@@ -117,6 +117,12 @@ fn assert_public_session(session: &Value) {
         "executable",
         "executable_identity",
         "runtime_profile_key",
+        "runtime_profile_version",
+        "provider_session_id",
+        "runtime_handle_id",
+        "lifecycle_intent_action",
+        "lifecycle_intent_id",
+        "lifecycle_intent_status",
     ] {
         assert!(
             session.get(private).is_none(),

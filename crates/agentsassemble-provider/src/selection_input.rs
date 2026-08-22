@@ -26,6 +26,7 @@ impl SelectionInput {
             .as_object()
             .ok_or_else(|| bad_request("payload must be an object."))?;
         reject_server_owned_fields(values)?;
+        reject_unknown_fields(values)?;
         let start = alias_bool(values, &["start", "start_now"])?;
         Ok(Self {
             catalog_revision: required_identifier(values, &["catalog_revision"], 128)?,
@@ -53,6 +54,36 @@ impl SelectionInput {
             start_requested: start.unwrap_or(false),
         })
     }
+}
+
+fn reject_unknown_fields(values: &Map<String, Value>) -> Result<(), ProviderSelectionError> {
+    const ALLOWED: [&str; 21] = [
+        "catalog_revision",
+        "provider_id",
+        "provider_kind",
+        "provider",
+        "model",
+        "model_id",
+        "reasoning_effort",
+        "effort",
+        "service_tier",
+        "variant",
+        "permission_mode",
+        "permission_option",
+        "execution_harness",
+        "display_name",
+        "workspace",
+        "provider_endpoint",
+        "persona_card_id",
+        "session_id",
+        "max_output_tokens",
+        "start",
+        "start_now",
+    ];
+    if let Some(key) = values.keys().find(|key| !ALLOWED.contains(&key.as_str())) {
+        return Err(bad_request(format!("Unknown agent.create field: {key}.")));
+    }
+    Ok(())
 }
 
 fn reject_server_owned_fields(values: &Map<String, Value>) -> Result<(), ProviderSelectionError> {

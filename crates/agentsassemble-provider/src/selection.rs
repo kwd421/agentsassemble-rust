@@ -264,7 +264,7 @@ fn validate_model_relation(
     relation: &str,
     selected: &str,
 ) -> Result<(), ProviderSelectionError> {
-    if selected.is_empty() || selected == "default" {
+    if selected == "default" {
         return Ok(());
     }
     let model_option = provider
@@ -294,6 +294,9 @@ fn validate_model_relation(
         }
         return Ok(());
     };
+    if selected.is_empty() && allowed.is_empty() {
+        return Ok(());
+    }
     if allowed.iter().any(|value| value.as_str() == Some(selected)) {
         return Ok(());
     }
@@ -665,5 +668,67 @@ mod tests {
         .err()
         .unwrap_or_else(|| panic!("conflicting aliases must fail"));
         assert_eq!(error.code, "bad_request");
+
+        let unknown = json!({
+            "provider_id": "codex",
+            "catalog_revision": "catalog-1",
+            "display_name": "Terra",
+            "workspace": workspace.path(),
+            "modle": "gpt-5.6-terra"
+        });
+        let error = ProviderSelection::from_catalog(
+            "general",
+            "operator-local-user",
+            "unknown-field",
+            &unknown,
+            &catalog(),
+        )
+        .await
+        .err()
+        .unwrap_or_else(|| panic!("unknown authority key must fail"));
+        assert_eq!(error.code, "bad_request");
+    }
+
+    #[tokio::test]
+    async fn empty_value_obeys_the_advertised_per_model_relation() {
+        let workspace =
+            tempfile::tempdir().unwrap_or_else(|error| panic!("create workspace: {error}"));
+        let mut authority = catalog();
+        authority.providers[0].controls[1]
+            .options
+            .insert(0, option("", json!({})));
+        let payload = json!({
+            "provider_id": "codex",
+            "catalog_revision": "catalog-1",
+            "display_name": "Terra",
+            "workspace": workspace.path(),
+            "model": "gpt-5.6-terra",
+            "reasoning_effort": ""
+        });
+        let error = ProviderSelection::from_catalog(
+            "general",
+            "operator-local-user",
+            "empty-effort-rejected",
+            &payload,
+            &authority,
+        )
+        .await
+        .err()
+        .unwrap_or_else(|| panic!("empty effort must not bypass a nonempty relation"));
+        assert_eq!(error.code, "unsupported_control");
+
+        authority.providers[0].controls[0].options[0]
+            .metadata
+            .insert("reasoning_efforts".to_owned(), json!([]));
+        let selected = ProviderSelection::from_catalog(
+            "general",
+            "operator-local-user",
+            "empty-effort-allowed",
+            &payload,
+            &authority,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("empty relation should allow empty effort: {error}"));
+        assert!(selected.reasoning_effort.is_empty());
     }
 }

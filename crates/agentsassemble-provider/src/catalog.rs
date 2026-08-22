@@ -600,8 +600,17 @@ fn controls_are_bounded(controls: &[ProviderControl]) -> bool {
 }
 
 fn controls_are_consistent(default_model: &str, controls: &[ProviderControl]) -> bool {
+    let mut control_keys = BTreeSet::new();
     if controls.iter().any(|control| {
         control.options.is_empty()
+            || !control_keys.insert(control.key.as_str())
+            || control
+                .options
+                .iter()
+                .map(|option| option.value.as_str())
+                .collect::<BTreeSet<_>>()
+                .len()
+                != control.options.len()
             || !control
                 .options
                 .iter()
@@ -630,18 +639,19 @@ fn controls_are_consistent(default_model: &str, controls: &[ProviderControl]) ->
         let Some(control) = controls.iter().find(|control| control.key == control_key) else {
             return true;
         };
-        if matches!(control.default_value.as_str(), "" | "default") {
+        if control.default_value == "default" {
             return true;
         }
-        model
-            .metadata
-            .get(relation_key)
-            .and_then(Value::as_array)
-            .is_some_and(|allowed| {
-                allowed
-                    .iter()
-                    .any(|value| value.as_str() == Some(&control.default_value))
-            })
+        let relation_scope = model.metadata.get("relation_scope").and_then(Value::as_str);
+        let Some(allowed) = model.metadata.get(relation_key).and_then(Value::as_array) else {
+            return relation_scope != Some("per_model");
+        };
+        if control.default_value.is_empty() {
+            return allowed.is_empty();
+        }
+        allowed
+            .iter()
+            .any(|value| value.as_str() == Some(&control.default_value))
     })
 }
 

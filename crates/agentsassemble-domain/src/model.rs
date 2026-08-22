@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 pub const LOCAL_OPERATOR_USER_ID: &str = "operator-local-user";
 pub const LOCAL_OPERATOR_PARTICIPANT_ID: &str = "operator-local";
+pub const CURRENT_RUNTIME_PROFILE_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
@@ -406,6 +407,8 @@ pub struct DurableAgentSession {
     #[serde(default)]
     pub workspace_identity: String,
     pub runtime_profile_key: String,
+    #[serde(default)]
+    pub runtime_profile_version: u32,
     #[serde(default)]
     pub provider_session_id: String,
     #[serde(default)]

@@ -1,6 +1,7 @@
 use agentsassemble_domain::{
-    AgentSession, AuthenticatedPrincipal, CapabilitySet, ClientKind, DurableAgentSession,
-    InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID, Participant, ParticipantStatus, Room, RoomSettings,
+    AgentSession, AuthenticatedPrincipal, CURRENT_RUNTIME_PROFILE_VERSION, CapabilitySet,
+    ClientKind, DurableAgentSession, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID, Participant,
+    ParticipantStatus, Room, RoomSettings,
 };
 use chrono::Utc;
 use serde_json::json;
@@ -106,6 +107,7 @@ async fn seed_agent(store: &SqliteStore, now: chrono::DateTime<Utc>) {
         workspace: "/owned/workspace".to_owned(),
         workspace_identity: "workspace-identity".to_owned(),
         runtime_profile_key: "profile-1".to_owned(),
+        runtime_profile_version: CURRENT_RUNTIME_PROFILE_VERSION,
         provider_session_id: String::new(),
         runtime_handle_id: String::new(),
         pending_event_ids: vec!["pending-1".to_owned()],
@@ -287,4 +289,43 @@ async fn stale_start_completion_fails_closed_and_visible_failure_clears_intent()
     assert_eq!(session.runtime_status, "error");
     assert_eq!(session.last_error_code, "runtime_start_failed");
     assert!(!session.enabled);
+}
+
+#[tokio::test]
+async fn unversioned_runtime_profile_fails_before_a_start_effect() {
+    let (store, principal, _directory) = fixture().await;
+    let encoded = sqlx::query_scalar::<_, String>(
+        "SELECT session_json FROM agent_sessions WHERE room_id = 'general' AND session_id = ?",
+    )
+    .bind(AGENT_ID)
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("read session: {error}"));
+    let mut session: DurableAgentSession =
+        serde_json::from_str(&encoded).unwrap_or_else(|error| panic!("decode session: {error}"));
+    session.runtime_profile_version = 0;
+    sqlx::query(
+        "UPDATE agent_sessions SET session_json = ? WHERE room_id = 'general' AND session_id = ?",
+    )
+    .bind(serde_json::to_string(&session).unwrap_or_else(|error| panic!("encode session: {error}")))
+    .bind(AGENT_ID)
+    .execute(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("write legacy session: {error}"));
+
+    let outcome = store
+        .prepare_agent_start(&principal, "start-legacy", &json!({"agent_id": AGENT_ID}))
+        .await;
+    assert!(matches!(
+        outcome,
+        Err(PersistenceError::CommandRejected {
+            code: "profile_migration_required",
+            ..
+        })
+    ));
+    let snapshot = store
+        .snapshot("general", 0, 10)
+        .await
+        .unwrap_or_else(|error| panic!("snapshot legacy session: {error}"));
+    assert_eq!(snapshot.agent_sessions[0].runtime_status, "stopped");
 }

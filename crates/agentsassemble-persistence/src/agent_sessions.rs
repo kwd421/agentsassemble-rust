@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
 
 use agentsassemble_domain::{
-    Actor, AgentSession, AgentSessionDraft, AuthenticatedPrincipal, ClientKind,
-    DurableAgentSession, Participant, ParticipantStatus, RoomEvent, canonical_payload_hash,
+    Actor, AgentSession, AgentSessionDraft, AuthenticatedPrincipal,
+    CURRENT_RUNTIME_PROFILE_VERSION, ClientKind, DurableAgentSession, Participant,
+    ParticipantStatus, RoomEvent, canonical_payload_hash,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -66,6 +67,24 @@ impl SqliteStore {
             });
         }
         let payload_hash = canonical_payload_hash(payload);
+        {
+            let mut transaction = self.pool.begin().await?;
+            active_room_for_principal(&mut transaction, principal).await?;
+            let outcome = existing_command(
+                &mut transaction,
+                &principal.room_id,
+                &principal.principal_id,
+                request_id,
+                ACTION,
+                &payload_hash,
+            )
+            .await?;
+            transaction.commit().await?;
+            if let Some(outcome) = outcome {
+                return Ok(outcome);
+            }
+        }
+        revalidate_runtime_authority(draft).await?;
         let mut transaction = self.pool.begin().await?;
         active_room_for_principal(&mut transaction, principal).await?;
         if let Some(outcome) = existing_command(
@@ -81,7 +100,6 @@ impl SqliteStore {
             transaction.commit().await?;
             return Ok(outcome);
         }
-        revalidate_runtime_authority(draft).await?;
         let session_count =
             sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM agent_sessions WHERE room_id = ?")
                 .bind(&principal.room_id)
@@ -168,6 +186,7 @@ impl SqliteStore {
             workspace: draft.workspace.clone(),
             workspace_identity: draft.workspace_identity.clone(),
             runtime_profile_key: draft.runtime_profile_key.clone(),
+            runtime_profile_version: CURRENT_RUNTIME_PROFILE_VERSION,
             provider_session_id: String::new(),
             runtime_handle_id: String::new(),
             pending_event_ids: Vec::new(),
@@ -432,6 +451,12 @@ mod tests {
             "executable",
             "executable_identity",
             "runtime_profile_key",
+            "runtime_profile_version",
+            "provider_session_id",
+            "runtime_handle_id",
+            "lifecycle_intent_action",
+            "lifecycle_intent_id",
+            "lifecycle_intent_status",
         ] {
             assert!(first.result["agent_session"].get(private).is_none());
             assert!(retry.result["agent_session"].get(private).is_none());

@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, HashSet};
 
 use agentsassemble_domain::{
-    AuthenticatedPrincipal, ClientKind, DurableAgentSession, Participant, ParticipantStatus,
-    RoomEvent, canonical_payload_hash, clean_identifier,
+    AuthenticatedPrincipal, CURRENT_RUNTIME_PROFILE_VERSION, ClientKind, DurableAgentSession,
+    Participant, ParticipantStatus, RoomEvent, canonical_payload_hash, clean_identifier,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -91,6 +91,12 @@ impl SqliteStore {
             return Err(rejected(
                 "participant_kicked",
                 "This agent was removed from the room. Add it again before starting it.",
+            ));
+        }
+        if session.runtime_profile_version != CURRENT_RUNTIME_PROFILE_VERSION {
+            return Err(rejected(
+                "profile_migration_required",
+                "This Agent Session runtime profile must be saved again before it can start.",
             ));
         }
         let incomplete = session.lifecycle_intent_action == "start"

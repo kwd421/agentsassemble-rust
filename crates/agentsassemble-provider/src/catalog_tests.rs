@@ -95,6 +95,27 @@ fn inconsistent_default_relation_cannot_be_startable() {
 }
 
 #[test]
+fn duplicate_option_authority_cannot_be_startable() {
+    let provider = fixture_provider();
+    let controls = vec![super::control(
+        "model",
+        "Model",
+        "select",
+        vec![
+            super::option("duplicate", "First"),
+            super::option("duplicate", "Second"),
+        ],
+        "duplicate",
+    )];
+    let inconsistent = ready_provider(provider, "duplicate".to_owned(), controls);
+    assert!(!inconsistent.startable);
+    assert_eq!(
+        inconsistent.discovery_error_code,
+        "model_discovery_malformed"
+    );
+}
+
+#[test]
 fn fixed_catalogs_are_bounded_before_publication() {
     let mut provider = fixture_provider();
     provider.startable = true;
