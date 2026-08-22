@@ -69,6 +69,7 @@ pub struct RoomSnapshotData {
 pub struct CommandOutcome {
     pub result: Value,
     pub event: RoomEvent,
+    pub events: Vec<RoomEvent>,
     pub deduplicated: bool,
 }
 
@@ -459,7 +460,8 @@ impl SqliteStore {
         transaction.commit().await?;
         Ok(CommandOutcome {
             result,
-            event,
+            event: event.clone(),
+            events: vec![event],
             deduplicated: false,
         })
     }
@@ -490,15 +492,21 @@ pub(crate) async fn existing_command(
         return Err(PersistenceError::CommandConflict);
     }
     let result: Value = serde_json::from_str(row.try_get::<String, _>("result_json")?.as_str())?;
-    let event = serde_json::from_value(result.get("event").cloned().ok_or_else(|| {
-        serde_json::Error::io(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "stored command result has no event",
-        ))
-    })?)?;
+    let event: RoomEvent =
+        serde_json::from_value(result.get("event").cloned().ok_or_else(|| {
+            serde_json::Error::io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "stored command result has no event",
+            ))
+        })?)?;
+    let events = result.get("events").map_or_else(
+        || Ok(vec![event.clone()]),
+        |events| serde_json::from_value(events.clone()),
+    )?;
     Ok(Some(CommandOutcome {
         result,
         event,
+        events,
         deduplicated: true,
     }))
 }

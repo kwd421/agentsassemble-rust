@@ -146,7 +146,9 @@ impl RoomRuntime {
                 if let Ok(outcome) = &result
                     && !outcome.deduplicated
                 {
-                    let _ = event_tx.send(outcome.event.clone());
+                    for event in &outcome.events {
+                        let _ = event_tx.send(event.clone());
+                    }
                 }
                 let _ = command.reply.send(result);
             }

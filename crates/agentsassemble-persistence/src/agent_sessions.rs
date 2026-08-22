@@ -151,6 +151,13 @@ impl SqliteStore {
             last_provider_sync_seq: last_message_seq,
             bootstrap_cutoff_seq: last_message_seq,
             turn_count: 0,
+            active_turn_id: String::new(),
+            turn_phase: String::new(),
+            last_error: String::new(),
+            last_error_code: String::new(),
+            recovery_required: false,
+            provider_session_active: false,
+            provider_session_reused: false,
             created_at: now,
             updated_at: now,
         };
@@ -161,6 +168,13 @@ impl SqliteStore {
             workspace: draft.workspace.clone(),
             workspace_identity: draft.workspace_identity.clone(),
             runtime_profile_key: draft.runtime_profile_key.clone(),
+            provider_session_id: String::new(),
+            runtime_handle_id: String::new(),
+            pending_event_ids: Vec::new(),
+            inflight_event_ids: Vec::new(),
+            lifecycle_intent_action: String::new(),
+            lifecycle_intent_id: String::new(),
+            lifecycle_intent_status: String::new(),
         };
         sqlx::query(
             "INSERT INTO participants(room_id, participant_id, participant_json) VALUES (?, ?, ?)",
@@ -233,7 +247,8 @@ impl SqliteStore {
         transaction.commit().await?;
         Ok(CommandOutcome {
             result,
-            event,
+            event: event.clone(),
+            events: vec![event],
             deduplicated: false,
         })
     }
@@ -546,13 +561,16 @@ mod tests {
                 &draft(workspace),
             )
             .await;
-        assert!(matches!(
-            outcome,
-            Err(PersistenceError::CommandRejected {
-                code: "agent_session_capacity",
-                ..
-            })
-        ));
+        assert!(
+            matches!(
+                &outcome,
+                Err(PersistenceError::CommandRejected {
+                    code: "agent_session_capacity",
+                    ..
+                })
+            ),
+            "unexpected capacity outcome: {outcome:?}"
+        );
         let counts = sqlx::query_as::<_, (i64, i64, i64, i64)>(
             "SELECT (SELECT COUNT(*) FROM agent_sessions), (SELECT COUNT(*) FROM participants), (SELECT COUNT(*) FROM room_events), (SELECT COUNT(*) FROM command_results)",
         )

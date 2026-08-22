@@ -1,0 +1,290 @@
+use agentsassemble_domain::{
+    AgentSession, AuthenticatedPrincipal, CapabilitySet, ClientKind, DurableAgentSession,
+    InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID, Participant, ParticipantStatus, Room, RoomSettings,
+};
+use chrono::Utc;
+use serde_json::json;
+
+use crate::{AgentRuntimeStarted, AgentStartPlan, AgentStopPlan, PersistenceError, SqliteStore};
+
+const AGENT_ID: &str = "codex-00000000-0000-5000-8000-000000000001";
+
+async fn fixture() -> (SqliteStore, AuthenticatedPrincipal, tempfile::TempDir) {
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
+    let store = SqliteStore::open_path(&directory.path().join("runtime.sqlite3"))
+        .await
+        .unwrap_or_else(|error| panic!("open store: {error}"));
+    let now = Utc::now();
+    let host = Participant {
+        room_id: "general".to_owned(),
+        participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
+        display_name: "Host".to_owned(),
+        participant_type: "human".to_owned(),
+        status: ParticipantStatus::Joined,
+        role: "host".to_owned(),
+        owner_id: String::new(),
+        muted: false,
+        created_at: now,
+        updated_at: now,
+    };
+    store
+        .initialize_room(
+            &Room::new("general".to_owned(), "General".to_owned(), now),
+            &RoomSettings::defaults("General".to_owned()),
+            &host,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("initialize room: {error}"));
+    seed_agent(&store, now).await;
+    let principal = AuthenticatedPrincipal {
+        principal_id: "operator-local-user".to_owned(),
+        participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
+        display_name: "Host".to_owned(),
+        room_id: "general".to_owned(),
+        client_kind: ClientKind::Browser,
+        invite_scope: InviteScope::ReadWrite,
+        capabilities: CapabilitySet::local_operator(ClientKind::Browser, InviteScope::ReadWrite),
+    };
+    (store, principal, directory)
+}
+
+async fn seed_agent(store: &SqliteStore, now: chrono::DateTime<Utc>) {
+    let participant = Participant {
+        room_id: "general".to_owned(),
+        participant_id: AGENT_ID.to_owned(),
+        display_name: "Terra".to_owned(),
+        participant_type: "agent".to_owned(),
+        status: ParticipantStatus::Detached,
+        role: "agent".to_owned(),
+        owner_id: "operator-local-user".to_owned(),
+        muted: false,
+        created_at: now,
+        updated_at: now,
+    };
+    let session = DurableAgentSession {
+        public: AgentSession {
+            room_id: "general".to_owned(),
+            session_id: AGENT_ID.to_owned(),
+            participant_id: AGENT_ID.to_owned(),
+            display_name: "Terra".to_owned(),
+            status: "available".to_owned(),
+            runtime_status: "stopped".to_owned(),
+            enabled: false,
+            provider_kind: "codex_live_session".to_owned(),
+            runtime_kind: "live_cli".to_owned(),
+            connection_kind: "native_cli_bridge".to_owned(),
+            external_owned: false,
+            process_ownership: "server".to_owned(),
+            model: "gpt-5.6-terra".to_owned(),
+            reasoning_effort: "medium".to_owned(),
+            service_tier: "default".to_owned(),
+            variant: String::new(),
+            execution_harness: "builtin".to_owned(),
+            permission_mode: "meeting_read_only".to_owned(),
+            max_output_tokens: 0,
+            catalog_revision: "catalog-1".to_owned(),
+            transport: "stdio_jsonl".to_owned(),
+            last_seen_event_id: String::new(),
+            last_seen_seq: 0,
+            last_provider_sync_event_id: String::new(),
+            last_provider_sync_seq: 0,
+            bootstrap_cutoff_seq: 0,
+            turn_count: 0,
+            active_turn_id: String::new(),
+            turn_phase: String::new(),
+            last_error: String::new(),
+            last_error_code: String::new(),
+            recovery_required: false,
+            provider_session_active: false,
+            provider_session_reused: false,
+            created_at: now,
+            updated_at: now,
+        },
+        executable: "/owned/codex".to_owned(),
+        executable_identity: "executable-identity".to_owned(),
+        workspace: "/owned/workspace".to_owned(),
+        workspace_identity: "workspace-identity".to_owned(),
+        runtime_profile_key: "profile-1".to_owned(),
+        provider_session_id: String::new(),
+        runtime_handle_id: String::new(),
+        pending_event_ids: vec!["pending-1".to_owned()],
+        inflight_event_ids: Vec::new(),
+        lifecycle_intent_action: String::new(),
+        lifecycle_intent_id: String::new(),
+        lifecycle_intent_status: String::new(),
+    };
+    sqlx::query(
+        "INSERT INTO participants(room_id, participant_id, participant_json) VALUES (?, ?, ?)",
+    )
+    .bind("general")
+    .bind(AGENT_ID)
+    .bind(
+        serde_json::to_string(&participant).unwrap_or_else(|error| panic!("encode agent: {error}")),
+    )
+    .execute(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("insert agent: {error}"));
+    sqlx::query("INSERT INTO agent_sessions(room_id, session_id, session_json) VALUES (?, ?, ?)")
+        .bind("general")
+        .bind(AGENT_ID)
+        .bind(
+            serde_json::to_string(&session)
+                .unwrap_or_else(|error| panic!("encode session: {error}")),
+        )
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("insert session: {error}"));
+}
+
+#[tokio::test]
+#[allow(clippy::too_many_lines)] // One scenario crosses the persisted start/effect/stop recovery boundary.
+async fn lifecycle_preserves_provider_identity_and_finalizes_stop_once() {
+    let (store, principal, _directory) = fixture().await;
+    let payload = json!({"agent_id": AGENT_ID});
+    let prepared = store
+        .prepare_agent_start(&principal, "start-lifecycle", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare start: {error}"));
+    let AgentStartPlan::Start(effect) = prepared else {
+        panic!("stopped session must require a start effect");
+    };
+    assert_eq!(effect.operation_id, "start-lifecycle");
+    assert_eq!(effect.session.public.runtime_status, "starting");
+    assert_eq!(effect.session.lifecycle_intent_status, "prepared");
+    let started = AgentRuntimeStarted {
+        runtime_handle_id: "owned-runtime-1".to_owned(),
+        provider_session_id: "provider-thread-1".to_owned(),
+        runtime_reused: false,
+        provider_session_reused: false,
+    };
+    let outcome = store
+        .complete_agent_start(
+            &principal,
+            "start-lifecycle",
+            &payload,
+            &effect.operation_id,
+            &started,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("complete start: {error}"));
+    assert_eq!(
+        outcome
+            .events
+            .iter()
+            .map(|event| event.event_type.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "participant_joined",
+            "session_attached",
+            "agent_session_state"
+        ]
+    );
+    assert!(
+        outcome.result["agent_session"]
+            .get("provider_session_id")
+            .is_none()
+    );
+    let replay = store
+        .prepare_agent_start(&principal, "start-lifecycle", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("replay start: {error}"));
+    let AgentStartPlan::Outcome(replay) = replay else {
+        panic!("completed start must replay without another effect");
+    };
+    assert!(replay.deduplicated);
+
+    let stop = store
+        .prepare_agent_stop(&principal, "stop-lifecycle", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare stop: {error}"));
+    let AgentStopPlan::Stop(effect) = stop else {
+        panic!("running session must require a stop effect");
+    };
+    assert_eq!(effect.runtime_handle_id, "owned-runtime-1");
+    store
+        .record_agent_stop_effect("general", &effect.session_id, &effect.operation_id)
+        .await
+        .unwrap_or_else(|error| panic!("record stop effect: {error}"));
+    assert!(matches!(
+        store
+            .prepare_agent_stop(&principal, "stop-lifecycle", &payload)
+            .await
+            .unwrap_or_else(|error| panic!("recover stop: {error}")),
+        AgentStopPlan::Finalize
+    ));
+    let stopped = store
+        .finalize_agent_stop(&principal, "stop-lifecycle", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("finalize stop: {error}"));
+    assert_eq!(stopped.result["agent_session"]["runtime_status"], "stopped");
+    let durable = sqlx::query_scalar::<_, String>(
+        "SELECT session_json FROM agent_sessions WHERE room_id = 'general' AND session_id = ?",
+    )
+    .bind(AGENT_ID)
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("read stopped session: {error}"));
+    let durable: DurableAgentSession = serde_json::from_str(&durable)
+        .unwrap_or_else(|error| panic!("decode stopped session: {error}"));
+    assert_eq!(durable.provider_session_id, "provider-thread-1");
+    assert!(durable.runtime_handle_id.is_empty());
+    assert!(durable.lifecycle_intent_action.is_empty());
+}
+
+#[tokio::test]
+async fn stale_start_completion_fails_closed_and_visible_failure_clears_intent() {
+    let (store, principal, _directory) = fixture().await;
+    let payload = json!({"agent_id": AGENT_ID});
+    let AgentStartPlan::Start(effect) = store
+        .prepare_agent_start(&principal, "start-failed", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare start: {error}"))
+    else {
+        panic!("stopped session must require a start effect");
+    };
+    let stale = store
+        .complete_agent_start(
+            &principal,
+            "start-failed",
+            &payload,
+            "different-operation",
+            &AgentRuntimeStarted {
+                runtime_handle_id: "owned-runtime".to_owned(),
+                provider_session_id: "provider-thread".to_owned(),
+                runtime_reused: false,
+                provider_session_reused: false,
+            },
+        )
+        .await;
+    assert!(matches!(
+        stale,
+        Err(PersistenceError::CommandRejected {
+            code: "stale_start_confirmation",
+            ..
+        })
+    ));
+    let events = store
+        .fail_agent_start(
+            &principal,
+            AGENT_ID,
+            &effect.operation_id,
+            "runtime_start_failed",
+            "provider launch failed\0secret",
+        )
+        .await
+        .unwrap_or_else(|error| panic!("record start failure: {error}"));
+    assert_eq!(events[0].event_type, "error");
+    assert_eq!(
+        events[0].content.as_deref(),
+        Some("provider launch failedsecret")
+    );
+    let snapshot = store
+        .snapshot("general", 0, 200)
+        .await
+        .unwrap_or_else(|error| panic!("snapshot failed start: {error}"));
+    let session = &snapshot.agent_sessions[0];
+    assert_eq!(session.runtime_status, "error");
+    assert_eq!(session.last_error_code, "runtime_start_failed");
+    assert!(!session.enabled);
+}

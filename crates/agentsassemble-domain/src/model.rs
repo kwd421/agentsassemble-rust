@@ -347,6 +347,7 @@ pub struct ProviderAvailability {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[allow(clippy::struct_excessive_bools)] // Public runtime observations are independent wire facts.
 pub struct AgentSession {
     pub room_id: String,
     pub session_id: String,
@@ -375,6 +376,20 @@ pub struct AgentSession {
     pub last_provider_sync_seq: i64,
     pub bootstrap_cutoff_seq: i64,
     pub turn_count: u64,
+    #[serde(default)]
+    pub active_turn_id: String,
+    #[serde(default)]
+    pub turn_phase: String,
+    #[serde(default)]
+    pub last_error: String,
+    #[serde(default)]
+    pub last_error_code: String,
+    #[serde(default)]
+    pub recovery_required: bool,
+    #[serde(default)]
+    pub provider_session_active: bool,
+    #[serde(default)]
+    pub provider_session_reused: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -391,6 +406,20 @@ pub struct DurableAgentSession {
     #[serde(default)]
     pub workspace_identity: String,
     pub runtime_profile_key: String,
+    #[serde(default)]
+    pub provider_session_id: String,
+    #[serde(default)]
+    pub runtime_handle_id: String,
+    #[serde(default)]
+    pub pending_event_ids: Vec<String>,
+    #[serde(default)]
+    pub inflight_event_ids: Vec<String>,
+    #[serde(default)]
+    pub lifecycle_intent_action: String,
+    #[serde(default)]
+    pub lifecycle_intent_id: String,
+    #[serde(default)]
+    pub lifecycle_intent_status: String,
 }
 
 impl DurableAgentSession {
