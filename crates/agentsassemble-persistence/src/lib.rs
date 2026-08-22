@@ -1,4 +1,7 @@
+mod agent_sessions;
+mod authority;
 mod database_target;
+mod migration;
 mod private_fs;
 mod schema;
 mod sqlite;

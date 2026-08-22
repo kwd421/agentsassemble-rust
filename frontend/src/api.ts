@@ -1,4 +1,5 @@
 import type { Participant } from "./types/generated/Participant";
+import type { AgentSession } from "./types/generated/AgentSession";
 import type { Room } from "./types/generated/Room";
 import type { RoomEvent } from "./types/generated/RoomEvent";
 import type { TicketResponse } from "./types/generated/TicketResponse";
@@ -49,14 +50,7 @@ export interface SideChatEvent extends LobbyEvent {
   official_record?: boolean;
 }
 
-export interface RoomAgentSession {
-  room_id: string;
-  session_id: string;
-  participant_id: string;
-  display_name: string;
-  status: string;
-  [key: string]: unknown;
-}
+export type RoomAgentSession = AgentSession;
 
 export function loadHostToken(): string {
   return inMemoryHostToken;

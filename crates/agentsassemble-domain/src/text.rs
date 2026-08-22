@@ -52,6 +52,7 @@ pub fn clean_message(value: &str, limit: usize) -> String {
         .collect()
 }
 
+#[must_use]
 pub fn has_visible_text(value: &str) -> bool {
     value.chars().any(|character| {
         !character.is_whitespace()

@@ -1,7 +1,8 @@
 use std::{fmt::Write, path::PathBuf, time::Duration};
 
-use agentsassemble_domain::{Participant, ParticipantStatus, Room, RoomSettings};
+use agentsassemble_domain::{Participant, ParticipantStatus, ProviderCatalog, Room, RoomSettings};
 use agentsassemble_persistence::SqliteStore;
+use agentsassemble_provider::ProviderCatalogService;
 use agentsassemble_server::{AppState, HostSecret, TicketStore, serve};
 use chrono::Utc;
 use futures_util::{SinkExt, StreamExt};
@@ -410,14 +411,18 @@ async fn websocket_snapshot_proves_the_private_ticket_control_channel() {
 }
 
 async fn start(store: SqliteStore) -> RunningServer {
-    start_server(store, None).await
+    start_server(store, None, ProviderCatalog::default()).await
 }
 
 async fn start_with_frontend(store: SqliteStore, frontend: PathBuf) -> RunningServer {
-    start_server(store, Some(frontend)).await
+    start_server(store, Some(frontend), ProviderCatalog::default()).await
 }
 
-async fn start_server(store: SqliteStore, frontend: Option<PathBuf>) -> RunningServer {
+async fn start_server(
+    store: SqliteStore,
+    frontend: Option<PathBuf>,
+    catalog: ProviderCatalog,
+) -> RunningServer {
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
         .unwrap_or_else(|error| panic!("bind test runtime: {error}"));
@@ -431,6 +436,7 @@ async fn start_server(store: SqliteStore, frontend: Option<PathBuf>) -> RunningS
         TicketStore::new(Duration::from_secs(30), 16),
         HostSecret::new(HOST_TOKEN)
             .unwrap_or_else(|error| panic!("validate test host secret: {error}")),
+        ProviderCatalogService::fixed(catalog),
     );
     if let Some(frontend) = frontend {
         state = state.with_frontend(frontend);

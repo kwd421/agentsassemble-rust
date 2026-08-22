@@ -12,11 +12,13 @@ import tomllib
 OWNED_CRATES = {
     "agentsassemble-domain": frozenset(),
     "agentsassemble-persistence": frozenset({"agentsassemble-domain"}),
+    "agentsassemble-provider": frozenset({"agentsassemble-domain"}),
     "agentsassemble-protocol": frozenset({"agentsassemble-domain"}),
     "agentsassemble-server": frozenset(
         {
             "agentsassemble-domain",
             "agentsassemble-persistence",
+            "agentsassemble-provider",
             "agentsassemble-protocol",
         }
     ),
@@ -28,12 +30,14 @@ CRATE_FORBIDDEN = {
     "agentsassemble-domain": DOMAIN_FORBIDDEN,
     "agentsassemble-protocol": frozenset({"axum", "sqlx", "tokio", "tower", "tower-http"}),
     "agentsassemble-persistence": frozenset({"axum", "tower", "tower-http"}),
+    "agentsassemble-provider": frozenset({"axum", "sqlx", "tower", "tower-http"}),
     "agentsassemble-server": frozenset({"sqlx"}),
 }
 DESKTOP_MANIFEST = Path("desktop/src-tauri/Cargo.toml")
 OWNED_MANIFESTS = {
     "agentsassemble-domain": Path("crates/agentsassemble-domain/Cargo.toml"),
     "agentsassemble-persistence": Path("crates/agentsassemble-persistence/Cargo.toml"),
+    "agentsassemble-provider": Path("crates/agentsassemble-provider/Cargo.toml"),
     "agentsassemble-protocol": Path("crates/agentsassemble-protocol/Cargo.toml"),
     "agentsassemble-server": Path("crates/agentsassemble-server/Cargo.toml"),
 }

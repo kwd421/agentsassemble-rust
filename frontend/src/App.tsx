@@ -1,5 +1,11 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { loadHostToken, saveHostToken, type RoomEvent } from "./api";
+import {
+  loadHostToken,
+  saveHostToken,
+  type RoomAgentSession,
+  type RoomEvent,
+} from "./api";
+import AgentSessionPanel from "./AgentSessionPanel";
 import { isDesktopShell, requestDesktopTicket } from "./desktopBridge";
 import {
   openRoomSocket,
@@ -7,6 +13,7 @@ import {
   type RoomSocketHandle,
 } from "./roomSocketClient";
 import { acceptSnapshotEvents, mergeRoomEvents } from "./roomProjection";
+import type { ProviderCatalogSnapshot } from "./roomSocketTypes";
 
 type ConnectionStatus = "locked" | "connecting" | "online" | "offline";
 
@@ -21,6 +28,12 @@ export default function App() {
   const [draftToken, setDraftToken] = useState("");
   const [roomLabel, setRoomLabel] = useState(roomId);
   const [events, setEvents] = useState<RoomEvent[]>([]);
+  const [agentSessions, setAgentSessions] = useState<RoomAgentSession[]>([]);
+  const [providerCatalog, setProviderCatalog] = useState<ProviderCatalogSnapshot>({
+    status: "loading",
+    catalog_revision: "",
+    providers: [],
+  });
   const [status, setStatus] = useState<ConnectionStatus>(hostToken ? "connecting" : "locked");
   const [notice, setNotice] = useState(hostToken ? "방 기록을 동기화하는 중…" : "런타임 호스트 토큰을 입력하세요.");
   const [message, setMessage] = useState("");
@@ -52,10 +65,13 @@ export default function App() {
             snapshot.events,
             snapshot.snapshot_mode
           ));
+          setAgentSessions(snapshot.agent_sessions);
+          setProviderCatalog(snapshot.provider_catalog);
           setStatus("online");
           setNotice(snapshot.resume_gap ? "기록 공백을 정본으로 복구했습니다." : "동기화 완료");
           return true;
         },
+        onProviderCatalog: setProviderCatalog,
         onRoomEvents: (incoming) => setEvents((current) => mergeRoomEvents(current, incoming)),
         onClose: () => {
           setStatus("offline");
@@ -103,6 +119,8 @@ export default function App() {
     saveHostToken("");
     setHostToken("");
     setEvents([]);
+    setAgentSessions([]);
+    setProviderCatalog({ status: "loading", catalog_revision: "", providers: [] });
     setNotice("런타임 호스트 토큰을 입력하세요.");
   }
 
@@ -119,6 +137,20 @@ export default function App() {
     } finally {
       setSending(false);
     }
+  }
+
+  async function createAgent(payload: Record<string, unknown>) {
+    if (!socketRef.current) throw new Error("방 연결을 기다리는 중입니다.");
+    const ack = await socketRef.current.command("agent.create", payload);
+    const session = ack.result?.agent_session;
+    if (!session || typeof session !== "object" || !("session_id" in session)) {
+      throw new Error("Agent Session ACK에 정본 세션이 없습니다.");
+    }
+    const created = session as RoomAgentSession;
+    setAgentSessions((current) => [
+      ...current.filter((candidate) => candidate.session_id !== created.session_id),
+      created,
+    ].sort((left, right) => left.session_id.localeCompare(right.session_id)));
   }
 
   return (
@@ -156,6 +188,13 @@ export default function App() {
             <span>{notice}</span>
             {!desktop && <button className="link-button" onClick={lock} type="button">토큰 지우기</button>}
           </div>
+          <AgentSessionPanel
+            catalog={providerCatalog}
+            key={providerCatalog.catalog_revision || providerCatalog.status}
+            onCreate={createAgent}
+            online={status === "online"}
+            sessions={agentSessions}
+          />
           <ol className="timeline" data-testid="timeline">
             {events.length === 0 ? (
               <li className="empty">아직 메시지가 없습니다.</li>

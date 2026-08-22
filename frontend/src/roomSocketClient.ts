@@ -20,6 +20,11 @@ import type {
   RoomSocketSnapshot,
 } from "./roomSocketTypes";
 import { createServerChallenge, verifyServerProof } from "./serverProof";
+import {
+  agentSessionIsValid,
+  isRecord,
+  providerCatalogIsValid,
+} from "./roomSocketSchema";
 
 export type { RoomSocketAuth } from "./api";
 export type { PluginEnvelope } from "./pluginSocketProtocol";
@@ -51,10 +56,6 @@ const ROOM_SOCKET_COMMAND_TIMEOUT_MS = 20_000;
 function wsBaseUrl(): string {
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
   return `${proto}//${window.location.host}`;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function isNonNegativeInteger(value: unknown): value is number {
@@ -150,7 +151,17 @@ function commandAckResultIsValid(
       event?.type === "provider_request_resolution_requested"
     );
   }
-  if (action === "agent.create" || action === "agent.configure") {
+  if (action === "agent.create") {
+    const session = result.agent_session;
+    return Boolean(
+      hasDurableEvent &&
+      event?.type === "agent_session_created" &&
+      agentSessionIsValid(session, String(event.room_id || "")) &&
+      isRecord(session) &&
+      event.participant_id === session.participant_id
+    );
+  }
+  if (action === "agent.configure") {
     return isRecord(result.agent_session);
   }
   if (action === "agent.readd") return result.status === "readded";
@@ -185,7 +196,7 @@ function snapshotValidationError(
     !Array.isArray(value.agent_sessions) ||
     !Array.isArray(value.active_turns) ||
     !Array.isArray(value.events) ||
-    !isRecord(value.provider_catalog) ||
+    !providerCatalogIsValid(value.provider_catalog) ||
     !Array.isArray(value.available_providers) ||
     !isRecord(value.capabilities) ||
     typeof value.has_more_before !== "boolean" ||
@@ -194,6 +205,19 @@ function snapshotValidationError(
     return new RoomSocketSayError(
       "Room snapshot did not match the canonical browser schema; reconnecting.",
       "snapshot_schema_invalid"
+    );
+  }
+  const snapshotRoom = value.room as Record<string, unknown>;
+  const snapshotCatalog = value.provider_catalog as ProviderCatalogSnapshot;
+  if (
+    value.agent_sessions.some((session) =>
+      !agentSessionIsValid(session, String(snapshotRoom.room_id || ""))
+    ) ||
+    JSON.stringify(value.available_providers) !== JSON.stringify(snapshotCatalog.providers)
+  ) {
+    return new RoomSocketSayError(
+      "Room snapshot contained inconsistent Agent Session or provider authority; reconnecting.",
+      "snapshot_authority_invalid"
     );
   }
   const mode = value.snapshot_mode;
@@ -473,6 +497,15 @@ export function openRoomSocket(
       return;
     }
     if (msg.op === "provider_catalog_updated" && msg.catalog) {
+      if (!providerCatalogIsValid(msg.catalog)) {
+        reconnectForProtocolError(
+          new RoomSocketSayError(
+            "Provider catalog update did not match the canonical schema; reconnecting.",
+            "provider_catalog_invalid"
+          )
+        );
+        return;
+      }
       handlers.onProviderCatalog?.(msg.catalog);
       return;
     }

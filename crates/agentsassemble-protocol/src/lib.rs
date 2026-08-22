@@ -1,5 +1,6 @@
 use agentsassemble_domain::{
-    CapabilitySet, Participant, ProviderCatalog, PublicRoomSettings, Room, RoomEvent, SnapshotMode,
+    AgentSession, CapabilitySet, Participant, ProviderAvailability, ProviderCatalog,
+    PublicRoomSettings, Room, RoomEvent, SnapshotMode,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -38,6 +39,9 @@ pub enum ServerFrame {
         events: Vec<RoomEvent>,
         latest_seq: i64,
     },
+    ProviderCatalogUpdated {
+        catalog: ProviderCatalog,
+    },
     Ack(CommandAck),
     Nack(CommandNack),
     ResyncRequired {
@@ -56,7 +60,7 @@ pub struct RoomSnapshot {
     pub room: Room,
     pub room_settings: PublicRoomSettings,
     pub participants: Vec<Participant>,
-    pub agent_sessions: Vec<Value>,
+    pub agent_sessions: Vec<AgentSession>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub provider_requests: Vec<Value>,
     pub active_turns: Vec<Value>,
@@ -67,7 +71,7 @@ pub struct RoomSnapshot {
     pub resume_gap: bool,
     pub snapshot_mode: SnapshotMode,
     pub provider_catalog: ProviderCatalog,
-    pub available_providers: Vec<Value>,
+    pub available_providers: Vec<ProviderAvailability>,
     pub capabilities: CapabilitySet,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub server_proof: String,

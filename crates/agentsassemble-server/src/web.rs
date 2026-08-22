@@ -1,10 +1,11 @@
 use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
 
-use agentsassemble_domain::{ProviderCatalog, SnapshotMode, public_settings};
+use agentsassemble_domain::{SnapshotMode, public_settings};
 use agentsassemble_persistence::{PersistenceError, SqliteStore};
 use agentsassemble_protocol::{
     ClientFrame, CommandAck, CommandNack, ProtocolError, RoomSnapshot, ServerFrame,
 };
+use agentsassemble_provider::ProviderCatalogService;
 use axum::{
     Json, Router, body,
     extract::{
@@ -55,6 +56,7 @@ pub struct AppState {
     pub rooms: RoomRuntime,
     pub tickets: TicketStore,
     pub host_token: HostSecret,
+    pub provider_catalog: ProviderCatalogService,
     pub shutdown: CancellationToken,
     pub connections: TaskTracker,
     pub connection_admission: Arc<Semaphore>,
@@ -63,12 +65,18 @@ pub struct AppState {
 
 impl AppState {
     #[must_use]
-    pub fn local(store: SqliteStore, tickets: TicketStore, host_token: HostSecret) -> Self {
+    pub fn local(
+        store: SqliteStore,
+        tickets: TicketStore,
+        host_token: HostSecret,
+        provider_catalog: ProviderCatalogService,
+    ) -> Self {
         Self {
-            rooms: RoomRuntime::new(store.clone()),
+            rooms: RoomRuntime::new(store.clone(), provider_catalog.clone()),
             store,
             tickets,
             host_token,
+            provider_catalog,
             shutdown: CancellationToken::new(),
             connections: TaskTracker::new(),
             connection_admission: Arc::new(Semaphore::new(MAX_WS_CONNECTIONS)),
@@ -87,6 +95,8 @@ impl AppState {
 pub enum ServeError {
     #[error("server I/O failed: {0}")]
     Io(#[from] std::io::Error),
+    #[error("provider discovery task failed: {0}")]
+    ProviderDiscovery(#[from] tokio::task::JoinError),
 }
 
 #[derive(Debug, Deserialize)]
@@ -126,6 +136,7 @@ pub async fn serve(
     cancellation: CancellationToken,
 ) -> Result<(), ServeError> {
     let rooms = state.rooms.clone();
+    let provider_catalog = state.provider_catalog.clone();
     let connections = state.connections.clone();
     let connection_shutdown = state.shutdown.clone();
     let http_admission = Arc::new(Semaphore::new(MAX_HTTP_CONNECTIONS));
@@ -167,6 +178,7 @@ pub async fn serve(
         tracing::warn!(rejected, "HTTP overload connections were rejected");
     }
     rooms.shutdown().await;
+    provider_catalog.shutdown().await?;
     result.map_err(ServeError::Io)
 }
 
@@ -389,12 +401,14 @@ async fn socket_session(
             return;
         }
     };
+    let mut catalog_updates = state.provider_catalog.subscribe();
+    let provider_catalog = catalog_updates.borrow_and_update().clone();
     let snapshot = RoomSnapshot {
         stream: "room_events",
         room: snapshot_data.room,
         room_settings: settings,
         participants: snapshot_data.participants,
-        agent_sessions: Vec::new(),
+        agent_sessions: snapshot_data.agent_sessions,
         provider_requests: Vec::new(),
         active_turns: Vec::new(),
         events: snapshot_data.events,
@@ -403,8 +417,8 @@ async fn socket_session(
         has_more_before: snapshot_data.has_more_before,
         resume_gap: snapshot_data.resume_gap,
         snapshot_mode: snapshot_data.snapshot_mode,
-        provider_catalog: ProviderCatalog::default(),
-        available_providers: Vec::new(),
+        available_providers: provider_catalog.providers.clone(),
+        provider_catalog,
         capabilities: principal.capabilities.clone(),
         server_proof,
     };
@@ -527,6 +541,15 @@ async fn socket_session(
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
                 }
             }
+            changed = catalog_updates.changed() => {
+                if changed.is_err() {
+                    continue;
+                }
+                let frame = ServerFrame::ProviderCatalogUpdated {
+                    catalog: catalog_updates.borrow_and_update().clone(),
+                };
+                if send_frame(&mut sender, &state.shutdown, &frame).await.is_err() { return; }
+            }
         }
     }
 }
@@ -614,7 +637,9 @@ fn persistence_error(error: &PersistenceError) -> (&'static str, String) {
         | PersistenceError::WriterAlreadyActive(_)
         | PersistenceError::WriterLease(_)
         | PersistenceError::UnsafeDatabasePath(_)
-        | PersistenceError::InitializationNotAllowed => (
+        | PersistenceError::InitializationNotAllowed
+        | PersistenceError::InvalidSchemaVersion(_)
+        | PersistenceError::UnsupportedSchemaVersion { .. } => (
             "persistence_failed",
             "Persistence operation failed.".to_owned(),
         ),
@@ -718,6 +743,8 @@ fn persistence_error_is_internal(error: &PersistenceError) -> bool {
             | PersistenceError::WriterLease(_)
             | PersistenceError::UnsafeDatabasePath(_)
             | PersistenceError::InitializationNotAllowed
+            | PersistenceError::InvalidSchemaVersion(_)
+            | PersistenceError::UnsupportedSchemaVersion { .. }
     )
 }
 

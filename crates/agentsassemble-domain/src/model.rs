@@ -281,7 +281,9 @@ pub enum SnapshotMode {
 pub struct ProviderCatalog {
     pub status: String,
     pub catalog_revision: String,
-    pub providers: Vec<Value>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub discovered_at: String,
+    pub providers: Vec<ProviderAvailability>,
 }
 
 impl Default for ProviderCatalog {
@@ -289,7 +291,107 @@ impl Default for ProviderCatalog {
         Self {
             status: "ready".to_owned(),
             catalog_revision: String::new(),
+            discovered_at: String::new(),
             providers: Vec::new(),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct ProviderControlOption {
+    pub value: String,
+    pub label: String,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub metadata: BTreeMap<String, Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct ProviderControl {
+    pub key: String,
+    pub label: String,
+    pub kind: String,
+    pub options: Vec<ProviderControlOption>,
+    pub default_value: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[allow(clippy::struct_excessive_bools)] // Public provider capabilities are independent facts.
+pub struct ProviderAvailability {
+    pub id: String,
+    pub display_name: String,
+    pub provider_kind: String,
+    pub runtime_kind: String,
+    pub catalog_group: String,
+    pub workspace_required: bool,
+    pub connection_kind: String,
+    pub executable: String,
+    pub default_model: String,
+    pub interactive: bool,
+    pub startable: bool,
+    pub available: bool,
+    pub discovery_status: String,
+    pub catalog_source: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub discovery_error_code: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub discovery_error: String,
+    pub login_available: bool,
+    pub login_label: String,
+    pub login_flow: String,
+    pub controls: Vec<ProviderControl>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct AgentSession {
+    pub room_id: String,
+    pub session_id: String,
+    pub participant_id: String,
+    pub display_name: String,
+    pub status: String,
+    pub runtime_status: String,
+    pub enabled: bool,
+    pub provider_kind: String,
+    pub runtime_kind: String,
+    pub connection_kind: String,
+    pub external_owned: bool,
+    pub process_ownership: String,
+    pub workspace: String,
+    pub model: String,
+    pub reasoning_effort: String,
+    pub service_tier: String,
+    pub variant: String,
+    pub execution_harness: String,
+    pub permission_mode: String,
+    pub max_output_tokens: u32,
+    pub catalog_revision: String,
+    pub runtime_profile_key: String,
+    pub transport: String,
+    pub last_seen_event_id: String,
+    pub last_seen_seq: i64,
+    pub last_provider_sync_event_id: String,
+    pub last_provider_sync_seq: i64,
+    pub bootstrap_cutoff_seq: i64,
+    pub turn_count: u64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentSessionDraft {
+    pub agent_id: String,
+    pub display_name: String,
+    pub provider_kind: String,
+    pub runtime_kind: String,
+    pub executable: String,
+    pub workspace: String,
+    pub model: String,
+    pub reasoning_effort: String,
+    pub service_tier: String,
+    pub variant: String,
+    pub execution_harness: String,
+    pub permission_mode: String,
+    pub max_output_tokens: u32,
+    pub catalog_revision: String,
+    pub runtime_profile_key: String,
+    pub transport: String,
 }

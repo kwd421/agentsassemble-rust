@@ -73,6 +73,12 @@ Room snapshots are read in one SQLite transaction. Their `oldest_seq` and `last_
 
 A resume cursor ahead of durable state produces `resync_required` with the durable latest sequence. The browser transport then clears its local cursor and reconnects for an authoritative initial snapshot; it does not retry the impossible cursor indefinitely.
 
+### Provider catalog and Agent Sessions
+
+The provider crate owns installed-provider discovery, catalog normalization, catalog revisioning, and selection validation. Provider probes are bounded child processes and their output is parsed into concrete domain types; the server cannot turn a missing or malformed catalog into a startable provider. The provider crate does not own rooms or persistence.
+
+An Agent Session's configured and desired state is durable room state. Live provider processes and their task handles are observed resources owned by one server supervisor. Lifecycle effects begin only from committed intent and report completion through the room mutation owner. Replayed commands reuse their durable result before consulting a newer catalog or launching an effect.
+
 ## Enforced source structure
 
 Cargo crate dependencies enforce direction:
@@ -80,7 +86,8 @@ Cargo crate dependencies enforce direction:
 ```text
 domain <- protocol
 domain <- persistence
-domain + protocol + persistence <- server
+domain <- provider
+domain + protocol + persistence + provider <- server
 ```
 
 `domain` cannot depend on Tokio, Axum, SQLx, Tower, or provider/network mechanisms. `scripts/check_architecture.py` rejects unowned workspace crates, dependency-direction violations, and every local path dependency outside the explicit owned-crate allowlist. `scripts/check_source_growth.py` applies the inherited 800-line source ceiling to handwritten and generated source alike, so a filename cannot bypass the gate. An exception requires an explicit path, ceiling, and cohesive reason showing why splitting would break an essential single owner.

@@ -2,19 +2,18 @@ import type {
   LobbyAttachmentRef,
   LobbyEvent,
   LobbyPostResponse,
-  RoomAgentSession,
   RoomEvent,
   RoomMember,
   RoomSocketAuth,
-  ServerRoom,
   SideChatEvent,
 } from "./api";
 import type { PluginEnvelope } from "./pluginSocketProtocol";
+import type { ProviderAvailability } from "./types/generated/ProviderAvailability";
+import type { ProviderCatalog } from "./types/generated/ProviderCatalog";
+import type { ProviderControl as GeneratedProviderControl } from "./types/generated/ProviderControl";
+import type { ProviderControlOption as GeneratedProviderControlOption } from "./types/generated/ProviderControlOption";
+import type { RoomSnapshot } from "./types/generated/RoomSnapshot";
 import type { TicketResponse } from "./types/generated/TicketResponse";
-import type {
-  PublicProviderRequest,
-  PublicRoomGlobalSettings,
-} from "./types/generatedRoomEvent";
 
 export interface RoomSocketHandlers {
   onLobby?: (events: LobbyEvent[]) => void;
@@ -58,73 +57,13 @@ export interface RoomHistoryPage {
   has_more_before: boolean;
 }
 
-export interface NativeCliProviderAvailability {
-  id: string;
-  display_name: string;
-  provider_kind: string;
-  runtime_kind: "live_cli" | "opencode" | "api";
-  catalog_group?: "subscription" | "api" | "local";
-  workspace_required?: boolean;
-  work_harness_available?: boolean;
-  custom_endpoint?: boolean;
-  custom_model?: boolean;
-  connection_kind: "native_cli_bridge";
-  executable: string;
-  default_model: string;
-  interactive: true;
-  startable: boolean;
-  available: boolean;
-  discovery_status?: "loading" | "ready" | "failed";
-  catalog_source?: "discovered" | "static_manifest" | "stale_cache";
-  discovery_error_code?: string;
-  discovery_error?: string;
-  login_available?: boolean;
-  login_label?: string;
-  login_flow?: "browser_oauth" | "interactive_terminal";
-  controls: ProviderControl[];
-}
-
-export interface ProviderCatalogSnapshot {
-  status: "loading" | "ready" | "failed";
-  catalog_revision: string;
-  discovered_at?: string;
-  providers: NativeCliProviderAvailability[];
-}
-
-export interface ProviderControlOption {
-  value: string;
-  label: string;
-  metadata?: Record<string, unknown>;
-}
-
-export interface ProviderControl {
-  key: string;
-  label: string;
-  kind: "select" | "combobox";
-  options: ProviderControlOption[];
-  default_value: string;
-}
-
-export interface RoomSocketSnapshot {
+export type NativeCliProviderAvailability = ProviderAvailability;
+export type ProviderCatalogSnapshot = ProviderCatalog;
+export type ProviderControlOption = GeneratedProviderControlOption;
+export type ProviderControl = GeneratedProviderControl;
+export type RoomSocketSnapshot = RoomSnapshot & {
   op: "snapshot";
-  stream: "room_events";
-  room: ServerRoom | Record<string, unknown>;
-  room_settings: PublicRoomGlobalSettings;
-  participants: RoomMember[];
-  agent_sessions: RoomAgentSession[];
-  provider_requests?: PublicProviderRequest[];
-  active_turns: Array<Record<string, unknown>>;
-  events: RoomEvent[];
-  oldest_seq: number;
-  last_seq: number;
-  has_more_before: boolean;
-  resume_gap: boolean;
-  snapshot_mode: "initial" | "resume" | "gap" | "bridge";
-  provider_catalog: ProviderCatalogSnapshot;
-  available_providers: NativeCliProviderAvailability[];
-  capabilities: Record<string, boolean>;
-  server_proof?: string;
-}
+};
 
 export interface RoomCommandAck {
   op: "ack";

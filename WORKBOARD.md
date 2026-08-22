@@ -1,15 +1,15 @@
 # WORKBOARD
 
-Status: Phase 1 — core room transport owner is active.
+Status: Phase 2 — Agent Session and provider runtime owner is active.
 
 Purpose: route the asynchronous Rust reimplementation without duplicating its contracts.
 
 ## Active work
 
-- Owner: [`docs/specs/core-room-slice.md`](docs/specs/core-room-slice.md)
+- Owner: [`docs/specs/agent-session-slice.md`](docs/specs/agent-session-slice.md)
 - Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - Real-client verification: [`docs/VERIFICATION.md`](docs/VERIFICATION.md)
-- Exit: the existing React room UI accepts the Rust snapshot and recovers one durable host message across reconnect and runtime restart without a Python process.
+- Exit: the same durable visible Agent Session completes a real room conversation through each provider in the exact matrix owned by [`docs/VERIFICATION.md`](docs/VERIFICATION.md), then all verification-owned processes and UI resources are shut down.
 
 ## Read routes
 

@@ -2,6 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use agentsassemble_domain::{AuthenticatedPrincipal, RoomEvent};
 use agentsassemble_persistence::{CommandOutcome, PersistenceError, SqliteStore};
+use agentsassemble_provider::ProviderCatalogService;
 use serde_json::Value;
 use tokio::{
     sync::{Mutex, broadcast, mpsc, oneshot},
@@ -29,6 +30,7 @@ struct RoomHandle {
 #[derive(Clone)]
 pub struct RoomRuntime {
     store: SqliteStore,
+    provider_catalog: ProviderCatalogService,
     rooms: Arc<Mutex<HashMap<String, RoomHandle>>>,
     cancellation: CancellationToken,
     tasks: Arc<Mutex<Vec<JoinHandle<()>>>>,
@@ -36,9 +38,10 @@ pub struct RoomRuntime {
 
 impl RoomRuntime {
     #[must_use]
-    pub fn new(store: SqliteStore) -> Self {
+    pub fn new(store: SqliteStore, provider_catalog: ProviderCatalogService) -> Self {
         Self {
             store,
+            provider_catalog,
             rooms: Arc::new(Mutex::new(HashMap::new())),
             cancellation: CancellationToken::new(),
             tasks: Arc::new(Mutex::new(Vec::new())),
@@ -114,6 +117,7 @@ impl RoomRuntime {
         };
         rooms.insert(room_id.to_owned(), handle.clone());
         let store = self.store.clone();
+        let provider_catalog = self.provider_catalog.clone();
         let cancellation = self.cancellation.clone();
         let task = tokio::spawn(async move {
             loop {
@@ -124,14 +128,7 @@ impl RoomRuntime {
                         command
                     }
                 };
-                let result = store
-                    .execute_message(
-                        &command.principal,
-                        &command.request_id,
-                        &command.action,
-                        &command.payload,
-                    )
-                    .await;
+                let result = execute_command(&store, &provider_catalog, &command).await;
                 if let Ok(outcome) = &result
                     && !outcome.deduplicated
                 {
@@ -143,4 +140,52 @@ impl RoomRuntime {
         self.tasks.lock().await.push(task);
         handle
     }
+}
+
+async fn execute_command(
+    store: &SqliteStore,
+    provider_catalog: &ProviderCatalogService,
+    command: &RoomCommand,
+) -> Result<CommandOutcome, PersistenceError> {
+    if command.action != "agent.create" {
+        return store
+            .execute_message(
+                &command.principal,
+                &command.request_id,
+                &command.action,
+                &command.payload,
+            )
+            .await;
+    }
+    if let Some(outcome) = store
+        .replay_command(
+            &command.principal,
+            &command.request_id,
+            &command.action,
+            &command.payload,
+        )
+        .await?
+    {
+        return Ok(outcome);
+    }
+    let selection = provider_catalog
+        .validate_creation(
+            &command.principal.room_id,
+            &command.principal.principal_id,
+            &command.request_id,
+            &command.payload,
+        )
+        .await
+        .map_err(|error| PersistenceError::CommandRejected {
+            code: error.code,
+            message: error.message,
+        })?;
+    store
+        .execute_agent_create(
+            &command.principal,
+            &command.request_id,
+            &command.payload,
+            &selection.into(),
+        )
+        .await
 }

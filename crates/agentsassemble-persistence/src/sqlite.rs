@@ -1,13 +1,15 @@
 use std::{fs::File, io, path::PathBuf, sync::Arc};
 
 use agentsassemble_domain::{
-    AuthenticatedPrincipal, MessageSend, Participant, ParticipantStatus, Room, RoomEvent,
-    RoomSettings, RoomStatus, SnapshotMode, canonical_payload_hash, prepare_message_event,
+    AgentSession, AuthenticatedPrincipal, MessageSend, Participant, Room, RoomEvent, RoomSettings,
+    RoomStatus, SnapshotMode, canonical_payload_hash, prepare_message_event,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
 use sqlx::{Row, Sqlite, SqlitePool, Transaction};
 use thiserror::Error;
+
+use crate::authority::{authorize_session, load_active_participant};
 
 const SCHEMA_OWNER: &str = "agentsassemble-rust-v1";
 
@@ -29,6 +31,10 @@ pub enum PersistenceError {
     UnsafeDatabasePath(&'static str),
     #[error("database initialization is allowed only for a newly created empty authority")]
     InitializationNotAllowed,
+    #[error("database schema version marker is invalid: {0}")]
+    InvalidSchemaVersion(String),
+    #[error("database schema version {found} is newer than supported version {supported}")]
+    UnsupportedSchemaVersion { found: i64, supported: i64 },
     #[error("room does not exist")]
     RoomMissing,
     #[error("participant does not exist")]
@@ -46,6 +52,7 @@ pub struct RoomSnapshotData {
     pub room: Room,
     pub settings: RoomSettings,
     pub participants: Vec<Participant>,
+    pub agent_sessions: Vec<AgentSession>,
     pub events: Vec<RoomEvent>,
     pub oldest_seq: i64,
     pub last_seq: i64,
@@ -97,6 +104,12 @@ impl SqliteStore {
                     .await?;
             }
         }
+        sqlx::query(
+            "INSERT INTO runtime_metadata(key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        )
+        .bind(crate::migration::CURRENT_SCHEMA_VERSION.to_string())
+        .execute(&mut *transaction)
+        .await?;
         transaction.commit().await?;
         Ok(())
     }
@@ -116,7 +129,7 @@ impl SqliteStore {
         .fetch_optional(&self.pool)
         .await?;
         match owner {
-            Some(owner) if owner == SCHEMA_OWNER => Ok(()),
+            Some(owner) if owner == SCHEMA_OWNER => self.migrate_schema().await,
             Some(owner) => Err(PersistenceError::AuthorityConflict(owner)),
             None => Err(PersistenceError::UnownedDatabase),
         }
@@ -298,6 +311,16 @@ impl SqliteStore {
             .into_iter()
             .map(|row| serde_json::from_str(row.get::<String, _>("participant_json").as_str()))
             .collect::<Result<Vec<_>, _>>()?;
+        let agent_session_rows = sqlx::query(
+            "SELECT session_json FROM agent_sessions WHERE room_id = ? ORDER BY session_id",
+        )
+        .bind(room_id)
+        .fetch_all(&mut *transaction)
+        .await?;
+        let agent_sessions = agent_session_rows
+            .into_iter()
+            .map(|row| serde_json::from_str(row.get::<String, _>("session_json").as_str()))
+            .collect::<Result<Vec<_>, _>>()?;
         let durable_last_seq = sqlx::query_scalar::<_, i64>(
             "SELECT COALESCE(MAX(seq), 0) FROM room_events WHERE room_id = ?",
         )
@@ -346,6 +369,7 @@ impl SqliteStore {
             room,
             settings,
             participants,
+            agent_sessions,
             events,
             oldest_seq,
             last_seq,
@@ -446,60 +470,7 @@ impl SqliteStore {
     }
 }
 
-async fn authorize_session(
-    transaction: &mut Transaction<'_, Sqlite>,
-    principal: &AuthenticatedPrincipal,
-) -> Result<(), PersistenceError> {
-    let participant =
-        load_active_participant(transaction, &principal.room_id, &principal.participant_id).await?;
-    if participant.room_id != principal.room_id
-        || participant.participant_id != principal.participant_id
-    {
-        return Err(PersistenceError::CommandRejected {
-            code: "session_revoked",
-            message: "This room session has ended.".to_owned(),
-        });
-    }
-    Ok(())
-}
-
-async fn load_active_participant(
-    transaction: &mut Transaction<'_, Sqlite>,
-    room_id: &str,
-    participant_id: &str,
-) -> Result<Participant, PersistenceError> {
-    let room_json =
-        sqlx::query_scalar::<_, String>("SELECT room_json FROM rooms WHERE room_id = ?")
-            .bind(room_id)
-            .fetch_optional(&mut **transaction)
-            .await?
-            .ok_or(PersistenceError::RoomMissing)?;
-    let room: Room = serde_json::from_str(&room_json)?;
-    if room.status != RoomStatus::Active {
-        return Err(PersistenceError::CommandRejected {
-            code: "room_inactive",
-            message: "Closed or archived rooms do not accept active sessions.".to_owned(),
-        });
-    }
-    let participant_json = sqlx::query_scalar::<_, String>(
-        "SELECT participant_json FROM participants WHERE room_id = ? AND participant_id = ?",
-    )
-    .bind(room_id)
-    .bind(participant_id)
-    .fetch_optional(&mut **transaction)
-    .await?
-    .ok_or(PersistenceError::ParticipantMissing)?;
-    let participant: Participant = serde_json::from_str(&participant_json)?;
-    if participant.status != ParticipantStatus::Joined {
-        return Err(PersistenceError::CommandRejected {
-            code: "session_revoked",
-            message: "This room session has ended.".to_owned(),
-        });
-    }
-    Ok(participant)
-}
-
-async fn existing_command(
+pub(crate) async fn existing_command(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
     principal_id: &str,

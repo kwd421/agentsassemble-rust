@@ -9,6 +9,7 @@ use agentsassemble_domain::{
 };
 use agentsassemble_persistence::{SqliteStore, secure_private_directory};
 use agentsassemble_protocol::{LocalControlRequest, LocalControlResponse};
+use agentsassemble_provider::ProviderCatalogService;
 use agentsassemble_server::{
     AppState, HostSecret, TicketIssueError, TicketStore, issue_local_ticket, serve,
 };
@@ -59,11 +60,11 @@ async fn main() -> anyhow::Result<()> {
         secure_private_directory(parent)
             .with_context(|| format!("secure database directory {}", parent.display()))?;
     }
+    let store = SqliteStore::open_path(&args.database).await?;
     let database_path = args
         .database
         .canonicalize()
-        .unwrap_or_else(|_| args.database.clone());
-    let store = SqliteStore::open_path(&args.database).await?;
+        .with_context(|| format!("resolve database path {}", args.database.display()))?;
     ensure_parent_alive(&cancellation)?;
     if store.was_created()
         && let Some(room_id) = args.initialize_room.as_deref()
@@ -84,6 +85,7 @@ async fn main() -> anyhow::Result<()> {
         store,
         TicketStore::new(Duration::from_secs(30), 4_096),
         host_secret,
+        ProviderCatalogService::discovering(),
     );
     let frontend_path = if let Some(frontend) = args.frontend {
         let path = frontend

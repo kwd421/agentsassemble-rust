@@ -2,6 +2,7 @@
 members = [
     "crates/agentsassemble-domain",
     "crates/agentsassemble-persistence",
+    "crates/agentsassemble-provider",
     "crates/agentsassemble-protocol",
     "crates/agentsassemble-server",
 ]
@@ -39,7 +40,7 @@ tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
 ts-rs = { version = "12.0.1", features = ["chrono-impl", "serde-json-impl", "uuid-impl"] }
 unicode-general-category = "1.1.0"
-uuid = { version = "1.24.1", features = ["serde", "v4"] }
+uuid = { version = "1.24.1", features = ["serde", "v4", "v5"] }
 url = "2.5.7"
 tempfile = "3.27.0"
 
