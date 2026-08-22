@@ -24,7 +24,11 @@ url = "2.5.7"
 uuid = { version = "1.24.1", features = ["v4"] }
 
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.31.2", features = ["process", "signal"] }
+nix = { version = "0.31.2", features = ["process", "signal", "user"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+same-file = "1.0.6"
+tempfile = "3.27.0"
 
 [target.'cfg(windows)'.dependencies]
 win32job = "2.0.3"

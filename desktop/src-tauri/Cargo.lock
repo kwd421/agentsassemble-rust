@@ -15,6 +15,7 @@ dependencies = [
  "agentsassemble-domain",
  "agentsassemble-protocol",
  "nix",
+ "same-file",
  "serde",
  "serde_json",
  "tauri",

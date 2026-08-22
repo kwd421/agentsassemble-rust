@@ -7,8 +7,10 @@ use tokio::{io::AsyncWriteExt, process::ChildStdin};
 use tokio_util::codec::{FramedRead, LinesCodec};
 
 use crate::{
-    guardian::GuardianLaunch, runtime::DriverError, runtime_lease::HeldRuntimeLease,
-    unix_process_tree::CapturedDescendants,
+    guardian::GuardianLaunch,
+    runtime::DriverError,
+    runtime_lease::HeldRuntimeLease,
+    unix_process_tree::{RUNTIME_TOKEN_ENV, tagged_runtime_exists},
 };
 
 const HELPER_TIMEOUT: Duration = Duration::from_secs(5);
@@ -21,6 +23,7 @@ pub(crate) struct UnixProcessCustody {
     provider_pid: Option<Pid>,
     guardian: tokio::process::Child,
     guardian_input: Option<ChildStdin>,
+    runtime_token: String,
     armed: bool,
 }
 
@@ -65,12 +68,15 @@ impl UnixProcessCustody {
             provider_pid: None,
             guardian,
             guardian_input: Some(guardian_input),
+            runtime_token: runtime_lease.token().to_owned(),
             armed: true,
         })
     }
 
     pub(crate) fn attach(&self, command: &mut tokio::process::Command) {
-        command.process_group(self.anchor_pid.as_raw_pid());
+        command
+            .process_group(self.anchor_pid.as_raw_pid())
+            .env(RUNTIME_TOKEN_ENV, &self.runtime_token);
     }
 
     pub(crate) fn bind_provider(&mut self, raw_pid: Option<u32>) -> Result<(), DriverError> {
@@ -101,10 +107,8 @@ impl UnixProcessCustody {
     }
 
     pub(crate) async fn stop(&mut self, child: &mut dyn ChildWrapper) -> Result<(), DriverError> {
-        let provider_pid = self.provider_pid.ok_or_else(custody_error)?;
-        let descendants = CapturedDescendants::freeze(provider_pid, self.anchor_pid);
+        self.provider_pid.ok_or_else(custody_error)?;
         self.request_stop();
-        descendants.kill();
         tokio::time::timeout(HELPER_TIMEOUT, async {
             let (guardian, provider) = tokio::join!(self.guardian.wait(), child.wait());
             let guardian = guardian.map_err(|_| stop_error())?;
@@ -113,7 +117,10 @@ impl UnixProcessCustody {
                 return Err(stop_error());
             }
             wait_for_group_absence(self.anchor_pid).await?;
-            descendants.confirm_gone().await.map_err(|_| stop_error())
+            match tagged_runtime_exists(&self.runtime_token) {
+                Ok(false) => Ok(()),
+                Ok(true) | Err(_) => Err(stop_error()),
+            }
         })
         .await
         .map_err(|_| stop_error())??;

@@ -7,12 +7,17 @@ use std::{
     time::Duration,
 };
 
+#[cfg(target_os = "macos")]
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 #[cfg(unix)]
 use std::time::Instant;
 
 const SUPERVISOR_FLAG: &str = "--agentsassemble-runtime-supervisor";
+#[cfg(target_os = "macos")]
+const STAGED_SERVER_ENV: &str = "AGENTSASSEMBLE_INTERNAL_SERVER_STAGED";
 const SIDECAR_SHUTDOWN_GRACE: Duration = Duration::from_secs(3);
 
 pub(crate) fn command(executable: &std::path::Path) -> Result<Command, String> {
@@ -47,6 +52,10 @@ pub fn run_if_requested() -> Option<i32> {
 
 fn supervise(executable: &std::path::Path, arguments: &[std::ffi::OsString]) -> io::Result<()> {
     let _container = supervisor_container()?;
+    #[cfg(target_os = "macos")]
+    let bound_executable = BoundSidecar::bind(executable)?;
+    #[cfg(target_os = "macos")]
+    let executable = bound_executable.launch_path();
     let mut command = Command::new(executable);
     command
         .args(arguments)
@@ -54,6 +63,8 @@ fn supervise(executable: &std::path::Path, arguments: &[std::ffi::OsString]) -> 
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit());
+    #[cfg(target_os = "macos")]
+    command.env(STAGED_SERVER_ENV, "v1");
     let mut sidecar = command.spawn()?;
     let Some(mut sidecar_input) = sidecar.stdin.take() else {
         terminate_sidecar(&mut sidecar);
@@ -98,6 +109,66 @@ fn supervise(executable: &std::path::Path, arguments: &[std::ffi::OsString]) -> 
             return Ok(());
         }
         thread::sleep(Duration::from_millis(20));
+    }
+}
+
+#[cfg(target_os = "macos")]
+struct BoundSidecar {
+    launch_path: PathBuf,
+    _staging: tempfile::TempDir,
+}
+
+#[cfg(target_os = "macos")]
+impl BoundSidecar {
+    fn bind(executable: &std::path::Path) -> io::Result<Self> {
+        use std::io::{Seek, Write};
+
+        use agentsassemble_domain::stable_content_identity;
+        use same_file::Handle;
+
+        let canonical = executable.canonicalize()?;
+        let mut source = std::fs::File::open(&canonical)?;
+        let source_metadata = source.metadata()?;
+        if !source_metadata.is_file() || source_metadata.permissions().mode() & 0o111 == 0 {
+            return Err(io::Error::other("sidecar source is not executable"));
+        }
+        let source_handle = Handle::from_file(source.try_clone()?)?;
+        let expected_identity = stable_content_identity(&source_handle, &mut source)?;
+        source.rewind()?;
+
+        let staging = tempfile::Builder::new()
+            .prefix("agentsassemble-server-exec-")
+            .permissions(std::fs::Permissions::from_mode(0o700))
+            .tempdir()?;
+        let staging_metadata = std::fs::symlink_metadata(staging.path())?;
+        if !staging_metadata.is_dir()
+            || staging_metadata.uid() != nix::unistd::geteuid().as_raw()
+            || staging_metadata.permissions().mode() & 0o077 != 0
+        {
+            return Err(io::Error::other("sidecar staging directory is not private"));
+        }
+        let launch_path = staging.path().join("agentsassemble-server");
+        let mut staged = std::fs::OpenOptions::new()
+            .create_new(true)
+            .read(true)
+            .write(true)
+            .open(&launch_path)?;
+        io::copy(&mut source, &mut staged)?;
+        staged.flush()?;
+        staged.sync_all()?;
+        staged.rewind()?;
+        if stable_content_identity(&source_handle, &mut staged)? != expected_identity {
+            return Err(io::Error::other("sidecar staging identity changed"));
+        }
+        std::fs::set_permissions(&launch_path, std::fs::Permissions::from_mode(0o500))?;
+        Ok(Self {
+            launch_path,
+            _staging: staging,
+        })
+    }
+
+    fn launch_path(&self) -> &std::path::Path {
+        &self.launch_path
     }
 }
 
@@ -202,7 +273,11 @@ fn terminate_sidecar(child: &mut Child) {
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;
+    #[cfg(target_os = "macos")]
+    use std::process::Command;
 
+    #[cfg(target_os = "macos")]
+    use super::BoundSidecar;
     use super::{forward_owned_output, run_if_requested};
 
     #[test]
@@ -218,5 +293,28 @@ mod tests {
             .unwrap_or_else(|error| panic!("forward valid readiness: {error}"));
         assert_eq!(output, valid);
         assert!(forward_owned_output(&mut Cursor::new(valid), &mut Vec::new(), 41).is_err());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn sidecar_binding_survives_source_path_replacement() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = tempfile::tempdir()
+            .unwrap_or_else(|error| panic!("create sidecar binding fixture: {error}"));
+        let source = directory.path().join("sidecar");
+        std::fs::write(&source, "#!/bin/sh\nprintf 'bound-sidecar'")
+            .unwrap_or_else(|error| panic!("write sidecar binding fixture: {error}"));
+        std::fs::set_permissions(&source, std::fs::Permissions::from_mode(0o700))
+            .unwrap_or_else(|error| panic!("make sidecar binding fixture executable: {error}"));
+        let bound = BoundSidecar::bind(&source)
+            .unwrap_or_else(|error| panic!("bind sidecar fixture: {error}"));
+        std::fs::write(&source, "#!/bin/sh\nprintf 'replacement'")
+            .unwrap_or_else(|error| panic!("replace sidecar fixture: {error}"));
+        let output = Command::new(bound.launch_path())
+            .output()
+            .unwrap_or_else(|error| panic!("launch bound sidecar fixture: {error}"));
+        assert!(output.status.success());
+        assert_eq!(output.stdout, b"bound-sidecar");
     }
 }

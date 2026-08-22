@@ -54,10 +54,16 @@ impl ProductionDriverFactory {
     fn local() -> Self {
         #[cfg(all(unix, test))]
         let guardian = GuardianLaunch::test_harness().ok();
-        #[cfg(all(unix, not(test)))]
-        let guardian = std::env::current_exe()
+        #[cfg(all(unix, not(test), any(target_os = "linux", target_os = "android")))]
+        let guardian = crate::guardian::reexecution_path()
             .ok()
             .and_then(|executable| GuardianLaunch::production(&executable).ok());
+        #[cfg(all(unix, not(test), not(any(target_os = "linux", target_os = "android"))))]
+        let guardian = (std::env::var_os("AGENTSASSEMBLE_INTERNAL_SERVER_STAGED")
+            == Some("v1".into()))
+        .then(crate::guardian::reexecution_path)
+        .and_then(Result::ok)
+        .and_then(|executable| GuardianLaunch::production(&executable).ok());
         Self {
             #[cfg(unix)]
             guardian,

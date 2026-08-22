@@ -5,6 +5,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::Arc,
+    time::Duration,
 };
 
 use rustix::process::{Pid, Signal};
@@ -21,6 +22,7 @@ const TEST_LEASE_ENV: &str = "AGENTSASSEMBLE_INTERNAL_GUARDIAN_LEASE";
 const TEST_TOKEN_ENV: &str = "AGENTSASSEMBLE_INTERNAL_GUARDIAN_TOKEN";
 
 use crate::filesystem::{BoundExecutable, bind_helper_executable_sync};
+use crate::unix_process_tree::CapturedRuntimeProcesses;
 
 #[derive(Clone)]
 pub(crate) struct GuardianLaunch {
@@ -108,9 +110,10 @@ enum HelperMode {
     Anchor,
 }
 
-fn reexecution_path() -> io::Result<PathBuf> {
+pub(crate) fn reexecution_path() -> io::Result<PathBuf> {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
+        let _executable = std::fs::File::open("/proc/self/exe")?;
         Ok(PathBuf::from("/proc/self/exe"))
     }
     #[cfg(not(any(target_os = "linux", target_os = "android")))]
@@ -196,11 +199,11 @@ fn run_guardian(lease_path: &Path, lease_token: &str, launch: &GuardianLaunch) -
         .process_group(0);
     let mut anchor = command.spawn()?;
     let anchor_pid = anchor.id();
+    let anchor_input = anchor
+        .stdin
+        .take()
+        .ok_or_else(|| io::Error::other("provider anchor input is unavailable"))?;
     let operation = (|| {
-        let _anchor_input = anchor
-            .stdin
-            .take()
-            .ok_or_else(|| io::Error::other("provider anchor input is unavailable"))?;
         let anchor_output = anchor
             .stdout
             .take()
@@ -216,7 +219,8 @@ fn run_guardian(lease_path: &Path, lease_token: &str, launch: &GuardianLaunch) -
         while io::stdin().lock().read(&mut buffer)? != 0 {}
         Ok(())
     })();
-    let cleanup = terminate_anchor(&mut anchor, anchor_pid);
+    let cleanup = terminate_runtime(&mut anchor, anchor_pid, lease_token);
+    drop(anchor_input);
     operation.and(cleanup)
 }
 
@@ -272,4 +276,24 @@ fn terminate_anchor(anchor: &mut Child, raw_pid: u32) -> io::Result<()> {
         (_, Err(error)) => Err(error),
         (Err(error), _) => Err(error.into()),
     }
+}
+
+fn terminate_runtime(anchor: &mut Child, raw_pid: u32, lease_token: &str) -> io::Result<()> {
+    let pid = i32::try_from(raw_pid)
+        .ok()
+        .and_then(Pid::from_raw)
+        .ok_or_else(|| io::Error::other("provider anchor pid is invalid"))?;
+    let captured = CapturedRuntimeProcesses::freeze(lease_token, pid);
+    let anchor_result = terminate_anchor(anchor, raw_pid);
+    let captured = match captured {
+        Ok(captured) => captured,
+        Err(error) => {
+            let _ = anchor_result;
+            return Err(error);
+        }
+    };
+    let captured_result = captured
+        .kill()
+        .and_then(|()| captured.confirm_gone(lease_token, Duration::from_secs(4)));
+    anchor_result.and(captured_result)
 }

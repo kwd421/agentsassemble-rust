@@ -16,17 +16,35 @@ fn provider_guardian_entry() {
 }
 
 #[test]
+#[allow(clippy::zombie_processes)] // The first fixture child must exit without reaping its child.
 fn escaped_descendant_entry() {
     let Some(pid_path) = std::env::var_os("AGENTSASSEMBLE_ESCAPE_FIXTURE_PID") else {
         return;
     };
+    if std::env::var_os("AGENTSASSEMBLE_ESCAPE_FIXTURE_CHILD").is_some() {
+        std::fs::write(pid_path, rustix::process::getpid().as_raw_pid().to_string())
+            .unwrap_or_else(|error| panic!("publish escaped descendant pid: {error}"));
+        loop {
+            std::thread::sleep(Duration::from_secs(1));
+        }
+    }
     rustix::process::setsid()
         .unwrap_or_else(|error| panic!("create escaped descendant session: {error}"));
-    std::fs::write(pid_path, rustix::process::getpid().as_raw_pid().to_string())
-        .unwrap_or_else(|error| panic!("publish escaped descendant pid: {error}"));
-    loop {
-        std::thread::sleep(Duration::from_secs(1));
-    }
+    std::process::Command::new(
+        std::env::current_exe()
+            .unwrap_or_else(|error| panic!("resolve escaped descendant binary: {error}")),
+    )
+    .args([
+        "--exact",
+        "runtime::tests::escaped_descendant_entry",
+        "--nocapture",
+    ])
+    .env("AGENTSASSEMBLE_ESCAPE_FIXTURE_CHILD", "1")
+    .stdin(std::process::Stdio::null())
+    .stdout(std::process::Stdio::null())
+    .stderr(std::process::Stdio::null())
+    .spawn()
+    .unwrap_or_else(|error| panic!("spawn reparented descendant: {error}"));
 }
 
 #[tokio::test]
@@ -198,7 +216,8 @@ async fn stop_kills_descendants_after_the_codex_leader_exits() {
 }
 
 #[tokio::test]
-async fn stop_captures_a_descendant_that_created_a_new_session() {
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
+async fn stop_captures_a_reparented_descendant_from_a_new_session() {
     let _serial = RUNTIME_TEST_LOCK.lock().await;
     let directory =
         tempfile::tempdir().unwrap_or_else(|error| panic!("create escape fixture: {error}"));
@@ -217,26 +236,57 @@ async fn stop_captures_a_descendant_that_created_a_new_session() {
         .await
         .unwrap_or_else(|error| panic!("start escaped descendant fixture: {error}"));
     let pid = wait_for_pid(&descendant_pid).await;
-    let _cleanup = ExactProcessCleanup(pid);
+    let cleanup = ExactProcessCleanup(pid);
     assert!(process_exists(pid));
-    adapter
+    let stopped = adapter
         .stop(
             &session.public.room_id,
             &session.public.session_id,
             &started.runtime_handle_id,
             &started.runtime_owner_id,
         )
-        .await
-        .unwrap_or_else(|error| panic!("stop escaped descendant fixture: {error}"));
-    adapter
-        .release_confirmed_stop(
+        .await;
+    #[cfg(target_os = "linux")]
+    stopped.unwrap_or_else(|error| panic!("stop escaped descendant fixture: {error}"));
+    #[cfg(any(target_os = "android", target_os = "macos"))]
+    {
+        let Err(error) = stopped else {
+            panic!("a platform without stable process handles must fail closed");
+        };
+        assert_eq!(error.code, "provider_stop_unconfirmed");
+        assert!(process_exists(pid));
+        let mut durable_session = session.clone();
+        durable_session.runtime_handle_id = started.runtime_handle_id.clone();
+        durable_session.runtime_owner_id = started.runtime_owner_id.clone();
+        let fresh = ProviderAdapter::new();
+        assert!(matches!(
+            fresh.observe(&durable_session).await,
+            ProviderRuntimeObservation::LeaseUncertain { .. }
+        ));
+        drop(cleanup);
+        wait_until(Duration::from_secs(2), || !process_exists(pid)).await;
+        assert_eq!(
+            fresh.observe(&durable_session).await,
+            ProviderRuntimeObservation::Gone
+        );
+        crate::runtime_lease::cleanup_stale_runtime_lease(
             &session.public.room_id,
             &session.public.session_id,
-            &started.runtime_handle_id,
-            &started.runtime_owner_id,
-        )
-        .await;
-    wait_until(Duration::from_secs(2), || !process_exists(pid)).await;
+        );
+    }
+    #[cfg(target_os = "linux")]
+    {
+        adapter
+            .release_confirmed_stop(
+                &session.public.room_id,
+                &session.public.session_id,
+                &started.runtime_handle_id,
+                &started.runtime_owner_id,
+            )
+            .await;
+        wait_until(Duration::from_secs(2), || !process_exists(pid)).await;
+        drop(cleanup);
+    }
 }
 
 #[tokio::test]

@@ -122,14 +122,14 @@ fn classify_unlocked_marker(marker: io::Result<String>) -> LeaseObservation {
             LeaseObservation::Gone
         }
         (Some("unix"), Some(token), Some(raw_pid), None) if validate_token(token).is_ok() => {
-            classify_unlocked_unix_marker(raw_pid)
+            classify_unlocked_unix_marker(token, raw_pid)
         }
         _ => LeaseObservation::Unknown,
     }
 }
 
 #[cfg(unix)]
-fn classify_unlocked_unix_marker(raw_pid: &str) -> LeaseObservation {
+fn classify_unlocked_unix_marker(token: &str, raw_pid: &str) -> LeaseObservation {
     let Some(pid) = raw_pid
         .parse::<i32>()
         .ok()
@@ -138,14 +138,20 @@ fn classify_unlocked_unix_marker(raw_pid: &str) -> LeaseObservation {
         return LeaseObservation::Unknown;
     };
     match rustix::process::test_kill_process_group(pid) {
-        Err(rustix::io::Errno::SRCH) => LeaseObservation::Gone,
+        Err(rustix::io::Errno::SRCH) => {
+            match crate::unix_process_tree::tagged_runtime_exists(token) {
+                Ok(true) => LeaseObservation::Active,
+                Ok(false) => LeaseObservation::Gone,
+                Err(_) => LeaseObservation::Unknown,
+            }
+        }
         Ok(()) | Err(rustix::io::Errno::PERM) => LeaseObservation::Active,
         Err(_) => LeaseObservation::Unknown,
     }
 }
 
 #[cfg(not(unix))]
-fn classify_unlocked_unix_marker(_raw_pid: &str) -> LeaseObservation {
+fn classify_unlocked_unix_marker(_token: &str, _raw_pid: &str) -> LeaseObservation {
     LeaseObservation::Unknown
 }
 

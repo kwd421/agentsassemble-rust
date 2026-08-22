@@ -93,9 +93,9 @@ impl CodexDriver {
         executable
             .configure_command(command.command_mut())
             .map_err(|_| executable_authority_error())?;
+        sanitize_environment(command.command_mut());
         #[cfg(unix)]
         process_group.attach(command.command_mut());
-        sanitize_environment(command.command_mut());
         command.wrap(KillOnDrop);
         #[cfg(windows)]
         command.wrap(JobObject);
