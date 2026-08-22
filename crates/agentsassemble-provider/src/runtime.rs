@@ -31,6 +31,7 @@ pub(crate) trait ProviderDriver: Send {
 pub(crate) struct ProviderSessionAttachment {
     pub(crate) provider_session_id: String,
     pub(crate) reused: bool,
+    pub(crate) observed_model_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
@@ -662,18 +663,29 @@ impl Default for ProviderAdapter {
 }
 
 fn started(
+    session: &DurableAgentSession,
     runtime: &OwnedRuntime,
     runtime_reused: bool,
     attachment: ProviderSessionAttachment,
-) -> ProviderRuntimeStarted {
-    ProviderRuntimeStarted {
+) -> Result<ProviderRuntimeStarted, DriverError> {
+    if attachment
+        .observed_model_id
+        .as_deref()
+        .is_some_and(|model| model != session.public.model)
+    {
+        return Err(DriverError::new(
+            "provider_model_mismatch",
+            "The provider attached a session for a different model.",
+        ));
+    }
+    Ok(ProviderRuntimeStarted {
         runtime_handle_id: runtime.handle_id.clone(),
         runtime_owner_id: runtime.owner_id.clone(),
         provider_session_id: attachment.provider_session_id,
         runtime_reused,
         provider_session_reused: attachment.reused,
         provider_session_active: true,
-    }
+    })
 }
 
 async fn reuse_owned_runtime(
@@ -709,7 +721,9 @@ async fn reuse_owned_runtime(
         ));
     }
     match runtime.driver.attach_session(session).await {
-        Ok(attachment) => Ok(started(runtime, true, attachment)),
+        Ok(attachment) => started(session, runtime, true, attachment).map_err(|error| {
+            ProviderAdapterError::uncertain(error, &runtime.handle_id, &runtime.owner_id)
+        }),
         Err(error) => Err(ProviderAdapterError::uncertain(
             error,
             &runtime.handle_id,
@@ -723,7 +737,9 @@ async fn initialize_owned_runtime(
     runtime: &mut OwnedRuntime,
 ) -> Result<ProviderRuntimeStarted, ProviderAdapterError> {
     match runtime.driver.attach_session(session).await {
-        Ok(attachment) => Ok(started(runtime, false, attachment)),
+        Ok(attachment) => started(session, runtime, false, attachment).map_err(|error| {
+            ProviderAdapterError::uncertain(error, &runtime.handle_id, &runtime.owner_id)
+        }),
         Err(error) => Err(ProviderAdapterError::uncertain(
             error,
             &runtime.handle_id,

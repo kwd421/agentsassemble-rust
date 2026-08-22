@@ -1,5 +1,6 @@
 mod catalog;
 mod codex;
+mod codex_identity;
 mod filesystem;
 #[cfg(unix)]
 mod guardian;

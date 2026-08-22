@@ -21,6 +21,10 @@ use crate::filesystem::BoundExecutable;
 #[cfg(not(unix))]
 use crate::process::sanitize_environment;
 use crate::{
+    codex_identity::{
+        checked_provider_session_id, observed_model_id_from_response,
+        provider_session_id_from_response, provider_session_mismatch, provider_session_unconfirmed,
+    },
     filesystem::bind_executable,
     launch_error::DriverLaunchError,
     runtime::{DriverError, DriverFuture, ProviderDriver, ProviderSessionAttachment},
@@ -36,8 +40,6 @@ const STOP_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_PROTOCOL_LINE_BYTES: usize = 256 * 1024;
 const MAX_PENDING_NOTIFICATIONS: usize = 256;
 const MAX_PENDING_NOTIFICATION_BYTES: usize = 2 * 1024 * 1024;
-const MAX_PROVIDER_SESSION_ID_BYTES: usize = 128;
-
 struct PendingRequest {
     id: u64,
     method: String,
@@ -58,10 +60,12 @@ pub(crate) struct CodexDriver {
     pending_notifications: VecDeque<Value>,
     pending_notification_bytes: usize,
     pending_request: Option<PendingRequest>,
+    initialization_error: Option<DriverError>,
     initialize_acked: bool,
     initialized_notification_started: bool,
     initialized: bool,
     attached_thread_id: Option<String>,
+    attached_observed_model_id: Option<String>,
     attachment_error: Option<DriverError>,
 }
 
@@ -128,10 +132,12 @@ impl CodexDriver {
                 pending_notifications: VecDeque::new(),
                 pending_notification_bytes: 0,
                 pending_request: None,
+                initialization_error: None,
                 initialize_acked: false,
                 initialized_notification_started: false,
                 initialized: false,
                 attached_thread_id: None,
+                attached_observed_model_id: None,
                 attachment_error: None,
             })
         }
@@ -176,10 +182,12 @@ impl CodexDriver {
                 pending_notifications: VecDeque::new(),
                 pending_notification_bytes: 0,
                 pending_request: None,
+                initialization_error: None,
                 initialize_acked: false,
                 initialized_notification_started: false,
                 initialized: false,
                 attached_thread_id: None,
+                attached_observed_model_id: None,
                 attachment_error: None,
             })
         }
@@ -189,12 +197,22 @@ impl CodexDriver {
         if self.initialized {
             return Ok(());
         }
+        if let Some(error) = self.initialization_error {
+            return Err(error);
+        }
         if !self.initialize_acked {
-            self.request(
-                "initialize",
-                json!({"clientInfo": {"name": "AgentsAssemble", "version": "0"}}),
-            )
-            .await?;
+            let initialized = self
+                .request(
+                    "initialize",
+                    json!({"clientInfo": {"name": "AgentsAssemble", "version": "0"}}),
+                )
+                .await;
+            if let Err(error) = initialized {
+                if self.pending_request.is_none() {
+                    self.initialization_error = Some(error);
+                }
+                return Err(error);
+            }
             self.initialize_acked = true;
         }
         if self.initialized_notification_started {
@@ -227,14 +245,15 @@ impl CodexDriver {
             return Ok(ProviderSessionAttachment {
                 provider_session_id: thread_id.clone(),
                 reused: durable_id.is_some(),
+                observed_model_id: self.attached_observed_model_id.clone(),
             });
         }
         let (method, params) = match durable_id {
             Some(thread_id) => ("thread/resume", json!({"threadId": thread_id})),
             None => ("thread/start", thread_start_params(session)?),
         };
-        let result = match self.request(method, params).await {
-            Ok(result) => result,
+        let response = match self.request(method, params).await {
+            Ok(response) => response,
             Err(error) => {
                 if self.pending_request.is_none() {
                     self.attachment_error = Some(error);
@@ -242,8 +261,12 @@ impl CodexDriver {
                 return Err(error);
             }
         };
-        let observed_id = match provider_session_id_from_result(&result) {
+        let observed_id = match provider_session_id_from_response(&response) {
             Ok(observed_id) => observed_id,
+            Err(error) => return self.poison_attachment(error),
+        };
+        let observed_model_id = match observed_model_id_from_response(&response) {
+            Ok(observed_model_id) => observed_model_id.map(str::to_owned),
             Err(error) => return self.poison_attachment(error),
         };
         let thread_id = match (durable_id, observed_id) {
@@ -257,9 +280,12 @@ impl CodexDriver {
             }
         };
         self.attached_thread_id = Some(thread_id.clone());
+        self.attached_observed_model_id
+            .clone_from(&observed_model_id);
         Ok(ProviderSessionAttachment {
             provider_session_id: thread_id,
             reused: durable_id.is_some(),
+            observed_model_id,
         })
     }
 
@@ -340,7 +366,10 @@ impl CodexDriver {
                     "The Codex app-server rejected a provider request.",
                 ));
             }
-            return object.get("result").cloned().ok_or_else(protocol_error);
+            if object.get("result").is_none() {
+                return Err(protocol_error());
+            }
+            return Ok(message);
         }
     }
 
@@ -484,42 +513,6 @@ fn profile_permissions(
     }
 }
 
-fn checked_provider_session_id(value: &str) -> Result<Option<&str>, DriverError> {
-    if value.is_empty() {
-        return Ok(None);
-    }
-    if value.len() > MAX_PROVIDER_SESSION_ID_BYTES
-        || value.trim() != value
-        || value.chars().any(char::is_control)
-        || value == "--last"
-    {
-        return Err(provider_session_mismatch());
-    }
-    Ok(Some(value))
-}
-
-fn provider_session_id_from_result(result: &Value) -> Result<Option<&str>, DriverError> {
-    let nested =
-        response_provider_session_id(result.get("thread").and_then(|thread| thread.get("id")))?;
-    let alias = response_provider_session_id(result.get("threadId"))?;
-    match (nested, alias) {
-        (Some(first), Some(second)) if first != second => Err(provider_session_mismatch()),
-        (Some(value), _) | (_, Some(value)) => Ok(Some(value)),
-        (None, None) => Ok(None),
-    }
-}
-
-fn response_provider_session_id(value: Option<&Value>) -> Result<Option<&str>, DriverError> {
-    let Some(value) = value else {
-        return Ok(None);
-    };
-    let value = value.as_str().ok_or_else(provider_session_mismatch)?;
-    checked_provider_session_id(value)?.map_or_else(
-        || Err(provider_session_unconfirmed()),
-        |value| Ok(Some(value)),
-    )
-}
-
 fn push_config(arguments: &mut Vec<String>, key: &str, value: &str) -> Result<(), DriverError> {
     arguments.push("-c".to_owned());
     arguments.push(format!("{key}={}", json_string(value)?));
@@ -588,20 +581,6 @@ const fn request_in_progress() -> DriverError {
     DriverError::new(
         "provider_request_in_progress",
         "A different Codex provider request may still be in progress.",
-    )
-}
-
-const fn provider_session_unconfirmed() -> DriverError {
-    DriverError::new(
-        "provider_session_unconfirmed",
-        "The Codex app-server did not return a provider session identity.",
-    )
-}
-
-const fn provider_session_mismatch() -> DriverError {
-    DriverError::new(
-        "provider_session_mismatch",
-        "The Codex provider session identity did not match durable authority.",
     )
 }
 

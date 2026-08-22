@@ -137,6 +137,51 @@ async fn durable_resume_rejects_conflicting_response_aliases() {
 }
 
 #[tokio::test]
+async fn definitive_initialize_rejection_is_not_retransmitted() {
+    let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
+    assert_initialization_error(
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"error\":{\"code\":-1,\"message\":\"rejected\"}}",
+        "provider_request_rejected",
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn definitive_malformed_initialize_response_is_not_retransmitted() {
+    let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
+    assert_initialization_error(
+        "{\"jsonrpc\":\"2.0\",\"id\":1}",
+        "provider_protocol_invalid",
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn attachment_rejects_an_observed_model_mismatch_without_retransmission() {
+    let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
+    let response = "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"thread\":{\"id\":\"thread-1\",\"model\":\"other-model\"}}}";
+    assert_new_attachment_error(response, "provider_model_mismatch").await;
+}
+
+#[tokio::test]
+async fn attachment_accepts_original_params_identity_and_exact_model() {
+    let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
+    let directory = tempfile::tempdir()
+        .unwrap_or_else(|error| panic!("create params-identity fixture: {error}"));
+    let transcript = directory.path().join("requests.jsonl");
+    let response = "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{},\"params\":{\"thread\":{\"id\":\"thread-1\",\"model\":\"gpt-5.6-terra\"}}}";
+    let script = transcript_fixture_with_response(&transcript, "", response);
+    let session = fixture_session(directory.path(), &script).await;
+    let adapter = ProviderAdapter::new();
+    let started = adapter
+        .start(&session)
+        .await
+        .unwrap_or_else(|error| panic!("attach params identity: {error}"));
+    assert_eq!(started.provider_session_id, "thread-1");
+    stop_and_release(&adapter, &session, &started).await;
+}
+
+#[tokio::test]
 async fn missing_thread_start_identity_is_poisoned_without_a_second_request() {
     let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
     let directory = tempfile::tempdir()
@@ -207,6 +252,55 @@ async fn assert_resume_error(response: &str, expected_code: &str) {
         .shutdown()
         .await
         .unwrap_or_else(|error| panic!("shutdown rejected-resume fixture: {error}"));
+}
+
+async fn assert_initialization_error(response: &str, expected_code: &str) {
+    let directory = tempfile::tempdir()
+        .unwrap_or_else(|error| panic!("create rejected-initialize fixture: {error}"));
+    let transcript = directory.path().join("requests.jsonl");
+    let script = format!(
+        "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' \"$initialize\" >> {log}\nprintf '%s\\n' {response}\nIFS= read -r forever\n",
+        log = shell_quote(&transcript),
+        response = shell_quote_text(response),
+    );
+    let session = fixture_session(directory.path(), &script).await;
+    let adapter = ProviderAdapter::new();
+    for _ in 0..2 {
+        let Err(error) = adapter.start(&session).await else {
+            panic!("definitive initialize failure must remain failed closed");
+        };
+        assert_eq!(error.code, expected_code);
+        assert!(error.effect_uncertain);
+    }
+    assert_eq!(request_methods(&transcript), ["initialize"]);
+    adapter
+        .shutdown()
+        .await
+        .unwrap_or_else(|error| panic!("shutdown rejected-initialize fixture: {error}"));
+}
+
+async fn assert_new_attachment_error(response: &str, expected_code: &str) {
+    let directory = tempfile::tempdir()
+        .unwrap_or_else(|error| panic!("create rejected-attachment fixture: {error}"));
+    let transcript = directory.path().join("requests.jsonl");
+    let script = transcript_fixture_with_response(&transcript, "", response);
+    let session = fixture_session(directory.path(), &script).await;
+    let adapter = ProviderAdapter::new();
+    for _ in 0..2 {
+        let Err(error) = adapter.start(&session).await else {
+            panic!("invalid provider attachment must remain failed closed");
+        };
+        assert_eq!(error.code, expected_code);
+        assert!(error.effect_uncertain);
+    }
+    assert_eq!(
+        request_methods(&transcript),
+        ["initialize", "initialized", "thread/start"]
+    );
+    adapter
+        .shutdown()
+        .await
+        .unwrap_or_else(|error| panic!("shutdown rejected-attachment fixture: {error}"));
 }
 
 fn requests(path: &Path) -> Vec<Value> {
