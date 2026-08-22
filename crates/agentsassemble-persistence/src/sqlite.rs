@@ -1,8 +1,9 @@
 use std::{fs::File, io, path::PathBuf, sync::Arc};
 
 use agentsassemble_domain::{
-    AgentSession, AuthenticatedPrincipal, MessageSend, Participant, Room, RoomEvent, RoomSettings,
-    RoomStatus, SnapshotMode, canonical_payload_hash, prepare_message_event,
+    AgentSession, AuthenticatedPrincipal, DurableAgentSession, MessageSend, Participant, Room,
+    RoomEvent, RoomSettings, RoomStatus, SnapshotMode, canonical_payload_hash,
+    prepare_message_event,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -12,6 +13,7 @@ use thiserror::Error;
 use crate::authority::{authorize_session, load_active_participant};
 
 const SCHEMA_OWNER: &str = "agentsassemble-rust-v1";
+pub(crate) const MAX_AGENT_SESSIONS_PER_ROOM: i64 = 64;
 
 #[derive(Debug, Error)]
 pub enum PersistenceError {
@@ -19,6 +21,8 @@ pub enum PersistenceError {
     Database(#[from] sqlx::Error),
     #[error("stored JSON is invalid: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("workspace validation task failed: {0}")]
+    WorkspaceValidationTask(#[from] tokio::task::JoinError),
     #[error("persistent authority belongs to {0}, not this runtime")]
     AuthorityConflict(String),
     #[error("existing nonempty database has no explicit Rust authority marker")]
@@ -311,16 +315,7 @@ impl SqliteStore {
             .into_iter()
             .map(|row| serde_json::from_str(row.get::<String, _>("participant_json").as_str()))
             .collect::<Result<Vec<_>, _>>()?;
-        let agent_session_rows = sqlx::query(
-            "SELECT session_json FROM agent_sessions WHERE room_id = ? ORDER BY session_id",
-        )
-        .bind(room_id)
-        .fetch_all(&mut *transaction)
-        .await?;
-        let agent_sessions = agent_session_rows
-            .into_iter()
-            .map(|row| serde_json::from_str(row.get::<String, _>("session_json").as_str()))
-            .collect::<Result<Vec<_>, _>>()?;
+        let agent_sessions = load_agent_sessions(&mut transaction, room_id).await?;
         let durable_last_seq = sqlx::query_scalar::<_, i64>(
             "SELECT COALESCE(MAX(seq), 0) FROM room_events WHERE room_id = ?",
         )
@@ -506,6 +501,34 @@ pub(crate) async fn existing_command(
         event,
         deduplicated: true,
     }))
+}
+
+async fn load_agent_sessions(
+    transaction: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+) -> Result<Vec<AgentSession>, PersistenceError> {
+    let rows = sqlx::query(
+        "SELECT session_json FROM agent_sessions WHERE room_id = ? ORDER BY session_id LIMIT ?",
+    )
+    .bind(room_id)
+    .bind(MAX_AGENT_SESSIONS_PER_ROOM + 1)
+    .fetch_all(&mut **transaction)
+    .await?;
+    if i64::try_from(rows.len()).unwrap_or(i64::MAX) > MAX_AGENT_SESSIONS_PER_ROOM {
+        return Err(PersistenceError::CommandRejected {
+            code: "agent_session_capacity",
+            message: "This room exceeds its Agent Session capacity.".to_owned(),
+        });
+    }
+    rows.into_iter()
+        .map(|row| {
+            serde_json::from_str::<DurableAgentSession>(
+                row.get::<String, _>("session_json").as_str(),
+            )
+            .map(|session| session.public())
+            .map_err(PersistenceError::from)
+        })
+        .collect()
 }
 
 fn rejection(error: agentsassemble_domain::CommandRejection) -> PersistenceError {

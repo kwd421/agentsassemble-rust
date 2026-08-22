@@ -1,7 +1,10 @@
+use std::path::Path;
+
 use agentsassemble_domain::{
     AgentSessionDraft, ProviderAvailability, ProviderCatalog, clean_identifier, clean_single_line,
-    has_visible_text,
+    has_visible_text, stable_identity_hash,
 };
+use same_file::Handle;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -15,7 +18,9 @@ pub struct ProviderSelection {
     pub provider_kind: String,
     pub runtime_kind: String,
     pub executable: String,
+    pub executable_identity: String,
     pub workspace: String,
+    pub workspace_identity: String,
     pub model: String,
     pub reasoning_effort: String,
     pub service_tier: String,
@@ -90,6 +95,27 @@ impl ProviderSelection {
         if !provider.startable || provider.discovery_status != "ready" {
             return Err(unsupported(&provider_id));
         }
+        if !Path::new(&provider.executable).is_absolute()
+            || !Path::new(&provider.executable).is_file()
+        {
+            return Err(ProviderSelectionError::new(
+                "catalog_inconsistent",
+                "Provider executable authority is not an absolute file.",
+            ));
+        }
+        let executable_identity =
+            stable_identity_hash(&Handle::from_path(&provider.executable).map_err(|_| {
+                ProviderSelectionError::new(
+                    "catalog_inconsistent",
+                    "Provider executable authority could not be reopened.",
+                )
+            })?);
+        if executable_identity != provider.executable_identity {
+            return Err(ProviderSelectionError::new(
+                "catalog_changed",
+                "Provider executable identity changed; refresh discovery.",
+            ));
+        }
         reject_server_owned_fields(values)?;
         let model = selected_value(
             provider,
@@ -157,15 +183,7 @@ impl ProviderSelection {
                 "display_name is required.",
             ));
         }
-        let raw_workspace = clean_identifier(
-            values
-                .get("workspace")
-                .or_else(|| values.get("workspace_path"))
-                .or_else(|| values.get("cwd"))
-                .and_then(Value::as_str)
-                .unwrap_or_default(),
-            4096,
-        );
+        let raw_workspace = exact_workspace(values.get("workspace"))?;
         if raw_workspace.is_empty() {
             return Err(ProviderSelectionError::new(
                 "invalid_workspace",
@@ -185,6 +203,8 @@ impl ProviderSelection {
             .into_os_string()
             .into_string()
             .map_err(|_| invalid_workspace())?;
+        let workspace_identity =
+            stable_identity_hash(&Handle::from_path(&workspace).map_err(|_| invalid_workspace())?);
         let transport = match provider.id.as_str() {
             "codex" => "stdio_jsonl",
             "antigravity" if cfg!(windows) => "conpty",
@@ -207,7 +227,9 @@ impl ProviderSelection {
             provider_kind: provider.provider_kind.clone(),
             runtime_kind: provider.runtime_kind.clone(),
             executable: provider.executable.clone(),
+            executable_identity,
             workspace,
+            workspace_identity,
             model,
             reasoning_effort,
             service_tier,
@@ -228,7 +250,9 @@ impl ProviderSelection {
             self.provider_kind.as_str(),
             self.runtime_kind.as_str(),
             self.executable.as_str(),
+            self.executable_identity.as_str(),
             self.workspace.as_str(),
+            self.workspace_identity.as_str(),
             self.model.as_str(),
             self.reasoning_effort.as_str(),
             self.service_tier.as_str(),
@@ -252,7 +276,9 @@ impl From<ProviderSelection> for AgentSessionDraft {
             provider_kind: selection.provider_kind,
             runtime_kind: selection.runtime_kind,
             executable: selection.executable,
+            executable_identity: selection.executable_identity,
             workspace: selection.workspace,
+            workspace_identity: selection.workspace_identity,
             model: selection.model,
             reasoning_effort: selection.reasoning_effort,
             service_tier: selection.service_tier,
@@ -314,8 +340,26 @@ fn validate_model_relation(
         .iter()
         .find(|control| control.key == "model")
         .and_then(|control| control.options.iter().find(|option| option.value == model));
-    let Some(Value::Array(allowed)) = model_option.and_then(|option| option.metadata.get(relation))
-    else {
+    let Some(model_option) = model_option else {
+        return Err(ProviderSelectionError::new(
+            "catalog_inconsistent",
+            format!("Provider {} has no selected model authority.", provider.id),
+        ));
+    };
+    let relation_scope = model_option
+        .metadata
+        .get("relation_scope")
+        .and_then(Value::as_str);
+    let Some(Value::Array(allowed)) = model_option.metadata.get(relation) else {
+        if relation_scope == Some("per_model") {
+            return Err(ProviderSelectionError::new(
+                "catalog_inconsistent",
+                format!(
+                    "Provider {} has incomplete per-model controls.",
+                    provider.id
+                ),
+            ));
+        }
         return Ok(());
     };
     if allowed.iter().any(|value| value.as_str() == Some(selected)) {
@@ -365,6 +409,14 @@ fn string(value: Option<&Value>, limit: usize) -> String {
     clean_identifier(value.and_then(Value::as_str).unwrap_or_default(), limit)
 }
 
+fn exact_workspace(value: Option<&Value>) -> Result<String, ProviderSelectionError> {
+    let workspace = value.and_then(Value::as_str).unwrap_or_default();
+    if workspace.is_empty() || workspace.len() > 4096 || workspace.chars().any(char::is_control) {
+        return Err(invalid_workspace());
+    }
+    Ok(workspace.to_owned())
+}
+
 fn truthy(value: Option<&Value>) -> bool {
     value.and_then(Value::as_bool).unwrap_or(false)
 }
@@ -396,7 +448,9 @@ mod tests {
 
     use agentsassemble_domain::{
         ProviderAvailability, ProviderCatalog, ProviderControl, ProviderControlOption,
+        stable_identity_hash,
     };
+    use same_file::Handle;
     use serde_json::{Value, json};
 
     use super::ProviderSelection;
@@ -440,7 +494,17 @@ mod tests {
                 catalog_group: "subscription".to_owned(),
                 workspace_required: true,
                 connection_kind: "native_cli_bridge".to_owned(),
-                executable: "codex".to_owned(),
+                executable: std::env::current_exe()
+                    .unwrap_or_else(|error| panic!("resolve test executable: {error}"))
+                    .to_string_lossy()
+                    .into_owned(),
+                executable_identity: stable_identity_hash(
+                    &Handle::from_path(
+                        std::env::current_exe()
+                            .unwrap_or_else(|error| panic!("resolve test executable: {error}")),
+                    )
+                    .unwrap_or_else(|error| panic!("open test executable: {error}")),
+                ),
                 default_model: "gpt-5.6-terra".to_owned(),
                 interactive: true,
                 startable: true,
@@ -458,6 +522,7 @@ mod tests {
                         vec![option(
                             "gpt-5.6-terra",
                             json!({
+                                "relation_scope": "per_model",
                                 "reasoning_efforts": ["medium", "high"],
                                 "service_tiers": ["priority"]
                             }),
@@ -492,7 +557,7 @@ mod tests {
             "provider_id": "codex",
             "catalog_revision": "catalog-1",
             "display_name": " Terra ",
-            "workspace_path": workspace.path(),
+            "workspace": workspace.path(),
             "model": "gpt-5.6-terra",
             "reasoning_effort": "high",
             "service_tier": "priority",
@@ -526,6 +591,7 @@ mod tests {
                 .unwrap_or_else(|error| panic!("canonical workspace: {error}"))
         );
         assert!(!first.runtime_profile_key.is_empty());
+        assert!(!first.workspace_identity.is_empty());
     }
 
     #[tokio::test]
@@ -536,7 +602,7 @@ mod tests {
             "provider_id": "codex",
             "catalog_revision": "catalog-1",
             "display_name": "Terra",
-            "workspace_path": workspace.path(),
+            "workspace": workspace.path(),
             "model": "gpt-5.6-terra",
             "reasoning_effort": "low"
         });
@@ -567,7 +633,7 @@ mod tests {
         assert_eq!(error.code, "catalog_changed");
         let mut invalid_workspace = stale;
         invalid_workspace["catalog_revision"] = json!("catalog-1");
-        invalid_workspace["workspace_path"] = json!(workspace.path().join("missing"));
+        invalid_workspace["workspace"] = json!(workspace.path().join("missing"));
         let error = ProviderSelection::from_catalog(
             "general",
             "operator-local-user",
@@ -593,5 +659,66 @@ mod tests {
         .err()
         .unwrap_or_else(|| panic!("start_now must not produce a fake stopped success"));
         assert_eq!(error.code, "agent_start_unavailable");
+    }
+
+    #[tokio::test]
+    async fn workspace_path_is_exact_and_per_model_relations_are_mandatory() {
+        let root = tempfile::tempdir().unwrap_or_else(|error| panic!("create workspace: {error}"));
+        let spaced = root.path().join(" workspace ");
+        std::fs::create_dir(&spaced)
+            .unwrap_or_else(|error| panic!("create spaced workspace: {error}"));
+        let payload = json!({
+            "provider_id": "codex",
+            "catalog_revision": "catalog-1",
+            "display_name": "Terra",
+            "workspace": spaced,
+            "model": "gpt-5.6-terra",
+            "reasoning_effort": "medium"
+        });
+        let selected = ProviderSelection::from_catalog(
+            "general",
+            "operator-local-user",
+            "create-spaced",
+            &payload,
+            &catalog(),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("select exact workspace: {error}"));
+        assert_eq!(
+            std::path::Path::new(&selected.workspace)
+                .file_name()
+                .and_then(std::ffi::OsStr::to_str),
+            Some(" workspace ")
+        );
+
+        let mut control_character = payload.clone();
+        control_character["workspace"] = json!(format!("{}\n", root.path().display()));
+        let error = ProviderSelection::from_catalog(
+            "general",
+            "operator-local-user",
+            "create-control",
+            &control_character,
+            &catalog(),
+        )
+        .await
+        .err()
+        .unwrap_or_else(|| panic!("control character must fail"));
+        assert_eq!(error.code, "invalid_workspace");
+
+        let mut incomplete = catalog();
+        incomplete.providers[0].controls[0].options[0]
+            .metadata
+            .remove("reasoning_efforts");
+        let error = ProviderSelection::from_catalog(
+            "general",
+            "operator-local-user",
+            "create-incomplete",
+            &payload,
+            &incomplete,
+        )
+        .await
+        .err()
+        .unwrap_or_else(|| panic!("missing per-model relation must fail"));
+        assert_eq!(error.code, "catalog_inconsistent");
     }
 }

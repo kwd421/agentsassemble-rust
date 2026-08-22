@@ -9,11 +9,18 @@ agentsassemble-domain = { path = "../agentsassemble-domain" }
 chrono.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+same-file.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 uuid.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.31.2", features = ["process", "signal"] }
+
+[target.'cfg(windows)'.dependencies]
+win32job = "2.0.3"
 
 [dev-dependencies]
 tempfile.workspace = true

@@ -1,0 +1,65 @@
+use std::time::Duration;
+
+use nix::{sys::signal::kill, unistd::Pid};
+use tokio_util::sync::CancellationToken;
+
+use super::{PROBE_ENVIRONMENT, ProbeFailure, probe};
+
+#[test]
+fn probe_environment_has_no_credential_names() {
+    assert!(PROBE_ENVIRONMENT.iter().all(|name| {
+        !["KEY", "TOKEN", "SECRET", "PASSWORD"]
+            .iter()
+            .any(|marker| name.contains(marker))
+            && !name.starts_with("AGENTSASSEMBLE_")
+    }));
+}
+
+#[tokio::test]
+async fn cancelled_probe_tree_is_killed_reaped_and_joinable() {
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create probe fixture: {error}"));
+    let pid_path = directory.path().join("descendant.pid");
+    let pid_text = pid_path.to_string_lossy().into_owned();
+    let args = [
+        "-c",
+        "sleep 30 & echo $! > \"$1\"; wait",
+        "sh",
+        pid_text.as_str(),
+    ];
+    let cancellation = CancellationToken::new();
+    let cancel = cancellation.clone();
+    let cancel_after_descendant = async {
+        for _ in 0..100 {
+            if pid_path.is_file() {
+                cancel.cancel();
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        panic!("probe descendant did not publish its pid");
+    };
+    let outcome = tokio::time::timeout(Duration::from_secs(2), async {
+        tokio::join!(
+            probe("/bin/sh", &args, &cancellation),
+            cancel_after_descendant,
+        )
+        .0
+    })
+    .await
+    .unwrap_or_else(|_| panic!("cancelled provider probe did not finish"));
+    assert_eq!(outcome, Err(ProbeFailure::Cancelled));
+    let descendant = tokio::fs::read_to_string(&pid_path)
+        .await
+        .unwrap_or_else(|error| panic!("read descendant pid: {error}"))
+        .trim()
+        .parse::<i32>()
+        .unwrap_or_else(|error| panic!("parse descendant pid: {error}"));
+    for _ in 0..100 {
+        if kill(Pid::from_raw(descendant), None).is_err() {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("probe descendant {descendant} survived cancellation");
+}

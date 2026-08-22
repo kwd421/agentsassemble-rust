@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, fmt::Write, time::Duration};
 
 use agentsassemble_domain::{
     Participant, ParticipantStatus, ProviderAvailability, ProviderCatalog, ProviderControl,
-    ProviderControlOption, Room, RoomSettings,
+    ProviderControlOption, Room, RoomSettings, stable_identity_hash,
 };
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_provider::ProviderCatalogService;
@@ -11,6 +11,7 @@ use chrono::Utc;
 use futures_util::{SinkExt, StreamExt};
 use hmac::{Hmac, Mac};
 use reqwest::Client;
+use same_file::Handle;
 use serde_json::{Value, json};
 use sha2::Sha256;
 use tokio::{net::TcpListener, task::JoinHandle};
@@ -76,6 +77,7 @@ async fn create_replay_conflict_and_restart_share_one_durable_authority() {
         .as_str()
         .unwrap_or_else(|| panic!("agent create ACK has no session id"))
         .to_owned();
+    assert_public_session(&ack["result"]["agent_session"]);
     assert!(frames.iter().any(|frame| frame["op"] == "event"));
     send_create(&mut socket, "agent-create-1", &payload).await;
     let replay = receive_json(&mut socket).await;
@@ -104,7 +106,23 @@ async fn create_replay_conflict_and_restart_share_one_durable_authority() {
     assert_eq!(recovered["agent_sessions"][0]["session_id"], session_id);
     assert_eq!(recovered["agent_sessions"][0]["runtime_status"], "stopped");
     assert_eq!(recovered["agent_sessions"][0]["model"], "gpt-5.6-terra");
+    assert_public_session(&recovered["agent_sessions"][0]);
     second.stop().await;
+}
+
+fn assert_public_session(session: &Value) {
+    for private in [
+        "workspace",
+        "workspace_identity",
+        "executable",
+        "executable_identity",
+        "runtime_profile_key",
+    ] {
+        assert!(
+            session.get(private).is_none(),
+            "public Agent Session exposed {private}"
+        );
+    }
 }
 
 async fn start(store: SqliteStore, catalog: ProviderCatalog) -> RunningServer {
@@ -267,6 +285,9 @@ async fn bootstrap(store: &SqliteStore) {
 }
 
 fn agent_catalog() -> ProviderCatalog {
+    let executable = std::env::current_exe()
+        .and_then(std::fs::canonicalize)
+        .unwrap_or_else(|error| panic!("resolve test executable: {error}"));
     ProviderCatalog {
         status: "ready".to_owned(),
         catalog_revision: "catalog-boundary-1".to_owned(),
@@ -279,7 +300,11 @@ fn agent_catalog() -> ProviderCatalog {
             catalog_group: "subscription".to_owned(),
             workspace_required: true,
             connection_kind: "native_cli_bridge".to_owned(),
-            executable: "codex".to_owned(),
+            executable: executable.to_string_lossy().into_owned(),
+            executable_identity: stable_identity_hash(
+                &Handle::from_path(&executable)
+                    .unwrap_or_else(|error| panic!("open test executable: {error}")),
+            ),
             default_model: "gpt-5.6-terra".to_owned(),
             interactive: true,
             startable: true,

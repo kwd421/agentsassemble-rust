@@ -1,4 +1,5 @@
 mod catalog;
+mod process;
 mod selection;
 
 pub use catalog::ProviderCatalogService;

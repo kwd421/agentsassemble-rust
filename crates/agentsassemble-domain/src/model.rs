@@ -324,7 +324,12 @@ pub struct ProviderAvailability {
     pub catalog_group: String,
     pub workspace_required: bool,
     pub connection_kind: String,
+    #[serde(skip)]
+    #[ts(skip)]
     pub executable: String,
+    #[serde(skip)]
+    #[ts(skip)]
+    pub executable_identity: String,
     pub default_model: String,
     pub interactive: bool,
     pub startable: bool,
@@ -355,7 +360,6 @@ pub struct AgentSession {
     pub connection_kind: String,
     pub external_owned: bool,
     pub process_ownership: String,
-    pub workspace: String,
     pub model: String,
     pub reasoning_effort: String,
     pub service_tier: String,
@@ -364,7 +368,6 @@ pub struct AgentSession {
     pub permission_mode: String,
     pub max_output_tokens: u32,
     pub catalog_revision: String,
-    pub runtime_profile_key: String,
     pub transport: String,
     pub last_seen_event_id: String,
     pub last_seen_seq: i64,
@@ -376,6 +379,27 @@ pub struct AgentSession {
     pub updated_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DurableAgentSession {
+    #[serde(flatten)]
+    pub public: AgentSession,
+    #[serde(default)]
+    pub executable: String,
+    #[serde(default)]
+    pub executable_identity: String,
+    pub workspace: String,
+    #[serde(default)]
+    pub workspace_identity: String,
+    pub runtime_profile_key: String,
+}
+
+impl DurableAgentSession {
+    #[must_use]
+    pub fn public(&self) -> AgentSession {
+        self.public.clone()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentSessionDraft {
     pub agent_id: String,
@@ -383,7 +407,9 @@ pub struct AgentSessionDraft {
     pub provider_kind: String,
     pub runtime_kind: String,
     pub executable: String,
+    pub executable_identity: String,
     pub workspace: String,
+    pub workspace_identity: String,
     pub model: String,
     pub reasoning_effort: String,
     pub service_tier: String,

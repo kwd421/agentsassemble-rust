@@ -51,9 +51,7 @@ describe("Agent Session socket receipts", () => {
           process_ownership: "server",
           external_owned: false,
           provider_kind: "codex_live_session",
-          workspace: "/workspace",
           model: "gpt-5.6-terra",
-          runtime_profile_key: "profile-1",
         },
       },
     });

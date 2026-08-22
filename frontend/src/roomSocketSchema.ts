@@ -20,12 +20,13 @@ export function agentSessionIsValid(value: unknown, expectedRoomId = ""): boolea
     value.external_owned === false &&
     typeof value.provider_kind === "string" &&
     value.provider_kind &&
-    typeof value.workspace === "string" &&
-    value.workspace &&
     typeof value.model === "string" &&
     value.model &&
-    typeof value.runtime_profile_key === "string" &&
-    value.runtime_profile_key
+    !("workspace" in value) &&
+    !("executable" in value) &&
+    !("workspace_identity" in value) &&
+    !("executable_identity" in value) &&
+    !("runtime_profile_key" in value)
   );
 }
 

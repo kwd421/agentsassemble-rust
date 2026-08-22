@@ -32,7 +32,7 @@ use tower_http::{
 };
 
 use crate::{
-    ConsumedTicket, RoomRuntime, TicketIssueError, TicketStore,
+    ConsumedTicket, RoomRuntime, RoomShutdownError, TicketIssueError, TicketStore,
     host_ticket::{AuthenticatedTicketResponse, HostChallengeResponse, HostSecret},
     http_transport::{MAX_HTTP_CONNECTIONS, RejectionCounter, serve_connection},
     ingress_budget::IngressBudget,
@@ -97,6 +97,8 @@ pub enum ServeError {
     Io(#[from] std::io::Error),
     #[error("provider discovery task failed: {0}")]
     ProviderDiscovery(#[from] tokio::task::JoinError),
+    #[error("room runtime shutdown failed: {0}")]
+    RoomShutdown(#[from] RoomShutdownError),
 }
 
 #[derive(Debug, Deserialize)]
@@ -177,8 +179,10 @@ pub async fn serve(
     if rejected > 0 {
         tracing::warn!(rejected, "HTTP overload connections were rejected");
     }
-    rooms.shutdown().await;
-    provider_catalog.shutdown().await?;
+    let room_shutdown = rooms.shutdown().await;
+    let provider_shutdown = provider_catalog.shutdown().await;
+    room_shutdown?;
+    provider_shutdown?;
     result.map_err(ServeError::Io)
 }
 
@@ -632,6 +636,7 @@ fn persistence_error(error: &PersistenceError) -> (&'static str, String) {
         PersistenceError::RoomMissing => ("room_not_found", error.to_string()),
         PersistenceError::Database(_)
         | PersistenceError::Json(_)
+        | PersistenceError::WorkspaceValidationTask(_)
         | PersistenceError::AuthorityConflict(_)
         | PersistenceError::UnownedDatabase
         | PersistenceError::WriterAlreadyActive(_)

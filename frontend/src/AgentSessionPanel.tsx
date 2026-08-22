@@ -55,7 +55,7 @@ export function agentCreationPayload(
     provider_id: providerId,
     catalog_revision: catalog.catalog_revision,
     display_name: displayName.trim(),
-    workspace: workspace.trim(),
+    workspace,
     start_now: false,
     ...controls,
   };

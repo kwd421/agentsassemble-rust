@@ -2,6 +2,13 @@
 
 Scope: live provider catalog plus creation and restart recovery of one durable stopped Agent Session. This is not evidence for provider conversation lifecycle or the three-provider conversation matrix.
 
+Security-review follow-up: the public Agent Session projection was separated from its private durable runtime authority; exact workspace and executable identities are revalidated at commit; discovery owns and sanitizes full process trees; OpenCode provenance matches the managed namespaces; and catalog/session capacities now make the fixed WebSocket budget enforceable. Focused Rust and frontend regression tests cover each boundary.
+
+- Post-fix `make verify`: passed, including architecture and 800-line source gates, generated TypeScript, React build and 26 tests, Tauri checks and 8 tests, all Rust tests, and warning-denied Clippy.
+- Post-fix Windows GNU checks: both the full workspace and Tauri shell passed with all targets/features and warnings denied. Their isolated target directory was moved to Trash.
+- A fresh owned Rust server using sanitized live probes reported `ready`, a nonempty revision, and an 8,229-byte catalog update. Exact startable models remained `gpt-5.6-terra`, `gemini-3.6-flash`, and `opencode/hy3-free`.
+- The live-smoke server exited through its parent control pipe and its temporary data root was moved to Trash. No provider conversation process was started.
+
 ## Observed product flow
 
 - A separately built packaged macOS Tauri app connected to its owned Rust sidecar and showed `Codex`, `Antigravity`, and `OpenCode` as `ready`.

@@ -1,4 +1,7 @@
-use std::{collections::BTreeMap, io, process::Stdio, sync::Arc, time::Duration};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 use agentsassemble_domain::{
     ProviderAvailability, ProviderCatalog, ProviderControl, ProviderControlOption,
@@ -8,17 +11,21 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use tokio::{
-    io::{AsyncRead, AsyncReadExt},
-    process::Command,
     sync::{Mutex, watch},
     task::JoinHandle,
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::{ProviderSelection, ProviderSelectionError};
+use crate::{
+    ProviderSelection, ProviderSelectionError,
+    process::{ProbeFailure, probe, resolve_executable},
+};
 
-const PROBE_TIMEOUT: Duration = Duration::from_secs(10);
-const MAX_PROBE_STREAM_BYTES: usize = 2 * 1024 * 1024;
+const MAX_PUBLIC_CATALOG_BYTES: usize = 48 * 1024;
+const MAX_PROVIDER_BYTES: usize = 16 * 1024;
+const MAX_PROVIDER_OPTIONS: usize = 256;
+const MAX_OPTION_VALUE_BYTES: usize = 128;
+const MAX_OPTION_LABEL_BYTES: usize = 256;
 
 #[derive(Clone)]
 pub struct ProviderCatalogService {
@@ -64,7 +71,7 @@ impl ProviderCatalogService {
 
     #[must_use]
     pub fn fixed(catalog: ProviderCatalog) -> Self {
-        let (sender, receiver) = watch::channel(catalog);
+        let (sender, receiver) = watch::channel(bound_catalog(catalog));
         Self {
             _sender: sender,
             receiver,
@@ -132,12 +139,26 @@ async fn discover_catalog(cancellation: &CancellationToken) -> ProviderCatalog {
         Ok(revision) => ("ready".to_owned(), revision),
         Err(_) => ("failed".to_owned(), String::new()),
     };
-    ProviderCatalog {
+    let catalog = ProviderCatalog {
         status,
         catalog_revision,
         discovered_at: Utc::now().to_rfc3339(),
         providers,
+    };
+    bound_catalog(catalog)
+}
+
+fn bound_catalog(catalog: ProviderCatalog) -> ProviderCatalog {
+    if serde_json::to_vec(&catalog).map_or(true, |encoded| encoded.len() > MAX_PUBLIC_CATALOG_BYTES)
+    {
+        return ProviderCatalog {
+            status: "failed".to_owned(),
+            catalog_revision: String::new(),
+            discovered_at: catalog.discovered_at,
+            providers: Vec::new(),
+        };
     }
+    catalog
 }
 
 fn loading_catalog() -> ProviderCatalog {
@@ -181,6 +202,7 @@ fn loading_provider(
         workspace_required: true,
         connection_kind: "native_cli_bridge".to_owned(),
         executable: executable.to_owned(),
+        executable_identity: String::new(),
         default_model: String::new(),
         interactive: true,
         startable: false,
@@ -201,8 +223,13 @@ fn loading_provider(
 }
 
 async fn discover_codex(cancellation: &CancellationToken) -> ProviderAvailability {
-    let provider = loading_provider("codex", "Codex", "codex_live_session", "live_cli", "codex");
-    let output = match Box::pin(probe("codex", &["debug", "models"], cancellation)).await {
+    let mut provider = loading_provider("codex", "Codex", "codex_live_session", "live_cli", "");
+    let Some((executable, executable_identity)) = resolve_executable("codex") else {
+        return failed_provider(provider, ProbeFailure::Missing);
+    };
+    provider.executable.clone_from(&executable);
+    provider.executable_identity = executable_identity;
+    let output = match Box::pin(probe(&executable, &["debug", "models"], cancellation)).await {
         Ok(output) => output,
         Err(error) => return failed_provider(provider, error),
     };
@@ -259,14 +286,19 @@ async fn discover_codex(cancellation: &CancellationToken) -> ProviderAvailabilit
 }
 
 async fn discover_antigravity(cancellation: &CancellationToken) -> ProviderAvailability {
-    let provider = loading_provider(
+    let mut provider = loading_provider(
         "antigravity",
         "Antigravity",
         "antigravity_live_session",
         "live_cli",
-        "agy",
+        "",
     );
-    let output = match Box::pin(probe("agy", &["models"], cancellation)).await {
+    let Some((executable, executable_identity)) = resolve_executable("agy") else {
+        return failed_provider(provider, ProbeFailure::Missing);
+    };
+    provider.executable.clone_from(&executable);
+    provider.executable_identity = executable_identity;
+    let output = match Box::pin(probe(&executable, &["models"], cancellation)).await {
         Ok(output) => output,
         Err(error) => return failed_provider(provider, error),
     };
@@ -312,23 +344,17 @@ async fn discover_antigravity(cancellation: &CancellationToken) -> ProviderAvail
 }
 
 async fn discover_opencode(cancellation: &CancellationToken) -> ProviderAvailability {
-    let provider = loading_provider(
-        "opencode",
-        "OpenCode",
-        "opencode_server",
-        "opencode",
-        "opencode",
-    );
-    let output = match Box::pin(probe("opencode", &["models"], cancellation)).await {
+    let mut provider = loading_provider("opencode", "OpenCode", "opencode_server", "opencode", "");
+    let Some((executable, executable_identity)) = resolve_executable("opencode") else {
+        return failed_provider(provider, ProbeFailure::Missing);
+    };
+    provider.executable.clone_from(&executable);
+    provider.executable_identity = executable_identity;
+    let output = match Box::pin(probe(&executable, &["models"], cancellation)).await {
         Ok(output) => output,
         Err(error) => return failed_provider(provider, error),
     };
-    let models = output
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty() && line.contains('/'))
-        .map(|model| option(model, model))
-        .collect::<Vec<_>>();
+    let models = opencode_models(&output);
     let default_model = preferred_model(&models, "opencode/hy3-free");
     ready_provider(
         provider,
@@ -351,79 +377,6 @@ async fn discover_opencode(cancellation: &CancellationToken) -> ProviderAvailabi
     )
 }
 
-async fn probe(
-    program: &str,
-    args: &[&str],
-    cancellation: &CancellationToken,
-) -> Result<String, ProbeFailure> {
-    let mut command = Command::new(program);
-    command
-        .args(args)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-    let mut child = match command.spawn() {
-        Ok(child) => child,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => {
-            return Err(ProbeFailure::Missing);
-        }
-        Err(_) => return Err(ProbeFailure::Failed),
-    };
-    let stdout = child.stdout.take().ok_or(ProbeFailure::Failed)?;
-    let stderr = child.stderr.take().ok_or(ProbeFailure::Failed)?;
-    let collected = tokio::select! {
-        () = cancellation.cancelled() => None,
-        collected = Box::pin(tokio::time::timeout(PROBE_TIMEOUT, async {
-            tokio::try_join!(read_limited(stdout), read_limited(stderr), child.wait())
-        })) => Some(collected),
-    };
-    let Some(collected) = collected else {
-        let _ = child.kill().await;
-        let _ = child.wait().await;
-        return Err(ProbeFailure::Cancelled);
-    };
-    let (stdout, stderr, status) = match collected {
-        Ok(Ok(output)) => output,
-        Ok(Err(_)) => {
-            let _ = child.kill().await;
-            let _ = child.wait().await;
-            return Err(ProbeFailure::Malformed);
-        }
-        Err(_) => {
-            let _ = child.kill().await;
-            let _ = child.wait().await;
-            return Err(ProbeFailure::Timeout);
-        }
-    };
-    if !status.success() {
-        let diagnostic = String::from_utf8_lossy(&stderr).to_lowercase();
-        return Err(
-            if diagnostic.contains("login") || diagnostic.contains("auth") {
-                ProbeFailure::Authentication
-            } else {
-                ProbeFailure::Failed
-            },
-        );
-    }
-    String::from_utf8(stdout).map_err(|_| ProbeFailure::Malformed)
-}
-
-async fn read_limited<R: AsyncRead + Unpin>(mut reader: R) -> io::Result<Vec<u8>> {
-    let mut output = Vec::new();
-    let mut chunk = vec![0_u8; 16 * 1024];
-    loop {
-        let count = reader.read(&mut chunk).await?;
-        if count == 0 {
-            return Ok(output);
-        }
-        if output.len().saturating_add(count) > MAX_PROBE_STREAM_BYTES {
-            return Err(io::Error::other("provider probe output exceeded its limit"));
-        }
-        output.extend_from_slice(&chunk[..count]);
-    }
-}
-
 fn ready_provider(
     mut provider: ProviderAvailability,
     default_model: String,
@@ -432,11 +385,17 @@ fn ready_provider(
     if default_model.is_empty() {
         return malformed_provider(provider);
     }
+    if !controls_are_bounded(&controls) {
+        return failed_provider(provider, ProbeFailure::CatalogTooLarge);
+    }
     provider.default_model = default_model;
     provider.available = true;
     provider.startable = true;
     "ready".clone_into(&mut provider.discovery_status);
     provider.controls = controls;
+    if serde_json::to_vec(&provider).map_or(true, |encoded| encoded.len() > MAX_PROVIDER_BYTES) {
+        return failed_provider(provider, ProbeFailure::CatalogTooLarge);
+    }
     provider
 }
 
@@ -467,8 +426,16 @@ fn failed_provider(
             "provider model discovery was cancelled",
             false,
         ),
+        ProbeFailure::CatalogTooLarge => (
+            "model_catalog_too_large",
+            "provider model catalog exceeded its bounded authority",
+            true,
+        ),
     };
     provider.available = available;
+    provider.startable = false;
+    provider.default_model.clear();
+    provider.controls.clear();
     "failed".clone_into(&mut provider.discovery_status);
     code.clone_into(&mut provider.discovery_error_code);
     message.clone_into(&mut provider.discovery_error);
@@ -550,19 +517,64 @@ fn nonempty(value: String) -> Option<String> {
     (!value.is_empty()).then_some(value)
 }
 
-fn catalog_revision(providers: &[ProviderAvailability]) -> Result<String, serde_json::Error> {
-    let encoded = serde_json::to_vec(providers)?;
-    Ok(format!("provider-catalog-v1-{:x}", Sha256::digest(encoded)))
+fn opencode_models(output: &str) -> Vec<ProviderControlOption> {
+    output
+        .lines()
+        .map(str::trim)
+        .filter(|model| valid_opencode_model(model))
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .map(|model| option(model, model))
+        .collect()
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ProbeFailure {
-    Missing,
-    Timeout,
-    Authentication,
-    Malformed,
-    Failed,
-    Cancelled,
+fn valid_opencode_model(model: &str) -> bool {
+    if model.is_empty() || model.len() > MAX_OPTION_VALUE_BYTES {
+        return false;
+    }
+    let Some((namespace, name)) = model.split_once('/') else {
+        return false;
+    };
+    if !matches!(namespace, "opencode" | "opencode-go") {
+        return false;
+    }
+    !namespace.is_empty()
+        && !name.is_empty()
+        && namespace
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"._-".contains(&byte))
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"._:/-".contains(&byte))
+}
+
+fn controls_are_bounded(controls: &[ProviderControl]) -> bool {
+    controls.iter().all(|control| {
+        control.options.len() <= MAX_PROVIDER_OPTIONS
+            && control.options.iter().all(|option| {
+                option.value.len() <= MAX_OPTION_VALUE_BYTES
+                    && option.label.len() <= MAX_OPTION_LABEL_BYTES
+                    && !option.value.chars().any(char::is_control)
+                    && !option.label.chars().any(char::is_control)
+            })
+    })
+}
+
+fn catalog_revision(providers: &[ProviderAvailability]) -> Result<String, serde_json::Error> {
+    let mut authority = serde_json::to_value(providers)?;
+    if let Value::Array(entries) = &mut authority {
+        for (entry, provider) in entries.iter_mut().zip(providers) {
+            if let Value::Object(values) = entry {
+                values.insert("executable".to_owned(), json!(provider.executable));
+                values.insert(
+                    "executable_identity".to_owned(),
+                    json!(provider.executable_identity),
+                );
+            }
+        }
+    }
+    let encoded = serde_json::to_vec(&authority)?;
+    Ok(format!("provider-catalog-v1-{:x}", Sha256::digest(encoded)))
 }
 
 #[derive(Debug, Deserialize)]
@@ -595,24 +607,6 @@ struct CodexTier {
     id: String,
 }
 
-#[cfg(all(test, unix))]
-mod tests {
-    use std::time::Duration;
-
-    use tokio_util::sync::CancellationToken;
-
-    use super::{ProbeFailure, probe};
-
-    #[tokio::test]
-    async fn cancelled_probe_is_killed_reaped_and_joinable() {
-        let cancellation = CancellationToken::new();
-        cancellation.cancel();
-        let outcome = tokio::time::timeout(
-            Duration::from_secs(1),
-            probe("sh", &["-c", "exec sleep 30"], &cancellation),
-        )
-        .await
-        .unwrap_or_else(|_| panic!("cancelled provider probe did not finish"));
-        assert_eq!(outcome, Err(ProbeFailure::Cancelled));
-    }
-}
+#[cfg(test)]
+#[path = "catalog_tests.rs"]
+mod tests;

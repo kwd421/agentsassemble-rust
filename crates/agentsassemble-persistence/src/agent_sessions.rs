@@ -1,16 +1,19 @@
 use std::collections::BTreeMap;
 
 use agentsassemble_domain::{
-    Actor, AgentSession, AgentSessionDraft, AuthenticatedPrincipal, ClientKind, Participant,
-    ParticipantStatus, RoomEvent, canonical_payload_hash,
+    Actor, AgentSession, AgentSessionDraft, AuthenticatedPrincipal, ClientKind,
+    DurableAgentSession, Participant, ParticipantStatus, RoomEvent, canonical_payload_hash,
+    stable_identity_hash,
 };
 use chrono::Utc;
+use same_file::Handle;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::{
-    CommandOutcome, PersistenceError, SqliteStore, authority::active_room_for_principal,
-    sqlite::existing_command,
+    CommandOutcome, PersistenceError, SqliteStore,
+    authority::active_room_for_principal,
+    sqlite::{MAX_AGENT_SESSIONS_PER_ROOM, existing_command},
 };
 
 impl SqliteStore {
@@ -79,6 +82,18 @@ impl SqliteStore {
             transaction.commit().await?;
             return Ok(outcome);
         }
+        revalidate_runtime_authority(draft).await?;
+        let session_count =
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM agent_sessions WHERE room_id = ?")
+                .bind(&principal.room_id)
+                .fetch_one(&mut *transaction)
+                .await?;
+        if session_count >= MAX_AGENT_SESSIONS_PER_ROOM {
+            return Err(PersistenceError::CommandRejected {
+                code: "agent_session_capacity",
+                message: "This room has reached its Agent Session capacity.".to_owned(),
+            });
+        }
         let collision = sqlx::query_scalar::<_, i64>(
             "SELECT (SELECT COUNT(*) FROM participants WHERE room_id = ? AND participant_id = ?) + (SELECT COUNT(*) FROM agent_sessions WHERE room_id = ? AND session_id = ?)",
         )
@@ -109,7 +124,7 @@ impl SqliteStore {
         };
         let (last_message_id, last_message_seq) =
             latest_message_cursor(&mut transaction, &principal.room_id).await?;
-        let session = AgentSession {
+        let public_session = AgentSession {
             room_id: principal.room_id.clone(),
             session_id: draft.agent_id.clone(),
             participant_id: draft.agent_id.clone(),
@@ -122,7 +137,6 @@ impl SqliteStore {
             connection_kind: "native_cli_bridge".to_owned(),
             external_owned: false,
             process_ownership: "server".to_owned(),
-            workspace: draft.workspace.clone(),
             model: draft.model.clone(),
             reasoning_effort: draft.reasoning_effort.clone(),
             service_tier: draft.service_tier.clone(),
@@ -131,7 +145,6 @@ impl SqliteStore {
             permission_mode: draft.permission_mode.clone(),
             max_output_tokens: draft.max_output_tokens,
             catalog_revision: draft.catalog_revision.clone(),
-            runtime_profile_key: draft.runtime_profile_key.clone(),
             transport: draft.transport.clone(),
             last_seen_event_id: last_message_id.clone(),
             last_seen_seq: last_message_seq,
@@ -141,6 +154,14 @@ impl SqliteStore {
             turn_count: 0,
             created_at: now,
             updated_at: now,
+        };
+        let session = DurableAgentSession {
+            public: public_session.clone(),
+            executable: draft.executable.clone(),
+            executable_identity: draft.executable_identity.clone(),
+            workspace: draft.workspace.clone(),
+            workspace_identity: draft.workspace_identity.clone(),
+            runtime_profile_key: draft.runtime_profile_key.clone(),
         };
         sqlx::query(
             "INSERT INTO participants(room_id, participant_id, participant_json) VALUES (?, ?, ?)",
@@ -154,14 +175,17 @@ impl SqliteStore {
             "INSERT INTO agent_sessions(room_id, session_id, session_json) VALUES (?, ?, ?)",
         )
         .bind(&principal.room_id)
-        .bind(&session.session_id)
+        .bind(&session.public.session_id)
         .bind(serde_json::to_string(&session)?)
         .execute(&mut *transaction)
         .await?;
         let sequence = next_sequence(&mut transaction, &principal.room_id).await?;
         let mut extra = BTreeMap::new();
-        extra.insert("session_id".to_owned(), json!(session.session_id));
-        extra.insert("provider_kind".to_owned(), json!(session.provider_kind));
+        extra.insert("session_id".to_owned(), json!(public_session.session_id));
+        extra.insert(
+            "provider_kind".to_owned(),
+            json!(public_session.provider_kind),
+        );
         let event = RoomEvent {
             v: 1,
             id: Uuid::new_v4().to_string(),
@@ -173,11 +197,11 @@ impl SqliteStore {
                 participant_id: principal.participant_id.clone(),
                 participant_type: "human".to_owned(),
             },
-            participant_id: Some(session.participant_id.clone()),
+            participant_id: Some(public_session.participant_id.clone()),
             participant_type: Some("agent".to_owned()),
             actor_id: Some(principal.participant_id.clone()),
             actor_type: Some("human".to_owned()),
-            display_name: Some(session.display_name.clone()),
+            display_name: Some(public_session.display_name.clone()),
             content: None,
             message_kind: None,
             relay_depth: None,
@@ -191,7 +215,7 @@ impl SqliteStore {
             .await?;
         let result = json!({
             "status": "created",
-            "agent_session": session,
+            "agent_session": public_session,
             "participant": participant,
             "event_seq": sequence,
             "event": event,
@@ -214,6 +238,34 @@ impl SqliteStore {
             deduplicated: false,
         })
     }
+}
+
+async fn revalidate_runtime_authority(draft: &AgentSessionDraft) -> Result<(), PersistenceError> {
+    let workspace = draft.workspace.clone();
+    let expected_workspace_identity = draft.workspace_identity.clone();
+    let executable = draft.executable.clone();
+    let expected_executable_identity = draft.executable_identity.clone();
+    let valid = tokio::task::spawn_blocking(move || {
+        let canonical_workspace = std::fs::canonicalize(&workspace).ok()?;
+        if canonical_workspace.to_str()? != workspace || !canonical_workspace.is_dir() {
+            return None;
+        }
+        let workspace_identity = stable_identity_hash(&Handle::from_path(&workspace).ok()?);
+        if workspace_identity != expected_workspace_identity {
+            return None;
+        }
+        let canonical_executable = std::fs::canonicalize(&executable).ok()?;
+        if canonical_executable.to_str()? != executable || !canonical_executable.is_file() {
+            return None;
+        }
+        let executable_identity = stable_identity_hash(&Handle::from_path(&executable).ok()?);
+        (executable_identity == expected_executable_identity).then_some(())
+    })
+    .await?;
+    valid.ok_or_else(|| PersistenceError::CommandRejected {
+        code: "runtime_authority_changed",
+        message: "Workspace or provider executable identity changed before commit.".to_owned(),
+    })
 }
 
 async fn latest_message_cursor(
@@ -252,8 +304,10 @@ mod tests {
     use agentsassemble_domain::{
         AgentSessionDraft, AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope,
         LOCAL_OPERATOR_PARTICIPANT_ID, Participant, ParticipantStatus, Room, RoomSettings,
+        stable_identity_hash,
     };
     use chrono::Utc;
+    use same_file::Handle;
     use serde_json::json;
 
     use crate::{PersistenceError, SqliteStore};
@@ -302,13 +356,26 @@ mod tests {
     }
 
     fn draft(workspace: &str) -> AgentSessionDraft {
+        let workspace = std::fs::canonicalize(workspace)
+            .unwrap_or_else(|error| panic!("canonical workspace: {error}"));
+        let executable = std::env::current_exe()
+            .and_then(std::fs::canonicalize)
+            .unwrap_or_else(|error| panic!("canonical executable: {error}"));
         AgentSessionDraft {
             agent_id: "codex-00000000-0000-5000-8000-000000000001".to_owned(),
             display_name: "Terra".to_owned(),
             provider_kind: "codex_live_session".to_owned(),
             runtime_kind: "live_cli".to_owned(),
-            executable: "codex".to_owned(),
-            workspace: workspace.to_owned(),
+            executable: executable.to_string_lossy().into_owned(),
+            executable_identity: stable_identity_hash(
+                &Handle::from_path(&executable)
+                    .unwrap_or_else(|error| panic!("open executable: {error}")),
+            ),
+            workspace: workspace.to_string_lossy().into_owned(),
+            workspace_identity: stable_identity_hash(
+                &Handle::from_path(&workspace)
+                    .unwrap_or_else(|error| panic!("open workspace: {error}")),
+            ),
             model: "gpt-5.6-terra".to_owned(),
             reasoning_effort: "medium".to_owned(),
             service_tier: "default".to_owned(),
@@ -342,6 +409,26 @@ mod tests {
         assert!(!first.deduplicated);
         assert!(retry.deduplicated);
         assert_eq!(first.event.id, retry.event.id);
+        for private in [
+            "workspace",
+            "workspace_identity",
+            "executable",
+            "executable_identity",
+            "runtime_profile_key",
+        ] {
+            assert!(first.result["agent_session"].get(private).is_none());
+            assert!(retry.result["agent_session"].get(private).is_none());
+        }
+        let durable = sqlx::query_scalar::<_, String>(
+            "SELECT session_json FROM agent_sessions WHERE room_id = 'general' LIMIT 1",
+        )
+        .fetch_one(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("read durable session: {error}"));
+        let durable: serde_json::Value = serde_json::from_str(&durable)
+            .unwrap_or_else(|error| panic!("decode durable session: {error}"));
+        assert_eq!(durable["workspace"], session.workspace);
+        assert_eq!(durable["executable"], session.executable);
         assert!(matches!(
             store
                 .replay_command(
@@ -391,6 +478,49 @@ mod tests {
         assert!(snapshot.agent_sessions.is_empty());
         assert_eq!(snapshot.participants.len(), 1);
         assert!(snapshot.events.is_empty());
+    }
+
+    #[tokio::test]
+    async fn room_capacity_rejects_without_partial_authority() {
+        let (store, principal, directory) = fixture().await;
+        for index in 0..crate::sqlite::MAX_AGENT_SESSIONS_PER_ROOM {
+            sqlx::query(
+                "INSERT INTO agent_sessions(room_id, session_id, session_json) VALUES ('general', ?, '{}')",
+            )
+            .bind(format!("existing-{index}"))
+            .execute(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("insert capacity fixture: {error}"));
+        }
+        let workspace = directory
+            .path()
+            .to_str()
+            .unwrap_or_else(|| panic!("test workspace path must be UTF-8"));
+        let outcome = store
+            .execute_agent_create(
+                &principal,
+                "create-capacity",
+                &json!({"provider_id": "codex"}),
+                &draft(workspace),
+            )
+            .await;
+        assert!(matches!(
+            outcome,
+            Err(PersistenceError::CommandRejected {
+                code: "agent_session_capacity",
+                ..
+            })
+        ));
+        let counts = sqlx::query_as::<_, (i64, i64, i64, i64)>(
+            "SELECT (SELECT COUNT(*) FROM agent_sessions), (SELECT COUNT(*) FROM participants), (SELECT COUNT(*) FROM room_events), (SELECT COUNT(*) FROM command_results)",
+        )
+        .fetch_one(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("inspect capacity rejection: {error}"));
+        assert_eq!(
+            counts,
+            (crate::sqlite::MAX_AGENT_SESSIONS_PER_ROOM, 1, 0, 0)
+        );
     }
 
     #[tokio::test]

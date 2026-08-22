@@ -8,11 +8,14 @@ A host selects an installed provider/model from the authoritative live catalog, 
 
 ## Current contract
 
-- Provider options come from bounded probes of the installed provider CLIs. A session can be created only from a `ready` catalog entry and the exact current `catalog_revision`; a stale, unavailable, unlisted, or internally inconsistent selection fails visibly.
+- Provider options come from bounded probes of the installed provider CLIs. Every probe runs in its own owned process tree with a credential-free environment allowlist, a ten-second deadline, and bounded output; cancellation and shutdown kill and reap the whole tree. A session can be created only from a `ready` catalog entry and the exact current `catalog_revision`; a stale, unavailable, unlisted, oversized, or internally inconsistent selection fails visibly.
+- OpenCode subscription discovery accepts only syntactically valid model IDs in the original managed `opencode` and `opencode-go` namespaces. Other namespaces never become startable subscription authority.
 - `agent.create` requires the server-derived `agent.control` capability. Client-supplied ownership, participant role, provider command, executable, runtime kind, transport, and process identity are ignored as authority.
 - `(room_id, principal_id, request_id)` remains the command identity. A new Agent Session ID is deterministically derived from that full identity and action, and the participant, session, creation event, and ACK commit in one room mutation transaction. A same-payload retry returns the original result and never creates or starts a second runtime.
 - The durable Agent Session owns desired/configured state. A provider supervisor owns live subprocesses and reports observed transitions through the room authority; process presence, caches, and task handles are never parallel session authority.
-- A stopped server-owned session is restorable from its complete durable runtime profile. Restart never silently substitutes a provider, model, workspace, transport, new provider conversation, or Python implementation.
+- A stopped server-owned session is restorable from its complete private durable runtime profile. Public snapshots, ACKs, events, replay results, and generated TypeScript never expose its workspace, executable, filesystem identities, or runtime profile key. Restart never silently substitutes a provider, model, workspace, transport, new provider conversation, or Python implementation.
+- Workspace input is an exact path, not an identifier: it is never trimmed or cleaned before canonicalization. Selection records stable workspace and executable identities, and the persistence transaction reopens and revalidates both immediately before commit.
+- Public provider catalogs are capped at 48 KiB, individual providers at 16 KiB and 256 options, and rooms at 64 Agent Sessions. Oversized authority fails closed before it can make the fixed 256 KiB WebSocket snapshot impossible.
 - Provider output becomes a canonical durable `message_final` event attributed to the Agent Session. No ACK or room event is published before its transaction commits.
 - Runtime and provider processes have explicit cancellation and reaping owners. Desktop/server shutdown and verification cleanup stop only processes created by that owner.
 
