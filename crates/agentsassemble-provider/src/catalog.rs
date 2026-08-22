@@ -424,6 +424,9 @@ fn ready_provider(
     if !controls_are_bounded(&controls) {
         return failed_provider(provider, ProbeFailure::CatalogTooLarge);
     }
+    if !controls_are_consistent(&default_model, &controls) {
+        return malformed_provider(provider);
+    }
     provider.default_model = default_model;
     provider.available = true;
     provider.startable = true;
@@ -592,6 +595,52 @@ fn controls_are_bounded(controls: &[ProviderControl]) -> bool {
                     && option.label.len() <= MAX_OPTION_LABEL_BYTES
                     && !option.value.chars().any(char::is_control)
                     && !option.label.chars().any(char::is_control)
+            })
+    })
+}
+
+fn controls_are_consistent(default_model: &str, controls: &[ProviderControl]) -> bool {
+    if controls.iter().any(|control| {
+        control.options.is_empty()
+            || !control
+                .options
+                .iter()
+                .any(|option| option.value == control.default_value)
+    }) {
+        return false;
+    }
+    let Some(model) = controls
+        .iter()
+        .find(|control| control.key == "model" && control.default_value == default_model)
+        .and_then(|control| {
+            control
+                .options
+                .iter()
+                .find(|option| option.value == default_model)
+        })
+    else {
+        return false;
+    };
+    [
+        ("reasoning_effort", "reasoning_efforts"),
+        ("service_tier", "service_tiers"),
+    ]
+    .into_iter()
+    .all(|(control_key, relation_key)| {
+        let Some(control) = controls.iter().find(|control| control.key == control_key) else {
+            return true;
+        };
+        if matches!(control.default_value.as_str(), "" | "default") {
+            return true;
+        }
+        model
+            .metadata
+            .get(relation_key)
+            .and_then(Value::as_array)
+            .is_some_and(|allowed| {
+                allowed
+                    .iter()
+                    .any(|value| value.as_str() == Some(&control.default_value))
             })
     })
 }

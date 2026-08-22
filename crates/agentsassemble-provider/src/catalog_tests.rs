@@ -1,4 +1,4 @@
-use agentsassemble_domain::{ProviderAvailability, ProviderCatalog};
+use agentsassemble_domain::{ProviderAvailability, ProviderCatalog, ProviderControlOption};
 use tokio_util::sync::CancellationToken;
 
 use super::{
@@ -58,6 +58,40 @@ fn failed_and_oversized_catalogs_cannot_remain_startable() {
     let bounded = ready_provider(provider, "opencode/model-0".to_owned(), controls);
     assert!(!bounded.startable);
     assert_eq!(bounded.discovery_error_code, "model_catalog_too_large");
+}
+
+#[test]
+fn inconsistent_default_relation_cannot_be_startable() {
+    let provider = fixture_provider();
+    let controls = vec![
+        super::control(
+            "model",
+            "Model",
+            "select",
+            vec![ProviderControlOption {
+                value: "model-high".to_owned(),
+                label: "Model high".to_owned(),
+                metadata: std::collections::BTreeMap::from([(
+                    "reasoning_efforts".to_owned(),
+                    serde_json::json!(["high"]),
+                )]),
+            }],
+            "model-high",
+        ),
+        super::control(
+            "reasoning_effort",
+            "Effort",
+            "select",
+            vec![super::option("low", "Low"), super::option("high", "High")],
+            "low",
+        ),
+    ];
+    let inconsistent = ready_provider(provider, "model-high".to_owned(), controls);
+    assert!(!inconsistent.startable);
+    assert_eq!(
+        inconsistent.discovery_error_code,
+        "model_discovery_malformed"
+    );
 }
 
 #[test]

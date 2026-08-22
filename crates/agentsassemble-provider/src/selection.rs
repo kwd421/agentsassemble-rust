@@ -1,9 +1,6 @@
 use std::path::Path;
 
-use agentsassemble_domain::{
-    AgentSessionDraft, ProviderAvailability, ProviderCatalog, clean_identifier, clean_single_line,
-    has_visible_text,
-};
+use agentsassemble_domain::{AgentSessionDraft, ProviderAvailability, ProviderCatalog};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -12,6 +9,7 @@ use uuid::Uuid;
 use crate::filesystem::{
     FilesystemFailure, canonical_workspace, executable_identity as current_executable_identity,
 };
+use crate::selection_input::SelectionInput;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProviderSelection {
@@ -44,7 +42,7 @@ pub struct ProviderSelectionError {
 }
 
 impl ProviderSelectionError {
-    fn new(code: &'static str, message: impl Into<String>) -> Self {
+    pub(crate) fn new(code: &'static str, message: impl Into<String>) -> Self {
         Self {
             code,
             message: message.into(),
@@ -61,10 +59,8 @@ impl ProviderSelection {
         payload: &Value,
         catalog: &ProviderCatalog,
     ) -> Result<Self, ProviderSelectionError> {
-        let values = payload.as_object().ok_or_else(|| {
-            ProviderSelectionError::new("bad_request", "payload must be an object.")
-        })?;
-        if truthy(values.get("start")) || truthy(values.get("start_now")) {
+        let input = SelectionInput::parse(payload)?;
+        if input.start_requested {
             return Err(ProviderSelectionError::new(
                 "agent_start_unavailable",
                 "Starting an Agent Session is not available in this runtime slice.",
@@ -76,20 +72,14 @@ impl ProviderSelection {
                 "Provider catalog is not ready.",
             ));
         }
-        let revision = string(values.get("catalog_revision"), 128);
+        let revision = input.catalog_revision;
         if revision != catalog.catalog_revision {
             return Err(ProviderSelectionError::new(
                 "catalog_changed",
                 "Provider catalog changed; refresh the selection before creating the session.",
             ));
         }
-        let provider_id = string(
-            values
-                .get("provider_id")
-                .or_else(|| values.get("provider_kind"))
-                .or_else(|| values.get("provider")),
-            64,
-        );
+        let provider_id = input.provider_id;
         let provider = catalog
             .providers
             .iter()
@@ -113,81 +103,42 @@ impl ProviderSelection {
                 "Provider executable identity changed; refresh discovery.",
             ));
         }
-        reject_server_owned_fields(values)?;
-        let model = selected_value(
-            provider,
-            "model",
-            string(values.get("model").or_else(|| values.get("model_id")), 128),
-        )?;
-        let reasoning_effort = selected_value(
-            provider,
-            "reasoning_effort",
-            string(
-                values
-                    .get("reasoning_effort")
-                    .or_else(|| values.get("effort")),
-                32,
-            ),
-        )?;
+        let model = selected_value(provider, "model", input.model)?;
+        let reasoning_effort =
+            selected_value(provider, "reasoning_effort", input.reasoning_effort)?;
         validate_model_relation(provider, &model, "reasoning_efforts", &reasoning_effort)?;
-        let service_tier = selected_value(
-            provider,
-            "service_tier",
-            string(values.get("service_tier"), 32),
-        )?;
+        let service_tier = selected_value(provider, "service_tier", input.service_tier)?;
         validate_model_relation(provider, &model, "service_tiers", &service_tier)?;
-        let variant = selected_value(provider, "variant", string(values.get("variant"), 64))?;
-        let permission_mode = selected_value(
-            provider,
-            "permission_mode",
-            string(
-                values
-                    .get("permission_mode")
-                    .or_else(|| values.get("permission_option")),
-                64,
-            ),
-        )?;
-        let execution_harness = string(values.get("execution_harness"), 32);
+        let variant = selected_value(provider, "variant", input.variant)?;
+        let permission_mode = selected_value(provider, "permission_mode", input.permission_mode)?;
+        let execution_harness = input.execution_harness.unwrap_or_default();
         if !execution_harness.is_empty() && execution_harness != "builtin" {
             return Err(ProviderSelectionError::new(
                 "unsupported_control",
                 "Alternate execution harnesses are not available in this runtime slice.",
             ));
         }
-        if values
-            .get("max_output_tokens")
-            .and_then(Value::as_u64)
-            .unwrap_or(0)
-            != 0
-            || !string(values.get("persona_card_id"), 80).is_empty()
-            || !string(values.get("session_id"), 128).is_empty()
+        if input.max_output_tokens.unwrap_or(0) != 0
+            || input.persona_card_id.is_some_and(|value| !value.is_empty())
+            || input
+                .provider_session_id
+                .is_some_and(|value| !value.is_empty())
         {
             return Err(ProviderSelectionError::new(
                 "unsupported_control",
                 "This Agent Session option is not available in the current runtime slice.",
             ));
         }
-        let display_name = clean_single_line(
-            values
-                .get("display_name")
-                .and_then(Value::as_str)
-                .unwrap_or_default(),
-            64,
-        );
-        if !has_visible_text(&display_name) {
+        if input
+            .provider_endpoint
+            .is_some_and(|value| !value.is_empty())
+        {
             return Err(ProviderSelectionError::new(
-                "bad_request",
-                "display_name is required.",
+                "unsupported_control",
+                "Custom provider endpoints are not available in this runtime slice.",
             ));
         }
-        let raw_workspace = exact_workspace(values.get("workspace"))?;
-        if raw_workspace.is_empty() {
-            return Err(ProviderSelectionError::new(
-                "invalid_workspace",
-                "An existing workspace directory is required.",
-            ));
-        }
-        let (workspace, workspace_identity) = canonical_workspace(raw_workspace)
+        let (workspace, workspace_identity) = canonical_workspace(input.workspace)
             .await
             .map_err(|_| invalid_workspace())?;
         let transport = match provider.id.as_str() {
@@ -207,7 +158,7 @@ impl ProviderSelection {
         let agent_id = format!("{}-{identity}", provider.id);
         let mut selected = Self {
             agent_id,
-            display_name,
+            display_name: input.display_name,
             provider_id: provider.id.clone(),
             provider_kind: provider.provider_kind.clone(),
             runtime_kind: provider.runtime_kind.clone(),
@@ -281,10 +232,10 @@ impl From<ProviderSelection> for AgentSessionDraft {
 fn selected_value(
     provider: &ProviderAvailability,
     key: &str,
-    requested: String,
+    requested: Option<String>,
 ) -> Result<String, ProviderSelectionError> {
     let Some(control) = provider.controls.iter().find(|control| control.key == key) else {
-        return if requested.is_empty() {
+        return if requested.is_none() {
             Ok(String::new())
         } else {
             Err(ProviderSelectionError::new(
@@ -293,11 +244,7 @@ fn selected_value(
             ))
         };
     };
-    let selected = if requested.is_empty() {
-        control.default_value.clone()
-    } else {
-        requested
-    };
+    let selected = requested.unwrap_or_else(|| control.default_value.clone());
     control
         .options
         .iter()
@@ -357,53 +304,6 @@ fn validate_model_relation(
             provider.id
         ),
     ))
-}
-
-fn reject_server_owned_fields(
-    values: &serde_json::Map<String, Value>,
-) -> Result<(), ProviderSelectionError> {
-    const OWNED: [&str; 10] = [
-        "agent_id",
-        "participant_id",
-        "owner_id",
-        "created_by",
-        "command",
-        "executable",
-        "runtime_kind",
-        "transport",
-        "process_ownership",
-        "runtime_profile_key",
-    ];
-    if OWNED.iter().any(|key| values.contains_key(*key)) {
-        return Err(ProviderSelectionError::new(
-            "bad_request",
-            "Agent Session identity and runtime ownership are server-controlled.",
-        ));
-    }
-    if string(values.get("provider_endpoint"), 1000).is_empty() {
-        Ok(())
-    } else {
-        Err(ProviderSelectionError::new(
-            "unsupported_control",
-            "Custom provider endpoints are not available in this runtime slice.",
-        ))
-    }
-}
-
-fn string(value: Option<&Value>, limit: usize) -> String {
-    clean_identifier(value.and_then(Value::as_str).unwrap_or_default(), limit)
-}
-
-fn exact_workspace(value: Option<&Value>) -> Result<String, ProviderSelectionError> {
-    let workspace = value.and_then(Value::as_str).unwrap_or_default();
-    if workspace.is_empty() || workspace.len() > 4096 || workspace.chars().any(char::is_control) {
-        return Err(invalid_workspace());
-    }
-    Ok(workspace.to_owned())
-}
-
-fn truthy(value: Option<&Value>) -> bool {
-    value.and_then(Value::as_bool).unwrap_or(false)
 }
 
 fn unsupported(provider_id: &str) -> ProviderSelectionError {
@@ -718,5 +618,52 @@ mod tests {
         .err()
         .unwrap_or_else(|| panic!("missing per-model relation must fail"));
         assert_eq!(error.code, "catalog_inconsistent");
+    }
+
+    #[tokio::test]
+    async fn malformed_authority_types_never_select_defaults() {
+        let workspace =
+            tempfile::tempdir().unwrap_or_else(|error| panic!("create workspace: {error}"));
+        let base = json!({
+            "provider_id": "codex",
+            "catalog_revision": "catalog-1",
+            "display_name": "Terra",
+            "workspace": workspace.path()
+        });
+        for (field, value) in [
+            ("model", json!(123)),
+            ("reasoning_effort", json!(["high"])),
+            ("start_now", json!("true")),
+            ("max_output_tokens", json!("0")),
+        ] {
+            let mut payload = base.clone();
+            payload[field] = value;
+            let error = ProviderSelection::from_catalog(
+                "general",
+                "operator-local-user",
+                field,
+                &payload,
+                &catalog(),
+            )
+            .await
+            .err()
+            .unwrap_or_else(|| panic!("malformed {field} must fail"));
+            assert_eq!(error.code, "bad_request", "field {field}");
+        }
+
+        let mut conflicting = base;
+        conflicting["model"] = json!("gpt-5.6-terra");
+        conflicting["model_id"] = json!("different-model");
+        let error = ProviderSelection::from_catalog(
+            "general",
+            "operator-local-user",
+            "conflicting-aliases",
+            &conflicting,
+            &catalog(),
+        )
+        .await
+        .err()
+        .unwrap_or_else(|| panic!("conflicting aliases must fail"));
+        assert_eq!(error.code, "bad_request");
     }
 }
