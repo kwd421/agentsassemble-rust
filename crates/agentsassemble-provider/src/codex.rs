@@ -27,7 +27,10 @@ use crate::{
     },
     filesystem::bind_executable,
     launch_error::DriverLaunchError,
-    runtime::{DriverError, DriverFuture, ProviderDriver, ProviderSessionAttachment},
+    runtime::{
+        DriverError, DriverFuture, ProviderDriver, ProviderSessionAttachment,
+        ProviderTurnCompleted, ProviderTurnRequest,
+    },
 };
 #[cfg(unix)]
 use crate::{
@@ -57,7 +60,7 @@ pub(crate) struct CodexDriver {
     stdout: FramedRead<ProviderStdout, LinesCodec>,
     stderr_task: JoinHandle<()>,
     next_request_id: u64,
-    pending_notifications: VecDeque<Value>,
+    pending_notifications: VecDeque<turn::QueuedNotification>,
     pending_notification_bytes: usize,
     pending_request: Option<PendingRequest>,
     initialization_error: Option<DriverError>,
@@ -67,6 +70,7 @@ pub(crate) struct CodexDriver {
     attached_thread_id: Option<String>,
     attached_observed_model_id: Option<String>,
     attachment_error: Option<DriverError>,
+    turn_state: turn::CodexTurnState,
 }
 
 #[cfg(unix)]
@@ -139,6 +143,7 @@ impl CodexDriver {
                 attached_thread_id: None,
                 attached_observed_model_id: None,
                 attachment_error: None,
+                turn_state: turn::CodexTurnState::default(),
             })
         }
         #[cfg(not(unix))]
@@ -189,6 +194,7 @@ impl CodexDriver {
                 attached_thread_id: None,
                 attached_observed_model_id: None,
                 attachment_error: None,
+                turn_state: turn::CodexTurnState::default(),
             })
         }
     }
@@ -344,12 +350,7 @@ impl CodexDriver {
                 if object.get("id").is_some() {
                     self.reject_server_request(&message).await?;
                 } else {
-                    self.pending_notification_bytes = next_notification_budget(
-                        self.pending_notifications.len(),
-                        self.pending_notification_bytes,
-                        line.len(),
-                    )?;
-                    self.pending_notifications.push_back(message);
+                    self.queue_notification(message, line.len())?;
                 }
                 continue;
             }
@@ -432,6 +433,14 @@ impl ProviderDriver for CodexDriver {
         session: &'a DurableAgentSession,
     ) -> DriverFuture<'a, Result<ProviderSessionAttachment, DriverError>> {
         Box::pin(self.attach(session))
+    }
+
+    fn send_turn<'a>(
+        &'a mut self,
+        session: &'a DurableAgentSession,
+        request: &'a ProviderTurnRequest,
+    ) -> DriverFuture<'a, Result<ProviderTurnCompleted, DriverError>> {
+        Box::pin(turn::send_turn(self, session, request))
     }
 
     fn is_alive(&mut self) -> Result<bool, DriverError> {
@@ -618,6 +627,9 @@ const fn notification_overflow() -> DriverError {
         "The Codex app-server notification queue exceeded its bound.",
     )
 }
+
+#[path = "codex_turn.rs"]
+mod turn;
 
 #[cfg(test)]
 mod tests {

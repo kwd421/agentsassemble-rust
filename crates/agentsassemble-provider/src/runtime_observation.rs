@@ -1,7 +1,7 @@
 use agentsassemble_domain::DurableAgentSession;
 
 use super::{
-    DriverError, ProviderAdapter, ProviderAdapterError, ProviderRuntimeGone,
+    DriverError, OwnedRuntime, ProviderAdapter, ProviderAdapterError, ProviderRuntimeGone,
     ProviderRuntimeObservation, RuntimeKey, RuntimeSlot, RuntimeState,
 };
 use crate::{
@@ -78,22 +78,8 @@ impl ProviderAdapter {
                 reason_code: "runtime_identity_mismatch".to_owned(),
             };
         }
-        match runtime.driver.is_alive() {
-            Ok(true) => {}
-            Ok(false) => {
-                return ProviderRuntimeObservation::LeaseUncertain {
-                    handle_id: runtime.handle_id.clone(),
-                    owner_id: runtime.owner_id.clone(),
-                    reason_code: "provider_leader_exited".to_owned(),
-                };
-            }
-            Err(_) => {
-                return ProviderRuntimeObservation::LeaseUncertain {
-                    handle_id: runtime.handle_id.clone(),
-                    owner_id: runtime.owner_id.clone(),
-                    reason_code: "runtime_health_unknown".to_owned(),
-                };
-            }
+        if let Some(observation) = unavailable_running_health(runtime) {
+            return observation;
         }
         if let Err(error) = revalidate_runtime_authority(session).await {
             return ProviderRuntimeObservation::LeaseUncertain {
@@ -109,6 +95,26 @@ impl ProviderAdapter {
             runtime_profile_key: runtime.profile_key.clone(),
         }
     }
+}
+
+fn unavailable_running_health(runtime: &OwnedRuntime) -> Option<ProviderRuntimeObservation> {
+    let Ok(mut driver) = runtime.driver.try_lock() else {
+        return Some(ProviderRuntimeObservation::LeaseUncertain {
+            handle_id: runtime.handle_id.clone(),
+            owner_id: runtime.owner_id.clone(),
+            reason_code: "provider_turn_active".to_owned(),
+        });
+    };
+    let reason_code = match driver.is_alive() {
+        Ok(true) => return None,
+        Ok(false) => "provider_leader_exited",
+        Err(_) => "runtime_health_unknown",
+    };
+    Some(ProviderRuntimeObservation::LeaseUncertain {
+        handle_id: runtime.handle_id.clone(),
+        owner_id: runtime.owner_id.clone(),
+        reason_code: reason_code.to_owned(),
+    })
 }
 
 pub(super) fn shutdown_launching_runtime(

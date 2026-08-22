@@ -23,6 +23,6 @@ pub use catalog::ProviderCatalogService;
 pub use guardian::run_process_helper_if_requested;
 pub use runtime::{
     ProviderAdapter, ProviderAdapterError, ProviderRuntimeGone, ProviderRuntimeObservation,
-    ProviderRuntimeStarted, ProviderShutdownOutcome,
+    ProviderRuntimeStarted, ProviderShutdownOutcome, ProviderTurnCompleted, ProviderTurnRequest,
 };
 pub use selection::{ProviderSelection, ProviderSelectionError};

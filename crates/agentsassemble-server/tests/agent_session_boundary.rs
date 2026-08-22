@@ -317,6 +317,7 @@ fn assert_public_session(session: &Value) {
     }
 }
 
+#[cfg(unix)]
 fn assert_session_flag(response: &Value, field: &str) {
     assert_eq!(response["result"]["agent_session"][field], true);
 }

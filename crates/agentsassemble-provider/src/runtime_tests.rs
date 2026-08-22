@@ -580,7 +580,6 @@ pub(super) async fn fixture_session(directory: &Path, script: &str) -> DurableAg
         &workspace_identity,
     )
 }
-
 async fn wait_for_pid(path: &Path) -> u32 {
     let mut pid = None;
     wait_until(Duration::from_secs(2), || {
@@ -592,7 +591,6 @@ async fn wait_for_pid(path: &Path) -> u32 {
     .await;
     pid.unwrap_or_else(|| panic!("fixture did not publish descendant pid"))
 }
-
 async fn wait_until(mut remaining: Duration, mut condition: impl FnMut() -> bool) {
     while !condition() && !remaining.is_zero() {
         let interval = Duration::from_millis(10).min(remaining);
@@ -601,7 +599,6 @@ async fn wait_until(mut remaining: Duration, mut condition: impl FnMut() -> bool
     }
     assert!(condition(), "condition did not become true before timeout");
 }
-
 fn leader_is_alive(adapter: &ProviderAdapter, session: &DurableAgentSession) -> bool {
     let Some(slot) = adapter.owner.runtimes.try_lock().ok().and_then(|slots| {
         slots
@@ -619,7 +616,10 @@ fn leader_is_alive(adapter: &ProviderAdapter, session: &DurableAgentSession) -> 
     let super::RuntimeState::Running(runtime) = &mut slot.state else {
         return false;
     };
-    runtime.driver.is_alive().unwrap_or(true)
+    runtime
+        .driver
+        .try_lock()
+        .map_or(true, |mut driver| driver.is_alive().unwrap_or(true))
 }
 
 fn process_exists(raw_pid: u32) -> bool {
