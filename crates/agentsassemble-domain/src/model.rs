@@ -1,0 +1,270 @@
+use std::collections::BTreeMap;
+
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use sha2::{Digest, Sha256};
+use uuid::Uuid;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RoomStatus {
+    Active,
+    Closed,
+    Archived,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Room {
+    pub room_id: String,
+    pub room_uid: Uuid,
+    pub label: String,
+    pub status: RoomStatus,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+impl Room {
+    #[must_use]
+    pub fn new(room_id: String, label: String, now: DateTime<Utc>) -> Self {
+        Self {
+            room_id,
+            room_uid: Uuid::new_v4(),
+            label,
+            status: RoomStatus::Active,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ParticipantStatus {
+    Joined,
+    Left,
+    Kicked,
+    Exported,
+    Detached,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Participant {
+    pub room_id: String,
+    pub participant_id: String,
+    pub display_name: String,
+    pub participant_type: String,
+    pub status: ParticipantStatus,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub role: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub owner_id: String,
+    #[serde(default)]
+    pub muted: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ClientKind {
+    Browser,
+    AgentBridge,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InviteScope {
+    ReadWrite,
+    ReadOnly,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)] // Wire capabilities are independent named permissions.
+pub struct CapabilitySet {
+    #[serde(rename = "room.history")]
+    pub room_history: bool,
+    #[serde(rename = "room.vote.summary")]
+    pub room_vote_summary: bool,
+    #[serde(rename = "room.random")]
+    pub room_random: bool,
+    #[serde(rename = "message.send")]
+    pub message_send: bool,
+    #[serde(rename = "message.modify")]
+    pub message_modify: bool,
+    #[serde(rename = "room.manage")]
+    pub room_manage: bool,
+    #[serde(rename = "room.delete")]
+    pub room_delete: bool,
+    #[serde(rename = "participant.leave")]
+    pub participant_leave: bool,
+    #[serde(rename = "participant.kick")]
+    pub participant_kick: bool,
+    #[serde(rename = "participant.mute")]
+    pub participant_mute: bool,
+    #[serde(rename = "agent.control")]
+    pub agent_control: bool,
+    #[serde(rename = "provider.request.resolve")]
+    pub provider_request_resolve: bool,
+    #[serde(rename = "bridge.report")]
+    pub bridge_report: bool,
+    #[serde(rename = "bridge.publish")]
+    pub bridge_publish: bool,
+}
+
+impl CapabilitySet {
+    #[must_use]
+    pub fn local_operator(client_kind: ClientKind, invite_scope: InviteScope) -> Self {
+        let bridge = client_kind == ClientKind::AgentBridge;
+        let writable = invite_scope == InviteScope::ReadWrite;
+        Self {
+            room_history: !bridge,
+            room_vote_summary: !bridge,
+            room_random: writable && !bridge,
+            message_send: writable && !bridge,
+            message_modify: writable && !bridge,
+            room_manage: true,
+            room_delete: true,
+            participant_leave: !bridge,
+            participant_kick: true,
+            participant_mute: true,
+            agent_control: true,
+            provider_request_resolve: writable && !bridge,
+            bridge_report: bridge,
+            bridge_publish: bridge && writable,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuthenticatedPrincipal {
+    pub principal_id: String,
+    pub participant_id: String,
+    pub display_name: String,
+    pub room_id: String,
+    pub client_kind: ClientKind,
+    pub invite_scope: InviteScope,
+    pub capabilities: CapabilitySet,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Actor {
+    pub participant_id: String,
+    pub participant_type: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RoomEvent {
+    pub v: u32,
+    pub id: String,
+    pub seq: i64,
+    pub created_at: DateTime<Utc>,
+    pub room_id: String,
+    #[serde(rename = "type")]
+    pub event_type: String,
+    pub actor: Actor,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub participant_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub participant_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actor_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actor_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message_kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relay_depth: Option<u32>,
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RoomAppearance {
+    pub banner_preset: String,
+    pub banner_image_url: String,
+    pub icon_image_url: String,
+    pub icon_label: String,
+    pub invite_scope: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RoomSettings {
+    pub label: String,
+    pub topic: String,
+    pub appearance: RoomAppearance,
+    pub conversation_mode: String,
+    pub tool_mode: String,
+    pub ordered_exclude_previous_speaker: bool,
+    pub max_relay_turns: u32,
+    pub channels: Vec<Value>,
+    pub activity_plugin: String,
+}
+
+impl RoomSettings {
+    #[must_use]
+    pub fn defaults(label: String) -> Self {
+        Self {
+            label,
+            topic: String::new(),
+            appearance: RoomAppearance {
+                banner_preset: "default".to_owned(),
+                banner_image_url: String::new(),
+                icon_image_url: String::new(),
+                icon_label: String::new(),
+                invite_scope: "room".to_owned(),
+            },
+            conversation_mode: "ordered".to_owned(),
+            tool_mode: "chat".to_owned(),
+            ordered_exclude_previous_speaker: true,
+            max_relay_turns: 6,
+            channels: Vec::new(),
+            activity_plugin: String::new(),
+        }
+    }
+}
+
+/// Serializes room settings and attaches their public content revision.
+///
+/// # Errors
+///
+/// Returns the serialization error if a settings field cannot be encoded.
+pub fn public_settings(settings: &RoomSettings) -> Result<Value, serde_json::Error> {
+    let mut value = serde_json::to_value(settings)?;
+    let canonical = serde_json::to_vec(settings)?;
+    let revision = format!("room-settings-v1-{:x}", Sha256::digest(canonical));
+    if let Value::Object(object) = &mut value {
+        object.insert("settings_revision".to_owned(), Value::String(revision));
+    }
+    Ok(value)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SnapshotMode {
+    Initial,
+    Resume,
+    Gap,
+    Bridge,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProviderCatalog {
+    pub status: String,
+    pub catalog_revision: String,
+    pub providers: Vec<Value>,
+}
+
+impl Default for ProviderCatalog {
+    fn default() -> Self {
+        Self {
+            status: "ready".to_owned(),
+            catalog_revision: String::new(),
+            providers: Vec::new(),
+        }
+    }
+}

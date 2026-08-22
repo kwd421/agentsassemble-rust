@@ -1,0 +1,36 @@
+# Rule
+
+아래 규칙은 구현 중 AI가 반복적으로 어기는 행동만 다룬다.
+
+1. **저장소 고유 사실을 관습으로 추측하지 않는다.**  
+   실행 환경, 공개 경계, 원본과 생성물, 상태 수명, 실제 검증 권위는 코드·설정·CI와 실제 실행 경로에서 확인한다. 확인하지 못한 것은 `unknown`으로 남긴다.
+
+2. **한 개념에는 하나의 권위 있는 표현만 둔다.**  
+   같은 상태·스키마·정책을 여러 곳에 독립 정의하지 않는다. 직렬화·검증·API·생성물은 권위 있는 소유자에서 파생하거나 불일치 검사를 둔다.
+
+3. **권위 상태를 여러 독립 신호의 조합으로 숨기지 않는다.**  
+   행동이 `status + flag/map/timer/cache` 같은 여러 신호에 의해 결정된다면 무엇이 authoritative state인지 명확히 한다. Cache, timer, queue, derived flag가 필요하면 권위 상태와 명시적 전이에서 파생되며 독립적인 두 번째 권위가 되지 않게 한다.
+
+4. **핵심을 고칠 자리에 우회로를 추가하지 않는다.**  
+   일회성 래퍼·어댑터·호환 경로로 기존 소유자를 피하지 말고 책임 있는 경계를 수정한 뒤 대체된 경로를 제거한다.
+
+5. **Fallback은 기본 금지다. 원인을 찾아 고친다.**  
+   새 fallback은 사용자 명시 승인 없이는 추가하지 않는다. Missing implementation, integration failure, provider incompatibility, protocol mismatch, migration defect, persistence failure, authorization failure, invalid state를 fallback으로 숨기지 않는다. 특히 Rust 실패 시 Python legacy 경로, structured provider 실패 시 scraping/prompt heuristic, persistence 실패 시 in-memory success, invalid authority/state 시 permissive default로 조용히 전환하지 않는다.
+
+6. **실패와 불확실성을 정상값으로 바꾸지 않는다.**  
+   누락·손상·미지원·실패를 빈 값, 기본값, 성공 결과로 삼키지 말고 서로 구분해 전파하거나 관측 가능하게 만든다.
+
+7. **의존성과 작업 수명은 명시적으로 소유시킨다.**  
+   로드 시점에 고정되는 설정, 숨은 전역 상태, 초기화 순서 의존, 소유자 없는 백그라운드 작업을 피한다. 생성·취소·정리 주체를 드러낸다.
+
+8. **동시성 요구를 모호한 순서 표현으로 구현하지 않는다.**  
+   “먼저”, “한 번”, “완료”가 선택·시작·외부 효과·커밋 중 무엇인지 정하고 대기·병렬 실행·재시작에서도 그 의미를 보존한다.
+
+9. **테스트는 시간을 기다리거나 내부를 엿보지 않는다.**  
+   중요한 실패 모드를 테스트해야 할 때는 `sleep`·임의 timeout·내부 상태 대신 barrier·event·통제 큐·fake clock으로 원인을 통제하고 공개 결과·부작용·최종 상태를 검증한다.
+
+10. **검사 통과를 검사 범위 밖의 정상으로 확대하지 않는다.**  
+    정적 분석·lint·test·build는 관측한 범위만 증명한다. skipped·unsupported·untested·contaminated 결과는 clean이 아니라 `unknown`이다.
+
+11. **변경은 증가분으로 검사하고 반복 위반은 기계화한다.**  
+    diff에서 새 소유자, 중복 계약, 병렬 권위 상태, fallback, 소유자 없는 작업, 공개 표면이 늘었는지 본다. 반복되는 위반은 가능한 경우 lint·test·CI·구조 게이트로 강제한다.

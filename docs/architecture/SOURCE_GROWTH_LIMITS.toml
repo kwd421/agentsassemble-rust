@@ -1,0 +1,9 @@
+# New source files stop at 800 lines. A recorded exception is a reviewed
+# cohesion boundary, not spare growth budget. Raising or adding one requires an
+# explicit user decision.
+
+[policy]
+new_file_line_limit = 800
+
+[file_limits]
+
