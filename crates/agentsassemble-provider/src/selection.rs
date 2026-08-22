@@ -9,6 +9,7 @@ use uuid::Uuid;
 use crate::filesystem::{
     FilesystemFailure, canonical_workspace, executable_identity as current_executable_identity,
 };
+use crate::profile::runtime_profile_key;
 use crate::selection_input::SelectionInput;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -182,7 +183,7 @@ impl ProviderSelection {
     }
 
     fn profile_key(&self) -> String {
-        let fields = [
+        runtime_profile_key([
             self.provider_kind.as_str(),
             self.runtime_kind.as_str(),
             self.executable.as_str(),
@@ -196,11 +197,7 @@ impl ProviderSelection {
             self.execution_harness.as_str(),
             self.permission_mode.as_str(),
             self.transport.as_str(),
-        ];
-        format!(
-            "provider-profile-v1-{:x}",
-            Sha256::digest(fields.join("\0").as_bytes())
-        )
+        ])
     }
 }
 

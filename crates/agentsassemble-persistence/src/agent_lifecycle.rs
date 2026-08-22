@@ -11,13 +11,12 @@ use sqlx::{Sqlite, Transaction};
 use crate::{
     CommandOutcome, PersistenceError, SqliteStore,
     agent_lifecycle_authority::{
-        authorize_control, lifecycle_intent_is_empty, lifecycle_operation_id,
-        matching_prepared_intent, payload_agent_id, require_intent, require_matching_operation,
-        validate_runtime_started,
+        authorize_control, lifecycle_intent_is_empty, lifecycle_operation_id, payload_agent_id,
+        require_intent, require_matching_operation, validate_runtime_started,
     },
     agent_lifecycle_events::{
         append_error_event, append_session_event, append_state_event, commit_already_stopped,
-        commit_reused_start, store_result,
+        store_result,
     },
     agent_lifecycle_reservations::{
         LifecycleReservation, claim_lifecycle_command, finish_lifecycle_command,
@@ -121,30 +120,19 @@ impl SqliteStore {
                 "This Agent Session runtime profile must be saved again before it can start.",
             ));
         }
-        let incomplete = matching_prepared_intent(&session, "start", &operation_id)?;
-        if matches!(
-            session.public.runtime_status.as_str(),
-            "starting" | "idle" | "busy" | "paused"
-        ) && !incomplete
-        {
-            finish_lifecycle_command(&mut transaction, &reservation).await?;
-            let outcome = commit_reused_start(
-                &mut transaction,
-                principal,
-                request_id,
-                payload_hash,
-                &session.public,
-            )
-            .await?;
-            transaction.commit().await?;
-            return Ok(AgentStartPlan::Outcome(Box::new(outcome)));
-        }
+        let incomplete = matching_start_intent(&mut session, &operation_id)?;
         let operation_id = if incomplete {
+            save_session(&mut transaction, &session).await?;
             operation_id
         } else {
             "available".clone_into(&mut session.public.status);
             session.public.enabled = true;
-            "starting".clone_into(&mut session.public.runtime_status);
+            if !matches!(
+                session.public.runtime_status.as_str(),
+                "starting" | "idle" | "busy" | "paused"
+            ) {
+                "starting".clone_into(&mut session.public.runtime_status);
+            }
             session.public.last_error.clear();
             session.public.last_error_code.clear();
             session.public.recovery_required = false;
@@ -219,7 +207,14 @@ impl SqliteStore {
         finish_lifecycle_command(&mut transaction, &reservation).await?;
         "attached".clone_into(&mut session.public.status);
         session.public.enabled = true;
-        "idle".clone_into(&mut session.public.runtime_status);
+        if !started.runtime_reused
+            || !matches!(
+                session.public.runtime_status.as_str(),
+                "idle" | "busy" | "paused"
+            )
+        {
+            "idle".clone_into(&mut session.public.runtime_status);
+        }
         session.public.provider_session_active = started.provider_session_active;
         session.public.provider_session_reused = started.provider_session_reused;
         session.public.last_error.clear();
@@ -257,57 +252,6 @@ impl SqliteStore {
         .await?;
         transaction.commit().await?;
         Ok(outcome)
-    }
-
-    /// Moves a failed start out of its prepared intent without hiding the error.
-    ///
-    /// # Errors
-    ///
-    /// Returns a stale-effect rejection or persistence failure.
-    pub async fn fail_agent_start(
-        &self,
-        principal: &AuthenticatedPrincipal,
-        agent_id: &str,
-        operation_id: &str,
-        error_code: &'static str,
-        message: &str,
-    ) -> Result<Vec<RoomEvent>, PersistenceError> {
-        let mut transaction = self.pool.begin().await?;
-        active_room_for_principal(&mut transaction, principal).await?;
-        let mut session = load_session(&mut transaction, &principal.room_id, agent_id).await?;
-        require_intent(
-            &session,
-            START,
-            operation_id,
-            "prepared",
-            "stale_start_confirmation",
-        )?;
-        "unavailable".clone_into(&mut session.public.status);
-        session.public.enabled = false;
-        "error".clone_into(&mut session.public.runtime_status);
-        session.public.provider_session_active = false;
-        session.public.last_error =
-            redact_persisted_diagnostic_text(message, PUBLIC_LIFECYCLE_ERROR_LIMIT);
-        if session.public.last_error.is_empty() {
-            "Provider launch failed.".clone_into(&mut session.public.last_error);
-        }
-        session.public.last_error_code = error_code.to_owned();
-        session.runtime_handle_id.clear();
-        session.runtime_owner_id.clear();
-        clear_intent(&mut session);
-        session.public.updated_at = Utc::now();
-        save_session(&mut transaction, &session).await?;
-        let error = append_error_event(
-            &mut transaction,
-            principal,
-            &session.public,
-            error_code,
-            &session.public.last_error,
-        )
-        .await?;
-        let state = append_state_event(&mut transaction, principal, &session.public).await?;
-        transaction.commit().await?;
-        Ok(vec![error, state])
     }
 
     /// Durably records a stop intent before the provider supervisor is called.
@@ -672,7 +616,29 @@ fn stop_effect(session: &DurableAgentSession) -> Result<AgentStopEffect, Persist
     })
 }
 
-fn clear_intent(session: &mut DurableAgentSession) {
+fn matching_start_intent(
+    session: &mut DurableAgentSession,
+    operation_id: &str,
+) -> Result<bool, PersistenceError> {
+    if lifecycle_intent_is_empty(session) {
+        return Ok(false);
+    }
+    require_matching_operation(session, "start", operation_id)?;
+    match session.lifecycle_intent_status.as_str() {
+        "prepared" => Ok(true),
+        "unconfirmed" => {
+            "prepared".clone_into(&mut session.lifecycle_intent_status);
+            session.public.updated_at = Utc::now();
+            Ok(true)
+        }
+        _ => Err(rejected(
+            "invalid_state",
+            "Stored provider start intent is invalid.",
+        )),
+    }
+}
+
+pub(crate) fn clear_intent(session: &mut DurableAgentSession) {
     session.lifecycle_intent_action.clear();
     session.lifecycle_intent_id.clear();
     session.lifecycle_intent_status.clear();
@@ -686,7 +652,7 @@ fn dedupe<'a>(values: impl Iterator<Item = &'a String>) -> Vec<String> {
         .collect()
 }
 
-async fn load_session(
+pub(crate) async fn load_session(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
     session_id: &str,
@@ -707,7 +673,7 @@ async fn load_session(
     Ok(serde_json::from_str(&encoded)?)
 }
 
-async fn save_session(
+pub(crate) async fn save_session(
     transaction: &mut Transaction<'_, Sqlite>,
     session: &DurableAgentSession,
 ) -> Result<(), PersistenceError> {

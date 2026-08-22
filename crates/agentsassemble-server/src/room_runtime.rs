@@ -1,8 +1,11 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use agentsassemble_domain::{AuthenticatedPrincipal, RoomEvent};
-use agentsassemble_persistence::{CommandOutcome, PersistenceError, SqliteStore};
-use agentsassemble_provider::ProviderCatalogService;
+use agentsassemble_persistence::{
+    AgentRuntimeStarted, AgentStartPlan, AgentStopPlan, CommandOutcome, PersistenceError,
+    SqliteStore,
+};
+use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService, ProviderRuntimeStarted};
 use serde_json::Value;
 use thiserror::Error;
 use tokio::{
@@ -22,6 +25,8 @@ pub enum RoomShutdownError {
     TimedOut,
     #[error("room mutation task failed: {0}")]
     TaskFailed(String),
+    #[error("provider runtime shutdown failed: {0}")]
+    Provider(String),
 }
 
 struct RoomCommand {
@@ -42,6 +47,7 @@ struct RoomHandle {
 pub struct RoomRuntime {
     store: SqliteStore,
     provider_catalog: ProviderCatalogService,
+    provider_adapter: ProviderAdapter,
     rooms: Arc<Mutex<HashMap<String, RoomHandle>>>,
     cancellation: CancellationToken,
     tasks: Arc<Mutex<Vec<JoinHandle<()>>>>,
@@ -50,9 +56,19 @@ pub struct RoomRuntime {
 impl RoomRuntime {
     #[must_use]
     pub fn new(store: SqliteStore, provider_catalog: ProviderCatalogService) -> Self {
+        Self::with_provider_adapter(store, provider_catalog, ProviderAdapter::new())
+    }
+
+    #[must_use]
+    pub fn with_provider_adapter(
+        store: SqliteStore,
+        provider_catalog: ProviderCatalogService,
+        provider_adapter: ProviderAdapter,
+    ) -> Self {
         Self {
             store,
             provider_catalog,
+            provider_adapter,
             rooms: Arc::new(Mutex::new(HashMap::new())),
             cancellation: CancellationToken::new(),
             tasks: Arc::new(Mutex::new(Vec::new())),
@@ -115,7 +131,13 @@ impl RoomRuntime {
             let mut tasks = self.tasks.lock().await;
             std::mem::take(&mut *tasks)
         };
-        join_room_tasks(tasks, ROOM_SHUTDOWN_TIMEOUT).await
+        let room_result = join_room_tasks(tasks, ROOM_SHUTDOWN_TIMEOUT).await;
+        let provider_result = self
+            .provider_adapter
+            .shutdown()
+            .await
+            .map_err(|error| RoomShutdownError::Provider(error.to_string()));
+        room_result.and(provider_result)
     }
 
     async fn handle(&self, room_id: &str) -> RoomHandle {
@@ -132,6 +154,7 @@ impl RoomRuntime {
         rooms.insert(room_id.to_owned(), handle.clone());
         let store = self.store.clone();
         let provider_catalog = self.provider_catalog.clone();
+        let provider_adapter = self.provider_adapter.clone();
         let cancellation = self.cancellation.clone();
         let task = tokio::spawn(async move {
             loop {
@@ -142,15 +165,12 @@ impl RoomRuntime {
                         command
                     }
                 };
-                let result = execute_command(&store, &provider_catalog, &command).await;
-                if let Ok(outcome) = &result
-                    && !outcome.deduplicated
-                {
-                    for event in &outcome.events {
-                        let _ = event_tx.send(event.clone());
-                    }
+                let execution =
+                    execute_command(&store, &provider_catalog, &provider_adapter, &command).await;
+                for event in &execution.committed_events {
+                    let _ = event_tx.send(event.clone());
                 }
-                let _ = command.reply.send(result);
+                let _ = command.reply.send(execution.reply);
             }
         });
         self.tasks.lock().await.push(task);
@@ -183,18 +203,64 @@ async fn join_room_tasks(
 async fn execute_command(
     store: &SqliteStore,
     provider_catalog: &ProviderCatalogService,
+    provider_adapter: &ProviderAdapter,
     command: &RoomCommand,
-) -> Result<CommandOutcome, PersistenceError> {
-    if command.action != "agent.create" {
-        return store
+) -> CommandExecution {
+    let result = match command.action.as_str() {
+        "agent.create" => execute_agent_create(store, provider_catalog, command).await,
+        "agent.start" => execute_agent_start(store, provider_adapter, command).await,
+        "agent.stop" => execute_agent_stop(store, provider_adapter, command).await,
+        _ => store
             .execute_message(
                 &command.principal,
                 &command.request_id,
                 &command.action,
                 &command.payload,
             )
-            .await;
+            .await
+            .map(CommandExecution::success),
+    };
+    result.unwrap_or_else(CommandExecution::failure)
+}
+
+struct CommandExecution {
+    reply: Result<CommandOutcome, PersistenceError>,
+    committed_events: Vec<RoomEvent>,
+}
+
+impl CommandExecution {
+    fn success(outcome: CommandOutcome) -> Self {
+        let committed_events = if outcome.deduplicated {
+            Vec::new()
+        } else {
+            outcome.events.clone()
+        };
+        Self {
+            reply: Ok(outcome),
+            committed_events,
+        }
     }
+
+    fn failure(error: PersistenceError) -> Self {
+        Self {
+            reply: Err(error),
+            committed_events: Vec::new(),
+        }
+    }
+
+    fn committed_failure(error: PersistenceError, committed_events: Vec<RoomEvent>) -> Self {
+        Self {
+            reply: Err(error),
+            committed_events,
+        }
+    }
+}
+
+async fn execute_agent_create(
+    store: &SqliteStore,
+    provider_catalog: &ProviderCatalogService,
+    command: &RoomCommand,
+) -> Result<CommandExecution, PersistenceError> {
     if let Some(outcome) = store
         .replay_command(
             &command.principal,
@@ -204,7 +270,7 @@ async fn execute_command(
         )
         .await?
     {
-        return Ok(outcome);
+        return Ok(CommandExecution::success(outcome));
     }
     let selection = provider_catalog
         .validate_creation(
@@ -226,6 +292,140 @@ async fn execute_command(
             &selection.into(),
         )
         .await
+        .map(CommandExecution::success)
+}
+
+async fn execute_agent_start(
+    store: &SqliteStore,
+    provider_adapter: &ProviderAdapter,
+    command: &RoomCommand,
+) -> Result<CommandExecution, PersistenceError> {
+    let effect = match store
+        .prepare_agent_start(&command.principal, &command.request_id, &command.payload)
+        .await?
+    {
+        AgentStartPlan::Outcome(outcome) => return Ok(CommandExecution::success(*outcome)),
+        AgentStartPlan::Start(effect) => effect,
+    };
+    match provider_adapter.start(&effect.session).await {
+        Ok(started) => store
+            .complete_agent_start(
+                &command.principal,
+                &command.request_id,
+                &command.payload,
+                &effect.operation_id,
+                &persisted_start(started),
+            )
+            .await
+            .map(CommandExecution::success),
+        Err(error) => {
+            let events = if error.effect_uncertain {
+                store
+                    .mark_agent_start_unconfirmed(
+                        &command.principal,
+                        &effect.session.public.session_id,
+                        &effect.operation_id,
+                        &error.runtime_handle_id,
+                        &error.runtime_owner_id,
+                        error.code,
+                        error.message,
+                    )
+                    .await?
+            } else {
+                store
+                    .fail_agent_start(
+                        &command.principal,
+                        &effect.session.public.session_id,
+                        &effect.operation_id,
+                        error.code,
+                        error.message,
+                    )
+                    .await?
+            };
+            Ok(CommandExecution::committed_failure(
+                PersistenceError::CommandRejected {
+                    code: error.code,
+                    message: error.message.to_owned(),
+                },
+                events,
+            ))
+        }
+    }
+}
+
+async fn execute_agent_stop(
+    store: &SqliteStore,
+    provider_adapter: &ProviderAdapter,
+    command: &RoomCommand,
+) -> Result<CommandExecution, PersistenceError> {
+    match store
+        .prepare_agent_stop(&command.principal, &command.request_id, &command.payload)
+        .await?
+    {
+        AgentStopPlan::Outcome(outcome) => Ok(CommandExecution::success(*outcome)),
+        AgentStopPlan::Finalize => store
+            .finalize_agent_stop(&command.principal, &command.request_id, &command.payload)
+            .await
+            .map(CommandExecution::success),
+        AgentStopPlan::Stop(effect) => {
+            let stop = provider_adapter
+                .stop(
+                    &command.principal.room_id,
+                    &effect.session_id,
+                    &effect.runtime_handle_id,
+                    &effect.runtime_owner_id,
+                )
+                .await;
+            if let Err(error) = stop {
+                let events = store
+                    .mark_agent_stop_unconfirmed(
+                        &command.principal,
+                        &effect.session_id,
+                        &effect.operation_id,
+                        error.code,
+                        error.message,
+                    )
+                    .await?;
+                return Ok(CommandExecution::committed_failure(
+                    PersistenceError::CommandRejected {
+                        code: error.code,
+                        message: error.message.to_owned(),
+                    },
+                    events,
+                ));
+            }
+            store
+                .record_agent_stop_effect(
+                    &command.principal.room_id,
+                    &effect.session_id,
+                    &effect.operation_id,
+                )
+                .await?;
+            provider_adapter
+                .release_confirmed_stop(
+                    &command.principal.room_id,
+                    &effect.session_id,
+                    &effect.runtime_handle_id,
+                    &effect.runtime_owner_id,
+                )
+                .await;
+            store
+                .finalize_agent_stop(&command.principal, &command.request_id, &command.payload)
+                .await
+                .map(CommandExecution::success)
+        }
+    }
+}
+
+fn persisted_start(started: ProviderRuntimeStarted) -> AgentRuntimeStarted {
+    AgentRuntimeStarted {
+        runtime_handle_id: started.runtime_handle_id,
+        runtime_owner_id: started.runtime_owner_id,
+        provider_session_id: started.provider_session_id,
+        runtime_reused: started.runtime_reused,
+        provider_session_reused: started.provider_session_reused,
+        provider_session_active: started.provider_session_active,
+    }
 }
 
 #[cfg(test)]

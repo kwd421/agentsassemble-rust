@@ -10,25 +10,29 @@ use tokio_util::sync::CancellationToken;
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_PROBE_STREAM_BYTES: usize = 2 * 1024 * 1024;
-const PROBE_ENVIRONMENT: [&str; 18] = [
-    "PATH",
+const PROVIDER_ENVIRONMENT: [&str; 22] = [
+    "APPDATA",
+    "COLORTERM",
+    "COMSPEC",
     "HOME",
-    "USER",
+    "LANG",
+    "LC_ALL",
+    "LOCALAPPDATA",
     "LOGNAME",
-    "TMPDIR",
-    "TMP",
+    "PATH",
+    "PATHEXT",
+    "SHELL",
+    "SYSTEMROOT",
     "TEMP",
+    "TERM",
+    "TMP",
+    "TMPDIR",
+    "USER",
+    "USERPROFILE",
+    "XDG_CACHE_HOME",
     "XDG_CONFIG_HOME",
     "XDG_DATA_HOME",
     "XDG_STATE_HOME",
-    "APPDATA",
-    "LOCALAPPDATA",
-    "USERPROFILE",
-    "SYSTEMROOT",
-    "WINDIR",
-    "COMSPEC",
-    "PATHEXT",
-    "LANG",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -104,9 +108,9 @@ pub(crate) async fn probe(
     String::from_utf8(stdout).map_err(|_| ProbeFailure::Malformed)
 }
 
-fn sanitize_environment(command: &mut tokio::process::Command) {
+pub(crate) fn sanitize_environment(command: &mut tokio::process::Command) {
     command.env_clear();
-    for name in PROBE_ENVIRONMENT {
+    for name in PROVIDER_ENVIRONMENT {
         if let Some(value) = env::var_os(name) {
             command.env(name, value);
         }

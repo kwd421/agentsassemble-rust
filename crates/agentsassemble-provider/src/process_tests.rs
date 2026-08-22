@@ -2,11 +2,11 @@ use std::time::Duration;
 
 use tokio_util::sync::CancellationToken;
 
-use super::{PROBE_ENVIRONMENT, ProbeFailure, probe};
+use super::{PROVIDER_ENVIRONMENT, ProbeFailure, probe};
 
 #[test]
 fn probe_environment_has_no_credential_names() {
-    assert!(PROBE_ENVIRONMENT.iter().all(|name| {
+    assert!(PROVIDER_ENVIRONMENT.iter().all(|name| {
         !["KEY", "TOKEN", "SECRET", "PASSWORD"]
             .iter()
             .any(|marker| name.contains(marker))

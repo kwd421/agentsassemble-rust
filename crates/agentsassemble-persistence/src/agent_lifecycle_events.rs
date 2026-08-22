@@ -89,33 +89,6 @@ pub(crate) async fn append_error_event(
     Ok(event)
 }
 
-pub(crate) async fn commit_reused_start(
-    transaction: &mut Transaction<'_, Sqlite>,
-    principal: &AuthenticatedPrincipal,
-    request_id: &str,
-    payload_hash: String,
-    session: &AgentSession,
-) -> Result<CommandOutcome, PersistenceError> {
-    let event = append_state_event(transaction, principal, session).await?;
-    let events = vec![event];
-    let result = json!({
-        "agent_session": session,
-        "runtime_reused": true,
-        "events": events,
-        "event": events.last(),
-    });
-    store_result(
-        transaction,
-        principal,
-        request_id,
-        "agent.start",
-        payload_hash,
-        result,
-        events,
-    )
-    .await
-}
-
 pub(crate) async fn commit_already_stopped(
     transaction: &mut Transaction<'_, Sqlite>,
     principal: &AuthenticatedPrincipal,

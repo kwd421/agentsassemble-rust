@@ -9,9 +9,10 @@ use agentsassemble_domain::{
 };
 use agentsassemble_persistence::{SqliteStore, secure_private_directory};
 use agentsassemble_protocol::{LocalControlRequest, LocalControlResponse};
-use agentsassemble_provider::ProviderCatalogService;
+use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService};
 use agentsassemble_server::{
-    AppState, HostSecret, TicketIssueError, TicketStore, issue_local_ticket, serve,
+    AppState, HostSecret, TicketIssueError, TicketStore, issue_local_ticket,
+    reconcile_runtime_ownership, serve,
 };
 use anyhow::Context;
 use chrono::Utc;
@@ -71,7 +72,8 @@ async fn main() -> anyhow::Result<()> {
     {
         initialize_room(&store, room_id).await?;
     }
-    let reconciled_sessions = store.reconcile_agent_sessions_after_restart().await?;
+    let provider_adapter = ProviderAdapter::new();
+    let reconciled_sessions = reconcile_runtime_ownership(&store, &provider_adapter).await?;
     if reconciled_sessions > 0 {
         tracing::warn!(
             reconciled_sessions,
@@ -88,11 +90,12 @@ async fn main() -> anyhow::Result<()> {
             signal.cancel();
         }
     });
-    let mut state = AppState::local(
+    let mut state = AppState::local_with_provider_adapter(
         store,
         TicketStore::new(Duration::from_secs(30), 4_096),
         host_secret,
         ProviderCatalogService::discovering(),
+        provider_adapter,
     );
     let frontend_path = if let Some(frontend) = args.frontend {
         let path = frontend

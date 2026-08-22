@@ -76,18 +76,20 @@ pub(crate) async fn claim_lifecycle_command(
     Ok(())
 }
 
-pub(crate) async fn mark_stop_owner_lost(
+pub(crate) async fn mark_lifecycle_owner_lost(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
     session_id: &str,
+    action: &str,
     operation_id: &str,
 ) -> Result<(), PersistenceError> {
     let updated = sqlx::query(
-        "UPDATE lifecycle_command_reservations SET status = 'owner_lost' WHERE room_id = ? AND session_id = ? AND operation_id = ? AND action = 'agent.stop' AND status = 'pending'",
+        "UPDATE lifecycle_command_reservations SET status = 'owner_lost' WHERE room_id = ? AND session_id = ? AND operation_id = ? AND action = ? AND status = 'pending'",
     )
     .bind(room_id)
     .bind(session_id)
     .bind(operation_id)
+    .bind(action)
     .execute(&mut **transaction)
     .await?
     .rows_affected();

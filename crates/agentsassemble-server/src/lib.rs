@@ -1,14 +1,18 @@
+mod app_state;
 mod host_ticket;
 mod http_transport;
 mod ingress_budget;
 mod room_runtime;
+mod runtime_reconciliation;
 mod server_proof;
 mod ticket;
 mod ticket_issuer;
 mod web;
 
+pub use app_state::AppState;
 pub use host_ticket::{HostSecret, InvalidHostSecret};
 pub use room_runtime::{RoomRuntime, RoomShutdownError};
+pub use runtime_reconciliation::reconcile_runtime_ownership;
 pub use ticket::{ConsumedTicket, IssuedTicket, TicketError, TicketStore};
 pub use ticket_issuer::{TicketIssueError, issue_local_ticket};
-pub use web::{AppState, ServeError, router, serve};
+pub use web::{ServeError, router, serve};

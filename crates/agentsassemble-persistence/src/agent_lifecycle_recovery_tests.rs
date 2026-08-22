@@ -3,7 +3,7 @@ use serde_json::json;
 
 use super::{AgentRuntimeStarted, AgentStartPlan, AgentStopPlan};
 use crate::{
-    PersistenceError, SqliteStore,
+    PersistenceError, RuntimeReconciliationObservation, SqliteStore,
     agent_lifecycle::tests::{AGENT_ID, fixture},
 };
 
@@ -18,6 +18,182 @@ fn started(handle: &str, provider_session_id: &str) -> AgentRuntimeStarted {
         provider_session_reused: false,
         provider_session_active: true,
     }
+}
+
+#[tokio::test]
+async fn live_looking_start_requires_supervisor_confirmation_before_success() {
+    let (store, principal, _directory) = fixture().await;
+    let payload = json!({"agent_id": AGENT_ID});
+    let AgentStartPlan::Start(first) = store
+        .prepare_agent_start(&principal, "first-observed-start", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare first start: {error}"))
+    else {
+        panic!("stopped session must require an effect");
+    };
+    store
+        .complete_agent_start(
+            &principal,
+            "first-observed-start",
+            &payload,
+            &first.operation_id,
+            &started("owned-runtime", "provider-thread"),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("complete first start: {error}"));
+    let AgentStartPlan::Start(reconcile) = store
+        .prepare_agent_start(&principal, "second-observed-start", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare observed reuse: {error}"))
+    else {
+        panic!("durable liveness alone must not commit reused start");
+    };
+    assert_eq!(reconcile.session.runtime_handle_id, "owned-runtime");
+    assert_eq!(reconcile.session.runtime_owner_id, "supervisor-instance-1");
+    assert_eq!(reconcile.session.public.runtime_status, "idle");
+}
+
+#[tokio::test]
+async fn ambiguous_start_retains_its_exact_runtime_lease_and_blocks_replacement() {
+    let (store, principal, _directory) = fixture().await;
+    let payload = json!({"agent_id": AGENT_ID});
+    let AgentStartPlan::Start(start) = store
+        .prepare_agent_start(&principal, "ambiguous-start", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare ambiguous start: {error}"))
+    else {
+        panic!("stopped session must require an effect");
+    };
+    store
+        .mark_agent_start_unconfirmed(
+            &principal,
+            AGENT_ID,
+            &start.operation_id,
+            "uncertain-runtime",
+            "supervisor-instance-1",
+            "runtime_start_unconfirmed",
+            "Provider initialization was not confirmed.",
+        )
+        .await
+        .unwrap_or_else(|error| panic!("mark start unconfirmed: {error}"));
+    assert!(matches!(
+        store
+            .prepare_agent_start(&principal, "replacement-start", &payload)
+            .await,
+        Err(PersistenceError::CommandRejected {
+            code: "operation_in_progress",
+            ..
+        })
+    ));
+    let AgentStartPlan::Start(retry) = store
+        .prepare_agent_start(&principal, "ambiguous-start", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("retry ambiguous start: {error}"))
+    else {
+        panic!("same start must retain its external-effect lease");
+    };
+    assert_eq!(retry.session.runtime_handle_id, "uncertain-runtime");
+    assert_eq!(retry.session.runtime_owner_id, "supervisor-instance-1");
+    assert_eq!(retry.session.lifecycle_intent_status, "prepared");
+}
+
+#[tokio::test]
+async fn reconciliation_rejects_competing_pending_lifecycle_authority() {
+    let (store, principal, _directory) = fixture().await;
+    let payload = json!({"agent_id": AGENT_ID});
+    let AgentStartPlan::Start(_) = store
+        .prepare_agent_start(&principal, "authoritative-start", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare authoritative start: {error}"))
+    else {
+        panic!("stopped session must require an effect");
+    };
+    sqlx::query(
+        "INSERT INTO lifecycle_command_reservations(room_id, principal_id, request_id, action, payload_hash, session_id, operation_id, status) VALUES ('general', 'operator', 'competing-start', 'agent.start', 'competing-hash', ?, 'competing-operation', 'pending')",
+    )
+    .bind(AGENT_ID)
+    .execute(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("insert competing reservation: {error}"));
+
+    assert!(matches!(
+        store.load_runtime_reconciliation_candidates().await,
+        Err(PersistenceError::CommandRejected {
+            code: "invalid_stored_runtime_authority",
+            ..
+        })
+    ));
+}
+
+#[tokio::test]
+async fn runtime_reconciliation_uses_exact_cas_and_gone_stop_finalizes_without_repeating_effect() {
+    let (store, principal, _directory) = fixture().await;
+    let payload = json!({"agent_id": AGENT_ID});
+    let AgentStartPlan::Start(start) = store
+        .prepare_agent_start(&principal, "start-before-observation", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare start: {error}"))
+    else {
+        panic!("stopped session must require an effect");
+    };
+    store
+        .complete_agent_start(
+            &principal,
+            "start-before-observation",
+            &payload,
+            &start.operation_id,
+            &started("runtime-before-observation", "provider-thread"),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("complete start: {error}"));
+    let stale_candidate = store
+        .load_runtime_reconciliation_candidates()
+        .await
+        .unwrap_or_else(|error| panic!("load stale candidate: {error}"))
+        .pop()
+        .unwrap_or_else(|| panic!("live runtime had no candidate"));
+    let AgentStopPlan::Stop(stop) = store
+        .prepare_agent_stop(&principal, "stop-after-observation", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare stop: {error}"))
+    else {
+        panic!("running session must require a stop effect");
+    };
+    assert!(matches!(
+        store
+            .apply_runtime_reconciliation(
+                &stale_candidate,
+                &RuntimeReconciliationObservation::Gone,
+            )
+            .await,
+        Err(PersistenceError::CommandRejected {
+            code: "stale_reconciliation_candidate",
+            ..
+        })
+    ));
+    let current = store
+        .load_runtime_reconciliation_candidates()
+        .await
+        .unwrap_or_else(|error| panic!("load stop candidate: {error}"))
+        .pop()
+        .unwrap_or_else(|| panic!("prepared stop had no candidate"));
+    store
+        .apply_runtime_reconciliation(&current, &RuntimeReconciliationObservation::Gone)
+        .await
+        .unwrap_or_else(|error| panic!("apply gone observation: {error}"));
+    assert!(matches!(
+        store
+            .prepare_agent_stop(&principal, "stop-after-observation", &payload)
+            .await
+            .unwrap_or_else(|error| panic!("recover observed stop: {error}")),
+        AgentStopPlan::Finalize
+    ));
+    let outcome = store
+        .finalize_agent_stop(&principal, "stop-after-observation", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("finalize observed stop: {error}"));
+    assert_eq!(outcome.result["agent_session"]["runtime_status"], "stopped");
+    assert_eq!(stop.runtime_handle_id, "runtime-before-observation");
 }
 
 async fn clone_agent(store: &SqliteStore, agent_id: &str) {

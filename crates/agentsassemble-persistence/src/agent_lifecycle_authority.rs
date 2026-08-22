@@ -104,24 +104,6 @@ pub(crate) fn validate_runtime_started(
     Ok(())
 }
 
-pub(crate) fn matching_prepared_intent(
-    session: &DurableAgentSession,
-    action: &str,
-    operation_id: &str,
-) -> Result<bool, PersistenceError> {
-    if lifecycle_intent_is_empty(session) {
-        return Ok(false);
-    }
-    require_matching_operation(session, action, operation_id)?;
-    if session.lifecycle_intent_status != "prepared" {
-        return Err(rejected_code(
-            "invalid_state",
-            "Stored provider lifecycle intent is invalid.",
-        ));
-    }
-    Ok(true)
-}
-
 pub(crate) fn require_matching_operation(
     session: &DurableAgentSession,
     action: &str,

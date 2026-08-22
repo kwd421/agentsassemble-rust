@@ -110,6 +110,106 @@ async fn create_replay_conflict_and_restart_share_one_durable_authority() {
     second.stop().await;
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn lifecycle_commands_use_the_owned_codex_app_server_before_committing() {
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create lifecycle root: {error}"));
+    let database_url = format!(
+        "sqlite://{}",
+        directory.path().join("runtime.sqlite3").display()
+    );
+    let store = SqliteStore::open(&database_url)
+        .await
+        .unwrap_or_else(|error| panic!("open lifecycle store: {error}"));
+    bootstrap(&store).await;
+    let catalog = agent_catalog(directory.path());
+    let server = start(store, catalog.clone()).await;
+    let mut socket = connect(&server.base_url).await;
+    subscribe(&mut socket).await;
+    let _snapshot = receive_json(&mut socket).await;
+    let create_payload = json!({
+        "provider_id": "codex",
+        "catalog_revision": "catalog-boundary-1",
+        "display_name": "Terra",
+        "workspace": directory.path(),
+        "model": "gpt-5.6-terra",
+        "permission_mode": "meeting_read_only",
+        "start_now": false,
+    });
+    send_create(&mut socket, "create-for-lifecycle", &create_payload).await;
+    let created = receive_until_ack(&mut socket, 2).await;
+    let session_id = created["result"]["agent_session"]["session_id"]
+        .as_str()
+        .unwrap_or_else(|| panic!("created session has no id"));
+    let lifecycle_payload = json!({"agent_id": session_id});
+    send_command(
+        &mut socket,
+        "first-start",
+        "agent.start",
+        &lifecycle_payload,
+    )
+    .await;
+    let started = receive_until_ack(&mut socket, 4).await;
+    assert_eq!(started["result"]["agent_session"]["runtime_status"], "idle");
+    assert_eq!(started["result"]["runtime_reused"], false);
+    assert_eq!(
+        started["result"]["agent_session"]["provider_session_active"],
+        false
+    );
+    send_command(
+        &mut socket,
+        "second-start",
+        "agent.start",
+        &lifecycle_payload,
+    )
+    .await;
+    let reused = receive_until_ack(&mut socket, 3).await;
+    assert_eq!(reused["result"]["runtime_reused"], true);
+    send_command(
+        &mut socket,
+        "stop-runtime",
+        "agent.stop",
+        &lifecycle_payload,
+    )
+    .await;
+    let stopped = receive_until_ack(&mut socket, 3).await;
+    assert_eq!(
+        stopped["result"]["agent_session"]["runtime_status"],
+        "stopped"
+    );
+    send_command(
+        &mut socket,
+        "start-before-server-restart",
+        "agent.start",
+        &lifecycle_payload,
+    )
+    .await;
+    let running = receive_until_ack(&mut socket, 3).await;
+    assert_eq!(running["result"]["agent_session"]["runtime_status"], "idle");
+    socket
+        .close(None)
+        .await
+        .unwrap_or_else(|error| panic!("close lifecycle socket: {error}"));
+    server.stop().await;
+    let reopened = SqliteStore::open(&database_url)
+        .await
+        .unwrap_or_else(|error| panic!("reopen lifecycle store: {error}"));
+    let restarted = start(reopened, catalog).await;
+    let mut recovered_socket = connect(&restarted.base_url).await;
+    subscribe(&mut recovered_socket).await;
+    let recovered = receive_json(&mut recovered_socket).await;
+    assert_eq!(
+        recovered["agent_sessions"][0]["runtime_status"],
+        "disconnected"
+    );
+    assert_eq!(
+        recovered["agent_sessions"][0]["last_error_code"],
+        "server_restarted"
+    );
+    restarted.stop().await;
+}
+
 fn assert_public_session(session: &Value) {
     for private in [
         "workspace",
@@ -252,6 +352,40 @@ where
         .unwrap_or_else(|error| panic!("send agent create: {error}"));
 }
 
+#[cfg(unix)]
+async fn send_command<S>(
+    socket: &mut WebSocketStream<S>,
+    request_id: &str,
+    action: &str,
+    payload: &Value,
+) where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    socket
+        .send(Message::Text(
+            json!({"op": "command", "request_id": request_id, "action": action, "payload": payload})
+                .to_string()
+                .into(),
+        ))
+        .await
+        .unwrap_or_else(|error| panic!("send {action}: {error}"));
+}
+
+#[cfg(unix)]
+async fn receive_until_ack<S>(socket: &mut WebSocketStream<S>, limit: usize) -> Value
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    let mut ack = None;
+    for _ in 0..limit {
+        let frame = receive_json(socket).await;
+        if frame["op"] == "ack" {
+            ack = Some(frame);
+        }
+    }
+    ack.unwrap_or_else(|| panic!("command ACK was not delivered within {limit} frames"))
+}
+
 async fn receive_json<S>(socket: &mut WebSocketStream<S>) -> Value
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
@@ -292,7 +426,11 @@ async fn bootstrap(store: &SqliteStore) {
 
 fn agent_catalog(root: &Path) -> ProviderCatalog {
     let executable = root.join("provider-fixture");
-    std::fs::write(&executable, b"provider fixture")
+    #[cfg(unix)]
+    let fixture: &[u8] = b"#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\nIFS= read -r initialized\nwhile :; do sleep 1; done\n";
+    #[cfg(not(unix))]
+    let fixture: &[u8] = b"provider fixture";
+    std::fs::write(&executable, fixture)
         .unwrap_or_else(|error| panic!("write test executable: {error}"));
     #[cfg(unix)]
     {
@@ -343,17 +481,30 @@ fn agent_catalog(root: &Path) -> ProviderCatalog {
             login_available: true,
             login_label: "Login".to_owned(),
             login_flow: "browser_oauth".to_owned(),
-            controls: vec![ProviderControl {
-                key: "model".to_owned(),
-                label: "Model".to_owned(),
-                kind: "combobox".to_owned(),
-                options: vec![ProviderControlOption {
-                    value: "gpt-5.6-terra".to_owned(),
-                    label: "Terra".to_owned(),
-                    metadata: BTreeMap::default(),
-                }],
-                default_value: "gpt-5.6-terra".to_owned(),
-            }],
+            controls: vec![
+                ProviderControl {
+                    key: "model".to_owned(),
+                    label: "Model".to_owned(),
+                    kind: "combobox".to_owned(),
+                    options: vec![ProviderControlOption {
+                        value: "gpt-5.6-terra".to_owned(),
+                        label: "Terra".to_owned(),
+                        metadata: BTreeMap::default(),
+                    }],
+                    default_value: "gpt-5.6-terra".to_owned(),
+                },
+                ProviderControl {
+                    key: "permission_mode".to_owned(),
+                    label: "Permission".to_owned(),
+                    kind: "select".to_owned(),
+                    options: vec![ProviderControlOption {
+                        value: "meeting_read_only".to_owned(),
+                        label: "Read only".to_owned(),
+                        metadata: BTreeMap::default(),
+                    }],
+                    default_value: "meeting_read_only".to_owned(),
+                },
+            ],
         }],
     }
 }

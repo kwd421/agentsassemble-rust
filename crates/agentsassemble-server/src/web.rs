@@ -1,11 +1,10 @@
-use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use agentsassemble_domain::{SnapshotMode, public_settings};
-use agentsassemble_persistence::{PersistenceError, SqliteStore};
+use agentsassemble_persistence::PersistenceError;
 use agentsassemble_protocol::{
     ClientFrame, CommandAck, CommandNack, ProtocolError, RoomSnapshot, ServerFrame,
 };
-use agentsassemble_provider::ProviderCatalogService;
 use axum::{
     Json, Router, body,
     extract::{
@@ -25,23 +24,22 @@ use tokio::{
     net::TcpListener,
     sync::{OwnedSemaphorePermit, Semaphore},
 };
-use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use tokio_util::sync::CancellationToken;
 use tower_http::{
     services::{ServeDir, ServeFile},
     timeout::RequestBodyDeadlineLayer,
 };
 
 use crate::{
-    ConsumedTicket, RoomRuntime, RoomShutdownError, TicketIssueError, TicketStore,
-    host_ticket::{AuthenticatedTicketResponse, HostChallengeResponse, HostSecret},
+    AppState, ConsumedTicket, RoomShutdownError, TicketIssueError,
+    host_ticket::{AuthenticatedTicketResponse, HostChallengeResponse},
     http_transport::{MAX_HTTP_CONNECTIONS, RejectionCounter, serve_connection},
     ingress_budget::IngressBudget,
-    issue_local_ticket,
+    issue_local_ticket, reconcile_runtime_ownership,
     server_proof::{challenge_is_valid, sign_challenge},
 };
 
 const MAX_WS_MESSAGE_BYTES: usize = 256 * 1024;
-const MAX_WS_CONNECTIONS: usize = 128;
 const HTTP_BODY_DEADLINE: Duration = Duration::from_secs(10);
 const MAX_TICKET_BODY_BYTES: usize = 4 * 1024;
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
@@ -49,47 +47,6 @@ const WS_WRITE_TIMEOUT: Duration = Duration::from_secs(5);
 const TRACKED_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(6);
 const SOCKET_IDLE_TIMEOUT: Duration = Duration::from_mins(5);
 const CONTENT_SECURITY_POLICY: &str = "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' ws://127.0.0.1:*; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
-
-#[derive(Clone)]
-pub struct AppState {
-    pub store: SqliteStore,
-    pub rooms: RoomRuntime,
-    pub tickets: TicketStore,
-    pub host_token: HostSecret,
-    pub provider_catalog: ProviderCatalogService,
-    pub shutdown: CancellationToken,
-    pub connections: TaskTracker,
-    pub connection_admission: Arc<Semaphore>,
-    pub frontend_root: Option<PathBuf>,
-}
-
-impl AppState {
-    #[must_use]
-    pub fn local(
-        store: SqliteStore,
-        tickets: TicketStore,
-        host_token: HostSecret,
-        provider_catalog: ProviderCatalogService,
-    ) -> Self {
-        Self {
-            rooms: RoomRuntime::new(store.clone(), provider_catalog.clone()),
-            store,
-            tickets,
-            host_token,
-            provider_catalog,
-            shutdown: CancellationToken::new(),
-            connections: TaskTracker::new(),
-            connection_admission: Arc::new(Semaphore::new(MAX_WS_CONNECTIONS)),
-            frontend_root: None,
-        }
-    }
-
-    #[must_use]
-    pub fn with_frontend(mut self, frontend_root: PathBuf) -> Self {
-        self.frontend_root = Some(frontend_root);
-        self
-    }
-}
 
 #[derive(Debug, Error)]
 pub enum ServeError {
@@ -99,6 +56,8 @@ pub enum ServeError {
     ProviderDiscovery(#[from] tokio::task::JoinError),
     #[error("room runtime shutdown failed: {0}")]
     RoomShutdown(#[from] RoomShutdownError),
+    #[error("runtime reconciliation failed: {0}")]
+    Reconciliation(#[from] PersistenceError),
 }
 
 #[derive(Debug, Deserialize)]
@@ -137,6 +96,7 @@ pub async fn serve(
     state: AppState,
     cancellation: CancellationToken,
 ) -> Result<(), ServeError> {
+    reconcile_runtime_ownership(&state.store, &state.provider_adapter).await?;
     let rooms = state.rooms.clone();
     let provider_catalog = state.provider_catalog.clone();
     let connections = state.connections.clone();
@@ -762,7 +722,8 @@ mod tests {
 
     use crate::ingress_budget::{CONTROL_FRAMES_PER_WINDOW, IngressBudget};
 
-    use super::{HostSecret, persistence_error};
+    use super::persistence_error;
+    use crate::HostSecret;
 
     #[test]
     fn host_secret_invariant_cannot_be_bypassed_by_an_adapter() {

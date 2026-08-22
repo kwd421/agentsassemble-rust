@@ -54,6 +54,7 @@ version = "0.1.0"
 dependencies = [
  "agentsassemble-domain",
  "chrono",
+ "futures-util",
  "process-wrap",
  "same-file",
  "serde",
@@ -2504,6 +2505,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "futures-util",
+ "libc",
  "pin-project-lite",
  "tokio",
 ]

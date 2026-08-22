@@ -7,6 +7,7 @@ license.workspace = true
 [dependencies]
 agentsassemble-domain = { path = "../agentsassemble-domain" }
 chrono.workspace = true
+futures-util.workspace = true
 process-wrap = { version = "9.1.0", default-features = false, features = ["job-object", "kill-on-drop", "process-group", "tokio1"] }
 serde.workspace = true
 serde_json.workspace = true
