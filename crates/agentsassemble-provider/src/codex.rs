@@ -22,6 +22,7 @@ use crate::filesystem::BoundExecutable;
 use crate::process::sanitize_environment;
 use crate::{
     filesystem::bind_executable,
+    launch_error::DriverLaunchError,
     runtime::{DriverError, DriverFuture, ProviderDriver},
 };
 #[cfg(unix)]
@@ -67,12 +68,12 @@ impl CodexDriver {
         session: &DurableAgentSession,
         runtime_lease: &HeldRuntimeLease,
         guardian_launch: &GuardianLaunch,
-    ) -> Result<Self, DriverError> {
+    ) -> Result<Self, DriverLaunchError> {
         Self::spawn_inner(session, runtime_lease, guardian_launch).await
     }
 
     #[cfg(not(unix))]
-    pub(crate) async fn spawn(session: &DurableAgentSession) -> Result<Self, DriverError> {
+    pub(crate) async fn spawn(session: &DurableAgentSession) -> Result<Self, DriverLaunchError> {
         Self::spawn_inner(session).await
     }
 
@@ -80,12 +81,13 @@ impl CodexDriver {
         session: &DurableAgentSession,
         #[cfg(unix)] runtime_lease: &HeldRuntimeLease,
         #[cfg(unix)] guardian_launch: &GuardianLaunch,
-    ) -> Result<Self, DriverError> {
+    ) -> Result<Self, DriverLaunchError> {
         #[cfg(not(any(unix, windows)))]
         return Err(DriverError::new(
             "provider_runtime_unsupported",
             "Provider processes are unsupported on this platform.",
-        ));
+        )
+        .into());
 
         let arguments = command_arguments(session)?;
         let executable = bind_executable(
@@ -131,20 +133,17 @@ impl CodexDriver {
             command.wrap(JobObject);
             let mut child = match command.spawn() {
                 Ok(child) => child,
-                Err(error) => return Err(spawn_error(&error)),
+                Err(error) => return Err(spawn_error(&error).into()),
             };
             drop(command);
             let Some(stdin) = child.stdin().take() else {
-                terminate_failed_spawn(child.as_mut()).await;
-                return Err(protocol_error());
+                return Err(failed_spawn_error(child.as_mut()).await);
             };
             let Some(stdout) = child.stdout().take() else {
-                terminate_failed_spawn(child.as_mut()).await;
-                return Err(protocol_error());
+                return Err(failed_spawn_error(child.as_mut()).await);
             };
             let Some(stderr) = child.stderr().take() else {
-                terminate_failed_spawn(child.as_mut()).await;
-                return Err(protocol_error());
+                return Err(failed_spawn_error(child.as_mut()).await);
             };
             let stderr_task = tokio::spawn(drain_stderr(stderr));
             Ok(Self {
@@ -386,8 +385,11 @@ async fn drain_stderr(mut stderr: impl AsyncRead + Unpin) {
 }
 
 #[cfg(not(unix))]
-async fn terminate_failed_spawn(child: &mut dyn ChildWrapper) {
-    let _ = tokio::time::timeout(STOP_TIMEOUT, Box::into_pin(child.kill())).await;
+async fn failed_spawn_error(child: &mut dyn ChildWrapper) -> DriverLaunchError {
+    match tokio::time::timeout(STOP_TIMEOUT, Box::into_pin(child.kill())).await {
+        Ok(Ok(())) => DriverLaunchError::safe(protocol_error()),
+        Ok(Err(_)) | Err(_) => DriverLaunchError::uncertain(protocol_error()),
+    }
 }
 
 #[cfg(not(unix))]

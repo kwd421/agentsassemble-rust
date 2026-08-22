@@ -6,7 +6,7 @@ use super::{ProviderAdapter, ProviderRuntimeObservation};
 use crate::filesystem::{canonical_workspace, executable_identity};
 use crate::profile::runtime_profile_key;
 
-static RUNTIME_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+pub(super) static RUNTIME_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 #[test]
 fn provider_guardian_entry() {
@@ -543,7 +543,7 @@ async fn cancelled_initialization_remains_owned_for_shutdown() {
     );
 }
 
-async fn fixture_session(directory: &Path, script: &str) -> DurableAgentSession {
+pub(super) async fn fixture_session(directory: &Path, script: &str) -> DurableAgentSession {
     let executable = directory.join("codex-fixture");
     std::fs::write(&executable, script)
         .unwrap_or_else(|error| panic!("write process fixture: {error}"));

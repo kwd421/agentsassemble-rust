@@ -276,6 +276,14 @@ pub(crate) fn mark_unix_runtime_gone(path: &Path, token: &str) -> io::Result<()>
     write_marker(&mut file, &format!("gone:{token}"))
 }
 
+#[cfg(unix)]
+pub(crate) fn unix_cleanup_receipt_is_present(path: &Path, token: &str) -> io::Result<bool> {
+    validate_token(token)?;
+    let mut file = OpenOptions::new().read(true).write(true).open(path)?;
+    file.try_lock_exclusive()?;
+    Ok(read_marker(&mut file)? == format!("gone:{token}"))
+}
+
 #[cfg(not(unix))]
 fn classify_unlocked_unix_marker(_path: &Path, _token: &str, _raw_pid: &str) -> LeaseObservation {
     LeaseObservation::Unknown

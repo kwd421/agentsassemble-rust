@@ -462,7 +462,10 @@ fn run_guardian(lease_path: &Path, lease_token: &str, launch: &GuardianLaunch) -
             #[cfg(target_os = "macos")]
             provider_history.as_mut(),
         ),
-        None => terminate_anchor(&mut anchor, anchor_pid),
+        None => terminate_anchor(&mut anchor, anchor_pid).and_then(|()| {
+            crate::runtime_lease::mark_unix_runtime_gone(lease_path, lease_token)
+                .map_err(|error| io::Error::other(format!("record cleanup receipt: {error}")))
+        }),
     };
     drop(anchor_input);
     operation.and(cleanup)

@@ -3,6 +3,7 @@ mod codex;
 mod filesystem;
 #[cfg(unix)]
 mod guardian;
+mod launch_error;
 mod process;
 mod profile;
 mod runtime;

@@ -2,28 +2,62 @@ use std::{fs::File, os::fd::OwnedFd, path::PathBuf, process::Stdio, time::Durati
 
 use futures_util::StreamExt;
 use rustix::process::Pid;
-use tokio::{io::AsyncWriteExt, process::ChildStdin};
+use tokio::process::ChildStdin;
 use tokio_util::codec::{FramedRead, LinesCodec};
 
 use crate::{
     filesystem::BoundExecutable,
     guardian::GuardianLaunch,
+    launch_error::DriverLaunchError,
     runtime::DriverError,
-    runtime_lease::{HeldRuntimeLease, provider_lifetime_is_active},
+    runtime_lease::{
+        HeldRuntimeLease, provider_lifetime_is_active, unix_cleanup_receipt_is_present,
+    },
     unix_process_tree::tagged_runtime_exists,
 };
 
 const HELPER_TIMEOUT: Duration = Duration::from_secs(5);
+const FAILED_START_CLEANUP_TIMEOUT: Duration = Duration::from_secs(7);
 const MAX_HELPER_LINE_BYTES: usize = 1024;
 const MAX_HELPER_LINES: usize = 32;
 const READY_PREFIX: &str = "AGENTSASSEMBLE_PROVIDER_READY=";
 #[cfg(any(target_os = "linux", target_os = "android"))]
 const MAX_PROCESS_STAT_BYTES: u64 = 4 * 1024;
 
+#[cfg(all(test, target_os = "linux"))]
+static WAIT_FOR_TEST_ESCAPE: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) fn enable_test_escape_wait() {
+    WAIT_FOR_TEST_ESCAPE.store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) fn test_escape_pid_path(token: &str) -> PathBuf {
+    std::env::temp_dir().join(format!("agentsassemble-launch-escape-{token}.pid"))
+}
+
 pub(crate) struct UnixProviderPipes {
     pub(crate) stdin: tokio::fs::File,
     pub(crate) stdout: tokio::fs::File,
     pub(crate) stderr: tokio::fs::File,
+}
+
+#[cfg(all(test, target_os = "linux"))]
+async fn wait_for_test_escape(provider: Pid, anchor: Pid, token: &str) {
+    if !WAIT_FOR_TEST_ESCAPE.swap(false, std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
+    let pid_path = test_escape_pid_path(token);
+    for _ in 0..2_000 {
+        let escaped = pid_path.exists()
+            && !matches!(rustix::process::getpgid(Some(provider)), Ok(group) if group == anchor);
+        if escaped {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(1)).await;
+    }
 }
 
 pub(crate) struct UnixProcessCustody {
@@ -42,7 +76,7 @@ impl UnixProcessCustody {
         launch: &GuardianLaunch,
         provider: &BoundExecutable,
         provider_arguments: &[String],
-    ) -> Result<(Self, UnixProviderPipes), DriverError> {
+    ) -> Result<(Self, UnixProviderPipes), DriverLaunchError> {
         let (provider_stdin, stdin) = provider_pipe()?;
         let (stdout, provider_stdout) = provider_pipe()?;
         let (stderr, provider_stderr) = provider_pipe()?;
@@ -60,16 +94,18 @@ impl UnixProcessCustody {
             .stdout(Stdio::piped())
             .stderr(Stdio::null());
         let Ok(mut guardian) = command.spawn() else {
-            return Err(custody_error());
+            return Err(custody_error().into());
         };
         let Some(guardian_input) = guardian.stdin.take() else {
-            terminate_failed_guardian(&mut guardian).await;
-            return Err(custody_error());
+            return Err(failed_started_guardian(&mut guardian, None, runtime_lease).await);
         };
         let Some(guardian_output) = guardian.stdout.take() else {
-            drop(guardian_input);
-            terminate_failed_guardian(&mut guardian).await;
-            return Err(custody_error());
+            return Err(failed_started_guardian(
+                &mut guardian,
+                Some(guardian_input),
+                runtime_lease,
+            )
+            .await);
         };
         let Ok(Ok((anchor_pid, provider_pid))) = tokio::time::timeout(
             HELPER_TIMEOUT,
@@ -80,22 +116,36 @@ impl UnixProcessCustody {
         )
         .await
         else {
-            terminate_failed_guardian(&mut guardian).await;
-            return Err(custody_error());
+            return Err(failed_started_guardian(
+                &mut guardian,
+                Some(guardian_input),
+                runtime_lease,
+            )
+            .await);
         };
+        #[cfg(all(test, target_os = "linux"))]
+        wait_for_test_escape(provider_pid, anchor_pid, runtime_lease.token()).await;
         if !matches!(
             provider_lifetime_is_active(runtime_lease.path(), runtime_lease.token()),
             Ok(true)
         ) {
-            drop(guardian_input);
-            terminate_failed_guardian(&mut guardian).await;
-            return Err(custody_error());
+            return Err(failed_started_guardian(
+                &mut guardian,
+                Some(guardian_input),
+                runtime_lease,
+            )
+            .await);
         }
-        if rustix::process::getpgid(Some(provider_pid)).map_err(|_| custody_error())? != anchor_pid
-        {
-            drop(guardian_input);
-            terminate_failed_guardian(&mut guardian).await;
-            return Err(custody_error());
+        match rustix::process::getpgid(Some(provider_pid)) {
+            Ok(group) if group == anchor_pid => {}
+            Ok(_) | Err(_) => {
+                return Err(failed_started_guardian(
+                    &mut guardian,
+                    Some(guardian_input),
+                    runtime_lease,
+                )
+                .await);
+            }
         }
         Ok((
             Self {
@@ -251,12 +301,28 @@ fn process_stat_is_running(contents: &str) -> std::io::Result<bool> {
     Ok(!matches!(state, "Z" | "X" | "x"))
 }
 
-async fn terminate_failed_guardian(guardian: &mut tokio::process::Child) {
-    if let Some(mut input) = guardian.stdin.take() {
-        let _ = input.shutdown().await;
+async fn failed_started_guardian(
+    guardian: &mut tokio::process::Child,
+    guardian_input: Option<ChildStdin>,
+    runtime_lease: &HeldRuntimeLease,
+) -> DriverLaunchError {
+    drop(guardian_input);
+    let finished = tokio::time::timeout(FAILED_START_CLEANUP_TIMEOUT, guardian.wait()).await;
+    let guardian_exited = matches!(&finished, Ok(Ok(_)));
+    let receipt = guardian_exited
+        && matches!(
+            unix_cleanup_receipt_is_present(runtime_lease.path(), runtime_lease.token()),
+            Ok(true)
+        );
+    if !guardian_exited {
+        let _ = guardian.kill().await;
+        let _ = guardian.wait().await;
     }
-    let _ = guardian.kill().await;
-    let _ = guardian.wait().await;
+    if receipt {
+        DriverLaunchError::safe(custody_error())
+    } else {
+        DriverLaunchError::uncertain(custody_error())
+    }
 }
 
 const fn custody_error() -> DriverError {

@@ -10,8 +10,10 @@ use uuid::Uuid;
 #[cfg(unix)]
 use crate::guardian::GuardianLaunch;
 use crate::{
-    codex::CodexDriver, runtime_authority::revalidate_runtime_authority,
-    runtime_lease::HeldRuntimeLease, runtime_recovery::observe_previous_runtime,
+    codex::CodexDriver,
+    launch_error::DriverLaunchError,
+    runtime_authority::revalidate_runtime_authority,
+    runtime_lease::{HeldRuntimeLease, LeaseObservation, observe_runtime_lease},
 };
 
 const DRIVER_STOP_TIMEOUT: Duration = Duration::from_secs(5);
@@ -42,7 +44,7 @@ trait DriverFactory: Send + Sync {
         &'a self,
         session: &'a DurableAgentSession,
         _runtime_lease: &'a HeldRuntimeLease,
-    ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverError>>;
+    ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>>;
 }
 
 struct ProductionDriverFactory {
@@ -83,7 +85,7 @@ impl DriverFactory for ProductionDriverFactory {
         &'a self,
         session: &'a DurableAgentSession,
         runtime_lease: &'a HeldRuntimeLease,
-    ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverError>> {
+    ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
         #[cfg(not(unix))]
         let _ = runtime_lease;
         Box::pin(async move {
@@ -111,15 +113,18 @@ impl DriverFactory for ProductionDriverFactory {
                 ("antigravity_live_session", "pty" | "conpty") => Err(DriverError::new(
                     "provider_runtime_unavailable",
                     "The Antigravity runtime driver is not implemented yet.",
-                )),
+                )
+                .into()),
                 ("opencode_server", "http") => Err(DriverError::new(
                     "provider_runtime_unavailable",
                     "The OpenCode runtime driver is not implemented yet.",
-                )),
+                )
+                .into()),
                 _ => Err(DriverError::new(
                     "invalid_runtime_profile",
                     "The stored provider runtime profile is unsupported.",
-                )),
+                )
+                .into()),
             }
         })
     }
@@ -220,12 +225,19 @@ struct RuntimeKey {
 
 enum RuntimeState {
     Vacant,
+    Launching(LaunchingRuntime),
     Running(OwnedRuntime),
     StopConfirmed {
         handle_id: String,
         owner_id: String,
         runtime_lease: HeldRuntimeLease,
     },
+}
+
+struct LaunchingRuntime {
+    handle_id: String,
+    owner_id: String,
+    runtime_lease: HeldRuntimeLease,
 }
 
 struct RuntimeSlot {
@@ -276,6 +288,14 @@ impl ProviderAdapter {
         let slot = self.slot(session).await;
         let mut slot = slot.lock().await;
         match &mut slot.state {
+            RuntimeState::Launching(runtime) => Err(ProviderAdapterError::uncertain(
+                DriverError::new(
+                    "provider_launch_unconfirmed",
+                    "A provider launch is still awaiting a confirmed cleanup.",
+                ),
+                &runtime.handle_id,
+                &runtime.owner_id,
+            )),
             RuntimeState::Running(runtime) => reuse_owned_runtime(session, runtime).await,
             RuntimeState::StopConfirmed { .. } => {
                 Err(ProviderAdapterError::safe(DriverError::new(
@@ -305,19 +325,54 @@ impl ProviderAdapter {
                             ))
                         })?;
                 let handle_id = format!("runtime-v3-{}", Uuid::new_v4());
-                let driver = match self.owner.factory.launch(session, &runtime_lease).await {
+                let owner_id = self.owner.supervisor_id.clone();
+                slot.state = RuntimeState::Launching(LaunchingRuntime {
+                    handle_id,
+                    owner_id,
+                    runtime_lease,
+                });
+                let launch = {
+                    let RuntimeState::Launching(runtime) = &slot.state else {
+                        unreachable!("new provider runtime slot must be launching");
+                    };
+                    self.owner
+                        .factory
+                        .launch(session, &runtime.runtime_lease)
+                        .await
+                };
+                let driver = match launch {
                     Ok(driver) => driver,
-                    Err(error) => {
-                        runtime_lease.cleanup_pre_effect();
-                        return Err(ProviderAdapterError::safe(error));
+                    Err(failure) if failure.effect_uncertain => {
+                        let RuntimeState::Launching(runtime) = &slot.state else {
+                            unreachable!("uncertain provider launch must remain owned");
+                        };
+                        return Err(ProviderAdapterError::uncertain(
+                            failure.error,
+                            &runtime.handle_id,
+                            &runtime.owner_id,
+                        ));
+                    }
+                    Err(failure) => {
+                        let RuntimeState::Launching(runtime) =
+                            std::mem::replace(&mut slot.state, RuntimeState::Vacant)
+                        else {
+                            unreachable!("safe provider launch failure must remain owned");
+                        };
+                        runtime.runtime_lease.cleanup_pre_effect();
+                        return Err(ProviderAdapterError::safe(failure.error));
                     }
                 };
+                let RuntimeState::Launching(runtime) =
+                    std::mem::replace(&mut slot.state, RuntimeState::Vacant)
+                else {
+                    unreachable!("completed provider launch must remain owned");
+                };
                 slot.state = RuntimeState::Running(OwnedRuntime {
-                    handle_id,
-                    owner_id: self.owner.supervisor_id.clone(),
+                    handle_id: runtime.handle_id,
+                    owner_id: runtime.owner_id,
                     profile_key: session.runtime_profile_key.clone(),
                     driver,
-                    runtime_lease: Some(runtime_lease),
+                    runtime_lease: Some(runtime.runtime_lease),
                 });
                 let RuntimeState::Running(runtime) = &mut slot.state else {
                     unreachable!("new provider runtime slot must be running");
@@ -423,72 +478,6 @@ impl ProviderAdapter {
         }
     }
 
-    pub async fn observe(&self, session: &DurableAgentSession) -> ProviderRuntimeObservation {
-        let Some(slot) = self
-            .existing_slot(&session.public.room_id, &session.public.session_id)
-            .await
-        else {
-            return observe_previous_runtime(session).await;
-        };
-        let mut slot = slot.lock().await;
-        if let RuntimeState::StopConfirmed {
-            handle_id,
-            owner_id,
-            ..
-        } = &slot.state
-        {
-            return if handle_id == &session.runtime_handle_id
-                && owner_id == &session.runtime_owner_id
-            {
-                ProviderRuntimeObservation::Gone
-            } else {
-                ProviderRuntimeObservation::Ambiguous {
-                    reason_code: "runtime_identity_mismatch".to_owned(),
-                }
-            };
-        }
-        let RuntimeState::Running(runtime) = &mut slot.state else {
-            return ProviderRuntimeObservation::Gone;
-        };
-        if runtime.handle_id != session.runtime_handle_id
-            || runtime.profile_key != session.runtime_profile_key
-        {
-            return ProviderRuntimeObservation::Ambiguous {
-                reason_code: "runtime_identity_mismatch".to_owned(),
-            };
-        }
-        match runtime.driver.is_alive() {
-            Ok(true) => {}
-            Ok(false) => {
-                return ProviderRuntimeObservation::LeaseUncertain {
-                    handle_id: runtime.handle_id.clone(),
-                    owner_id: runtime.owner_id.clone(),
-                    reason_code: "provider_leader_exited".to_owned(),
-                };
-            }
-            Err(_) => {
-                return ProviderRuntimeObservation::LeaseUncertain {
-                    handle_id: runtime.handle_id.clone(),
-                    owner_id: runtime.owner_id.clone(),
-                    reason_code: "runtime_health_unknown".to_owned(),
-                };
-            }
-        }
-        if let Err(error) = revalidate_runtime_authority(session).await {
-            return ProviderRuntimeObservation::LeaseUncertain {
-                handle_id: runtime.handle_id.clone(),
-                owner_id: runtime.owner_id.clone(),
-                reason_code: error.code.to_owned(),
-            };
-        }
-        ProviderRuntimeObservation::Adopted {
-            handle_id: runtime.handle_id.clone(),
-            previous_owner_id: session.runtime_owner_id.clone(),
-            new_owner_id: runtime.owner_id.clone(),
-            runtime_profile_key: runtime.profile_key.clone(),
-        }
-    }
-
     /// Stops and reaps every runtime created by this adapter owner.
     ///
     /// # Errors
@@ -517,6 +506,15 @@ impl ProviderAdapter {
         let mut gone = Vec::new();
         for (key, slot) in slots {
             let mut slot = slot.lock().await;
+            if let Some(result) = shutdown_launching_runtime(&key, &mut slot) {
+                match result {
+                    Ok(stopped) => gone.push(stopped),
+                    Err(error) => {
+                        failure.get_or_insert(error);
+                    }
+                }
+                continue;
+            }
             if let RuntimeState::Running(runtime) = &mut slot.state {
                 let stopped =
                     tokio::time::timeout(DRIVER_STOP_TIMEOUT, runtime.driver.stop()).await;
@@ -655,6 +653,42 @@ impl Default for ProviderAdapter {
     }
 }
 
+fn shutdown_launching_runtime(
+    key: &RuntimeKey,
+    slot: &mut RuntimeSlot,
+) -> Option<Result<ProviderRuntimeGone, ProviderAdapterError>> {
+    let RuntimeState::Launching(runtime) = &slot.state else {
+        return None;
+    };
+    if observe_runtime_lease(&key.room_id, &key.session_id) != LeaseObservation::Gone {
+        return Some(Err(ProviderAdapterError::uncertain(
+            DriverError::new(
+                "provider_launch_cleanup_unconfirmed",
+                "An interrupted provider launch could not be confirmed gone.",
+            ),
+            &runtime.handle_id,
+            &runtime.owner_id,
+        )));
+    }
+    let RuntimeState::Launching(runtime) = std::mem::replace(&mut slot.state, RuntimeState::Vacant)
+    else {
+        unreachable!("observed provider launch must remain owned");
+    };
+    let stopped = ProviderRuntimeGone {
+        room_id: key.room_id.clone(),
+        session_id: key.session_id.clone(),
+        runtime_handle_id: runtime.handle_id.clone(),
+        runtime_owner_id: runtime.owner_id.clone(),
+        runtime_lease_token: runtime.runtime_lease.token().to_owned(),
+    };
+    slot.state = RuntimeState::StopConfirmed {
+        handle_id: runtime.handle_id,
+        owner_id: runtime.owner_id,
+        runtime_lease: runtime.runtime_lease,
+    };
+    Some(Ok(stopped))
+}
+
 fn started(
     session: &DurableAgentSession,
     runtime: &OwnedRuntime,
@@ -753,3 +787,10 @@ fn validate_owned_runtime(
 #[cfg(all(test, unix))]
 #[path = "runtime_tests.rs"]
 mod tests;
+
+#[cfg(all(test, unix))]
+#[path = "runtime_launch_tests.rs"]
+mod launch_tests;
+
+#[path = "runtime_observation.rs"]
+mod observation;
