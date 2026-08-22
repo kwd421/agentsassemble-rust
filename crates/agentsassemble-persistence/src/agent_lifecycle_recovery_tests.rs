@@ -12,6 +12,7 @@ const SECOND_AGENT_ID: &str = "codex-00000000-0000-5000-8000-000000000002";
 fn started(handle: &str, provider_session_id: &str) -> AgentRuntimeStarted {
     AgentRuntimeStarted {
         runtime_handle_id: handle.to_owned(),
+        runtime_owner_id: "supervisor-instance-1".to_owned(),
         provider_session_id: provider_session_id.to_owned(),
         runtime_reused: false,
         provider_session_reused: false,
@@ -292,6 +293,7 @@ async fn confirmed_stop_checkpoint_survives_restart_and_finalizes_without_an_eff
     assert_eq!(durable.lifecycle_intent_action, "stop");
     assert_eq!(durable.lifecycle_intent_status, "effect_applied");
     assert!(durable.runtime_handle_id.is_empty());
+    assert!(durable.runtime_owner_id.is_empty());
     assert!(!durable.public.provider_session_active);
     assert!(matches!(
         store
@@ -358,6 +360,7 @@ async fn provider_session_reuse_requires_exact_durable_identity() {
             &restart.operation_id,
             &AgentRuntimeStarted {
                 runtime_handle_id: "second-runtime".to_owned(),
+                runtime_owner_id: "supervisor-instance-1".to_owned(),
                 provider_session_id: "substituted-thread".to_owned(),
                 runtime_reused: false,
                 provider_session_reused: true,
@@ -380,6 +383,7 @@ async fn provider_session_reuse_requires_exact_durable_identity() {
             &restart.operation_id,
             &AgentRuntimeStarted {
                 runtime_handle_id: "second-runtime".to_owned(),
+                runtime_owner_id: "supervisor-instance-1".to_owned(),
                 provider_session_id: "durable-thread".to_owned(),
                 runtime_reused: false,
                 provider_session_reused: true,

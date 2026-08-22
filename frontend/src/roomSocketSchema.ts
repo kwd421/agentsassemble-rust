@@ -41,6 +41,7 @@ export function agentSessionIsValid(value: unknown, expectedRoomId = ""): boolea
     !("runtime_profile_key" in value) &&
     !("runtime_profile_version" in value) &&
     !("runtime_handle_id" in value) &&
+    !("runtime_owner_id" in value) &&
     !("provider_session_id" in value) &&
     !("lifecycle_intent_action" in value) &&
     !("lifecycle_intent_id" in value) &&

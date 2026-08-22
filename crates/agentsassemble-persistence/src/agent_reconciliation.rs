@@ -57,6 +57,13 @@ impl SqliteStore {
             {
                 continue;
             }
+            if !ACTIVE_RUNTIME_STATES.contains(&session.public.runtime_status.as_str())
+                && invalidate_previous_runtime_owner(&mut session)
+            {
+                save_reconciled_session(&mut transaction, &session).await?;
+                reconciled += 1;
+                continue;
+            }
             if !ACTIVE_RUNTIME_STATES.contains(&session.public.runtime_status.as_str()) {
                 continue;
             }
@@ -79,6 +86,7 @@ fn confirmed_stop_needs_reconciliation(session: &DurableAgentSession) -> bool {
     session.lifecycle_intent_action == "stop"
         && session.lifecycle_intent_status == "effect_applied"
         && (!session.runtime_handle_id.is_empty()
+            || !session.runtime_owner_id.is_empty()
             || session.public.provider_session_active
             || session.public.provider_session_reused
             || !session.public.active_turn_id.is_empty()
@@ -97,6 +105,7 @@ fn reconcile_confirmed_stop(session: &mut DurableAgentSession) {
     session.public.active_turn_id.clear();
     session.public.turn_phase.clear();
     session.runtime_handle_id.clear();
+    session.runtime_owner_id.clear();
     session.public.updated_at = Utc::now();
 }
 
@@ -113,10 +122,21 @@ fn disconnect_after_restart(session: &mut DurableAgentSession) {
         .clone_into(&mut session.public.last_error);
     "server_restarted".clone_into(&mut session.public.last_error_code);
     session.runtime_handle_id.clear();
+    session.runtime_owner_id.clear();
     session.lifecycle_intent_action.clear();
     session.lifecycle_intent_id.clear();
     session.lifecycle_intent_status.clear();
     session.public.updated_at = Utc::now();
+}
+
+fn invalidate_previous_runtime_owner(session: &mut DurableAgentSession) -> bool {
+    if session.runtime_handle_id.is_empty() && session.runtime_owner_id.is_empty() {
+        return false;
+    }
+    session.runtime_handle_id.clear();
+    session.runtime_owner_id.clear();
+    session.public.updated_at = Utc::now();
+    true
 }
 
 fn merge_inflight_events(session: &mut DurableAgentSession) {

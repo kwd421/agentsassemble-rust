@@ -644,7 +644,8 @@ fn persistence_error(error: &PersistenceError) -> (&'static str, String) {
         | PersistenceError::UnsafeDatabasePath(_)
         | PersistenceError::InitializationNotAllowed
         | PersistenceError::InvalidSchemaVersion(_)
-        | PersistenceError::UnsupportedSchemaVersion { .. } => (
+        | PersistenceError::UnsupportedSchemaVersion { .. }
+        | PersistenceError::IncompleteLifecycleMigration => (
             "persistence_failed",
             "Persistence operation failed.".to_owned(),
         ),

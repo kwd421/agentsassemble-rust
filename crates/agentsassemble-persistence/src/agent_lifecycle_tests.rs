@@ -4,7 +4,7 @@ use agentsassemble_domain::{
     ParticipantStatus, Room, RoomSettings,
 };
 use chrono::Utc;
-use serde_json::json;
+use serde_json::{Value, json};
 
 use crate::{AgentRuntimeStarted, AgentStartPlan, AgentStopPlan, PersistenceError, SqliteStore};
 
@@ -110,6 +110,7 @@ async fn seed_agent(store: &SqliteStore, now: chrono::DateTime<Utc>) {
         runtime_profile_version: CURRENT_RUNTIME_PROFILE_VERSION,
         provider_session_id: String::new(),
         runtime_handle_id: String::new(),
+        runtime_owner_id: String::new(),
         pending_event_ids: vec!["pending-1".to_owned()],
         inflight_event_ids: Vec::new(),
         lifecycle_intent_action: String::new(),
@@ -157,6 +158,7 @@ async fn lifecycle_preserves_provider_identity_and_finalizes_stop_once() {
     assert_eq!(effect.session.lifecycle_intent_status, "prepared");
     let started = AgentRuntimeStarted {
         runtime_handle_id: "owned-runtime-1".to_owned(),
+        runtime_owner_id: "supervisor-instance-1".to_owned(),
         provider_session_id: "provider-thread-1".to_owned(),
         runtime_reused: false,
         provider_session_reused: false,
@@ -210,6 +212,7 @@ async fn lifecycle_preserves_provider_identity_and_finalizes_stop_once() {
         panic!("running session must require a stop effect");
     };
     assert_eq!(effect.runtime_handle_id, "owned-runtime-1");
+    assert_eq!(effect.runtime_owner_id, "supervisor-instance-1");
     store
         .record_agent_stop_effect("general", &effect.session_id, &effect.operation_id)
         .await
@@ -266,6 +269,7 @@ async fn stale_start_completion_fails_closed_and_visible_failure_clears_intent()
             "different-operation",
             &AgentRuntimeStarted {
                 runtime_handle_id: "owned-runtime".to_owned(),
+                runtime_owner_id: "supervisor-instance-1".to_owned(),
                 provider_session_id: "provider-thread".to_owned(),
                 runtime_reused: false,
                 provider_session_reused: false,
@@ -306,6 +310,15 @@ async fn stale_start_completion_fails_closed_and_visible_failure_clears_intent()
     assert!(!session.last_error.contains("alice"));
     assert!(!session.last_error.contains("secret-provider-token"));
     assert!(!session.enabled);
+    assert!(matches!(
+        store
+            .prepare_agent_stop(&principal, "stop-after-failed-start", &payload)
+            .await,
+        Err(PersistenceError::CommandRejected {
+            code: "runtime_handle_unavailable",
+            ..
+        })
+    ));
 }
 
 #[tokio::test]
@@ -319,6 +332,29 @@ async fn provider_process_presence_does_not_imply_a_provider_conversation() {
     else {
         panic!("stopped session must require start");
     };
+    let unowned = store
+        .complete_agent_start(
+            &principal,
+            "start-without-thread",
+            &payload,
+            &start.operation_id,
+            &AgentRuntimeStarted {
+                runtime_handle_id: "owned-app-server".to_owned(),
+                runtime_owner_id: String::new(),
+                provider_session_id: String::new(),
+                runtime_reused: false,
+                provider_session_reused: false,
+                provider_session_active: false,
+            },
+        )
+        .await;
+    assert!(matches!(
+        unowned,
+        Err(PersistenceError::CommandRejected {
+            code: "runtime_start_unconfirmed",
+            ..
+        })
+    ));
     let invalid = store
         .complete_agent_start(
             &principal,
@@ -327,6 +363,7 @@ async fn provider_process_presence_does_not_imply_a_provider_conversation() {
             &start.operation_id,
             &AgentRuntimeStarted {
                 runtime_handle_id: "owned-app-server".to_owned(),
+                runtime_owner_id: "supervisor-instance-1".to_owned(),
                 provider_session_id: String::new(),
                 runtime_reused: false,
                 provider_session_reused: false,
@@ -349,6 +386,7 @@ async fn provider_process_presence_does_not_imply_a_provider_conversation() {
             &start.operation_id,
             &AgentRuntimeStarted {
                 runtime_handle_id: "owned-app-server".to_owned(),
+                runtime_owner_id: "supervisor-instance-1".to_owned(),
                 provider_session_id: String::new(),
                 runtime_reused: false,
                 provider_session_reused: false,
@@ -406,46 +444,7 @@ async fn unversioned_runtime_profile_fails_before_a_start_effect() {
 async fn ambiguous_stop_becomes_a_redacted_recoverable_disconnect() {
     let (store, principal, _directory) = fixture().await;
     let payload = json!({"agent_id": AGENT_ID});
-    let AgentStartPlan::Start(start) = store
-        .prepare_agent_start(&principal, "start-before-ambiguous-stop", &payload)
-        .await
-        .unwrap_or_else(|error| panic!("prepare start: {error}"))
-    else {
-        panic!("stopped session must require start");
-    };
-    store
-        .complete_agent_start(
-            &principal,
-            "start-before-ambiguous-stop",
-            &payload,
-            &start.operation_id,
-            &AgentRuntimeStarted {
-                runtime_handle_id: "runtime-before-ambiguous-stop".to_owned(),
-                provider_session_id: "provider-thread-preserved".to_owned(),
-                runtime_reused: false,
-                provider_session_reused: false,
-                provider_session_active: true,
-            },
-        )
-        .await
-        .unwrap_or_else(|error| panic!("complete start: {error}"));
-    let AgentStopPlan::Stop(stop) = store
-        .prepare_agent_stop(&principal, "ambiguous-stop", &payload)
-        .await
-        .unwrap_or_else(|error| panic!("prepare stop: {error}"))
-    else {
-        panic!("running session must require stop");
-    };
-    let events = store
-        .mark_agent_stop_unconfirmed(
-            &principal,
-            AGENT_ID,
-            &stop.operation_id,
-            "runtime_stop_unconfirmed",
-            "/Users/alice/private/provider Authorization: Bearer private-stop-token",
-        )
-        .await
-        .unwrap_or_else(|error| panic!("mark ambiguous stop: {error}"));
+    let events = mark_ambiguous_stop(&store, &principal, &payload).await;
     assert_eq!(events.len(), 2);
     assert_eq!(events[0].event_type, "error");
     assert!(
@@ -491,7 +490,15 @@ async fn ambiguous_stop_becomes_a_redacted_recoverable_disconnect() {
         .unwrap_or_else(|error| panic!("decode ambiguous durable session: {error}"));
     assert_eq!(durable.provider_session_id, "provider-thread-preserved");
     assert_eq!(durable.runtime_handle_id, "runtime-before-ambiguous-stop");
+    assert_eq!(durable.runtime_owner_id, "supervisor-instance-1");
     assert!(durable.lifecycle_intent_action.is_empty());
+}
+
+#[tokio::test]
+async fn restart_invalidates_ambiguous_handle_before_any_stop_effect() {
+    let (store, principal, _directory) = fixture().await;
+    let payload = json!({"agent_id": AGENT_ID});
+    mark_ambiguous_stop(&store, &principal, &payload).await;
     let AgentStopPlan::Stop(retry) = store
         .prepare_agent_stop(&principal, "ambiguous-stop", &payload)
         .await
@@ -500,6 +507,83 @@ async fn ambiguous_stop_becomes_a_redacted_recoverable_disconnect() {
         panic!("ambiguous stop must retry the exact runtime handle");
     };
     assert_eq!(retry.runtime_handle_id, "runtime-before-ambiguous-stop");
+    assert_eq!(retry.runtime_owner_id, "supervisor-instance-1");
+    assert_eq!(
+        store
+            .reconcile_agent_sessions_after_restart()
+            .await
+            .unwrap_or_else(|error| panic!("invalidate ambiguous owner: {error}")),
+        1
+    );
+    assert!(matches!(
+        store
+            .prepare_agent_stop(&principal, "ambiguous-stop", &payload)
+            .await,
+        Err(PersistenceError::CommandRejected {
+            code: "runtime_handle_unavailable",
+            ..
+        })
+    ));
+    let encoded = sqlx::query_scalar::<_, String>(
+        "SELECT session_json FROM agent_sessions WHERE room_id = 'general' AND session_id = ?",
+    )
+    .bind(AGENT_ID)
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("read invalidated ambiguous session: {error}"));
+    let invalidated = serde_json::from_str::<DurableAgentSession>(&encoded)
+        .unwrap_or_else(|error| panic!("decode invalidated ambiguous session: {error}"));
+    assert!(invalidated.runtime_handle_id.is_empty());
+    assert!(invalidated.runtime_owner_id.is_empty());
+    assert!(invalidated.lifecycle_intent_action.is_empty());
+}
+
+async fn mark_ambiguous_stop(
+    store: &SqliteStore,
+    principal: &AuthenticatedPrincipal,
+    payload: &Value,
+) -> Vec<agentsassemble_domain::RoomEvent> {
+    let AgentStartPlan::Start(start) = store
+        .prepare_agent_start(principal, "start-before-ambiguous-stop", payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare start: {error}"))
+    else {
+        panic!("stopped session must require start");
+    };
+    store
+        .complete_agent_start(
+            principal,
+            "start-before-ambiguous-stop",
+            payload,
+            &start.operation_id,
+            &AgentRuntimeStarted {
+                runtime_handle_id: "runtime-before-ambiguous-stop".to_owned(),
+                runtime_owner_id: "supervisor-instance-1".to_owned(),
+                provider_session_id: "provider-thread-preserved".to_owned(),
+                runtime_reused: false,
+                provider_session_reused: false,
+                provider_session_active: true,
+            },
+        )
+        .await
+        .unwrap_or_else(|error| panic!("complete start: {error}"));
+    let AgentStopPlan::Stop(stop) = store
+        .prepare_agent_stop(principal, "ambiguous-stop", payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare stop: {error}"))
+    else {
+        panic!("running session must require stop");
+    };
+    store
+        .mark_agent_stop_unconfirmed(
+            principal,
+            AGENT_ID,
+            &stop.operation_id,
+            "runtime_stop_unconfirmed",
+            "/Users/alice/private/provider Authorization: Bearer private-stop-token",
+        )
+        .await
+        .unwrap_or_else(|error| panic!("mark ambiguous stop: {error}"))
 }
 
 #[tokio::test]
@@ -521,6 +605,7 @@ async fn startup_reconciliation_disconnects_only_live_looking_sessions() {
             &start.operation_id,
             &AgentRuntimeStarted {
                 runtime_handle_id: "lost-owned-runtime".to_owned(),
+                runtime_owner_id: "supervisor-instance-1".to_owned(),
                 provider_session_id: "provider-thread-survives".to_owned(),
                 runtime_reused: false,
                 provider_session_reused: false,
@@ -563,4 +648,5 @@ async fn startup_reconciliation_disconnects_only_live_looking_sessions() {
         .unwrap_or_else(|error| panic!("decode reconciled durable session: {error}"));
     assert_eq!(durable.provider_session_id, "provider-thread-survives");
     assert!(durable.runtime_handle_id.is_empty());
+    assert!(durable.runtime_owner_id.is_empty());
 }

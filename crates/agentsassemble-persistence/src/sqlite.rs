@@ -39,6 +39,8 @@ pub enum PersistenceError {
     InvalidSchemaVersion(String),
     #[error("database schema version {found} is newer than supported version {supported}")]
     UnsupportedSchemaVersion { found: i64, supported: i64 },
+    #[error("database contains a lifecycle intent that cannot be safely migrated")]
+    IncompleteLifecycleMigration,
     #[error("room does not exist")]
     RoomMissing,
     #[error("participant does not exist")]

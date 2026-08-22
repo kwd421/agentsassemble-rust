@@ -28,6 +28,7 @@ describe("Agent Session socket receipts", () => {
     }
     expect(agentSessionIsValid({ ...session, runtime_status: "unknown" }, "general")).toBe(false);
     expect(agentSessionIsValid({ ...session, runtime_status: "idle", runtime_handle_id: "private" }, "general")).toBe(false);
+    expect(agentSessionIsValid({ ...session, runtime_status: "idle", runtime_owner_id: "private" }, "general")).toBe(false);
   });
 
   it("accepts agent.create only with its durable stopped-session receipt", async () => {

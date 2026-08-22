@@ -1,4 +1,5 @@
-use sqlx::Row;
+use agentsassemble_domain::DurableAgentSession;
+use sqlx::{Row, Sqlite, Transaction};
 
 use crate::{PersistenceError, SqliteStore};
 
@@ -36,6 +37,7 @@ impl SqliteStore {
             redact_legacy_agent_results(&mut transaction).await?;
         }
         if version < 4 {
+            reject_unmigratable_lifecycle_intents(&mut transaction).await?;
             sqlx::query(
                 "CREATE TABLE lifecycle_command_reservations (room_id TEXT NOT NULL, principal_id TEXT NOT NULL, request_id TEXT NOT NULL, action TEXT NOT NULL, payload_hash TEXT NOT NULL, session_id TEXT NOT NULL, operation_id TEXT NOT NULL, PRIMARY KEY(room_id, principal_id, request_id), FOREIGN KEY(room_id) REFERENCES rooms(room_id) ON DELETE CASCADE)",
             )
@@ -51,6 +53,24 @@ impl SqliteStore {
         transaction.commit().await?;
         Ok(())
     }
+}
+
+async fn reject_unmigratable_lifecycle_intents(
+    transaction: &mut Transaction<'_, Sqlite>,
+) -> Result<(), PersistenceError> {
+    let sessions = sqlx::query_scalar::<_, String>("SELECT session_json FROM agent_sessions")
+        .fetch_all(&mut **transaction)
+        .await?;
+    for encoded in sessions {
+        let session = serde_json::from_str::<DurableAgentSession>(&encoded)?;
+        if !session.lifecycle_intent_action.is_empty()
+            || !session.lifecycle_intent_id.is_empty()
+            || !session.lifecycle_intent_status.is_empty()
+        {
+            return Err(PersistenceError::IncompleteLifecycleMigration);
+        }
+    }
+    Ok(())
 }
 
 async fn redact_legacy_agent_results(
@@ -210,6 +230,79 @@ mod tests {
         assert!(matches!(
             SqliteStore::open_path(&path).await,
             Err(crate::PersistenceError::InvalidSchemaVersion(value)) if value == "corrupt"
+        ));
+    }
+
+    #[tokio::test]
+    async fn version_three_incomplete_lifecycle_authority_fails_closed() {
+        let directory =
+            tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
+        let path = directory.path().join("runtime.sqlite3");
+        let store = SqliteStore::open_path(&path)
+            .await
+            .unwrap_or_else(|error| panic!("create store: {error}"));
+        sqlx::query(
+            "INSERT INTO rooms(room_id, room_json, settings_json) VALUES ('general', '{}', '{}')",
+        )
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("insert room: {error}"));
+        let session = serde_json::json!({
+            "room_id": "general",
+            "session_id": "agent-1",
+            "participant_id": "agent-1",
+            "display_name": "Agent",
+            "status": "available",
+            "runtime_status": "starting",
+            "enabled": true,
+            "provider_kind": "codex_live_session",
+            "runtime_kind": "live_cli",
+            "connection_kind": "native_cli_bridge",
+            "external_owned": false,
+            "process_ownership": "server",
+            "model": "gpt-5.6-terra",
+            "reasoning_effort": "medium",
+            "service_tier": "default",
+            "variant": "",
+            "execution_harness": "builtin",
+            "permission_mode": "meeting_read_only",
+            "max_output_tokens": 0,
+            "catalog_revision": "catalog-1",
+            "transport": "stdio_jsonl",
+            "last_seen_event_id": "",
+            "last_seen_seq": 0,
+            "last_provider_sync_event_id": "",
+            "last_provider_sync_seq": 0,
+            "bootstrap_cutoff_seq": 0,
+            "turn_count": 0,
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+            "workspace": "/workspace",
+            "runtime_profile_key": "profile-1",
+            "lifecycle_intent_action": "start",
+            "lifecycle_intent_id": "unrecoverable-request-binding",
+            "lifecycle_intent_status": "prepared"
+        });
+        sqlx::query(
+            "INSERT INTO agent_sessions(room_id, session_id, session_json) VALUES ('general', 'agent-1', ?)",
+        )
+        .bind(session.to_string())
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("insert incomplete session: {error}"));
+        sqlx::query("DROP TABLE lifecycle_command_reservations")
+            .execute(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("remove v4 table: {error}"));
+        sqlx::query("UPDATE runtime_metadata SET value = '3' WHERE key = 'schema_version'")
+            .execute(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("set v3 marker: {error}"));
+        drop(store);
+
+        assert!(matches!(
+            SqliteStore::open_path(&path).await,
+            Err(crate::PersistenceError::IncompleteLifecycleMigration)
         ));
     }
 }

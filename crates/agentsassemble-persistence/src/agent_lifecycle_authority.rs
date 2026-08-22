@@ -74,6 +74,12 @@ pub(crate) fn validate_runtime_started(
             "Provider start did not return an owned runtime handle.",
         ));
     }
+    if started.runtime_owner_id.is_empty() {
+        return Err(rejected_code(
+            "runtime_start_unconfirmed",
+            "Provider start did not return its supervisor ownership identity.",
+        ));
+    }
     if started.provider_session_active && started.provider_session_id.is_empty() {
         return Err(rejected_code(
             "provider_session_unconfirmed",

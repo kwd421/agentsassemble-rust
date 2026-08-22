@@ -41,6 +41,7 @@ pub struct AgentStopEffect {
     pub operation_id: String,
     pub session_id: String,
     pub runtime_handle_id: String,
+    pub runtime_owner_id: String,
 }
 
 #[derive(Debug, Clone)]
@@ -59,6 +60,7 @@ pub enum AgentStopPlan {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentRuntimeStarted {
     pub runtime_handle_id: String,
+    pub runtime_owner_id: String,
     pub provider_session_id: String,
     pub runtime_reused: bool,
     pub provider_session_reused: bool,
@@ -226,6 +228,9 @@ impl SqliteStore {
         session
             .runtime_handle_id
             .clone_from(&started.runtime_handle_id);
+        session
+            .runtime_owner_id
+            .clone_from(&started.runtime_owner_id);
         if !started.provider_session_id.is_empty() {
             session
                 .provider_session_id
@@ -288,6 +293,7 @@ impl SqliteStore {
         }
         session.public.last_error_code = error_code.to_owned();
         session.runtime_handle_id.clear();
+        session.runtime_owner_id.clear();
         clear_intent(&mut session);
         session.public.updated_at = Utc::now();
         save_session(&mut transaction, &session).await?;
@@ -348,6 +354,7 @@ impl SqliteStore {
             session.public.runtime_status.as_str(),
             "stopped" | "available"
         ) && session.runtime_handle_id.is_empty()
+            && session.runtime_owner_id.is_empty()
             && lifecycle_intent_is_empty(&session)
         {
             finish_lifecycle_command(&mut transaction, &reservation).await?;
@@ -369,7 +376,7 @@ impl SqliteStore {
                 return Ok(AgentStopPlan::Finalize);
             }
             if session.lifecycle_intent_status == "prepared" {
-                let effect = stop_effect(&session);
+                let effect = stop_effect(&session)?;
                 transaction.commit().await?;
                 return Ok(AgentStopPlan::Stop(effect));
             }
@@ -385,7 +392,7 @@ impl SqliteStore {
         "prepared".clone_into(&mut session.lifecycle_intent_status);
         session.public.updated_at = Utc::now();
         save_session(&mut transaction, &session).await?;
-        let effect = stop_effect(&session);
+        let effect = stop_effect(&session)?;
         transaction.commit().await?;
         Ok(AgentStopPlan::Stop(effect))
     }
@@ -545,6 +552,7 @@ impl SqliteStore {
         session.public.last_error_code.clear();
         session.public.recovery_required = false;
         session.runtime_handle_id.clear();
+        session.runtime_owner_id.clear();
         clear_intent(&mut session);
         session.public.updated_at = Utc::now();
         save_session(&mut transaction, &session).await?;
@@ -641,12 +649,19 @@ async fn commit_start_result(
     .await
 }
 
-fn stop_effect(session: &DurableAgentSession) -> AgentStopEffect {
-    AgentStopEffect {
+fn stop_effect(session: &DurableAgentSession) -> Result<AgentStopEffect, PersistenceError> {
+    if session.runtime_handle_id.is_empty() || session.runtime_owner_id.is_empty() {
+        return Err(rejected(
+            "runtime_handle_unavailable",
+            "Provider shutdown requires an exact handle owned by the current supervisor.",
+        ));
+    }
+    Ok(AgentStopEffect {
         operation_id: session.lifecycle_intent_id.clone(),
         session_id: session.public.session_id.clone(),
         runtime_handle_id: session.runtime_handle_id.clone(),
-    }
+        runtime_owner_id: session.runtime_owner_id.clone(),
+    })
 }
 
 fn clear_intent(session: &mut DurableAgentSession) {

@@ -414,6 +414,8 @@ pub struct DurableAgentSession {
     #[serde(default)]
     pub runtime_handle_id: String,
     #[serde(default)]
+    pub runtime_owner_id: String,
+    #[serde(default)]
     pub pending_event_ids: Vec<String>,
     #[serde(default)]
     pub inflight_event_ids: Vec<String>,
