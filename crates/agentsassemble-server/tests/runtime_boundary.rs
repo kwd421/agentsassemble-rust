@@ -169,6 +169,97 @@ async fn incomplete_http_headers_expire_and_admission_is_bounded() {
 }
 
 #[tokio::test]
+async fn ticket_auth_and_route_limit_are_checked_before_request_body() {
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
+    let database_url = format!(
+        "sqlite://{}",
+        directory.path().join("runtime.sqlite3").display()
+    );
+    let store = SqliteStore::open(&database_url)
+        .await
+        .unwrap_or_else(|error| panic!("open test store: {error}"));
+    bootstrap(&store).await;
+    let server = start(store).await;
+    let address = server.base_url.replacen("http://", "", 1);
+
+    let unauthorized = header_only_request(
+        &address,
+        "POST /api/ws-ticket HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1048576\r\n\r\n",
+    )
+    .await;
+    assert!(unauthorized.starts_with("HTTP/1.1 401"));
+
+    let oversized = header_only_request(
+        &address,
+        &format!(
+            "POST /api/ws-ticket HTTP/1.1\r\nHost: localhost\r\nx-host-token: {HOST_TOKEN}\r\nContent-Length: 1048576\r\n\r\n"
+        ),
+    )
+    .await;
+    assert!(oversized.starts_with("HTTP/1.1 413"));
+    server.stop().await;
+}
+
+#[tokio::test]
+async fn snapshot_is_trimmed_to_the_websocket_message_budget() {
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
+    let database_url = format!(
+        "sqlite://{}",
+        directory.path().join("runtime.sqlite3").display()
+    );
+    let store = SqliteStore::open(&database_url)
+        .await
+        .unwrap_or_else(|error| panic!("open test store: {error}"));
+    bootstrap(&store).await;
+    let server = start(store).await;
+    let mut socket = connect(&server.base_url).await;
+    subscribe(&mut socket, 0).await;
+    let _ = receive_json(&mut socket).await;
+    let content = "x".repeat(12_000);
+    for index in 0..32 {
+        socket
+            .send(Message::Text(
+                json!({
+                    "op": "command",
+                    "request_id": format!("snapshot-budget-{index}"),
+                    "action": "message.send",
+                    "payload": {"content": content}
+                })
+                .to_string()
+                .into(),
+            ))
+            .await
+            .unwrap_or_else(|error| panic!("send snapshot fixture command: {error}"));
+        for _ in 0..2 {
+            let _ = receive_json(&mut socket).await;
+        }
+    }
+    socket
+        .close(None)
+        .await
+        .unwrap_or_else(|error| panic!("close fixture socket: {error}"));
+
+    let mut resumed = connect(&server.base_url).await;
+    subscribe(&mut resumed, 0).await;
+    let snapshot = receive_json(&mut resumed).await;
+    let encoded =
+        serde_json::to_vec(&snapshot).unwrap_or_else(|error| panic!("re-encode snapshot: {error}"));
+    assert!(encoded.len() <= 256 * 1024);
+    assert_eq!(snapshot["last_seq"], 32);
+    assert_eq!(snapshot["has_more_before"], true);
+    assert_eq!(snapshot["resume_gap"], false);
+    assert_eq!(snapshot["snapshot_mode"], "initial");
+    assert!(snapshot["events"].as_array().is_some_and(|events| {
+        !events.is_empty()
+            && events.len() < 32
+            && events.last().is_some_and(|event| event["seq"] == 32)
+    }));
+    server.stop().await;
+}
+
+#[tokio::test]
 async fn static_frontend_has_browser_security_headers() {
     let directory =
         tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
@@ -211,6 +302,13 @@ async fn static_frontend_has_browser_security_headers() {
             .get("x-frame-options")
             .and_then(|value| value.to_str().ok()),
         Some("DENY")
+    );
+    assert_eq!(
+        response
+            .headers()
+            .get("connection")
+            .and_then(|value| value.to_str().ok()),
+        Some("close")
     );
     server.stop().await;
 }
@@ -356,6 +454,23 @@ where
         .unwrap_or_else(|error| panic!("receive WebSocket frame: {error}"));
     serde_json::from_slice(&message.into_data())
         .unwrap_or_else(|error| panic!("decode WebSocket JSON: {error}"))
+}
+
+async fn header_only_request(address: &str, request: &str) -> String {
+    let mut socket = TcpStream::connect(address)
+        .await
+        .unwrap_or_else(|error| panic!("connect raw HTTP client: {error}"));
+    socket
+        .write_all(request.as_bytes())
+        .await
+        .unwrap_or_else(|error| panic!("write raw HTTP headers: {error}"));
+    let mut response = Vec::new();
+    tokio::time::timeout(Duration::from_secs(1), socket.read_to_end(&mut response))
+        .await
+        .unwrap_or_else(|_| panic!("server waited for a rejected request body"))
+        .unwrap_or_else(|error| panic!("read raw HTTP response: {error}"));
+    String::from_utf8(response)
+        .unwrap_or_else(|error| panic!("raw HTTP response was not UTF-8: {error}"))
 }
 
 async fn bootstrap(store: &SqliteStore) {

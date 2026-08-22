@@ -2,35 +2,30 @@ use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
 
 use agentsassemble_domain::{
     AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID,
-    LOCAL_OPERATOR_USER_ID, ProviderCatalog, public_settings, validate_room_id,
+    LOCAL_OPERATOR_USER_ID, ProviderCatalog, SnapshotMode, public_settings, validate_room_id,
 };
 use agentsassemble_persistence::{PersistenceError, SqliteStore};
 use agentsassemble_protocol::{
     ClientFrame, CommandAck, CommandNack, ProtocolError, RoomSnapshot, ServerFrame, TicketResponse,
 };
 use axum::{
-    Json, Router,
+    Json, Router, body,
     extract::{
-        Query, State, WebSocketUpgrade,
+        Query, Request, State, WebSocketUpgrade,
         ws::{Message, WebSocket},
     },
-    http::{HeaderMap, HeaderValue, StatusCode, header},
+    http::{HeaderValue, StatusCode, header},
     middleware,
     response::{IntoResponse, Redirect, Response},
     routing::{get, post},
 };
 use futures_util::{SinkExt, StreamExt};
-use hyper::server::conn::http1;
-use hyper_util::{
-    rt::{TokioIo, TokioTimer},
-    service::TowerToHyperService,
-};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use subtle::ConstantTimeEq;
 use thiserror::Error;
 use tokio::{
-    net::{TcpListener, TcpStream},
+    net::TcpListener,
     sync::{OwnedSemaphorePermit, Semaphore},
     time::Instant,
 };
@@ -40,14 +35,18 @@ use tower_http::{
     timeout::RequestBodyDeadlineLayer,
 };
 
-use crate::{RoomRuntime, TicketStore};
+use crate::{
+    RoomRuntime, TicketStore,
+    http_transport::{MAX_HTTP_CONNECTIONS, RejectionCounter, serve_connection},
+};
 
 const MAX_WS_MESSAGE_BYTES: usize = 256 * 1024;
 const MAX_WS_CONNECTIONS: usize = 128;
-const MAX_HTTP_CONNECTIONS: usize = 128;
-const HTTP_HEADER_TIMEOUT: Duration = Duration::from_secs(3);
 const HTTP_BODY_DEADLINE: Duration = Duration::from_secs(10);
+const MAX_TICKET_BODY_BYTES: usize = 4 * 1024;
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
+const WS_WRITE_TIMEOUT: Duration = Duration::from_secs(5);
+const TRACKED_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(6);
 const SOCKET_IDLE_TIMEOUT: Duration = Duration::from_mins(5);
 const INGRESS_WINDOW: Duration = Duration::from_secs(10);
 const INGRESS_MESSAGES_PER_WINDOW: usize = 256;
@@ -165,18 +164,19 @@ pub async fn serve(
     let connections = state.connections.clone();
     let connection_shutdown = state.shutdown.clone();
     let http_admission = Arc::new(Semaphore::new(MAX_HTTP_CONNECTIONS));
+    let rejected_connections = RejectionCounter::default();
     let app = router(state);
     let result = loop {
         let accepted = tokio::select! {
             () = cancellation.cancelled() => break Ok(()),
             accepted = listener.accept() => accepted,
         };
-        let (stream, peer) = match accepted {
+        let (stream, _) = match accepted {
             Ok(accepted) => accepted,
             Err(error) => break Err(error),
         };
         let Ok(permit) = http_admission.clone().try_acquire_owned() else {
-            tracing::warn!(%peer, "HTTP connection admission limit reached");
+            rejected_connections.record();
             drop(stream);
             continue;
         };
@@ -185,32 +185,28 @@ pub async fn serve(
         connections.spawn(async move {
             tokio::select! {
                 () = shutdown.cancelled() => {}
-                () = serve_http_connection(stream, connection_app, permit) => {}
+                () = serve_connection(stream, connection_app, permit) => {}
             }
         });
     };
     connection_shutdown.cancel();
     connections.close();
-    connections.wait().await;
+    if tokio::time::timeout(TRACKED_SHUTDOWN_TIMEOUT, connections.wait())
+        .await
+        .is_err()
+    {
+        tracing::warn!("tracked connections exceeded the shutdown deadline");
+    }
+    let rejected = rejected_connections.total();
+    if rejected > 0 {
+        tracing::warn!(rejected, "HTTP overload connections were rejected");
+    }
     rooms.shutdown().await;
     result.map_err(ServeError::Io)
 }
 
-async fn serve_http_connection(stream: TcpStream, app: Router, _permit: OwnedSemaphorePermit) {
-    let mut builder = http1::Builder::new();
-    builder
-        .timer(TokioTimer::new())
-        .header_read_timeout(HTTP_HEADER_TIMEOUT)
-        .max_buf_size(MAX_WS_MESSAGE_BYTES);
-    let connection = builder
-        .serve_connection(TokioIo::new(stream), TowerToHyperService::new(app))
-        .with_upgrades();
-    if let Err(error) = connection.await {
-        tracing::debug!(error = ?error, "HTTP connection closed");
-    }
-}
-
 async fn security_headers(mut response: Response) -> Response {
+    let is_upgrade = response.status() == StatusCode::SWITCHING_PROTOCOLS;
     let headers = response.headers_mut();
     headers.insert(
         header::CONTENT_SECURITY_POLICY,
@@ -228,6 +224,9 @@ async fn security_headers(mut response: Response) -> Response {
         header::REFERRER_POLICY,
         HeaderValue::from_static("no-referrer"),
     );
+    if !is_upgrade {
+        headers.insert(header::CONNECTION, HeaderValue::from_static("close"));
+    }
     response
 }
 
@@ -237,16 +236,32 @@ async fn health() -> Json<Value> {
 
 async fn issue_ticket(
     State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(request): Json<TicketRequest>,
+    request: Request,
 ) -> Result<Json<TicketResponse>, ApiError> {
-    let provided_token = headers
+    let provided_token = request
+        .headers()
         .get("x-host-token")
         .and_then(|value| value.to_str().ok())
         .unwrap_or_default();
     if !state.host_token.matches(provided_token) {
         return Err(ApiError::unauthorized("A valid host token is required."));
     }
+    if request
+        .headers()
+        .get(header::CONTENT_LENGTH)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse::<usize>().ok())
+        .is_some_and(|length| length > MAX_TICKET_BODY_BYTES)
+    {
+        return Err(ApiError::payload_too_large(
+            "Ticket request body exceeds the route limit.",
+        ));
+    }
+    let encoded = body::to_bytes(request.into_body(), MAX_TICKET_BODY_BYTES)
+        .await
+        .map_err(|_| ApiError::payload_too_large("Ticket request body exceeds the route limit."))?;
+    let request: TicketRequest = serde_json::from_slice(&encoded)
+        .map_err(|_| ApiError::bad_request("Ticket request JSON is invalid."))?;
     let room_id = validate_room_id(&request.meeting_id)
         .map_err(|error| ApiError::bad_request(error.message))?;
     if !state.store.room_exists(&room_id).await? {
@@ -316,7 +331,7 @@ async fn socket_session(
         () = state.shutdown.cancelled() => return,
         incoming = tokio::time::timeout(HANDSHAKE_TIMEOUT, receiver.next()) => {
             let Ok(incoming) = incoming else {
-                let _ = send_nack(&mut sender, "", "subscribe", "subscribe_timeout", "Subscription was not received within 10 seconds.").await;
+                let _ = send_nack(&mut sender, &state.shutdown, "", "subscribe", "subscribe_timeout", "Subscription was not received within 10 seconds.").await;
                 return;
             };
             incoming
@@ -332,6 +347,7 @@ async fn socket_session(
     else {
         let _ = send_nack(
             &mut sender,
+            &state.shutdown,
             "",
             "subscribe",
             "subscribe_required",
@@ -343,6 +359,7 @@ async fn socket_session(
     if !streams.iter().any(|stream| stream == "room_events") || resume_from_seq < 0 {
         let _ = send_nack(
             &mut sender,
+            &state.shutdown,
             "",
             "subscribe",
             "invalid_subscription",
@@ -364,13 +381,14 @@ async fn socket_session(
                 reason: "resume cursor is ahead of durable room state".to_owned(),
                 latest_seq: durable_last_seq,
             };
-            let _ = send_frame(&mut sender, &frame).await;
+            let _ = send_frame(&mut sender, &state.shutdown, &frame).await;
             return;
         }
         Err(error) => {
             tracing::error!(error = ?error, room_id = %principal.room_id, "room snapshot failed");
             let _ = send_nack(
                 &mut sender,
+                &state.shutdown,
                 "",
                 "subscribe",
                 "snapshot_failed",
@@ -385,6 +403,7 @@ async fn socket_session(
         Err(error) => {
             let _ = send_nack(
                 &mut sender,
+                &state.shutdown,
                 "",
                 "subscribe",
                 "snapshot_failed",
@@ -394,7 +413,7 @@ async fn socket_session(
             return;
         }
     };
-    let snapshot = ServerFrame::Snapshot(Box::new(RoomSnapshot {
+    let snapshot = RoomSnapshot {
         stream: "room_events",
         room: snapshot_data.room,
         room_settings: settings,
@@ -411,8 +430,23 @@ async fn socket_session(
         provider_catalog: ProviderCatalog::default(),
         available_providers: Vec::new(),
         capabilities: principal.capabilities.clone(),
-    }));
-    if send_frame(&mut sender, &snapshot).await.is_err() {
+    };
+    let Some(snapshot) = fit_snapshot_frame(snapshot) else {
+        let _ = send_nack(
+            &mut sender,
+            &state.shutdown,
+            "",
+            "subscribe",
+            "snapshot_too_large",
+            "Room metadata exceeds the WebSocket snapshot limit.",
+        )
+        .await;
+        return;
+    };
+    if send_frame(&mut sender, &state.shutdown, &snapshot)
+        .await
+        .is_err()
+    {
         return;
     }
     let mut ingress = IngressBudget::new();
@@ -428,12 +462,12 @@ async fn socket_session(
                     Message::Close(_) => return,
                 };
                 if !ingress.admit(frame_bytes, control_frame) {
-                    let _ = send_nack(&mut sender, "", "frame", "ingress_limited", "WebSocket ingress budget exceeded.").await;
+                    let _ = send_nack(&mut sender, &state.shutdown, "", "frame", "ingress_limited", "WebSocket ingress budget exceeded.").await;
                     return;
                 }
                 let Message::Text(raw) = message else {
                     if matches!(message, Message::Binary(_)) {
-                        let _ = send_nack(&mut sender, "", "frame", "binary_frame_unsupported", "Binary WebSocket frames are not supported.").await;
+                        let _ = send_nack(&mut sender, &state.shutdown, "", "frame", "binary_frame_unsupported", "Binary WebSocket frames are not supported.").await;
                         return;
                     }
                     continue;
@@ -445,7 +479,7 @@ async fn socket_session(
                             || action.is_empty()
                             || action.chars().count() > 64
                         {
-                            if send_nack(&mut sender, &request_id, &action, "command_envelope_invalid", "request_id or action is invalid.").await.is_err() { return; }
+                            if send_nack(&mut sender, &state.shutdown, &request_id, &action, "command_envelope_invalid", "request_id or action is invalid.").await.is_err() { return; }
                             continue;
                         }
                         let outcome = state.rooms.execute(
@@ -460,25 +494,25 @@ async fn socket_session(
                                     result: outcome.result,
                                     deduplicated: outcome.deduplicated,
                                 });
-                                if send_frame(&mut sender, &frame).await.is_err() { return; }
+                                if send_frame(&mut sender, &state.shutdown, &frame).await.is_err() { return; }
                             }
                             Err(error) => {
                                 if persistence_error_is_internal(&error) {
                                     tracing::error!(error = ?error, room_id = %principal.room_id, action = %action, "room command persistence failed");
                                 }
                                 let (code, message) = persistence_error(&error);
-                                if send_nack(&mut sender, &request_id, &action, code, &message).await.is_err() { return; }
+                                if send_nack(&mut sender, &state.shutdown, &request_id, &action, code, &message).await.is_err() { return; }
                             }
                         }
                     }
                     Ok(ClientFrame::Ping { nonce }) => {
-                        if send_frame(&mut sender, &ServerFrame::Pong { nonce }).await.is_err() { return; }
+                        if send_frame(&mut sender, &state.shutdown, &ServerFrame::Pong { nonce }).await.is_err() { return; }
                     }
                     Ok(ClientFrame::Subscribe { .. }) => {
-                        if send_nack(&mut sender, "", "subscribe", "already_subscribed", "This socket is already subscribed.").await.is_err() { return; }
+                        if send_nack(&mut sender, &state.shutdown, "", "subscribe", "already_subscribed", "This socket is already subscribed.").await.is_err() { return; }
                     }
                     Err(error) => {
-                        if send_nack(&mut sender, "", "frame", "frame_invalid", &error.to_string()).await.is_err() { return; }
+                        if send_nack(&mut sender, &state.shutdown, "", "frame", "frame_invalid", &error.to_string()).await.is_err() { return; }
                     }
                 }
             }
@@ -491,7 +525,7 @@ async fn socket_session(
                             events: vec![event],
                             latest_seq,
                         };
-                        if send_frame(&mut sender, &frame).await.is_err() { return; }
+                        if send_frame(&mut sender, &state.shutdown, &frame).await.is_err() { return; }
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
                         let frame = ServerFrame::ResyncRequired {
@@ -499,7 +533,7 @@ async fn socket_session(
                             reason: "subscriber fell behind the room event stream".to_owned(),
                             latest_seq: state.store.snapshot(&principal.room_id, 0, 1).await.map_or(0, |snapshot| snapshot.last_seq),
                         };
-                        let _ = send_frame(&mut sender, &frame).await;
+                        let _ = send_frame(&mut sender, &state.shutdown, &frame).await;
                         return;
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
@@ -511,6 +545,7 @@ async fn socket_session(
 
 async fn send_nack<S>(
     sender: &mut S,
+    cancellation: &CancellationToken,
     request_id: &str,
     action: &str,
     code: &str,
@@ -521,6 +556,7 @@ where
 {
     send_frame(
         sender,
+        cancellation,
         &ServerFrame::Nack(CommandNack {
             request_id: request_id.to_owned(),
             accepted: false,
@@ -534,12 +570,47 @@ where
     .await
 }
 
-async fn send_frame<S>(sender: &mut S, frame: &ServerFrame) -> Result<(), axum::Error>
+async fn send_frame<S>(
+    sender: &mut S,
+    cancellation: &CancellationToken,
+    frame: &ServerFrame,
+) -> Result<(), axum::Error>
 where
     S: futures_util::Sink<Message, Error = axum::Error> + Unpin,
 {
     let encoded = serde_json::to_string(frame).map_err(axum::Error::new)?;
-    sender.send(Message::Text(encoded.into())).await
+    tokio::select! {
+        () = cancellation.cancelled() => Err(axum::Error::new(std::io::Error::new(
+            std::io::ErrorKind::Interrupted,
+            "runtime shutdown interrupted WebSocket send",
+        ))),
+        result = tokio::time::timeout(WS_WRITE_TIMEOUT, sender.send(Message::Text(encoded.into()))) => {
+            result.map_err(axum::Error::new)?
+        }
+    }
+}
+
+fn fit_snapshot_frame(mut snapshot: RoomSnapshot) -> Option<ServerFrame> {
+    loop {
+        let frame = ServerFrame::Snapshot(Box::new(snapshot.clone()));
+        if serde_json::to_vec(&frame).ok()?.len() <= MAX_WS_MESSAGE_BYTES {
+            return Some(frame);
+        }
+        if snapshot.events.is_empty() {
+            return None;
+        }
+        let remove = (snapshot.events.len() / 2).max(1);
+        snapshot.events.drain(..remove);
+        snapshot.oldest_seq = snapshot
+            .events
+            .first()
+            .map_or(snapshot.last_seq, |event| event.seq);
+        snapshot.has_more_before = true;
+        if snapshot.snapshot_mode != SnapshotMode::Initial {
+            snapshot.resume_gap = true;
+            snapshot.snapshot_mode = SnapshotMode::Gap;
+        }
+    }
 }
 
 fn persistence_error(error: &PersistenceError) -> (&'static str, String) {
@@ -599,6 +670,14 @@ impl ApiError {
         Self {
             status: StatusCode::SERVICE_UNAVAILABLE,
             code: "unavailable",
+            message: message.into(),
+        }
+    }
+
+    fn payload_too_large(message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::PAYLOAD_TOO_LARGE,
+            code: "payload_too_large",
             message: message.into(),
         }
     }

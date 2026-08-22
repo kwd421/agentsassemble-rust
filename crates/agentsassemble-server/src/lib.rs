@@ -1,3 +1,4 @@
+mod http_transport;
 mod room_runtime;
 mod ticket;
 mod web;
