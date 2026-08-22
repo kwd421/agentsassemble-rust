@@ -26,6 +26,8 @@ const MAX_PROVIDER_MANIFEST_BYTES: usize = 256 * 1024;
 const TEST_MODE_ENV: &str = "AGENTSASSEMBLE_INTERNAL_GUARDIAN_MODE";
 const TEST_LEASE_ENV: &str = "AGENTSASSEMBLE_INTERNAL_GUARDIAN_LEASE";
 const TEST_TOKEN_ENV: &str = "AGENTSASSEMBLE_INTERNAL_GUARDIAN_TOKEN";
+#[cfg(test)]
+const TEST_PRE_ANCHOR_SIGNAL_ENV: &str = "AGENTSASSEMBLE_INTERNAL_PRE_ANCHOR_SIGNAL";
 const PROVIDER_LAUNCH_ENV: &str = "AGENTSASSEMBLE_INTERNAL_PROVIDER_LAUNCH";
 const PROVIDER_STDIN_FD: i32 = 4;
 const PROVIDER_STDOUT_FD: i32 = 5;
@@ -119,6 +121,8 @@ struct ProviderLaunch {
 pub(crate) struct GuardianLaunch {
     executable: Arc<BoundExecutable>,
     test_harness: bool,
+    #[cfg(test)]
+    pre_anchor_signal: Option<PathBuf>,
 }
 
 impl GuardianLaunch {
@@ -126,6 +130,8 @@ impl GuardianLaunch {
         Ok(Self {
             executable: Arc::new(bind_helper_executable_sync(executable)?),
             test_harness: false,
+            #[cfg(test)]
+            pre_anchor_signal: None,
         })
     }
 
@@ -134,7 +140,15 @@ impl GuardianLaunch {
         Ok(Self {
             executable: Arc::new(bind_helper_executable_sync(&reexecution_path()?)?),
             test_harness: true,
+            pre_anchor_signal: None,
         })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn test_harness_with_pre_anchor_signal(signal: PathBuf) -> io::Result<Self> {
+        let mut launch = Self::test_harness()?;
+        launch.pre_anchor_signal = Some(signal);
+        Ok(launch)
     }
 
     pub(crate) fn guardian_command(
@@ -157,6 +171,10 @@ impl GuardianLaunch {
             lease_path,
             lease_token,
         );
+        #[cfg(test)]
+        if let Some(signal) = &self.pre_anchor_signal {
+            command.env(TEST_PRE_ANCHOR_SIGNAL_ENV, signal);
+        }
         let provider_launch = ProviderLaunch {
             #[cfg(any(target_os = "linux", target_os = "android"))]
             executable: "/proc/self/fd/3".to_owned(),
@@ -392,6 +410,11 @@ fn run_helper(
 }
 
 fn run_guardian(lease_path: &Path, lease_token: &str, launch: &GuardianLaunch) -> io::Result<()> {
+    #[cfg(test)]
+    if let Some(signal) = env::var_os(TEST_PRE_ANCHOR_SIGNAL_ENV) {
+        std::fs::write(signal, b"spawned")?;
+        std::thread::sleep(Duration::from_millis(500));
+    }
     #[cfg(any(target_os = "linux", target_os = "android"))]
     rustix::process::set_child_subreaper(Some(rustix::process::getpid()))?;
 

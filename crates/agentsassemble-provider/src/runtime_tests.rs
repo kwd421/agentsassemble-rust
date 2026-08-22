@@ -35,6 +35,9 @@ async fn guardian_runs_outside_the_server_process_group() {
     .unwrap_or_else(|error| panic!("prepare guardian group lease: {error}"));
     let launch = crate::guardian::GuardianLaunch::test_harness()
         .unwrap_or_else(|error| panic!("bind guardian test harness: {error}"));
+    lease
+        .begin_launch_effect()
+        .unwrap_or_else(|error| panic!("begin guardian group launch: {error}"));
     let provider = crate::filesystem::bind_helper_executable_sync(
         &std::env::current_exe()
             .unwrap_or_else(|error| panic!("resolve guardian fixture provider: {error}")),
@@ -113,6 +116,9 @@ async fn guardian_death_without_a_cleanup_receipt_never_proves_gone() {
         .unwrap_or_else(|error| panic!("prepare guardian death lease: {error}"));
     let launch = crate::guardian::GuardianLaunch::test_harness()
         .unwrap_or_else(|error| panic!("bind guardian death harness: {error}"));
+    lease
+        .begin_launch_effect()
+        .unwrap_or_else(|error| panic!("begin guardian death launch: {error}"));
     let provider = crate::filesystem::bind_helper_executable_sync(
         &std::env::current_exe()
             .unwrap_or_else(|error| panic!("resolve guardian death provider: {error}")),

@@ -75,6 +75,33 @@ impl HeldRuntimeLease {
         &self.token
     }
 
+    pub(crate) fn begin_launch_effect(&self) -> io::Result<()> {
+        #[cfg(unix)]
+        {
+            let mut file = OpenOptions::new().read(true).write(true).open(&self.path)?;
+            file.try_lock_exclusive()?;
+            if read_marker(&mut file)? != format!("pending:{}", self.token) {
+                return Err(io::Error::other("provider launch lease generation changed"));
+            }
+            write_marker(&mut file, &format!("launching:{}", self.token))?;
+        }
+        #[cfg(not(unix))]
+        if self.file.is_none() {
+            return Err(io::Error::other("provider launch lease is unavailable"));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn cleanup_receipt_is_present(&self) -> bool {
+        #[cfg(unix)]
+        return matches!(
+            unix_cleanup_receipt_is_present(&self.path, &self.token),
+            Ok(true)
+        );
+        #[cfg(not(unix))]
+        no_cleanup_receipt(self)
+    }
+
     pub(crate) fn cleanup_pre_effect(mut self) {
         self.file.take();
         self.remove_files();
@@ -90,6 +117,11 @@ impl HeldRuntimeLease {
         #[cfg(unix)]
         remove_runtime_lease(&self.lifetime_path, &self.token);
     }
+}
+
+#[cfg(not(unix))]
+const fn no_cleanup_receipt(_lease: &HeldRuntimeLease) -> bool {
+    false
 }
 
 #[cfg(unix)]
@@ -171,7 +203,7 @@ pub(crate) fn activate_unix_runtime_lease(
     let mut file = OpenOptions::new().read(true).write(true).open(path)?;
     file.try_lock_exclusive()?;
     let marker = read_marker(&mut file)?;
-    if marker != format!("pending:{token}") {
+    if marker != format!("launching:{token}") {
         return Err(io::Error::other(
             "provider runtime lease generation changed",
         ));
@@ -308,7 +340,7 @@ fn remove_runtime_lease(path: &Path, token: &str) {
 fn marker_token(marker: &str) -> Option<&str> {
     let mut parts = marker.split(':');
     match (parts.next(), parts.next()) {
-        (Some("pending" | "windows" | "unix" | "lifetime" | "gone"), Some(token))
+        (Some("pending" | "launching" | "windows" | "unix" | "lifetime" | "gone"), Some(token))
             if validate_token(token).is_ok() =>
         {
             Some(token)
@@ -455,9 +487,26 @@ mod tests {
     }
 
     #[test]
+    fn unlocked_launching_lease_never_proves_absence() {
+        let lease = HeldRuntimeLease::prepare("lease-launch-room", "lease-launch-session")
+            .unwrap_or_else(|error| panic!("prepare launch lease: {error}"));
+        lease
+            .begin_launch_effect()
+            .unwrap_or_else(|error| panic!("begin launch effect: {error}"));
+        assert_eq!(
+            observe_runtime_lease("lease-launch-room", "lease-launch-session"),
+            LeaseObservation::Unknown
+        );
+        lease.cleanup_pre_effect();
+    }
+
+    #[test]
     fn unlocked_unix_lease_requires_recorded_group_absence() {
         let lease = HeldRuntimeLease::prepare("lease-group-room", "lease-group-session")
             .unwrap_or_else(|error| panic!("prepare group runtime lease: {error}"));
+        lease
+            .begin_launch_effect()
+            .unwrap_or_else(|error| panic!("begin group runtime launch: {error}"));
         let anchor = super::activate_unix_runtime_lease(
             lease.path(),
             lease.token(),
@@ -480,6 +529,9 @@ mod tests {
     fn unlocked_unix_lease_requires_guardian_cleanup_receipt() {
         let lease = HeldRuntimeLease::prepare("lease-lifetime-room", "lease-lifetime-session")
             .unwrap_or_else(|error| panic!("prepare lifetime runtime lease: {error}"));
+        lease
+            .begin_launch_effect()
+            .unwrap_or_else(|error| panic!("begin lifetime runtime launch: {error}"));
         let lifetime = super::open_provider_lifetime_lease(lease.path(), lease.token())
             .unwrap_or_else(|error| panic!("open provider lifetime lease: {error}"));
         let absent_group = rustix::process::Pid::from_raw(i32::MAX)

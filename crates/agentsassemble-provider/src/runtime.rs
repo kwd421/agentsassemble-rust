@@ -10,10 +10,8 @@ use uuid::Uuid;
 #[cfg(unix)]
 use crate::guardian::GuardianLaunch;
 use crate::{
-    codex::CodexDriver,
-    launch_error::DriverLaunchError,
-    runtime_authority::revalidate_runtime_authority,
-    runtime_lease::{HeldRuntimeLease, LeaseObservation, observe_runtime_lease},
+    codex::CodexDriver, launch_error::DriverLaunchError,
+    runtime_authority::revalidate_runtime_authority, runtime_lease::HeldRuntimeLease,
 };
 
 const DRIVER_STOP_TIMEOUT: Duration = Duration::from_secs(5);
@@ -331,6 +329,7 @@ impl ProviderAdapter {
                     owner_id,
                     runtime_lease,
                 });
+                launch_state::begin_launch_effect(&mut slot)?;
                 let launch = {
                     let RuntimeState::Launching(runtime) = &slot.state else {
                         unreachable!("new provider runtime slot must be launching");
@@ -506,7 +505,7 @@ impl ProviderAdapter {
         let mut gone = Vec::new();
         for (key, slot) in slots {
             let mut slot = slot.lock().await;
-            if let Some(result) = shutdown_launching_runtime(&key, &mut slot) {
+            if let Some(result) = observation::shutdown_launching_runtime(&key, &mut slot) {
                 match result {
                     Ok(stopped) => gone.push(stopped),
                     Err(error) => {
@@ -653,42 +652,6 @@ impl Default for ProviderAdapter {
     }
 }
 
-fn shutdown_launching_runtime(
-    key: &RuntimeKey,
-    slot: &mut RuntimeSlot,
-) -> Option<Result<ProviderRuntimeGone, ProviderAdapterError>> {
-    let RuntimeState::Launching(runtime) = &slot.state else {
-        return None;
-    };
-    if observe_runtime_lease(&key.room_id, &key.session_id) != LeaseObservation::Gone {
-        return Some(Err(ProviderAdapterError::uncertain(
-            DriverError::new(
-                "provider_launch_cleanup_unconfirmed",
-                "An interrupted provider launch could not be confirmed gone.",
-            ),
-            &runtime.handle_id,
-            &runtime.owner_id,
-        )));
-    }
-    let RuntimeState::Launching(runtime) = std::mem::replace(&mut slot.state, RuntimeState::Vacant)
-    else {
-        unreachable!("observed provider launch must remain owned");
-    };
-    let stopped = ProviderRuntimeGone {
-        room_id: key.room_id.clone(),
-        session_id: key.session_id.clone(),
-        runtime_handle_id: runtime.handle_id.clone(),
-        runtime_owner_id: runtime.owner_id.clone(),
-        runtime_lease_token: runtime.runtime_lease.token().to_owned(),
-    };
-    slot.state = RuntimeState::StopConfirmed {
-        handle_id: runtime.handle_id,
-        owner_id: runtime.owner_id,
-        runtime_lease: runtime.runtime_lease,
-    };
-    Some(Ok(stopped))
-}
-
 fn started(
     session: &DurableAgentSession,
     runtime: &OwnedRuntime,
@@ -794,3 +757,6 @@ mod launch_tests;
 
 #[path = "runtime_observation.rs"]
 mod observation;
+
+#[path = "runtime_launch_state.rs"]
+mod launch_state;

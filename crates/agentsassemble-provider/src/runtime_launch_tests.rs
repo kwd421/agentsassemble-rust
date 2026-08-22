@@ -4,16 +4,21 @@ use std::{
         Arc,
         atomic::{AtomicUsize, Ordering},
     },
+    time::Duration,
 };
 
-use super::{DriverFactory, DriverFuture, ProviderAdapter, ProviderDriver};
+use super::{
+    DriverFactory, DriverFuture, ProductionDriverFactory, ProviderAdapter, ProviderDriver,
+    ProviderRuntimeObservation,
+};
+use crate::{
+    guardian::GuardianLaunch, launch_error::DriverLaunchError, runtime_lease::HeldRuntimeLease,
+};
 #[cfg(target_os = "linux")]
 use crate::{
-    guardian::GuardianLaunch,
     runtime_lease::{LeaseObservation, observe_runtime_lease, unix_cleanup_receipt_is_present},
     unix_custody::{UnixProcessCustody, enable_test_escape_wait, test_escape_pid_path},
 };
-use crate::{launch_error::DriverLaunchError, runtime_lease::HeldRuntimeLease};
 #[cfg(target_os = "linux")]
 use std::process::{Command, Stdio};
 
@@ -84,9 +89,62 @@ async fn cancelled_pre_ready_launch_retains_slot_custody() {
     assert!(!error.runtime_owner_id.is_empty());
     assert_eq!(launches.load(Ordering::SeqCst), 1);
     let outcome = adapter.shutdown_with_observations().await;
-    assert!(outcome.failure.is_none());
-    assert_eq!(outcome.gone.len(), 1);
-    adapter.release_shutdown_observations(&outcome.gone).await;
+    assert!(outcome.failure.is_some());
+    assert!(outcome.gone.is_empty());
+    drop(adapter);
+    crate::runtime_lease::cleanup_stale_runtime_lease(
+        &session.public.room_id,
+        &session.public.session_id,
+    );
+}
+
+#[tokio::test]
+async fn post_spawn_pre_anchor_cancellation_requires_the_guardian_receipt() {
+    let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
+    let directory = tempfile::tempdir()
+        .unwrap_or_else(|error| panic!("create pre-anchor cancellation fixture: {error}"));
+    let guardian_spawned = directory.path().join("guardian-spawned");
+    let provider_started = directory.path().join("provider-started");
+    let script = format!(
+        "#!/bin/sh\nprintf started > '{}'\nIFS= read -r forever\n",
+        provider_started.to_string_lossy().replace('\'', "'\\''"),
+    );
+    let mut session = super::tests::fixture_session(directory.path(), &script).await;
+    let guardian = GuardianLaunch::test_harness_with_pre_anchor_signal(guardian_spawned.clone())
+        .unwrap_or_else(|error| panic!("bind delayed guardian harness: {error}"));
+    let adapter = ProviderAdapter::with_factory(Arc::new(ProductionDriverFactory {
+        guardian: Some(guardian),
+    }));
+    let pending_adapter = adapter.clone();
+    let pending_session = session.clone();
+    let task = tokio::spawn(async move { pending_adapter.start(&pending_session).await });
+    wait_for_path(&guardian_spawned).await;
+    task.abort();
+    let _ = task.await;
+    let shutdown = adapter.shutdown_with_observations().await;
+    assert!(shutdown.failure.is_some());
+    assert!(shutdown.gone.is_empty());
+    let Err(retry) = adapter.start(&session).await else {
+        panic!("pre-anchor cancellation must not permit a replacement");
+    };
+    assert!(retry.effect_uncertain);
+    session.runtime_handle_id = retry.runtime_handle_id;
+    session.runtime_owner_id = retry.runtime_owner_id;
+    let mut observation = adapter.observe(&session).await;
+    for _ in 0..1_000 {
+        if observation == ProviderRuntimeObservation::Gone {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        observation = adapter.observe(&session).await;
+    }
+    assert_eq!(observation, ProviderRuntimeObservation::Gone);
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    assert!(provider_started.exists());
+    adapter
+        .shutdown()
+        .await
+        .unwrap_or_else(|error| panic!("shutdown after delayed guardian receipt: {error}"));
 }
 
 #[tokio::test]
@@ -106,6 +164,9 @@ async fn post_ready_failure_is_safe_only_after_exact_guardian_receipt() {
             .unwrap_or_else(|error| panic!("resolve launch cleanup provider: {error}")),
     )
     .unwrap_or_else(|error| panic!("bind launch cleanup provider: {error}"));
+    lease
+        .begin_launch_effect()
+        .unwrap_or_else(|error| panic!("begin escaped provider launch: {error}"));
     enable_test_escape_wait();
     let result = UnixProcessCustody::start(
         &lease,
@@ -148,4 +209,14 @@ async fn post_ready_failure_is_safe_only_after_exact_guardian_receipt() {
     );
     let _ = std::fs::remove_file(pid_path);
     lease.cleanup_pre_effect();
+}
+
+async fn wait_for_path(path: &std::path::Path) {
+    for _ in 0..500 {
+        if path.exists() {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("test helper did not publish its readiness marker");
 }

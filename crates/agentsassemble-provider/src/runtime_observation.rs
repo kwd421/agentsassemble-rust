@@ -1,6 +1,9 @@
 use agentsassemble_domain::DurableAgentSession;
 
-use super::{ProviderAdapter, ProviderRuntimeObservation, RuntimeState};
+use super::{
+    DriverError, ProviderAdapter, ProviderAdapterError, ProviderRuntimeGone,
+    ProviderRuntimeObservation, RuntimeKey, RuntimeSlot, RuntimeState,
+};
 use crate::{
     runtime_authority::revalidate_runtime_authority,
     runtime_lease::{LeaseObservation, observe_runtime_lease},
@@ -24,23 +27,23 @@ impl ProviderAdapter {
                     reason_code: "runtime_identity_mismatch".to_owned(),
                 };
             }
+            if runtime.runtime_lease.cleanup_receipt_is_present() {
+                let RuntimeState::Launching(mut runtime) =
+                    std::mem::replace(&mut slot.state, RuntimeState::Vacant)
+                else {
+                    unreachable!("observed provider launch must remain owned");
+                };
+                runtime.runtime_lease.release_and_remove();
+                return ProviderRuntimeObservation::Gone;
+            }
             return match observe_runtime_lease(&session.public.room_id, &session.public.session_id)
             {
-                LeaseObservation::Gone => {
-                    let RuntimeState::Launching(mut runtime) =
-                        std::mem::replace(&mut slot.state, RuntimeState::Vacant)
-                    else {
-                        unreachable!("observed provider launch must remain owned");
-                    };
-                    runtime.runtime_lease.release_and_remove();
-                    ProviderRuntimeObservation::Gone
-                }
                 LeaseObservation::Active => ProviderRuntimeObservation::LeaseUncertain {
                     handle_id: runtime.handle_id.clone(),
                     owner_id: runtime.owner_id.clone(),
                     reason_code: "provider_launch_cleanup_active".to_owned(),
                 },
-                LeaseObservation::Missing | LeaseObservation::Unknown => {
+                LeaseObservation::Gone | LeaseObservation::Missing | LeaseObservation::Unknown => {
                     ProviderRuntimeObservation::LeaseUncertain {
                         handle_id: runtime.handle_id.clone(),
                         owner_id: runtime.owner_id.clone(),
@@ -106,4 +109,40 @@ impl ProviderAdapter {
             runtime_profile_key: runtime.profile_key.clone(),
         }
     }
+}
+
+pub(super) fn shutdown_launching_runtime(
+    key: &RuntimeKey,
+    slot: &mut RuntimeSlot,
+) -> Option<Result<ProviderRuntimeGone, ProviderAdapterError>> {
+    let RuntimeState::Launching(runtime) = &slot.state else {
+        return None;
+    };
+    if !runtime.runtime_lease.cleanup_receipt_is_present() {
+        return Some(Err(ProviderAdapterError::uncertain(
+            DriverError::new(
+                "provider_launch_cleanup_unconfirmed",
+                "An interrupted provider launch could not be confirmed gone.",
+            ),
+            &runtime.handle_id,
+            &runtime.owner_id,
+        )));
+    }
+    let RuntimeState::Launching(runtime) = std::mem::replace(&mut slot.state, RuntimeState::Vacant)
+    else {
+        unreachable!("observed provider launch must remain owned");
+    };
+    let stopped = ProviderRuntimeGone {
+        room_id: key.room_id.clone(),
+        session_id: key.session_id.clone(),
+        runtime_handle_id: runtime.handle_id.clone(),
+        runtime_owner_id: runtime.owner_id.clone(),
+        runtime_lease_token: runtime.runtime_lease.token().to_owned(),
+    };
+    slot.state = RuntimeState::StopConfirmed {
+        handle_id: runtime.handle_id,
+        owner_id: runtime.owner_id,
+        runtime_lease: runtime.runtime_lease,
+    };
+    Some(Ok(stopped))
 }
