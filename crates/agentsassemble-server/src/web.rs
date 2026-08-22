@@ -363,7 +363,7 @@ async fn socket_session(
     let mut events = state.rooms.subscribe(&principal.room_id).await;
     let snapshot_data = match state
         .store
-        .snapshot(&principal.room_id, resume_from_seq, 200)
+        .snapshot_for(&principal, resume_from_seq, 200)
         .await
     {
         Ok(snapshot) => snapshot,
@@ -512,6 +512,17 @@ async fn socket_session(
             published = events.recv() => {
                 match published {
                     Ok(event) => {
+                        if state.store.authorize_session(&principal).await.is_err() {
+                            let _ = send_nack(
+                                &mut sender,
+                                &state.shutdown,
+                                "",
+                                "session",
+                                "session_revoked",
+                                "This room session has ended.",
+                            ).await;
+                            return;
+                        }
                         let latest_seq = event.seq;
                         let frame = ServerFrame::Event {
                             stream: "room_events",
@@ -617,7 +628,9 @@ fn persistence_error(error: &PersistenceError) -> (&'static str, String) {
         | PersistenceError::AuthorityConflict(_)
         | PersistenceError::UnownedDatabase
         | PersistenceError::WriterAlreadyActive(_)
-        | PersistenceError::WriterLease(_) => (
+        | PersistenceError::WriterLease(_)
+        | PersistenceError::UnsafeDatabasePath(_)
+        | PersistenceError::InitializationNotAllowed => (
             "persistence_failed",
             "Persistence operation failed.".to_owned(),
         ),
@@ -719,6 +732,8 @@ fn persistence_error_is_internal(error: &PersistenceError) -> bool {
             | PersistenceError::UnownedDatabase
             | PersistenceError::WriterAlreadyActive(_)
             | PersistenceError::WriterLease(_)
+            | PersistenceError::UnsafeDatabasePath(_)
+            | PersistenceError::InitializationNotAllowed
     )
 }
 

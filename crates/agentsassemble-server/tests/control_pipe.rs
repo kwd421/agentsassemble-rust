@@ -106,7 +106,7 @@ async fn start_controlled(database: &Path) -> ControlledServer {
             database
                 .to_str()
                 .unwrap_or_else(|| panic!("database path is not UTF-8")),
-            "--bootstrap-room",
+            "--initialize-room",
             "general",
         ])
         .env_remove("AGENTSASSEMBLE_HOST_TOKEN")

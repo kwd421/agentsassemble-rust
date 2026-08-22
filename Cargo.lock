@@ -23,11 +23,13 @@ dependencies = [
  "agentsassemble-domain",
  "chrono",
  "fs2",
+ "same-file",
  "serde_json",
  "sqlx",
  "tempfile",
  "thiserror",
  "tokio",
+ "url",
  "uuid",
 ]
 

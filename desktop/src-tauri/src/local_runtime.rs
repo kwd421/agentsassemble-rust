@@ -1,10 +1,10 @@
 use std::{
     env,
     fs::{self, File},
-    io::{BufRead, BufReader, Write},
+    io::{BufRead, BufReader, Read, Write},
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream},
     path::{Path, PathBuf},
-    process::{Child, ChildStdin, ChildStdout, Stdio},
+    process::{Child, ChildStderr, ChildStdin, ChildStdout, Stdio},
     sync::{Mutex, mpsc},
     thread,
     time::{Duration, Instant},
@@ -22,6 +22,7 @@ use crate::runtime_supervisor;
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(20);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(3);
+const RUNTIME_LOG_LIMIT_BYTES: u64 = 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct TicketGrant {
@@ -122,33 +123,38 @@ fn start_runtime(app: &AppHandle, room_id: &str) -> Result<RuntimeProcess, Strin
         .map_err(|error| format!("cannot resolve desktop data directory: {error}"))?;
     fs::create_dir_all(&data_root)
         .map_err(|error| format!("cannot create {}: {error}", data_root.display()))?;
+    make_private_directory(&data_root)
+        .map_err(|error| format!("cannot secure {}: {error}", data_root.display()))?;
     let executable = sidecar_executable(app)?;
     let database = data_root.join("runtime.sqlite3");
     let secret = generate_host_secret();
     let stdout_path = data_root.join("runtime.stdout.log");
     let stderr_path = data_root.join("runtime.stderr.log");
-    let stdout_log = File::create(&stdout_path)
-        .map_err(|error| format!("cannot open {}: {error}", stdout_path.display()))?;
-    let stderr_log = File::create(&stderr_path)
-        .map_err(|error| format!("cannot open {}: {error}", stderr_path.display()))?;
+    let stdout_log = open_private_rotating_log(&stdout_path)?;
+    let stderr_log = open_private_rotating_log(&stderr_path)?;
     let mut command = runtime_supervisor::command(&executable)?;
     command
         .arg("--bind")
         .arg("127.0.0.1:0")
         .arg("--database")
         .arg(&database)
-        .arg("--bootstrap-room")
+        .arg("--initialize-room")
         .arg(room_id)
         .env_remove("AGENTSASSEMBLE_HOST_TOKEN")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::from(stderr_log));
+        .stderr(Stdio::piped());
     let mut child = command.spawn().map_err(|error| {
         format!(
             "cannot start Rust runtime supervisor for {}: {error}",
             executable.display()
         )
     })?;
+    let Some(stderr) = child.stderr.take() else {
+        abort_startup(&mut child, None);
+        return Err("cannot capture Rust runtime diagnostics".to_owned());
+    };
+    capture_capped_stderr(stderr, stderr_log);
     let Some(mut control) = child.stdin.take() else {
         abort_startup(&mut child, None);
         return Err("cannot open Rust runtime control pipe".to_owned());
@@ -288,6 +294,78 @@ fn is_application_rejection(code: &str) -> bool {
 
 fn generate_host_secret() -> String {
     format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple())
+}
+
+fn open_private_rotating_log(path: &Path) -> Result<File, String> {
+    let mut previous_name = path.as_os_str().to_os_string();
+    previous_name.push(".previous");
+    let previous = PathBuf::from(previous_name);
+    if path.exists() {
+        if previous.exists() {
+            fs::remove_file(&previous)
+                .map_err(|error| format!("cannot replace {}: {error}", previous.display()))?;
+        }
+        fs::rename(path, &previous)
+            .map_err(|error| format!("cannot rotate {}: {error}", path.display()))?;
+    }
+    let file =
+        File::create(path).map_err(|error| format!("cannot open {}: {error}", path.display()))?;
+    make_private_file(&file)
+        .map_err(|error| format!("cannot secure {}: {error}", path.display()))?;
+    Ok(file)
+}
+
+fn capture_capped_stderr(stderr: ChildStderr, mut log: File) {
+    thread::spawn(move || {
+        let mut reader = BufReader::new(stderr);
+        let _ = copy_capped(&mut reader, &mut log, RUNTIME_LOG_LIMIT_BYTES);
+        let _ = log.flush();
+    });
+}
+
+fn copy_capped(
+    reader: &mut impl Read,
+    writer: &mut impl Write,
+    limit: u64,
+) -> std::io::Result<u64> {
+    let mut buffer = [0_u8; 8 * 1024];
+    let mut written = 0_u64;
+    while let Ok(count) = reader.read(&mut buffer) {
+        if count == 0 {
+            break;
+        }
+        let remaining = limit.saturating_sub(written);
+        let allowed = usize::try_from(remaining.min(count as u64)).unwrap_or(0);
+        if allowed > 0 {
+            writer.write_all(&buffer[..allowed])?;
+            written = written.saturating_add(allowed as u64);
+        }
+    }
+    Ok(written)
+}
+
+#[cfg(unix)]
+fn make_private_directory(path: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    fs::set_permissions(path, fs::Permissions::from_mode(0o700))
+}
+
+#[cfg(not(unix))]
+fn make_private_directory(_path: &Path) -> std::io::Result<()> {
+    Ok(())
+}
+
+#[cfg(unix)]
+fn make_private_file(file: &File) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    file.set_permissions(fs::Permissions::from_mode(0o600))
+}
+
+#[cfg(not(unix))]
+fn make_private_file(_file: &File) -> std::io::Result<()> {
+    Ok(())
 }
 
 fn capture_runtime_output(
@@ -458,8 +536,11 @@ fn sidecar_executable(app: &AppHandle) -> Result<PathBuf, String> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::{Cursor, Read, Write};
+
     use super::{
-        StartupRecord, generate_host_secret, is_application_rejection, validate_startup_record,
+        RUNTIME_LOG_LIMIT_BYTES, StartupRecord, copy_capped, generate_host_secret,
+        is_application_rejection, open_private_rotating_log, validate_startup_record,
     };
 
     #[test]
@@ -491,5 +572,42 @@ mod tests {
         assert!(is_application_rejection("room_not_found"));
         assert!(!is_application_rejection("persistence_failed"));
         assert!(!is_application_rejection("unavailable"));
+    }
+
+    #[test]
+    fn runtime_log_writer_drains_but_caps_persisted_bytes() {
+        let input = vec![b'x'; usize::try_from(RUNTIME_LOG_LIMIT_BYTES + 4096).unwrap_or(0)];
+        let mut reader = Cursor::new(input);
+        let mut output = Vec::new();
+        let written = copy_capped(&mut reader, &mut output, RUNTIME_LOG_LIMIT_BYTES)
+            .unwrap_or_else(|error| panic!("copy capped log: {error}"));
+        assert_eq!(written, RUNTIME_LOG_LIMIT_BYTES);
+        assert_eq!(output.len() as u64, RUNTIME_LOG_LIMIT_BYTES);
+        let mut remaining = Vec::new();
+        reader
+            .read_to_end(&mut remaining)
+            .unwrap_or_else(|error| panic!("inspect drained input: {error}"));
+        assert!(remaining.is_empty());
+    }
+
+    #[test]
+    fn runtime_logs_rotate_one_private_previous_generation() {
+        let directory = tempfile::tempdir()
+            .unwrap_or_else(|error| panic!("create log test directory: {error}"));
+        let path = directory.path().join("runtime.stderr.log");
+        let mut first = open_private_rotating_log(&path)
+            .unwrap_or_else(|error| panic!("open first log: {error}"));
+        first
+            .write_all(b"first generation")
+            .unwrap_or_else(|error| panic!("write first log: {error}"));
+        drop(first);
+        let _second = open_private_rotating_log(&path)
+            .unwrap_or_else(|error| panic!("open second log: {error}"));
+        let previous = directory.path().join("runtime.stderr.log.previous");
+        assert_eq!(
+            std::fs::read_to_string(previous)
+                .unwrap_or_else(|error| panic!("read previous log: {error}")),
+            "first generation"
+        );
     }
 }

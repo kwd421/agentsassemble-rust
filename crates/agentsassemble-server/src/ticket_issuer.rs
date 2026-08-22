@@ -1,6 +1,6 @@
 use agentsassemble_domain::{
     AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID,
-    LOCAL_OPERATOR_USER_ID, ParticipantStatus, validate_room_id,
+    LOCAL_OPERATOR_USER_ID, validate_room_id,
 };
 use agentsassemble_persistence::PersistenceError;
 use agentsassemble_protocol::TicketResponse;
@@ -33,22 +33,19 @@ pub async fn issue_local_ticket(
 ) -> Result<TicketResponse, TicketIssueError> {
     let room_id = validate_room_id(requested_room_id)
         .map_err(|error| TicketIssueError::InvalidRoom(error.message))?;
-    if !state
-        .store
-        .room_exists(&room_id)
-        .await
-        .map_err(TicketIssueError::Persistence)?
-    {
-        return Err(TicketIssueError::RoomMissing);
-    }
     let participant = state
         .store
-        .participant(&room_id, LOCAL_OPERATOR_PARTICIPANT_ID)
+        .active_participant(&room_id, LOCAL_OPERATOR_PARTICIPANT_ID)
         .await
-        .map_err(TicketIssueError::Persistence)?;
-    if participant.status != ParticipantStatus::Joined {
-        return Err(TicketIssueError::ParticipantInactive);
-    }
+        .map_err(|error| match error {
+            PersistenceError::RoomMissing => TicketIssueError::RoomMissing,
+            PersistenceError::ParticipantMissing
+            | PersistenceError::CommandRejected {
+                code: "session_revoked" | "room_inactive",
+                ..
+            } => TicketIssueError::ParticipantInactive,
+            error => TicketIssueError::Persistence(error),
+        })?;
     let client_kind = ClientKind::Browser;
     let invite_scope = InviteScope::ReadWrite;
     let issued = state

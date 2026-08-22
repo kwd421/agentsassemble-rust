@@ -33,7 +33,7 @@ struct Args {
     #[arg(long, default_value = ".agentsassemble-rust/runtime.sqlite3")]
     database: PathBuf,
     #[arg(long)]
-    bootstrap_room: Option<String>,
+    initialize_room: Option<String>,
     #[arg(long)]
     frontend: Option<PathBuf>,
 }
@@ -56,6 +56,8 @@ async fn main() -> anyhow::Result<()> {
         tokio::fs::create_dir_all(parent)
             .await
             .with_context(|| format!("create database directory {}", parent.display()))?;
+        make_private_directory(parent)
+            .with_context(|| format!("secure database directory {}", parent.display()))?;
     }
     let database_path = args
         .database
@@ -64,8 +66,10 @@ async fn main() -> anyhow::Result<()> {
     let database_url = format!("sqlite://{}", args.database.display());
     let store = SqliteStore::open(&database_url).await?;
     ensure_parent_alive(&cancellation)?;
-    if let Some(room_id) = args.bootstrap_room.as_deref() {
-        bootstrap(&store, room_id).await?;
+    if store.was_created()
+        && let Some(room_id) = args.initialize_room.as_deref()
+    {
+        initialize_room(&store, room_id).await?;
     }
     ensure_parent_alive(&cancellation)?;
     let listener = TcpListener::bind(args.bind).await?;
@@ -120,6 +124,18 @@ async fn main() -> anyhow::Result<()> {
         control_cancellation.cancel();
     });
     serve(listener, state, cancellation).await?;
+    Ok(())
+}
+
+#[cfg(unix)]
+fn make_private_directory(path: &std::path::Path) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))
+}
+
+#[cfg(not(unix))]
+fn make_private_directory(_path: &std::path::Path) -> std::io::Result<()> {
     Ok(())
 }
 
@@ -265,7 +281,7 @@ fn ensure_parent_alive(cancellation: &CancellationToken) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn bootstrap(store: &SqliteStore, room_id: &str) -> anyhow::Result<()> {
+async fn initialize_room(store: &SqliteStore, room_id: &str) -> anyhow::Result<()> {
     let now = Utc::now();
     let label = room_id.replace(['-', '_'], " ");
     let room = Room::new(room_id.to_owned(), label.clone(), now);
@@ -282,7 +298,7 @@ async fn bootstrap(store: &SqliteStore, room_id: &str) -> anyhow::Result<()> {
         updated_at: now,
     };
     store
-        .bootstrap_room(&room, &RoomSettings::defaults(label), &participant)
+        .initialize_room(&room, &RoomSettings::defaults(label), &participant)
         .await?;
     Ok(())
 }

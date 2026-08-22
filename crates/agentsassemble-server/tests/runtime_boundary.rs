@@ -561,7 +561,7 @@ async fn bootstrap(store: &SqliteStore) {
         updated_at: now,
     };
     store
-        .bootstrap_room(
+        .initialize_room(
             &room,
             &RoomSettings::defaults("General".to_owned()),
             &participant,
