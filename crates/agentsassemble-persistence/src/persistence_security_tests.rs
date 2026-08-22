@@ -66,6 +66,18 @@ async fn filename_text_cannot_disable_the_file_writer_lease() {
     drop(first);
 }
 
+#[tokio::test]
+async fn path_api_treats_query_characters_as_literal_filename_text() {
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
+    let path = directory.path().join("authority?mode=memory");
+    let store = SqliteStore::open_path(&path)
+        .await
+        .unwrap_or_else(|error| panic!("open literal query-shaped filename: {error}"));
+    assert!(path.is_file());
+    assert!(store.was_created());
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn symlink_and_hardlink_database_aliases_are_rejected() {
@@ -94,6 +106,31 @@ async fn symlink_and_hardlink_database_aliases_are_rejected() {
         SqliteStore::open(&format!("sqlite://{}", hard.display())).await,
         Err(PersistenceError::UnsafeDatabasePath(_))
     ));
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn unlinked_hardlink_alias_cannot_become_a_second_writer() {
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
+    let original = directory.path().join("authority.sqlite3");
+    let alias = directory.path().join("alias.sqlite3");
+    let first = SqliteStore::open_path(&original)
+        .await
+        .unwrap_or_else(|error| panic!("open first authority: {error}"));
+    std::fs::hard_link(&original, &alias)
+        .unwrap_or_else(|error| panic!("create authority alias: {error}"));
+    std::fs::remove_file(&original)
+        .unwrap_or_else(|error| panic!("unlink original authority name: {error}"));
+
+    assert!(SqliteStore::open_path(&alias).await.is_err());
+    let owner = sqlx::query_scalar::<_, String>(
+        "SELECT value FROM runtime_metadata WHERE key = 'schema_owner'",
+    )
+    .fetch_one(&first.pool)
+    .await
+    .unwrap_or_else(|error| panic!("original writer remains usable: {error}"));
+    assert_eq!(owner, "agentsassemble-rust-v1");
 }
 
 #[cfg(unix)]

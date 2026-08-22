@@ -10,6 +10,7 @@ import type {
   SideChatEvent,
 } from "./api";
 import type { PluginEnvelope } from "./pluginSocketProtocol";
+import type { TicketResponse } from "./types/generated/TicketResponse";
 import type {
   PublicProviderRequest,
   PublicRoomGlobalSettings,
@@ -135,7 +136,7 @@ export interface RoomCommandAck {
 }
 
 export interface RoomSocketClientDependencies {
-  getTicket?: (auth: RoomSocketAuth) => Promise<string>;
+  getTicket?: (auth: RoomSocketAuth) => Promise<TicketResponse | string>;
   createSocket?: (url: string) => WebSocket;
   websocketBaseUrl?: () => string;
   serverProofKey?: () => string;

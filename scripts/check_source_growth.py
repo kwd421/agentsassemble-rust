@@ -150,15 +150,18 @@ def violations(metrics: Mapping[str, SourceMetric], policy: SourceGrowthPolicy) 
 
 
 def _tracked_source(path: Path) -> bool:
-    if not path.is_file() or path.name in GENERATED_LOCKFILES:
+    if not path.is_file():
+        return False
+    mode = path.stat().st_mode
+    with path.open("rb") as source:
+        has_shebang = source.read(2) == b"#!"
+    if mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH) or has_shebang:
+        return True
+    if path.name in GENERATED_LOCKFILES:
         return False
     if path.suffix.lower() in SOURCE_SUFFIXES or path.name in SPECIAL_SOURCE_NAMES:
         return True
-    mode = path.stat().st_mode
-    if mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH):
-        return True
-    with path.open("rb") as source:
-        return source.read(2) == b"#!"
+    return False
 
 
 def main() -> int:

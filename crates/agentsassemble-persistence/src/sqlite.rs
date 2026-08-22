@@ -6,10 +6,8 @@ use agentsassemble_domain::{
 };
 use chrono::Utc;
 use serde_json::{Value, json};
-use sqlx::{Row, Sqlite, SqlitePool, Transaction, sqlite::SqlitePoolOptions};
+use sqlx::{Row, Sqlite, SqlitePool, Transaction};
 use thiserror::Error;
-
-use crate::database_target::PreparedDatabase;
 
 const SCHEMA_OWNER: &str = "agentsassemble-rust-v1";
 
@@ -66,42 +64,18 @@ pub struct CommandOutcome {
 #[derive(Clone)]
 pub struct SqliteStore {
     pub(crate) pool: SqlitePool,
-    _writer_lease: Option<Arc<File>>,
-    created: bool,
+    pub(crate) _writer_lease: Option<Arc<File>>,
+    pub(crate) _database_identity: Option<Arc<same_file::Handle>>,
+    pub(crate) created: bool,
 }
 
 impl SqliteStore {
-    /// Opens the `SQLite` authority and verifies its ownership marker.
-    ///
-    /// # Errors
-    ///
-    /// Returns a database or authority error when the store cannot be owned safely.
-    pub async fn open(database_url: &str) -> Result<Self, PersistenceError> {
-        let prepared = PreparedDatabase::from_url(database_url)?;
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect_with(prepared.options.clone().create_if_missing(true))
-            .await?;
-        prepared.revalidate()?;
-        let store = Self {
-            pool,
-            _writer_lease: prepared.writer_lease,
-            created: prepared.created,
-        };
-        if store.created {
-            store.initialize().await?;
-        } else {
-            store.verify_owner().await?;
-        }
-        Ok(store)
-    }
-
     /// Installs the current schema in one transaction.
     ///
     /// # Errors
     ///
     /// Returns a database or authority error if initialization cannot complete.
-    async fn initialize(&self) -> Result<(), PersistenceError> {
+    pub(crate) async fn initialize(&self) -> Result<(), PersistenceError> {
         let mut transaction = self.pool.begin().await?;
         for statement in crate::schema::statements() {
             sqlx::query(*statement).execute(&mut *transaction).await?;
@@ -127,7 +101,7 @@ impl SqliteStore {
         Ok(())
     }
 
-    async fn verify_owner(&self) -> Result<(), PersistenceError> {
+    pub(crate) async fn verify_owner(&self) -> Result<(), PersistenceError> {
         let metadata_table = sqlx::query_scalar::<_, i64>(
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'runtime_metadata'",
         )

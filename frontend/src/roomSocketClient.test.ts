@@ -769,4 +769,32 @@ describe("canonical room socket client", () => {
     expect(sockets).toHaveLength(2);
     handle.close();
   });
+
+  it("rejects a replacement standalone server that cannot prove the ticket grant", async () => {
+    const sockets: FakeWebSocket[] = [];
+    const errors: RoomSocketSayError[] = [];
+    const handle = openRoomSocket({ kind: "host", meetingId: "general" }, ["room_events"],
+      { onError: (error) => {
+        if (error instanceof RoomSocketSayError) errors.push(error);
+      } },
+      {
+        getTicket: async () => ({ ticket: "standalone-ticket", ttl_seconds: 30,
+          server_proof_key: "a".repeat(64),
+        }),
+        createSocket: () => {
+          const socket = new FakeWebSocket();
+          sockets.push(socket); return socket as unknown as WebSocket;
+        },
+      });
+    await flushPromises();
+    sockets[0].open();
+    expect(sockets[0].sent[0]).toMatchObject({ op: "subscribe",
+      server_challenge: expect.stringMatching(/^[0-9a-f]{64}$/),
+    });
+    sockets[0].receive({ op: "snapshot", stream: "room_events", server_proof: "b".repeat(64) });
+    await flushPromises();
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    expect(errors.at(-1)?.category).toBe("server_identity_invalid");
+    expect(sockets[0].readyState).toBe(WebSocket.CLOSED);
+    handle.close(); });
 });

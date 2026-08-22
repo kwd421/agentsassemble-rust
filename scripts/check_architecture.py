@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import os
 import subprocess
 import tomllib
 
@@ -160,7 +161,15 @@ def architecture_violations(
             f"{name} imports forbidden infrastructure dependency {item}"
             for item in forbidden
         )
-    found.extend(resolve_graph_violations(payload, package_by_id, set(OWNED_CRATES)))
+    found.extend(
+        resolve_graph_violations(
+            payload,
+            package_by_id,
+            {name: (repository_root / manifest).resolve() for name, manifest in OWNED_MANIFESTS.items()}
+            if repository_root is not None
+            else {},
+        )
+    )
     return tuple(found)
 
 
@@ -225,14 +234,21 @@ def desktop_violations(
         for item in payload.get("packages", [])
         if isinstance(item, dict)
     }
-    found.extend(resolve_graph_violations(payload, package_by_id, {"agentsassemble-desktop"}))
+    expected_reachable = {}
+    if repository_root is not None:
+        expected_reachable = {
+            "agentsassemble-desktop": (repository_root / DESKTOP_MANIFEST).resolve(),
+            "agentsassemble-domain": (repository_root / OWNED_MANIFESTS["agentsassemble-domain"]).resolve(),
+            "agentsassemble-protocol": (repository_root / OWNED_MANIFESTS["agentsassemble-protocol"]).resolve(),
+        }
+    found.extend(resolve_graph_violations(payload, package_by_id, expected_reachable))
     return tuple(found)
 
 
 def resolve_graph_violations(
     payload: dict[str, object],
     package_by_id: dict[str, dict[str, object]],
-    roots: set[str],
+    expected_manifests: dict[str, Path],
 ) -> list[str]:
     resolve = payload.get("resolve")
     if not isinstance(resolve, dict) or not isinstance(resolve.get("nodes"), list):
@@ -245,7 +261,7 @@ def resolve_graph_violations(
     root_ids = {
         package_id
         for package_id, package in package_by_id.items()
-        if str(package.get("name")) in roots
+        if str(package.get("name")) in expected_manifests
     }
     reachable = set(root_ids)
     pending = list(root_ids)
@@ -260,15 +276,25 @@ def resolve_graph_violations(
     found: list[str] = []
     for package_id in sorted(reachable):
         package = package_by_id.get(package_id)
-        if not package or package.get("source") is not None:
+        if not package:
             continue
         name = str(package.get("name"))
-        if name not in OWNED_MANIFESTS and name != "agentsassemble-desktop":
-            found.append(f"resolved graph reaches unapproved local package {name}")
+        expected = expected_manifests.get(name)
+        if expected is None:
+            if package.get("source") is None:
+                found.append(f"resolved graph reaches unapproved local package {name}")
+            continue
+        manifest = Path(str(package.get("manifest_path"))).resolve()
+        if package.get("source") is not None or manifest != expected:
+            found.append(
+                f"resolved graph reaches {name} from {manifest}, expected {expected}"
+            )
     return found
 
 
-def override_violations(repository_root: Path) -> tuple[str, ...]:
+def override_violations(
+    repository_root: Path, cargo_home: Path | None = None
+) -> tuple[str, ...]:
     found: list[str] = []
     ignored = {"target", "node_modules", ".git"}
     for manifest in repository_root.rglob("Cargo.toml"):
@@ -280,14 +306,27 @@ def override_violations(repository_root: Path) -> tuple[str, ...]:
             found.append(f"{relative} contains forbidden [patch] source overrides")
         if "replace" in payload:
             found.append(f"{relative} contains forbidden [replace] source overrides")
-    for config_name in (".cargo/config", ".cargo/config.toml"):
-        for config in repository_root.rglob(config_name):
-            if ignored.intersection(config.parts):
-                continue
-            payload = tomllib.loads(config.read_text(encoding="utf-8"))
-            relative = config.relative_to(repository_root).as_posix()
-            if "source" in payload or "paths" in payload:
-                found.append(f"{relative} contains forbidden Cargo source/path overrides")
+    configs = set(repository_root.rglob(".cargo/config"))
+    configs.update(repository_root.rglob(".cargo/config.toml"))
+    configs.update(
+        candidate
+        for parent in (repository_root, *repository_root.parents)
+        for candidate in (parent / ".cargo/config", parent / ".cargo/config.toml")
+    )
+    active_cargo_home = cargo_home or Path(
+        os.environ.get("CARGO_HOME", Path.home() / ".cargo")
+    )
+    configs.update((active_cargo_home / "config", active_cargo_home / "config.toml"))
+    for config in sorted(configs):
+        if not config.is_file() or ignored.intersection(config.parts):
+            continue
+        payload = tomllib.loads(config.read_text(encoding="utf-8"))
+        try:
+            label = config.relative_to(repository_root).as_posix()
+        except ValueError:
+            label = str(config)
+        if "source" in payload or "paths" in payload:
+            found.append(f"{label} contains forbidden Cargo source/path overrides")
     return tuple(found)
 
 

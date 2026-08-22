@@ -60,7 +60,7 @@ export function saveHostToken(token: string): void {
   inMemoryHostToken = cleanToken;
 }
 
-export async function getWsTicket(auth: RoomSocketAuth): Promise<string> {
+export async function getWsTicket(auth: RoomSocketAuth): Promise<TicketResponse> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   const body: Record<string, string> = {};
   if (auth.kind === "host") {
@@ -85,6 +85,8 @@ export async function getWsTicket(auth: RoomSocketAuth): Promise<string> {
     throw new Error(message || `${response.status} ${response.statusText}`);
   }
   const grant = await response.json() as TicketResponse;
-  if (!grant.ticket) throw new Error("Ticket response did not include a ticket.");
-  return grant.ticket;
+  if (!grant.ticket || !/^[0-9a-f]{64}$/i.test(grant.server_proof_key)) {
+    throw new Error("Ticket response did not include a complete server proof grant.");
+  }
+  return grant;
 }

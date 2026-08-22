@@ -5,11 +5,12 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
+    time::Duration,
 };
 
 use fs2::FileExt;
 use same_file::Handle;
-use sqlx::sqlite::SqliteConnectOptions;
+use sqlx::sqlite::{SqliteConnectOptions, SqliteLockingMode};
 
 use crate::PersistenceError;
 
@@ -17,7 +18,7 @@ pub(crate) struct PreparedDatabase {
     pub(crate) options: SqliteConnectOptions,
     pub(crate) writer_lease: Option<Arc<File>>,
     pub(crate) created: bool,
-    identity: Option<Handle>,
+    pub(crate) identity: Option<Arc<Handle>>,
     canonical_path: Option<PathBuf>,
 }
 
@@ -36,6 +37,14 @@ impl PreparedDatabase {
         prepare_file(options)
     }
 
+    pub(crate) fn from_path(path: &Path) -> Result<Self, PersistenceError> {
+        prepare_file(
+            SqliteConnectOptions::new()
+                .filename(path)
+                .foreign_keys(true),
+        )
+    }
+
     pub(crate) fn revalidate(&self) -> Result<(), PersistenceError> {
         let (Some(expected), Some(path)) = (&self.identity, &self.canonical_path) else {
             return Ok(());
@@ -46,7 +55,7 @@ impl PreparedDatabase {
             .open(path)
             .and_then(Handle::from_file)
             .map_err(PersistenceError::WriterLease)?;
-        if &current != expected {
+        if current != **expected {
             return Err(PersistenceError::UnsafeDatabasePath(
                 "database identity changed while ownership was being established",
             ));
@@ -88,10 +97,13 @@ fn prepare_file(options: SqliteConnectOptions) -> Result<PreparedDatabase, Persi
     let canonical = resolved
         .canonicalize()
         .map_err(PersistenceError::WriterLease)?;
-    let identity = Handle::from_file(file).map_err(PersistenceError::WriterLease)?;
+    let identity = Arc::new(Handle::from_file(file).map_err(PersistenceError::WriterLease)?);
     let lease = Arc::new(acquire_writer_lease(&canonical)?);
     let prepared = PreparedDatabase {
-        options: options.filename(&canonical),
+        options: options
+            .filename(&canonical)
+            .locking_mode(SqliteLockingMode::Exclusive)
+            .busy_timeout(Duration::from_millis(250)),
         writer_lease: Some(lease),
         created,
         identity: Some(identity),
@@ -238,9 +250,26 @@ fn validate_link_count(metadata: &std::fs::Metadata) -> Result<(), PersistenceEr
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn validate_link_count(metadata: &std::fs::Metadata) -> Result<(), PersistenceError> {
+    use std::os::windows::fs::MetadataExt;
+
+    match metadata.number_of_links() {
+        Some(1) => Ok(()),
+        Some(_) => Err(PersistenceError::UnsafeDatabasePath(
+            "hard-linked database authorities are not supported",
+        )),
+        None => Err(PersistenceError::UnsafeDatabasePath(
+            "database hard-link count is unavailable",
+        )),
+    }
+}
+
+#[cfg(all(not(unix), not(windows)))]
 fn validate_link_count(_metadata: &std::fs::Metadata) -> Result<(), PersistenceError> {
-    Ok(())
+    Err(PersistenceError::UnsafeDatabasePath(
+        "database hard-link validation is unsupported on this platform",
+    ))
 }
 
 #[cfg(test)]

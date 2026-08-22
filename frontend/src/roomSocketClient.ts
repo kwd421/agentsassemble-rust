@@ -570,9 +570,12 @@ export function openRoomSocket(
 
   async function connect() {
     try {
-      const ticket = await requestTicket(auth);
+      const issued = await requestTicket(auth);
       if (closed) return;
-      const proofKey = dependencies.serverProofKey?.() || "";
+      const ticket = typeof issued === "string" ? issued : issued.ticket;
+      const proofKey = typeof issued === "string"
+        ? dependencies.serverProofKey?.() || ""
+        : issued.server_proof_key;
       const serverChallenge = proofKey ? createServerChallenge() : "";
       const currentSocket = createSocket(`${dependencies.websocketBaseUrl?.() || wsBaseUrl()}/ws?ticket=${encodeURIComponent(ticket)}`);
       socket = currentSocket;

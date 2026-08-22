@@ -8,6 +8,7 @@ from scripts.check_architecture import (
     architecture_violations,
     desktop_violations,
     override_violations,
+    resolve_graph_violations,
 )
 from scripts.check_source_growth import (
     SourceGrowthPolicy,
@@ -87,6 +88,57 @@ class ArchitecturePolicyTests(unittest.TestCase):
                 override_violations(root),
             )
 
+    def test_transitive_same_name_local_crate_must_use_canonical_manifest(self) -> None:
+        expected = Path("/repo/crates/agentsassemble-domain/Cargo.toml").resolve()
+        server_id = "path+file:///repo/server#agentsassemble-server@0.1.0"
+        fake_id = "path+file:///tmp/fake#agentsassemble-domain@9.9.9"
+        packages = {
+            server_id: {
+                "id": server_id,
+                "name": "agentsassemble-server",
+                "source": None,
+                "manifest_path": "/repo/crates/agentsassemble-server/Cargo.toml",
+            },
+            fake_id: {
+                "id": fake_id,
+                "name": "agentsassemble-domain",
+                "source": None,
+                "manifest_path": "/tmp/fake/Cargo.toml",
+            },
+        }
+        payload = {
+            "resolve": {
+                "nodes": [
+                    {"id": server_id, "dependencies": [fake_id]},
+                    {"id": fake_id, "dependencies": []},
+                ]
+            }
+        }
+        self.assertIn(
+            f"resolved graph reaches agentsassemble-domain from {Path('/tmp/fake/Cargo.toml').resolve()}, expected {expected}",
+            resolve_graph_violations(
+                payload,
+                packages,
+                {
+                    "agentsassemble-server": Path("/repo/crates/agentsassemble-server/Cargo.toml"),
+                    "agentsassemble-domain": expected,
+                },
+            ),
+        )
+
+    def test_parent_cargo_source_override_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repository = root / "checkout"
+            repository.mkdir()
+            cargo = root / ".cargo"
+            cargo.mkdir()
+            (cargo / "config.toml").write_text(
+                '[source.crates-io]\nreplace-with = "mirror"\n', encoding="utf-8"
+            )
+            found = override_violations(repository, cargo_home=root / "empty-cargo-home")
+            self.assertTrue(any("forbidden Cargo source/path overrides" in item for item in found))
+
 
 class SourceGrowthPolicyTests(unittest.TestCase):
     def test_generated_prefix_does_not_bypass_source_counting(self) -> None:
@@ -116,6 +168,13 @@ class SourceGrowthPolicyTests(unittest.TestCase):
             "frontend/src/compressed.ts: 20000-byte logical line exceeds the limit of 16384",
             found,
         )
+
+    def test_executable_lockfile_name_is_still_source(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "Cargo.lock"
+            source.write_text("#!/bin/sh\necho executable\n", encoding="utf-8")
+            source.chmod(0o755)
+            self.assertTrue(_tracked_source(source))
 
 
 if __name__ == "__main__":

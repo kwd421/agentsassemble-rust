@@ -63,8 +63,7 @@ async fn main() -> anyhow::Result<()> {
         .database
         .canonicalize()
         .unwrap_or_else(|_| args.database.clone());
-    let database_url = format!("sqlite://{}", args.database.display());
-    let store = SqliteStore::open(&database_url).await?;
+    let store = SqliteStore::open_path(&args.database).await?;
     ensure_parent_alive(&cancellation)?;
     if store.was_created()
         && let Some(room_id) = args.initialize_room.as_deref()

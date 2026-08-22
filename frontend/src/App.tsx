@@ -73,7 +73,11 @@ export default function App() {
           const grant = await requestDesktopTicket(roomId);
           desktopWebSocketBase = grant.websocket_base_url;
           desktopServerProofKey = grant.server_proof_key;
-          return grant.ticket;
+          return {
+            ticket: grant.ticket,
+            ttl_seconds: grant.ttl_seconds,
+            server_proof_key: grant.server_proof_key,
+          };
         },
         websocketBaseUrl: () => desktopWebSocketBase,
         serverProofKey: () => desktopServerProofKey,
