@@ -4,7 +4,7 @@ use agentsassemble_domain::{
 use chrono::Utc;
 use sqlx::Row;
 
-use crate::{PersistenceError, SqliteStore};
+use crate::{PersistenceError, SqliteStore, agent_lifecycle_reservations::mark_stop_owner_lost};
 
 const ACTIVE_RUNTIME_STATES: [&str; 6] = [
     "starting",
@@ -19,8 +19,8 @@ impl SqliteStore {
     /// Disconnects durable sessions whose process ownership cannot survive restart.
     ///
     /// This runs before HTTP or WebSocket admission. Provider conversation IDs stay
-    /// durable so a later explicit start can resume them, while stale process handles
-    /// and lifecycle intents are discarded.
+    /// durable so a later explicit start can resume them. Unresolved stops become a
+    /// terminal owner-lost reservation before their session intent is released.
     ///
     /// # Errors
     ///
@@ -40,6 +40,25 @@ impl SqliteStore {
             }
             let mut session =
                 serde_json::from_str::<DurableAgentSession>(&row.get::<String, _>("session_json"))?;
+            if unresolved_stop_lost_its_owner(&session) {
+                mark_stop_owner_lost(
+                    &mut transaction,
+                    &session.public.room_id,
+                    &session.public.session_id,
+                    &session.lifecycle_intent_id,
+                )
+                .await?;
+                disconnect_after_owner_loss(&mut session);
+                save_reconciled_session(&mut transaction, &session).await?;
+                detach_participant(
+                    &mut transaction,
+                    &session.public.room_id,
+                    &session.public.participant_id,
+                )
+                .await?;
+                reconciled += 1;
+                continue;
+            }
             if confirmed_stop_needs_reconciliation(&session) {
                 reconcile_confirmed_stop(&mut session);
                 save_reconciled_session(&mut transaction, &session).await?;
@@ -82,6 +101,14 @@ impl SqliteStore {
     }
 }
 
+fn unresolved_stop_lost_its_owner(session: &DurableAgentSession) -> bool {
+    session.lifecycle_intent_action == "stop"
+        && matches!(
+            session.lifecycle_intent_status.as_str(),
+            "prepared" | "unconfirmed"
+        )
+}
+
 fn confirmed_stop_needs_reconciliation(session: &DurableAgentSession) -> bool {
     session.lifecycle_intent_action == "stop"
         && session.lifecycle_intent_status == "effect_applied"
@@ -106,6 +133,27 @@ fn reconcile_confirmed_stop(session: &mut DurableAgentSession) {
     session.public.turn_phase.clear();
     session.runtime_handle_id.clear();
     session.runtime_owner_id.clear();
+    session.public.updated_at = Utc::now();
+}
+
+fn disconnect_after_owner_loss(session: &mut DurableAgentSession) {
+    merge_inflight_events(session);
+    "unavailable".clone_into(&mut session.public.status);
+    session.public.enabled = false;
+    "disconnected".clone_into(&mut session.public.runtime_status);
+    session.public.provider_session_active = false;
+    session.public.provider_session_reused = false;
+    session.public.active_turn_id.clear();
+    session.public.turn_phase.clear();
+    session.public.recovery_required = true;
+    "Provider runtime ownership was lost during restart."
+        .clone_into(&mut session.public.last_error);
+    "runtime_owner_lost".clone_into(&mut session.public.last_error_code);
+    session.runtime_handle_id.clear();
+    session.runtime_owner_id.clear();
+    session.lifecycle_intent_action.clear();
+    session.lifecycle_intent_id.clear();
+    session.lifecycle_intent_status.clear();
     session.public.updated_at = Utc::now();
 }
 

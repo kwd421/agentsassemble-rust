@@ -353,6 +353,60 @@ async fn confirmed_stop_checkpoint_survives_restart_and_finalizes_without_an_eff
 }
 
 #[tokio::test]
+async fn restart_terminalizes_a_prepared_stop_before_releasing_its_session() {
+    let (store, principal, _directory) = fixture().await;
+    let payload = json!({"agent_id": AGENT_ID});
+    let AgentStartPlan::Start(start) = store
+        .prepare_agent_start(&principal, "start-before-prepared-stop", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare start: {error}"))
+    else {
+        panic!("stopped session must require start");
+    };
+    store
+        .complete_agent_start(
+            &principal,
+            "start-before-prepared-stop",
+            &payload,
+            &start.operation_id,
+            &started("runtime-before-prepared-stop", "provider-thread"),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("complete start: {error}"));
+    let AgentStopPlan::Stop(_) = store
+        .prepare_agent_stop(&principal, "prepared-stop-owner-lost", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare stop: {error}"))
+    else {
+        panic!("running session must require stop");
+    };
+
+    assert_eq!(
+        store
+            .reconcile_agent_sessions_after_restart()
+            .await
+            .unwrap_or_else(|error| panic!("reconcile prepared stop: {error}")),
+        1
+    );
+    assert!(matches!(
+        store
+            .prepare_agent_stop(&principal, "prepared-stop-owner-lost", &payload)
+            .await,
+        Err(PersistenceError::CommandRejected {
+            code: "runtime_owner_lost",
+            ..
+        })
+    ));
+    assert!(matches!(
+        store
+            .prepare_agent_start(&principal, "new-start-after-owner-loss", &payload)
+            .await
+            .unwrap_or_else(|error| panic!("prepare new start: {error}")),
+        AgentStartPlan::Start(_)
+    ));
+}
+
+#[tokio::test]
 async fn provider_session_reuse_requires_exact_durable_identity() {
     let (store, principal, _directory) = fixture().await;
     let payload = json!({"agent_id": AGENT_ID});

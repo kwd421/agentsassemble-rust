@@ -530,7 +530,7 @@ async fn restart_invalidates_ambiguous_handle_before_any_stop_effect() {
             .prepare_agent_stop(&principal, "ambiguous-stop", &payload)
             .await,
         Err(PersistenceError::CommandRejected {
-            code: "runtime_handle_unavailable",
+            code: "runtime_owner_lost",
             ..
         })
     ));
@@ -545,17 +545,59 @@ async fn restart_invalidates_ambiguous_handle_before_any_stop_effect() {
         .unwrap_or_else(|error| panic!("decode invalidated ambiguous session: {error}"));
     assert!(invalidated.runtime_handle_id.is_empty());
     assert!(invalidated.runtime_owner_id.is_empty());
-    assert_eq!(invalidated.lifecycle_intent_action, "stop");
-    assert_eq!(invalidated.lifecycle_intent_status, "prepared");
+    assert!(invalidated.lifecycle_intent_action.is_empty());
+    assert!(invalidated.lifecycle_intent_status.is_empty());
+    assert_eq!(invalidated.public.last_error_code, "runtime_owner_lost");
+    let reservation_status = sqlx::query_scalar::<_, String>(
+        "SELECT status FROM lifecycle_command_reservations WHERE request_id = 'ambiguous-stop'",
+    )
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("read terminal reservation: {error}"));
+    assert_eq!(reservation_status, "owner_lost");
+    let AgentStartPlan::Start(replacement) = store
+        .prepare_agent_start(&principal, "replacement-after-restart", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare replacement start: {error}"))
+    else {
+        panic!("owner-lost stop must release the session for a new request");
+    };
+    store
+        .complete_agent_start(
+            &principal,
+            "replacement-after-restart",
+            &payload,
+            &replacement.operation_id,
+            &AgentRuntimeStarted {
+                runtime_handle_id: "replacement-runtime".to_owned(),
+                runtime_owner_id: "supervisor-instance-2".to_owned(),
+                provider_session_id: "provider-thread-preserved".to_owned(),
+                runtime_reused: false,
+                provider_session_reused: true,
+                provider_session_active: true,
+            },
+        )
+        .await
+        .unwrap_or_else(|error| panic!("complete replacement start: {error}"));
     assert!(matches!(
         store
-            .prepare_agent_start(&principal, "replacement-after-restart", &payload)
+            .prepare_agent_stop(&principal, "ambiguous-stop", &payload)
             .await,
         Err(PersistenceError::CommandRejected {
-            code: "operation_in_progress",
+            code: "runtime_owner_lost",
             ..
         })
     ));
+    let replaced = sqlx::query_scalar::<_, String>(
+        "SELECT session_json FROM agent_sessions WHERE room_id = 'general' AND session_id = ?",
+    )
+    .bind(AGENT_ID)
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("read replacement session: {error}"));
+    let replaced = serde_json::from_str::<DurableAgentSession>(&replaced)
+        .unwrap_or_else(|error| panic!("decode replacement session: {error}"));
+    assert_eq!(replaced.runtime_handle_id, "replacement-runtime");
 }
 
 async fn mark_ambiguous_stop(
