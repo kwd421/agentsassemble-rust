@@ -15,10 +15,17 @@ fn provider_guardian_entry() {
     }
 }
 
+#[test]
+fn inert_provider_entry() {
+    if std::env::var_os(crate::unix_process_tree::RUNTIME_TOKEN_ENV).is_some() {
+        loop {
+            std::thread::park();
+        }
+    }
+}
+
 #[tokio::test]
 async fn guardian_runs_outside_the_server_process_group() {
-    use tokio::io::{AsyncBufReadExt, BufReader};
-
     let _serial = RUNTIME_TEST_LOCK.lock().await;
     let suffix = uuid::Uuid::new_v4().to_string();
     let lease = crate::runtime_lease::HeldRuntimeLease::prepare(
@@ -28,8 +35,33 @@ async fn guardian_runs_outside_the_server_process_group() {
     .unwrap_or_else(|error| panic!("prepare guardian group lease: {error}"));
     let launch = crate::guardian::GuardianLaunch::test_harness()
         .unwrap_or_else(|error| panic!("bind guardian test harness: {error}"));
+    let provider = crate::filesystem::bind_helper_executable_sync(
+        &std::env::current_exe()
+            .unwrap_or_else(|error| panic!("resolve guardian fixture provider: {error}")),
+    )
+    .unwrap_or_else(|error| panic!("bind guardian fixture provider: {error}"));
+    let (provider_stdin, _stdin) =
+        std::io::pipe().unwrap_or_else(|error| panic!("create guardian fixture stdin: {error}"));
+    let (_stdout, provider_stdout) =
+        std::io::pipe().unwrap_or_else(|error| panic!("create guardian fixture stdout: {error}"));
+    let (_stderr, provider_stderr) =
+        std::io::pipe().unwrap_or_else(|error| panic!("create guardian fixture stderr: {error}"));
     let mut command = launch
-        .guardian_command(lease.path(), lease.token())
+        .guardian_command(
+            lease.path(),
+            lease.token(),
+            &provider,
+            &[
+                "--exact".to_owned(),
+                "runtime::tests::inert_provider_entry".to_owned(),
+                "--nocapture".to_owned(),
+            ],
+            [
+                provider_stdin.into(),
+                provider_stdout.into(),
+                provider_stderr.into(),
+            ],
+        )
         .unwrap_or_else(|error| panic!("configure guardian test command: {error}"));
     command
         .stdin(std::process::Stdio::piped())
@@ -41,7 +73,7 @@ async fn guardian_runs_outside_the_server_process_group() {
     let guardian_pid = guardian_child
         .id()
         .unwrap_or_else(|| panic!("guardian pid is unavailable"));
-    let cleanup = ExactProcessCleanup(guardian_pid);
+    let mut cleanup = ExactProcessCleanup::new(guardian_pid);
     let input = guardian_child
         .stdin
         .take()
@@ -50,27 +82,7 @@ async fn guardian_runs_outside_the_server_process_group() {
         .stdout
         .take()
         .unwrap_or_else(|| panic!("guardian output is unavailable"));
-    let anchor_pid = tokio::time::timeout(Duration::from_secs(5), async {
-        let mut output = BufReader::new(output);
-        for _ in 0..32 {
-            let mut line = String::new();
-            if output.read_line(&mut line).await? == 0 {
-                break;
-            }
-            if let Some(pid) = line
-                .trim()
-                .strip_prefix("AGENTSASSEMBLE_PROVIDER_ANCHOR=")
-                .and_then(|value| value.parse::<u32>().ok())
-            {
-                return Ok::<_, std::io::Error>(Some(pid));
-            }
-        }
-        Ok(None)
-    })
-    .await
-    .unwrap_or_else(|_| panic!("guardian readiness timed out"))
-    .unwrap_or_else(|error| panic!("read guardian readiness: {error}"))
-    .unwrap_or_else(|| panic!("guardian readiness was not published"));
+    let (anchor_pid, _) = read_guardian_ready(output, "guardian group").await;
     assert!(anchor_pid > 0);
     let guardian_process = i32::try_from(guardian_pid)
         .ok()
@@ -87,7 +99,78 @@ async fn guardian_runs_outside_the_server_process_group() {
         .unwrap_or_else(|_| panic!("guardian cleanup timed out"))
         .unwrap_or_else(|error| panic!("wait for guardian cleanup: {error}"));
     assert!(status.success());
-    drop(cleanup);
+    cleanup.disarm();
+    lease.cleanup_pre_effect();
+}
+
+#[tokio::test]
+async fn guardian_death_without_a_cleanup_receipt_never_proves_gone() {
+    let _serial = RUNTIME_TEST_LOCK.lock().await;
+    let suffix = uuid::Uuid::new_v4().to_string();
+    let room_id = format!("guardian-death-room-{suffix}");
+    let session_id = format!("guardian-death-session-{suffix}");
+    let lease = crate::runtime_lease::HeldRuntimeLease::prepare(&room_id, &session_id)
+        .unwrap_or_else(|error| panic!("prepare guardian death lease: {error}"));
+    let launch = crate::guardian::GuardianLaunch::test_harness()
+        .unwrap_or_else(|error| panic!("bind guardian death harness: {error}"));
+    let provider = crate::filesystem::bind_helper_executable_sync(
+        &std::env::current_exe()
+            .unwrap_or_else(|error| panic!("resolve guardian death provider: {error}")),
+    )
+    .unwrap_or_else(|error| panic!("bind guardian death provider: {error}"));
+    let (provider_stdin, _provider_input) =
+        std::io::pipe().unwrap_or_else(|error| panic!("create guardian death stdin: {error}"));
+    let (_provider_output, provider_stdout) =
+        std::io::pipe().unwrap_or_else(|error| panic!("create guardian death stdout: {error}"));
+    let (_provider_error, provider_stderr) =
+        std::io::pipe().unwrap_or_else(|error| panic!("create guardian death stderr: {error}"));
+    let mut command = launch
+        .guardian_command(
+            lease.path(),
+            lease.token(),
+            &provider,
+            &[
+                "--exact".to_owned(),
+                "runtime::tests::inert_provider_entry".to_owned(),
+                "--nocapture".to_owned(),
+            ],
+            [
+                provider_stdin.into(),
+                provider_stdout.into(),
+                provider_stderr.into(),
+            ],
+        )
+        .unwrap_or_else(|error| panic!("configure guardian death command: {error}"));
+    command
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null());
+    let mut guardian = command
+        .spawn()
+        .unwrap_or_else(|error| panic!("spawn guardian death command: {error}"));
+    let guardian_pid = guardian
+        .id()
+        .unwrap_or_else(|| panic!("guardian death pid is unavailable"));
+    let mut guardian_cleanup = ExactProcessCleanup::new(guardian_pid);
+    let output = guardian
+        .stdout
+        .take()
+        .unwrap_or_else(|| panic!("guardian death output is unavailable"));
+    let (anchor_pid, _) = read_guardian_ready(output, "guardian death").await;
+    let mut group_cleanup = ExactProcessGroupCleanup::new(anchor_pid);
+    guardian_cleanup.kill_now();
+    tokio::time::timeout(Duration::from_secs(2), guardian.wait())
+        .await
+        .unwrap_or_else(|_| panic!("guardian death wait timed out"))
+        .unwrap_or_else(|error| panic!("wait for killed guardian: {error}"));
+    guardian_cleanup.disarm();
+    group_cleanup.kill_now();
+    wait_until(Duration::from_secs(2), || !process_group_exists(anchor_pid)).await;
+    group_cleanup.disarm();
+    assert_eq!(
+        crate::runtime_lease::observe_runtime_lease(&room_id, &session_id),
+        crate::runtime_lease::LeaseObservation::Unknown
+    );
     lease.cleanup_pre_effect();
 }
 
@@ -106,22 +189,23 @@ fn escaped_descendant_entry() {
     }
     rustix::process::setsid()
         .unwrap_or_else(|error| panic!("create escaped descendant session: {error}"));
-    std::process::Command::new(
-        std::env::current_exe()
-            .unwrap_or_else(|error| panic!("resolve escaped descendant binary: {error}")),
-    )
-    .args([
-        "--exact",
-        "runtime::tests::escaped_descendant_entry",
-        "--nocapture",
-    ])
-    .env_remove(crate::unix_process_tree::RUNTIME_TOKEN_ENV)
-    .env("AGENTSASSEMBLE_ESCAPE_FIXTURE_CHILD", "1")
-    .stdin(std::process::Stdio::null())
-    .stdout(std::process::Stdio::null())
-    .stderr(std::process::Stdio::null())
-    .spawn()
-    .unwrap_or_else(|error| panic!("spawn reparented descendant: {error}"));
+    std::process::Command::new("/bin/sh")
+        .args([
+            "-c",
+            "exec 198>&-; exec \"$1\" --exact runtime::tests::escaped_descendant_entry --nocapture",
+            "escaped-descendant",
+            &std::env::current_exe()
+                .unwrap_or_else(|error| panic!("resolve escaped descendant binary: {error}"))
+                .to_string_lossy(),
+        ])
+        .env_clear()
+        .env("AGENTSASSEMBLE_ESCAPE_FIXTURE_PID", pid_path)
+        .env("AGENTSASSEMBLE_ESCAPE_FIXTURE_CHILD", "1")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap_or_else(|error| panic!("spawn reparented descendant: {error}"));
 }
 
 #[tokio::test]
@@ -132,7 +216,7 @@ async fn codex_runtime_is_initialized_reused_and_stopped_by_exact_owner() {
     let executable = directory.path().join("codex-fixture");
     std::fs::write(
         &executable,
-        b"#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\nIFS= read -r initialized\nwhile :; do sleep 1; done\n",
+        b"#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\nIFS= read -r initialized\nIFS= read -r forever\n",
     )
     .unwrap_or_else(|error| panic!("write runtime fixture: {error}"));
     let mut permissions = std::fs::metadata(&executable)
@@ -266,21 +350,30 @@ async fn stop_kills_descendants_after_the_codex_leader_exits() {
         .await
         .unwrap_or_else(|error| panic!("start descendant fixture: {error}"));
     let pid = wait_for_pid(&descendant_pid).await;
-    let _cleanup = ExactProcessCleanup(pid);
+    let mut cleanup = ExactProcessCleanup::new(pid);
     wait_until(Duration::from_secs(2), || {
         !leader_is_alive(&adapter, &session)
     })
     .await;
     assert!(process_exists(pid));
-    adapter
+    let stopped = adapter
         .stop(
             &session.public.room_id,
             &session.public.session_id,
             &started.runtime_handle_id,
             &started.runtime_owner_id,
         )
-        .await
-        .unwrap_or_else(|error| panic!("stop exited leader and descendants: {error}"));
+        .await;
+    #[cfg(not(target_os = "macos"))]
+    stopped.unwrap_or_else(|error| panic!("stop exited leader and descendants: {error}"));
+    #[cfg(target_os = "macos")]
+    {
+        let Err(error) = stopped else {
+            panic!("macOS must fail closed when the provider forked before its leader exited");
+        };
+        assert_eq!(error.code, "provider_stop_unconfirmed");
+    }
+    #[cfg(not(target_os = "macos"))]
     adapter
         .release_confirmed_stop(
             &session.public.room_id,
@@ -289,7 +382,17 @@ async fn stop_kills_descendants_after_the_codex_leader_exits() {
             &started.runtime_owner_id,
         )
         .await;
+    #[cfg(target_os = "macos")]
+    {
+        cleanup.kill_now();
+    }
     wait_until(Duration::from_secs(2), || !process_exists(pid)).await;
+    cleanup.disarm();
+    #[cfg(target_os = "macos")]
+    crate::runtime_lease::cleanup_stale_runtime_lease(
+        &session.public.room_id,
+        &session.public.session_id,
+    );
 }
 
 #[tokio::test]
@@ -302,7 +405,7 @@ async fn stop_captures_a_reparented_descendant_from_a_new_session() {
     let test_binary = std::env::current_exe()
         .unwrap_or_else(|error| panic!("resolve provider test binary: {error}"));
     let script = format!(
-        "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nAGENTSASSEMBLE_ESCAPE_FIXTURE_PID={} {} --exact runtime::tests::escaped_descendant_entry --nocapture </dev/null >/dev/null 2>&1 &\nwhile :; do sleep 1; done\n",
+        "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nAGENTSASSEMBLE_ESCAPE_FIXTURE_PID={} {} --exact runtime::tests::escaped_descendant_entry --nocapture </dev/null >/dev/null 2>&1 &\nIFS= read -r forever\n",
         shell_quote(&descendant_pid),
         shell_quote(&test_binary),
     );
@@ -313,7 +416,7 @@ async fn stop_captures_a_reparented_descendant_from_a_new_session() {
         .await
         .unwrap_or_else(|error| panic!("start escaped descendant fixture: {error}"));
     let pid = wait_for_pid(&descendant_pid).await;
-    let cleanup = ExactProcessCleanup(pid);
+    let mut cleanup = ExactProcessCleanup::new(pid);
     assert!(process_exists(pid));
     let stopped = adapter
         .stop(
@@ -338,14 +441,14 @@ async fn stop_captures_a_reparented_descendant_from_a_new_session() {
         let fresh = ProviderAdapter::new();
         assert!(matches!(
             fresh.observe(&durable_session).await,
-            ProviderRuntimeObservation::LeaseUncertain { .. }
+            ProviderRuntimeObservation::Ambiguous { .. }
         ));
-        drop(cleanup);
+        cleanup.kill_now();
         wait_until(Duration::from_secs(2), || !process_exists(pid)).await;
-        assert_eq!(
+        assert!(matches!(
             fresh.observe(&durable_session).await,
-            ProviderRuntimeObservation::Gone
-        );
+            ProviderRuntimeObservation::Ambiguous { .. }
+        ));
         crate::runtime_lease::cleanup_stale_runtime_lease(
             &session.public.room_id,
             &session.public.session_id,
@@ -362,7 +465,7 @@ async fn stop_captures_a_reparented_descendant_from_a_new_session() {
             )
             .await;
         wait_until(Duration::from_secs(2), || !process_exists(pid)).await;
-        drop(cleanup);
+        cleanup.disarm();
     }
 }
 
@@ -371,7 +474,7 @@ async fn fresh_supervisor_uses_the_guardian_lease_before_reporting_gone() {
     let _serial = RUNTIME_TEST_LOCK.lock().await;
     let directory =
         tempfile::tempdir().unwrap_or_else(|error| panic!("create guardian fixture: {error}"));
-    let script = "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\nIFS= read -r initialized\nwhile :; do sleep 1; done\n";
+    let script = "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\nIFS= read -r initialized\nIFS= read -r forever\n";
     let mut session = fixture_session(directory.path(), script).await;
     let adapter = ProviderAdapter::new();
     let started = adapter
@@ -387,7 +490,7 @@ async fn fresh_supervisor_uses_the_guardian_lease_before_reporting_gone() {
     ));
     drop(adapter);
     let mut observation = fresh.observe(&session).await;
-    for _ in 0..200 {
+    for _ in 0..800 {
         if observation == ProviderRuntimeObservation::Gone {
             break;
         }
@@ -417,14 +520,27 @@ async fn cancelled_initialization_remains_owned_for_shutdown() {
     let pending_session = session.clone();
     let pending = tokio::spawn(async move { pending_adapter.start(&pending_session).await });
     let pid = wait_for_pid(&descendant_pid).await;
-    let _cleanup = ExactProcessCleanup(pid);
+    let mut cleanup = ExactProcessCleanup::new(pid);
     pending.abort();
     let _ = pending.await;
-    adapter
-        .shutdown()
-        .await
-        .unwrap_or_else(|error| panic!("shutdown cancelled initialization: {error}"));
+    let shutdown = adapter.shutdown().await;
+    #[cfg(not(target_os = "macos"))]
+    shutdown.unwrap_or_else(|error| panic!("shutdown cancelled initialization: {error}"));
+    #[cfg(target_os = "macos")]
+    {
+        let Err(error) = shutdown else {
+            panic!("macOS must fail closed after a cancelled provider fork");
+        };
+        assert_eq!(error.code, "provider_stop_unconfirmed");
+        cleanup.kill_now();
+    }
     wait_until(Duration::from_secs(2), || !process_exists(pid)).await;
+    cleanup.disarm();
+    #[cfg(target_os = "macos")]
+    crate::runtime_lease::cleanup_stale_runtime_lease(
+        &session.public.room_id,
+        &session.public.session_id,
+    );
 }
 
 async fn fixture_session(directory: &Path, script: &str) -> DurableAgentSession {
@@ -509,20 +625,107 @@ fn process_exists(raw_pid: u32) -> bool {
         })
 }
 
+async fn read_guardian_ready(output: tokio::process::ChildStdout, context: &str) -> (u32, u32) {
+    use tokio::io::{AsyncBufReadExt, BufReader};
+
+    let ready = tokio::time::timeout(Duration::from_secs(5), async {
+        let mut output = BufReader::new(output);
+        for _ in 0..32 {
+            let mut line = String::new();
+            if output.read_line(&mut line).await? == 0 {
+                break;
+            }
+            if let Some(identities) = line
+                .trim()
+                .strip_prefix("AGENTSASSEMBLE_PROVIDER_READY=")
+                .and_then(|value| value.split_once(':'))
+                .and_then(|(anchor, provider)| {
+                    Some((anchor.parse::<u32>().ok()?, provider.parse::<u32>().ok()?))
+                })
+            {
+                return Ok::<_, std::io::Error>(Some(identities));
+            }
+        }
+        Ok(None)
+    })
+    .await
+    .unwrap_or_else(|_| panic!("{context} readiness timed out"))
+    .unwrap_or_else(|error| panic!("read {context} readiness: {error}"));
+    ready.unwrap_or_else(|| panic!("{context} readiness was not published"))
+}
+
+fn process_group_exists(raw_pid: u32) -> bool {
+    i32::try_from(raw_pid)
+        .ok()
+        .and_then(rustix::process::Pid::from_raw)
+        .is_some_and(|pid| match rustix::process::test_kill_process_group(pid) {
+            Ok(()) | Err(rustix::io::Errno::PERM) => true,
+            Err(rustix::io::Errno::SRCH) => false,
+            Err(error) => panic!("inspect exact process group {raw_pid}: {error}"),
+        })
+}
+
 fn shell_quote(path: &Path) -> String {
     format!("'{}'", path.to_string_lossy().replace('\'', "'\\''"))
 }
 
-struct ExactProcessCleanup(u32);
+struct ExactProcessCleanup(Option<u32>);
 
-impl Drop for ExactProcessCleanup {
-    fn drop(&mut self) {
-        if let Some(pid) = i32::try_from(self.0)
+impl ExactProcessCleanup {
+    const fn new(pid: u32) -> Self {
+        Self(Some(pid))
+    }
+
+    fn kill_now(&mut self) {
+        let Some(raw_pid) = self.0.take() else {
+            return;
+        };
+        if let Some(pid) = i32::try_from(raw_pid)
             .ok()
             .and_then(rustix::process::Pid::from_raw)
         {
             let _ = rustix::process::kill_process(pid, rustix::process::Signal::KILL);
         }
+    }
+
+    fn disarm(&mut self) {
+        self.0 = None;
+    }
+}
+
+impl Drop for ExactProcessCleanup {
+    fn drop(&mut self) {
+        self.kill_now();
+    }
+}
+
+struct ExactProcessGroupCleanup(Option<u32>);
+
+impl ExactProcessGroupCleanup {
+    const fn new(pid: u32) -> Self {
+        Self(Some(pid))
+    }
+
+    fn kill_now(&mut self) {
+        let Some(raw_pid) = self.0.take() else {
+            return;
+        };
+        if let Some(pid) = i32::try_from(raw_pid)
+            .ok()
+            .and_then(rustix::process::Pid::from_raw)
+        {
+            let _ = rustix::process::kill_process_group(pid, rustix::process::Signal::KILL);
+        }
+    }
+
+    fn disarm(&mut self) {
+        self.0 = None;
+    }
+}
+
+impl Drop for ExactProcessGroupCleanup {
+    fn drop(&mut self) {
+        self.kill_now();
     }
 }
 

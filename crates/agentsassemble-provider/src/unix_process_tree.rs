@@ -10,6 +10,8 @@ const MAX_CAPTURED_PROCESSES: usize = 512;
 const MAX_ENVIRONMENT_BYTES: u64 = 64 * 1024;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 const MAX_SCANNED_DESCRIPTORS: usize = 1_048_576;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+const MAX_FDINFO_BYTES: u64 = 16 * 1024;
 #[cfg(target_os = "linux")]
 const MAX_CAPTURE_PASSES: usize = 8;
 
@@ -19,15 +21,27 @@ pub(crate) fn tagged_runtime_exists(token: &str) -> io::Result<bool> {
 
 pub(crate) struct CapturedRuntimeProcesses {
     #[cfg(target_os = "linux")]
-    escaped: Vec<rustix::fd::OwnedFd>,
+    escaped: Vec<CapturedProcess>,
+    anchored_group: Pid,
     captured_count: usize,
 }
 
+#[cfg(target_os = "linux")]
+struct CapturedProcess {
+    handle: rustix::fd::OwnedFd,
+    identity: ProcessIdentity,
+}
+
 impl CapturedRuntimeProcesses {
-    pub(crate) fn freeze(lease_path: &Path, token: &str, anchored_group: Pid) -> io::Result<Self> {
+    pub(crate) fn freeze(
+        lease_path: &Path,
+        token: &str,
+        anchored_group: Pid,
+        provider_was_running: bool,
+    ) -> io::Result<Self> {
         rustix::process::kill_process_group(anchored_group, Signal::STOP)
             .map_err(|error| io::Error::other(format!("stop anchor group: {error}")))?;
-        capture_escaped(lease_path, token, anchored_group)
+        capture_escaped(lease_path, token, anchored_group, provider_was_running)
             .map_err(|error| io::Error::other(format!("capture escaped runtime: {error}")))
     }
 
@@ -39,7 +53,7 @@ impl CapturedRuntimeProcesses {
         }
         #[cfg(target_os = "linux")]
         for process in self.escaped.iter().rev() {
-            match rustix::process::pidfd_send_signal(process, Signal::KILL) {
+            match rustix::process::pidfd_send_signal(&process.handle, Signal::KILL) {
                 Ok(()) | Err(rustix::io::Errno::SRCH) => {}
                 Err(error) => return Err(error.into()),
             }
@@ -59,9 +73,25 @@ impl CapturedRuntimeProcesses {
             ));
         }
         let started = std::time::Instant::now();
-        while tagged_runtime_exists(token)?
-            || crate::runtime_lease::provider_lifetime_is_active(lease_path, token)?
-        {
+        loop {
+            #[cfg(target_os = "linux")]
+            reap_exited_children()?;
+            let group_exists = match rustix::process::test_kill_process_group(self.anchored_group) {
+                Ok(()) | Err(rustix::io::Errno::PERM) => true,
+                Err(rustix::io::Errno::SRCH) => false,
+                Err(error) => return Err(error.into()),
+            };
+            #[cfg(target_os = "linux")]
+            let captured_exists = captured_processes_exist(&self.escaped)?;
+            #[cfg(not(target_os = "linux"))]
+            let captured_exists = false;
+            if !group_exists
+                && !captured_exists
+                && !tagged_runtime_exists(token)?
+                && !crate::runtime_lease::provider_lifetime_is_active(lease_path, token)?
+            {
+                return Ok(());
+            }
             if started.elapsed() >= deadline {
                 return Err(io::Error::other(
                     "provider runtime processes remained after shutdown",
@@ -69,8 +99,26 @@ impl CapturedRuntimeProcesses {
             }
             std::thread::sleep(Duration::from_millis(10));
         }
-        Ok(())
     }
+}
+
+#[cfg(target_os = "linux")]
+fn reap_exited_children() -> io::Result<()> {
+    while rustix::process::wait(rustix::process::WaitOptions::NOHANG)?.is_some() {}
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn captured_processes_exist(processes: &[CapturedProcess]) -> io::Result<bool> {
+    for process in processes {
+        let Some(pid) = Pid::from_raw(process.identity.pid) else {
+            continue;
+        };
+        if process_identity(pid)? == Some(process.identity) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 #[cfg(target_os = "linux")]
@@ -78,6 +126,7 @@ fn capture_escaped(
     lease_path: &Path,
     token: &str,
     anchored_group: Pid,
+    _provider_was_running: bool,
 ) -> io::Result<CapturedRuntimeProcesses> {
     use std::collections::HashSet;
 
@@ -89,7 +138,7 @@ fn capture_escaped(
     for _ in 0..MAX_CAPTURE_PASSES {
         let mut added = false;
         let mut unstable = false;
-        for identity in owned_processes(token, lifetime)? {
+        for identity in runtime_descendants(token, lifetime, rustix::process::getpid())? {
             let Some(process) = Pid::from_raw(identity.pid) else {
                 continue;
             };
@@ -111,7 +160,7 @@ fn capture_escaped(
                 }
                 Err(error) => return Err(error.into()),
             };
-            if !owned_identity_matches(identity, token, lifetime)? {
+            if !owned_identity_matches(identity, token, lifetime, rustix::process::getpid())? {
                 unstable = true;
                 continue;
             }
@@ -124,7 +173,7 @@ fn capture_escaped(
                 }
                 Err(error) => return Err(error.into()),
             }
-            if !owned_identity_matches(identity, token, lifetime)? {
+            if !owned_identity_matches(identity, token, lifetime, rustix::process::getpid())? {
                 unstable = true;
                 continue;
             }
@@ -136,19 +185,23 @@ fn capture_escaped(
                 }
                 Err(error) => return Err(error.into()),
             }
-            if !owned_identity_matches(identity, token, lifetime)? {
+            if !owned_identity_matches(identity, token, lifetime, rustix::process::getpid())? {
                 return Err(io::Error::other(
                     "provider runtime identity changed while it was captured",
                 ));
             }
             captured.insert(identity);
-            escaped.push(process_fd);
+            escaped.push(CapturedProcess {
+                handle: process_fd,
+                identity,
+            });
             added = true;
         }
         if !added && !unstable {
             let captured_count = escaped.len();
             return Ok(CapturedRuntimeProcesses {
                 escaped,
+                anchored_group,
                 captured_count,
             });
         }
@@ -163,9 +216,13 @@ fn capture_escaped(
     lease_path: &Path,
     token: &str,
     anchored_group: Pid,
+    _provider_was_running: bool,
 ) -> io::Result<CapturedRuntimeProcesses> {
     refuse_unstable_escaped_processes(lease_path, token, anchored_group, true)?;
-    Ok(CapturedRuntimeProcesses { captured_count: 0 })
+    Ok(CapturedRuntimeProcesses {
+        anchored_group,
+        captured_count: 0,
+    })
 }
 
 #[cfg(target_os = "macos")]
@@ -173,9 +230,18 @@ fn capture_escaped(
     lease_path: &Path,
     token: &str,
     anchored_group: Pid,
+    provider_was_running: bool,
 ) -> io::Result<CapturedRuntimeProcesses> {
-    refuse_unstable_escaped_processes(lease_path, token, anchored_group, false)?;
-    Ok(CapturedRuntimeProcesses { captured_count: 0 })
+    if !provider_was_running {
+        return Err(io::Error::other(
+            "provider exited before macOS descendant custody could be proven",
+        ));
+    }
+    refuse_unstable_escaped_processes(lease_path, token, anchored_group, true)?;
+    Ok(CapturedRuntimeProcesses {
+        anchored_group,
+        captured_count: 0,
+    })
 }
 
 #[cfg(any(target_os = "android", target_os = "macos"))]
@@ -191,13 +257,13 @@ fn refuse_unstable_escaped_processes(
         #[cfg(target_os = "android")]
         {
             let lifetime = crate::runtime_lease::provider_lifetime_identity(lease_path, token)?;
-            owned_processes(token, lifetime)?
+            runtime_descendants(token, lifetime, rustix::process::getpid())?
                 .into_iter()
                 .filter_map(|identity| Pid::from_raw(identity.pid))
                 .collect()
         }
-        #[cfg(not(target_os = "android"))]
-        unreachable!()
+        #[cfg(target_os = "macos")]
+        descendant_processes_macos(rustix::process::getpid())?
     } else {
         tagged_processes(token)?
     };
@@ -237,7 +303,8 @@ fn owned_processes(
     let snapshot = process_snapshot()?;
     let mut owned = HashMap::<i32, ProcessIdentity>::new();
     let mut scanned_descriptors = 0_usize;
-    for identity in snapshot.values().copied() {
+    for record in snapshot.values().copied() {
+        let identity = record.identity;
         let Some(process) = Pid::from_raw(identity.pid) else {
             continue;
         };
@@ -257,11 +324,30 @@ fn owned_processes(
     Ok(owned.into_values().collect())
 }
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn runtime_descendants(
+    token: &str,
+    lifetime: crate::runtime_lease::ProviderLifetimeIdentity,
+    guardian: Pid,
+) -> io::Result<Vec<ProcessIdentity>> {
+    use std::collections::HashMap;
+
+    let mut processes = owned_processes(token, lifetime)?
+        .into_iter()
+        .map(|identity| (identity.pid, identity))
+        .collect::<HashMap<_, _>>();
+    for identity in descendant_processes(guardian)? {
+        processes.insert(identity.pid, identity);
+    }
+    Ok(processes.into_values().collect())
+}
+
 #[cfg(target_os = "linux")]
 fn owned_identity_matches(
     expected: ProcessIdentity,
     token: &str,
     lifetime: crate::runtime_lease::ProviderLifetimeIdentity,
+    guardian: Pid,
 ) -> io::Result<bool> {
     let Some(process) = Pid::from_raw(expected.pid) else {
         return Ok(false);
@@ -272,7 +358,8 @@ fn owned_identity_matches(
     let mut scanned_descriptors = 0;
     Ok(
         process_has_lifetime(process, lifetime, &mut scanned_descriptors)?
-            || process_has_token(process, token)?,
+            || process_has_token(process, token)?
+            || descendant_processes(guardian)?.contains(&expected),
     )
 }
 
@@ -304,14 +391,54 @@ fn process_has_lifetime(
             Err(error) => return Err(error),
         };
         if metadata.dev() == lifetime.device && metadata.ino() == lifetime.inode {
-            return Ok(true);
+            let Some(raw_fd) = entry.file_name().to_str().map(str::to_owned) else {
+                continue;
+            };
+            if descriptor_holds_lifetime_lock(process, &raw_fd)? {
+                return Ok(true);
+            }
         }
     }
     Ok(false)
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn process_snapshot() -> io::Result<std::collections::HashMap<i32, ProcessIdentity>> {
+fn descriptor_holds_lifetime_lock(process: Pid, raw_fd: &str) -> io::Result<bool> {
+    use std::io::Read;
+
+    if raw_fd.is_empty() || !raw_fd.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Ok(false);
+    }
+    let path = format!("/proc/{}/fdinfo/{raw_fd}", process.as_raw_pid());
+    let file = match std::fs::File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error),
+    };
+    let mut contents = String::new();
+    file.take(MAX_FDINFO_BYTES + 1)
+        .read_to_string(&mut contents)?;
+    if contents.len() as u64 > MAX_FDINFO_BYTES {
+        return Err(io::Error::other(
+            "provider runtime descriptor metadata was oversized",
+        ));
+    }
+    Ok(fdinfo_has_shared_flock(&contents))
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn fdinfo_has_shared_flock(contents: &str) -> bool {
+    contents.lines().any(|line| {
+        let fields = line.split_ascii_whitespace().collect::<Vec<_>>();
+        matches!(
+            fields.as_slice(),
+            ["lock:", _, "FLOCK", "ADVISORY", "READ", _, _, _, _, ..]
+        )
+    })
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn process_snapshot() -> io::Result<std::collections::HashMap<i32, ProcessRecord>> {
     use std::os::unix::fs::MetadataExt;
 
     let mut snapshot = std::collections::HashMap::new();
@@ -342,8 +469,8 @@ fn process_snapshot() -> io::Result<std::collections::HashMap<i32, ProcessIdenti
         let Some(pid) = Pid::from_raw(raw_pid) else {
             continue;
         };
-        if let Some(identity) = process_identity(pid)? {
-            snapshot.insert(raw_pid, identity);
+        if let Some(record) = process_record(pid)? {
+            snapshot.insert(raw_pid, record);
         }
     }
     Ok(snapshot)
@@ -351,6 +478,18 @@ fn process_snapshot() -> io::Result<std::collections::HashMap<i32, ProcessIdenti
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn process_identity(process: Pid) -> io::Result<Option<ProcessIdentity>> {
+    Ok(process_record(process)?.map(|record| record.identity))
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[derive(Clone, Copy)]
+struct ProcessRecord {
+    identity: ProcessIdentity,
+    parent_pid: i32,
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn process_record(process: Pid) -> io::Result<Option<ProcessRecord>> {
     let path = format!("/proc/{}/stat", process.as_raw_pid());
     let contents = match std::fs::read_to_string(path) {
         Ok(contents) => contents,
@@ -363,14 +502,45 @@ fn process_identity(process: Pid) -> io::Result<Option<ProcessIdentity>> {
         .1
         .split_whitespace()
         .collect::<Vec<_>>();
+    let parent_pid = fields
+        .get(1)
+        .and_then(|value| value.parse::<i32>().ok())
+        .ok_or_else(|| io::Error::other("provider process parent is invalid"))?;
     let start_time = fields
         .get(19)
         .and_then(|value| value.parse::<u64>().ok())
         .ok_or_else(|| io::Error::other("provider process start time is invalid"))?;
-    Ok(Some(ProcessIdentity {
-        pid: process.as_raw_pid(),
-        start_time,
+    Ok(Some(ProcessRecord {
+        identity: ProcessIdentity {
+            pid: process.as_raw_pid(),
+            start_time,
+        },
+        parent_pid,
     }))
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn descendant_processes(guardian: Pid) -> io::Result<Vec<ProcessIdentity>> {
+    use std::collections::HashSet;
+
+    let snapshot = process_snapshot()?;
+    let mut lineage = HashSet::from([guardian.as_raw_pid()]);
+    let mut descendants = Vec::new();
+    for _ in 0..MAX_CAPTURED_PROCESSES {
+        let mut added = false;
+        for record in snapshot.values().copied() {
+            if lineage.contains(&record.parent_pid) && lineage.insert(record.identity.pid) {
+                descendants.push(record.identity);
+                added = true;
+            }
+        }
+        if !added {
+            return Ok(descendants);
+        }
+    }
+    Err(io::Error::other(
+        "provider runtime descendant depth exceeded its bound",
+    ))
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android", target_os = "macos")))]
@@ -378,10 +548,66 @@ fn capture_escaped(
     _lease_path: &Path,
     _token: &str,
     _anchored_group: Pid,
+    _provider_was_running: bool,
 ) -> io::Result<CapturedRuntimeProcesses> {
     Err(io::Error::new(
         io::ErrorKind::Unsupported,
         "provider runtime process capture is unsupported",
+    ))
+}
+
+#[cfg(target_os = "macos")]
+fn descendant_processes_macos(guardian: Pid) -> io::Result<Vec<Pid>> {
+    use std::collections::HashSet;
+
+    use sysinfo::{ProcessRefreshKind, ProcessStatus, ProcessesToUpdate, System, UpdateKind};
+
+    let mut system = System::new();
+    system.refresh_processes_specifics(
+        ProcessesToUpdate::All,
+        true,
+        ProcessRefreshKind::nothing().with_user(UpdateKind::Always),
+    );
+    if system.processes().len() > MAX_SCANNED_PROCESSES {
+        return Err(io::Error::other(
+            "provider runtime process scan budget was exceeded",
+        ));
+    }
+    let effective_user = rustix::process::geteuid().as_raw();
+    let mut lineage = HashSet::from([guardian.as_raw_pid().cast_unsigned()]);
+    let mut descendants = Vec::new();
+    for _ in 0..MAX_CAPTURED_PROCESSES {
+        let mut added = false;
+        for (raw_pid, process) in system.processes() {
+            if matches!(
+                process.status(),
+                ProcessStatus::Zombie | ProcessStatus::Dead
+            ) || process
+                .user_id()
+                .is_none_or(|user_id| **user_id != effective_user)
+            {
+                continue;
+            }
+            let Some(parent) = process.parent().map(sysinfo::Pid::as_u32) else {
+                continue;
+            };
+            let pid = raw_pid.as_u32();
+            if !lineage.contains(&parent) || !lineage.insert(pid) {
+                continue;
+            }
+            let process = i32::try_from(pid)
+                .ok()
+                .and_then(Pid::from_raw)
+                .ok_or_else(|| io::Error::other("provider descendant pid is invalid"))?;
+            descendants.push(process);
+            added = true;
+        }
+        if !added {
+            return Ok(descendants);
+        }
+    }
+    Err(io::Error::other(
+        "provider runtime descendant depth exceeded its bound",
     ))
 }
 
@@ -516,4 +742,59 @@ fn tagged_processes(_token: &str) -> io::Result<Vec<Pid>> {
         io::ErrorKind::Unsupported,
         "provider runtime process scan is unsupported",
     ))
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::{fdinfo_has_shared_flock, process_has_lifetime};
+    use std::fs::OpenOptions;
+
+    #[test]
+    fn fdinfo_parser_requires_a_shared_flock_record() {
+        assert!(fdinfo_has_shared_flock(
+            "pos:\t0\nlock:\t1: FLOCK  ADVISORY  READ 123 00:01:2 0 EOF\n"
+        ));
+        assert!(!fdinfo_has_shared_flock(
+            "lock:\t1: FLOCK  ADVISORY  WRITE 123 00:01:2 0 EOF\n"
+        ));
+        assert!(!fdinfo_has_shared_flock(
+            "lock:\t1: POSIX  ADVISORY  READ 123 00:01:2 0 EOF\n"
+        ));
+        assert!(!fdinfo_has_shared_flock("pos:\t0\nflags:\t0100002\n"));
+    }
+
+    #[test]
+    fn transient_lifetime_opener_is_not_an_owner() {
+        let suffix = uuid::Uuid::new_v4();
+        let lease = crate::runtime_lease::HeldRuntimeLease::prepare(
+            &format!("fdinfo-room-{suffix}"),
+            &format!("fdinfo-session-{suffix}"),
+        )
+        .unwrap_or_else(|error| panic!("prepare fdinfo runtime lease: {error}"));
+        let identity =
+            crate::runtime_lease::provider_lifetime_identity(lease.path(), lease.token())
+                .unwrap_or_else(|error| panic!("identify fdinfo lifetime lease: {error}"));
+        let lifetime_path = lease.path().with_extension("lifetime");
+        let plain = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&lifetime_path)
+            .unwrap_or_else(|error| panic!("open lifetime without a lock: {error}"));
+        let mut scanned = 0;
+        assert!(
+            !process_has_lifetime(rustix::process::getpid(), identity, &mut scanned)
+                .unwrap_or_else(|error| panic!("scan transient lifetime opener: {error}"))
+        );
+        let locked =
+            crate::runtime_lease::open_provider_lifetime_lease(lease.path(), lease.token())
+                .unwrap_or_else(|error| panic!("lock provider lifetime: {error}"));
+        scanned = 0;
+        assert!(
+            process_has_lifetime(rustix::process::getpid(), identity, &mut scanned)
+                .unwrap_or_else(|error| panic!("scan locked lifetime opener: {error}"))
+        );
+        drop(locked);
+        drop(plain);
+        lease.cleanup_pre_effect();
+    }
 }

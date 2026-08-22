@@ -57,6 +57,7 @@ dependencies = [
  "command-fds",
  "fs2",
  "futures-util",
+ "nix",
  "process-wrap",
  "rustix",
  "same-file",

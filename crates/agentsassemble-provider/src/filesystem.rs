@@ -36,6 +36,11 @@ impl BoundExecutable {
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
+    pub(crate) fn try_clone_file(&self) -> io::Result<File> {
+        self.file.try_clone()
+    }
+
+    #[cfg(all(test, any(target_os = "linux", target_os = "android")))]
     pub(crate) fn configure_command(
         &self,
         command: &mut tokio::process::Command,
@@ -60,13 +65,23 @@ impl BoundExecutable {
         &self,
         command: &mut std::process::Command,
     ) -> io::Result<()> {
+        self.configure_std_command_with_mappings(command, Vec::new())
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    pub(crate) fn configure_std_command_with_mappings(
+        &self,
+        command: &mut std::process::Command,
+        mut mappings: Vec<command_fds::FdMapping>,
+    ) -> io::Result<()> {
         use command_fds::{CommandFdExt, FdMapping};
 
+        mappings.push(FdMapping {
+            parent_fd: self.file.try_clone()?.into(),
+            child_fd: 3,
+        });
         command
-            .fd_mappings(vec![FdMapping {
-                parent_fd: self.file.try_clone()?.into(),
-                child_fd: 3,
-            }])
+            .fd_mappings(mappings)
             .map(|_| ())
             .map_err(io::Error::other)
     }
@@ -74,9 +89,23 @@ impl BoundExecutable {
     #[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
     pub(crate) fn configure_std_command(
         &self,
-        _command: &mut std::process::Command,
+        command: &mut std::process::Command,
     ) -> io::Result<()> {
+        self.configure_std_command_with_mappings(command, Vec::new())
+    }
+
+    #[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
+    pub(crate) fn configure_std_command_with_mappings(
+        &self,
+        command: &mut std::process::Command,
+        mappings: Vec<command_fds::FdMapping>,
+    ) -> io::Result<()> {
+        use command_fds::CommandFdExt;
+
         drop(self.file.try_clone()?);
+        if !mappings.is_empty() {
+            command.fd_mappings(mappings).map_err(io::Error::other)?;
+        }
         Ok(())
     }
 }

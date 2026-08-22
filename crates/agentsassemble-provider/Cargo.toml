@@ -27,6 +27,7 @@ rustix.workspace = true
 tempfile.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
+nix = { version = "0.31.3", default-features = false, features = ["event"] }
 sysinfo.workspace = true
 
 [target.'cfg(windows)'.dependencies]

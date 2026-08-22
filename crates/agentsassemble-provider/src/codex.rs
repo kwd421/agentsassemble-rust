@@ -1,23 +1,27 @@
-use std::{collections::VecDeque, io, process::Stdio, time::Duration};
+use std::{collections::VecDeque, time::Duration};
+
+#[cfg(not(unix))]
+use std::{io, process::Stdio};
 
 use agentsassemble_domain::DurableAgentSession;
 use futures_util::StreamExt;
 #[cfg(windows)]
 use process_wrap::tokio::JobObject;
+#[cfg(not(unix))]
 use process_wrap::tokio::{ChildWrapper, CommandWrap, KillOnDrop};
 use serde_json::{Value, json};
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    process::ChildStdin,
+    io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
     task::JoinHandle,
 };
 use tokio_util::codec::{FramedRead, LinesCodec};
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 use crate::filesystem::BoundExecutable;
+#[cfg(not(unix))]
+use crate::process::sanitize_environment;
 use crate::{
     filesystem::bind_executable,
-    process::sanitize_environment,
     runtime::{DriverError, DriverFuture, ProviderDriver},
 };
 #[cfg(unix)]
@@ -26,26 +30,36 @@ use crate::{
 };
 
 const PROTOCOL_TIMEOUT: Duration = Duration::from_secs(10);
-#[cfg(windows)]
+#[cfg(not(unix))]
 const STOP_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_PROTOCOL_LINE_BYTES: usize = 256 * 1024;
 const MAX_PENDING_NOTIFICATIONS: usize = 256;
 const MAX_PENDING_NOTIFICATION_BYTES: usize = 2 * 1024 * 1024;
 
 pub(crate) struct CodexDriver {
+    #[cfg(not(unix))]
     child: Box<dyn ChildWrapper>,
     #[cfg(not(any(target_os = "linux", target_os = "android")))]
     _executable_guard: BoundExecutable,
     #[cfg(unix)]
     process_group: UnixProcessCustody,
-    stdin: ChildStdin,
-    stdout: FramedRead<tokio::process::ChildStdout, LinesCodec>,
+    stdin: ProviderStdin,
+    stdout: FramedRead<ProviderStdout, LinesCodec>,
     stderr_task: JoinHandle<()>,
     next_request_id: u64,
     pending_notifications: VecDeque<Value>,
     pending_notification_bytes: usize,
     initialized: bool,
 }
+
+#[cfg(unix)]
+type ProviderStdin = tokio::fs::File;
+#[cfg(not(unix))]
+type ProviderStdin = tokio::process::ChildStdin;
+#[cfg(unix)]
+type ProviderStdout = tokio::fs::File;
+#[cfg(not(unix))]
+type ProviderStdout = tokio::process::ChildStdout;
 
 impl CodexDriver {
     #[cfg(unix)]
@@ -81,86 +95,73 @@ impl CodexDriver {
         .await
         .map_err(|_| executable_authority_error())?;
         #[cfg(unix)]
-        let mut process_group = UnixProcessCustody::start(runtime_lease, guardian_launch).await?;
-        let mut command = CommandWrap::with_new(executable.launch_path(), |command| {
-            command
-                .args(&arguments)
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped());
-        });
-        #[cfg(any(target_os = "linux", target_os = "android"))]
-        executable
-            .configure_command(command.command_mut())
-            .map_err(|_| executable_authority_error())?;
-        sanitize_environment(command.command_mut());
-        #[cfg(unix)]
-        process_group.attach(command.command_mut())?;
-        command.wrap(KillOnDrop);
-        #[cfg(windows)]
-        command.wrap(JobObject);
-        let mut child = match command.spawn() {
-            Ok(child) => child,
-            Err(error) => {
-                #[cfg(unix)]
-                process_group.request_stop();
-                return Err(spawn_error(&error));
-            }
-        };
-        drop(command);
-        #[cfg(unix)]
-        match process_group.bind_provider(child.id()) {
-            Ok(()) => {}
-            Err(error) => {
-                let _ = process_group.stop(child.as_mut()).await;
-                return Err(error);
-            }
+        {
+            let (process_group, pipes) =
+                UnixProcessCustody::start(runtime_lease, guardian_launch, &executable, &arguments)
+                    .await?;
+            let stderr_task = tokio::spawn(drain_stderr(pipes.stderr));
+            Ok(Self {
+                process_group,
+                #[cfg(not(any(target_os = "linux", target_os = "android")))]
+                _executable_guard: executable,
+                stdin: pipes.stdin,
+                stdout: FramedRead::new(
+                    pipes.stdout,
+                    LinesCodec::new_with_max_length(MAX_PROTOCOL_LINE_BYTES),
+                ),
+                stderr_task,
+                next_request_id: 1,
+                pending_notifications: VecDeque::new(),
+                pending_notification_bytes: 0,
+                initialized: false,
+            })
         }
-        let Some(stdin) = child.stdin().take() else {
-            terminate_failed_spawn(
-                child.as_mut(),
-                #[cfg(unix)]
-                &mut process_group,
-            )
-            .await;
-            return Err(protocol_error());
-        };
-        let Some(stdout) = child.stdout().take() else {
-            terminate_failed_spawn(
-                child.as_mut(),
-                #[cfg(unix)]
-                &mut process_group,
-            )
-            .await;
-            return Err(protocol_error());
-        };
-        let Some(stderr) = child.stderr().take() else {
-            terminate_failed_spawn(
-                child.as_mut(),
-                #[cfg(unix)]
-                &mut process_group,
-            )
-            .await;
-            return Err(protocol_error());
-        };
-        let stderr_task = tokio::spawn(drain_stderr(stderr));
-        Ok(Self {
-            child,
-            #[cfg(not(any(target_os = "linux", target_os = "android")))]
-            _executable_guard: executable,
-            #[cfg(unix)]
-            process_group,
-            stdin,
-            stdout: FramedRead::new(
-                stdout,
-                LinesCodec::new_with_max_length(MAX_PROTOCOL_LINE_BYTES),
-            ),
-            stderr_task,
-            next_request_id: 1,
-            pending_notifications: VecDeque::new(),
-            pending_notification_bytes: 0,
-            initialized: false,
-        })
+        #[cfg(not(unix))]
+        {
+            let mut command = CommandWrap::with_new(executable.launch_path(), |command| {
+                command
+                    .args(&arguments)
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped());
+            });
+            sanitize_environment(command.command_mut());
+            command.wrap(KillOnDrop);
+            #[cfg(windows)]
+            command.wrap(JobObject);
+            let mut child = match command.spawn() {
+                Ok(child) => child,
+                Err(error) => return Err(spawn_error(&error)),
+            };
+            drop(command);
+            let Some(stdin) = child.stdin().take() else {
+                terminate_failed_spawn(child.as_mut()).await;
+                return Err(protocol_error());
+            };
+            let Some(stdout) = child.stdout().take() else {
+                terminate_failed_spawn(child.as_mut()).await;
+                return Err(protocol_error());
+            };
+            let Some(stderr) = child.stderr().take() else {
+                terminate_failed_spawn(child.as_mut()).await;
+                return Err(protocol_error());
+            };
+            let stderr_task = tokio::spawn(drain_stderr(stderr));
+            Ok(Self {
+                child,
+                _executable_guard: executable,
+                stdin,
+                stdout: FramedRead::new(
+                    stdout,
+                    LinesCodec::new_with_max_length(MAX_PROTOCOL_LINE_BYTES),
+                ),
+                stderr_task,
+                next_request_id: 1,
+                pending_notifications: VecDeque::new(),
+                pending_notification_bytes: 0,
+                initialized: false,
+            })
+        }
     }
 
     async fn initialize(&mut self) -> Result<(), DriverError> {
@@ -272,10 +273,10 @@ impl CodexDriver {
 
     async fn stop_process(&mut self) -> Result<(), DriverError> {
         #[cfg(unix)]
-        let stopped = self.process_group.stop(self.child.as_mut()).await;
-        #[cfg(windows)]
+        let stopped = self.process_group.stop().await;
+        #[cfg(not(unix))]
         let stopped = tokio::time::timeout(STOP_TIMEOUT, Box::into_pin(self.child.kill())).await;
-        #[cfg(windows)]
+        #[cfg(not(unix))]
         let stopped = stopped.map_err(|_| {
             DriverError::new(
                 "provider_stop_unconfirmed",
@@ -374,7 +375,7 @@ fn json_string(value: &str) -> Result<String, DriverError> {
     serde_json::to_string(value).map_err(|_| protocol_error())
 }
 
-async fn drain_stderr(mut stderr: tokio::process::ChildStderr) {
+async fn drain_stderr(mut stderr: impl AsyncRead + Unpin) {
     let mut buffer = [0_u8; 16 * 1024];
     loop {
         match stderr.read(&mut buffer).await {
@@ -384,18 +385,12 @@ async fn drain_stderr(mut stderr: tokio::process::ChildStderr) {
     }
 }
 
-async fn terminate_failed_spawn(
-    child: &mut dyn ChildWrapper,
-    #[cfg(unix)] process_group: &mut UnixProcessCustody,
-) {
-    #[cfg(unix)]
-    {
-        let _ = process_group.stop(child).await;
-    }
-    #[cfg(not(unix))]
+#[cfg(not(unix))]
+async fn terminate_failed_spawn(child: &mut dyn ChildWrapper) {
     let _ = tokio::time::timeout(STOP_TIMEOUT, Box::into_pin(child.kill())).await;
 }
 
+#[cfg(not(unix))]
 fn spawn_error(error: &io::Error) -> DriverError {
     if error.kind() == io::ErrorKind::NotFound {
         DriverError::new(

@@ -117,6 +117,16 @@ pub(crate) fn sanitize_environment(command: &mut tokio::process::Command) {
     }
 }
 
+#[cfg(unix)]
+pub(crate) fn sanitize_std_environment(command: &mut std::process::Command) {
+    command.env_clear();
+    for name in PROVIDER_ENVIRONMENT {
+        if let Some(value) = env::var_os(name) {
+            command.env(name, value);
+        }
+    }
+}
+
 async fn read_limited<R: AsyncRead + Unpin>(mut reader: R) -> io::Result<Vec<u8>> {
     let mut output = Vec::new();
     let mut chunk = vec![0_u8; 16 * 1024];

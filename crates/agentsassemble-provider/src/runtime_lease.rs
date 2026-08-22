@@ -10,6 +10,8 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 const MAX_LEASE_MARKER_BYTES: u64 = 256;
+#[cfg(unix)]
+const CLEANUP_RECEIPT_LOCK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum LeaseObservation {
@@ -211,6 +213,9 @@ fn classify_unlocked_marker(path: &Path, marker: io::Result<String>) -> LeaseObs
         (Some("unix"), Some(token), Some(raw_pid), None) if validate_token(token).is_ok() => {
             classify_unlocked_unix_marker(path, token, raw_pid)
         }
+        (Some("gone"), Some(token), None, None) if validate_token(token).is_ok() => {
+            LeaseObservation::Gone
+        }
         _ => LeaseObservation::Unknown,
     }
 }
@@ -231,13 +236,44 @@ fn classify_unlocked_unix_marker(path: &Path, token: &str, raw_pid: &str) -> Lea
                 crate::unix_process_tree::tagged_runtime_exists(token),
             ) {
                 (Ok(true), _) | (_, Ok(true)) => LeaseObservation::Active,
-                (Ok(false), Ok(false)) => LeaseObservation::Gone,
+                // Absence or uncertainty of the auxiliary signals is not an
+                // absence proof: a normal daemon spawn can close inherited
+                // descriptors and clear its environment. Only the guardian
+                // may write the exact `gone` receipt after bounded cleanup.
                 _ => LeaseObservation::Unknown,
             }
         }
         Ok(()) | Err(rustix::io::Errno::PERM) => LeaseObservation::Active,
         Err(_) => LeaseObservation::Unknown,
     }
+}
+
+#[cfg(unix)]
+pub(crate) fn mark_unix_runtime_gone(path: &Path, token: &str) -> io::Result<()> {
+    validate_token(token)?;
+    let mut file = OpenOptions::new().read(true).write(true).open(path)?;
+    let started = std::time::Instant::now();
+    loop {
+        match file.try_lock_exclusive() {
+            Ok(()) => break,
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                if started.elapsed() >= CLEANUP_RECEIPT_LOCK_TIMEOUT {
+                    return Err(io::Error::other(
+                        "provider runtime cleanup receipt lock timed out",
+                    ));
+                }
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    let marker = read_marker(&mut file)?;
+    if marker_token(&marker) != Some(token) || !marker.starts_with("unix:") {
+        return Err(io::Error::other(
+            "provider runtime lease generation changed before cleanup receipt",
+        ));
+    }
+    write_marker(&mut file, &format!("gone:{token}"))
 }
 
 #[cfg(not(unix))]
@@ -264,7 +300,7 @@ fn remove_runtime_lease(path: &Path, token: &str) {
 fn marker_token(marker: &str) -> Option<&str> {
     let mut parts = marker.split(':');
     match (parts.next(), parts.next()) {
-        (Some("pending" | "windows" | "unix" | "lifetime"), Some(token))
+        (Some("pending" | "windows" | "unix" | "lifetime" | "gone"), Some(token))
             if validate_token(token).is_ok() =>
         {
             Some(token)
@@ -433,7 +469,7 @@ mod tests {
     }
 
     #[test]
-    fn unlocked_unix_lease_requires_exact_lifetime_lock_absence() {
+    fn unlocked_unix_lease_requires_guardian_cleanup_receipt() {
         let lease = HeldRuntimeLease::prepare("lease-lifetime-room", "lease-lifetime-session")
             .unwrap_or_else(|error| panic!("prepare lifetime runtime lease: {error}"));
         let lifetime = super::open_provider_lifetime_lease(lease.path(), lease.token())
@@ -448,6 +484,12 @@ mod tests {
             LeaseObservation::Active
         );
         drop(lifetime);
+        assert_eq!(
+            observe_runtime_lease("lease-lifetime-room", "lease-lifetime-session"),
+            LeaseObservation::Unknown
+        );
+        super::mark_unix_runtime_gone(lease.path(), lease.token())
+            .unwrap_or_else(|error| panic!("record guardian cleanup receipt: {error}"));
         assert_eq!(
             observe_runtime_lease("lease-lifetime-room", "lease-lifetime-session"),
             LeaseObservation::Gone

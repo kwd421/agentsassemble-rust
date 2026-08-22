@@ -240,7 +240,7 @@ async fn shutdown_checkpoints_gone_after_aborting_initialization() {
     let started_path = directory.path().join("initialization-started");
     let release_path = directory.path().join("release-initialization");
     let fixture = format!(
-        "#!/bin/sh\nprintf '%s' \"$$\" > {}\nIFS= read -r initialize\nwhile [ ! -f {} ]; do sleep 1; done\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nwhile :; do sleep 1; done\n",
+        "#!/bin/sh\nprintf '%s' \"$$\" > {}\nIFS= read -r initialize\nwhile [ ! -f {} ]; do :; done\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nIFS= read -r forever\n",
         shell_quote(&started_path),
         shell_quote(&release_path),
     );
@@ -520,7 +520,7 @@ async fn bootstrap(store: &SqliteStore) {
 
 fn agent_catalog(root: &Path) -> ProviderCatalog {
     #[cfg(unix)]
-    let fixture: &[u8] = b"#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\nIFS= read -r initialized\nwhile :; do sleep 1; done\n";
+    let fixture: &[u8] = b"#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\nIFS= read -r initialized\nIFS= read -r forever\n";
     #[cfg(not(unix))]
     let fixture: &[u8] = b"provider fixture";
     agent_catalog_with_fixture(root, fixture)
