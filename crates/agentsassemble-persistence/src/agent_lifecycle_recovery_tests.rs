@@ -110,6 +110,49 @@ async fn pending_request_identity_cannot_be_rebound_to_another_agent() {
 }
 
 #[tokio::test]
+async fn pending_lifecycle_request_blocks_non_lifecycle_command_admission() {
+    let (store, principal, _directory) = fixture().await;
+    let lifecycle_payload = json!({"agent_id": AGENT_ID});
+    let AgentStartPlan::Start(_) = store
+        .prepare_agent_start(&principal, "shared-command-request", &lifecycle_payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare reserved start: {error}"))
+    else {
+        panic!("stopped session must require start");
+    };
+
+    assert!(matches!(
+        store
+            .replay_command(
+                &principal,
+                "shared-command-request",
+                "agent.create",
+                &json!({"provider_id": "codex"}),
+            )
+            .await,
+        Err(PersistenceError::CommandConflict)
+    ));
+    assert!(matches!(
+        store
+            .execute_message(
+                &principal,
+                "shared-command-request",
+                "message.send",
+                &json!({"content": "must not commit"}),
+            )
+            .await,
+        Err(PersistenceError::CommandConflict)
+    ));
+    let message_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM room_events WHERE room_id = 'general' AND event_json LIKE '%must not commit%'",
+    )
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("inspect rejected message: {error}"));
+    assert_eq!(message_count, 0);
+}
+
+#[tokio::test]
 async fn start_completion_derives_its_request_operation_binding() {
     let (store, principal, _directory) = fixture().await;
     let payload = json!({"agent_id": AGENT_ID});

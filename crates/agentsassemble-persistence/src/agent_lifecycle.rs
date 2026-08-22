@@ -23,7 +23,7 @@ use crate::{
         LifecycleReservation, claim_lifecycle_command, finish_lifecycle_command,
     },
     authority::active_room_for_principal,
-    sqlite::existing_command,
+    command_admission::existing_command,
 };
 
 const START: &str = "agent.start";
@@ -380,6 +380,14 @@ impl SqliteStore {
                 transaction.commit().await?;
                 return Ok(AgentStopPlan::Stop(effect));
             }
+            if session.lifecycle_intent_status == "unconfirmed" {
+                let effect = stop_effect(&session)?;
+                "prepared".clone_into(&mut session.lifecycle_intent_status);
+                session.public.updated_at = Utc::now();
+                save_session(&mut transaction, &session).await?;
+                transaction.commit().await?;
+                return Ok(AgentStopPlan::Stop(effect));
+            }
             return Err(rejected(
                 "invalid_state",
                 "Stored provider stop intent is invalid.",
@@ -468,7 +476,7 @@ impl SqliteStore {
         }
         session.public.last_error_code = error_code.to_owned();
         session.public.recovery_required = true;
-        clear_intent(&mut session);
+        "unconfirmed".clone_into(&mut session.lifecycle_intent_status);
         session.public.updated_at = Utc::now();
         save_session(&mut transaction, &session).await?;
         let mut participant =

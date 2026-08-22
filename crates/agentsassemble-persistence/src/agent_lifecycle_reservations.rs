@@ -70,6 +70,26 @@ pub(crate) async fn claim_lifecycle_command(
     Ok(())
 }
 
+pub(crate) async fn reject_reserved_request_id(
+    transaction: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    principal_id: &str,
+    request_id: &str,
+) -> Result<(), PersistenceError> {
+    let reserved = sqlx::query_scalar::<_, i64>(
+        "SELECT EXISTS(SELECT 1 FROM lifecycle_command_reservations WHERE room_id = ? AND principal_id = ? AND request_id = ?)",
+    )
+    .bind(room_id)
+    .bind(principal_id)
+    .bind(request_id)
+    .fetch_one(&mut **transaction)
+    .await?;
+    if reserved != 0 {
+        return Err(PersistenceError::CommandConflict);
+    }
+    Ok(())
+}
+
 pub(crate) async fn finish_lifecycle_command(
     transaction: &mut Transaction<'_, Sqlite>,
     reservation: &LifecycleReservation<'_>,

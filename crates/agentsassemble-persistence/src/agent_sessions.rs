@@ -10,10 +10,9 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::{
-    CommandOutcome, PersistenceError, SqliteStore,
-    authority::active_room_for_principal,
-    filesystem_authority::revalidate_runtime_authority,
-    sqlite::{MAX_AGENT_SESSIONS_PER_ROOM, existing_command},
+    CommandOutcome, PersistenceError, SqliteStore, authority::active_room_for_principal,
+    command_admission::admit_non_lifecycle_command,
+    filesystem_authority::revalidate_runtime_authority, sqlite::MAX_AGENT_SESSIONS_PER_ROOM,
 };
 
 impl SqliteStore {
@@ -32,7 +31,7 @@ impl SqliteStore {
         let payload_hash = canonical_payload_hash(payload);
         let mut transaction = self.pool.begin().await?;
         active_room_for_principal(&mut transaction, principal).await?;
-        let outcome = existing_command(
+        let outcome = admit_non_lifecycle_command(
             &mut transaction,
             &principal.room_id,
             &principal.principal_id,
@@ -70,7 +69,7 @@ impl SqliteStore {
         {
             let mut transaction = self.pool.begin().await?;
             active_room_for_principal(&mut transaction, principal).await?;
-            let outcome = existing_command(
+            let outcome = admit_non_lifecycle_command(
                 &mut transaction,
                 &principal.room_id,
                 &principal.principal_id,
@@ -87,7 +86,7 @@ impl SqliteStore {
         revalidate_runtime_authority(draft).await?;
         let mut transaction = self.pool.begin().await?;
         active_room_for_principal(&mut transaction, principal).await?;
-        if let Some(outcome) = existing_command(
+        if let Some(outcome) = admit_non_lifecycle_command(
             &mut transaction,
             &principal.room_id,
             &principal.principal_id,
@@ -522,6 +521,41 @@ mod tests {
         assert!(snapshot.agent_sessions.is_empty());
         assert_eq!(snapshot.participants.len(), 1);
         assert!(snapshot.events.is_empty());
+    }
+
+    #[tokio::test]
+    async fn pending_lifecycle_request_blocks_agent_create() {
+        let (store, principal, directory) = fixture().await;
+        sqlx::query(
+            "INSERT INTO lifecycle_command_reservations(room_id, principal_id, request_id, action, payload_hash, session_id, operation_id) VALUES ('general', ?, 'reserved-create', 'agent.start', 'reserved-hash', 'existing-agent', 'reserved-operation')",
+        )
+        .bind(&principal.principal_id)
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("insert lifecycle reservation: {error}"));
+        let workspace = directory
+            .path()
+            .to_str()
+            .unwrap_or_else(|| panic!("test workspace path must be UTF-8"));
+
+        assert!(matches!(
+            store
+                .execute_agent_create(
+                    &principal,
+                    "reserved-create",
+                    &json!({"provider_id": "codex"}),
+                    &draft(workspace),
+                )
+                .await,
+            Err(PersistenceError::CommandConflict)
+        ));
+        let counts = sqlx::query_as::<_, (i64, i64, i64)>(
+            "SELECT (SELECT COUNT(*) FROM agent_sessions), (SELECT COUNT(*) FROM room_events), (SELECT COUNT(*) FROM command_results)",
+        )
+        .fetch_one(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("inspect rejected create: {error}"));
+        assert_eq!(counts, (0, 0, 0));
     }
 
     #[tokio::test]

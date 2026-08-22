@@ -10,7 +10,10 @@ use serde_json::{Value, json};
 use sqlx::{Row, Sqlite, SqlitePool, Transaction};
 use thiserror::Error;
 
-use crate::authority::{authorize_session, load_active_participant};
+use crate::{
+    authority::{authorize_session, load_active_participant},
+    command_admission::admit_non_lifecycle_command,
+};
 
 const SCHEMA_OWNER: &str = "agentsassemble-rust-v1";
 pub(crate) const MAX_AGENT_SESSIONS_PER_ROOM: i64 = 64;
@@ -404,7 +407,7 @@ impl SqliteStore {
                 message: "Closed or archived rooms do not accept commands.".to_owned(),
             });
         }
-        if let Some(outcome) = existing_command(
+        if let Some(outcome) = admit_non_lifecycle_command(
             &mut transaction,
             &principal.room_id,
             &principal.principal_id,
@@ -467,50 +470,6 @@ impl SqliteStore {
             deduplicated: false,
         })
     }
-}
-
-pub(crate) async fn existing_command(
-    transaction: &mut Transaction<'_, Sqlite>,
-    room_id: &str,
-    principal_id: &str,
-    request_id: &str,
-    action: &str,
-    payload_hash: &str,
-) -> Result<Option<CommandOutcome>, PersistenceError> {
-    let row = sqlx::query(
-        "SELECT action, payload_hash, result_json FROM command_results WHERE room_id = ? AND principal_id = ? AND request_id = ?",
-    )
-    .bind(room_id)
-    .bind(principal_id)
-    .bind(request_id)
-    .fetch_optional(&mut **transaction)
-    .await?;
-    let Some(row) = row else {
-        return Ok(None);
-    };
-    let stored_action: String = row.try_get("action")?;
-    let stored_hash: String = row.try_get("payload_hash")?;
-    if stored_action != action || stored_hash != payload_hash {
-        return Err(PersistenceError::CommandConflict);
-    }
-    let result: Value = serde_json::from_str(row.try_get::<String, _>("result_json")?.as_str())?;
-    let event: RoomEvent =
-        serde_json::from_value(result.get("event").cloned().ok_or_else(|| {
-            serde_json::Error::io(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "stored command result has no event",
-            ))
-        })?)?;
-    let events = result.get("events").map_or_else(
-        || Ok(vec![event.clone()]),
-        |events| serde_json::from_value(events.clone()),
-    )?;
-    Ok(Some(CommandOutcome {
-        result,
-        event,
-        events,
-        deduplicated: true,
-    }))
 }
 
 async fn load_agent_sessions(

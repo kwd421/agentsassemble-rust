@@ -5,6 +5,7 @@ mod agent_lifecycle_reservations;
 mod agent_reconciliation;
 mod agent_sessions;
 mod authority;
+mod command_admission;
 mod database_target;
 mod filesystem_authority;
 mod migration;

@@ -491,7 +491,17 @@ async fn ambiguous_stop_becomes_a_redacted_recoverable_disconnect() {
     assert_eq!(durable.provider_session_id, "provider-thread-preserved");
     assert_eq!(durable.runtime_handle_id, "runtime-before-ambiguous-stop");
     assert_eq!(durable.runtime_owner_id, "supervisor-instance-1");
-    assert!(durable.lifecycle_intent_action.is_empty());
+    assert_eq!(durable.lifecycle_intent_action, "stop");
+    assert_eq!(durable.lifecycle_intent_status, "unconfirmed");
+    assert!(matches!(
+        store
+            .prepare_agent_start(&principal, "replacement-start", &payload)
+            .await,
+        Err(PersistenceError::CommandRejected {
+            code: "operation_in_progress",
+            ..
+        })
+    ));
 }
 
 #[tokio::test]
@@ -535,7 +545,17 @@ async fn restart_invalidates_ambiguous_handle_before_any_stop_effect() {
         .unwrap_or_else(|error| panic!("decode invalidated ambiguous session: {error}"));
     assert!(invalidated.runtime_handle_id.is_empty());
     assert!(invalidated.runtime_owner_id.is_empty());
-    assert!(invalidated.lifecycle_intent_action.is_empty());
+    assert_eq!(invalidated.lifecycle_intent_action, "stop");
+    assert_eq!(invalidated.lifecycle_intent_status, "prepared");
+    assert!(matches!(
+        store
+            .prepare_agent_start(&principal, "replacement-after-restart", &payload)
+            .await,
+        Err(PersistenceError::CommandRejected {
+            code: "operation_in_progress",
+            ..
+        })
+    ));
 }
 
 async fn mark_ambiguous_stop(
