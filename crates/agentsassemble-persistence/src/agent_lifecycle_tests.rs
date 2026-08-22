@@ -272,14 +272,14 @@ async fn stale_start_completion_fails_closed_and_visible_failure_clears_intent()
             AGENT_ID,
             &effect.operation_id,
             "runtime_start_failed",
-            "provider launch failed\0secret",
+            "/Users/alice/private/bin/codex:\nAuthorization: Bearer secret-provider-token",
         )
         .await
         .unwrap_or_else(|error| panic!("record start failure: {error}"));
     assert_eq!(events[0].event_type, "error");
     assert_eq!(
         events[0].content.as_deref(),
-        Some("provider launch failedsecret")
+        Some("[local path]\n[redacted]")
     );
     let snapshot = store
         .snapshot("general", 0, 200)
@@ -288,6 +288,9 @@ async fn stale_start_completion_fails_closed_and_visible_failure_clears_intent()
     let session = &snapshot.agent_sessions[0];
     assert_eq!(session.runtime_status, "error");
     assert_eq!(session.last_error_code, "runtime_start_failed");
+    assert_eq!(session.last_error, "[local path]\n[redacted]");
+    assert!(!session.last_error.contains("alice"));
+    assert!(!session.last_error.contains("secret-provider-token"));
     assert!(!session.enabled);
 }
 

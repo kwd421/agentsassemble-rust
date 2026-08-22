@@ -1,9 +1,11 @@
 mod command;
+mod diagnostic;
 mod identity;
 mod model;
 mod text;
 
 pub use command::{CommandRejection, MessageSend, canonical_payload_hash, prepare_message_event};
+pub use diagnostic::{redact_persisted_diagnostic, redact_persisted_diagnostic_text};
 pub use identity::{stable_content_identity, stable_identity_hash};
 pub use model::{
     Actor, AgentSession, AgentSessionDraft, AuthenticatedPrincipal,

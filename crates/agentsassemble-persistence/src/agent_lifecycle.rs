@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, HashSet};
 use agentsassemble_domain::{
     AuthenticatedPrincipal, CURRENT_RUNTIME_PROFILE_VERSION, ClientKind, DurableAgentSession,
     Participant, ParticipantStatus, RoomEvent, canonical_payload_hash, clean_identifier,
+    redact_persisted_diagnostic_text,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -281,7 +282,10 @@ impl SqliteStore {
         session.public.enabled = false;
         "error".clone_into(&mut session.public.runtime_status);
         session.public.provider_session_active = false;
-        session.public.last_error = bounded_diagnostic(message);
+        session.public.last_error = redact_persisted_diagnostic_text(message, 4_000);
+        if session.public.last_error.is_empty() {
+            "Provider launch failed.".clone_into(&mut session.public.last_error);
+        }
         session.public.last_error_code = error_code.to_owned();
         session.runtime_handle_id.clear();
         clear_intent(&mut session);
@@ -562,16 +566,6 @@ fn clear_intent(session: &mut DurableAgentSession) {
     session.lifecycle_intent_action.clear();
     session.lifecycle_intent_id.clear();
     session.lifecycle_intent_status.clear();
-}
-
-fn bounded_diagnostic(message: &str) -> String {
-    message
-        .replace('\0', "")
-        .chars()
-        .take(4_000)
-        .collect::<String>()
-        .trim()
-        .to_owned()
 }
 
 fn dedupe<'a>(values: impl Iterator<Item = &'a String>) -> Vec<String> {
