@@ -8,6 +8,7 @@ license.workspace = true
 agentsassemble-domain = { path = "../agentsassemble-domain" }
 chrono.workspace = true
 futures-util.workspace = true
+fs2.workspace = true
 process-wrap = { version = "9.1.0", default-features = false, features = ["job-object", "kill-on-drop", "process-group", "tokio1"] }
 serde.workspace = true
 serde_json.workspace = true
@@ -21,10 +22,10 @@ uuid.workspace = true
 [target.'cfg(unix)'.dependencies]
 rustix.workspace = true
 
-[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 command-fds.workspace = true
 
-[target.'cfg(target_os = "macos")'.dependencies]
+[target.'cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))'.dependencies]
 tempfile.workspace = true
 
 [target.'cfg(windows)'.dependencies]

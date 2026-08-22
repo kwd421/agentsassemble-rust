@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 pub const LOCAL_OPERATOR_USER_ID: &str = "operator-local-user";
 pub const LOCAL_OPERATOR_PARTICIPANT_ID: &str = "operator-local";
-pub const CURRENT_RUNTIME_PROFILE_VERSION: u32 = 1;
+pub const CURRENT_RUNTIME_PROFILE_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]

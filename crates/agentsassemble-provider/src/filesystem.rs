@@ -25,7 +25,7 @@ pub(crate) enum FilesystemFailure {
 pub(crate) struct BoundExecutable {
     _file: File,
     launch_path: String,
-    #[cfg(target_os = "macos")]
+    #[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
     _staging: tempfile::TempDir,
 }
 
@@ -34,8 +34,7 @@ impl BoundExecutable {
         &self.launch_path
     }
 
-    #[cfg(unix)]
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     pub(crate) fn configure_command(
         self,
         command: &mut tokio::process::Command,
@@ -180,10 +179,15 @@ fn bind_executable_sync(path: &Path, expected_identity: &str) -> io::Result<Boun
     if identity != expected_identity {
         return Err(io::Error::other("executable identity changed"));
     }
-    #[cfg(all(unix, not(target_os = "macos")))]
-    let launch_path = "/dev/fd/3".to_owned();
-    #[cfg(target_os = "macos")]
-    let (launch_path, staging) = stage_macos_executable(&mut file, &handle, expected_identity)?;
+    #[cfg(unix)]
+    let expected_digest = raw_content_digest(&mut file)?;
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    let file = stage_sealed_executable(&mut file, &handle, expected_identity, expected_digest)?;
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    let launch_path = "/proc/self/fd/3".to_owned();
+    #[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
+    let (file, launch_path, staging) =
+        stage_private_executable(&mut file, &handle, expected_identity, expected_digest)?;
     #[cfg(windows)]
     let launch_path = canonical
         .to_str()
@@ -197,17 +201,55 @@ fn bind_executable_sync(path: &Path, expected_identity: &str) -> io::Result<Boun
     Ok(BoundExecutable {
         _file: file,
         launch_path,
-        #[cfg(target_os = "macos")]
+        #[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
         _staging: staging,
     })
 }
 
-#[cfg(target_os = "macos")]
-fn stage_macos_executable(
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn stage_sealed_executable(
     source: &mut File,
     source_handle: &Handle,
     expected_identity: &str,
-) -> io::Result<(String, tempfile::TempDir)> {
+    expected_digest: [u8; 32],
+) -> io::Result<File> {
+    use rustix::fs::{MemfdFlags, Mode, SealFlags};
+
+    let mut staged = match rustix::fs::memfd_create(
+        "agentsassemble-provider",
+        MemfdFlags::ALLOW_SEALING | MemfdFlags::EXEC,
+    ) {
+        Ok(file) => File::from(file),
+        Err(rustix::io::Errno::INVAL) => File::from(rustix::fs::memfd_create(
+            "agentsassemble-provider",
+            MemfdFlags::ALLOW_SEALING,
+        )?),
+        Err(error) => return Err(error.into()),
+    };
+    rustix::fs::fchmod(&staged, Mode::RUSR | Mode::XUSR)?;
+    copy_and_verify_staged(
+        source,
+        source_handle,
+        expected_identity,
+        expected_digest,
+        &mut staged,
+    )?;
+    let required = SealFlags::SEAL | SealFlags::SHRINK | SealFlags::GROW | SealFlags::WRITE;
+    rustix::fs::fcntl_add_seals(&staged, required)?;
+    if !rustix::fs::fcntl_get_seals(&staged)?.contains(required) {
+        return Err(io::Error::other("staged executable seals are incomplete"));
+    }
+    staged.rewind()?;
+    Ok(staged)
+}
+
+#[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
+fn stage_private_executable(
+    source: &mut File,
+    source_handle: &Handle,
+    expected_identity: &str,
+    expected_digest: [u8; 32],
+) -> io::Result<(File, String, tempfile::TempDir)> {
     use std::os::unix::fs::PermissionsExt;
 
     let staging = tempfile::Builder::new()
@@ -219,27 +261,44 @@ fn stage_macos_executable(
         .read(true)
         .write(true)
         .open(&staged_path)?;
-    source.rewind()?;
-    io::copy(source, &mut staged)?;
-    staged.sync_all()?;
+    copy_and_verify_staged(
+        source,
+        source_handle,
+        expected_identity,
+        expected_digest,
+        &mut staged,
+    )?;
     std::fs::set_permissions(&staged_path, std::fs::Permissions::from_mode(0o500))?;
-    source.rewind()?;
-    if stable_content_identity(source_handle, &mut *source)? != expected_identity {
-        return Err(io::Error::other("executable changed while it was staged"));
-    }
-    source.rewind()?;
-    staged.rewind()?;
-    if raw_content_digest(source)? != raw_content_digest(&mut staged)? {
-        return Err(io::Error::other("staged executable bytes do not match"));
-    }
     let launch_path = staged_path
         .to_str()
         .ok_or_else(|| io::Error::other("staged executable path is not UTF-8"))?
         .to_owned();
-    Ok((launch_path, staging))
+    Ok((staged, launch_path, staging))
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(unix)]
+fn copy_and_verify_staged(
+    source: &mut File,
+    source_handle: &Handle,
+    expected_identity: &str,
+    expected_digest: [u8; 32],
+    staged: &mut File,
+) -> io::Result<()> {
+    source.rewind()?;
+    io::copy(source, &mut *staged)?;
+    staged.sync_all()?;
+    source.rewind()?;
+    if stable_content_identity(source_handle, &mut *source)? != expected_identity {
+        return Err(io::Error::other("executable changed while it was staged"));
+    }
+    staged.rewind()?;
+    if raw_content_digest(staged)? != expected_digest {
+        return Err(io::Error::other("staged executable bytes do not match"));
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
 fn raw_content_digest(file: &mut File) -> io::Result<[u8; 32]> {
     use std::io::Read;
 
@@ -386,6 +445,11 @@ mod tests {
         let bound = super::bind_executable(executable, identity)
             .await
             .unwrap_or_else(|error| panic!("bind executable: {error:?}"));
+        std::fs::write(
+            directory.path().join("bound-provider"),
+            b"#!/bin/sh\nprintf 'in-place-replacement'",
+        )
+        .unwrap_or_else(|error| panic!("overwrite selected inode in place: {error}"));
         let replacement = directory.path().join("replacement-provider");
         std::fs::write(&replacement, b"#!/bin/sh\nprintf 'replacement-bytes'")
             .unwrap_or_else(|error| panic!("write replacement executable: {error}"));
@@ -398,7 +462,7 @@ mod tests {
         std::fs::rename(&replacement, directory.path().join("bound-provider"))
             .unwrap_or_else(|error| panic!("atomically replace selected executable: {error}"));
         let mut command = tokio::process::Command::new(bound.launch_path());
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(any(target_os = "linux", target_os = "android"))]
         bound
             .configure_command(&mut command)
             .unwrap_or_else(|error| panic!("map executable fd: {error:?}"));

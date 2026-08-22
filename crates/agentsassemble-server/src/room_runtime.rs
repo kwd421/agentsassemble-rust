@@ -27,6 +27,8 @@ pub enum RoomShutdownError {
     TaskFailed(String),
     #[error("provider runtime shutdown failed: {0}")]
     Provider(String),
+    #[error("confirmed provider shutdown checkpoint failed: {0}")]
+    Persistence(String),
 }
 
 struct RoomCommand {
@@ -132,12 +134,21 @@ impl RoomRuntime {
             std::mem::take(&mut *tasks)
         };
         let room_result = join_room_tasks(tasks, ROOM_SHUTDOWN_TIMEOUT).await;
-        let provider_result = self
-            .provider_adapter
-            .shutdown()
-            .await
-            .map_err(|error| RoomShutdownError::Provider(error.to_string()));
-        room_result.and(provider_result)
+        let provider_outcome = self.provider_adapter.shutdown_with_observations().await;
+        let checkpoint_result = crate::runtime_reconciliation::checkpoint_confirmed_shutdowns(
+            &self.store,
+            &provider_outcome.gone,
+        )
+        .await
+        .map_err(|error| RoomShutdownError::Persistence(error.to_string()));
+        if checkpoint_result.is_ok() {
+            self.provider_adapter
+                .release_shutdown_observations(&provider_outcome.gone);
+        }
+        let provider_result = provider_outcome.failure.map_or(Ok(()), |error| {
+            Err(RoomShutdownError::Provider(error.to_string()))
+        });
+        room_result.and(provider_result).and(checkpoint_result)
     }
 
     async fn handle(&self, room_id: &str) -> RoomHandle {

@@ -55,6 +55,7 @@ dependencies = [
  "agentsassemble-domain",
  "chrono",
  "command-fds",
+ "fs2",
  "futures-util",
  "process-wrap",
  "rustix",

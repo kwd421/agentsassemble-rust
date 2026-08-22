@@ -42,6 +42,10 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    #[cfg(unix)]
+    if let Some(code) = agentsassemble_provider::run_process_helper_if_requested() {
+        std::process::exit(code);
+    }
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .with_writer(std::io::stderr)

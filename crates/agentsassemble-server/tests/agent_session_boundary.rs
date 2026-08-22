@@ -5,7 +5,7 @@ use agentsassemble_domain::{
     ProviderControlOption, Room, RoomSettings, stable_content_identity,
 };
 use agentsassemble_persistence::SqliteStore;
-use agentsassemble_provider::ProviderCatalogService;
+use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService};
 use agentsassemble_server::{AppState, HostSecret, TicketStore, serve};
 use chrono::Utc;
 use futures_util::{SinkExt, StreamExt};
@@ -23,7 +23,7 @@ const HOST_TOKEN: &str = "agent-boundary-host-token-000000001";
 struct RunningServer {
     base_url: String,
     cancellation: CancellationToken,
-    task: JoinHandle<()>,
+    task: JoinHandle<Result<(), String>>,
 }
 
 impl RunningServer {
@@ -31,7 +31,21 @@ impl RunningServer {
         self.cancellation.cancel();
         self.task
             .await
-            .unwrap_or_else(|error| panic!("server task join: {error}"));
+            .unwrap_or_else(|error| panic!("server task join: {error}"))
+            .unwrap_or_else(|error| panic!("stop test runtime: {error}"));
+    }
+
+    #[cfg(unix)]
+    async fn stop_with_interrupted_command(self) {
+        self.cancellation.cancel();
+        let result = self
+            .task
+            .await
+            .unwrap_or_else(|error| panic!("interrupted server task join: {error}"));
+        assert!(
+            result.is_err(),
+            "an interrupted room command must remain visible during shutdown"
+        );
     }
 }
 
@@ -210,6 +224,79 @@ async fn lifecycle_commands_use_the_owned_codex_app_server_before_committing() {
     restarted.stop().await;
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn shutdown_checkpoints_gone_after_aborting_initialization() {
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create cancellation root: {error}"));
+    let database_url = format!(
+        "sqlite://{}",
+        directory.path().join("runtime.sqlite3").display()
+    );
+    let store = SqliteStore::open(&database_url)
+        .await
+        .unwrap_or_else(|error| panic!("open cancellation store: {error}"));
+    bootstrap(&store).await;
+    let started_path = directory.path().join("initialization-started");
+    let release_path = directory.path().join("release-initialization");
+    let fixture = format!(
+        "#!/bin/sh\nprintf '%s' \"$$\" > {}\nIFS= read -r initialize\nwhile [ ! -f {} ]; do sleep 1; done\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nwhile :; do sleep 1; done\n",
+        shell_quote(&started_path),
+        shell_quote(&release_path),
+    );
+    let catalog = agent_catalog_with_fixture(directory.path(), fixture.as_bytes());
+    let server = start(store, catalog.clone()).await;
+    let mut socket = connect(&server.base_url).await;
+    subscribe(&mut socket).await;
+    let _snapshot = receive_json(&mut socket).await;
+    let create_payload = json!({
+        "provider_id": "codex",
+        "catalog_revision": "catalog-boundary-1",
+        "display_name": "Terra",
+        "workspace": directory.path(),
+        "model": "gpt-5.6-terra",
+        "permission_mode": "meeting_read_only",
+        "start_now": false,
+    });
+    send_create(&mut socket, "create-cancelled-start", &create_payload).await;
+    let created = receive_until_ack(&mut socket, 2).await;
+    let session_id = created["result"]["agent_session"]["session_id"]
+        .as_str()
+        .unwrap_or_else(|| panic!("cancelled fixture session has no id"))
+        .to_owned();
+    let lifecycle_payload = json!({"agent_id": session_id});
+    send_command(
+        &mut socket,
+        "cancelled-start",
+        "agent.start",
+        &lifecycle_payload,
+    )
+    .await;
+    wait_for_file(&started_path).await;
+    server.stop_with_interrupted_command().await;
+    std::fs::write(&release_path, b"release")
+        .unwrap_or_else(|error| panic!("release initialization fixture: {error}"));
+
+    let reopened = SqliteStore::open(&database_url)
+        .await
+        .unwrap_or_else(|error| panic!("reopen cancellation store: {error}"));
+    let restarted = start(reopened, catalog).await;
+    let mut recovered_socket = connect(&restarted.base_url).await;
+    subscribe(&mut recovered_socket).await;
+    let recovered = receive_json(&mut recovered_socket).await;
+    assert_eq!(recovered["agent_sessions"][0]["runtime_status"], "starting");
+    send_command(
+        &mut recovered_socket,
+        "cancelled-start",
+        "agent.start",
+        &lifecycle_payload,
+    )
+    .await;
+    let resumed = receive_until_ack(&mut recovered_socket, 3).await;
+    assert_eq!(resumed["result"]["agent_session"]["runtime_status"], "idle");
+    restarted.stop().await;
+}
+
 fn assert_public_session(session: &Value) {
     for private in [
         "workspace",
@@ -240,17 +327,24 @@ async fn start(store: SqliteStore, catalog: ProviderCatalog) -> RunningServer {
         .unwrap_or_else(|error| panic!("read test runtime address: {error}"));
     let cancellation = CancellationToken::new();
     let server_cancellation = cancellation.clone();
-    let state = AppState::local(
+    #[cfg(unix)]
+    let provider_adapter = ProviderAdapter::with_guardian_executable(std::path::PathBuf::from(
+        env!("CARGO_BIN_EXE_agentsassemble-server"),
+    ));
+    #[cfg(not(unix))]
+    let provider_adapter = ProviderAdapter::new();
+    let state = AppState::local_with_provider_adapter(
         store,
         TicketStore::new(Duration::from_secs(30), 16),
         HostSecret::new(HOST_TOKEN)
             .unwrap_or_else(|error| panic!("validate test host secret: {error}")),
         ProviderCatalogService::fixed(catalog),
+        provider_adapter,
     );
     let task = tokio::spawn(async move {
         serve(listener, state, server_cancellation)
             .await
-            .unwrap_or_else(|error| panic!("serve test runtime: {error}"));
+            .map_err(|error| error.to_string())
     });
     RunningServer {
         base_url: format!("http://{address}"),
@@ -425,11 +519,15 @@ async fn bootstrap(store: &SqliteStore) {
 }
 
 fn agent_catalog(root: &Path) -> ProviderCatalog {
-    let executable = root.join("provider-fixture");
     #[cfg(unix)]
     let fixture: &[u8] = b"#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\nIFS= read -r initialized\nwhile :; do sleep 1; done\n";
     #[cfg(not(unix))]
     let fixture: &[u8] = b"provider fixture";
+    agent_catalog_with_fixture(root, fixture)
+}
+
+fn agent_catalog_with_fixture(root: &Path, fixture: &[u8]) -> ProviderCatalog {
+    let executable = root.join("provider-fixture");
     std::fs::write(&executable, fixture)
         .unwrap_or_else(|error| panic!("write test executable: {error}"));
     #[cfg(unix)]
@@ -507,4 +605,20 @@ fn agent_catalog(root: &Path) -> ProviderCatalog {
             ],
         }],
     }
+}
+
+#[cfg(unix)]
+async fn wait_for_file(path: &Path) {
+    for _ in 0..200 {
+        if path.is_file() {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("fixture did not publish {}", path.display());
+}
+
+#[cfg(unix)]
+fn shell_quote(path: &Path) -> String {
+    format!("'{}'", path.to_string_lossy().replace('\'', "'\\''"))
 }

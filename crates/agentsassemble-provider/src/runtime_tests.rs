@@ -8,6 +8,13 @@ use crate::profile::runtime_profile_key;
 
 static RUNTIME_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
+#[test]
+fn provider_guardian_entry() {
+    if let Some(code) = crate::guardian::run_test_helper_if_requested() {
+        std::process::exit(code);
+    }
+}
+
 #[tokio::test]
 async fn codex_runtime_is_initialized_reused_and_stopped_by_exact_owner() {
     let _serial = RUNTIME_TEST_LOCK.lock().await;
@@ -165,7 +172,47 @@ async fn stop_kills_descendants_after_the_codex_leader_exits() {
         )
         .await
         .unwrap_or_else(|error| panic!("stop exited leader and descendants: {error}"));
+    adapter
+        .release_confirmed_stop(
+            &session.public.room_id,
+            &session.public.session_id,
+            &started.runtime_handle_id,
+            &started.runtime_owner_id,
+        )
+        .await;
     wait_until(Duration::from_secs(2), || !process_exists(pid)).await;
+}
+
+#[tokio::test]
+async fn fresh_supervisor_uses_the_guardian_lease_before_reporting_gone() {
+    let _serial = RUNTIME_TEST_LOCK.lock().await;
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create guardian fixture: {error}"));
+    let script = "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\nIFS= read -r initialized\nwhile :; do sleep 1; done\n";
+    let mut session = fixture_session(directory.path(), script).await;
+    let adapter = ProviderAdapter::new();
+    let started = adapter
+        .start(&session)
+        .await
+        .unwrap_or_else(|error| panic!("start guarded fixture: {error}"));
+    session.runtime_handle_id = started.runtime_handle_id;
+    session.runtime_owner_id = started.runtime_owner_id;
+    let fresh = ProviderAdapter::new();
+    assert!(matches!(
+        fresh.observe(&session).await,
+        ProviderRuntimeObservation::LeaseUncertain { .. }
+    ));
+    drop(adapter);
+    let mut observation = fresh.observe(&session).await;
+    for _ in 0..200 {
+        if observation == ProviderRuntimeObservation::Gone {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        observation = fresh.observe(&session).await;
+    }
+    assert_eq!(observation, ProviderRuntimeObservation::Gone);
+    crate::runtime_lease::remove_runtime_lease(&session.public.room_id, &session.public.session_id);
 }
 
 #[tokio::test]
@@ -191,6 +238,7 @@ async fn cancelled_initialization_remains_owned_for_shutdown() {
         .shutdown()
         .await
         .unwrap_or_else(|error| panic!("shutdown cancelled initialization: {error}"));
+    crate::runtime_lease::remove_runtime_lease(&session.public.room_id, &session.public.session_id);
     wait_until(Duration::from_secs(2), || !process_exists(pid)).await;
 }
 
