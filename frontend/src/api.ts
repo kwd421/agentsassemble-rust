@@ -2,6 +2,13 @@ import type { Participant } from "./types/generated/Participant";
 import type { Room } from "./types/generated/Room";
 import type { RoomEvent } from "./types/generated/RoomEvent";
 import type { TicketResponse } from "./types/generated/TicketResponse";
+import {
+  signHostTicketRequest,
+  verifyHostChallenge,
+  verifyHostTicketResponse,
+  type HostChallengeGrant,
+  type HostTicketGrant,
+} from "./hostTicketProof";
 
 let inMemoryHostToken = "";
 
@@ -61,19 +68,33 @@ export function saveHostToken(token: string): void {
 }
 
 export async function getWsTicket(auth: RoomSocketAuth): Promise<TicketResponse> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  const body: Record<string, string> = {};
+  const headers: Record<string, string> = {};
+  let challenge = "";
+  let hostToken = "";
   if (auth.kind === "host") {
-    const hostToken = loadHostToken();
-    if (hostToken) headers["X-Host-Token"] = hostToken;
-    body.meeting_id = auth.meetingId;
+    hostToken = loadHostToken();
+    const challengeResponse = await fetch("/api/host-challenge");
+    if (!challengeResponse.ok) {
+      throw new Error(`${challengeResponse.status} ${challengeResponse.statusText}`);
+    }
+    const challengeGrant = await challengeResponse.json() as HostChallengeGrant;
+    if (!(await verifyHostChallenge(hostToken, challengeGrant))) {
+      throw new Error("Host challenge did not prove the server authority.");
+    }
+    challenge = challengeGrant.challenge;
+    headers["X-Host-Challenge"] = challenge;
+    headers["X-Host-Meeting"] = auth.meetingId;
+    headers["X-Host-Proof"] = await signHostTicketRequest(
+      hostToken,
+      challenge,
+      auth.meetingId
+    );
   } else {
     headers.Authorization = `Bearer ${auth.sessionToken}`;
   }
   const response = await fetch("/api/ws-ticket", {
     method: "POST",
     headers,
-    body: JSON.stringify(body),
   });
   if (!response.ok) {
     const payload = await response.json().catch(() => null) as {
@@ -84,9 +105,12 @@ export async function getWsTicket(auth: RoomSocketAuth): Promise<TicketResponse>
       : payload?.error?.message;
     throw new Error(message || `${response.status} ${response.statusText}`);
   }
-  const grant = await response.json() as TicketResponse;
-  if (!grant.ticket || !/^[0-9a-f]{64}$/i.test(grant.server_proof_key)) {
-    throw new Error("Ticket response did not include a complete server proof grant.");
+  const grant = await response.json() as HostTicketGrant;
+  if (
+    auth.kind !== "host" ||
+    !(await verifyHostTicketResponse(hostToken, challenge, grant))
+  ) {
+    throw new Error("Ticket response did not prove the host authority.");
   }
   return grant;
 }

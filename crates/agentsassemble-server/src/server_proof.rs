@@ -14,6 +14,10 @@ pub(crate) fn sign_challenge(proof_key: &str, challenge: &str) -> String {
         .unwrap_or_else(|_| unreachable!("HMAC accepts keys of every length"));
     signer.update(PROOF_CONTEXT.as_bytes());
     signer.update(challenge.as_bytes());
+    encode_signature(signer)
+}
+
+fn encode_signature(signer: Hmac<Sha256>) -> String {
     signer
         .finalize()
         .into_bytes()

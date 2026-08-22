@@ -3,7 +3,7 @@ use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
 use agentsassemble_domain::{ProviderCatalog, SnapshotMode, public_settings};
 use agentsassemble_persistence::{PersistenceError, SqliteStore};
 use agentsassemble_protocol::{
-    ClientFrame, CommandAck, CommandNack, ProtocolError, RoomSnapshot, ServerFrame, TicketResponse,
+    ClientFrame, CommandAck, CommandNack, ProtocolError, RoomSnapshot, ServerFrame,
 };
 use axum::{
     Json, Router, body,
@@ -19,7 +19,6 @@ use axum::{
 use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
 use serde_json::{Value, json};
-use subtle::ConstantTimeEq;
 use thiserror::Error;
 use tokio::{
     net::TcpListener,
@@ -33,6 +32,7 @@ use tower_http::{
 
 use crate::{
     ConsumedTicket, RoomRuntime, TicketIssueError, TicketStore,
+    host_ticket::{AuthenticatedTicketResponse, HostChallengeResponse, HostSecret},
     http_transport::{MAX_HTTP_CONNECTIONS, RejectionCounter, serve_connection},
     ingress_budget::IngressBudget,
     issue_local_ticket,
@@ -83,41 +83,10 @@ impl AppState {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct HostSecret(Arc<str>);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
-#[error("host secret must contain at least 32 non-whitespace bytes")]
-pub struct InvalidHostSecret;
-
-impl HostSecret {
-    /// Validates a desktop runtime host credential.
-    ///
-    /// # Errors
-    ///
-    /// Returns `InvalidHostSecret` for short or whitespace-padded credentials.
-    pub fn new(value: impl Into<String>) -> Result<Self, InvalidHostSecret> {
-        let value = value.into();
-        if value.len() < 32 || value.trim() != value {
-            return Err(InvalidHostSecret);
-        }
-        Ok(Self(Arc::from(value)))
-    }
-
-    fn matches(&self, provided: &str) -> bool {
-        self.0.len() == provided.len() && bool::from(self.0.as_bytes().ct_eq(provided.as_bytes()))
-    }
-}
-
 #[derive(Debug, Error)]
 pub enum ServeError {
     #[error("server I/O failed: {0}")]
     Io(#[from] std::io::Error),
-}
-
-#[derive(Debug, Deserialize)]
-struct TicketRequest {
-    meeting_id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -129,6 +98,7 @@ pub fn router(state: AppState) -> Router {
     let frontend_root = state.frontend_root.clone();
     let mut app = Router::new()
         .route("/healthz", get(health))
+        .route("/api/host-challenge", get(issue_host_challenge))
         .route("/api/ws-ticket", post(issue_ticket))
         .route("/ws", get(upgrade_socket));
     if let Some(frontend_root) = frontend_root {
@@ -229,18 +199,26 @@ async fn health() -> Json<Value> {
     Json(json!({"status": "ready", "runtime": "rust"}))
 }
 
+async fn issue_host_challenge(
+    State(state): State<AppState>,
+) -> Result<Json<HostChallengeResponse>, ApiError> {
+    state
+        .host_token
+        .challenge()
+        .map(Json)
+        .ok_or_else(|| ApiError::unavailable("Host challenge capacity is unavailable."))
+}
+
 async fn issue_ticket(
     State(state): State<AppState>,
     request: Request,
-) -> Result<Json<TicketResponse>, ApiError> {
-    let provided_token = request
-        .headers()
-        .get("x-host-token")
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or_default();
-    if !state.host_token.matches(provided_token) {
-        return Err(ApiError::unauthorized("A valid host token is required."));
-    }
+) -> Result<Json<AuthenticatedTicketResponse>, ApiError> {
+    let Some(authenticated) = state
+        .host_token
+        .authenticate_ticket_request(request.headers())
+    else {
+        return Err(ApiError::unauthorized("A valid host proof is required."));
+    };
     if request
         .headers()
         .get(header::CONTENT_LENGTH)
@@ -255,12 +233,18 @@ async fn issue_ticket(
     let encoded = body::to_bytes(request.into_body(), MAX_TICKET_BODY_BYTES)
         .await
         .map_err(|_| ApiError::payload_too_large("Ticket request body exceeds the route limit."))?;
-    let request: TicketRequest = serde_json::from_slice(&encoded)
-        .map_err(|_| ApiError::bad_request("Ticket request JSON is invalid."))?;
-    issue_local_ticket(&state, &request.meeting_id)
+    if !encoded.is_empty() {
+        return Err(ApiError::bad_request(
+            "Ticket requests must not contain a body.",
+        ));
+    }
+    let grant = issue_local_ticket(&state, &authenticated.meeting_id)
         .await
-        .map(Json)
-        .map_err(ApiError::from)
+        .map_err(ApiError::from)?;
+    Ok(Json(state.host_token.authenticated_ticket_response(
+        &authenticated.challenge,
+        grant,
+    )))
 }
 
 async fn upgrade_socket(

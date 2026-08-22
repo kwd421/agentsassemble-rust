@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use sqlx::sqlite::SqlitePoolOptions;
+use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
 
 use crate::{PersistenceError, SqliteStore, database_target::PreparedDatabase};
 
@@ -30,6 +30,9 @@ impl SqliteStore {
             .max_lifetime(None)
             .connect_with(prepared.options.clone().create_if_missing(true))
             .await?;
+        if prepared.identity.is_some() {
+            acquire_file_authority_lock(&pool).await?;
+        }
         prepared.revalidate()?;
         let store = Self {
             pool,
@@ -44,4 +47,13 @@ impl SqliteStore {
         }
         Ok(store)
     }
+}
+
+async fn acquire_file_authority_lock(pool: &SqlitePool) -> Result<(), PersistenceError> {
+    let mut connection = pool.acquire().await?;
+    sqlx::query("BEGIN EXCLUSIVE")
+        .execute(&mut *connection)
+        .await?;
+    sqlx::query("COMMIT").execute(&mut *connection).await?;
+    Ok(())
 }

@@ -115,9 +115,13 @@ async fn unlinked_hardlink_alias_cannot_become_a_second_writer() {
         tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
     let original = directory.path().join("authority.sqlite3");
     let alias = directory.path().join("alias.sqlite3");
+    let seed = SqliteStore::open_path(&original)
+        .await
+        .unwrap_or_else(|error| panic!("create authority: {error}"));
+    drop(seed);
     let first = SqliteStore::open_path(&original)
         .await
-        .unwrap_or_else(|error| panic!("open first authority: {error}"));
+        .unwrap_or_else(|error| panic!("reopen existing authority: {error}"));
     std::fs::hard_link(&original, &alias)
         .unwrap_or_else(|error| panic!("create authority alias: {error}"));
     std::fs::remove_file(&original)

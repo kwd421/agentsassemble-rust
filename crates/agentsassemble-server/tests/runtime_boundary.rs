@@ -18,6 +18,9 @@ use tokio_tungstenite::{WebSocketStream, connect_async, tungstenite::Message};
 use tokio_util::sync::CancellationToken;
 
 const HOST_TOKEN: &str = "boundary-test-host-token-0000000001";
+const HOST_CHALLENGE_CONTEXT: &str = "agentsassemble-host-challenge-v1\0";
+const HOST_REQUEST_CONTEXT: &str = "agentsassemble-host-ticket-request-v1\0";
+const HOST_RESPONSE_CONTEXT: &str = "agentsassemble-host-ticket-response-v1\0";
 
 struct RunningServer {
     base_url: String,
@@ -54,14 +57,22 @@ async fn external_client_recovers_committed_command_after_restart() {
         .await
         .unwrap_or_else(|error| panic!("request unauthenticated ticket: {error}"));
     assert_eq!(unauthenticated.status(), reqwest::StatusCode::UNAUTHORIZED);
+    let wrong_challenge = "a".repeat(64);
+    let wrong_proof = expected_host_request_proof(
+        "wrong-boundary-host-token-000000000",
+        &wrong_challenge,
+        "general",
+    );
     let wrong_secret = Client::new()
         .post(format!("{}/api/ws-ticket", first_server.base_url))
-        .header("x-host-token", "wrong-boundary-host-token-000000000")
-        .json(&json!({"meeting_id": "general"}))
+        .header("x-host-challenge", wrong_challenge)
+        .header("x-host-meeting", "general")
+        .header("x-host-proof", wrong_proof)
         .send()
         .await
         .unwrap_or_else(|error| panic!("request ticket with wrong secret: {error}"));
     assert_eq!(wrong_secret.status(), reqwest::StatusCode::UNAUTHORIZED);
+    assert_ticket_challenge_is_single_use(&first_server.base_url).await;
     let mut first_socket = connect(&first_server.base_url).await;
     subscribe(&mut first_socket, 0).await;
     let initial = receive_json(&mut first_socket).await;
@@ -192,10 +203,12 @@ async fn ticket_auth_and_route_limit_are_checked_before_request_body() {
     .await;
     assert!(unauthorized.starts_with("HTTP/1.1 401"));
 
+    let challenge = request_host_challenge(&server.base_url).await;
+    let proof = expected_host_request_proof(HOST_TOKEN, &challenge, "general");
     let oversized = header_only_request(
         &address,
         &format!(
-            "POST /api/ws-ticket HTTP/1.1\r\nHost: localhost\r\nx-host-token: {HOST_TOKEN}\r\nContent-Length: 1048576\r\n\r\n"
+            "POST /api/ws-ticket HTTP/1.1\r\nHost: localhost\r\nx-host-challenge: {challenge}\r\nx-host-meeting: general\r\nx-host-proof: {proof}\r\nContent-Length: 1048576\r\n\r\n"
         ),
     )
     .await;
@@ -452,18 +465,110 @@ async fn connect(
 }
 
 async fn request_ticket(base_url: &str) -> Value {
+    let challenge = request_host_challenge(base_url).await;
+    let proof = expected_host_request_proof(HOST_TOKEN, &challenge, "general");
     let response = Client::new()
         .post(format!("{base_url}/api/ws-ticket"))
-        .header("x-host-token", HOST_TOKEN)
-        .json(&json!({"meeting_id": "general"}))
+        .header("x-host-challenge", &challenge)
+        .header("x-host-meeting", "general")
+        .header("x-host-proof", proof)
         .send()
         .await
         .unwrap_or_else(|error| panic!("request ticket: {error}"));
     assert!(response.status().is_success());
-    response
+    let grant: Value = response
         .json()
         .await
-        .unwrap_or_else(|error| panic!("decode ticket: {error}"))
+        .unwrap_or_else(|error| panic!("decode ticket: {error}"));
+    let ticket = grant["ticket"]
+        .as_str()
+        .unwrap_or_else(|| panic!("ticket response has no ticket"));
+    let ttl_seconds = grant["ttl_seconds"]
+        .as_u64()
+        .unwrap_or_else(|| panic!("ticket response has no TTL"));
+    let proof_key = grant["server_proof_key"]
+        .as_str()
+        .unwrap_or_else(|| panic!("ticket response has no proof key"));
+    assert_eq!(
+        grant["host_response_proof"],
+        expected_host_response_proof(HOST_TOKEN, &challenge, ticket, ttl_seconds, proof_key,)
+    );
+    grant
+}
+
+async fn assert_ticket_challenge_is_single_use(base_url: &str) {
+    let challenge = request_host_challenge(base_url).await;
+    let proof = expected_host_request_proof(HOST_TOKEN, &challenge, "general");
+    let client = Client::new();
+    for expected in [reqwest::StatusCode::OK, reqwest::StatusCode::UNAUTHORIZED] {
+        let response = client
+            .post(format!("{base_url}/api/ws-ticket"))
+            .header("x-host-challenge", &challenge)
+            .header("x-host-meeting", "general")
+            .header("x-host-proof", &proof)
+            .send()
+            .await
+            .unwrap_or_else(|error| panic!("exercise single-use host challenge: {error}"));
+        assert_eq!(response.status(), expected);
+    }
+}
+
+async fn request_host_challenge(base_url: &str) -> String {
+    let challenge_response = Client::new()
+        .get(format!("{base_url}/api/host-challenge"))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("request host challenge: {error}"));
+    assert!(challenge_response.status().is_success());
+    let challenge_grant: Value = challenge_response
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("decode host challenge: {error}"));
+    let challenge = challenge_grant["challenge"]
+        .as_str()
+        .unwrap_or_else(|| panic!("host challenge response has no challenge"));
+    assert_eq!(
+        challenge_grant["host_challenge_proof"],
+        expected_hmac(HOST_TOKEN, HOST_CHALLENGE_CONTEXT, &[challenge])
+    );
+    challenge.to_owned()
+}
+
+fn expected_host_request_proof(secret: &str, challenge: &str, meeting_id: &str) -> String {
+    expected_hmac(secret, HOST_REQUEST_CONTEXT, &[challenge, meeting_id])
+}
+
+fn expected_host_response_proof(
+    secret: &str,
+    challenge: &str,
+    ticket: &str,
+    ttl_seconds: u64,
+    proof_key: &str,
+) -> String {
+    expected_hmac(
+        secret,
+        HOST_RESPONSE_CONTEXT,
+        &[challenge, ticket, &ttl_seconds.to_string(), proof_key],
+    )
+}
+
+fn expected_hmac(secret: &str, context: &str, fields: &[&str]) -> String {
+    let mut signer = Hmac::<Sha256>::new_from_slice(secret.as_bytes())
+        .unwrap_or_else(|error| panic!("construct host proof signer: {error}"));
+    signer.update(context.as_bytes());
+    for field in fields {
+        signer.update(field.as_bytes());
+        signer.update(&[0]);
+    }
+    signer
+        .finalize()
+        .into_bytes()
+        .iter()
+        .fold(String::with_capacity(64), |mut encoded, byte| {
+            write!(encoded, "{byte:02x}")
+                .unwrap_or_else(|error| panic!("encode host proof: {error}"));
+            encoded
+        })
 }
 
 async fn subscribe<S>(socket: &mut WebSocketStream<S>, cursor: i64)
