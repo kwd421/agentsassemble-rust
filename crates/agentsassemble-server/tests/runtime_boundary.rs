@@ -1,8 +1,8 @@
-use std::{sync::Arc, time::Duration};
+use std::time::Duration;
 
 use agentsassemble_domain::{Participant, ParticipantStatus, Room, RoomSettings};
 use agentsassemble_persistence::SqliteStore;
-use agentsassemble_server::{AppState, TicketStore, serve};
+use agentsassemble_server::{AppState, HostSecret, TicketStore, serve};
 use chrono::Utc;
 use futures_util::{SinkExt, StreamExt};
 use reqwest::Client;
@@ -48,6 +48,14 @@ async fn external_client_recovers_committed_command_after_restart() {
         .await
         .unwrap_or_else(|error| panic!("request unauthenticated ticket: {error}"));
     assert_eq!(unauthenticated.status(), reqwest::StatusCode::UNAUTHORIZED);
+    let wrong_secret = Client::new()
+        .post(format!("{}/api/ws-ticket", first_server.base_url))
+        .header("x-host-token", "wrong-boundary-host-token-000000000")
+        .json(&json!({"meeting_id": "general"}))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("request ticket with wrong secret: {error}"));
+    assert_eq!(wrong_secret.status(), reqwest::StatusCode::UNAUTHORIZED);
     let mut first_socket = connect(&first_server.base_url).await;
     subscribe(&mut first_socket, 0).await;
     let initial = receive_json(&mut first_socket).await;
@@ -69,6 +77,7 @@ async fn external_client_recovers_committed_command_after_restart() {
     assert_eq!(event["events"][0]["seq"], 1);
     assert_eq!(ack["result"]["event_seq"], 1);
     assert_eq!(ack["result"]["event"]["id"], event["events"][0]["id"]);
+    assert_eq!(event["events"][0]["id"].as_str().map(str::len), Some(36));
     first_socket
         .close(None)
         .await
@@ -95,6 +104,11 @@ async fn external_client_recovers_committed_command_after_restart() {
             .await
             .is_err()
     );
+    let mut cursor_ahead = connect(&second_server.base_url).await;
+    subscribe(&mut cursor_ahead, 50).await;
+    let resync = receive_json(&mut cursor_ahead).await;
+    assert_eq!(resync["op"], "resync_required");
+    assert_eq!(resync["latest_seq"], 1);
     second_server.stop().await;
 }
 
@@ -110,7 +124,8 @@ async fn start(store: SqliteStore) -> RunningServer {
     let state = AppState::local(
         store,
         TicketStore::new(Duration::from_secs(30), 16),
-        Arc::from(HOST_TOKEN),
+        HostSecret::new(HOST_TOKEN)
+            .unwrap_or_else(|error| panic!("validate test host secret: {error}")),
     );
     let task = tokio::spawn(async move {
         serve(listener, state, server_cancellation)

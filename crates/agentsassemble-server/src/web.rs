@@ -45,7 +45,7 @@ pub struct AppState {
     pub store: SqliteStore,
     pub rooms: RoomRuntime,
     pub tickets: TicketStore,
-    pub host_token: Arc<str>,
+    pub host_token: HostSecret,
     pub shutdown: CancellationToken,
     pub connections: TaskTracker,
     pub connection_admission: Arc<Semaphore>,
@@ -53,7 +53,7 @@ pub struct AppState {
 
 impl AppState {
     #[must_use]
-    pub fn local(store: SqliteStore, tickets: TicketStore, host_token: Arc<str>) -> Self {
+    pub fn local(store: SqliteStore, tickets: TicketStore, host_token: HostSecret) -> Self {
         Self {
             rooms: RoomRuntime::new(store.clone()),
             store,
@@ -63,6 +63,32 @@ impl AppState {
             connections: TaskTracker::new(),
             connection_admission: Arc::new(Semaphore::new(MAX_WS_CONNECTIONS)),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct HostSecret(Arc<str>);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+#[error("host secret must contain at least 32 non-whitespace bytes")]
+pub struct InvalidHostSecret;
+
+impl HostSecret {
+    /// Validates a desktop runtime host credential.
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvalidHostSecret` for short or whitespace-padded credentials.
+    pub fn new(value: impl Into<String>) -> Result<Self, InvalidHostSecret> {
+        let value = value.into();
+        if value.len() < 32 || value.trim() != value {
+            return Err(InvalidHostSecret);
+        }
+        Ok(Self(Arc::from(value)))
+    }
+
+    fn matches(&self, provided: &str) -> bool {
+        self.0.len() == provided.len() && bool::from(self.0.as_bytes().ct_eq(provided.as_bytes()))
     }
 }
 
@@ -126,7 +152,7 @@ async fn issue_ticket(
         .get("x-host-token")
         .and_then(|value| value.to_str().ok())
         .unwrap_or_default();
-    if !secure_token_matches(state.host_token.as_ref(), provided_token) {
+    if !state.host_token.matches(provided_token) {
         return Err(ApiError::unauthorized("A valid host token is required."));
     }
     let room_id = validate_room_id(&request.meeting_id)
@@ -240,27 +266,28 @@ async fn socket_session(
         .await
     {
         Ok(snapshot) => snapshot,
+        Err(PersistenceError::InvalidCursor { durable_last_seq }) => {
+            let frame = ServerFrame::ResyncRequired {
+                stream: "room_events",
+                reason: "resume cursor is ahead of durable room state".to_owned(),
+                latest_seq: durable_last_seq,
+            };
+            let _ = send_frame(&mut sender, &frame).await;
+            return;
+        }
         Err(error) => {
+            tracing::error!(error = ?error, room_id = %principal.room_id, "room snapshot failed");
             let _ = send_nack(
                 &mut sender,
                 "",
                 "subscribe",
                 "snapshot_failed",
-                &error.to_string(),
+                "Room snapshot failed.",
             )
             .await;
             return;
         }
     };
-    if resume_from_seq > snapshot_data.last_seq {
-        let frame = ServerFrame::ResyncRequired {
-            stream: "room_events",
-            reason: "resume cursor is ahead of durable room state".to_owned(),
-            latest_seq: snapshot_data.last_seq,
-        };
-        let _ = send_frame(&mut sender, &frame).await;
-        return;
-    }
     let settings = match public_settings(&snapshot_data.settings) {
         Ok(settings) => settings,
         Err(error) => {
@@ -309,6 +336,14 @@ async fn socket_session(
                 }
                 match serde_json::from_str::<ClientFrame>(raw.as_str()) {
                     Ok(ClientFrame::Command { request_id, action, payload }) => {
+                        if request_id.is_empty()
+                            || request_id.chars().count() > 128
+                            || action.is_empty()
+                            || action.chars().count() > 64
+                        {
+                            if send_nack(&mut sender, &request_id, &action, "command_envelope_invalid", "request_id or action is invalid.").await.is_err() { return; }
+                            continue;
+                        }
                         let outcome = state.rooms.execute(
                             principal.clone(), request_id.clone(), action.clone(), payload,
                         ).await;
@@ -324,6 +359,9 @@ async fn socket_session(
                                 if send_frame(&mut sender, &frame).await.is_err() { return; }
                             }
                             Err(error) => {
+                                if persistence_error_is_internal(&error) {
+                                    tracing::error!(error = ?error, room_id = %principal.room_id, action = %action, "room command persistence failed");
+                                }
                                 let (code, message) = persistence_error(&error);
                                 if send_nack(&mut sender, &request_id, &action, code, &message).await.is_err() { return; }
                             }
@@ -411,8 +449,13 @@ fn persistence_error(error: &PersistenceError) -> (&'static str, String) {
         | PersistenceError::AuthorityConflict(_)
         | PersistenceError::UnownedDatabase
         | PersistenceError::WriterAlreadyActive(_)
-        | PersistenceError::WriterLease(_) => ("persistence_failed", error.to_string()),
-        PersistenceError::InvalidCursor => ("invalid_cursor", error.to_string()),
+        | PersistenceError::WriterLease(_) => (
+            "persistence_failed",
+            "Persistence operation failed.".to_owned(),
+        ),
+        PersistenceError::InvalidCursor { .. } => {
+            ("invalid_cursor", "Room cursor is invalid.".to_owned())
+        }
     }
 }
 
@@ -459,7 +502,8 @@ impl ApiError {
 
 impl From<PersistenceError> for ApiError {
     fn from(error: PersistenceError) -> Self {
-        Self::unavailable(error.to_string())
+        tracing::error!(error = ?error, "HTTP persistence operation failed");
+        Self::unavailable("Persistence operation failed.")
     }
 }
 
@@ -476,10 +520,16 @@ impl IntoResponse for ApiError {
 #[allow(dead_code)]
 fn _socket_address_is_send(_: SocketAddr) {}
 
-fn secure_token_matches(expected: &str, provided: &str) -> bool {
-    !expected.is_empty()
-        && expected.len() == provided.len()
-        && bool::from(expected.as_bytes().ct_eq(provided.as_bytes()))
+fn persistence_error_is_internal(error: &PersistenceError) -> bool {
+    matches!(
+        error,
+        PersistenceError::Database(_)
+            | PersistenceError::Json(_)
+            | PersistenceError::AuthorityConflict(_)
+            | PersistenceError::UnownedDatabase
+            | PersistenceError::WriterAlreadyActive(_)
+            | PersistenceError::WriterLease(_)
+    )
 }
 
 struct IngressBudget {
@@ -507,5 +557,37 @@ impl IngressBudget {
         self.messages = self.messages.saturating_add(1);
         self.bytes = self.bytes.saturating_add(bytes);
         self.messages <= INGRESS_MESSAGES_PER_WINDOW && self.bytes <= INGRESS_BYTES_PER_WINDOW
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{io, path::PathBuf};
+
+    use agentsassemble_persistence::PersistenceError;
+
+    use super::{HostSecret, persistence_error};
+
+    #[test]
+    fn host_secret_invariant_cannot_be_bypassed_by_an_adapter() {
+        assert!(HostSecret::new("short").is_err());
+        assert!(HostSecret::new(" padded-host-secret-00000000000000 ").is_err());
+        assert!(HostSecret::new("valid-host-secret-0000000000000001").is_ok());
+    }
+
+    #[test]
+    fn internal_persistence_errors_have_a_stable_wire_message() {
+        let errors = [
+            PersistenceError::WriterAlreadyActive(PathBuf::from("/private/data.sqlite3")),
+            PersistenceError::WriterLease(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "/private/data.sqlite3 denied",
+            )),
+        ];
+        for error in errors {
+            let (_, message) = persistence_error(&error);
+            assert_eq!(message, "Persistence operation failed.");
+            assert!(!message.contains("/private"));
+        }
     }
 }

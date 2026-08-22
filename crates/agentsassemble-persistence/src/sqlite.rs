@@ -39,8 +39,8 @@ pub enum PersistenceError {
     ParticipantMissing,
     #[error("request id was reused with a different action or payload")]
     CommandConflict,
-    #[error("snapshot cursor is outside durable room history")]
-    InvalidCursor,
+    #[error("snapshot cursor is ahead of durable room history at {durable_last_seq}")]
+    InvalidCursor { durable_last_seq: i64 },
     #[error("command rejected: {code}: {message}")]
     CommandRejected { code: &'static str, message: String },
 }
@@ -211,7 +211,9 @@ impl SqliteStore {
         limit: i64,
     ) -> Result<RoomSnapshotData, PersistenceError> {
         if resume_from_seq < 0 {
-            return Err(PersistenceError::InvalidCursor);
+            return Err(PersistenceError::InvalidCursor {
+                durable_last_seq: 0,
+            });
         }
         let limit = limit.max(1);
         let mut transaction = self.pool.begin().await?;
@@ -239,7 +241,7 @@ impl SqliteStore {
         .fetch_one(&mut *transaction)
         .await?;
         if resume_from_seq > durable_last_seq {
-            return Err(PersistenceError::InvalidCursor);
+            return Err(PersistenceError::InvalidCursor { durable_last_seq });
         }
         let resume_gap = resume_from_seq > 0 && durable_last_seq - resume_from_seq > limit;
         let snapshot_mode = if resume_from_seq == 0 {

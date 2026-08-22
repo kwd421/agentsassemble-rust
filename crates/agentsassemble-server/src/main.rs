@@ -1,7 +1,6 @@
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     path::PathBuf,
-    sync::Arc,
     time::Duration,
 };
 
@@ -9,7 +8,7 @@ use agentsassemble_domain::{
     LOCAL_OPERATOR_PARTICIPANT_ID, Participant, ParticipantStatus, Room, RoomSettings,
 };
 use agentsassemble_persistence::SqliteStore;
-use agentsassemble_server::{AppState, TicketStore, serve};
+use agentsassemble_server::{AppState, HostSecret, TicketStore, serve};
 use anyhow::Context;
 use chrono::Utc;
 use clap::Parser;
@@ -38,9 +37,7 @@ async fn main() -> anyhow::Result<()> {
         .with_writer(std::io::stderr)
         .init();
     let args = Args::parse();
-    if args.host_token.len() < 32 || args.host_token.trim() != args.host_token {
-        anyhow::bail!("host token must contain at least 32 non-whitespace bytes");
-    }
+    let host_secret = HostSecret::new(args.host_token)?;
     if args.bind.ip() != IpAddr::V4(Ipv4Addr::LOCALHOST) && !args.bind.ip().is_loopback() {
         anyhow::bail!("the local runtime may bind only to loopback");
     }
@@ -70,7 +67,7 @@ async fn main() -> anyhow::Result<()> {
     let state = AppState::local(
         store,
         TicketStore::new(Duration::from_secs(30), 4_096),
-        Arc::from(args.host_token),
+        host_secret,
     );
     println!(
         "{}",

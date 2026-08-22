@@ -22,6 +22,12 @@ OWNED_CRATES = {
 DOMAIN_FORBIDDEN = frozenset(
     {"axum", "reqwest", "sqlx", "tokio", "tokio-util", "tower", "tower-http"}
 )
+CRATE_FORBIDDEN = {
+    "agentsassemble-domain": DOMAIN_FORBIDDEN,
+    "agentsassemble-protocol": frozenset({"axum", "sqlx", "tokio", "tower", "tower-http"}),
+    "agentsassemble-persistence": frozenset({"axum", "tower", "tower-http"}),
+    "agentsassemble-server": frozenset({"sqlx"}),
+}
 
 
 def metadata(repository_root: Path) -> dict[str, object]:
@@ -67,9 +73,11 @@ def architecture_violations(payload: dict[str, object]) -> tuple[str, ...]:
         workspace_dependencies = dependency_names & set(OWNED_CRATES)
         disallowed = sorted(workspace_dependencies - OWNED_CRATES[name])
         found.extend(f"{name} imports disallowed workspace crate {item}" for item in disallowed)
-        if name == "agentsassemble-domain":
-            forbidden = sorted(dependency_names & DOMAIN_FORBIDDEN)
-            found.extend(f"domain imports infrastructure dependency {item}" for item in forbidden)
+        forbidden = sorted(dependency_names & CRATE_FORBIDDEN[name])
+        found.extend(
+            f"{name} imports forbidden infrastructure dependency {item}"
+            for item in forbidden
+        )
     return tuple(found)
 
 
@@ -86,4 +94,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

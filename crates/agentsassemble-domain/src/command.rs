@@ -105,12 +105,7 @@ pub fn prepare_message_event(
     let participant_id = participant.participant_id.clone();
     Ok(RoomEvent {
         v: 1,
-        id: Uuid::new_v4()
-            .simple()
-            .to_string()
-            .chars()
-            .take(12)
-            .collect(),
+        id: Uuid::new_v4().to_string(),
         seq: sequence,
         created_at: now,
         room_id: participant.room_id.clone(),
