@@ -1,11 +1,13 @@
-use agentsassemble_domain::DurableAgentSession;
+use agentsassemble_domain::{DurableAgentSession, Participant};
 use serde_json::json;
 
 use super::{AgentRuntimeStarted, AgentStartPlan, AgentStopPlan};
 use crate::{
-    PersistenceError,
+    PersistenceError, SqliteStore,
     agent_lifecycle::tests::{AGENT_ID, fixture},
 };
+
+const SECOND_AGENT_ID: &str = "codex-00000000-0000-5000-8000-000000000002";
 
 fn started(handle: &str, provider_session_id: &str) -> AgentRuntimeStarted {
     AgentRuntimeStarted {
@@ -15,6 +17,133 @@ fn started(handle: &str, provider_session_id: &str) -> AgentRuntimeStarted {
         provider_session_reused: false,
         provider_session_active: true,
     }
+}
+
+async fn clone_agent(store: &SqliteStore, agent_id: &str) {
+    let participant = sqlx::query_scalar::<_, String>(
+        "SELECT participant_json FROM participants WHERE room_id = 'general' AND participant_id = ?",
+    )
+    .bind(AGENT_ID)
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("read source participant: {error}"));
+    let mut participant: Participant = serde_json::from_str(&participant)
+        .unwrap_or_else(|error| panic!("decode source participant: {error}"));
+    participant.participant_id = agent_id.to_owned();
+    sqlx::query(
+        "INSERT INTO participants(room_id, participant_id, participant_json) VALUES ('general', ?, ?)",
+    )
+    .bind(agent_id)
+    .bind(
+        serde_json::to_string(&participant)
+            .unwrap_or_else(|error| panic!("encode cloned participant: {error}")),
+    )
+    .execute(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("insert cloned participant: {error}"));
+
+    let session = sqlx::query_scalar::<_, String>(
+        "SELECT session_json FROM agent_sessions WHERE room_id = 'general' AND session_id = ?",
+    )
+    .bind(AGENT_ID)
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("read source session: {error}"));
+    let mut session: DurableAgentSession = serde_json::from_str(&session)
+        .unwrap_or_else(|error| panic!("decode source session: {error}"));
+    session.public.session_id = agent_id.to_owned();
+    session.public.participant_id = agent_id.to_owned();
+    sqlx::query(
+        "INSERT INTO agent_sessions(room_id, session_id, session_json) VALUES ('general', ?, ?)",
+    )
+    .bind(agent_id)
+    .bind(
+        serde_json::to_string(&session)
+            .unwrap_or_else(|error| panic!("encode cloned session: {error}")),
+    )
+    .execute(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("insert cloned session: {error}"));
+}
+
+#[tokio::test]
+async fn pending_request_identity_cannot_be_rebound_to_another_agent() {
+    let (store, principal, _directory) = fixture().await;
+    clone_agent(&store, SECOND_AGENT_ID).await;
+    let first_payload = json!({"agent_id": AGENT_ID});
+    let AgentStartPlan::Start(first) = store
+        .prepare_agent_start(&principal, "shared-request", &first_payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare first start: {error}"))
+    else {
+        panic!("first stopped session must require start");
+    };
+    let conflict = store
+        .prepare_agent_start(
+            &principal,
+            "shared-request",
+            &json!({"agent_id": SECOND_AGENT_ID}),
+        )
+        .await;
+    assert!(matches!(conflict, Err(PersistenceError::CommandConflict)));
+    let encoded = sqlx::query_scalar::<_, String>(
+        "SELECT session_json FROM agent_sessions WHERE room_id = 'general' AND session_id = ?",
+    )
+    .bind(SECOND_AGENT_ID)
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("read untouched second session: {error}"));
+    let untouched: DurableAgentSession = serde_json::from_str(&encoded)
+        .unwrap_or_else(|error| panic!("decode untouched second session: {error}"));
+    assert_eq!(untouched.public.runtime_status, "stopped");
+    assert!(untouched.lifecycle_intent_id.is_empty());
+    let reservation_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM lifecycle_command_reservations WHERE request_id = 'shared-request' AND session_id = ? AND operation_id = ?",
+    )
+    .bind(AGENT_ID)
+    .bind(&first.operation_id)
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("inspect reservation: {error}"));
+    assert_eq!(reservation_count, 1);
+}
+
+#[tokio::test]
+async fn start_completion_derives_its_request_operation_binding() {
+    let (store, principal, _directory) = fixture().await;
+    let payload = json!({"agent_id": AGENT_ID});
+    let AgentStartPlan::Start(start) = store
+        .prepare_agent_start(&principal, "owned-request", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare start: {error}"))
+    else {
+        panic!("stopped session must require start");
+    };
+    assert!(matches!(
+        store
+            .complete_agent_start(
+                &principal,
+                "substituted-request",
+                &payload,
+                &start.operation_id,
+                &started("owned-runtime", "owned-provider-thread"),
+            )
+            .await,
+        Err(PersistenceError::CommandRejected {
+            code: "stale_start_confirmation",
+            ..
+        })
+    ));
+    store
+        .complete_agent_start(
+            &principal,
+            "owned-request",
+            &payload,
+            &start.operation_id,
+            &started("owned-runtime", "owned-provider-thread"),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("complete exact request: {error}"));
 }
 
 #[tokio::test]

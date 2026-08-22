@@ -1,7 +1,9 @@
-use agentsassemble_domain::{AuthenticatedPrincipal, clean_identifier, stable_identity_hash};
+use agentsassemble_domain::{
+    AuthenticatedPrincipal, ClientKind, DurableAgentSession, clean_identifier, stable_identity_hash,
+};
 use serde_json::Value;
 
-use crate::PersistenceError;
+use crate::{AgentRuntimeStarted, PersistenceError};
 
 const AGENT_ID_KEYS: [&str; 3] = ["agent_id", "participant_id", "session_id"];
 
@@ -50,9 +52,117 @@ pub(crate) fn lifecycle_operation_id(
     ))
 }
 
+pub(crate) fn authorize_control(
+    principal: &AuthenticatedPrincipal,
+) -> Result<(), PersistenceError> {
+    if principal.client_kind == ClientKind::AgentBridge || !principal.capabilities.agent_control {
+        return Err(rejected_code(
+            "permission_denied",
+            "agent.control permission is required.",
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_runtime_started(
+    session: &DurableAgentSession,
+    started: &AgentRuntimeStarted,
+) -> Result<(), PersistenceError> {
+    if started.runtime_handle_id.is_empty() {
+        return Err(rejected_code(
+            "runtime_start_unconfirmed",
+            "Provider start did not return an owned runtime handle.",
+        ));
+    }
+    if started.provider_session_active && started.provider_session_id.is_empty() {
+        return Err(rejected_code(
+            "provider_session_unconfirmed",
+            "Provider start reported an active session without its identity.",
+        ));
+    }
+    if started.provider_session_reused && !started.provider_session_active {
+        return Err(rejected_code(
+            "provider_session_unconfirmed",
+            "An inactive provider session cannot be reported as reused.",
+        ));
+    }
+    if started.provider_session_reused
+        && (session.provider_session_id.is_empty()
+            || started.provider_session_id != session.provider_session_id)
+    {
+        return Err(rejected_code(
+            "provider_session_mismatch",
+            "A reused provider session must preserve its durable identity.",
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn matching_prepared_intent(
+    session: &DurableAgentSession,
+    action: &str,
+    operation_id: &str,
+) -> Result<bool, PersistenceError> {
+    if lifecycle_intent_is_empty(session) {
+        return Ok(false);
+    }
+    require_matching_operation(session, action, operation_id)?;
+    if session.lifecycle_intent_status != "prepared" {
+        return Err(rejected_code(
+            "invalid_state",
+            "Stored provider lifecycle intent is invalid.",
+        ));
+    }
+    Ok(true)
+}
+
+pub(crate) fn require_matching_operation(
+    session: &DurableAgentSession,
+    action: &str,
+    operation_id: &str,
+) -> Result<(), PersistenceError> {
+    if session.lifecycle_intent_action == action && session.lifecycle_intent_id == operation_id {
+        return Ok(());
+    }
+    Err(rejected_code(
+        "operation_in_progress",
+        "Another provider lifecycle operation is still in progress.",
+    ))
+}
+
+pub(crate) fn lifecycle_intent_is_empty(session: &DurableAgentSession) -> bool {
+    session.lifecycle_intent_action.is_empty()
+        && session.lifecycle_intent_id.is_empty()
+        && session.lifecycle_intent_status.is_empty()
+}
+
+pub(crate) fn require_intent(
+    session: &DurableAgentSession,
+    action: &str,
+    operation_id: &str,
+    status: &str,
+    code: &'static str,
+) -> Result<(), PersistenceError> {
+    let action = action.strip_prefix("agent.").unwrap_or(action);
+    if session.lifecycle_intent_action != action
+        || session.lifecycle_intent_id != operation_id
+        || session.lifecycle_intent_status != status
+    {
+        return Err(rejected_code(
+            code,
+            "Provider lifecycle confirmation does not match the active operation.",
+        ));
+    }
+    Ok(())
+}
+
 fn rejected(message: impl Into<String>) -> PersistenceError {
+    rejected_code("bad_request", message)
+}
+
+fn rejected_code(code: &'static str, message: impl Into<String>) -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: "bad_request",
+        code,
         message: message.into(),
     }
 }

@@ -2,7 +2,7 @@ use sqlx::Row;
 
 use crate::{PersistenceError, SqliteStore};
 
-pub(crate) const CURRENT_SCHEMA_VERSION: i64 = 3;
+pub(crate) const CURRENT_SCHEMA_VERSION: i64 = 4;
 
 impl SqliteStore {
     pub(crate) async fn migrate_schema(&self) -> Result<(), PersistenceError> {
@@ -34,6 +34,13 @@ impl SqliteStore {
         }
         if version < 3 {
             redact_legacy_agent_results(&mut transaction).await?;
+        }
+        if version < 4 {
+            sqlx::query(
+                "CREATE TABLE lifecycle_command_reservations (room_id TEXT NOT NULL, principal_id TEXT NOT NULL, request_id TEXT NOT NULL, action TEXT NOT NULL, payload_hash TEXT NOT NULL, session_id TEXT NOT NULL, operation_id TEXT NOT NULL, PRIMARY KEY(room_id, principal_id, request_id), FOREIGN KEY(room_id) REFERENCES rooms(room_id) ON DELETE CASCADE)",
+            )
+            .execute(&mut *transaction)
+            .await?;
         }
         sqlx::query(
             "INSERT INTO runtime_metadata(key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -109,6 +116,10 @@ mod tests {
             .execute(&store.pool)
             .await
             .unwrap_or_else(|error| panic!("set legacy version: {error}"));
+        sqlx::query("DROP TABLE lifecycle_command_reservations")
+            .execute(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("remove v4 table: {error}"));
         drop(store);
 
         let reopened = SqliteStore::open_path(&path)
@@ -146,6 +157,10 @@ mod tests {
             .execute(&store.pool)
             .await
             .unwrap_or_else(|error| panic!("remove v2 table: {error}"));
+        sqlx::query("DROP TABLE lifecycle_command_reservations")
+            .execute(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("remove v4 table: {error}"));
         sqlx::query("DELETE FROM runtime_metadata WHERE key = 'schema_version'")
             .execute(&store.pool)
             .await
@@ -161,6 +176,12 @@ mod tests {
         .fetch_one(&reopened.pool)
         .await
         .unwrap_or_else(|error| panic!("inspect table: {error}"));
+        let reservation_table_count = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'lifecycle_command_reservations'",
+        )
+        .fetch_one(&reopened.pool)
+        .await
+        .unwrap_or_else(|error| panic!("inspect reservation table: {error}"));
         let version = sqlx::query_scalar::<_, String>(
             "SELECT value FROM runtime_metadata WHERE key = 'schema_version'",
         )
@@ -168,6 +189,7 @@ mod tests {
         .await
         .unwrap_or_else(|error| panic!("inspect version: {error}"));
         assert_eq!(table_count, 1);
+        assert_eq!(reservation_table_count, 1);
         assert_eq!(version, super::CURRENT_SCHEMA_VERSION.to_string());
     }
 

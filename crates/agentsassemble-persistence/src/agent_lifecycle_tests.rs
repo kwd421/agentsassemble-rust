@@ -238,6 +238,13 @@ async fn lifecycle_preserves_provider_identity_and_finalizes_stop_once() {
     assert_eq!(durable.provider_session_id, "provider-thread-1");
     assert!(durable.runtime_handle_id.is_empty());
     assert!(durable.lifecycle_intent_action.is_empty());
+    let reservations = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM lifecycle_command_reservations WHERE room_id = 'general'",
+    )
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("inspect completed reservations: {error}"));
+    assert_eq!(reservations, 0);
 }
 
 #[tokio::test]
@@ -483,8 +490,16 @@ async fn ambiguous_stop_becomes_a_redacted_recoverable_disconnect() {
     let durable = serde_json::from_str::<DurableAgentSession>(&encoded)
         .unwrap_or_else(|error| panic!("decode ambiguous durable session: {error}"));
     assert_eq!(durable.provider_session_id, "provider-thread-preserved");
-    assert!(durable.runtime_handle_id.is_empty());
+    assert_eq!(durable.runtime_handle_id, "runtime-before-ambiguous-stop");
     assert!(durable.lifecycle_intent_action.is_empty());
+    let AgentStopPlan::Stop(retry) = store
+        .prepare_agent_stop(&principal, "ambiguous-stop", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("retry ambiguous stop: {error}"))
+    else {
+        panic!("ambiguous stop must retry the exact runtime handle");
+    };
+    assert_eq!(retry.runtime_handle_id, "runtime-before-ambiguous-stop");
 }
 
 #[tokio::test]

@@ -1,9 +1,8 @@
 use std::collections::{BTreeMap, HashSet};
 
 use agentsassemble_domain::{
-    AuthenticatedPrincipal, CURRENT_RUNTIME_PROFILE_VERSION, ClientKind, DurableAgentSession,
-    Participant, ParticipantStatus, RoomEvent, canonical_payload_hash,
-    redact_persisted_diagnostic_text,
+    AuthenticatedPrincipal, CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession, Participant,
+    ParticipantStatus, RoomEvent, canonical_payload_hash, redact_persisted_diagnostic_text,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -11,10 +10,17 @@ use sqlx::{Sqlite, Transaction};
 
 use crate::{
     CommandOutcome, PersistenceError, SqliteStore,
-    agent_lifecycle_authority::{lifecycle_operation_id, payload_agent_id},
+    agent_lifecycle_authority::{
+        authorize_control, lifecycle_intent_is_empty, lifecycle_operation_id,
+        matching_prepared_intent, payload_agent_id, require_intent, require_matching_operation,
+        validate_runtime_started,
+    },
     agent_lifecycle_events::{
         append_error_event, append_session_event, append_state_event, commit_already_stopped,
         commit_reused_start, store_result,
+    },
+    agent_lifecycle_reservations::{
+        LifecycleReservation, claim_lifecycle_command, finish_lifecycle_command,
     },
     authority::active_room_for_principal,
     sqlite::existing_command,
@@ -74,6 +80,7 @@ impl SqliteStore {
         authorize_control(principal)?;
         let agent_id = payload_agent_id(payload)?;
         let payload_hash = canonical_payload_hash(payload);
+        let operation_id = lifecycle_operation_id(principal, request_id, START);
         let mut transaction = self.pool.begin().await?;
         active_room_for_principal(&mut transaction, principal).await?;
         if let Some(outcome) = existing_command(
@@ -89,6 +96,15 @@ impl SqliteStore {
             transaction.commit().await?;
             return Ok(AgentStartPlan::Outcome(Box::new(outcome)));
         }
+        let reservation = LifecycleReservation::new(
+            principal,
+            request_id,
+            START,
+            &payload_hash,
+            &agent_id,
+            &operation_id,
+        );
+        claim_lifecycle_command(&mut transaction, &reservation).await?;
         let mut session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
         let participant = load_participant(&mut transaction, &principal.room_id, &agent_id).await?;
         if participant.status == ParticipantStatus::Kicked {
@@ -103,13 +119,13 @@ impl SqliteStore {
                 "This Agent Session runtime profile must be saved again before it can start.",
             ));
         }
-        let operation_id = lifecycle_operation_id(principal, request_id, START);
         let incomplete = matching_prepared_intent(&session, "start", &operation_id)?;
         if matches!(
             session.public.runtime_status.as_str(),
             "starting" | "idle" | "busy" | "paused"
         ) && !incomplete
         {
+            finish_lifecycle_command(&mut transaction, &reservation).await?;
             let outcome = commit_reused_start(
                 &mut transaction,
                 principal,
@@ -159,6 +175,13 @@ impl SqliteStore {
     ) -> Result<CommandOutcome, PersistenceError> {
         let agent_id = payload_agent_id(payload)?;
         let payload_hash = canonical_payload_hash(payload);
+        let expected_operation_id = lifecycle_operation_id(principal, request_id, START);
+        if operation_id != expected_operation_id {
+            return Err(rejected(
+                "stale_start_confirmation",
+                "Provider start confirmation does not match its request.",
+            ));
+        }
         let mut transaction = self.pool.begin().await?;
         active_room_for_principal(&mut transaction, principal).await?;
         if let Some(outcome) = existing_command(
@@ -179,10 +202,19 @@ impl SqliteStore {
         require_intent(
             &session,
             START,
-            operation_id,
+            &expected_operation_id,
             "prepared",
             "stale_start_confirmation",
         )?;
+        let reservation = LifecycleReservation::new(
+            principal,
+            request_id,
+            START,
+            &payload_hash,
+            &agent_id,
+            &expected_operation_id,
+        );
+        finish_lifecycle_command(&mut transaction, &reservation).await?;
         "attached".clone_into(&mut session.public.status);
         session.public.enabled = true;
         "idle".clone_into(&mut session.public.runtime_status);
@@ -208,44 +240,14 @@ impl SqliteStore {
         participant.status = ParticipantStatus::Joined;
         participant.updated_at = Utc::now();
         save_participant(&mut transaction, &participant).await?;
-        let mut events = Vec::with_capacity(3);
-        if joined {
-            events.push(
-                append_session_event(
-                    &mut transaction,
-                    principal,
-                    &session.public,
-                    "participant_joined",
-                    BTreeMap::new(),
-                )
-                .await?,
-            );
-        }
-        events.push(
-            append_session_event(
-                &mut transaction,
-                principal,
-                &session.public,
-                "session_attached",
-                BTreeMap::new(),
-            )
-            .await?,
-        );
-        events.push(append_state_event(&mut transaction, principal, &session.public).await?);
-        let result = json!({
-            "agent_session": session.public,
-            "runtime_reused": started.runtime_reused,
-            "events": events,
-            "event": events.last(),
-        });
-        let outcome = store_result(
+        let outcome = commit_start_result(
             &mut transaction,
             principal,
             request_id,
-            START,
             payload_hash,
-            result,
-            events,
+            &session,
+            joined,
+            started.runtime_reused,
         )
         .await?;
         transaction.commit().await?;
@@ -316,6 +318,7 @@ impl SqliteStore {
         authorize_control(principal)?;
         let agent_id = payload_agent_id(payload)?;
         let payload_hash = canonical_payload_hash(payload);
+        let operation_id = lifecycle_operation_id(principal, request_id, STOP);
         let mut transaction = self.pool.begin().await?;
         active_room_for_principal(&mut transaction, principal).await?;
         if let Some(outcome) = existing_command(
@@ -331,14 +334,23 @@ impl SqliteStore {
             transaction.commit().await?;
             return Ok(AgentStopPlan::Outcome(Box::new(outcome)));
         }
+        let reservation = LifecycleReservation::new(
+            principal,
+            request_id,
+            STOP,
+            &payload_hash,
+            &agent_id,
+            &operation_id,
+        );
+        claim_lifecycle_command(&mut transaction, &reservation).await?;
         let mut session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
-        let operation_id = lifecycle_operation_id(principal, request_id, STOP);
         if matches!(
             session.public.runtime_status.as_str(),
             "stopped" | "available"
         ) && session.runtime_handle_id.is_empty()
             && lifecycle_intent_is_empty(&session)
         {
+            finish_lifecycle_command(&mut transaction, &reservation).await?;
             let outcome = commit_already_stopped(
                 &mut transaction,
                 principal,
@@ -449,7 +461,6 @@ impl SqliteStore {
         }
         session.public.last_error_code = error_code.to_owned();
         session.public.recovery_required = true;
-        session.runtime_handle_id.clear();
         clear_intent(&mut session);
         session.public.updated_at = Utc::now();
         save_session(&mut transaction, &session).await?;
@@ -508,6 +519,15 @@ impl SqliteStore {
             "effect_applied",
             "stale_stop_confirmation",
         )?;
+        let reservation = LifecycleReservation::new(
+            principal,
+            request_id,
+            STOP,
+            &payload_hash,
+            &agent_id,
+            &operation_id,
+        );
+        finish_lifecycle_command(&mut transaction, &reservation).await?;
         session.pending_event_ids = dedupe(
             session
                 .inflight_event_ids
@@ -570,86 +590,55 @@ impl SqliteStore {
     }
 }
 
-fn authorize_control(principal: &AuthenticatedPrincipal) -> Result<(), PersistenceError> {
-    if principal.client_kind == ClientKind::AgentBridge || !principal.capabilities.agent_control {
-        return Err(rejected(
-            "permission_denied",
-            "agent.control permission is required.",
-        ));
-    }
-    Ok(())
-}
-
-fn validate_runtime_started(
+async fn commit_start_result(
+    transaction: &mut Transaction<'_, Sqlite>,
+    principal: &AuthenticatedPrincipal,
+    request_id: &str,
+    payload_hash: String,
     session: &DurableAgentSession,
-    started: &AgentRuntimeStarted,
-) -> Result<(), PersistenceError> {
-    if started.runtime_handle_id.is_empty() {
-        return Err(rejected(
-            "runtime_start_unconfirmed",
-            "Provider start did not return an owned runtime handle.",
-        ));
+    joined: bool,
+    runtime_reused: bool,
+) -> Result<CommandOutcome, PersistenceError> {
+    let mut events = Vec::with_capacity(3);
+    if joined {
+        events.push(
+            append_session_event(
+                transaction,
+                principal,
+                &session.public,
+                "participant_joined",
+                BTreeMap::new(),
+            )
+            .await?,
+        );
     }
-    if started.provider_session_active && started.provider_session_id.is_empty() {
-        return Err(rejected(
-            "provider_session_unconfirmed",
-            "Provider start reported an active session without its identity.",
-        ));
-    }
-    if started.provider_session_reused && !started.provider_session_active {
-        return Err(rejected(
-            "provider_session_unconfirmed",
-            "An inactive provider session cannot be reported as reused.",
-        ));
-    }
-    if started.provider_session_reused
-        && (session.provider_session_id.is_empty()
-            || started.provider_session_id != session.provider_session_id)
-    {
-        return Err(rejected(
-            "provider_session_mismatch",
-            "A reused provider session must preserve its durable identity.",
-        ));
-    }
-    Ok(())
-}
-
-fn matching_prepared_intent(
-    session: &DurableAgentSession,
-    action: &str,
-    operation_id: &str,
-) -> Result<bool, PersistenceError> {
-    if lifecycle_intent_is_empty(session) {
-        return Ok(false);
-    }
-    require_matching_operation(session, action, operation_id)?;
-    if session.lifecycle_intent_status != "prepared" {
-        return Err(rejected(
-            "invalid_state",
-            "Stored provider lifecycle intent is invalid.",
-        ));
-    }
-    Ok(true)
-}
-
-fn require_matching_operation(
-    session: &DurableAgentSession,
-    action: &str,
-    operation_id: &str,
-) -> Result<(), PersistenceError> {
-    if session.lifecycle_intent_action == action && session.lifecycle_intent_id == operation_id {
-        return Ok(());
-    }
-    Err(rejected(
-        "operation_in_progress",
-        "Another provider lifecycle operation is still in progress.",
-    ))
-}
-
-fn lifecycle_intent_is_empty(session: &DurableAgentSession) -> bool {
-    session.lifecycle_intent_action.is_empty()
-        && session.lifecycle_intent_id.is_empty()
-        && session.lifecycle_intent_status.is_empty()
+    events.push(
+        append_session_event(
+            transaction,
+            principal,
+            &session.public,
+            "session_attached",
+            BTreeMap::new(),
+        )
+        .await?,
+    );
+    events.push(append_state_event(transaction, principal, &session.public).await?);
+    let result = json!({
+        "agent_session": session.public,
+        "runtime_reused": runtime_reused,
+        "events": events,
+        "event": events.last(),
+    });
+    store_result(
+        transaction,
+        principal,
+        request_id,
+        START,
+        payload_hash,
+        result,
+        events,
+    )
+    .await
 }
 
 fn stop_effect(session: &DurableAgentSession) -> AgentStopEffect {
@@ -658,26 +647,6 @@ fn stop_effect(session: &DurableAgentSession) -> AgentStopEffect {
         session_id: session.public.session_id.clone(),
         runtime_handle_id: session.runtime_handle_id.clone(),
     }
-}
-
-fn require_intent(
-    session: &DurableAgentSession,
-    action: &str,
-    operation_id: &str,
-    status: &str,
-    code: &'static str,
-) -> Result<(), PersistenceError> {
-    let action = action.strip_prefix("agent.").unwrap_or(action);
-    if session.lifecycle_intent_action != action
-        || session.lifecycle_intent_id != operation_id
-        || session.lifecycle_intent_status != status
-    {
-        return Err(rejected(
-            code,
-            "Provider lifecycle confirmation does not match the active operation.",
-        ));
-    }
-    Ok(())
 }
 
 fn clear_intent(session: &mut DurableAgentSession) {
