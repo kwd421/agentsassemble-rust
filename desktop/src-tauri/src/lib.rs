@@ -1,4 +1,6 @@
 mod local_runtime;
+#[cfg(windows)]
+mod private_fs;
 mod runtime_supervisor;
 
 use local_runtime::{LocalRuntime, TicketGrant};

@@ -12,7 +12,10 @@ use fs2::FileExt;
 use same_file::Handle;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteLockingMode};
 
-use crate::PersistenceError;
+use crate::{
+    PersistenceError,
+    private_fs::{secure_file, validate_directory, validate_file},
+};
 
 pub(crate) struct PreparedDatabase {
     pub(crate) options: SqliteConnectOptions,
@@ -149,11 +152,13 @@ fn validate_database_file(file: &File, created: bool) -> Result<(), PersistenceE
             "database authority must be a regular file",
         ));
     }
-    validate_link_count(&metadata)?;
+    validate_link_count(file, &metadata)?;
     if created {
-        set_private_file_permissions(file)?;
-    } else {
-        validate_private_file_permissions(&metadata)?;
+        secure_file(file).map_err(PersistenceError::WriterLease)?;
+    } else if !validate_file(file).map_err(PersistenceError::WriterLease)? {
+        return Err(PersistenceError::UnsafeDatabasePath(
+            "database and lease files must be private to the current user",
+        ));
     }
     Ok(())
 }
@@ -170,8 +175,8 @@ fn acquire_writer_lease(database_path: &Path) -> Result<File, PersistenceError> 
             "writer lease authority must be a regular file",
         ));
     }
-    validate_link_count(&metadata)?;
-    set_private_file_permissions(&file)?;
+    validate_link_count(&file, &metadata)?;
+    secure_file(&file).map_err(PersistenceError::WriterLease)?;
     match FileExt::try_lock_exclusive(&file) {
         Ok(()) => Ok(file),
         Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
@@ -181,64 +186,18 @@ fn acquire_writer_lease(database_path: &Path) -> Result<File, PersistenceError> 
     }
 }
 
-#[cfg(unix)]
 fn validate_private_directory(path: &Path) -> Result<(), PersistenceError> {
-    use std::os::unix::fs::PermissionsExt;
-
-    let mode = path
-        .metadata()
-        .map_err(PersistenceError::WriterLease)?
-        .permissions()
-        .mode();
-    if mode & 0o022 == 0 {
+    if validate_directory(path).map_err(PersistenceError::WriterLease)? {
         Ok(())
     } else {
         Err(PersistenceError::UnsafeDatabasePath(
-            "database directory must not grant group or other write access",
+            "database directory must be private to the current user",
         ))
     }
 }
 
-#[cfg(not(unix))]
-fn validate_private_directory(_path: &Path) -> Result<(), PersistenceError> {
-    Ok(())
-}
-
 #[cfg(unix)]
-fn set_private_file_permissions(file: &File) -> Result<(), PersistenceError> {
-    use std::os::unix::fs::PermissionsExt;
-
-    file.set_permissions(std::fs::Permissions::from_mode(0o600))
-        .map_err(PersistenceError::WriterLease)
-}
-
-#[cfg(not(unix))]
-fn set_private_file_permissions(_file: &File) -> Result<(), PersistenceError> {
-    Ok(())
-}
-
-#[cfg(unix)]
-fn validate_private_file_permissions(metadata: &std::fs::Metadata) -> Result<(), PersistenceError> {
-    use std::os::unix::fs::PermissionsExt;
-
-    if metadata.permissions().mode().trailing_zeros() >= 6 {
-        Ok(())
-    } else {
-        Err(PersistenceError::UnsafeDatabasePath(
-            "database and lease files must not grant group or other access",
-        ))
-    }
-}
-
-#[cfg(not(unix))]
-fn validate_private_file_permissions(
-    _metadata: &std::fs::Metadata,
-) -> Result<(), PersistenceError> {
-    Ok(())
-}
-
-#[cfg(unix)]
-fn validate_link_count(metadata: &std::fs::Metadata) -> Result<(), PersistenceError> {
+fn validate_link_count(_file: &File, metadata: &std::fs::Metadata) -> Result<(), PersistenceError> {
     use std::os::unix::fs::MetadataExt;
 
     if metadata.nlink() == 1 {
@@ -251,22 +210,23 @@ fn validate_link_count(metadata: &std::fs::Metadata) -> Result<(), PersistenceEr
 }
 
 #[cfg(windows)]
-fn validate_link_count(metadata: &std::fs::Metadata) -> Result<(), PersistenceError> {
-    use std::os::windows::fs::MetadataExt;
-
-    match metadata.number_of_links() {
-        Some(1) => Ok(()),
-        Some(_) => Err(PersistenceError::UnsafeDatabasePath(
+fn validate_link_count(file: &File, _metadata: &std::fs::Metadata) -> Result<(), PersistenceError> {
+    match winapi_util::file::information(file)
+        .map_err(PersistenceError::WriterLease)?
+        .number_of_links()
+    {
+        1 => Ok(()),
+        _ => Err(PersistenceError::UnsafeDatabasePath(
             "hard-linked database authorities are not supported",
-        )),
-        None => Err(PersistenceError::UnsafeDatabasePath(
-            "database hard-link count is unavailable",
         )),
     }
 }
 
 #[cfg(all(not(unix), not(windows)))]
-fn validate_link_count(_metadata: &std::fs::Metadata) -> Result<(), PersistenceError> {
+fn validate_link_count(
+    _file: &File,
+    _metadata: &std::fs::Metadata,
+) -> Result<(), PersistenceError> {
     Err(PersistenceError::UnsafeDatabasePath(
         "database hard-link validation is unsupported on this platform",
     ))

@@ -14,6 +14,11 @@ sqlx.workspace = true
 thiserror.workspace = true
 url.workspace = true
 
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3.9", features = ["winnt"] }
+winapi-util = "0.1.11"
+windows-acl = "0.3.0"
+
 [dev-dependencies]
 tempfile.workspace = true
 tokio.workspace = true

@@ -7,7 +7,7 @@ use std::{
 use agentsassemble_domain::{
     LOCAL_OPERATOR_PARTICIPANT_ID, Participant, ParticipantStatus, Room, RoomSettings,
 };
-use agentsassemble_persistence::SqliteStore;
+use agentsassemble_persistence::{SqliteStore, secure_private_directory};
 use agentsassemble_protocol::{LocalControlRequest, LocalControlResponse};
 use agentsassemble_server::{
     AppState, HostSecret, TicketIssueError, TicketStore, issue_local_ticket, serve,
@@ -56,7 +56,7 @@ async fn main() -> anyhow::Result<()> {
         tokio::fs::create_dir_all(parent)
             .await
             .with_context(|| format!("create database directory {}", parent.display()))?;
-        make_private_directory(parent)
+        secure_private_directory(parent)
             .with_context(|| format!("secure database directory {}", parent.display()))?;
     }
     let database_path = args
@@ -123,18 +123,6 @@ async fn main() -> anyhow::Result<()> {
         control_cancellation.cancel();
     });
     serve(listener, state, cancellation).await?;
-    Ok(())
-}
-
-#[cfg(unix)]
-fn make_private_directory(path: &std::path::Path) -> std::io::Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))
-}
-
-#[cfg(not(unix))]
-fn make_private_directory(_path: &std::path::Path) -> std::io::Result<()> {
     Ok(())
 }
 

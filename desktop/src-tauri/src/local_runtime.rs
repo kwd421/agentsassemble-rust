@@ -130,7 +130,7 @@ fn start_runtime(app: &AppHandle, room_id: &str) -> Result<RuntimeProcess, Strin
     let secret = generate_host_secret();
     let stdout_path = data_root.join("runtime.stdout.log");
     let stderr_path = data_root.join("runtime.stderr.log");
-    let stdout_log = open_private_rotating_log(&stdout_path)?;
+    let stdout_log = open_private_fresh_log(&stdout_path)?;
     let stderr_log = open_private_rotating_log(&stderr_path)?;
     let mut command = runtime_supervisor::command(&executable)?;
     command
@@ -302,17 +302,47 @@ fn open_private_rotating_log(path: &Path) -> Result<File, String> {
     let previous = PathBuf::from(previous_name);
     if path.exists() {
         if previous.exists() {
-            fs::remove_file(&previous)
-                .map_err(|error| format!("cannot replace {}: {error}", previous.display()))?;
+            remove_log_entry(&previous)?;
         }
         fs::rename(path, &previous)
             .map_err(|error| format!("cannot rotate {}: {error}", path.display()))?;
     }
-    let file =
-        File::create(path).map_err(|error| format!("cannot open {}: {error}", path.display()))?;
+    open_private_new_log(path)
+}
+
+fn open_private_fresh_log(path: &Path) -> Result<File, String> {
+    let mut previous_name = path.as_os_str().to_os_string();
+    previous_name.push(".previous");
+    for stale in [path, Path::new(&previous_name)] {
+        if stale.exists() || stale.is_symlink() {
+            remove_log_entry(stale)?;
+        }
+    }
+    open_private_new_log(path)
+}
+
+fn open_private_new_log(path: &Path) -> Result<File, String> {
+    let file = fs::OpenOptions::new()
+        .create_new(true)
+        .read(true)
+        .write(true)
+        .open(path)
+        .map_err(|error| format!("cannot create {}: {error}", path.display()))?;
     make_private_file(&file)
         .map_err(|error| format!("cannot secure {}: {error}", path.display()))?;
     Ok(file)
+}
+
+fn remove_log_entry(path: &Path) -> Result<(), String> {
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|error| format!("cannot inspect {}: {error}", path.display()))?;
+    if !metadata.is_file() && !metadata.file_type().is_symlink() {
+        return Err(format!(
+            "refusing to replace non-file log path {}",
+            path.display()
+        ));
+    }
+    fs::remove_file(path).map_err(|error| format!("cannot remove {}: {error}", path.display()))
 }
 
 fn capture_capped_stderr(stderr: ChildStderr, mut log: File) {
@@ -351,9 +381,9 @@ fn make_private_directory(path: &Path) -> std::io::Result<()> {
     fs::set_permissions(path, fs::Permissions::from_mode(0o700))
 }
 
-#[cfg(not(unix))]
-fn make_private_directory(_path: &Path) -> std::io::Result<()> {
-    Ok(())
+#[cfg(windows)]
+fn make_private_directory(path: &Path) -> std::io::Result<()> {
+    crate::private_fs::secure_directory(path)
 }
 
 #[cfg(unix)]
@@ -363,9 +393,9 @@ fn make_private_file(file: &File) -> std::io::Result<()> {
     file.set_permissions(fs::Permissions::from_mode(0o600))
 }
 
-#[cfg(not(unix))]
-fn make_private_file(_file: &File) -> std::io::Result<()> {
-    Ok(())
+#[cfg(windows)]
+fn make_private_file(file: &File) -> std::io::Result<()> {
+    crate::private_fs::secure_file(file)
 }
 
 fn capture_runtime_output(
@@ -540,7 +570,8 @@ mod tests {
 
     use super::{
         RUNTIME_LOG_LIMIT_BYTES, StartupRecord, copy_capped, generate_host_secret,
-        is_application_rejection, open_private_rotating_log, validate_startup_record,
+        is_application_rejection, open_private_fresh_log, open_private_rotating_log,
+        validate_startup_record,
     };
 
     #[test]
@@ -609,5 +640,25 @@ mod tests {
                 .unwrap_or_else(|error| panic!("read previous log: {error}")),
             "first generation"
         );
+    }
+
+    #[test]
+    fn control_log_discards_legacy_secret_generations() {
+        let directory = tempfile::tempdir()
+            .unwrap_or_else(|error| panic!("create log test directory: {error}"));
+        let path = directory.path().join("runtime.stdout.log");
+        std::fs::write(&path, b"legacy ticket")
+            .unwrap_or_else(|error| panic!("write legacy control log: {error}"));
+        std::fs::write(path.with_extension("log.previous"), b"older proof")
+            .unwrap_or_else(|error| panic!("write older control log: {error}"));
+        let _log = open_private_fresh_log(&path)
+            .unwrap_or_else(|error| panic!("replace control log: {error}"));
+        assert_eq!(
+            std::fs::metadata(&path)
+                .unwrap_or_else(|error| panic!("inspect fresh control log: {error}"))
+                .len(),
+            0
+        );
+        assert!(!path.with_extension("log.previous").exists());
     }
 }
