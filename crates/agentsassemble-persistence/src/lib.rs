@@ -1,6 +1,7 @@
 mod agent_sessions;
 mod authority;
 mod database_target;
+mod filesystem_authority;
 mod migration;
 mod private_fs;
 mod schema;

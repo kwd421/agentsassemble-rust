@@ -2,13 +2,16 @@ use std::path::Path;
 
 use agentsassemble_domain::{
     AgentSessionDraft, ProviderAvailability, ProviderCatalog, clean_identifier, clean_single_line,
-    has_visible_text, stable_identity_hash,
+    has_visible_text,
 };
-use same_file::Handle;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
+
+use crate::filesystem::{
+    FilesystemFailure, canonical_workspace, executable_identity as current_executable_identity,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProviderSelection {
@@ -95,21 +98,15 @@ impl ProviderSelection {
         if !provider.startable || provider.discovery_status != "ready" {
             return Err(unsupported(&provider_id));
         }
-        if !Path::new(&provider.executable).is_absolute()
-            || !Path::new(&provider.executable).is_file()
-        {
+        if !Path::new(&provider.executable).is_absolute() {
             return Err(ProviderSelectionError::new(
                 "catalog_inconsistent",
-                "Provider executable authority is not an absolute file.",
+                "Provider executable authority is not absolute.",
             ));
         }
-        let executable_identity =
-            stable_identity_hash(&Handle::from_path(&provider.executable).map_err(|_| {
-                ProviderSelectionError::new(
-                    "catalog_inconsistent",
-                    "Provider executable authority could not be reopened.",
-                )
-            })?);
+        let executable_identity = current_executable_identity(provider.executable.clone())
+            .await
+            .map_err(executable_validation_error)?;
         if executable_identity != provider.executable_identity {
             return Err(ProviderSelectionError::new(
                 "catalog_changed",
@@ -190,21 +187,9 @@ impl ProviderSelection {
                 "An existing workspace directory is required.",
             ));
         }
-        let workspace = tokio::fs::canonicalize(&raw_workspace)
+        let (workspace, workspace_identity) = canonical_workspace(raw_workspace)
             .await
             .map_err(|_| invalid_workspace())?;
-        let metadata = tokio::fs::metadata(&workspace)
-            .await
-            .map_err(|_| invalid_workspace())?;
-        if !metadata.is_dir() {
-            return Err(invalid_workspace());
-        }
-        let workspace = workspace
-            .into_os_string()
-            .into_string()
-            .map_err(|_| invalid_workspace())?;
-        let workspace_identity =
-            stable_identity_hash(&Handle::from_path(&workspace).map_err(|_| invalid_workspace())?);
         let transport = match provider.id.as_str() {
             "codex" => "stdio_jsonl",
             "antigravity" if cfg!(windows) => "conpty",
@@ -442,13 +427,22 @@ fn invalid_workspace() -> ProviderSelectionError {
     )
 }
 
+fn executable_validation_error(failure: FilesystemFailure) -> ProviderSelectionError {
+    let message = match failure {
+        FilesystemFailure::Busy => "Provider executable validation is at capacity.",
+        FilesystemFailure::Timeout => "Provider executable validation timed out.",
+        FilesystemFailure::Failed => "Provider executable authority could not be reopened.",
+    };
+    ProviderSelectionError::new("catalog_inconsistent", message)
+}
+
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
+    use std::{collections::BTreeMap, fs::File};
 
     use agentsassemble_domain::{
         ProviderAvailability, ProviderCatalog, ProviderControl, ProviderControlOption,
-        stable_identity_hash,
+        stable_content_identity,
     };
     use same_file::Handle;
     use serde_json::{Value, json};
@@ -482,6 +476,19 @@ mod tests {
     }
 
     fn catalog() -> ProviderCatalog {
+        let executable = std::env::current_exe()
+            .and_then(std::fs::canonicalize)
+            .unwrap_or_else(|error| panic!("resolve test executable: {error}"));
+        let mut executable_file =
+            File::open(&executable).unwrap_or_else(|error| panic!("open test executable: {error}"));
+        let executable_handle = Handle::from_file(
+            executable_file
+                .try_clone()
+                .unwrap_or_else(|error| panic!("clone test executable: {error}")),
+        )
+        .unwrap_or_else(|error| panic!("identify test executable: {error}"));
+        let executable_identity = stable_content_identity(&executable_handle, &mut executable_file)
+            .unwrap_or_else(|error| panic!("hash test executable: {error}"));
         ProviderCatalog {
             status: "ready".to_owned(),
             catalog_revision: "catalog-1".to_owned(),
@@ -494,17 +501,8 @@ mod tests {
                 catalog_group: "subscription".to_owned(),
                 workspace_required: true,
                 connection_kind: "native_cli_bridge".to_owned(),
-                executable: std::env::current_exe()
-                    .unwrap_or_else(|error| panic!("resolve test executable: {error}"))
-                    .to_string_lossy()
-                    .into_owned(),
-                executable_identity: stable_identity_hash(
-                    &Handle::from_path(
-                        std::env::current_exe()
-                            .unwrap_or_else(|error| panic!("resolve test executable: {error}")),
-                    )
-                    .unwrap_or_else(|error| panic!("open test executable: {error}")),
-                ),
+                executable: executable.to_string_lossy().into_owned(),
+                executable_identity,
                 default_model: "gpt-5.6-terra".to_owned(),
                 interactive: true,
                 startable: true,

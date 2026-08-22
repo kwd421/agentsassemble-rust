@@ -1,8 +1,8 @@
-use std::{collections::BTreeMap, fmt::Write, time::Duration};
+use std::{collections::BTreeMap, fmt::Write, fs::File, path::Path, time::Duration};
 
 use agentsassemble_domain::{
     Participant, ParticipantStatus, ProviderAvailability, ProviderCatalog, ProviderControl,
-    ProviderControlOption, Room, RoomSettings, stable_identity_hash,
+    ProviderControlOption, Room, RoomSettings, stable_content_identity,
 };
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_provider::ProviderCatalogService;
@@ -47,7 +47,7 @@ async fn create_replay_conflict_and_restart_share_one_durable_authority() {
         .await
         .unwrap_or_else(|error| panic!("open agent store: {error}"));
     bootstrap(&store).await;
-    let catalog = agent_catalog();
+    let catalog = agent_catalog(directory.path());
     let first = start(store, catalog.clone()).await;
     let mut socket = connect(&first.base_url).await;
     subscribe(&mut socket).await;
@@ -284,10 +284,34 @@ async fn bootstrap(store: &SqliteStore) {
         .unwrap_or_else(|error| panic!("bootstrap boundary room: {error}"));
 }
 
-fn agent_catalog() -> ProviderCatalog {
-    let executable = std::env::current_exe()
-        .and_then(std::fs::canonicalize)
+fn agent_catalog(root: &Path) -> ProviderCatalog {
+    let executable = root.join("provider-fixture");
+    std::fs::write(&executable, b"provider fixture")
+        .unwrap_or_else(|error| panic!("write test executable: {error}"));
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let mut permissions = std::fs::metadata(&executable)
+            .unwrap_or_else(|error| panic!("read test executable mode: {error}"))
+            .permissions();
+        permissions.set_mode(0o700);
+        std::fs::set_permissions(&executable, permissions)
+            .unwrap_or_else(|error| panic!("set test executable mode: {error}"));
+    }
+    let executable = executable
+        .canonicalize()
         .unwrap_or_else(|error| panic!("resolve test executable: {error}"));
+    let mut executable_file =
+        File::open(&executable).unwrap_or_else(|error| panic!("open test executable: {error}"));
+    let executable_handle = Handle::from_file(
+        executable_file
+            .try_clone()
+            .unwrap_or_else(|error| panic!("clone test executable: {error}")),
+    )
+    .unwrap_or_else(|error| panic!("identify test executable: {error}"));
+    let executable_identity = stable_content_identity(&executable_handle, &mut executable_file)
+        .unwrap_or_else(|error| panic!("hash test executable: {error}"));
     ProviderCatalog {
         status: "ready".to_owned(),
         catalog_revision: "catalog-boundary-1".to_owned(),
@@ -301,10 +325,7 @@ fn agent_catalog() -> ProviderCatalog {
             workspace_required: true,
             connection_kind: "native_cli_bridge".to_owned(),
             executable: executable.to_string_lossy().into_owned(),
-            executable_identity: stable_identity_hash(
-                &Handle::from_path(&executable)
-                    .unwrap_or_else(|error| panic!("open test executable: {error}")),
-            ),
+            executable_identity,
             default_model: "gpt-5.6-terra".to_owned(),
             interactive: true,
             startable: true,

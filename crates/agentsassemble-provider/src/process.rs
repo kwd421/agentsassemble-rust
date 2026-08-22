@@ -1,16 +1,11 @@
-use std::{
-    env, io,
-    path::{Path, PathBuf},
-    process::Stdio,
-    time::Duration,
-};
+use std::{env, io, process::Stdio, time::Duration};
 
-use agentsassemble_domain::stable_identity_hash;
-use same_file::Handle;
-use tokio::{
-    io::{AsyncRead, AsyncReadExt},
-    process::Command,
-};
+#[cfg(windows)]
+use process_wrap::tokio::JobObject;
+#[cfg(unix)]
+use process_wrap::tokio::ProcessGroup;
+use process_wrap::tokio::{CommandWrap, KillOnDrop};
+use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio_util::sync::CancellationToken;
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(10);
@@ -52,15 +47,25 @@ pub(crate) async fn probe(
     args: &[&str],
     cancellation: &CancellationToken,
 ) -> Result<String, ProbeFailure> {
-    let mut command = Command::new(program);
-    command
-        .args(args)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-    sanitize_environment(&mut command);
-    ProbeTree::configure(&mut command);
+    if cancellation.is_cancelled() {
+        return Err(ProbeFailure::Cancelled);
+    }
+    #[cfg(not(any(unix, windows)))]
+    return Err(ProbeFailure::Failed);
+
+    let mut command = CommandWrap::with_new(program, |command| {
+        command
+            .args(args)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+    });
+    sanitize_environment(command.command_mut());
+    command.wrap(KillOnDrop);
+    #[cfg(unix)]
+    command.wrap(ProcessGroup::leader());
+    #[cfg(windows)]
+    command.wrap(JobObject);
     let mut child = match command.spawn() {
         Ok(child) => child,
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
@@ -68,16 +73,8 @@ pub(crate) async fn probe(
         }
         Err(_) => return Err(ProbeFailure::Failed),
     };
-    let tree = match ProbeTree::attach(&mut child) {
-        Ok(tree) => tree,
-        Err(failure) => {
-            let _ = child.kill().await;
-            let _ = child.wait().await;
-            return Err(failure);
-        }
-    };
-    let (Some(stdout), Some(stderr)) = (child.stdout.take(), child.stderr.take()) else {
-        terminate_probe_tree(&mut child, tree).await;
+    let (Some(stdout), Some(stderr)) = (child.stdout().take(), child.stderr().take()) else {
+        terminate_probe_tree(child.as_mut()).await;
         return Err(ProbeFailure::Failed);
     };
     let collected = tokio::select! {
@@ -92,7 +89,7 @@ pub(crate) async fn probe(
         Some(Ok(Err(_))) => Err(ProbeFailure::Malformed),
         Some(Err(_)) => Err(ProbeFailure::Timeout),
     };
-    terminate_probe_tree(&mut child, tree).await;
+    terminate_probe_tree(child.as_mut()).await;
     let (stdout, stderr, status) = outcome?;
     if !status.success() {
         let diagnostic = String::from_utf8_lossy(&stderr).to_lowercase();
@@ -107,23 +104,7 @@ pub(crate) async fn probe(
     String::from_utf8(stdout).map_err(|_| ProbeFailure::Malformed)
 }
 
-pub(crate) fn resolve_executable(program: &str) -> Option<(String, String)> {
-    let path = env::var_os("PATH")?;
-    for directory in env::split_paths(&path) {
-        for candidate in executable_candidates(&directory, program) {
-            if is_executable_file(&candidate)
-                && let Ok(canonical) = candidate.canonicalize()
-                && let Ok(canonical) = canonical.into_os_string().into_string()
-                && let Ok(handle) = Handle::from_path(&canonical)
-            {
-                return Some((canonical, stable_identity_hash(&handle)));
-            }
-        }
-    }
-    None
-}
-
-fn sanitize_environment(command: &mut Command) {
+fn sanitize_environment(command: &mut tokio::process::Command) {
     command.env_clear();
     for name in PROBE_ENVIRONMENT {
         if let Some(value) = env::var_os(name) {
@@ -147,114 +128,8 @@ async fn read_limited<R: AsyncRead + Unpin>(mut reader: R) -> io::Result<Vec<u8>
     }
 }
 
-fn executable_candidates(directory: &Path, program: &str) -> Vec<PathBuf> {
-    let base = directory.join(program);
-    #[cfg(windows)]
-    {
-        if Path::new(program).extension().is_some() {
-            return vec![base];
-        }
-        let extensions = env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_owned());
-        extensions
-            .split(';')
-            .filter(|extension| !extension.is_empty())
-            .map(|extension| directory.join(format!("{program}{extension}")))
-            .collect()
-    }
-    #[cfg(not(windows))]
-    {
-        vec![base]
-    }
-}
-
-fn is_executable_file(path: &Path) -> bool {
-    let Ok(metadata) = path.metadata() else {
-        return false;
-    };
-    if !metadata.is_file() {
-        return false;
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-
-        metadata.permissions().mode() & 0o111 != 0
-    }
-    #[cfg(not(unix))]
-    {
-        true
-    }
-}
-
-#[cfg(unix)]
-struct ProbeTree {
-    process_group: i32,
-}
-
-#[cfg(unix)]
-impl ProbeTree {
-    fn configure(command: &mut Command) {
-        command.process_group(0);
-    }
-
-    fn attach(child: &mut tokio::process::Child) -> Result<Self, ProbeFailure> {
-        let process_group = child
-            .id()
-            .and_then(|pid| i32::try_from(pid).ok())
-            .ok_or(ProbeFailure::Failed)?;
-        Ok(Self { process_group })
-    }
-}
-
-#[cfg(windows)]
-struct ProbeTree {
-    job: Option<win32job::Job>,
-}
-
-#[cfg(windows)]
-impl ProbeTree {
-    fn configure(_command: &mut Command) {}
-
-    fn attach(child: &mut tokio::process::Child) -> Result<Self, ProbeFailure> {
-        let job = win32job::Job::create().map_err(|_| ProbeFailure::Failed)?;
-        let mut limits = job
-            .query_extended_limit_info()
-            .map_err(|_| ProbeFailure::Failed)?;
-        limits.limit_kill_on_job_close();
-        job.set_extended_limit_info(&limits)
-            .map_err(|_| ProbeFailure::Failed)?;
-        let handle = child.raw_handle().ok_or(ProbeFailure::Failed)? as isize;
-        job.assign_process(handle)
-            .map_err(|_| ProbeFailure::Failed)?;
-        Ok(Self { job: Some(job) })
-    }
-}
-
-#[cfg(not(any(unix, windows)))]
-struct ProbeTree;
-
-#[cfg(not(any(unix, windows)))]
-impl ProbeTree {
-    fn configure(_command: &mut Command) {}
-
-    fn attach(_child: &mut tokio::process::Child) -> Result<Self, ProbeFailure> {
-        Err(ProbeFailure::Failed)
-    }
-}
-
-async fn terminate_probe_tree(child: &mut tokio::process::Child, tree: ProbeTree) {
-    #[cfg(unix)]
-    {
-        let _ = nix::sys::signal::kill(
-            nix::unistd::Pid::from_raw(-tree.process_group),
-            nix::sys::signal::Signal::SIGKILL,
-        );
-    }
-    #[cfg(windows)]
-    drop(tree.job);
-    #[cfg(not(any(unix, windows)))]
-    let _ = tree;
-    let _ = child.kill().await;
+async fn terminate_probe_tree(child: &mut dyn process_wrap::tokio::ChildWrapper) {
+    let _ = Box::into_pin(child.kill()).await;
     let _ = child.wait().await;
 }
 

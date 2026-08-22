@@ -1,4 +1,5 @@
 mod catalog;
+mod filesystem;
 mod process;
 mod selection;
 

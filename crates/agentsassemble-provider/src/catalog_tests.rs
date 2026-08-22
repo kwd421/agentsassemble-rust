@@ -1,6 +1,21 @@
 use agentsassemble_domain::{ProviderAvailability, ProviderCatalog};
+use tokio_util::sync::CancellationToken;
 
-use super::{MAX_PROVIDER_OPTIONS, ProbeFailure, failed_provider, opencode_models, ready_provider};
+use super::{
+    FilesystemFailure, MAX_PROVIDER_OPTIONS, ProbeFailure, await_filesystem, failed_provider,
+    opencode_models, ready_provider,
+};
+
+#[tokio::test]
+async fn cancelled_catalog_does_not_wait_for_stalled_filesystem_work() {
+    let cancellation = CancellationToken::new();
+    cancellation.cancel();
+    let stalled = std::future::pending::<Result<(), FilesystemFailure>>();
+    assert_eq!(
+        await_filesystem(&cancellation, stalled).await,
+        Err(ProbeFailure::Cancelled)
+    );
+}
 
 #[test]
 fn opencode_catalog_accepts_only_managed_valid_namespaces() {

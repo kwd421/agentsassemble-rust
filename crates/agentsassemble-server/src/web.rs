@@ -636,7 +636,7 @@ fn persistence_error(error: &PersistenceError) -> (&'static str, String) {
         PersistenceError::RoomMissing => ("room_not_found", error.to_string()),
         PersistenceError::Database(_)
         | PersistenceError::Json(_)
-        | PersistenceError::WorkspaceValidationTask(_)
+        | PersistenceError::RuntimeAuthorityTask(_)
         | PersistenceError::AuthorityConflict(_)
         | PersistenceError::UnownedDatabase
         | PersistenceError::WriterAlreadyActive(_)

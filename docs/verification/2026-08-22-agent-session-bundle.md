@@ -4,6 +4,8 @@ Scope: live provider catalog plus creation and restart recovery of one durable s
 
 Security-review follow-up: the public Agent Session projection was separated from its private durable runtime authority; exact workspace and executable identities are revalidated at commit; discovery owns and sanitizes full process trees; OpenCode provenance matches the managed namespaces; and catalog/session capacities now make the fixed WebSocket budget enforceable. Focused Rust and frontend regression tests cover each boundary.
 
+Manual-review closure: Windows probes now start suspended and join their Job Object before resuming; executable authority binds the opened filesystem object to its complete bytes and detects an in-place rewrite; and potentially stalled selection/commit filesystem work uses ten-second, four-worker detached boundaries that retain capacity while stalled without joining Tokio runtime shutdown.
+
 - Post-fix `make verify`: passed, including architecture and 800-line source gates, generated TypeScript, React build and 26 tests, Tauri checks and 8 tests, all Rust tests, and warning-denied Clippy.
 - Post-fix Windows GNU checks: both the full workspace and Tauri shell passed with all targets/features and warnings denied. Their isolated target directory was moved to Trash.
 - A fresh owned Rust server using sanitized live probes reported `ready`, a nonempty revision, and an 8,229-byte catalog update. Exact startable models remained `gpt-5.6-terra`, `gemini-3.6-flash`, and `opencode/hy3-free`.

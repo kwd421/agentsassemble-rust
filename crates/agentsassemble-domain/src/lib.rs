@@ -4,7 +4,7 @@ mod model;
 mod text;
 
 pub use command::{CommandRejection, MessageSend, canonical_payload_hash, prepare_message_event};
-pub use identity::stable_identity_hash;
+pub use identity::{stable_content_identity, stable_identity_hash};
 pub use model::{
     Actor, AgentSession, AgentSessionDraft, AuthenticatedPrincipal, CapabilitySet, ClientKind,
     DurableAgentSession, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID,

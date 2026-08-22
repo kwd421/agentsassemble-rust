@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-use nix::{sys::signal::kill, unistd::Pid};
 use tokio_util::sync::CancellationToken;
 
 use super::{PROBE_ENVIRONMENT, ProbeFailure, probe};
@@ -56,7 +55,12 @@ async fn cancelled_probe_tree_is_killed_reaped_and_joinable() {
         .parse::<i32>()
         .unwrap_or_else(|error| panic!("parse descendant pid: {error}"));
     for _ in 0..100 {
-        if kill(Pid::from_raw(descendant), None).is_err() {
+        let status = std::process::Command::new("/bin/kill")
+            .args(["-0", &descendant.to_string()])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+        if status.is_err() || status.is_ok_and(|status| !status.success()) {
             return;
         }
         tokio::time::sleep(Duration::from_millis(10)).await;

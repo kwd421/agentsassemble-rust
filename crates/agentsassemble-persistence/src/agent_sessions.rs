@@ -3,16 +3,15 @@ use std::collections::BTreeMap;
 use agentsassemble_domain::{
     Actor, AgentSession, AgentSessionDraft, AuthenticatedPrincipal, ClientKind,
     DurableAgentSession, Participant, ParticipantStatus, RoomEvent, canonical_payload_hash,
-    stable_identity_hash,
 };
 use chrono::Utc;
-use same_file::Handle;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::{
     CommandOutcome, PersistenceError, SqliteStore,
     authority::active_room_for_principal,
+    filesystem_authority::revalidate_runtime_authority,
     sqlite::{MAX_AGENT_SESSIONS_PER_ROOM, existing_command},
 };
 
@@ -240,34 +239,6 @@ impl SqliteStore {
     }
 }
 
-async fn revalidate_runtime_authority(draft: &AgentSessionDraft) -> Result<(), PersistenceError> {
-    let workspace = draft.workspace.clone();
-    let expected_workspace_identity = draft.workspace_identity.clone();
-    let executable = draft.executable.clone();
-    let expected_executable_identity = draft.executable_identity.clone();
-    let valid = tokio::task::spawn_blocking(move || {
-        let canonical_workspace = std::fs::canonicalize(&workspace).ok()?;
-        if canonical_workspace.to_str()? != workspace || !canonical_workspace.is_dir() {
-            return None;
-        }
-        let workspace_identity = stable_identity_hash(&Handle::from_path(&workspace).ok()?);
-        if workspace_identity != expected_workspace_identity {
-            return None;
-        }
-        let canonical_executable = std::fs::canonicalize(&executable).ok()?;
-        if canonical_executable.to_str()? != executable || !canonical_executable.is_file() {
-            return None;
-        }
-        let executable_identity = stable_identity_hash(&Handle::from_path(&executable).ok()?);
-        (executable_identity == expected_executable_identity).then_some(())
-    })
-    .await?;
-    valid.ok_or_else(|| PersistenceError::CommandRejected {
-        code: "runtime_authority_changed",
-        message: "Workspace or provider executable identity changed before commit.".to_owned(),
-    })
-}
-
 async fn latest_message_cursor(
     transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     room_id: &str,
@@ -304,11 +275,12 @@ mod tests {
     use agentsassemble_domain::{
         AgentSessionDraft, AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope,
         LOCAL_OPERATOR_PARTICIPANT_ID, Participant, ParticipantStatus, Room, RoomSettings,
-        stable_identity_hash,
+        stable_content_identity, stable_identity_hash,
     };
     use chrono::Utc;
     use same_file::Handle;
     use serde_json::json;
+    use std::{fs::File, path::Path};
 
     use crate::{PersistenceError, SqliteStore};
 
@@ -361,16 +333,14 @@ mod tests {
         let executable = std::env::current_exe()
             .and_then(std::fs::canonicalize)
             .unwrap_or_else(|error| panic!("canonical executable: {error}"));
+        let (executable, executable_identity) = executable_authority(&executable);
         AgentSessionDraft {
             agent_id: "codex-00000000-0000-5000-8000-000000000001".to_owned(),
             display_name: "Terra".to_owned(),
             provider_kind: "codex_live_session".to_owned(),
             runtime_kind: "live_cli".to_owned(),
-            executable: executable.to_string_lossy().into_owned(),
-            executable_identity: stable_identity_hash(
-                &Handle::from_path(&executable)
-                    .unwrap_or_else(|error| panic!("open executable: {error}")),
-            ),
+            executable,
+            executable_identity,
             workspace: workspace.to_string_lossy().into_owned(),
             workspace_identity: stable_identity_hash(
                 &Handle::from_path(&workspace)
@@ -387,6 +357,38 @@ mod tests {
             runtime_profile_key: "profile-1".to_owned(),
             transport: "stdio_jsonl".to_owned(),
         }
+    }
+
+    fn executable_authority(executable: &Path) -> (String, String) {
+        let executable = executable
+            .canonicalize()
+            .unwrap_or_else(|error| panic!("canonical executable authority: {error}"));
+        let mut file =
+            File::open(&executable).unwrap_or_else(|error| panic!("open executable: {error}"));
+        let handle = Handle::from_file(
+            file.try_clone()
+                .unwrap_or_else(|error| panic!("clone executable: {error}")),
+        )
+        .unwrap_or_else(|error| panic!("identify executable: {error}"));
+        let identity = stable_content_identity(&handle, &mut file)
+            .unwrap_or_else(|error| panic!("hash executable: {error}"));
+        (executable.to_string_lossy().into_owned(), identity)
+    }
+
+    fn make_executable(executable: &Path) {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            let mut permissions = std::fs::metadata(executable)
+                .unwrap_or_else(|error| panic!("read executable permissions: {error}"))
+                .permissions();
+            permissions.set_mode(0o700);
+            std::fs::set_permissions(executable, permissions)
+                .unwrap_or_else(|error| panic!("set executable permissions: {error}"));
+        }
+        #[cfg(not(unix))]
+        let _ = executable;
     }
 
     #[tokio::test]
@@ -475,6 +477,46 @@ mod tests {
             .snapshot("general", 0, 200)
             .await
             .unwrap_or_else(|error| panic!("snapshot: {error}"));
+        assert!(snapshot.agent_sessions.is_empty());
+        assert_eq!(snapshot.participants.len(), 1);
+        assert!(snapshot.events.is_empty());
+    }
+
+    #[tokio::test]
+    async fn in_place_executable_change_rejects_without_partial_authority() {
+        let (store, principal, directory) = fixture().await;
+        let executable = directory.path().join("provider-fixture");
+        std::fs::write(&executable, b"first provider bytes")
+            .unwrap_or_else(|error| panic!("write executable fixture: {error}"));
+        make_executable(&executable);
+        let workspace = directory
+            .path()
+            .to_str()
+            .unwrap_or_else(|| panic!("test workspace path must be UTF-8"));
+        let mut session = draft(workspace);
+        (session.executable, session.executable_identity) = executable_authority(&executable);
+        std::fs::write(&executable, b"changed provider bytes")
+            .unwrap_or_else(|error| panic!("overwrite executable fixture: {error}"));
+
+        let result = store
+            .execute_agent_create(
+                &principal,
+                "create-changed-executable",
+                &json!({"provider_id": "codex"}),
+                &session,
+            )
+            .await;
+        assert!(matches!(
+            result,
+            Err(PersistenceError::CommandRejected {
+                code: "runtime_authority_changed",
+                ..
+            })
+        ));
+        let snapshot = store
+            .snapshot("general", 0, 200)
+            .await
+            .unwrap_or_else(|error| panic!("snapshot after authority rejection: {error}"));
         assert!(snapshot.agent_sessions.is_empty());
         assert_eq!(snapshot.participants.len(), 1);
         assert!(snapshot.events.is_empty());

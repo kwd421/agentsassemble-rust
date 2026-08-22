@@ -21,8 +21,8 @@ pub enum PersistenceError {
     Database(#[from] sqlx::Error),
     #[error("stored JSON is invalid: {0}")]
     Json(#[from] serde_json::Error),
-    #[error("workspace validation task failed: {0}")]
-    WorkspaceValidationTask(#[from] tokio::task::JoinError),
+    #[error("runtime authority validation task failed: {0}")]
+    RuntimeAuthorityTask(String),
     #[error("persistent authority belongs to {0}, not this runtime")]
     AuthorityConflict(String),
     #[error("existing nonempty database has no explicit Rust authority marker")]

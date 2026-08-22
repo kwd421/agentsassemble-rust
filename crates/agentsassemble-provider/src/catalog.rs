@@ -1,5 +1,6 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
+    future::Future,
     sync::Arc,
 };
 
@@ -18,7 +19,8 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     ProviderSelection, ProviderSelectionError,
-    process::{ProbeFailure, probe, resolve_executable},
+    filesystem::{FilesystemFailure, resolve_executable},
+    process::{ProbeFailure, probe},
 };
 
 const MAX_PUBLIC_CATALOG_BYTES: usize = 48 * 1024;
@@ -222,10 +224,41 @@ fn loading_provider(
     }
 }
 
+async fn provider_executable(
+    program: &str,
+    cancellation: &CancellationToken,
+) -> Result<(String, String), ProbeFailure> {
+    let resolved = await_filesystem(cancellation, resolve_executable(program)).await?;
+    match resolved {
+        Some(authority) => Ok(authority),
+        None => Err(ProbeFailure::Missing),
+    }
+}
+
+async fn await_filesystem<T>(
+    cancellation: &CancellationToken,
+    operation: impl Future<Output = Result<T, FilesystemFailure>>,
+) -> Result<T, ProbeFailure> {
+    let resolved = tokio::select! {
+        biased;
+        () = cancellation.cancelled() => return Err(ProbeFailure::Cancelled),
+        resolved = operation => resolved,
+    };
+    if cancellation.is_cancelled() {
+        return Err(ProbeFailure::Cancelled);
+    }
+    match resolved {
+        Ok(value) => Ok(value),
+        Err(FilesystemFailure::Timeout) => Err(ProbeFailure::Timeout),
+        Err(FilesystemFailure::Busy | FilesystemFailure::Failed) => Err(ProbeFailure::Failed),
+    }
+}
+
 async fn discover_codex(cancellation: &CancellationToken) -> ProviderAvailability {
     let mut provider = loading_provider("codex", "Codex", "codex_live_session", "live_cli", "");
-    let Some((executable, executable_identity)) = resolve_executable("codex") else {
-        return failed_provider(provider, ProbeFailure::Missing);
+    let (executable, executable_identity) = match provider_executable("codex", cancellation).await {
+        Ok(authority) => authority,
+        Err(failure) => return failed_provider(provider, failure),
     };
     provider.executable.clone_from(&executable);
     provider.executable_identity = executable_identity;
@@ -293,8 +326,9 @@ async fn discover_antigravity(cancellation: &CancellationToken) -> ProviderAvail
         "live_cli",
         "",
     );
-    let Some((executable, executable_identity)) = resolve_executable("agy") else {
-        return failed_provider(provider, ProbeFailure::Missing);
+    let (executable, executable_identity) = match provider_executable("agy", cancellation).await {
+        Ok(authority) => authority,
+        Err(failure) => return failed_provider(provider, failure),
     };
     provider.executable.clone_from(&executable);
     provider.executable_identity = executable_identity;
@@ -345,9 +379,11 @@ async fn discover_antigravity(cancellation: &CancellationToken) -> ProviderAvail
 
 async fn discover_opencode(cancellation: &CancellationToken) -> ProviderAvailability {
     let mut provider = loading_provider("opencode", "OpenCode", "opencode_server", "opencode", "");
-    let Some((executable, executable_identity)) = resolve_executable("opencode") else {
-        return failed_provider(provider, ProbeFailure::Missing);
-    };
+    let (executable, executable_identity) =
+        match provider_executable("opencode", cancellation).await {
+            Ok(authority) => authority,
+            Err(failure) => return failed_provider(provider, failure),
+        };
     provider.executable.clone_from(&executable);
     provider.executable_identity = executable_identity;
     let output = match Box::pin(probe(&executable, &["models"], cancellation)).await {

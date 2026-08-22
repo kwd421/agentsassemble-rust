@@ -1,4 +1,7 @@
-use std::hash::{Hash, Hasher};
+use std::{
+    hash::{Hash, Hasher},
+    io::{self, Read},
+};
 
 use sha2::{Digest, Sha256};
 
@@ -79,9 +82,32 @@ pub fn stable_identity_hash(value: &(impl Hash + ?Sized)) -> String {
     format!("identity-v1-{:x}", hasher.0.finalize())
 }
 
+/// Binds an already-open readable object's stable filesystem identity to its bytes.
+///
+/// # Errors
+///
+/// Returns the reader error without producing a partial identity.
+pub fn stable_content_identity(
+    identity: &(impl Hash + ?Sized),
+    mut content: impl Read,
+) -> io::Result<String> {
+    let mut digest = Sha256::new();
+    digest.update(b"agentsassemble-content-identity-v1\0");
+    digest.update(stable_identity_hash(identity).as_bytes());
+    let mut buffer = vec![0_u8; 64 * 1024];
+    loop {
+        let count = content.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        digest.update(&buffer[..count]);
+    }
+    Ok(format!("content-identity-v1-{:x}", digest.finalize()))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::stable_identity_hash;
+    use super::{stable_content_identity, stable_identity_hash};
 
     #[test]
     fn stable_identity_separates_values() {
@@ -93,5 +119,17 @@ mod tests {
             stable_identity_hash(&(1_u64, 2_u64)),
             stable_identity_hash(&(2_u64, 1_u64))
         );
+    }
+
+    #[test]
+    fn content_identity_binds_object_and_bytes() {
+        let first = stable_content_identity(&1_u64, b"provider bytes".as_slice())
+            .unwrap_or_else(|error| panic!("hash content: {error}"));
+        let changed_bytes = stable_content_identity(&1_u64, b"changed bytes".as_slice())
+            .unwrap_or_else(|error| panic!("hash changed content: {error}"));
+        let changed_object = stable_content_identity(&2_u64, b"provider bytes".as_slice())
+            .unwrap_or_else(|error| panic!("hash changed object: {error}"));
+        assert_ne!(first, changed_bytes);
+        assert_ne!(first, changed_object);
     }
 }
