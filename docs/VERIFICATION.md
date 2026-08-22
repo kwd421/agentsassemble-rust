@@ -8,6 +8,8 @@ Verification claims only the boundary actually observed. Build, lint, unit tests
 
 `make verify` regenerates TypeScript protocol bindings from the Rust owner, builds the React production bundle, runs the socket-client tests, verifies the isolated Tauri shell and bundled sidecar input, and then runs the Rust architecture, source-growth, formatting, check, Clippy, and test gates.
 
+The sidecar boundary tests close the parent control pipe and prove the process exits and releases its SQLite writer lease for a restart. Desktop real-flow verification separately kills the owning Tauri process and suspends a live sidecar to prove parent-death cleanup and unhealthy-child replacement; only the exact processes created by that verification may be signalled.
+
 ## Frontend real-flow cleanup
 
 When Computer Use is used for frontend verification, every resource created solely for that verification is shut down after its evidence is collected:

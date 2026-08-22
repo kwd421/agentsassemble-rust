@@ -157,7 +157,6 @@ export interface RoomSocketClientDependencies {
   websocketBaseUrl?: () => string;
 }
 const ROOM_SOCKET_COMMAND_TIMEOUT_MS = 20_000;
-
 function wsBaseUrl(): string {
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
   return `${proto}//${window.location.host}`;
@@ -745,6 +744,7 @@ export function openRoomSocket(
         if (!waiting) return;
         pending.delete(requestId);
         waiting.reject(new RoomSocketSayError("Room command timed out.", "timeout"));
+        socket?.close();
       }, ROOM_SOCKET_COMMAND_TIMEOUT_MS);
       pending.set(requestId, { action, payload, resolve, reject, timerId });
       sendPending();

@@ -13,9 +13,14 @@ use anyhow::Context;
 use chrono::Utc;
 use clap::Parser;
 use serde_json::json;
-use tokio::net::TcpListener;
+use tokio::{
+    io::{AsyncReadExt, Stdin},
+    net::TcpListener,
+};
 use tokio_util::sync::CancellationToken;
 use tracing_subscriber::EnvFilter;
+
+const MAX_CONTROL_SECRET_BYTES: usize = 128;
 
 #[derive(Debug, Parser)]
 #[command(name = "agentsassemble-server")]
@@ -29,7 +34,9 @@ struct Args {
     #[arg(long)]
     frontend: Option<PathBuf>,
     #[arg(long, env = "AGENTSASSEMBLE_HOST_TOKEN")]
-    host_token: String,
+    host_token: Option<String>,
+    #[arg(long)]
+    control_stdin: bool,
 }
 
 #[tokio::main]
@@ -39,7 +46,27 @@ async fn main() -> anyhow::Result<()> {
         .with_writer(std::io::stderr)
         .init();
     let args = Args::parse();
-    let host_secret = HostSecret::new(args.host_token)?;
+    let (host_token, control_stdin) = if args.control_stdin {
+        let mut stdin = tokio::io::stdin();
+        let secret = read_control_secret(&mut stdin).await?;
+        (secret, Some(stdin))
+    } else {
+        (
+            args.host_token
+                .context("--host-token or AGENTSASSEMBLE_HOST_TOKEN is required")?,
+            None,
+        )
+    };
+    let host_secret = HostSecret::new(host_token)?;
+    let cancellation = CancellationToken::new();
+    if let Some(mut stdin) = control_stdin {
+        let parent_death = cancellation.clone();
+        tokio::spawn(async move {
+            let mut byte = [0_u8; 1];
+            let _ = stdin.read(&mut byte).await;
+            parent_death.cancel();
+        });
+    }
     if args.bind.ip() != IpAddr::V4(Ipv4Addr::LOCALHOST) && !args.bind.ip().is_loopback() {
         anyhow::bail!("the local runtime may bind only to loopback");
     }
@@ -54,12 +81,14 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or_else(|_| args.database.clone());
     let database_url = format!("sqlite://{}", args.database.display());
     let store = SqliteStore::open(&database_url).await?;
+    ensure_parent_alive(&cancellation)?;
     if let Some(room_id) = args.bootstrap_room.as_deref() {
         bootstrap(&store, room_id).await?;
     }
+    ensure_parent_alive(&cancellation)?;
     let listener = TcpListener::bind(args.bind).await?;
+    ensure_parent_alive(&cancellation)?;
     let address = listener.local_addr()?;
-    let cancellation = CancellationToken::new();
     let signal = cancellation.clone();
     tokio::spawn(async move {
         if tokio::signal::ctrl_c().await.is_ok() {
@@ -95,6 +124,35 @@ async fn main() -> anyhow::Result<()> {
         }))?
     );
     serve(listener, state, cancellation).await?;
+    Ok(())
+}
+
+async fn read_control_secret(stdin: &mut Stdin) -> anyhow::Result<String> {
+    let mut bytes = Vec::with_capacity(64);
+    let mut byte = [0_u8; 1];
+    for _ in 0..=MAX_CONTROL_SECRET_BYTES {
+        let count = stdin
+            .read(&mut byte)
+            .await
+            .context("read parent control pipe")?;
+        if count == 0 {
+            anyhow::bail!("parent control pipe closed before the host secret");
+        }
+        if byte[0] == b'\n' {
+            if bytes.last() == Some(&b'\r') {
+                bytes.pop();
+            }
+            return String::from_utf8(bytes).context("parent control secret is not UTF-8");
+        }
+        bytes.push(byte[0]);
+    }
+    anyhow::bail!("parent control secret exceeds {MAX_CONTROL_SECRET_BYTES} bytes")
+}
+
+fn ensure_parent_alive(cancellation: &CancellationToken) -> anyhow::Result<()> {
+    if cancellation.is_cancelled() {
+        anyhow::bail!("parent control pipe closed during startup");
+    }
     Ok(())
 }
 

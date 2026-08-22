@@ -739,4 +739,34 @@ describe("canonical room socket client", () => {
       category: "socket_closed",
     });
   });
+
+  it("retires a socket that cannot acknowledge a command", async () => {
+    vi.useFakeTimers();
+    const sockets: FakeWebSocket[] = [];
+    const handle = openRoomSocket(
+      { kind: "host", meetingId: "general" },
+      ["room_events"],
+      {},
+      {
+        getTicket: async () => `ticket-${sockets.length + 1}`,
+        createSocket: () => {
+          const socket = new FakeWebSocket();
+          sockets.push(socket);
+          return socket as unknown as WebSocket;
+        },
+      }
+    );
+    await flushPromises();
+    sockets[0].open();
+
+    const pending = handle.command("message.send", { content: "unacknowledged" });
+    const rejected = expect(pending).rejects.toMatchObject({ category: "timeout" });
+    await vi.advanceTimersByTimeAsync(20_000);
+    await rejected;
+    expect(sockets[0].readyState).toBe(WebSocket.CLOSED);
+    await vi.advanceTimersByTimeAsync(500);
+    await flushPromises();
+    expect(sockets).toHaveLength(2);
+    handle.close();
+  });
 });

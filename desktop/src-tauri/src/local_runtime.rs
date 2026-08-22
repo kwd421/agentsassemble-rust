@@ -4,7 +4,7 @@ use std::{
     io::{BufRead, BufReader, Write},
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream},
     path::{Path, PathBuf},
-    process::{Child, ChildStdout, Command, Stdio},
+    process::{Child, ChildStdin, ChildStdout, Command, Stdio},
     sync::{Mutex, mpsc},
     thread,
     time::{Duration, Instant},
@@ -38,8 +38,14 @@ pub struct LocalRuntime {
 
 struct RuntimeProcess {
     child: Child,
+    control: Option<ChildStdin>,
     address: Url,
     secret: SecretString,
+}
+
+enum TicketFailure {
+    Rejected(String),
+    Broken(String),
 }
 
 #[derive(Debug, Deserialize)]
@@ -78,6 +84,7 @@ impl LocalRuntime {
         };
         if must_start {
             if let Some(mut stopped) = process.take() {
+                stopped.control.take();
                 let _ = stopped.child.wait();
             }
             *process = Some(start_runtime(app, &room_id)?);
@@ -85,7 +92,19 @@ impl LocalRuntime {
         let runtime = process
             .as_mut()
             .ok_or_else(|| "local runtime did not start".to_owned())?;
-        request_ticket(runtime, &room_id)
+        let result = request_ticket(runtime, &room_id);
+        match result {
+            Ok(grant) => Ok(grant),
+            Err(TicketFailure::Rejected(message)) => Err(message),
+            Err(TicketFailure::Broken(message)) => {
+                if let Some(mut broken) = process.take() {
+                    terminate_owned_runtime(&mut broken);
+                }
+                Err(format!(
+                    "{message}; the owned runtime was stopped and will restart on the next attempt"
+                ))
+            }
+        }
     }
 
     pub fn stop(&self) {
@@ -93,7 +112,7 @@ impl LocalRuntime {
             return;
         };
         if let Some(mut runtime) = process.take() {
-            terminate_owned_process(&mut runtime.child);
+            terminate_owned_runtime(&mut runtime);
         }
     }
 }
@@ -122,8 +141,9 @@ fn start_runtime(app: &AppHandle, room_id: &str) -> Result<RuntimeProcess, Strin
         .arg(&database)
         .arg("--bootstrap-room")
         .arg(room_id)
-        .env("AGENTSASSEMBLE_HOST_TOKEN", secret.expose_secret())
-        .stdin(Stdio::null())
+        .arg("--control-stdin")
+        .env_remove("AGENTSASSEMBLE_HOST_TOKEN")
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::from(stderr_log));
     configure_process_group(&mut command);
@@ -133,10 +153,22 @@ fn start_runtime(app: &AppHandle, room_id: &str) -> Result<RuntimeProcess, Strin
             executable.display()
         )
     })?;
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| "cannot capture Rust runtime startup output".to_owned())?;
+    let Some(mut control) = child.stdin.take() else {
+        terminate_owned_process(&mut child);
+        return Err("cannot open Rust runtime control pipe".to_owned());
+    };
+    if let Err(error) =
+        writeln!(control, "{}", secret.expose_secret()).and_then(|()| control.flush())
+    {
+        terminate_owned_process(&mut child);
+        return Err(format!(
+            "cannot initialize Rust runtime control pipe: {error}"
+        ));
+    }
+    let Some(stdout) = child.stdout.take() else {
+        terminate_owned_process(&mut child);
+        return Err("cannot capture Rust runtime startup output".to_owned());
+    };
     let records = capture_startup_record(stdout, stdout_log);
     let record = match wait_for_startup(&mut child, &records) {
         Ok(record) => record,
@@ -158,54 +190,72 @@ fn start_runtime(app: &AppHandle, room_id: &str) -> Result<RuntimeProcess, Strin
     }
     Ok(RuntimeProcess {
         child,
+        control: Some(control),
         address,
         secret,
     })
 }
 
-fn request_ticket(runtime: &mut RuntimeProcess, room_id: &str) -> Result<TicketGrant, String> {
+fn request_ticket(
+    runtime: &mut RuntimeProcess,
+    room_id: &str,
+) -> Result<TicketGrant, TicketFailure> {
     if runtime
         .child
         .try_wait()
-        .map_err(|error| format!("cannot inspect local runtime: {error}"))?
+        .map_err(|error| TicketFailure::Broken(format!("cannot inspect local runtime: {error}")))?
         .is_some()
     {
-        return Err("the owned Rust runtime exited before ticket issuance".to_owned());
+        return Err(TicketFailure::Broken(
+            "the owned Rust runtime exited before ticket issuance".to_owned(),
+        ));
     }
-    let endpoint = runtime
-        .address
-        .join("api/ws-ticket")
-        .map_err(|error| format!("cannot construct ticket endpoint: {error}"))?;
+    let endpoint = runtime.address.join("api/ws-ticket").map_err(|error| {
+        TicketFailure::Broken(format!("cannot construct ticket endpoint: {error}"))
+    })?;
     let response = reqwest::blocking::Client::builder()
         .timeout(REQUEST_TIMEOUT)
         .build()
-        .map_err(|error| format!("cannot create local ticket client: {error}"))?
+        .map_err(|error| {
+            TicketFailure::Broken(format!("cannot create local ticket client: {error}"))
+        })?
         .post(endpoint)
         .header("x-host-token", runtime.secret.expose_secret())
         .json(&serde_json::json!({"meeting_id": room_id}))
         .send()
-        .map_err(|error| format!("local runtime ticket request failed: {error}"))?;
+        .map_err(|error| {
+            TicketFailure::Broken(format!("local runtime ticket request failed: {error}"))
+        })?;
     if !response.status().is_success() {
-        return Err(format!(
-            "local runtime rejected ticket request with status {}",
-            response.status()
-        ));
+        let status = response.status();
+        let message = format!("local runtime rejected ticket request with status {status}");
+        return if is_application_rejection(status) {
+            Err(TicketFailure::Rejected(message))
+        } else {
+            Err(TicketFailure::Broken(message))
+        };
     }
-    let ticket: TicketResponse = response
-        .json()
-        .map_err(|error| format!("local runtime returned an invalid ticket: {error}"))?;
+    let ticket: TicketResponse = response.json().map_err(|error| {
+        TicketFailure::Broken(format!("local runtime returned an invalid ticket: {error}"))
+    })?;
     if ticket.ticket.is_empty() || ticket.ttl_seconds == 0 {
-        return Err("local runtime returned an empty or expired ticket".to_owned());
+        return Err(TicketFailure::Broken(
+            "local runtime returned an empty or expired ticket".to_owned(),
+        ));
     }
     let port = runtime
         .address
         .port()
-        .ok_or_else(|| "local runtime address has no port".to_owned())?;
+        .ok_or_else(|| TicketFailure::Broken("local runtime address has no port".to_owned()))?;
     Ok(TicketGrant {
         ticket: ticket.ticket,
         ttl_seconds: ticket.ttl_seconds,
         websocket_base_url: format!("ws://127.0.0.1:{port}"),
     })
+}
+
+fn is_application_rejection(status: reqwest::StatusCode) -> bool {
+    status.is_client_error() && status != reqwest::StatusCode::UNAUTHORIZED
 }
 
 fn generate_host_secret() -> String {
@@ -305,6 +355,18 @@ fn prove_listening(address: &Url) -> Result<(), String> {
         .map_err(|error| format!("Rust runtime readiness proof failed: {error}"))
 }
 
+fn terminate_owned_runtime(runtime: &mut RuntimeProcess) {
+    runtime.control.take();
+    let deadline = Instant::now() + SHUTDOWN_GRACE;
+    while Instant::now() < deadline {
+        if runtime.child.try_wait().ok().flatten().is_some() {
+            return;
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+    terminate_owned_process(&mut runtime.child);
+}
+
 fn sidecar_executable(app: &AppHandle) -> Result<PathBuf, String> {
     let executable_name = if cfg!(windows) {
         "agentsassemble-server.exe"
@@ -380,7 +442,9 @@ fn terminate_owned_process(child: &mut Child) {
 
 #[cfg(test)]
 mod tests {
-    use super::{StartupRecord, generate_host_secret, validate_startup_record};
+    use super::{
+        StartupRecord, generate_host_secret, is_application_rejection, validate_startup_record,
+    };
 
     #[test]
     fn generated_host_secret_is_high_entropy_and_unpadded() {
@@ -404,5 +468,15 @@ mod tests {
             ..record
         };
         assert!(validate_startup_record(&unsafe_record, 42).is_err());
+    }
+
+    #[test]
+    fn only_normal_client_rejections_preserve_the_runtime() {
+        assert!(is_application_rejection(reqwest::StatusCode::BAD_REQUEST));
+        assert!(is_application_rejection(reqwest::StatusCode::NOT_FOUND));
+        assert!(!is_application_rejection(reqwest::StatusCode::UNAUTHORIZED));
+        assert!(!is_application_rejection(
+            reqwest::StatusCode::SERVICE_UNAVAILABLE
+        ));
     }
 }

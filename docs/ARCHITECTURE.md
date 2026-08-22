@@ -63,7 +63,7 @@ The local WebSocket adapter has explicit resource budgets: bounded connection ad
 
 ### Runtime lifecycle
 
-Tauri owns the local sidecar it starts. The sidecar binds loopback, reports one structured startup record containing the selected address and readiness, and is cancelled and reaped by its owner. Reusing an existing runtime requires a data-root-scoped ownership record plus a live readiness proof. The lifecycle control plane is separate from room application messages.
+Tauri owns the local sidecar it starts. The sidecar binds loopback, reports one structured startup record containing the selected address and readiness, and is cancelled and reaped by its owner. A private anonymous stdin control pipe delivers the host secret once without argv or environment exposure; Tauri keeps its write end open, and EOF makes the sidecar shut down when the parent exits normally or crashes. Transport failure or an invalid ticket response retires the unhealthy owned child so the next request starts a fresh runtime, while valid application rejection does not restart it. Reusing an existing runtime requires a data-root-scoped ownership record plus a live readiness proof. The lifecycle control plane is separate from room application messages.
 
 ### Persistence
 
