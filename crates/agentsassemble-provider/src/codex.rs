@@ -15,7 +15,10 @@ use tokio::{
 };
 use tokio_util::codec::{FramedRead, LinesCodec};
 
+#[cfg(any(not(unix), target_os = "macos"))]
+use crate::filesystem::BoundExecutable;
 use crate::{
+    filesystem::bind_executable,
     process::sanitize_environment,
     runtime::{DriverError, DriverFuture, ProviderDriver},
 };
@@ -27,6 +30,10 @@ const MAX_PENDING_NOTIFICATIONS: usize = 256;
 
 pub(crate) struct CodexDriver {
     child: Box<dyn ChildWrapper>,
+    #[cfg(any(not(unix), target_os = "macos"))]
+    _executable_guard: BoundExecutable,
+    #[cfg(unix)]
+    process_group: UnixProcessGroup,
     stdin: ChildStdin,
     stdout: FramedRead<tokio::process::ChildStdout, LinesCodec>,
     stderr_task: JoinHandle<()>,
@@ -44,13 +51,23 @@ impl CodexDriver {
         ));
 
         let arguments = command_arguments(session)?;
-        let mut command = CommandWrap::with_new(&session.executable, |command| {
+        let executable = bind_executable(
+            session.executable.clone(),
+            session.executable_identity.clone(),
+        )
+        .await
+        .map_err(|_| executable_authority_error())?;
+        let mut command = CommandWrap::with_new(executable.launch_path(), |command| {
             command
                 .args(&arguments)
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped());
         });
+        #[cfg(all(unix, not(target_os = "macos")))]
+        executable
+            .configure_command(command.command_mut())
+            .map_err(|_| executable_authority_error())?;
         sanitize_environment(command.command_mut());
         command.wrap(KillOnDrop);
         #[cfg(unix)]
@@ -58,6 +75,14 @@ impl CodexDriver {
         #[cfg(windows)]
         command.wrap(JobObject);
         let mut child = command.spawn().map_err(|error| spawn_error(&error))?;
+        #[cfg(unix)]
+        let process_group = match UnixProcessGroup::new(child.id()) {
+            Ok(group) => group,
+            Err(error) => {
+                terminate_failed_spawn(child.as_mut()).await;
+                return Err(error);
+            }
+        };
         let Some(stdin) = child.stdin().take() else {
             terminate_failed_spawn(child.as_mut()).await;
             return Err(protocol_error());
@@ -73,6 +98,10 @@ impl CodexDriver {
         let stderr_task = tokio::spawn(drain_stderr(stderr));
         Ok(Self {
             child,
+            #[cfg(any(not(unix), target_os = "macos"))]
+            _executable_guard: executable,
+            #[cfg(unix)]
+            process_group,
             stdin,
             stdout: FramedRead::new(
                 stdout,
@@ -194,20 +223,26 @@ impl CodexDriver {
     }
 
     async fn stop_process(&mut self) -> Result<(), DriverError> {
-        let stopped = tokio::time::timeout(STOP_TIMEOUT, Box::into_pin(self.child.kill()))
-            .await
-            .map_err(|_| {
-                DriverError::new(
-                    "provider_stop_unconfirmed",
-                    "The Codex app-server exceeded its shutdown deadline.",
-                )
-            })?;
+        #[cfg(unix)]
+        self.process_group.kill()?;
+        #[cfg(unix)]
+        let stopped = tokio::time::timeout(STOP_TIMEOUT, self.child.wait()).await;
+        #[cfg(windows)]
+        let stopped = tokio::time::timeout(STOP_TIMEOUT, Box::into_pin(self.child.kill())).await;
+        let stopped = stopped.map_err(|_| {
+            DriverError::new(
+                "provider_stop_unconfirmed",
+                "The Codex app-server exceeded its shutdown deadline.",
+            )
+        })?;
         stopped.map_err(|_| {
             DriverError::new(
                 "provider_stop_unconfirmed",
                 "The Codex app-server shutdown could not be confirmed.",
             )
         })?;
+        #[cfg(unix)]
+        self.process_group.confirm_gone().await?;
         self.stderr_task.abort();
         let _ = (&mut self.stderr_task).await;
         Ok(())
@@ -238,7 +273,74 @@ impl ProviderDriver for CodexDriver {
 
 impl Drop for CodexDriver {
     fn drop(&mut self) {
+        #[cfg(unix)]
+        self.process_group.kill_on_drop();
         self.stderr_task.abort();
+    }
+}
+
+#[cfg(unix)]
+struct UnixProcessGroup {
+    pid: rustix::process::Pid,
+    armed: bool,
+}
+
+#[cfg(unix)]
+impl UnixProcessGroup {
+    fn new(raw_pid: Option<u32>) -> Result<Self, DriverError> {
+        let pid = raw_pid
+            .and_then(|pid| i32::try_from(pid).ok())
+            .and_then(rustix::process::Pid::from_raw)
+            .ok_or_else(|| {
+                DriverError::new(
+                    "provider_spawn_failed",
+                    "The Codex app-server process group could not be identified.",
+                )
+            })?;
+        Ok(Self { pid, armed: true })
+    }
+
+    fn kill(&self) -> Result<(), DriverError> {
+        match rustix::process::kill_process_group(self.pid, rustix::process::Signal::KILL) {
+            Ok(()) | Err(rustix::io::Errno::SRCH) => Ok(()),
+            Err(_) => Err(DriverError::new(
+                "provider_stop_unconfirmed",
+                "The Codex app-server process group could not be stopped.",
+            )),
+        }
+    }
+
+    async fn confirm_gone(&mut self) -> Result<(), DriverError> {
+        let deadline = tokio::time::Instant::now() + STOP_TIMEOUT;
+        loop {
+            match rustix::process::test_kill_process_group(self.pid) {
+                Err(rustix::io::Errno::SRCH) => {
+                    self.armed = false;
+                    return Ok(());
+                }
+                Ok(()) => {}
+                Err(_) => {
+                    return Err(DriverError::new(
+                        "provider_stop_unconfirmed",
+                        "The Codex app-server process group state could not be confirmed.",
+                    ));
+                }
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return Err(DriverError::new(
+                    "provider_stop_unconfirmed",
+                    "The Codex app-server process group exceeded its shutdown deadline.",
+                ));
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    }
+
+    fn kill_on_drop(&mut self) {
+        if self.armed {
+            let _ = rustix::process::kill_process_group(self.pid, rustix::process::Signal::KILL);
+            self.armed = false;
+        }
     }
 }
 
@@ -328,6 +430,13 @@ const fn protocol_closed() -> DriverError {
     DriverError::new(
         "provider_protocol_closed",
         "The Codex app-server protocol stream closed unexpectedly.",
+    )
+}
+
+const fn executable_authority_error() -> DriverError {
+    DriverError::new(
+        "executable_authority_changed",
+        "The provider executable authority changed before process creation.",
     )
 }
 

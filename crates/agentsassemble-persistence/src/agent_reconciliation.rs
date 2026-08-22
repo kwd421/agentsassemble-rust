@@ -31,9 +31,13 @@ pub enum RuntimeReconciliationObservation {
         previous_owner_id: String,
         new_owner_id: String,
         runtime_profile_key: String,
-        provider_session_active: bool,
     },
     Gone,
+    LeaseUncertain {
+        handle_id: String,
+        owner_id: String,
+        reason_code: String,
+    },
     Ambiguous {
         reason_code: String,
     },
@@ -243,7 +247,6 @@ async fn reconcile_observation(
             previous_owner_id,
             new_owner_id,
             runtime_profile_key,
-            provider_session_active,
         } => {
             validate_adoption(
                 session,
@@ -251,15 +254,23 @@ async fn reconcile_observation(
                 previous_owner_id,
                 new_owner_id,
                 runtime_profile_key,
-                *provider_session_active,
             )?;
             session.runtime_handle_id.clone_from(handle_id);
             session.runtime_owner_id.clone_from(new_owner_id);
-            session.public.provider_session_active = *provider_session_active;
+            session.public.provider_session_active = false;
             session.public.updated_at = Utc::now();
             Ok(false)
         }
         RuntimeReconciliationObservation::Gone => Ok(reconcile_gone(session)),
+        RuntimeReconciliationObservation::LeaseUncertain {
+            handle_id,
+            owner_id,
+            reason_code,
+        } => {
+            validate_uncertain_lease(session, handle_id, owner_id, reason_code)?;
+            retain_uncertain_runtime(session);
+            Ok(true)
+        }
         RuntimeReconciliationObservation::Ambiguous { reason_code } => {
             if reason_code.is_empty() {
                 return Err(invalid_observation());
@@ -306,7 +317,16 @@ async fn reconcile_ambiguous(
     transaction: &mut Transaction<'_, Sqlite>,
     session: &mut DurableAgentSession,
 ) -> Result<bool, PersistenceError> {
-    if matches!(session.lifecycle_intent_action.as_str(), "start" | "stop")
+    if session.lifecycle_intent_action == "start"
+        && matches!(
+            session.lifecycle_intent_status.as_str(),
+            "prepared" | "unconfirmed"
+        )
+    {
+        retain_uncertain_runtime(session);
+        return Ok(true);
+    }
+    if session.lifecycle_intent_action == "stop"
         && matches!(
             session.lifecycle_intent_status.as_str(),
             "prepared" | "unconfirmed"
@@ -332,13 +352,29 @@ async fn reconcile_ambiguous(
     Ok(false)
 }
 
+fn validate_uncertain_lease(
+    session: &DurableAgentSession,
+    handle_id: &str,
+    owner_id: &str,
+    reason_code: &str,
+) -> Result<(), PersistenceError> {
+    if handle_id.is_empty()
+        || owner_id.is_empty()
+        || reason_code.is_empty()
+        || handle_id != session.runtime_handle_id
+        || owner_id != session.runtime_owner_id
+    {
+        return Err(invalid_observation());
+    }
+    Ok(())
+}
+
 fn validate_adoption(
     session: &DurableAgentSession,
     handle_id: &str,
     previous_owner_id: &str,
     new_owner_id: &str,
     runtime_profile_key: &str,
-    provider_session_active: bool,
 ) -> Result<(), PersistenceError> {
     if handle_id.is_empty()
         || previous_owner_id.is_empty()
@@ -346,7 +382,6 @@ fn validate_adoption(
         || handle_id != session.runtime_handle_id
         || previous_owner_id != session.runtime_owner_id
         || runtime_profile_key != session.runtime_profile_key
-        || (provider_session_active && session.provider_session_id.is_empty())
     {
         return Err(invalid_observation());
     }
@@ -402,6 +437,24 @@ fn disconnect_after_owner_loss(session: &mut DurableAgentSession) {
     session.lifecycle_intent_action.clear();
     session.lifecycle_intent_id.clear();
     session.lifecycle_intent_status.clear();
+}
+
+fn retain_uncertain_runtime(session: &mut DurableAgentSession) {
+    merge_inflight_events(session);
+    if session.lifecycle_intent_action == "start" && session.lifecycle_intent_status == "prepared" {
+        "unconfirmed".clone_into(&mut session.lifecycle_intent_status);
+    }
+    "unavailable".clone_into(&mut session.public.status);
+    session.public.enabled = false;
+    "disconnected".clone_into(&mut session.public.runtime_status);
+    session.public.provider_session_active = false;
+    session.public.provider_session_reused = false;
+    session.public.active_turn_id.clear();
+    session.public.turn_phase.clear();
+    session.public.recovery_required = true;
+    "Provider runtime authority could not be confirmed.".clone_into(&mut session.public.last_error);
+    "runtime_authority_uncertain".clone_into(&mut session.public.last_error_code);
+    session.public.updated_at = Utc::now();
 }
 
 fn disconnect_after_restart(session: &mut DurableAgentSession) {

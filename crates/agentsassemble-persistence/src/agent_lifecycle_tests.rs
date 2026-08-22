@@ -287,7 +287,8 @@ async fn stale_start_completion_fails_closed_and_visible_failure_clears_intent()
     let events = store
         .fail_agent_start(
             &principal,
-            AGENT_ID,
+            "start-failed",
+            &payload,
             &effect.operation_id,
             "runtime_start_failed",
             "/Users/alice/private/bin/codex:\nAuthorization: Bearer secret-provider-token",
@@ -310,6 +311,20 @@ async fn stale_start_completion_fails_closed_and_visible_failure_clears_intent()
     assert!(!session.last_error.contains("alice"));
     assert!(!session.last_error.contains("secret-provider-token"));
     assert!(!session.enabled);
+    let reservations = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM lifecycle_command_reservations WHERE room_id = 'general'",
+    )
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("inspect failed-start reservations: {error}"));
+    assert_eq!(reservations, 0);
+    assert!(
+        store
+            .load_runtime_reconciliation_candidates()
+            .await
+            .unwrap_or_else(|error| panic!("load post-failure candidates: {error}"))
+            .is_empty()
+    );
     assert!(matches!(
         store
             .prepare_agent_stop(&principal, "stop-after-failed-start", &payload)
@@ -318,6 +333,13 @@ async fn stale_start_completion_fails_closed_and_visible_failure_clears_intent()
             code: "runtime_handle_unavailable",
             ..
         })
+    ));
+    assert!(matches!(
+        store
+            .prepare_agent_start(&principal, "new-start-after-safe-failure", &payload)
+            .await
+            .unwrap_or_else(|error| panic!("prepare replacement start: {error}")),
+        AgentStartPlan::Start(_)
     ));
 }
 

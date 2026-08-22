@@ -1,13 +1,16 @@
-use std::os::unix::fs::PermissionsExt;
+use std::{os::unix::fs::PermissionsExt, path::Path, time::Duration};
 
 use agentsassemble_domain::{CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession};
 
-use super::ProviderAdapter;
+use super::{ProviderAdapter, ProviderRuntimeObservation};
 use crate::filesystem::{canonical_workspace, executable_identity};
 use crate::profile::runtime_profile_key;
 
+static RUNTIME_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 #[tokio::test]
 async fn codex_runtime_is_initialized_reused_and_stopped_by_exact_owner() {
+    let _serial = RUNTIME_TEST_LOCK.lock().await;
     let directory =
         tempfile::tempdir().unwrap_or_else(|error| panic!("create runtime fixture: {error}"));
     let executable = directory.path().join("codex-fixture");
@@ -56,6 +59,14 @@ async fn codex_runtime_is_initialized_reused_and_stopped_by_exact_owner() {
     assert!(second.runtime_reused);
     assert_eq!(second.runtime_handle_id, first.runtime_handle_id);
     assert_eq!(second.runtime_owner_id, first.runtime_owner_id);
+    let mut durable_session = session.clone();
+    durable_session
+        .runtime_handle_id
+        .clone_from(&first.runtime_handle_id);
+    durable_session
+        .runtime_owner_id
+        .clone_from(&first.runtime_owner_id);
+    assert_adopted(&adapter, &durable_session, &first).await;
     std::fs::write(
         &session.executable,
         b"provider bytes changed while runtime is alive",
@@ -67,6 +78,7 @@ async fn codex_runtime_is_initialized_reused_and_stopped_by_exact_owner() {
     assert!(changed.effect_uncertain);
     assert_eq!(changed.runtime_handle_id, first.runtime_handle_id);
     assert_eq!(changed.runtime_owner_id, first.runtime_owner_id);
+    assert_executable_lease_uncertain(&adapter, &durable_session, &first).await;
     adapter
         .stop(
             &session.public.room_id,
@@ -88,6 +100,197 @@ async fn codex_runtime_is_initialized_reused_and_stopped_by_exact_owner() {
         .shutdown()
         .await
         .unwrap_or_else(|error| panic!("shutdown runtime owner: {error}"));
+}
+
+async fn assert_adopted(
+    adapter: &ProviderAdapter,
+    session: &DurableAgentSession,
+    started: &super::ProviderRuntimeStarted,
+) {
+    assert_eq!(
+        adapter.observe(session).await,
+        ProviderRuntimeObservation::Adopted {
+            handle_id: started.runtime_handle_id.clone(),
+            previous_owner_id: started.runtime_owner_id.clone(),
+            new_owner_id: started.runtime_owner_id.clone(),
+            runtime_profile_key: session.runtime_profile_key.clone(),
+        }
+    );
+}
+
+async fn assert_executable_lease_uncertain(
+    adapter: &ProviderAdapter,
+    session: &DurableAgentSession,
+    started: &super::ProviderRuntimeStarted,
+) {
+    assert_eq!(
+        adapter.observe(session).await,
+        ProviderRuntimeObservation::LeaseUncertain {
+            handle_id: started.runtime_handle_id.clone(),
+            owner_id: started.runtime_owner_id.clone(),
+            reason_code: "executable_authority_changed".to_owned(),
+        }
+    );
+}
+
+#[tokio::test]
+async fn stop_kills_descendants_after_the_codex_leader_exits() {
+    let _serial = RUNTIME_TEST_LOCK.lock().await;
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create descendant fixture: {error}"));
+    let descendant_pid = directory.path().join("descendant.pid");
+    let script = format!(
+        "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\n(while :; do sleep 1; done) </dev/null >/dev/null 2>&1 &\nprintf '%s' \"$!\" > {}\nexit 0\n",
+        shell_quote(&descendant_pid)
+    );
+    let session = fixture_session(directory.path(), &script).await;
+    let adapter = ProviderAdapter::new();
+    let started = adapter
+        .start(&session)
+        .await
+        .unwrap_or_else(|error| panic!("start descendant fixture: {error}"));
+    let pid = wait_for_pid(&descendant_pid).await;
+    let _cleanup = ExactProcessCleanup(pid);
+    wait_until(Duration::from_secs(2), || {
+        !leader_is_alive(&adapter, &session)
+    })
+    .await;
+    assert!(process_exists(pid));
+    adapter
+        .stop(
+            &session.public.room_id,
+            &session.public.session_id,
+            &started.runtime_handle_id,
+            &started.runtime_owner_id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("stop exited leader and descendants: {error}"));
+    wait_until(Duration::from_secs(2), || !process_exists(pid)).await;
+}
+
+#[tokio::test]
+async fn cancelled_initialization_remains_owned_for_shutdown() {
+    let _serial = RUNTIME_TEST_LOCK.lock().await;
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create cancellation fixture: {error}"));
+    let descendant_pid = directory.path().join("cancelled-descendant.pid");
+    let script = format!(
+        "#!/bin/sh\n(while :; do sleep 1; done) </dev/null >/dev/null 2>&1 &\nprintf '%s' \"$!\" > {}\nIFS= read -r initialize\nwhile :; do sleep 1; done\n",
+        shell_quote(&descendant_pid)
+    );
+    let session = fixture_session(directory.path(), &script).await;
+    let adapter = ProviderAdapter::new();
+    let pending_adapter = adapter.clone();
+    let pending_session = session.clone();
+    let pending = tokio::spawn(async move { pending_adapter.start(&pending_session).await });
+    let pid = wait_for_pid(&descendant_pid).await;
+    let _cleanup = ExactProcessCleanup(pid);
+    pending.abort();
+    let _ = pending.await;
+    adapter
+        .shutdown()
+        .await
+        .unwrap_or_else(|error| panic!("shutdown cancelled initialization: {error}"));
+    wait_until(Duration::from_secs(2), || !process_exists(pid)).await;
+}
+
+async fn fixture_session(directory: &Path, script: &str) -> DurableAgentSession {
+    let executable = directory.join("codex-fixture");
+    std::fs::write(&executable, script)
+        .unwrap_or_else(|error| panic!("write process fixture: {error}"));
+    let mut permissions = std::fs::metadata(&executable)
+        .unwrap_or_else(|error| panic!("read process fixture mode: {error}"))
+        .permissions();
+    permissions.set_mode(0o700);
+    std::fs::set_permissions(&executable, permissions)
+        .unwrap_or_else(|error| panic!("make process fixture executable: {error}"));
+    let executable = executable
+        .canonicalize()
+        .unwrap_or_else(|error| panic!("canonicalize process fixture: {error}"))
+        .to_string_lossy()
+        .into_owned();
+    let executable_identity = executable_identity(executable.clone())
+        .await
+        .unwrap_or_else(|error| panic!("identify process fixture: {error:?}"));
+    let (workspace, workspace_identity) =
+        canonical_workspace(directory.to_string_lossy().into_owned())
+            .await
+            .unwrap_or_else(|error| panic!("identify process workspace: {error:?}"));
+    session(
+        executable,
+        executable_identity,
+        &workspace,
+        &workspace_identity,
+    )
+}
+
+async fn wait_for_pid(path: &Path) -> u32 {
+    let mut pid = None;
+    wait_until(Duration::from_secs(2), || {
+        pid = std::fs::read_to_string(path)
+            .ok()
+            .and_then(|value| value.parse::<u32>().ok());
+        pid.is_some()
+    })
+    .await;
+    pid.unwrap_or_else(|| panic!("fixture did not publish descendant pid"))
+}
+
+async fn wait_until(mut remaining: Duration, mut condition: impl FnMut() -> bool) {
+    while !condition() && !remaining.is_zero() {
+        let interval = Duration::from_millis(10).min(remaining);
+        tokio::time::sleep(interval).await;
+        remaining = remaining.saturating_sub(interval);
+    }
+    assert!(condition(), "condition did not become true before timeout");
+}
+
+fn leader_is_alive(adapter: &ProviderAdapter, session: &DurableAgentSession) -> bool {
+    let Some(slot) = adapter.owner.runtimes.try_lock().ok().and_then(|slots| {
+        slots
+            .get(&super::RuntimeKey {
+                room_id: session.public.room_id.clone(),
+                session_id: session.public.session_id.clone(),
+            })
+            .cloned()
+    }) else {
+        return true;
+    };
+    let Ok(mut slot) = slot.try_lock() else {
+        return true;
+    };
+    let super::RuntimeState::Running(runtime) = &mut slot.state else {
+        return false;
+    };
+    runtime.driver.is_alive().unwrap_or(true)
+}
+
+fn process_exists(raw_pid: u32) -> bool {
+    i32::try_from(raw_pid)
+        .ok()
+        .and_then(rustix::process::Pid::from_raw)
+        .is_some_and(|pid| match rustix::process::test_kill_process(pid) {
+            Ok(()) | Err(rustix::io::Errno::PERM) => true,
+            Err(rustix::io::Errno::SRCH) => false,
+            Err(error) => panic!("inspect exact process {raw_pid}: {error}"),
+        })
+}
+
+fn shell_quote(path: &Path) -> String {
+    format!("'{}'", path.to_string_lossy().replace('\'', "'\\''"))
+}
+
+struct ExactProcessCleanup(u32);
+
+impl Drop for ExactProcessCleanup {
+    fn drop(&mut self) {
+        if let Some(pid) = i32::try_from(self.0)
+            .ok()
+            .and_then(rustix::process::Pid::from_raw)
+        {
+            let _ = rustix::process::kill_process(pid, rustix::process::Signal::KILL);
+        }
+    }
 }
 
 fn session(

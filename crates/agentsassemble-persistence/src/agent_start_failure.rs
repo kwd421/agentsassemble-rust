@@ -1,11 +1,15 @@
-use agentsassemble_domain::{AuthenticatedPrincipal, RoomEvent, redact_persisted_diagnostic_text};
+use agentsassemble_domain::{
+    AuthenticatedPrincipal, RoomEvent, canonical_payload_hash, redact_persisted_diagnostic_text,
+};
 use chrono::Utc;
+use serde_json::Value;
 
 use crate::{
     PersistenceError, SqliteStore,
     agent_lifecycle::{clear_intent, load_session, save_session},
-    agent_lifecycle_authority::require_intent,
+    agent_lifecycle_authority::{payload_agent_id, require_intent},
     agent_lifecycle_events::{append_error_event, append_state_event},
+    agent_lifecycle_reservations::{LifecycleReservation, finish_lifecycle_command},
     authority::active_room_for_principal,
 };
 
@@ -21,14 +25,17 @@ impl SqliteStore {
     pub async fn fail_agent_start(
         &self,
         principal: &AuthenticatedPrincipal,
-        agent_id: &str,
+        request_id: &str,
+        payload: &Value,
         operation_id: &str,
         error_code: &'static str,
         message: &str,
     ) -> Result<Vec<RoomEvent>, PersistenceError> {
+        let agent_id = payload_agent_id(payload)?;
+        let payload_hash = canonical_payload_hash(payload);
         let mut transaction = self.pool.begin().await?;
         active_room_for_principal(&mut transaction, principal).await?;
-        let mut session = load_session(&mut transaction, &principal.room_id, agent_id).await?;
+        let mut session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
         require_intent(
             &session,
             START,
@@ -36,6 +43,18 @@ impl SqliteStore {
             "prepared",
             "stale_start_confirmation",
         )?;
+        finish_lifecycle_command(
+            &mut transaction,
+            &LifecycleReservation::new(
+                principal,
+                request_id,
+                START,
+                &payload_hash,
+                &agent_id,
+                operation_id,
+            ),
+        )
+        .await?;
         "unavailable".clone_into(&mut session.public.status);
         session.public.enabled = false;
         "error".clone_into(&mut session.public.runtime_status);

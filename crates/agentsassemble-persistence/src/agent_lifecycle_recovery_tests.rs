@@ -76,6 +76,34 @@ async fn ambiguous_start_retains_its_exact_runtime_lease_and_blocks_replacement(
         )
         .await
         .unwrap_or_else(|error| panic!("mark start unconfirmed: {error}"));
+    assert_eq!(
+        store
+            .reconcile_agent_sessions_after_restart()
+            .await
+            .unwrap_or_else(|error| panic!("reconcile ambiguous start: {error}")),
+        1
+    );
+    let retained = store
+        .load_runtime_reconciliation_candidates()
+        .await
+        .unwrap_or_else(|error| panic!("load retained start lease: {error}"))
+        .pop()
+        .unwrap_or_else(|| panic!("ambiguous start lease was released"));
+    assert_eq!(retained.session.runtime_handle_id, "uncertain-runtime");
+    assert_eq!(retained.session.runtime_owner_id, "supervisor-instance-1");
+    assert_eq!(retained.session.lifecycle_intent_action, "start");
+    assert_eq!(retained.session.lifecycle_intent_status, "unconfirmed");
+    store
+        .apply_runtime_reconciliation(
+            &retained,
+            &RuntimeReconciliationObservation::LeaseUncertain {
+                handle_id: "uncertain-runtime".to_owned(),
+                owner_id: "supervisor-instance-1".to_owned(),
+                reason_code: "runtime_health_unknown".to_owned(),
+            },
+        )
+        .await
+        .unwrap_or_else(|error| panic!("retain exact uncertain lease: {error}"));
     assert!(matches!(
         store
             .prepare_agent_start(&principal, "replacement-start", &payload)
@@ -95,6 +123,44 @@ async fn ambiguous_start_retains_its_exact_runtime_lease_and_blocks_replacement(
     assert_eq!(retry.session.runtime_handle_id, "uncertain-runtime");
     assert_eq!(retry.session.runtime_owner_id, "supervisor-instance-1");
     assert_eq!(retry.session.lifecycle_intent_status, "prepared");
+}
+
+#[tokio::test]
+async fn ambiguous_pre_effect_start_cannot_spawn_again_without_a_gone_observation() {
+    let (store, principal, _directory) = fixture().await;
+    let payload = json!({"agent_id": AGENT_ID});
+    let AgentStartPlan::Start(_) = store
+        .prepare_agent_start(&principal, "unobserved-start", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare unobserved start: {error}"))
+    else {
+        panic!("stopped session must require an effect");
+    };
+    assert_eq!(
+        store
+            .reconcile_agent_sessions_after_restart()
+            .await
+            .unwrap_or_else(|error| panic!("reconcile unobserved start: {error}")),
+        1
+    );
+    assert!(matches!(
+        store
+            .prepare_agent_start(&principal, "unobserved-start", &payload)
+            .await,
+        Err(PersistenceError::CommandRejected {
+            code: "runtime_effect_unconfirmed",
+            ..
+        })
+    ));
+    assert!(matches!(
+        store
+            .prepare_agent_start(&principal, "replacement-after-unobserved", &payload)
+            .await,
+        Err(PersistenceError::CommandRejected {
+            code: "operation_in_progress",
+            ..
+        })
+    ));
 }
 
 #[tokio::test]

@@ -18,15 +18,22 @@ pub async fn reconcile_runtime_ownership(
                 previous_owner_id,
                 new_owner_id,
                 runtime_profile_key,
-                provider_session_active,
             } => RuntimeReconciliationObservation::Adopted {
                 handle_id,
                 previous_owner_id,
                 new_owner_id,
                 runtime_profile_key,
-                provider_session_active,
             },
             ProviderRuntimeObservation::Gone => RuntimeReconciliationObservation::Gone,
+            ProviderRuntimeObservation::LeaseUncertain {
+                handle_id,
+                owner_id,
+                reason_code,
+            } => RuntimeReconciliationObservation::LeaseUncertain {
+                handle_id,
+                owner_id,
+                reason_code,
+            },
             ProviderRuntimeObservation::Ambiguous { reason_code } => {
                 RuntimeReconciliationObservation::Ambiguous { reason_code }
             }

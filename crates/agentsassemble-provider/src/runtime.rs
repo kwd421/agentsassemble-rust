@@ -90,9 +90,13 @@ pub enum ProviderRuntimeObservation {
         previous_owner_id: String,
         new_owner_id: String,
         runtime_profile_key: String,
-        provider_session_active: bool,
     },
     Gone,
+    LeaseUncertain {
+        handle_id: String,
+        owner_id: String,
+        reason_code: String,
+    },
     Ambiguous {
         reason_code: String,
     },
@@ -192,13 +196,7 @@ impl ProviderAdapter {
         let slot = self.slot(session).await;
         let mut slot = slot.lock().await;
         match &mut slot.state {
-            RuntimeState::Running(runtime) => {
-                let (result, vacated) = reuse_owned_runtime(session, runtime).await;
-                if vacated {
-                    slot.state = RuntimeState::Vacant;
-                }
-                result
-            }
+            RuntimeState::Running(runtime) => reuse_owned_runtime(session, runtime).await,
             RuntimeState::StopConfirmed { .. } => {
                 Err(ProviderAdapterError::safe(DriverError::new(
                     "operation_in_progress",
@@ -224,33 +222,16 @@ impl ProviderAdapter {
                     .launch(session)
                     .await
                     .map_err(ProviderAdapterError::safe)?;
-                let mut runtime = OwnedRuntime {
+                slot.state = RuntimeState::Running(OwnedRuntime {
                     handle_id: format!("runtime-v1-{}", Uuid::new_v4()),
                     owner_id: self.owner.supervisor_id.clone(),
                     profile_key: session.runtime_profile_key.clone(),
                     driver,
+                });
+                let RuntimeState::Running(runtime) = &mut slot.state else {
+                    unreachable!("new provider runtime slot must be running");
                 };
-                match runtime.driver.ensure_ready().await {
-                    Ok(()) => {
-                        let result = started(session, &runtime, false);
-                        slot.state = RuntimeState::Running(runtime);
-                        Ok(result)
-                    }
-                    Err(error) => {
-                        let alive = runtime.driver.is_alive().unwrap_or(true);
-                        if alive {
-                            let failure = ProviderAdapterError::uncertain(
-                                error,
-                                &runtime.handle_id,
-                                &runtime.owner_id,
-                            );
-                            slot.state = RuntimeState::Running(runtime);
-                            Err(failure)
-                        } else {
-                            Err(ProviderAdapterError::safe(error))
-                        }
-                    }
-                }
+                initialize_owned_runtime(session, runtime).await
             }
         }
     }
@@ -285,18 +266,8 @@ impl ProviderAdapter {
             RuntimeState::Running(runtime)
                 if runtime.handle_id == handle_id && runtime.owner_id == owner_id =>
             {
-                match runtime.driver.is_alive() {
-                    Ok(false) => {
-                        slot.state = RuntimeState::StopConfirmed {
-                            handle_id: handle_id.to_owned(),
-                            owner_id: owner_id.to_owned(),
-                        };
-                        return Ok(());
-                    }
-                    Ok(true) => {}
-                    Err(error) => {
-                        return Err(ProviderAdapterError::uncertain(error, handle_id, owner_id));
-                    }
+                if let Err(error) = runtime.driver.is_alive() {
+                    return Err(ProviderAdapterError::uncertain(error, handle_id, owner_id));
                 }
                 if let Err(error) = runtime.driver.stop().await {
                     return Err(ProviderAdapterError::uncertain(error, handle_id, owner_id));
@@ -380,17 +351,28 @@ impl ProviderAdapter {
             };
         }
         match runtime.driver.is_alive() {
-            Ok(true) => ProviderRuntimeObservation::Adopted {
+            Ok(true) => {}
+            Ok(false) => return ProviderRuntimeObservation::Gone,
+            Err(_) => {
+                return ProviderRuntimeObservation::LeaseUncertain {
+                    handle_id: runtime.handle_id.clone(),
+                    owner_id: runtime.owner_id.clone(),
+                    reason_code: "runtime_health_unknown".to_owned(),
+                };
+            }
+        }
+        if let Err(error) = revalidate_runtime_authority(session).await {
+            return ProviderRuntimeObservation::LeaseUncertain {
                 handle_id: runtime.handle_id.clone(),
-                previous_owner_id: session.runtime_owner_id.clone(),
-                new_owner_id: runtime.owner_id.clone(),
-                runtime_profile_key: runtime.profile_key.clone(),
-                provider_session_active: session.public.provider_session_active,
-            },
-            Ok(false) => ProviderRuntimeObservation::Gone,
-            Err(_) => ProviderRuntimeObservation::Ambiguous {
-                reason_code: "runtime_health_unknown".to_owned(),
-            },
+                owner_id: runtime.owner_id.clone(),
+                reason_code: error.code.to_owned(),
+            };
+        }
+        ProviderRuntimeObservation::Adopted {
+            handle_id: runtime.handle_id.clone(),
+            previous_owner_id: session.runtime_owner_id.clone(),
+            new_owner_id: runtime.owner_id.clone(),
+            runtime_profile_key: runtime.profile_key.clone(),
         }
     }
 
@@ -500,55 +482,56 @@ fn started(
 async fn reuse_owned_runtime(
     session: &DurableAgentSession,
     runtime: &mut OwnedRuntime,
-) -> (Result<ProviderRuntimeStarted, ProviderAdapterError>, bool) {
-    if let Err(error) = validate_owned_runtime(session, runtime) {
-        return (Err(error), false);
-    }
+) -> Result<ProviderRuntimeStarted, ProviderAdapterError> {
+    validate_owned_runtime(session, runtime)?;
     match runtime.driver.is_alive() {
         Ok(true) => {}
         Ok(false) => {
-            return (
-                Err(ProviderAdapterError::safe(DriverError::new(
+            return Err(ProviderAdapterError::uncertain(
+                DriverError::new(
                     "provider_runtime_exited",
                     "The owned provider runtime exited before it became ready.",
-                ))),
-                true,
-            );
+                ),
+                &runtime.handle_id,
+                &runtime.owner_id,
+            ));
         }
         Err(error) => {
-            return (
-                Err(ProviderAdapterError::uncertain(
-                    error,
-                    &runtime.handle_id,
-                    &runtime.owner_id,
-                )),
-                false,
-            );
+            return Err(ProviderAdapterError::uncertain(
+                error,
+                &runtime.handle_id,
+                &runtime.owner_id,
+            ));
         }
     }
     if let Err(error) = revalidate_runtime_authority(session).await {
-        return (
-            Err(ProviderAdapterError::uncertain(
-                error,
-                &runtime.handle_id,
-                &runtime.owner_id,
-            )),
-            false,
-        );
+        return Err(ProviderAdapterError::uncertain(
+            error,
+            &runtime.handle_id,
+            &runtime.owner_id,
+        ));
     }
     match runtime.driver.ensure_ready().await {
-        Ok(()) => (Ok(started(session, runtime, true)), false),
-        Err(error) if matches!(runtime.driver.is_alive(), Ok(false)) => {
-            (Err(ProviderAdapterError::safe(error)), true)
-        }
-        Err(error) => (
-            Err(ProviderAdapterError::uncertain(
-                error,
-                &runtime.handle_id,
-                &runtime.owner_id,
-            )),
-            false,
-        ),
+        Ok(()) => Ok(started(session, runtime, true)),
+        Err(error) => Err(ProviderAdapterError::uncertain(
+            error,
+            &runtime.handle_id,
+            &runtime.owner_id,
+        )),
+    }
+}
+
+async fn initialize_owned_runtime(
+    session: &DurableAgentSession,
+    runtime: &mut OwnedRuntime,
+) -> Result<ProviderRuntimeStarted, ProviderAdapterError> {
+    match runtime.driver.ensure_ready().await {
+        Ok(()) => Ok(started(session, runtime, false)),
+        Err(error) => Err(ProviderAdapterError::uncertain(
+            error,
+            &runtime.handle_id,
+            &runtime.owner_id,
+        )),
     }
 }
 

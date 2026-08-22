@@ -626,6 +626,14 @@ fn matching_start_intent(
     require_matching_operation(session, "start", operation_id)?;
     match session.lifecycle_intent_status.as_str() {
         "prepared" => Ok(true),
+        "unconfirmed"
+            if session.public.recovery_required && session.runtime_handle_id.is_empty() =>
+        {
+            Err(rejected(
+                "runtime_effect_unconfirmed",
+                "The original provider start effect could not be observed. Recovery is required before retrying it.",
+            ))
+        }
         "unconfirmed" => {
             "prepared".clone_into(&mut session.lifecycle_intent_status);
             session.public.updated_at = Utc::now();

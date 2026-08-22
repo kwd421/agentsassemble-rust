@@ -335,7 +335,8 @@ async fn execute_agent_start(
                 store
                     .fail_agent_start(
                         &command.principal,
-                        &effect.session.public.session_id,
+                        &command.request_id,
+                        &command.payload,
                         &effect.operation_id,
                         error.code,
                         error.message,

@@ -54,8 +54,10 @@ version = "0.1.0"
 dependencies = [
  "agentsassemble-domain",
  "chrono",
+ "command-fds",
  "futures-util",
  "process-wrap",
+ "rustix",
  "same-file",
  "serde",
  "serde_json",
@@ -65,6 +67,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "uuid",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -448,6 +451,17 @@ checksum = "ba5a308b75df32fe02788e748662718f03fde005016435c444eea572398219fd"
 dependencies = [
  "bytes",
  "memchr",
+]
+
+[[package]]
+name = "command-fds"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1b60b5124979fccd9addd89d8b97a1d6eebb4950694520c75ddd722535ea443f"
+dependencies = [
+ "nix",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]

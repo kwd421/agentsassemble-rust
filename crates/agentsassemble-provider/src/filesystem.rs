@@ -1,7 +1,7 @@
 use std::{
     env,
-    fs::File,
-    io,
+    fs::{File, OpenOptions},
+    io::{self, Seek},
     path::{Path, PathBuf},
     sync::{Arc, OnceLock},
     time::Duration,
@@ -20,6 +20,36 @@ pub(crate) enum FilesystemFailure {
     Busy,
     Timeout,
     Failed,
+}
+
+pub(crate) struct BoundExecutable {
+    _file: File,
+    launch_path: String,
+    #[cfg(target_os = "macos")]
+    _staging: tempfile::TempDir,
+}
+
+impl BoundExecutable {
+    pub(crate) fn launch_path(&self) -> &str {
+        &self.launch_path
+    }
+
+    #[cfg(unix)]
+    #[cfg(not(target_os = "macos"))]
+    pub(crate) fn configure_command(
+        self,
+        command: &mut tokio::process::Command,
+    ) -> Result<(), FilesystemFailure> {
+        use command_fds::{CommandFdExt, FdMapping};
+
+        command
+            .fd_mappings(vec![FdMapping {
+                parent_fd: self._file.into(),
+                child_fd: 3,
+            }])
+            .map(|_| ())
+            .map_err(|_| FilesystemFailure::Failed)
+    }
 }
 
 pub(crate) async fn resolve_executable(
@@ -49,6 +79,13 @@ pub(crate) async fn canonical_workspace(
 
 pub(crate) async fn executable_identity(path: String) -> Result<String, FilesystemFailure> {
     run_bounded(move || executable_identity_sync(Path::new(&path))).await
+}
+
+pub(crate) async fn bind_executable(
+    path: String,
+    expected_identity: String,
+) -> Result<BoundExecutable, FilesystemFailure> {
+    run_bounded(move || bind_executable_sync(Path::new(&path), &expected_identity)).await
 }
 
 async fn run_bounded<T, F>(operation: F) -> Result<T, FilesystemFailure>
@@ -120,6 +157,104 @@ fn executable_identity_sync(path: &Path) -> io::Result<String> {
     let mut file = File::open(&canonical)?;
     let handle = Handle::from_file(file.try_clone()?)?;
     stable_content_identity(&handle, &mut file)
+}
+
+fn bind_executable_sync(path: &Path, expected_identity: &str) -> io::Result<BoundExecutable> {
+    let canonical = path.canonicalize()?;
+    if canonical != path || !is_executable_file(&canonical)? {
+        return Err(io::Error::other("executable authority is not canonical"));
+    }
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        use windows_sys::Win32::Storage::FileSystem::FILE_SHARE_READ;
+
+        options.share_mode(FILE_SHARE_READ);
+    }
+    let mut file = options.open(&canonical)?;
+    let handle = Handle::from_file(file.try_clone()?)?;
+    let identity = stable_content_identity(&handle, &mut file)?;
+    file.rewind()?;
+    if identity != expected_identity {
+        return Err(io::Error::other("executable identity changed"));
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let launch_path = "/dev/fd/3".to_owned();
+    #[cfg(target_os = "macos")]
+    let (launch_path, staging) = stage_macos_executable(&mut file, &handle, expected_identity)?;
+    #[cfg(windows)]
+    let launch_path = canonical
+        .to_str()
+        .ok_or_else(|| io::Error::other("executable path is not UTF-8"))?
+        .to_owned();
+    #[cfg(not(any(unix, windows)))]
+    let launch_path = canonical
+        .to_str()
+        .ok_or_else(|| io::Error::other("executable path is not UTF-8"))?
+        .to_owned();
+    Ok(BoundExecutable {
+        _file: file,
+        launch_path,
+        #[cfg(target_os = "macos")]
+        _staging: staging,
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn stage_macos_executable(
+    source: &mut File,
+    source_handle: &Handle,
+    expected_identity: &str,
+) -> io::Result<(String, tempfile::TempDir)> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let staging = tempfile::Builder::new()
+        .prefix("agentsassemble-provider-exec-")
+        .tempdir()?;
+    let staged_path = staging.path().join("provider");
+    let mut staged = OpenOptions::new()
+        .create_new(true)
+        .read(true)
+        .write(true)
+        .open(&staged_path)?;
+    source.rewind()?;
+    io::copy(source, &mut staged)?;
+    staged.sync_all()?;
+    std::fs::set_permissions(&staged_path, std::fs::Permissions::from_mode(0o500))?;
+    source.rewind()?;
+    if stable_content_identity(source_handle, &mut *source)? != expected_identity {
+        return Err(io::Error::other("executable changed while it was staged"));
+    }
+    source.rewind()?;
+    staged.rewind()?;
+    if raw_content_digest(source)? != raw_content_digest(&mut staged)? {
+        return Err(io::Error::other("staged executable bytes do not match"));
+    }
+    let launch_path = staged_path
+        .to_str()
+        .ok_or_else(|| io::Error::other("staged executable path is not UTF-8"))?
+        .to_owned();
+    Ok((launch_path, staging))
+}
+
+#[cfg(target_os = "macos")]
+fn raw_content_digest(file: &mut File) -> io::Result<[u8; 32]> {
+    use std::io::Read;
+
+    use sha2::{Digest, Sha256};
+
+    let mut digest = Sha256::new();
+    let mut buffer = vec![0_u8; 64 * 1024];
+    loop {
+        let count = file.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        digest.update(&buffer[..count]);
+    }
+    Ok(digest.finalize().into())
 }
 
 fn executable_candidates(directory: &Path, program: &str) -> Vec<PathBuf> {
@@ -222,5 +357,56 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("reidentify executable: {error:?}"));
         assert_ne!(first, changed);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn bound_executable_launches_the_verified_open_file() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory =
+            tempfile::tempdir().unwrap_or_else(|error| panic!("create bound root: {error}"));
+        let executable = directory.path().join("bound-provider");
+        std::fs::write(&executable, b"#!/bin/sh\nprintf 'verified-bytes'")
+            .unwrap_or_else(|error| panic!("write bound executable: {error}"));
+        let mut permissions = std::fs::metadata(&executable)
+            .unwrap_or_else(|error| panic!("read bound mode: {error}"))
+            .permissions();
+        permissions.set_mode(0o700);
+        std::fs::set_permissions(&executable, permissions)
+            .unwrap_or_else(|error| panic!("set bound mode: {error}"));
+        let executable = executable
+            .canonicalize()
+            .unwrap_or_else(|error| panic!("canonicalize bound executable: {error}"))
+            .to_string_lossy()
+            .into_owned();
+        let identity = super::executable_identity(executable.clone())
+            .await
+            .unwrap_or_else(|error| panic!("identify bound executable: {error:?}"));
+        let bound = super::bind_executable(executable, identity)
+            .await
+            .unwrap_or_else(|error| panic!("bind executable: {error:?}"));
+        let replacement = directory.path().join("replacement-provider");
+        std::fs::write(&replacement, b"#!/bin/sh\nprintf 'replacement-bytes'")
+            .unwrap_or_else(|error| panic!("write replacement executable: {error}"));
+        let mut permissions = std::fs::metadata(&replacement)
+            .unwrap_or_else(|error| panic!("read replacement mode: {error}"))
+            .permissions();
+        permissions.set_mode(0o700);
+        std::fs::set_permissions(&replacement, permissions)
+            .unwrap_or_else(|error| panic!("set replacement mode: {error}"));
+        std::fs::rename(&replacement, directory.path().join("bound-provider"))
+            .unwrap_or_else(|error| panic!("atomically replace selected executable: {error}"));
+        let mut command = tokio::process::Command::new(bound.launch_path());
+        #[cfg(not(target_os = "macos"))]
+        bound
+            .configure_command(&mut command)
+            .unwrap_or_else(|error| panic!("map executable fd: {error:?}"));
+        let output = command
+            .output()
+            .await
+            .unwrap_or_else(|error| panic!("spawn bound executable: {error}"));
+        assert!(output.status.success());
+        assert_eq!(output.stdout, b"verified-bytes");
     }
 }

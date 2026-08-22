@@ -19,6 +19,7 @@ anyhow = "1.0.100"
 axum = { version = "0.8.9", features = ["ws"] }
 chrono = { version = "0.4.45", features = ["serde"] }
 clap = { version = "4.5.48", features = ["derive", "env"] }
+command-fds = { version = "0.3.3", features = ["tokio"] }
 futures-util = "0.3.31"
 fs2 = "0.4.3"
 hyper = { version = "1.11.0", features = ["http1", "server"] }
@@ -28,6 +29,7 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 reqwest = { version = "0.13.4", default-features = false, features = ["json", "rustls"] }
 regex = "1.12"
+rustix = { version = "1.1.4", features = ["process"] }
 same-file = "1.0.6"
 sha2 = "0.10.9"
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros"] }
@@ -44,6 +46,7 @@ unicode-general-category = "1.1.0"
 uuid = { version = "1.24.1", features = ["serde", "v4", "v5"] }
 url = "2.5.7"
 tempfile = "3.27.0"
+windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem"] }
 
 # Full executable identities must hash 100+ MiB CLIs inside the validation deadline.
 [profile.dev.package.sha2]
