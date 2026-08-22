@@ -5,9 +5,11 @@ use std::{
     time::Duration,
 };
 
-use agentsassemble_domain::{Participant, ParticipantStatus, Room, RoomSettings};
+use agentsassemble_domain::{
+    LOCAL_OPERATOR_PARTICIPANT_ID, Participant, ParticipantStatus, Room, RoomSettings,
+};
 use agentsassemble_persistence::SqliteStore;
-use agentsassemble_server::{AppState, RoomRuntime, TicketStore, serve};
+use agentsassemble_server::{AppState, TicketStore, serve};
 use anyhow::Context;
 use chrono::Utc;
 use clap::Parser;
@@ -25,7 +27,7 @@ struct Args {
     database: PathBuf,
     #[arg(long)]
     bootstrap_room: Option<String>,
-    #[arg(long, env = "AGENTSASSEMBLE_HOST_TOKEN", default_value = "")]
+    #[arg(long, env = "AGENTSASSEMBLE_HOST_TOKEN")]
     host_token: String,
 }
 
@@ -36,6 +38,9 @@ async fn main() -> anyhow::Result<()> {
         .with_writer(std::io::stderr)
         .init();
     let args = Args::parse();
+    if args.host_token.len() < 32 || args.host_token.trim() != args.host_token {
+        anyhow::bail!("host token must contain at least 32 non-whitespace bytes");
+    }
     if args.bind.ip() != IpAddr::V4(Ipv4Addr::LOCALHOST) && !args.bind.ip().is_loopback() {
         anyhow::bail!("the local runtime may bind only to loopback");
     }
@@ -62,12 +67,11 @@ async fn main() -> anyhow::Result<()> {
             signal.cancel();
         }
     });
-    let state = AppState {
-        rooms: RoomRuntime::new(store.clone()),
+    let state = AppState::local(
         store,
-        tickets: TicketStore::new(Duration::from_secs(30), 4_096),
-        host_token: Arc::from(args.host_token),
-    };
+        TicketStore::new(Duration::from_secs(30), 4_096),
+        Arc::from(args.host_token),
+    );
     println!(
         "{}",
         serde_json::to_string(&json!({
@@ -88,7 +92,7 @@ async fn bootstrap(store: &SqliteStore, room_id: &str) -> anyhow::Result<()> {
     let room = Room::new(room_id.to_owned(), label.clone(), now);
     let participant = Participant {
         room_id: room_id.to_owned(),
-        participant_id: "host".to_owned(),
+        participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
         display_name: "Host".to_owned(),
         participant_type: "human".to_owned(),
         status: ParticipantStatus::Joined,

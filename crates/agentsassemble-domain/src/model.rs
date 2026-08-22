@@ -6,6 +6,9 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
+pub const LOCAL_OPERATOR_USER_ID: &str = "operator-local-user";
+pub const LOCAL_OPERATOR_PARTICIPANT_ID: &str = "operator-local";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RoomStatus {

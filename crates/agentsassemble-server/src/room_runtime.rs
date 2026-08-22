@@ -3,7 +3,11 @@ use std::{collections::HashMap, sync::Arc};
 use agentsassemble_domain::{AuthenticatedPrincipal, RoomEvent};
 use agentsassemble_persistence::{CommandOutcome, PersistenceError, SqliteStore};
 use serde_json::Value;
-use tokio::sync::{Mutex, broadcast, mpsc, oneshot};
+use tokio::{
+    sync::{Mutex, broadcast, mpsc, oneshot},
+    task::JoinHandle,
+};
+use tokio_util::sync::CancellationToken;
 
 const ROOM_QUEUE_CAPACITY: usize = 128;
 const EVENT_RECEIVER_CAPACITY: usize = 256;
@@ -26,6 +30,8 @@ struct RoomHandle {
 pub struct RoomRuntime {
     store: SqliteStore,
     rooms: Arc<Mutex<HashMap<String, RoomHandle>>>,
+    cancellation: CancellationToken,
+    tasks: Arc<Mutex<Vec<JoinHandle<()>>>>,
 }
 
 impl RoomRuntime {
@@ -34,6 +40,8 @@ impl RoomRuntime {
         Self {
             store,
             rooms: Arc::new(Mutex::new(HashMap::new())),
+            cancellation: CancellationToken::new(),
+            tasks: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -53,17 +61,22 @@ impl RoomRuntime {
         let (reply, response) = oneshot::channel();
         handle
             .commands
-            .send(RoomCommand {
+            .try_send(RoomCommand {
                 principal,
                 request_id,
                 action,
                 payload,
                 reply,
             })
-            .await
-            .map_err(|_| PersistenceError::CommandRejected {
-                code: "room_unavailable",
-                message: "Room mutation task stopped.".to_owned(),
+            .map_err(|error| match error {
+                mpsc::error::TrySendError::Full(_) => PersistenceError::CommandRejected {
+                    code: "room_busy",
+                    message: "Room command queue is full.".to_owned(),
+                },
+                mpsc::error::TrySendError::Closed(_) => PersistenceError::CommandRejected {
+                    code: "room_unavailable",
+                    message: "Room mutation task stopped.".to_owned(),
+                },
             })?;
         response
             .await
@@ -75,6 +88,17 @@ impl RoomRuntime {
 
     pub async fn subscribe(&self, room_id: &str) -> broadcast::Receiver<RoomEvent> {
         self.handle(room_id).await.events.subscribe()
+    }
+
+    pub async fn shutdown(&self) {
+        self.cancellation.cancel();
+        let tasks = {
+            let mut tasks = self.tasks.lock().await;
+            std::mem::take(&mut *tasks)
+        };
+        for task in tasks {
+            let _ = task.await;
+        }
     }
 
     async fn handle(&self, room_id: &str) -> RoomHandle {
@@ -90,8 +114,16 @@ impl RoomRuntime {
         };
         rooms.insert(room_id.to_owned(), handle.clone());
         let store = self.store.clone();
-        tokio::spawn(async move {
-            while let Some(command) = command_rx.recv().await {
+        let cancellation = self.cancellation.clone();
+        let task = tokio::spawn(async move {
+            loop {
+                let command = tokio::select! {
+                    () = cancellation.cancelled() => break,
+                    command = command_rx.recv() => {
+                        let Some(command) = command else { break; };
+                        command
+                    }
+                };
                 let result = store
                     .execute_message(
                         &command.principal,
@@ -108,6 +140,7 @@ impl RoomRuntime {
                 let _ = command.reply.send(result);
             }
         });
+        self.tasks.lock().await.push(task);
         handle
     }
 }

@@ -57,7 +57,9 @@ Action payloads are added only by the slice that implements them.
 
 A credential resolves once to an `AuthenticatedPrincipal` containing stable identity, room scope, client kind, and server-derived capabilities. Client-supplied roles, operator flags, participant type, or capabilities are never authority.
 
-Opaque, short-lived, one-use WebSocket tickets remain the connection credential. Browser-compatible HTTP ticket issuance stays an adapter while it is a reachable flow; desktop IPC may issue the same credential without changing room authority.
+Opaque, short-lived, one-use WebSocket tickets remain the connection credential. Browser-compatible HTTP ticket issuance stays an adapter while it is a reachable flow and always requires a high-entropy host secret or an authenticated session. Desktop mode cannot start with an empty host secret; Tauri generates it per runtime and should return only the one-use ticket to React.
+
+The local WebSocket adapter has explicit resource budgets: bounded connection admission, 256 KiB frames/messages, a ten-second first-subscription deadline, an idle deadline, bounded ingress messages/bytes, and a non-waiting room queue admission that returns `room_busy` when saturated.
 
 ### Runtime lifecycle
 
@@ -65,7 +67,9 @@ Tauri owns the local sidecar it starts. The sidecar binds loopback, reports one 
 
 ### Persistence
 
-SQLite is the local durable authority. The Rust schema owns its version and cutover marker. A command result and its event commit in one transaction. Persistence failure is an error, never an in-memory success.
+SQLite is the local durable authority. The Rust schema owns its version and cutover marker, while an adjacent process-lifetime exclusive writer lease prevents two Rust runtimes from becoming concurrent room authorities. A nonempty database without the Rust owner marker is rejected before any schema write; ownership changes require explicit migration. A command result and its event commit in one transaction. Persistence failure is an error, never an in-memory success.
+
+Room snapshots are read in one SQLite transaction. Their `oldest_seq` and `last_seq` describe the returned event range, not an independently sampled global range. Initial connections receive the newest bounded tail; resumes receive every event after the cursor when it fits, an explicit gap tail otherwise, and the empty `(oldest_seq=0, last_seq=cursor)` boundary when already current.
 
 ## Enforced source structure
 
@@ -78,4 +82,3 @@ domain + protocol + persistence <- server
 ```
 
 `domain` cannot depend on Tokio, Axum, SQLx, Tower, or provider/network mechanisms. `scripts/check_architecture.py` rejects unowned workspace crates and dependency-direction violations. `scripts/check_source_growth.py` applies the inherited 800-line source ceiling. An exception requires an explicit path, ceiling, and cohesive reason showing why splitting would break an essential single owner.
-

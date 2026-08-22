@@ -2,7 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use agentsassemble_domain::{Participant, ParticipantStatus, Room, RoomSettings};
 use agentsassemble_persistence::SqliteStore;
-use agentsassemble_server::{AppState, RoomRuntime, TicketStore, serve};
+use agentsassemble_server::{AppState, TicketStore, serve};
 use chrono::Utc;
 use futures_util::{SinkExt, StreamExt};
 use reqwest::Client;
@@ -10,6 +10,8 @@ use serde_json::{Value, json};
 use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_tungstenite::{WebSocketStream, connect_async, tungstenite::Message};
 use tokio_util::sync::CancellationToken;
+
+const HOST_TOKEN: &str = "boundary-test-host-token-0000000001";
 
 struct RunningServer {
     base_url: String,
@@ -39,6 +41,13 @@ async fn external_client_recovers_committed_command_after_restart() {
         .unwrap_or_else(|error| panic!("open first store: {error}"));
     bootstrap(&store).await;
     let first_server = start(store).await;
+    let unauthenticated = Client::new()
+        .post(format!("{}/api/ws-ticket", first_server.base_url))
+        .json(&json!({"meeting_id": "general"}))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("request unauthenticated ticket: {error}"));
+    assert_eq!(unauthenticated.status(), reqwest::StatusCode::UNAUTHORIZED);
     let mut first_socket = connect(&first_server.base_url).await;
     subscribe(&mut first_socket, 0).await;
     let initial = receive_json(&mut first_socket).await;
@@ -98,12 +107,11 @@ async fn start(store: SqliteStore) -> RunningServer {
         .unwrap_or_else(|error| panic!("read test runtime address: {error}"));
     let cancellation = CancellationToken::new();
     let server_cancellation = cancellation.clone();
-    let state = AppState {
-        rooms: RoomRuntime::new(store.clone()),
+    let state = AppState::local(
         store,
-        tickets: TicketStore::new(Duration::from_secs(30), 16),
-        host_token: Arc::from(""),
-    };
+        TicketStore::new(Duration::from_secs(30), 16),
+        Arc::from(HOST_TOKEN),
+    );
     let task = tokio::spawn(async move {
         serve(listener, state, server_cancellation)
             .await
@@ -121,6 +129,7 @@ async fn connect(
 ) -> WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
     let response = Client::new()
         .post(format!("{base_url}/api/ws-ticket"))
+        .header("x-host-token", HOST_TOKEN)
         .json(&json!({"meeting_id": "general"}))
         .send()
         .await
@@ -194,7 +203,7 @@ async fn bootstrap(store: &SqliteStore) {
     let room = Room::new("general".to_owned(), "General".to_owned(), now);
     let participant = Participant {
         room_id: "general".to_owned(),
-        participant_id: "host".to_owned(),
+        participant_id: "operator-local".to_owned(),
         display_name: "Host".to_owned(),
         participant_type: "human".to_owned(),
         status: ParticipantStatus::Joined,

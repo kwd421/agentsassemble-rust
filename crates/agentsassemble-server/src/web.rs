@@ -1,8 +1,8 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use agentsassemble_domain::{
-    AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, ProviderCatalog, SnapshotMode,
-    public_settings, validate_room_id,
+    AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID,
+    LOCAL_OPERATOR_USER_ID, ProviderCatalog, public_settings, validate_room_id,
 };
 use agentsassemble_persistence::{PersistenceError, SqliteStore};
 use agentsassemble_protocol::{
@@ -21,11 +21,24 @@ use axum::{
 use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
 use serde_json::{Value, json};
+use subtle::ConstantTimeEq;
 use thiserror::Error;
-use tokio::net::TcpListener;
-use tokio_util::sync::CancellationToken;
+use tokio::{
+    net::TcpListener,
+    sync::{OwnedSemaphorePermit, Semaphore},
+    time::Instant,
+};
+use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
 use crate::{RoomRuntime, TicketStore};
+
+const MAX_WS_MESSAGE_BYTES: usize = 256 * 1024;
+const MAX_WS_CONNECTIONS: usize = 128;
+const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
+const SOCKET_IDLE_TIMEOUT: Duration = Duration::from_mins(5);
+const INGRESS_WINDOW: Duration = Duration::from_secs(10);
+const INGRESS_MESSAGES_PER_WINDOW: usize = 256;
+const INGRESS_BYTES_PER_WINDOW: usize = 2 * 1024 * 1024;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -33,6 +46,24 @@ pub struct AppState {
     pub rooms: RoomRuntime,
     pub tickets: TicketStore,
     pub host_token: Arc<str>,
+    pub shutdown: CancellationToken,
+    pub connections: TaskTracker,
+    pub connection_admission: Arc<Semaphore>,
+}
+
+impl AppState {
+    #[must_use]
+    pub fn local(store: SqliteStore, tickets: TicketStore, host_token: Arc<str>) -> Self {
+        Self {
+            rooms: RoomRuntime::new(store.clone()),
+            store,
+            tickets,
+            host_token,
+            shutdown: CancellationToken::new(),
+            connections: TaskTracker::new(),
+            connection_admission: Arc::new(Semaphore::new(MAX_WS_CONNECTIONS)),
+        }
+    }
 }
 
 #[derive(Debug, Error)]
@@ -69,10 +100,17 @@ pub async fn serve(
     state: AppState,
     cancellation: CancellationToken,
 ) -> Result<(), ServeError> {
-    axum::serve(listener, router(state))
+    let rooms = state.rooms.clone();
+    let connections = state.connections.clone();
+    let connection_shutdown = state.shutdown.clone();
+    let result = axum::serve(listener, router(state))
         .with_graceful_shutdown(cancellation.cancelled_owned())
-        .await
-        .map_err(ServeError::Io)
+        .await;
+    connection_shutdown.cancel();
+    connections.close();
+    connections.wait().await;
+    rooms.shutdown().await;
+    result.map_err(ServeError::Io)
 }
 
 async fn health() -> Json<Value> {
@@ -84,12 +122,11 @@ async fn issue_ticket(
     headers: HeaderMap,
     Json(request): Json<TicketRequest>,
 ) -> Result<Json<TicketResponse>, ApiError> {
-    if !state.host_token.is_empty()
-        && headers
-            .get("x-host-token")
-            .and_then(|value| value.to_str().ok())
-            != Some(state.host_token.as_ref())
-    {
+    let provided_token = headers
+        .get("x-host-token")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default();
+    if !secure_token_matches(state.host_token.as_ref(), provided_token) {
         return Err(ApiError::unauthorized("A valid host token is required."));
     }
     let room_id = validate_room_id(&request.meeting_id)
@@ -97,13 +134,16 @@ async fn issue_ticket(
     if !state.store.room_exists(&room_id).await? {
         return Err(ApiError::not_found("Room does not exist."));
     }
-    let participant = state.store.participant(&room_id, "host").await?;
+    let participant = state
+        .store
+        .participant(&room_id, LOCAL_OPERATOR_PARTICIPANT_ID)
+        .await?;
     let client_kind = ClientKind::Browser;
     let invite_scope = InviteScope::ReadWrite;
     let ticket = state
         .tickets
         .issue(AuthenticatedPrincipal {
-            principal_id: "local-operator".to_owned(),
+            principal_id: LOCAL_OPERATOR_USER_ID.to_owned(),
             participant_id: participant.participant_id,
             display_name: participant.display_name,
             room_id,
@@ -124,20 +164,47 @@ async fn upgrade_socket(
     Query(query): Query<TicketQuery>,
     upgrade: WebSocketUpgrade,
 ) -> Result<Response, ApiError> {
+    let permit = state
+        .connection_admission
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| ApiError::unavailable("WebSocket connection limit reached."))?;
     let principal = state
         .tickets
         .consume(&query.ticket)
         .await
         .map_err(|error| ApiError::unauthorized(error.to_string()))?;
+    let connections = state.connections.clone();
     Ok(upgrade
-        .on_upgrade(move |socket| socket_session(socket, state, principal))
+        .max_message_size(MAX_WS_MESSAGE_BYTES)
+        .max_frame_size(MAX_WS_MESSAGE_BYTES)
+        .write_buffer_size(64 * 1024)
+        .max_write_buffer_size(384 * 1024)
+        .on_upgrade(move |socket| {
+            connections.track_future(socket_session(socket, state, principal, permit))
+        })
         .into_response())
 }
 
 #[allow(clippy::too_many_lines)] // One select loop owns the socket's ordering and lifecycle.
-async fn socket_session(socket: WebSocket, state: AppState, principal: AuthenticatedPrincipal) {
+async fn socket_session(
+    socket: WebSocket,
+    state: AppState,
+    principal: AuthenticatedPrincipal,
+    _permit: OwnedSemaphorePermit,
+) {
     let (mut sender, mut receiver) = socket.split();
-    let Some(Ok(Message::Text(raw))) = receiver.next().await else {
+    let incoming = tokio::select! {
+        () = state.shutdown.cancelled() => return,
+        incoming = tokio::time::timeout(HANDSHAKE_TIMEOUT, receiver.next()) => {
+            let Ok(incoming) = incoming else {
+                let _ = send_nack(&mut sender, "", "subscribe", "subscribe_timeout", "Subscription was not received within 10 seconds.").await;
+                return;
+            };
+            incoming
+        },
+    };
+    let Some(Ok(Message::Text(raw))) = incoming else {
         return;
     };
     let Ok(ClientFrame::Subscribe {
@@ -220,12 +287,8 @@ async fn socket_session(socket: WebSocket, state: AppState, principal: Authentic
         oldest_seq: snapshot_data.oldest_seq,
         last_seq: snapshot_data.last_seq,
         has_more_before: snapshot_data.has_more_before,
-        resume_gap: false,
-        snapshot_mode: if resume_from_seq == 0 {
-            SnapshotMode::Initial
-        } else {
-            SnapshotMode::Resume
-        },
+        resume_gap: snapshot_data.resume_gap,
+        snapshot_mode: snapshot_data.snapshot_mode,
         provider_catalog: ProviderCatalog::default(),
         available_providers: Vec::new(),
         capabilities: principal.capabilities.clone(),
@@ -233,11 +296,17 @@ async fn socket_session(socket: WebSocket, state: AppState, principal: Authentic
     if send_frame(&mut sender, &snapshot).await.is_err() {
         return;
     }
+    let mut ingress = IngressBudget::new();
     loop {
         tokio::select! {
-            incoming = receiver.next() => {
-                let Some(Ok(message)) = incoming else { return; };
+            () = state.shutdown.cancelled() => return,
+            incoming = tokio::time::timeout(SOCKET_IDLE_TIMEOUT, receiver.next()) => {
+                let Ok(Some(Ok(message))) = incoming else { return; };
                 let Message::Text(raw) = message else { continue; };
+                if !ingress.admit(raw.len()) {
+                    let _ = send_nack(&mut sender, "", "frame", "ingress_limited", "WebSocket ingress budget exceeded.").await;
+                    return;
+                }
                 match serde_json::from_str::<ClientFrame>(raw.as_str()) {
                     Ok(ClientFrame::Command { request_id, action, payload }) => {
                         let outcome = state.rooms.execute(
@@ -339,7 +408,11 @@ fn persistence_error(error: &PersistenceError) -> (&'static str, String) {
         PersistenceError::RoomMissing => ("room_not_found", error.to_string()),
         PersistenceError::Database(_)
         | PersistenceError::Json(_)
-        | PersistenceError::AuthorityConflict(_) => ("persistence_failed", error.to_string()),
+        | PersistenceError::AuthorityConflict(_)
+        | PersistenceError::UnownedDatabase
+        | PersistenceError::WriterAlreadyActive(_)
+        | PersistenceError::WriterLease(_) => ("persistence_failed", error.to_string()),
+        PersistenceError::InvalidCursor => ("invalid_cursor", error.to_string()),
     }
 }
 
@@ -402,3 +475,37 @@ impl IntoResponse for ApiError {
 
 #[allow(dead_code)]
 fn _socket_address_is_send(_: SocketAddr) {}
+
+fn secure_token_matches(expected: &str, provided: &str) -> bool {
+    !expected.is_empty()
+        && expected.len() == provided.len()
+        && bool::from(expected.as_bytes().ct_eq(provided.as_bytes()))
+}
+
+struct IngressBudget {
+    window_started: Instant,
+    messages: usize,
+    bytes: usize,
+}
+
+impl IngressBudget {
+    fn new() -> Self {
+        Self {
+            window_started: Instant::now(),
+            messages: 0,
+            bytes: 0,
+        }
+    }
+
+    fn admit(&mut self, bytes: usize) -> bool {
+        let now = Instant::now();
+        if now.duration_since(self.window_started) >= INGRESS_WINDOW {
+            self.window_started = now;
+            self.messages = 0;
+            self.bytes = 0;
+        }
+        self.messages = self.messages.saturating_add(1);
+        self.bytes = self.bytes.saturating_add(bytes);
+        self.messages <= INGRESS_MESSAGES_PER_WINDOW && self.bytes <= INGRESS_BYTES_PER_WINDOW
+    }
+}

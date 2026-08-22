@@ -1,10 +1,18 @@
-use std::str::FromStr;
+use std::{
+    ffi::OsString,
+    fs::{File, OpenOptions},
+    io,
+    path::{Path, PathBuf},
+    str::FromStr,
+    sync::Arc,
+};
 
 use agentsassemble_domain::{
-    AuthenticatedPrincipal, MessageSend, Participant, Room, RoomEvent, RoomSettings,
+    AuthenticatedPrincipal, MessageSend, Participant, Room, RoomEvent, RoomSettings, SnapshotMode,
     canonical_payload_hash, prepare_message_event,
 };
 use chrono::Utc;
+use fs2::FileExt;
 use serde_json::{Value, json};
 use sqlx::{Row, Sqlite, SqlitePool, Transaction, sqlite::SqliteConnectOptions};
 use thiserror::Error;
@@ -19,12 +27,20 @@ pub enum PersistenceError {
     Json(#[from] serde_json::Error),
     #[error("persistent authority belongs to {0}, not this runtime")]
     AuthorityConflict(String),
+    #[error("existing nonempty database has no explicit Rust authority marker")]
+    UnownedDatabase,
+    #[error("another process already owns the database writer lease: {0}")]
+    WriterAlreadyActive(PathBuf),
+    #[error("writer lease operation failed: {0}")]
+    WriterLease(#[source] io::Error),
     #[error("room does not exist")]
     RoomMissing,
     #[error("participant does not exist")]
     ParticipantMissing,
     #[error("request id was reused with a different action or payload")]
     CommandConflict,
+    #[error("snapshot cursor is outside durable room history")]
+    InvalidCursor,
     #[error("command rejected: {code}: {message}")]
     CommandRejected { code: &'static str, message: String },
 }
@@ -38,6 +54,8 @@ pub struct RoomSnapshotData {
     pub oldest_seq: i64,
     pub last_seq: i64,
     pub has_more_before: bool,
+    pub resume_gap: bool,
+    pub snapshot_mode: SnapshotMode,
 }
 
 #[derive(Debug, Clone)]
@@ -50,6 +68,7 @@ pub struct CommandOutcome {
 #[derive(Clone)]
 pub struct SqliteStore {
     pool: SqlitePool,
+    _writer_lease: Option<Arc<File>>,
 }
 
 impl SqliteStore {
@@ -59,12 +78,26 @@ impl SqliteStore {
     ///
     /// Returns a database or authority error when the store cannot be owned safely.
     pub async fn open(database_url: &str) -> Result<Self, PersistenceError> {
-        let options = SqliteConnectOptions::from_str(database_url)?
-            .create_if_missing(true)
-            .foreign_keys(true);
+        let options = SqliteConnectOptions::from_str(database_url)?.foreign_keys(true);
+        let in_memory =
+            database_url.contains("mode=memory") || options.get_filename() == Path::new(":memory:");
+        let existing = !in_memory
+            && std::fs::metadata(options.get_filename()).is_ok_and(|metadata| metadata.len() > 0);
+        let writer_lease = if in_memory {
+            None
+        } else {
+            Some(Arc::new(acquire_writer_lease(options.get_filename())?))
+        };
+        if existing {
+            verify_existing_owner(options.clone()).await?;
+        }
+        let options = options.create_if_missing(true);
         let pool = SqlitePool::connect_with(options).await?;
-        let store = Self { pool };
-        store.initialize().await?;
+        let store = Self {
+            pool,
+            _writer_lease: writer_lease,
+        };
+        store.initialize(!existing).await?;
         Ok(store)
     }
 
@@ -73,7 +106,7 @@ impl SqliteStore {
     /// # Errors
     ///
     /// Returns a database or authority error if initialization cannot complete.
-    pub async fn initialize(&self) -> Result<(), PersistenceError> {
+    async fn initialize(&self, may_claim: bool) -> Result<(), PersistenceError> {
         let mut transaction = self.pool.begin().await?;
         for statement in schema_statements() {
             sqlx::query(*statement).execute(&mut *transaction).await?;
@@ -88,12 +121,13 @@ impl SqliteStore {
                 return Err(PersistenceError::AuthorityConflict(owner));
             }
             Some(_) => {}
-            None => {
+            None if may_claim => {
                 sqlx::query("INSERT INTO runtime_metadata(key, value) VALUES ('schema_owner', ?)")
                     .bind(SCHEMA_OWNER)
                     .execute(&mut *transaction)
                     .await?;
             }
+            None => return Err(PersistenceError::UnownedDatabase),
         }
         transaction.commit().await?;
         Ok(())
@@ -176,9 +210,14 @@ impl SqliteStore {
         resume_from_seq: i64,
         limit: i64,
     ) -> Result<RoomSnapshotData, PersistenceError> {
+        if resume_from_seq < 0 {
+            return Err(PersistenceError::InvalidCursor);
+        }
+        let limit = limit.max(1);
+        let mut transaction = self.pool.begin().await?;
         let row = sqlx::query("SELECT room_json, settings_json FROM rooms WHERE room_id = ?")
             .bind(room_id)
-            .fetch_optional(&self.pool)
+            .fetch_optional(&mut *transaction)
             .await?
             .ok_or(PersistenceError::RoomMissing)?;
         let room = serde_json::from_str(row.try_get("room_json")?)?;
@@ -187,39 +226,56 @@ impl SqliteStore {
             "SELECT participant_json FROM participants WHERE room_id = ? ORDER BY participant_id",
         )
         .bind(room_id)
-        .fetch_all(&self.pool)
+        .fetch_all(&mut *transaction)
         .await?;
         let participants = participant_rows
             .into_iter()
             .map(|row| serde_json::from_str(row.get::<String, _>("participant_json").as_str()))
             .collect::<Result<Vec<_>, _>>()?;
-        let last_seq = sqlx::query_scalar::<_, i64>(
+        let durable_last_seq = sqlx::query_scalar::<_, i64>(
             "SELECT COALESCE(MAX(seq), 0) FROM room_events WHERE room_id = ?",
         )
         .bind(room_id)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *transaction)
         .await?;
-        let oldest_seq = sqlx::query_scalar::<_, i64>(
-            "SELECT COALESCE(MIN(seq), 0) FROM room_events WHERE room_id = ?",
-        )
-        .bind(room_id)
-        .fetch_one(&self.pool)
-        .await?;
-        let event_rows = sqlx::query(
-            "SELECT event_json FROM room_events WHERE room_id = ? AND seq > ? ORDER BY seq LIMIT ?",
-        )
-        .bind(room_id)
-        .bind(resume_from_seq.max(0))
-        .bind(limit.max(1))
-        .fetch_all(&self.pool)
-        .await?;
+        if resume_from_seq > durable_last_seq {
+            return Err(PersistenceError::InvalidCursor);
+        }
+        let resume_gap = resume_from_seq > 0 && durable_last_seq - resume_from_seq > limit;
+        let snapshot_mode = if resume_from_seq == 0 {
+            SnapshotMode::Initial
+        } else if resume_gap {
+            SnapshotMode::Gap
+        } else {
+            SnapshotMode::Resume
+        };
+        let event_rows = if resume_from_seq == 0 || resume_gap {
+            sqlx::query(
+                "SELECT event_json FROM (SELECT seq, event_json FROM room_events WHERE room_id = ? ORDER BY seq DESC LIMIT ?) ORDER BY seq",
+            )
+            .bind(room_id)
+            .bind(limit)
+            .fetch_all(&mut *transaction)
+            .await?
+        } else {
+            sqlx::query(
+                "SELECT event_json FROM room_events WHERE room_id = ? AND seq > ? ORDER BY seq",
+            )
+            .bind(room_id)
+            .bind(resume_from_seq)
+            .fetch_all(&mut *transaction)
+            .await?
+        };
         let events = event_rows
             .into_iter()
             .map(|row| serde_json::from_str(row.get::<String, _>("event_json").as_str()))
             .collect::<Result<Vec<_>, _>>()?;
-        let returned_last = events
+        let oldest_seq = events.first().map_or(0, |event: &RoomEvent| event.seq);
+        let last_seq = events
             .last()
-            .map_or(resume_from_seq.max(0), |event: &RoomEvent| event.seq);
+            .map_or(resume_from_seq, |event: &RoomEvent| event.seq);
+        let has_more_before = oldest_seq > 1;
+        transaction.commit().await?;
         Ok(RoomSnapshotData {
             room,
             settings,
@@ -227,7 +283,9 @@ impl SqliteStore {
             events,
             oldest_seq,
             last_seq,
-            has_more_before: returned_last < last_seq,
+            has_more_before,
+            resume_gap,
+            snapshot_mode,
         })
     }
 
@@ -314,6 +372,56 @@ impl SqliteStore {
     }
 }
 
+fn acquire_writer_lease(database_path: &Path) -> Result<File, PersistenceError> {
+    let mut lock_name = OsString::from(database_path.as_os_str());
+    lock_name.push(".writer.lock");
+    let lock_path = PathBuf::from(lock_name);
+    let file = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(&lock_path)
+        .map_err(PersistenceError::WriterLease)?;
+    match FileExt::try_lock_exclusive(&file) {
+        Ok(()) => Ok(file),
+        Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+            Err(PersistenceError::WriterAlreadyActive(lock_path))
+        }
+        Err(error) => Err(PersistenceError::WriterLease(error)),
+    }
+}
+
+async fn verify_existing_owner(options: SqliteConnectOptions) -> Result<(), PersistenceError> {
+    let pool = SqlitePool::connect_with(
+        options
+            .create_if_missing(false)
+            .read_only(true)
+            .foreign_keys(true),
+    )
+    .await?;
+    let metadata_table = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'runtime_metadata'",
+    )
+    .fetch_one(&pool)
+    .await?;
+    if metadata_table != 1 {
+        pool.close().await;
+        return Err(PersistenceError::UnownedDatabase);
+    }
+    let owner = sqlx::query_scalar::<_, String>(
+        "SELECT value FROM runtime_metadata WHERE key = 'schema_owner'",
+    )
+    .fetch_optional(&pool)
+    .await?;
+    pool.close().await;
+    match owner {
+        Some(owner) if owner == SCHEMA_OWNER => Ok(()),
+        Some(owner) => Err(PersistenceError::AuthorityConflict(owner)),
+        None => Err(PersistenceError::UnownedDatabase),
+    }
+}
+
 async fn existing_command(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
@@ -371,12 +479,15 @@ fn schema_statements() -> &'static [&'static str] {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use agentsassemble_domain::{
         AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, Participant,
-        ParticipantStatus, Room, RoomSettings,
+        ParticipantStatus, Room, RoomSettings, SnapshotMode,
     };
     use chrono::Utc;
     use serde_json::json;
+    use sqlx::{SqlitePool, sqlite::SqliteConnectOptions};
 
     use super::{PersistenceError, SqliteStore};
 
@@ -392,7 +503,7 @@ mod tests {
         let room = Room::new("general".to_owned(), "General".to_owned(), now);
         let participant = Participant {
             room_id: "general".to_owned(),
-            participant_id: "host".to_owned(),
+            participant_id: "operator-local".to_owned(),
             display_name: "Host".to_owned(),
             participant_type: "human".to_owned(),
             status: ParticipantStatus::Joined,
@@ -411,8 +522,8 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("bootstrap fixture: {error}"));
         let principal = AuthenticatedPrincipal {
-            principal_id: "local-operator".to_owned(),
-            participant_id: "host".to_owned(),
+            principal_id: "operator-local-user".to_owned(),
+            participant_id: "operator-local".to_owned(),
             display_name: "Host".to_owned(),
             room_id: "general".to_owned(),
             client_kind: ClientKind::Browser,
@@ -479,5 +590,109 @@ mod tests {
             .unwrap_or_else(|error| panic!("read snapshot: {error}"));
         assert!(snapshot.events.is_empty());
         assert_eq!(snapshot.last_seq, 0);
+    }
+
+    #[tokio::test]
+    async fn existing_unowned_database_is_not_modified() {
+        let directory = tempfile::tempdir()
+            .unwrap_or_else(|error| panic!("create temporary directory: {error}"));
+        let path = directory.path().join("foreign.sqlite3");
+        let url = format!("sqlite://{}", path.display());
+        let options = SqliteConnectOptions::from_str(&url)
+            .unwrap_or_else(|error| panic!("parse foreign URL: {error}"))
+            .create_if_missing(true);
+        let foreign = SqlitePool::connect_with(options)
+            .await
+            .unwrap_or_else(|error| panic!("open foreign database: {error}"));
+        sqlx::query("CREATE TABLE foreign_data(value TEXT NOT NULL)")
+            .execute(&foreign)
+            .await
+            .unwrap_or_else(|error| panic!("create foreign table: {error}"));
+        foreign.close().await;
+
+        assert!(matches!(
+            SqliteStore::open(&url).await,
+            Err(PersistenceError::UnownedDatabase)
+        ));
+        let read_only = SqlitePool::connect_with(
+            SqliteConnectOptions::from_str(&url)
+                .unwrap_or_else(|error| panic!("parse read-only URL: {error}"))
+                .read_only(true),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("reopen foreign database: {error}"));
+        let metadata_tables = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'runtime_metadata'",
+        )
+        .fetch_one(&read_only)
+        .await
+        .unwrap_or_else(|error| panic!("inspect foreign schema: {error}"));
+        assert_eq!(metadata_tables, 0);
+    }
+
+    #[tokio::test]
+    async fn file_database_has_one_process_writer() {
+        let directory = tempfile::tempdir()
+            .unwrap_or_else(|error| panic!("create temporary directory: {error}"));
+        let path = directory.path().join("owned.sqlite3");
+        let url = format!("sqlite://{}", path.display());
+        let first = SqliteStore::open(&url)
+            .await
+            .unwrap_or_else(|error| panic!("open first writer: {error}"));
+        assert!(matches!(
+            SqliteStore::open(&url).await,
+            Err(PersistenceError::WriterAlreadyActive(_))
+        ));
+        drop(first);
+        SqliteStore::open(&url)
+            .await
+            .unwrap_or_else(|error| panic!("open writer after lease release: {error}"));
+    }
+
+    #[tokio::test]
+    async fn snapshot_boundaries_match_the_browser_contract() {
+        let (store, principal) = fixture().await;
+        for sequence in 1..=205 {
+            store
+                .execute_message(
+                    &principal,
+                    &format!("snapshot-{sequence}"),
+                    "message.send",
+                    &json!({"content": format!("message {sequence}")}),
+                )
+                .await
+                .unwrap_or_else(|error| panic!("append snapshot fixture {sequence}: {error}"));
+        }
+        let initial = store
+            .snapshot("general", 0, 200)
+            .await
+            .unwrap_or_else(|error| panic!("initial snapshot: {error}"));
+        assert_eq!(initial.snapshot_mode, SnapshotMode::Initial);
+        assert_eq!((initial.oldest_seq, initial.last_seq), (6, 205));
+        assert!(initial.has_more_before);
+
+        let resume = store
+            .snapshot("general", 5, 200)
+            .await
+            .unwrap_or_else(|error| panic!("resume snapshot: {error}"));
+        assert_eq!(resume.snapshot_mode, SnapshotMode::Resume);
+        assert_eq!((resume.oldest_seq, resume.last_seq), (6, 205));
+        assert!(!resume.resume_gap);
+
+        let gap = store
+            .snapshot("general", 4, 200)
+            .await
+            .unwrap_or_else(|error| panic!("gap snapshot: {error}"));
+        assert_eq!(gap.snapshot_mode, SnapshotMode::Gap);
+        assert_eq!((gap.oldest_seq, gap.last_seq), (6, 205));
+        assert!(gap.resume_gap);
+
+        let current = store
+            .snapshot("general", 205, 200)
+            .await
+            .unwrap_or_else(|error| panic!("current snapshot: {error}"));
+        assert_eq!(current.snapshot_mode, SnapshotMode::Resume);
+        assert!(current.events.is_empty());
+        assert_eq!((current.oldest_seq, current.last_seq), (0, 205));
     }
 }

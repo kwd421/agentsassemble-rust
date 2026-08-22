@@ -92,7 +92,7 @@ mod tests {
     fn principal() -> AuthenticatedPrincipal {
         AuthenticatedPrincipal {
             principal_id: "operator".to_owned(),
-            participant_id: "host".to_owned(),
+            participant_id: "operator-local".to_owned(),
             display_name: "Host".to_owned(),
             room_id: "general".to_owned(),
             client_kind: ClientKind::Browser,
