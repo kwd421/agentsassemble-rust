@@ -95,7 +95,7 @@ impl CodexDriver {
             .map_err(|_| executable_authority_error())?;
         sanitize_environment(command.command_mut());
         #[cfg(unix)]
-        process_group.attach(command.command_mut());
+        process_group.attach(command.command_mut())?;
         command.wrap(KillOnDrop);
         #[cfg(windows)]
         command.wrap(JobObject);
@@ -107,6 +107,7 @@ impl CodexDriver {
                 return Err(spawn_error(&error));
             }
         };
+        drop(command);
         #[cfg(unix)]
         match process_group.bind_provider(child.id()) {
             Ok(()) => {}

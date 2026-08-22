@@ -15,6 +15,82 @@ fn provider_guardian_entry() {
     }
 }
 
+#[tokio::test]
+async fn guardian_runs_outside_the_server_process_group() {
+    use tokio::io::{AsyncBufReadExt, BufReader};
+
+    let _serial = RUNTIME_TEST_LOCK.lock().await;
+    let suffix = uuid::Uuid::new_v4().to_string();
+    let lease = crate::runtime_lease::HeldRuntimeLease::prepare(
+        &format!("guardian-group-room-{suffix}"),
+        &format!("guardian-group-session-{suffix}"),
+    )
+    .unwrap_or_else(|error| panic!("prepare guardian group lease: {error}"));
+    let launch = crate::guardian::GuardianLaunch::test_harness()
+        .unwrap_or_else(|error| panic!("bind guardian test harness: {error}"));
+    let mut command = launch
+        .guardian_command(lease.path(), lease.token())
+        .unwrap_or_else(|error| panic!("configure guardian test command: {error}"));
+    command
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null());
+    let mut guardian_child = command
+        .spawn()
+        .unwrap_or_else(|error| panic!("spawn guardian test command: {error}"));
+    let guardian_pid = guardian_child
+        .id()
+        .unwrap_or_else(|| panic!("guardian pid is unavailable"));
+    let cleanup = ExactProcessCleanup(guardian_pid);
+    let input = guardian_child
+        .stdin
+        .take()
+        .unwrap_or_else(|| panic!("guardian input is unavailable"));
+    let output = guardian_child
+        .stdout
+        .take()
+        .unwrap_or_else(|| panic!("guardian output is unavailable"));
+    let anchor_pid = tokio::time::timeout(Duration::from_secs(5), async {
+        let mut output = BufReader::new(output);
+        for _ in 0..32 {
+            let mut line = String::new();
+            if output.read_line(&mut line).await? == 0 {
+                break;
+            }
+            if let Some(pid) = line
+                .trim()
+                .strip_prefix("AGENTSASSEMBLE_PROVIDER_ANCHOR=")
+                .and_then(|value| value.parse::<u32>().ok())
+            {
+                return Ok::<_, std::io::Error>(Some(pid));
+            }
+        }
+        Ok(None)
+    })
+    .await
+    .unwrap_or_else(|_| panic!("guardian readiness timed out"))
+    .unwrap_or_else(|error| panic!("read guardian readiness: {error}"))
+    .unwrap_or_else(|| panic!("guardian readiness was not published"));
+    assert!(anchor_pid > 0);
+    let guardian_process = i32::try_from(guardian_pid)
+        .ok()
+        .and_then(rustix::process::Pid::from_raw)
+        .unwrap_or_else(|| panic!("guardian pid is invalid"));
+    assert_ne!(
+        rustix::process::getpgid(Some(guardian_process))
+            .unwrap_or_else(|error| panic!("inspect guardian group: {error}")),
+        rustix::process::getpgrp()
+    );
+    drop(input);
+    let status = tokio::time::timeout(Duration::from_secs(6), guardian_child.wait())
+        .await
+        .unwrap_or_else(|_| panic!("guardian cleanup timed out"))
+        .unwrap_or_else(|error| panic!("wait for guardian cleanup: {error}"));
+    assert!(status.success());
+    drop(cleanup);
+    lease.cleanup_pre_effect();
+}
+
 #[test]
 #[allow(clippy::zombie_processes)] // The first fixture child must exit without reaping its child.
 fn escaped_descendant_entry() {
@@ -39,6 +115,7 @@ fn escaped_descendant_entry() {
         "runtime::tests::escaped_descendant_entry",
         "--nocapture",
     ])
+    .env_remove(crate::unix_process_tree::RUNTIME_TOKEN_ENV)
     .env("AGENTSASSEMBLE_ESCAPE_FIXTURE_CHILD", "1")
     .stdin(std::process::Stdio::null())
     .stdout(std::process::Stdio::null())

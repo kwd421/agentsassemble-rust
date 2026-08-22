@@ -134,6 +134,7 @@ fn start_runtime(app: &AppHandle, room_id: &str) -> Result<RuntimeProcess, Strin
     let stderr_log = open_private_rotating_log(&stderr_path)?;
     let mut command = runtime_supervisor::command(&executable)?;
     command
+        .command_mut()
         .arg("--bind")
         .arg("127.0.0.1:0")
         .arg("--database")

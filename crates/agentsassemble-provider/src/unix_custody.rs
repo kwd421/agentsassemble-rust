@@ -1,5 +1,6 @@
-use std::{process::Stdio, time::Duration};
+use std::{fs::File, path::PathBuf, process::Stdio, time::Duration};
 
+use command_fds::CommandFdExt;
 use futures_util::StreamExt;
 use process_wrap::tokio::ChildWrapper;
 use rustix::process::{Pid, WaitId, WaitIdOptions};
@@ -9,7 +10,7 @@ use tokio_util::codec::{FramedRead, LinesCodec};
 use crate::{
     guardian::GuardianLaunch,
     runtime::DriverError,
-    runtime_lease::HeldRuntimeLease,
+    runtime_lease::{HeldRuntimeLease, open_provider_lifetime_lease, provider_lifetime_is_active},
     unix_process_tree::{RUNTIME_TOKEN_ENV, tagged_runtime_exists},
 };
 
@@ -23,6 +24,8 @@ pub(crate) struct UnixProcessCustody {
     provider_pid: Option<Pid>,
     guardian: tokio::process::Child,
     guardian_input: Option<ChildStdin>,
+    lifetime_lease: Option<File>,
+    lease_path: PathBuf,
     runtime_token: String,
     armed: bool,
 }
@@ -63,20 +66,37 @@ impl UnixProcessCustody {
             terminate_failed_guardian(&mut guardian).await;
             return Err(custody_error());
         };
+        let Ok(lifetime_lease) =
+            open_provider_lifetime_lease(runtime_lease.path(), runtime_lease.token())
+        else {
+            drop(guardian_input);
+            terminate_failed_guardian(&mut guardian).await;
+            return Err(custody_error());
+        };
         Ok(Self {
             anchor_pid,
             provider_pid: None,
             guardian,
             guardian_input: Some(guardian_input),
+            lifetime_lease: Some(lifetime_lease),
+            lease_path: runtime_lease.path().to_path_buf(),
             runtime_token: runtime_lease.token().to_owned(),
             armed: true,
         })
     }
 
-    pub(crate) fn attach(&self, command: &mut tokio::process::Command) {
+    pub(crate) fn attach(&self, command: &mut tokio::process::Command) -> Result<(), DriverError> {
+        let lifetime_lease = self
+            .lifetime_lease
+            .as_ref()
+            .ok_or_else(custody_error)?
+            .try_clone()
+            .map_err(|_| custody_error())?;
+        command.preserved_fds(vec![lifetime_lease.into()]);
         command
             .process_group(self.anchor_pid.as_raw_pid())
             .env(RUNTIME_TOKEN_ENV, &self.runtime_token);
+        Ok(())
     }
 
     pub(crate) fn bind_provider(&mut self, raw_pid: Option<u32>) -> Result<(), DriverError> {
@@ -85,6 +105,13 @@ impl UnixProcessCustody {
             .and_then(Pid::from_raw)
             .ok_or_else(custody_error)?;
         if rustix::process::getpgid(Some(pid)).map_err(|_| custody_error())? != self.anchor_pid {
+            return Err(custody_error());
+        }
+        drop(self.lifetime_lease.take());
+        if !matches!(
+            provider_lifetime_is_active(&self.lease_path, &self.runtime_token),
+            Ok(true)
+        ) {
             return Err(custody_error());
         }
         self.provider_pid = Some(pid);

@@ -21,6 +21,8 @@ pub(crate) enum LeaseObservation {
 
 pub(crate) struct HeldRuntimeLease {
     path: PathBuf,
+    #[cfg(unix)]
+    lifetime_path: PathBuf,
     token: String,
     file: Option<File>,
 }
@@ -30,7 +32,15 @@ impl HeldRuntimeLease {
         let path = runtime_lease_path(room_id, session_id)?;
         let mut file = open_runtime_lease(&path)?;
         file.try_lock_exclusive()?;
+        #[cfg(unix)]
+        let lifetime_path = runtime_lifetime_path(&path);
+        #[cfg(unix)]
+        let mut lifetime = open_runtime_lease(&lifetime_path)?;
+        #[cfg(unix)]
+        lifetime.try_lock_exclusive()?;
         let token = Uuid::new_v4().to_string();
+        #[cfg(unix)]
+        write_marker(&mut lifetime, &format!("lifetime:{token}"))?;
         write_marker(&mut file, &format!("pending:{token}"))?;
         #[cfg(windows)]
         {
@@ -44,8 +54,10 @@ impl HeldRuntimeLease {
         #[cfg(not(windows))]
         {
             FileExt::unlock(&file)?;
+            FileExt::unlock(&lifetime)?;
             Ok(Self {
                 path,
+                lifetime_path,
                 token,
                 file: None,
             })
@@ -63,13 +75,88 @@ impl HeldRuntimeLease {
 
     pub(crate) fn cleanup_pre_effect(mut self) {
         self.file.take();
-        remove_runtime_lease(&self.path, &self.token);
+        self.remove_files();
     }
 
     pub(crate) fn release_and_remove(&mut self) {
         self.file.take();
-        remove_runtime_lease(&self.path, &self.token);
+        self.remove_files();
     }
+
+    fn remove_files(&self) {
+        remove_runtime_lease(&self.path, &self.token);
+        #[cfg(unix)]
+        remove_runtime_lease(&self.lifetime_path, &self.token);
+    }
+}
+
+#[cfg(unix)]
+pub(crate) fn open_provider_lifetime_lease(path: &Path, token: &str) -> io::Result<File> {
+    validate_token(token)?;
+    let mut file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(runtime_lifetime_path(path))?;
+    file.try_lock_shared()?;
+    if read_marker(&mut file)? != format!("lifetime:{token}") {
+        return Err(io::Error::other(
+            "provider lifetime lease generation changed",
+        ));
+    }
+    Ok(file)
+}
+
+#[cfg(unix)]
+pub(crate) fn provider_lifetime_is_active(path: &Path, token: &str) -> io::Result<bool> {
+    validate_token(token)?;
+    let mut file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(runtime_lifetime_path(path))?;
+    if read_marker(&mut file)? != format!("lifetime:{token}") {
+        return Err(io::Error::other(
+            "provider lifetime lease generation changed",
+        ));
+    }
+    match file.try_lock_exclusive() {
+        Ok(()) => {
+            FileExt::unlock(&file)?;
+            Ok(false)
+        }
+        Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(true),
+        Err(error) => Err(error),
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[derive(Clone, Copy)]
+pub(crate) struct ProviderLifetimeIdentity {
+    pub(crate) device: u64,
+    pub(crate) inode: u64,
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub(crate) fn provider_lifetime_identity(
+    path: &Path,
+    token: &str,
+) -> io::Result<ProviderLifetimeIdentity> {
+    use std::os::unix::fs::MetadataExt;
+
+    validate_token(token)?;
+    let mut file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(runtime_lifetime_path(path))?;
+    if read_marker(&mut file)? != format!("lifetime:{token}") {
+        return Err(io::Error::other(
+            "provider lifetime lease generation changed",
+        ));
+    }
+    let metadata = file.metadata()?;
+    Ok(ProviderLifetimeIdentity {
+        device: metadata.dev(),
+        inode: metadata.ino(),
+    })
 }
 
 #[cfg(unix)]
@@ -98,7 +185,7 @@ pub(crate) fn observe_runtime_lease(room_id: &str, session_id: &str) -> LeaseObs
     let Ok(path) = runtime_lease_path(room_id, session_id) else {
         return LeaseObservation::Unknown;
     };
-    let mut file = match OpenOptions::new().read(true).write(true).open(path) {
+    let mut file = match OpenOptions::new().read(true).write(true).open(&path) {
         Ok(file) => file,
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
             return LeaseObservation::Missing;
@@ -106,13 +193,13 @@ pub(crate) fn observe_runtime_lease(room_id: &str, session_id: &str) -> LeaseObs
         Err(_) => return LeaseObservation::Unknown,
     };
     match file.try_lock_exclusive() {
-        Ok(()) => classify_unlocked_marker(read_marker(&mut file)),
+        Ok(()) => classify_unlocked_marker(&path, read_marker(&mut file)),
         Err(error) if error.kind() == io::ErrorKind::WouldBlock => LeaseObservation::Active,
         Err(_) => LeaseObservation::Unknown,
     }
 }
 
-fn classify_unlocked_marker(marker: io::Result<String>) -> LeaseObservation {
+fn classify_unlocked_marker(path: &Path, marker: io::Result<String>) -> LeaseObservation {
     let Ok(marker) = marker else {
         return LeaseObservation::Unknown;
     };
@@ -122,14 +209,14 @@ fn classify_unlocked_marker(marker: io::Result<String>) -> LeaseObservation {
             LeaseObservation::Gone
         }
         (Some("unix"), Some(token), Some(raw_pid), None) if validate_token(token).is_ok() => {
-            classify_unlocked_unix_marker(token, raw_pid)
+            classify_unlocked_unix_marker(path, token, raw_pid)
         }
         _ => LeaseObservation::Unknown,
     }
 }
 
 #[cfg(unix)]
-fn classify_unlocked_unix_marker(token: &str, raw_pid: &str) -> LeaseObservation {
+fn classify_unlocked_unix_marker(path: &Path, token: &str, raw_pid: &str) -> LeaseObservation {
     let Some(pid) = raw_pid
         .parse::<i32>()
         .ok()
@@ -139,10 +226,13 @@ fn classify_unlocked_unix_marker(token: &str, raw_pid: &str) -> LeaseObservation
     };
     match rustix::process::test_kill_process_group(pid) {
         Err(rustix::io::Errno::SRCH) => {
-            match crate::unix_process_tree::tagged_runtime_exists(token) {
-                Ok(true) => LeaseObservation::Active,
-                Ok(false) => LeaseObservation::Gone,
-                Err(_) => LeaseObservation::Unknown,
+            match (
+                provider_lifetime_is_active(path, token),
+                crate::unix_process_tree::tagged_runtime_exists(token),
+            ) {
+                (Ok(true), _) | (_, Ok(true)) => LeaseObservation::Active,
+                (Ok(false), Ok(false)) => LeaseObservation::Gone,
+                _ => LeaseObservation::Unknown,
             }
         }
         Ok(()) | Err(rustix::io::Errno::PERM) => LeaseObservation::Active,
@@ -151,7 +241,7 @@ fn classify_unlocked_unix_marker(token: &str, raw_pid: &str) -> LeaseObservation
 }
 
 #[cfg(not(unix))]
-fn classify_unlocked_unix_marker(_token: &str, _raw_pid: &str) -> LeaseObservation {
+fn classify_unlocked_unix_marker(_path: &Path, _token: &str, _raw_pid: &str) -> LeaseObservation {
     LeaseObservation::Unknown
 }
 
@@ -174,7 +264,9 @@ fn remove_runtime_lease(path: &Path, token: &str) {
 fn marker_token(marker: &str) -> Option<&str> {
     let mut parts = marker.split(':');
     match (parts.next(), parts.next()) {
-        (Some("pending" | "windows" | "unix"), Some(token)) if validate_token(token).is_ok() => {
+        (Some("pending" | "windows" | "unix" | "lifetime"), Some(token))
+            if validate_token(token).is_ok() =>
+        {
             Some(token)
         }
         _ => None,
@@ -238,6 +330,11 @@ fn runtime_lease_path(room_id: &str, session_id: &str) -> io::Result<PathBuf> {
     }
     let encoded = format!("{:x}", digest.finalize());
     Ok(runtime_lease_root()?.join(format!("{encoded}.lease")))
+}
+
+#[cfg(unix)]
+fn runtime_lifetime_path(lease_path: &Path) -> PathBuf {
+    lease_path.with_extension("lifetime")
 }
 
 fn runtime_lease_root() -> io::Result<PathBuf> {
@@ -305,7 +402,10 @@ mod tests {
     #[test]
     fn malformed_unlocked_lease_never_proves_absence() {
         assert_eq!(
-            super::classify_unlocked_marker(Ok("not-a-runtime-marker".to_owned())),
+            super::classify_unlocked_marker(
+                std::path::Path::new("unused"),
+                Ok("not-a-runtime-marker".to_owned()),
+            ),
             LeaseObservation::Unknown
         );
     }
@@ -328,6 +428,29 @@ mod tests {
         assert_eq!(
             observe_runtime_lease("lease-group-room", "lease-group-session"),
             LeaseObservation::Active
+        );
+        lease.cleanup_pre_effect();
+    }
+
+    #[test]
+    fn unlocked_unix_lease_requires_exact_lifetime_lock_absence() {
+        let lease = HeldRuntimeLease::prepare("lease-lifetime-room", "lease-lifetime-session")
+            .unwrap_or_else(|error| panic!("prepare lifetime runtime lease: {error}"));
+        let lifetime = super::open_provider_lifetime_lease(lease.path(), lease.token())
+            .unwrap_or_else(|error| panic!("open provider lifetime lease: {error}"));
+        let absent_group = rustix::process::Pid::from_raw(i32::MAX)
+            .unwrap_or_else(|| panic!("construct absent process group"));
+        let anchor = super::activate_unix_runtime_lease(lease.path(), lease.token(), absent_group)
+            .unwrap_or_else(|error| panic!("activate lifetime runtime lease: {error}"));
+        drop(anchor);
+        assert_eq!(
+            observe_runtime_lease("lease-lifetime-room", "lease-lifetime-session"),
+            LeaseObservation::Active
+        );
+        drop(lifetime);
+        assert_eq!(
+            observe_runtime_lease("lease-lifetime-room", "lease-lifetime-session"),
+            LeaseObservation::Gone
         );
         lease.cleanup_pre_effect();
     }

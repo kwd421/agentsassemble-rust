@@ -58,6 +58,7 @@ impl GuardianLaunch {
             lease_path,
             lease_token,
         )?;
+        command.process_group(0);
         Ok(command)
     }
 
@@ -219,7 +220,7 @@ fn run_guardian(lease_path: &Path, lease_token: &str, launch: &GuardianLaunch) -
         while io::stdin().lock().read(&mut buffer)? != 0 {}
         Ok(())
     })();
-    let cleanup = terminate_runtime(&mut anchor, anchor_pid, lease_token);
+    let cleanup = terminate_runtime(&mut anchor, anchor_pid, lease_path, lease_token);
     drop(anchor_input);
     operation.and(cleanup)
 }
@@ -278,12 +279,17 @@ fn terminate_anchor(anchor: &mut Child, raw_pid: u32) -> io::Result<()> {
     }
 }
 
-fn terminate_runtime(anchor: &mut Child, raw_pid: u32, lease_token: &str) -> io::Result<()> {
+fn terminate_runtime(
+    anchor: &mut Child,
+    raw_pid: u32,
+    lease_path: &Path,
+    lease_token: &str,
+) -> io::Result<()> {
     let pid = i32::try_from(raw_pid)
         .ok()
         .and_then(Pid::from_raw)
         .ok_or_else(|| io::Error::other("provider anchor pid is invalid"))?;
-    let captured = CapturedRuntimeProcesses::freeze(lease_token, pid);
+    let captured = CapturedRuntimeProcesses::freeze(lease_path, lease_token, pid);
     let anchor_result = terminate_anchor(anchor, raw_pid);
     let captured = match captured {
         Ok(captured) => captured,
@@ -294,6 +300,6 @@ fn terminate_runtime(anchor: &mut Child, raw_pid: u32, lease_token: &str) -> io:
     };
     let captured_result = captured
         .kill()
-        .and_then(|()| captured.confirm_gone(lease_token, Duration::from_secs(4)));
+        .and_then(|()| captured.confirm_gone(lease_path, lease_token, Duration::from_secs(4)));
     anchor_result.and(captured_result)
 }
