@@ -4,6 +4,7 @@
 
 [policy]
 new_file_line_limit = 800
+new_file_byte_limit = 262144
+max_logical_line_bytes = 16384
 
 [file_limits]
-
