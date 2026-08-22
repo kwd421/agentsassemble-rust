@@ -252,11 +252,103 @@ async fn changed_codex_turn_model_is_poisoned_without_a_second_turn() {
     .await;
 }
 
+#[tokio::test]
+async fn rerouted_codex_turn_model_is_poisoned_without_a_second_turn() {
+    let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
+    let notifications = concat!(
+        "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"model/rerouted\",\"params\":{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\",\"fromModel\":\"gpt-5.6-terra\",\"toModel\":\"other-model\"}}'\n",
+        "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"agent_message/completed\",\"params\":{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\",\"text\":\"wrong-model answer\"}}'\n",
+        "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"turn/completed\",\"params\":{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\"}}'\n",
+    );
+    assert_turn_error(
+        "{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"turn\":{\"id\":\"provider-turn-1\"}}}",
+        "",
+        notifications,
+        "provider_model_mismatch",
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn unscoped_codex_output_is_poisoned_without_a_second_turn() {
+    let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
+    let before_response = concat!(
+        "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"agent_message/completed\",\"params\":{\"text\":\"stale turn output\"}}'\n",
+        "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"turn/completed\",\"params\":{}}'\n",
+    );
+    assert_turn_error(
+        "{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"turn\":{\"id\":\"provider-turn-1\"}}}",
+        before_response,
+        "",
+        "provider_protocol_invalid",
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn reused_codex_provider_turn_identity_is_poisoned() {
+    let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
+    let directory = tempfile::tempdir()
+        .unwrap_or_else(|error| panic!("create reused provider-turn fixture: {error}"));
+    let transcript = directory.path().join("requests.jsonl");
+    let script = reused_turn_fixture(&transcript);
+    let session = fixture_session(directory.path(), &script).await;
+    let adapter = ProviderAdapter::new();
+    let started = adapter
+        .start(&session)
+        .await
+        .unwrap_or_else(|error| panic!("start reused provider-turn fixture: {error}"));
+    let first = active_session(&session, &started, "room-turn-1");
+    adapter
+        .send_turn(
+            &first,
+            &ProviderTurnRequest {
+                turn_id: "room-turn-1".to_owned(),
+                input: "First answer.".to_owned(),
+            },
+        )
+        .await
+        .unwrap_or_else(|error| panic!("complete first provider turn: {error}"));
+    let second = active_session(&session, &started, "room-turn-2");
+    let request = ProviderTurnRequest {
+        turn_id: "room-turn-2".to_owned(),
+        input: "Second answer.".to_owned(),
+    };
+    for _ in 0..2 {
+        let Err(error) = adapter.send_turn(&second, &request).await else {
+            panic!("reused provider turn identity must fail closed");
+        };
+        assert_eq!(error.code, "provider_turn_reused");
+        assert!(error.effect_uncertain);
+    }
+    let requests = requests(&transcript);
+    assert_eq!(
+        request_methods(&requests),
+        [
+            "initialize",
+            "initialized",
+            "thread/start",
+            "turn/start",
+            "turn/start"
+        ]
+    );
+    stop_and_release(&adapter, &second, &started).await;
+}
+
 async fn assert_turn_start_error(response: &str, expected_code: &str) {
+    assert_turn_error(response, "", "", expected_code).await;
+}
+
+async fn assert_turn_error(
+    response: &str,
+    before_response: &str,
+    notifications: &str,
+    expected_code: &str,
+) {
     let directory = tempfile::tempdir()
         .unwrap_or_else(|error| panic!("create failed provider-turn fixture: {error}"));
     let transcript = directory.path().join("requests.jsonl");
-    let script = turn_fixture(&transcript, "", response, "");
+    let script = turn_fixture(&transcript, before_response, response, notifications);
     let session = fixture_session(directory.path(), &script).await;
     let adapter = ProviderAdapter::new();
     let started = adapter
@@ -281,6 +373,13 @@ async fn assert_turn_start_error(response: &str, expected_code: &str) {
         ["initialize", "initialized", "thread/start", "turn/start"]
     );
     stop_and_release(&adapter, &active, &started).await;
+}
+
+fn reused_turn_fixture(transcript: &Path) -> String {
+    format!(
+        "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' \"$initialize\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nprintf '%s\\n' \"$initialized\" >> {log}\nIFS= read -r thread\nprintf '%s\\n' \"$thread\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{{\"thread\":{{\"id\":\"thread-1\"}}}}}}'\nIFS= read -r first_turn\nprintf '%s\\n' \"$first_turn\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{{\"turn\":{{\"id\":\"provider-turn-1\"}}}}}}'\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"method\":\"agent_message/completed\",\"params\":{{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\",\"text\":\"first answer\"}}}}'\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"method\":\"turn/completed\",\"params\":{{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\"}}}}'\nIFS= read -r second_turn\nprintf '%s\\n' \"$second_turn\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":4,\"result\":{{\"turn\":{{\"id\":\"provider-turn-1\"}}}}}}'\nIFS= read -r forever\n",
+        log = shell_quote(transcript),
+    )
 }
 
 fn turn_fixture(

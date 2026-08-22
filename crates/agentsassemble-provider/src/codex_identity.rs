@@ -61,7 +61,21 @@ fn response_provider_session_id(value: Option<&Value>) -> Result<Option<&str>, D
 pub(crate) fn observed_model_id_from_response(
     response: &Value,
 ) -> Result<Option<&str>, DriverError> {
+    let rerouted_model = if response.get("method").and_then(Value::as_str) == Some("model/rerouted")
+    {
+        let candidate = response
+            .get("params")
+            .and_then(|params| params.get("toModel"))
+            .ok_or_else(provider_model_mismatch)?;
+        if candidate.is_null() {
+            return Err(provider_model_mismatch());
+        }
+        Some(candidate)
+    } else {
+        None
+    };
     let candidates = [
+        rerouted_model,
         response
             .get("result")
             .and_then(|result| result.get("model")),

@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{collections::HashSet, time::Duration};
 
 use agentsassemble_domain::{DurableAgentSession, clean_message, has_visible_text};
 use futures_util::StreamExt;
@@ -11,6 +11,7 @@ use crate::runtime::{DriverError, ProviderTurnCompleted, ProviderTurnRequest};
 const TURN_INACTIVITY_TIMEOUT: Duration = Duration::from_mins(3);
 const INFERRED_COMPLETION_GRACE: Duration = Duration::from_secs(1);
 const MAX_PROVIDER_TURN_ID_BYTES: usize = 128;
+const MAX_PROVIDER_TURN_IDS: usize = 4_096;
 const MAX_FINAL_MESSAGE_CHARS: usize = 12_000;
 
 pub(super) struct QueuedNotification {
@@ -22,6 +23,7 @@ pub(super) struct QueuedNotification {
 pub(super) struct CodexTurnState {
     active: Option<ActiveTurn>,
     completed: Option<CompletedTurn>,
+    provider_turn_ids: HashSet<String>,
     error: Option<DriverError>,
 }
 
@@ -68,7 +70,7 @@ pub(super) async fn send_turn(
     } else {
         start_turn(driver, session, request, &thread_id).await?;
     }
-    read_turn(driver, &thread_id).await
+    read_turn(driver, &thread_id, &session.public.model).await
 }
 
 async fn start_turn(
@@ -99,6 +101,20 @@ async fn start_turn(
         Ok(None) => return poison(driver, turn_unconfirmed()),
         Err(error) => return poison(driver, error),
     };
+    if driver
+        .turn_state
+        .provider_turn_ids
+        .contains(&provider_turn_id)
+    {
+        return poison(driver, provider_turn_reused());
+    }
+    if driver.turn_state.provider_turn_ids.len() >= MAX_PROVIDER_TURN_IDS {
+        return poison(driver, provider_turn_history_exhausted());
+    }
+    driver
+        .turn_state
+        .provider_turn_ids
+        .insert(provider_turn_id.clone());
     driver.turn_state.completed = None;
     driver.turn_state.active = Some(ActiveTurn {
         request: request.clone(),
@@ -115,6 +131,7 @@ async fn start_turn(
 async fn read_turn(
     driver: &mut CodexDriver,
     thread_id: &str,
+    configured_model: &str,
 ) -> Result<ProviderTurnCompleted, DriverError> {
     loop {
         let (turn_id, deadline, inference_deadline) = {
@@ -149,6 +166,13 @@ async fn read_turn(
         let Some(method) = message.get("method").and_then(Value::as_str) else {
             return poison(driver, protocol_error());
         };
+        let observed_model = match super::observed_model_id_from_response(&message) {
+            Ok(value) => value,
+            Err(error) => return poison(driver, error),
+        };
+        if observed_model.is_some_and(|model| model != configured_model) {
+            return poison(driver, crate::codex_identity::provider_model_mismatch());
+        }
         let active = driver
             .turn_state
             .active
@@ -238,6 +262,10 @@ fn matching_pending_index(
 }
 
 fn message_matches(message: &Value, thread_id: &str, turn_id: &str) -> Result<bool, DriverError> {
+    let method = message
+        .get("method")
+        .and_then(Value::as_str)
+        .ok_or_else(protocol_error)?;
     let message_thread = exact_optional_id(
         [
             nested(message, &["params", "threadId"]),
@@ -256,10 +284,31 @@ fn message_matches(message: &Value, thread_id: &str, turn_id: &str) -> Result<bo
         ],
         protocol_error,
     )?;
+    if turn_scoped_method(method) && (message_thread.is_none() || message_turn.is_none()) {
+        return Err(protocol_error());
+    }
+    if method == "thread/status/changed" && message_thread.is_none() {
+        return Err(protocol_error());
+    }
     Ok(message_thread
         .as_deref()
         .is_none_or(|value| value == thread_id)
         && message_turn.as_deref().is_none_or(|value| value == turn_id))
+}
+
+fn turn_scoped_method(method: &str) -> bool {
+    method.starts_with("turn/")
+        || method.starts_with("item/")
+        || method.starts_with("hook/")
+        || method.starts_with("agent_message/")
+        || method.starts_with("agent-message/")
+        || matches!(
+            method,
+            "model/rerouted"
+                | "command_execution/request_approval"
+                | "file_change/request_approval"
+                | "permissions/request_approval"
+        )
 }
 
 impl CodexDriver {
@@ -441,6 +490,20 @@ const fn turn_mismatch() -> DriverError {
     DriverError::new(
         "provider_turn_mismatch",
         "The Codex app-server returned conflicting provider turn identities.",
+    )
+}
+
+const fn provider_turn_reused() -> DriverError {
+    DriverError::new(
+        "provider_turn_reused",
+        "The Codex app-server reused a provider turn identity in one process.",
+    )
+}
+
+const fn provider_turn_history_exhausted() -> DriverError {
+    DriverError::new(
+        "provider_turn_history_exhausted",
+        "The bounded Codex provider turn identity history is exhausted.",
     )
 }
 
