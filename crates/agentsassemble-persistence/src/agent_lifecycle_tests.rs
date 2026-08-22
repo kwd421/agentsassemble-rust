@@ -151,7 +151,8 @@ async fn lifecycle_preserves_provider_identity_and_finalizes_stop_once() {
     let AgentStartPlan::Start(effect) = prepared else {
         panic!("stopped session must require a start effect");
     };
-    assert_eq!(effect.operation_id, "start-lifecycle");
+    assert!(effect.operation_id.starts_with("identity-v1-"));
+    assert_ne!(effect.operation_id, "start-lifecycle");
     assert_eq!(effect.session.public.runtime_status, "starting");
     assert_eq!(effect.session.lifecycle_intent_status, "prepared");
     let started = AgentRuntimeStarted {
@@ -159,6 +160,7 @@ async fn lifecycle_preserves_provider_identity_and_finalizes_stop_once() {
         provider_session_id: "provider-thread-1".to_owned(),
         runtime_reused: false,
         provider_session_reused: false,
+        provider_session_active: true,
     };
     let outcome = store
         .complete_agent_start(
@@ -186,6 +188,10 @@ async fn lifecycle_preserves_provider_identity_and_finalizes_stop_once() {
         outcome.result["agent_session"]
             .get("provider_session_id")
             .is_none()
+    );
+    assert_eq!(
+        outcome.result["agent_session"]["provider_session_active"],
+        true
     );
     let replay = store
         .prepare_agent_start(&principal, "start-lifecycle", &payload)
@@ -256,6 +262,7 @@ async fn stale_start_completion_fails_closed_and_visible_failure_clears_intent()
                 provider_session_id: "provider-thread".to_owned(),
                 runtime_reused: false,
                 provider_session_reused: false,
+                provider_session_active: true,
             },
         )
         .await;
@@ -295,6 +302,61 @@ async fn stale_start_completion_fails_closed_and_visible_failure_clears_intent()
 }
 
 #[tokio::test]
+async fn provider_process_presence_does_not_imply_a_provider_conversation() {
+    let (store, principal, _directory) = fixture().await;
+    let payload = json!({"agent_id": AGENT_ID});
+    let AgentStartPlan::Start(start) = store
+        .prepare_agent_start(&principal, "start-without-thread", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare start: {error}"))
+    else {
+        panic!("stopped session must require start");
+    };
+    let invalid = store
+        .complete_agent_start(
+            &principal,
+            "start-without-thread",
+            &payload,
+            &start.operation_id,
+            &AgentRuntimeStarted {
+                runtime_handle_id: "owned-app-server".to_owned(),
+                provider_session_id: String::new(),
+                runtime_reused: false,
+                provider_session_reused: false,
+                provider_session_active: true,
+            },
+        )
+        .await;
+    assert!(matches!(
+        invalid,
+        Err(PersistenceError::CommandRejected {
+            code: "provider_session_unconfirmed",
+            ..
+        })
+    ));
+    let outcome = store
+        .complete_agent_start(
+            &principal,
+            "start-without-thread",
+            &payload,
+            &start.operation_id,
+            &AgentRuntimeStarted {
+                runtime_handle_id: "owned-app-server".to_owned(),
+                provider_session_id: String::new(),
+                runtime_reused: false,
+                provider_session_reused: false,
+                provider_session_active: false,
+            },
+        )
+        .await
+        .unwrap_or_else(|error| panic!("complete process-only start: {error}"));
+    assert_eq!(
+        outcome.result["agent_session"]["provider_session_active"],
+        false
+    );
+}
+
+#[tokio::test]
 async fn unversioned_runtime_profile_fails_before_a_start_effect() {
     let (store, principal, _directory) = fixture().await;
     let encoded = sqlx::query_scalar::<_, String>(
@@ -331,4 +393,159 @@ async fn unversioned_runtime_profile_fails_before_a_start_effect() {
         .await
         .unwrap_or_else(|error| panic!("snapshot legacy session: {error}"));
     assert_eq!(snapshot.agent_sessions[0].runtime_status, "stopped");
+}
+
+#[tokio::test]
+async fn ambiguous_stop_becomes_a_redacted_recoverable_disconnect() {
+    let (store, principal, _directory) = fixture().await;
+    let payload = json!({"agent_id": AGENT_ID});
+    let AgentStartPlan::Start(start) = store
+        .prepare_agent_start(&principal, "start-before-ambiguous-stop", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare start: {error}"))
+    else {
+        panic!("stopped session must require start");
+    };
+    store
+        .complete_agent_start(
+            &principal,
+            "start-before-ambiguous-stop",
+            &payload,
+            &start.operation_id,
+            &AgentRuntimeStarted {
+                runtime_handle_id: "runtime-before-ambiguous-stop".to_owned(),
+                provider_session_id: "provider-thread-preserved".to_owned(),
+                runtime_reused: false,
+                provider_session_reused: false,
+                provider_session_active: true,
+            },
+        )
+        .await
+        .unwrap_or_else(|error| panic!("complete start: {error}"));
+    let AgentStopPlan::Stop(stop) = store
+        .prepare_agent_stop(&principal, "ambiguous-stop", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare stop: {error}"))
+    else {
+        panic!("running session must require stop");
+    };
+    let events = store
+        .mark_agent_stop_unconfirmed(
+            &principal,
+            AGENT_ID,
+            &stop.operation_id,
+            "runtime_stop_unconfirmed",
+            "/Users/alice/private/provider Authorization: Bearer private-stop-token",
+        )
+        .await
+        .unwrap_or_else(|error| panic!("mark ambiguous stop: {error}"));
+    assert_eq!(events.len(), 2);
+    assert_eq!(events[0].event_type, "error");
+    assert!(
+        !events[0]
+            .content
+            .as_deref()
+            .unwrap_or_default()
+            .contains("alice")
+    );
+    assert!(
+        !events[0]
+            .content
+            .as_deref()
+            .unwrap_or_default()
+            .contains("private-stop-token")
+    );
+
+    let snapshot = store
+        .snapshot("general", 0, 200)
+        .await
+        .unwrap_or_else(|error| panic!("snapshot ambiguous stop: {error}"));
+    let session = &snapshot.agent_sessions[0];
+    assert_eq!(session.runtime_status, "disconnected");
+    assert_eq!(session.last_error_code, "runtime_stop_unconfirmed");
+    assert!(session.recovery_required);
+    assert!(!session.provider_session_active);
+    assert_eq!(
+        store
+            .participant("general", AGENT_ID)
+            .await
+            .unwrap_or_else(|error| panic!("read detached participant: {error}"))
+            .status,
+        ParticipantStatus::Detached
+    );
+    let encoded = sqlx::query_scalar::<_, String>(
+        "SELECT session_json FROM agent_sessions WHERE room_id = 'general' AND session_id = ?",
+    )
+    .bind(AGENT_ID)
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("read ambiguous durable session: {error}"));
+    let durable = serde_json::from_str::<DurableAgentSession>(&encoded)
+        .unwrap_or_else(|error| panic!("decode ambiguous durable session: {error}"));
+    assert_eq!(durable.provider_session_id, "provider-thread-preserved");
+    assert!(durable.runtime_handle_id.is_empty());
+    assert!(durable.lifecycle_intent_action.is_empty());
+}
+
+#[tokio::test]
+async fn startup_reconciliation_disconnects_only_live_looking_sessions() {
+    let (store, principal, _directory) = fixture().await;
+    let payload = json!({"agent_id": AGENT_ID});
+    let AgentStartPlan::Start(start) = store
+        .prepare_agent_start(&principal, "start-before-restart", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare start: {error}"))
+    else {
+        panic!("stopped session must require start");
+    };
+    store
+        .complete_agent_start(
+            &principal,
+            "start-before-restart",
+            &payload,
+            &start.operation_id,
+            &AgentRuntimeStarted {
+                runtime_handle_id: "lost-owned-runtime".to_owned(),
+                provider_session_id: "provider-thread-survives".to_owned(),
+                runtime_reused: false,
+                provider_session_reused: false,
+                provider_session_active: true,
+            },
+        )
+        .await
+        .unwrap_or_else(|error| panic!("complete start: {error}"));
+
+    assert_eq!(
+        store
+            .reconcile_agent_sessions_after_restart()
+            .await
+            .unwrap_or_else(|error| panic!("reconcile restart: {error}")),
+        1
+    );
+    assert_eq!(
+        store
+            .reconcile_agent_sessions_after_restart()
+            .await
+            .unwrap_or_else(|error| panic!("repeat reconciliation: {error}")),
+        0
+    );
+    let snapshot = store
+        .snapshot("general", 0, 200)
+        .await
+        .unwrap_or_else(|error| panic!("snapshot restart: {error}"));
+    let session = &snapshot.agent_sessions[0];
+    assert_eq!(session.runtime_status, "disconnected");
+    assert_eq!(session.last_error_code, "server_restarted");
+    assert!(session.recovery_required);
+    let encoded = sqlx::query_scalar::<_, String>(
+        "SELECT session_json FROM agent_sessions WHERE room_id = 'general' AND session_id = ?",
+    )
+    .bind(AGENT_ID)
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("read reconciled durable session: {error}"));
+    let durable = serde_json::from_str::<DurableAgentSession>(&encoded)
+        .unwrap_or_else(|error| panic!("decode reconciled durable session: {error}"));
+    assert_eq!(durable.provider_session_id, "provider-thread-survives");
+    assert!(durable.runtime_handle_id.is_empty());
 }

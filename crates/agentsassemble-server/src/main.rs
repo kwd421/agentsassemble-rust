@@ -71,6 +71,13 @@ async fn main() -> anyhow::Result<()> {
     {
         initialize_room(&store, room_id).await?;
     }
+    let reconciled_sessions = store.reconcile_agent_sessions_after_restart().await?;
+    if reconciled_sessions > 0 {
+        tracing::warn!(
+            reconciled_sessions,
+            "disconnected stale provider sessions before network admission"
+        );
+    }
     ensure_parent_alive(&cancellation)?;
     let listener = TcpListener::bind(args.bind).await?;
     ensure_parent_alive(&cancellation)?;

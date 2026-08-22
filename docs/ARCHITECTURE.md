@@ -81,6 +81,8 @@ An Agent Session's configured and desired state is durable room state. Its publi
 
 Provider diagnostics are untrusted process output. Before an error enters a durable Agent Session, room event, command result, snapshot, or public projection, the shared domain boundary removes local paths, credentials, authorization headers, secret-shaped options and assignments, URL user information, JWTs, and private keys, then applies the field's size limit.
 
+Lifecycle command payloads carry exactly one unchanged Agent Session identifier alias and no unknown keys. The external-effect operation identity binds the exact room, principal, request ID, and action. Process reuse and provider-conversation reuse are independent observations; an app-server process is not proof that a Codex thread is active. Ambiguous shutdown becomes a durable redacted `disconnected` error with recovery required, never a successful stop. Before network admission after server startup, stale live-looking session states are either adopted by an exact-handle owner or, while cross-process adoption is unavailable, synchronously disconnected with their provider conversation identity retained for explicit resume.
+
 ## Enforced source structure
 
 Cargo crate dependencies enforce direction:

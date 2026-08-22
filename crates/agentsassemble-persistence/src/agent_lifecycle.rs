@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashSet};
 
 use agentsassemble_domain::{
     AuthenticatedPrincipal, CURRENT_RUNTIME_PROFILE_VERSION, ClientKind, DurableAgentSession,
-    Participant, ParticipantStatus, RoomEvent, canonical_payload_hash, clean_identifier,
+    Participant, ParticipantStatus, RoomEvent, canonical_payload_hash,
     redact_persisted_diagnostic_text,
 };
 use chrono::Utc;
@@ -11,6 +11,7 @@ use sqlx::{Sqlite, Transaction};
 
 use crate::{
     CommandOutcome, PersistenceError, SqliteStore,
+    agent_lifecycle_authority::{lifecycle_operation_id, payload_agent_id},
     agent_lifecycle_events::{
         append_error_event, append_session_event, append_state_event, commit_already_stopped,
         commit_reused_start, store_result,
@@ -21,6 +22,7 @@ use crate::{
 
 const START: &str = "agent.start";
 const STOP: &str = "agent.stop";
+const PUBLIC_LIFECYCLE_ERROR_LIMIT: usize = 512;
 
 #[derive(Debug, Clone)]
 pub struct AgentStartEffect {
@@ -54,6 +56,7 @@ pub struct AgentRuntimeStarted {
     pub provider_session_id: String,
     pub runtime_reused: bool,
     pub provider_session_reused: bool,
+    pub provider_session_active: bool,
 }
 
 impl SqliteStore {
@@ -129,7 +132,7 @@ impl SqliteStore {
             session.public.last_error_code.clear();
             session.public.recovery_required = false;
             "start".clone_into(&mut session.lifecycle_intent_action);
-            session.lifecycle_intent_id = lifecycle_operation_id(request_id);
+            session.lifecycle_intent_id = lifecycle_operation_id(principal, request_id, START);
             "prepared".clone_into(&mut session.lifecycle_intent_status);
             session.public.updated_at = Utc::now();
             save_session(&mut transaction, &session).await?;
@@ -155,12 +158,7 @@ impl SqliteStore {
         operation_id: &str,
         started: &AgentRuntimeStarted,
     ) -> Result<CommandOutcome, PersistenceError> {
-        if started.runtime_handle_id.is_empty() {
-            return Err(rejected(
-                "runtime_start_unconfirmed",
-                "Provider start did not return an owned runtime handle.",
-            ));
-        }
+        validate_runtime_started(started)?;
         let agent_id = payload_agent_id(payload)?;
         let payload_hash = canonical_payload_hash(payload);
         let mut transaction = self.pool.begin().await?;
@@ -189,7 +187,7 @@ impl SqliteStore {
         "attached".clone_into(&mut session.public.status);
         session.public.enabled = true;
         "idle".clone_into(&mut session.public.runtime_status);
-        session.public.provider_session_active = true;
+        session.public.provider_session_active = started.provider_session_active;
         session.public.provider_session_reused = started.provider_session_reused;
         session.public.last_error.clear();
         session.public.last_error_code.clear();
@@ -282,7 +280,8 @@ impl SqliteStore {
         session.public.enabled = false;
         "error".clone_into(&mut session.public.runtime_status);
         session.public.provider_session_active = false;
-        session.public.last_error = redact_persisted_diagnostic_text(message, 4_000);
+        session.public.last_error =
+            redact_persisted_diagnostic_text(message, PUBLIC_LIFECYCLE_ERROR_LIMIT);
         if session.public.last_error.is_empty() {
             "Provider launch failed.".clone_into(&mut session.public.last_error);
         }
@@ -368,7 +367,7 @@ impl SqliteStore {
         "stopping".clone_into(&mut session.public.runtime_status);
         session.public.enabled = false;
         "stop".clone_into(&mut session.lifecycle_intent_action);
-        session.lifecycle_intent_id = lifecycle_operation_id(request_id);
+        session.lifecycle_intent_id = lifecycle_operation_id(principal, request_id, STOP);
         "prepared".clone_into(&mut session.lifecycle_intent_status);
         session.public.updated_at = Utc::now();
         save_session(&mut transaction, &session).await?;
@@ -402,6 +401,72 @@ impl SqliteStore {
         save_session(&mut transaction, &session).await?;
         transaction.commit().await?;
         Ok(())
+    }
+
+    /// Makes an ambiguous stop visible and recoverable without claiming success.
+    ///
+    /// # Errors
+    ///
+    /// Returns a stale-effect rejection or persistence failure.
+    pub async fn mark_agent_stop_unconfirmed(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        agent_id: &str,
+        operation_id: &str,
+        error_code: &'static str,
+        message: &str,
+    ) -> Result<Vec<RoomEvent>, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        active_room_for_principal(&mut transaction, principal).await?;
+        let mut session = load_session(&mut transaction, &principal.room_id, agent_id).await?;
+        require_intent(
+            &session,
+            STOP,
+            operation_id,
+            "prepared",
+            "stale_stop_confirmation",
+        )?;
+        session.pending_event_ids = dedupe(
+            session
+                .inflight_event_ids
+                .iter()
+                .chain(&session.pending_event_ids),
+        );
+        session.inflight_event_ids.clear();
+        "unavailable".clone_into(&mut session.public.status);
+        session.public.enabled = false;
+        "disconnected".clone_into(&mut session.public.runtime_status);
+        session.public.provider_session_active = false;
+        session.public.provider_session_reused = false;
+        session.public.active_turn_id.clear();
+        session.public.turn_phase.clear();
+        session.public.last_error =
+            redact_persisted_diagnostic_text(message, PUBLIC_LIFECYCLE_ERROR_LIMIT);
+        if session.public.last_error.is_empty() {
+            "Provider shutdown could not be confirmed.".clone_into(&mut session.public.last_error);
+        }
+        session.public.last_error_code = error_code.to_owned();
+        session.public.recovery_required = true;
+        session.runtime_handle_id.clear();
+        clear_intent(&mut session);
+        session.public.updated_at = Utc::now();
+        save_session(&mut transaction, &session).await?;
+        let mut participant =
+            load_participant(&mut transaction, &principal.room_id, agent_id).await?;
+        participant.status = ParticipantStatus::Detached;
+        participant.updated_at = Utc::now();
+        save_participant(&mut transaction, &participant).await?;
+        let error = append_error_event(
+            &mut transaction,
+            principal,
+            &session.public,
+            error_code,
+            &session.public.last_error,
+        )
+        .await?;
+        let state = append_state_event(&mut transaction, principal, &session.public).await?;
+        transaction.commit().await?;
+        Ok(vec![error, state])
     }
 
     /// Finalizes a previously confirmed stop without repeating its external effect.
@@ -513,25 +578,26 @@ fn authorize_control(principal: &AuthenticatedPrincipal) -> Result<(), Persisten
     Ok(())
 }
 
-fn payload_agent_id(payload: &Value) -> Result<String, PersistenceError> {
-    let object = payload
-        .as_object()
-        .ok_or_else(|| rejected("bad_request", "payload must be an object."))?;
-    let raw = object
-        .get("agent_id")
-        .or_else(|| object.get("participant_id"))
-        .or_else(|| object.get("session_id"))
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    let agent_id = clean_identifier(raw, 128);
-    if agent_id.is_empty() {
-        return Err(rejected("bad_request", "agent_id is required."));
+fn validate_runtime_started(started: &AgentRuntimeStarted) -> Result<(), PersistenceError> {
+    if started.runtime_handle_id.is_empty() {
+        return Err(rejected(
+            "runtime_start_unconfirmed",
+            "Provider start did not return an owned runtime handle.",
+        ));
     }
-    Ok(agent_id)
-}
-
-fn lifecycle_operation_id(request_id: &str) -> String {
-    clean_identifier(request_id, 128)
+    if started.provider_session_active && started.provider_session_id.is_empty() {
+        return Err(rejected(
+            "provider_session_unconfirmed",
+            "Provider start reported an active session without its identity.",
+        ));
+    }
+    if started.provider_session_reused && !started.provider_session_active {
+        return Err(rejected(
+            "provider_session_unconfirmed",
+            "An inactive provider session cannot be reported as reused.",
+        ));
+    }
+    Ok(())
 }
 
 fn stop_effect(session: &DurableAgentSession) -> AgentStopEffect {

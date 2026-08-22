@@ -15,7 +15,19 @@ export function agentSessionIsValid(value: unknown, expectedRoomId = ""): boolea
     value.participant_id === value.session_id &&
     typeof value.display_name === "string" &&
     value.display_name &&
-    value.runtime_status === "stopped" &&
+    typeof value.runtime_status === "string" &&
+    [
+      "stopped",
+      "available",
+      "starting",
+      "idle",
+      "busy",
+      "paused",
+      "recovering",
+      "stopping",
+      "error",
+      "disconnected",
+    ].includes(value.runtime_status) &&
     value.process_ownership === "server" &&
     value.external_owned === false &&
     typeof value.provider_kind === "string" &&
@@ -26,7 +38,13 @@ export function agentSessionIsValid(value: unknown, expectedRoomId = ""): boolea
     !("executable" in value) &&
     !("workspace_identity" in value) &&
     !("executable_identity" in value) &&
-    !("runtime_profile_key" in value)
+    !("runtime_profile_key" in value) &&
+    !("runtime_profile_version" in value) &&
+    !("runtime_handle_id" in value) &&
+    !("provider_session_id" in value) &&
+    !("lifecycle_intent_action" in value) &&
+    !("lifecycle_intent_id" in value) &&
+    !("lifecycle_intent_status" in value)
   );
 }
 

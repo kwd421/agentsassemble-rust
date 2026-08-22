@@ -1,0 +1,125 @@
+use agentsassemble_domain::{
+    DurableAgentSession, Participant, ParticipantStatus, Room, RoomStatus,
+};
+use chrono::Utc;
+use sqlx::Row;
+
+use crate::{PersistenceError, SqliteStore};
+
+const ACTIVE_RUNTIME_STATES: [&str; 6] = [
+    "starting",
+    "idle",
+    "busy",
+    "paused",
+    "recovering",
+    "stopping",
+];
+
+impl SqliteStore {
+    /// Disconnects durable sessions whose process ownership cannot survive restart.
+    ///
+    /// This runs before HTTP or WebSocket admission. Provider conversation IDs stay
+    /// durable so a later explicit start can resume them, while stale process handles
+    /// and lifecycle intents are discarded.
+    ///
+    /// # Errors
+    ///
+    /// Returns a persistence or stored-data failure and leaves the transaction rolled back.
+    pub async fn reconcile_agent_sessions_after_restart(&self) -> Result<usize, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        let rows = sqlx::query(
+            "SELECT sessions.session_json, rooms.room_json FROM agent_sessions AS sessions JOIN rooms ON rooms.room_id = sessions.room_id ORDER BY sessions.room_id, sessions.session_id",
+        )
+        .fetch_all(&mut *transaction)
+        .await?;
+        let mut reconciled = 0_usize;
+        for row in rows {
+            let room = serde_json::from_str::<Room>(&row.get::<String, _>("room_json"))?;
+            if room.status == RoomStatus::Closed {
+                continue;
+            }
+            let mut session =
+                serde_json::from_str::<DurableAgentSession>(&row.get::<String, _>("session_json"))?;
+            if !ACTIVE_RUNTIME_STATES.contains(&session.public.runtime_status.as_str()) {
+                continue;
+            }
+            disconnect_after_restart(&mut session);
+            sqlx::query(
+                "UPDATE agent_sessions SET session_json = ? WHERE room_id = ? AND session_id = ?",
+            )
+            .bind(serde_json::to_string(&session)?)
+            .bind(&session.public.room_id)
+            .bind(&session.public.session_id)
+            .execute(&mut *transaction)
+            .await?;
+            detach_participant(
+                &mut transaction,
+                &session.public.room_id,
+                &session.public.participant_id,
+            )
+            .await?;
+            reconciled += 1;
+        }
+        transaction.commit().await?;
+        Ok(reconciled)
+    }
+}
+
+fn disconnect_after_restart(session: &mut DurableAgentSession) {
+    let mut pending = Vec::new();
+    for event_id in session
+        .inflight_event_ids
+        .iter()
+        .chain(&session.pending_event_ids)
+    {
+        if !event_id.is_empty() && !pending.contains(event_id) {
+            pending.push(event_id.clone());
+        }
+    }
+    session.pending_event_ids = pending;
+    session.inflight_event_ids.clear();
+    "unavailable".clone_into(&mut session.public.status);
+    "disconnected".clone_into(&mut session.public.runtime_status);
+    session.public.provider_session_active = false;
+    session.public.provider_session_reused = false;
+    session.public.active_turn_id.clear();
+    session.public.turn_phase.clear();
+    session.public.recovery_required = true;
+    "Server restarted without a current owned provider handle."
+        .clone_into(&mut session.public.last_error);
+    "server_restarted".clone_into(&mut session.public.last_error_code);
+    session.runtime_handle_id.clear();
+    session.lifecycle_intent_action.clear();
+    session.lifecycle_intent_id.clear();
+    session.lifecycle_intent_status.clear();
+    session.public.updated_at = Utc::now();
+}
+
+async fn detach_participant(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    room_id: &str,
+    participant_id: &str,
+) -> Result<(), PersistenceError> {
+    let Some(encoded) = sqlx::query_scalar::<_, String>(
+        "SELECT participant_json FROM participants WHERE room_id = ? AND participant_id = ?",
+    )
+    .bind(room_id)
+    .bind(participant_id)
+    .fetch_optional(&mut **transaction)
+    .await?
+    else {
+        return Ok(());
+    };
+    let mut participant = serde_json::from_str::<Participant>(&encoded)?;
+    participant.status = ParticipantStatus::Detached;
+    participant.updated_at = Utc::now();
+    sqlx::query(
+        "UPDATE participants SET participant_json = ? WHERE room_id = ? AND participant_id = ?",
+    )
+    .bind(serde_json::to_string(&participant)?)
+    .bind(room_id)
+    .bind(participant_id)
+    .execute(&mut **transaction)
+    .await?;
+    Ok(())
+}

@@ -1,12 +1,35 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { openRoomSocket, RoomSocketSayError } from "./roomSocketClient";
 import { FakeWebSocket, flushPromises } from "./roomSocketTestSupport";
+import { agentSessionIsValid } from "./roomSocketSchema";
 
 afterEach(() => {
   vi.useRealTimers();
 });
 
 describe("Agent Session socket receipts", () => {
+  it("accepts every public runtime lifecycle state without private authority", () => {
+    const session = {
+      room_id: "general",
+      session_id: "codex-session-1",
+      participant_id: "codex-session-1",
+      display_name: "Terra",
+      runtime_status: "stopped",
+      process_ownership: "server",
+      external_owned: false,
+      provider_kind: "codex_live_session",
+      model: "gpt-5.6-terra",
+    };
+    for (const runtime_status of [
+      "stopped", "available", "starting", "idle", "busy", "paused",
+      "recovering", "stopping", "error", "disconnected",
+    ]) {
+      expect(agentSessionIsValid({ ...session, runtime_status }, "general")).toBe(true);
+    }
+    expect(agentSessionIsValid({ ...session, runtime_status: "unknown" }, "general")).toBe(false);
+    expect(agentSessionIsValid({ ...session, runtime_status: "idle", runtime_handle_id: "private" }, "general")).toBe(false);
+  });
+
   it("accepts agent.create only with its durable stopped-session receipt", async () => {
     vi.useFakeTimers();
     const sockets: FakeWebSocket[] = [];
