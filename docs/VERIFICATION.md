@@ -6,6 +6,8 @@ Status: current real-client verification owner
 
 Verification claims only the boundary actually observed. Build, lint, unit tests, simulated sockets, responsive browser emulation, and real provider runs are separate evidence classes and cannot substitute for one another.
 
+`make verify` regenerates TypeScript protocol bindings from the Rust owner, builds the React production bundle, runs the socket-client tests, and then runs the Rust architecture, source-growth, formatting, check, Clippy, and test gates.
+
 ## Frontend real-flow cleanup
 
 When Computer Use is used for frontend verification, every resource created solely for that verification is shut down after its evidence is collected:
@@ -28,4 +30,3 @@ Frontend flows that require real Agent Sessions use exactly this matrix:
 The verification records the exact provider/model identifiers exposed by the installed runtime at execution time. Missing login, unavailable capability, unsupported model, or provider failure remains visible as failed or `unknown`; it never triggers model substitution, a mock pass, or a fallback provider.
 
 Provider credentials, private conversation state, hidden reasoning, and provider-private identifiers are excluded from screenshots, logs, fixtures, public events, and committed artifacts.
-

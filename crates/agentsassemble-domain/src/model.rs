@@ -4,12 +4,13 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+use ts_rs::TS;
 use uuid::Uuid;
 
 pub const LOCAL_OPERATOR_USER_ID: &str = "operator-local-user";
 pub const LOCAL_OPERATOR_PARTICIPANT_ID: &str = "operator-local";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum RoomStatus {
     Active,
@@ -17,7 +18,7 @@ pub enum RoomStatus {
     Archived,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct Room {
     pub room_id: String,
     pub room_uid: Uuid,
@@ -41,7 +42,7 @@ impl Room {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum ParticipantStatus {
     Joined,
@@ -51,7 +52,7 @@ pub enum ParticipantStatus {
     Detached,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct Participant {
     pub room_id: String,
     pub participant_id: String,
@@ -68,21 +69,21 @@ pub struct Participant {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum ClientKind {
     Browser,
     AgentBridge,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum InviteScope {
     ReadWrite,
     ReadOnly,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[allow(clippy::struct_excessive_bools)] // Wire capabilities are independent named permissions.
 pub struct CapabilitySet {
     #[serde(rename = "room.history")]
@@ -139,7 +140,7 @@ impl CapabilitySet {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct AuthenticatedPrincipal {
     pub principal_id: String,
     pub participant_id: String,
@@ -150,13 +151,13 @@ pub struct AuthenticatedPrincipal {
     pub capabilities: CapabilitySet,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct Actor {
     pub participant_id: String,
     pub participant_type: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 pub struct RoomEvent {
     pub v: u32,
     pub id: String,
@@ -186,7 +187,7 @@ pub struct RoomEvent {
     pub extra: BTreeMap<String, Value>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct RoomAppearance {
     pub banner_preset: String,
     pub banner_image_url: String,
@@ -195,8 +196,22 @@ pub struct RoomAppearance {
     pub invite_scope: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct RoomSettings {
+    pub label: String,
+    pub topic: String,
+    pub appearance: RoomAppearance,
+    pub conversation_mode: String,
+    pub tool_mode: String,
+    pub ordered_exclude_previous_speaker: bool,
+    pub max_relay_turns: u32,
+    pub channels: Vec<Value>,
+    pub activity_plugin: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct PublicRoomSettings {
+    pub settings_revision: String,
     pub label: String,
     pub topic: String,
     pub appearance: RoomAppearance,
@@ -236,17 +251,24 @@ impl RoomSettings {
 /// # Errors
 ///
 /// Returns the serialization error if a settings field cannot be encoded.
-pub fn public_settings(settings: &RoomSettings) -> Result<Value, serde_json::Error> {
-    let mut value = serde_json::to_value(settings)?;
+pub fn public_settings(settings: &RoomSettings) -> Result<PublicRoomSettings, serde_json::Error> {
     let canonical = serde_json::to_vec(settings)?;
     let revision = format!("room-settings-v1-{:x}", Sha256::digest(canonical));
-    if let Value::Object(object) = &mut value {
-        object.insert("settings_revision".to_owned(), Value::String(revision));
-    }
-    Ok(value)
+    Ok(PublicRoomSettings {
+        settings_revision: revision,
+        label: settings.label.clone(),
+        topic: settings.topic.clone(),
+        appearance: settings.appearance.clone(),
+        conversation_mode: settings.conversation_mode.clone(),
+        tool_mode: settings.tool_mode.clone(),
+        ordered_exclude_previous_speaker: settings.ordered_exclude_previous_speaker,
+        max_relay_turns: settings.max_relay_turns,
+        channels: settings.channels.clone(),
+        activity_plugin: settings.activity_plugin.clone(),
+    })
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum SnapshotMode {
     Initial,
@@ -255,7 +277,7 @@ pub enum SnapshotMode {
     Bridge,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct ProviderCatalog {
     pub status: String,
     pub catalog_revision: String,

@@ -1,8 +1,9 @@
 use agentsassemble_domain::{
-    CapabilitySet, Participant, ProviderCatalog, Room, RoomEvent, SnapshotMode,
+    CapabilitySet, Participant, ProviderCatalog, PublicRoomSettings, Room, RoomEvent, SnapshotMode,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use ts_rs::TS;
 
 pub const PROTOCOL_VERSION: u32 = 1;
 
@@ -47,11 +48,11 @@ pub enum ServerFrame {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
 pub struct RoomSnapshot {
     pub stream: &'static str,
     pub room: Room,
-    pub room_settings: Value,
+    pub room_settings: PublicRoomSettings,
     pub participants: Vec<Participant>,
     pub agent_sessions: Vec<Value>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -68,7 +69,7 @@ pub struct RoomSnapshot {
     pub capabilities: CapabilitySet,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 pub struct CommandAck {
     pub request_id: String,
     pub accepted: bool,
@@ -86,13 +87,13 @@ pub struct CommandNack {
     pub error: ProtocolError,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 pub struct ProtocolError {
     pub code: String,
     pub message: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 pub struct TicketResponse {
     pub ticket: String,
     pub ttl_seconds: u64,

@@ -26,6 +26,8 @@ struct Args {
     database: PathBuf,
     #[arg(long)]
     bootstrap_room: Option<String>,
+    #[arg(long)]
+    frontend: Option<PathBuf>,
     #[arg(long, env = "AGENTSASSEMBLE_HOST_TOKEN")]
     host_token: String,
 }
@@ -64,11 +66,23 @@ async fn main() -> anyhow::Result<()> {
             signal.cancel();
         }
     });
-    let state = AppState::local(
+    let mut state = AppState::local(
         store,
         TicketStore::new(Duration::from_secs(30), 4_096),
         host_secret,
     );
+    let frontend_path = if let Some(frontend) = args.frontend {
+        let path = frontend
+            .canonicalize()
+            .with_context(|| format!("resolve frontend directory {}", frontend.display()))?;
+        if !path.join("index.html").is_file() {
+            anyhow::bail!("frontend directory {} has no index.html", path.display());
+        }
+        state = state.with_frontend(path.clone());
+        Some(path)
+    } else {
+        None
+    };
     println!(
         "{}",
         serde_json::to_string(&json!({
@@ -76,6 +90,7 @@ async fn main() -> anyhow::Result<()> {
             "runtime": "rust",
             "address": format!("http://{address}"),
             "database": database_path,
+            "frontend": frontend_path,
             "pid": std::process::id(),
         }))?
     );

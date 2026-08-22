@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
 
 use agentsassemble_domain::{
     AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID,
@@ -15,7 +15,7 @@ use axum::{
         ws::{Message, WebSocket},
     },
     http::{HeaderMap, StatusCode},
-    response::{IntoResponse, Response},
+    response::{IntoResponse, Redirect, Response},
     routing::{get, post},
 };
 use futures_util::{SinkExt, StreamExt};
@@ -29,6 +29,7 @@ use tokio::{
     time::Instant,
 };
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use tower_http::services::{ServeDir, ServeFile};
 
 use crate::{RoomRuntime, TicketStore};
 
@@ -49,6 +50,7 @@ pub struct AppState {
     pub shutdown: CancellationToken,
     pub connections: TaskTracker,
     pub connection_admission: Arc<Semaphore>,
+    pub frontend_root: Option<PathBuf>,
 }
 
 impl AppState {
@@ -62,7 +64,14 @@ impl AppState {
             shutdown: CancellationToken::new(),
             connections: TaskTracker::new(),
             connection_admission: Arc::new(Semaphore::new(MAX_WS_CONNECTIONS)),
+            frontend_root: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_frontend(mut self, frontend_root: PathBuf) -> Self {
+        self.frontend_root = Some(frontend_root);
+        self
     }
 }
 
@@ -109,11 +118,21 @@ struct TicketQuery {
 }
 
 pub fn router(state: AppState) -> Router {
-    Router::new()
+    let frontend_root = state.frontend_root.clone();
+    let mut app = Router::new()
         .route("/healthz", get(health))
         .route("/api/ws-ticket", post(issue_ticket))
-        .route("/ws", get(upgrade_socket))
-        .with_state(state)
+        .route("/ws", get(upgrade_socket));
+    if let Some(frontend_root) = frontend_root {
+        let index = frontend_root.join("index.html");
+        app = app
+            .route("/", get(|| async { Redirect::temporary("/app/") }))
+            .nest_service(
+                "/app",
+                ServeDir::new(frontend_root).not_found_service(ServeFile::new(index)),
+            );
+    }
+    app.with_state(state)
 }
 
 /// Serves the loopback runtime until its explicit cancellation token fires.
