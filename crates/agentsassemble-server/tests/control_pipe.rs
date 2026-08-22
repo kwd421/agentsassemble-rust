@@ -8,6 +8,19 @@ use tokio::{
 
 const HOST_TOKEN: &str = "control-pipe-test-host-token-000000001";
 
+#[test]
+fn command_line_does_not_accept_a_host_secret() {
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_agentsassemble-server"))
+        .arg("--help")
+        .output()
+        .unwrap_or_else(|error| panic!("run server help: {error}"));
+    assert!(output.status.success());
+    let help = String::from_utf8(output.stdout)
+        .unwrap_or_else(|error| panic!("decode server help: {error}"));
+    assert!(!help.contains("host-token"));
+    assert!(!help.contains("AGENTSASSEMBLE_HOST_TOKEN"));
+}
+
 struct ControlledServer {
     child: Child,
     control: ChildStdin,
@@ -45,7 +58,6 @@ async fn start_controlled(database: &Path) -> ControlledServer {
                 .unwrap_or_else(|| panic!("database path is not UTF-8")),
             "--bootstrap-room",
             "general",
-            "--control-stdin",
         ])
         .env_remove("AGENTSASSEMBLE_HOST_TOKEN")
         .stdin(Stdio::piped())

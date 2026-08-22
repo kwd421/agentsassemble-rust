@@ -105,7 +105,6 @@ def _tracked_source(path: Path) -> bool:
     return (
         path.is_file()
         and path.suffix.lower() in SOURCE_SUFFIXES
-        and not path.name.lower().startswith("generated")
         and "node_modules" not in path.parts
         and "target" not in path.parts
         and "__pycache__" not in path.parts

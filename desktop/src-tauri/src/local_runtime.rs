@@ -39,8 +39,14 @@ pub struct LocalRuntime {
 struct RuntimeProcess {
     child: Child,
     control: Option<ChildStdin>,
+    watchdog: ParentWatchdog,
     address: Url,
     secret: SecretString,
+}
+
+struct ParentWatchdog {
+    child: Child,
+    control: Option<ChildStdin>,
 }
 
 enum TicketFailure {
@@ -84,8 +90,7 @@ impl LocalRuntime {
         };
         if must_start {
             if let Some(mut stopped) = process.take() {
-                stopped.control.take();
-                let _ = stopped.child.wait();
+                terminate_owned_runtime(&mut stopped);
             }
             *process = Some(start_runtime(app, &room_id)?);
         }
@@ -141,7 +146,6 @@ fn start_runtime(app: &AppHandle, room_id: &str) -> Result<RuntimeProcess, Strin
         .arg(&database)
         .arg("--bootstrap-room")
         .arg(room_id)
-        .arg("--control-stdin")
         .env_remove("AGENTSASSEMBLE_HOST_TOKEN")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -153,44 +157,52 @@ fn start_runtime(app: &AppHandle, room_id: &str) -> Result<RuntimeProcess, Strin
             executable.display()
         )
     })?;
+    let mut watchdog = match start_parent_watchdog(child.id()) {
+        Ok(watchdog) => watchdog,
+        Err(error) => {
+            terminate_owned_process(&mut child);
+            return Err(error);
+        }
+    };
     let Some(mut control) = child.stdin.take() else {
-        terminate_owned_process(&mut child);
+        abort_startup(&mut child, &mut watchdog);
         return Err("cannot open Rust runtime control pipe".to_owned());
     };
     if let Err(error) =
         writeln!(control, "{}", secret.expose_secret()).and_then(|()| control.flush())
     {
-        terminate_owned_process(&mut child);
+        abort_startup(&mut child, &mut watchdog);
         return Err(format!(
             "cannot initialize Rust runtime control pipe: {error}"
         ));
     }
     let Some(stdout) = child.stdout.take() else {
-        terminate_owned_process(&mut child);
+        abort_startup(&mut child, &mut watchdog);
         return Err("cannot capture Rust runtime startup output".to_owned());
     };
     let records = capture_startup_record(stdout, stdout_log);
     let record = match wait_for_startup(&mut child, &records) {
         Ok(record) => record,
         Err(error) => {
-            terminate_owned_process(&mut child);
+            abort_startup(&mut child, &mut watchdog);
             return Err(format!("{error} Details: {}", stderr_path.display()));
         }
     };
     let address = match validate_startup_record(&record, child.id()) {
         Ok(address) => address,
         Err(error) => {
-            terminate_owned_process(&mut child);
+            abort_startup(&mut child, &mut watchdog);
             return Err(error);
         }
     };
     if let Err(error) = prove_listening(&address) {
-        terminate_owned_process(&mut child);
+        abort_startup(&mut child, &mut watchdog);
         return Err(error);
     }
     Ok(RuntimeProcess {
         child,
         control: Some(control),
+        watchdog,
         address,
         secret,
     })
@@ -358,13 +370,87 @@ fn prove_listening(address: &Url) -> Result<(), String> {
 fn terminate_owned_runtime(runtime: &mut RuntimeProcess) {
     runtime.control.take();
     let deadline = Instant::now() + SHUTDOWN_GRACE;
+    let mut exited = false;
     while Instant::now() < deadline {
         if runtime.child.try_wait().ok().flatten().is_some() {
-            return;
+            exited = true;
+            break;
         }
         thread::sleep(Duration::from_millis(50));
     }
-    terminate_owned_process(&mut runtime.child);
+    if !exited {
+        terminate_owned_process(&mut runtime.child);
+    }
+    stop_parent_watchdog(&mut runtime.watchdog);
+}
+
+fn abort_startup(child: &mut Child, watchdog: &mut ParentWatchdog) {
+    terminate_owned_process(child);
+    stop_parent_watchdog(watchdog);
+}
+
+#[cfg(unix)]
+fn start_parent_watchdog(runtime_pid: u32) -> Result<ParentWatchdog, String> {
+    let mut child = Command::new("/bin/sh")
+        .args([
+            "-c",
+            "while IFS= read -r _; do :; done; kill -KILL -- \"-$1\" 2>/dev/null || true",
+            "agentsassemble-watchdog",
+            &runtime_pid.to_string(),
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|error| format!("cannot start runtime parent watchdog: {error}"))?;
+    let control = child
+        .stdin
+        .take()
+        .ok_or_else(|| "runtime parent watchdog has no control pipe".to_owned())?;
+    Ok(ParentWatchdog {
+        child,
+        control: Some(control),
+    })
+}
+
+#[cfg(windows)]
+fn start_parent_watchdog(runtime_pid: u32) -> Result<ParentWatchdog, String> {
+    let script = "$null = [Console]::In.ReadToEnd(); taskkill.exe /PID $args[0] /T /F | Out-Null";
+    let mut child = Command::new("powershell.exe")
+        .args([
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            script,
+            &runtime_pid.to_string(),
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|error| format!("cannot start runtime parent watchdog: {error}"))?;
+    let control = child
+        .stdin
+        .take()
+        .ok_or_else(|| "runtime parent watchdog has no control pipe".to_owned())?;
+    Ok(ParentWatchdog {
+        child,
+        control: Some(control),
+    })
+}
+
+fn stop_parent_watchdog(watchdog: &mut ParentWatchdog) {
+    watchdog.control.take();
+    let deadline = Instant::now() + Duration::from_secs(1);
+    while Instant::now() < deadline {
+        if watchdog.child.try_wait().ok().flatten().is_some() {
+            return;
+        }
+        thread::sleep(Duration::from_millis(25));
+    }
+    let _ = watchdog.child.kill();
+    let _ = watchdog.child.wait();
 }
 
 fn sidecar_executable(app: &AppHandle) -> Result<PathBuf, String> {
@@ -478,5 +564,57 @@ mod tests {
         assert!(!is_application_rejection(
             reqwest::StatusCode::SERVICE_UNAVAILABLE
         ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn watchdog_kills_a_stopped_runtime_when_parent_control_closes() {
+        use std::{process::Stdio, thread, time::Duration};
+
+        use nix::{
+            sys::signal::{Signal, kill},
+            unistd::Pid,
+        };
+
+        use super::{configure_process_group, start_parent_watchdog, terminate_owned_process};
+
+        let mut command = std::process::Command::new("/bin/sh");
+        command
+            .args(["-c", "while :; do sleep 60; done"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        configure_process_group(&mut command);
+        let mut runtime = command
+            .spawn()
+            .unwrap_or_else(|error| panic!("spawn stopped runtime fixture: {error}"));
+        let mut watchdog = start_parent_watchdog(runtime.id())
+            .unwrap_or_else(|error| panic!("start parent watchdog: {error}"));
+        let runtime_pid = i32::try_from(runtime.id())
+            .unwrap_or_else(|error| panic!("convert runtime pid: {error}"));
+        kill(Pid::from_raw(runtime_pid), Signal::SIGSTOP)
+            .unwrap_or_else(|error| panic!("stop runtime fixture: {error}"));
+
+        watchdog.control.take();
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        loop {
+            if runtime
+                .try_wait()
+                .unwrap_or_else(|error| panic!("inspect runtime fixture: {error}"))
+                .is_some()
+            {
+                break;
+            }
+            if std::time::Instant::now() >= deadline {
+                terminate_owned_process(&mut runtime);
+                panic!("watchdog did not kill the stopped runtime");
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+        let watchdog_status = watchdog
+            .child
+            .wait()
+            .unwrap_or_else(|error| panic!("wait for parent watchdog: {error}"));
+        assert!(watchdog_status.success());
     }
 }

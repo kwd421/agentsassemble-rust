@@ -33,10 +33,6 @@ struct Args {
     bootstrap_room: Option<String>,
     #[arg(long)]
     frontend: Option<PathBuf>,
-    #[arg(long, env = "AGENTSASSEMBLE_HOST_TOKEN")]
-    host_token: Option<String>,
-    #[arg(long)]
-    control_stdin: bool,
 }
 
 #[tokio::main]
@@ -46,27 +42,16 @@ async fn main() -> anyhow::Result<()> {
         .with_writer(std::io::stderr)
         .init();
     let args = Args::parse();
-    let (host_token, control_stdin) = if args.control_stdin {
-        let mut stdin = tokio::io::stdin();
-        let secret = read_control_secret(&mut stdin).await?;
-        (secret, Some(stdin))
-    } else {
-        (
-            args.host_token
-                .context("--host-token or AGENTSASSEMBLE_HOST_TOKEN is required")?,
-            None,
-        )
-    };
+    let mut stdin = tokio::io::stdin();
+    let host_token = read_control_secret(&mut stdin).await?;
     let host_secret = HostSecret::new(host_token)?;
     let cancellation = CancellationToken::new();
-    if let Some(mut stdin) = control_stdin {
-        let parent_death = cancellation.clone();
-        tokio::spawn(async move {
-            let mut byte = [0_u8; 1];
-            let _ = stdin.read(&mut byte).await;
-            parent_death.cancel();
-        });
-    }
+    let parent_death = cancellation.clone();
+    tokio::spawn(async move {
+        let mut byte = [0_u8; 1];
+        let _ = stdin.read(&mut byte).await;
+        parent_death.cancel();
+    });
     if args.bind.ip() != IpAddr::V4(Ipv4Addr::LOCALHOST) && !args.bind.ip().is_loopback() {
         anyhow::bail!("the local runtime may bind only to loopback");
     }

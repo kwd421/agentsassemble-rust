@@ -14,32 +14,46 @@ use axum::{
         Query, State, WebSocketUpgrade,
         ws::{Message, WebSocket},
     },
-    http::{HeaderMap, StatusCode},
+    http::{HeaderMap, HeaderValue, StatusCode, header},
+    middleware,
     response::{IntoResponse, Redirect, Response},
     routing::{get, post},
 };
 use futures_util::{SinkExt, StreamExt};
+use hyper::server::conn::http1;
+use hyper_util::{
+    rt::{TokioIo, TokioTimer},
+    service::TowerToHyperService,
+};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use subtle::ConstantTimeEq;
 use thiserror::Error;
 use tokio::{
-    net::TcpListener,
+    net::{TcpListener, TcpStream},
     sync::{OwnedSemaphorePermit, Semaphore},
     time::Instant,
 };
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use tower_http::services::{ServeDir, ServeFile};
+use tower_http::{
+    services::{ServeDir, ServeFile},
+    timeout::RequestBodyDeadlineLayer,
+};
 
 use crate::{RoomRuntime, TicketStore};
 
 const MAX_WS_MESSAGE_BYTES: usize = 256 * 1024;
 const MAX_WS_CONNECTIONS: usize = 128;
+const MAX_HTTP_CONNECTIONS: usize = 128;
+const HTTP_HEADER_TIMEOUT: Duration = Duration::from_secs(3);
+const HTTP_BODY_DEADLINE: Duration = Duration::from_secs(10);
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 const SOCKET_IDLE_TIMEOUT: Duration = Duration::from_mins(5);
 const INGRESS_WINDOW: Duration = Duration::from_secs(10);
 const INGRESS_MESSAGES_PER_WINDOW: usize = 256;
 const INGRESS_BYTES_PER_WINDOW: usize = 2 * 1024 * 1024;
+const INGRESS_CONTROL_FRAMES_PER_WINDOW: usize = 64;
+const CONTENT_SECURITY_POLICY: &str = "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' ws://127.0.0.1:*; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
 
 #[derive(Clone)]
 pub struct AppState {
@@ -133,6 +147,8 @@ pub fn router(state: AppState) -> Router {
             );
     }
     app.with_state(state)
+        .layer(RequestBodyDeadlineLayer::new(HTTP_BODY_DEADLINE))
+        .layer(middleware::map_response(security_headers))
 }
 
 /// Serves the loopback runtime until its explicit cancellation token fires.
@@ -148,14 +164,71 @@ pub async fn serve(
     let rooms = state.rooms.clone();
     let connections = state.connections.clone();
     let connection_shutdown = state.shutdown.clone();
-    let result = axum::serve(listener, router(state))
-        .with_graceful_shutdown(cancellation.cancelled_owned())
-        .await;
+    let http_admission = Arc::new(Semaphore::new(MAX_HTTP_CONNECTIONS));
+    let app = router(state);
+    let result = loop {
+        let accepted = tokio::select! {
+            () = cancellation.cancelled() => break Ok(()),
+            accepted = listener.accept() => accepted,
+        };
+        let (stream, peer) = match accepted {
+            Ok(accepted) => accepted,
+            Err(error) => break Err(error),
+        };
+        let Ok(permit) = http_admission.clone().try_acquire_owned() else {
+            tracing::warn!(%peer, "HTTP connection admission limit reached");
+            drop(stream);
+            continue;
+        };
+        let connection_app = app.clone();
+        let shutdown = connection_shutdown.clone();
+        connections.spawn(async move {
+            tokio::select! {
+                () = shutdown.cancelled() => {}
+                () = serve_http_connection(stream, connection_app, permit) => {}
+            }
+        });
+    };
     connection_shutdown.cancel();
     connections.close();
     connections.wait().await;
     rooms.shutdown().await;
     result.map_err(ServeError::Io)
+}
+
+async fn serve_http_connection(stream: TcpStream, app: Router, _permit: OwnedSemaphorePermit) {
+    let mut builder = http1::Builder::new();
+    builder
+        .timer(TokioTimer::new())
+        .header_read_timeout(HTTP_HEADER_TIMEOUT)
+        .max_buf_size(MAX_WS_MESSAGE_BYTES);
+    let connection = builder
+        .serve_connection(TokioIo::new(stream), TowerToHyperService::new(app))
+        .with_upgrades();
+    if let Err(error) = connection.await {
+        tracing::debug!(error = ?error, "HTTP connection closed");
+    }
+}
+
+async fn security_headers(mut response: Response) -> Response {
+    let headers = response.headers_mut();
+    headers.insert(
+        header::CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static(CONTENT_SECURITY_POLICY),
+    );
+    headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    headers.insert(
+        header::HeaderName::from_static("x-frame-options"),
+        HeaderValue::from_static("DENY"),
+    );
+    headers.insert(
+        header::REFERRER_POLICY,
+        HeaderValue::from_static("no-referrer"),
+    );
+    response
 }
 
 async fn health() -> Json<Value> {
@@ -348,11 +421,23 @@ async fn socket_session(
             () = state.shutdown.cancelled() => return,
             incoming = tokio::time::timeout(SOCKET_IDLE_TIMEOUT, receiver.next()) => {
                 let Ok(Some(Ok(message))) = incoming else { return; };
-                let Message::Text(raw) = message else { continue; };
-                if !ingress.admit(raw.len()) {
+                let (frame_bytes, control_frame) = match &message {
+                    Message::Text(raw) => (raw.len(), false),
+                    Message::Binary(raw) => (raw.len(), false),
+                    Message::Ping(raw) | Message::Pong(raw) => (raw.len(), true),
+                    Message::Close(_) => return,
+                };
+                if !ingress.admit(frame_bytes, control_frame) {
                     let _ = send_nack(&mut sender, "", "frame", "ingress_limited", "WebSocket ingress budget exceeded.").await;
                     return;
                 }
+                let Message::Text(raw) = message else {
+                    if matches!(message, Message::Binary(_)) {
+                        let _ = send_nack(&mut sender, "", "frame", "binary_frame_unsupported", "Binary WebSocket frames are not supported.").await;
+                        return;
+                    }
+                    continue;
+                };
                 match serde_json::from_str::<ClientFrame>(raw.as_str()) {
                     Ok(ClientFrame::Command { request_id, action, payload }) => {
                         if request_id.is_empty()
@@ -555,6 +640,7 @@ struct IngressBudget {
     window_started: Instant,
     messages: usize,
     bytes: usize,
+    control_frames: usize,
 }
 
 impl IngressBudget {
@@ -563,19 +649,26 @@ impl IngressBudget {
             window_started: Instant::now(),
             messages: 0,
             bytes: 0,
+            control_frames: 0,
         }
     }
 
-    fn admit(&mut self, bytes: usize) -> bool {
+    fn admit(&mut self, bytes: usize, control_frame: bool) -> bool {
         let now = Instant::now();
         if now.duration_since(self.window_started) >= INGRESS_WINDOW {
             self.window_started = now;
             self.messages = 0;
             self.bytes = 0;
+            self.control_frames = 0;
         }
         self.messages = self.messages.saturating_add(1);
         self.bytes = self.bytes.saturating_add(bytes);
-        self.messages <= INGRESS_MESSAGES_PER_WINDOW && self.bytes <= INGRESS_BYTES_PER_WINDOW
+        if control_frame {
+            self.control_frames = self.control_frames.saturating_add(1);
+        }
+        self.messages <= INGRESS_MESSAGES_PER_WINDOW
+            && self.bytes <= INGRESS_BYTES_PER_WINDOW
+            && self.control_frames <= INGRESS_CONTROL_FRAMES_PER_WINDOW
     }
 }
 
@@ -585,7 +678,7 @@ mod tests {
 
     use agentsassemble_persistence::PersistenceError;
 
-    use super::{HostSecret, persistence_error};
+    use super::{HostSecret, INGRESS_CONTROL_FRAMES_PER_WINDOW, IngressBudget, persistence_error};
 
     #[test]
     fn host_secret_invariant_cannot_be_bypassed_by_an_adapter() {
@@ -608,5 +701,14 @@ mod tests {
             assert_eq!(message, "Persistence operation failed.");
             assert!(!message.contains("/private"));
         }
+    }
+
+    #[test]
+    fn control_frames_have_an_independent_ingress_budget() {
+        let mut budget = IngressBudget::new();
+        for _ in 0..INGRESS_CONTROL_FRAMES_PER_WINDOW {
+            assert!(budget.admit(0, true));
+        }
+        assert!(!budget.admit(0, true));
     }
 }

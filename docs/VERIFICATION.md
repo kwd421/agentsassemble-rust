@@ -8,7 +8,9 @@ Verification claims only the boundary actually observed. Build, lint, unit tests
 
 `make verify` regenerates TypeScript protocol bindings from the Rust owner, builds the React production bundle, runs the socket-client tests, verifies the isolated Tauri shell and bundled sidecar input, and then runs the Rust architecture, source-growth, formatting, check, Clippy, and test gates.
 
-The sidecar boundary tests close the parent control pipe and prove the process exits and releases its SQLite writer lease for a restart. Desktop real-flow verification separately kills the owning Tauri process and suspends a live sidecar to prove parent-death cleanup and unhealthy-child replacement; only the exact processes created by that verification may be signalled.
+The sidecar boundary tests close the parent control pipe and prove the process exits and releases its SQLite writer lease for a restart. A watchdog regression test suspends an owned process before closing the independent parent control pipe and proves the stopped process group is force-killed. Desktop real-flow verification separately kills the owning Tauri process while its live sidecar is suspended to prove the packaged watchdog cleanup, then suspends a live sidecar with its parent active to prove unhealthy-child replacement; only the exact processes created by that verification may be signalled.
+
+Server boundary tests also prove that pre-authentication HTTP admission is bounded, incomplete headers expire, standalone static assets carry CSP and browser hardening headers, binary WebSocket ingress is rejected, and command-line help exposes no host-secret argument or environment path.
 
 ## Frontend real-flow cleanup
 

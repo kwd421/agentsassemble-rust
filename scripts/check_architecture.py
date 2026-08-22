@@ -90,6 +90,16 @@ def architecture_violations(payload: dict[str, object]) -> tuple[str, ...]:
             for dependency in dependencies
             if isinstance(dependency, dict)
         }
+        local_path_names = {
+            str(dependency.get("name"))
+            for dependency in dependencies
+            if isinstance(dependency, dict) and dependency.get("path") is not None
+        }
+        unapproved_paths = sorted(local_path_names - set(OWNED_CRATES))
+        found.extend(
+            f"{name} imports unapproved local path dependency {item}"
+            for item in unapproved_paths
+        )
         workspace_dependencies = dependency_names & set(OWNED_CRATES)
         disallowed = sorted(workspace_dependencies - OWNED_CRATES[name])
         found.extend(f"{name} imports disallowed workspace crate {item}" for item in disallowed)
@@ -117,6 +127,11 @@ def desktop_violations(payload: dict[str, object]) -> tuple[str, ...]:
         if isinstance(dependency, dict)
     }
     allowed_owned = {"agentsassemble-domain"}
+    local_path_names = {
+        str(dependency.get("name"))
+        for dependency in dependencies
+        if isinstance(dependency, dict) and dependency.get("path") is not None
+    }
     found = [
         f"desktop imports disallowed workspace crate {name}"
         for name in sorted((names & set(OWNED_CRATES)) - allowed_owned)
@@ -124,6 +139,10 @@ def desktop_violations(payload: dict[str, object]) -> tuple[str, ...]:
     found.extend(
         f"desktop imports forbidden server infrastructure dependency {name}"
         for name in sorted(names & {"axum", "sqlx", "tower", "tower-http"})
+    )
+    found.extend(
+        f"desktop imports unapproved local path dependency {name}"
+        for name in sorted(local_path_names - allowed_owned)
     )
     return tuple(found)
 

@@ -5,8 +5,9 @@
 PYTHON ?= python3
 
 architecture-check:
-	$(PYTHON) scripts/check_architecture.py
-	$(PYTHON) scripts/check_source_growth.py
+	$(PYTHON) -B scripts/check_architecture.py
+	$(PYTHON) -B scripts/check_source_growth.py
+	$(PYTHON) -B -m unittest scripts/test_policy_gates.py
 
 bindings:
 	cargo run -p agentsassemble-protocol --bin export_types

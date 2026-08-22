@@ -20,6 +20,8 @@ chrono = { version = "0.4.45", features = ["serde"] }
 clap = { version = "4.5.48", features = ["derive", "env"] }
 futures-util = "0.3.31"
 fs2 = "0.4.3"
+hyper = { version = "1.11.0", features = ["http1", "server"] }
+hyper-util = { version = "0.1.20", features = ["service", "tokio"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 reqwest = { version = "0.13.4", default-features = false, features = ["json", "rustls"] }
@@ -30,7 +32,7 @@ thiserror = "2.0.20"
 tokio = { version = "1.53.1", features = ["full"] }
 tokio-util = { version = "0.7.19", features = ["rt"] }
 tokio-tungstenite = "0.30.0"
-tower-http = { version = "0.7.0", features = ["cors", "fs", "limit", "trace"] }
+tower-http = { version = "0.7.0", features = ["cors", "fs", "limit", "timeout", "trace"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
 ts-rs = { version = "12.0.1", features = ["chrono-impl", "serde-json-impl", "uuid-impl"] }
