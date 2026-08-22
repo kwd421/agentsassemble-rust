@@ -31,10 +31,7 @@ fn pem_private_key() -> &'static Regex {
 
 fn jwt_value() -> &'static Regex {
     static VALUE: OnceLock<Regex> = OnceLock::new();
-    regex(
-        r"(?P<prefix>^|[^A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{8,}(?:\.[A-Za-z0-9_-]{8,}){1,4}(?P<suffix>[^A-Za-z0-9_-]|$)",
-        &VALUE,
-    )
+    regex(r"eyJ[A-Za-z0-9_-]{8,}(?:\.[A-Za-z0-9_-]{8,}){1,4}", &VALUE)
 }
 
 fn bearer_value() -> &'static Regex {
@@ -119,6 +116,28 @@ fn replace_preserving(text: &str, matcher: &Regex, replacement: &str) -> String 
         .into_owned()
 }
 
+fn is_jwt_boundary(value: Option<char>) -> bool {
+    value.is_none_or(|character| {
+        !character.is_ascii_alphanumeric() && character != '_' && character != '-'
+    })
+}
+
+fn redact_jwt_values(text: &str) -> String {
+    let mut redacted = String::with_capacity(text.len());
+    let mut cursor = 0;
+    for matched in jwt_value().find_iter(text) {
+        let prefix = text[..matched.start()].chars().next_back();
+        let suffix = text[matched.end()..].chars().next();
+        if is_jwt_boundary(prefix) && is_jwt_boundary(suffix) {
+            redacted.push_str(&text[cursor..matched.start()]);
+            redacted.push_str("[redacted JWT]");
+            cursor = matched.end();
+        }
+    }
+    redacted.push_str(&text[cursor..]);
+    redacted
+}
+
 fn tail_chars(text: &str, limit: usize) -> String {
     let count = text.chars().count();
     if count <= limit {
@@ -145,7 +164,7 @@ pub fn redact_persisted_diagnostic_text(value: &str, limit: usize) -> String {
     text = sensitive_http_header()
         .replace_all(&text, "${prefix}${name}: [redacted]")
         .into_owned();
-    text = replace_preserving(&text, jwt_value(), "[redacted JWT]");
+    text = redact_jwt_values(&text);
     text = tail_chars(&text, bounded_limit.saturating_mul(2).max(32_000));
     text = bearer_value()
         .replace_all(&text, "Bearer [redacted]")
@@ -200,5 +219,17 @@ mod tests {
     fn strips_nul_and_keeps_the_bounded_tail() {
         let redacted = redact_persisted_diagnostic_text("old-prefix\0useful-tail", 11);
         assert_eq!(redacted, "useful-tail");
+    }
+
+    #[test]
+    fn redacts_adjacent_jwts_without_consuming_their_boundary() {
+        let input = "eyJaaaaaaaa.bbbbbbbb eyJcccccccc.dddddddd";
+        let redacted = redact_persisted_diagnostic_text(input, 4_000);
+
+        assert_eq!(redacted, "[redacted JWT] [redacted JWT]");
+        assert_eq!(
+            redact_persisted_diagnostic_text("xeyJaaaaaaaa.bbbbbbbb", 4_000),
+            "xeyJaaaaaaaa.bbbbbbbb"
+        );
     }
 }
