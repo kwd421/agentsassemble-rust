@@ -167,10 +167,7 @@ async fn lifecycle_commands_use_the_owned_codex_app_server_before_committing() {
     let started = receive_until_ack(&mut socket, 4).await;
     assert_eq!(started["result"]["agent_session"]["runtime_status"], "idle");
     assert_eq!(started["result"]["runtime_reused"], false);
-    assert_eq!(
-        started["result"]["agent_session"]["provider_session_active"],
-        false
-    );
+    assert_session_flag(&started, "provider_session_active");
     send_command(
         &mut socket,
         "second-start",
@@ -180,6 +177,7 @@ async fn lifecycle_commands_use_the_owned_codex_app_server_before_committing() {
     .await;
     let reused = receive_until_ack(&mut socket, 3).await;
     assert_eq!(reused["result"]["runtime_reused"], true);
+    assert_session_flag(&reused, "provider_session_reused");
     send_command(
         &mut socket,
         "stop-runtime",
@@ -201,6 +199,7 @@ async fn lifecycle_commands_use_the_owned_codex_app_server_before_committing() {
     .await;
     let running = receive_until_ack(&mut socket, 3).await;
     assert_eq!(running["result"]["agent_session"]["runtime_status"], "idle");
+    assert_session_flag(&running, "provider_session_reused");
     socket
         .close(None)
         .await
@@ -240,7 +239,7 @@ async fn shutdown_checkpoints_gone_after_aborting_initialization() {
     let started_path = directory.path().join("initialization-started");
     let release_path = directory.path().join("release-initialization");
     let fixture = format!(
-        "#!/bin/sh\nprintf '%s' \"$$\" > {}\nIFS= read -r initialize\nwhile [ ! -f {} ]; do :; done\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nIFS= read -r forever\n",
+        "#!/bin/sh\nprintf '%s' \"$$\" > {}\nIFS= read -r initialize\nwhile [ ! -f {} ]; do :; done\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nIFS= read -r thread\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{{\"thread\":{{\"id\":\"thread-1\"}}}}}}'\nIFS= read -r forever\n",
         shell_quote(&started_path),
         shell_quote(&release_path),
     );
@@ -316,6 +315,10 @@ fn assert_public_session(session: &Value) {
             "public Agent Session exposed {private}"
         );
     }
+}
+
+fn assert_session_flag(response: &Value, field: &str) {
+    assert_eq!(response["result"]["agent_session"][field], true);
 }
 
 async fn start(store: SqliteStore, catalog: ProviderCatalog) -> RunningServer {
@@ -520,7 +523,7 @@ async fn bootstrap(store: &SqliteStore) {
 
 fn agent_catalog(root: &Path) -> ProviderCatalog {
     #[cfg(unix)]
-    let fixture: &[u8] = b"#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\nIFS= read -r initialized\nIFS= read -r forever\n";
+    let fixture: &[u8] = b"#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\nIFS= read -r initialized\nIFS= read -r thread\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"thread\":{\"id\":\"thread-1\"}}}'\nIFS= read -r forever\n";
     #[cfg(not(unix))]
     let fixture: &[u8] = b"provider fixture";
     agent_catalog_with_fixture(root, fixture)

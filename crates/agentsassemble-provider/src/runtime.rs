@@ -19,9 +19,18 @@ const DRIVER_STOP_TIMEOUT: Duration = Duration::from_secs(5);
 pub(crate) type DriverFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 pub(crate) trait ProviderDriver: Send {
-    fn ensure_ready(&mut self) -> DriverFuture<'_, Result<(), DriverError>>;
+    fn attach_session<'a>(
+        &'a mut self,
+        session: &'a DurableAgentSession,
+    ) -> DriverFuture<'a, Result<ProviderSessionAttachment, DriverError>>;
     fn is_alive(&mut self) -> Result<bool, DriverError>;
     fn stop(&mut self) -> DriverFuture<'_, Result<(), DriverError>>;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ProviderSessionAttachment {
+    pub(crate) provider_session_id: String,
+    pub(crate) reused: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
@@ -653,17 +662,17 @@ impl Default for ProviderAdapter {
 }
 
 fn started(
-    session: &DurableAgentSession,
     runtime: &OwnedRuntime,
     runtime_reused: bool,
+    attachment: ProviderSessionAttachment,
 ) -> ProviderRuntimeStarted {
     ProviderRuntimeStarted {
         runtime_handle_id: runtime.handle_id.clone(),
         runtime_owner_id: runtime.owner_id.clone(),
-        provider_session_id: session.provider_session_id.clone(),
+        provider_session_id: attachment.provider_session_id,
         runtime_reused,
-        provider_session_reused: false,
-        provider_session_active: false,
+        provider_session_reused: attachment.reused,
+        provider_session_active: true,
     }
 }
 
@@ -699,8 +708,8 @@ async fn reuse_owned_runtime(
             &runtime.owner_id,
         ));
     }
-    match runtime.driver.ensure_ready().await {
-        Ok(()) => Ok(started(session, runtime, true)),
+    match runtime.driver.attach_session(session).await {
+        Ok(attachment) => Ok(started(runtime, true, attachment)),
         Err(error) => Err(ProviderAdapterError::uncertain(
             error,
             &runtime.handle_id,
@@ -713,8 +722,8 @@ async fn initialize_owned_runtime(
     session: &DurableAgentSession,
     runtime: &mut OwnedRuntime,
 ) -> Result<ProviderRuntimeStarted, ProviderAdapterError> {
-    match runtime.driver.ensure_ready().await {
-        Ok(()) => Ok(started(session, runtime, false)),
+    match runtime.driver.attach_session(session).await {
+        Ok(attachment) => Ok(started(runtime, false, attachment)),
         Err(error) => Err(ProviderAdapterError::uncertain(
             error,
             &runtime.handle_id,
@@ -754,6 +763,10 @@ mod tests;
 #[cfg(all(test, unix))]
 #[path = "runtime_launch_tests.rs"]
 mod launch_tests;
+
+#[cfg(all(test, unix))]
+#[path = "runtime_provider_session_tests.rs"]
+mod provider_session_tests;
 
 #[path = "runtime_observation.rs"]
 mod observation;

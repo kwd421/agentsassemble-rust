@@ -23,7 +23,7 @@ use crate::process::sanitize_environment;
 use crate::{
     filesystem::bind_executable,
     launch_error::DriverLaunchError,
-    runtime::{DriverError, DriverFuture, ProviderDriver},
+    runtime::{DriverError, DriverFuture, ProviderDriver, ProviderSessionAttachment},
 };
 #[cfg(unix)]
 use crate::{
@@ -36,6 +36,13 @@ const STOP_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_PROTOCOL_LINE_BYTES: usize = 256 * 1024;
 const MAX_PENDING_NOTIFICATIONS: usize = 256;
 const MAX_PENDING_NOTIFICATION_BYTES: usize = 2 * 1024 * 1024;
+const MAX_PROVIDER_SESSION_ID_BYTES: usize = 128;
+
+struct PendingRequest {
+    id: u64,
+    method: String,
+    params: Value,
+}
 
 pub(crate) struct CodexDriver {
     #[cfg(not(unix))]
@@ -50,7 +57,12 @@ pub(crate) struct CodexDriver {
     next_request_id: u64,
     pending_notifications: VecDeque<Value>,
     pending_notification_bytes: usize,
+    pending_request: Option<PendingRequest>,
+    initialize_acked: bool,
+    initialized_notification_started: bool,
     initialized: bool,
+    attached_thread_id: Option<String>,
+    attachment_error: Option<DriverError>,
 }
 
 #[cfg(unix)]
@@ -115,7 +127,12 @@ impl CodexDriver {
                 next_request_id: 1,
                 pending_notifications: VecDeque::new(),
                 pending_notification_bytes: 0,
+                pending_request: None,
+                initialize_acked: false,
+                initialized_notification_started: false,
                 initialized: false,
+                attached_thread_id: None,
+                attachment_error: None,
             })
         }
         #[cfg(not(unix))]
@@ -158,7 +175,12 @@ impl CodexDriver {
                 next_request_id: 1,
                 pending_notifications: VecDeque::new(),
                 pending_notification_bytes: 0,
+                pending_request: None,
+                initialize_acked: false,
+                initialized_notification_started: false,
                 initialized: false,
+                attached_thread_id: None,
+                attachment_error: None,
             })
         }
     }
@@ -167,11 +189,18 @@ impl CodexDriver {
         if self.initialized {
             return Ok(());
         }
-        self.request(
-            "initialize",
-            json!({"clientInfo": {"name": "AgentsAssemble", "version": "0"}}),
-        )
-        .await?;
+        if !self.initialize_acked {
+            self.request(
+                "initialize",
+                json!({"clientInfo": {"name": "AgentsAssemble", "version": "0"}}),
+            )
+            .await?;
+            self.initialize_acked = true;
+        }
+        if self.initialized_notification_started {
+            return Err(initialization_uncertain());
+        }
+        self.initialized_notification_started = true;
         self.write_message(&json!({
             "jsonrpc": "2.0",
             "method": "initialized",
@@ -182,16 +211,87 @@ impl CodexDriver {
         Ok(())
     }
 
+    async fn attach(
+        &mut self,
+        session: &DurableAgentSession,
+    ) -> Result<ProviderSessionAttachment, DriverError> {
+        self.initialize().await?;
+        if let Some(error) = self.attachment_error {
+            return Err(error);
+        }
+        let durable_id = checked_provider_session_id(&session.provider_session_id)?;
+        if let Some(thread_id) = &self.attached_thread_id {
+            if durable_id.is_some_and(|durable| durable != thread_id) {
+                return Err(provider_session_mismatch());
+            }
+            return Ok(ProviderSessionAttachment {
+                provider_session_id: thread_id.clone(),
+                reused: durable_id.is_some(),
+            });
+        }
+        let (method, params) = match durable_id {
+            Some(thread_id) => ("thread/resume", json!({"threadId": thread_id})),
+            None => ("thread/start", thread_start_params(session)?),
+        };
+        let result = match self.request(method, params).await {
+            Ok(result) => result,
+            Err(error) => {
+                if self.pending_request.is_none() {
+                    self.attachment_error = Some(error);
+                }
+                return Err(error);
+            }
+        };
+        let observed_id = match provider_session_id_from_result(&result) {
+            Ok(observed_id) => observed_id,
+            Err(error) => return self.poison_attachment(error),
+        };
+        let thread_id = match (durable_id, observed_id) {
+            (Some(expected), Some(observed)) if expected != observed => {
+                return self.poison_attachment(provider_session_mismatch());
+            }
+            (Some(expected), _) => expected.to_owned(),
+            (None, Some(observed)) => observed.to_owned(),
+            (None, None) => return self.poison_attachment(provider_session_unconfirmed()),
+        };
+        self.attached_thread_id = Some(thread_id.clone());
+        Ok(ProviderSessionAttachment {
+            provider_session_id: thread_id,
+            reused: durable_id.is_some(),
+        })
+    }
+
+    fn poison_attachment<T>(&mut self, error: DriverError) -> Result<T, DriverError> {
+        self.attachment_error = Some(error);
+        Err(error)
+    }
+
     async fn request(&mut self, method: &str, params: Value) -> Result<Value, DriverError> {
-        let request_id = self.next_request_id;
-        self.next_request_id = self.next_request_id.saturating_add(1);
-        self.write_message(&json!({
-            "jsonrpc": "2.0",
-            "id": request_id,
-            "method": method,
-            "params": params,
-        }))
-        .await?;
+        let request_id = if let Some(pending) = &self.pending_request {
+            if pending.method != method || pending.params != params {
+                return Err(request_in_progress());
+            }
+            pending.id
+        } else {
+            let request_id = self.next_request_id;
+            self.next_request_id = self
+                .next_request_id
+                .checked_add(1)
+                .ok_or_else(protocol_error)?;
+            self.pending_request = Some(PendingRequest {
+                id: request_id,
+                method: method.to_owned(),
+                params: params.clone(),
+            });
+            self.write_message(&json!({
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "method": method,
+                "params": params,
+            }))
+            .await?;
+            request_id
+        };
         tokio::time::timeout(PROTOCOL_TIMEOUT, self.read_response(request_id))
             .await
             .map_err(|_| {
@@ -231,10 +331,11 @@ impl CodexDriver {
                     "The Codex app-server returned an unmatched response.",
                 ));
             }
+            self.pending_request = None;
             if object.get("error").is_some_and(|value| !value.is_null()) {
                 return Err(DriverError::new(
                     "provider_request_rejected",
-                    "The Codex app-server rejected its initialization request.",
+                    "The Codex app-server rejected a provider request.",
                 ));
             }
             return object.get("result").cloned().ok_or_else(protocol_error);
@@ -295,8 +396,11 @@ impl CodexDriver {
 }
 
 impl ProviderDriver for CodexDriver {
-    fn ensure_ready(&mut self) -> DriverFuture<'_, Result<(), DriverError>> {
-        Box::pin(self.initialize())
+    fn attach_session<'a>(
+        &'a mut self,
+        session: &'a DurableAgentSession,
+    ) -> DriverFuture<'a, Result<ProviderSessionAttachment, DriverError>> {
+        Box::pin(self.attach(session))
     }
 
     fn is_alive(&mut self) -> Result<bool, DriverError> {
@@ -328,16 +432,7 @@ impl Drop for CodexDriver {
 }
 
 fn command_arguments(session: &DurableAgentSession) -> Result<Vec<String>, DriverError> {
-    let (approval, sandbox) = match session.public.permission_mode.as_str() {
-        "workspace_write" => ("on-request", "workspace-write"),
-        "meeting_read_only" => ("never", "read-only"),
-        _ => {
-            return Err(DriverError::new(
-                "invalid_runtime_profile",
-                "The Codex permission mode is unsupported.",
-            ));
-        }
-    };
+    let (approval, sandbox) = profile_permissions(session)?;
     if session.public.model.is_empty() {
         return Err(DriverError::new(
             "invalid_runtime_profile",
@@ -362,6 +457,52 @@ fn command_arguments(session: &DurableAgentSession) -> Result<Vec<String>, Drive
     push_config(&mut arguments, &project_key, "trusted")?;
     arguments.push("--stdio".to_owned());
     Ok(arguments)
+}
+
+fn thread_start_params(session: &DurableAgentSession) -> Result<Value, DriverError> {
+    let (approval, sandbox) = profile_permissions(session)?;
+    if session.workspace.is_empty() || session.public.model.is_empty() {
+        return Err(invalid_runtime_profile());
+    }
+    Ok(json!({
+        "cwd": session.workspace,
+        "model": session.public.model,
+        "approvalPolicy": approval,
+        "sandbox": sandbox,
+    }))
+}
+
+fn profile_permissions(
+    session: &DurableAgentSession,
+) -> Result<(&'static str, &'static str), DriverError> {
+    match session.public.permission_mode.as_str() {
+        "workspace_write" => Ok(("on-request", "workspace-write")),
+        "meeting_read_only" => Ok(("never", "read-only")),
+        _ => Err(invalid_runtime_profile()),
+    }
+}
+
+fn checked_provider_session_id(value: &str) -> Result<Option<&str>, DriverError> {
+    if value.is_empty() {
+        return Ok(None);
+    }
+    if value.len() > MAX_PROVIDER_SESSION_ID_BYTES
+        || value.trim() != value
+        || value.chars().any(char::is_control)
+        || value == "--last"
+    {
+        return Err(provider_session_mismatch());
+    }
+    Ok(Some(value))
+}
+
+fn provider_session_id_from_result(result: &Value) -> Result<Option<&str>, DriverError> {
+    let value = result
+        .get("thread")
+        .and_then(|thread| thread.get("id"))
+        .and_then(Value::as_str)
+        .or_else(|| result.get("threadId").and_then(Value::as_str));
+    value.map_or(Ok(None), checked_provider_session_id)
 }
 
 fn push_config(arguments: &mut Vec<String>, key: &str, value: &str) -> Result<(), DriverError> {
@@ -418,6 +559,41 @@ const fn protocol_closed() -> DriverError {
     DriverError::new(
         "provider_protocol_closed",
         "The Codex app-server protocol stream closed unexpectedly.",
+    )
+}
+
+const fn initialization_uncertain() -> DriverError {
+    DriverError::new(
+        "provider_initialization_uncertain",
+        "The Codex initialized notification may already have been sent.",
+    )
+}
+
+const fn request_in_progress() -> DriverError {
+    DriverError::new(
+        "provider_request_in_progress",
+        "A different Codex provider request may still be in progress.",
+    )
+}
+
+const fn provider_session_unconfirmed() -> DriverError {
+    DriverError::new(
+        "provider_session_unconfirmed",
+        "The Codex app-server did not return a provider session identity.",
+    )
+}
+
+const fn provider_session_mismatch() -> DriverError {
+    DriverError::new(
+        "provider_session_mismatch",
+        "The Codex provider session identity did not match durable authority.",
+    )
+}
+
+const fn invalid_runtime_profile() -> DriverError {
+    DriverError::new(
+        "invalid_runtime_profile",
+        "The Codex runtime profile is invalid.",
     )
 }
 

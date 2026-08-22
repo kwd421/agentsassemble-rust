@@ -222,7 +222,7 @@ async fn codex_runtime_is_initialized_reused_and_stopped_by_exact_owner() {
     let executable = directory.path().join("codex-fixture");
     std::fs::write(
         &executable,
-        b"#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\nIFS= read -r initialized\nIFS= read -r forever\n",
+        b"#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\nIFS= read -r initialized\nIFS= read -r thread\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"thread\":{\"id\":\"thread-1\"}}}'\nIFS= read -r forever\n",
     )
     .unwrap_or_else(|error| panic!("write runtime fixture: {error}"));
     let mut permissions = std::fs::metadata(&executable)
@@ -257,7 +257,9 @@ async fn codex_runtime_is_initialized_reused_and_stopped_by_exact_owner() {
     assert!(!first.runtime_reused);
     assert!(!first.runtime_handle_id.is_empty());
     assert!(!first.runtime_owner_id.is_empty());
-    assert!(!first.provider_session_active);
+    assert!(first.provider_session_active);
+    assert_eq!(first.provider_session_id, "thread-1");
+    assert!(!first.provider_session_reused);
     let second = adapter
         .start(&session)
         .await
@@ -346,7 +348,7 @@ async fn stop_kills_descendants_after_the_codex_leader_exits() {
         tempfile::tempdir().unwrap_or_else(|error| panic!("create descendant fixture: {error}"));
     let descendant_pid = directory.path().join("descendant.pid");
     let script = format!(
-        "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\n(while :; do sleep 1; done) </dev/null >/dev/null 2>&1 &\nprintf '%s' \"$!\" > {}\nexit 0\n",
+        "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nIFS= read -r thread\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{{\"thread\":{{\"id\":\"thread-1\"}}}}}}'\n(while :; do sleep 1; done) </dev/null >/dev/null 2>&1 &\nprintf '%s' \"$!\" > {}\nexit 0\n",
         shell_quote(&descendant_pid)
     );
     let session = fixture_session(directory.path(), &script).await;
@@ -411,7 +413,7 @@ async fn stop_captures_a_reparented_descendant_from_a_new_session() {
     let test_binary = std::env::current_exe()
         .unwrap_or_else(|error| panic!("resolve provider test binary: {error}"));
     let script = format!(
-        "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nAGENTSASSEMBLE_ESCAPE_FIXTURE_PID={} {} --exact runtime::tests::escaped_descendant_entry --nocapture </dev/null >/dev/null 2>&1 &\nIFS= read -r forever\n",
+        "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nIFS= read -r thread\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{{\"thread\":{{\"id\":\"thread-1\"}}}}}}'\nAGENTSASSEMBLE_ESCAPE_FIXTURE_PID={} {} --exact runtime::tests::escaped_descendant_entry --nocapture </dev/null >/dev/null 2>&1 &\nIFS= read -r forever\n",
         shell_quote(&descendant_pid),
         shell_quote(&test_binary),
     );
@@ -480,7 +482,7 @@ async fn fresh_supervisor_uses_the_guardian_lease_before_reporting_gone() {
     let _serial = RUNTIME_TEST_LOCK.lock().await;
     let directory =
         tempfile::tempdir().unwrap_or_else(|error| panic!("create guardian fixture: {error}"));
-    let script = "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\nIFS= read -r initialized\nIFS= read -r forever\n";
+    let script = "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\nIFS= read -r initialized\nIFS= read -r thread\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"thread\":{\"id\":\"thread-1\"}}}'\nIFS= read -r forever\n";
     let mut session = fixture_session(directory.path(), script).await;
     let adapter = ProviderAdapter::new();
     let started = adapter
