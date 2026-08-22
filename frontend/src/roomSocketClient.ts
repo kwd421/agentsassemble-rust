@@ -154,8 +154,8 @@ export interface RoomCommandAck {
 export interface RoomSocketClientDependencies {
   getTicket?: (auth: RoomSocketAuth) => Promise<string>;
   createSocket?: (url: string) => WebSocket;
+  websocketBaseUrl?: () => string;
 }
-
 const ROOM_SOCKET_COMMAND_TIMEOUT_MS = 20_000;
 
 function wsBaseUrl(): string {
@@ -681,7 +681,7 @@ export function openRoomSocket(
     try {
       const ticket = await requestTicket(auth);
       if (closed) return;
-      const currentSocket = createSocket(`${wsBaseUrl()}/ws?ticket=${encodeURIComponent(ticket)}`);
+      const currentSocket = createSocket(`${dependencies.websocketBaseUrl?.() || wsBaseUrl()}/ws?ticket=${encodeURIComponent(ticket)}`);
       socket = currentSocket;
       roomSnapshotAccepted = false;
       currentSocket.onopen = () => {

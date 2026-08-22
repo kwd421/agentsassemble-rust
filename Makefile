@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := test
 
-.PHONY: architecture-check bindings frontend-check format-check check clippy test verify diff-check
+.PHONY: architecture-check bindings frontend-check desktop-check format-check check clippy test verify diff-check
 
 PYTHON ?= python3
 
@@ -15,6 +15,9 @@ frontend-check: bindings
 	npm --prefix frontend run build
 	npm --prefix frontend test
 
+desktop-check:
+	npm --prefix desktop run check
+
 format-check:
 	cargo fmt --all -- --check
 
@@ -24,7 +27,7 @@ check: architecture-check format-check
 clippy:
 	cargo clippy --workspace --all-targets --all-features -- -D warnings
 
-test: check frontend-check
+test: check frontend-check desktop-check
 	cargo test --workspace --all-features
 
 diff-check:

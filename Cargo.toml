@@ -5,6 +5,7 @@ members = [
     "crates/agentsassemble-protocol",
     "crates/agentsassemble-server",
 ]
+exclude = ["desktop/src-tauri"]
 resolver = "3"
 
 [workspace.package]

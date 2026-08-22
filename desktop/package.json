@@ -1,0 +1,16 @@
+{
+  "name": "agentsassemble-rust-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "prepare:sidecar": "node scripts/prepare_sidecar.mjs",
+    "prepare:sidecar:release": "node scripts/prepare_sidecar.mjs --release",
+    "dev": "npm --prefix ../frontend run build && npm run prepare:sidecar && tauri dev",
+    "build": "npm --prefix ../frontend run build && npm run prepare:sidecar:release && tauri build",
+    "check": "npm run prepare:sidecar && cargo fmt --manifest-path src-tauri/Cargo.toml -- --check && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.11.4"
+  }
+}

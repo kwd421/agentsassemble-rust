@@ -57,7 +57,7 @@ Action payloads are added only by the slice that implements them.
 
 A credential resolves once to an `AuthenticatedPrincipal` containing stable identity, room scope, client kind, and server-derived capabilities. Client-supplied roles, operator flags, participant type, or capabilities are never authority.
 
-Opaque, short-lived, one-use WebSocket tickets remain the connection credential. Browser-compatible HTTP ticket issuance stays an adapter while it is a reachable flow and always requires a high-entropy host secret or an authenticated session. Desktop mode cannot start with an empty host secret; Tauri generates it per runtime and should return only the one-use ticket to React.
+Opaque, short-lived, one-use WebSocket tickets remain the connection credential. Browser-compatible HTTP ticket issuance stays an adapter while it is a reachable flow and always requires a high-entropy host secret or an authenticated session. Desktop mode cannot start with an empty host secret; Tauri generates it per owned runtime and returns only a one-use ticket plus the validated loopback WebSocket origin to React over IPC.
 
 The local WebSocket adapter has explicit resource budgets: bounded connection admission, 256 KiB frames/messages, a ten-second first-subscription deadline, an idle deadline, bounded ingress messages/bytes, and a non-waiting room queue admission that returns `room_busy` when saturated.
 

@@ -28,11 +28,31 @@ CRATE_FORBIDDEN = {
     "agentsassemble-persistence": frozenset({"axum", "tower", "tower-http"}),
     "agentsassemble-server": frozenset({"sqlx"}),
 }
+DESKTOP_MANIFEST = Path("desktop/src-tauri/Cargo.toml")
 
 
 def metadata(repository_root: Path) -> dict[str, object]:
     completed = subprocess.run(
         ["cargo", "metadata", "--format-version", "1", "--no-deps"],
+        cwd=repository_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return json.loads(completed.stdout)
+
+
+def desktop_metadata(repository_root: Path) -> dict[str, object]:
+    completed = subprocess.run(
+        [
+            "cargo",
+            "metadata",
+            "--format-version",
+            "1",
+            "--no-deps",
+            "--manifest-path",
+            str(DESKTOP_MANIFEST),
+        ],
         cwd=repository_root,
         check=True,
         capture_output=True,
@@ -81,9 +101,36 @@ def architecture_violations(payload: dict[str, object]) -> tuple[str, ...]:
     return tuple(found)
 
 
+def desktop_violations(payload: dict[str, object]) -> tuple[str, ...]:
+    packages = payload.get("packages")
+    if not isinstance(packages, list) or len(packages) != 1:
+        return ("desktop metadata must contain exactly one package",)
+    package = packages[0]
+    if not isinstance(package, dict) or package.get("name") != "agentsassemble-desktop":
+        return ("desktop package must be agentsassemble-desktop",)
+    dependencies = package.get("dependencies")
+    if not isinstance(dependencies, list):
+        return ("desktop metadata did not contain dependencies",)
+    names = {
+        str(dependency.get("name"))
+        for dependency in dependencies
+        if isinstance(dependency, dict)
+    }
+    allowed_owned = {"agentsassemble-domain"}
+    found = [
+        f"desktop imports disallowed workspace crate {name}"
+        for name in sorted((names & set(OWNED_CRATES)) - allowed_owned)
+    ]
+    found.extend(
+        f"desktop imports forbidden server infrastructure dependency {name}"
+        for name in sorted(names & {"axum", "sqlx", "tower", "tower-http"})
+    )
+    return tuple(found)
+
+
 def main() -> int:
     root = Path(__file__).resolve().parents[1]
-    found = architecture_violations(metadata(root))
+    found = architecture_violations(metadata(root)) + desktop_violations(desktop_metadata(root))
     if not found:
         return 0
     print("Architecture violations:")

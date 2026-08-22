@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { loadHostToken, saveHostToken, type RoomEvent } from "./api";
+import { isDesktopShell, requestDesktopTicket } from "./desktopBridge";
 import {
   openRoomSocket,
   RoomSocketSayError,
@@ -15,7 +16,8 @@ function roomFromLocation(): string {
 
 export default function App() {
   const roomId = useMemo(roomFromLocation, []);
-  const [hostToken, setHostToken] = useState(loadHostToken);
+  const desktop = useMemo(isDesktopShell, []);
+  const [hostToken, setHostToken] = useState(() => desktop ? "tauri-owned" : loadHostToken());
   const [draftToken, setDraftToken] = useState("");
   const [roomLabel, setRoomLabel] = useState(roomId);
   const [events, setEvents] = useState<RoomEvent[]>([]);
@@ -33,6 +35,7 @@ export default function App() {
     }
     setStatus("connecting");
     setNotice("방 기록을 동기화하는 중…");
+    let desktopWebSocketBase = "";
     const socket = openRoomSocket(
       { kind: "host", meetingId: roomId },
       ["room_events"],
@@ -63,14 +66,22 @@ export default function App() {
             : "WebSocket 연결 오류";
           setNotice(detail);
         },
-      }
+      },
+      desktop ? {
+        getTicket: async () => {
+          const grant = await requestDesktopTicket(roomId);
+          desktopWebSocketBase = grant.websocket_base_url;
+          return grant.ticket;
+        },
+        websocketBaseUrl: () => desktopWebSocketBase,
+      } : {}
     );
     socketRef.current = socket;
     return () => {
       socket.close();
       if (socketRef.current === socket) socketRef.current = null;
     };
-  }, [hostToken, roomId]);
+  }, [desktop, hostToken, roomId]);
 
   function unlock(event: FormEvent) {
     event.preventDefault();
@@ -136,7 +147,7 @@ export default function App() {
         <section className="room-card">
           <div className="notice" role="status">
             <span>{notice}</span>
-            <button className="link-button" onClick={lock} type="button">토큰 지우기</button>
+            {!desktop && <button className="link-button" onClick={lock} type="button">토큰 지우기</button>}
           </div>
           <ol className="timeline" data-testid="timeline">
             {events.length === 0 ? (

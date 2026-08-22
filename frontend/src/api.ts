@@ -3,7 +3,6 @@ import type { Room } from "./types/generated/Room";
 import type { RoomEvent } from "./types/generated/RoomEvent";
 import type { TicketResponse } from "./types/generated/TicketResponse";
 
-const HOST_TOKEN_STORAGE_KEY = "agentsassemble.hostToken.v1";
 let inMemoryHostToken = "";
 
 export type ServerRoom = Room;
@@ -53,22 +52,12 @@ export interface RoomAgentSession {
 }
 
 export function loadHostToken(): string {
-  try {
-    return String(sessionStorage.getItem(HOST_TOKEN_STORAGE_KEY) || inMemoryHostToken).trim();
-  } catch {
-    return inMemoryHostToken;
-  }
+  return inMemoryHostToken;
 }
 
 export function saveHostToken(token: string): void {
   const cleanToken = token.trim();
   inMemoryHostToken = cleanToken;
-  try {
-    if (cleanToken) sessionStorage.setItem(HOST_TOKEN_STORAGE_KEY, cleanToken);
-    else sessionStorage.removeItem(HOST_TOKEN_STORAGE_KEY);
-  } catch {
-    // The in-memory value remains available in restricted browser contexts.
-  }
 }
 
 export async function getWsTicket(auth: RoomSocketAuth): Promise<string> {

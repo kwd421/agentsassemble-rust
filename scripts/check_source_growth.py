@@ -13,6 +13,7 @@ SOURCE_ROOTS = (
     Path("crates"),
     Path("frontend/src"),
     Path("desktop/src"),
+    Path("desktop/scripts"),
     Path("desktop/src-tauri/src"),
     Path("scripts"),
     Path("tests"),
@@ -128,4 +129,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
