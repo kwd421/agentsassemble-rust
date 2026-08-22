@@ -1,13 +1,12 @@
 use std::{
     env,
     ffi::OsStr,
-    fs::OpenOptions,
     io::{self, BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
+    sync::Arc,
 };
 
-use fs2::FileExt;
 use rustix::process::{Pid, Signal};
 
 #[cfg(unix)]
@@ -19,42 +18,61 @@ const READY_PREFIX: &str = "AGENTSASSEMBLE_PROVIDER_ANCHOR=";
 const MAX_HELPER_OUTPUT_BYTES: usize = 8 * 1024;
 const TEST_MODE_ENV: &str = "AGENTSASSEMBLE_INTERNAL_GUARDIAN_MODE";
 const TEST_LEASE_ENV: &str = "AGENTSASSEMBLE_INTERNAL_GUARDIAN_LEASE";
+const TEST_TOKEN_ENV: &str = "AGENTSASSEMBLE_INTERNAL_GUARDIAN_TOKEN";
+
+use crate::filesystem::{BoundExecutable, bind_helper_executable_sync};
 
 #[derive(Clone)]
 pub(crate) struct GuardianLaunch {
-    executable: PathBuf,
+    executable: Arc<BoundExecutable>,
     test_harness: bool,
 }
 
 impl GuardianLaunch {
-    pub(crate) fn production(executable: PathBuf) -> Self {
-        Self {
-            executable,
+    pub(crate) fn production(executable: &Path) -> io::Result<Self> {
+        Ok(Self {
+            executable: Arc::new(bind_helper_executable_sync(executable)?),
             test_harness: false,
-        }
+        })
     }
 
     #[cfg(test)]
     pub(crate) fn test_harness() -> io::Result<Self> {
         Ok(Self {
-            executable: env::current_exe()?,
+            executable: Arc::new(bind_helper_executable_sync(&reexecution_path()?)?),
             test_harness: true,
         })
     }
 
-    pub(crate) fn guardian_command(&self, lease_path: &Path) -> tokio::process::Command {
-        let mut command = tokio::process::Command::new(&self.executable);
-        self.configure(command.as_std_mut(), HelperMode::Guardian, lease_path);
-        command
+    pub(crate) fn guardian_command(
+        &self,
+        lease_path: &Path,
+        lease_token: &str,
+    ) -> io::Result<tokio::process::Command> {
+        let mut command = tokio::process::Command::new(self.executable.launch_path());
+        self.configure(
+            command.as_std_mut(),
+            HelperMode::Guardian,
+            lease_path,
+            lease_token,
+        )?;
+        Ok(command)
     }
 
-    fn anchor_command(&self, lease_path: &Path) -> Command {
-        let mut command = Command::new(&self.executable);
-        self.configure(&mut command, HelperMode::Anchor, lease_path);
-        command
+    fn anchor_command(&self, lease_path: &Path, lease_token: &str) -> io::Result<Command> {
+        let mut command = Command::new(self.executable.launch_path());
+        self.configure(&mut command, HelperMode::Anchor, lease_path, lease_token)?;
+        Ok(command)
     }
 
-    fn configure(&self, command: &mut Command, mode: HelperMode, lease_path: &Path) {
+    fn configure(
+        &self,
+        command: &mut Command,
+        mode: HelperMode,
+        lease_path: &Path,
+        lease_token: &str,
+    ) -> io::Result<()> {
+        self.executable.configure_std_command(command)?;
         command.env_clear();
         if self.test_harness {
             command
@@ -70,14 +88,17 @@ impl GuardianLaunch {
                         HelperMode::Anchor => "anchor",
                     },
                 )
-                .env(TEST_LEASE_ENV, lease_path);
+                .env(TEST_LEASE_ENV, lease_path)
+                .env(TEST_TOKEN_ENV, lease_token);
         } else {
             command.arg(match mode {
                 HelperMode::Guardian => GUARDIAN_FLAG,
                 HelperMode::Anchor => ANCHOR_FLAG,
             });
             command.arg(lease_path);
+            command.arg(lease_token);
         }
+        Ok(())
     }
 }
 
@@ -85,6 +106,17 @@ impl GuardianLaunch {
 enum HelperMode {
     Guardian,
     Anchor,
+}
+
+fn reexecution_path() -> io::Result<PathBuf> {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        Ok(PathBuf::from("/proc/self/exe"))
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    {
+        env::current_exe()
+    }
 }
 
 pub fn run_process_helper_if_requested() -> Option<i32> {
@@ -98,14 +130,24 @@ pub fn run_process_helper_if_requested() -> Option<i32> {
     let Some(lease_path) = arguments.next().map(PathBuf::from) else {
         return Some(2);
     };
+    let Some(lease_token) = arguments.next() else {
+        return Some(2);
+    };
     if arguments.next().is_some() {
         return Some(2);
     }
-    let launch = GuardianLaunch::production(match env::current_exe() {
-        Ok(path) => path,
-        Err(_) => return Some(1),
-    });
-    Some(run_helper(mode, &lease_path, &launch))
+    let Ok(path) = reexecution_path() else {
+        return Some(1);
+    };
+    let Ok(launch) = GuardianLaunch::production(&path) else {
+        return Some(1);
+    };
+    Some(run_helper(
+        mode,
+        &lease_path,
+        &lease_token.to_string_lossy(),
+        &launch,
+    ))
 }
 
 #[cfg(test)]
@@ -118,22 +160,35 @@ pub(crate) fn run_test_helper_if_requested() -> Option<i32> {
     let Some(lease_path) = env::var_os(TEST_LEASE_ENV).map(PathBuf::from) else {
         return Some(2);
     };
+    let Some(lease_token) = env::var_os(TEST_TOKEN_ENV) else {
+        return Some(2);
+    };
     let Ok(launch) = GuardianLaunch::test_harness() else {
         return Some(1);
     };
-    Some(run_helper(mode, &lease_path, &launch))
+    Some(run_helper(
+        mode,
+        &lease_path,
+        &lease_token.to_string_lossy(),
+        &launch,
+    ))
 }
 
-fn run_helper(mode: HelperMode, lease_path: &Path, launch: &GuardianLaunch) -> i32 {
+fn run_helper(
+    mode: HelperMode,
+    lease_path: &Path,
+    lease_token: &str,
+    launch: &GuardianLaunch,
+) -> i32 {
     let result = match mode {
-        HelperMode::Guardian => run_guardian(lease_path, launch),
-        HelperMode::Anchor => run_anchor(lease_path),
+        HelperMode::Guardian => run_guardian(lease_path, lease_token, launch),
+        HelperMode::Anchor => run_anchor(lease_path, lease_token),
     };
     i32::from(result.is_err())
 }
 
-fn run_guardian(lease_path: &Path, launch: &GuardianLaunch) -> io::Result<()> {
-    let mut command = launch.anchor_command(lease_path);
+fn run_guardian(lease_path: &Path, lease_token: &str, launch: &GuardianLaunch) -> io::Result<()> {
+    let mut command = launch.anchor_command(lease_path, lease_token)?;
     command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -165,15 +220,14 @@ fn run_guardian(lease_path: &Path, launch: &GuardianLaunch) -> io::Result<()> {
     operation.and(cleanup)
 }
 
-fn run_anchor(lease_path: &Path) -> io::Result<()> {
+fn run_anchor(lease_path: &Path, lease_token: &str) -> io::Result<()> {
     let pid = rustix::process::getpid();
     if rustix::process::getpgrp() != pid {
         return Err(io::Error::other(
             "provider anchor is not its process-group leader",
         ));
     }
-    let lease = OpenOptions::new().read(true).write(true).open(lease_path)?;
-    lease.try_lock_exclusive()?;
+    let _lease = crate::runtime_lease::activate_unix_runtime_lease(lease_path, lease_token, pid)?;
     writeln!(io::stdout().lock(), "{READY_PREFIX}{}", pid.as_raw_pid())?;
     io::stdout().lock().flush()?;
     let mut buffer = [0_u8; 1024];

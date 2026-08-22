@@ -143,7 +143,8 @@ impl RoomRuntime {
         .map_err(|error| RoomShutdownError::Persistence(error.to_string()));
         if checkpoint_result.is_ok() {
             self.provider_adapter
-                .release_shutdown_observations(&provider_outcome.gone);
+                .release_shutdown_observations(&provider_outcome.gone)
+                .await;
         }
         let provider_result = provider_outcome.failure.map_or(Ok(()), |error| {
             Err(RoomShutdownError::Provider(error.to_string()))

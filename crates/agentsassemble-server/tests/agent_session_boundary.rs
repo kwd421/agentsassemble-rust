@@ -328,9 +328,9 @@ async fn start(store: SqliteStore, catalog: ProviderCatalog) -> RunningServer {
     let cancellation = CancellationToken::new();
     let server_cancellation = cancellation.clone();
     #[cfg(unix)]
-    let provider_adapter = ProviderAdapter::with_guardian_executable(std::path::PathBuf::from(
-        env!("CARGO_BIN_EXE_agentsassemble-server"),
-    ));
+    let provider_adapter = ProviderAdapter::with_guardian_executable(std::path::Path::new(env!(
+        "CARGO_BIN_EXE_agentsassemble-server"
+    )));
     #[cfg(not(unix))]
     let provider_adapter = ProviderAdapter::new();
     let state = AppState::local_with_provider_adapter(

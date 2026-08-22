@@ -6,12 +6,15 @@ mod guardian;
 mod process;
 mod profile;
 mod runtime;
+mod runtime_authority;
 mod runtime_lease;
 mod runtime_recovery;
 mod selection;
 mod selection_input;
 #[cfg(unix)]
 mod unix_custody;
+#[cfg(unix)]
+mod unix_process_tree;
 
 pub use catalog::ProviderCatalogService;
 #[cfg(unix)]

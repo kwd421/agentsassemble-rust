@@ -28,6 +28,9 @@ command-fds.workspace = true
 [target.'cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))'.dependencies]
 tempfile.workspace = true
 
+[target.'cfg(target_os = "macos")'.dependencies]
+sysinfo.workspace = true
+
 [target.'cfg(windows)'.dependencies]
 windows-sys.workspace = true
 

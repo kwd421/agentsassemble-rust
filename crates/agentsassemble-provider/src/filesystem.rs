@@ -23,7 +23,7 @@ pub(crate) enum FilesystemFailure {
 }
 
 pub(crate) struct BoundExecutable {
-    _file: File,
+    file: File,
     launch_path: String,
     #[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
     _staging: tempfile::TempDir,
@@ -31,23 +31,53 @@ pub(crate) struct BoundExecutable {
 
 impl BoundExecutable {
     pub(crate) fn launch_path(&self) -> &str {
+        let _ = &self.file;
         &self.launch_path
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
     pub(crate) fn configure_command(
-        self,
+        &self,
         command: &mut tokio::process::Command,
     ) -> Result<(), FilesystemFailure> {
         use command_fds::{CommandFdExt, FdMapping};
 
+        let file = self
+            .file
+            .try_clone()
+            .map_err(|_| FilesystemFailure::Failed)?;
         command
             .fd_mappings(vec![FdMapping {
-                parent_fd: self._file.into(),
+                parent_fd: file.into(),
                 child_fd: 3,
             }])
             .map(|_| ())
             .map_err(|_| FilesystemFailure::Failed)
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    pub(crate) fn configure_std_command(
+        &self,
+        command: &mut std::process::Command,
+    ) -> io::Result<()> {
+        use command_fds::{CommandFdExt, FdMapping};
+
+        command
+            .fd_mappings(vec![FdMapping {
+                parent_fd: self.file.try_clone()?.into(),
+                child_fd: 3,
+            }])
+            .map(|_| ())
+            .map_err(io::Error::other)
+    }
+
+    #[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
+    pub(crate) fn configure_std_command(
+        &self,
+        _command: &mut std::process::Command,
+    ) -> io::Result<()> {
+        drop(self.file.try_clone()?);
+        Ok(())
     }
 }
 
@@ -180,26 +210,43 @@ fn bind_executable_sync(path: &Path, expected_identity: &str) -> io::Result<Boun
         return Err(io::Error::other("executable identity changed"));
     }
     #[cfg(unix)]
-    let expected_digest = raw_content_digest(&mut file)?;
+    return bind_verified_unix_executable(file, &handle, expected_identity);
+    #[cfg(not(unix))]
+    let launch_path = canonical
+        .to_str()
+        .ok_or_else(|| io::Error::other("executable path is not UTF-8"))?
+        .to_owned();
+    #[cfg(not(unix))]
+    Ok(BoundExecutable { file, launch_path })
+}
+
+#[cfg(unix)]
+pub(crate) fn bind_helper_executable_sync(path: &Path) -> io::Result<BoundExecutable> {
+    if !is_executable_file(path)? {
+        return Err(io::Error::other("helper executable is not executable"));
+    }
+    let mut file = File::open(path)?;
+    let handle = Handle::from_file(file.try_clone()?)?;
+    let expected_identity = stable_content_identity(&handle, &mut file)?;
+    file.rewind()?;
+    bind_verified_unix_executable(file, &handle, &expected_identity)
+}
+
+#[cfg(unix)]
+fn bind_verified_unix_executable(
+    mut file: File,
+    handle: &Handle,
+    expected_identity: &str,
+) -> io::Result<BoundExecutable> {
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    let file = stage_sealed_executable(&mut file, &handle, expected_identity, expected_digest)?;
+    let file = stage_sealed_executable(&mut file, handle, expected_identity)?;
     #[cfg(any(target_os = "linux", target_os = "android"))]
     let launch_path = "/proc/self/fd/3".to_owned();
     #[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
     let (file, launch_path, staging) =
-        stage_private_executable(&mut file, &handle, expected_identity, expected_digest)?;
-    #[cfg(windows)]
-    let launch_path = canonical
-        .to_str()
-        .ok_or_else(|| io::Error::other("executable path is not UTF-8"))?
-        .to_owned();
-    #[cfg(not(any(unix, windows)))]
-    let launch_path = canonical
-        .to_str()
-        .ok_or_else(|| io::Error::other("executable path is not UTF-8"))?
-        .to_owned();
+        stage_private_executable(&mut file, handle, expected_identity)?;
     Ok(BoundExecutable {
-        _file: file,
+        file,
         launch_path,
         #[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
         _staging: staging,
@@ -211,7 +258,6 @@ fn stage_sealed_executable(
     source: &mut File,
     source_handle: &Handle,
     expected_identity: &str,
-    expected_digest: [u8; 32],
 ) -> io::Result<File> {
     use rustix::fs::{MemfdFlags, Mode, SealFlags};
 
@@ -227,13 +273,7 @@ fn stage_sealed_executable(
         Err(error) => return Err(error.into()),
     };
     rustix::fs::fchmod(&staged, Mode::RUSR | Mode::XUSR)?;
-    copy_and_verify_staged(
-        source,
-        source_handle,
-        expected_identity,
-        expected_digest,
-        &mut staged,
-    )?;
+    copy_and_verify_staged(source, source_handle, expected_identity, &mut staged)?;
     let required = SealFlags::SEAL | SealFlags::SHRINK | SealFlags::GROW | SealFlags::WRITE;
     rustix::fs::fcntl_add_seals(&staged, required)?;
     if !rustix::fs::fcntl_get_seals(&staged)?.contains(required) {
@@ -248,26 +288,29 @@ fn stage_private_executable(
     source: &mut File,
     source_handle: &Handle,
     expected_identity: &str,
-    expected_digest: [u8; 32],
 ) -> io::Result<(File, String, tempfile::TempDir)> {
-    use std::os::unix::fs::PermissionsExt;
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
     let staging = tempfile::Builder::new()
         .prefix("agentsassemble-provider-exec-")
+        .permissions(std::fs::Permissions::from_mode(0o700))
         .tempdir()?;
+    let staging_metadata = std::fs::symlink_metadata(staging.path())?;
+    if !staging_metadata.is_dir()
+        || staging_metadata.uid() != rustix::process::geteuid().as_raw()
+        || staging_metadata.permissions().mode() & 0o077 != 0
+    {
+        return Err(io::Error::other(
+            "executable staging directory is not private",
+        ));
+    }
     let staged_path = staging.path().join("provider");
     let mut staged = OpenOptions::new()
         .create_new(true)
         .read(true)
         .write(true)
         .open(&staged_path)?;
-    copy_and_verify_staged(
-        source,
-        source_handle,
-        expected_identity,
-        expected_digest,
-        &mut staged,
-    )?;
+    copy_and_verify_staged(source, source_handle, expected_identity, &mut staged)?;
     std::fs::set_permissions(&staged_path, std::fs::Permissions::from_mode(0o500))?;
     let launch_path = staged_path
         .to_str()
@@ -281,39 +324,27 @@ fn copy_and_verify_staged(
     source: &mut File,
     source_handle: &Handle,
     expected_identity: &str,
-    expected_digest: [u8; 32],
     staged: &mut File,
 ) -> io::Result<()> {
     source.rewind()?;
     io::copy(source, &mut *staged)?;
     staged.sync_all()?;
-    source.rewind()?;
-    if stable_content_identity(source_handle, &mut *source)? != expected_identity {
-        return Err(io::Error::other("executable changed while it was staged"));
-    }
-    staged.rewind()?;
-    if raw_content_digest(staged)? != expected_digest {
-        return Err(io::Error::other("staged executable bytes do not match"));
-    }
-    Ok(())
+    verify_staged_identity(source_handle, expected_identity, staged)
 }
 
 #[cfg(unix)]
-fn raw_content_digest(file: &mut File) -> io::Result<[u8; 32]> {
-    use std::io::Read;
-
-    use sha2::{Digest, Sha256};
-
-    let mut digest = Sha256::new();
-    let mut buffer = vec![0_u8; 64 * 1024];
-    loop {
-        let count = file.read(&mut buffer)?;
-        if count == 0 {
-            break;
-        }
-        digest.update(&buffer[..count]);
+fn verify_staged_identity(
+    source_handle: &Handle,
+    expected_identity: &str,
+    staged: &mut File,
+) -> io::Result<()> {
+    staged.rewind()?;
+    if stable_content_identity(source_handle, &mut *staged)? != expected_identity {
+        return Err(io::Error::other(
+            "staged executable identity does not match verified authority",
+        ));
     }
-    Ok(digest.finalize().into())
+    Ok(())
 }
 
 fn executable_candidates(directory: &Path, program: &str) -> Vec<PathBuf> {
@@ -360,6 +391,11 @@ fn is_executable_file(path: &Path) -> io::Result<bool> {
 #[cfg(test)]
 mod tests {
     use std::{io, sync::Arc, time::Duration};
+
+    #[cfg(unix)]
+    use agentsassemble_domain::stable_content_identity;
+    #[cfg(unix)]
+    use same_file::Handle;
 
     use tokio::sync::Semaphore;
 
@@ -416,6 +452,35 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("reidentify executable: {error:?}"));
         assert_ne!(first, changed);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn staged_bytes_are_compared_directly_to_the_persisted_source_identity() {
+        use std::io::{Seek, Write};
+
+        let mut source = tempfile::tempfile()
+            .unwrap_or_else(|error| panic!("create staged identity source: {error}"));
+        source
+            .write_all(b"verified helper bytes")
+            .unwrap_or_else(|error| panic!("write staged identity source: {error}"));
+        source
+            .rewind()
+            .unwrap_or_else(|error| panic!("rewind staged identity source: {error}"));
+        let handle = Handle::from_file(
+            source
+                .try_clone()
+                .unwrap_or_else(|error| panic!("clone staged identity source: {error}")),
+        )
+        .unwrap_or_else(|error| panic!("identify staged identity source: {error}"));
+        let expected = stable_content_identity(&handle, &mut source)
+            .unwrap_or_else(|error| panic!("hash staged identity source: {error}"));
+        let mut staged = tempfile::tempfile()
+            .unwrap_or_else(|error| panic!("create staged identity target: {error}"));
+        staged
+            .write_all(b"different bytes from a later source read")
+            .unwrap_or_else(|error| panic!("write staged identity target: {error}"));
+        assert!(super::verify_staged_identity(&handle, &expected, &mut staged).is_err());
     }
 
     #[cfg(unix)]

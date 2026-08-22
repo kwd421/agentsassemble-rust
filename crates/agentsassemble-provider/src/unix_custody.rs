@@ -1,4 +1,4 @@
-use std::{path::PathBuf, process::Stdio, time::Duration};
+use std::{process::Stdio, time::Duration};
 
 use futures_util::StreamExt;
 use process_wrap::tokio::ChildWrapper;
@@ -7,7 +7,8 @@ use tokio::{io::AsyncWriteExt, process::ChildStdin};
 use tokio_util::codec::{FramedRead, LinesCodec};
 
 use crate::{
-    guardian::GuardianLaunch, runtime::DriverError, runtime_lease::prepare_unheld_runtime_lease,
+    guardian::GuardianLaunch, runtime::DriverError, runtime_lease::HeldRuntimeLease,
+    unix_process_tree::CapturedDescendants,
 };
 
 const HELPER_TIMEOUT: Duration = Duration::from_secs(5);
@@ -20,36 +21,31 @@ pub(crate) struct UnixProcessCustody {
     provider_pid: Option<Pid>,
     guardian: tokio::process::Child,
     guardian_input: Option<ChildStdin>,
-    _lease_path: PathBuf,
     armed: bool,
 }
 
 impl UnixProcessCustody {
     pub(crate) async fn start(
-        room_id: &str,
-        session_id: &str,
+        runtime_lease: &HeldRuntimeLease,
         launch: &GuardianLaunch,
     ) -> Result<Self, DriverError> {
-        let lease_path =
-            prepare_unheld_runtime_lease(room_id, session_id).map_err(|_| custody_error())?;
-        let mut command = launch.guardian_command(&lease_path);
+        let mut command = launch
+            .guardian_command(runtime_lease.path(), runtime_lease.token())
+            .map_err(|_| custody_error())?;
         command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null());
         let Ok(mut guardian) = command.spawn() else {
-            let _ = std::fs::remove_file(&lease_path);
             return Err(custody_error());
         };
         let Some(guardian_input) = guardian.stdin.take() else {
             terminate_failed_guardian(&mut guardian).await;
-            let _ = std::fs::remove_file(&lease_path);
             return Err(custody_error());
         };
         let Some(guardian_output) = guardian.stdout.take() else {
             drop(guardian_input);
             terminate_failed_guardian(&mut guardian).await;
-            let _ = std::fs::remove_file(&lease_path);
             return Err(custody_error());
         };
         let Ok(Ok(anchor_pid)) = tokio::time::timeout(
@@ -62,7 +58,6 @@ impl UnixProcessCustody {
         .await
         else {
             terminate_failed_guardian(&mut guardian).await;
-            let _ = std::fs::remove_file(&lease_path);
             return Err(custody_error());
         };
         Ok(Self {
@@ -70,7 +65,6 @@ impl UnixProcessCustody {
             provider_pid: None,
             guardian,
             guardian_input: Some(guardian_input),
-            _lease_path: lease_path,
             armed: true,
         })
     }
@@ -107,17 +101,22 @@ impl UnixProcessCustody {
     }
 
     pub(crate) async fn stop(&mut self, child: &mut dyn ChildWrapper) -> Result<(), DriverError> {
+        let provider_pid = self.provider_pid.ok_or_else(custody_error)?;
+        let descendants = CapturedDescendants::freeze(provider_pid, self.anchor_pid);
         self.request_stop();
-        let (guardian, provider) = tokio::time::timeout(HELPER_TIMEOUT, async {
-            tokio::join!(self.guardian.wait(), child.wait())
+        descendants.kill();
+        tokio::time::timeout(HELPER_TIMEOUT, async {
+            let (guardian, provider) = tokio::join!(self.guardian.wait(), child.wait());
+            let guardian = guardian.map_err(|_| stop_error())?;
+            provider.map_err(|_| stop_error())?;
+            if !guardian.success() {
+                return Err(stop_error());
+            }
+            wait_for_group_absence(self.anchor_pid).await?;
+            descendants.confirm_gone().await.map_err(|_| stop_error())
         })
         .await
-        .map_err(|_| stop_error())?;
-        let guardian = guardian.map_err(|_| stop_error())?;
-        provider.map_err(|_| stop_error())?;
-        if !guardian.success() {
-            return Err(stop_error());
-        }
+        .map_err(|_| stop_error())??;
         self.armed = false;
         Ok(())
     }
@@ -125,6 +124,18 @@ impl UnixProcessCustody {
     pub(crate) fn request_stop(&mut self) {
         if self.armed {
             drop(self.guardian_input.take());
+        }
+    }
+}
+
+async fn wait_for_group_absence(process_group: Pid) -> Result<(), DriverError> {
+    loop {
+        match rustix::process::test_kill_process_group(process_group) {
+            Err(rustix::io::Errno::SRCH) => return Ok(()),
+            Ok(()) | Err(rustix::io::Errno::PERM) => {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            Err(_) => return Err(stop_error()),
         }
     }
 }

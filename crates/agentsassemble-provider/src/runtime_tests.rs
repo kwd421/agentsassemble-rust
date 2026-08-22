@@ -15,6 +15,20 @@ fn provider_guardian_entry() {
     }
 }
 
+#[test]
+fn escaped_descendant_entry() {
+    let Some(pid_path) = std::env::var_os("AGENTSASSEMBLE_ESCAPE_FIXTURE_PID") else {
+        return;
+    };
+    rustix::process::setsid()
+        .unwrap_or_else(|error| panic!("create escaped descendant session: {error}"));
+    std::fs::write(pid_path, rustix::process::getpid().as_raw_pid().to_string())
+        .unwrap_or_else(|error| panic!("publish escaped descendant pid: {error}"));
+    loop {
+        std::thread::sleep(Duration::from_secs(1));
+    }
+}
+
 #[tokio::test]
 async fn codex_runtime_is_initialized_reused_and_stopped_by_exact_owner() {
     let _serial = RUNTIME_TEST_LOCK.lock().await;
@@ -184,6 +198,48 @@ async fn stop_kills_descendants_after_the_codex_leader_exits() {
 }
 
 #[tokio::test]
+async fn stop_captures_a_descendant_that_created_a_new_session() {
+    let _serial = RUNTIME_TEST_LOCK.lock().await;
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create escape fixture: {error}"));
+    let descendant_pid = directory.path().join("escaped-descendant.pid");
+    let test_binary = std::env::current_exe()
+        .unwrap_or_else(|error| panic!("resolve provider test binary: {error}"));
+    let script = format!(
+        "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nAGENTSASSEMBLE_ESCAPE_FIXTURE_PID={} {} --exact runtime::tests::escaped_descendant_entry --nocapture </dev/null >/dev/null 2>&1 &\nwhile :; do sleep 1; done\n",
+        shell_quote(&descendant_pid),
+        shell_quote(&test_binary),
+    );
+    let session = fixture_session(directory.path(), &script).await;
+    let adapter = ProviderAdapter::new();
+    let started = adapter
+        .start(&session)
+        .await
+        .unwrap_or_else(|error| panic!("start escaped descendant fixture: {error}"));
+    let pid = wait_for_pid(&descendant_pid).await;
+    let _cleanup = ExactProcessCleanup(pid);
+    assert!(process_exists(pid));
+    adapter
+        .stop(
+            &session.public.room_id,
+            &session.public.session_id,
+            &started.runtime_handle_id,
+            &started.runtime_owner_id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("stop escaped descendant fixture: {error}"));
+    adapter
+        .release_confirmed_stop(
+            &session.public.room_id,
+            &session.public.session_id,
+            &started.runtime_handle_id,
+            &started.runtime_owner_id,
+        )
+        .await;
+    wait_until(Duration::from_secs(2), || !process_exists(pid)).await;
+}
+
+#[tokio::test]
 async fn fresh_supervisor_uses_the_guardian_lease_before_reporting_gone() {
     let _serial = RUNTIME_TEST_LOCK.lock().await;
     let directory =
@@ -212,7 +268,10 @@ async fn fresh_supervisor_uses_the_guardian_lease_before_reporting_gone() {
         observation = fresh.observe(&session).await;
     }
     assert_eq!(observation, ProviderRuntimeObservation::Gone);
-    crate::runtime_lease::remove_runtime_lease(&session.public.room_id, &session.public.session_id);
+    crate::runtime_lease::cleanup_stale_runtime_lease(
+        &session.public.room_id,
+        &session.public.session_id,
+    );
 }
 
 #[tokio::test]
@@ -238,7 +297,6 @@ async fn cancelled_initialization_remains_owned_for_shutdown() {
         .shutdown()
         .await
         .unwrap_or_else(|error| panic!("shutdown cancelled initialization: {error}"));
-    crate::runtime_lease::remove_runtime_lease(&session.public.room_id, &session.public.session_id);
     wait_until(Duration::from_secs(2), || !process_exists(pid)).await;
 }
 

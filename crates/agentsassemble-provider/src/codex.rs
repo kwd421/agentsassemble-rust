@@ -21,7 +21,9 @@ use crate::{
     runtime::{DriverError, DriverFuture, ProviderDriver},
 };
 #[cfg(unix)]
-use crate::{guardian::GuardianLaunch, unix_custody::UnixProcessCustody};
+use crate::{
+    guardian::GuardianLaunch, runtime_lease::HeldRuntimeLease, unix_custody::UnixProcessCustody,
+};
 
 const PROTOCOL_TIMEOUT: Duration = Duration::from_secs(10);
 #[cfg(windows)]
@@ -49,9 +51,10 @@ impl CodexDriver {
     #[cfg(unix)]
     pub(crate) async fn spawn(
         session: &DurableAgentSession,
+        runtime_lease: &HeldRuntimeLease,
         guardian_launch: &GuardianLaunch,
     ) -> Result<Self, DriverError> {
-        Self::spawn_inner(session, guardian_launch).await
+        Self::spawn_inner(session, runtime_lease, guardian_launch).await
     }
 
     #[cfg(not(unix))]
@@ -61,6 +64,7 @@ impl CodexDriver {
 
     async fn spawn_inner(
         session: &DurableAgentSession,
+        #[cfg(unix)] runtime_lease: &HeldRuntimeLease,
         #[cfg(unix)] guardian_launch: &GuardianLaunch,
     ) -> Result<Self, DriverError> {
         #[cfg(not(any(unix, windows)))]
@@ -77,12 +81,7 @@ impl CodexDriver {
         .await
         .map_err(|_| executable_authority_error())?;
         #[cfg(unix)]
-        let mut process_group = UnixProcessCustody::start(
-            &session.public.room_id,
-            &session.public.session_id,
-            guardian_launch,
-        )
-        .await?;
+        let mut process_group = UnixProcessCustody::start(runtime_lease, guardian_launch).await?;
         let mut command = CommandWrap::with_new(executable.launch_path(), |command| {
             command
                 .args(&arguments)

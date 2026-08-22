@@ -36,15 +36,23 @@ pub(crate) async fn observe_previous_runtime(
             }
         }
         LeaseObservation::Gone => ProviderRuntimeObservation::Gone,
-        LeaseObservation::Unknown
+        LeaseObservation::Missing
             if session.runtime_profile_version == CURRENT_RUNTIME_PROFILE_VERSION
                 && session.runtime_handle_id.is_empty()
-                && session.runtime_owner_id.is_empty() =>
+                && session.runtime_owner_id.is_empty()
+                && session.lifecycle_intent_action == "start"
+                && matches!(
+                    session.lifecycle_intent_status.as_str(),
+                    "prepared" | "unconfirmed"
+                ) =>
         {
             ProviderRuntimeObservation::Gone
         }
+        LeaseObservation::Missing => ProviderRuntimeObservation::Ambiguous {
+            reason_code: "runtime_lease_missing".to_owned(),
+        },
         LeaseObservation::Unknown => ProviderRuntimeObservation::Ambiguous {
-            reason_code: "runtime_not_owned".to_owned(),
+            reason_code: "runtime_lease_observation_failed".to_owned(),
         },
     }
 }

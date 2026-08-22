@@ -1,8 +1,8 @@
 #[cfg(unix)]
-use std::path::PathBuf;
+use std::path::Path;
 use std::{collections::HashMap, future::Future, pin::Pin, sync::Arc, time::Duration};
 
-use agentsassemble_domain::{CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession};
+use agentsassemble_domain::DurableAgentSession;
 use thiserror::Error;
 use tokio::sync::Mutex;
 use uuid::Uuid;
@@ -10,11 +10,8 @@ use uuid::Uuid;
 #[cfg(unix)]
 use crate::guardian::GuardianLaunch;
 use crate::{
-    codex::CodexDriver,
-    filesystem::{canonical_workspace, executable_identity},
-    profile::runtime_profile_key,
-    runtime_lease::{HeldRuntimeLease, remove_runtime_lease},
-    runtime_recovery::observe_previous_runtime,
+    codex::CodexDriver, runtime_authority::revalidate_runtime_authority,
+    runtime_lease::HeldRuntimeLease, runtime_recovery::observe_previous_runtime,
 };
 
 const DRIVER_STOP_TIMEOUT: Duration = Duration::from_secs(5);
@@ -44,6 +41,7 @@ trait DriverFactory: Send + Sync {
     fn launch<'a>(
         &'a self,
         session: &'a DurableAgentSession,
+        _runtime_lease: &'a HeldRuntimeLease,
     ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverError>>;
 }
 
@@ -57,7 +55,9 @@ impl ProductionDriverFactory {
         #[cfg(all(unix, test))]
         let guardian = GuardianLaunch::test_harness().ok();
         #[cfg(all(unix, not(test)))]
-        let guardian = std::env::current_exe().ok().map(GuardianLaunch::production);
+        let guardian = std::env::current_exe()
+            .ok()
+            .and_then(|executable| GuardianLaunch::production(&executable).ok());
         Self {
             #[cfg(unix)]
             guardian,
@@ -65,9 +65,9 @@ impl ProductionDriverFactory {
     }
 
     #[cfg(unix)]
-    fn with_guardian(executable: PathBuf) -> Self {
+    fn with_guardian(executable: &Path) -> Self {
         Self {
-            guardian: Some(GuardianLaunch::production(executable)),
+            guardian: GuardianLaunch::production(executable).ok(),
         }
     }
 }
@@ -76,7 +76,10 @@ impl DriverFactory for ProductionDriverFactory {
     fn launch<'a>(
         &'a self,
         session: &'a DurableAgentSession,
+        runtime_lease: &'a HeldRuntimeLease,
     ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverError>> {
+        #[cfg(not(unix))]
+        let _ = runtime_lease;
         Box::pin(async move {
             match (
                 session.public.provider_kind.as_str(),
@@ -86,6 +89,7 @@ impl DriverFactory for ProductionDriverFactory {
                     #[cfg(unix)]
                     let driver = CodexDriver::spawn(
                         session,
+                        runtime_lease,
                         self.guardian.as_ref().ok_or_else(|| {
                             DriverError::new(
                                 "provider_custody_unavailable",
@@ -131,6 +135,7 @@ pub struct ProviderRuntimeGone {
     pub session_id: String,
     pub runtime_handle_id: String,
     pub runtime_owner_id: String,
+    pub runtime_lease_token: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -213,7 +218,7 @@ enum RuntimeState {
     StopConfirmed {
         handle_id: String,
         owner_id: String,
-        _runtime_lease: Option<HeldRuntimeLease>,
+        runtime_lease: HeldRuntimeLease,
     },
 }
 
@@ -239,7 +244,7 @@ impl ProviderAdapter {
     #[doc(hidden)]
     #[cfg(unix)]
     #[must_use]
-    pub fn with_guardian_executable(executable: PathBuf) -> Self {
+    pub fn with_guardian_executable(executable: &Path) -> Self {
         Self::with_factory(Arc::new(ProductionDriverFactory::with_guardian(executable)))
     }
 
@@ -285,29 +290,28 @@ impl ProviderAdapter {
                 revalidate_runtime_authority(session)
                     .await
                     .map_err(ProviderAdapterError::safe)?;
-                let runtime_lease = HeldRuntimeLease::acquire_for_parent(
-                    &session.public.room_id,
-                    &session.public.session_id,
-                )
-                .map_err(|_| {
-                    ProviderAdapterError::safe(DriverError::new(
-                        "provider_custody_unavailable",
-                        "The provider runtime lease could not be established.",
-                    ))
-                })?;
-                let handle_id = format!("runtime-v2-{}", Uuid::new_v4());
-                let driver = self
-                    .owner
-                    .factory
-                    .launch(session)
-                    .await
-                    .map_err(ProviderAdapterError::safe)?;
+                let runtime_lease =
+                    HeldRuntimeLease::prepare(&session.public.room_id, &session.public.session_id)
+                        .map_err(|_| {
+                            ProviderAdapterError::safe(DriverError::new(
+                                "provider_custody_unavailable",
+                                "The provider runtime lease could not be established.",
+                            ))
+                        })?;
+                let handle_id = format!("runtime-v3-{}", Uuid::new_v4());
+                let driver = match self.owner.factory.launch(session, &runtime_lease).await {
+                    Ok(driver) => driver,
+                    Err(error) => {
+                        runtime_lease.cleanup_pre_effect();
+                        return Err(ProviderAdapterError::safe(error));
+                    }
+                };
                 slot.state = RuntimeState::Running(OwnedRuntime {
                     handle_id,
                     owner_id: self.owner.supervisor_id.clone(),
                     profile_key: session.runtime_profile_key.clone(),
                     driver,
-                    runtime_lease,
+                    runtime_lease: Some(runtime_lease),
                 });
                 let RuntimeState::Running(runtime) = &mut slot.state else {
                     unreachable!("new provider runtime slot must be running");
@@ -353,10 +357,20 @@ impl ProviderAdapter {
                 if let Err(error) = runtime.driver.stop().await {
                     return Err(ProviderAdapterError::uncertain(error, handle_id, owner_id));
                 }
+                let Some(runtime_lease) = runtime.runtime_lease.take() else {
+                    return Err(ProviderAdapterError::uncertain(
+                        DriverError::new(
+                            "provider_custody_unavailable",
+                            "The provider runtime lease is unavailable.",
+                        ),
+                        handle_id,
+                        owner_id,
+                    ));
+                };
                 slot.state = RuntimeState::StopConfirmed {
                     handle_id: handle_id.to_owned(),
                     owner_id: owner_id.to_owned(),
-                    _runtime_lease: runtime.runtime_lease.take(),
+                    runtime_lease,
                 };
                 Ok(())
             }
@@ -392,10 +406,13 @@ impl ProviderAdapter {
             RuntimeState::StopConfirmed {
                 handle_id: confirmed_handle,
                 owner_id: confirmed_owner,
-                ..
+                runtime_lease,
             } if confirmed_handle == handle_id && confirmed_owner == owner_id
         ) {
-            remove_runtime_lease(room_id, session_id);
+            let RuntimeState::StopConfirmed { runtime_lease, .. } = &mut slot.state else {
+                unreachable!("confirmed provider stop changed while locked");
+            };
+            runtime_lease.release_and_remove();
             slot.state = RuntimeState::Vacant;
         }
     }
@@ -472,10 +489,9 @@ impl ProviderAdapter {
     ///
     /// Returns when one or more owned processes could not be confirmed stopped.
     pub async fn shutdown(&self) -> Result<(), ProviderAdapterError> {
-        self.shutdown_with_observations()
-            .await
-            .failure
-            .map_or(Ok(()), Err)
+        let outcome = self.shutdown_with_observations().await;
+        self.release_shutdown_observations(&outcome.gone).await;
+        outcome.failure.map_or(Ok(()), Err)
     }
 
     /// Stops every owned runtime and returns the exact durable sessions now proven gone.
@@ -500,13 +516,31 @@ impl ProviderAdapter {
                     tokio::time::timeout(DRIVER_STOP_TIMEOUT, runtime.driver.stop()).await;
                 match stopped {
                     Ok(Ok(())) => {
+                        let Some(runtime_lease) = runtime.runtime_lease.take() else {
+                            failure.get_or_insert_with(|| {
+                                ProviderAdapterError::uncertain(
+                                    DriverError::new(
+                                        "provider_custody_unavailable",
+                                        "The provider runtime lease is unavailable.",
+                                    ),
+                                    &runtime.handle_id,
+                                    &runtime.owner_id,
+                                )
+                            });
+                            continue;
+                        };
                         gone.push(ProviderRuntimeGone {
                             room_id: key.room_id,
                             session_id: key.session_id,
                             runtime_handle_id: runtime.handle_id.clone(),
                             runtime_owner_id: runtime.owner_id.clone(),
+                            runtime_lease_token: runtime_lease.token().to_owned(),
                         });
-                        slot.state = RuntimeState::Vacant;
+                        slot.state = RuntimeState::StopConfirmed {
+                            handle_id: runtime.handle_id.clone(),
+                            owner_id: runtime.owner_id.clone(),
+                            runtime_lease,
+                        };
                     }
                     Ok(Err(error)) => {
                         failure.get_or_insert_with(|| {
@@ -533,7 +567,7 @@ impl ProviderAdapter {
             } else if let RuntimeState::StopConfirmed {
                 handle_id,
                 owner_id,
-                ..
+                runtime_lease,
             } = &slot.state
             {
                 gone.push(ProviderRuntimeGone {
@@ -541,16 +575,38 @@ impl ProviderAdapter {
                     session_id: key.session_id,
                     runtime_handle_id: handle_id.clone(),
                     runtime_owner_id: owner_id.clone(),
+                    runtime_lease_token: runtime_lease.token().to_owned(),
                 });
-                slot.state = RuntimeState::Vacant;
             }
         }
         ProviderShutdownOutcome { gone, failure }
     }
 
-    pub fn release_shutdown_observations(&self, gone: &[ProviderRuntimeGone]) {
+    pub async fn release_shutdown_observations(&self, gone: &[ProviderRuntimeGone]) {
         for stopped in gone {
-            remove_runtime_lease(&stopped.room_id, &stopped.session_id);
+            let Some(slot) = self
+                .existing_slot(&stopped.room_id, &stopped.session_id)
+                .await
+            else {
+                continue;
+            };
+            let mut slot = slot.lock().await;
+            let RuntimeState::StopConfirmed {
+                handle_id,
+                owner_id,
+                runtime_lease,
+            } = &mut slot.state
+            else {
+                continue;
+            };
+            if handle_id != &stopped.runtime_handle_id
+                || owner_id != &stopped.runtime_owner_id
+                || runtime_lease.token() != stopped.runtime_lease_token
+            {
+                continue;
+            }
+            runtime_lease.release_and_remove();
+            slot.state = RuntimeState::Vacant;
         }
     }
 
@@ -683,65 +739,6 @@ fn validate_owned_runtime(
             ),
             &runtime.handle_id,
             &runtime.owner_id,
-        ));
-    }
-    Ok(())
-}
-
-async fn revalidate_runtime_authority(session: &DurableAgentSession) -> Result<(), DriverError> {
-    if session.runtime_profile_version != CURRENT_RUNTIME_PROFILE_VERSION {
-        return Err(DriverError::new(
-            "profile_migration_required",
-            "The provider runtime profile version is unsupported.",
-        ));
-    }
-    let expected_profile_key = runtime_profile_key([
-        session.public.provider_kind.as_str(),
-        session.public.runtime_kind.as_str(),
-        session.executable.as_str(),
-        session.executable_identity.as_str(),
-        session.workspace.as_str(),
-        session.workspace_identity.as_str(),
-        session.public.model.as_str(),
-        session.public.reasoning_effort.as_str(),
-        session.public.service_tier.as_str(),
-        session.public.variant.as_str(),
-        session.public.execution_harness.as_str(),
-        session.public.permission_mode.as_str(),
-        session.public.transport.as_str(),
-    ]);
-    if expected_profile_key != session.runtime_profile_key {
-        return Err(DriverError::new(
-            "runtime_profile_changed",
-            "The provider runtime profile no longer matches its durable identity.",
-        ));
-    }
-    let workspace = canonical_workspace(session.workspace.clone())
-        .await
-        .map_err(|_| {
-            DriverError::new(
-                "workspace_authority_changed",
-                "The provider workspace authority could not be revalidated.",
-            )
-        })?;
-    if workspace.0 != session.workspace || workspace.1 != session.workspace_identity {
-        return Err(DriverError::new(
-            "workspace_authority_changed",
-            "The provider workspace authority changed after selection.",
-        ));
-    }
-    let executable = executable_identity(session.executable.clone())
-        .await
-        .map_err(|_| {
-            DriverError::new(
-                "executable_authority_changed",
-                "The provider executable authority could not be revalidated.",
-            )
-        })?;
-    if executable != session.executable_identity {
-        return Err(DriverError::new(
-            "executable_authority_changed",
-            "The provider executable authority changed after selection.",
         ));
     }
     Ok(())
