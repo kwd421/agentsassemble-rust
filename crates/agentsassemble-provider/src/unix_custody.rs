@@ -17,6 +17,8 @@ const HELPER_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_HELPER_LINE_BYTES: usize = 1024;
 const MAX_HELPER_LINES: usize = 32;
 const READY_PREFIX: &str = "AGENTSASSEMBLE_PROVIDER_READY=";
+#[cfg(any(target_os = "linux", target_os = "android"))]
+const MAX_PROCESS_STAT_BYTES: u64 = 4 * 1024;
 
 pub(crate) struct UnixProviderPipes {
     pub(crate) stdin: tokio::fs::File,
@@ -113,14 +115,23 @@ impl UnixProcessCustody {
         ))
     }
 
-    pub(crate) fn leader_is_running(&self) -> Result<bool, DriverError> {
+    pub(crate) fn leader_is_running(&mut self) -> Result<bool, DriverError> {
+        if self
+            .guardian
+            .try_wait()
+            .map_err(|_| health_error())?
+            .is_some()
+        {
+            return Err(health_error());
+        }
         match rustix::process::getpgid(Some(self.provider_pid)) {
-            Ok(group) => Ok(group == self.anchor_pid),
+            Ok(group) if group != self.anchor_pid => Ok(false),
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            Ok(_) => provider_process_is_running(self.provider_pid).map_err(|_| health_error()),
+            #[cfg(not(any(target_os = "linux", target_os = "android")))]
+            Ok(_) => Ok(true),
             Err(rustix::io::Errno::SRCH) => Ok(false),
-            Err(_) => Err(DriverError::new(
-                "provider_health_unknown",
-                "The Codex app-server leader state could not be observed.",
-            )),
+            Err(_) => Err(health_error()),
         }
     }
 
@@ -210,6 +221,36 @@ fn provider_pipe() -> Result<(OwnedFd, OwnedFd), DriverError> {
         .map_err(|_| custody_error())
 }
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn provider_process_is_running(process: Pid) -> std::io::Result<bool> {
+    use std::io::Read;
+
+    let path = format!("/proc/{}/stat", process.as_raw_pid());
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error),
+    };
+    let mut contents = String::new();
+    file.take(MAX_PROCESS_STAT_BYTES + 1)
+        .read_to_string(&mut contents)?;
+    if contents.len() as u64 > MAX_PROCESS_STAT_BYTES {
+        return Err(std::io::Error::other(
+            "provider process status exceeded its bound",
+        ));
+    }
+    process_stat_is_running(&contents)
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn process_stat_is_running(contents: &str) -> std::io::Result<bool> {
+    let state = contents
+        .rsplit_once(')')
+        .and_then(|(_, fields)| fields.split_whitespace().next())
+        .ok_or_else(|| std::io::Error::other("provider process status is invalid"))?;
+    Ok(!matches!(state, "Z" | "X" | "x"))
+}
+
 async fn terminate_failed_guardian(guardian: &mut tokio::process::Child) {
     if let Some(mut input) = guardian.stdin.take() {
         let _ = input.shutdown().await;
@@ -230,4 +271,28 @@ const fn stop_error() -> DriverError {
         "provider_stop_unconfirmed",
         "The Codex app-server process tree shutdown could not be confirmed.",
     )
+}
+
+const fn health_error() -> DriverError {
+    DriverError::new(
+        "provider_health_unknown",
+        "The Codex app-server leader state could not be observed.",
+    )
+}
+
+#[cfg(all(test, any(target_os = "linux", target_os = "android")))]
+mod tests {
+    #[test]
+    fn process_status_rejects_zombies_and_dead_tasks() {
+        assert!(
+            super::process_stat_is_running("123 (provider worker) R 1 2 3")
+                .unwrap_or_else(|error| panic!("parse running provider status: {error}"))
+        );
+        for state in ["Z", "X", "x"] {
+            assert!(
+                !super::process_stat_is_running(&format!("123 (provider worker) {state} 1 2 3"))
+                    .unwrap_or_else(|error| panic!("parse stopped provider status: {error}"))
+            );
+        }
+    }
 }

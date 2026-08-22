@@ -427,6 +427,7 @@ fn run_guardian(lease_path: &Path, lease_token: &str, launch: &GuardianLaunch) -
         let mut provider_command =
             launch.provider_launcher_command(lease_path, lease_token, anchor_group)?;
         let provider_child = provider_command.spawn()?;
+        drop(provider_command);
         let provider_pid = provider_child.id();
         wait_for_launcher_stop(provider_pid)?;
         let provider_process = i32::try_from(provider_pid)
