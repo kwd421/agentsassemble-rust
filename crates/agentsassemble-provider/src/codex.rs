@@ -250,9 +250,11 @@ impl CodexDriver {
             (Some(expected), Some(observed)) if expected != observed => {
                 return self.poison_attachment(provider_session_mismatch());
             }
-            (Some(expected), _) => expected.to_owned(),
+            (Some(expected), Some(_)) => expected.to_owned(),
             (None, Some(observed)) => observed.to_owned(),
-            (None, None) => return self.poison_attachment(provider_session_unconfirmed()),
+            (Some(_) | None, None) => {
+                return self.poison_attachment(provider_session_unconfirmed());
+            }
         };
         self.attached_thread_id = Some(thread_id.clone());
         Ok(ProviderSessionAttachment {
@@ -497,12 +499,25 @@ fn checked_provider_session_id(value: &str) -> Result<Option<&str>, DriverError>
 }
 
 fn provider_session_id_from_result(result: &Value) -> Result<Option<&str>, DriverError> {
-    let value = result
-        .get("thread")
-        .and_then(|thread| thread.get("id"))
-        .and_then(Value::as_str)
-        .or_else(|| result.get("threadId").and_then(Value::as_str));
-    value.map_or(Ok(None), checked_provider_session_id)
+    let nested =
+        response_provider_session_id(result.get("thread").and_then(|thread| thread.get("id")))?;
+    let alias = response_provider_session_id(result.get("threadId"))?;
+    match (nested, alias) {
+        (Some(first), Some(second)) if first != second => Err(provider_session_mismatch()),
+        (Some(value), _) | (_, Some(value)) => Ok(Some(value)),
+        (None, None) => Ok(None),
+    }
+}
+
+fn response_provider_session_id(value: Option<&Value>) -> Result<Option<&str>, DriverError> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let value = value.as_str().ok_or_else(provider_session_mismatch)?;
+    checked_provider_session_id(value)?.map_or_else(
+        || Err(provider_session_unconfirmed()),
+        |value| Ok(Some(value)),
+    )
 }
 
 fn push_config(arguments: &mut Vec<String>, key: &str, value: &str) -> Result<(), DriverError> {

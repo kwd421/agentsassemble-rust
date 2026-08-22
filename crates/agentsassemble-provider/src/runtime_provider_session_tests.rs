@@ -102,7 +102,7 @@ async fn durable_resume_rejects_a_changed_provider_identity() {
         "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"thread\":{\"id\":\"thread-other\"}}}";
     let script = transcript_fixture_with_response(&transcript, "", response);
     let mut session = fixture_session(directory.path(), &script).await;
-    session.provider_session_id = "thread-1".to_owned();
+    "thread-1".clone_into(&mut session.provider_session_id);
     let adapter = ProviderAdapter::new();
     let Err(error) = adapter.start(&session).await else {
         panic!("changed resume identity must be rejected");
@@ -114,6 +114,26 @@ async fn durable_resume_rejects_a_changed_provider_identity() {
         .shutdown()
         .await
         .unwrap_or_else(|error| panic!("shutdown resume-mismatch fixture: {error}"));
+}
+
+#[tokio::test]
+async fn durable_resume_requires_an_observed_response_identity() {
+    let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
+    assert_resume_error(
+        "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{}}",
+        "provider_session_unconfirmed",
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn durable_resume_rejects_conflicting_response_aliases() {
+    let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
+    assert_resume_error(
+        "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"thread\":{\"id\":\"thread-1\"},\"threadId\":\"thread-other\"}}",
+        "provider_session_mismatch",
+    )
+    .await;
 }
 
 #[tokio::test]
@@ -162,6 +182,31 @@ fn transcript_fixture_with_response(
         before = before_response,
         response = shell_quote_text(response),
     )
+}
+
+async fn assert_resume_error(response: &str, expected_code: &str) {
+    let directory = tempfile::tempdir()
+        .unwrap_or_else(|error| panic!("create rejected-resume fixture: {error}"));
+    let transcript = directory.path().join("requests.jsonl");
+    let script = transcript_fixture_with_response(&transcript, "", response);
+    let mut session = fixture_session(directory.path(), &script).await;
+    "thread-1".clone_into(&mut session.provider_session_id);
+    let adapter = ProviderAdapter::new();
+    for _ in 0..2 {
+        let Err(error) = adapter.start(&session).await else {
+            panic!("unconfirmed resume identity must remain failed closed");
+        };
+        assert_eq!(error.code, expected_code);
+        assert!(error.effect_uncertain);
+    }
+    assert_eq!(
+        request_methods(&transcript),
+        ["initialize", "initialized", "thread/resume"]
+    );
+    adapter
+        .shutdown()
+        .await
+        .unwrap_or_else(|error| panic!("shutdown rejected-resume fixture: {error}"));
 }
 
 fn requests(path: &Path) -> Vec<Value> {
