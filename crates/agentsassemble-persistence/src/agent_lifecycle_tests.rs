@@ -8,9 +8,9 @@ use serde_json::json;
 
 use crate::{AgentRuntimeStarted, AgentStartPlan, AgentStopPlan, PersistenceError, SqliteStore};
 
-const AGENT_ID: &str = "codex-00000000-0000-5000-8000-000000000001";
+pub(super) const AGENT_ID: &str = "codex-00000000-0000-5000-8000-000000000001";
 
-async fn fixture() -> (SqliteStore, AuthenticatedPrincipal, tempfile::TempDir) {
+pub(super) async fn fixture() -> (SqliteStore, AuthenticatedPrincipal, tempfile::TempDir) {
     let directory =
         tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
     let store = SqliteStore::open_path(&directory.path().join("runtime.sqlite3"))

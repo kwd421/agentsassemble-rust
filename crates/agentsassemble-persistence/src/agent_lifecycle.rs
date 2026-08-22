@@ -103,9 +103,8 @@ impl SqliteStore {
                 "This Agent Session runtime profile must be saved again before it can start.",
             ));
         }
-        let incomplete = session.lifecycle_intent_action == "start"
-            && session.lifecycle_intent_status == "prepared"
-            && session.runtime_handle_id.is_empty();
+        let operation_id = lifecycle_operation_id(principal, request_id, START);
+        let incomplete = matching_prepared_intent(&session, "start", &operation_id)?;
         if matches!(
             session.public.runtime_status.as_str(),
             "starting" | "idle" | "busy" | "paused"
@@ -123,7 +122,7 @@ impl SqliteStore {
             return Ok(AgentStartPlan::Outcome(Box::new(outcome)));
         }
         let operation_id = if incomplete {
-            session.lifecycle_intent_id.clone()
+            operation_id
         } else {
             "available".clone_into(&mut session.public.status);
             session.public.enabled = true;
@@ -132,11 +131,11 @@ impl SqliteStore {
             session.public.last_error_code.clear();
             session.public.recovery_required = false;
             "start".clone_into(&mut session.lifecycle_intent_action);
-            session.lifecycle_intent_id = lifecycle_operation_id(principal, request_id, START);
+            session.lifecycle_intent_id.clone_from(&operation_id);
             "prepared".clone_into(&mut session.lifecycle_intent_status);
             session.public.updated_at = Utc::now();
             save_session(&mut transaction, &session).await?;
-            session.lifecycle_intent_id.clone()
+            operation_id
         };
         transaction.commit().await?;
         Ok(AgentStartPlan::Start(Box::new(AgentStartEffect {
@@ -158,7 +157,6 @@ impl SqliteStore {
         operation_id: &str,
         started: &AgentRuntimeStarted,
     ) -> Result<CommandOutcome, PersistenceError> {
-        validate_runtime_started(started)?;
         let agent_id = payload_agent_id(payload)?;
         let payload_hash = canonical_payload_hash(payload);
         let mut transaction = self.pool.begin().await?;
@@ -177,6 +175,7 @@ impl SqliteStore {
             return Ok(outcome);
         }
         let mut session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
+        validate_runtime_started(&session, started)?;
         require_intent(
             &session,
             START,
@@ -333,10 +332,12 @@ impl SqliteStore {
             return Ok(AgentStopPlan::Outcome(Box::new(outcome)));
         }
         let mut session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
+        let operation_id = lifecycle_operation_id(principal, request_id, STOP);
         if matches!(
             session.public.runtime_status.as_str(),
             "stopped" | "available"
         ) && session.runtime_handle_id.is_empty()
+            && lifecycle_intent_is_empty(&session)
         {
             let outcome = commit_already_stopped(
                 &mut transaction,
@@ -349,7 +350,8 @@ impl SqliteStore {
             transaction.commit().await?;
             return Ok(AgentStopPlan::Outcome(Box::new(outcome)));
         }
-        if session.lifecycle_intent_action == "stop" {
+        if !lifecycle_intent_is_empty(&session) {
+            require_matching_operation(&session, "stop", &operation_id)?;
             if session.lifecycle_intent_status == "effect_applied" {
                 transaction.commit().await?;
                 return Ok(AgentStopPlan::Finalize);
@@ -367,7 +369,7 @@ impl SqliteStore {
         "stopping".clone_into(&mut session.public.runtime_status);
         session.public.enabled = false;
         "stop".clone_into(&mut session.lifecycle_intent_action);
-        session.lifecycle_intent_id = lifecycle_operation_id(principal, request_id, STOP);
+        session.lifecycle_intent_id.clone_from(&operation_id);
         "prepared".clone_into(&mut session.lifecycle_intent_status);
         session.public.updated_at = Utc::now();
         save_session(&mut transaction, &session).await?;
@@ -498,14 +500,14 @@ impl SqliteStore {
             return Ok(outcome);
         }
         let mut session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
-        if session.lifecycle_intent_action != "stop"
-            || session.lifecycle_intent_status != "effect_applied"
-        {
-            return Err(rejected(
-                "stale_stop_confirmation",
-                "Provider stop finalization does not match a confirmed lifecycle operation.",
-            ));
-        }
+        let operation_id = lifecycle_operation_id(principal, request_id, STOP);
+        require_intent(
+            &session,
+            "stop",
+            &operation_id,
+            "effect_applied",
+            "stale_stop_confirmation",
+        )?;
         session.pending_event_ids = dedupe(
             session
                 .inflight_event_ids
@@ -578,7 +580,10 @@ fn authorize_control(principal: &AuthenticatedPrincipal) -> Result<(), Persisten
     Ok(())
 }
 
-fn validate_runtime_started(started: &AgentRuntimeStarted) -> Result<(), PersistenceError> {
+fn validate_runtime_started(
+    session: &DurableAgentSession,
+    started: &AgentRuntimeStarted,
+) -> Result<(), PersistenceError> {
     if started.runtime_handle_id.is_empty() {
         return Err(rejected(
             "runtime_start_unconfirmed",
@@ -597,7 +602,54 @@ fn validate_runtime_started(started: &AgentRuntimeStarted) -> Result<(), Persist
             "An inactive provider session cannot be reported as reused.",
         ));
     }
+    if started.provider_session_reused
+        && (session.provider_session_id.is_empty()
+            || started.provider_session_id != session.provider_session_id)
+    {
+        return Err(rejected(
+            "provider_session_mismatch",
+            "A reused provider session must preserve its durable identity.",
+        ));
+    }
     Ok(())
+}
+
+fn matching_prepared_intent(
+    session: &DurableAgentSession,
+    action: &str,
+    operation_id: &str,
+) -> Result<bool, PersistenceError> {
+    if lifecycle_intent_is_empty(session) {
+        return Ok(false);
+    }
+    require_matching_operation(session, action, operation_id)?;
+    if session.lifecycle_intent_status != "prepared" {
+        return Err(rejected(
+            "invalid_state",
+            "Stored provider lifecycle intent is invalid.",
+        ));
+    }
+    Ok(true)
+}
+
+fn require_matching_operation(
+    session: &DurableAgentSession,
+    action: &str,
+    operation_id: &str,
+) -> Result<(), PersistenceError> {
+    if session.lifecycle_intent_action == action && session.lifecycle_intent_id == operation_id {
+        return Ok(());
+    }
+    Err(rejected(
+        "operation_in_progress",
+        "Another provider lifecycle operation is still in progress.",
+    ))
+}
+
+fn lifecycle_intent_is_empty(session: &DurableAgentSession) -> bool {
+    session.lifecycle_intent_action.is_empty()
+        && session.lifecycle_intent_id.is_empty()
+        && session.lifecycle_intent_status.is_empty()
 }
 
 fn stop_effect(session: &DurableAgentSession) -> AgentStopEffect {
@@ -723,3 +775,7 @@ fn rejected(code: &'static str, message: impl Into<String>) -> PersistenceError 
 #[cfg(test)]
 #[path = "agent_lifecycle_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "agent_lifecycle_recovery_tests.rs"]
+mod recovery_tests;

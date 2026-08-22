@@ -40,18 +40,28 @@ impl SqliteStore {
             }
             let mut session =
                 serde_json::from_str::<DurableAgentSession>(&row.get::<String, _>("session_json"))?;
+            if confirmed_stop_needs_reconciliation(&session) {
+                reconcile_confirmed_stop(&mut session);
+                save_reconciled_session(&mut transaction, &session).await?;
+                detach_participant(
+                    &mut transaction,
+                    &session.public.room_id,
+                    &session.public.participant_id,
+                )
+                .await?;
+                reconciled += 1;
+                continue;
+            }
+            if session.lifecycle_intent_action == "stop"
+                && session.lifecycle_intent_status == "effect_applied"
+            {
+                continue;
+            }
             if !ACTIVE_RUNTIME_STATES.contains(&session.public.runtime_status.as_str()) {
                 continue;
             }
             disconnect_after_restart(&mut session);
-            sqlx::query(
-                "UPDATE agent_sessions SET session_json = ? WHERE room_id = ? AND session_id = ?",
-            )
-            .bind(serde_json::to_string(&session)?)
-            .bind(&session.public.room_id)
-            .bind(&session.public.session_id)
-            .execute(&mut *transaction)
-            .await?;
+            save_reconciled_session(&mut transaction, &session).await?;
             detach_participant(
                 &mut transaction,
                 &session.public.room_id,
@@ -65,19 +75,33 @@ impl SqliteStore {
     }
 }
 
+fn confirmed_stop_needs_reconciliation(session: &DurableAgentSession) -> bool {
+    session.lifecycle_intent_action == "stop"
+        && session.lifecycle_intent_status == "effect_applied"
+        && (!session.runtime_handle_id.is_empty()
+            || session.public.provider_session_active
+            || session.public.provider_session_reused
+            || !session.public.active_turn_id.is_empty()
+            || !session.public.turn_phase.is_empty()
+            || !session.inflight_event_ids.is_empty()
+            || session.public.status != "unavailable")
+}
+
+fn reconcile_confirmed_stop(session: &mut DurableAgentSession) {
+    merge_inflight_events(session);
+    "unavailable".clone_into(&mut session.public.status);
+    session.public.enabled = false;
+    "stopping".clone_into(&mut session.public.runtime_status);
+    session.public.provider_session_active = false;
+    session.public.provider_session_reused = false;
+    session.public.active_turn_id.clear();
+    session.public.turn_phase.clear();
+    session.runtime_handle_id.clear();
+    session.public.updated_at = Utc::now();
+}
+
 fn disconnect_after_restart(session: &mut DurableAgentSession) {
-    let mut pending = Vec::new();
-    for event_id in session
-        .inflight_event_ids
-        .iter()
-        .chain(&session.pending_event_ids)
-    {
-        if !event_id.is_empty() && !pending.contains(event_id) {
-            pending.push(event_id.clone());
-        }
-    }
-    session.pending_event_ids = pending;
-    session.inflight_event_ids.clear();
+    merge_inflight_events(session);
     "unavailable".clone_into(&mut session.public.status);
     "disconnected".clone_into(&mut session.public.runtime_status);
     session.public.provider_session_active = false;
@@ -93,6 +117,34 @@ fn disconnect_after_restart(session: &mut DurableAgentSession) {
     session.lifecycle_intent_id.clear();
     session.lifecycle_intent_status.clear();
     session.public.updated_at = Utc::now();
+}
+
+fn merge_inflight_events(session: &mut DurableAgentSession) {
+    let mut pending = Vec::new();
+    for event_id in session
+        .inflight_event_ids
+        .iter()
+        .chain(&session.pending_event_ids)
+    {
+        if !event_id.is_empty() && !pending.contains(event_id) {
+            pending.push(event_id.clone());
+        }
+    }
+    session.pending_event_ids = pending;
+    session.inflight_event_ids.clear();
+}
+
+async fn save_reconciled_session(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    session: &DurableAgentSession,
+) -> Result<(), PersistenceError> {
+    sqlx::query("UPDATE agent_sessions SET session_json = ? WHERE room_id = ? AND session_id = ?")
+        .bind(serde_json::to_string(session)?)
+        .bind(&session.public.room_id)
+        .bind(&session.public.session_id)
+        .execute(&mut **transaction)
+        .await?;
+    Ok(())
 }
 
 async fn detach_participant(
