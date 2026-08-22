@@ -125,11 +125,23 @@ fn is_jwt_boundary(value: Option<char>) -> bool {
 fn redact_jwt_values(text: &str) -> String {
     let mut redacted = String::with_capacity(text.len());
     let mut cursor = 0;
-    for matched in jwt_value().find_iter(text) {
-        let prefix = text[..matched.start()].chars().next_back();
+    for (candidate_start, _) in text.match_indices("eyJ") {
+        if candidate_start < cursor {
+            continue;
+        }
+        let prefix = text[..candidate_start].chars().next_back();
+        if !is_jwt_boundary(prefix) {
+            continue;
+        }
+        let Some(matched) = jwt_value().find_at(text, candidate_start) else {
+            continue;
+        };
+        if matched.start() != candidate_start {
+            continue;
+        }
         let suffix = text[matched.end()..].chars().next();
-        if is_jwt_boundary(prefix) && is_jwt_boundary(suffix) {
-            redacted.push_str(&text[cursor..matched.start()]);
+        if is_jwt_boundary(suffix) {
+            redacted.push_str(&text[cursor..candidate_start]);
             redacted.push_str("[redacted JWT]");
             cursor = matched.end();
         }
@@ -230,6 +242,10 @@ mod tests {
         assert_eq!(
             redact_persisted_diagnostic_text("xeyJaaaaaaaa.bbbbbbbb", 4_000),
             "xeyJaaaaaaaa.bbbbbbbb"
+        );
+        assert_eq!(
+            redact_persisted_diagnostic_text("xeyJaaaaaaaa.eyJcccccccc.dddddddd", 4_000),
+            "xeyJaaaaaaaa.[redacted JWT]"
         );
     }
 }
