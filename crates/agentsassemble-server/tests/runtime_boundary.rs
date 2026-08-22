@@ -1,12 +1,14 @@
-use std::{path::PathBuf, time::Duration};
+use std::{fmt::Write, path::PathBuf, time::Duration};
 
 use agentsassemble_domain::{Participant, ParticipantStatus, Room, RoomSettings};
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_server::{AppState, HostSecret, TicketStore, serve};
 use chrono::Utc;
 use futures_util::{SinkExt, StreamExt};
+use hmac::{Hmac, Mac};
 use reqwest::Client;
 use serde_json::{Value, json};
+use sha2::Sha256;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
@@ -344,6 +346,56 @@ async fn authenticated_binary_frame_is_rejected_and_closed() {
     server.stop().await;
 }
 
+#[tokio::test]
+async fn websocket_snapshot_proves_the_private_ticket_control_channel() {
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
+    let database_url = format!(
+        "sqlite://{}",
+        directory.path().join("runtime.sqlite3").display()
+    );
+    let store = SqliteStore::open(&database_url)
+        .await
+        .unwrap_or_else(|error| panic!("open test store: {error}"));
+    bootstrap(&store).await;
+    let server = start(store).await;
+    let grant = request_ticket(&server.base_url).await;
+    let ticket = grant["ticket"]
+        .as_str()
+        .unwrap_or_else(|| panic!("ticket grant is missing a ticket"));
+    let proof_key = grant["server_proof_key"]
+        .as_str()
+        .unwrap_or_else(|| panic!("ticket grant is missing a proof key"));
+    let url = format!(
+        "{}/ws?ticket={ticket}",
+        server.base_url.replacen("http://", "ws://", 1)
+    );
+    let mut socket = connect_async(url)
+        .await
+        .unwrap_or_else(|error| panic!("connect proved WebSocket: {error}"))
+        .0;
+    let challenge = "b".repeat(64);
+    socket
+        .send(Message::Text(
+            json!({
+                "op": "subscribe",
+                "streams": ["room_events"],
+                "resume_from_seq": 0,
+                "server_challenge": challenge,
+            })
+            .to_string()
+            .into(),
+        ))
+        .await
+        .unwrap_or_else(|error| panic!("send proved subscription: {error}"));
+    let snapshot = receive_json(&mut socket).await;
+    let received = snapshot["server_proof"]
+        .as_str()
+        .unwrap_or_else(|| panic!("snapshot is missing server proof"));
+    assert_eq!(received, expected_server_proof(proof_key, &challenge));
+    server.stop().await;
+}
+
 async fn start(store: SqliteStore) -> RunningServer {
     start_server(store, None).await
 }
@@ -385,18 +437,7 @@ async fn start_server(store: SqliteStore, frontend: Option<PathBuf>) -> RunningS
 async fn connect(
     base_url: &str,
 ) -> WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
-    let response = Client::new()
-        .post(format!("{base_url}/api/ws-ticket"))
-        .header("x-host-token", HOST_TOKEN)
-        .json(&json!({"meeting_id": "general"}))
-        .send()
-        .await
-        .unwrap_or_else(|error| panic!("request ticket: {error}"));
-    assert!(response.status().is_success());
-    let grant: Value = response
-        .json()
-        .await
-        .unwrap_or_else(|error| panic!("decode ticket: {error}"));
+    let grant = request_ticket(base_url).await;
     let ticket = grant["ticket"]
         .as_str()
         .unwrap_or_else(|| panic!("ticket response has no ticket"));
@@ -408,6 +449,21 @@ async fn connect(
         .await
         .unwrap_or_else(|error| panic!("connect WebSocket: {error}"))
         .0
+}
+
+async fn request_ticket(base_url: &str) -> Value {
+    let response = Client::new()
+        .post(format!("{base_url}/api/ws-ticket"))
+        .header("x-host-token", HOST_TOKEN)
+        .json(&json!({"meeting_id": "general"}))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("request ticket: {error}"));
+    assert!(response.status().is_success());
+    response
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("decode ticket: {error}"))
 }
 
 async fn subscribe<S>(socket: &mut WebSocketStream<S>, cursor: i64)
@@ -471,6 +527,22 @@ async fn header_only_request(address: &str, request: &str) -> String {
         .unwrap_or_else(|error| panic!("read raw HTTP response: {error}"));
     String::from_utf8(response)
         .unwrap_or_else(|error| panic!("raw HTTP response was not UTF-8: {error}"))
+}
+
+fn expected_server_proof(proof_key: &str, challenge: &str) -> String {
+    let mut signer = Hmac::<Sha256>::new_from_slice(proof_key.as_bytes())
+        .unwrap_or_else(|error| panic!("construct proof signer: {error}"));
+    signer.update(b"agentsassemble-server-proof-v1\0");
+    signer.update(challenge.as_bytes());
+    signer
+        .finalize()
+        .into_bytes()
+        .iter()
+        .fold(String::with_capacity(64), |mut encoded, byte| {
+            write!(encoded, "{byte:02x}")
+                .unwrap_or_else(|error| panic!("encode proof byte: {error}"));
+            encoded
+        })
 }
 
 async fn bootstrap(store: &SqliteStore) {

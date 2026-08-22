@@ -126,7 +126,7 @@ def desktop_violations(payload: dict[str, object]) -> tuple[str, ...]:
         for dependency in dependencies
         if isinstance(dependency, dict)
     }
-    allowed_owned = {"agentsassemble-domain"}
+    allowed_owned = {"agentsassemble-domain", "agentsassemble-protocol"}
     local_path_names = {
         str(dependency.get("name"))
         for dependency in dependencies

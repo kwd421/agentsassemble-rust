@@ -36,6 +36,7 @@ export default function App() {
     setStatus("connecting");
     setNotice("방 기록을 동기화하는 중…");
     let desktopWebSocketBase = "";
+    let desktopServerProofKey = "";
     const socket = openRoomSocket(
       { kind: "host", meetingId: roomId },
       ["room_events"],
@@ -71,9 +72,11 @@ export default function App() {
         getTicket: async () => {
           const grant = await requestDesktopTicket(roomId);
           desktopWebSocketBase = grant.websocket_base_url;
+          desktopServerProofKey = grant.server_proof_key;
           return grant.ticket;
         },
         websocketBaseUrl: () => desktopWebSocketBase,
+        serverProofKey: () => desktopServerProofKey,
       } : {}
     );
     socketRef.current = socket;

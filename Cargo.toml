@@ -22,6 +22,7 @@ futures-util = "0.3.31"
 fs2 = "0.4.3"
 hyper = { version = "1.11.0", features = ["http1", "server"] }
 hyper-util = { version = "0.1.20", features = ["service", "tokio"] }
+hmac = "0.12.1"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 reqwest = { version = "0.13.4", default-features = false, features = ["json", "rustls"] }

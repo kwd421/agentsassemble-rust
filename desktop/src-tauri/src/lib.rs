@@ -1,4 +1,5 @@
 mod local_runtime;
+mod runtime_supervisor;
 
 use local_runtime::{LocalRuntime, TicketGrant};
 use tauri::{Manager, RunEvent, WebviewWindow};
@@ -50,4 +51,9 @@ pub fn run() {
             handle.state::<LocalRuntime>().stop();
         }
     });
+}
+
+#[must_use]
+pub fn run_runtime_supervisor_if_requested() -> Option<i32> {
+    runtime_supervisor::run_if_requested()
 }

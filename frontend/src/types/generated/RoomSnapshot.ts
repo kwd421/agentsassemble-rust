@@ -8,4 +8,4 @@ import type { RoomEvent } from "./RoomEvent.js";
 import type { SnapshotMode } from "./SnapshotMode.js";
 import type { JsonValue } from "./serde_json/JsonValue.js";
 
-export type RoomSnapshot = { stream: string, room: Room, room_settings: PublicRoomSettings, participants: Array<Participant>, agent_sessions: Array<JsonValue>, provider_requests: Array<JsonValue>, active_turns: Array<JsonValue>, events: Array<RoomEvent>, oldest_seq: number, last_seq: number, has_more_before: boolean, resume_gap: boolean, snapshot_mode: SnapshotMode, provider_catalog: ProviderCatalog, available_providers: Array<JsonValue>, capabilities: CapabilitySet, };
+export type RoomSnapshot = { stream: string, room: Room, room_settings: PublicRoomSettings, participants: Array<Participant>, agent_sessions: Array<JsonValue>, provider_requests: Array<JsonValue>, active_turns: Array<JsonValue>, events: Array<RoomEvent>, oldest_seq: number, last_seq: number, has_more_before: boolean, resume_gap: boolean, snapshot_mode: SnapshotMode, provider_catalog: ProviderCatalog, available_providers: Array<JsonValue>, capabilities: CapabilitySet, server_proof?: string, };

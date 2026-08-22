@@ -8,19 +8,22 @@ use agentsassemble_domain::{
     LOCAL_OPERATOR_PARTICIPANT_ID, Participant, ParticipantStatus, Room, RoomSettings,
 };
 use agentsassemble_persistence::SqliteStore;
-use agentsassemble_server::{AppState, HostSecret, TicketStore, serve};
+use agentsassemble_protocol::{LocalControlRequest, LocalControlResponse};
+use agentsassemble_server::{
+    AppState, HostSecret, TicketIssueError, TicketStore, issue_local_ticket, serve,
+};
 use anyhow::Context;
 use chrono::Utc;
 use clap::Parser;
-use serde_json::json;
 use tokio::{
-    io::{AsyncReadExt, Stdin},
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, Stdin},
     net::TcpListener,
 };
 use tokio_util::sync::CancellationToken;
 use tracing_subscriber::EnvFilter;
 
 const MAX_CONTROL_SECRET_BYTES: usize = 128;
+const MAX_CONTROL_MESSAGE_BYTES: usize = 4 * 1024;
 
 #[derive(Debug, Parser)]
 #[command(name = "agentsassemble-server")]
@@ -46,12 +49,6 @@ async fn main() -> anyhow::Result<()> {
     let host_token = read_control_secret(&mut stdin).await?;
     let host_secret = HostSecret::new(host_token)?;
     let cancellation = CancellationToken::new();
-    let parent_death = cancellation.clone();
-    tokio::spawn(async move {
-        let mut byte = [0_u8; 1];
-        let _ = stdin.read(&mut byte).await;
-        parent_death.cancel();
-    });
     if args.bind.ip() != IpAddr::V4(Ipv4Addr::LOCALHOST) && !args.bind.ip().is_loopback() {
         anyhow::bail!("the local runtime may bind only to loopback");
     }
@@ -97,18 +94,145 @@ async fn main() -> anyhow::Result<()> {
     } else {
         None
     };
-    println!(
-        "{}",
-        serde_json::to_string(&json!({
+    let mut stdout = tokio::io::stdout();
+    write_json_line(
+        &mut stdout,
+        &serde_json::json!({
             "status": "ready",
             "runtime": "rust",
             "address": format!("http://{address}"),
             "database": database_path,
             "frontend": frontend_path,
             "pid": std::process::id(),
-        }))?
-    );
+        }),
+    )
+    .await?;
+    let control_state = state.clone();
+    let control_cancellation = cancellation.clone();
+    tokio::spawn(async move {
+        run_control_pipe(
+            &mut stdin,
+            &mut stdout,
+            control_state,
+            &control_cancellation,
+        )
+        .await;
+        control_cancellation.cancel();
+    });
     serve(listener, state, cancellation).await?;
+    Ok(())
+}
+
+async fn run_control_pipe<R, W>(
+    reader: &mut R,
+    writer: &mut W,
+    state: AppState,
+    cancellation: &CancellationToken,
+) where
+    R: AsyncRead + Unpin,
+    W: AsyncWrite + Unpin,
+{
+    loop {
+        let line = tokio::select! {
+            () = cancellation.cancelled() => return,
+            line = read_control_line(reader) => line,
+        };
+        let Ok(Some(line)) = line else {
+            return;
+        };
+        let response = match serde_json::from_slice::<LocalControlRequest>(&line) {
+            Ok(LocalControlRequest::IssueTicket {
+                request_id,
+                meeting_id,
+            }) if !request_id.is_empty() && request_id.len() <= 128 => {
+                match issue_local_ticket(&state, &meeting_id).await {
+                    Ok(ticket) => LocalControlResponse::Ok {
+                        request_id,
+                        ticket: ticket.ticket,
+                        ttl_seconds: ticket.ttl_seconds,
+                        server_proof_key: ticket.server_proof_key,
+                    },
+                    Err(error) => control_error(request_id, error),
+                }
+            }
+            Ok(LocalControlRequest::IssueTicket { request_id, .. }) => {
+                LocalControlResponse::Error {
+                    request_id,
+                    code: "request_id_invalid".to_owned(),
+                    message: "Control request id is invalid.".to_owned(),
+                }
+            }
+            Err(_) => LocalControlResponse::Error {
+                request_id: String::new(),
+                code: "control_request_invalid".to_owned(),
+                message: "Control request JSON is invalid.".to_owned(),
+            },
+        };
+        if write_json_line(writer, &response).await.is_err() {
+            return;
+        }
+    }
+}
+
+fn control_error(request_id: String, error: TicketIssueError) -> LocalControlResponse {
+    let (code, message) = match error {
+        TicketIssueError::InvalidRoom(message) => ("bad_request", message),
+        TicketIssueError::RoomMissing => ("room_not_found", "Room does not exist.".to_owned()),
+        TicketIssueError::ParticipantInactive => (
+            "session_revoked",
+            "The local operator is not an active room participant.".to_owned(),
+        ),
+        TicketIssueError::Persistence(_) => (
+            "persistence_failed",
+            "Persistence operation failed.".to_owned(),
+        ),
+        TicketIssueError::Unavailable => {
+            ("unavailable", "Ticket capacity is unavailable.".to_owned())
+        }
+    };
+    LocalControlResponse::Error {
+        request_id,
+        code: code.to_owned(),
+        message,
+    }
+}
+
+async fn read_control_line<R: AsyncRead + Unpin>(
+    reader: &mut R,
+) -> anyhow::Result<Option<Vec<u8>>> {
+    let mut line = Vec::with_capacity(256);
+    let mut byte = [0_u8; 1];
+    for _ in 0..=MAX_CONTROL_MESSAGE_BYTES {
+        let count = reader
+            .read(&mut byte)
+            .await
+            .context("read parent control pipe")?;
+        if count == 0 {
+            return if line.is_empty() {
+                Ok(None)
+            } else {
+                anyhow::bail!("control pipe closed during a request")
+            };
+        }
+        if byte[0] == b'\n' {
+            if line.last() == Some(&b'\r') {
+                line.pop();
+            }
+            return Ok(Some(line));
+        }
+        line.push(byte[0]);
+    }
+    anyhow::bail!("control request exceeds {MAX_CONTROL_MESSAGE_BYTES} bytes")
+}
+
+async fn write_json_line<W: AsyncWrite + Unpin>(
+    writer: &mut W,
+    value: &impl serde::Serialize,
+) -> anyhow::Result<()> {
+    let mut encoded = serde_json::to_vec(value)?;
+    encoded.push(b'\n');
+    writer.write_all(&encoded).await?;
+    writer.flush().await?;
     Ok(())
 }
 

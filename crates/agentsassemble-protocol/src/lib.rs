@@ -14,6 +14,8 @@ pub enum ClientFrame {
         streams: Vec<String>,
         #[serde(default)]
         resume_from_seq: i64,
+        #[serde(default)]
+        server_challenge: Option<String>,
     },
     Command {
         request_id: String,
@@ -67,6 +69,8 @@ pub struct RoomSnapshot {
     pub provider_catalog: ProviderCatalog,
     pub available_providers: Vec<Value>,
     pub capabilities: CapabilitySet,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub server_proof: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -97,6 +101,32 @@ pub struct ProtocolError {
 pub struct TicketResponse {
     pub ticket: String,
     pub ttl_seconds: u64,
+    pub server_proof_key: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "op", rename_all = "snake_case")]
+pub enum LocalControlRequest {
+    IssueTicket {
+        request_id: String,
+        meeting_id: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum LocalControlResponse {
+    Ok {
+        request_id: String,
+        ticket: String,
+        ttl_seconds: u64,
+        server_proof_key: String,
+    },
+    Error {
+        request_id: String,
+        code: String,
+        message: String,
+    },
 }
 
 fn empty_object() -> Value {

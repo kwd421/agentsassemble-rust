@@ -1,9 +1,6 @@
 use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
 
-use agentsassemble_domain::{
-    AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID,
-    LOCAL_OPERATOR_USER_ID, ProviderCatalog, SnapshotMode, public_settings, validate_room_id,
-};
+use agentsassemble_domain::{ProviderCatalog, SnapshotMode, public_settings};
 use agentsassemble_persistence::{PersistenceError, SqliteStore};
 use agentsassemble_protocol::{
     ClientFrame, CommandAck, CommandNack, ProtocolError, RoomSnapshot, ServerFrame, TicketResponse,
@@ -27,7 +24,6 @@ use thiserror::Error;
 use tokio::{
     net::TcpListener,
     sync::{OwnedSemaphorePermit, Semaphore},
-    time::Instant,
 };
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use tower_http::{
@@ -36,8 +32,11 @@ use tower_http::{
 };
 
 use crate::{
-    RoomRuntime, TicketStore,
+    ConsumedTicket, RoomRuntime, TicketIssueError, TicketStore,
     http_transport::{MAX_HTTP_CONNECTIONS, RejectionCounter, serve_connection},
+    ingress_budget::IngressBudget,
+    issue_local_ticket,
+    server_proof::{challenge_is_valid, sign_challenge},
 };
 
 const MAX_WS_MESSAGE_BYTES: usize = 256 * 1024;
@@ -48,10 +47,6 @@ const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 const WS_WRITE_TIMEOUT: Duration = Duration::from_secs(5);
 const TRACKED_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(6);
 const SOCKET_IDLE_TIMEOUT: Duration = Duration::from_mins(5);
-const INGRESS_WINDOW: Duration = Duration::from_secs(10);
-const INGRESS_MESSAGES_PER_WINDOW: usize = 256;
-const INGRESS_BYTES_PER_WINDOW: usize = 2 * 1024 * 1024;
-const INGRESS_CONTROL_FRAMES_PER_WINDOW: usize = 64;
 const CONTENT_SECURITY_POLICY: &str = "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' ws://127.0.0.1:*; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
 
 #[derive(Clone)]
@@ -262,34 +257,10 @@ async fn issue_ticket(
         .map_err(|_| ApiError::payload_too_large("Ticket request body exceeds the route limit."))?;
     let request: TicketRequest = serde_json::from_slice(&encoded)
         .map_err(|_| ApiError::bad_request("Ticket request JSON is invalid."))?;
-    let room_id = validate_room_id(&request.meeting_id)
-        .map_err(|error| ApiError::bad_request(error.message))?;
-    if !state.store.room_exists(&room_id).await? {
-        return Err(ApiError::not_found("Room does not exist."));
-    }
-    let participant = state
-        .store
-        .participant(&room_id, LOCAL_OPERATOR_PARTICIPANT_ID)
-        .await?;
-    let client_kind = ClientKind::Browser;
-    let invite_scope = InviteScope::ReadWrite;
-    let ticket = state
-        .tickets
-        .issue(AuthenticatedPrincipal {
-            principal_id: LOCAL_OPERATOR_USER_ID.to_owned(),
-            participant_id: participant.participant_id,
-            display_name: participant.display_name,
-            room_id,
-            client_kind,
-            invite_scope,
-            capabilities: CapabilitySet::local_operator(client_kind, invite_scope),
-        })
+    issue_local_ticket(&state, &request.meeting_id)
         .await
-        .map_err(|error| ApiError::unavailable(error.to_string()))?;
-    Ok(Json(TicketResponse {
-        ticket,
-        ttl_seconds: state.tickets.ttl_seconds(),
-    }))
+        .map(Json)
+        .map_err(ApiError::from)
 }
 
 async fn upgrade_socket(
@@ -302,7 +273,7 @@ async fn upgrade_socket(
         .clone()
         .try_acquire_owned()
         .map_err(|_| ApiError::unavailable("WebSocket connection limit reached."))?;
-    let principal = state
+    let grant = state
         .tickets
         .consume(&query.ticket)
         .await
@@ -314,7 +285,7 @@ async fn upgrade_socket(
         .write_buffer_size(64 * 1024)
         .max_write_buffer_size(384 * 1024)
         .on_upgrade(move |socket| {
-            connections.track_future(socket_session(socket, state, principal, permit))
+            connections.track_future(socket_session(socket, state, grant, permit))
         })
         .into_response())
 }
@@ -323,9 +294,13 @@ async fn upgrade_socket(
 async fn socket_session(
     socket: WebSocket,
     state: AppState,
-    principal: AuthenticatedPrincipal,
+    grant: ConsumedTicket,
     _permit: OwnedSemaphorePermit,
 ) {
+    let ConsumedTicket {
+        principal,
+        proof_key,
+    } = grant;
     let (mut sender, mut receiver) = socket.split();
     let incoming = tokio::select! {
         () = state.shutdown.cancelled() => return,
@@ -343,6 +318,7 @@ async fn socket_session(
     let Ok(ClientFrame::Subscribe {
         streams,
         resume_from_seq,
+        server_challenge,
     }) = serde_json::from_str(raw.as_str())
     else {
         let _ = send_nack(
@@ -368,6 +344,22 @@ async fn socket_session(
         .await;
         return;
     }
+    let server_proof = match server_challenge {
+        Some(challenge) if challenge_is_valid(&challenge) => sign_challenge(&proof_key, &challenge),
+        Some(_) => {
+            let _ = send_nack(
+                &mut sender,
+                &state.shutdown,
+                "",
+                "subscribe",
+                "server_challenge_invalid",
+                "The server challenge must be 32 random bytes encoded as hexadecimal.",
+            )
+            .await;
+            return;
+        }
+        None => String::new(),
+    };
     let mut events = state.rooms.subscribe(&principal.room_id).await;
     let snapshot_data = match state
         .store
@@ -430,6 +422,7 @@ async fn socket_session(
         provider_catalog: ProviderCatalog::default(),
         available_providers: Vec::new(),
         capabilities: principal.capabilities.clone(),
+        server_proof,
     };
     let Some(snapshot) = fit_snapshot_frame(snapshot) else {
         let _ = send_nack(
@@ -690,6 +683,20 @@ impl From<PersistenceError> for ApiError {
     }
 }
 
+impl From<TicketIssueError> for ApiError {
+    fn from(error: TicketIssueError) -> Self {
+        match error {
+            TicketIssueError::InvalidRoom(message) => Self::bad_request(message),
+            TicketIssueError::RoomMissing => Self::not_found("Room does not exist."),
+            TicketIssueError::ParticipantInactive => {
+                Self::unauthorized("The local operator is not an active room participant.")
+            }
+            TicketIssueError::Persistence(error) => Self::from(error),
+            TicketIssueError::Unavailable => Self::unavailable("Ticket capacity is unavailable."),
+        }
+    }
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         (
@@ -715,49 +722,15 @@ fn persistence_error_is_internal(error: &PersistenceError) -> bool {
     )
 }
 
-struct IngressBudget {
-    window_started: Instant,
-    messages: usize,
-    bytes: usize,
-    control_frames: usize,
-}
-
-impl IngressBudget {
-    fn new() -> Self {
-        Self {
-            window_started: Instant::now(),
-            messages: 0,
-            bytes: 0,
-            control_frames: 0,
-        }
-    }
-
-    fn admit(&mut self, bytes: usize, control_frame: bool) -> bool {
-        let now = Instant::now();
-        if now.duration_since(self.window_started) >= INGRESS_WINDOW {
-            self.window_started = now;
-            self.messages = 0;
-            self.bytes = 0;
-            self.control_frames = 0;
-        }
-        self.messages = self.messages.saturating_add(1);
-        self.bytes = self.bytes.saturating_add(bytes);
-        if control_frame {
-            self.control_frames = self.control_frames.saturating_add(1);
-        }
-        self.messages <= INGRESS_MESSAGES_PER_WINDOW
-            && self.bytes <= INGRESS_BYTES_PER_WINDOW
-            && self.control_frames <= INGRESS_CONTROL_FRAMES_PER_WINDOW
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::{io, path::PathBuf};
 
     use agentsassemble_persistence::PersistenceError;
 
-    use super::{HostSecret, INGRESS_CONTROL_FRAMES_PER_WINDOW, IngressBudget, persistence_error};
+    use crate::ingress_budget::{CONTROL_FRAMES_PER_WINDOW, IngressBudget};
+
+    use super::{HostSecret, persistence_error};
 
     #[test]
     fn host_secret_invariant_cannot_be_bypassed_by_an_adapter() {
@@ -785,7 +758,7 @@ mod tests {
     #[test]
     fn control_frames_have_an_independent_ingress_budget() {
         let mut budget = IngressBudget::new();
-        for _ in 0..INGRESS_CONTROL_FRAMES_PER_WINDOW {
+        for _ in 0..CONTROL_FRAMES_PER_WINDOW {
             assert!(budget.admit(0, true));
         }
         assert!(!budget.admit(0, true));

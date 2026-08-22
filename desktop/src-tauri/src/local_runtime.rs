@@ -4,21 +4,20 @@ use std::{
     io::{BufRead, BufReader, Write},
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream},
     path::{Path, PathBuf},
-    process::{Child, ChildStdin, ChildStdout, Command, Stdio},
+    process::{Child, ChildStdin, ChildStdout, Stdio},
     sync::{Mutex, mpsc},
     thread,
     time::{Duration, Instant},
 };
 
 use agentsassemble_domain::validate_room_id;
-use secrecy::{ExposeSecret, SecretString};
+use agentsassemble_protocol::{LocalControlRequest, LocalControlResponse};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 use url::Url;
 use uuid::Uuid;
 
-#[cfg(unix)]
-use std::os::unix::process::CommandExt;
+use crate::runtime_supervisor;
 
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(20);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
@@ -29,6 +28,7 @@ pub struct TicketGrant {
     ticket: String,
     ttl_seconds: u64,
     websocket_base_url: String,
+    server_proof_key: String,
 }
 
 #[derive(Default)]
@@ -39,14 +39,8 @@ pub struct LocalRuntime {
 struct RuntimeProcess {
     child: Child,
     control: Option<ChildStdin>,
-    watchdog: ParentWatchdog,
+    output: mpsc::Receiver<Result<RuntimeOutput, String>>,
     address: Url,
-    secret: SecretString,
-}
-
-struct ParentWatchdog {
-    child: Child,
-    control: Option<ChildStdin>,
 }
 
 enum TicketFailure {
@@ -62,10 +56,9 @@ struct StartupRecord {
     pid: u32,
 }
 
-#[derive(Debug, Deserialize)]
-struct TicketResponse {
-    ticket: String,
-    ttl_seconds: u64,
+enum RuntimeOutput {
+    Startup(StartupRecord),
+    Control(LocalControlResponse),
 }
 
 impl LocalRuntime {
@@ -131,14 +124,14 @@ fn start_runtime(app: &AppHandle, room_id: &str) -> Result<RuntimeProcess, Strin
         .map_err(|error| format!("cannot create {}: {error}", data_root.display()))?;
     let executable = sidecar_executable(app)?;
     let database = data_root.join("runtime.sqlite3");
-    let secret = SecretString::from(generate_host_secret());
+    let secret = generate_host_secret();
     let stdout_path = data_root.join("runtime.stdout.log");
     let stderr_path = data_root.join("runtime.stderr.log");
     let stdout_log = File::create(&stdout_path)
         .map_err(|error| format!("cannot open {}: {error}", stdout_path.display()))?;
     let stderr_log = File::create(&stderr_path)
         .map_err(|error| format!("cannot open {}: {error}", stderr_path.display()))?;
-    let mut command = Command::new(&executable);
+    let mut command = runtime_supervisor::command(&executable)?;
     command
         .arg("--bind")
         .arg("127.0.0.1:0")
@@ -150,61 +143,50 @@ fn start_runtime(app: &AppHandle, room_id: &str) -> Result<RuntimeProcess, Strin
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::from(stderr_log));
-    configure_process_group(&mut command);
     let mut child = command.spawn().map_err(|error| {
         format!(
-            "cannot start Rust runtime {}: {error}",
+            "cannot start Rust runtime supervisor for {}: {error}",
             executable.display()
         )
     })?;
-    let mut watchdog = match start_parent_watchdog(child.id()) {
-        Ok(watchdog) => watchdog,
-        Err(error) => {
-            terminate_owned_process(&mut child);
-            return Err(error);
-        }
-    };
     let Some(mut control) = child.stdin.take() else {
-        abort_startup(&mut child, &mut watchdog);
+        abort_startup(&mut child, None);
         return Err("cannot open Rust runtime control pipe".to_owned());
     };
-    if let Err(error) =
-        writeln!(control, "{}", secret.expose_secret()).and_then(|()| control.flush())
-    {
-        abort_startup(&mut child, &mut watchdog);
+    if let Err(error) = writeln!(control, "{secret}").and_then(|()| control.flush()) {
+        abort_startup(&mut child, Some(control));
         return Err(format!(
             "cannot initialize Rust runtime control pipe: {error}"
         ));
     }
     let Some(stdout) = child.stdout.take() else {
-        abort_startup(&mut child, &mut watchdog);
+        abort_startup(&mut child, Some(control));
         return Err("cannot capture Rust runtime startup output".to_owned());
     };
-    let records = capture_startup_record(stdout, stdout_log);
-    let record = match wait_for_startup(&mut child, &records) {
+    let output = capture_runtime_output(stdout, stdout_log);
+    let record = match wait_for_startup(&mut child, &output) {
         Ok(record) => record,
         Err(error) => {
-            abort_startup(&mut child, &mut watchdog);
+            abort_startup(&mut child, Some(control));
             return Err(format!("{error} Details: {}", stderr_path.display()));
         }
     };
-    let address = match validate_startup_record(&record, child.id()) {
+    let address = match validate_startup_record(&record) {
         Ok(address) => address,
         Err(error) => {
-            abort_startup(&mut child, &mut watchdog);
+            abort_startup(&mut child, Some(control));
             return Err(error);
         }
     };
     if let Err(error) = prove_listening(&address) {
-        abort_startup(&mut child, &mut watchdog);
+        abort_startup(&mut child, Some(control));
         return Err(error);
     }
     Ok(RuntimeProcess {
         child,
         control: Some(control),
-        watchdog,
+        output,
         address,
-        secret,
     })
 }
 
@@ -222,37 +204,70 @@ fn request_ticket(
             "the owned Rust runtime exited before ticket issuance".to_owned(),
         ));
     }
-    let endpoint = runtime.address.join("api/ws-ticket").map_err(|error| {
-        TicketFailure::Broken(format!("cannot construct ticket endpoint: {error}"))
+    let request_id = Uuid::new_v4().to_string();
+    let request = LocalControlRequest::IssueTicket {
+        request_id: request_id.clone(),
+        meeting_id: room_id.to_owned(),
+    };
+    let mut encoded = serde_json::to_vec(&request).map_err(|error| {
+        TicketFailure::Broken(format!("cannot encode local ticket request: {error}"))
     })?;
-    let response = reqwest::blocking::Client::builder()
-        .timeout(REQUEST_TIMEOUT)
-        .build()
+    encoded.push(b'\n');
+    let control = runtime
+        .control
+        .as_mut()
+        .ok_or_else(|| TicketFailure::Broken("local runtime control pipe is closed".to_owned()))?;
+    control
+        .write_all(&encoded)
+        .and_then(|()| control.flush())
         .map_err(|error| {
-            TicketFailure::Broken(format!("cannot create local ticket client: {error}"))
-        })?
-        .post(endpoint)
-        .header("x-host-token", runtime.secret.expose_secret())
-        .json(&serde_json::json!({"meeting_id": room_id}))
-        .send()
-        .map_err(|error| {
-            TicketFailure::Broken(format!("local runtime ticket request failed: {error}"))
+            TicketFailure::Broken(format!("cannot write local ticket request: {error}"))
         })?;
-    if !response.status().is_success() {
-        let status = response.status();
-        let message = format!("local runtime rejected ticket request with status {status}");
-        return if is_application_rejection(status) {
-            Err(TicketFailure::Rejected(message))
-        } else {
-            Err(TicketFailure::Broken(message))
-        };
-    }
-    let ticket: TicketResponse = response.json().map_err(|error| {
-        TicketFailure::Broken(format!("local runtime returned an invalid ticket: {error}"))
-    })?;
-    if ticket.ticket.is_empty() || ticket.ttl_seconds == 0 {
+    let response = runtime
+        .output
+        .recv_timeout(REQUEST_TIMEOUT)
+        .map_err(|error| {
+            TicketFailure::Broken(format!("local runtime ticket response timed out: {error}"))
+        })?
+        .map_err(TicketFailure::Broken)?;
+    let RuntimeOutput::Control(response) = response else {
         return Err(TicketFailure::Broken(
-            "local runtime returned an empty or expired ticket".to_owned(),
+            "local runtime returned a duplicate startup record".to_owned(),
+        ));
+    };
+    let (ticket, ttl_seconds, server_proof_key) = match response {
+        LocalControlResponse::Ok {
+            request_id: response_id,
+            ticket,
+            ttl_seconds,
+            server_proof_key,
+        } if response_id == request_id => (ticket, ttl_seconds, server_proof_key),
+        LocalControlResponse::Error {
+            request_id: response_id,
+            code,
+            message,
+        } if response_id == request_id => {
+            return if is_application_rejection(&code) {
+                Err(TicketFailure::Rejected(message))
+            } else {
+                Err(TicketFailure::Broken(message))
+            };
+        }
+        _ => {
+            return Err(TicketFailure::Broken(
+                "local runtime ticket response id did not match the request".to_owned(),
+            ));
+        }
+    };
+    if ticket.is_empty()
+        || ttl_seconds == 0
+        || server_proof_key.len() != 64
+        || !server_proof_key
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err(TicketFailure::Broken(
+            "local runtime returned an invalid ticket grant".to_owned(),
         ));
     }
     let port = runtime
@@ -260,50 +275,44 @@ fn request_ticket(
         .port()
         .ok_or_else(|| TicketFailure::Broken("local runtime address has no port".to_owned()))?;
     Ok(TicketGrant {
-        ticket: ticket.ticket,
-        ttl_seconds: ticket.ttl_seconds,
+        ticket,
+        ttl_seconds,
         websocket_base_url: format!("ws://127.0.0.1:{port}"),
+        server_proof_key,
     })
 }
 
-fn is_application_rejection(status: reqwest::StatusCode) -> bool {
-    status.is_client_error() && status != reqwest::StatusCode::UNAUTHORIZED
+fn is_application_rejection(code: &str) -> bool {
+    matches!(code, "bad_request" | "room_not_found" | "session_revoked")
 }
 
 fn generate_host_secret() -> String {
     format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple())
 }
 
-fn capture_startup_record(
+fn capture_runtime_output(
     stdout: ChildStdout,
     mut log: File,
-) -> mpsc::Receiver<Result<StartupRecord, String>> {
-    let (sender, receiver) = mpsc::sync_channel(1);
+) -> mpsc::Receiver<Result<RuntimeOutput, String>> {
+    let (sender, receiver) = mpsc::sync_channel(8);
     thread::spawn(move || {
         let mut reader = BufReader::new(stdout);
-        let mut reported = false;
         loop {
             let mut line = String::new();
             match reader.read_line(&mut line) {
                 Ok(0) => break,
                 Ok(_) => {
-                    let _ = log.write_all(line.as_bytes());
-                    let _ = log.flush();
-                    if !reported && !line.trim().is_empty() {
-                        reported = true;
-                        let result =
-                            serde_json::from_str::<StartupRecord>(line.trim()).map_err(|error| {
-                                format!("invalid Rust runtime startup record: {error}")
-                            });
-                        let _ = sender.send(result);
+                    if !line.trim().is_empty() {
+                        let parsed = parse_runtime_output(line.trim());
+                        if matches!(parsed, Ok(RuntimeOutput::Startup(_))) {
+                            let _ = log.write_all(line.as_bytes());
+                            let _ = log.flush();
+                        }
+                        let _ = sender.send(parsed);
                     }
                 }
                 Err(error) => {
-                    if !reported {
-                        let _ = sender.send(Err(format!(
-                            "cannot read Rust runtime startup output: {error}"
-                        )));
-                    }
+                    let _ = sender.send(Err(format!("cannot read Rust runtime output: {error}")));
                     break;
                 }
             }
@@ -312,14 +321,32 @@ fn capture_startup_record(
     receiver
 }
 
+fn parse_runtime_output(line: &str) -> Result<RuntimeOutput, String> {
+    let value: serde_json::Value = serde_json::from_str(line)
+        .map_err(|error| format!("invalid Rust runtime output: {error}"))?;
+    if value.get("status").and_then(serde_json::Value::as_str) == Some("ready") {
+        serde_json::from_value(value)
+            .map(RuntimeOutput::Startup)
+            .map_err(|error| format!("invalid Rust runtime startup record: {error}"))
+    } else {
+        serde_json::from_value(value)
+            .map(RuntimeOutput::Control)
+            .map_err(|error| format!("invalid Rust runtime control response: {error}"))
+    }
+}
+
 fn wait_for_startup(
     child: &mut Child,
-    records: &mpsc::Receiver<Result<StartupRecord, String>>,
+    records: &mpsc::Receiver<Result<RuntimeOutput, String>>,
 ) -> Result<StartupRecord, String> {
     let deadline = Instant::now() + STARTUP_TIMEOUT;
     while Instant::now() < deadline {
         match records.recv_timeout(Duration::from_millis(100)) {
-            Ok(result) => return result,
+            Ok(Ok(RuntimeOutput::Startup(record))) => return Ok(record),
+            Ok(Ok(RuntimeOutput::Control(_))) => {
+                return Err("Rust runtime sent a control response before readiness".to_owned());
+            }
+            Ok(Err(error)) => return Err(error),
             Err(mpsc::RecvTimeoutError::Disconnected) => {
                 return Err("Rust runtime closed stdout before readiness".to_owned());
             }
@@ -337,8 +364,8 @@ fn wait_for_startup(
     Err("Rust runtime did not report readiness within 20 seconds".to_owned())
 }
 
-fn validate_startup_record(record: &StartupRecord, expected_pid: u32) -> Result<Url, String> {
-    if record.status != "ready" || record.runtime != "rust" || record.pid != expected_pid {
+fn validate_startup_record(record: &StartupRecord) -> Result<Url, String> {
+    if record.status != "ready" || record.runtime != "rust" || record.pid == 0 {
         return Err("Rust runtime startup identity did not match the owned process".to_owned());
     }
     let address = Url::parse(&record.address)
@@ -379,78 +406,22 @@ fn terminate_owned_runtime(runtime: &mut RuntimeProcess) {
         thread::sleep(Duration::from_millis(50));
     }
     if !exited {
-        terminate_owned_process(&mut runtime.child);
+        let _ = runtime.child.kill();
+        let _ = runtime.child.wait();
     }
-    stop_parent_watchdog(&mut runtime.watchdog);
 }
 
-fn abort_startup(child: &mut Child, watchdog: &mut ParentWatchdog) {
-    terminate_owned_process(child);
-    stop_parent_watchdog(watchdog);
-}
-
-#[cfg(unix)]
-fn start_parent_watchdog(runtime_pid: u32) -> Result<ParentWatchdog, String> {
-    let mut child = Command::new("/bin/sh")
-        .args([
-            "-c",
-            "while IFS= read -r _; do :; done; kill -KILL -- \"-$1\" 2>/dev/null || true",
-            "agentsassemble-watchdog",
-            &runtime_pid.to_string(),
-        ])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|error| format!("cannot start runtime parent watchdog: {error}"))?;
-    let control = child
-        .stdin
-        .take()
-        .ok_or_else(|| "runtime parent watchdog has no control pipe".to_owned())?;
-    Ok(ParentWatchdog {
-        child,
-        control: Some(control),
-    })
-}
-
-#[cfg(windows)]
-fn start_parent_watchdog(runtime_pid: u32) -> Result<ParentWatchdog, String> {
-    let script = "$null = [Console]::In.ReadToEnd(); taskkill.exe /PID $args[0] /T /F | Out-Null";
-    let mut child = Command::new("powershell.exe")
-        .args([
-            "-NoLogo",
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            script,
-            &runtime_pid.to_string(),
-        ])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|error| format!("cannot start runtime parent watchdog: {error}"))?;
-    let control = child
-        .stdin
-        .take()
-        .ok_or_else(|| "runtime parent watchdog has no control pipe".to_owned())?;
-    Ok(ParentWatchdog {
-        child,
-        control: Some(control),
-    })
-}
-
-fn stop_parent_watchdog(watchdog: &mut ParentWatchdog) {
-    watchdog.control.take();
-    let deadline = Instant::now() + Duration::from_secs(1);
+fn abort_startup(child: &mut Child, control: Option<ChildStdin>) {
+    drop(control);
+    let deadline = Instant::now() + SHUTDOWN_GRACE;
     while Instant::now() < deadline {
-        if watchdog.child.try_wait().ok().flatten().is_some() {
+        if child.try_wait().ok().flatten().is_some() {
             return;
         }
         thread::sleep(Duration::from_millis(25));
     }
-    let _ = watchdog.child.kill();
-    let _ = watchdog.child.wait();
+    let _ = child.kill();
+    let _ = child.wait();
 }
 
 fn sidecar_executable(app: &AppHandle) -> Result<PathBuf, String> {
@@ -485,47 +456,6 @@ fn sidecar_executable(app: &AppHandle) -> Result<PathBuf, String> {
         .ok_or_else(|| "the bundled AgentsAssemble Rust runtime is missing".to_owned())
 }
 
-#[cfg(unix)]
-fn configure_process_group(command: &mut Command) {
-    command.process_group(0);
-}
-
-#[cfg(windows)]
-fn configure_process_group(_command: &mut Command) {}
-
-#[cfg(unix)]
-fn terminate_owned_process(child: &mut Child) {
-    use nix::{
-        sys::signal::{Signal, kill},
-        unistd::Pid,
-    };
-
-    let Ok(pid) = i32::try_from(child.id()) else {
-        let _ = child.kill();
-        let _ = child.wait();
-        return;
-    };
-    let group = Pid::from_raw(-pid);
-    let _ = kill(group, Signal::SIGINT);
-    let deadline = Instant::now() + SHUTDOWN_GRACE;
-    while Instant::now() < deadline {
-        if child.try_wait().ok().flatten().is_some() {
-            return;
-        }
-        thread::sleep(Duration::from_millis(50));
-    }
-    let _ = kill(group, Signal::SIGKILL);
-    let _ = child.wait();
-}
-
-#[cfg(windows)]
-fn terminate_owned_process(child: &mut Child) {
-    let _ = Command::new("taskkill")
-        .args(["/PID", &child.id().to_string(), "/T", "/F"])
-        .status();
-    let _ = child.wait();
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
@@ -547,74 +477,19 @@ mod tests {
             address: "http://127.0.0.1:43123".to_owned(),
             pid: 42,
         };
-        assert!(validate_startup_record(&record, 42).is_ok());
-        assert!(validate_startup_record(&record, 43).is_err());
+        assert!(validate_startup_record(&record).is_ok());
         let unsafe_record = StartupRecord {
             address: "http://localhost:43123".to_owned(),
             ..record
         };
-        assert!(validate_startup_record(&unsafe_record, 42).is_err());
+        assert!(validate_startup_record(&unsafe_record).is_err());
     }
 
     #[test]
     fn only_normal_client_rejections_preserve_the_runtime() {
-        assert!(is_application_rejection(reqwest::StatusCode::BAD_REQUEST));
-        assert!(is_application_rejection(reqwest::StatusCode::NOT_FOUND));
-        assert!(!is_application_rejection(reqwest::StatusCode::UNAUTHORIZED));
-        assert!(!is_application_rejection(
-            reqwest::StatusCode::SERVICE_UNAVAILABLE
-        ));
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn watchdog_kills_a_stopped_runtime_when_parent_control_closes() {
-        use std::{process::Stdio, thread, time::Duration};
-
-        use nix::{
-            sys::signal::{Signal, kill},
-            unistd::Pid,
-        };
-
-        use super::{configure_process_group, start_parent_watchdog, terminate_owned_process};
-
-        let mut command = std::process::Command::new("/bin/sh");
-        command
-            .args(["-c", "while :; do sleep 60; done"])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
-        configure_process_group(&mut command);
-        let mut runtime = command
-            .spawn()
-            .unwrap_or_else(|error| panic!("spawn stopped runtime fixture: {error}"));
-        let mut watchdog = start_parent_watchdog(runtime.id())
-            .unwrap_or_else(|error| panic!("start parent watchdog: {error}"));
-        let runtime_pid = i32::try_from(runtime.id())
-            .unwrap_or_else(|error| panic!("convert runtime pid: {error}"));
-        kill(Pid::from_raw(runtime_pid), Signal::SIGSTOP)
-            .unwrap_or_else(|error| panic!("stop runtime fixture: {error}"));
-
-        watchdog.control.take();
-        let deadline = std::time::Instant::now() + Duration::from_secs(2);
-        loop {
-            if runtime
-                .try_wait()
-                .unwrap_or_else(|error| panic!("inspect runtime fixture: {error}"))
-                .is_some()
-            {
-                break;
-            }
-            if std::time::Instant::now() >= deadline {
-                terminate_owned_process(&mut runtime);
-                panic!("watchdog did not kill the stopped runtime");
-            }
-            thread::sleep(Duration::from_millis(20));
-        }
-        let watchdog_status = watchdog
-            .child
-            .wait()
-            .unwrap_or_else(|error| panic!("wait for parent watchdog: {error}"));
-        assert!(watchdog_status.success());
+        assert!(is_application_rejection("bad_request"));
+        assert!(is_application_rejection("room_not_found"));
+        assert!(!is_application_rejection("persistence_failed"));
+        assert!(!is_application_rejection("unavailable"));
     }
 }

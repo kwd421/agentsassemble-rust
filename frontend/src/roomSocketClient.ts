@@ -1,52 +1,41 @@
 import {
   getWsTicket,
-  type LobbyAttachmentRef,
   type LobbyEvent,
-  type LobbyPostResponse,
-  type RoomAgentSession,
   type RoomEvent,
   type RoomMember,
   type RoomSocketAuth,
-  type ServerRoom,
   type SideChatEvent,
 } from "./api";
-import type {
-  PublicProviderRequest,
-  PublicRoomGlobalSettings,
-} from "./types/generatedRoomEvent";
 import {
   parsePluginEnvelopeBatch,
   PluginStreamProtocolError,
   type PluginEnvelope,
 } from "./pluginSocketProtocol";
+import type {
+  ProviderCatalogSnapshot,
+  RoomCommandAck,
+  RoomSocketClientDependencies,
+  RoomSocketHandle,
+  RoomSocketHandlers,
+  RoomSocketSnapshot,
+} from "./roomSocketTypes";
+import { createServerChallenge, verifyServerProof } from "./serverProof";
 
 export type { RoomSocketAuth } from "./api";
 export type { PluginEnvelope } from "./pluginSocketProtocol";
-
-export interface RoomSocketHandlers {
-  onLobby?: (events: LobbyEvent[]) => void;
-  onRoster?: (members: RoomMember[]) => void;
-  onSideChat?: (events: SideChatEvent[]) => void;
-  onRoomSnapshot?: (snapshot: RoomSocketSnapshot) => boolean | void;
-  onProviderCatalog?: (catalog: ProviderCatalogSnapshot) => void;
-  onRoomEvents?: (events: RoomEvent[]) => void;
-  onPlugin?: (events: PluginEnvelope[], snapshot: boolean) => void;
-  onRoomDeleted?: (roomId: string, roomName: string) => void;
-  onOpen?: () => void;
-  onClose?: () => void;
-  onError?: (err: Event | Error) => void;
-}
-
-export interface RoomSayRequest {
-  message: string;
-  attachments?: LobbyAttachmentRef[];
-  kind?: "message" | "ready" | "deploy" | "vote" | "vote_cast" | "vote_withdraw" | "vote_close";
-  voteId?: string;
-  voteQuestion?: string;
-  voteOptions?: string[];
-  voteChoice?: string;
-  voteDurationSeconds?: number;
-}
+export type {
+  NativeCliProviderAvailability,
+  ProviderCatalogSnapshot,
+  ProviderControl,
+  ProviderControlOption,
+  RoomCommandAck,
+  RoomHistoryPage,
+  RoomSayRequest,
+  RoomSocketClientDependencies,
+  RoomSocketHandle,
+  RoomSocketHandlers,
+  RoomSocketSnapshot,
+} from "./roomSocketTypes";
 
 export class RoomSocketSayError extends Error {
   category: string;
@@ -58,104 +47,6 @@ export class RoomSocketSayError extends Error {
   }
 }
 
-export interface RoomSocketHandle {
-  close: () => void;
-  resync?: () => void;
-  ready: () => boolean;
-  say: (request: RoomSayRequest) => Promise<LobbyPostResponse>;
-  command: (action: string, payload?: Record<string, unknown>) => Promise<RoomCommandAck>;
-  plugin?: (payload: Record<string, unknown>) => void;
-  historyBefore: (beforeSeq: number, limit?: number) => Promise<RoomHistoryPage>;
-}
-
-export interface RoomHistoryPage {
-  events: RoomEvent[];
-  oldest_seq: number;
-  last_seq: number;
-  has_more_before: boolean;
-}
-
-export interface NativeCliProviderAvailability {
-  id: string;
-  display_name: string;
-  provider_kind: string;
-  runtime_kind: "live_cli" | "opencode" | "api";
-  catalog_group?: "subscription" | "api" | "local";
-  workspace_required?: boolean;
-  work_harness_available?: boolean;
-  custom_endpoint?: boolean;
-  custom_model?: boolean;
-  connection_kind: "native_cli_bridge";
-  executable: string;
-  default_model: string;
-  interactive: true;
-  startable: boolean;
-  available: boolean;
-  discovery_status?: "loading" | "ready" | "failed";
-  catalog_source?: "discovered" | "static_manifest" | "stale_cache";
-  discovery_error_code?: string;
-  discovery_error?: string;
-  login_available?: boolean;
-  login_label?: string;
-  login_flow?: "browser_oauth" | "interactive_terminal";
-  controls: ProviderControl[];
-}
-
-export interface ProviderCatalogSnapshot {
-  status: "loading" | "ready" | "failed";
-  catalog_revision: string;
-  discovered_at?: string;
-  providers: NativeCliProviderAvailability[];
-}
-
-export interface ProviderControlOption {
-  value: string;
-  label: string;
-  metadata?: Record<string, unknown>;
-}
-
-export interface ProviderControl {
-  key: string;
-  label: string;
-  kind: "select" | "combobox";
-  options: ProviderControlOption[];
-  default_value: string;
-}
-
-export interface RoomSocketSnapshot {
-  op: "snapshot";
-  stream: "room_events";
-  room: ServerRoom | Record<string, unknown>;
-  room_settings: PublicRoomGlobalSettings;
-  participants: RoomMember[];
-  agent_sessions: RoomAgentSession[];
-  provider_requests?: PublicProviderRequest[];
-  active_turns: Array<Record<string, unknown>>;
-  events: RoomEvent[];
-  oldest_seq: number;
-  last_seq: number;
-  has_more_before: boolean;
-  resume_gap: boolean;
-  snapshot_mode: "initial" | "resume" | "gap" | "bridge";
-  provider_catalog: ProviderCatalogSnapshot;
-  available_providers: NativeCliProviderAvailability[];
-  capabilities: Record<string, boolean>;
-}
-
-export interface RoomCommandAck {
-  op: "ack";
-  request_id: string;
-  accepted: true;
-  action: string;
-  result?: Record<string, unknown>;
-  deduplicated?: boolean;
-}
-
-export interface RoomSocketClientDependencies {
-  getTicket?: (auth: RoomSocketAuth) => Promise<string>;
-  createSocket?: (url: string) => WebSocket;
-  websocketBaseUrl?: () => string;
-}
 const ROOM_SOCKET_COMMAND_TIMEOUT_MS = 20_000;
 function wsBaseUrl(): string {
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -397,6 +288,7 @@ export function openRoomSocket(
   let lastSeq = 0;
   let lastPluginSeq = 0;
   let roomSnapshotAccepted = false;
+  let transportAuthenticated = false;
   let canonicalRoomId = auth.kind === "host" ? auth.meetingId : "";
   let requestCounter = 0;
   const requestTicket = dependencies.getTicket || getWsTicket;
@@ -421,7 +313,7 @@ export function openRoomSocket(
   }
 
   function sendPending() {
-    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    if (!socket || socket.readyState !== WebSocket.OPEN || !transportAuthenticated) return;
     pending.forEach((command, requestId) => {
       socket?.send(
         JSON.stringify({
@@ -680,38 +572,76 @@ export function openRoomSocket(
     try {
       const ticket = await requestTicket(auth);
       if (closed) return;
+      const proofKey = dependencies.serverProofKey?.() || "";
+      const serverChallenge = proofKey ? createServerChallenge() : "";
       const currentSocket = createSocket(`${dependencies.websocketBaseUrl?.() || wsBaseUrl()}/ws?ticket=${encodeURIComponent(ticket)}`);
       socket = currentSocket;
       roomSnapshotAccepted = false;
+      transportAuthenticated = false;
+      let serverVerified = !proofKey;
+      let verificationQueue = Promise.resolve();
+      const handleFrameError = (error: unknown) => {
+        if (error instanceof SyntaxError) {
+          reconnectForProtocolError(
+            new RoomSocketSayError(
+              "Room socket received malformed JSON; reconnecting before accepting more events.",
+              "frame_json_invalid"
+            )
+          );
+          return;
+        }
+        handlers.onError?.(error as Error);
+      };
       currentSocket.onopen = () => {
         reconnectAttempt = 0;
+        transportAuthenticated = !proofKey;
         const subscription: Record<string, unknown> = {
           op: "subscribe",
           streams,
           resume_from_seq: lastSeq,
         };
+        if (serverChallenge) subscription.server_challenge = serverChallenge;
         if (streams.includes("plugin")) {
           subscription.plugin_resume_from_seq = lastPluginSeq;
         }
         currentSocket.send(JSON.stringify(subscription));
-        sendPending();
+        if (transportAuthenticated) sendPending();
         handlers.onOpen?.();
       };
       currentSocket.onmessage = (event) => {
-        try {
-          dispatchFrame(event.data as string);
-        } catch (error) {
-          if (error instanceof SyntaxError) {
-            reconnectForProtocolError(
-              new RoomSocketSayError(
-                "Room socket received malformed JSON; reconnecting before accepting more events.",
-                "frame_json_invalid"
-              )
-            );
-            return;
+        const raw = event.data as string;
+        if (!proofKey) {
+          try {
+            dispatchFrame(raw);
+          } catch (error) {
+            handleFrameError(error);
           }
-          handlers.onError?.(error as Error);
+          return;
         }
+        verificationQueue = verificationQueue.then(async () => {
+          if (socket !== currentSocket || currentSocket.readyState !== WebSocket.OPEN) return;
+          if (!serverVerified) {
+            const frame = JSON.parse(raw) as { op?: string; server_proof?: string };
+            const verified = frame.op === "snapshot" &&
+              typeof frame.server_proof === "string" &&
+              await verifyServerProof(proofKey, serverChallenge, frame.server_proof);
+            if (!verified) {
+              reconnectForProtocolError(
+                new RoomSocketSayError(
+                  "The desktop runtime did not prove ownership of its control channel.",
+                  "server_identity_invalid"
+                )
+              );
+              return;
+            }
+            serverVerified = true;
+            transportAuthenticated = true;
+          }
+          dispatchFrame(raw);
+          if (roomSnapshotAccepted) sendPending();
+        }).catch((error) => {
+          handleFrameError(error);
+        });
       };
       currentSocket.onerror = (event) => handlers.onError?.(event);
       currentSocket.onclose = () => {
@@ -763,7 +693,7 @@ export function openRoomSocket(
     resync: () => {
       socket?.close();
     },
-    ready: () => socket?.readyState === WebSocket.OPEN,
+    ready: () => socket?.readyState === WebSocket.OPEN && transportAuthenticated,
     command,
     plugin: (payload) => {
       if (socket?.readyState !== WebSocket.OPEN) {

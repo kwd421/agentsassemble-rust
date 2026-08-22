@@ -2,6 +2,7 @@ export interface DesktopTicketGrant {
   ticket: string;
   ttl_seconds: number;
   websocket_base_url: string;
+  server_proof_key: string;
 }
 
 export function isDesktopShell(): boolean {
