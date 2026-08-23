@@ -8,7 +8,7 @@ Verification claims only the boundary actually observed. Build, lint, unit tests
 
 The active comparison baseline is original
 `d5046473010d1353a81ee38337360e6d98f7bd6f` and public Rust
-`87a6aec05b54dcc0a840eedbe44741e218712122`. Local uncommitted behavior
+`99165dd621c6cde81e62324d0c418df9b40fc3ea`. Local uncommitted behavior
 is never described as public completion. Every completed-slice evidence entry must
 name the tested Rust commit, original provenance commit, platform/build, exact
 entry point and command flow, viewer identity, provider/model where applicable,
@@ -81,6 +81,52 @@ Frontend flows that require real Agent Sessions use exactly this matrix:
 The verification records the exact provider/model identifiers exposed by the installed runtime at execution time. Missing login, unavailable capability, unsupported model, or provider failure remains visible as failed or `unknown`; it never triggers model substitution, a mock pass, or a fallback provider.
 
 Provider credentials, private conversation state, hidden reasoning, and provider-private identifiers are excluded from screenshots, logs, fixtures, public events, and committed artifacts.
+
+## Published macOS evidence: `99165dd`
+
+On 2026-08-24, the packaged release candidate that became Rust commit
+`99165dd621c6cde81e62324d0c418df9b40fc3ea` was compared with original commit
+`d5046473010d1353a81ee38337360e6d98f7bd6f` on macOS through the copied React UI
+inside the bundled Tauri application. The production source was unchanged between
+that real-client run and publication; the only later pre-commit change was a
+test-build-only serialization guard for the process-global filesystem-authority
+pool plus documentation. `make verify` then passed again on the exact published
+commit: architecture/source-growth policy gates, generated protocol bindings,
+frontend production build, original CSS/cascade verification, 65 Vitest files with
+332 tests, Tauri checks with 13 tests, all Rust workspace tests, Clippy with warnings
+denied, and `git diff --check`.
+
+The real-client flow used the local owner identity and the native directory picker
+for the repository workspace. Each provider was added with the original
+"추가하고 바로 실행" control, then addressed through the room composer:
+
+| Provider/model | Observed result |
+| --- | --- |
+| Codex `gpt-5.6-terra` | One persistent `app-server --stdio` session returned `CODEX_TERRA_CREATE_START_OK`; the durable room order was source message, turn start, provider final, turn finish, then idle session state. |
+| Antigravity `gemini-3.6-flash` | One persistent native PTY session returned `ANTIGRAVITY_FLASH_CREATE_START_OK`; no print/one-shot path was used. |
+| OpenCode `opencode/hy3-free` | One persistent loopback HTTP/SSE session returned `OPENCODE_HY3_CREATE_START_OK`. After normal application shutdown and relaunch, the UI `재개` control retained the same private provider-session identity, set `provider_session_reused=true`, and returned `OPENCODE_HY3_REUSE_OK` on turn two. The UI `중지` control then reached detached/stopped with no provider process left. |
+
+Application shutdown removed the exact verification-owned desktop, sidecar,
+provider supervisor, and provider processes. The final process inspection found no
+verification-owned AgentsAssemble, Antigravity, or OpenCode process; existing
+ChatGPT/Codex application processes were identified as user-owned and left alone.
+Provider-private session identifiers remain in the local evidence database and are
+intentionally not copied into this document.
+
+The copied frontend CSS chunks remained byte-identical under the provenance gate.
+The global overlay root was moved to a body portal with an explicit stacking
+context, without changing the original CSS cascade. Opening the left-bottom human
+profile and then the Agent Add dialog confirmed that the profile card closes and
+the profile bar, left rail, right member panel, and central chat remain below the
+modal rather than painting over it.
+
+One explicit provider edge remains visible: a newly created Codex thread with no
+completed turn was shut down before its first turn, and the installed app-server
+later rejected `thread/resume` because no rollout existed. The Rust runtime kept
+the original thread identity, surfaced `provider_request_rejected` with recovery
+required, and did not create a replacement thread or invoke a fallback. A Codex
+session with one completed turn passed the normal create-and-start flow. This
+zero-turn provider limitation is not reported as successful restart parity.
 
 ## API verification scope
 

@@ -1,10 +1,10 @@
 # Frontend/backend exposure map
 
-Status: source-derived migration inventory, 2026-08-23
+Status: source-derived migration inventory, 2026-08-24
 
 Comparison baseline: original
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust
-`87a6aec05b54dcc0a840eedbe44741e218712122`. Local uncommitted code and
+`99165dd621c6cde81e62324d0c418df9b40fc3ea`. Local uncommitted code and
 local verification are not promoted to public implementation status in this file.
 
 ## Scope and method
@@ -66,9 +66,9 @@ not by itself a product gap.
 
 The Rust server currently exposes `GET /healthz`, `GET /api/host-challenge`,
 `POST /api/ws-ticket`, static `/app`, and `/ws`. Its room command implementation
-at the public comparison commit completes `message.send`, `agent.create`,
-`agent.start`, `agent.resume`, and `agent.stop`. A local uncommitted
-`agent.configure` path is active work, not a connected public surface.
+at the public comparison commit completes `message.send`, atomic
+`agent.create(start=false|true)`, `agent.start`, `agent.resume`, `agent.stop`, and
+stopped-session `agent.configure`.
 Everything below must remain visibly unavailable or failed until its Rust owner is
 implemented; the frontend must not silently substitute Python or local fake data.
 
@@ -81,7 +81,7 @@ implemented; the frontend must not silently substitute Python or local fake data
 | Attachments, personas, pins, and search | Attachment upload/read, persona list/import/thumbnail, message pins, room search/context. |
 | Provider settings and diagnostics | Login, catalog refresh HTTP response, credential CRUD, provider usage, local resources, release health, and runtime version. The original `/api/local/workspace-picker` HTTP route is absent, but packaged desktop creation uses the native Tauri directory picker instead. |
 | Games and plugins | Mafia HTTP operations and generic plugin WebSocket hosting remain unimplemented. The copied RimWorld view is an external plugin consumer; its Python plugin package/runtime is intentionally outside the current Rust core-migration scope and is not a core parity exit condition. |
-| Canonical room commands | History, vote summary, edit/delete, settings, random operations, re-add/configure, pause/interrupt, participant controls, room lifecycle, and provider request resolution. Stopped-session `agent.resume` is connected at the public comparison commit; `agent.configure` remains active uncommitted work. |
+| Canonical room commands | History, vote summary, edit/delete, settings, random operations, re-add, pause/interrupt, participant controls, room lifecycle, and provider request resolution. Stopped-session `agent.resume` and `agent.configure` are connected at the public comparison commit. |
 | Canonical room events | The React projector recognizes the broader original event vocabulary; only Rust-emitted snapshot/events are currently verified. |
 
 ## Public Rust slice, active gap, and provenance gate
@@ -105,15 +105,16 @@ At the public Rust comparison commit:
   list, Agent Session list, and create/start/resume/stop controls.
 - The original create dialog uses a native Tauri directory picker in the packaged
   desktop build.
-- Create-and-start does **not** yet preserve the original server-owned intent: the
-  public desktop controller sends create with `start=false`, then a second
-  `agent.start`, then normal-path resync. The Rust server does not own the original
-  `agent.create(start=true)` contract. This remains incomplete until one command
-  reservation owns creation and the optional lifecycle intent and committed
-  ACK/events update the UI without success-path resync.
-- Snapshot projection exists, but live fanout does not yet prove the same
-  viewer-specific projection and hidden-sequence contract. This is a prerequisite,
-  not a later security hardening item.
+- One durable `agent.create(start=false|true)` reservation owns creation and its
+  optional start intent. The copied desktop controller sends one command, consumes
+  the original nested result shape, and does not issue a success-path start or
+  resynchronization command.
+- Snapshot, catch-up, resynchronization, and live fanout use the same
+  authenticated-viewer projection. Invisible durable events become bounded
+  `event_hidden` envelopes so every viewer retains a contiguous cursor, while
+  public ACK/result/error shaping excludes private runtime authority.
+- Stopped-session `agent.configure` preserves the Agent Session identity and
+  revalidates provider controls plus stored filesystem authority before commit.
 - Unsupported original controls fail with the Rust command error. They are not
   hidden by a substitute result and do not fall back to Python.
 
@@ -132,24 +133,21 @@ but it must not be backed by placeholder snapshots, a fake plugin host, or a Pyt
 fallback. Until a later plugin slice is explicitly opened, attempts to use it stay
 visibly unsupported.
 
-Historical packaged-release UI verification on 2026-08-23 exercised native
-sessions, not mocked adapters, but it does not complete the active slice because
-the exact public evidence commit and the corrected command/projection contracts
-were not recorded together:
+Published packaged-release UI verification for `99165dd` exercised native
+sessions, not mocked adapters:
 
 | Provider | Verified path |
 | --- | --- |
-| Codex `gpt-5.6-terra` | Native app-server session created from the copied UI, one real room turn completed, then the exact owned process tree was stopped. |
-| Antigravity `gemini-3.6-flash` | Persistent native session created from the copied UI, one real room turn completed, then the exact owned process tree was stopped. |
-| OpenCode `opencode/hy3-free` | Persistent `opencode serve` session created from the copied UI, first turn completed, UI stop completed, then UI resume reused provider session `ses_fd204f66cffekIX7o7bed3VgnA`; a second turn completed with durable `provider_session_reused=true` and turn count `2`, followed by confirmed UI stop. |
+| Codex `gpt-5.6-terra` | Persistent native app-server session created and started by one copied-UI command; one real room turn completed. |
+| Antigravity `gemini-3.6-flash` | Persistent native PTY session created and started by one copied-UI command; one real room turn completed without print mode. |
+| OpenCode `opencode/hy3-free` | Persistent `opencode serve` session completed turn one, application restart, UI resume with the same private provider-session identity, turn two with durable `provider_session_reused=true`, and confirmed UI stop. |
 
 The OpenCode resume check also verifies that `agent.resume` keeps its own durable
 request/result identity while sharing the provider launch effect with `agent.start`.
 It does not silently rewrite a resume request into a start request.
 
-The exact matrix must be rerun on the eventual completed public slice commit and
-recorded in `docs/VERIFICATION.md` with command flow, process/session ownership,
-restart, hidden-cursor, and cleanup evidence before this section may describe the
-Agent Session slice as complete.
+The complete command flow, exact public commit, cleanup evidence, overlay geometry,
+and the explicit Codex zero-turn resume limitation are recorded in
+`docs/VERIFICATION.md`. Provider-private session identifiers remain local evidence.
 
 This file must be updated when either side gains or removes a reachable surface.

@@ -1,6 +1,6 @@
 # Agent Session vertical slice
 
-Status: active implementation owner
+Status: published implementation owner; web and manual-security review pending
 
 ## Definition
 
@@ -10,13 +10,13 @@ A host selects an installed provider/model from the authoritative live catalog, 
 
 The comparison baseline is original commit
 `d5046473010d1353a81ee38337360e6d98f7bd6f` and public Rust commit
-`87a6aec05b54dcc0a840eedbe44741e218712122`. Local uncommitted work is
-not completion evidence. At that Rust baseline the desktop controller decomposes a
-create-and-start request into `agent.create(start=false)`, `agent.start`, and a
-normal-path resync, while the server does not own the original `agent.create(start)`
-intent. Live fanout also does not yet share the viewer projector used by snapshots.
-The slice is therefore incomplete even where resident provider code or historical
-real-provider runs exist.
+`99165dd621c6cde81e62324d0c418df9b40fc3ea`. Local uncommitted work is
+not completion evidence. At that Rust baseline one durable server-owned
+`agent.create(start=false|true)` reservation covers creation and optional start,
+the copied desktop sends only that command, and snapshot, catch-up, resync, and
+live fanout use the same authenticated-viewer projector. The exact published
+real-provider and copied-UI evidence is recorded in `docs/VERIFICATION.md`; web
+and separate manual-security review remain open before this slice is closed.
 
 Implementation order is mandatory:
 
