@@ -159,7 +159,7 @@ async fn lifecycle_commands_use_the_owned_codex_app_server_before_committing() {
         "start_now": false,
     });
     send_create(&mut socket, "create-for-lifecycle", &create_payload).await;
-    let created = receive_until_ack(&mut socket, 2).await;
+    let created = receive_command_ack(&mut socket).await;
     let session_id = created["result"]["agent_session"]["session_id"]
         .as_str()
         .unwrap_or_else(|| panic!("created session has no id"));
@@ -312,10 +312,17 @@ async fn room_turns_publish_provider_finals_without_blocking_room_commands() {
     let directory =
         tempfile::tempdir().unwrap_or_else(|error| panic!("create room-turn root: {error}"));
     let transcript = directory.path().join("turn-requests.jsonl");
-    let observed_views = directory.path().join("observed-room-views.txt");
+    let portal_endpoint = directory.path().join("portal-endpoint");
     let turn_seen = directory.path().join("turn-seen");
-    let release = directory.path().join("turn-release");
-    let fixture = room_portal_fixture::script(&transcript, &observed_views, &turn_seen, &release);
+    let release_first = directory.path().join("turn-release-1");
+    let release_second = directory.path().join("turn-release-2");
+    let fixture = room_portal_fixture::script(
+        &transcript,
+        &portal_endpoint,
+        &turn_seen,
+        &release_first,
+        &release_second,
+    );
     let store = SqliteStore::open(&format!(
         "sqlite://{}",
         directory.path().join("runtime.sqlite3").display()
@@ -353,7 +360,7 @@ async fn room_turns_publish_provider_finals_without_blocking_room_commands() {
         &json!({"agent_id": session_id}),
     )
     .await;
-    let _started = receive_until_ack(&mut socket, 4).await;
+    let _started = receive_command_ack(&mut socket).await;
 
     send_command(
         &mut socket,
@@ -362,8 +369,9 @@ async fn room_turns_publish_provider_finals_without_blocking_room_commands() {
         &json!({"content": "@Terra answer the first room message"}),
     )
     .await;
-    let _first_ack = receive_until_ack(&mut socket, 5).await;
-    wait_for_file(&turn_seen).await;
+    let _first_ack = receive_command_ack(&mut socket).await;
+    room_portal_fixture::wait_for_turn(&turn_seen, "1").await;
+    let endpoint = room_portal_fixture::wait_for_endpoint(&portal_endpoint).await;
     send_command(
         &mut socket,
         "room-message-2",
@@ -371,12 +379,23 @@ async fn room_turns_publish_provider_finals_without_blocking_room_commands() {
         &json!({"content": "@Terra queue the second room message"}),
     )
     .await;
-    let _second_ack = receive_until_ack(&mut socket, 2).await;
-    std::fs::write(&release, b"release")
+    let _second_ack = receive_command_ack(&mut socket).await;
+    let first_view = room_portal_fixture::publish(&endpoint, "first room answer").await;
+    let second_turn_seen = turn_seen.clone();
+    let second_endpoint = endpoint.clone();
+    let second_release = release_second.clone();
+    let second_portal = tokio::spawn(async move {
+        room_portal_fixture::wait_for_turn(&second_turn_seen, "2").await;
+        let view = room_portal_fixture::publish(&second_endpoint, "second room answer").await;
+        std::fs::write(&second_release, b"release")
+            .unwrap_or_else(|error| panic!("release second room turn fixture: {error}"));
+        view
+    });
+    std::fs::write(&release_first, b"release")
         .unwrap_or_else(|error| panic!("release room turn fixture: {error}"));
 
     let mut provider_finals = Vec::new();
-    for _ in 0..9 {
+    for _ in 0..32 {
         let frame = receive_json_with_timeout(&mut socket, Duration::from_secs(5)).await;
         for event in frame["events"].as_array().into_iter().flatten() {
             if event["type"] == "message_final" && event["actor"]["participant_type"] == "agent" {
@@ -388,8 +407,10 @@ async fn room_turns_publish_provider_finals_without_blocking_room_commands() {
         }
     }
     assert_eq!(provider_finals, ["first room answer", "second room answer"]);
-    let views = std::fs::read_to_string(&observed_views)
-        .unwrap_or_else(|error| panic!("read observed RoomPortal views: {error}"));
+    let second_view = second_portal
+        .await
+        .unwrap_or_else(|error| panic!("join second portal turn: {error}"));
+    let views = format!("{first_view}\n{second_view}");
     assert!(views.contains("answer the first room message"));
     assert!(views.contains("queue the second room message"));
     let requests = std::fs::read_to_string(&transcript)
@@ -606,6 +627,20 @@ where
         }
     }
     ack.unwrap_or_else(|| panic!("command ACK was not delivered within {limit} frames"))
+}
+
+#[cfg(unix)]
+async fn receive_command_ack<S>(socket: &mut WebSocketStream<S>) -> Value
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    for _ in 0..32 {
+        let frame = receive_json_with_timeout(socket, Duration::from_secs(5)).await;
+        if frame["op"] == "ack" {
+            return frame;
+        }
+    }
+    panic!("command ACK was not delivered");
 }
 
 async fn receive_json<S>(socket: &mut WebSocketStream<S>) -> Value

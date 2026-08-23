@@ -8,6 +8,7 @@ mod launch_error;
 mod process;
 mod profile;
 mod room_portal;
+mod room_portal_mcp;
 mod runtime;
 mod runtime_authority;
 mod runtime_lease;
@@ -22,7 +23,7 @@ mod unix_process_tree;
 pub use catalog::ProviderCatalogService;
 #[cfg(unix)]
 pub use guardian::run_process_helper_if_requested;
-pub use room_portal::{ProviderTurnOutcome, run_room_portal_mcp_if_requested};
+pub use room_portal::ProviderTurnOutcome;
 pub use runtime::{
     ProviderAdapter, ProviderAdapterError, ProviderRoomObservation, ProviderRuntimeGone,
     ProviderRuntimeObservation, ProviderRuntimeStarted, ProviderShutdownOutcome,
