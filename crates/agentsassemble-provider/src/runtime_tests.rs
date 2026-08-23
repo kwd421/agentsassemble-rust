@@ -5,6 +5,7 @@ use agentsassemble_domain::{CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession
 use super::{ProviderAdapter, ProviderRuntimeObservation};
 use crate::filesystem::{canonical_workspace, executable_identity};
 use crate::profile::runtime_profile_key;
+use crate::runtime::test_cleanup::{ExactProcessCleanup, ExactProcessGroupCleanup};
 
 pub(super) static RUNTIME_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
@@ -59,6 +60,7 @@ async fn guardian_runs_outside_the_server_process_group() {
                 "runtime::tests::inert_provider_entry".to_owned(),
                 "--nocapture".to_owned(),
             ],
+            &[],
             [
                 provider_stdin.into(),
                 provider_stdout.into(),
@@ -140,6 +142,7 @@ async fn guardian_death_without_a_cleanup_receipt_never_proves_gone() {
                 "runtime::tests::inert_provider_entry".to_owned(),
                 "--nocapture".to_owned(),
             ],
+            &[],
             [
                 provider_stdin.into(),
                 provider_stdout.into(),
@@ -348,7 +351,7 @@ async fn stop_kills_descendants_after_the_codex_leader_exits() {
         tempfile::tempdir().unwrap_or_else(|error| panic!("create descendant fixture: {error}"));
     let descendant_pid = directory.path().join("descendant.pid");
     let script = format!(
-        "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nIFS= read -r thread\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{{\"thread\":{{\"id\":\"thread-1\"}}}}}}'\n(while :; do sleep 1; done) </dev/null >/dev/null 2>&1 &\nprintf '%s' \"$!\" > {}\nexit 0\n",
+        "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nIFS= read -r thread\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{{\"thread\":{{\"id\":\"thread-1\"}}}}}}'\n(while :; do sleep 1; done) </dev/null >/dev/null 2>&1 &\nprintf '%s' \"$!\" > {}\nsleep 1\nexit 0\n",
         shell_quote(&descendant_pid)
     );
     let session = fixture_session(directory.path(), &script).await;
@@ -675,66 +678,6 @@ fn process_group_exists(raw_pid: u32) -> bool {
 
 fn shell_quote(path: &Path) -> String {
     format!("'{}'", path.to_string_lossy().replace('\'', "'\\''"))
-}
-
-struct ExactProcessCleanup(Option<u32>);
-
-impl ExactProcessCleanup {
-    const fn new(pid: u32) -> Self {
-        Self(Some(pid))
-    }
-
-    fn kill_now(&mut self) {
-        let Some(raw_pid) = self.0.take() else {
-            return;
-        };
-        if let Some(pid) = i32::try_from(raw_pid)
-            .ok()
-            .and_then(rustix::process::Pid::from_raw)
-        {
-            let _ = rustix::process::kill_process(pid, rustix::process::Signal::KILL);
-        }
-    }
-
-    fn disarm(&mut self) {
-        self.0 = None;
-    }
-}
-
-impl Drop for ExactProcessCleanup {
-    fn drop(&mut self) {
-        self.kill_now();
-    }
-}
-
-struct ExactProcessGroupCleanup(Option<u32>);
-
-impl ExactProcessGroupCleanup {
-    const fn new(pid: u32) -> Self {
-        Self(Some(pid))
-    }
-
-    fn kill_now(&mut self) {
-        let Some(raw_pid) = self.0.take() else {
-            return;
-        };
-        if let Some(pid) = i32::try_from(raw_pid)
-            .ok()
-            .and_then(rustix::process::Pid::from_raw)
-        {
-            let _ = rustix::process::kill_process_group(pid, rustix::process::Signal::KILL);
-        }
-    }
-
-    fn disarm(&mut self) {
-        self.0 = None;
-    }
-}
-
-impl Drop for ExactProcessGroupCleanup {
-    fn drop(&mut self) {
-        self.kill_now();
-    }
 }
 
 fn session(

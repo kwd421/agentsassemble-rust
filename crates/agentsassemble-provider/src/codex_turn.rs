@@ -245,7 +245,7 @@ async fn next_matching_notification(
             ));
         }
         if object.get("id").is_some() {
-            driver.reject_server_request(&message).await?;
+            driver.handle_server_request(&message).await?;
             continue;
         }
         if message_matches(&message, thread_id, turn_id)? {

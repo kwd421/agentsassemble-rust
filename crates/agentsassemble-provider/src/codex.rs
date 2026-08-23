@@ -120,34 +120,14 @@ impl CodexDriver {
         .map_err(|_| executable_authority_error())?;
         #[cfg(unix)]
         {
-            let (process_group, pipes) =
-                UnixProcessCustody::start(runtime_lease, guardian_launch, &executable, &arguments)
-                    .await?;
-            let stderr_task = tokio::spawn(drain_stderr(pipes.stderr));
-            Ok(Self {
-                process_group,
-                #[cfg(not(any(target_os = "linux", target_os = "android")))]
-                _executable_guard: executable,
-                stdin: pipes.stdin,
-                stdout: FramedRead::new(
-                    pipes.stdout,
-                    LinesCodec::new_with_max_length(MAX_PROTOCOL_LINE_BYTES),
-                ),
-                stderr_task,
-                next_request_id: 1,
-                pending_notifications: VecDeque::new(),
-                pending_notification_bytes: 0,
-                pending_request: None,
-                initialization_error: None,
-                initialize_acked: false,
-                initialized_notification_started: false,
-                initialized: false,
-                attached_thread_id: None,
-                attached_observed_model_id: None,
-                attachment_error: None,
-                turn_state: turn::CodexTurnState::default(),
+            return Self::spawn_unix(
                 room_portal,
-            })
+                executable,
+                arguments,
+                runtime_lease,
+                guardian_launch,
+            )
+            .await;
         }
         #[cfg(not(unix))]
         {
@@ -159,6 +139,7 @@ impl CodexDriver {
                     .stderr(Stdio::piped());
             });
             sanitize_environment(command.command_mut());
+            room_portal.configure_environment(command.command_mut());
             command.wrap(KillOnDrop);
             #[cfg(windows)]
             command.wrap(JobObject);
@@ -201,6 +182,50 @@ impl CodexDriver {
                 room_portal,
             })
         }
+    }
+
+    #[cfg(unix)]
+    async fn spawn_unix(
+        room_portal: RoomPortal,
+        executable: crate::filesystem::BoundExecutable,
+        arguments: Vec<String>,
+        runtime_lease: &HeldRuntimeLease,
+        guardian_launch: &GuardianLaunch,
+    ) -> Result<Self, DriverLaunchError> {
+        let provider_environment = room_portal.provider_environment();
+        let (process_group, pipes) = UnixProcessCustody::start(
+            runtime_lease,
+            guardian_launch,
+            &executable,
+            &arguments,
+            &provider_environment,
+        )
+        .await?;
+        let stderr_task = tokio::spawn(drain_stderr(pipes.stderr));
+        Ok(Self {
+            process_group,
+            #[cfg(not(any(target_os = "linux", target_os = "android")))]
+            _executable_guard: executable,
+            stdin: pipes.stdin,
+            stdout: FramedRead::new(
+                pipes.stdout,
+                LinesCodec::new_with_max_length(MAX_PROTOCOL_LINE_BYTES),
+            ),
+            stderr_task,
+            next_request_id: 1,
+            pending_notifications: VecDeque::new(),
+            pending_notification_bytes: 0,
+            pending_request: None,
+            initialization_error: None,
+            initialize_acked: false,
+            initialized_notification_started: false,
+            initialized: false,
+            attached_thread_id: None,
+            attached_observed_model_id: None,
+            attachment_error: None,
+            turn_state: turn::CodexTurnState::default(),
+            room_portal,
+        })
     }
 
     async fn initialize(&mut self) -> Result<(), DriverError> {
@@ -352,7 +377,7 @@ impl CodexDriver {
             let object = message.as_object().ok_or_else(protocol_error)?;
             if object.get("method").is_some() {
                 if object.get("id").is_some() {
-                    self.reject_server_request(&message).await?;
+                    self.handle_server_request(&message).await?;
                 } else {
                     self.queue_notification(message, line.len())?;
                 }
@@ -378,8 +403,17 @@ impl CodexDriver {
         }
     }
 
-    async fn reject_server_request(&mut self, message: &Value) -> Result<(), DriverError> {
+    async fn handle_server_request(&mut self, message: &Value) -> Result<(), DriverError> {
         let id = message.get("id").cloned().ok_or_else(protocol_error)?;
+        if is_room_portal_approval(message) {
+            return self
+                .write_message(&json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": {"action": "accept", "content": {}},
+                }))
+                .await;
+        }
         self.write_message(&json!({
             "jsonrpc": "2.0",
             "id": id,
@@ -429,6 +463,18 @@ impl CodexDriver {
         let _ = (&mut self.stderr_task).await;
         Ok(())
     }
+}
+
+fn is_room_portal_approval(message: &Value) -> bool {
+    message.get("method").and_then(Value::as_str) == Some("mcpServer/elicitation/request")
+        && message
+            .pointer("/params/serverName")
+            .and_then(Value::as_str)
+            == Some("agentsassemble_room")
+        && message
+            .pointer("/params/_meta/codex_approval_kind")
+            .and_then(Value::as_str)
+            == Some("mcp_tool_call")
 }
 
 impl ProviderDriver for CodexDriver {

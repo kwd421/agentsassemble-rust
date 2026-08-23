@@ -177,6 +177,7 @@ async fn post_ready_failure_is_safe_only_after_exact_guardian_receipt() {
             "runtime::launch_tests::post_ready_escape_entry".to_owned(),
             "--nocapture".to_owned(),
         ],
+        &[],
     )
     .await;
     let failure = match result {

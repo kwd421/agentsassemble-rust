@@ -7,7 +7,11 @@ use std::{
 use bytes::Bytes;
 use http_body_util::{BodyExt, Empty, combinators::BoxBody};
 use hyper::{
-    Request, Response, StatusCode, body::Incoming, server::conn::http1, service::service_fn,
+    Request, Response, StatusCode,
+    body::Incoming,
+    header::{AUTHORIZATION, CONNECTION, WWW_AUTHENTICATE},
+    server::conn::http1,
+    service::service_fn,
 };
 use hyper_util::rt::{TokioIo, TokioTimer};
 use rmcp::{
@@ -20,6 +24,7 @@ use rmcp::{
     },
 };
 use serde::Deserialize;
+use subtle::ConstantTimeEq;
 use tokio::{net::TcpListener, sync::Semaphore, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -29,15 +34,17 @@ use crate::room_portal::{
 };
 
 const MAX_MCP_REQUEST_BYTES: usize = 64 * 1024;
-const MAX_PORTAL_CONNECTIONS: usize = 8;
 const MAX_PORTAL_REQUESTS: usize = 8;
 const PORTAL_HEADER_TIMEOUT: Duration = Duration::from_secs(2);
+const PORTAL_CONNECTION_TIMEOUT: Duration = Duration::from_secs(5);
+const PORTAL_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
 
 type PortalHttpService = StreamableHttpService<RoomPortalMcp, LocalSessionManager>;
 type PortalBody = BoxBody<Bytes, Infallible>;
 
 pub(super) struct PortalServer {
     endpoint: String,
+    bearer_token: String,
     cancellation: CancellationToken,
     task: JoinHandle<()>,
 }
@@ -50,6 +57,7 @@ impl PortalServer {
         let address = listener.local_addr().map_err(|_| RoomPortalError::Mcp)?;
         let capability_path = format!("/portal/{}/mcp", Uuid::new_v4().simple());
         let endpoint = format!("http://{address}{capability_path}");
+        let bearer_token = Uuid::new_v4().simple().to_string();
         let cancellation = CancellationToken::new();
         let service = StreamableHttpService::new(
             move || Ok(RoomPortalMcp::new(state.clone())),
@@ -67,11 +75,13 @@ impl PortalServer {
         let task = tokio::spawn(run_server(
             listener,
             capability_path,
+            format!("Bearer {bearer_token}"),
             service,
             task_cancellation,
         ));
         Ok(Self {
             endpoint,
+            bearer_token,
             cancellation,
             task,
         })
@@ -79,6 +89,10 @@ impl PortalServer {
 
     pub(super) fn endpoint(&self) -> &str {
         &self.endpoint
+    }
+
+    pub(super) fn bearer_token(&self) -> &str {
+        &self.bearer_token
     }
 
     pub(super) fn is_running(&self) -> bool {
@@ -96,10 +110,10 @@ impl Drop for PortalServer {
 async fn run_server(
     listener: TcpListener,
     capability_path: String,
+    expected_authorization: String,
     service: PortalHttpService,
     cancellation: CancellationToken,
 ) {
-    let connection_admission = Arc::new(Semaphore::new(MAX_PORTAL_CONNECTIONS));
     let request_admission = Arc::new(Semaphore::new(MAX_PORTAL_REQUESTS));
     loop {
         let accepted = tokio::select! {
@@ -112,11 +126,9 @@ async fn run_server(
         if !peer.ip().is_loopback() {
             continue;
         }
-        let Ok(connection_permit) = connection_admission.clone().try_acquire_owned() else {
-            continue;
-        };
         let service = service.clone();
         let expected_path = capability_path.clone();
+        let expected_authorization = expected_authorization.clone();
         let request_admission = request_admission.clone();
         let connection_cancellation = cancellation.child_token();
         tokio::spawn(async move {
@@ -126,20 +138,22 @@ async fn run_server(
                     request,
                     service.clone(),
                     expected_path.clone(),
+                    expected_authorization.clone(),
                     request_admission.clone(),
                 )
             });
             let mut builder = http1::Builder::new();
             builder
                 .timer(TokioTimer::new())
-                .header_read_timeout(PORTAL_HEADER_TIMEOUT);
+                .header_read_timeout(PORTAL_HEADER_TIMEOUT)
+                .keep_alive(false);
             let connection = builder.serve_connection(io, http_service);
             tokio::pin!(connection);
             tokio::select! {
                 () = connection_cancellation.cancelled() => {}
+                () = tokio::time::sleep(PORTAL_CONNECTION_TIMEOUT) => {}
                 _ = &mut connection => {}
             }
-            drop(connection_permit);
         });
     }
 }
@@ -148,20 +162,44 @@ async fn serve_request(
     request: Request<Incoming>,
     service: PortalHttpService,
     expected_path: String,
+    expected_authorization: String,
     admission: Arc<Semaphore>,
 ) -> Result<Response<PortalBody>, Infallible> {
     if request.uri().path() != expected_path || request.uri().query().is_some() {
         return Ok(empty_response(StatusCode::NOT_FOUND));
     }
+    let authorized = request.headers().get(AUTHORIZATION).is_some_and(|value| {
+        let observed = value.as_bytes();
+        observed.len() == expected_authorization.len()
+            && bool::from(observed.ct_eq(expected_authorization.as_bytes()))
+    });
+    if !authorized {
+        let mut response = empty_response(StatusCode::UNAUTHORIZED);
+        response.headers_mut().insert(
+            WWW_AUTHENTICATE,
+            hyper::header::HeaderValue::from_static("Bearer"),
+        );
+        return Ok(response);
+    }
     let Ok(_permit) = admission.try_acquire_owned() else {
         return Ok(empty_response(StatusCode::SERVICE_UNAVAILABLE));
     };
-    Ok(service.handle(request).await)
+    match tokio::time::timeout(PORTAL_REQUEST_TIMEOUT, service.handle(request)).await {
+        Ok(response) => Ok(with_connection_close(response)),
+        Err(_) => Ok(empty_response(StatusCode::REQUEST_TIMEOUT)),
+    }
 }
 
 fn empty_response(status: StatusCode) -> Response<PortalBody> {
     let mut response = Response::new(Empty::<Bytes>::new().boxed());
     *response.status_mut() = status;
+    with_connection_close(response)
+}
+
+fn with_connection_close(mut response: Response<PortalBody>) -> Response<PortalBody> {
+    response
+        .headers_mut()
+        .insert(CONNECTION, hyper::header::HeaderValue::from_static("close"));
     response
 }
 
@@ -204,9 +242,7 @@ impl RoomPortalMcp {
             .active
             .as_mut()
             .ok_or_else(|| "No active room observation.".to_owned())?;
-        if active.receipt_generation.is_none() {
-            active.receipt_generation = Some(Uuid::new_v4());
-        }
+        active.receipt_generation = Some(active.turn_generation);
         Ok(active.room_view.clone())
     }
 
@@ -225,9 +261,7 @@ impl RoomPortalMcp {
             .active
             .as_mut()
             .ok_or_else(|| "No active room observation.".to_owned())?;
-        let receipt_generation = active
-            .receipt_generation
-            .ok_or_else(|| "Read the shared room discussion before publishing.".to_owned())?;
+        let receipt_generation = active.turn_generation;
         if active.outcome.is_some() {
             return Err("This turn already has a terminal room action.".to_owned());
         }
@@ -265,9 +299,7 @@ impl RoomPortalMcp {
             .active
             .as_mut()
             .ok_or_else(|| "No active room observation.".to_owned())?;
-        let receipt_generation = active
-            .receipt_generation
-            .ok_or_else(|| "Read the shared room discussion before declining.".to_owned())?;
+        let receipt_generation = active.turn_generation;
         if active.outcome.is_some() {
             return Err("This turn already has a terminal room action.".to_owned());
         }
@@ -296,7 +328,12 @@ mod tests {
     use std::{collections::BTreeSet, time::Duration};
 
     use rmcp::{
-        ServiceExt, model::CallToolRequestParams, transport::StreamableHttpClientTransport,
+        ServiceExt,
+        model::CallToolRequestParams,
+        transport::{
+            StreamableHttpClientTransport,
+            streamable_http_client::StreamableHttpClientTransportConfig,
+        },
     };
     use serde_json::{Map, json};
 
@@ -304,7 +341,7 @@ mod tests {
     use crate::room_portal::{ProviderTurnOutcome, RoomPortal};
 
     #[tokio::test]
-    async fn loopback_mcp_enforces_read_before_one_publication() {
+    async fn loopback_mcp_requires_a_same_turn_read_before_commit() {
         let portal = RoomPortal::create()
             .await
             .unwrap_or_else(|error| panic!("create room portal fixture: {error}"));
@@ -317,7 +354,10 @@ mod tests {
             )
             .unwrap_or_else(|error| panic!("begin room observation: {error}"));
         let client = ()
-            .serve(StreamableHttpClientTransport::from_uri(portal.endpoint()))
+            .serve(StreamableHttpClientTransport::from_config(
+                StreamableHttpClientTransportConfig::with_uri(portal.endpoint())
+                    .auth_header(portal.bearer_token()),
+            ))
             .await
             .unwrap_or_else(|error| panic!("connect room portal MCP: {error}"));
         let names = client
@@ -338,10 +378,10 @@ mod tests {
         let early = call_tool(
             &client,
             "publish_message",
-            json!({"content": "too early", "next_agent_id": "agent-2"}),
+            json!({"content": "  canonical reply  ", "next_agent_id": "unknown"}),
         )
         .await;
-        assert_eq!(early.is_error, Some(true));
+        assert_ne!(early.is_error, Some(true));
         assert!(portal.finish_observation("turn-1", 7).is_err());
         let read = call_tool(&client, "read_discussion", json!({})).await;
         let read_text = read
@@ -351,13 +391,6 @@ mod tests {
             .map(|content| content.text.as_str())
             .unwrap_or_default();
         assert!(read_text.contains("Human: hello"));
-        let publish = call_tool(
-            &client,
-            "publish_message",
-            json!({"content": "  canonical reply  ", "next_agent_id": "unknown"}),
-        )
-        .await;
-        assert_ne!(publish.is_error, Some(true));
         let duplicate = call_tool(
             &client,
             "decline_to_speak",
@@ -394,6 +427,30 @@ mod tests {
             endpoint.host_str().unwrap_or("127.0.0.1"),
             endpoint.port().unwrap_or_default()
         );
+        let address = format!(
+            "{}:{}",
+            endpoint.host_str().unwrap_or("127.0.0.1"),
+            endpoint.port().unwrap_or_default()
+        );
+        let mut idle_connections = Vec::new();
+        for _ in 0..16 {
+            idle_connections.push(
+                tokio::net::TcpStream::connect(&address)
+                    .await
+                    .unwrap_or_else(|error| panic!("open idle loopback connection: {error}")),
+            );
+        }
+        let admitted = client
+            .post(portal.endpoint())
+            .bearer_auth(portal.bearer_token())
+            .header("accept", "application/json, text/event-stream")
+            .header("content-type", "application/json")
+            .body("{}")
+            .send()
+            .await
+            .unwrap_or_else(|error| panic!("probe authenticated admission: {error}"));
+        assert_ne!(admitted.status(), reqwest::StatusCode::SERVICE_UNAVAILABLE);
+        assert_ne!(admitted.status(), reqwest::StatusCode::UNAUTHORIZED);
         let hidden = client
             .post(root)
             .body("{}")
@@ -401,8 +458,18 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("probe hidden portal route: {error}"));
         assert_eq!(hidden.status(), reqwest::StatusCode::NOT_FOUND);
+        let unauthorized = client
+            .post(portal.endpoint())
+            .header("accept", "application/json, text/event-stream")
+            .header("content-type", "application/json")
+            .body("{}")
+            .send()
+            .await
+            .unwrap_or_else(|error| panic!("probe portal authorization: {error}"));
+        assert_eq!(unauthorized.status(), reqwest::StatusCode::UNAUTHORIZED);
         let oversized = client
             .post(portal.endpoint())
+            .bearer_auth(portal.bearer_token())
             .header("accept", "application/json, text/event-stream")
             .header("content-type", "application/json")
             .body("x".repeat(MAX_MCP_REQUEST_BYTES + 1))
@@ -410,6 +477,7 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("send oversized MCP body: {error}"));
         assert_eq!(oversized.status(), reqwest::StatusCode::PAYLOAD_TOO_LARGE);
+        drop(idle_connections);
     }
 
     async fn call_tool(

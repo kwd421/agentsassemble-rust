@@ -76,6 +76,7 @@ impl UnixProcessCustody {
         launch: &GuardianLaunch,
         provider: &BoundExecutable,
         provider_arguments: &[String],
+        provider_environment: &[(String, String)],
     ) -> Result<(Self, UnixProviderPipes), DriverLaunchError> {
         let (provider_stdin, stdin) = provider_pipe()?;
         let (stdout, provider_stdout) = provider_pipe()?;
@@ -86,6 +87,7 @@ impl UnixProcessCustody {
                 runtime_lease.token(),
                 provider,
                 provider_arguments,
+                provider_environment,
                 [provider_stdin, provider_stdout, provider_stderr],
             )
             .map_err(|_| custody_error())?;

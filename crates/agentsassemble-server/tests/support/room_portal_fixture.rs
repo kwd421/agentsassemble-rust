@@ -1,14 +1,19 @@
 use std::{path::Path, time::Duration};
 
 use rmcp::{
-    ServiceExt, model::CallToolRequestParams, service::RunningService,
-    transport::StreamableHttpClientTransport,
+    ServiceExt,
+    model::CallToolRequestParams,
+    service::RunningService,
+    transport::{
+        StreamableHttpClientTransport, streamable_http_client::StreamableHttpClientTransportConfig,
+    },
 };
 use serde_json::{Map, json};
 
 pub(super) fn script(
     transcript: &Path,
     portal_endpoint: &Path,
+    portal_token: &Path,
     turn_seen: &Path,
     release_first: &Path,
     release_second: &Path,
@@ -28,7 +33,9 @@ do
     esac
 done
 test -n "$portal_url" || exit 40
+test -n "$AGENTSASSEMBLE_INTERNAL_ROOM_PORTAL_TOKEN" || exit 41
 printf '%s' "$portal_url" > {endpoint}
+printf '%s' "$AGENTSASSEMBLE_INTERNAL_ROOM_PORTAL_TOKEN" > {token}
 IFS= read -r initialize
 printf '%s\n' "$initialize" >> {log}
 printf '%s\n' '{{"jsonrpc":"2.0","id":1,"result":{{}}}}'
@@ -39,6 +46,13 @@ printf '%s\n' "$thread" >> {log}
 printf '%s\n' '{{"jsonrpc":"2.0","id":2,"result":{{"thread":{{"id":"thread-1"}}}}}}'
 IFS= read -r turn_one
 printf '%s\n' "$turn_one" >> {log}
+printf '%s\n' '{{"jsonrpc":"2.0","id":"room-approval-1","method":"mcpServer/elicitation/request","params":{{"serverName":"agentsassemble_room","mode":"form","_meta":{{"codex_approval_kind":"mcp_tool_call"}}}}}}'
+IFS= read -r approval_one
+printf '%s\n' "$approval_one" >> {log}
+case "$approval_one" in
+    *'"action":"accept"'*'"content":{{}}'*) ;;
+    *) exit 42 ;;
+esac
 printf '1' > {seen}
 while [ ! -f {release_first} ]; do :; done
 printf '%s\n' '{{"jsonrpc":"2.0","id":3,"result":{{"turn":{{"id":"provider-turn-1"}}}}}}'
@@ -55,13 +69,14 @@ IFS= read -r forever
 "#,
         log = quote(transcript),
         endpoint = quote(portal_endpoint),
+        token = quote(portal_token),
         seen = quote(turn_seen),
         release_first = quote(release_first),
         release_second = quote(release_second),
     )
 }
 
-pub(super) async fn wait_for_endpoint(path: &Path) -> String {
+pub(super) async fn wait_for_value(path: &Path, description: &str) -> String {
     for _ in 0..500 {
         if let Ok(value) = std::fs::read_to_string(path)
             && !value.is_empty()
@@ -70,7 +85,7 @@ pub(super) async fn wait_for_endpoint(path: &Path) -> String {
         }
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
-    panic!("RoomPortal endpoint was not published");
+    panic!("RoomPortal {description} was not published");
 }
 
 pub(super) async fn wait_for_turn(path: &Path, expected: &str) {
@@ -83,9 +98,11 @@ pub(super) async fn wait_for_turn(path: &Path, expected: &str) {
     panic!("provider fixture did not receive turn {expected}");
 }
 
-pub(super) async fn publish(endpoint: &str, content: &str) -> String {
+pub(super) async fn publish(endpoint: &str, token: &str, content: &str) -> String {
     let client = ()
-        .serve(StreamableHttpClientTransport::from_uri(endpoint))
+        .serve(StreamableHttpClientTransport::from_config(
+            StreamableHttpClientTransportConfig::with_uri(endpoint).auth_header(token),
+        ))
         .await
         .unwrap_or_else(|error| panic!("connect room portal MCP: {error}"));
     let read = call_tool(&client, "read_discussion", json!({})).await;

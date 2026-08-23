@@ -2,9 +2,9 @@ use agentsassemble_domain::DurableAgentSession;
 
 use super::{
     MAX_PENDING_NOTIFICATION_BYTES, MAX_PENDING_NOTIFICATIONS, command_arguments,
-    next_notification_budget,
+    is_room_portal_approval, next_notification_budget,
 };
-use crate::room_portal::RoomPortal;
+use crate::room_portal::{ROOM_PORTAL_TOKEN_ENV, RoomPortal};
 
 #[tokio::test]
 async fn command_uses_app_server_and_process_local_profile_settings() {
@@ -75,6 +75,22 @@ async fn command_uses_app_server_and_process_local_profile_settings() {
             .iter()
             .any(|value| value.starts_with("mcp_servers.agentsassemble_room.url="))
     );
+    assert!(arguments.iter().any(|value| {
+        value
+            == &format!(
+                "mcp_servers.agentsassemble_room.bearer_token_env_var=\"{ROOM_PORTAL_TOKEN_ENV}\""
+            )
+    }));
+    assert!(arguments.iter().any(|value| {
+        value == "mcp_servers.agentsassemble_room.default_tools_approval_mode=\"approve\""
+    }));
+    let provider_environment = room_portal.provider_environment();
+    let token = provider_environment
+        .iter()
+        .find_map(|(name, value)| (name == ROOM_PORTAL_TOKEN_ENV).then_some(value.as_str()))
+        .unwrap_or_else(|| panic!("room portal bearer environment is missing"));
+    assert!(!token.is_empty());
+    assert!(!arguments.iter().any(|value| value.contains(token)));
     assert!(!arguments.iter().any(|value| value == "print"));
 }
 
@@ -86,4 +102,41 @@ fn pending_notifications_have_an_encoded_byte_budget() {
     );
     assert!(next_notification_budget(0, MAX_PENDING_NOTIFICATION_BYTES, 1).is_err());
     assert!(next_notification_budget(MAX_PENDING_NOTIFICATIONS, 0, 1).is_err());
+}
+
+#[test]
+fn only_the_exact_room_portal_mcp_approval_is_accepted() {
+    let approval = serde_json::json!({
+        "method": "mcpServer/elicitation/request",
+        "params": {
+            "serverName": "agentsassemble_room",
+            "_meta": {"codex_approval_kind": "mcp_tool_call"},
+        },
+    });
+    assert!(is_room_portal_approval(&approval));
+    for changed in [
+        serde_json::json!({
+            "method": "mcpServer/elicitation/request",
+            "params": {
+                "serverName": "other",
+                "_meta": {"codex_approval_kind": "mcp_tool_call"},
+            },
+        }),
+        serde_json::json!({
+            "method": "mcpServer/elicitation/request",
+            "params": {
+                "serverName": "agentsassemble_room",
+                "_meta": {"codex_approval_kind": "other"},
+            },
+        }),
+        serde_json::json!({
+            "method": "command_execution/request_approval",
+            "params": {
+                "serverName": "agentsassemble_room",
+                "_meta": {"codex_approval_kind": "mcp_tool_call"},
+            },
+        }),
+    ] {
+        assert!(!is_room_portal_approval(&changed));
+    }
 }

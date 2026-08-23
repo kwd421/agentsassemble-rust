@@ -8,6 +8,8 @@ use uuid::Uuid;
 
 use crate::room_portal_mcp::PortalServer;
 
+pub(super) const ROOM_PORTAL_TOKEN_ENV: &str = "AGENTSASSEMBLE_INTERNAL_ROOM_PORTAL_TOKEN";
+
 const MAX_ROOM_VIEW_BYTES: usize = 96 * 1024;
 const MAX_TURN_ID_BYTES: usize = 128;
 const MAX_AGENT_IDS: usize = 64;
@@ -64,6 +66,7 @@ pub(super) enum StagedOutcome {
 pub(super) struct ActiveObservation {
     pub(super) authority: TurnAuthority,
     pub(super) room_view: String,
+    pub(super) turn_generation: Uuid,
     pub(super) receipt_generation: Option<Uuid>,
     pub(super) outcome: Option<StagedOutcome>,
 }
@@ -97,9 +100,32 @@ impl RoomPortal {
             &serde_json::to_string(self.server.endpoint())
                 .map_err(|_| RoomPortalError::Authority)?,
         );
+        push_codex_config(
+            arguments,
+            &format!("{server}.bearer_token_env_var"),
+            &serde_json::to_string(ROOM_PORTAL_TOKEN_ENV)
+                .map_err(|_| RoomPortalError::Authority)?,
+        );
+        push_codex_config(
+            arguments,
+            &format!("{server}.default_tools_approval_mode"),
+            &serde_json::to_string("approve").map_err(|_| RoomPortalError::Authority)?,
+        );
         push_codex_config(arguments, &format!("{server}.startup_timeout_sec"), "10");
         push_codex_config(arguments, &format!("{server}.tool_timeout_sec"), "30");
         Ok(())
+    }
+
+    pub(crate) fn provider_environment(&self) -> Vec<(String, String)> {
+        vec![(
+            ROOM_PORTAL_TOKEN_ENV.to_owned(),
+            self.server.bearer_token().to_owned(),
+        )]
+    }
+
+    #[cfg(not(unix))]
+    pub(crate) fn configure_environment(&self, command: &mut tokio::process::Command) {
+        command.envs(self.provider_environment());
     }
 
     pub(crate) fn begin_observation(
@@ -138,6 +164,7 @@ impl RoomPortal {
                 state.active = Some(ActiveObservation {
                     authority,
                     room_view: room_view.to_owned(),
+                    turn_generation: Uuid::new_v4(),
                     receipt_generation: None,
                     outcome: None,
                 });
@@ -162,6 +189,9 @@ impl RoomPortal {
         let receipt_generation = active
             .receipt_generation
             .ok_or(RoomPortalError::ReceiptMissing)?;
+        if receipt_generation != active.turn_generation {
+            return Err(RoomPortalError::OutcomeInvalid);
+        }
         let result = match active
             .outcome
             .as_ref()
@@ -203,6 +233,11 @@ impl RoomPortal {
     #[cfg(test)]
     pub(crate) fn endpoint(&self) -> &str {
         self.server.endpoint()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn bearer_token(&self) -> &str {
+        self.server.bearer_token()
     }
 
     fn require_server(&self) -> Result<(), RoomPortalError> {

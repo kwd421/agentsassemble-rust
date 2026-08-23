@@ -28,12 +28,12 @@ const TEST_LEASE_ENV: &str = "AGENTSASSEMBLE_INTERNAL_GUARDIAN_LEASE";
 const TEST_TOKEN_ENV: &str = "AGENTSASSEMBLE_INTERNAL_GUARDIAN_TOKEN";
 #[cfg(test)]
 const TEST_PRE_ANCHOR_SIGNAL_ENV: &str = "AGENTSASSEMBLE_INTERNAL_PRE_ANCHOR_SIGNAL";
-const PROVIDER_LAUNCH_ENV: &str = "AGENTSASSEMBLE_INTERNAL_PROVIDER_LAUNCH";
 const PROVIDER_STDIN_FD: i32 = 4;
 const PROVIDER_STDOUT_FD: i32 = 5;
 const PROVIDER_STDERR_FD: i32 = 6;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 const PROVIDER_EXECUTABLE_FD: i32 = 7;
+const PROVIDER_LAUNCH_FD: i32 = 8;
 const PROVIDER_LIFETIME_FD: i32 = 198;
 
 use crate::filesystem::{BoundExecutable, bind_helper_executable_sync};
@@ -115,6 +115,7 @@ impl MacProviderHistory {
 struct ProviderLaunch {
     executable: String,
     arguments: Vec<String>,
+    environment: Vec<(String, String)>,
 }
 
 #[derive(Clone)]
@@ -157,6 +158,7 @@ impl GuardianLaunch {
         lease_token: &str,
         provider: &BoundExecutable,
         provider_arguments: &[String],
+        provider_environment: &[(String, String)],
         provider_pipes: [OwnedFd; 3],
     ) -> io::Result<tokio::process::Command> {
         use command_fds::FdMapping;
@@ -181,6 +183,7 @@ impl GuardianLaunch {
             #[cfg(not(any(target_os = "linux", target_os = "android")))]
             executable: provider.launch_path().to_owned(),
             arguments: provider_arguments.to_vec(),
+            environment: provider_environment.to_vec(),
         };
         let encoded = serde_json::to_string(&provider_launch).map_err(io::Error::other)?;
         if encoded.len() > MAX_PROVIDER_MANIFEST_BYTES {
@@ -188,7 +191,9 @@ impl GuardianLaunch {
                 "provider launch manifest exceeded its bound",
             ));
         }
-        command.env(PROVIDER_LAUNCH_ENV, encoded);
+        let (manifest, mut manifest_input) = std::io::pipe()?;
+        manifest_input.write_all(encoded.as_bytes())?;
+        drop(manifest_input);
         let mappings = vec![
             FdMapping {
                 parent_fd: provider_stdin,
@@ -201,6 +206,10 @@ impl GuardianLaunch {
             FdMapping {
                 parent_fd: provider_stderr,
                 child_fd: PROVIDER_STDERR_FD,
+            },
+            FdMapping {
+                parent_fd: manifest.into(),
+                child_fd: PROVIDER_LAUNCH_FD,
             },
         ];
         #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -242,9 +251,6 @@ impl GuardianLaunch {
             lease_path,
             lease_token,
         );
-        let manifest = env::var_os(PROVIDER_LAUNCH_ENV)
-            .ok_or_else(|| io::Error::other("provider launch manifest is unavailable"))?;
-        command.env(PROVIDER_LAUNCH_ENV, manifest);
         command
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -267,6 +273,10 @@ impl GuardianLaunch {
             FdMapping {
                 parent_fd: lifetime.into(),
                 child_fd: PROVIDER_LIFETIME_FD,
+            },
+            FdMapping {
+                parent_fd: open_inherited_fd(PROVIDER_LAUNCH_FD, false)?.into(),
+                child_fd: PROVIDER_LAUNCH_FD,
             },
         ];
         #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -495,8 +505,10 @@ fn run_guardian(lease_path: &Path, lease_token: &str, launch: &GuardianLaunch) -
 }
 
 fn run_provider_launcher(lease_token: &str) -> io::Result<()> {
-    let encoded = env::var(PROVIDER_LAUNCH_ENV)
-        .map_err(|_| io::Error::other("provider launch manifest is unavailable"))?;
+    let mut encoded = String::new();
+    open_inherited_fd(PROVIDER_LAUNCH_FD, false)?
+        .take((MAX_PROVIDER_MANIFEST_BYTES + 1) as u64)
+        .read_to_string(&mut encoded)?;
     if encoded.len() > MAX_PROVIDER_MANIFEST_BYTES {
         return Err(io::Error::other(
             "provider launch manifest exceeded its bound",
@@ -504,7 +516,17 @@ fn run_provider_launcher(lease_token: &str) -> io::Result<()> {
     }
     let launch = serde_json::from_str::<ProviderLaunch>(&encoded)
         .map_err(|_| io::Error::other("provider launch manifest is invalid"))?;
-    if launch.executable.is_empty() || launch.arguments.len() > 256 {
+    if launch.executable.is_empty()
+        || launch.arguments.len() > 256
+        || launch.environment.len() > 64
+        || launch.environment.iter().any(|(name, value)| {
+            name.is_empty()
+                || name.len() > 128
+                || value.len() > 4096
+                || name.contains(['=', '\0'])
+                || value.contains('\0')
+        })
+    {
         return Err(io::Error::other("provider launch manifest is invalid"));
     }
     let pid = rustix::process::getpid();
@@ -516,6 +538,7 @@ fn run_provider_launcher(lease_token: &str) -> io::Result<()> {
         .stdout(Stdio::from(open_inherited_fd(PROVIDER_STDOUT_FD, true)?))
         .stderr(Stdio::from(open_inherited_fd(PROVIDER_STDERR_FD, true)?));
     crate::process::sanitize_std_environment(&mut command);
+    command.envs(launch.environment);
     command.env(crate::unix_process_tree::RUNTIME_TOKEN_ENV, lease_token);
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {

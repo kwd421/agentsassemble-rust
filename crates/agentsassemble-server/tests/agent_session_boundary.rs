@@ -313,12 +313,14 @@ async fn room_turns_publish_provider_finals_without_blocking_room_commands() {
         tempfile::tempdir().unwrap_or_else(|error| panic!("create room-turn root: {error}"));
     let transcript = directory.path().join("turn-requests.jsonl");
     let portal_endpoint = directory.path().join("portal-endpoint");
+    let portal_token = directory.path().join("portal-token");
     let turn_seen = directory.path().join("turn-seen");
     let release_first = directory.path().join("turn-release-1");
     let release_second = directory.path().join("turn-release-2");
     let fixture = room_portal_fixture::script(
         &transcript,
         &portal_endpoint,
+        &portal_token,
         &turn_seen,
         &release_first,
         &release_second,
@@ -371,7 +373,8 @@ async fn room_turns_publish_provider_finals_without_blocking_room_commands() {
     .await;
     let _first_ack = receive_command_ack(&mut socket).await;
     room_portal_fixture::wait_for_turn(&turn_seen, "1").await;
-    let endpoint = room_portal_fixture::wait_for_endpoint(&portal_endpoint).await;
+    let endpoint = room_portal_fixture::wait_for_value(&portal_endpoint, "endpoint").await;
+    let token = room_portal_fixture::wait_for_value(&portal_token, "token").await;
     send_command(
         &mut socket,
         "room-message-2",
@@ -380,13 +383,16 @@ async fn room_turns_publish_provider_finals_without_blocking_room_commands() {
     )
     .await;
     let _second_ack = receive_command_ack(&mut socket).await;
-    let first_view = room_portal_fixture::publish(&endpoint, "first room answer").await;
+    let first_view = room_portal_fixture::publish(&endpoint, &token, "first room answer").await;
     let second_turn_seen = turn_seen.clone();
     let second_endpoint = endpoint.clone();
+    let second_token = token.clone();
     let second_release = release_second.clone();
     let second_portal = tokio::spawn(async move {
         room_portal_fixture::wait_for_turn(&second_turn_seen, "2").await;
-        let view = room_portal_fixture::publish(&second_endpoint, "second room answer").await;
+        let view =
+            room_portal_fixture::publish(&second_endpoint, &second_token, "second room answer")
+                .await;
         std::fs::write(&second_release, b"release")
             .unwrap_or_else(|error| panic!("release second room turn fixture: {error}"));
         view

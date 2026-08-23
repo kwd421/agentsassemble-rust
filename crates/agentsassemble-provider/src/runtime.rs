@@ -726,6 +726,9 @@ mod provider_session_tests;
 #[path = "runtime_provider_turn_tests.rs"]
 mod provider_turn_tests;
 #[cfg(all(test, unix))]
+#[path = "runtime_test_cleanup.rs"]
+mod test_cleanup;
+#[cfg(all(test, unix))]
 #[path = "runtime_tests.rs"]
 mod tests;
 
