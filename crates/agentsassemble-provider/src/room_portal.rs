@@ -111,6 +111,12 @@ impl RoomPortal {
             &format!("{server}.default_tools_approval_mode"),
             &serde_json::to_string("approve").map_err(|_| RoomPortalError::Authority)?,
         );
+        push_codex_config(
+            arguments,
+            &format!("shell_environment_policy.filters.{ROOM_PORTAL_TOKEN_ENV}"),
+            &serde_json::to_string("exclude").map_err(|_| RoomPortalError::Authority)?,
+        );
+        push_codex_config(arguments, "features.shell_snapshot", "false");
         push_codex_config(arguments, &format!("{server}.startup_timeout_sec"), "10");
         push_codex_config(arguments, &format!("{server}.tool_timeout_sec"), "30");
         Ok(())

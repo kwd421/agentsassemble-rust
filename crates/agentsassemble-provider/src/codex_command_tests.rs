@@ -84,6 +84,14 @@ async fn command_uses_app_server_and_process_local_profile_settings() {
     assert!(arguments.iter().any(|value| {
         value == "mcp_servers.agentsassemble_room.default_tools_approval_mode=\"approve\""
     }));
+    assert!(arguments.iter().any(|value| {
+        value == &format!("shell_environment_policy.filters.{ROOM_PORTAL_TOKEN_ENV}=\"exclude\"")
+    }));
+    assert!(
+        arguments
+            .iter()
+            .any(|value| value == "features.shell_snapshot=false")
+    );
     let provider_environment = room_portal.provider_environment();
     let token = provider_environment
         .iter()

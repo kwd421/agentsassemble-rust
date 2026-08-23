@@ -22,6 +22,8 @@ pub(super) fn script(
         r#"#!/bin/sh
 umask 077
 portal_url=
+room_token_filtered=
+shell_snapshot_disabled=
 for argument in "$@"
 do
     case "$argument" in
@@ -30,10 +32,18 @@ do
             portal_url=${{portal_url#\"}}
             portal_url=${{portal_url%\"}}
             ;;
+        shell_environment_policy.filters.AGENTSASSEMBLE_INTERNAL_ROOM_PORTAL_TOKEN=\"exclude\")
+            room_token_filtered=1
+            ;;
+        features.shell_snapshot=false)
+            shell_snapshot_disabled=1
+            ;;
     esac
 done
 test -n "$portal_url" || exit 40
 test -n "$AGENTSASSEMBLE_INTERNAL_ROOM_PORTAL_TOKEN" || exit 41
+test "$room_token_filtered" = 1 || exit 43
+test "$shell_snapshot_disabled" = 1 || exit 44
 printf '%s' "$portal_url" > {endpoint}
 printf '%s' "$AGENTSASSEMBLE_INTERNAL_ROOM_PORTAL_TOKEN" > {token}
 IFS= read -r initialize
