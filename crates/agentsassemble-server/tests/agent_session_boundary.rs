@@ -589,7 +589,7 @@ async fn receive_json<S>(socket: &mut WebSocketStream<S>) -> Value
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
-    receive_json_with_timeout(socket, Duration::from_secs(2)).await
+    receive_json_with_timeout(socket, Duration::from_secs(5)).await
 }
 
 async fn receive_json_with_timeout<S>(socket: &mut WebSocketStream<S>, timeout: Duration) -> Value

@@ -1,8 +1,18 @@
-use std::{path::Path, time::Duration};
+use std::{net::SocketAddr, path::Path, time::Duration};
 
-use reqwest::{Client, Method, Response, StatusCode, Url, redirect::Policy};
+use base64::{Engine as _, engine::general_purpose::STANDARD};
+use bytes::Bytes;
+use http_body_util::{BodyExt, Full};
+use hyper::{
+    Method, Request, StatusCode, Uri,
+    body::Incoming,
+    header::{ACCEPT, AUTHORIZATION, CONNECTION, CONTENT_TYPE, HOST, HeaderValue},
+};
+use hyper_util::rt::TokioIo;
 use serde_json::Value;
 use thiserror::Error;
+use tokio::{net::TcpStream, task::JoinHandle};
+use url::{Position, Url};
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
 const MAX_JSON_BYTES: usize = 2 * 1024 * 1024;
@@ -13,6 +23,8 @@ pub(crate) enum LoopbackHttpError {
     InvalidEndpoint,
     #[error("the loopback provider credentials are invalid")]
     InvalidCredentials,
+    #[error("the loopback provider peer is not the owned runtime")]
+    PeerNotOwned,
     #[error("the loopback provider request failed")]
     Request,
     #[error("the loopback provider response exceeded its bound")]
@@ -23,11 +35,25 @@ pub(crate) enum LoopbackHttpError {
 
 #[derive(Clone)]
 pub(crate) struct LoopbackHttp {
-    client: Client,
     endpoint: Url,
+    address: SocketAddr,
+    authority: HeaderValue,
     directory: String,
-    username: String,
-    password: String,
+    authorization: HeaderValue,
+}
+
+pub(crate) struct UnverifiedLoopbackConnection {
+    stream: TcpStream,
+}
+
+pub(crate) struct VerifiedLoopbackConnection {
+    stream: TcpStream,
+    http: LoopbackHttp,
+}
+
+pub(crate) struct LoopbackStream {
+    body: Incoming,
+    connection_task: JoinHandle<()>,
 }
 
 pub(crate) struct JsonResponse {
@@ -52,6 +78,10 @@ impl LoopbackHttp {
         {
             return Err(LoopbackHttpError::InvalidEndpoint);
         }
+        let port = endpoint.port().ok_or(LoopbackHttpError::InvalidEndpoint)?;
+        let address = SocketAddr::from(([127, 0, 0, 1], port));
+        let authority = HeaderValue::from_str(&format!("127.0.0.1:{port}"))
+            .map_err(|_| LoopbackHttpError::InvalidEndpoint)?;
         let directory = directory
             .to_str()
             .filter(|value| !value.is_empty() && !value.contains('\0'))
@@ -66,102 +96,41 @@ impl LoopbackHttp {
         {
             return Err(LoopbackHttpError::InvalidCredentials);
         }
-        let client = Client::builder()
-            .no_proxy()
-            .redirect(Policy::none())
-            .connect_timeout(CONNECT_TIMEOUT)
-            .build()
-            .map_err(|_| LoopbackHttpError::Request)?;
+        let encoded = STANDARD.encode(format!("{username}:{password}"));
+        let authorization = HeaderValue::from_str(&format!("Basic {encoded}"))
+            .map_err(|_| LoopbackHttpError::InvalidCredentials)?;
         Ok(Self {
-            client,
             endpoint,
+            address,
+            authority,
             directory,
-            username: username.to_owned(),
-            password: password.to_owned(),
+            authorization,
         })
     }
 
-    pub(crate) async fn get_json(
-        &self,
-        path: &str,
-        timeout: Duration,
-    ) -> Result<JsonResponse, LoopbackHttpError> {
-        self.json_request(Method::GET, path, None, timeout).await
-    }
-
-    pub(crate) async fn post_json(
-        &self,
-        path: &str,
-        payload: &Value,
-        timeout: Duration,
-    ) -> Result<JsonResponse, LoopbackHttpError> {
-        self.json_request(Method::POST, path, Some(payload), timeout)
-            .await
-    }
-
-    pub(crate) async fn get_stream(
-        &self,
-        path: &str,
-        timeout: Duration,
-    ) -> Result<Response, LoopbackHttpError> {
-        let response = self
-            .request(Method::GET, path)?
-            .header(reqwest::header::ACCEPT, "text/event-stream")
-            .timeout(timeout)
-            .send()
-            .await
-            .map_err(|_| LoopbackHttpError::Request)?;
-        if !response.status().is_success() {
-            return Err(LoopbackHttpError::Request);
-        }
-        Ok(response)
-    }
-
-    async fn json_request(
-        &self,
-        method: Method,
-        path: &str,
-        payload: Option<&Value>,
-        timeout: Duration,
-    ) -> Result<JsonResponse, LoopbackHttpError> {
-        let mut request = self.request(method, path)?.timeout(timeout);
-        if let Some(payload) = payload {
-            request = request.json(payload);
-        }
-        let response = request
-            .send()
-            .await
-            .map_err(|_| LoopbackHttpError::Request)?;
-        let status = response.status();
-        let mut response = response;
-        let mut encoded = Vec::new();
-        while let Some(chunk) = response
-            .chunk()
+    pub(crate) async fn connect(&self) -> Result<UnverifiedLoopbackConnection, LoopbackHttpError> {
+        let stream = tokio::time::timeout(CONNECT_TIMEOUT, TcpStream::connect(self.address))
             .await
             .map_err(|_| LoopbackHttpError::Request)?
-        {
-            if encoded.len().saturating_add(chunk.len()) > MAX_JSON_BYTES {
-                return Err(LoopbackHttpError::ResponseTooLarge);
-            }
-            encoded.extend_from_slice(&chunk);
+            .map_err(|_| LoopbackHttpError::Request)?;
+        if stream.peer_addr().map_err(|_| LoopbackHttpError::Request)? != self.address {
+            return Err(LoopbackHttpError::InvalidEndpoint);
         }
-        let value = if encoded.is_empty() {
-            Value::Null
-        } else {
-            serde_json::from_slice(&encoded).map_err(|_| LoopbackHttpError::InvalidJson)?
-        };
-        Ok(JsonResponse { status, value })
+        Ok(UnverifiedLoopbackConnection { stream })
     }
 
-    fn request(
+    pub(crate) fn verify_peer(
         &self,
-        method: Method,
-        path: &str,
-    ) -> Result<reqwest::RequestBuilder, LoopbackHttpError> {
-        Ok(self
-            .client
-            .request(method, self.url(path)?)
-            .basic_auth(&self.username, Some(&self.password)))
+        connection: UnverifiedLoopbackConnection,
+        exact_child_is_alive: bool,
+    ) -> Result<VerifiedLoopbackConnection, LoopbackHttpError> {
+        if !exact_child_is_alive {
+            return Err(LoopbackHttpError::PeerNotOwned);
+        }
+        Ok(VerifiedLoopbackConnection {
+            stream: connection.stream,
+            http: self.clone(),
+        })
     }
 
     fn url(&self, path: &str) -> Result<Url, LoopbackHttpError> {
@@ -181,6 +150,155 @@ impl LoopbackHttp {
         url.query_pairs_mut()
             .append_pair("directory", &self.directory);
         Ok(url)
+    }
+
+    fn request(
+        &self,
+        method: Method,
+        path: &str,
+        payload: Option<&Value>,
+        stream: bool,
+    ) -> Result<Request<Full<Bytes>>, LoopbackHttpError> {
+        let url = self.url(path)?;
+        let uri = url[Position::BeforePath..]
+            .parse::<Uri>()
+            .map_err(|_| LoopbackHttpError::InvalidEndpoint)?;
+        let body = payload
+            .map(serde_json::to_vec)
+            .transpose()
+            .map_err(|_| LoopbackHttpError::InvalidJson)?
+            .unwrap_or_default();
+        if body.len() > MAX_JSON_BYTES {
+            return Err(LoopbackHttpError::ResponseTooLarge);
+        }
+        let mut builder = Request::builder()
+            .method(method)
+            .uri(uri)
+            .header(HOST, self.authority.clone())
+            .header(AUTHORIZATION, self.authorization.clone())
+            .header(CONNECTION, "close");
+        if payload.is_some() {
+            builder = builder.header(CONTENT_TYPE, "application/json");
+        }
+        if stream {
+            builder = builder.header(ACCEPT, "text/event-stream");
+        }
+        builder
+            .body(Full::new(Bytes::from(body)))
+            .map_err(|_| LoopbackHttpError::Request)
+    }
+}
+
+impl VerifiedLoopbackConnection {
+    pub(crate) async fn get_json(
+        self,
+        path: &str,
+        timeout: Duration,
+    ) -> Result<JsonResponse, LoopbackHttpError> {
+        self.json_request(Method::GET, path, None, timeout).await
+    }
+
+    pub(crate) async fn post_json(
+        self,
+        path: &str,
+        payload: &Value,
+        timeout: Duration,
+    ) -> Result<JsonResponse, LoopbackHttpError> {
+        self.json_request(Method::POST, path, Some(payload), timeout)
+            .await
+    }
+
+    pub(crate) async fn get_stream(
+        self,
+        path: &str,
+        timeout: Duration,
+    ) -> Result<LoopbackStream, LoopbackHttpError> {
+        let request = self.http.request(Method::GET, path, None, true)?;
+        let (response, connection_task) = tokio::time::timeout(timeout, self.send(request))
+            .await
+            .map_err(|_| LoopbackHttpError::Request)??;
+        if !response.status().is_success() {
+            connection_task.abort();
+            return Err(LoopbackHttpError::Request);
+        }
+        Ok(LoopbackStream {
+            body: response.into_body(),
+            connection_task,
+        })
+    }
+
+    async fn json_request(
+        self,
+        method: Method,
+        path: &str,
+        payload: Option<&Value>,
+        timeout: Duration,
+    ) -> Result<JsonResponse, LoopbackHttpError> {
+        let request = self.http.request(method, path, payload, false)?;
+        tokio::time::timeout(timeout, async move {
+            let (response, connection_task) = self.send(request).await?;
+            let status = response.status();
+            let mut body = response.into_body();
+            let mut encoded = Vec::new();
+            while let Some(frame) = body.frame().await {
+                let frame = frame.map_err(|_| LoopbackHttpError::Request)?;
+                if let Ok(chunk) = frame.into_data() {
+                    if encoded.len().saturating_add(chunk.len()) > MAX_JSON_BYTES {
+                        connection_task.abort();
+                        return Err(LoopbackHttpError::ResponseTooLarge);
+                    }
+                    encoded.extend_from_slice(&chunk);
+                }
+            }
+            connection_task.abort();
+            let value = if encoded.is_empty() {
+                Value::Null
+            } else {
+                serde_json::from_slice(&encoded).map_err(|_| LoopbackHttpError::InvalidJson)?
+            };
+            Ok(JsonResponse { status, value })
+        })
+        .await
+        .map_err(|_| LoopbackHttpError::Request)?
+    }
+
+    async fn send(
+        self,
+        request: Request<Full<Bytes>>,
+    ) -> Result<(hyper::Response<Incoming>, JoinHandle<()>), LoopbackHttpError> {
+        let (mut sender, connection) =
+            hyper::client::conn::http1::handshake(TokioIo::new(self.stream))
+                .await
+                .map_err(|_| LoopbackHttpError::Request)?;
+        let connection_task = tokio::spawn(async move {
+            let _ = connection.await;
+        });
+        if let Ok(response) = sender.send_request(request).await {
+            Ok((response, connection_task))
+        } else {
+            connection_task.abort();
+            Err(LoopbackHttpError::Request)
+        }
+    }
+}
+
+impl LoopbackStream {
+    pub(crate) async fn chunk(&mut self) -> Result<Option<Bytes>, LoopbackHttpError> {
+        loop {
+            let Some(frame) = self.body.frame().await else {
+                return Ok(None);
+            };
+            let frame = frame.map_err(|_| LoopbackHttpError::Request)?;
+            if let Ok(data) = frame.into_data() {
+                return Ok(Some(data));
+            }
+        }
+    }
+}
+
+impl Drop for LoopbackStream {
+    fn drop(&mut self) {
+        self.connection_task.abort();
     }
 }
 
@@ -223,6 +341,44 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn unowned_connected_peer_receives_no_http_or_credentials() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .unwrap_or_else(|error| panic!("bind fixture: {error}"));
+        let endpoint = format!(
+            "http://127.0.0.1:{}/",
+            listener
+                .local_addr()
+                .unwrap_or_else(|error| panic!("fixture address: {error}"))
+                .port()
+        );
+        let observed = tokio::spawn(async move {
+            let (mut stream, _) = listener
+                .accept()
+                .await
+                .unwrap_or_else(|error| panic!("accept fixture: {error}"));
+            let mut encoded = Vec::new();
+            stream
+                .read_to_end(&mut encoded)
+                .await
+                .unwrap_or_else(|error| panic!("read fixture: {error}"));
+            encoded
+        });
+        let client = client(&endpoint).unwrap_or_else(|error| panic!("create client: {error}"));
+        let connected = client
+            .connect()
+            .await
+            .unwrap_or_else(|error| panic!("connect fixture: {error}"));
+        assert!(client.verify_peer(connected, false).is_err());
+        assert!(
+            observed
+                .await
+                .unwrap_or_else(|error| panic!("join fixture: {error}"))
+                .is_empty()
+        );
+    }
+
+    #[tokio::test]
     async fn json_and_stream_requests_carry_the_private_basic_capability() {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
@@ -258,7 +414,7 @@ mod tests {
                 }
                 authenticated &= String::from_utf8_lossy(&request)
                     .lines()
-                    .any(|line| line.starts_with("authorization: Basic "));
+                    .any(|line| line.to_ascii_lowercase().starts_with("authorization: basic "));
                 stream
                     .write_all(response)
                     .await
@@ -268,15 +424,31 @@ mod tests {
         });
         let client = client(&endpoint).unwrap_or_else(|error| panic!("create client: {error}"));
         let response = client
+            .verify_peer(
+                client
+                    .connect()
+                    .await
+                    .unwrap_or_else(|error| panic!("connect JSON fixture: {error}")),
+                true,
+            )
+            .unwrap_or_else(|error| panic!("verify JSON fixture: {error}"))
             .get_json("/global/health", std::time::Duration::from_secs(1))
             .await
             .unwrap_or_else(|error| panic!("request fixture: {error}"));
         assert!(response.status.is_success());
         let stream = client
+            .verify_peer(
+                client
+                    .connect()
+                    .await
+                    .unwrap_or_else(|error| panic!("connect SSE fixture: {error}")),
+                true,
+            )
+            .unwrap_or_else(|error| panic!("verify SSE fixture: {error}"))
             .get_stream("/event", std::time::Duration::from_secs(1))
             .await
             .unwrap_or_else(|error| panic!("stream fixture: {error}"));
-        assert!(stream.status().is_success());
+        drop(stream);
         assert!(
             observed
                 .await

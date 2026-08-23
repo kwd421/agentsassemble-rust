@@ -1,10 +1,9 @@
 use std::time::Duration;
 
-use reqwest::Response;
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::opencode_protocol::observed_model;
+use crate::{loopback_http::LoopbackStream, opencode_protocol::observed_model};
 
 const MAX_EVENT_STREAM_BYTES: usize = 8 * 1024 * 1024;
 const MAX_EVENT_LINE_BYTES: usize = 512 * 1024;
@@ -109,7 +108,7 @@ impl EventState {
 }
 
 pub(crate) async fn collect_turn_events(
-    mut response: Response,
+    mut response: LoopbackStream,
     session_id: &str,
     timeout: Duration,
 ) -> Result<OpenCodeTurnEvents, OpenCodeEventError> {

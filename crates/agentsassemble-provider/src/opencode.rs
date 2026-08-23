@@ -4,11 +4,11 @@ use std::{path::Path, time::Duration};
 use std::process::Stdio;
 
 use agentsassemble_domain::DurableAgentSession;
+use hyper::StatusCode;
 #[cfg(windows)]
 use process_wrap::tokio::JobObject;
 #[cfg(not(unix))]
 use process_wrap::tokio::{ChildWrapper, CommandWrap, KillOnDrop};
-use reqwest::StatusCode;
 use serde_json::{Value, json};
 use tokio::{
     io::{AsyncRead, AsyncReadExt},
@@ -26,7 +26,7 @@ use crate::process::sanitize_environment;
 use crate::{
     filesystem::bind_executable_with_children,
     launch_error::DriverLaunchError,
-    loopback_http::{JsonResponse, LoopbackHttp},
+    loopback_http::{JsonResponse, LoopbackHttp, VerifiedLoopbackConnection},
     opencode_protocol::{
         TurnTransportError, assistant_message, clean_session_id, config_error, executable_error,
         http_driver_error, model_id, model_mismatch, portal_driver_error, portal_unavailable,
@@ -215,13 +215,10 @@ impl OpenCodeDriver {
             return Err(startup_error());
         }
         loop {
-            if !self.is_alive()? {
-                return Err(runtime_exited());
-            }
-            if let Ok(response) = self
-                .http
-                .get_json("/global/health", Duration::from_millis(500))
-                .await
+            if let Ok(connection) = self.connect_owned_peer().await
+                && let Ok(response) = connection
+                    .get_json("/global/health", Duration::from_millis(500))
+                    .await
                 && response.status.is_success()
                 && response.value.get("healthy").and_then(Value::as_bool) == Some(true)
             {
@@ -232,6 +229,17 @@ impl OpenCodeDriver {
             }
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
+    }
+
+    async fn connect_owned_peer(&mut self) -> Result<VerifiedLoopbackConnection, DriverError> {
+        let connection = self.http.connect().await.map_err(http_driver_error)?;
+        let exact_child_is_alive = self.is_alive()?;
+        if !exact_child_is_alive {
+            return Err(runtime_exited());
+        }
+        self.http
+            .verify_peer(connection, true)
+            .map_err(http_driver_error)
     }
 
     async fn attach(
@@ -272,9 +280,10 @@ impl OpenCodeDriver {
         })
     }
 
-    async fn register_room_portal(&self) -> Result<(), DriverError> {
+    async fn register_room_portal(&mut self) -> Result<(), DriverError> {
         let response = self
-            .http
+            .connect_owned_peer()
+            .await?
             .post_json(
                 "/mcp",
                 &json!({
@@ -308,7 +317,10 @@ impl OpenCodeDriver {
         }
     }
 
-    async fn create_session(&self, session: &DurableAgentSession) -> Result<String, DriverError> {
+    async fn create_session(
+        &mut self,
+        session: &DurableAgentSession,
+    ) -> Result<String, DriverError> {
         let permission_action = if session.public.permission_mode == "meeting_read_only" {
             "deny"
         } else {
@@ -322,7 +334,8 @@ impl OpenCodeDriver {
             model["variant"] = json!(session.public.variant);
         }
         let response = self
-            .http
+            .connect_owned_peer()
+            .await?
             .post_json(
                 "/session",
                 &json!({
@@ -353,9 +366,10 @@ impl OpenCodeDriver {
             .ok_or_else(session_unconfirmed)
     }
 
-    async fn require_session(&self, provider_session_id: &str) -> Result<(), DriverError> {
+    async fn require_session(&mut self, provider_session_id: &str) -> Result<(), DriverError> {
         let response = self
-            .http
+            .connect_owned_peer()
+            .await?
             .get_json(&session_path(provider_session_id)?, REQUEST_TIMEOUT)
             .await
             .map_err(http_driver_error)?;
@@ -381,17 +395,18 @@ impl OpenCodeDriver {
         }
         let attached = self
             .attached_session_id
-            .as_deref()
+            .clone()
             .ok_or_else(session_unconfirmed)?;
         if session.provider_session_id != attached {
             return self.poison(session_mismatch());
         }
         let event_response = self
-            .http
+            .connect_owned_peer()
+            .await?
             .get_stream("/event", TURN_TIMEOUT)
             .await
             .map_err(http_driver_error)?;
-        let path = format!("{}/message", session_path(attached)?);
+        let path = format!("{}/message", session_path(&attached)?);
         let mut payload = json!({
             "model": {
                 "providerID": provider_id(&session.public.model)?,
@@ -402,14 +417,15 @@ impl OpenCodeDriver {
         if !session.public.variant.is_empty() {
             payload["variant"] = json!(session.public.variant);
         }
-        let prompt = async {
-            self.http
+        let prompt_connection = self.connect_owned_peer().await?;
+        let prompt = async move {
+            prompt_connection
                 .post_json(&path, &payload, TURN_TIMEOUT)
                 .await
                 .map_err(TurnTransportError::from)
         };
         let events = async {
-            collect_turn_events(event_response, attached, TURN_TIMEOUT)
+            collect_turn_events(event_response, &attached, TURN_TIMEOUT)
                 .await
                 .map_err(TurnTransportError::from)
         };
@@ -419,12 +435,12 @@ impl OpenCodeDriver {
         let (prompt, events) = match joined {
             Ok(joined) => joined,
             Err(error) => {
-                self.abort_session(attached).await;
+                self.abort_session(&attached).await;
                 return Err(turn_transport_error(error));
             }
         };
         let completed = self
-            .completed_from_response(session, request, attached, prompt, events)
+            .completed_from_response(session, request, &attached, prompt, events)
             .await;
         match completed {
             Ok(completed) => {
@@ -436,7 +452,7 @@ impl OpenCodeDriver {
     }
 
     async fn completed_from_response(
-        &self,
+        &mut self,
         session: &DurableAgentSession,
         request: &ProviderTurnRequest,
         attached: &str,
@@ -479,14 +495,15 @@ impl OpenCodeDriver {
     }
 
     async fn assistant_text_for_parent(
-        &self,
+        &mut self,
         attached: &str,
         parent_id: &str,
         configured_model: &str,
     ) -> Result<String, DriverError> {
         let path = format!("{}/message", session_path(attached)?);
         let response = self
-            .http
+            .connect_owned_peer()
+            .await?
             .get_json(&path, REQUEST_TIMEOUT)
             .await
             .map_err(http_driver_error)?;
@@ -510,23 +527,25 @@ impl OpenCodeDriver {
         Ok(String::new())
     }
 
-    async fn abort_session(&self, session_id: &str) {
+    async fn abort_session(&mut self, session_id: &str) {
         let Ok(path) = session_path(session_id).map(|path| format!("{path}/abort")) else {
             return;
         };
-        let _ = self
-            .http
-            .post_json(&path, &json!({}), Duration::from_secs(5))
-            .await;
+        if let Ok(connection) = self.connect_owned_peer().await {
+            let _ = connection
+                .post_json(&path, &json!({}), Duration::from_secs(5))
+                .await;
+        }
     }
 
     async fn stop_process(&mut self) -> Result<(), DriverError> {
-        if let Some(session_id) = &self.attached_session_id {
-            self.abort_session(session_id).await;
+        if let Some(session_id) = self.attached_session_id.clone() {
+            self.abort_session(&session_id).await;
         }
-        if self.mcp_registered {
-            let _ = self
-                .http
+        if self.mcp_registered
+            && let Ok(connection) = self.connect_owned_peer().await
+        {
+            let _ = connection
                 .post_json(
                     &format!("/mcp/{MCP_NAME}/disconnect"),
                     &json!({}),
