@@ -30,7 +30,7 @@ jobs:
         run: |
           cargo test -p agentsassemble-provider antigravity_hook::tests -- --nocapture
           cargo test -p agentsassemble-provider room_portal_terminal::tests::hook_command_binds_the_absolute_private_helper -- --exact --nocapture
-          cargo test -p agentsassemble-provider room_portal_terminal::tests::workspace_shadow_cannot_replace_the_bound_helper -- --exact --nocapture
+          cargo test -p agentsassemble-provider room_portal_terminal::tests::workspace_shadow_cannot_replace_shared_multi_session_helpers -- --exact --nocapture
       - name: Verify resident ConPTY transport
         run: >-
           cargo test -p agentsassemble-provider

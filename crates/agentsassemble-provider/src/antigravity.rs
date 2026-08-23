@@ -139,8 +139,11 @@ impl AntigravityDriver {
         let terminal_helper = room_portal
             .create_terminal_helper(guardian)
             .map_err(portal_driver_error)?;
-        let hook =
-            AntigravityHookRegistration::register(&workspace, terminal_helper.hook_command())?;
+        let hook = AntigravityHookRegistration::register(
+            &workspace,
+            terminal_helper.hook_command(),
+            terminal_helper.hook_executable_owner(),
+        )?;
         let mut environment = terminal_helper.provider_environment();
         environment.extend([
             ("TERM".to_owned(), "xterm-256color".to_owned()),
@@ -181,8 +184,11 @@ impl AntigravityDriver {
         let terminal_helper = room_portal
             .create_terminal_helper(companion)
             .map_err(portal_driver_error)?;
-        let hook =
-            AntigravityHookRegistration::register(&workspace, terminal_helper.hook_command())?;
+        let hook = AntigravityHookRegistration::register(
+            &workspace,
+            terminal_helper.hook_command(),
+            terminal_helper.hook_executable_owner(),
+        )?;
         let mut environment = terminal_helper.provider_environment();
         environment.extend([
             ("TERM".to_owned(), "xterm-256color".to_owned()),

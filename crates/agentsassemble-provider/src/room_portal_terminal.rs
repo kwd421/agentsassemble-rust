@@ -4,6 +4,7 @@ use std::{
     fs::{File, OpenOptions},
     io::{Read, Write},
     path::{Path, PathBuf},
+    sync::Arc,
     time::Duration,
 };
 
@@ -31,6 +32,7 @@ const AUTHORITY_FILE: &str = "room-portal.json";
 const MAX_AUTHORITY_BYTES: u64 = 4 * 1024;
 const MAX_HOOK_INPUT_BYTES: u64 = 64 * 1024;
 const HELPER_TIMEOUT: Duration = Duration::from_secs(10);
+const HELPER_COMMAND_ENV: &str = "AGENTSASSEMBLE_ROOM_HELPER_COMMAND";
 
 #[derive(Deserialize, Serialize)]
 struct HelperAuthority {
@@ -39,7 +41,7 @@ struct HelperAuthority {
 }
 
 pub(crate) struct RoomPortalTerminalHelper {
-    executable: PrivateExecutable,
+    executable: Arc<PrivateExecutable>,
     command_prefix: String,
     hook_command: String,
     path_environment: String,
@@ -75,6 +77,7 @@ impl RoomPortalTerminalHelper {
         endpoint: &str,
         bearer_token: &str,
     ) -> Result<Self, RoomPortalError> {
+        let executable = Arc::new(executable);
         write_authority(
             executable.directory(),
             &HelperAuthority {
@@ -110,9 +113,16 @@ impl RoomPortalTerminalHelper {
         &self.hook_command
     }
 
+    pub(crate) fn hook_executable_owner(&self) -> Arc<dyn Send + Sync> {
+        self.executable.clone()
+    }
+
     pub(crate) fn provider_environment(&self) -> Vec<(String, String)> {
         let _ = self.executable.path();
-        vec![("PATH".to_owned(), self.path_environment.clone())]
+        vec![
+            ("PATH".to_owned(), self.path_environment.clone()),
+            (HELPER_COMMAND_ENV.to_owned(), self.command_prefix.clone()),
+        ]
     }
 }
 
@@ -208,8 +218,10 @@ async fn run_helper(executable: PathBuf) -> Result<(), &'static str> {
         if arguments.next().is_some() {
             return Err("usage: agentsassemble-room hook");
         }
-        let helper = absolute_helper_command(&executable)
-            .map_err(|_| "room helper invocation is unavailable")?;
+        let helper = env::var(HELPER_COMMAND_ENV)
+            .ok()
+            .filter(|value| valid_helper_command_prefix(value))
+            .ok_or("room helper invocation is unavailable")?;
         return run_hook(&helper);
     }
     let authority = read_authority(
@@ -382,6 +394,28 @@ fn decode_antigravity_string_argument(value: &str) -> Option<String> {
     serde_json::from_str::<String>(value).ok()
 }
 
+fn valid_helper_command_prefix(value: &str) -> bool {
+    if value.is_empty() || value.len() > 4096 {
+        return false;
+    }
+    #[cfg(unix)]
+    let path = match shlex::split(value).as_deref() {
+        Some([path]) => PathBuf::from(path),
+        _ => return false,
+    };
+    #[cfg(windows)]
+    let path = match value
+        .strip_prefix('"')
+        .and_then(|value| value.strip_suffix('"'))
+    {
+        Some(path) => PathBuf::from(path),
+        None => return false,
+    };
+    path.is_absolute()
+        && path.file_name() == Some(OsStr::new(HELPER_FILE_NAME))
+        && absolute_helper_command(&path).is_ok_and(|canonical| canonical == value)
+}
+
 pub(crate) fn safe_room_command(command: &str, command_prefix: &str) -> bool {
     let Some(arguments) = command
         .strip_prefix(command_prefix)
@@ -460,7 +494,10 @@ fn valid_agent_id(value: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{absolute_helper_command, decode_antigravity_string_argument, safe_room_command};
+    use super::{
+        absolute_helper_command, decode_antigravity_string_argument, safe_room_command,
+        valid_helper_command_prefix,
+    };
 
     const HELPER: &str = "'/private/helper path/agentsassemble-room'";
 
@@ -474,6 +511,8 @@ mod tests {
             shlex::split(&command),
             Some(vec![executable.to_string_lossy().into_owned(),])
         );
+        assert!(valid_helper_command_prefix(&command));
+        assert!(!valid_helper_command_prefix("agentsassemble-room"));
         assert_ne!(command, "agentsassemble-room");
     }
 
@@ -481,45 +520,67 @@ mod tests {
     #[test]
     fn hook_command_binds_the_absolute_private_helper() {
         let executable = std::path::Path::new(r"C:\private helper\agentsassemble-room.exe");
-        assert_eq!(
-            absolute_helper_command(executable)
-                .unwrap_or_else(|error| panic!("build absolute hook command: {error}")),
-            r#""C:\private helper\agentsassemble-room.exe""#
-        );
+        let command = absolute_helper_command(executable)
+            .unwrap_or_else(|error| panic!("build absolute hook command: {error}"));
+        assert_eq!(command, r#""C:\private helper\agentsassemble-room.exe""#);
+        assert!(valid_helper_command_prefix(&command));
+        assert!(!valid_helper_command_prefix("agentsassemble-room"));
     }
 
     #[cfg(windows)]
     #[test]
-    fn workspace_shadow_cannot_replace_the_bound_helper() {
+    fn workspace_shadow_cannot_replace_shared_multi_session_helpers() {
         use std::os::windows::process::CommandExt;
         use std::process::Command;
+        use std::sync::Arc;
 
         use crate::antigravity_hook::AntigravityHookRegistration;
 
         let root =
             tempfile::tempdir().unwrap_or_else(|error| panic!("create shadow test root: {error}"));
         let workspace = root.path().join("workspace");
-        let private = root.path().join("private helper");
+        let private_a = root.path().join("private helper a");
+        let private_b = root.path().join("private helper b");
         std::fs::create_dir(&workspace)
             .unwrap_or_else(|error| panic!("create shadow workspace: {error}"));
-        std::fs::create_dir(&private)
-            .unwrap_or_else(|error| panic!("create private helper directory: {error}"));
+        std::fs::create_dir(&private_a)
+            .unwrap_or_else(|error| panic!("create first private helper directory: {error}"));
+        std::fs::create_dir(&private_b)
+            .unwrap_or_else(|error| panic!("create second private helper directory: {error}"));
         let decoy = workspace.join("agentsassemble-room.cmd");
-        let helper = private.join("agentsassemble-room.cmd");
+        let helper_a = private_a.join("agentsassemble-room.cmd");
+        let helper_b = private_b.join("agentsassemble-room.cmd");
         let decoy_marker = root.path().join("decoy.marker");
-        let private_marker = root.path().join("private.marker");
+        let marker_a = root.path().join("private-a.marker");
+        let marker_b = root.path().join("private-b.marker");
         std::fs::write(&decoy, "@echo off\r\necho decoy>>\"%DECOY_MARKER%\"\r\n")
             .unwrap_or_else(|error| panic!("write shadow helper: {error}"));
         std::fs::write(
-            &helper,
-            "@echo off\r\necho private>>\"%PRIVATE_MARKER%\"\r\n",
+            &helper_a,
+            "@echo off\r\necho private-a>>\"%PRIVATE_A_MARKER%\"\r\n",
         )
-        .unwrap_or_else(|error| panic!("write bound helper: {error}"));
-        let prefix = absolute_helper_command(&helper)
-            .unwrap_or_else(|error| panic!("quote bound helper: {error}"));
-        let hook_command = format!("{prefix} hook");
-        let registration = AntigravityHookRegistration::register(&workspace, &hook_command)
-            .unwrap_or_else(|error| panic!("register bound hook: {error}"));
+        .unwrap_or_else(|error| panic!("write first bound helper: {error}"));
+        std::fs::write(
+            &helper_b,
+            "@echo off\r\necho private-b>>\"%PRIVATE_B_MARKER%\"\r\n",
+        )
+        .unwrap_or_else(|error| panic!("write second bound helper: {error}"));
+        let prefix_a = absolute_helper_command(&helper_a)
+            .unwrap_or_else(|error| panic!("quote first bound helper: {error}"));
+        let prefix_b = absolute_helper_command(&helper_b)
+            .unwrap_or_else(|error| panic!("quote second bound helper: {error}"));
+        let registration_a = AntigravityHookRegistration::register(
+            &workspace,
+            &format!("{prefix_a} hook"),
+            Arc::new(()),
+        )
+        .unwrap_or_else(|error| panic!("register first bound hook: {error}"));
+        let registration_b = AntigravityHookRegistration::register(
+            &workspace,
+            &format!("{prefix_b} hook"),
+            Arc::new(()),
+        )
+        .unwrap_or_else(|error| panic!("register second bound hook: {error}"));
         let hooks: serde_json::Value = serde_json::from_slice(
             &std::fs::read(workspace.join(".agents").join("hooks.json"))
                 .unwrap_or_else(|error| panic!("read bound hook: {error}")),
@@ -532,34 +593,53 @@ mod tests {
         run_windows_command(
             installed,
             &workspace,
-            &private,
-            &private_marker,
+            &[&private_a, &private_b],
+            &prefix_a,
+            &marker_a,
+            &marker_b,
             &decoy_marker,
         );
-        let approved = format!("{prefix} read");
-        assert!(safe_room_command(&approved, &prefix));
-        assert!(!safe_room_command("agentsassemble-room read", &prefix));
+        let approved_a = format!("{prefix_a} read");
+        assert!(safe_room_command(&approved_a, &prefix_a));
+        assert!(!safe_room_command("agentsassemble-room read", &prefix_a));
         run_windows_command(
-            &approved,
+            &approved_a,
             &workspace,
-            &private,
-            &private_marker,
+            &[&private_a, &private_b],
+            &prefix_a,
+            &marker_a,
+            &marker_b,
+            &decoy_marker,
+        );
+        drop(registration_a);
+        assert!(workspace.join(".agents").join("hooks.json").exists());
+        let approved_b = format!("{prefix_b} read");
+        assert!(safe_room_command(&approved_b, &prefix_b));
+        run_windows_command(
+            &approved_b,
+            &workspace,
+            &[&private_a, &private_b],
+            &prefix_b,
+            &marker_a,
+            &marker_b,
             &decoy_marker,
         );
         assert!(!decoy_marker.exists(), "workspace helper was executed");
-        let executions = std::fs::read_to_string(&private_marker)
-            .unwrap_or_else(|error| panic!("read private helper marker: {error}"));
-        assert_eq!(executions.lines().count(), 2);
-        drop(registration);
+        assert_eq!(marker_lines(&marker_a), 2);
+        assert_eq!(marker_lines(&marker_b), 1);
+        drop(registration_b);
+        assert!(!workspace.join(".agents").join("hooks.json").exists());
 
         fn run_windows_command(
             command: &str,
             workspace: &std::path::Path,
-            private: &std::path::Path,
-            private_marker: &std::path::Path,
+            private: &[&std::path::Path],
+            command_prefix: &str,
+            marker_a: &std::path::Path,
+            marker_b: &std::path::Path,
             decoy_marker: &std::path::Path,
         ) {
-            let path = std::env::join_paths(std::iter::once(private.to_path_buf()).chain(
+            let path = std::env::join_paths(private.iter().map(|path| path.to_path_buf()).chain(
                 std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()),
             ))
             .unwrap_or_else(|error| panic!("build shadow test PATH: {error}"));
@@ -570,11 +650,20 @@ mod tests {
             let status = process
                 .current_dir(workspace)
                 .env("PATH", path)
-                .env("PRIVATE_MARKER", private_marker)
+                .env(super::HELPER_COMMAND_ENV, command_prefix)
+                .env("PRIVATE_A_MARKER", marker_a)
+                .env("PRIVATE_B_MARKER", marker_b)
                 .env("DECOY_MARKER", decoy_marker)
                 .status()
                 .unwrap_or_else(|error| panic!("run bound helper command: {error}"));
             assert!(status.success(), "bound helper command failed: {status}");
+        }
+
+        fn marker_lines(path: &std::path::Path) -> usize {
+            std::fs::read_to_string(path)
+                .unwrap_or_else(|error| panic!("read helper marker: {error}"))
+                .lines()
+                .count()
         }
     }
 

@@ -3,7 +3,7 @@ use std::{
     fs::File,
     io::{Read, Write},
     path::{Path, PathBuf},
-    sync::{Mutex, OnceLock},
+    sync::{Arc, Mutex, OnceLock},
 };
 
 use fs2::FileExt;
@@ -23,6 +23,7 @@ const MAX_HOOKS_BYTES: u64 = 64 * 1024;
 struct Registration {
     count: usize,
     definition: Value,
+    _executable_owner: Arc<dyn Send + Sync>,
 }
 
 static REGISTRATIONS: OnceLock<Mutex<HashMap<PathBuf, Registration>>> = OnceLock::new();
@@ -32,15 +33,16 @@ pub(crate) struct AntigravityHookRegistration {
 }
 
 impl AntigravityHookRegistration {
-    pub(crate) fn register(workspace: &Path, command: &str) -> Result<Self, DriverError> {
+    pub(crate) fn register(
+        workspace: &Path,
+        command: &str,
+        executable_owner: Arc<dyn Send + Sync>,
+    ) -> Result<Self, DriverError> {
         let workspace = workspace.to_path_buf();
         let definition = hook_definition(command);
         let registry = REGISTRATIONS.get_or_init(|| Mutex::new(HashMap::new()));
         let mut registrations = registry.lock().map_err(|_| hook_error())?;
         if let Some(active) = registrations.get_mut(&workspace) {
-            if active.definition != definition {
-                return Err(hook_error());
-            }
             active.count = active.count.checked_add(1).ok_or_else(hook_error)?;
             return Ok(Self { workspace });
         }
@@ -57,6 +59,7 @@ impl AntigravityHookRegistration {
             Registration {
                 count: 1,
                 definition,
+                _executable_owner: executable_owner,
             },
         );
         Ok(Self { workspace })
@@ -337,11 +340,24 @@ const fn hook_error() -> DriverError {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
+
     use serde_json::Value;
 
     use super::{AntigravityHookRegistration, HOOK_NAME};
 
     const HOOK_COMMAND: &str = "/private/agentsassemble-room hook";
+
+    struct OwnerDrop(Arc<AtomicBool>);
+
+    impl Drop for OwnerDrop {
+        fn drop(&mut self) {
+            self.0.store(true, Ordering::SeqCst);
+        }
+    }
 
     #[test]
     fn registration_rejects_existing_project_hooks() {
@@ -360,7 +376,10 @@ mod tests {
             serde_json::to_vec(&document).unwrap_or_default(),
         )
         .unwrap_or_else(|error| panic!("write previous hook: {error}"));
-        assert!(AntigravityHookRegistration::register(workspace.path(), HOOK_COMMAND).is_err());
+        assert!(
+            AntigravityHookRegistration::register(workspace.path(), HOOK_COMMAND, Arc::new(()))
+                .is_err()
+        );
     }
 
     #[test]
@@ -368,12 +387,22 @@ mod tests {
         let workspace =
             tempfile::tempdir().unwrap_or_else(|error| panic!("create hook workspace: {error}"));
         let directory = workspace.path().join(".agents");
+        let owner_dropped = Arc::new(AtomicBool::new(false));
         {
-            let first = AntigravityHookRegistration::register(workspace.path(), HOOK_COMMAND)
-                .unwrap_or_else(|error| panic!("register first hook: {error}"));
-            let second = AntigravityHookRegistration::register(workspace.path(), HOOK_COMMAND)
-                .unwrap_or_else(|error| panic!("register second hook: {error}"));
+            let first = AntigravityHookRegistration::register(
+                workspace.path(),
+                HOOK_COMMAND,
+                Arc::new(OwnerDrop(owner_dropped.clone())),
+            )
+            .unwrap_or_else(|error| panic!("register first hook: {error}"));
+            let second = AntigravityHookRegistration::register(
+                workspace.path(),
+                "/private/other-agentsassemble-room hook",
+                Arc::new(()),
+            )
+            .unwrap_or_else(|error| panic!("register second hook: {error}"));
             drop(first);
+            assert!(!owner_dropped.load(Ordering::SeqCst));
             let installed: Value = serde_json::from_slice(
                 &std::fs::read(directory.join("hooks.json"))
                     .unwrap_or_else(|error| panic!("read installed hook: {error}")),
@@ -385,6 +414,7 @@ mod tests {
             );
             drop(second);
         }
+        assert!(owner_dropped.load(Ordering::SeqCst));
         assert!(!directory.join("hooks.json").exists());
     }
 }
