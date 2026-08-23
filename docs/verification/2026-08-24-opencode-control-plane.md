@@ -10,6 +10,7 @@ is a separate plugin slice and is outside this provider-runtime verification.
 - Initial authentication commit: `bcff0b55a8f082f77d69623528e4711882121b20`.
 - Post-readiness custody commit: `3929e31f3407c60d829a030a527266daacaf9197`.
 - Exact Unix child-handle commit: `642f27250e966ffaf6070a8a3e7503dc961c0999`.
+- Correlated health-probe commit: `5c31ccf1cf33146a4e91431df7400b8508aca82d`.
 - Each OpenCode runtime generates a fresh 64-hex-character password and supplies
   it with the fixed private username only to the exact sanitized child environment.
 - The shared loopback client rejects missing or malformed credentials and applies
@@ -28,6 +29,11 @@ is a separate plugin slice and is outside this provider-runtime verification.
   guardian, which synchronously checks the exact provider `Child` handle with
   `try_wait`. An exited macOS zombie cannot be approved by its retained PID/PGID,
   and the guardian keeps custody until the normal stop path performs cleanup.
+- Every guardian health request carries a strictly increasing nonzero identity;
+  the response must echo that identity and the exact provider PID. A timeout,
+  cancellation, malformed response, or mismatch permanently poisons observation
+  before another probe can consume buffered output. Normal stop bypasses health
+  observation and still closes the guardian input to drive exact-owner cleanup.
 
 ## Automated evidence
 
@@ -45,6 +51,8 @@ is a separate plugin slice and is outside this provider-runtime verification.
 - The exited-leader regression runs on macOS, keeps a live descendant while the
   exact provider leader exits, and proves common async health rejects that leader
   before the existing stop path cleans up or fails closed on fork history.
+- Focused regressions bind health responses to both request identity and provider
+  PID and prove that an incomplete probe permanently poisons the channel.
 - The six real WebSocket Agent Session boundary tests passed three consecutive
   runs with their existing semantic and frame-count assertions unchanged. Their
   per-frame receive deadline is five seconds so normal guardian startup is not a
@@ -62,7 +70,8 @@ is a separate plugin slice and is outside this provider-runtime verification.
 - Product result: the real Hy3 session published
   `OPENCODE_PEER_CUSTODY_OK` through RoomPortal and returned to idle. After the
   exact-child fix, the rebuilt bundle repeated the flow and published
-  `OPENCODE_MAC_CHILD_HANDLE_OK`.
+  `OPENCODE_MAC_CHILD_HANDLE_OK`. After correlated probes were added, a third
+  rebuilt-bundle run published `OPENCODE_HEALTH_NONCE_OK`.
 - Cleanup: the copied stop control reached stopped; the exact debug desktop,
   sidecar, guardian, anchor, and OpenCode process were shut down and confirmed
   absent. The post-fix run also confirmed the observed provider listener was

@@ -8,7 +8,7 @@ Verification claims only the boundary actually observed. Build, lint, unit tests
 
 The active comparison baseline is original
 `d5046473010d1353a81ee38337360e6d98f7bd6f` and public Rust
-`642f27250e966ffaf6070a8a3e7503dc961c0999`. Local uncommitted behavior
+`5c31ccf1cf33146a4e91431df7400b8508aca82d`. Local uncommitted behavior
 is never described as public completion. Every completed-slice evidence entry must
 name the tested Rust commit, original provenance commit, platform/build, exact
 entry point and command flow, viewer identity, provider/model where applicable,
@@ -181,7 +181,7 @@ published macOS real-client matrix above remains the provider/model evidence; a
 future Windows real-provider run must be recorded separately rather than inferred
 from the ConPTY fixture.
 
-## Published OpenCode control-plane evidence: `642f272`
+## Published OpenCode control-plane evidence: `5c31ccf`
 
 The separate Daybreak manual security review found that the OpenCode loopback
 control plane had no authentication and that dropping the port-reservation
@@ -226,6 +226,18 @@ the exact-child proof. The guardian retains cleanup ownership after reporting an
 exit, so existing stop and macOS fork-history failure semantics are unchanged.
 The protocol was split into its own owner rather than weakening the 800-line gate.
 
+The third manual re-review found that a timed-out or cancelled health probe could
+leave its uncorrelated response buffered for the next post-connect check. Commit
+`5c31ccf1cf33146a4e91431df7400b8508aca82d` adds a strictly increasing nonzero
+request identity to every guardian health command and requires the guardian to
+echo both that identity and the exact provider PID. A malformed, mismatched,
+timed-out, or cancelled exchange permanently poisons that custody channel, so no
+later request can consume a stale response. The poison guard is armed before the
+first asynchronous write and disarmed only after one fully correlated response.
+Normal stop no longer performs a preliminary health probe: it closes the guardian
+input and executes the exact-owner cleanup directly, so a poisoned observation
+channel cannot prevent guardian EOF cleanup or its existing receipt proof.
+
 The exact code passed the complete `make verify` on macOS: architecture and
 800-line source gates, generated protocol bindings, copied frontend build and CSS
 verification, 65 frontend files with 332 tests, 13 Tauri tests, all Rust workspace
@@ -255,7 +267,14 @@ unauthenticated `/global/health` and `/event`, and the real agent published
 copied stop control reached stopped; the app, sidecar, guardian, provider, and
 observed listener were all confirmed absent afterward.
 
-This addresses all three manual findings but does not pre-empt the same Daybreak
+The exact debug bundle was rebuilt again from `5c31ccf` source. The copied UI
+resumed the durable Hy3 session, the same observed provider port returned HTTP
+401 for unauthenticated `/global/health` and `/event`, and the real agent
+published `OPENCODE_HEALTH_NONCE_OK` through RoomPortal. The copied stop control
+reached stopped; the debug app, Rust sidecar, guardian, provider, and observed
+listener were all confirmed absent afterward.
+
+This addresses all four manual findings but does not pre-empt the same Daybreak
 task's pending manual re-review. No second Deep Scan is used.
 
 ## API verification scope

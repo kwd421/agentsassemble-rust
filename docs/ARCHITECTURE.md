@@ -185,17 +185,22 @@ provider can be reused—and after OpenCode connects a raw socket but before it
 constructs or sends authenticated HTTP—the common asynchronous health contract
 sends one bounded request over the private guardian control pipe. The guardian
 synchronously calls `try_wait` on its exact provider `Child` handle and returns
-the expected provider PID plus `alive` or `exited`; malformed, mismatched,
-timed-out, or unavailable responses fail closed. An exited macOS zombie is
-therefore rejected even while it retains its PID and anchor PGID. The existing
-group check and Linux/Android `/proc/<pid>/stat` state check remain additional
-evidence after this exact-child proof.
+the expected provider PID, a strictly increasing nonzero request identity, and
+`alive` or `exited`. The caller accepts only the one fully correlated response.
+A malformed, mismatched, timed-out, cancelled, or unavailable exchange
+permanently poisons that observation channel, so buffered output can never become
+authority for a later request. An exited macOS zombie is therefore rejected even
+while it retains its PID and anchor PGID. The existing group check and
+Linux/Android `/proc/<pid>/stat` state check remain additional evidence after
+this exact-child proof.
 
-Reporting an exited child does not abandon custody. The guardian retains the
-handle and descendants until control-pipe EOF drives the existing cleanup and
-receipt path. Consequently, a replacement OpenCode listener reached after the
-real child exits sees EOF and zero HTTP bytes, while the existing normal-stop and
-macOS fork-history failure semantics remain unchanged.
+Reporting an exited child or poisoning health observation does not abandon
+custody. Normal stop does not require another health probe: it closes the guardian
+input and performs the exact-owner stop directly. The guardian retains the handle
+and descendants until control-pipe EOF drives the existing cleanup and receipt
+path. Consequently, a replacement OpenCode listener reached after the real child
+exits sees EOF and zero HTTP bytes, while the existing normal-stop and macOS
+fork-history failure semantics remain unchanged.
 
 ## Enforced source structure
 
