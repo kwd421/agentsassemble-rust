@@ -12,7 +12,12 @@ import {
   RoomSocketSayError,
   type RoomSocketHandle,
 } from "./roomSocketClient";
-import { acceptSnapshotEvents, mergeRoomEvents } from "./roomProjection";
+import {
+  acceptSnapshotEvents,
+  mergeRoomEvents,
+  projectAgentSessionEvents,
+  visibleTimelineEvents,
+} from "./roomProjection";
 import type { ProviderCatalogSnapshot } from "./roomSocketTypes";
 
 type ConnectionStatus = "locked" | "connecting" | "online" | "offline";
@@ -39,6 +44,7 @@ export default function App() {
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const socketRef = useRef<RoomSocketHandle | null>(null);
+  const timelineEvents = useMemo(() => visibleTimelineEvents(events), [events]);
 
   useEffect(() => {
     if (!hostToken) {
@@ -72,7 +78,10 @@ export default function App() {
           return true;
         },
         onProviderCatalog: setProviderCatalog,
-        onRoomEvents: (incoming) => setEvents((current) => mergeRoomEvents(current, incoming)),
+        onRoomEvents: (incoming) => {
+          setEvents((current) => mergeRoomEvents(current, incoming));
+          setAgentSessions((current) => projectAgentSessionEvents(current, incoming));
+        },
         onClose: () => {
           setStatus("offline");
           setNotice("연결이 끊겼습니다. 같은 커서로 다시 연결합니다…");
@@ -196,9 +205,9 @@ export default function App() {
             sessions={agentSessions}
           />
           <ol className="timeline" data-testid="timeline">
-            {events.length === 0 ? (
+            {timelineEvents.length === 0 ? (
               <li className="empty">아직 메시지가 없습니다.</li>
-            ) : events.map((roomEvent) => (
+            ) : timelineEvents.map((roomEvent) => (
               <li key={roomEvent.id} data-seq={roomEvent.seq}>
                 <div className="avatar">{String(roomEvent.display_name || "H").slice(0, 1)}</div>
                 <div className="message-body">

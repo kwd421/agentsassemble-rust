@@ -1,19 +1,14 @@
 use std::{fs::File, io, path::PathBuf, sync::Arc};
 
 use agentsassemble_domain::{
-    AgentSession, AuthenticatedPrincipal, DurableAgentSession, MessageSend, Participant, Room,
-    RoomEvent, RoomSettings, RoomStatus, SnapshotMode, canonical_payload_hash,
-    prepare_message_event,
+    AgentSession, AuthenticatedPrincipal, DurableAgentSession, Participant, Room, RoomEvent,
+    RoomSettings, SnapshotMode,
 };
-use chrono::Utc;
-use serde_json::{Value, json};
+use serde_json::Value;
 use sqlx::{Row, Sqlite, SqlitePool, Transaction};
 use thiserror::Error;
 
-use crate::{
-    authority::{authorize_session, load_active_participant},
-    command_admission::admit_non_lifecycle_command,
-};
+use crate::authority::{authorize_session, load_active_participant};
 
 const SCHEMA_OWNER: &str = "agentsassemble-rust-v1";
 pub(crate) const MAX_AGENT_SESSIONS_PER_ROOM: i64 = 64;
@@ -379,97 +374,6 @@ impl SqliteStore {
             snapshot_mode,
         })
     }
-
-    /// Commits a message event and its durable idempotency result atomically.
-    ///
-    /// # Errors
-    ///
-    /// Returns a visible command rejection, conflict, or persistence failure.
-    pub async fn execute_message(
-        &self,
-        principal: &AuthenticatedPrincipal,
-        request_id: &str,
-        action: &str,
-        payload: &Value,
-    ) -> Result<CommandOutcome, PersistenceError> {
-        let payload_hash = canonical_payload_hash(payload);
-        let mut transaction = self.pool.begin().await?;
-        let room_json =
-            sqlx::query_scalar::<_, String>("SELECT room_json FROM rooms WHERE room_id = ?")
-                .bind(&principal.room_id)
-                .fetch_optional(&mut *transaction)
-                .await?
-                .ok_or(PersistenceError::RoomMissing)?;
-        let room: Room = serde_json::from_str(&room_json)?;
-        if room.status != RoomStatus::Active {
-            return Err(PersistenceError::CommandRejected {
-                code: "room_inactive",
-                message: "Closed or archived rooms do not accept commands.".to_owned(),
-            });
-        }
-        if let Some(outcome) = admit_non_lifecycle_command(
-            &mut transaction,
-            &principal.room_id,
-            &principal.principal_id,
-            request_id,
-            action,
-            &payload_hash,
-        )
-        .await?
-        {
-            transaction.commit().await?;
-            return Ok(outcome);
-        }
-        if action != "message.send" {
-            return Err(PersistenceError::CommandRejected {
-                code: "unsupported_action",
-                message: format!("Unsupported room command: {action}"),
-            });
-        }
-        let command = MessageSend::from_payload(payload).map_err(rejection)?;
-        let participant_json = sqlx::query_scalar::<_, String>(
-            "SELECT participant_json FROM participants WHERE room_id = ? AND participant_id = ?",
-        )
-        .bind(&principal.room_id)
-        .bind(&principal.participant_id)
-        .fetch_optional(&mut *transaction)
-        .await?
-        .ok_or(PersistenceError::ParticipantMissing)?;
-        let participant: Participant = serde_json::from_str(&participant_json)?;
-        let sequence = sqlx::query_scalar::<_, i64>(
-            "SELECT COALESCE(MAX(seq), 0) + 1 FROM room_events WHERE room_id = ?",
-        )
-        .bind(&principal.room_id)
-        .fetch_one(&mut *transaction)
-        .await?;
-        let event = prepare_message_event(principal, &participant, &command, sequence, Utc::now())
-            .map_err(rejection)?;
-        sqlx::query("INSERT INTO room_events(room_id, seq, event_json) VALUES (?, ?, ?)")
-            .bind(&principal.room_id)
-            .bind(sequence)
-            .bind(serde_json::to_string(&event)?)
-            .execute(&mut *transaction)
-            .await?;
-        let result = json!({"event": event, "event_seq": sequence});
-        sqlx::query(
-            "INSERT INTO command_results(room_id, principal_id, request_id, action, payload_hash, result_json) VALUES (?, ?, ?, ?, ?, ?)",
-        )
-        .bind(&principal.room_id)
-        .bind(&principal.principal_id)
-        .bind(request_id)
-        .bind(action)
-        .bind(payload_hash)
-        .bind(serde_json::to_string(&result)?)
-        .execute(&mut *transaction)
-        .await?;
-        transaction.commit().await?;
-        Ok(CommandOutcome {
-            result,
-            event: event.clone(),
-            events: vec![event],
-            deduplicated: false,
-        })
-    }
 }
 
 async fn load_agent_sessions(
@@ -498,13 +402,6 @@ async fn load_agent_sessions(
             .map_err(PersistenceError::from)
         })
         .collect()
-}
-
-fn rejection(error: agentsassemble_domain::CommandRejection) -> PersistenceError {
-    PersistenceError::CommandRejected {
-        code: error.code,
-        message: error.message,
-    }
 }
 
 #[cfg(test)]

@@ -541,6 +541,18 @@ export function openRoomSocket(
           );
           return;
         }
+        if (
+          event.type === "agent_session_state" &&
+          !agentSessionIsValid(event.agent_session, event.room_id)
+        ) {
+          reconnectForProtocolError(
+            new RoomSocketSayError(
+              "Agent Session event contained invalid public authority; reconnecting.",
+              "event_authority_invalid"
+            )
+          );
+          return;
+        }
         const eventSeq = Number(event.seq || 0);
         if (!Number.isInteger(eventSeq) || eventSeq <= 0) {
           handlers.onError?.(

@@ -505,6 +505,9 @@ fn merge_inflight_events(session: &mut DurableAgentSession) {
     }
     session.pending_event_ids = pending;
     session.inflight_event_ids.clear();
+    session.active_source_event_id.clear();
+    session.input_up_to_event_id.clear();
+    session.input_up_to_seq = 0;
 }
 
 async fn save_reconciled_session(

@@ -420,6 +420,12 @@ pub struct DurableAgentSession {
     #[serde(default)]
     pub inflight_event_ids: Vec<String>,
     #[serde(default)]
+    pub active_source_event_id: String,
+    #[serde(default)]
+    pub input_up_to_event_id: String,
+    #[serde(default)]
+    pub input_up_to_seq: i64,
+    #[serde(default)]
     pub lifecycle_intent_action: String,
     #[serde(default)]
     pub lifecycle_intent_id: String,

@@ -413,6 +413,9 @@ impl SqliteStore {
         session.public.provider_session_reused = false;
         session.public.active_turn_id.clear();
         session.public.turn_phase.clear();
+        session.active_source_event_id.clear();
+        session.input_up_to_event_id.clear();
+        session.input_up_to_seq = 0;
         session.public.last_error =
             redact_persisted_diagnostic_text(message, PUBLIC_LIFECYCLE_ERROR_LIMIT);
         if session.public.last_error.is_empty() {
@@ -500,6 +503,9 @@ impl SqliteStore {
         session.public.provider_session_active = false;
         session.public.active_turn_id.clear();
         session.public.turn_phase.clear();
+        session.active_source_event_id.clear();
+        session.input_up_to_event_id.clear();
+        session.input_up_to_seq = 0;
         session.public.last_error.clear();
         session.public.last_error_code.clear();
         session.public.recovery_required = false;

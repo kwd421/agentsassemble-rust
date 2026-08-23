@@ -19,6 +19,7 @@ use tokio_tungstenite::{WebSocketStream, connect_async, tungstenite::Message};
 use tokio_util::sync::CancellationToken;
 
 const HOST_TOKEN: &str = "agent-boundary-host-token-000000001";
+static AGENT_BOUNDARY_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 struct RunningServer {
     base_url: String,
@@ -51,6 +52,7 @@ impl RunningServer {
 
 #[tokio::test]
 async fn create_replay_conflict_and_restart_share_one_durable_authority() {
+    let _serial = AGENT_BOUNDARY_LOCK.lock().await;
     let directory =
         tempfile::tempdir().unwrap_or_else(|error| panic!("create agent data root: {error}"));
     let database_url = format!(
@@ -127,6 +129,7 @@ async fn create_replay_conflict_and_restart_share_one_durable_authority() {
 #[cfg(unix)]
 #[tokio::test]
 async fn lifecycle_commands_use_the_owned_codex_app_server_before_committing() {
+    let _serial = AGENT_BOUNDARY_LOCK.lock().await;
     let directory =
         tempfile::tempdir().unwrap_or_else(|error| panic!("create lifecycle root: {error}"));
     let database_url = format!(
@@ -226,6 +229,7 @@ async fn lifecycle_commands_use_the_owned_codex_app_server_before_committing() {
 #[cfg(unix)]
 #[tokio::test]
 async fn shutdown_checkpoints_gone_after_aborting_initialization() {
+    let _serial = AGENT_BOUNDARY_LOCK.lock().await;
     let directory =
         tempfile::tempdir().unwrap_or_else(|error| panic!("create cancellation root: {error}"));
     let database_url = format!(
@@ -294,6 +298,122 @@ async fn shutdown_checkpoints_gone_after_aborting_initialization() {
     let resumed = receive_until_ack(&mut recovered_socket, 3).await;
     assert_eq!(resumed["result"]["agent_session"]["runtime_status"], "idle");
     restarted.stop().await;
+}
+
+#[cfg(unix)]
+#[tokio::test]
+#[allow(clippy::too_many_lines)] // One boundary scenario spans setup, blocked turn, queueing, and publication.
+async fn room_turns_publish_provider_finals_without_blocking_room_commands() {
+    let _serial = AGENT_BOUNDARY_LOCK.lock().await;
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create room-turn root: {error}"));
+    let transcript = directory.path().join("turn-requests.jsonl");
+    let turn_seen = directory.path().join("turn-seen");
+    let release = directory.path().join("turn-release");
+    let fixture = format!(
+        "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' \"$initialize\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nprintf '%s\\n' \"$initialized\" >> {log}\nIFS= read -r thread\nprintf '%s\\n' \"$thread\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{{\"thread\":{{\"id\":\"thread-1\"}}}}}}'\nIFS= read -r turn_one\nprintf '%s\\n' \"$turn_one\" >> {log}\nprintf seen > {seen}\nwhile [ ! -f {release} ]; do :; done\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{{\"turn\":{{\"id\":\"provider-turn-1\"}}}}}}'\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"method\":\"agent_message/completed\",\"params\":{{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\",\"text\":\"first room answer\"}}}}'\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"method\":\"turn/completed\",\"params\":{{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\"}}}}'\nIFS= read -r turn_two\nprintf '%s\\n' \"$turn_two\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":4,\"result\":{{\"turn\":{{\"id\":\"provider-turn-2\"}}}}}}'\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"method\":\"agent_message/completed\",\"params\":{{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-2\",\"text\":\"second room answer\"}}}}'\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"method\":\"turn/completed\",\"params\":{{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-2\"}}}}'\nIFS= read -r forever\n",
+        log = shell_quote(&transcript),
+        seen = shell_quote(&turn_seen),
+        release = shell_quote(&release),
+    );
+    let store = SqliteStore::open(&format!(
+        "sqlite://{}",
+        directory.path().join("runtime.sqlite3").display()
+    ))
+    .await
+    .unwrap_or_else(|error| panic!("open room-turn store: {error}"));
+    bootstrap(&store).await;
+    let catalog = agent_catalog_with_fixture(directory.path(), fixture.as_bytes());
+    let server = start(store, catalog).await;
+    let mut socket = connect(&server.base_url).await;
+    subscribe(&mut socket).await;
+    let _snapshot = receive_json(&mut socket).await;
+    send_create(
+        &mut socket,
+        "create-room-turn-agent",
+        &json!({
+            "provider_id": "codex",
+            "catalog_revision": "catalog-boundary-1",
+            "display_name": "Terra",
+            "workspace": directory.path(),
+            "model": "gpt-5.6-terra",
+            "permission_mode": "meeting_read_only",
+            "start_now": false,
+        }),
+    )
+    .await;
+    let created = receive_until_ack(&mut socket, 2).await;
+    let session_id = created["result"]["agent_session"]["session_id"]
+        .as_str()
+        .unwrap_or_else(|| panic!("created room-turn session has no id"));
+    send_command(
+        &mut socket,
+        "start-room-turn-agent",
+        "agent.start",
+        &json!({"agent_id": session_id}),
+    )
+    .await;
+    let _started = receive_until_ack(&mut socket, 4).await;
+
+    send_command(
+        &mut socket,
+        "room-message-1",
+        "message.send",
+        &json!({"content": "@Terra answer the first room message"}),
+    )
+    .await;
+    let _first_ack = receive_until_ack(&mut socket, 5).await;
+    wait_for_file(&turn_seen).await;
+    send_command(
+        &mut socket,
+        "room-message-2",
+        "message.send",
+        &json!({"content": "@Terra queue the second room message"}),
+    )
+    .await;
+    let _second_ack = receive_until_ack(&mut socket, 2).await;
+    std::fs::write(&release, b"release")
+        .unwrap_or_else(|error| panic!("release room turn fixture: {error}"));
+
+    let mut provider_finals = Vec::new();
+    for _ in 0..9 {
+        let frame = receive_json_with_timeout(&mut socket, Duration::from_secs(5)).await;
+        for event in frame["events"].as_array().into_iter().flatten() {
+            if event["type"] == "message_final" && event["actor"]["participant_type"] == "agent" {
+                provider_finals.push(event["content"].as_str().unwrap_or_default().to_owned());
+            }
+        }
+        if provider_finals.len() == 2 {
+            break;
+        }
+    }
+    assert_eq!(provider_finals, ["first room answer", "second room answer"]);
+    let requests = std::fs::read_to_string(&transcript)
+        .unwrap_or_else(|error| panic!("read room-turn transcript: {error}"))
+        .lines()
+        .map(|line| {
+            serde_json::from_str::<Value>(line)
+                .unwrap_or_else(|error| panic!("decode room-turn request: {error}"))
+        })
+        .collect::<Vec<_>>();
+    let turns = requests
+        .iter()
+        .filter(|request| request["method"] == "turn/start")
+        .collect::<Vec<_>>();
+    assert_eq!(turns.len(), 2);
+    assert!(
+        turns[0]["params"]["input"][0]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("answer the first room message")
+    );
+    assert!(
+        turns[1]["params"]["input"][0]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("queue the second room message")
+    );
+    server.stop().await;
 }
 
 fn assert_public_session(session: &Value) {
@@ -488,7 +608,14 @@ async fn receive_json<S>(socket: &mut WebSocketStream<S>) -> Value
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
-    let message = tokio::time::timeout(Duration::from_secs(2), socket.next())
+    receive_json_with_timeout(socket, Duration::from_secs(2)).await
+}
+
+async fn receive_json_with_timeout<S>(socket: &mut WebSocketStream<S>, timeout: Duration) -> Value
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    let message = tokio::time::timeout(timeout, socket.next())
         .await
         .unwrap_or_else(|_| panic!("timed out waiting for WebSocket frame"))
         .unwrap_or_else(|| panic!("WebSocket closed before expected frame"))
