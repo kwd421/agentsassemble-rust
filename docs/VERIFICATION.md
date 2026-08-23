@@ -8,7 +8,7 @@ Verification claims only the boundary actually observed. Build, lint, unit tests
 
 The active comparison baseline is original
 `d5046473010d1353a81ee38337360e6d98f7bd6f` and public Rust
-`11e9b8547580c3da8b2f32ed40ff5034d7683ec2`. Local uncommitted behavior
+`bcff0b5058d6c928d2330a7de284694a8f8fbfa3`. Local uncommitted behavior
 is never described as public completion. Every completed-slice evidence entry must
 name the tested Rust commit, original provenance commit, platform/build, exact
 entry point and command flow, viewer identity, provider/model where applicable,
@@ -180,6 +180,47 @@ Antigravity Flash account or the copied desktop UI was exercised on Windows. The
 published macOS real-client matrix above remains the provider/model evidence; a
 future Windows real-provider run must be recorded separately rather than inferred
 from the ConPTY fixture.
+
+## Published OpenCode control-plane evidence: `bcff0b5`
+
+The separate Daybreak manual security review found that the OpenCode loopback
+control plane had no authentication and that dropping the port-reservation
+listener before child bind could let another local process receive the first
+health and RoomPortal-registration requests. Commit
+`bcff0b5058d6c928d2330a7de284694a8f8fbfa3` gives each OpenCode runtime a fresh
+64-hex-character Basic-auth password, requires credentials in the shared strict
+loopback client, and applies them to both bounded JSON requests and SSE streams.
+The password enters only the exact provider environment; on Unix it crosses the
+guardian boundary inside the anonymous inherited launch manifest and never enters
+argv or the guardian environment.
+
+Before any authenticated HTTP request, startup now requires the exact bounded
+`opencode server listening on http://127.0.0.1:<selected-port>` line from the
+byte-bound child's stdout. Only that proof permits the authenticated health check,
+and only a successful health check permits RoomPortal registration. A process that
+merely wins the released reservation cannot make the child emit that line and
+therefore receives neither the control-plane password nor the portal bearer.
+
+The exact code passed the complete `make verify` on macOS: architecture and
+800-line source gates, generated protocol bindings, copied frontend build and CSS
+verification, 65 frontend files with 332 tests, 13 Tauri tests, all Rust workspace
+tests, warning-denied Clippy, and diff checks. The workspace also passed the
+warning-denied `x86_64-pc-windows-gnu` all-target cross-check with the installed
+rustup compiler. Focused tests prove credential validation, fresh password shape,
+exact child-endpoint readiness, and Basic authentication on both JSON and SSE.
+
+Computer Use then launched the exact debug application bundle built from this
+workspace, resumed the durable OpenCode `opencode/hy3-free` Agent Session, and
+sent one room message through the copied composer. Direct unauthenticated requests
+to that run's `/global/health` and `/event` returned HTTP 401. The real Hy3 agent
+published `OPENCODE_AUTH_CONTROL_OK` through RoomPortal and returned to idle; the
+copied stop control reached stopped state. The exact debug app, Rust sidecar,
+guardian, anchor, and OpenCode process were then shut down, their absence was
+confirmed, and the verification-only temporary directory was moved to Trash.
+Pre-existing original-project and unrelated processes were not signalled.
+
+This closes the reported implementation defect but does not pre-empt the same
+Daybreak task's pending manual re-review. No second Deep Scan is used.
 
 ## API verification scope
 
