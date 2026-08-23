@@ -240,6 +240,11 @@ impl RoomPortal {
         self.server.bearer_token()
     }
 
+    #[cfg(test)]
+    pub(crate) fn active_connection_count(&self) -> usize {
+        self.server.active_connection_count()
+    }
+
     fn require_server(&self) -> Result<(), RoomPortalError> {
         if self.server.is_running() {
             Ok(())
