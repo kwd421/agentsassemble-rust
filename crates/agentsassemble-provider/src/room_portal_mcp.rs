@@ -231,21 +231,26 @@ async fn serve_request(
     if request.uri().path() != expected_path || request.uri().query().is_some() {
         return Ok(empty_response(StatusCode::NOT_FOUND));
     }
-    let authorized = request.headers().get(AUTHORIZATION).is_some_and(|value| {
-        let observed = value.as_bytes();
-        observed.len() == expected_authorization.len()
-            && bool::from(observed.ct_eq(expected_authorization.as_bytes()))
-    });
-    if !authorized {
-        let mut response = empty_response(StatusCode::UNAUTHORIZED);
-        response.headers_mut().insert(
-            WWW_AUTHENTICATE,
-            hyper::header::HeaderValue::from_static("Bearer"),
-        );
-        return Ok(response);
-    }
-    if !connections.mark_authenticated(connection_id) {
-        return Ok(empty_response(StatusCode::SERVICE_UNAVAILABLE));
+    match connections.authenticate(
+        connection_id,
+        request
+            .headers()
+            .get(AUTHORIZATION)
+            .map(hyper::header::HeaderValue::as_bytes),
+        expected_authorization.as_bytes(),
+    ) {
+        ConnectionAuthentication::Authenticated => {}
+        ConnectionAuthentication::Unauthorized => {
+            let mut response = empty_response(StatusCode::UNAUTHORIZED);
+            response.headers_mut().insert(
+                WWW_AUTHENTICATE,
+                hyper::header::HeaderValue::from_static("Bearer"),
+            );
+            return Ok(response);
+        }
+        ConnectionAuthentication::Gone => {
+            return Ok(empty_response(StatusCode::SERVICE_UNAVAILABLE));
+        }
     }
     let Ok(_permit) = admission.try_acquire_owned() else {
         return Ok(empty_response(StatusCode::SERVICE_UNAVAILABLE));
@@ -273,6 +278,13 @@ struct ActiveConnection {
     abort: AbortHandle,
 }
 
+#[derive(Debug, Eq, PartialEq)]
+enum ConnectionAuthentication {
+    Authenticated,
+    Unauthorized,
+    Gone,
+}
+
 impl ConnectionRegistry {
     fn register(&self, abort: AbortHandle) -> u64 {
         let Ok(mut state) = self.state.lock() else {
@@ -289,15 +301,27 @@ impl ConnectionRegistry {
         id
     }
 
-    fn mark_authenticated(&self, id: u64) -> bool {
+    fn authenticate(
+        &self,
+        id: u64,
+        observed_authorization: Option<&[u8]>,
+        expected_authorization: &[u8],
+    ) -> ConnectionAuthentication {
         let Ok(mut state) = self.state.lock() else {
-            return false;
+            return ConnectionAuthentication::Gone;
         };
+        let authorized = observed_authorization.is_some_and(|observed| {
+            observed.len() == expected_authorization.len()
+                && bool::from(observed.ct_eq(expected_authorization))
+        });
+        if !authorized {
+            return ConnectionAuthentication::Unauthorized;
+        }
         let Some(connection) = state.active.iter_mut().find(|entry| entry.id == id) else {
-            return false;
+            return ConnectionAuthentication::Gone;
         };
         connection.authenticated = true;
-        true
+        ConnectionAuthentication::Authenticated
     }
 
     fn evict_oldest_unauthenticated(&self) -> Option<AbortHandle> {
@@ -475,8 +499,13 @@ impl ServerHandler for RoomPortalMcp {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::BTreeSet, time::Duration};
+    use std::{
+        collections::BTreeSet,
+        sync::{Arc, Barrier},
+        time::Duration,
+    };
 
+    use futures_util::future::AbortHandle;
     use rmcp::{
         ServiceExt,
         model::CallToolRequestParams,
@@ -487,8 +516,52 @@ mod tests {
     };
     use serde_json::{Map, json};
 
-    use super::{MAX_MCP_REQUEST_BYTES, MAX_PORTAL_CONNECTIONS};
+    use super::{
+        ConnectionAuthentication, ConnectionRegistry, MAX_MCP_REQUEST_BYTES, MAX_PORTAL_CONNECTIONS,
+    };
     use crate::room_portal::{ProviderTurnOutcome, RoomPortal};
+
+    #[test]
+    fn bearer_authentication_is_atomic_with_unauthenticated_eviction() {
+        for _ in 0..128 {
+            let registry = Arc::new(ConnectionRegistry::default());
+            let (abort, _registration) = AbortHandle::new_pair();
+            let connection_id = registry.register(abort);
+            let barrier = Arc::new(Barrier::new(2));
+            let (authentication, evicted) = std::thread::scope(|scope| {
+                let authentication_registry = registry.clone();
+                let authentication_barrier = barrier.clone();
+                let authentication = scope.spawn(move || {
+                    authentication_barrier.wait();
+                    authentication_registry.authenticate(
+                        connection_id,
+                        Some(b"Bearer portal-token"),
+                        b"Bearer portal-token",
+                    )
+                });
+                let eviction_registry = registry.clone();
+                let eviction = scope.spawn(move || {
+                    barrier.wait();
+                    eviction_registry.evict_oldest_unauthenticated()
+                });
+                (
+                    authentication
+                        .join()
+                        .unwrap_or_else(|_| panic!("join authentication race")),
+                    eviction
+                        .join()
+                        .unwrap_or_else(|_| panic!("join eviction race")),
+                )
+            });
+            match authentication {
+                ConnectionAuthentication::Authenticated => assert!(evicted.is_none()),
+                ConnectionAuthentication::Gone => assert!(evicted.is_some()),
+                ConnectionAuthentication::Unauthorized => {
+                    panic!("the exact bearer was rejected")
+                }
+            }
+        }
+    }
 
     #[tokio::test]
     async fn loopback_mcp_requires_a_same_turn_read_before_commit() {
