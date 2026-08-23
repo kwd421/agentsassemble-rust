@@ -562,8 +562,10 @@ mod tests {
                 std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()),
             ))
             .unwrap_or_else(|error| panic!("build shadow test PATH: {error}"));
+            let shell_command = format!(r#""{command}""#);
             let status = Command::new("cmd.exe")
-                .args(["/D", "/S", "/C", command])
+                .args(["/D", "/S", "/C"])
+                .arg(shell_command)
                 .current_dir(workspace)
                 .env("PATH", path)
                 .env("PRIVATE_MARKER", private_marker)
