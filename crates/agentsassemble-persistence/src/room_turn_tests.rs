@@ -125,8 +125,7 @@ async fn ordered_assignment_and_finalization_are_durable_and_exact() {
         .complete_agent_turn(
             "general",
             AGENT_ID,
-            &first_turn_id,
-            "provider-turn-1",
+            authority(&first_turn_id, "provider-turn-1", None),
             "First provider final",
             "",
         )
@@ -167,8 +166,7 @@ async fn ordered_assignment_and_finalization_are_durable_and_exact() {
         .complete_agent_turn(
             "general",
             AGENT_ID,
-            &first_turn_id,
-            "provider-turn-stale",
+            authority(&first_turn_id, "provider-turn-stale", None),
             "must not publish",
             "",
         )
@@ -177,6 +175,79 @@ async fn ordered_assignment_and_finalization_are_durable_and_exact() {
         panic!("old turn authority must not publish twice");
     };
     assert_rejection_code(&stale, "stale_provider_turn");
+}
+
+#[tokio::test]
+async fn first_antigravity_final_promotes_the_native_session_id_atomically() {
+    let (store, principal, _directory) = fixture().await;
+    let mut session = stored_session(&store).await;
+    "antigravity_live_session".clone_into(&mut session.public.provider_kind);
+    "pty".clone_into(&mut session.public.transport);
+    "pending-antigravity-codex-1".clone_into(&mut session.provider_session_id);
+    save_stored_session(&store, &session).await;
+
+    let mutation = store
+        .execute_message_with_turn(
+            &principal,
+            "antigravity-first-message",
+            "message.send",
+            &json!({"content": "@Terra bind the native conversation"}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("assign first Antigravity turn: {error}"));
+    let assignment = mutation
+        .assignment
+        .unwrap_or_else(|| panic!("first Antigravity turn must be assigned"));
+    store
+        .complete_agent_turn(
+            "general",
+            AGENT_ID,
+            authority(
+                &assignment.turn_id,
+                "provider-turn-antigravity-1",
+                Some("conversation-1"),
+            ),
+            "Native session attached",
+            "",
+        )
+        .await
+        .unwrap_or_else(|error| panic!("commit first Antigravity final: {error}"));
+    assert_eq!(
+        stored_session(&store).await.provider_session_id,
+        "conversation-1"
+    );
+
+    let second = store
+        .execute_message_with_turn(
+            &principal,
+            "antigravity-second-message",
+            "message.send",
+            &json!({"content": "@Terra keep the same conversation"}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("assign second Antigravity turn: {error}"))
+        .assignment
+        .unwrap_or_else(|| panic!("second Antigravity turn must be assigned"));
+    let Err(error) = store
+        .complete_agent_turn(
+            "general",
+            AGENT_ID,
+            authority(
+                &second.turn_id,
+                "provider-turn-antigravity-2",
+                Some("conversation-2"),
+            ),
+            "must roll back",
+            "",
+        )
+        .await
+    else {
+        panic!("an attached Antigravity session must not change identity");
+    };
+    assert_rejection_code(&error, "provider_session_invalid");
+    let stored = stored_session(&store).await;
+    assert_eq!(stored.provider_session_id, "conversation-1");
+    assert_eq!(stored.public.active_turn_id, second.turn_id);
 }
 
 #[tokio::test]
@@ -459,6 +530,18 @@ fn assert_rejection_code(error: &PersistenceError, expected: &str) {
         panic!("expected command rejection, got {error}");
     };
     assert_eq!(*code, expected);
+}
+
+fn authority<'a>(
+    turn_id: &'a str,
+    provider_turn_id: &'a str,
+    provider_session_id: Option<&'a str>,
+) -> super::ProviderTurnAuthority<'a> {
+    super::ProviderTurnAuthority {
+        turn_id,
+        provider_turn_id,
+        provider_session_id,
+    }
 }
 
 async fn stored_session(store: &SqliteStore) -> DurableAgentSession {

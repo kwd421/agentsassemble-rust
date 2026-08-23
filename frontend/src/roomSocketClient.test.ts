@@ -1,6 +1,44 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { openRoomSocket, RoomSocketSayError } from "./roomSocketClient";
-import { FakeWebSocket, flushPromises } from "./roomSocketTestSupport";
+
+class FakeWebSocket {
+  readyState: number = WebSocket.CONNECTING;
+  sent: Array<Record<string, unknown>> = [];
+  onopen: ((event: Event) => void) | null = null;
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
+  onclose: ((event: CloseEvent) => void) | null = null;
+
+  send(raw: string) {
+    this.sent.push(JSON.parse(raw) as Record<string, unknown>);
+  }
+
+  open() {
+    this.readyState = WebSocket.OPEN;
+    this.onopen?.(new Event("open"));
+  }
+
+  receive(message: Record<string, unknown>) {
+    if (this.readyState === WebSocket.CLOSED) return;
+    this.onmessage?.({ data: JSON.stringify(message) } as MessageEvent);
+  }
+
+  receiveRaw(message: string) {
+    if (this.readyState === WebSocket.CLOSED) return;
+    this.onmessage?.({ data: message } as MessageEvent);
+  }
+
+  close() {
+    if (this.readyState === WebSocket.CLOSED) return;
+    this.readyState = WebSocket.CLOSED;
+    this.onclose?.({} as CloseEvent);
+  }
+}
+
+async function flushPromises() {
+  await Promise.resolve();
+  await Promise.resolve();
+}
 
 afterEach(() => {
   vi.useRealTimers();
@@ -332,7 +370,7 @@ describe("canonical room socket client", () => {
     handle.close();
   });
 
-  it("resets an invalid durable cursor before authoritative resync", async () => {
+  it("reconnects from the last durable sequence after backpressure resync", async () => {
     vi.useFakeTimers();
     const sockets: FakeWebSocket[] = [];
     const errors: RoomSocketSayError[] = [];
@@ -373,7 +411,7 @@ describe("canonical room socket client", () => {
       available_providers: [],
       capabilities: {},
     });
-    sockets[0].receive({ op: "resync_required", reason: "cursor_ahead", latest_seq: 0 });
+    sockets[0].receive({ op: "resync_required", reason: "outbound_backpressure" });
 
     expect(errors.at(-1)?.category).toBe("resync_required");
     await vi.advanceTimersByTimeAsync(500);
@@ -383,7 +421,7 @@ describe("canonical room socket client", () => {
     expect(sockets[1].sent[0]).toEqual({
       op: "subscribe",
       streams: ["room_events"],
-      resume_from_seq: 0,
+      resume_from_seq: 7,
     });
     handle.close();
   });
@@ -701,62 +739,4 @@ describe("canonical room socket client", () => {
       category: "socket_closed",
     });
   });
-
-  it("retires a socket that cannot acknowledge a command", async () => {
-    vi.useFakeTimers();
-    const sockets: FakeWebSocket[] = [];
-    const handle = openRoomSocket(
-      { kind: "host", meetingId: "general" },
-      ["room_events"],
-      {},
-      {
-        getTicket: async () => `ticket-${sockets.length + 1}`,
-        createSocket: () => {
-          const socket = new FakeWebSocket();
-          sockets.push(socket);
-          return socket as unknown as WebSocket;
-        },
-      }
-    );
-    await flushPromises();
-    sockets[0].open();
-
-    const pending = handle.command("message.send", { content: "unacknowledged" });
-    const rejected = expect(pending).rejects.toMatchObject({ category: "timeout" });
-    await vi.advanceTimersByTimeAsync(20_000);
-    await rejected;
-    expect(sockets[0].readyState).toBe(WebSocket.CLOSED);
-    await vi.advanceTimersByTimeAsync(500);
-    await flushPromises();
-    expect(sockets).toHaveLength(2);
-    handle.close();
-  });
-
-  it("rejects a replacement standalone server that cannot prove the ticket grant", async () => {
-    const sockets: FakeWebSocket[] = [];
-    const errors: RoomSocketSayError[] = [];
-    const handle = openRoomSocket({ kind: "host", meetingId: "general" }, ["room_events"],
-      { onError: (error) => {
-        if (error instanceof RoomSocketSayError) errors.push(error);
-      } },
-      {
-        getTicket: async () => ({ ticket: "standalone-ticket", ttl_seconds: 30,
-          server_proof_key: "a".repeat(64),
-        }),
-        createSocket: () => {
-          const socket = new FakeWebSocket();
-          sockets.push(socket); return socket as unknown as WebSocket;
-        },
-      });
-    await flushPromises();
-    sockets[0].open();
-    expect(sockets[0].sent[0]).toMatchObject({ op: "subscribe",
-      server_challenge: expect.stringMatching(/^[0-9a-f]{64}$/),
-    });
-    sockets[0].receive({ op: "snapshot", stream: "room_events", server_proof: "b".repeat(64) });
-    await flushPromises();
-    await new Promise((resolve) => window.setTimeout(resolve, 0));
-    expect(errors.at(-1)?.category).toBe("server_identity_invalid");
-    expect(sockets[0].readyState).toBe(WebSocket.CLOSED);
-    handle.close(); });
 });

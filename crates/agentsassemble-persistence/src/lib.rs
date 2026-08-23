@@ -1,3 +1,4 @@
+mod agent_launch_events;
 mod agent_lifecycle;
 mod agent_lifecycle_authority;
 mod agent_lifecycle_events;
@@ -26,5 +27,7 @@ pub use agent_lifecycle::{
 };
 pub use agent_reconciliation::{RuntimeReconciliationCandidate, RuntimeReconciliationObservation};
 pub use private_fs::secure_private_directory;
-pub use room_turns::{AgentTurnAssignment, AgentTurnCommit, RoomCommandMutation};
+pub use room_turns::{
+    AgentTurnAssignment, AgentTurnCommit, ProviderTurnAuthority, RoomCommandMutation,
+};
 pub use sqlite::{CommandOutcome, PersistenceError, RoomSnapshotData, SqliteStore};

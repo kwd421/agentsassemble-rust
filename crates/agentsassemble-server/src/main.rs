@@ -42,7 +42,7 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    if run_internal_provider_mode() {
+    if run_internal_provider_mode().await {
         return Ok(());
     }
     tracing_subscriber::fmt()
@@ -141,7 +141,15 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn run_internal_provider_mode() -> bool {
+async fn run_internal_provider_mode() -> bool {
+    #[cfg(unix)]
+    if let Some(code) = agentsassemble_provider::run_antigravity_hook_if_requested() {
+        std::process::exit(code);
+    }
+    #[cfg(unix)]
+    if let Some(code) = agentsassemble_provider::run_room_helper_if_requested().await {
+        std::process::exit(code);
+    }
     #[cfg(unix)]
     if let Some(code) = agentsassemble_provider::run_process_helper_if_requested() {
         std::process::exit(code);

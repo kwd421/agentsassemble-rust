@@ -178,6 +178,7 @@ async fn post_ready_failure_is_safe_only_after_exact_guardian_receipt() {
             "--nocapture".to_owned(),
         ],
         &[],
+        directory.path(),
     )
     .await;
     let failure = match result {

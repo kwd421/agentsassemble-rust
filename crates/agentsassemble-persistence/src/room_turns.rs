@@ -33,6 +33,13 @@ pub struct AgentTurnCommit {
     pub next_assignment: Option<AgentTurnAssignment>,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct ProviderTurnAuthority<'a> {
+    pub turn_id: &'a str,
+    pub provider_turn_id: &'a str,
+    pub provider_session_id: Option<&'a str>,
+}
+
 struct PreparedAssignment {
     assignment: AgentTurnAssignment,
     events: Vec<RoomEvent>,
@@ -167,11 +174,15 @@ impl SqliteStore {
         &self,
         room_id: &str,
         session_id: &str,
-        turn_id: &str,
-        provider_turn_id: &str,
+        authority: ProviderTurnAuthority<'_>,
         content: &str,
         target_agent_id: &str,
     ) -> Result<AgentTurnCommit, PersistenceError> {
+        let ProviderTurnAuthority {
+            turn_id,
+            provider_turn_id,
+            provider_session_id,
+        } = authority;
         validate_identifier(provider_turn_id, "provider_turn_invalid")?;
         let content = clean_message(content, 12_000);
         if !has_visible_text(&content) {
@@ -186,6 +197,7 @@ impl SqliteStore {
         require_active_turn(&session, turn_id)?;
         validate_input_cursor(&mut transaction, &session).await?;
         validate_publication_target(&mut transaction, &session, target_agent_id).await?;
+        apply_provider_session_transition(&mut session, provider_session_id)?;
         let source_event_id = session.active_source_event_id.clone();
         let input_event_id = session.input_up_to_event_id.clone();
         let input_seq = session.input_up_to_seq;
@@ -234,10 +246,14 @@ impl SqliteStore {
         &self,
         room_id: &str,
         session_id: &str,
-        turn_id: &str,
-        provider_turn_id: &str,
+        authority: ProviderTurnAuthority<'_>,
         reason_code: &str,
     ) -> Result<AgentTurnCommit, PersistenceError> {
+        let ProviderTurnAuthority {
+            turn_id,
+            provider_turn_id,
+            provider_session_id,
+        } = authority;
         validate_identifier(provider_turn_id, "provider_turn_invalid")?;
         if !matches!(
             reason_code,
@@ -253,6 +269,7 @@ impl SqliteStore {
         let mut session = load_session(&mut transaction, room_id, session_id).await?;
         require_active_turn(&session, turn_id)?;
         validate_input_cursor(&mut transaction, &session).await?;
+        apply_provider_session_transition(&mut session, provider_session_id)?;
         let input_event_id = session.input_up_to_event_id.clone();
         let input_seq = session.input_up_to_seq;
         let finished = turn_finished_event(
@@ -360,6 +377,34 @@ impl SqliteStore {
             next_assignment,
         })
     }
+}
+
+fn apply_provider_session_transition(
+    session: &mut DurableAgentSession,
+    provider_session_id: Option<&str>,
+) -> Result<(), PersistenceError> {
+    let Some(next) = provider_session_id else {
+        return Ok(());
+    };
+    if next.is_empty()
+        || next.len() > 200
+        || next.trim() != next
+        || next.chars().any(char::is_control)
+        || next.starts_with("pending-antigravity-")
+        || (next != session.provider_session_id
+            && (session.public.provider_kind != "antigravity_live_session"
+                || !session
+                    .provider_session_id
+                    .starts_with("pending-antigravity-")))
+    {
+        return Err(rejected(
+            "provider_session_invalid",
+            "The provider session transition is invalid.",
+        ));
+    }
+    next.clone_into(&mut session.provider_session_id);
+    session.public.provider_session_active = true;
+    Ok(())
 }
 
 fn complete_session_state(session: &mut DurableAgentSession, input_event_id: &str, input_seq: i64) {

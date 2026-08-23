@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 use agentsassemble_domain::{AuthenticatedPrincipal, RoomEvent};
 use agentsassemble_persistence::{
     AgentRuntimeStarted, AgentStartPlan, AgentStopPlan, AgentTurnAssignment, AgentTurnCommit,
-    CommandOutcome, PersistenceError, RoomCommandMutation, SqliteStore,
+    CommandOutcome, PersistenceError, ProviderTurnAuthority, RoomCommandMutation, SqliteStore,
 };
 use agentsassemble_provider::{
     ProviderAdapter, ProviderAdapterError, ProviderCatalogService, ProviderRoomObservation,
@@ -296,8 +296,11 @@ async fn commit_provider_result(
                     .complete_agent_turn(
                         room_id,
                         session_id,
-                        turn_id,
-                        &result.provider_turn_id,
+                        ProviderTurnAuthority {
+                            turn_id,
+                            provider_turn_id: &result.provider_turn_id,
+                            provider_session_id: result.provider_session_id.as_deref(),
+                        },
                         &content,
                         &target_agent_id,
                     )
@@ -308,8 +311,11 @@ async fn commit_provider_result(
                     .decline_agent_turn(
                         room_id,
                         session_id,
-                        turn_id,
-                        &result.provider_turn_id,
+                        ProviderTurnAuthority {
+                            turn_id,
+                            provider_turn_id: &result.provider_turn_id,
+                            provider_session_id: result.provider_session_id.as_deref(),
+                        },
                         &reason_code,
                     )
                     .await
@@ -389,7 +395,9 @@ async fn execute_command(
 ) -> CommandExecution {
     let result = match command.action.as_str() {
         "agent.create" => execute_agent_create(store, provider_catalog, command).await,
-        "agent.start" => execute_agent_start(store, provider_adapter, command).await,
+        "agent.start" | "agent.resume" => {
+            execute_agent_start(store, provider_adapter, command).await
+        }
         "agent.stop" => execute_agent_stop(store, provider_adapter, command).await,
         _ => store
             .execute_message_with_turn(
@@ -498,10 +506,16 @@ async fn execute_agent_start(
     provider_adapter: &ProviderAdapter,
     command: &RoomCommand,
 ) -> Result<CommandExecution, PersistenceError> {
-    let effect = match store
-        .prepare_agent_start(&command.principal, &command.request_id, &command.payload)
-        .await?
-    {
+    let plan = if command.action == "agent.resume" {
+        store
+            .prepare_agent_resume(&command.principal, &command.request_id, &command.payload)
+            .await?
+    } else {
+        store
+            .prepare_agent_start(&command.principal, &command.request_id, &command.payload)
+            .await?
+    };
+    let effect = match plan {
         AgentStartPlan::Outcome(outcome) => {
             return Ok(progressed_execution(store, &command.principal.room_id, *outcome).await);
         }
@@ -509,15 +523,28 @@ async fn execute_agent_start(
     };
     match provider_adapter.start(&effect.session).await {
         Ok(started) => {
-            let outcome = store
-                .complete_agent_start(
-                    &command.principal,
-                    &command.request_id,
-                    &command.payload,
-                    &effect.operation_id,
-                    &persisted_start(started),
-                )
-                .await?;
+            let persisted = persisted_start(started);
+            let outcome = if command.action == "agent.resume" {
+                store
+                    .complete_agent_resume(
+                        &command.principal,
+                        &command.request_id,
+                        &command.payload,
+                        &effect.operation_id,
+                        &persisted,
+                    )
+                    .await?
+            } else {
+                store
+                    .complete_agent_start(
+                        &command.principal,
+                        &command.request_id,
+                        &command.payload,
+                        &effect.operation_id,
+                        &persisted,
+                    )
+                    .await?
+            };
             Ok(progressed_execution(store, &command.principal.room_id, outcome).await)
         }
         Err(error) => {
@@ -529,6 +556,17 @@ async fn execute_agent_start(
                         &effect.operation_id,
                         &error.runtime_handle_id,
                         &error.runtime_owner_id,
+                        error.code,
+                        error.message,
+                    )
+                    .await?
+            } else if command.action == "agent.resume" {
+                store
+                    .fail_agent_resume(
+                        &command.principal,
+                        &command.request_id,
+                        &command.payload,
+                        &effect.operation_id,
                         error.code,
                         error.message,
                     )

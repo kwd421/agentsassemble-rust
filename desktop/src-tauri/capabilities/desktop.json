@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "desktop",
-  "description": "Allow the bundled room UI to request one-use tickets from its owned Rust runtime.",
+  "description": "Allow the bundled room UI to request one-use runtime tickets and choose a local workspace.",
   "windows": ["main"],
   "local": true,
-  "permissions": ["allow-runtime-ticket"]
+  "permissions": ["allow-runtime-ticket", "allow-choose-local-workspace"]
 }

@@ -11,6 +11,13 @@ use agentsassemble_domain::{stable_content_identity, stable_identity_hash};
 use same_file::Handle;
 use tokio::sync::{Semaphore, oneshot};
 
+#[path = "codex_executable.rs"]
+mod codex_executable;
+
+pub(crate) use codex_executable::{
+    bind_codex_executable, codex_executable_identity, resolve_codex_executable,
+};
+
 const FILESYSTEM_TIMEOUT: Duration = Duration::from_secs(10);
 const FILESYSTEM_WORKERS: usize = 4;
 static WORKERS: OnceLock<Arc<Semaphore>> = OnceLock::new();
@@ -25,14 +32,70 @@ pub(crate) enum FilesystemFailure {
 pub(crate) struct BoundExecutable {
     file: File,
     launch_path: String,
-    #[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
-    _staging: tempfile::TempDir,
+    companion_files: Vec<File>,
+    allows_child_processes: bool,
+    #[cfg(unix)]
+    _staging: Option<tempfile::TempDir>,
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    inherited_executable_fd: bool,
 }
 
 impl BoundExecutable {
     pub(crate) fn launch_path(&self) -> &str {
         let _ = &self.file;
+        let _ = &self.companion_files;
         &self.launch_path
+    }
+
+    #[cfg(unix)]
+    pub(crate) fn requires_inherited_executable_fd(&self) -> bool {
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        return self.inherited_executable_fd;
+        #[cfg(not(any(target_os = "linux", target_os = "android")))]
+        {
+            let _ = &self.file;
+            false
+        }
+    }
+
+    #[cfg(unix)]
+    pub(crate) const fn allows_child_processes(&self) -> bool {
+        self.allows_child_processes
+    }
+
+    #[cfg(unix)]
+    pub(crate) fn stage_private_companion(&self, name: &str) -> io::Result<PrivateExecutable> {
+        use std::os::unix::fs::PermissionsExt;
+
+        if name.is_empty() || name.contains(['/', '\0']) {
+            return Err(io::Error::other("companion executable name is invalid"));
+        }
+        let staging = tempfile::Builder::new()
+            .prefix("agentsassemble-companion-")
+            .permissions(std::fs::Permissions::from_mode(0o700))
+            .tempdir()?;
+        let staged_path = staging.path().join(name);
+        let mut source = self.file.try_clone()?;
+        source.rewind()?;
+        let source_handle = Handle::from_file(source.try_clone()?)?;
+        let expected_identity = stable_content_identity(&source_handle, &mut source)?;
+        source.rewind()?;
+        let mut staged = OpenOptions::new()
+            .create_new(true)
+            .read(true)
+            .write(true)
+            .open(&staged_path)?;
+        io::copy(&mut source, &mut staged)?;
+        staged.sync_all()?;
+        verify_staged_identity(&source_handle, &expected_identity, &mut staged)?;
+        std::fs::set_permissions(&staged_path, std::fs::Permissions::from_mode(0o500))?;
+        drop(staged);
+        let file = OpenOptions::new().read(true).open(&staged_path)?;
+        Ok(PrivateExecutable {
+            file,
+            path: staged_path,
+            staging,
+        })
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -110,6 +173,25 @@ impl BoundExecutable {
     }
 }
 
+#[cfg(unix)]
+pub(crate) struct PrivateExecutable {
+    file: File,
+    path: PathBuf,
+    staging: tempfile::TempDir,
+}
+
+#[cfg(unix)]
+impl PrivateExecutable {
+    pub(crate) fn path(&self) -> &Path {
+        let _ = &self.file;
+        &self.path
+    }
+
+    pub(crate) fn directory(&self) -> &Path {
+        self.staging.path()
+    }
+}
+
 pub(crate) async fn resolve_executable(
     program: &str,
 ) -> Result<Option<(String, String)>, FilesystemFailure> {
@@ -139,11 +221,31 @@ pub(crate) async fn executable_identity(path: String) -> Result<String, Filesyst
     run_bounded(move || executable_identity_sync(Path::new(&path))).await
 }
 
+pub(crate) async fn runtime_executable_identity(
+    provider_kind: &str,
+    path: String,
+) -> Result<String, FilesystemFailure> {
+    if provider_kind == "codex_live_session" {
+        codex_executable_identity(path).await
+    } else {
+        executable_identity(path).await
+    }
+}
+
 pub(crate) async fn bind_executable(
     path: String,
     expected_identity: String,
 ) -> Result<BoundExecutable, FilesystemFailure> {
     run_bounded(move || bind_executable_sync(Path::new(&path), &expected_identity)).await
+}
+
+pub(crate) async fn bind_executable_with_children(
+    path: String,
+    expected_identity: String,
+) -> Result<BoundExecutable, FilesystemFailure> {
+    let mut executable = bind_executable(path, expected_identity).await?;
+    executable.allows_child_processes = true;
+    Ok(executable)
 }
 
 async fn run_bounded<T, F>(operation: F) -> Result<T, FilesystemFailure>
@@ -246,7 +348,12 @@ fn bind_executable_sync(path: &Path, expected_identity: &str) -> io::Result<Boun
         .ok_or_else(|| io::Error::other("executable path is not UTF-8"))?
         .to_owned();
     #[cfg(not(unix))]
-    Ok(BoundExecutable { file, launch_path })
+    Ok(BoundExecutable {
+        file,
+        launch_path,
+        companion_files: Vec::new(),
+        allows_child_processes: false,
+    })
 }
 
 #[cfg(unix)]
@@ -277,8 +384,14 @@ fn bind_verified_unix_executable(
     Ok(BoundExecutable {
         file,
         launch_path,
+        companion_files: Vec::new(),
+        allows_child_processes: false,
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        _staging: None,
         #[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
-        _staging: staging,
+        _staging: Some(staging),
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        inherited_executable_fd: true,
     })
 }
 
@@ -312,7 +425,7 @@ fn stage_sealed_executable(
     Ok(staged)
 }
 
-#[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
+#[cfg(unix)]
 fn stage_private_executable(
     source: &mut File,
     source_handle: &Handle,

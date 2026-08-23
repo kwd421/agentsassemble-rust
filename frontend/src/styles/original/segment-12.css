@@ -1,0 +1,30 @@
+@media (min-width: 761px) and (max-width: 1279px) {
+  .dc-members {
+    position: fixed;
+    z-index: 100;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    display: flex !important;
+    width: min(360px, calc(100vw - 72px));
+    flex-direction: column;
+    box-shadow: -18px 0 30px rgba(0, 0, 0, 0.36);
+  }
+
+  .dc-compact-panel-close {
+    display: grid;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 auto;
+    place-items: center;
+    border-radius: 4px;
+    color: var(--color-text-muted);
+  }
+
+  .dc-compact-panel-close:hover,
+  .dc-compact-panel-close:focus-visible {
+    background: var(--color-sidebar-hover);
+    color: var(--color-text-primary);
+    outline: none;
+  }
+}

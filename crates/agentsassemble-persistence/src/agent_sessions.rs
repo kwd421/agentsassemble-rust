@@ -374,7 +374,7 @@ mod tests {
         AgentSessionDraft {
             agent_id: "codex-00000000-0000-5000-8000-000000000001".to_owned(),
             display_name: "Terra".to_owned(),
-            provider_kind: "codex_live_session".to_owned(),
+            provider_kind: "opencode_server".to_owned(),
             runtime_kind: "live_cli".to_owned(),
             executable,
             executable_identity,

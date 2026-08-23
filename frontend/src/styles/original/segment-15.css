@@ -1,0 +1,14 @@
+@media (prefers-reduced-motion: reduce) {
+  .live-pulse {
+    animation: none;
+  }
+  .dc-typing-dots span {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
+/* Mobile needs a direct settings entry because the desktop room rail is hidden. */
+.dc-mobile-room-settings {
+  display: none;
+}

@@ -1,0 +1,399 @@
+@media (max-width: 640px) {
+  .dc-agent-runtime-settings {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.dc-member-session-button {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 6px;
+  background: var(--color-accent);
+  padding: 0 13px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.dc-member-session-button:hover,
+.dc-member-session-button:focus-visible {
+  background: var(--color-accent-hover);
+  outline: none;
+}
+
+.dc-member-session-button[data-active="false"] {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(148, 155, 164, 0.16);
+  color: var(--color-text-secondary);
+}
+
+.dc-member-session-button[data-active="false"]:hover,
+.dc-member-session-button[data-active="false"]:focus-visible {
+  background: rgba(148, 155, 164, 0.24);
+  color: var(--color-text-primary);
+}
+
+.dc-member-session-button[data-variant="danger"] {
+  background: var(--color-danger);
+}
+
+.dc-member-session-button[data-variant="danger"]:hover,
+.dc-member-session-button[data-variant="danger"]:focus-visible {
+  background: #c73639;
+}
+
+.dc-member-session-button:disabled {
+  cursor: not-allowed;
+  background: rgba(148, 155, 164, 0.18);
+  color: var(--color-text-muted);
+  opacity: 0.72;
+}
+
+.dc-member-session-status {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.dc-member-execution-mode {
+  display: grid;
+  gap: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.14);
+  padding: 10px;
+}
+
+.dc-member-execution-mode-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.dc-member-execution-options {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.dc-member-execution-option {
+  min-height: 38px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  background: rgba(148, 155, 164, 0.12);
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.dc-member-execution-option[data-active="true"] {
+  border-color: rgba(88, 101, 242, 0.8);
+  background: rgba(88, 101, 242, 0.22);
+  color: var(--color-text-primary);
+}
+
+.dc-member-execution-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+/* Message row hover, like a chat client. */
+.dc-message {
+  position: relative;
+  transition: background-color 80ms ease;
+}
+
+.dc-message:hover {
+  background: var(--color-chat-hover);
+}
+
+.dc-message:focus-visible {
+  background: var(--color-chat-hover);
+  outline: none;
+}
+
+.dc-message-actions {
+  position: absolute;
+  z-index: 3;
+  top: -8px;
+  right: 18px;
+  display: inline-flex;
+  overflow: visible;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  background: #1e1f22;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 80ms ease, transform 80ms ease, visibility 80ms ease;
+  transform: translateY(2px);
+  visibility: hidden;
+}
+
+.dc-message:hover .dc-message-actions,
+.dc-message:focus-within .dc-message-actions,
+.dc-message:focus-visible .dc-message-actions {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+  visibility: visible;
+}
+
+.dc-message-action-button {
+  display: grid;
+  width: 32px;
+  height: 28px;
+  place-items: center;
+  color: var(--color-text-muted);
+}
+
+.dc-message-action-button:hover,
+.dc-message-action-button:focus-visible {
+  background: var(--color-sidebar-hover);
+  color: var(--color-text-primary);
+  outline: none;
+}
+
+.dc-message-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #4e5058;
+  overflow: hidden;
+}
+
+.dc-message-avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.dc-message-avatar.system {
+  background: #3f4147;
+  color: #c7cad1;
+}
+
+.dc-message-avatar.agent {
+  background: var(--color-accent-soft);
+}
+
+.dc-mafia-channel-tabs {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.2);
+  padding: 6px 12px;
+}
+
+.dc-mafia-channel-tab {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  border-radius: 4px;
+  padding: 0 10px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.dc-mafia-channel-tab:hover:not(:disabled),
+.dc-mafia-channel-tab:focus-visible,
+.dc-mafia-channel-tab[data-active="true"] {
+  background: var(--color-sidebar-active);
+  color: var(--color-text-primary);
+  outline: none;
+}
+
+.dc-mafia-channel-tab:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.dc-mafia-composer {
+  display: grid;
+  grid-template-columns: 148px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 8px;
+  border-radius: 8px;
+  background: #383a40;
+  padding: 6px;
+}
+
+.dc-mafia-speaker,
+.dc-mafia-input,
+.dc-mafia-select {
+  min-width: 0;
+  border: 0;
+  border-radius: 5px;
+  background: #1e1f22;
+  color: var(--color-text-primary);
+  outline: none;
+}
+
+.dc-mafia-speaker,
+.dc-mafia-select {
+  height: 34px;
+  padding: 0 9px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.dc-mafia-input {
+  height: 38px;
+  padding: 0 11px;
+  font-size: 14px;
+}
+
+.dc-mafia-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.dc-mafia-speaker:focus,
+.dc-mafia-input:focus,
+.dc-mafia-select:focus {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 56%, transparent);
+}
+
+.dc-mafia-send {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--color-accent);
+}
+
+.dc-mafia-send:hover:not(:disabled),
+.dc-mafia-send:focus-visible {
+  background: rgba(88, 101, 242, 0.12);
+  outline: none;
+}
+
+.dc-mafia-send:disabled {
+  opacity: 0.4;
+}
+
+.dc-mafia-panel {
+  border-left: 1px solid rgba(0, 0, 0, 0.22);
+  background: var(--color-sidebar);
+  padding: 14px 8px;
+}
+
+.dc-mafia-panel section + section {
+  margin-top: 18px;
+}
+
+.dc-mafia-panel h2 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px 6px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.dc-mafia-panel h2 span {
+  color: var(--color-text-secondary);
+  text-transform: none;
+}
+
+.dc-mafia-player-list,
+.dc-mafia-control-stack {
+  display: grid;
+  gap: 4px;
+}
+
+.dc-mafia-player {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  border-radius: 4px;
+  padding: 6px 8px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.dc-mafia-player:hover {
+  background: var(--color-sidebar-hover);
+  color: var(--color-text-primary);
+}
+
+.dc-mafia-player-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.dc-mafia-player-dot.alive {
+  background: var(--color-online);
+}
+
+.dc-mafia-player-dot.dead {
+  background: var(--color-danger);
+}
+
+.dc-mafia-player span.alive,
+.dc-mafia-player span.dead {
+  font-size: 10px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.dc-mafia-player span.alive {
+  color: var(--color-online);
+}
+
+.dc-mafia-player span.dead {
+  color: var(--color-danger);
+}
+
+.dc-mafia-control-button {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: 5px;
+  background: var(--color-sidebar-hover);
+  padding: 0 10px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.dc-mafia-control-button:hover:not(:disabled),
+.dc-mafia-control-button:focus-visible {
+  background: var(--color-sidebar-active);
+  color: var(--color-text-primary);
+  outline: none;
+}
+
+.dc-mafia-control-button.primary {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.dc-mafia-control-button.primary:hover:not(:disabled),
+.dc-mafia-control-button.primary:focus-visible {
+  background: var(--color-accent-hover);
+}
+
+.dc-mafia-control-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.46;
+}

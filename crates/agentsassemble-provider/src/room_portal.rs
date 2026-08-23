@@ -7,6 +7,8 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::room_portal_mcp::PortalServer;
+#[cfg(unix)]
+use crate::{guardian::GuardianLaunch, room_portal_terminal::RoomPortalTerminalHelper};
 
 pub(super) const ROOM_PORTAL_TOKEN_ENV_PREFIX: &str = "AGENTSASSEMBLE_INTERNAL_ROOM_PORTAL_TOKEN_";
 
@@ -125,6 +127,8 @@ impl RoomPortal {
             "shell_environment_policy.ignore_default_excludes",
             "false",
         );
+        push_codex_config(arguments, "features.plugins", "false");
+        push_codex_config(arguments, "features.apps", "false");
         push_codex_config(arguments, "features.shell_snapshot", "false");
         push_codex_config(arguments, &format!("{server}.startup_timeout_sec"), "10");
         push_codex_config(arguments, &format!("{server}.tool_timeout_sec"), "30");
@@ -136,6 +140,19 @@ impl RoomPortal {
             self.bearer_environment_name.clone(),
             self.server.bearer_token().to_owned(),
         )]
+    }
+
+    #[cfg(unix)]
+    pub(crate) fn create_terminal_helper(
+        &self,
+        guardian: &GuardianLaunch,
+    ) -> Result<RoomPortalTerminalHelper, RoomPortalError> {
+        self.require_server()?;
+        RoomPortalTerminalHelper::create(
+            guardian,
+            self.server.endpoint(),
+            self.server.bearer_token(),
+        )
     }
 
     #[cfg(not(unix))]
@@ -245,12 +262,10 @@ impl RoomPortal {
         Ok(())
     }
 
-    #[cfg(test)]
     pub(crate) fn endpoint(&self) -> &str {
         self.server.endpoint()
     }
 
-    #[cfg(test)]
     pub(crate) fn bearer_token(&self) -> &str {
         self.server.bearer_token()
     }

@@ -6,9 +6,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::filesystem::{
-    FilesystemFailure, canonical_workspace, executable_identity as current_executable_identity,
-};
+use crate::filesystem::{FilesystemFailure, canonical_workspace, runtime_executable_identity};
 use crate::profile::runtime_profile_key;
 use crate::selection_input::SelectionInput;
 
@@ -95,9 +93,10 @@ impl ProviderSelection {
                 "Provider executable authority is not absolute.",
             ));
         }
-        let executable_identity = current_executable_identity(provider.executable.clone())
-            .await
-            .map_err(executable_validation_error)?;
+        let executable_identity =
+            runtime_executable_identity(&provider.provider_kind, provider.executable.clone())
+                .await
+                .map_err(executable_validation_error)?;
         if executable_identity != provider.executable_identity {
             return Err(ProviderSelectionError::new(
                 "catalog_changed",
@@ -232,7 +231,7 @@ fn selected_value(
     requested: Option<String>,
 ) -> Result<String, ProviderSelectionError> {
     let Some(control) = provider.controls.iter().find(|control| control.key == key) else {
-        return if requested.is_none() {
+        return if requested.as_deref().is_none_or(str::is_empty) {
             Ok(String::new())
         } else {
             Err(ProviderSelectionError::new(
@@ -264,6 +263,33 @@ fn validate_model_relation(
     if selected == "default" {
         return Ok(());
     }
+
+    if selected.is_empty() {
+        let advertises_nonempty_values = provider
+            .controls
+            .iter()
+            .find(|control| control.key == "model")
+            .and_then(|control| control.options.iter().find(|option| option.value == model))
+            .and_then(|option| option.metadata.get(relation))
+            .and_then(Value::as_array)
+            .is_some_and(|allowed| {
+                allowed
+                    .iter()
+                    .any(|value| value.as_str().is_some_and(|value| !value.is_empty()))
+            });
+        return if advertises_nonempty_values {
+            Err(ProviderSelectionError::new(
+                "unsupported_control",
+                format!(
+                    "Provider {} model {model} does not support an empty {relation} value.",
+                    provider.id
+                ),
+            ))
+        } else {
+            Ok(())
+        };
+    }
+
     let model_option = provider
         .controls
         .iter()
@@ -347,7 +373,7 @@ mod tests {
     use same_file::Handle;
     use serde_json::{Value, json};
 
-    use super::ProviderSelection;
+    use super::{ProviderSelection, selected_value};
 
     fn option(value: &str, relations: Value) -> ProviderControlOption {
         let mut metadata = BTreeMap::new();
@@ -445,6 +471,20 @@ mod tests {
                 ],
             }],
         }
+    }
+
+    #[test]
+    fn empty_optional_control_matches_an_omitted_original_frontend_field() {
+        let provider = &catalog().providers[0];
+        assert_eq!(
+            selected_value(provider, "variant", Some(String::new()))
+                .unwrap_or_else(|error| panic!("normalize empty optional control: {error}")),
+            ""
+        );
+        let error = selected_value(provider, "variant", Some("unsupported".to_owned()))
+            .err()
+            .unwrap_or_else(|| panic!("nonempty unsupported controls must still fail"));
+        assert_eq!(error.code, "unsupported_control");
     }
 
     #[tokio::test]

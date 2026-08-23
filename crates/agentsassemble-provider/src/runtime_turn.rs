@@ -32,6 +32,7 @@ pub struct ProviderRoomObservation {
 pub struct ProviderTurnCompleted {
     pub turn_id: String,
     pub provider_turn_id: String,
+    pub provider_session_id: Option<String>,
     pub outcome: ProviderTurnOutcome,
 }
 
@@ -107,9 +108,14 @@ impl ProviderAdapter {
             result = driver.send_turn(session, request) => result,
         };
         match result {
-            Ok(completed) => {
-                finish_completed_turn(driver.as_mut(), request, completed, &handle_id, &owner_id)
-            }
+            Ok(completed) => finish_completed_turn(
+                driver.as_mut(),
+                session,
+                request,
+                completed,
+                &handle_id,
+                &owner_id,
+            ),
             Err(error) => {
                 driver.abort_room_observation();
                 let requires_restart = driver.requires_restart();
@@ -140,11 +146,29 @@ impl ProviderAdapter {
 
 fn finish_completed_turn(
     driver: &mut dyn ProviderDriver,
+    session: &DurableAgentSession,
     request: &ProviderTurnRequest,
     mut completed: ProviderTurnCompleted,
     handle_id: &str,
     owner_id: &str,
 ) -> Result<ProviderTurnCompleted, ProviderAdapterError> {
+    if completed.turn_id != request.turn_id
+        || completed.provider_turn_id.is_empty()
+        || completed.provider_turn_id.len() > MAX_TURN_ID_BYTES
+        || completed.provider_turn_id.trim() != completed.provider_turn_id
+        || completed.provider_turn_id.chars().any(char::is_control)
+        || !valid_provider_session_transition(session, completed.provider_session_id.as_deref())
+    {
+        driver.abort_room_observation();
+        return Err(ProviderAdapterError::uncertain(
+            DriverError::new(
+                "provider_protocol_invalid",
+                "The provider returned invalid turn or session authority.",
+            ),
+            handle_id,
+            owner_id,
+        ));
+    }
     if request.room_observation.is_some() {
         completed.outcome = match driver.finish_room_observation(request) {
             Ok(outcome) => outcome,
@@ -155,6 +179,28 @@ fn finish_completed_turn(
         };
     }
     Ok(completed)
+}
+
+fn valid_provider_session_transition(
+    session: &DurableAgentSession,
+    provider_session_id: Option<&str>,
+) -> bool {
+    let Some(next) = provider_session_id else {
+        return true;
+    };
+    if next.is_empty()
+        || next.len() > 200
+        || next.trim() != next
+        || next.chars().any(char::is_control)
+        || next.starts_with("pending-antigravity-")
+    {
+        return false;
+    }
+    next == session.provider_session_id
+        || (session.public.provider_kind == "antigravity_live_session"
+            && session
+                .provider_session_id
+                .starts_with("pending-antigravity-"))
 }
 
 fn validate_request(

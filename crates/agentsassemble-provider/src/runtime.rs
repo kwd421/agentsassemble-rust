@@ -9,10 +9,13 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 #[cfg(unix)]
+use crate::antigravity::AntigravityDriver;
+#[cfg(unix)]
 use crate::guardian::GuardianLaunch;
 use crate::{
-    codex::CodexDriver, launch_error::DriverLaunchError, room_portal::ProviderTurnOutcome,
-    runtime_authority::revalidate_runtime_authority, runtime_lease::HeldRuntimeLease,
+    codex::CodexDriver, launch_error::DriverLaunchError, opencode::OpenCodeDriver,
+    room_portal::ProviderTurnOutcome, runtime_authority::revalidate_runtime_authority,
+    runtime_lease::HeldRuntimeLease,
 };
 
 const DRIVER_STOP_TIMEOUT: Duration = Duration::from_secs(5);
@@ -146,16 +149,49 @@ impl DriverFactory for ProductionDriverFactory {
                     let driver = CodexDriver::spawn(session).await?;
                     Ok(Box::new(driver) as Box<dyn ProviderDriver>)
                 }
-                ("antigravity_live_session", "pty" | "conpty") => Err(DriverError::new(
+                ("antigravity_live_session", "pty") => {
+                    #[cfg(unix)]
+                    let driver = AntigravityDriver::spawn(
+                        session,
+                        runtime_lease,
+                        self.guardian.as_ref().ok_or_else(|| {
+                            DriverError::new(
+                                "provider_custody_unavailable",
+                                "The provider process custody helper is unavailable.",
+                            )
+                        })?,
+                    )
+                    .await?;
+                    #[cfg(not(unix))]
+                    return Err(DriverError::new(
+                        "provider_runtime_unsupported",
+                        "PTY provider sessions are unsupported on this platform.",
+                    )
+                    .into());
+                    Ok(Box::new(driver) as Box<dyn ProviderDriver>)
+                }
+                ("antigravity_live_session", "conpty") => Err(DriverError::new(
                     "provider_runtime_unavailable",
-                    "The Antigravity runtime driver is not implemented yet.",
+                    "The Antigravity ConPTY driver is not implemented yet.",
                 )
                 .into()),
-                ("opencode_server", "http") => Err(DriverError::new(
-                    "provider_runtime_unavailable",
-                    "The OpenCode runtime driver is not implemented yet.",
-                )
-                .into()),
+                ("opencode_server", "http") => {
+                    #[cfg(unix)]
+                    let driver = OpenCodeDriver::spawn(
+                        session,
+                        runtime_lease,
+                        self.guardian.as_ref().ok_or_else(|| {
+                            DriverError::new(
+                                "provider_custody_unavailable",
+                                "The provider process custody helper is unavailable.",
+                            )
+                        })?,
+                    )
+                    .await?;
+                    #[cfg(not(unix))]
+                    let driver = OpenCodeDriver::spawn(session).await?;
+                    Ok(Box::new(driver) as Box<dyn ProviderDriver>)
+                }
                 _ => Err(DriverError::new(
                     "invalid_runtime_profile",
                     "The stored provider runtime profile is unsupported.",

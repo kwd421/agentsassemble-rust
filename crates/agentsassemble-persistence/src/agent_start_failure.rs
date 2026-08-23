@@ -14,6 +14,7 @@ use crate::{
 };
 
 const START: &str = "agent.start";
+const RESUME: &str = "agent.resume";
 const PUBLIC_LIFECYCLE_ERROR_LIMIT: usize = 512;
 
 impl SqliteStore {
@@ -30,6 +31,56 @@ impl SqliteStore {
         operation_id: &str,
         error_code: &'static str,
         message: &str,
+    ) -> Result<Vec<RoomEvent>, PersistenceError> {
+        self.fail_agent_launch(
+            principal,
+            request_id,
+            payload,
+            operation_id,
+            error_code,
+            message,
+            START,
+        )
+        .await
+    }
+
+    /// Moves a failed resume out of its prepared launch intent.
+    ///
+    /// # Errors
+    ///
+    /// Returns a stale-effect rejection or persistence failure.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn fail_agent_resume(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request_id: &str,
+        payload: &Value,
+        operation_id: &str,
+        error_code: &'static str,
+        message: &str,
+    ) -> Result<Vec<RoomEvent>, PersistenceError> {
+        self.fail_agent_launch(
+            principal,
+            request_id,
+            payload,
+            operation_id,
+            error_code,
+            message,
+            RESUME,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn fail_agent_launch(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request_id: &str,
+        payload: &Value,
+        operation_id: &str,
+        error_code: &'static str,
+        message: &str,
+        command_action: &'static str,
     ) -> Result<Vec<RoomEvent>, PersistenceError> {
         let agent_id = payload_agent_id(payload)?;
         let payload_hash = canonical_payload_hash(payload);
@@ -48,7 +99,7 @@ impl SqliteStore {
             &LifecycleReservation::new(
                 principal,
                 request_id,
-                START,
+                command_action,
                 &payload_hash,
                 &agent_id,
                 operation_id,

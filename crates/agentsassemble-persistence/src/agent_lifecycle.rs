@@ -10,6 +10,7 @@ use sqlx::{Sqlite, Transaction};
 
 use crate::{
     CommandOutcome, PersistenceError, SqliteStore,
+    agent_launch_events::commit_launch_result,
     agent_lifecycle_authority::{
         authorize_control, lifecycle_intent_is_empty, lifecycle_operation_id, payload_agent_id,
         require_intent, require_matching_operation, validate_runtime_started,
@@ -28,6 +29,7 @@ use crate::{
 };
 
 const START: &str = "agent.start";
+const RESUME: &str = "agent.resume";
 const STOP: &str = "agent.stop";
 const PUBLIC_LIFECYCLE_ERROR_LIMIT: usize = 512;
 
@@ -80,10 +82,39 @@ impl SqliteStore {
         request_id: &str,
         payload: &Value,
     ) -> Result<AgentStartPlan, PersistenceError> {
+        self.prepare_agent_launch(principal, request_id, payload, START)
+            .await
+    }
+
+    /// Durably records a resume intent before the provider supervisor is called.
+    ///
+    /// A stopped runtime resumes through the same provider launch effect as start,
+    /// while retaining a distinct command identity for replay and conflict checks.
+    ///
+    /// # Errors
+    ///
+    /// Returns authorization, idempotency, payload, state, or storage failures.
+    pub async fn prepare_agent_resume(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request_id: &str,
+        payload: &Value,
+    ) -> Result<AgentStartPlan, PersistenceError> {
+        self.prepare_agent_launch(principal, request_id, payload, RESUME)
+            .await
+    }
+
+    async fn prepare_agent_launch(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request_id: &str,
+        payload: &Value,
+        command_action: &'static str,
+    ) -> Result<AgentStartPlan, PersistenceError> {
         authorize_control(principal)?;
         let agent_id = payload_agent_id(payload)?;
         let payload_hash = canonical_payload_hash(payload);
-        let operation_id = lifecycle_operation_id(principal, request_id, START);
+        let operation_id = lifecycle_operation_id(principal, request_id, command_action);
         let mut transaction = self.pool.begin().await?;
         active_room_for_principal(&mut transaction, principal).await?;
         if let Some(outcome) = existing_command(
@@ -91,7 +122,7 @@ impl SqliteStore {
             &principal.room_id,
             &principal.principal_id,
             request_id,
-            START,
+            command_action,
             &payload_hash,
         )
         .await?
@@ -102,7 +133,7 @@ impl SqliteStore {
         let reservation = LifecycleReservation::new(
             principal,
             request_id,
-            START,
+            command_action,
             &payload_hash,
             &agent_id,
             &operation_id,
@@ -166,9 +197,46 @@ impl SqliteStore {
         operation_id: &str,
         started: &AgentRuntimeStarted,
     ) -> Result<CommandOutcome, PersistenceError> {
+        self.complete_agent_launch(principal, request_id, payload, operation_id, started, START)
+            .await
+    }
+
+    /// Commits a resumed provider runtime and the correlated resume result.
+    ///
+    /// # Errors
+    ///
+    /// Returns a stale-effect rejection or persistence failure.
+    pub async fn complete_agent_resume(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request_id: &str,
+        payload: &Value,
+        operation_id: &str,
+        started: &AgentRuntimeStarted,
+    ) -> Result<CommandOutcome, PersistenceError> {
+        self.complete_agent_launch(
+            principal,
+            request_id,
+            payload,
+            operation_id,
+            started,
+            RESUME,
+        )
+        .await
+    }
+
+    async fn complete_agent_launch(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request_id: &str,
+        payload: &Value,
+        operation_id: &str,
+        started: &AgentRuntimeStarted,
+        command_action: &'static str,
+    ) -> Result<CommandOutcome, PersistenceError> {
         let agent_id = payload_agent_id(payload)?;
         let payload_hash = canonical_payload_hash(payload);
-        let expected_operation_id = lifecycle_operation_id(principal, request_id, START);
+        let expected_operation_id = lifecycle_operation_id(principal, request_id, command_action);
         if operation_id != expected_operation_id {
             return Err(rejected(
                 "stale_start_confirmation",
@@ -182,7 +250,7 @@ impl SqliteStore {
             &principal.room_id,
             &principal.principal_id,
             request_id,
-            START,
+            command_action,
             &payload_hash,
         )
         .await?
@@ -202,7 +270,7 @@ impl SqliteStore {
         let reservation = LifecycleReservation::new(
             principal,
             request_id,
-            START,
+            command_action,
             &payload_hash,
             &agent_id,
             &expected_operation_id,
@@ -243,7 +311,7 @@ impl SqliteStore {
         participant.status = ParticipantStatus::Joined;
         participant.updated_at = Utc::now();
         save_participant(&mut transaction, &participant).await?;
-        let outcome = commit_start_result(
+        let outcome = commit_launch_result(
             &mut transaction,
             principal,
             request_id,
@@ -251,6 +319,7 @@ impl SqliteStore {
             &session,
             joined,
             started.runtime_reused,
+            command_action,
         )
         .await?;
         transaction.commit().await?;
@@ -550,57 +619,6 @@ impl SqliteStore {
     }
 }
 
-async fn commit_start_result(
-    transaction: &mut Transaction<'_, Sqlite>,
-    principal: &AuthenticatedPrincipal,
-    request_id: &str,
-    payload_hash: String,
-    session: &DurableAgentSession,
-    joined: bool,
-    runtime_reused: bool,
-) -> Result<CommandOutcome, PersistenceError> {
-    let mut events = Vec::with_capacity(3);
-    if joined {
-        events.push(
-            append_session_event(
-                transaction,
-                principal,
-                &session.public,
-                "participant_joined",
-                BTreeMap::new(),
-            )
-            .await?,
-        );
-    }
-    events.push(
-        append_session_event(
-            transaction,
-            principal,
-            &session.public,
-            "session_attached",
-            BTreeMap::new(),
-        )
-        .await?,
-    );
-    events.push(append_state_event(transaction, principal, &session.public).await?);
-    let result = json!({
-        "agent_session": session.public,
-        "runtime_reused": runtime_reused,
-        "events": events,
-        "event": events.last(),
-    });
-    store_result(
-        transaction,
-        principal,
-        request_id,
-        START,
-        payload_hash,
-        result,
-        events,
-    )
-    .await
-}
-
 fn stop_effect(session: &DurableAgentSession) -> Result<AgentStopEffect, PersistenceError> {
     if session.runtime_handle_id.is_empty() || session.runtime_owner_id.is_empty() {
         return Err(rejected(
@@ -762,6 +780,10 @@ mod tests;
 #[cfg(test)]
 #[path = "agent_lifecycle_recovery_tests.rs"]
 mod recovery_tests;
+
+#[cfg(test)]
+#[path = "agent_resume_tests.rs"]
+mod resume_tests;
 
 #[cfg(test)]
 #[path = "agent_turn_recovery_tests.rs"]

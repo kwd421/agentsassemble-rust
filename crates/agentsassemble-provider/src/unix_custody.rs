@@ -1,4 +1,10 @@
-use std::{fs::File, os::fd::OwnedFd, path::PathBuf, process::Stdio, time::Duration};
+use std::{
+    fs::File,
+    os::fd::{AsFd, OwnedFd},
+    path::PathBuf,
+    process::Stdio,
+    time::Duration,
+};
 
 use futures_util::StreamExt;
 use rustix::process::Pid;
@@ -7,7 +13,7 @@ use tokio_util::codec::{FramedRead, LinesCodec};
 
 use crate::{
     filesystem::BoundExecutable,
-    guardian::GuardianLaunch,
+    guardian::{GuardianLaunch, ProviderForkPolicy, ProviderLaunchConfig},
     launch_error::DriverLaunchError,
     runtime::DriverError,
     runtime_lease::{
@@ -44,6 +50,10 @@ pub(crate) struct UnixProviderPipes {
     pub(crate) stderr: tokio::fs::File,
 }
 
+pub(crate) struct UnixProviderPty {
+    pub(crate) terminal: tokio::io::unix::AsyncFd<OwnedFd>,
+}
+
 #[cfg(all(test, target_os = "linux"))]
 async fn wait_for_test_escape(provider: Pid, anchor: Pid, token: &str) {
     if !WAIT_FOR_TEST_ESCAPE.swap(false, std::sync::atomic::Ordering::SeqCst) {
@@ -71,25 +81,134 @@ pub(crate) struct UnixProcessCustody {
 }
 
 impl UnixProcessCustody {
+    #[cfg(all(test, target_os = "linux"))]
     pub(crate) async fn start(
         runtime_lease: &HeldRuntimeLease,
         launch: &GuardianLaunch,
         provider: &BoundExecutable,
         provider_arguments: &[String],
         provider_environment: &[(String, String)],
+        working_directory: &std::path::Path,
+    ) -> Result<(Self, UnixProviderPipes), DriverLaunchError> {
+        Self::start_pipes(
+            runtime_lease,
+            launch,
+            provider,
+            provider_arguments,
+            provider_environment,
+            working_directory,
+            ProviderForkPolicy::Deny,
+        )
+        .await
+    }
+
+    pub(crate) async fn start_with_children(
+        runtime_lease: &HeldRuntimeLease,
+        launch: &GuardianLaunch,
+        provider: &BoundExecutable,
+        provider_arguments: &[String],
+        provider_environment: &[(String, String)],
+        working_directory: &std::path::Path,
+    ) -> Result<(Self, UnixProviderPipes), DriverLaunchError> {
+        Self::start_pipes(
+            runtime_lease,
+            launch,
+            provider,
+            provider_arguments,
+            provider_environment,
+            working_directory,
+            if provider.allows_child_processes() {
+                ProviderForkPolicy::AllowInGroup
+            } else {
+                ProviderForkPolicy::Deny
+            },
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn start_pipes(
+        runtime_lease: &HeldRuntimeLease,
+        launch: &GuardianLaunch,
+        provider: &BoundExecutable,
+        provider_arguments: &[String],
+        provider_environment: &[(String, String)],
+        working_directory: &std::path::Path,
+        fork_policy: ProviderForkPolicy,
     ) -> Result<(Self, UnixProviderPipes), DriverLaunchError> {
         let (provider_stdin, stdin) = provider_pipe()?;
         let (stdout, provider_stdout) = provider_pipe()?;
         let (stderr, provider_stderr) = provider_pipe()?;
-        let mut command = launch
-            .guardian_command(
-                runtime_lease.path(),
-                runtime_lease.token(),
+        Self::start_with_config(
+            runtime_lease,
+            launch,
+            ProviderLaunchConfig {
                 provider,
-                provider_arguments,
-                provider_environment,
-                [provider_stdin, provider_stdout, provider_stderr],
+                arguments: provider_arguments,
+                environment: provider_environment,
+                working_directory,
+                pipes: [provider_stdin, provider_stdout, provider_stderr],
+                fork_policy,
+            },
+        )
+        .await
+        .map(|custody| {
+            (
+                custody,
+                UnixProviderPipes {
+                    stdin: tokio::fs::File::from_std(File::from(stdin)),
+                    stdout: tokio::fs::File::from_std(File::from(stdout)),
+                    stderr: tokio::fs::File::from_std(File::from(stderr)),
+                },
             )
+        })
+    }
+
+    pub(crate) async fn start_pty(
+        runtime_lease: &HeldRuntimeLease,
+        launch: &GuardianLaunch,
+        provider: &BoundExecutable,
+        provider_arguments: &[String],
+        provider_environment: &[(String, String)],
+        working_directory: &std::path::Path,
+    ) -> Result<(Self, UnixProviderPty), DriverLaunchError> {
+        let window = nix::pty::Winsize {
+            ws_row: 40,
+            ws_col: 120,
+            ws_xpixel: 0,
+            ws_ypixel: 0,
+        };
+        let opened = nix::pty::openpty(Some(&window), None).map_err(|_| custody_error())?;
+        let provider_stdin = opened.slave.try_clone().map_err(|_| custody_error())?;
+        let provider_stdout = opened.slave.try_clone().map_err(|_| custody_error())?;
+        let provider_stderr = opened.slave;
+        let flags = rustix::fs::fcntl_getfl(opened.master.as_fd()).map_err(|_| custody_error())?;
+        rustix::fs::fcntl_setfl(opened.master.as_fd(), flags | rustix::fs::OFlags::NONBLOCK)
+            .map_err(|_| custody_error())?;
+        let terminal = tokio::io::unix::AsyncFd::new(opened.master).map_err(|_| custody_error())?;
+        Self::start_with_config(
+            runtime_lease,
+            launch,
+            ProviderLaunchConfig {
+                provider,
+                arguments: provider_arguments,
+                environment: provider_environment,
+                working_directory,
+                pipes: [provider_stdin, provider_stdout, provider_stderr],
+                fork_policy: ProviderForkPolicy::AllowInGroup,
+            },
+        )
+        .await
+        .map(|custody| (custody, UnixProviderPty { terminal }))
+    }
+
+    async fn start_with_config(
+        runtime_lease: &HeldRuntimeLease,
+        launch: &GuardianLaunch,
+        config: ProviderLaunchConfig<'_>,
+    ) -> Result<Self, DriverLaunchError> {
+        let mut command = launch
+            .guardian_command(runtime_lease.path(), runtime_lease.token(), config)
             .map_err(|_| custody_error())?;
         command
             .stdin(Stdio::piped())
@@ -149,22 +268,15 @@ impl UnixProcessCustody {
                 .await);
             }
         }
-        Ok((
-            Self {
-                anchor_pid,
-                provider_pid,
-                guardian,
-                guardian_input: Some(guardian_input),
-                lease_path: runtime_lease.path().to_path_buf(),
-                runtime_token: runtime_lease.token().to_owned(),
-                armed: true,
-            },
-            UnixProviderPipes {
-                stdin: tokio::fs::File::from_std(File::from(stdin)),
-                stdout: tokio::fs::File::from_std(File::from(stdout)),
-                stderr: tokio::fs::File::from_std(File::from(stderr)),
-            },
-        ))
+        Ok(Self {
+            anchor_pid,
+            provider_pid,
+            guardian,
+            guardian_input: Some(guardian_input),
+            lease_path: runtime_lease.path().to_path_buf(),
+            runtime_token: runtime_lease.token().to_owned(),
+            armed: true,
+        })
     }
 
     pub(crate) fn leader_is_running(&mut self) -> Result<bool, DriverError> {

@@ -6,7 +6,9 @@ use std::{
     time::Duration,
 };
 
-use agentsassemble_domain::{AgentSessionDraft, stable_content_identity, stable_identity_hash};
+use agentsassemble_domain::{
+    AgentSessionDraft, stable_bundle_identity, stable_content_identity, stable_identity_hash,
+};
 use same_file::Handle;
 use tokio::sync::{Semaphore, oneshot};
 
@@ -100,16 +102,46 @@ fn validate_sync(draft: &AgentSessionDraft) -> io::Result<()> {
     if canonical_executable != executable {
         return Err(io::Error::other("executable authority is not canonical"));
     }
-    let mut executable_file = File::open(&canonical_executable)?;
-    if !is_executable_file(&executable_file)? {
-        return Err(io::Error::other("executable authority is not executable"));
-    }
-    let executable_handle = Handle::from_file(executable_file.try_clone()?)?;
-    let executable_identity = stable_content_identity(&executable_handle, &mut executable_file)?;
+    let executable_identity =
+        runtime_executable_identity(&draft.provider_kind, &canonical_executable)?;
     if executable_identity != draft.executable_identity {
         return Err(io::Error::other("executable identity changed"));
     }
     Ok(())
+}
+
+fn runtime_executable_identity(provider_kind: &str, executable: &Path) -> io::Result<String> {
+    let executable_identity = open_executable_identity(executable)?;
+    if provider_kind != "codex_live_session" {
+        return Ok(executable_identity);
+    }
+    let companion = executable
+        .parent()
+        .ok_or_else(|| io::Error::other("Codex executable directory is unavailable"))?
+        .join(if cfg!(windows) {
+            "codex-code-mode-host.exe"
+        } else {
+            "codex-code-mode-host"
+        });
+    if companion.canonicalize()? != companion {
+        return Err(io::Error::other(
+            "Codex code-mode host authority is not canonical",
+        ));
+    }
+    let companion_identity = open_executable_identity(&companion)?;
+    Ok(stable_bundle_identity(
+        "codex-native",
+        &[&executable_identity, &companion_identity],
+    ))
+}
+
+fn open_executable_identity(path: &Path) -> io::Result<String> {
+    let mut file = File::open(path)?;
+    if !is_executable_file(&file)? {
+        return Err(io::Error::other("executable authority is not executable"));
+    }
+    let handle = Handle::from_file(file.try_clone()?)?;
+    stable_content_identity(&handle, &mut file)
 }
 
 fn is_executable_file(file: &File) -> io::Result<bool> {
@@ -131,11 +163,52 @@ fn is_executable_file(file: &File) -> io::Result<bool> {
 
 #[cfg(test)]
 mod tests {
-    use std::{io, sync::Arc, time::Duration};
+    use std::{io, path::Path, sync::Arc, time::Duration};
 
     use tokio::sync::Semaphore;
 
-    use super::{AuthorityFailure, run_with};
+    use super::{AuthorityFailure, run_with, runtime_executable_identity};
+
+    fn write_executable(path: &Path, bytes: &[u8]) {
+        std::fs::write(path, bytes).unwrap_or_else(|error| panic!("write executable: {error}"));
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            let mut permissions = std::fs::metadata(path)
+                .unwrap_or_else(|error| panic!("read executable mode: {error}"))
+                .permissions();
+            permissions.set_mode(0o700);
+            std::fs::set_permissions(path, permissions)
+                .unwrap_or_else(|error| panic!("set executable mode: {error}"));
+        }
+    }
+
+    #[test]
+    fn codex_authority_revalidates_the_complete_native_bundle() {
+        let root =
+            tempfile::tempdir().unwrap_or_else(|error| panic!("create bundle root: {error}"));
+        let executable = root
+            .path()
+            .join(if cfg!(windows) { "codex.exe" } else { "codex" });
+        let companion = root.path().join(if cfg!(windows) {
+            "codex-code-mode-host.exe"
+        } else {
+            "codex-code-mode-host"
+        });
+        write_executable(&executable, b"codex-main");
+        write_executable(&companion, b"codex-host");
+        let executable = executable
+            .canonicalize()
+            .unwrap_or_else(|error| panic!("canonicalize executable: {error}"));
+        let first = runtime_executable_identity("codex_live_session", &executable)
+            .unwrap_or_else(|error| panic!("identify Codex bundle: {error}"));
+        assert!(first.starts_with("bundle-identity-v1-"));
+        write_executable(&companion, b"changed-host");
+        let changed = runtime_executable_identity("codex_live_session", &executable)
+            .unwrap_or_else(|error| panic!("reidentify Codex bundle: {error}"));
+        assert_ne!(first, changed);
+    }
 
     #[test]
     fn stalled_worker_does_not_join_tokio_runtime_shutdown() {

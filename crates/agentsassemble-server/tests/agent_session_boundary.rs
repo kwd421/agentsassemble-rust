@@ -1,8 +1,8 @@
-use std::{collections::BTreeMap, fmt::Write, fs::File, path::Path, time::Duration};
+use std::{collections::BTreeMap, fmt::Write, path::Path, time::Duration};
 
 use agentsassemble_domain::{
     Participant, ParticipantStatus, ProviderAvailability, ProviderCatalog, ProviderControl,
-    ProviderControlOption, Room, RoomSettings, stable_content_identity,
+    ProviderControlOption, Room, RoomSettings,
 };
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService};
@@ -11,7 +11,6 @@ use chrono::Utc;
 use futures_util::{SinkExt, StreamExt};
 use hmac::{Hmac, Mac};
 use reqwest::Client;
-use same_file::Handle;
 use serde_json::{Value, json};
 use sha2::Sha256;
 use tokio::{net::TcpListener, task::JoinHandle};
@@ -21,6 +20,9 @@ use tokio_util::sync::CancellationToken;
 #[cfg(unix)]
 #[path = "support/room_portal_fixture.rs"]
 mod room_portal_fixture;
+
+#[path = "support/provider_fixture.rs"]
+mod provider_fixture;
 
 const HOST_TOKEN: &str = "agent-boundary-host-token-000000001";
 static AGENT_BOUNDARY_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
@@ -199,8 +201,8 @@ async fn lifecycle_commands_use_the_owned_codex_app_server_before_committing() {
     );
     send_command(
         &mut socket,
-        "start-before-server-restart",
-        "agent.start",
+        "resume-before-server-restart",
+        "agent.resume",
         &lifecycle_payload,
     )
     .await;
@@ -703,33 +705,7 @@ fn agent_catalog(root: &Path) -> ProviderCatalog {
 }
 
 fn agent_catalog_with_fixture(root: &Path, fixture: &[u8]) -> ProviderCatalog {
-    let executable = root.join("provider-fixture");
-    std::fs::write(&executable, fixture)
-        .unwrap_or_else(|error| panic!("write test executable: {error}"));
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-
-        let mut permissions = std::fs::metadata(&executable)
-            .unwrap_or_else(|error| panic!("read test executable mode: {error}"))
-            .permissions();
-        permissions.set_mode(0o700);
-        std::fs::set_permissions(&executable, permissions)
-            .unwrap_or_else(|error| panic!("set test executable mode: {error}"));
-    }
-    let executable = executable
-        .canonicalize()
-        .unwrap_or_else(|error| panic!("resolve test executable: {error}"));
-    let mut executable_file =
-        File::open(&executable).unwrap_or_else(|error| panic!("open test executable: {error}"));
-    let executable_handle = Handle::from_file(
-        executable_file
-            .try_clone()
-            .unwrap_or_else(|error| panic!("clone test executable: {error}")),
-    )
-    .unwrap_or_else(|error| panic!("identify test executable: {error}"));
-    let executable_identity = stable_content_identity(&executable_handle, &mut executable_file)
-        .unwrap_or_else(|error| panic!("hash test executable: {error}"));
+    let (executable, executable_identity) = provider_fixture::write_codex_bundle(root, fixture);
     ProviderCatalog {
         status: "ready".to_owned(),
         catalog_revision: "catalog-boundary-1".to_owned(),
@@ -742,7 +718,7 @@ fn agent_catalog_with_fixture(root: &Path, fixture: &[u8]) -> ProviderCatalog {
             catalog_group: "subscription".to_owned(),
             workspace_required: true,
             connection_kind: "native_cli_bridge".to_owned(),
-            executable: executable.to_string_lossy().into_owned(),
+            executable,
             executable_identity,
             default_model: "gpt-5.6-terra".to_owned(),
             interactive: true,

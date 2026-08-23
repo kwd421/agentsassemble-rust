@@ -24,7 +24,7 @@ use crate::{
         checked_provider_session_id, observed_model_id_from_response,
         provider_session_id_from_response, provider_session_mismatch, provider_session_unconfirmed,
     },
-    filesystem::bind_executable,
+    filesystem::bind_codex_executable,
     launch_error::DriverLaunchError,
     room_portal::{ProviderTurnOutcome, RoomPortal, RoomPortalError},
     runtime::{
@@ -110,9 +110,10 @@ impl CodexDriver {
         )
         .into());
 
+        let inherited_mcp_servers = config::inherited_mcp_servers().await?;
         let room_portal = create_room_portal().await?;
-        let arguments = command_arguments(session, &room_portal)?;
-        let executable = bind_executable(
+        let arguments = command_arguments(session, &room_portal, &inherited_mcp_servers)?;
+        let executable = bind_codex_executable(
             session.executable.clone(),
             session.executable_identity.clone(),
         )
@@ -124,6 +125,7 @@ impl CodexDriver {
                 room_portal,
                 executable,
                 arguments,
+                std::path::Path::new(&session.workspace),
                 runtime_lease,
                 guardian_launch,
             )
@@ -134,6 +136,7 @@ impl CodexDriver {
             let mut command = CommandWrap::with_new(executable.launch_path(), |command| {
                 command
                     .args(&arguments)
+                    .current_dir(&session.workspace)
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())
                     .stderr(Stdio::piped());
@@ -189,16 +192,18 @@ impl CodexDriver {
         room_portal: RoomPortal,
         executable: crate::filesystem::BoundExecutable,
         arguments: Vec<String>,
+        workspace: &std::path::Path,
         runtime_lease: &HeldRuntimeLease,
         guardian_launch: &GuardianLaunch,
     ) -> Result<Self, DriverLaunchError> {
         let provider_environment = room_portal.provider_environment();
-        let (process_group, pipes) = UnixProcessCustody::start(
+        let (process_group, pipes) = UnixProcessCustody::start_with_children(
             runtime_lease,
             guardian_launch,
             &executable,
             &arguments,
             &provider_environment,
+            workspace,
         )
         .await?;
         let stderr_task = tokio::spawn(drain_stderr(pipes.stderr));
@@ -562,6 +567,7 @@ impl Drop for CodexDriver {
 fn command_arguments(
     session: &DurableAgentSession,
     room_portal: &RoomPortal,
+    inherited_mcp_servers: &[String],
 ) -> Result<Vec<String>, DriverError> {
     let (approval, sandbox) = profile_permissions(session)?;
     if session.public.model.is_empty() {
@@ -588,10 +594,11 @@ fn command_arguments(
         &mut arguments,
         "projects",
         &format!(
-            "{{ {} = {{ trust_level = \"untrusted\" }} }}",
+            "{{ {} = {{ trust_level = \"trusted\" }} }}",
             json_string(&session.workspace)?
         ),
     );
+    config::append_mcp_isolation(&mut arguments, inherited_mcp_servers)?;
     room_portal
         .append_codex_config(&mut arguments)
         .map_err(|_| room_portal_unavailable())?;
@@ -764,6 +771,9 @@ const fn notification_overflow() -> DriverError {
 
 #[path = "codex_turn.rs"]
 mod turn;
+
+#[path = "codex_config.rs"]
+mod config;
 
 #[cfg(test)]
 #[path = "codex_command_tests.rs"]

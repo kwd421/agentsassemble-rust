@@ -19,7 +19,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     ProviderSelection, ProviderSelectionError,
-    filesystem::{FilesystemFailure, resolve_executable},
+    filesystem::{FilesystemFailure, resolve_codex_executable, resolve_executable},
     process::{ProbeFailure, probe},
 };
 
@@ -256,10 +256,12 @@ async fn await_filesystem<T>(
 
 async fn discover_codex(cancellation: &CancellationToken) -> ProviderAvailability {
     let mut provider = loading_provider("codex", "Codex", "codex_live_session", "live_cli", "");
-    let (executable, executable_identity) = match provider_executable("codex", cancellation).await {
-        Ok(authority) => authority,
-        Err(failure) => return failed_provider(provider, failure),
-    };
+    let (executable, executable_identity) =
+        match await_filesystem(cancellation, resolve_codex_executable()).await {
+            Ok(Some(authority)) => authority,
+            Ok(None) => return failed_provider(provider, ProbeFailure::Missing),
+            Err(failure) => return failed_provider(provider, failure),
+        };
     provider.executable.clone_from(&executable);
     provider.executable_identity = executable_identity;
     let output = match Box::pin(probe(&executable, &["debug", "models"], cancellation)).await {

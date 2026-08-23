@@ -19,6 +19,7 @@ agentsassemble-domain = { path = "../../crates/agentsassemble-domain" }
 agentsassemble-protocol = { path = "../../crates/agentsassemble-protocol" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
+rfd = "0.17.2"
 tauri = { version = "2.11.0", features = [] }
 url = "2.5.7"
 uuid = { version = "1.24.1", features = ["v4"] }

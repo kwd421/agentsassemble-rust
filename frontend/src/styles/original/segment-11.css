@@ -1,0 +1,438 @@
+
+.dc-settings-section .ops-input {
+  height: 40px;
+  padding: 0 10px;
+}
+
+.dc-settings-preview {
+  display: flex;
+  min-height: 104px;
+  align-items: flex-end;
+  gap: 14px;
+  border-radius: 8px;
+  background-image:
+    var(--room-banner-image),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.02), rgba(0, 0, 0, 0.42)),
+    linear-gradient(135deg, #5865f2, #2b2d31);
+  background-position: center;
+  background-size: cover;
+  padding: 16px;
+}
+
+.dc-settings-preview-icon {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  border-radius: 16px;
+  background: #1e1f22;
+  color: var(--color-text-primary);
+  font-weight: 900;
+}
+
+.dc-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.dc-preset-grid button,
+.dc-upload-button {
+  min-height: 40px;
+  border-radius: 4px;
+  background: var(--color-panel-soft);
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.dc-preset-grid button[data-active="true"] {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.dc-upload-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+}
+
+.dc-upload-button {
+  display: inline-flex;
+  cursor: pointer;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+}
+
+.dc-upload-button input {
+  display: none;
+}
+
+.dc-channel-settings-list {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  background: #1e1f22;
+}
+
+.dc-channel-settings-row {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(132px, 180px);
+  align-items: center;
+  gap: 12px !important;
+  padding: 12px;
+}
+
+.dc-channel-settings-row + .dc-channel-settings-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.dc-channel-settings-row strong {
+  display: block;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.dc-channel-settings-row small {
+  display: block;
+  margin-top: 3px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.dc-channel-settings-row select {
+  min-height: 34px;
+  min-width: 0;
+  border-radius: 4px;
+  background: #111214;
+  padding: 0 9px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.dc-radio-stack {
+  display: grid;
+  gap: 9px;
+}
+
+.dc-radio-stack label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+/* ---- custom channels (CH-5): sidebar + text/voice views + create modal --- */
+.dc-channel-category-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dc-channel-add {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  color: var(--color-text-muted);
+}
+
+.dc-channel-add:hover {
+  color: var(--color-text-primary);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.dc-channel-message-list {
+  display: grid;
+  gap: 10px;
+}
+
+.dc-channel-message {
+  display: grid;
+  gap: 2px;
+}
+
+.dc-channel-message-author {
+  font-weight: 800;
+  font-size: 13px;
+  color: var(--color-text-primary);
+}
+
+.dc-channel-message-body {
+  font-size: 14px;
+  white-space: pre-wrap;
+}
+
+.dc-channel-composer {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--color-panel-border);
+}
+
+.dc-channel-composer-input {
+  flex: 1;
+  min-height: 40px;
+  resize: none;
+  padding: 9px 12px;
+}
+
+.dc-channel-composer-send {
+  align-self: stretch;
+  padding: 0 14px;
+}
+
+.dc-channel-composer-error {
+  padding: 0 16px 10px;
+  font-size: 12px;
+  color: var(--color-danger, #f87171);
+}
+
+.dc-voice-stage {
+  display: grid;
+  gap: 14px;
+}
+
+.dc-voice-roster {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.dc-voice-tile {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 16px 10px;
+  border-radius: 10px;
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-panel-border);
+}
+
+.dc-voice-tile[data-muted="true"] {
+  opacity: 0.7;
+}
+
+.dc-voice-avatar {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #5865f2;
+  color: #fff;
+  font-weight: 900;
+}
+
+.dc-voice-name {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dc-voice-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--color-panel-border);
+}
+
+.dc-voice-controls .ops-cta[data-tone="danger"] {
+  background: var(--color-danger, #ed4245);
+}
+
+.dc-create-channel-modal {
+  width: min(440px, 92vw);
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border-radius: 10px;
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-panel-border);
+}
+
+.dc-create-channel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dc-create-channel-head h2 {
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.dc-create-channel-name {
+  display: grid;
+  gap: 7px;
+  font-weight: 800;
+}
+
+.dc-create-channel-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.dc-leave-room-confirm {
+  background: var(--color-danger, #ed4245);
+}
+
+.dc-leave-room-confirm:hover:not(:disabled),
+.dc-leave-room-confirm:focus-visible:not(:disabled) {
+  background: #d83c3e;
+}
+
+.dc-settings-field {
+  display: grid;
+  gap: 7px;
+}
+
+.dc-settings-field-label {
+  font-weight: 800;
+}
+
+/* Radio rows with descriptive captions wrap, not center-clip, the long text. */
+.dc-settings-field .dc-radio-stack label {
+  align-items: flex-start;
+}
+
+.dc-settings-field .dc-radio-stack input[type="radio"] {
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+
+.dc-settings-invite {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 12px;
+}
+
+/* ----------------------------------------------------- view primitives ---- */
+/* Flattened from the old neon "ops" system; class names kept so the views
+   render correctly without per-element churn. */
+
+.ops-panel {
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-panel-border);
+  border-radius: 8px;
+}
+
+.ops-inner {
+  background: var(--color-panel-soft);
+  border: 1px solid var(--color-line);
+  border-radius: 6px;
+}
+
+.ops-cut {
+  border-radius: 8px;
+}
+
+.ops-button {
+  border: 1px solid var(--color-line);
+  background: var(--color-panel-soft);
+  color: var(--color-text-secondary);
+  border-radius: 4px;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease;
+}
+
+.ops-button:hover:not(:disabled) {
+  background: var(--color-sidebar-hover);
+  color: var(--color-text-primary);
+}
+
+.ops-button:disabled,
+.ops-button[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.ops-cta {
+  border: 1px solid transparent;
+  background: var(--color-accent);
+  color: #fff;
+  border-radius: 4px;
+  font-weight: 700;
+  transition: background-color 140ms ease;
+}
+
+.ops-cta:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+
+.ops-input {
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  background: #1e1f22;
+  color: var(--color-text-primary);
+  border-radius: 4px;
+  outline: none;
+}
+
+.ops-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.ops-input:focus {
+  border-color: var(--color-accent);
+}
+
+.ops-chip {
+  border: 1px solid var(--color-line);
+  background: var(--color-panel-soft);
+  color: var(--color-text-secondary);
+  border-radius: 6px;
+}
+
+/* Round avatar badge (was a neon hexagon). */
+.hex-badge {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  color: #fff;
+  background: var(--color-accent-soft);
+}
+
+.hex-badge.gold {
+  background: #b5891f;
+}
+
+.hex-badge.violet {
+  background: #6d5acd;
+}
+
+.hex-badge.green {
+  background: #1f7a45;
+}
+
+/* Brand mark for the server rail / lobby button. */
+.ops-logo-mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  color: #fff;
+  background: var(--color-accent);
+  font-weight: 900;
+}
+
+.ops-logo-mark::before {
+  content: "A";
+  font-size: 20px;
+  line-height: 1;
+}
+
+/* ----------------------------------------------------------- mobile room ---- */

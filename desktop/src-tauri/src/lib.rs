@@ -4,7 +4,14 @@ mod private_fs;
 mod runtime_supervisor;
 
 use local_runtime::{LocalRuntime, TicketGrant};
+use serde::Serialize;
 use tauri::{Manager, RunEvent, WebviewWindow};
+
+#[derive(Serialize)]
+struct WorkspaceSelection {
+    selected: bool,
+    path: String,
+}
 
 fn caller_is_bundled_ui(window: &WebviewWindow) -> Result<(), String> {
     let url = window
@@ -36,6 +43,39 @@ async fn runtime_ticket(
     .map_err(|error| format!("runtime ticket worker failed: {error}"))?
 }
 
+fn workspace_selection(path: Option<std::path::PathBuf>) -> Result<WorkspaceSelection, String> {
+    let Some(path) = path else {
+        return Ok(WorkspaceSelection {
+            selected: false,
+            path: String::new(),
+        });
+    };
+    let path = path
+        .canonicalize()
+        .map_err(|error| format!("workspace_picker_invalid_selection: {error}"))?;
+    if !path.is_dir() {
+        return Err("workspace_picker_invalid_selection: selection is not a directory".to_owned());
+    }
+    let path = path
+        .to_str()
+        .ok_or_else(|| "workspace_picker_invalid_selection: path is not UTF-8".to_owned())?
+        .to_owned();
+    Ok(WorkspaceSelection {
+        selected: true,
+        path,
+    })
+}
+
+#[tauri::command]
+async fn choose_local_workspace(window: WebviewWindow) -> Result<WorkspaceSelection, String> {
+    caller_is_bundled_ui(&window)?;
+    tauri::async_runtime::spawn_blocking(|| {
+        workspace_selection(rfd::FileDialog::new().pick_folder())
+    })
+    .await
+    .map_err(|error| format!("workspace_picker_failed: {error}"))?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 /// Runs the desktop shell until its application event loop exits.
 ///
@@ -45,7 +85,10 @@ async fn runtime_ticket(
 pub fn run() {
     let app = tauri::Builder::default()
         .manage(LocalRuntime::default())
-        .invoke_handler(tauri::generate_handler![runtime_ticket])
+        .invoke_handler(tauri::generate_handler![
+            runtime_ticket,
+            choose_local_workspace
+        ])
         .build(tauri::generate_context!())
         .unwrap_or_else(|error| panic!("AgentsAssemble desktop failed to initialize: {error}"));
     app.run(|handle, event| {
@@ -58,4 +101,28 @@ pub fn run() {
 #[must_use]
 pub fn run_runtime_supervisor_if_requested() -> Option<i32> {
     runtime_supervisor::run_if_requested()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::workspace_selection;
+
+    #[test]
+    fn workspace_selection_is_canonical_and_cancel_is_empty() {
+        let directory =
+            tempfile::tempdir().unwrap_or_else(|error| panic!("create workspace fixture: {error}"));
+        let selected = workspace_selection(Some(directory.path().to_path_buf()))
+            .unwrap_or_else(|error| panic!("select workspace fixture: {error}"));
+        assert!(selected.selected);
+        let canonical = directory
+            .path()
+            .canonicalize()
+            .unwrap_or_else(|error| panic!("canonicalize workspace fixture: {error}"));
+        assert_eq!(selected.path, canonical.to_string_lossy());
+
+        let cancelled = workspace_selection(None)
+            .unwrap_or_else(|error| panic!("cancel workspace fixture: {error}"));
+        assert!(!cancelled.selected);
+        assert!(cancelled.path.is_empty());
+    }
 }

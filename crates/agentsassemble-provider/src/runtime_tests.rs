@@ -19,6 +19,16 @@ fn provider_guardian_entry() {
 #[test]
 fn inert_provider_entry() {
     if std::env::var_os(crate::unix_process_tree::RUNTIME_TOKEN_ENV).is_some() {
+        if let Some(report) = std::env::var_os("AGENTSASSEMBLE_TEST_CWD_REPORT") {
+            std::fs::write(
+                report,
+                std::env::current_dir()
+                    .unwrap_or_else(|error| panic!("resolve provider cwd: {error}"))
+                    .as_os_str()
+                    .as_encoded_bytes(),
+            )
+            .unwrap_or_else(|error| panic!("report provider cwd: {error}"));
+        }
         loop {
             std::thread::park();
         }
@@ -28,6 +38,13 @@ fn inert_provider_entry() {
 #[tokio::test]
 async fn guardian_runs_outside_the_server_process_group() {
     let _serial = RUNTIME_TEST_LOCK.lock().await;
+    let workspace =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create guardian workspace: {error}"));
+    let workspace_path = workspace
+        .path()
+        .canonicalize()
+        .unwrap_or_else(|error| panic!("canonicalize guardian workspace: {error}"));
+    let cwd_report = workspace_path.join("provider-cwd");
     let suffix = uuid::Uuid::new_v4().to_string();
     let lease = crate::runtime_lease::HeldRuntimeLease::prepare(
         &format!("guardian-group-room-{suffix}"),
@@ -54,18 +71,25 @@ async fn guardian_runs_outside_the_server_process_group() {
         .guardian_command(
             lease.path(),
             lease.token(),
-            &provider,
-            &[
-                "--exact".to_owned(),
-                "runtime::tests::inert_provider_entry".to_owned(),
-                "--nocapture".to_owned(),
-            ],
-            &[],
-            [
-                provider_stdin.into(),
-                provider_stdout.into(),
-                provider_stderr.into(),
-            ],
+            crate::guardian::ProviderLaunchConfig {
+                provider: &provider,
+                arguments: &[
+                    "--exact".to_owned(),
+                    "runtime::tests::inert_provider_entry".to_owned(),
+                    "--nocapture".to_owned(),
+                ],
+                environment: &[(
+                    "AGENTSASSEMBLE_TEST_CWD_REPORT".to_owned(),
+                    cwd_report.to_string_lossy().into_owned(),
+                )],
+                working_directory: &workspace_path,
+                pipes: [
+                    provider_stdin.into(),
+                    provider_stdout.into(),
+                    provider_stderr.into(),
+                ],
+                fork_policy: crate::guardian::ProviderForkPolicy::Deny,
+            },
         )
         .unwrap_or_else(|error| panic!("configure guardian test command: {error}"));
     command
@@ -89,6 +113,13 @@ async fn guardian_runs_outside_the_server_process_group() {
         .unwrap_or_else(|| panic!("guardian output is unavailable"));
     let (anchor_pid, _) = read_guardian_ready(output, "guardian group").await;
     assert!(anchor_pid > 0);
+    for _ in 0..500 {
+        if cwd_report.exists() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert_provider_working_directory(&cwd_report, &workspace_path);
     let guardian_process = i32::try_from(guardian_pid)
         .ok()
         .and_then(rustix::process::Pid::from_raw)
@@ -106,6 +137,13 @@ async fn guardian_runs_outside_the_server_process_group() {
     assert!(status.success());
     cleanup.disarm();
     lease.cleanup_pre_effect();
+}
+
+fn assert_provider_working_directory(report: &Path, expected: &Path) {
+    assert_eq!(
+        std::fs::read(report).unwrap_or_else(|error| panic!("read provider cwd report: {error}")),
+        expected.as_os_str().as_encoded_bytes()
+    );
 }
 
 #[tokio::test]
@@ -136,18 +174,22 @@ async fn guardian_death_without_a_cleanup_receipt_never_proves_gone() {
         .guardian_command(
             lease.path(),
             lease.token(),
-            &provider,
-            &[
-                "--exact".to_owned(),
-                "runtime::tests::inert_provider_entry".to_owned(),
-                "--nocapture".to_owned(),
-            ],
-            &[],
-            [
-                provider_stdin.into(),
-                provider_stdout.into(),
-                provider_stderr.into(),
-            ],
+            crate::guardian::ProviderLaunchConfig {
+                provider: &provider,
+                arguments: &[
+                    "--exact".to_owned(),
+                    "runtime::tests::inert_provider_entry".to_owned(),
+                    "--nocapture".to_owned(),
+                ],
+                environment: &[],
+                working_directory: Path::new(env!("CARGO_MANIFEST_DIR")),
+                pipes: [
+                    provider_stdin.into(),
+                    provider_stdout.into(),
+                    provider_stderr.into(),
+                ],
+                fork_policy: crate::guardian::ProviderForkPolicy::Deny,
+            },
         )
         .unwrap_or_else(|error| panic!("configure guardian death command: {error}"));
     command

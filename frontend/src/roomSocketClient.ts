@@ -11,23 +11,20 @@ import {
   PluginStreamProtocolError,
   type PluginEnvelope,
 } from "./pluginSocketProtocol";
-import type {
-  ProviderCatalogSnapshot,
-  RoomCommandAck,
-  RoomSocketClientDependencies,
-  RoomSocketHandle,
-  RoomSocketHandlers,
-  RoomSocketSnapshot,
-} from "./roomSocketTypes";
-import { createServerChallenge, verifyServerProof } from "./serverProof";
+import { createServerChallenge, verifyServerProof } from "./lib/serverProof";
 import {
-  agentSessionIsValid,
-  isRecord,
-  providerCatalogIsValid,
-} from "./roomSocketSchema";
+  RoomSocketSayError,
+  type ProviderCatalogSnapshot,
+  type RoomCommandAck,
+  type RoomSocketClientDependencies,
+  type RoomSocketHandle,
+  type RoomSocketHandlers,
+  type RoomSocketSnapshot,
+} from "./roomSocketTypes";
 
 export type { RoomSocketAuth } from "./api";
 export type { PluginEnvelope } from "./pluginSocketProtocol";
+export { RoomSocketSayError } from "./roomSocketTypes";
 export type {
   NativeCliProviderAvailability,
   ProviderCatalogSnapshot,
@@ -42,20 +39,15 @@ export type {
   RoomSocketSnapshot,
 } from "./roomSocketTypes";
 
-export class RoomSocketSayError extends Error {
-  category: string;
-
-  constructor(message: string, category = "rejected") {
-    super(message);
-    this.name = "RoomSocketSayError";
-    this.category = category;
-  }
-}
-
 const ROOM_SOCKET_COMMAND_TIMEOUT_MS = 20_000;
+
 function wsBaseUrl(): string {
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
   return `${proto}//${window.location.host}`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function isNonNegativeInteger(value: unknown): value is number {
@@ -151,17 +143,7 @@ function commandAckResultIsValid(
       event?.type === "provider_request_resolution_requested"
     );
   }
-  if (action === "agent.create") {
-    const session = result.agent_session;
-    return Boolean(
-      hasDurableEvent &&
-      event?.type === "agent_session_created" &&
-      agentSessionIsValid(session, String(event.room_id || "")) &&
-      isRecord(session) &&
-      event.participant_id === session.participant_id
-    );
-  }
-  if (action === "agent.configure") {
+  if (action === "agent.create" || action === "agent.configure") {
     return isRecord(result.agent_session);
   }
   if (action === "agent.readd") return result.status === "readded";
@@ -196,7 +178,7 @@ function snapshotValidationError(
     !Array.isArray(value.agent_sessions) ||
     !Array.isArray(value.active_turns) ||
     !Array.isArray(value.events) ||
-    !providerCatalogIsValid(value.provider_catalog) ||
+    !isRecord(value.provider_catalog) ||
     !Array.isArray(value.available_providers) ||
     !isRecord(value.capabilities) ||
     typeof value.has_more_before !== "boolean" ||
@@ -205,19 +187,6 @@ function snapshotValidationError(
     return new RoomSocketSayError(
       "Room snapshot did not match the canonical browser schema; reconnecting.",
       "snapshot_schema_invalid"
-    );
-  }
-  const snapshotRoom = value.room as Record<string, unknown>;
-  const snapshotCatalog = value.provider_catalog as ProviderCatalogSnapshot;
-  if (
-    value.agent_sessions.some((session) =>
-      !agentSessionIsValid(session, String(snapshotRoom.room_id || ""))
-    ) ||
-    JSON.stringify(value.available_providers) !== JSON.stringify(snapshotCatalog.providers)
-  ) {
-    return new RoomSocketSayError(
-      "Room snapshot contained inconsistent Agent Session or provider authority; reconnecting.",
-      "snapshot_authority_invalid"
     );
   }
   const mode = value.snapshot_mode;
@@ -497,15 +466,6 @@ export function openRoomSocket(
       return;
     }
     if (msg.op === "provider_catalog_updated" && msg.catalog) {
-      if (!providerCatalogIsValid(msg.catalog)) {
-        reconnectForProtocolError(
-          new RoomSocketSayError(
-            "Provider catalog update did not match the canonical schema; reconnecting.",
-            "provider_catalog_invalid"
-          )
-        );
-        return;
-      }
       handlers.onProviderCatalog?.(msg.catalog);
       return;
     }
@@ -537,18 +497,6 @@ export function openRoomSocket(
             new RoomSocketSayError(
               "Room event did not match the canonical event schema; reconnecting.",
               "event_schema_invalid"
-            )
-          );
-          return;
-        }
-        if (
-          event.type === "agent_session_state" &&
-          !agentSessionIsValid(event.agent_session, event.room_id)
-        ) {
-          reconnectForProtocolError(
-            new RoomSocketSayError(
-              "Agent Session event contained invalid public authority; reconnecting.",
-              "event_authority_invalid"
             )
           );
           return;
@@ -618,11 +566,13 @@ export function openRoomSocket(
       const issued = await requestTicket(auth);
       if (closed) return;
       const ticket = typeof issued === "string" ? issued : issued.ticket;
-      const proofKey = typeof issued === "string"
-        ? dependencies.serverProofKey?.() || ""
-        : issued.server_proof_key;
+      const proofKey = typeof issued === "string" ? "" : issued.server_proof_key || "";
+      const websocketBaseUrl =
+        typeof issued === "string" ? wsBaseUrl() : issued.websocket_base_url || wsBaseUrl();
       const serverChallenge = proofKey ? createServerChallenge() : "";
-      const currentSocket = createSocket(`${dependencies.websocketBaseUrl?.() || wsBaseUrl()}/ws?ticket=${encodeURIComponent(ticket)}`);
+      const currentSocket = createSocket(
+        `${websocketBaseUrl}/ws?ticket=${encodeURIComponent(ticket)}`
+      );
       socket = currentSocket;
       roomSnapshotAccepted = false;
       transportAuthenticated = false;
@@ -670,7 +620,8 @@ export function openRoomSocket(
           if (socket !== currentSocket || currentSocket.readyState !== WebSocket.OPEN) return;
           if (!serverVerified) {
             const frame = JSON.parse(raw) as { op?: string; server_proof?: string };
-            const verified = frame.op === "snapshot" &&
+            const verified =
+              frame.op === "snapshot" &&
               typeof frame.server_proof === "string" &&
               await verifyServerProof(proofKey, serverChallenge, frame.server_proof);
             if (!verified) {
@@ -687,9 +638,7 @@ export function openRoomSocket(
           }
           dispatchFrame(raw);
           if (roomSnapshotAccepted) sendPending();
-        }).catch((error) => {
-          handleFrameError(error);
-        });
+        }).catch(handleFrameError);
       };
       currentSocket.onerror = (event) => handlers.onError?.(event);
       currentSocket.onclose = () => {
@@ -722,7 +671,6 @@ export function openRoomSocket(
         if (!waiting) return;
         pending.delete(requestId);
         waiting.reject(new RoomSocketSayError("Room command timed out.", "timeout"));
-        socket?.close();
       }, ROOM_SOCKET_COMMAND_TIMEOUT_MS);
       pending.set(requestId, { action, payload, resolve, reject, timerId });
       sendPending();
@@ -741,7 +689,7 @@ export function openRoomSocket(
     resync: () => {
       socket?.close();
     },
-    ready: () => socket?.readyState === WebSocket.OPEN && transportAuthenticated,
+    ready: () => socket?.readyState === WebSocket.OPEN,
     command,
     plugin: (payload) => {
       if (socket?.readyState !== WebSocket.OPEN) {

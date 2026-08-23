@@ -1,0 +1,184 @@
+
+.dc-agent-field input,
+.dc-agent-field select,
+.dc-agent-field .dc-agent-static-control {
+  color-scheme: dark;
+  min-width: 0;
+  height: 38px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--color-panel-soft);
+  padding: 0 11px;
+  color: var(--color-text-primary);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 120ms ease;
+}
+
+.dc-agent-static-control {
+  display: flex;
+  align-items: center;
+}
+
+.dc-agent-select {
+  position: relative;
+  min-width: 0;
+}
+
+.dc-agent-select-trigger {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--color-panel-soft);
+  padding: 0 11px;
+  color: var(--color-text-primary);
+  font-size: 13px;
+  text-align: left;
+  outline: none;
+}
+
+.dc-agent-select-trigger > svg {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+  transition: transform 120ms ease, color 120ms ease;
+}
+
+.dc-agent-select-trigger:hover:not(:disabled) {
+  background: #32343a;
+}
+
+.dc-agent-select-trigger:focus-visible {
+  box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.55);
+}
+
+.dc-agent-select-trigger[aria-expanded="true"] {
+  background: #32343a;
+}
+
+.dc-agent-select-trigger:focus-visible > svg,
+.dc-agent-select-trigger[aria-expanded="true"] > svg {
+  color: var(--color-text-primary);
+}
+
+.dc-agent-select-trigger[aria-expanded="true"] > svg {
+  transform: rotate(180deg);
+}
+
+.dc-agent-select-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.dc-agent-select-trigger[data-effect="ultra"] {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    linear-gradient(
+      100deg,
+      rgba(45, 23, 91, 0.96) 0%,
+      rgba(117, 55, 220, 0.9) 28%,
+      rgba(55, 31, 112, 0.96) 50%,
+      rgba(147, 75, 255, 0.9) 72%,
+      rgba(45, 23, 91, 0.96) 100%
+    ) padding-box,
+    linear-gradient(110deg, #ffc45c, #975bff, #58b5ff) border-box;
+  background-size: 240% 100%, 100% 100%;
+  border-color: transparent;
+  box-shadow: 0 0 16px rgba(138, 92, 246, 0.18);
+  animation:
+    dc-ultra-control-fill 4.6s linear infinite,
+    dc-ultra-control-glow 2.8s ease-in-out infinite;
+}
+
+.dc-agent-select-trigger[data-effect="ultra"] > * {
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes dc-ultra-control-fill {
+  from {
+    background-position: 0% 50%, 0 0;
+  }
+  to {
+    background-position: 240% 50%, 0 0;
+  }
+}
+
+@keyframes dc-ultra-control-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 12px rgba(138, 92, 246, 0.14);
+  }
+  50% {
+    box-shadow: 0 0 22px rgba(255, 183, 77, 0.22);
+  }
+}
+
+.dc-provider-control-toggle {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--color-panel-soft);
+  padding: 0 10px 0 11px;
+  color: var(--color-text-primary);
+  font-size: 13px;
+  text-align: left;
+}
+
+.dc-provider-control-toggle:focus-visible {
+  box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.55);
+  outline: none;
+}
+
+.dc-provider-control-toggle:hover:not(:disabled) {
+  background: #32343a;
+}
+
+.dc-provider-control-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.dc-provider-control-switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 18px;
+  border-radius: 999px;
+  background: #4b4d54;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  transition: background 140ms ease;
+}
+
+.dc-provider-control-switch i {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  transition: transform 140ms ease;
+}
+
+.dc-provider-control-toggle[data-on="true"] .dc-provider-control-switch {
+  background: var(--color-accent);
+}
+
+.dc-provider-control-toggle[data-on="true"] .dc-provider-control-switch i {
+  transform: translateX(14px);
+}

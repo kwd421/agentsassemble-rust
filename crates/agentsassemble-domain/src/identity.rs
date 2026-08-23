@@ -105,9 +105,20 @@ pub fn stable_content_identity(
     Ok(format!("content-identity-v1-{:x}", digest.finalize()))
 }
 
+#[must_use]
+pub fn stable_bundle_identity(bundle_kind: &str, members: &[&str]) -> String {
+    let mut digest = Sha256::new();
+    digest.update(b"agentsassemble-bundle-identity-v1\0");
+    for value in std::iter::once(bundle_kind).chain(members.iter().copied()) {
+        digest.update(u64::try_from(value.len()).unwrap_or(u64::MAX).to_le_bytes());
+        digest.update(value.as_bytes());
+    }
+    format!("bundle-identity-v1-{:x}", digest.finalize())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{stable_content_identity, stable_identity_hash};
+    use super::{stable_bundle_identity, stable_content_identity, stable_identity_hash};
 
     #[test]
     fn stable_identity_separates_values() {
@@ -131,5 +142,19 @@ mod tests {
             .unwrap_or_else(|error| panic!("hash changed object: {error}"));
         assert_ne!(first, changed_bytes);
         assert_ne!(first, changed_object);
+    }
+
+    #[test]
+    fn bundle_identity_binds_kind_order_and_every_member() {
+        let first = stable_bundle_identity("codex-native", &["main", "host"]);
+        assert_eq!(
+            first,
+            stable_bundle_identity("codex-native", &["main", "host"])
+        );
+        assert_ne!(
+            first,
+            stable_bundle_identity("codex-native", &["host", "main"])
+        );
+        assert_ne!(first, stable_bundle_identity("other", &["main", "host"]));
     }
 }

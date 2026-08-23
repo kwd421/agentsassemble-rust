@@ -13,8 +13,12 @@ async fn command_uses_app_server_and_process_local_profile_settings() {
     let room_portal = RoomPortal::create()
         .await
         .unwrap_or_else(|error| panic!("create room portal: {error}"));
-    let arguments = command_arguments(&session, &room_portal)
-        .unwrap_or_else(|error| panic!("build app-server command: {error}"));
+    let arguments = command_arguments(
+        &session,
+        &room_portal,
+        &["company.tools".to_owned(), "node_repl".to_owned()],
+    )
+    .unwrap_or_else(|error| panic!("build app-server command: {error}"));
     assert_eq!(arguments.first().map(String::as_str), Some("app-server"));
     assert_eq!(arguments.last().map(String::as_str), Some("--stdio"));
     assert!(
@@ -33,7 +37,7 @@ async fn command_uses_app_server_and_process_local_profile_settings() {
             .any(|value| value == "sandbox_mode=\"workspace-write\"")
     );
     assert!(arguments.iter().any(|value| {
-        value == "projects={ \"/tmp/work space\" = { trust_level = \"untrusted\" } }"
+        value == "projects={ \"/tmp/work space\" = { trust_level = \"trusted\" } }"
     }));
     assert!(
         arguments
@@ -63,6 +67,16 @@ async fn command_uses_app_server_and_process_local_profile_settings() {
             .iter()
             .any(|value| { value == "shell_environment_policy.ignore_default_excludes=false" })
     );
+    assert!(
+        arguments
+            .iter()
+            .any(|value| value == "features.plugins=false")
+    );
+    assert!(arguments.iter().any(|value| value == "features.apps=false"));
+    assert!(arguments.iter().any(|value| {
+        value
+            == "mcp_servers={ \"company.tools\" = { enabled = false }, \"node_repl\" = { enabled = false } }"
+    }));
     assert!(
         arguments
             .iter()

@@ -26,6 +26,7 @@ const MAX_PROVIDER_MANIFEST_BYTES: usize = 256 * 1024;
 const TEST_MODE_ENV: &str = "AGENTSASSEMBLE_INTERNAL_GUARDIAN_MODE";
 const TEST_LEASE_ENV: &str = "AGENTSASSEMBLE_INTERNAL_GUARDIAN_LEASE";
 const TEST_TOKEN_ENV: &str = "AGENTSASSEMBLE_INTERNAL_GUARDIAN_TOKEN";
+const TEST_FORK_POLICY_ENV: &str = "AGENTSASSEMBLE_INTERNAL_PROVIDER_FORK_POLICY";
 #[cfg(test)]
 const TEST_PRE_ANCHOR_SIGNAL_ENV: &str = "AGENTSASSEMBLE_INTERNAL_PRE_ANCHOR_SIGNAL";
 const PROVIDER_STDIN_FD: i32 = 4;
@@ -36,8 +37,31 @@ const PROVIDER_EXECUTABLE_FD: i32 = 7;
 const PROVIDER_LAUNCH_FD: i32 = 8;
 const PROVIDER_LIFETIME_FD: i32 = 198;
 
-use crate::filesystem::{BoundExecutable, bind_helper_executable_sync};
+use crate::filesystem::{BoundExecutable, PrivateExecutable, bind_helper_executable_sync};
 use crate::unix_process_tree::CapturedRuntimeProcesses;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ProviderForkPolicy {
+    Deny,
+    AllowInGroup,
+}
+
+impl ProviderForkPolicy {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Deny => "deny",
+            Self::AllowInGroup => "allow-in-group",
+        }
+    }
+
+    fn parse(value: &OsStr) -> Option<Self> {
+        match value.to_str() {
+            Some("deny") => Some(Self::Deny),
+            Some("allow-in-group") => Some(Self::AllowInGroup),
+            _ => None,
+        }
+    }
+}
 
 #[cfg(target_os = "macos")]
 struct MacProviderHistory {
@@ -94,7 +118,7 @@ impl MacProviderHistory {
         })
     }
 
-    fn finish(&mut self) -> io::Result<()> {
+    fn finish(&mut self, fork_policy: ProviderForkPolicy) -> io::Result<()> {
         let watcher = self
             .watcher
             .take()
@@ -102,7 +126,7 @@ impl MacProviderHistory {
         let forked = watcher
             .join()
             .map_err(|_| io::Error::other("macOS provider lineage watcher panicked"))??;
-        if forked {
+        if forked && fork_policy == ProviderForkPolicy::Deny {
             return Err(io::Error::other(
                 "provider forked before macOS descendant custody could be proven",
             ));
@@ -114,8 +138,19 @@ impl MacProviderHistory {
 #[derive(Deserialize, Serialize)]
 struct ProviderLaunch {
     executable: String,
+    inherited_executable_fd: bool,
     arguments: Vec<String>,
     environment: Vec<(String, String)>,
+    working_directory: String,
+}
+
+pub(crate) struct ProviderLaunchConfig<'a> {
+    pub(crate) provider: &'a BoundExecutable,
+    pub(crate) arguments: &'a [String],
+    pub(crate) environment: &'a [(String, String)],
+    pub(crate) working_directory: &'a Path,
+    pub(crate) pipes: [OwnedFd; 3],
+    pub(crate) fork_policy: ProviderForkPolicy,
 }
 
 #[derive(Clone)]
@@ -156,14 +191,18 @@ impl GuardianLaunch {
         &self,
         lease_path: &Path,
         lease_token: &str,
-        provider: &BoundExecutable,
-        provider_arguments: &[String],
-        provider_environment: &[(String, String)],
-        provider_pipes: [OwnedFd; 3],
+        config: ProviderLaunchConfig<'_>,
     ) -> io::Result<tokio::process::Command> {
         use command_fds::FdMapping;
 
-        let [provider_stdin, provider_stdout, provider_stderr] = provider_pipes;
+        let ProviderLaunchConfig {
+            provider,
+            arguments: provider_arguments,
+            environment: provider_environment,
+            working_directory,
+            pipes: [provider_stdin, provider_stdout, provider_stderr],
+            fork_policy,
+        } = config;
 
         let mut command = tokio::process::Command::new(self.executable.launch_path());
         crate::process::sanitize_std_environment(command.as_std_mut());
@@ -173,17 +212,24 @@ impl GuardianLaunch {
             lease_path,
             lease_token,
         );
+        if self.test_harness {
+            command.env(TEST_FORK_POLICY_ENV, fork_policy.as_str());
+        } else {
+            command.arg(fork_policy.as_str());
+        }
         #[cfg(test)]
         if let Some(signal) = &self.pre_anchor_signal {
             command.env(TEST_PRE_ANCHOR_SIGNAL_ENV, signal);
         }
         let provider_launch = ProviderLaunch {
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            executable: "/proc/self/fd/3".to_owned(),
-            #[cfg(not(any(target_os = "linux", target_os = "android")))]
             executable: provider.launch_path().to_owned(),
+            inherited_executable_fd: provider.requires_inherited_executable_fd(),
             arguments: provider_arguments.to_vec(),
             environment: provider_environment.to_vec(),
+            working_directory: working_directory
+                .to_str()
+                .ok_or_else(|| io::Error::other("provider working directory is not UTF-8"))?
+                .to_owned(),
         };
         let encoded = serde_json::to_string(&provider_launch).map_err(io::Error::other)?;
         if encoded.len() > MAX_PROVIDER_MANIFEST_BYTES {
@@ -225,6 +271,10 @@ impl GuardianLaunch {
             .configure_std_command_with_mappings(command.as_std_mut(), mappings)?;
         command.process_group(0);
         Ok(command)
+    }
+
+    pub(crate) fn stage_companion(&self, name: &str) -> io::Result<PrivateExecutable> {
+        self.executable.stage_private_companion(name)
     }
 
     fn anchor_command(&self, lease_path: &Path, lease_token: &str) -> io::Result<Command> {
@@ -363,20 +413,37 @@ pub fn run_process_helper_if_requested() -> Option<i32> {
     let Some(lease_token) = arguments.next() else {
         return Some(2);
     };
+    let fork_policy = match mode {
+        HelperMode::Guardian => arguments
+            .next()
+            .as_deref()
+            .and_then(ProviderForkPolicy::parse),
+        HelperMode::Anchor | HelperMode::ProviderLauncher => Some(ProviderForkPolicy::Deny),
+    };
+    let Some(fork_policy) = fork_policy else {
+        return Some(2);
+    };
     if arguments.next().is_some() {
         return Some(2);
     }
-    let Ok(path) = reexecution_path() else {
-        return Some(1);
-    };
-    let Ok(launch) = GuardianLaunch::production(&path) else {
-        return Some(1);
+    let launch = match mode {
+        HelperMode::Guardian => {
+            let Ok(path) = reexecution_path() else {
+                return Some(1);
+            };
+            let Ok(launch) = GuardianLaunch::production(&path) else {
+                return Some(1);
+            };
+            Some(launch)
+        }
+        HelperMode::Anchor | HelperMode::ProviderLauncher => None,
     };
     Some(run_helper(
         mode,
         &lease_path,
         &lease_token.to_string_lossy(),
-        &launch,
+        launch.as_ref(),
+        fork_policy,
     ))
 }
 
@@ -394,14 +461,30 @@ pub(crate) fn run_test_helper_if_requested() -> Option<i32> {
     let Some(lease_token) = env::var_os(TEST_TOKEN_ENV) else {
         return Some(2);
     };
-    let Ok(launch) = GuardianLaunch::test_harness() else {
-        return Some(1);
+    let launch = match mode {
+        HelperMode::Guardian => {
+            let Ok(launch) = GuardianLaunch::test_harness() else {
+                return Some(1);
+            };
+            Some(launch)
+        }
+        HelperMode::Anchor | HelperMode::ProviderLauncher => None,
+    };
+    let fork_policy = match mode {
+        HelperMode::Guardian => env::var_os(TEST_FORK_POLICY_ENV)
+            .as_deref()
+            .and_then(ProviderForkPolicy::parse),
+        HelperMode::Anchor | HelperMode::ProviderLauncher => Some(ProviderForkPolicy::Deny),
+    };
+    let Some(fork_policy) = fork_policy else {
+        return Some(2);
     };
     Some(run_helper(
         mode,
         &lease_path,
         &lease_token.to_string_lossy(),
-        &launch,
+        launch.as_ref(),
+        fork_policy,
     ))
 }
 
@@ -409,17 +492,25 @@ fn run_helper(
     mode: HelperMode,
     lease_path: &Path,
     lease_token: &str,
-    launch: &GuardianLaunch,
+    launch: Option<&GuardianLaunch>,
+    fork_policy: ProviderForkPolicy,
 ) -> i32 {
     let result = match mode {
-        HelperMode::Guardian => run_guardian(lease_path, lease_token, launch),
+        HelperMode::Guardian => launch
+            .ok_or_else(|| io::Error::other("provider guardian launch is unavailable"))
+            .and_then(|launch| run_guardian(lease_path, lease_token, launch, fork_policy)),
         HelperMode::Anchor => run_anchor(lease_path, lease_token),
         HelperMode::ProviderLauncher => run_provider_launcher(lease_token),
     };
     i32::from(result.is_err())
 }
 
-fn run_guardian(lease_path: &Path, lease_token: &str, launch: &GuardianLaunch) -> io::Result<()> {
+fn run_guardian(
+    lease_path: &Path,
+    lease_token: &str,
+    launch: &GuardianLaunch,
+    fork_policy: ProviderForkPolicy,
+) -> io::Result<()> {
     #[cfg(test)]
     if let Some(signal) = env::var_os(TEST_PRE_ANCHOR_SIGNAL_ENV) {
         std::fs::write(signal, b"spawned")?;
@@ -492,6 +583,7 @@ fn run_guardian(lease_path: &Path, lease_token: &str, launch: &GuardianLaunch) -
             anchor_pid,
             lease_path,
             lease_token,
+            fork_policy,
             #[cfg(target_os = "macos")]
             provider_history.as_mut(),
         ),
@@ -519,6 +611,7 @@ fn run_provider_launcher(lease_token: &str) -> io::Result<()> {
     if launch.executable.is_empty()
         || launch.arguments.len() > 256
         || launch.environment.len() > 64
+        || launch.working_directory.len() > 4096
         || launch.environment.iter().any(|(name, value)| {
             name.is_empty()
                 || name.len() > 128
@@ -529,11 +622,21 @@ fn run_provider_launcher(lease_token: &str) -> io::Result<()> {
     {
         return Err(io::Error::other("provider launch manifest is invalid"));
     }
+    let working_directory = Path::new(&launch.working_directory);
+    if !working_directory.is_absolute()
+        || std::fs::canonicalize(working_directory)? != working_directory
+        || !working_directory.metadata()?.is_dir()
+    {
+        return Err(io::Error::other(
+            "provider working directory authority is invalid",
+        ));
+    }
     let pid = rustix::process::getpid();
     rustix::process::kill_process(pid, Signal::STOP)?;
     let mut command = Command::new(&launch.executable);
     command
         .args(&launch.arguments)
+        .current_dir(working_directory)
         .stdin(Stdio::from(open_inherited_fd(PROVIDER_STDIN_FD, false)?))
         .stdout(Stdio::from(open_inherited_fd(PROVIDER_STDOUT_FD, true)?))
         .stderr(Stdio::from(open_inherited_fd(PROVIDER_STDERR_FD, true)?));
@@ -544,13 +647,15 @@ fn run_provider_launcher(lease_token: &str) -> io::Result<()> {
     {
         use command_fds::{CommandFdExt, FdMapping};
 
-        let selected = open_inherited_fd(PROVIDER_EXECUTABLE_FD, false)?;
-        command
-            .fd_mappings(vec![FdMapping {
-                parent_fd: selected.into(),
-                child_fd: 3,
-            }])
-            .map_err(io::Error::other)?;
+        if launch.inherited_executable_fd {
+            let selected = open_inherited_fd(PROVIDER_EXECUTABLE_FD, false)?;
+            command
+                .fd_mappings(vec![FdMapping {
+                    parent_fd: selected.into(),
+                    child_fd: 3,
+                }])
+                .map_err(io::Error::other)?;
+        }
     }
     let error = command.exec();
     Err(error)
@@ -641,6 +746,7 @@ fn terminate_runtime(
     raw_pid: u32,
     lease_path: &Path,
     lease_token: &str,
+    fork_policy: ProviderForkPolicy,
     #[cfg(target_os = "macos")] provider_history: Option<&mut MacProviderHistory>,
 ) -> io::Result<()> {
     let pid = i32::try_from(raw_pid)
@@ -667,7 +773,7 @@ fn terminate_runtime(
             #[cfg(target_os = "macos")]
             provider_history
                 .ok_or_else(|| io::Error::other("macOS provider lineage history is unavailable"))?
-                .finish()
+                .finish(fork_policy)
                 .map_err(|error| io::Error::other(format!("finish provider history: {error}")))?;
             captured
                 .confirm_gone(lease_path, lease_token, Duration::from_secs(4))
