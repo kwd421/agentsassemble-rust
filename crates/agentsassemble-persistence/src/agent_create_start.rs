@@ -31,6 +31,7 @@ pub struct AgentCreateStartEffect {
     pub operation_id: String,
     pub session: agentsassemble_domain::DurableAgentSession,
     pub committed_events: Vec<RoomEvent>,
+    pub newly_committed_events: Vec<RoomEvent>,
     prepared_result_json: String,
 }
 
@@ -45,6 +46,7 @@ pub enum AgentCreateStartPlan {
 pub struct AgentCreateStartCommit {
     pub outcome: CommandOutcome,
     pub committed_events: Vec<RoomEvent>,
+    pub newly_committed_events: Vec<RoomEvent>,
 }
 
 impl SqliteStore {
@@ -142,10 +144,12 @@ impl SqliteStore {
             ),
         )
         .await?;
+        let newly_committed_events = records.committed_events.clone();
         let effect = AgentCreateStartEffect {
             operation_id,
             session: records.session,
             committed_events: records.committed_events,
+            newly_committed_events,
             prepared_result_json,
         };
         transaction.commit().await?;
@@ -189,6 +193,7 @@ impl SqliteStore {
             return Ok(AgentCreateStartCommit {
                 outcome,
                 committed_events: Vec::new(),
+                newly_committed_events: Vec::new(),
             });
         }
         let stored =
@@ -231,6 +236,7 @@ impl SqliteStore {
         save_participant(&mut transaction, &participant).await?;
         let launch_events =
             append_launch_events(&mut transaction, principal, &session, joined).await?;
+        let newly_committed_events = launch_events.clone();
         let start_result = launch_result(&session, started.runtime_reused, &launch_events);
         let mut committed_events = prepared_events(&prepared_result)?;
         committed_events.extend(launch_events);
@@ -251,6 +257,7 @@ impl SqliteStore {
         Ok(AgentCreateStartCommit {
             outcome,
             committed_events,
+            newly_committed_events,
         })
     }
 
@@ -270,23 +277,19 @@ impl SqliteStore {
         message: &str,
     ) -> Result<Vec<RoomEvent>, PersistenceError> {
         let payload_hash = canonical_payload_hash(payload);
-        let mut events = effect.committed_events.clone();
-        events.extend(
-            self.fail_agent_launch_command(
-                principal,
-                request_id,
-                &payload_hash,
-                &effect.session.public.session_id,
-                &effect.operation_id,
-                error_code,
-                message,
-                CREATE,
-                "creation_committed",
-                &effect.prepared_result_json,
-            )
-            .await?,
-        );
-        Ok(events)
+        self.fail_agent_launch_command(
+            principal,
+            request_id,
+            &payload_hash,
+            &effect.session.public.session_id,
+            &effect.operation_id,
+            error_code,
+            message,
+            CREATE,
+            "creation_committed",
+            &effect.prepared_result_json,
+        )
+        .await
     }
 }
 
@@ -344,6 +347,7 @@ async fn resume_create_start(
         operation_id: stored.operation_id,
         session,
         committed_events: prepared_events(&prepared_result)?,
+        newly_committed_events: Vec::new(),
         prepared_result_json: stored.prepared_result_json,
     }))
 }

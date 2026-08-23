@@ -138,6 +138,8 @@ async fn create_start_first_commit_replays_one_intent_and_preserves_result_shape
     );
     assert_eq!(first.committed_events, replay.committed_events);
     assert_eq!(first.committed_events.len(), 1);
+    assert_eq!(first.newly_committed_events, first.committed_events);
+    assert!(replay.newly_committed_events.is_empty());
 
     let commit = store
         .complete_agent_create_start(
@@ -164,6 +166,13 @@ async fn create_start_first_commit_replays_one_intent_and_preserves_result_shape
         "agent_session_created"
     );
     assert_eq!(commit.outcome.events, commit.committed_events);
+    assert_eq!(commit.newly_committed_events, commit.committed_events[1..]);
+    assert!(
+        commit
+            .newly_committed_events
+            .iter()
+            .all(|event| event.event_type != "agent_session_created")
+    );
 
     let replay = store
         .inspect_agent_create_start(&principal, "create-start-1", &payload)
@@ -203,7 +212,12 @@ async fn safe_start_failure_reuses_exact_creation_without_a_second_created_event
         )
         .await
         .unwrap_or_else(|error| panic!("record safe failure: {error}"));
-    assert_eq!(events[0].event_type, "agent_session_created");
+    assert_eq!(events.len(), 2);
+    assert!(
+        events
+            .iter()
+            .all(|event| event.event_type != "agent_session_created")
+    );
 
     let retry = store
         .prepare_agent_create_start(

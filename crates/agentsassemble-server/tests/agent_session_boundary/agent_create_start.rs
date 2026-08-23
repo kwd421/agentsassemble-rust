@@ -75,6 +75,9 @@ async fn shutdown_checkpoints_gone_after_aborting_initialization() {
     let mut socket = connect(&server.base_url).await;
     subscribe(&mut socket).await;
     let _snapshot = receive_json(&mut socket).await;
+    let mut observer = connect(&server.base_url).await;
+    subscribe(&mut observer).await;
+    let _observer_snapshot = receive_json(&mut observer).await;
     let create_payload = json!({
         "provider_id": "codex",
         "catalog_revision": "catalog-boundary-1",
@@ -86,6 +89,22 @@ async fn shutdown_checkpoints_gone_after_aborting_initialization() {
     });
     send_create(&mut socket, "create-cancelled-start", &create_payload).await;
     wait_for_file(&started_path).await;
+    let created = receive_json(&mut observer).await;
+    assert_eq!(created["op"], "event");
+    assert_eq!(created["events"][0]["type"], "agent_session_created");
+    let created_sequence = created["events"][0]["seq"]
+        .as_i64()
+        .unwrap_or_else(|| panic!("creation event has no durable sequence"));
+
+    let mut snapshot_viewer = connect(&server.base_url).await;
+    subscribe(&mut snapshot_viewer).await;
+    let concurrent_snapshot = receive_json(&mut snapshot_viewer).await;
+    assert_eq!(concurrent_snapshot["last_seq"], created_sequence);
+    assert_eq!(concurrent_snapshot["events"][0]["seq"], created_sequence);
+    assert_eq!(
+        concurrent_snapshot["agent_sessions"][0]["session_id"],
+        created["events"][0]["participant_id"]
+    );
     server.stop_with_interrupted_command().await;
     std::fs::write(&release_path, b"release")
         .unwrap_or_else(|error| panic!("release initialization fixture: {error}"));
@@ -104,7 +123,7 @@ async fn shutdown_checkpoints_gone_after_aborting_initialization() {
         &create_payload,
     )
     .await;
-    let resumed = receive_until_ack(&mut recovered_socket, 5).await;
+    let resumed = receive_command_ack(&mut recovered_socket).await;
     assert_eq!(
         resumed["result"]["agent_session"]["runtime_status"],
         "stopped"

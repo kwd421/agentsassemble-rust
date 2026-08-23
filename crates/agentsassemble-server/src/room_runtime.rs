@@ -221,8 +221,14 @@ fn spawn_room_task(
                     let execution = match store.resolve_principal(&command.principal).await {
                         Ok(principal) => {
                             command.principal = principal;
-                            execute_command(&store, &provider_catalog, &provider_adapter, &command)
-                                .await
+                            execute_command(
+                                &store,
+                                &provider_catalog,
+                                &provider_adapter,
+                                &event_tx,
+                                &command,
+                            )
+                            .await
                         }
                         Err(error) => CommandExecution::failure(error),
                     };
@@ -323,11 +329,19 @@ async fn execute_command(
     store: &SqliteStore,
     provider_catalog: &ProviderCatalogService,
     provider_adapter: &ProviderAdapter,
+    event_tx: &broadcast::Sender<RoomEvent>,
     command: &RoomCommand,
 ) -> CommandExecution {
     let result = match command.action.as_str() {
         "agent.create" => {
-            execute_agent_create_command(store, provider_catalog, provider_adapter, command).await
+            execute_agent_create_command(
+                store,
+                provider_catalog,
+                provider_adapter,
+                event_tx,
+                command,
+            )
+            .await
         }
         "agent.configure" => execute_agent_configure(store, provider_catalog, command).await,
         "agent.start" | "agent.resume" => {
@@ -351,6 +365,7 @@ async fn execute_agent_create_command(
     store: &SqliteStore,
     provider_catalog: &ProviderCatalogService,
     provider_adapter: &ProviderAdapter,
+    event_tx: &broadcast::Sender<RoomEvent>,
     command: &RoomCommand,
 ) -> Result<CommandExecution, PersistenceError> {
     let AgentCreateExecution {
@@ -361,6 +376,7 @@ async fn execute_agent_create_command(
         store,
         provider_catalog,
         provider_adapter,
+        event_tx,
         &command.principal,
         &command.request_id,
         &command.payload,

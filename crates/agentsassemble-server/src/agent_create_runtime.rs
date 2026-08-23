@@ -6,6 +6,7 @@ use agentsassemble_provider::{
     ProviderAdapter, ProviderCatalogService, ProviderRuntimeStarted, creation_start_requested,
 };
 use serde_json::Value;
+use tokio::sync::broadcast;
 
 pub(crate) struct AgentCreateExecution {
     pub reply: Result<CommandOutcome, PersistenceError>,
@@ -17,6 +18,7 @@ pub(crate) async fn execute_agent_create(
     store: &SqliteStore,
     provider_catalog: &ProviderCatalogService,
     provider_adapter: &ProviderAdapter,
+    event_tx: &broadcast::Sender<RoomEvent>,
     principal: &AuthenticatedPrincipal,
     request_id: &str,
     payload: &Value,
@@ -27,6 +29,7 @@ pub(crate) async fn execute_agent_create(
             store,
             provider_catalog,
             provider_adapter,
+            event_tx,
             principal,
             request_id,
             payload,
@@ -58,6 +61,7 @@ async fn execute_agent_create_start(
     store: &SqliteStore,
     provider_catalog: &ProviderCatalogService,
     provider_adapter: &ProviderAdapter,
+    event_tx: &broadcast::Sender<RoomEvent>,
     principal: &AuthenticatedPrincipal,
     request_id: &str,
     payload: &Value,
@@ -98,6 +102,7 @@ async fn execute_agent_create_start(
             ));
         }
     };
+    publish_events(event_tx, &effect.newly_committed_events);
     match provider_adapter.start(&effect.session).await {
         Ok(started) => {
             let commit = store
@@ -111,27 +116,23 @@ async fn execute_agent_create_start(
                 .await?;
             Ok(AgentCreateExecution {
                 reply: Ok(commit.outcome),
-                committed_events: commit.committed_events,
+                committed_events: commit.newly_committed_events,
                 advance_ordered_floor: true,
             })
         }
         Err(error) => {
             let events = if error.effect_uncertain {
-                let mut events = effect.committed_events.clone();
-                events.extend(
-                    store
-                        .mark_agent_start_unconfirmed(
-                            principal,
-                            &effect.session.public.session_id,
-                            &effect.operation_id,
-                            &error.runtime_handle_id,
-                            &error.runtime_owner_id,
-                            error.code,
-                            error.message,
-                        )
-                        .await?,
-                );
-                events
+                store
+                    .mark_agent_start_unconfirmed(
+                        principal,
+                        &effect.session.public.session_id,
+                        &effect.operation_id,
+                        &error.runtime_handle_id,
+                        &error.runtime_owner_id,
+                        error.code,
+                        error.message,
+                    )
+                    .await?
             } else {
                 store
                     .fail_agent_create_start(
@@ -150,6 +151,12 @@ async fn execute_agent_create_start(
                 advance_ordered_floor: false,
             })
         }
+    }
+}
+
+fn publish_events(event_tx: &broadcast::Sender<RoomEvent>, events: &[RoomEvent]) {
+    for event in events {
+        let _ = event_tx.send(event.clone());
     }
 }
 
