@@ -8,7 +8,7 @@ Verification claims only the boundary actually observed. Build, lint, unit tests
 
 The active comparison baseline is original
 `d5046473010d1353a81ee38337360e6d98f7bd6f` and public Rust
-`3929e31f3407c60d829a030a527266daacaf9197`. Local uncommitted behavior
+`642f27250e966ffaf6070a8a3e7503dc961c0999`. Local uncommitted behavior
 is never described as public completion. Every completed-slice evidence entry must
 name the tested Rust commit, original provenance commit, platform/build, exact
 entry point and command flow, viewer identity, provider/model where applicable,
@@ -181,7 +181,7 @@ published macOS real-client matrix above remains the provider/model evidence; a
 future Windows real-provider run must be recorded separately rather than inferred
 from the ConPTY fixture.
 
-## Published OpenCode control-plane evidence: `3929e31`
+## Published OpenCode control-plane evidence: `642f272`
 
 The separate Daybreak manual security review found that the OpenCode loopback
 control plane had no authentication and that dropping the port-reservation
@@ -213,6 +213,19 @@ dies after verification, the established TCP socket cannot be redirected to a ne
 listener. Initial health, RoomPortal registration, session operations, turn POST,
 SSE, abort, and disconnect all use this same custody-bound path.
 
+The second manual re-review found a macOS-specific gap in that revalidation: an
+exited provider can remain as a zombie under the guardian, retaining its PID and
+process group until the guardian reaps it. Commit
+`642f27250e966ffaf6070a8a3e7503dc961c0999` makes provider health an asynchronous
+common-driver contract. On every Unix target the server asks the guardian over
+its bounded private control protocol, and the guardian calls `try_wait` on the
+exact `Child` handle before answering. A dead or zombie child therefore fails
+before any HTTP byte is sent even when its PID and PGID still look live. The
+existing group and Linux `/proc` checks remain additional custody evidence after
+the exact-child proof. The guardian retains cleanup ownership after reporting an
+exit, so existing stop and macOS fork-history failure semantics are unchanged.
+The protocol was split into its own owner rather than weakening the 800-line gate.
+
 The exact code passed the complete `make verify` on macOS: architecture and
 800-line source gates, generated protocol bindings, copied frontend build and CSS
 verification, 65 frontend files with 332 tests, 13 Tauri tests, all Rust workspace
@@ -235,8 +248,15 @@ guardian, anchor, and OpenCode process were then shut down, their absence was
 confirmed, and the verification-only temporary directory was moved to Trash.
 Pre-existing original-project and unrelated processes were not signalled.
 
-This addresses both manual findings but does not pre-empt the same Daybreak task's
-pending manual re-review. No second Deep Scan is used.
+The exact debug bundle was rebuilt from `642f272` source and the copied UI resumed
+that durable Hy3 session again. The observed provider port returned HTTP 401 for
+unauthenticated `/global/health` and `/event`, and the real agent published
+`OPENCODE_MAC_CHILD_HANDLE_OK` through RoomPortal before returning to idle. The
+copied stop control reached stopped; the app, sidecar, guardian, provider, and
+observed listener were all confirmed absent afterward.
+
+This addresses all three manual findings but does not pre-empt the same Daybreak
+task's pending manual re-review. No second Deep Scan is used.
 
 ## API verification scope
 

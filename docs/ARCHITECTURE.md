@@ -178,6 +178,25 @@ Every current-profile runtime acquires a generation-tokened exact room/session l
 
 Executable binding protects selection against path, symlink, updater, in-place-write, and atomic-replacement races within the application's trusted local account. Normal provider daemonization that changes sessions, clears the environment, or closes inherited descriptors remains inside the custody model. A hostile process already executing as the same OS account, or a deliberately hostile provider that delegates work through an unrelated pre-existing same-account process, remains outside this boundary because Unix peers can interfere with account-private processes and files. macOS exposes neither a sealed descriptor-execution path equivalent to Linux `memfd` nor a pidfd-style stable signaling handle, so any provider fork makes cleanup recovery-required instead of claiming success. Network peers, room inputs, and provider output remain untrusted.
 
+## Unix provider health custody
+
+Unix liveness never relies on PID or process-group presence alone. Before any
+provider can be reused—and after OpenCode connects a raw socket but before it
+constructs or sends authenticated HTTP—the common asynchronous health contract
+sends one bounded request over the private guardian control pipe. The guardian
+synchronously calls `try_wait` on its exact provider `Child` handle and returns
+the expected provider PID plus `alive` or `exited`; malformed, mismatched,
+timed-out, or unavailable responses fail closed. An exited macOS zombie is
+therefore rejected even while it retains its PID and anchor PGID. The existing
+group check and Linux/Android `/proc/<pid>/stat` state check remain additional
+evidence after this exact-child proof.
+
+Reporting an exited child does not abandon custody. The guardian retains the
+handle and descendants until control-pipe EOF drives the existing cleanup and
+receipt path. Consequently, a replacement OpenCode listener reached after the
+real child exits sees EOF and zero HTTP bytes, while the existing normal-stop and
+macOS fork-history failure semantics remain unchanged.
+
 ## Enforced source structure
 
 Cargo crate dependencies enforce direction:
