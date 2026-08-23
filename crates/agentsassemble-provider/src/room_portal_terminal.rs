@@ -491,6 +491,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn workspace_shadow_cannot_replace_the_bound_helper() {
+        use std::os::windows::process::CommandExt;
         use std::process::Command;
 
         use crate::antigravity_hook::AntigravityHookRegistration;
@@ -563,9 +564,10 @@ mod tests {
             ))
             .unwrap_or_else(|error| panic!("build shadow test PATH: {error}"));
             let shell_command = format!(r#""{command}""#);
-            let status = Command::new("cmd.exe")
-                .args(["/D", "/S", "/C"])
-                .arg(shell_command)
+            let mut process = Command::new("cmd.exe");
+            process.args(["/D", "/S", "/C"]);
+            process.raw_arg(shell_command);
+            let status = process
                 .current_dir(workspace)
                 .env("PATH", path)
                 .env("PRIVATE_MARKER", private_marker)
