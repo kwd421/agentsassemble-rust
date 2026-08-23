@@ -6,8 +6,8 @@ use agentsassemble_persistence::{
     CommandOutcome, PersistenceError, RoomCommandMutation, SqliteStore,
 };
 use agentsassemble_provider::{
-    ProviderAdapter, ProviderAdapterError, ProviderCatalogService, ProviderRuntimeStarted,
-    ProviderTurnCompleted, ProviderTurnRequest,
+    ProviderAdapter, ProviderAdapterError, ProviderCatalogService, ProviderRoomObservation,
+    ProviderRuntimeStarted, ProviderTurnCompleted, ProviderTurnOutcome, ProviderTurnRequest,
 };
 use serde_json::Value;
 use thiserror::Error;
@@ -210,7 +210,7 @@ impl RoomRuntime {
                         Ok(result) => {
                             let room_id = result.assignment.session.public.room_id.clone();
                             let session_id = result.assignment.session.public.session_id.clone();
-                            match commit_provider_result(&store, result).await {
+                            match commit_provider_result(&store, &provider_adapter, result).await {
                                 Ok(commit) => publish_turn_commit(
                                     &event_tx,
                                     &mut turn_tasks,
@@ -265,6 +265,11 @@ fn spawn_provider_turn(
         let request = ProviderTurnRequest {
             turn_id: assignment.turn_id.clone(),
             input: assignment.provider_input.clone(),
+            room_observation: Some(ProviderRoomObservation {
+                input_up_to_seq: assignment.session.input_up_to_seq,
+                view: assignment.room_view.clone(),
+                allowed_agent_ids: assignment.room_agent_ids.clone(),
+            }),
         };
         let result = provider_adapter
             .send_turn(&assignment.session, &request)
@@ -275,27 +280,67 @@ fn spawn_provider_turn(
 
 async fn commit_provider_result(
     store: &SqliteStore,
+    provider_adapter: &ProviderAdapter,
     completed: ProviderTurnTaskResult,
 ) -> Result<AgentTurnCommit, PersistenceError> {
     let room_id = &completed.assignment.session.public.room_id;
     let session_id = &completed.assignment.session.public.session_id;
     let turn_id = &completed.assignment.turn_id;
     match completed.result {
-        Ok(result) => {
-            store
-                .complete_agent_turn(
+        Ok(result) => match result.outcome {
+            ProviderTurnOutcome::Message {
+                content,
+                target_agent_id,
+            } => {
+                store
+                    .complete_agent_turn(
+                        room_id,
+                        session_id,
+                        turn_id,
+                        &result.provider_turn_id,
+                        &content,
+                        &target_agent_id,
+                    )
+                    .await
+            }
+            ProviderTurnOutcome::Declined { reason_code } => {
+                store
+                    .decline_agent_turn(
+                        room_id,
+                        session_id,
+                        turn_id,
+                        &result.provider_turn_id,
+                        &reason_code,
+                    )
+                    .await
+            }
+        },
+        Err(error) => {
+            let confirmed_stop = error.runtime_stopped.then_some((
+                error.runtime_handle_id.as_str(),
+                error.runtime_owner_id.as_str(),
+            ));
+            let commit = store
+                .fail_agent_turn(
                     room_id,
                     session_id,
                     turn_id,
-                    &result.provider_turn_id,
-                    &result.content,
+                    error.code,
+                    error.message,
+                    confirmed_stop,
                 )
-                .await
-        }
-        Err(error) => {
-            store
-                .fail_agent_turn(room_id, session_id, turn_id, error.code, error.message)
-                .await
+                .await?;
+            if error.runtime_stopped {
+                provider_adapter
+                    .release_confirmed_stop(
+                        room_id,
+                        session_id,
+                        &error.runtime_handle_id,
+                        &error.runtime_owner_id,
+                    )
+                    .await;
+            }
+            Ok(commit)
         }
     }
 }
@@ -458,7 +503,7 @@ async fn execute_agent_start(
         .await?
     {
         AgentStartPlan::Outcome(outcome) => {
-            return Ok(started_execution(store, &command.principal.room_id, *outcome).await);
+            return Ok(progressed_execution(store, &command.principal.room_id, *outcome).await);
         }
         AgentStartPlan::Start(effect) => effect,
     };
@@ -473,7 +518,7 @@ async fn execute_agent_start(
                     &persisted_start(started),
                 )
                 .await?;
-            Ok(started_execution(store, &command.principal.room_id, outcome).await)
+            Ok(progressed_execution(store, &command.principal.room_id, outcome).await)
         }
         Err(error) => {
             let events = if error.effect_uncertain {
@@ -511,7 +556,7 @@ async fn execute_agent_start(
     }
 }
 
-async fn started_execution(
+async fn progressed_execution(
     store: &SqliteStore,
     room_id: &str,
     outcome: CommandOutcome,
@@ -523,7 +568,17 @@ async fn started_execution(
             execution.assignment = commit.next_assignment;
         }
         Ok(None) => {}
-        Err(error) => execution.reply = Err(error),
+        Err(error) => {
+            let code = match error {
+                PersistenceError::CommandRejected { code, .. } => code,
+                _ => "persistence_error",
+            };
+            tracing::error!(
+                code,
+                room_id,
+                "committed lifecycle command could not advance the ordered floor"
+            );
+        }
     }
     execution
 }
@@ -537,11 +592,15 @@ async fn execute_agent_stop(
         .prepare_agent_stop(&command.principal, &command.request_id, &command.payload)
         .await?
     {
-        AgentStopPlan::Outcome(outcome) => Ok(CommandExecution::success(*outcome)),
-        AgentStopPlan::Finalize => store
-            .finalize_agent_stop(&command.principal, &command.request_id, &command.payload)
-            .await
-            .map(CommandExecution::success),
+        AgentStopPlan::Outcome(outcome) => {
+            Ok(progressed_execution(store, &command.principal.room_id, *outcome).await)
+        }
+        AgentStopPlan::Finalize => {
+            let outcome = store
+                .finalize_agent_stop(&command.principal, &command.request_id, &command.payload)
+                .await?;
+            Ok(progressed_execution(store, &command.principal.room_id, outcome).await)
+        }
         AgentStopPlan::Stop(effect) => {
             let stop = provider_adapter
                 .stop(
@@ -584,10 +643,10 @@ async fn execute_agent_stop(
                     &effect.runtime_owner_id,
                 )
                 .await;
-            store
+            let outcome = store
                 .finalize_agent_stop(&command.principal, &command.request_id, &command.payload)
-                .await
-                .map(CommandExecution::success)
+                .await?;
+            Ok(progressed_execution(store, &command.principal.room_id, outcome).await)
         }
     }
 }

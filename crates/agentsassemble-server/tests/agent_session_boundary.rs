@@ -18,6 +18,10 @@ use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_tungstenite::{WebSocketStream, connect_async, tungstenite::Message};
 use tokio_util::sync::CancellationToken;
 
+#[cfg(unix)]
+#[path = "support/room_portal_fixture.rs"]
+mod room_portal_fixture;
+
 const HOST_TOKEN: &str = "agent-boundary-host-token-000000001";
 static AGENT_BOUNDARY_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
@@ -308,14 +312,10 @@ async fn room_turns_publish_provider_finals_without_blocking_room_commands() {
     let directory =
         tempfile::tempdir().unwrap_or_else(|error| panic!("create room-turn root: {error}"));
     let transcript = directory.path().join("turn-requests.jsonl");
+    let observed_views = directory.path().join("observed-room-views.txt");
     let turn_seen = directory.path().join("turn-seen");
     let release = directory.path().join("turn-release");
-    let fixture = format!(
-        "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' \"$initialize\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nprintf '%s\\n' \"$initialized\" >> {log}\nIFS= read -r thread\nprintf '%s\\n' \"$thread\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{{\"thread\":{{\"id\":\"thread-1\"}}}}}}'\nIFS= read -r turn_one\nprintf '%s\\n' \"$turn_one\" >> {log}\nprintf seen > {seen}\nwhile [ ! -f {release} ]; do :; done\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{{\"turn\":{{\"id\":\"provider-turn-1\"}}}}}}'\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"method\":\"agent_message/completed\",\"params\":{{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\",\"text\":\"first room answer\"}}}}'\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"method\":\"turn/completed\",\"params\":{{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\"}}}}'\nIFS= read -r turn_two\nprintf '%s\\n' \"$turn_two\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":4,\"result\":{{\"turn\":{{\"id\":\"provider-turn-2\"}}}}}}'\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"method\":\"agent_message/completed\",\"params\":{{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-2\",\"text\":\"second room answer\"}}}}'\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"method\":\"turn/completed\",\"params\":{{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-2\"}}}}'\nIFS= read -r forever\n",
-        log = shell_quote(&transcript),
-        seen = shell_quote(&turn_seen),
-        release = shell_quote(&release),
-    );
+    let fixture = room_portal_fixture::script(&transcript, &observed_views, &turn_seen, &release);
     let store = SqliteStore::open(&format!(
         "sqlite://{}",
         directory.path().join("runtime.sqlite3").display()
@@ -388,6 +388,10 @@ async fn room_turns_publish_provider_finals_without_blocking_room_commands() {
         }
     }
     assert_eq!(provider_finals, ["first room answer", "second room answer"]);
+    let views = std::fs::read_to_string(&observed_views)
+        .unwrap_or_else(|error| panic!("read observed RoomPortal views: {error}"));
+    assert!(views.contains("answer the first room message"));
+    assert!(views.contains("queue the second room message"));
     let requests = std::fs::read_to_string(&transcript)
         .unwrap_or_else(|error| panic!("read room-turn transcript: {error}"))
         .lines()
@@ -405,13 +409,13 @@ async fn room_turns_publish_provider_finals_without_blocking_room_commands() {
         turns[0]["params"]["input"][0]["text"]
             .as_str()
             .unwrap_or_default()
-            .contains("answer the first room message")
+            .contains("read_discussion")
     );
     assert!(
         turns[1]["params"]["input"][0]["text"]
             .as_str()
             .unwrap_or_default()
-            .contains("queue the second room message")
+            .contains("read_discussion")
     );
     server.stop().await;
 }

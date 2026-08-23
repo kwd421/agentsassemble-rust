@@ -37,6 +37,16 @@ pub(super) async fn reuse_owned_runtime(
 ) -> Result<ProviderRuntimeStarted, ProviderAdapterError> {
     validate_owned_runtime(session, runtime)?;
     let mut driver = runtime.driver.lock().await;
+    if driver.requires_restart() {
+        return Err(ProviderAdapterError::uncertain(
+            DriverError::new(
+                "provider_runtime_restart_required",
+                "The owned provider runtime must be stopped before it can be reused.",
+            ),
+            &runtime.handle_id,
+            &runtime.owner_id,
+        ));
+    }
     match driver.is_alive() {
         Ok(true) => {}
         Ok(false) => {

@@ -6,6 +6,7 @@ use serde_json::{Value, json};
 use tokio::time::Instant;
 
 use super::{CodexDriver, protocol_closed, protocol_error};
+use crate::room_portal::ProviderTurnOutcome;
 use crate::runtime::{DriverError, ProviderTurnCompleted, ProviderTurnRequest};
 
 const TURN_INACTIVITY_TIMEOUT: Duration = Duration::from_mins(3);
@@ -25,6 +26,12 @@ pub(super) struct CodexTurnState {
     completed: Option<CompletedTurn>,
     provider_turn_ids: HashSet<String>,
     error: Option<DriverError>,
+}
+
+impl CodexTurnState {
+    pub(super) const fn is_poisoned(&self) -> bool {
+        self.error.is_some()
+    }
 }
 
 struct ActiveTurn {
@@ -449,13 +456,16 @@ fn finish_turn(driver: &mut CodexDriver) -> Result<ProviderTurnCompleted, Driver
     let content = active
         .final_content
         .unwrap_or_else(|| clean_message(&active.delta_content, MAX_FINAL_MESSAGE_CHARS));
-    if !has_visible_text(&content) {
+    if !has_visible_text(&content) && active.request.room_observation.is_none() {
         return poison(driver, output_missing());
     }
     let outcome = ProviderTurnCompleted {
         turn_id: active.request.turn_id.clone(),
         provider_turn_id: active.provider_turn_id,
-        content,
+        outcome: ProviderTurnOutcome::Message {
+            content,
+            target_agent_id: String::new(),
+        },
     };
     driver.turn_state.completed = Some(CompletedTurn {
         request: active.request,

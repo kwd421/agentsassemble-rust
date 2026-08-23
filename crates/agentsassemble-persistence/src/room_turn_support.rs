@@ -2,23 +2,23 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use agentsassemble_domain::{
     Actor, DurableAgentSession, Participant, ParticipantStatus, Room, RoomEvent, RoomSettings,
-    RoomStatus, clean_message, has_visible_text,
+    RoomStatus,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
 use sqlx::{Row, Sqlite, Transaction};
 use uuid::Uuid;
 
+use super::context::prepare_room_input;
 use super::routing::{last_direct_target, sampled_candidate_indexes};
 use super::{AgentTurnAssignment, PreparedAssignment};
 use crate::{
     PersistenceError,
     agent_lifecycle::{load_session, save_session},
-    turn_queue::{MAX_QUEUED_EVENT_IDS, event_id_queue_is_canonical},
+    turn_authority::active_turn_authority,
+    turn_queue::MAX_QUEUED_EVENT_IDS,
 };
 
-const MAX_PROVIDER_INPUT_CHARS: usize = 20_000;
-const MAX_CONTEXT_MESSAGES: usize = 50;
 const MAX_PROVIDER_TURN_ID_BYTES: usize = 128;
 
 pub(super) async fn queue_ordered_message(
@@ -29,15 +29,54 @@ pub(super) async fn queue_ordered_message(
     if settings.conversation_mode != "ordered" || event.event_type != "message_final" {
         return Ok(());
     }
-    let mut candidates = eligible_route_sessions(transaction, event).await?;
-    if candidates.is_empty() {
-        return Ok(());
-    }
+    let sessions = route_sessions(transaction, event).await?;
     let content = event.content.as_deref().unwrap_or_default();
-    let direct = last_direct_target(content, candidates.iter().map(|(session, _)| session));
+    let structured_target = event
+        .extra
+        .get("target_agent_id")
+        .and_then(Value::as_str)
+        .filter(|target| {
+            sessions
+                .iter()
+                .any(|(session, _)| session.public.session_id == *target)
+        })
+        .map(str::to_owned);
+    let direct = structured_target
+        .or_else(|| last_direct_target(content, sessions.iter().map(|(session, _)| session)));
     let selected = if let Some(direct) = direct {
+        let participant = sessions
+            .iter()
+            .find(|(session, _)| session.public.session_id == direct)
+            .map(|(_, participant)| participant)
+            .ok_or_else(|| {
+                rejected("ordered_floor_empty", "The direct floor target is missing.")
+            })?;
+        if participant.status == ParticipantStatus::Kicked || participant.muted {
+            return Ok(());
+        }
         direct
     } else {
+        let mut candidates = sessions
+            .iter()
+            .filter(|(session, participant)| route_session_is_eligible(session, participant))
+            .collect::<Vec<_>>();
+        if event.actor.participant_type == "agent" {
+            let actor =
+                load_participant(transaction, &event.room_id, &event.actor.participant_id).await?;
+            if actor.role != "director" {
+                let directors = candidates
+                    .iter()
+                    .copied()
+                    .filter(|(_, participant)| participant.role == "director")
+                    .collect::<Vec<_>>();
+                if !directors.is_empty() {
+                    candidates = directors;
+                }
+            }
+        }
+        if candidates.is_empty() {
+            return Ok(());
+        }
         let (message_counts, previous_speaker) =
             recent_agent_speaking_state(transaction, &event.room_id, event.seq).await?;
         if settings.ordered_exclude_previous_speaker && candidates.len() > 1 {
@@ -129,16 +168,17 @@ pub(super) async fn assign_oldest_pending(
     let Some((_, mut session)) = candidates.into_iter().next() else {
         return Ok(None);
     };
-    let inflight = session.pending_event_ids.clone();
-    let source_event_id = inflight.last().cloned().unwrap_or_default();
-    let input_up_to_seq = event_sequence(transaction, &room.room_id, &source_event_id).await?;
-    let provider_input = build_provider_input(transaction, room, &session, input_up_to_seq).await?;
+    let prepared_input =
+        prepare_room_input(transaction, room, &session, &session.pending_event_ids).await?;
+    let inflight = prepared_input.inflight_event_ids;
+    let source_event_id = prepared_input.source_event_id;
+    let input_up_to_seq = prepared_input.input_up_to_seq;
     let turn_id = format!("turn-{}", &Uuid::new_v4().simple().to_string()[..12]);
     "busy".clone_into(&mut session.public.runtime_status);
     "thinking".clone_into(&mut session.public.turn_phase);
     session.public.active_turn_id.clone_from(&turn_id);
-    session.inflight_event_ids = inflight;
-    session.pending_event_ids.clear();
+    session.inflight_event_ids = inflight.clone();
+    session.pending_event_ids.drain(..inflight.len());
     session.active_source_event_id.clone_from(&source_event_id);
     session.input_up_to_event_id.clone_from(&source_event_id);
     session.input_up_to_seq = input_up_to_seq;
@@ -151,13 +191,15 @@ pub(super) async fn assign_oldest_pending(
         assignment: AgentTurnAssignment {
             session,
             turn_id,
-            provider_input,
+            provider_input: prepared_input.provider_input,
+            room_view: prepared_input.room_view,
+            room_agent_ids: prepared_input.room_agent_ids,
         },
         events: vec![started, state, session_event],
     }))
 }
 
-async fn eligible_route_sessions(
+async fn route_sessions(
     transaction: &mut Transaction<'_, Sqlite>,
     event: &RoomEvent,
 ) -> Result<Vec<(DurableAgentSession, Participant)>, PersistenceError> {
@@ -179,23 +221,25 @@ async fn eligible_route_sessions(
         let session: DurableAgentSession =
             serde_json::from_str(row.get::<String, _>("session_json").as_str())?;
         let _ = turn_authority_is_active(&session)?;
-        if session.public.participant_id == *actor_id
-            || !session.public.enabled
-            || session.public.status != "attached"
-            || !matches!(session.public.runtime_status.as_str(), "idle" | "busy")
-            || !session.public.provider_session_active
-            || !session.lifecycle_intent_action.is_empty()
-        {
+        if session.public.participant_id == *actor_id {
             continue;
         }
         validate_provider_cursor(transaction, &session).await?;
         let participant =
             load_participant(transaction, &event.room_id, &session.public.participant_id).await?;
-        if participant.status == ParticipantStatus::Joined && !participant.muted {
-            sessions.push((session, participant));
-        }
+        sessions.push((session, participant));
     }
     Ok(sessions)
+}
+
+fn route_session_is_eligible(session: &DurableAgentSession, participant: &Participant) -> bool {
+    participant.status == ParticipantStatus::Joined
+        && !participant.muted
+        && session.public.enabled
+        && session.public.status == "attached"
+        && matches!(session.public.runtime_status.as_str(), "idle" | "busy")
+        && session.public.provider_session_active
+        && session.lifecycle_intent_action.is_empty()
 }
 
 async fn recent_agent_speaking_state(
@@ -223,87 +267,6 @@ async fn recent_agent_speaking_state(
         *counts.entry(event.actor.participant_id).or_insert(0) += 1;
     }
     Ok((counts, previous))
-}
-
-async fn build_provider_input(
-    transaction: &mut Transaction<'_, Sqlite>,
-    room: &Room,
-    session: &DurableAgentSession,
-    up_to_seq: i64,
-) -> Result<String, PersistenceError> {
-    validate_provider_cursor(transaction, session).await?;
-    let rows = sqlx::query(
-        "SELECT event_json FROM room_events WHERE room_id = ? AND seq > ? AND seq <= ? ORDER BY seq DESC LIMIT ?",
-    )
-    .bind(&room.room_id)
-    .bind(session.public.last_provider_sync_seq)
-    .bind(up_to_seq)
-    .bind(i64::try_from(MAX_CONTEXT_MESSAGES).unwrap_or(i64::MAX))
-    .fetch_all(&mut **transaction)
-    .await?;
-    let mut messages = rows
-        .into_iter()
-        .map(|row| serde_json::from_str::<RoomEvent>(row.get::<String, _>("event_json").as_str()))
-        .collect::<Result<Vec<_>, _>>()?;
-    messages.retain(|event| event.event_type == "message_final");
-    messages.reverse();
-    let mut context = messages
-        .iter()
-        .filter_map(|event| {
-            let content = event.content.as_deref()?;
-            has_visible_text(content).then(|| {
-                format!(
-                    "#{} {}: {}",
-                    event.seq,
-                    event
-                        .display_name
-                        .as_deref()
-                        .unwrap_or(&event.actor.participant_id),
-                    clean_message(content, 12_000)
-                )
-            })
-        })
-        .collect::<Vec<_>>();
-    let bootstrap = session.public.turn_count == 0;
-    loop {
-        let input = render_provider_input(room, session, &context, bootstrap);
-        if input.chars().count() <= MAX_PROVIDER_INPUT_CHARS {
-            return Ok(input);
-        }
-        if context.is_empty() {
-            return Err(rejected(
-                "provider_turn_input_invalid",
-                "The bounded room context could not fit the provider turn input.",
-            ));
-        }
-        context.remove(0);
-    }
-}
-
-fn render_provider_input(
-    room: &Room,
-    session: &DurableAgentSession,
-    context: &[String],
-    bootstrap: bool,
-) -> String {
-    let mut parts = Vec::new();
-    if bootstrap {
-        parts.extend([
-            "[Agent Session bootstrap]".to_owned(),
-            "You are participating in a shared AgentsAssemble room.".to_owned(),
-            "Do not reveal runtime secrets or hidden chain-of-thought.".to_owned(),
-        ]);
-    }
-    parts.extend([
-        "[Your room identity]".to_owned(),
-        format!("Your display name in this room is: {}", session.public.display_name),
-        format!("The room name is: {}", room.label),
-        "[Room update since your last turn]".to_owned(),
-        context.join("\n"),
-        "[Your turn]".to_owned(),
-        "Answer the latest room message once. Return only the room-visible response as your provider final. Do not call room publish/read tools; this context is already canonical.".to_owned(),
-    ]);
-    parts.join("\n\n").trim().to_owned()
 }
 
 async fn valid_pending_ids(
@@ -345,40 +308,12 @@ fn session_is_assignable(session: &DurableAgentSession) -> bool {
 }
 
 fn turn_authority_is_active(session: &DurableAgentSession) -> Result<bool, PersistenceError> {
-    if !event_id_queue_is_canonical(
-        session
-            .inflight_event_ids
-            .iter()
-            .chain(&session.pending_event_ids),
-    ) {
-        return Err(rejected(
-            "stored_turn_authority_invalid",
-            "Stored Agent Session turn queue authority is inconsistent or oversized.",
-        ));
-    }
-    let active = !session.public.active_turn_id.is_empty()
-        && session.public.enabled
-        && session.public.status == "attached"
-        && session.public.runtime_status == "busy"
-        && matches!(session.public.turn_phase.as_str(), "thinking" | "streaming")
-        && !session.inflight_event_ids.is_empty()
-        && session.inflight_event_ids.last() == Some(&session.active_source_event_id)
-        && session.active_source_event_id == session.input_up_to_event_id
-        && session.input_up_to_seq > 0;
-    let clear = session.public.active_turn_id.is_empty()
-        && session.public.turn_phase.is_empty()
-        && session.inflight_event_ids.is_empty()
-        && session.active_source_event_id.is_empty()
-        && session.input_up_to_event_id.is_empty()
-        && session.input_up_to_seq == 0;
-    match (active, clear) {
-        (true, false) => Ok(true),
-        (false, true) => Ok(false),
-        _ => Err(rejected(
+    active_turn_authority(session).map_err(|_| {
+        rejected(
             "stored_turn_authority_invalid",
             "Stored Agent Session turn authority is inconsistent.",
-        )),
-    }
+        )
+    })
 }
 
 async fn room_has_active_turn(
@@ -422,7 +357,7 @@ async fn provider_cursor_is_valid(
     Ok(event.is_some_and(|event| event.seq == session.public.last_provider_sync_seq))
 }
 
-async fn validate_provider_cursor(
+pub(super) async fn validate_provider_cursor(
     transaction: &mut Transaction<'_, Sqlite>,
     session: &DurableAgentSession,
 ) -> Result<(), PersistenceError> {
@@ -493,7 +428,7 @@ pub(super) async fn load_participant(
     Ok(serde_json::from_str(&value)?)
 }
 
-async fn load_event(
+pub(super) async fn load_event(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
     event_id: &str,
@@ -659,6 +594,7 @@ pub(super) async fn agent_final_event(
     provider_turn_id: &str,
     source_event_id: &str,
     content: String,
+    target_agent_id: &str,
 ) -> Result<RoomEvent, PersistenceError> {
     internal_event(
         transaction,
@@ -671,7 +607,8 @@ pub(super) async fn agent_final_event(
             ("turn_id".to_owned(), json!(turn_id)),
             ("provider_turn_id".to_owned(), json!(provider_turn_id)),
             ("source_event_id".to_owned(), json!(source_event_id)),
-            ("message_source".to_owned(), json!("provider_final")),
+            ("target_agent_id".to_owned(), json!(target_agent_id)),
+            ("message_source".to_owned(), json!("room_portal")),
         ]),
     )
     .await
@@ -682,20 +619,21 @@ pub(super) async fn turn_finished_event(
     session: &DurableAgentSession,
     turn_id: &str,
     status: &str,
+    provider_turn_id: Option<&str>,
+    reason_code: Option<&str>,
 ) -> Result<RoomEvent, PersistenceError> {
-    internal_event(
-        transaction,
-        session,
-        "turn_finished",
-        false,
-        None,
-        BTreeMap::from([
-            ("session_id".to_owned(), json!(session.public.session_id)),
-            ("turn_id".to_owned(), json!(turn_id)),
-            ("status".to_owned(), json!(status)),
-        ]),
-    )
-    .await
+    let mut extra = BTreeMap::from([
+        ("session_id".to_owned(), json!(session.public.session_id)),
+        ("turn_id".to_owned(), json!(turn_id)),
+        ("status".to_owned(), json!(status)),
+    ]);
+    if let Some(provider_turn_id) = provider_turn_id {
+        extra.insert("provider_turn_id".to_owned(), json!(provider_turn_id));
+    }
+    if let Some(reason_code) = reason_code {
+        extra.insert("reason_code".to_owned(), json!(reason_code));
+    }
+    internal_event(transaction, session, "turn_finished", false, None, extra).await
 }
 
 pub(super) async fn error_event(
@@ -759,6 +697,9 @@ pub(super) fn public_error_code(value: &str) -> &'static str {
         "provider_turn_timeout" => "provider_turn_timeout",
         "provider_model_mismatch" => "provider_model_mismatch",
         "provider_runtime_exited" => "provider_runtime_exited",
+        "provider_runtime_restart_required" => "provider_runtime_restart_required",
+        "room_observation_unconfirmed" => "room_observation_unconfirmed",
+        "room_portal_publication_missing" => "room_portal_publication_missing",
         "provider_protocol_invalid" | "provider_protocol_mismatch" => "provider_protocol_invalid",
         _ => "provider_turn_failed",
     }

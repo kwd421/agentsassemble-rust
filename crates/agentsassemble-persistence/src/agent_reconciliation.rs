@@ -6,9 +6,8 @@ use serde_json::{Value, json};
 use sqlx::{Row, Sqlite, Transaction};
 
 use crate::{
-    PersistenceError, SqliteStore,
-    agent_lifecycle_reservations::mark_lifecycle_owner_lost,
-    turn_queue::{event_id_queue_is_canonical, merge_event_ids},
+    PersistenceError, SqliteStore, agent_lifecycle_reservations::mark_lifecycle_owner_lost,
+    turn_authority::active_turn_authority, turn_queue::merge_event_ids,
 };
 
 const ACTIVE_RUNTIME_STATES: [&str; 6] = [
@@ -186,12 +185,7 @@ fn validate_candidate_authority(
     session: &DurableAgentSession,
     reservations: &[Value],
 ) -> Result<(), PersistenceError> {
-    if !event_id_queue_is_canonical(
-        session
-            .inflight_event_ids
-            .iter()
-            .chain(&session.pending_event_ids),
-    ) {
+    if active_turn_authority(session).is_err() {
         return Err(invalid_stored_authority());
     }
     if session.runtime_handle_id.is_empty() != session.runtime_owner_id.is_empty() {
@@ -268,6 +262,20 @@ async fn reconcile_observation(
             session.runtime_handle_id.clone_from(handle_id);
             session.runtime_owner_id.clone_from(new_owner_id);
             session.public.provider_session_active = false;
+            if active_turn_authority(session).unwrap_or(false) {
+                merge_inflight_events(session)?;
+                "unavailable".clone_into(&mut session.public.status);
+                session.public.enabled = false;
+                "recovering".clone_into(&mut session.public.runtime_status);
+                session.public.active_turn_id.clear();
+                session.public.turn_phase.clear();
+                "A provider turn was interrupted while its runtime was adopted after restart."
+                    .clone_into(&mut session.public.last_error);
+                "provider_turn_recovery_required".clone_into(&mut session.public.last_error_code);
+                session.public.recovery_required = true;
+                session.public.updated_at = Utc::now();
+                return Ok(true);
+            }
             session.public.updated_at = Utc::now();
             Ok(false)
         }

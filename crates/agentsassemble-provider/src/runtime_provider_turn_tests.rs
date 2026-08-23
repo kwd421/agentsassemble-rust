@@ -3,6 +3,17 @@ use std::{path::Path, time::Duration};
 use serde_json::Value;
 
 use super::{ProviderAdapter, ProviderRuntimeStarted, ProviderTurnRequest, tests::fixture_session};
+use crate::room_portal::ProviderTurnOutcome;
+
+fn assert_message(completed: &super::ProviderTurnCompleted, expected: &str) {
+    assert_eq!(
+        completed.outcome,
+        ProviderTurnOutcome::Message {
+            content: expected.to_owned(),
+            target_agent_id: String::new(),
+        }
+    );
+}
 
 #[tokio::test]
 async fn codex_turn_uses_original_settings_and_returns_one_canonical_final() {
@@ -30,6 +41,7 @@ async fn codex_turn_uses_original_settings_and_returns_one_canonical_final() {
     let request = ProviderTurnRequest {
         turn_id: "room-turn-1".to_owned(),
         input: "Read the canonical room context and answer.".to_owned(),
+        room_observation: None,
     };
     let completed = adapter
         .send_turn(&active, &request)
@@ -37,7 +49,7 @@ async fn codex_turn_uses_original_settings_and_returns_one_canonical_final() {
         .unwrap_or_else(|error| panic!("complete provider turn: {error}"));
     assert_eq!(completed.turn_id, "room-turn-1");
     assert_eq!(completed.provider_turn_id, "provider-turn-1");
-    assert_eq!(completed.content, "final answer");
+    assert_message(&completed, "final answer");
 
     let replay = adapter
         .send_turn(&active, &request)
@@ -91,11 +103,12 @@ async fn codex_turn_infers_completion_after_final_message_and_thread_idle() {
             &ProviderTurnRequest {
                 turn_id: "room-turn-1".to_owned(),
                 input: "Finish when the thread becomes idle.".to_owned(),
+                room_observation: None,
             },
         )
         .await
         .unwrap_or_else(|error| panic!("infer provider turn completion: {error}"));
-    assert_eq!(completed.content, "idle answer");
+    assert_message(&completed, "idle answer");
     stop_and_release(&adapter, &active, &started).await;
 }
 
@@ -127,11 +140,12 @@ async fn nullable_hook_turn_identity_does_not_poison_an_active_turn() {
             &ProviderTurnRequest {
                 turn_id: "room-turn-1".to_owned(),
                 input: "Continue after the thread hook.".to_owned(),
+                room_observation: None,
             },
         )
         .await
         .unwrap_or_else(|error| panic!("complete provider turn after hook: {error}"));
-    assert_eq!(completed.content, "answer after hook");
+    assert_message(&completed, "answer after hook");
     stop_and_release(&adapter, &active, &started).await;
 }
 
@@ -167,6 +181,7 @@ async fn cancelled_codex_turn_start_continues_without_retransmission() {
     let request = ProviderTurnRequest {
         turn_id: "room-turn-1".to_owned(),
         input: "Continue exactly once.".to_owned(),
+        room_observation: None,
     };
     let pending_adapter = adapter.clone();
     let pending_session = active.clone();
@@ -186,7 +201,7 @@ async fn cancelled_codex_turn_start_continues_without_retransmission() {
         .send_turn(&active, &request)
         .await
         .unwrap_or_else(|error| panic!("recover provider turn response: {error}"));
-    assert_eq!(completed.content, "continued answer");
+    assert_message(&completed, "continued answer");
     let requests = requests(&transcript);
     assert_eq!(
         request_methods(&requests),
@@ -224,6 +239,7 @@ async fn owned_stop_cancels_a_blocked_turn_without_waiting_for_inactivity() {
                 &ProviderTurnRequest {
                     turn_id: "room-turn-1".to_owned(),
                     input: "Wait for shutdown.".to_owned(),
+                    room_observation: None,
                 },
             )
             .await
@@ -341,6 +357,7 @@ async fn reused_codex_provider_turn_identity_is_poisoned() {
             &ProviderTurnRequest {
                 turn_id: "room-turn-1".to_owned(),
                 input: "First answer.".to_owned(),
+                room_observation: None,
             },
         )
         .await
@@ -349,14 +366,14 @@ async fn reused_codex_provider_turn_identity_is_poisoned() {
     let request = ProviderTurnRequest {
         turn_id: "room-turn-2".to_owned(),
         input: "Second answer.".to_owned(),
+        room_observation: None,
     };
-    for _ in 0..2 {
-        let Err(error) = adapter.send_turn(&second, &request).await else {
-            panic!("reused provider turn identity must fail closed");
-        };
-        assert_eq!(error.code, "provider_turn_reused");
-        assert!(error.effect_uncertain);
-    }
+    let Err(error) = adapter.send_turn(&second, &request).await else {
+        panic!("reused provider turn identity must fail closed");
+    };
+    assert_eq!(error.code, "provider_turn_reused");
+    assert!(!error.effect_uncertain);
+    assert!(error.runtime_stopped);
     let requests = requests(&transcript);
     assert_eq!(
         request_methods(&requests),
@@ -368,7 +385,18 @@ async fn reused_codex_provider_turn_identity_is_poisoned() {
             "turn/start"
         ]
     );
-    stop_and_release(&adapter, &second, &started).await;
+    adapter
+        .release_confirmed_stop(
+            &second.public.room_id,
+            &second.public.session_id,
+            &started.runtime_handle_id,
+            &started.runtime_owner_id,
+        )
+        .await;
+    let Err(replay_error) = adapter.send_turn(&second, &request).await else {
+        panic!("stopped poisoned runtime must not accept another turn");
+    };
+    assert_eq!(replay_error.code, "runtime_owner_mismatch");
 }
 
 async fn assert_turn_start_error(response: &str, expected_code: &str) {
@@ -395,20 +423,31 @@ async fn assert_turn_error(
     let request = ProviderTurnRequest {
         turn_id: "room-turn-1".to_owned(),
         input: "This must not be sent twice.".to_owned(),
+        room_observation: None,
     };
-    for _ in 0..2 {
-        let Err(error) = adapter.send_turn(&active, &request).await else {
-            panic!("unconfirmed provider turn must remain failed closed");
-        };
-        assert_eq!(error.code, expected_code);
-        assert!(error.effect_uncertain);
-    }
+    let Err(error) = adapter.send_turn(&active, &request).await else {
+        panic!("unconfirmed provider turn must fail closed");
+    };
+    assert_eq!(error.code, expected_code);
+    assert!(!error.effect_uncertain);
+    assert!(error.runtime_stopped);
     let requests = requests(&transcript);
     assert_eq!(
         request_methods(&requests),
         ["initialize", "initialized", "thread/start", "turn/start"]
     );
-    stop_and_release(&adapter, &active, &started).await;
+    adapter
+        .release_confirmed_stop(
+            &active.public.room_id,
+            &active.public.session_id,
+            &started.runtime_handle_id,
+            &started.runtime_owner_id,
+        )
+        .await;
+    let Err(replay_error) = adapter.send_turn(&active, &request).await else {
+        panic!("stopped poisoned runtime must not accept another turn");
+    };
+    assert_eq!(replay_error.code, "runtime_owner_mismatch");
 }
 
 fn reused_turn_fixture(transcript: &Path) -> String {

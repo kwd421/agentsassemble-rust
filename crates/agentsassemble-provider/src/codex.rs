@@ -1,5 +1,4 @@
 use std::{collections::VecDeque, time::Duration};
-
 #[cfg(not(unix))]
 use std::{io, process::Stdio};
 
@@ -27,6 +26,7 @@ use crate::{
     },
     filesystem::bind_executable,
     launch_error::DriverLaunchError,
+    room_portal::{ProviderTurnOutcome, RoomPortal, RoomPortalError},
     runtime::{
         DriverError, DriverFuture, ProviderDriver, ProviderSessionAttachment,
         ProviderTurnCompleted, ProviderTurnRequest,
@@ -71,6 +71,7 @@ pub(crate) struct CodexDriver {
     attached_observed_model_id: Option<String>,
     attachment_error: Option<DriverError>,
     turn_state: turn::CodexTurnState,
+    room_portal: RoomPortal,
 }
 
 #[cfg(unix)]
@@ -109,7 +110,8 @@ impl CodexDriver {
         )
         .into());
 
-        let arguments = command_arguments(session)?;
+        let room_portal = RoomPortal::create().map_err(|_| room_portal_unavailable())?;
+        let arguments = command_arguments(session, &room_portal)?;
         let executable = bind_executable(
             session.executable.clone(),
             session.executable_identity.clone(),
@@ -144,6 +146,7 @@ impl CodexDriver {
                 attached_observed_model_id: None,
                 attachment_error: None,
                 turn_state: turn::CodexTurnState::default(),
+                room_portal,
             })
         }
         #[cfg(not(unix))]
@@ -195,6 +198,7 @@ impl CodexDriver {
                 attached_observed_model_id: None,
                 attachment_error: None,
                 turn_state: turn::CodexTurnState::default(),
+                room_portal,
             })
         }
     }
@@ -461,6 +465,44 @@ impl ProviderDriver for CodexDriver {
     fn stop(&mut self) -> DriverFuture<'_, Result<(), DriverError>> {
         Box::pin(self.stop_process())
     }
+
+    fn begin_room_observation(&mut self, request: &ProviderTurnRequest) -> Result<(), DriverError> {
+        let observation = request
+            .room_observation
+            .as_ref()
+            .ok_or_else(room_portal_unavailable)?;
+        self.room_portal
+            .begin_observation(
+                &request.turn_id,
+                observation.input_up_to_seq,
+                &observation.view,
+                &observation.allowed_agent_ids,
+            )
+            .map_err(portal_driver_error)
+    }
+
+    fn finish_room_observation(
+        &mut self,
+        request: &ProviderTurnRequest,
+    ) -> Result<ProviderTurnOutcome, DriverError> {
+        let observation = request
+            .room_observation
+            .as_ref()
+            .ok_or_else(room_portal_unavailable)?;
+        self.room_portal
+            .finish_observation(&request.turn_id, observation.input_up_to_seq)
+            .map_err(portal_driver_error)
+    }
+
+    fn abort_room_observation(&mut self) {
+        let _ = self.room_portal.end_observation();
+    }
+
+    fn requires_restart(&self) -> bool {
+        self.initialization_error.is_some()
+            || self.attachment_error.is_some()
+            || self.turn_state.is_poisoned()
+    }
 }
 
 impl Drop for CodexDriver {
@@ -471,7 +513,10 @@ impl Drop for CodexDriver {
     }
 }
 
-fn command_arguments(session: &DurableAgentSession) -> Result<Vec<String>, DriverError> {
+fn command_arguments(
+    session: &DurableAgentSession,
+    room_portal: &RoomPortal,
+) -> Result<Vec<String>, DriverError> {
     let (approval, sandbox) = profile_permissions(session)?;
     if session.public.model.is_empty() {
         return Err(DriverError::new(
@@ -495,6 +540,9 @@ fn command_arguments(session: &DurableAgentSession) -> Result<Vec<String>, Drive
     push_config(&mut arguments, "approval_policy", approval)?;
     let project_key = format!("projects.{}.trust_level", json_string(&session.workspace)?);
     push_config(&mut arguments, &project_key, "trusted")?;
+    room_portal
+        .append_codex_config(&mut arguments)
+        .map_err(|_| room_portal_unavailable())?;
     arguments.push("--stdio".to_owned());
     Ok(arguments)
 }
@@ -530,6 +578,29 @@ fn push_config(arguments: &mut Vec<String>, key: &str, value: &str) -> Result<()
 
 fn json_string(value: &str) -> Result<String, DriverError> {
     serde_json::to_string(value).map_err(|_| protocol_error())
+}
+
+const fn room_portal_unavailable() -> DriverError {
+    DriverError::new(
+        "room_portal_unavailable",
+        "The server-owned provider room portal is unavailable.",
+    )
+}
+
+const fn portal_driver_error(error: RoomPortalError) -> DriverError {
+    match error {
+        RoomPortalError::ReceiptMissing => DriverError::new(
+            "room_observation_unconfirmed",
+            "The provider did not confirm reading the assigned room observation.",
+        ),
+        RoomPortalError::OutcomeMissing | RoomPortalError::OutcomeInvalid => DriverError::new(
+            "room_portal_publication_missing",
+            "The provider did not stage a valid room publication or decline.",
+        ),
+        RoomPortalError::Authority | RoomPortalError::Observation | RoomPortalError::Mcp => {
+            room_portal_unavailable()
+        }
+    }
 }
 
 async fn drain_stderr(mut stderr: impl AsyncRead + Unpin) {
@@ -639,6 +710,7 @@ mod tests {
         MAX_PENDING_NOTIFICATION_BYTES, MAX_PENDING_NOTIFICATIONS, command_arguments,
         next_notification_budget,
     };
+    use crate::room_portal::RoomPortal;
 
     #[test]
     fn command_uses_app_server_and_process_local_profile_settings() {
@@ -677,7 +749,9 @@ mod tests {
         }))
         .unwrap_or_else(|error| panic!("decode session fixture: {error}"));
         session.executable = "/bin/codex".to_owned();
-        let arguments = command_arguments(&session)
+        let room_portal =
+            RoomPortal::create().unwrap_or_else(|error| panic!("create room portal: {error}"));
+        let arguments = command_arguments(&session, &room_portal)
             .unwrap_or_else(|error| panic!("build app-server command: {error}"));
         assert_eq!(arguments.first().map(String::as_str), Some("app-server"));
         assert_eq!(arguments.last().map(String::as_str), Some("--stdio"));
@@ -700,6 +774,16 @@ mod tests {
             arguments
                 .iter()
                 .any(|value| { value == "projects.\"/tmp/work space\".trust_level=\"trusted\"" })
+        );
+        assert!(
+            arguments
+                .iter()
+                .any(|value| value.starts_with("mcp_servers.agentsassemble_room.command="))
+        );
+        assert!(
+            arguments
+                .iter()
+                .any(|value| value.starts_with("mcp_servers.agentsassemble_room.args="))
         );
         assert!(!arguments.iter().any(|value| value == "print"));
     }

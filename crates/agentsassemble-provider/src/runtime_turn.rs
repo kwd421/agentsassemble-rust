@@ -1,24 +1,38 @@
+use std::collections::HashSet;
+
 use agentsassemble_domain::{DurableAgentSession, has_visible_text};
 
 use super::{
-    DriverError, ProviderAdapter, ProviderAdapterError, RuntimeState, revalidate_runtime_authority,
-    validate_owned_runtime,
+    DriverError, ProviderAdapter, ProviderAdapterError, ProviderDriver, RuntimeState,
+    revalidate_runtime_authority, validate_owned_runtime,
 };
+use crate::room_portal::ProviderTurnOutcome;
 
 const MAX_TURN_ID_BYTES: usize = 128;
 const MAX_PROVIDER_INPUT_CHARS: usize = 20_000;
+const MAX_ROOM_VIEW_CHARS: usize = 20_000;
+const MAX_ROOM_VIEW_BYTES: usize = 96 * 1024;
+const MAX_ROOM_AGENT_IDS: usize = 64;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProviderTurnRequest {
     pub turn_id: String,
     pub input: String,
+    pub room_observation: Option<ProviderRoomObservation>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProviderRoomObservation {
+    pub input_up_to_seq: i64,
+    pub view: String,
+    pub allowed_agent_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProviderTurnCompleted {
     pub turn_id: String,
     pub provider_turn_id: String,
-    pub content: String,
+    pub outcome: ProviderTurnOutcome,
 }
 
 impl ProviderAdapter {
@@ -82,13 +96,65 @@ impl ProviderAdapter {
                 ));
             }
         }
+        if request.room_observation.is_some() {
+            driver
+                .begin_room_observation(request)
+                .map_err(ProviderAdapterError::safe)?;
+        }
         let result = tokio::select! {
             biased;
             () = cancellation.cancelled() => Err(turn_cancelled()),
             result = driver.send_turn(session, request) => result,
         };
-        result.map_err(|error| ProviderAdapterError::uncertain(error, &handle_id, &owner_id))
+        match result {
+            Ok(completed) => {
+                finish_completed_turn(driver.as_mut(), request, completed, &handle_id, &owner_id)
+            }
+            Err(error) => {
+                driver.abort_room_observation();
+                let requires_restart = driver.requires_restart();
+                drop(driver);
+                if requires_restart {
+                    return match self
+                        .stop(
+                            &session.public.room_id,
+                            &session.public.session_id,
+                            &handle_id,
+                            &owner_id,
+                        )
+                        .await
+                    {
+                        Ok(()) => Err(ProviderAdapterError::confirmed_stopped(
+                            error, &handle_id, &owner_id,
+                        )),
+                        Err(stop_error) => Err(stop_error),
+                    };
+                }
+                Err(ProviderAdapterError::uncertain(
+                    error, &handle_id, &owner_id,
+                ))
+            }
+        }
     }
+}
+
+fn finish_completed_turn(
+    driver: &mut dyn ProviderDriver,
+    request: &ProviderTurnRequest,
+    mut completed: ProviderTurnCompleted,
+    handle_id: &str,
+    owner_id: &str,
+) -> Result<ProviderTurnCompleted, ProviderAdapterError> {
+    if request.room_observation.is_some() {
+        completed.outcome = match driver.finish_room_observation(request) {
+            Ok(outcome) => outcome,
+            Err(error) => {
+                driver.abort_room_observation();
+                return Err(ProviderAdapterError::uncertain(error, handle_id, owner_id));
+            }
+        };
+    }
+    Ok(completed)
 }
 
 fn validate_request(
@@ -120,6 +186,28 @@ fn validate_request(
             "provider_turn_input_invalid",
             "The provider turn input is empty or exceeds its bound.",
         ));
+    }
+    if let Some(observation) = &request.room_observation {
+        let unique_ids = observation.allowed_agent_ids.iter().collect::<HashSet<_>>();
+        if observation.input_up_to_seq <= 0
+            || observation.view.chars().count() > MAX_ROOM_VIEW_CHARS
+            || observation.view.len() > MAX_ROOM_VIEW_BYTES
+            || observation.view.contains('\0')
+            || !has_visible_text(&observation.view)
+            || observation.allowed_agent_ids.len() > MAX_ROOM_AGENT_IDS
+            || unique_ids.len() != observation.allowed_agent_ids.len()
+            || observation.allowed_agent_ids.iter().any(|agent_id| {
+                agent_id.is_empty()
+                    || agent_id.len() > MAX_TURN_ID_BYTES
+                    || agent_id.trim() != agent_id
+                    || agent_id.chars().any(char::is_control)
+            })
+        {
+            return Err(DriverError::new(
+                "room_observation_invalid",
+                "The provider room observation is invalid or exceeds its bound.",
+            ));
+        }
     }
     Ok(())
 }

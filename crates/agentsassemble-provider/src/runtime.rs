@@ -11,7 +11,7 @@ use uuid::Uuid;
 #[cfg(unix)]
 use crate::guardian::GuardianLaunch;
 use crate::{
-    codex::CodexDriver, launch_error::DriverLaunchError,
+    codex::CodexDriver, launch_error::DriverLaunchError, room_portal::ProviderTurnOutcome,
     runtime_authority::revalidate_runtime_authority, runtime_lease::HeldRuntimeLease,
 };
 
@@ -31,6 +31,28 @@ pub(crate) trait ProviderDriver: Send {
     ) -> DriverFuture<'a, Result<ProviderTurnCompleted, DriverError>>;
     fn is_alive(&mut self) -> Result<bool, DriverError>;
     fn stop(&mut self) -> DriverFuture<'_, Result<(), DriverError>>;
+    fn begin_room_observation(
+        &mut self,
+        _request: &ProviderTurnRequest,
+    ) -> Result<(), DriverError> {
+        Err(DriverError::new(
+            "room_portal_unavailable",
+            "The provider runtime has no server-owned room portal.",
+        ))
+    }
+    fn finish_room_observation(
+        &mut self,
+        _request: &ProviderTurnRequest,
+    ) -> Result<ProviderTurnOutcome, DriverError> {
+        Err(DriverError::new(
+            "room_portal_unavailable",
+            "The provider runtime has no server-owned room portal.",
+        ))
+    }
+    fn abort_room_observation(&mut self) {}
+    fn requires_restart(&self) -> bool {
+        false
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -196,6 +218,7 @@ pub struct ProviderAdapterError {
     pub effect_uncertain: bool,
     pub runtime_handle_id: String,
     pub runtime_owner_id: String,
+    pub runtime_stopped: bool,
 }
 
 impl ProviderAdapterError {
@@ -206,6 +229,7 @@ impl ProviderAdapterError {
             effect_uncertain: false,
             runtime_handle_id: String::new(),
             runtime_owner_id: String::new(),
+            runtime_stopped: false,
         }
     }
 
@@ -216,6 +240,18 @@ impl ProviderAdapterError {
             effect_uncertain: true,
             runtime_handle_id: handle_id.to_owned(),
             runtime_owner_id: owner_id.to_owned(),
+            runtime_stopped: false,
+        }
+    }
+
+    fn confirmed_stopped(error: DriverError, handle_id: &str, owner_id: &str) -> Self {
+        Self {
+            code: error.code,
+            message: error.message,
+            effect_uncertain: false,
+            runtime_handle_id: handle_id.to_owned(),
+            runtime_owner_id: owner_id.to_owned(),
+            runtime_stopped: true,
         }
     }
 }
@@ -326,6 +362,7 @@ impl ProviderAdapter {
                         effect_uncertain: true,
                         runtime_handle_id: session.runtime_handle_id.clone(),
                         runtime_owner_id: session.runtime_owner_id.clone(),
+                        runtime_stopped: false,
                     });
                 }
                 revalidate_runtime_authority(session)
@@ -701,4 +738,4 @@ use start::{initialize_owned_runtime, reuse_owned_runtime};
 
 #[path = "runtime_turn.rs"]
 mod turn;
-pub use turn::{ProviderTurnCompleted, ProviderTurnRequest};
+pub use turn::{ProviderRoomObservation, ProviderTurnCompleted, ProviderTurnRequest};

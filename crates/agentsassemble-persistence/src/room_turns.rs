@@ -17,6 +17,8 @@ pub struct AgentTurnAssignment {
     pub session: DurableAgentSession,
     pub turn_id: String,
     pub provider_input: String,
+    pub room_view: String,
+    pub room_agent_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -168,6 +170,7 @@ impl SqliteStore {
         turn_id: &str,
         provider_turn_id: &str,
         content: &str,
+        target_agent_id: &str,
     ) -> Result<AgentTurnCommit, PersistenceError> {
         validate_identifier(provider_turn_id, "provider_turn_invalid")?;
         let content = clean_message(content, 12_000);
@@ -182,6 +185,7 @@ impl SqliteStore {
         let mut session = load_session(&mut transaction, room_id, session_id).await?;
         require_active_turn(&session, turn_id)?;
         validate_input_cursor(&mut transaction, &session).await?;
+        validate_publication_target(&mut transaction, &session, target_agent_id).await?;
         let source_event_id = session.active_source_event_id.clone();
         let input_event_id = session.input_up_to_event_id.clone();
         let input_seq = session.input_up_to_seq;
@@ -192,39 +196,79 @@ impl SqliteStore {
             provider_turn_id,
             &source_event_id,
             content,
+            target_agent_id,
         )
         .await?;
-        let finished =
-            turn_finished_event(&mut transaction, &session, turn_id, "completed").await?;
-        "attached".clone_into(&mut session.public.status);
-        "idle".clone_into(&mut session.public.runtime_status);
-        session.public.turn_phase.clear();
-        session.public.active_turn_id.clear();
-        session
-            .public
-            .last_seen_event_id
-            .clone_from(&input_event_id);
-        session.public.last_seen_seq = input_seq;
-        session
-            .public
-            .last_provider_sync_event_id
-            .clone_from(&input_event_id);
-        session.public.last_provider_sync_seq = input_seq;
-        if session.public.turn_count == 0 {
-            session.public.bootstrap_cutoff_seq = input_seq;
-        }
-        session.public.turn_count = session.public.turn_count.saturating_add(1);
-        session.public.last_error.clear();
-        session.public.last_error_code.clear();
-        session.public.recovery_required = false;
-        session.inflight_event_ids.clear();
-        clear_active_turn_fields(&mut session);
-        session.public.updated_at = Utc::now();
+        let finished = turn_finished_event(
+            &mut transaction,
+            &session,
+            turn_id,
+            "completed",
+            Some(provider_turn_id),
+            None,
+        )
+        .await?;
+        complete_session_state(&mut session, &input_event_id, input_seq);
         save_session(&mut transaction, &session).await?;
         let state = session_state_event(&mut transaction, &session).await?;
         queue_ordered_message(&mut transaction, &settings, &final_event).await?;
         let prepared = assign_oldest_pending(&mut transaction, &room, &settings).await?;
         let mut events = vec![final_event, finished, state];
+        let next_assignment = prepared.map(|prepared| {
+            events.extend(prepared.events);
+            prepared.assignment
+        });
+        transaction.commit().await?;
+        Ok(AgentTurnCommit {
+            events,
+            next_assignment,
+        })
+    }
+
+    /// Atomically records an explicit provider decline and advances the ordered floor.
+    ///
+    /// # Errors
+    ///
+    /// Returns an exact active-turn conflict, invalid decline, or storage failure.
+    pub async fn decline_agent_turn(
+        &self,
+        room_id: &str,
+        session_id: &str,
+        turn_id: &str,
+        provider_turn_id: &str,
+        reason_code: &str,
+    ) -> Result<AgentTurnCommit, PersistenceError> {
+        validate_identifier(provider_turn_id, "provider_turn_invalid")?;
+        if !matches!(
+            reason_code,
+            "nothing_useful_to_add" | "not_addressed" | "duplicate"
+        ) {
+            return Err(rejected(
+                "invalid_decline_reason",
+                "The provider decline reason is unsupported.",
+            ));
+        }
+        let mut transaction = self.pool.begin().await?;
+        let (room, settings) = load_active_room(&mut transaction, room_id).await?;
+        let mut session = load_session(&mut transaction, room_id, session_id).await?;
+        require_active_turn(&session, turn_id)?;
+        validate_input_cursor(&mut transaction, &session).await?;
+        let input_event_id = session.input_up_to_event_id.clone();
+        let input_seq = session.input_up_to_seq;
+        let finished = turn_finished_event(
+            &mut transaction,
+            &session,
+            turn_id,
+            "declined",
+            Some(provider_turn_id),
+            Some(reason_code),
+        )
+        .await?;
+        complete_session_state(&mut session, &input_event_id, input_seq);
+        save_session(&mut transaction, &session).await?;
+        let state = session_state_event(&mut transaction, &session).await?;
+        let prepared = assign_oldest_pending(&mut transaction, &room, &settings).await?;
+        let mut events = vec![finished, state];
         let next_assignment = prepared.map(|prepared| {
             events.extend(prepared.events);
             prepared.assignment
@@ -248,11 +292,28 @@ impl SqliteStore {
         turn_id: &str,
         error_code: &str,
         message: &str,
+        confirmed_runtime_stop: Option<(&str, &str)>,
     ) -> Result<AgentTurnCommit, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
         let (room, settings) = load_active_room(&mut transaction, room_id).await?;
         let mut session = load_session(&mut transaction, room_id, session_id).await?;
         require_active_turn(&session, turn_id)?;
+        if let Some((handle_id, owner_id)) = confirmed_runtime_stop {
+            if handle_id.is_empty()
+                || owner_id.is_empty()
+                || session.runtime_handle_id != handle_id
+                || session.runtime_owner_id != owner_id
+            {
+                return Err(rejected(
+                    "stale_provider_turn",
+                    "Confirmed provider shutdown does not match durable turn authority.",
+                ));
+            }
+            session.runtime_handle_id.clear();
+            session.runtime_owner_id.clear();
+            session.public.provider_session_active = false;
+            session.public.provider_session_reused = false;
+        }
         let code = public_error_code(error_code);
         let message = clean_message(&redact_persisted_diagnostic_text(message, 512), 512);
         let message = if has_visible_text(&message) {
@@ -261,7 +322,8 @@ impl SqliteStore {
             "Provider turn failed.".to_owned()
         };
         let error = error_event(&mut transaction, &session, turn_id, code, &message).await?;
-        let finished = turn_finished_event(&mut transaction, &session, turn_id, "error").await?;
+        let finished =
+            turn_finished_event(&mut transaction, &session, turn_id, "error", None, None).await?;
         session.pending_event_ids = merge_event_ids(
             session
                 .inflight_event_ids
@@ -300,6 +362,74 @@ impl SqliteStore {
     }
 }
 
+fn complete_session_state(session: &mut DurableAgentSession, input_event_id: &str, input_seq: i64) {
+    "attached".clone_into(&mut session.public.status);
+    "idle".clone_into(&mut session.public.runtime_status);
+    session.public.turn_phase.clear();
+    session.public.active_turn_id.clear();
+    input_event_id.clone_into(&mut session.public.last_seen_event_id);
+    session.public.last_seen_seq = input_seq;
+    input_event_id.clone_into(&mut session.public.last_provider_sync_event_id);
+    session.public.last_provider_sync_seq = input_seq;
+    if session.public.turn_count == 0 {
+        session.public.bootstrap_cutoff_seq = input_seq;
+    }
+    session.public.turn_count = session.public.turn_count.saturating_add(1);
+    session.public.last_error.clear();
+    session.public.last_error_code.clear();
+    session.public.recovery_required = false;
+    session.inflight_event_ids.clear();
+    clear_active_turn_fields(session);
+    session.public.updated_at = Utc::now();
+}
+
+async fn validate_publication_target(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    session: &DurableAgentSession,
+    target_agent_id: &str,
+) -> Result<(), PersistenceError> {
+    if target_agent_id.is_empty() {
+        return Ok(());
+    }
+    if target_agent_id == session.public.session_id
+        || target_agent_id.len() > 128
+        || target_agent_id.trim() != target_agent_id
+        || target_agent_id.chars().any(char::is_control)
+    {
+        return Err(rejected(
+            "room_portal_publication_invalid",
+            "The RoomPortal handoff target is invalid.",
+        ));
+    }
+    let target = match load_session(transaction, &session.public.room_id, target_agent_id).await {
+        Ok(target) => target,
+        Err(PersistenceError::CommandRejected {
+            code: "not_found", ..
+        }) => {
+            return Err(rejected(
+                "room_portal_publication_invalid",
+                "The RoomPortal handoff target does not exist.",
+            ));
+        }
+        Err(error) => return Err(error),
+    };
+    let participant = load_participant(
+        transaction,
+        &session.public.room_id,
+        &target.public.participant_id,
+    )
+    .await?;
+    if participant.status == agentsassemble_domain::ParticipantStatus::Kicked || participant.muted {
+        return Err(rejected(
+            "room_portal_publication_invalid",
+            "The RoomPortal handoff target cannot receive the ordered floor.",
+        ));
+    }
+    Ok(())
+}
+
+#[path = "room_turn_context.rs"]
+mod context;
 #[path = "room_turn_routing.rs"]
 mod routing;
 #[path = "room_turn_support.rs"]

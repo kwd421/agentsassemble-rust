@@ -42,9 +42,8 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    #[cfg(unix)]
-    if let Some(code) = agentsassemble_provider::run_process_helper_if_requested() {
-        std::process::exit(code);
+    if run_internal_provider_mode().await? {
+        return Ok(());
     }
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -140,6 +139,18 @@ async fn main() -> anyhow::Result<()> {
     });
     serve(listener, state, cancellation).await?;
     Ok(())
+}
+
+async fn run_internal_provider_mode() -> anyhow::Result<bool> {
+    #[cfg(unix)]
+    if let Some(code) = agentsassemble_provider::run_process_helper_if_requested() {
+        std::process::exit(code);
+    }
+    if let Some(result) = agentsassemble_provider::run_room_portal_mcp_if_requested().await {
+        result?;
+        return Ok(true);
+    }
+    Ok(false)
 }
 
 async fn run_control_pipe<R, W>(

@@ -191,13 +191,16 @@ async fn missing_thread_start_identity_is_poisoned_without_a_second_request() {
     let script = transcript_fixture_with_response(&transcript, "", response);
     let session = fixture_session(directory.path(), &script).await;
     let adapter = ProviderAdapter::new();
-    for _ in 0..2 {
-        let Err(error) = adapter.start(&session).await else {
-            panic!("missing provider identity must remain failed closed");
-        };
-        assert_eq!(error.code, "provider_session_unconfirmed");
-        assert!(error.effect_uncertain);
-    }
+    let Err(error) = adapter.start(&session).await else {
+        panic!("missing provider identity must fail closed");
+    };
+    assert_eq!(error.code, "provider_session_unconfirmed");
+    assert!(error.effect_uncertain);
+    let Err(reuse_error) = adapter.start(&session).await else {
+        panic!("poisoned provider runtime must not be reused");
+    };
+    assert_eq!(reuse_error.code, "provider_runtime_restart_required");
+    assert!(reuse_error.effect_uncertain);
     assert_eq!(
         request_methods(&transcript),
         ["initialize", "initialized", "thread/start"]
@@ -237,13 +240,16 @@ async fn assert_resume_error(response: &str, expected_code: &str) {
     let mut session = fixture_session(directory.path(), &script).await;
     "thread-1".clone_into(&mut session.provider_session_id);
     let adapter = ProviderAdapter::new();
-    for _ in 0..2 {
-        let Err(error) = adapter.start(&session).await else {
-            panic!("unconfirmed resume identity must remain failed closed");
-        };
-        assert_eq!(error.code, expected_code);
-        assert!(error.effect_uncertain);
-    }
+    let Err(error) = adapter.start(&session).await else {
+        panic!("unconfirmed resume identity must fail closed");
+    };
+    assert_eq!(error.code, expected_code);
+    assert!(error.effect_uncertain);
+    let Err(reuse_error) = adapter.start(&session).await else {
+        panic!("poisoned resume runtime must not be reused");
+    };
+    assert_eq!(reuse_error.code, "provider_runtime_restart_required");
+    assert!(reuse_error.effect_uncertain);
     assert_eq!(
         request_methods(&transcript),
         ["initialize", "initialized", "thread/resume"]
@@ -265,13 +271,16 @@ async fn assert_initialization_error(response: &str, expected_code: &str) {
     );
     let session = fixture_session(directory.path(), &script).await;
     let adapter = ProviderAdapter::new();
-    for _ in 0..2 {
-        let Err(error) = adapter.start(&session).await else {
-            panic!("definitive initialize failure must remain failed closed");
-        };
-        assert_eq!(error.code, expected_code);
-        assert!(error.effect_uncertain);
-    }
+    let Err(error) = adapter.start(&session).await else {
+        panic!("definitive initialize failure must fail closed");
+    };
+    assert_eq!(error.code, expected_code);
+    assert!(error.effect_uncertain);
+    let Err(reuse_error) = adapter.start(&session).await else {
+        panic!("poisoned initialized runtime must not be reused");
+    };
+    assert_eq!(reuse_error.code, "provider_runtime_restart_required");
+    assert!(reuse_error.effect_uncertain);
     assert_eq!(request_methods(&transcript), ["initialize"]);
     adapter
         .shutdown()

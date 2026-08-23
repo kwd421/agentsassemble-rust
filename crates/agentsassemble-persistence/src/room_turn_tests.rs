@@ -9,6 +9,8 @@ use serde_json::json;
 use crate::{PersistenceError, SqliteStore};
 
 const AGENT_ID: &str = "codex-00000000-0000-5000-8000-000000000001";
+const SECOND_AGENT_ID: &str = "codex-00000000-0000-5000-8000-000000000002";
+const SPEAKER_AGENT_ID: &str = "codex-00000000-0000-5000-8000-000000000003";
 
 #[tokio::test]
 async fn ordered_floor_queue_limit_rejects_the_source_message_atomically() {
@@ -94,10 +96,10 @@ async fn ordered_assignment_and_finalization_are_durable_and_exact() {
     assert_eq!(first_assignment.session.public.session_id, AGENT_ID);
     assert!(
         first_assignment
-            .provider_input
+            .room_view
             .contains("@Terra take the first turn")
     );
-    assert!(first_assignment.provider_input.contains("[Your turn]"));
+    assert!(first_assignment.provider_input.contains("read_discussion"));
 
     let replay = store
         .execute_message_with_turn(&principal, "message-1", "message.send", &first_payload)
@@ -126,6 +128,7 @@ async fn ordered_assignment_and_finalization_are_durable_and_exact() {
             &first_turn_id,
             "provider-turn-1",
             "First provider final",
+            "",
         )
         .await
         .unwrap_or_else(|error| panic!("complete first provider turn: {error}"));
@@ -144,7 +147,7 @@ async fn ordered_assignment_and_finalization_are_durable_and_exact() {
         panic!("queued message must get the next turn");
     };
     assert_ne!(next.turn_id, first_turn_id);
-    assert!(next.provider_input.contains("queue this while busy"));
+    assert!(next.room_view.contains("queue this while busy"));
 
     let stored = stored_session(&store).await;
     assert_eq!(stored.public.active_turn_id, next.turn_id);
@@ -167,6 +170,7 @@ async fn ordered_assignment_and_finalization_are_durable_and_exact() {
             &first_turn_id,
             "provider-turn-stale",
             "must not publish",
+            "",
         )
         .await
     else {
@@ -198,6 +202,7 @@ async fn provider_failure_restores_input_and_clears_active_authority() {
             &assignment.turn_id,
             "unknown_internal_failure",
             "/Users/alice/private/bin/codex --api-key=sk-live-example123456",
+            None,
         )
         .await
         .unwrap_or_else(|error| panic!("fail provider turn: {error}"));
@@ -268,6 +273,180 @@ async fn inconsistent_turn_or_provider_cursor_authority_fails_the_message_transa
     assert_eq!(event_count, 0);
 }
 
+#[tokio::test]
+async fn stopped_direct_target_keeps_every_message_and_assigns_only_the_visible_prefix() {
+    let (store, principal, _directory) = fixture().await;
+    let mut stopped = stored_session(&store).await;
+    "unavailable".clone_into(&mut stopped.public.status);
+    "stopped".clone_into(&mut stopped.public.runtime_status);
+    stopped.public.enabled = false;
+    stopped.public.provider_session_active = false;
+    save_stored_session(&store, &stopped).await;
+
+    let mut event_ids = Vec::new();
+    for index in 0..51 {
+        let mutation = store
+            .execute_message_with_turn(
+                &principal,
+                &format!("stopped-direct-{index}"),
+                "message.send",
+                &json!({"content": format!("@Terra queued message {index:02}")}),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("queue stopped direct target {index}: {error}"));
+        assert!(mutation.assignment.is_none());
+        event_ids.push(mutation.outcome.event.id);
+    }
+    let queued = stored_session(&store).await;
+    assert_eq!(queued.pending_event_ids, event_ids);
+
+    let mut attached = queued;
+    "attached".clone_into(&mut attached.public.status);
+    "idle".clone_into(&mut attached.public.runtime_status);
+    attached.public.enabled = true;
+    attached.public.provider_session_active = true;
+    save_stored_session(&store, &attached).await;
+    let commit = store
+        .assign_pending_turn("general")
+        .await
+        .unwrap_or_else(|error| panic!("assign stopped direct backlog: {error}"))
+        .unwrap_or_else(|| panic!("stopped direct backlog must become assignable"));
+    let assignment = commit
+        .next_assignment
+        .unwrap_or_else(|| panic!("backlog commit must carry an assignment"));
+    assert_eq!(assignment.session.inflight_event_ids, event_ids[..50]);
+    assert_eq!(assignment.session.pending_event_ids, event_ids[50..]);
+    assert_eq!(assignment.session.input_up_to_event_id, event_ids[49]);
+    assert!(assignment.room_view.contains("queued message 00"));
+    assert!(assignment.room_view.contains("queued message 49"));
+    assert!(!assignment.room_view.contains("queued message 50"));
+}
+
+#[tokio::test]
+async fn character_bound_defers_whole_messages_instead_of_advancing_past_them() {
+    let (store, principal, _directory) = fixture().await;
+    let mut stopped = stored_session(&store).await;
+    "unavailable".clone_into(&mut stopped.public.status);
+    "stopped".clone_into(&mut stopped.public.runtime_status);
+    stopped.public.enabled = false;
+    stopped.public.provider_session_active = false;
+    save_stored_session(&store, &stopped).await;
+
+    let first_text = format!("@Terra first-visible {}", "a".repeat(10_900));
+    let second_text = format!("@Terra second-deferred {}", "b".repeat(10_900));
+    let first = store
+        .execute_message_with_turn(
+            &principal,
+            "bounded-first",
+            "message.send",
+            &json!({"content": first_text}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("queue first bounded input: {error}"));
+    let second = store
+        .execute_message_with_turn(
+            &principal,
+            "bounded-second",
+            "message.send",
+            &json!({"content": second_text}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("queue second bounded input: {error}"));
+    let mut attached = stored_session(&store).await;
+    "attached".clone_into(&mut attached.public.status);
+    "idle".clone_into(&mut attached.public.runtime_status);
+    attached.public.enabled = true;
+    attached.public.provider_session_active = true;
+    save_stored_session(&store, &attached).await;
+
+    let commit = store
+        .assign_pending_turn("general")
+        .await
+        .unwrap_or_else(|error| panic!("assign character-bounded input: {error}"))
+        .unwrap_or_else(|| panic!("bounded input must become assignable"));
+    let assignment = commit
+        .next_assignment
+        .unwrap_or_else(|| panic!("bounded input commit must carry an assignment"));
+    assert_eq!(
+        assignment.session.inflight_event_ids.as_slice(),
+        std::slice::from_ref(&first.outcome.event.id)
+    );
+    assert_eq!(
+        assignment.session.pending_event_ids.as_slice(),
+        std::slice::from_ref(&second.outcome.event.id)
+    );
+    assert_eq!(
+        assignment.session.input_up_to_event_id,
+        first.outcome.event.id
+    );
+    assert!(assignment.room_view.contains("first-visible"));
+    assert!(!assignment.room_view.contains("second-deferred"));
+}
+
+#[tokio::test]
+async fn undirected_agent_message_prefers_an_eligible_director() {
+    let (store, _principal, _directory) = fixture().await;
+    let now = Utc::now();
+    let mut director = participant(AGENT_ID, "Terra", "agent", "director", now);
+    director.updated_at = now;
+    sqlx::query(
+        "UPDATE participants SET participant_json = ? WHERE room_id = 'general' AND participant_id = ?",
+    )
+    .bind(
+        serde_json::to_string(&director)
+            .unwrap_or_else(|error| panic!("encode director participant: {error}")),
+    )
+    .bind(AGENT_ID)
+    .execute(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("promote director participant: {error}"));
+
+    let second_participant = participant(SECOND_AGENT_ID, "Flash", "agent", "agent", now);
+    let mut second_session = attached_session(now);
+    SECOND_AGENT_ID.clone_into(&mut second_session.public.session_id);
+    SECOND_AGENT_ID.clone_into(&mut second_session.public.participant_id);
+    "Flash".clone_into(&mut second_session.public.display_name);
+    "provider-thread-2".clone_into(&mut second_session.provider_session_id);
+    "owned-runtime-2".clone_into(&mut second_session.runtime_handle_id);
+    insert_agent(&store, &second_participant, &second_session).await;
+    let speaker = participant(SPEAKER_AGENT_ID, "Worker", "agent", "agent", now);
+    sqlx::query(
+        "INSERT INTO participants(room_id, participant_id, participant_json) VALUES (?, ?, ?)",
+    )
+    .bind("general")
+    .bind(SPEAKER_AGENT_ID)
+    .bind(
+        serde_json::to_string(&speaker)
+            .unwrap_or_else(|error| panic!("encode speaker participant: {error}")),
+    )
+    .execute(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("insert speaker participant: {error}"));
+    let principal = AuthenticatedPrincipal {
+        principal_id: "operator-local-user".to_owned(),
+        participant_id: SPEAKER_AGENT_ID.to_owned(),
+        display_name: "Worker".to_owned(),
+        room_id: "general".to_owned(),
+        client_kind: ClientKind::Browser,
+        invite_scope: InviteScope::ReadWrite,
+        capabilities: CapabilitySet::local_operator(ClientKind::Browser, InviteScope::ReadWrite),
+    };
+    let mutation = store
+        .execute_message_with_turn(
+            &principal,
+            "agent-undirected",
+            "message.send",
+            &json!({"content": "A room update without a direct handoff."}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("route undirected agent message: {error}"));
+    let assignment = mutation
+        .assignment
+        .unwrap_or_else(|| panic!("undirected agent message must assign a director"));
+    assert_eq!(assignment.session.public.session_id, AGENT_ID);
+    assert!(assignment.room_view.contains(SECOND_AGENT_ID));
+}
+
 fn event_types(events: &[agentsassemble_domain::RoomEvent]) -> Vec<&str> {
     events
         .iter()
@@ -305,6 +484,35 @@ async fn save_stored_session(store: &SqliteStore, session: &DurableAgentSession)
     .execute(&store.pool)
     .await
     .unwrap_or_else(|error| panic!("save stored session: {error}"));
+}
+
+async fn insert_agent(
+    store: &SqliteStore,
+    participant: &Participant,
+    session: &DurableAgentSession,
+) {
+    sqlx::query(
+        "INSERT INTO participants(room_id, participant_id, participant_json) VALUES (?, ?, ?)",
+    )
+    .bind("general")
+    .bind(&participant.participant_id)
+    .bind(
+        serde_json::to_string(participant)
+            .unwrap_or_else(|error| panic!("encode additional agent: {error}")),
+    )
+    .execute(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("insert additional agent: {error}"));
+    sqlx::query("INSERT INTO agent_sessions(room_id, session_id, session_json) VALUES (?, ?, ?)")
+        .bind("general")
+        .bind(&session.public.session_id)
+        .bind(
+            serde_json::to_string(session)
+                .unwrap_or_else(|error| panic!("encode additional session: {error}")),
+        )
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("insert additional session: {error}"));
 }
 
 async fn fixture() -> (SqliteStore, AuthenticatedPrincipal, tempfile::TempDir) {

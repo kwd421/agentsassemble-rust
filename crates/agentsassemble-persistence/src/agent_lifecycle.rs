@@ -23,7 +23,8 @@ use crate::{
     },
     authority::active_room_for_principal,
     command_admission::existing_command,
-    turn_queue::{event_id_queue_is_canonical, merge_event_ids},
+    turn_authority::active_turn_authority,
+    turn_queue::merge_event_ids,
 };
 
 const START: &str = "agent.start";
@@ -108,7 +109,7 @@ impl SqliteStore {
         );
         claim_lifecycle_command(&mut transaction, &reservation).await?;
         let mut session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
-        require_valid_turn_queue(&session)?;
+        require_valid_turn_authority(&session)?;
         let participant = load_participant(&mut transaction, &principal.room_id, &agent_id).await?;
         if participant.status == ParticipantStatus::Kicked {
             return Err(rejected(
@@ -296,7 +297,7 @@ impl SqliteStore {
         );
         claim_lifecycle_command(&mut transaction, &reservation).await?;
         let mut session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
-        require_valid_turn_queue(&session)?;
+        require_valid_turn_authority(&session)?;
         if matches!(
             session.public.runtime_status.as_str(),
             "stopped" | "available"
@@ -651,13 +652,8 @@ pub(crate) fn clear_intent(session: &mut DurableAgentSession) {
     session.lifecycle_intent_status.clear();
 }
 
-fn require_valid_turn_queue(session: &DurableAgentSession) -> Result<(), PersistenceError> {
-    if event_id_queue_is_canonical(
-        session
-            .inflight_event_ids
-            .iter()
-            .chain(&session.pending_event_ids),
-    ) {
+fn require_valid_turn_authority(session: &DurableAgentSession) -> Result<(), PersistenceError> {
+    if active_turn_authority(session).is_ok() {
         Ok(())
     } else {
         Err(invalid_turn_queue())
@@ -677,7 +673,7 @@ fn merged_turn_queue(session: &DurableAgentSession) -> Result<Vec<String>, Persi
 fn invalid_turn_queue() -> PersistenceError {
     rejected(
         "stored_turn_authority_invalid",
-        "Stored Agent Session turn queue authority is inconsistent or oversized.",
+        "Stored Agent Session turn authority is inconsistent or oversized.",
     )
 }
 
@@ -766,3 +762,7 @@ mod tests;
 #[cfg(test)]
 #[path = "agent_lifecycle_recovery_tests.rs"]
 mod recovery_tests;
+
+#[cfg(test)]
+#[path = "agent_turn_recovery_tests.rs"]
+mod turn_recovery_tests;
