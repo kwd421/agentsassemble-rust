@@ -8,7 +8,7 @@ Verification claims only the boundary actually observed. Build, lint, unit tests
 
 The active comparison baseline is original
 `d5046473010d1353a81ee38337360e6d98f7bd6f` and public Rust
-`bcff0b5058d6c928d2330a7de284694a8f8fbfa3`. Local uncommitted behavior
+`3929e31f3407c60d829a030a527266daacaf9197`. Local uncommitted behavior
 is never described as public completion. Every completed-slice evidence entry must
 name the tested Rust commit, original provenance commit, platform/build, exact
 entry point and command flow, viewer identity, provider/model where applicable,
@@ -181,13 +181,13 @@ published macOS real-client matrix above remains the provider/model evidence; a
 future Windows real-provider run must be recorded separately rather than inferred
 from the ConPTY fixture.
 
-## Published OpenCode control-plane evidence: `bcff0b5`
+## Published OpenCode control-plane evidence: `3929e31`
 
 The separate Daybreak manual security review found that the OpenCode loopback
 control plane had no authentication and that dropping the port-reservation
 listener before child bind could let another local process receive the first
 health and RoomPortal-registration requests. Commit
-`bcff0b5058d6c928d2330a7de284694a8f8fbfa3` gives each OpenCode runtime a fresh
+`bcff0b55a8f082f77d69623528e4711882121b20` gives each OpenCode runtime a fresh
 64-hex-character Basic-auth password, requires credentials in the shared strict
 loopback client, and applies them to both bounded JSON requests and SSE streams.
 The password enters only the exact provider environment; on Unix it crosses the
@@ -198,8 +198,20 @@ Before any authenticated HTTP request, startup now requires the exact bounded
 `opencode server listening on http://127.0.0.1:<selected-port>` line from the
 byte-bound child's stdout. Only that proof permits the authenticated health check,
 and only a successful health check permits RoomPortal registration. A process that
-merely wins the released reservation cannot make the child emit that line and
-therefore receives neither the control-plane password nor the portal bearer.
+merely wins the released reservation cannot make the child emit that line before
+initial health.
+
+The first manual re-review correctly found that this still proved only historical
+readiness: after the child died, a replacement listener could receive credentials
+from a later transparent client reconnection. Commit
+`3929e31f3407c60d829a030a527266daacaf9197` removes that client behavior. Every
+JSON or SSE operation first creates a raw TCP connection without request bytes,
+then revalidates the exact owned guardian/child, and only then constructs and sends
+authenticated HTTP on that already connected socket using Hyper. A replacement
+peer connected after child death receives EOF and no credentials; if the child
+dies after verification, the established TCP socket cannot be redirected to a new
+listener. Initial health, RoomPortal registration, session operations, turn POST,
+SSE, abort, and disconnect all use this same custody-bound path.
 
 The exact code passed the complete `make verify` on macOS: architecture and
 800-line source gates, generated protocol bindings, copied frontend build and CSS
@@ -207,20 +219,24 @@ verification, 65 frontend files with 332 tests, 13 Tauri tests, all Rust workspa
 tests, warning-denied Clippy, and diff checks. The workspace also passed the
 warning-denied `x86_64-pc-windows-gnu` all-target cross-check with the installed
 rustup compiler. Focused tests prove credential validation, fresh password shape,
-exact child-endpoint readiness, and Basic authentication on both JSON and SSE.
+exact child-endpoint readiness, Basic authentication on both JSON and SSE, and
+zero transmitted bytes when the connected peer fails the post-connect child-
+custody check. The six real WebSocket Agent Session boundary tests passed three
+consecutive runs after their existing receive deadline was increased from two to
+five seconds; the frame-count and semantic assertions were unchanged.
 
 Computer Use then launched the exact debug application bundle built from this
 workspace, resumed the durable OpenCode `opencode/hy3-free` Agent Session, and
 sent one room message through the copied composer. Direct unauthenticated requests
 to that run's `/global/health` and `/event` returned HTTP 401. The real Hy3 agent
-published `OPENCODE_AUTH_CONTROL_OK` through RoomPortal and returned to idle; the
+published `OPENCODE_PEER_CUSTODY_OK` through RoomPortal and returned to idle; the
 copied stop control reached stopped state. The exact debug app, Rust sidecar,
 guardian, anchor, and OpenCode process were then shut down, their absence was
 confirmed, and the verification-only temporary directory was moved to Trash.
 Pre-existing original-project and unrelated processes were not signalled.
 
-This closes the reported implementation defect but does not pre-empt the same
-Daybreak task's pending manual re-review. No second Deep Scan is used.
+This addresses both manual findings but does not pre-empt the same Daybreak task's
+pending manual re-review. No second Deep Scan is used.
 
 ## API verification scope
 

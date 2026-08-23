@@ -7,7 +7,8 @@ is a separate plugin slice and is outside this provider-runtime verification.
 ## Published implementation
 
 - Original comparison commit: `d5046473010d1353a81ee38337360e6d98f7bd6f`.
-- Rust implementation commit: `bcff0b5058d6c928d2330a7de284694a8f8fbfa3`.
+- Initial authentication commit: `bcff0b55a8f082f77d69623528e4711882121b20`.
+- Post-readiness custody commit: `3929e31f3407c60d829a030a527266daacaf9197`.
 - Each OpenCode runtime generates a fresh 64-hex-character password and supplies
   it with the fixed private username only to the exact sanitized child environment.
 - The shared loopback client rejects missing or malformed credentials and applies
@@ -17,6 +18,11 @@ is a separate plugin slice and is outside this provider-runtime verification.
 - The driver sends no credential until the byte-bound child's stdout emits the
   exact bounded ready line for the selected `127.0.0.1` port. An authenticated
   health check must then pass before RoomPortal registration sends its bearer.
+- Every initial and later request creates a raw TCP connection first, transmits no
+  bytes until exact guardian/child liveness is revalidated, and then uses Hyper on
+  that already connected socket without automatic reconnection. A replacement
+  listener reached after child death receives EOF and no credential; an
+  established connection cannot migrate after later child death.
 
 ## Automated evidence
 
@@ -29,7 +35,12 @@ is a separate plugin slice and is outside this provider-runtime verification.
   evidence, not a Windows real-provider claim.
 - Focused regressions verify fresh credential shape and environment ownership,
   rejection of a ready line for any other port, and an Authorization header on
-  both the JSON and SSE client paths.
+  both the JSON and SSE client paths. A replacement-peer fixture also proves that
+  a failed post-connect child-custody check sends zero bytes.
+- The six real WebSocket Agent Session boundary tests passed three consecutive
+  runs with their existing semantic and frame-count assertions unchanged. Their
+  per-frame receive deadline is five seconds so normal guardian startup is not a
+  machine-load-dependent two-second failure.
 
 ## Real copied-UI evidence
 
@@ -41,7 +52,7 @@ is a separate plugin slice and is outside this provider-runtime verification.
 - Network boundary: unauthenticated direct requests to `/global/health` and
   `/event` on the observed provider port both returned HTTP 401.
 - Product result: the real Hy3 session published
-  `OPENCODE_AUTH_CONTROL_OK` through RoomPortal and returned to idle.
+  `OPENCODE_PEER_CUSTODY_OK` through RoomPortal and returned to idle.
 - Cleanup: the copied stop control reached stopped; the exact debug desktop,
   sidecar, guardian, anchor, and OpenCode process were shut down and confirmed
   absent. The verification-only temporary directory was moved to recoverable
