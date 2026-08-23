@@ -63,17 +63,18 @@ impl BoundExecutable {
         self.allows_child_processes
     }
 
-    #[cfg(unix)]
     pub(crate) fn stage_private_companion(&self, name: &str) -> io::Result<PrivateExecutable> {
+        #[cfg(unix)]
         use std::os::unix::fs::PermissionsExt;
 
-        if name.is_empty() || name.contains(['/', '\0']) {
+        if name.is_empty() || name.contains(['/', '\\', '\0']) {
             return Err(io::Error::other("companion executable name is invalid"));
         }
-        let staging = tempfile::Builder::new()
-            .prefix("agentsassemble-companion-")
-            .permissions(std::fs::Permissions::from_mode(0o700))
-            .tempdir()?;
+        let mut staging_builder = tempfile::Builder::new();
+        staging_builder.prefix("agentsassemble-companion-");
+        #[cfg(unix)]
+        staging_builder.permissions(std::fs::Permissions::from_mode(0o700));
+        let staging = staging_builder.tempdir()?;
         let staged_path = staging.path().join(name);
         let mut source = self.file.try_clone()?;
         source.rewind()?;
@@ -88,9 +89,19 @@ impl BoundExecutable {
         io::copy(&mut source, &mut staged)?;
         staged.sync_all()?;
         verify_staged_identity(&source_handle, &expected_identity, &mut staged)?;
+        #[cfg(unix)]
         std::fs::set_permissions(&staged_path, std::fs::Permissions::from_mode(0o500))?;
         drop(staged);
-        let file = OpenOptions::new().read(true).open(&staged_path)?;
+        let mut options = OpenOptions::new();
+        options.read(true);
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            use windows_sys::Win32::Storage::FileSystem::FILE_SHARE_READ;
+
+            options.share_mode(FILE_SHARE_READ);
+        }
+        let file = options.open(&staged_path)?;
         Ok(PrivateExecutable {
             file,
             path: staged_path,
@@ -173,14 +184,12 @@ impl BoundExecutable {
     }
 }
 
-#[cfg(unix)]
 pub(crate) struct PrivateExecutable {
     file: File,
     path: PathBuf,
     staging: tempfile::TempDir,
 }
 
-#[cfg(unix)]
 impl PrivateExecutable {
     pub(crate) fn path(&self) -> &Path {
         let _ = &self.file;
@@ -356,16 +365,29 @@ fn bind_executable_sync(path: &Path, expected_identity: &str) -> io::Result<Boun
     })
 }
 
-#[cfg(unix)]
 pub(crate) fn bind_helper_executable_sync(path: &Path) -> io::Result<BoundExecutable> {
-    if !is_executable_file(path)? {
-        return Err(io::Error::other("helper executable is not executable"));
+    #[cfg(windows)]
+    {
+        let canonical = path.canonicalize()?;
+        let identity = executable_identity_sync(&canonical)?;
+        return bind_executable_sync(&canonical, &identity);
     }
-    let mut file = File::open(path)?;
-    let handle = Handle::from_file(file.try_clone()?)?;
-    let expected_identity = stable_content_identity(&handle, &mut file)?;
-    file.rewind()?;
-    bind_verified_unix_executable(file, &handle, &expected_identity)
+    #[cfg(unix)]
+    {
+        if !is_executable_file(path)? {
+            return Err(io::Error::other("helper executable is not executable"));
+        }
+        let mut file = File::open(path)?;
+        let handle = Handle::from_file(file.try_clone()?)?;
+        let expected_identity = stable_content_identity(&handle, &mut file)?;
+        file.rewind()?;
+        bind_verified_unix_executable(file, &handle, &expected_identity)
+    }
+}
+
+#[cfg(windows)]
+pub(crate) fn bind_current_helper_executable() -> io::Result<BoundExecutable> {
+    bind_helper_executable_sync(&std::env::current_exe()?)
 }
 
 #[cfg(unix)]
@@ -474,7 +496,7 @@ fn copy_and_verify_staged(
     verify_staged_identity(source_handle, expected_identity, staged)
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn verify_staged_identity(
     source_handle: &Handle,
     expected_identity: &str,

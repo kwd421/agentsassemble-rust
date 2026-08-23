@@ -7,8 +7,10 @@ use std::{
 };
 
 use fs2::FileExt;
+#[cfg(unix)]
 use rustix::fs::{AtFlags, Mode, OFlags};
 use serde_json::{Map, Value, json};
+#[cfg(unix)]
 use uuid::Uuid;
 
 use crate::runtime::DriverError;
@@ -108,10 +110,12 @@ fn hook_definition() -> Value {
     })
 }
 
+#[cfg(unix)]
 struct HookDirectory {
     directory: File,
 }
 
+#[cfg(unix)]
 impl HookDirectory {
     fn open(workspace: &Path) -> Result<Self, DriverError> {
         let workspace = File::open(workspace).map_err(|_| hook_error())?;
@@ -217,6 +221,110 @@ impl HookDirectory {
             return Err(hook_error());
         }
         rustix::fs::fsync(&self.directory).map_err(|_| hook_error())
+    }
+}
+
+#[cfg(windows)]
+struct HookDirectory {
+    directory: PathBuf,
+}
+
+#[cfg(windows)]
+impl HookDirectory {
+    fn open(workspace: &Path) -> Result<Self, DriverError> {
+        let workspace_metadata = std::fs::symlink_metadata(workspace).map_err(|_| hook_error())?;
+        if !workspace_metadata.is_dir() || workspace_metadata.file_type().is_symlink() {
+            return Err(hook_error());
+        }
+        let directory = workspace.join(".agents");
+        match std::fs::create_dir(&directory) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(_) => return Err(hook_error()),
+        }
+        let metadata = std::fs::symlink_metadata(&directory).map_err(|_| hook_error())?;
+        if !metadata.is_dir() || metadata.file_type().is_symlink() {
+            return Err(hook_error());
+        }
+        Ok(Self { directory })
+    }
+
+    fn lock(&self) -> Result<File, DriverError> {
+        use std::os::windows::fs::OpenOptionsExt;
+        use windows_sys::Win32::Storage::FileSystem::{
+            FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_READ, FILE_SHARE_WRITE,
+        };
+
+        let mut options = std::fs::OpenOptions::new();
+        options
+            .read(true)
+            .write(true)
+            .create(true)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
+        let file = options
+            .open(self.directory.join(LOCK_FILE))
+            .map_err(|_| hook_error())?;
+        if !file.metadata().map_err(|_| hook_error())?.is_file() {
+            return Err(hook_error());
+        }
+        file.lock_exclusive().map_err(|_| hook_error())?;
+        Ok(file)
+    }
+
+    fn read_document(&self) -> Result<Map<String, Value>, DriverError> {
+        use std::os::windows::fs::OpenOptionsExt;
+        use windows_sys::Win32::Storage::FileSystem::{
+            FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_READ,
+        };
+
+        let path = self.directory.join(HOOKS_FILE);
+        let mut options = std::fs::OpenOptions::new();
+        options
+            .read(true)
+            .share_mode(FILE_SHARE_READ)
+            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
+        let file = match options.open(path) {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Map::new()),
+            Err(_) => return Err(hook_error()),
+        };
+        let metadata = file.metadata().map_err(|_| hook_error())?;
+        if !metadata.is_file() || metadata.len() > MAX_HOOKS_BYTES {
+            return Err(hook_error());
+        }
+        let mut encoded = String::new();
+        file.take(MAX_HOOKS_BYTES + 1)
+            .read_to_string(&mut encoded)
+            .map_err(|_| hook_error())?;
+        if encoded.len() as u64 > MAX_HOOKS_BYTES {
+            return Err(hook_error());
+        }
+        let document: Value = serde_json::from_str(&encoded).map_err(|_| hook_error())?;
+        document.as_object().cloned().ok_or_else(hook_error)
+    }
+
+    fn write_document(&self, document: &Map<String, Value>) -> Result<(), DriverError> {
+        let path = self.directory.join(HOOKS_FILE);
+        if document.is_empty() {
+            return match std::fs::remove_file(path) {
+                Ok(()) => Ok(()),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                Err(_) => Err(hook_error()),
+            };
+        }
+        let encoded =
+            serde_json::to_vec(&Value::Object(document.clone())).map_err(|_| hook_error())?;
+        if encoded.len() as u64 > MAX_HOOKS_BYTES {
+            return Err(hook_error());
+        }
+        let mut temporary =
+            tempfile::NamedTempFile::new_in(&self.directory).map_err(|_| hook_error())?;
+        temporary.write_all(&encoded).map_err(|_| hook_error())?;
+        temporary.write_all(b"\n").map_err(|_| hook_error())?;
+        temporary.as_file().sync_all().map_err(|_| hook_error())?;
+        temporary.persist(path).map_err(|_| hook_error())?;
+        Ok(())
     }
 }
 

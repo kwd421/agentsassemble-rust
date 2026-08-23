@@ -41,6 +41,7 @@ nix = { version = "0.31.3", default-features = false, features = ["event", "term
 sysinfo.workspace = true
 
 [target.'cfg(windows)'.dependencies]
+conpty-oxide = { version = "0.1.2", default-features = false, features = ["tokio"] }
 windows-sys.workspace = true
 
 [dev-dependencies]

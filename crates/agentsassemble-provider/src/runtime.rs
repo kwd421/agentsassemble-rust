@@ -8,7 +8,7 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use crate::antigravity::AntigravityDriver;
 #[cfg(unix)]
 use crate::guardian::GuardianLaunch;
@@ -19,9 +19,7 @@ use crate::{
 };
 
 const DRIVER_STOP_TIMEOUT: Duration = Duration::from_secs(5);
-
 pub(crate) type DriverFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
-
 pub(crate) trait ProviderDriver: Send {
     fn attach_session<'a>(
         &'a mut self,
@@ -57,27 +55,23 @@ pub(crate) trait ProviderDriver: Send {
         false
     }
 }
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ProviderSessionAttachment {
     pub(crate) provider_session_id: String,
     pub(crate) reused: bool,
     pub(crate) observed_model_id: Option<String>,
 }
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 #[error("{message}")]
 pub(crate) struct DriverError {
     pub code: &'static str,
     pub message: &'static str,
 }
-
 impl DriverError {
     pub(crate) const fn new(code: &'static str, message: &'static str) -> Self {
         Self { code, message }
     }
 }
-
 trait DriverFactory: Send + Sync {
     fn launch<'a>(
         &'a self,
@@ -85,10 +79,11 @@ trait DriverFactory: Send + Sync {
         _runtime_lease: &'a HeldRuntimeLease,
     ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>>;
 }
-
 struct ProductionDriverFactory {
     #[cfg(unix)]
     guardian: Option<GuardianLaunch>,
+    #[cfg(windows)]
+    companion: Option<Arc<crate::filesystem::BoundExecutable>>,
 }
 
 impl ProductionDriverFactory {
@@ -108,6 +103,10 @@ impl ProductionDriverFactory {
         Self {
             #[cfg(unix)]
             guardian,
+            #[cfg(windows)]
+            companion: crate::filesystem::bind_current_helper_executable()
+                .ok()
+                .map(Arc::new),
         }
     }
 
@@ -151,30 +150,49 @@ impl DriverFactory for ProductionDriverFactory {
                 }
                 ("antigravity_live_session", "pty") => {
                     #[cfg(unix)]
-                    let driver = AntigravityDriver::spawn(
-                        session,
-                        runtime_lease,
-                        self.guardian.as_ref().ok_or_else(|| {
-                            DriverError::new(
-                                "provider_custody_unavailable",
-                                "The provider process custody helper is unavailable.",
-                            )
-                        })?,
-                    )
-                    .await?;
+                    {
+                        let driver = AntigravityDriver::spawn(
+                            session,
+                            runtime_lease,
+                            self.guardian.as_ref().ok_or_else(|| {
+                                DriverError::new(
+                                    "provider_custody_unavailable",
+                                    "The provider process custody helper is unavailable.",
+                                )
+                            })?,
+                        )
+                        .await?;
+                        Ok(Box::new(driver) as Box<dyn ProviderDriver>)
+                    }
                     #[cfg(not(unix))]
-                    return Err(DriverError::new(
+                    Err(DriverError::new(
                         "provider_runtime_unsupported",
                         "PTY provider sessions are unsupported on this platform.",
                     )
-                    .into());
-                    Ok(Box::new(driver) as Box<dyn ProviderDriver>)
+                    .into())
                 }
-                ("antigravity_live_session", "conpty") => Err(DriverError::new(
-                    "provider_runtime_unavailable",
-                    "The Antigravity ConPTY driver is not implemented yet.",
-                )
-                .into()),
+                ("antigravity_live_session", "conpty") => {
+                    #[cfg(windows)]
+                    {
+                        let driver = AntigravityDriver::spawn(
+                            session,
+                            self.companion.as_deref().ok_or_else(|| {
+                                DriverError::new(
+                                    "provider_custody_unavailable",
+                                    "The private provider companion is unavailable.",
+                                )
+                            })?,
+                        )
+                        .await?;
+                        Ok(Box::new(driver) as Box<dyn ProviderDriver>)
+                    }
+                    #[cfg(not(windows))]
+                    Err(DriverError::new(
+                        "provider_runtime_unsupported",
+                        "ConPTY provider sessions are unsupported on this platform.",
+                    )
+                    .into())
+                }
                 ("opencode_server", "http") => {
                     #[cfg(unix)]
                     let driver = OpenCodeDriver::spawn(

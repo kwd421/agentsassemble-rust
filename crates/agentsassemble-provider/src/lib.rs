@@ -1,11 +1,17 @@
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 mod antigravity;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 mod antigravity_hook;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 mod antigravity_terminal;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 mod antigravity_transcript;
+#[cfg(any(unix, windows))]
+mod antigravity_transport;
+#[cfg(unix)]
+mod antigravity_unix;
+#[cfg(windows)]
+mod antigravity_windows;
 mod catalog;
 mod codex;
 mod codex_identity;
@@ -22,7 +28,7 @@ mod process;
 mod profile;
 mod room_portal;
 mod room_portal_mcp;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 mod room_portal_terminal;
 mod runtime;
 mod runtime_authority;
@@ -39,7 +45,7 @@ pub use catalog::ProviderCatalogService;
 #[cfg(unix)]
 pub use guardian::run_process_helper_if_requested;
 pub use room_portal::ProviderTurnOutcome;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub use room_portal_terminal::{run_antigravity_hook_if_requested, run_room_helper_if_requested};
 pub use runtime::{
     ProviderAdapter, ProviderAdapterError, ProviderRoomObservation, ProviderRuntimeGone,

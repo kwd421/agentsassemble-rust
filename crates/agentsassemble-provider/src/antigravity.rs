@@ -4,15 +4,15 @@ use std::{
 };
 
 use agentsassemble_domain::DurableAgentSession;
-use tokio::{io::unix::AsyncFd, time::Instant};
+use tokio::time::Instant;
 use uuid::Uuid;
 
 use crate::{
     antigravity_hook::AntigravityHookRegistration,
     antigravity_terminal::AntigravityRoomPermissionPolicy,
     antigravity_transcript::AntigravityTranscript,
+    antigravity_transport::AntigravityTerminal,
     filesystem::{BoundExecutable, bind_executable},
-    guardian::GuardianLaunch,
     launch_error::DriverLaunchError,
     room_portal::{ProviderTurnOutcome, RoomPortal, RoomPortalError},
     room_portal_terminal::RoomPortalTerminalHelper,
@@ -20,9 +20,9 @@ use crate::{
         DriverError, DriverFuture, ProviderDriver, ProviderSessionAttachment,
         ProviderTurnCompleted, ProviderTurnRequest,
     },
-    runtime_lease::HeldRuntimeLease,
-    unix_custody::UnixProcessCustody,
 };
+#[cfg(unix)]
+use crate::{guardian::GuardianLaunch, runtime_lease::HeldRuntimeLease};
 
 const MAX_PROVIDER_SESSION_ID_BYTES: usize = 200;
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(20);
@@ -71,11 +71,41 @@ struct ActiveTurn {
     last_progress: Instant,
 }
 
+struct PreparedAntigravity {
+    arguments: Vec<String>,
+    workspace: PathBuf,
+    transcript: AntigravityTranscript,
+    executable: BoundExecutable,
+    room_portal: RoomPortal,
+}
+
+async fn prepare(session: &DurableAgentSession) -> Result<PreparedAntigravity, DriverLaunchError> {
+    let arguments = command_arguments(session)?;
+    let workspace = PathBuf::from(&session.workspace);
+    let home = env_home()?;
+    let mut transcript = AntigravityTranscript::new(home, workspace.clone());
+    let resume_id = clean_identifier(&session.provider_session_id);
+    let resume_id = (!resume_id.is_empty() && !resume_id.starts_with(PENDING_SESSION_PREFIX))
+        .then_some(resume_id.as_str());
+    transcript.prepare_start(resume_id)?;
+    let executable = bind_executable(
+        session.executable.clone(),
+        session.executable_identity.clone(),
+    )
+    .await
+    .map_err(|_| executable_error())?;
+    let room_portal = RoomPortal::create().await.map_err(portal_driver_error)?;
+    Ok(PreparedAntigravity {
+        arguments,
+        workspace,
+        transcript,
+        executable,
+        room_portal,
+    })
+}
+
 pub(crate) struct AntigravityDriver {
-    process_group: UnixProcessCustody,
-    terminal: AsyncFd<std::os::fd::OwnedFd>,
-    #[cfg(not(any(target_os = "linux", target_os = "android")))]
-    _executable_guard: BoundExecutable,
+    terminal: Box<dyn AntigravityTerminal>,
     transcript: AntigravityTranscript,
     room_portal: RoomPortal,
     terminal_helper: Option<RoomPortalTerminalHelper>,
@@ -93,26 +123,19 @@ pub(crate) struct AntigravityDriver {
 }
 
 impl AntigravityDriver {
+    #[cfg(unix)]
     pub(crate) async fn spawn(
         session: &DurableAgentSession,
         runtime_lease: &HeldRuntimeLease,
         guardian: &GuardianLaunch,
     ) -> Result<Self, DriverLaunchError> {
-        let arguments = command_arguments(session)?;
-        let workspace = PathBuf::from(&session.workspace);
-        let home = env_home()?;
-        let mut transcript = AntigravityTranscript::new(home, workspace.clone());
-        let resume_id = clean_identifier(&session.provider_session_id);
-        let resume_id = (!resume_id.is_empty() && !resume_id.starts_with(PENDING_SESSION_PREFIX))
-            .then_some(resume_id.as_str());
-        transcript.prepare_start(resume_id)?;
-        let executable = bind_executable(
-            session.executable.clone(),
-            session.executable_identity.clone(),
-        )
-        .await
-        .map_err(|_| executable_error())?;
-        let room_portal = RoomPortal::create().await.map_err(portal_driver_error)?;
+        let PreparedAntigravity {
+            arguments,
+            workspace,
+            transcript,
+            executable,
+            room_portal,
+        } = prepare(session).await?;
         let terminal_helper = room_portal
             .create_terminal_helper(guardian)
             .map_err(portal_driver_error)?;
@@ -124,20 +147,71 @@ impl AntigravityDriver {
             ("COLUMNS".to_owned(), "120".to_owned()),
             ("LINES".to_owned(), "40".to_owned()),
         ]);
-        let (process_group, pty) = UnixProcessCustody::start_pty(
+        let terminal = crate::antigravity_unix::spawn_terminal(
             runtime_lease,
             guardian,
-            &executable,
+            executable,
             &arguments,
             &environment,
             &workspace,
         )
         .await?;
-        Ok(Self {
-            process_group,
-            terminal: pty.terminal,
-            #[cfg(not(any(target_os = "linux", target_os = "android")))]
-            _executable_guard: executable,
+        Ok(Self::from_parts(
+            terminal,
+            transcript,
+            room_portal,
+            terminal_helper,
+            hook,
+        ))
+    }
+
+    #[cfg(windows)]
+    pub(crate) async fn spawn(
+        session: &DurableAgentSession,
+        companion: &BoundExecutable,
+    ) -> Result<Self, DriverLaunchError> {
+        let PreparedAntigravity {
+            arguments,
+            workspace,
+            transcript,
+            executable,
+            room_portal,
+        } = prepare(session).await?;
+        let terminal_helper = room_portal
+            .create_terminal_helper(companion)
+            .map_err(portal_driver_error)?;
+        let hook = AntigravityHookRegistration::register(&workspace)?;
+        let mut environment = terminal_helper.provider_environment();
+        environment.extend([
+            ("TERM".to_owned(), "xterm-256color".to_owned()),
+            ("COLORTERM".to_owned(), "truecolor".to_owned()),
+            ("COLUMNS".to_owned(), "120".to_owned()),
+            ("LINES".to_owned(), "40".to_owned()),
+        ]);
+        let terminal = crate::antigravity_windows::spawn_terminal(
+            executable,
+            &arguments,
+            &environment,
+            &workspace,
+        )?;
+        Ok(Self::from_parts(
+            terminal,
+            transcript,
+            room_portal,
+            terminal_helper,
+            hook,
+        ))
+    }
+
+    fn from_parts(
+        terminal: Box<dyn AntigravityTerminal>,
+        transcript: AntigravityTranscript,
+        room_portal: RoomPortal,
+        terminal_helper: RoomPortalTerminalHelper,
+        hook: AntigravityHookRegistration,
+    ) -> Self {
+        Self {
+            terminal,
             transcript,
             room_portal,
             terminal_helper: Some(terminal_helper),
@@ -152,7 +226,7 @@ impl AntigravityDriver {
             completed_turn: None,
             terminal_tail: Vec::new(),
             poisoned: false,
-        })
+        }
     }
 
     async fn attach(
@@ -199,7 +273,7 @@ impl AntigravityDriver {
             if Instant::now() >= deadline {
                 return self.poison(startup_error());
             }
-            if !self.process_group.leader_is_running()? {
+            if !self.terminal.is_alive()? {
                 return self.poison(runtime_exited());
             }
             if let Ok(chunk) = tokio::time::timeout(POLL_INTERVAL, self.read_terminal()).await {
@@ -307,7 +381,7 @@ impl AntigravityDriver {
                 }
             }
             let Some(snapshot) = self.transcript.poll()? else {
-                if !self.process_group.leader_is_running()? {
+                if !self.terminal.is_alive()? {
                     return self.poison(runtime_exited());
                 }
                 continue;
@@ -353,44 +427,12 @@ impl AntigravityDriver {
         }
     }
 
-    async fn read_terminal(&self) -> Result<Vec<u8>, DriverError> {
-        loop {
-            let mut ready = self
-                .terminal
-                .readable()
-                .await
-                .map_err(|_| terminal_error())?;
-            let mut buffer = vec![0_u8; 16 * 1024];
-            match ready.try_io(|inner| {
-                rustix::io::read(inner.get_ref(), &mut buffer).map_err(std::io::Error::from)
-            }) {
-                Ok(Ok(0)) => return Err(runtime_exited()),
-                Ok(Ok(count)) => {
-                    buffer.truncate(count);
-                    return Ok(buffer);
-                }
-                Ok(Err(_)) => return Err(terminal_error()),
-                Err(_) => {}
-            }
-        }
+    async fn read_terminal(&mut self) -> Result<Vec<u8>, DriverError> {
+        self.terminal.read().await
     }
 
-    async fn write_terminal(&self, mut data: &[u8]) -> Result<(), DriverError> {
-        while !data.is_empty() {
-            let mut ready = self
-                .terminal
-                .writable()
-                .await
-                .map_err(|_| terminal_error())?;
-            match ready.try_io(|inner| {
-                rustix::io::write(inner.get_ref(), data).map_err(std::io::Error::from)
-            }) {
-                Ok(Ok(0) | Err(_)) => return Err(terminal_error()),
-                Ok(Ok(count)) => data = &data[count..],
-                Err(_) => {}
-            }
-        }
-        Ok(())
+    async fn write_terminal(&mut self, data: &[u8]) -> Result<(), DriverError> {
+        self.terminal.write(data).await
     }
 
     async fn answer_terminal_queries(&mut self, chunk: &[u8]) -> Result<(), DriverError> {
@@ -451,7 +493,7 @@ impl AntigravityDriver {
     }
 
     async fn stop_process(&mut self) -> Result<(), DriverError> {
-        self.process_group.stop().await?;
+        self.terminal.stop().await?;
         self.hook.take();
         self.terminal_helper.take();
         Ok(())
@@ -475,7 +517,7 @@ impl ProviderDriver for AntigravityDriver {
     }
 
     fn is_alive(&mut self) -> Result<bool, DriverError> {
-        self.process_group.leader_is_running()
+        self.terminal.is_alive()
     }
 
     fn stop(&mut self) -> DriverFuture<'_, Result<(), DriverError>> {
@@ -521,7 +563,7 @@ impl ProviderDriver for AntigravityDriver {
 
 impl Drop for AntigravityDriver {
     fn drop(&mut self) {
-        self.process_group.request_stop();
+        self.terminal.request_stop();
     }
 }
 
@@ -561,7 +603,12 @@ fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
 }
 
 fn env_home() -> Result<PathBuf, DriverError> {
-    std::env::var_os("HOME")
+    #[cfg(unix)]
+    const HOME_ENVIRONMENT: &str = "HOME";
+    #[cfg(windows)]
+    const HOME_ENVIRONMENT: &str = "USERPROFILE";
+
+    std::env::var_os(HOME_ENVIRONMENT)
         .map(PathBuf::from)
         .filter(|path| path.is_absolute())
         .ok_or_else(profile_error)
@@ -592,13 +639,6 @@ const fn runtime_exited() -> DriverError {
     DriverError::new(
         "provider_runtime_exited",
         "The Antigravity interactive session exited unexpectedly.",
-    )
-}
-
-const fn terminal_error() -> DriverError {
-    DriverError::new(
-        "provider_transport_failed",
-        "The Antigravity terminal transport failed.",
     )
 }
 

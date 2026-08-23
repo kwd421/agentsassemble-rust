@@ -6,9 +6,13 @@ use std::{
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::room_portal_mcp::PortalServer;
+#[cfg(windows)]
+use crate::filesystem::BoundExecutable;
 #[cfg(unix)]
-use crate::{guardian::GuardianLaunch, room_portal_terminal::RoomPortalTerminalHelper};
+use crate::guardian::GuardianLaunch;
+use crate::room_portal_mcp::PortalServer;
+#[cfg(any(unix, windows))]
+use crate::room_portal_terminal::RoomPortalTerminalHelper;
 
 pub(super) const ROOM_PORTAL_TOKEN_ENV_PREFIX: &str = "AGENTSASSEMBLE_INTERNAL_ROOM_PORTAL_TOKEN_";
 
@@ -150,6 +154,19 @@ impl RoomPortal {
         self.require_server()?;
         RoomPortalTerminalHelper::create(
             guardian,
+            self.server.endpoint(),
+            self.server.bearer_token(),
+        )
+    }
+
+    #[cfg(windows)]
+    pub(crate) fn create_terminal_helper(
+        &self,
+        companion: &BoundExecutable,
+    ) -> Result<RoomPortalTerminalHelper, RoomPortalError> {
+        self.require_server()?;
+        RoomPortalTerminalHelper::create(
+            companion,
             self.server.endpoint(),
             self.server.bearer_token(),
         )

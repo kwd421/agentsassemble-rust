@@ -1,0 +1,37 @@
+name: Windows ConPTY
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/windows-conpty.yml"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "crates/agentsassemble-domain/**"
+      - "crates/agentsassemble-provider/**"
+  pull_request:
+    paths:
+      - ".github/workflows/windows-conpty.yml"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "crates/agentsassemble-domain/**"
+      - "crates/agentsassemble-provider/**"
+
+permissions:
+  contents: read
+
+jobs:
+  managed-conpty:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Windows workspace hook ownership
+        run: >-
+          cargo test -p agentsassemble-provider antigravity_hook::tests
+          -- --nocapture
+      - name: Verify resident ConPTY transport
+        run: >-
+          cargo test -p agentsassemble-provider
+          antigravity_windows::tests::managed_conpty_is_one_resident_bidirectional_terminal
+          -- --exact --nocapture

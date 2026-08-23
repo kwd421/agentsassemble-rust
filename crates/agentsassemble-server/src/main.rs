@@ -142,11 +142,11 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn run_internal_provider_mode() -> bool {
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     if let Some(code) = agentsassemble_provider::run_antigravity_hook_if_requested() {
         std::process::exit(code);
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     if let Some(code) = agentsassemble_provider::run_room_helper_if_requested().await {
         std::process::exit(code);
     }

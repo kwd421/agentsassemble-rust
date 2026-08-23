@@ -1,4 +1,4 @@
-use std::{env, io, process::Stdio, time::Duration};
+use std::{env, ffi::OsString, io, process::Stdio, time::Duration};
 
 #[cfg(windows)]
 use process_wrap::tokio::JobObject;
@@ -110,21 +110,23 @@ pub(crate) async fn probe(
 
 pub(crate) fn sanitize_environment(command: &mut tokio::process::Command) {
     command.env_clear();
-    for name in PROVIDER_ENVIRONMENT {
-        if let Some(value) = env::var_os(name) {
-            command.env(name, value);
-        }
-    }
+    command.envs(sanitized_environment());
 }
 
 #[cfg(unix)]
 pub(crate) fn sanitize_std_environment(command: &mut std::process::Command) {
     command.env_clear();
+    command.envs(sanitized_environment());
+}
+
+pub(crate) fn sanitized_environment() -> Vec<(OsString, OsString)> {
+    let mut environment = Vec::with_capacity(PROVIDER_ENVIRONMENT.len());
     for name in PROVIDER_ENVIRONMENT {
         if let Some(value) = env::var_os(name) {
-            command.env(name, value);
+            environment.push((OsString::from(name), value));
         }
     }
+    environment
 }
 
 async fn read_limited<R: AsyncRead + Unpin>(mut reader: R) -> io::Result<Vec<u8>> {

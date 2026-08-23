@@ -17,11 +17,17 @@ use rmcp::{
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
-use crate::{
-    filesystem::PrivateExecutable, guardian::GuardianLaunch, room_portal::RoomPortalError,
-};
+#[cfg(windows)]
+use crate::filesystem::BoundExecutable;
+#[cfg(unix)]
+use crate::guardian::GuardianLaunch;
+use crate::{filesystem::PrivateExecutable, room_portal::RoomPortalError};
 
 const HELPER_NAME: &str = "agentsassemble-room";
+#[cfg(unix)]
+const HELPER_FILE_NAME: &str = HELPER_NAME;
+#[cfg(windows)]
+const HELPER_FILE_NAME: &str = "agentsassemble-room.exe";
 const AUTHORITY_FILE: &str = "room-portal.json";
 const MAX_AUTHORITY_BYTES: u64 = 4 * 1024;
 const MAX_HOOK_INPUT_BYTES: u64 = 64 * 1024;
@@ -39,14 +45,35 @@ pub(crate) struct RoomPortalTerminalHelper {
 }
 
 impl RoomPortalTerminalHelper {
+    #[cfg(unix)]
     pub(crate) fn create(
         guardian: &GuardianLaunch,
         endpoint: &str,
         bearer_token: &str,
     ) -> Result<Self, RoomPortalError> {
         let executable = guardian
-            .stage_companion(HELPER_NAME)
+            .stage_companion(HELPER_FILE_NAME)
             .map_err(|_| RoomPortalError::Authority)?;
+        Self::from_executable(executable, endpoint, bearer_token)
+    }
+
+    #[cfg(windows)]
+    pub(crate) fn create(
+        companion: &BoundExecutable,
+        endpoint: &str,
+        bearer_token: &str,
+    ) -> Result<Self, RoomPortalError> {
+        let executable = companion
+            .stage_private_companion(HELPER_FILE_NAME)
+            .map_err(|_| RoomPortalError::Authority)?;
+        Self::from_executable(executable, endpoint, bearer_token)
+    }
+
+    fn from_executable(
+        executable: PrivateExecutable,
+        endpoint: &str,
+        bearer_token: &str,
+    ) -> Result<Self, RoomPortalError> {
         write_authority(
             executable.directory(),
             &HelperAuthority {
@@ -108,7 +135,7 @@ fn write_authority(directory: &Path, authority: &HelperAuthority) -> Result<(), 
 
 pub async fn run_room_helper_if_requested() -> Option<i32> {
     let executable = env::current_exe().ok()?;
-    if executable.file_name() != Some(OsStr::new(HELPER_NAME)) {
+    if executable.file_name() != Some(OsStr::new(HELPER_FILE_NAME)) {
         return None;
     }
     Some(
