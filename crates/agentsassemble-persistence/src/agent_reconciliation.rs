@@ -6,8 +6,9 @@ use serde_json::{Value, json};
 use sqlx::{Row, Sqlite, Transaction};
 
 use crate::{
-    PersistenceError, SqliteStore, agent_lifecycle_reservations::mark_lifecycle_owner_lost,
-    turn_queue::bounded_event_ids,
+    PersistenceError, SqliteStore,
+    agent_lifecycle_reservations::mark_lifecycle_owner_lost,
+    turn_queue::{event_id_queue_is_canonical, merge_event_ids},
 };
 
 const ACTIVE_RUNTIME_STATES: [&str; 6] = [
@@ -185,6 +186,14 @@ fn validate_candidate_authority(
     session: &DurableAgentSession,
     reservations: &[Value],
 ) -> Result<(), PersistenceError> {
+    if !event_id_queue_is_canonical(
+        session
+            .inflight_event_ids
+            .iter()
+            .chain(&session.pending_event_ids),
+    ) {
+        return Err(invalid_stored_authority());
+    }
     if session.runtime_handle_id.is_empty() != session.runtime_owner_id.is_empty() {
         return Err(invalid_stored_authority());
     }
@@ -239,7 +248,7 @@ async fn reconcile_observation(
     observation: &RuntimeReconciliationObservation,
 ) -> Result<bool, PersistenceError> {
     if confirmed_stop_needs_reconciliation(session) {
-        reconcile_confirmed_stop(session);
+        reconcile_confirmed_stop(session)?;
         return Ok(true);
     }
     match observation {
@@ -262,14 +271,14 @@ async fn reconcile_observation(
             session.public.updated_at = Utc::now();
             Ok(false)
         }
-        RuntimeReconciliationObservation::Gone => Ok(reconcile_gone(session)),
+        RuntimeReconciliationObservation::Gone => reconcile_gone(session),
         RuntimeReconciliationObservation::LeaseUncertain {
             handle_id,
             owner_id,
             reason_code,
         } => {
             validate_uncertain_lease(session, handle_id, owner_id, reason_code)?;
-            retain_uncertain_runtime(session);
+            retain_uncertain_runtime(session)?;
             Ok(true)
         }
         RuntimeReconciliationObservation::Ambiguous { reason_code } => {
@@ -281,7 +290,7 @@ async fn reconcile_observation(
     }
 }
 
-fn reconcile_gone(session: &mut DurableAgentSession) -> bool {
+fn reconcile_gone(session: &mut DurableAgentSession) -> Result<bool, PersistenceError> {
     if session.lifecycle_intent_action == "stop"
         && matches!(
             session.lifecycle_intent_status.as_str(),
@@ -289,8 +298,8 @@ fn reconcile_gone(session: &mut DurableAgentSession) -> bool {
         )
     {
         "effect_applied".clone_into(&mut session.lifecycle_intent_status);
-        reconcile_confirmed_stop(session);
-        return true;
+        reconcile_confirmed_stop(session)?;
+        return Ok(true);
     }
     if session.lifecycle_intent_action == "start"
         && matches!(
@@ -304,14 +313,13 @@ fn reconcile_gone(session: &mut DurableAgentSession) -> bool {
         "starting".clone_into(&mut session.public.runtime_status);
         session.public.provider_session_active = false;
         session.public.updated_at = Utc::now();
-        return false;
+        return Ok(false);
     }
     if ACTIVE_RUNTIME_STATES.contains(&session.public.runtime_status.as_str()) {
-        disconnect_after_restart(session);
-        return true;
+        disconnect_after_restart(session)?;
+        return Ok(true);
     }
-    invalidate_previous_runtime_owner(session);
-    false
+    Ok(invalidate_previous_runtime_owner(session))
 }
 
 async fn reconcile_ambiguous(
@@ -324,7 +332,7 @@ async fn reconcile_ambiguous(
             "prepared" | "unconfirmed"
         )
     {
-        retain_uncertain_runtime(session);
+        retain_uncertain_runtime(session)?;
         return Ok(true);
     }
     if session.lifecycle_intent_action == "stop"
@@ -342,11 +350,11 @@ async fn reconcile_ambiguous(
             &session.lifecycle_intent_id,
         )
         .await?;
-        disconnect_after_owner_loss(session);
+        disconnect_after_owner_loss(session)?;
         return Ok(true);
     }
     if ACTIVE_RUNTIME_STATES.contains(&session.public.runtime_status.as_str()) {
-        disconnect_after_restart(session);
+        disconnect_after_restart(session)?;
         return Ok(true);
     }
     invalidate_previous_runtime_owner(session);
@@ -416,8 +424,8 @@ fn confirmed_stop_needs_reconciliation(session: &DurableAgentSession) -> bool {
             || session.public.status != "unavailable")
 }
 
-fn reconcile_confirmed_stop(session: &mut DurableAgentSession) {
-    merge_inflight_events(session);
+fn reconcile_confirmed_stop(session: &mut DurableAgentSession) -> Result<(), PersistenceError> {
+    merge_inflight_events(session)?;
     "unavailable".clone_into(&mut session.public.status);
     session.public.enabled = false;
     "stopping".clone_into(&mut session.public.runtime_status);
@@ -428,20 +436,22 @@ fn reconcile_confirmed_stop(session: &mut DurableAgentSession) {
     session.runtime_handle_id.clear();
     session.runtime_owner_id.clear();
     session.public.updated_at = Utc::now();
+    Ok(())
 }
 
-fn disconnect_after_owner_loss(session: &mut DurableAgentSession) {
-    disconnect_common(session);
+fn disconnect_after_owner_loss(session: &mut DurableAgentSession) -> Result<(), PersistenceError> {
+    disconnect_common(session)?;
     "Provider runtime ownership was lost during restart."
         .clone_into(&mut session.public.last_error);
     "runtime_owner_lost".clone_into(&mut session.public.last_error_code);
     session.lifecycle_intent_action.clear();
     session.lifecycle_intent_id.clear();
     session.lifecycle_intent_status.clear();
+    Ok(())
 }
 
-fn retain_uncertain_runtime(session: &mut DurableAgentSession) {
-    merge_inflight_events(session);
+fn retain_uncertain_runtime(session: &mut DurableAgentSession) -> Result<(), PersistenceError> {
+    merge_inflight_events(session)?;
     if session.lifecycle_intent_action == "start" && session.lifecycle_intent_status == "prepared" {
         "unconfirmed".clone_into(&mut session.lifecycle_intent_status);
     }
@@ -456,20 +466,22 @@ fn retain_uncertain_runtime(session: &mut DurableAgentSession) {
     "Provider runtime authority could not be confirmed.".clone_into(&mut session.public.last_error);
     "runtime_authority_uncertain".clone_into(&mut session.public.last_error_code);
     session.public.updated_at = Utc::now();
+    Ok(())
 }
 
-fn disconnect_after_restart(session: &mut DurableAgentSession) {
-    disconnect_common(session);
+fn disconnect_after_restart(session: &mut DurableAgentSession) -> Result<(), PersistenceError> {
+    disconnect_common(session)?;
     "Server restarted without a current owned provider handle."
         .clone_into(&mut session.public.last_error);
     "server_restarted".clone_into(&mut session.public.last_error_code);
     session.lifecycle_intent_action.clear();
     session.lifecycle_intent_id.clear();
     session.lifecycle_intent_status.clear();
+    Ok(())
 }
 
-fn disconnect_common(session: &mut DurableAgentSession) {
-    merge_inflight_events(session);
+fn disconnect_common(session: &mut DurableAgentSession) -> Result<(), PersistenceError> {
+    merge_inflight_events(session)?;
     "unavailable".clone_into(&mut session.public.status);
     session.public.enabled = false;
     "disconnected".clone_into(&mut session.public.runtime_status);
@@ -481,6 +493,7 @@ fn disconnect_common(session: &mut DurableAgentSession) {
     session.runtime_handle_id.clear();
     session.runtime_owner_id.clear();
     session.public.updated_at = Utc::now();
+    Ok(())
 }
 
 fn invalidate_previous_runtime_owner(session: &mut DurableAgentSession) -> bool {
@@ -493,17 +506,19 @@ fn invalidate_previous_runtime_owner(session: &mut DurableAgentSession) -> bool 
     true
 }
 
-fn merge_inflight_events(session: &mut DurableAgentSession) {
-    session.pending_event_ids = bounded_event_ids(
+fn merge_inflight_events(session: &mut DurableAgentSession) -> Result<(), PersistenceError> {
+    session.pending_event_ids = merge_event_ids(
         session
             .inflight_event_ids
             .iter()
             .chain(&session.pending_event_ids),
-    );
+    )
+    .map_err(|_| invalid_stored_authority())?;
     session.inflight_event_ids.clear();
     session.active_source_event_id.clear();
     session.input_up_to_event_id.clear();
     session.input_up_to_seq = 0;
+    Ok(())
 }
 
 async fn save_reconciled_session(

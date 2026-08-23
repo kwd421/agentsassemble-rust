@@ -9,7 +9,7 @@ use crate::{
     CommandOutcome, PersistenceError, SqliteStore,
     agent_lifecycle::{load_session, save_session},
     command_admission::admit_non_lifecycle_command,
-    turn_queue::bounded_event_ids,
+    turn_queue::merge_event_ids,
 };
 
 #[derive(Debug, Clone)]
@@ -262,12 +262,18 @@ impl SqliteStore {
         };
         let error = error_event(&mut transaction, &session, turn_id, code, &message).await?;
         let finished = turn_finished_event(&mut transaction, &session, turn_id, "error").await?;
-        session.pending_event_ids = bounded_event_ids(
+        session.pending_event_ids = merge_event_ids(
             session
                 .inflight_event_ids
                 .iter()
                 .chain(&session.pending_event_ids),
-        );
+        )
+        .map_err(|_| {
+            rejected(
+                "stored_turn_authority_invalid",
+                "Stored Agent Session turn queue authority is inconsistent or oversized.",
+            )
+        })?;
         session.inflight_event_ids.clear();
         "error".clone_into(&mut session.public.status);
         "error".clone_into(&mut session.public.runtime_status);

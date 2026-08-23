@@ -21,6 +21,58 @@ fn started(handle: &str, provider_session_id: &str) -> AgentRuntimeStarted {
 }
 
 #[tokio::test]
+async fn oversized_turn_queue_fails_before_lifecycle_or_reconciliation_effects() {
+    let (store, principal, _directory) = fixture().await;
+    let encoded = sqlx::query_scalar::<_, String>(
+        "SELECT session_json FROM agent_sessions WHERE room_id = 'general' AND session_id = ?",
+    )
+    .bind(AGENT_ID)
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("read session: {error}"));
+    let mut session = serde_json::from_str::<DurableAgentSession>(&encoded)
+        .unwrap_or_else(|error| panic!("decode session: {error}"));
+    session.pending_event_ids = (0..=crate::turn_queue::MAX_QUEUED_EVENT_IDS)
+        .map(|index| format!("event-{index}"))
+        .collect();
+    sqlx::query(
+        "UPDATE agent_sessions SET session_json = ? WHERE room_id = 'general' AND session_id = ?",
+    )
+    .bind(
+        serde_json::to_string(&session)
+            .unwrap_or_else(|error| panic!("encode oversized session: {error}")),
+    )
+    .bind(AGENT_ID)
+    .execute(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("store oversized session: {error}"));
+    let payload = json!({"agent_id": AGENT_ID});
+
+    for result in [
+        store
+            .prepare_agent_start(&principal, "oversized-start", &payload)
+            .await
+            .map(|_| ()),
+        store
+            .prepare_agent_stop(&principal, "oversized-stop", &payload)
+            .await
+            .map(|_| ()),
+        store
+            .load_runtime_reconciliation_candidates()
+            .await
+            .map(|_| ()),
+    ] {
+        assert!(matches!(
+            result,
+            Err(PersistenceError::CommandRejected {
+                code: "stored_turn_authority_invalid" | "invalid_stored_runtime_authority",
+                ..
+            })
+        ));
+    }
+}
+
+#[tokio::test]
 async fn live_looking_start_requires_supervisor_confirmation_before_success() {
     let (store, principal, _directory) = fixture().await;
     let payload = json!({"agent_id": AGENT_ID});

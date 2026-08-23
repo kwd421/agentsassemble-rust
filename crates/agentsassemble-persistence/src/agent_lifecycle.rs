@@ -23,7 +23,7 @@ use crate::{
     },
     authority::active_room_for_principal,
     command_admission::existing_command,
-    turn_queue::bounded_event_ids,
+    turn_queue::{event_id_queue_is_canonical, merge_event_ids},
 };
 
 const START: &str = "agent.start";
@@ -108,6 +108,7 @@ impl SqliteStore {
         );
         claim_lifecycle_command(&mut transaction, &reservation).await?;
         let mut session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
+        require_valid_turn_queue(&session)?;
         let participant = load_participant(&mut transaction, &principal.room_id, &agent_id).await?;
         if participant.status == ParticipantStatus::Kicked {
             return Err(rejected(
@@ -295,6 +296,7 @@ impl SqliteStore {
         );
         claim_lifecycle_command(&mut transaction, &reservation).await?;
         let mut session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
+        require_valid_turn_queue(&session)?;
         if matches!(
             session.public.runtime_status.as_str(),
             "stopped" | "available"
@@ -400,12 +402,7 @@ impl SqliteStore {
             "prepared",
             "stale_stop_confirmation",
         )?;
-        session.pending_event_ids = bounded_event_ids(
-            session
-                .inflight_event_ids
-                .iter()
-                .chain(&session.pending_event_ids),
-        );
+        session.pending_event_ids = merged_turn_queue(&session)?;
         session.inflight_event_ids.clear();
         "unavailable".clone_into(&mut session.public.status);
         session.public.enabled = false;
@@ -491,12 +488,7 @@ impl SqliteStore {
             &operation_id,
         );
         finish_lifecycle_command(&mut transaction, &reservation).await?;
-        session.pending_event_ids = bounded_event_ids(
-            session
-                .inflight_event_ids
-                .iter()
-                .chain(&session.pending_event_ids),
-        );
+        session.pending_event_ids = merged_turn_queue(&session)?;
         session.inflight_event_ids.clear();
         "detached".clone_into(&mut session.public.status);
         session.public.enabled = false;
@@ -657,6 +649,36 @@ pub(crate) fn clear_intent(session: &mut DurableAgentSession) {
     session.lifecycle_intent_action.clear();
     session.lifecycle_intent_id.clear();
     session.lifecycle_intent_status.clear();
+}
+
+fn require_valid_turn_queue(session: &DurableAgentSession) -> Result<(), PersistenceError> {
+    if event_id_queue_is_canonical(
+        session
+            .inflight_event_ids
+            .iter()
+            .chain(&session.pending_event_ids),
+    ) {
+        Ok(())
+    } else {
+        Err(invalid_turn_queue())
+    }
+}
+
+fn merged_turn_queue(session: &DurableAgentSession) -> Result<Vec<String>, PersistenceError> {
+    merge_event_ids(
+        session
+            .inflight_event_ids
+            .iter()
+            .chain(&session.pending_event_ids),
+    )
+    .map_err(|_| invalid_turn_queue())
+}
+
+fn invalid_turn_queue() -> PersistenceError {
+    rejected(
+        "stored_turn_authority_invalid",
+        "Stored Agent Session turn queue authority is inconsistent or oversized.",
+    )
 }
 
 pub(crate) async fn load_session(
