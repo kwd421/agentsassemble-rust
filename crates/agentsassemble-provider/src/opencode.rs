@@ -12,8 +12,10 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 use tokio::{
     io::{AsyncRead, AsyncReadExt},
+    sync::oneshot,
     task::JoinHandle,
 };
+use uuid::Uuid;
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 use crate::filesystem::BoundExecutable;
@@ -51,6 +53,8 @@ const TURN_TIMEOUT: Duration = Duration::from_mins(3);
 #[cfg(not(unix))]
 const STOP_TIMEOUT: Duration = Duration::from_secs(5);
 const MCP_NAME: &str = "agentsassemble_room";
+const SERVER_USERNAME: &str = "agentsassemble";
+const MAX_STARTUP_LINE_BYTES: usize = 1024;
 
 pub(crate) struct OpenCodeDriver {
     #[cfg(unix)]
@@ -94,9 +98,11 @@ impl OpenCodeDriver {
         validate_profile(session)?;
         let workspace = Path::new(&session.workspace);
         let config_root = isolated_config_root()?;
-        let environment = isolated_environment(config_root.path())?;
+        let server_password = server_password();
+        let environment = isolated_environment(config_root.path(), &server_password)?;
         let port = reserve_loopback_port().await?;
         let endpoint = format!("http://127.0.0.1:{port}/");
+        let ready_line = format!("opencode server listening on http://127.0.0.1:{port}");
         let arguments = server_arguments(port);
         let executable = bind_executable_with_children(
             session.executable.clone(),
@@ -116,15 +122,17 @@ impl OpenCodeDriver {
         )
         .await?;
         #[cfg(unix)]
-        let (stdout_task, stderr_task) = {
+        let (stdout_task, stderr_task, startup) = {
             drop(pipes.stdin);
+            let (stdout_task, startup) = observe_startup(pipes.stdout, ready_line.clone());
             (
-                tokio::spawn(drain_output(pipes.stdout)),
+                stdout_task,
                 tokio::spawn(drain_output(pipes.stderr)),
+                startup,
             )
         };
         #[cfg(not(unix))]
-        let (child, stdout_task, stderr_task) = {
+        let (child, stdout_task, stderr_task, startup) = {
             let mut command = CommandWrap::with_new(executable.launch_path(), |command| {
                 command
                     .args(&arguments)
@@ -150,14 +158,17 @@ impl OpenCodeDriver {
                 .stderr()
                 .take()
                 .ok_or_else(|| DriverLaunchError::uncertain(spawn_error()))?;
+            let (stdout_task, startup) = observe_startup(stdout, ready_line);
             (
                 child,
-                tokio::spawn(drain_output(stdout)),
+                stdout_task,
                 tokio::spawn(drain_output(stderr)),
+                startup,
             )
         };
-        let http = LoopbackHttp::new(&endpoint, workspace).map_err(http_driver_error)?;
-        let mut driver = Self {
+        let http = LoopbackHttp::new(&endpoint, workspace, SERVER_USERNAME, &server_password)
+            .map_err(http_driver_error)?;
+        let driver = Self {
             #[cfg(unix)]
             process_group,
             #[cfg(not(unix))]
@@ -175,7 +186,14 @@ impl OpenCodeDriver {
             completed_turn: None,
             poisoned: false,
         };
-        if let Err(error) = driver.wait_until_ready().await {
+        Self::confirm_startup(driver, startup).await
+    }
+
+    async fn confirm_startup(
+        mut driver: Self,
+        startup: oneshot::Receiver<bool>,
+    ) -> Result<Self, DriverLaunchError> {
+        if let Err(error) = driver.wait_until_ready(startup).await {
             return Err(if driver.stop_process().await.is_ok() {
                 DriverLaunchError::safe(error)
             } else {
@@ -185,8 +203,17 @@ impl OpenCodeDriver {
         Ok(driver)
     }
 
-    async fn wait_until_ready(&mut self) -> Result<(), DriverError> {
+    async fn wait_until_ready(
+        &mut self,
+        startup: oneshot::Receiver<bool>,
+    ) -> Result<(), DriverError> {
         let deadline = tokio::time::Instant::now() + STARTUP_TIMEOUT;
+        if !matches!(
+            tokio::time::timeout_at(deadline, startup).await,
+            Ok(Ok(true))
+        ) {
+            return Err(startup_error());
+        }
         loop {
             if !self.is_alive()? {
                 return Err(runtime_exited());
@@ -562,7 +589,10 @@ fn isolated_config_root() -> Result<tempfile::TempDir, DriverLaunchError> {
     Ok(root)
 }
 
-fn isolated_environment(root: &Path) -> Result<Vec<(String, String)>, DriverLaunchError> {
+fn isolated_environment(
+    root: &Path,
+    server_password: &str,
+) -> Result<Vec<(String, String)>, DriverLaunchError> {
     let root = root
         .to_str()
         .filter(|value| !value.is_empty() && value.len() <= 4096)
@@ -589,6 +619,14 @@ fn isolated_environment(root: &Path) -> Result<Vec<(String, String)>, DriverLaun
             "1".to_owned(),
         ),
         ("OPENCODE_PURE".to_owned(), "1".to_owned()),
+        (
+            "OPENCODE_SERVER_USERNAME".to_owned(),
+            SERVER_USERNAME.to_owned(),
+        ),
+        (
+            "OPENCODE_SERVER_PASSWORD".to_owned(),
+            server_password.to_owned(),
+        ),
     ])
 }
 
@@ -675,39 +713,52 @@ async fn reserve_loopback_port() -> Result<u16, DriverError> {
     Ok(port)
 }
 
+fn server_password() -> String {
+    format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple())
+}
+
+fn observe_startup<R>(
+    mut output: R,
+    expected_line: String,
+) -> (JoinHandle<()>, oneshot::Receiver<bool>)
+where
+    R: AsyncRead + Unpin + Send + 'static,
+{
+    let (ready_sender, ready_receiver) = oneshot::channel();
+    let task = tokio::spawn(async move {
+        let ready = read_startup_line(&mut output)
+            .await
+            .is_some_and(|line| line == expected_line.as_bytes());
+        let _ = ready_sender.send(ready);
+        drain_output(output).await;
+    });
+    (task, ready_receiver)
+}
+
+async fn read_startup_line<R: AsyncRead + Unpin>(output: &mut R) -> Option<Vec<u8>> {
+    let mut line = Vec::with_capacity(128);
+    let mut byte = [0_u8; 1];
+    loop {
+        if line.len() >= MAX_STARTUP_LINE_BYTES {
+            return None;
+        }
+        match output.read(&mut byte).await {
+            Ok(0) | Err(_) => return None,
+            Ok(_) if byte[0] == b'\n' => {
+                if line.last() == Some(&b'\r') {
+                    line.pop();
+                }
+                return Some(line);
+            }
+            Ok(_) => line.push(byte[0]),
+        }
+    }
+}
+
 async fn drain_output<R: AsyncRead + Unpin>(mut output: R) {
     let mut buffer = [0_u8; 8 * 1024];
     while output.read(&mut buffer).await.is_ok_and(|count| count != 0) {}
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{isolated_config_root, isolated_environment, server_arguments};
-
-    #[test]
-    fn server_launch_disables_external_and_project_configuration() {
-        let arguments = server_arguments(43123);
-        assert!(arguments.iter().any(|argument| argument == "--pure"));
-
-        let root = tempfile::tempdir()
-            .unwrap_or_else(|error| panic!("create OpenCode config fixture: {error}"));
-        let environment = isolated_environment(root.path())
-            .unwrap_or_else(|_| panic!("build OpenCode environment"));
-        let value = |name: &str| {
-            environment
-                .iter()
-                .find_map(|(key, value)| (key == name).then_some(value.as_str()))
-        };
-        assert_eq!(value("OPENCODE_DISABLE_PROJECT_CONFIG"), Some("1"));
-        assert_eq!(value("OPENCODE_PURE"), Some("1"));
-        assert_eq!(value("OPENCODE_DISABLE_EXTERNAL_SKILLS"), Some("1"));
-        assert_eq!(value("XDG_CONFIG_HOME"), root.path().to_str());
-    }
-
-    #[test]
-    fn isolated_config_root_is_private_on_the_running_platform() {
-        let root = isolated_config_root()
-            .unwrap_or_else(|error| panic!("create isolated OpenCode config root: {error:?}"));
-        assert!(root.path().is_dir());
-    }
-}
+mod opencode_tests;
