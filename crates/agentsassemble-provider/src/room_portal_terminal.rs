@@ -133,7 +133,7 @@ fn absolute_helper_command(executable: &Path) -> Result<String, RoomPortalError>
     let executable = executable.to_str().ok_or(RoomPortalError::Authority)?;
     if executable.chars().any(|character| {
         !(character.is_alphanumeric()
-            || matches!(character, ' ' | '-' | '_' | '.' | ':' | '\\' | '/'))
+            || matches!(character, ' ' | '-' | '_' | '.' | ':' | '\\' | '/' | '~'))
     }) {
         return Err(RoomPortalError::Authority);
     }
