@@ -8,12 +8,19 @@ const APPROVE_CONVERSATION: &[u8] = b"\x1b[B\r";
 const MAX_SCREEN_ROWS: usize = 400;
 const MAX_SCREEN_COLUMNS: usize = 400;
 
-#[derive(Default)]
 pub(crate) struct AntigravityRoomPermissionPolicy {
+    command_prefix: String,
     handled_commands: HashSet<String>,
 }
 
 impl AntigravityRoomPermissionPolicy {
+    pub(crate) fn new(command_prefix: String) -> Self {
+        Self {
+            command_prefix,
+            handled_commands: HashSet::new(),
+        }
+    }
+
     pub(crate) fn begin_turn(&mut self) {
         self.handled_commands.clear();
     }
@@ -28,7 +35,7 @@ impl AntigravityRoomPermissionPolicy {
         if self.handled_commands.contains(&command) {
             return Ok(None);
         }
-        if !safe_room_command(&command) {
+        if !safe_room_command(&command, &self.command_prefix) {
             return Err(());
         }
         self.handled_commands.insert(command);
@@ -50,11 +57,7 @@ fn latest_permission_command(text: &str) -> Option<String> {
         .name("command")?
         .as_str()
         .trim();
-    if command.contains(['\r', '\n']) {
-        Some(command.to_owned())
-    } else {
-        Some(command.split_whitespace().collect::<Vec<_>>().join(" "))
-    }
+    Some(command.to_owned())
 }
 
 fn strip_terminal_ansi(raw: &[u8]) -> String {
@@ -214,8 +217,9 @@ mod tests {
 
     #[test]
     fn approves_an_exact_room_command_once() {
-        let mut policy = AntigravityRoomPermissionPolicy::default();
-        let prompt = b"Requesting permission for:\r\n agentsassemble-room read\r\n\
+        let mut policy =
+            AntigravityRoomPermissionPolicy::new("/private/agentsassemble-room".to_owned());
+        let prompt = b"Requesting permission for:\r\n /private/agentsassemble-room read\r\n\
             \xf0\x9f\x94\x93 Allow sandbox bypass for command execution?";
         assert_eq!(
             policy.response_for(prompt).unwrap_or_default(),
@@ -226,11 +230,12 @@ mod tests {
 
     #[test]
     fn rejects_shell_chaining_and_hidden_continuation_lines() {
-        let mut policy = AntigravityRoomPermissionPolicy::default();
+        let mut policy =
+            AntigravityRoomPermissionPolicy::new("/private/agentsassemble-room".to_owned());
         for prompt in [
-            b"Requesting permission for: agentsassemble-room read && env\nDo you want to proceed?"
+            b"Requesting permission for: /private/agentsassemble-room read && env\nDo you want to proceed?"
                 .as_slice(),
-            b"Requesting permission for:\n agentsassemble-room speak 'safe'\n whoami\nDo you want to proceed?"
+            b"Requesting permission for:\n /private/agentsassemble-room speak 'safe'\n whoami\nDo you want to proceed?"
                 .as_slice(),
         ] {
             assert!(policy.response_for(prompt).is_err());
@@ -240,8 +245,9 @@ mod tests {
 
     #[test]
     fn reconstructs_a_cursor_positioned_permission_card() {
-        let mut policy = AntigravityRoomPermissionPolicy::default();
-        let prompt = b"\x1b[2J\x1b[1;1HRequesting permission for:\x1b[2;4Hagentsassemble-room help\x1b[3;1HDo you want to proceed?";
+        let mut policy =
+            AntigravityRoomPermissionPolicy::new("/private/agentsassemble-room".to_owned());
+        let prompt = b"\x1b[2J\x1b[1;1HRequesting permission for:\x1b[2;4H/private/agentsassemble-room help\x1b[3;1HDo you want to proceed?";
         assert_eq!(
             policy.response_for(prompt).unwrap_or_default(),
             Some(APPROVE_CONVERSATION)

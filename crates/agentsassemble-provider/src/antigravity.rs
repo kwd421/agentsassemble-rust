@@ -139,7 +139,8 @@ impl AntigravityDriver {
         let terminal_helper = room_portal
             .create_terminal_helper(guardian)
             .map_err(portal_driver_error)?;
-        let hook = AntigravityHookRegistration::register(&workspace)?;
+        let hook =
+            AntigravityHookRegistration::register(&workspace, terminal_helper.hook_command())?;
         let mut environment = terminal_helper.provider_environment();
         environment.extend([
             ("TERM".to_owned(), "xterm-256color".to_owned()),
@@ -180,7 +181,8 @@ impl AntigravityDriver {
         let terminal_helper = room_portal
             .create_terminal_helper(companion)
             .map_err(portal_driver_error)?;
-        let hook = AntigravityHookRegistration::register(&workspace)?;
+        let hook =
+            AntigravityHookRegistration::register(&workspace, terminal_helper.hook_command())?;
         let mut environment = terminal_helper.provider_environment();
         environment.extend([
             ("TERM".to_owned(), "xterm-256color".to_owned()),
@@ -210,6 +212,8 @@ impl AntigravityDriver {
         terminal_helper: RoomPortalTerminalHelper,
         hook: AntigravityHookRegistration,
     ) -> Self {
+        let permission_policy =
+            AntigravityRoomPermissionPolicy::new(terminal_helper.command_prefix().to_owned());
         Self {
             terminal,
             transcript,
@@ -220,7 +224,7 @@ impl AntigravityDriver {
             attached_reused: false,
             startup_drained: false,
             terminal_query_tail: Vec::new(),
-            permission_policy: AntigravityRoomPermissionPolicy::default(),
+            permission_policy,
             transcript_nonce: Uuid::new_v4(),
             active_turn: None,
             completed_turn: None,
@@ -332,7 +336,14 @@ impl AntigravityDriver {
         } else {
             self.drain_terminal_available().await?;
             self.permission_policy.begin_turn();
-            let prompt = terminal_prompt(request, self.transcript_nonce);
+            let prompt = terminal_prompt(
+                request,
+                self.transcript_nonce,
+                self.terminal_helper
+                    .as_ref()
+                    .ok_or_else(portal_missing)?
+                    .command_prefix(),
+            );
             self.transcript.begin_turn(&prompt)?;
             self.write_terminal(format!("\x1b[200~{prompt}\x1b[201~").as_bytes())
                 .await?;
@@ -567,9 +578,9 @@ impl Drop for AntigravityDriver {
     }
 }
 
-fn terminal_prompt(request: &ProviderTurnRequest, transcript_nonce: Uuid) -> String {
+fn terminal_prompt(request: &ProviderTurnRequest, transcript_nonce: Uuid, helper: &str) -> String {
     format!(
-        "{}\n\n<agentsassemble-transport turn=\"{}\" launch=\"{transcript_nonce}\">Antigravity room transport: first run `agentsassemble-room help`, then run `agentsassemble-room read`. Finish with exactly one `agentsassemble-room speak 'message'`, `agentsassemble-room speak-to agent-id 'message'`, or `agentsassemble-room decline reason`. Run one helper command per terminal tool call. Ordinary assistant final text is not a room publication.</agentsassemble-transport>",
+        "{}\n\n<agentsassemble-transport turn=\"{}\" launch=\"{transcript_nonce}\">Antigravity room transport: first run `{helper} help`, then run `{helper} read`. Finish with exactly one `{helper} speak 'message'`, `{helper} speak-to agent-id 'message'`, or `{helper} decline reason`. Run one helper command per terminal tool call. Ordinary assistant final text is not a room publication.</agentsassemble-transport>",
         request.input, request.turn_id
     )
 }

@@ -32,9 +32,9 @@ pub(crate) struct AntigravityHookRegistration {
 }
 
 impl AntigravityHookRegistration {
-    pub(crate) fn register(workspace: &Path) -> Result<Self, DriverError> {
+    pub(crate) fn register(workspace: &Path, command: &str) -> Result<Self, DriverError> {
         let workspace = workspace.to_path_buf();
-        let definition = hook_definition();
+        let definition = hook_definition(command);
         let registry = REGISTRATIONS.get_or_init(|| Mutex::new(HashMap::new()));
         let mut registrations = registry.lock().map_err(|_| hook_error())?;
         if let Some(active) = registrations.get_mut(&workspace) {
@@ -97,13 +97,13 @@ impl Drop for AntigravityHookRegistration {
     }
 }
 
-fn hook_definition() -> Value {
+fn hook_definition(command: &str) -> Value {
     json!({
         "PreToolUse": [{
             "matcher": "run_command|ask_permission|ask_question",
             "hooks": [{
                 "type": "command",
-                "command": "agentsassemble-room hook",
+                "command": command,
                 "timeout": 900
             }]
         }]
@@ -341,6 +341,8 @@ mod tests {
 
     use super::{AntigravityHookRegistration, HOOK_NAME};
 
+    const HOOK_COMMAND: &str = "/private/agentsassemble-room hook";
+
     #[test]
     fn registration_rejects_existing_project_hooks() {
         let workspace =
@@ -358,7 +360,7 @@ mod tests {
             serde_json::to_vec(&document).unwrap_or_default(),
         )
         .unwrap_or_else(|error| panic!("write previous hook: {error}"));
-        assert!(AntigravityHookRegistration::register(workspace.path()).is_err());
+        assert!(AntigravityHookRegistration::register(workspace.path(), HOOK_COMMAND).is_err());
     }
 
     #[test]
@@ -367,9 +369,9 @@ mod tests {
             tempfile::tempdir().unwrap_or_else(|error| panic!("create hook workspace: {error}"));
         let directory = workspace.path().join(".agents");
         {
-            let first = AntigravityHookRegistration::register(workspace.path())
+            let first = AntigravityHookRegistration::register(workspace.path(), HOOK_COMMAND)
                 .unwrap_or_else(|error| panic!("register first hook: {error}"));
-            let second = AntigravityHookRegistration::register(workspace.path())
+            let second = AntigravityHookRegistration::register(workspace.path(), HOOK_COMMAND)
                 .unwrap_or_else(|error| panic!("register second hook: {error}"));
             drop(first);
             let installed: Value = serde_json::from_slice(
@@ -379,7 +381,7 @@ mod tests {
             .unwrap_or_else(|error| panic!("decode installed hook: {error}"));
             assert_eq!(
                 installed[HOOK_NAME]["PreToolUse"][0]["hooks"][0]["command"],
-                "agentsassemble-room hook"
+                HOOK_COMMAND
             );
             drop(second);
         }

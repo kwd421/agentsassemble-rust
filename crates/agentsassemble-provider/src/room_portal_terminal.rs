@@ -23,9 +23,8 @@ use crate::filesystem::BoundExecutable;
 use crate::guardian::GuardianLaunch;
 use crate::{filesystem::PrivateExecutable, room_portal::RoomPortalError};
 
-const HELPER_NAME: &str = "agentsassemble-room";
 #[cfg(unix)]
-const HELPER_FILE_NAME: &str = HELPER_NAME;
+const HELPER_FILE_NAME: &str = "agentsassemble-room";
 #[cfg(windows)]
 const HELPER_FILE_NAME: &str = "agentsassemble-room.exe";
 const AUTHORITY_FILE: &str = "room-portal.json";
@@ -41,6 +40,8 @@ struct HelperAuthority {
 
 pub(crate) struct RoomPortalTerminalHelper {
     executable: PrivateExecutable,
+    command_prefix: String,
+    hook_command: String,
     path_environment: String,
 }
 
@@ -81,6 +82,8 @@ impl RoomPortalTerminalHelper {
                 bearer_token: bearer_token.to_owned(),
             },
         )?;
+        let command_prefix = absolute_helper_command(executable.path())?;
+        let hook_command = format!("{command_prefix} hook");
         let current_path = env::var_os("PATH").unwrap_or_default();
         let mut paths = vec![executable.directory().to_path_buf()];
         paths.extend(env::split_paths(&current_path));
@@ -93,14 +96,48 @@ impl RoomPortalTerminalHelper {
         }
         Ok(Self {
             executable,
+            command_prefix,
+            hook_command,
             path_environment,
         })
+    }
+
+    pub(crate) fn command_prefix(&self) -> &str {
+        &self.command_prefix
+    }
+
+    pub(crate) fn hook_command(&self) -> &str {
+        &self.hook_command
     }
 
     pub(crate) fn provider_environment(&self) -> Vec<(String, String)> {
         let _ = self.executable.path();
         vec![("PATH".to_owned(), self.path_environment.clone())]
     }
+}
+
+#[cfg(unix)]
+fn absolute_helper_command(executable: &Path) -> Result<String, RoomPortalError> {
+    let executable = executable.to_str().ok_or(RoomPortalError::Authority)?;
+    if executable
+        .chars()
+        .any(|character| character.is_control() || matches!(character, '`' | '<' | '>'))
+    {
+        return Err(RoomPortalError::Authority);
+    }
+    shlex::try_join([executable]).map_err(|_| RoomPortalError::Authority)
+}
+
+#[cfg(windows)]
+fn absolute_helper_command(executable: &Path) -> Result<String, RoomPortalError> {
+    let executable = executable.to_str().ok_or(RoomPortalError::Authority)?;
+    if executable.chars().any(|character| {
+        !(character.is_alphanumeric()
+            || matches!(character, ' ' | '-' | '_' | '.' | ':' | '\\' | '/'))
+    }) {
+        return Err(RoomPortalError::Authority);
+    }
+    Ok(format!(r#""{executable}""#))
 }
 
 fn write_authority(directory: &Path, authority: &HelperAuthority) -> Result<(), RoomPortalError> {
@@ -160,8 +197,10 @@ async fn run_helper(executable: PathBuf) -> Result<(), &'static str> {
         if arguments.next().is_some() {
             return Err("usage: agentsassemble-room help");
         }
+        let helper = absolute_helper_command(&executable)
+            .map_err(|_| "room helper invocation is unavailable")?;
         println!(
-            "agentsassemble-room read | speak <message> | speak-to <agent-id> <message> | decline <reason>"
+            "{helper} read | speak <message> | speak-to <agent-id> <message> | decline <reason>"
         );
         return Ok(());
     }
@@ -169,7 +208,9 @@ async fn run_helper(executable: PathBuf) -> Result<(), &'static str> {
         if arguments.next().is_some() {
             return Err("usage: agentsassemble-room hook");
         }
-        return run_hook();
+        let helper = absolute_helper_command(&executable)
+            .map_err(|_| "room helper invocation is unavailable")?;
+        return run_hook(&helper);
     }
     let authority = read_authority(
         executable
@@ -302,7 +343,7 @@ fn valid_authority(authority: &HelperAuthority) -> bool {
         })
 }
 
-fn run_hook() -> Result<(), &'static str> {
+fn run_hook(command_prefix: &str) -> Result<(), &'static str> {
     let mut encoded = String::new();
     std::io::stdin()
         .take(MAX_HOOK_INPUT_BYTES + 1)
@@ -318,7 +359,9 @@ fn run_hook() -> Result<(), &'static str> {
         .and_then(Value::as_str);
     let decoded_command = raw_command.and_then(decode_antigravity_string_argument);
     let command = decoded_command.as_deref().or(raw_command);
-    let response = if name == Some("run_command") && command.is_some_and(safe_room_command) {
+    let response = if name == Some("run_command")
+        && command.is_some_and(|command| safe_room_command(command, command_prefix))
+    {
         json!({
             "decision": "allow",
             "reason": "AgentsAssemble room tool command.",
@@ -332,24 +375,6 @@ fn run_hook() -> Result<(), &'static str> {
     Ok(())
 }
 
-#[must_use]
-pub fn run_antigravity_hook_if_requested() -> Option<i32> {
-    let mut arguments = env::args().skip(1);
-    if arguments.next().as_deref() != Some("--agentsassemble-antigravity-hook") {
-        return None;
-    }
-    if arguments.next().is_some() {
-        return Some(2);
-    }
-    Some(match run_hook() {
-        Ok(()) => 0,
-        Err(message) => {
-            eprintln!("{message}");
-            2
-        }
-    })
-}
-
 fn decode_antigravity_string_argument(value: &str) -> Option<String> {
     if !(value.starts_with('"') && value.ends_with('"')) {
         return None;
@@ -357,30 +382,36 @@ fn decode_antigravity_string_argument(value: &str) -> Option<String> {
     serde_json::from_str::<String>(value).ok()
 }
 
-pub(crate) fn safe_room_command(command: &str) -> bool {
-    if command.contains(['\r', '\n']) || shell_metacharacter_outside_single_quotes(command) {
-        return false;
-    }
-    let Some(parts) = shlex::split(command) else {
+pub(crate) fn safe_room_command(command: &str, command_prefix: &str) -> bool {
+    let Some(arguments) = command
+        .strip_prefix(command_prefix)
+        .and_then(|suffix| suffix.strip_prefix(' '))
+    else {
         return false;
     };
-    if parts.len() < 2 || parts[0] != HELPER_NAME {
+    if arguments.contains(['\r', '\n']) || shell_metacharacter_outside_single_quotes(arguments) {
         return false;
     }
-    match parts[1].as_str() {
-        "help" | "read" => parts.len() == 2,
+    let Some(parts) = shlex::split(arguments) else {
+        return false;
+    };
+    if parts.is_empty() {
+        return false;
+    }
+    match parts[0].as_str() {
+        "help" | "read" => parts.len() == 1,
         "decline" => {
-            parts.len() == 3
+            parts.len() == 2
                 && matches!(
-                    parts[2].as_str(),
+                    parts[1].as_str(),
                     "nothing_useful_to_add" | "not_addressed" | "duplicate"
                 )
         }
-        "speak" => parts.len() >= 3 && parts[2..].iter().all(|part| !part.starts_with('~')),
+        "speak" => parts.len() >= 2 && parts[1..].iter().all(|part| !part.starts_with('~')),
         "speak-to" => {
-            parts.len() >= 4
-                && valid_agent_id(&parts[2])
-                && parts[3..].iter().all(|part| !part.starts_with('~'))
+            parts.len() >= 3
+                && valid_agent_id(&parts[1])
+                && parts[2..].iter().all(|part| !part.starts_with('~'))
         }
         _ => false,
     }
@@ -429,31 +460,143 @@ fn valid_agent_id(value: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{decode_antigravity_string_argument, safe_room_command};
+    use super::{absolute_helper_command, decode_antigravity_string_argument, safe_room_command};
+
+    const HELPER: &str = "'/private/helper path/agentsassemble-room'";
+
+    #[cfg(unix)]
+    #[test]
+    fn hook_command_binds_the_absolute_private_helper() {
+        let executable = std::path::Path::new("/private/helper path/agentsassemble-room");
+        let command = absolute_helper_command(executable)
+            .unwrap_or_else(|error| panic!("build absolute hook command: {error}"));
+        assert_eq!(
+            shlex::split(&command),
+            Some(vec![executable.to_string_lossy().into_owned(),])
+        );
+        assert_ne!(command, "agentsassemble-room");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn hook_command_binds_the_absolute_private_helper() {
+        let executable = std::path::Path::new(r"C:\private helper\agentsassemble-room.exe");
+        assert_eq!(
+            absolute_helper_command(executable)
+                .unwrap_or_else(|error| panic!("build absolute hook command: {error}")),
+            r#""C:\private helper\agentsassemble-room.exe""#
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn workspace_shadow_cannot_replace_the_bound_helper() {
+        use std::process::Command;
+
+        use crate::antigravity_hook::AntigravityHookRegistration;
+
+        let root =
+            tempfile::tempdir().unwrap_or_else(|error| panic!("create shadow test root: {error}"));
+        let workspace = root.path().join("workspace");
+        let private = root.path().join("private helper");
+        std::fs::create_dir(&workspace)
+            .unwrap_or_else(|error| panic!("create shadow workspace: {error}"));
+        std::fs::create_dir(&private)
+            .unwrap_or_else(|error| panic!("create private helper directory: {error}"));
+        let decoy = workspace.join("agentsassemble-room.cmd");
+        let helper = private.join("agentsassemble-room.cmd");
+        let decoy_marker = root.path().join("decoy.marker");
+        let private_marker = root.path().join("private.marker");
+        std::fs::write(&decoy, "@echo off\r\necho decoy>>\"%DECOY_MARKER%\"\r\n")
+            .unwrap_or_else(|error| panic!("write shadow helper: {error}"));
+        std::fs::write(
+            &helper,
+            "@echo off\r\necho private>>\"%PRIVATE_MARKER%\"\r\n",
+        )
+        .unwrap_or_else(|error| panic!("write bound helper: {error}"));
+        let prefix = absolute_helper_command(&helper)
+            .unwrap_or_else(|error| panic!("quote bound helper: {error}"));
+        let hook_command = format!("{prefix} hook");
+        let registration = AntigravityHookRegistration::register(&workspace, &hook_command)
+            .unwrap_or_else(|error| panic!("register bound hook: {error}"));
+        let hooks: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(workspace.join(".agents").join("hooks.json"))
+                .unwrap_or_else(|error| panic!("read bound hook: {error}")),
+        )
+        .unwrap_or_else(|error| panic!("decode bound hook: {error}"));
+        let installed =
+            hooks["agentsassemble-room-requests"]["PreToolUse"][0]["hooks"][0]["command"]
+                .as_str()
+                .unwrap_or_else(|| panic!("installed hook command is missing"));
+        run_windows_command(
+            installed,
+            &workspace,
+            &private,
+            &private_marker,
+            &decoy_marker,
+        );
+        let approved = format!("{prefix} read");
+        assert!(safe_room_command(&approved, &prefix));
+        assert!(!safe_room_command("agentsassemble-room read", &prefix));
+        run_windows_command(
+            &approved,
+            &workspace,
+            &private,
+            &private_marker,
+            &decoy_marker,
+        );
+        assert!(!decoy_marker.exists(), "workspace helper was executed");
+        let executions = std::fs::read_to_string(&private_marker)
+            .unwrap_or_else(|error| panic!("read private helper marker: {error}"));
+        assert_eq!(executions.lines().count(), 2);
+        drop(registration);
+
+        fn run_windows_command(
+            command: &str,
+            workspace: &std::path::Path,
+            private: &std::path::Path,
+            private_marker: &std::path::Path,
+            decoy_marker: &std::path::Path,
+        ) {
+            let path = std::env::join_paths(std::iter::once(private.to_path_buf()).chain(
+                std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()),
+            ))
+            .unwrap_or_else(|error| panic!("build shadow test PATH: {error}"));
+            let status = Command::new("cmd.exe")
+                .args(["/D", "/S", "/C", command])
+                .current_dir(workspace)
+                .env("PATH", path)
+                .env("PRIVATE_MARKER", private_marker)
+                .env("DECOY_MARKER", decoy_marker)
+                .status()
+                .unwrap_or_else(|error| panic!("run bound helper command: {error}"));
+            assert!(status.success(), "bound helper command failed: {status}");
+        }
+    }
 
     #[test]
     fn hook_allows_only_one_exact_room_helper_command() {
         for command in [
-            "agentsassemble-room help",
-            "agentsassemble-room read",
-            "agentsassemble-room speak 'hello room'",
-            "agentsassemble-room speak-to agent-2 'your turn'",
-            "agentsassemble-room decline duplicate",
+            format!("{HELPER} help"),
+            format!("{HELPER} read"),
+            format!("{HELPER} speak 'hello room'"),
+            format!("{HELPER} speak-to agent-2 'your turn'"),
+            format!("{HELPER} decline duplicate"),
         ] {
             assert!(
-                safe_room_command(command),
+                safe_room_command(&command, HELPER),
                 "safe command rejected: {command}"
             );
         }
         for command in [
-            "agentsassemble-room read && env",
-            "agentsassemble-room speak \"$HOME\"",
-            "agentsassemble-room read\nuname",
-            "which agentsassemble-room",
-            "/tmp/agentsassemble-room read",
+            format!("{HELPER} read && env"),
+            format!("{HELPER} speak \"$HOME\""),
+            format!("{HELPER} read\nuname"),
+            "agentsassemble-room read".to_owned(),
+            "/tmp/agentsassemble-room read".to_owned(),
         ] {
             assert!(
-                !safe_room_command(command),
+                !safe_room_command(&command, HELPER),
                 "unsafe command allowed: {command}"
             );
         }

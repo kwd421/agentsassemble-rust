@@ -46,7 +46,7 @@ pub use catalog::ProviderCatalogService;
 pub use guardian::run_process_helper_if_requested;
 pub use room_portal::ProviderTurnOutcome;
 #[cfg(any(unix, windows))]
-pub use room_portal_terminal::{run_antigravity_hook_if_requested, run_room_helper_if_requested};
+pub use room_portal_terminal::run_room_helper_if_requested;
 pub use runtime::{
     ProviderAdapter, ProviderAdapterError, ProviderRoomObservation, ProviderRuntimeGone,
     ProviderRuntimeObservation, ProviderRuntimeStarted, ProviderShutdownOutcome,
