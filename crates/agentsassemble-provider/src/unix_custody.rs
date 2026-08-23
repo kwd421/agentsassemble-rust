@@ -14,6 +14,7 @@ use tokio_util::codec::{FramedRead, LinesCodec};
 use crate::{
     filesystem::BoundExecutable,
     guardian::{GuardianLaunch, ProviderForkPolicy, ProviderLaunchConfig},
+    guardian_health,
     launch_error::DriverLaunchError,
     runtime::DriverError,
     runtime_lease::{
@@ -75,6 +76,7 @@ pub(crate) struct UnixProcessCustody {
     provider_pid: Pid,
     guardian: tokio::process::Child,
     guardian_input: Option<ChildStdin>,
+    guardian_output: FramedRead<tokio::process::ChildStdout, LinesCodec>,
     lease_path: PathBuf,
     runtime_token: String,
     armed: bool,
@@ -228,14 +230,12 @@ impl UnixProcessCustody {
             )
             .await);
         };
-        let Ok(Ok((anchor_pid, provider_pid))) = tokio::time::timeout(
-            HELPER_TIMEOUT,
-            read_ready(FramedRead::new(
-                guardian_output,
-                LinesCodec::new_with_max_length(MAX_HELPER_LINE_BYTES),
-            )),
-        )
-        .await
+        let mut guardian_output = FramedRead::new(
+            guardian_output,
+            LinesCodec::new_with_max_length(MAX_HELPER_LINE_BYTES),
+        );
+        let Ok(Ok((anchor_pid, provider_pid))) =
+            tokio::time::timeout(HELPER_TIMEOUT, read_ready(&mut guardian_output)).await
         else {
             return Err(failed_started_guardian(
                 &mut guardian,
@@ -273,13 +273,14 @@ impl UnixProcessCustody {
             provider_pid,
             guardian,
             guardian_input: Some(guardian_input),
+            guardian_output,
             lease_path: runtime_lease.path().to_path_buf(),
             runtime_token: runtime_lease.token().to_owned(),
             armed: true,
         })
     }
 
-    pub(crate) fn leader_is_running(&mut self) -> Result<bool, DriverError> {
+    pub(crate) async fn leader_is_running(&mut self) -> Result<bool, DriverError> {
         if self
             .guardian
             .try_wait()
@@ -287,6 +288,10 @@ impl UnixProcessCustody {
             .is_some()
         {
             return Err(health_error());
+        }
+        let input = self.guardian_input.as_mut().ok_or_else(health_error)?;
+        if !guardian_health::probe(input, &mut self.guardian_output, self.provider_pid).await? {
+            return Ok(false);
         }
         match rustix::process::getpgid(Some(self.provider_pid)) {
             Ok(group) if group != self.anchor_pid => Ok(false),
@@ -351,7 +356,7 @@ impl Drop for UnixProcessCustody {
 }
 
 async fn read_ready(
-    mut lines: FramedRead<tokio::process::ChildStdout, LinesCodec>,
+    lines: &mut FramedRead<tokio::process::ChildStdout, LinesCodec>,
 ) -> Result<(Pid, Pid), DriverError> {
     for _ in 0..MAX_HELPER_LINES {
         let line = lines

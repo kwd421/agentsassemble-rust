@@ -75,12 +75,14 @@ impl AntigravityTerminal for WindowsAntigravityTerminal {
         })
     }
 
-    fn is_alive(&mut self) -> Result<bool, DriverError> {
-        let child = self.child.as_mut().ok_or_else(runtime_exited)?;
-        child
-            .try_wait()
-            .map(|status| status.is_none())
-            .map_err(|_| terminal_error())
+    fn is_alive(&mut self) -> DriverFuture<'_, Result<bool, DriverError>> {
+        Box::pin(async move {
+            let child = self.child.as_mut().ok_or_else(runtime_exited)?;
+            child
+                .try_wait()
+                .map(|status| status.is_none())
+                .map_err(|_| terminal_error())
+        })
     }
 
     fn stop(&mut self) -> DriverFuture<'_, Result<(), DriverError>> {
@@ -198,7 +200,7 @@ mod tests {
         read_until(&mut *terminal, b"AA-CONPTY-READY").await;
         terminal.write(b"first\r").await.expect("write first turn");
         read_until(&mut *terminal, b"AA-CONPTY-ECHO:first").await;
-        assert!(terminal.is_alive().expect("probe resident fixture"));
+        assert!(terminal.is_alive().await.expect("probe resident fixture"));
         terminal
             .write(b"second\r")
             .await
@@ -207,7 +209,7 @@ mod tests {
         terminal.write(b"quit\r").await.expect("write fixture exit");
         read_until(&mut *terminal, b"AA-CONPTY-BYE").await;
         tokio::time::timeout(Duration::from_secs(5), async {
-            while terminal.is_alive().expect("probe fixture exit") {
+            while terminal.is_alive().await.expect("probe fixture exit") {
                 tokio::task::yield_now().await;
             }
         })

@@ -30,7 +30,7 @@ pub(crate) trait ProviderDriver: Send {
         session: &'a DurableAgentSession,
         request: &'a ProviderTurnRequest,
     ) -> DriverFuture<'a, Result<ProviderTurnCompleted, DriverError>>;
-    fn is_alive(&mut self) -> Result<bool, DriverError>;
+    fn is_alive(&mut self) -> DriverFuture<'_, Result<bool, DriverError>>;
     fn stop(&mut self) -> DriverFuture<'_, Result<(), DriverError>>;
     fn begin_room_observation(
         &mut self,
@@ -522,7 +522,7 @@ impl ProviderAdapter {
             {
                 runtime.turn_cancellation.cancel();
                 let mut driver = runtime.driver.lock().await;
-                if let Err(error) = driver.is_alive() {
+                if let Err(error) = driver.is_alive().await {
                     return Err(ProviderAdapterError::uncertain(error, handle_id, owner_id));
                 }
                 if let Err(error) = driver.stop().await {

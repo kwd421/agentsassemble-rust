@@ -89,8 +89,8 @@ impl AntigravityTerminal for UnixAntigravityTerminal {
         })
     }
 
-    fn is_alive(&mut self) -> Result<bool, DriverError> {
-        self.process_group.leader_is_running()
+    fn is_alive(&mut self) -> DriverFuture<'_, Result<bool, DriverError>> {
+        Box::pin(self.process_group.leader_is_running())
     }
 
     fn stop(&mut self) -> DriverFuture<'_, Result<(), DriverError>> {

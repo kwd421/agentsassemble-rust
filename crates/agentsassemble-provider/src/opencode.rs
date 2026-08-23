@@ -233,7 +233,7 @@ impl OpenCodeDriver {
 
     async fn connect_owned_peer(&mut self) -> Result<VerifiedLoopbackConnection, DriverError> {
         let connection = self.http.connect().await.map_err(http_driver_error)?;
-        let exact_child_is_alive = self.is_alive()?;
+        let exact_child_is_alive = self.is_alive().await?;
         if !exact_child_is_alive {
             return Err(runtime_exited());
         }
@@ -665,14 +665,16 @@ impl ProviderDriver for OpenCodeDriver {
         Box::pin(self.send(session, request))
     }
 
-    fn is_alive(&mut self) -> Result<bool, DriverError> {
-        #[cfg(unix)]
-        return self.process_group.leader_is_running();
-        #[cfg(not(unix))]
-        self.child
-            .try_wait()
-            .map(|status| status.is_none())
-            .map_err(|_| health_error())
+    fn is_alive(&mut self) -> DriverFuture<'_, Result<bool, DriverError>> {
+        Box::pin(async move {
+            #[cfg(unix)]
+            return self.process_group.leader_is_running().await;
+            #[cfg(not(unix))]
+            self.child
+                .try_wait()
+                .map(|status| status.is_none())
+                .map_err(|_| health_error())
+        })
     }
 
     fn stop(&mut self) -> DriverFuture<'_, Result<(), DriverError>> {

@@ -47,7 +47,7 @@ pub(super) async fn reuse_owned_runtime(
             &runtime.owner_id,
         ));
     }
-    match driver.is_alive() {
+    match driver.is_alive().await {
         Ok(true) => {}
         Ok(false) => {
             return Err(ProviderAdapterError::uncertain(

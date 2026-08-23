@@ -113,12 +113,11 @@ async fn guardian_runs_outside_the_server_process_group() {
         .unwrap_or_else(|| panic!("guardian output is unavailable"));
     let (anchor_pid, _) = read_guardian_ready(output, "guardian group").await;
     assert!(anchor_pid > 0);
-    for _ in 0..500 {
-        if cwd_report.exists() {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
+    wait_until(Duration::from_secs(5), || {
+        std::fs::read(&cwd_report)
+            .is_ok_and(|contents| contents == workspace_path.as_os_str().as_encoded_bytes())
+    })
+    .await;
     assert_provider_working_directory(&cwd_report, &workspace_path);
     let guardian_process = i32::try_from(guardian_pid)
         .ok()
@@ -404,10 +403,13 @@ async fn stop_kills_descendants_after_the_codex_leader_exits() {
         .unwrap_or_else(|error| panic!("start descendant fixture: {error}"));
     let pid = wait_for_pid(&descendant_pid).await;
     let mut cleanup = ExactProcessCleanup::new(pid);
-    wait_until(Duration::from_secs(2), || {
-        !leader_is_alive(&adapter, &session)
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while leader_is_alive(&adapter, &session).await {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
     })
-    .await;
+    .await
+    .unwrap_or_else(|_| panic!("provider leader did not exit before timeout"));
     assert!(process_exists(pid));
     let stopped = adapter
         .stop(
@@ -644,7 +646,7 @@ async fn wait_until(mut remaining: Duration, mut condition: impl FnMut() -> bool
     }
     assert!(condition(), "condition did not become true before timeout");
 }
-fn leader_is_alive(adapter: &ProviderAdapter, session: &DurableAgentSession) -> bool {
+async fn leader_is_alive(adapter: &ProviderAdapter, session: &DurableAgentSession) -> bool {
     let Some(slot) = adapter.owner.runtimes.try_lock().ok().and_then(|slots| {
         slots
             .get(&super::RuntimeKey {
@@ -661,10 +663,10 @@ fn leader_is_alive(adapter: &ProviderAdapter, session: &DurableAgentSession) -> 
     let super::RuntimeState::Running(runtime) = &mut slot.state else {
         return false;
     };
-    runtime
-        .driver
-        .try_lock()
-        .map_or(true, |mut driver| driver.is_alive().unwrap_or(true))
+    let Ok(mut driver) = runtime.driver.try_lock() else {
+        return true;
+    };
+    driver.is_alive().await.unwrap_or(true)
 }
 
 fn process_exists(raw_pid: u32) -> bool {

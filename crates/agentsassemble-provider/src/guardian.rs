@@ -572,9 +572,12 @@ fn run_guardian(
             "{PROVIDER_READY_PREFIX}{anchor_pid}:{provider_pid}"
         )?;
         io::stdout().lock().flush()?;
-        let mut buffer = [0_u8; 1024];
-        while io::stdin().lock().read(&mut buffer)? != 0 {}
-        Ok(())
+        crate::guardian_health::serve(
+            provider
+                .as_mut()
+                .ok_or_else(|| io::Error::other("provider child handle is unavailable"))?,
+            provider_pid,
+        )
     })();
     let cleanup = match provider.as_mut() {
         Some(provider) => terminate_runtime(

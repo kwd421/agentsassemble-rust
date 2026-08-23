@@ -283,7 +283,7 @@ impl AntigravityDriver {
             if Instant::now() >= deadline {
                 return self.poison(startup_error());
             }
-            if !self.terminal.is_alive()? {
+            if !self.terminal.is_alive().await? {
                 return self.poison(runtime_exited());
             }
             if let Ok(chunk) = tokio::time::timeout(POLL_INTERVAL, self.read_terminal()).await {
@@ -398,7 +398,7 @@ impl AntigravityDriver {
                 }
             }
             let Some(snapshot) = self.transcript.poll()? else {
-                if !self.terminal.is_alive()? {
+                if !self.terminal.is_alive().await? {
                     return self.poison(runtime_exited());
                 }
                 continue;
@@ -533,7 +533,7 @@ impl ProviderDriver for AntigravityDriver {
         Box::pin(self.send(session, request))
     }
 
-    fn is_alive(&mut self) -> Result<bool, DriverError> {
+    fn is_alive(&mut self) -> DriverFuture<'_, Result<bool, DriverError>> {
         self.terminal.is_alive()
     }
 

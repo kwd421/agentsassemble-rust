@@ -498,19 +498,21 @@ impl ProviderDriver for CodexDriver {
         Box::pin(turn::send_turn(self, session, request))
     }
 
-    fn is_alive(&mut self) -> Result<bool, DriverError> {
-        #[cfg(unix)]
-        return self.process_group.leader_is_running();
-        #[cfg(not(unix))]
-        self.child
-            .try_wait()
-            .map(|status| status.is_none())
-            .map_err(|_| {
-                DriverError::new(
-                    "provider_health_unknown",
-                    "The Codex app-server health could not be observed.",
-                )
-            })
+    fn is_alive(&mut self) -> DriverFuture<'_, Result<bool, DriverError>> {
+        Box::pin(async move {
+            #[cfg(unix)]
+            return self.process_group.leader_is_running().await;
+            #[cfg(not(unix))]
+            self.child
+                .try_wait()
+                .map(|status| status.is_none())
+                .map_err(|_| {
+                    DriverError::new(
+                        "provider_health_unknown",
+                        "The Codex app-server health could not be observed.",
+                    )
+                })
+        })
     }
 
     fn stop(&mut self) -> DriverFuture<'_, Result<(), DriverError>> {

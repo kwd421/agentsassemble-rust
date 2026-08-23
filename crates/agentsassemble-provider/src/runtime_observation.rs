@@ -78,7 +78,7 @@ impl ProviderAdapter {
                 reason_code: "runtime_identity_mismatch".to_owned(),
             };
         }
-        if let Some(observation) = unavailable_running_health(runtime) {
+        if let Some(observation) = unavailable_running_health(runtime).await {
             return observation;
         }
         if let Err(error) = revalidate_runtime_authority(session).await {
@@ -97,7 +97,7 @@ impl ProviderAdapter {
     }
 }
 
-fn unavailable_running_health(runtime: &OwnedRuntime) -> Option<ProviderRuntimeObservation> {
+async fn unavailable_running_health(runtime: &OwnedRuntime) -> Option<ProviderRuntimeObservation> {
     let Ok(mut driver) = runtime.driver.try_lock() else {
         return Some(ProviderRuntimeObservation::LeaseUncertain {
             handle_id: runtime.handle_id.clone(),
@@ -105,7 +105,7 @@ fn unavailable_running_health(runtime: &OwnedRuntime) -> Option<ProviderRuntimeO
             reason_code: "provider_turn_active".to_owned(),
         });
     };
-    let reason_code = match driver.is_alive() {
+    let reason_code = match driver.is_alive().await {
         Ok(true) => return None,
         Ok(false) => "provider_leader_exited",
         Err(_) => "runtime_health_unknown",
