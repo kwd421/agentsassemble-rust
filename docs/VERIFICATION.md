@@ -8,7 +8,7 @@ Verification claims only the boundary actually observed. Build, lint, unit tests
 
 The active comparison baseline is original
 `d5046473010d1353a81ee38337360e6d98f7bd6f` and public Rust
-`99165dd621c6cde81e62324d0c418df9b40fc3ea`. Local uncommitted behavior
+`6bfe73ed2c080eb36d942674fa1de3f04a2584a1`. Local uncommitted behavior
 is never described as public completion. Every completed-slice evidence entry must
 name the tested Rust commit, original provenance commit, platform/build, exact
 entry point and command flow, viewer identity, provider/model where applicable,
@@ -127,6 +127,34 @@ the original thread identity, surfaced `provider_request_rejected` with recovery
 required, and did not create a replacement thread or invoke a fallback. A Codex
 session with one completed turn passed the normal create-and-start flow. This
 zero-turn provider limitation is not reported as successful restart parity.
+
+## Published Windows transport evidence: `6bfe73e`
+
+Rust commit `6bfe73ed2c080eb36d942674fa1de3f04a2584a1` replaces the previously
+unimplemented Windows Antigravity branch with one managed, resident system-ConPTY
+session. The selected executable remains byte-bound and open without write/delete
+sharing; process creation is suspended until the root is assigned to a
+kill-on-close Job Object. The same common Antigravity transcript, session identity,
+permission, room-portal, turn, and failure logic is used on Unix and Windows. The
+Windows driver does not invoke print, exec, Python, another provider, or automatic
+ConPTY backend substitution.
+
+The exact public commit passed the repository's complete `make verify` on macOS,
+including the 800-line source gate, copied frontend production build and all 332
+frontend tests, 13 Tauri tests, all Rust tests, and warning-denied Clippy. It also
+passed Windows GNU source and test cross-checks for the provider/server crates.
+GitHub Actions run
+[`32650454003`](https://github.com/kwd421/agentsassemble-rust/actions/runs/32650454003)
+then executed on `windows-latest`: Windows workspace-hook registration/removal
+passed, and one actual ConPTY test process accepted two sequential inputs through
+the same bidirectional terminal, returned both responses, remained alive between
+turns, and exited under managed custody.
+
+This is Windows OS transport evidence, not a claim that an authenticated
+Antigravity Flash account or the copied desktop UI was exercised on Windows. The
+published macOS real-client matrix above remains the provider/model evidence; a
+future Windows real-provider run must be recorded separately rather than inferred
+from the ConPTY fixture.
 
 ## API verification scope
 
