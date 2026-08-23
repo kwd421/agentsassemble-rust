@@ -4,11 +4,82 @@ use super::{
     MAX_PENDING_NOTIFICATION_BYTES, MAX_PENDING_NOTIFICATIONS, command_arguments,
     is_room_portal_approval, next_notification_budget,
 };
-use crate::room_portal::{ROOM_PORTAL_TOKEN_ENV, RoomPortal};
+use crate::room_portal::{ROOM_PORTAL_TOKEN_ENV_PREFIX, RoomPortal};
 
 #[tokio::test]
 async fn command_uses_app_server_and_process_local_profile_settings() {
-    let mut session = serde_json::from_value::<DurableAgentSession>(serde_json::json!({
+    let mut session = codex_session_fixture();
+    session.executable = "/bin/codex".to_owned();
+    let room_portal = RoomPortal::create()
+        .await
+        .unwrap_or_else(|error| panic!("create room portal: {error}"));
+    let arguments = command_arguments(&session, &room_portal)
+        .unwrap_or_else(|error| panic!("build app-server command: {error}"));
+    assert_eq!(arguments.first().map(String::as_str), Some("app-server"));
+    assert_eq!(arguments.last().map(String::as_str), Some("--stdio"));
+    assert!(
+        arguments
+            .iter()
+            .any(|value| value == "model=\"gpt-5.6-terra\"")
+    );
+    assert!(
+        arguments
+            .iter()
+            .any(|value| value == "approval_policy=\"on-request\"")
+    );
+    assert!(
+        arguments
+            .iter()
+            .any(|value| value == "sandbox_mode=\"workspace-write\"")
+    );
+    assert!(arguments.iter().any(|value| {
+        value == "projects={ \"/tmp/work space\" = { trust_level = \"untrusted\" } }"
+    }));
+    assert!(
+        arguments
+            .iter()
+            .any(|value| value.starts_with("mcp_servers.agentsassemble_room.url="))
+    );
+    let bearer_environment_name = room_portal.bearer_environment_name();
+    assert!(bearer_environment_name.starts_with(ROOM_PORTAL_TOKEN_ENV_PREFIX));
+    let second_room_portal = RoomPortal::create()
+        .await
+        .unwrap_or_else(|error| panic!("create second room portal: {error}"));
+    assert_ne!(
+        bearer_environment_name,
+        second_room_portal.bearer_environment_name()
+    );
+    assert!(arguments.iter().any(|value| {
+        value
+            == &format!(
+                "mcp_servers.agentsassemble_room.bearer_token_env_var=\"{bearer_environment_name}\""
+            )
+    }));
+    assert!(arguments.iter().any(|value| {
+        value == "mcp_servers.agentsassemble_room.default_tools_approval_mode=\"approve\""
+    }));
+    assert!(
+        arguments
+            .iter()
+            .any(|value| { value == "shell_environment_policy.ignore_default_excludes=false" })
+    );
+    assert!(
+        arguments
+            .iter()
+            .any(|value| value == "features.shell_snapshot=false")
+    );
+    let provider_environment = room_portal.provider_environment();
+    let token = provider_environment
+        .iter()
+        .find_map(|(name, value)| (name == bearer_environment_name).then_some(value.as_str()))
+        .unwrap_or_else(|| panic!("room portal bearer environment is missing"));
+    assert!(!token.is_empty());
+    assert!(!arguments.iter().any(|value| value.contains(token)));
+    assert!(!arguments.iter().any(|value| value == "print"));
+}
+
+fn codex_session_fixture() -> DurableAgentSession {
+    serde_json::from_value::<DurableAgentSession>(serde_json::json!({
         "room_id": "room",
         "session_id": "agent",
         "participant_id": "agent",
@@ -41,65 +112,7 @@ async fn command_uses_app_server_and_process_local_profile_settings() {
         "workspace": "/tmp/work space",
         "runtime_profile_key": "profile"
     }))
-    .unwrap_or_else(|error| panic!("decode session fixture: {error}"));
-    session.executable = "/bin/codex".to_owned();
-    let room_portal = RoomPortal::create()
-        .await
-        .unwrap_or_else(|error| panic!("create room portal: {error}"));
-    let arguments = command_arguments(&session, &room_portal)
-        .unwrap_or_else(|error| panic!("build app-server command: {error}"));
-    assert_eq!(arguments.first().map(String::as_str), Some("app-server"));
-    assert_eq!(arguments.last().map(String::as_str), Some("--stdio"));
-    assert!(
-        arguments
-            .iter()
-            .any(|value| value == "model=\"gpt-5.6-terra\"")
-    );
-    assert!(
-        arguments
-            .iter()
-            .any(|value| value == "approval_policy=\"on-request\"")
-    );
-    assert!(
-        arguments
-            .iter()
-            .any(|value| value == "sandbox_mode=\"workspace-write\"")
-    );
-    assert!(
-        arguments
-            .iter()
-            .any(|value| { value == "projects.\"/tmp/work space\".trust_level=\"trusted\"" })
-    );
-    assert!(
-        arguments
-            .iter()
-            .any(|value| value.starts_with("mcp_servers.agentsassemble_room.url="))
-    );
-    assert!(arguments.iter().any(|value| {
-        value
-            == &format!(
-                "mcp_servers.agentsassemble_room.bearer_token_env_var=\"{ROOM_PORTAL_TOKEN_ENV}\""
-            )
-    }));
-    assert!(arguments.iter().any(|value| {
-        value == "mcp_servers.agentsassemble_room.default_tools_approval_mode=\"approve\""
-    }));
-    assert!(arguments.iter().any(|value| {
-        value == &format!("shell_environment_policy.filters.{ROOM_PORTAL_TOKEN_ENV}=\"exclude\"")
-    }));
-    assert!(
-        arguments
-            .iter()
-            .any(|value| value == "features.shell_snapshot=false")
-    );
-    let provider_environment = room_portal.provider_environment();
-    let token = provider_environment
-        .iter()
-        .find_map(|(name, value)| (name == ROOM_PORTAL_TOKEN_ENV).then_some(value.as_str()))
-        .unwrap_or_else(|| panic!("room portal bearer environment is missing"));
-    assert!(!token.is_empty());
-    assert!(!arguments.iter().any(|value| value.contains(token)));
-    assert!(!arguments.iter().any(|value| value == "print"));
+    .unwrap_or_else(|error| panic!("decode session fixture: {error}"))
 }
 
 #[test]

@@ -584,8 +584,14 @@ fn command_arguments(
     }
     push_config(&mut arguments, "sandbox_mode", sandbox)?;
     push_config(&mut arguments, "approval_policy", approval)?;
-    let project_key = format!("projects.{}.trust_level", json_string(&session.workspace)?);
-    push_config(&mut arguments, &project_key, "trusted")?;
+    push_raw_config(
+        &mut arguments,
+        "projects",
+        &format!(
+            "{{ {} = {{ trust_level = \"untrusted\" }} }}",
+            json_string(&session.workspace)?
+        ),
+    );
     room_portal
         .append_codex_config(&mut arguments)
         .map_err(|_| room_portal_unavailable())?;
@@ -620,6 +626,11 @@ fn push_config(arguments: &mut Vec<String>, key: &str, value: &str) -> Result<()
     arguments.push("-c".to_owned());
     arguments.push(format!("{key}={}", json_string(value)?));
     Ok(())
+}
+
+fn push_raw_config(arguments: &mut Vec<String>, key: &str, value: &str) {
+    arguments.push("-c".to_owned());
+    arguments.push(format!("{key}={value}"));
 }
 
 fn json_string(value: &str) -> Result<String, DriverError> {

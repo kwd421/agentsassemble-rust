@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::room_portal_mcp::PortalServer;
 
-pub(super) const ROOM_PORTAL_TOKEN_ENV: &str = "AGENTSASSEMBLE_INTERNAL_ROOM_PORTAL_TOKEN";
+pub(super) const ROOM_PORTAL_TOKEN_ENV_PREFIX: &str = "AGENTSASSEMBLE_INTERNAL_ROOM_PORTAL_TOKEN_";
 
 const MAX_ROOM_VIEW_BYTES: usize = 96 * 1024;
 const MAX_TURN_ID_BYTES: usize = 128;
@@ -79,13 +79,22 @@ pub(super) struct PortalState {
 pub(crate) struct RoomPortal {
     state: Arc<Mutex<PortalState>>,
     server: PortalServer,
+    bearer_environment_name: String,
 }
 
 impl RoomPortal {
     pub(crate) async fn create() -> Result<Self, RoomPortalError> {
         let state = Arc::new(Mutex::new(PortalState::default()));
         let server = PortalServer::start(state.clone()).await?;
-        Ok(Self { state, server })
+        let bearer_environment_name = format!(
+            "{ROOM_PORTAL_TOKEN_ENV_PREFIX}{}",
+            Uuid::new_v4().simple().to_string().to_ascii_uppercase()
+        );
+        Ok(Self {
+            state,
+            server,
+            bearer_environment_name,
+        })
     }
 
     pub(crate) fn append_codex_config(
@@ -103,7 +112,7 @@ impl RoomPortal {
         push_codex_config(
             arguments,
             &format!("{server}.bearer_token_env_var"),
-            &serde_json::to_string(ROOM_PORTAL_TOKEN_ENV)
+            &serde_json::to_string(&self.bearer_environment_name)
                 .map_err(|_| RoomPortalError::Authority)?,
         );
         push_codex_config(
@@ -113,8 +122,8 @@ impl RoomPortal {
         );
         push_codex_config(
             arguments,
-            &format!("shell_environment_policy.filters.{ROOM_PORTAL_TOKEN_ENV}"),
-            &serde_json::to_string("exclude").map_err(|_| RoomPortalError::Authority)?,
+            "shell_environment_policy.ignore_default_excludes",
+            "false",
         );
         push_codex_config(arguments, "features.shell_snapshot", "false");
         push_codex_config(arguments, &format!("{server}.startup_timeout_sec"), "10");
@@ -124,7 +133,7 @@ impl RoomPortal {
 
     pub(crate) fn provider_environment(&self) -> Vec<(String, String)> {
         vec![(
-            ROOM_PORTAL_TOKEN_ENV.to_owned(),
+            self.bearer_environment_name.clone(),
             self.server.bearer_token().to_owned(),
         )]
     }
@@ -244,6 +253,11 @@ impl RoomPortal {
     #[cfg(test)]
     pub(crate) fn bearer_token(&self) -> &str {
         self.server.bearer_token()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn bearer_environment_name(&self) -> &str {
+        &self.bearer_environment_name
     }
 
     #[cfg(test)]
