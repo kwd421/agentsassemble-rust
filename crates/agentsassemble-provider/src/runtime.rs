@@ -522,9 +522,6 @@ impl ProviderAdapter {
             {
                 runtime.turn_cancellation.cancel();
                 let mut driver = runtime.driver.lock().await;
-                if let Err(error) = driver.is_alive().await {
-                    return Err(ProviderAdapterError::uncertain(error, handle_id, owner_id));
-                }
                 if let Err(error) = driver.stop().await {
                     return Err(ProviderAdapterError::uncertain(error, handle_id, owner_id));
                 }

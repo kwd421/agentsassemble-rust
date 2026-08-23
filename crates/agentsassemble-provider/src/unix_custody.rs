@@ -77,6 +77,8 @@ pub(crate) struct UnixProcessCustody {
     guardian: tokio::process::Child,
     guardian_input: Option<ChildStdin>,
     guardian_output: FramedRead<tokio::process::ChildStdout, LinesCodec>,
+    health_request_id: u64,
+    health_poisoned: bool,
     lease_path: PathBuf,
     runtime_token: String,
     armed: bool,
@@ -274,6 +276,8 @@ impl UnixProcessCustody {
             guardian,
             guardian_input: Some(guardian_input),
             guardian_output,
+            health_request_id: 0,
+            health_poisoned: false,
             lease_path: runtime_lease.path().to_path_buf(),
             runtime_token: runtime_lease.token().to_owned(),
             armed: true,
@@ -281,6 +285,9 @@ impl UnixProcessCustody {
     }
 
     pub(crate) async fn leader_is_running(&mut self) -> Result<bool, DriverError> {
+        if self.health_poisoned {
+            return Err(health_error());
+        }
         if self
             .guardian
             .try_wait()
@@ -289,8 +296,27 @@ impl UnixProcessCustody {
         {
             return Err(health_error());
         }
-        let input = self.guardian_input.as_mut().ok_or_else(health_error)?;
-        if !guardian_health::probe(input, &mut self.guardian_output, self.provider_pid).await? {
+        let Some(request_id) = self.health_request_id.checked_add(1) else {
+            self.health_poisoned = true;
+            return Err(health_error());
+        };
+        self.health_request_id = request_id;
+        let exact_child_is_alive = {
+            let input = self.guardian_input.as_mut().ok_or_else(health_error)?;
+            let mut poison = HealthProbePoison::new(&mut self.health_poisoned);
+            let result = guardian_health::probe(
+                input,
+                &mut self.guardian_output,
+                self.provider_pid,
+                request_id,
+            )
+            .await;
+            if result.is_ok() {
+                poison.disarm();
+            }
+            result
+        }?;
+        if !exact_child_is_alive {
             return Ok(false);
         }
         match rustix::process::getpgid(Some(self.provider_pid)) {
@@ -333,6 +359,32 @@ impl UnixProcessCustody {
     pub(crate) fn request_stop(&mut self) {
         if self.armed {
             drop(self.guardian_input.take());
+        }
+    }
+}
+
+struct HealthProbePoison<'a> {
+    poisoned: &'a mut bool,
+    armed: bool,
+}
+
+impl<'a> HealthProbePoison<'a> {
+    fn new(poisoned: &'a mut bool) -> Self {
+        Self {
+            poisoned,
+            armed: true,
+        }
+    }
+
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for HealthProbePoison<'_> {
+    fn drop(&mut self) {
+        if self.armed {
+            *self.poisoned = true;
         }
     }
 }
@@ -465,8 +517,18 @@ const fn health_error() -> DriverError {
     )
 }
 
-#[cfg(all(test, any(target_os = "linux", target_os = "android")))]
+#[cfg(test)]
 mod tests {
+    #[test]
+    fn incomplete_health_probe_permanently_poisons_the_channel() {
+        let mut poisoned = false;
+        {
+            let _probe = super::HealthProbePoison::new(&mut poisoned);
+        }
+        assert!(poisoned);
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     #[test]
     fn process_status_rejects_zombies_and_dead_tasks() {
         assert!(
