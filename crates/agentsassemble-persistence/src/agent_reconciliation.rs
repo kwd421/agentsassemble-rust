@@ -154,7 +154,7 @@ async fn load_candidate(
     let encoded_session = row.get::<String, _>("session_json");
     let session = serde_json::from_str::<DurableAgentSession>(&encoded_session)?;
     let reservation_rows = sqlx::query(
-        "SELECT principal_id, request_id, action, payload_hash, operation_id, status FROM lifecycle_command_reservations WHERE room_id = ? AND session_id = ? ORDER BY principal_id, request_id",
+        "SELECT principal_id, request_id, action, payload_hash, operation_id, status, phase FROM lifecycle_command_reservations WHERE room_id = ? AND session_id = ? ORDER BY principal_id, request_id",
     )
     .bind(room_id)
     .bind(session_id)
@@ -170,6 +170,7 @@ async fn load_candidate(
                 "payload_hash": row.get::<String, _>("payload_hash"),
                 "operation_id": row.get::<String, _>("operation_id"),
                 "status": row.get::<String, _>("status"),
+                "phase": row.get::<String, _>("phase"),
             })
         })
         .collect::<Vec<Value>>();
@@ -220,11 +221,10 @@ fn validate_candidate_authority(
     {
         return Err(invalid_stored_authority());
     }
-    let expected_action = format!("agent.{}", session.lifecycle_intent_action);
     let matching_reservations = reservations
         .iter()
         .filter(|reservation| {
-            reservation["action"].as_str() == Some(expected_action.as_str())
+            reservation_matches_intent(reservation, &session.lifecycle_intent_action)
                 && reservation["operation_id"].as_str()
                     == Some(session.lifecycle_intent_id.as_str())
                 && reservation["status"].as_str() == Some("pending")
@@ -234,6 +234,22 @@ fn validate_candidate_authority(
         return Err(invalid_stored_authority());
     }
     Ok(())
+}
+
+fn reservation_matches_intent(reservation: &Value, intent_action: &str) -> bool {
+    matches!(
+        (
+            intent_action,
+            reservation["action"].as_str(),
+            reservation["phase"].as_str(),
+        ),
+        (
+            "start",
+            Some("agent.start" | "agent.resume"),
+            Some("lifecycle_prepared")
+        ) | ("start", Some("agent.create"), Some("creation_committed"))
+            | ("stop", Some("agent.stop"), Some("lifecycle_prepared"))
+    )
 }
 
 async fn reconcile_observation(

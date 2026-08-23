@@ -10,6 +10,19 @@ pub(crate) struct LifecycleReservation<'a> {
     pub payload_hash: &'a str,
     pub session_id: &'a str,
     pub operation_id: &'a str,
+    pub phase: &'a str,
+    pub prepared_result_json: &'a str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct StoredLifecycleReservation {
+    pub action: String,
+    pub payload_hash: String,
+    pub session_id: String,
+    pub operation_id: String,
+    pub status: String,
+    pub phase: String,
+    pub prepared_result_json: String,
 }
 
 impl<'a> LifecycleReservation<'a> {
@@ -28,8 +41,55 @@ impl<'a> LifecycleReservation<'a> {
             payload_hash,
             session_id,
             operation_id,
+            phase: "lifecycle_prepared",
+            prepared_result_json: "{}",
         }
     }
+
+    pub(crate) const fn creation(
+        principal: &'a AuthenticatedPrincipal,
+        request_id: &'a str,
+        payload_hash: &'a str,
+        session_id: &'a str,
+        operation_id: &'a str,
+        prepared_result_json: &'a str,
+    ) -> Self {
+        Self {
+            principal,
+            request_id,
+            action: "agent.create",
+            payload_hash,
+            session_id,
+            operation_id,
+            phase: "creation_committed",
+            prepared_result_json,
+        }
+    }
+}
+
+pub(crate) async fn load_lifecycle_reservation(
+    transaction: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    principal_id: &str,
+    request_id: &str,
+) -> Result<Option<StoredLifecycleReservation>, PersistenceError> {
+    let row = sqlx::query(
+        "SELECT action, payload_hash, session_id, operation_id, status, phase, prepared_result_json FROM lifecycle_command_reservations WHERE room_id = ? AND principal_id = ? AND request_id = ?",
+    )
+    .bind(room_id)
+    .bind(principal_id)
+    .bind(request_id)
+    .fetch_optional(&mut **transaction)
+    .await?;
+    Ok(row.map(|row| StoredLifecycleReservation {
+        action: row.get("action"),
+        payload_hash: row.get("payload_hash"),
+        session_id: row.get("session_id"),
+        operation_id: row.get("operation_id"),
+        status: row.get("status"),
+        phase: row.get("phase"),
+        prepared_result_json: row.get("prepared_result_json"),
+    }))
 }
 
 pub(crate) async fn claim_lifecycle_command(
@@ -37,7 +97,7 @@ pub(crate) async fn claim_lifecycle_command(
     reservation: &LifecycleReservation<'_>,
 ) -> Result<(), PersistenceError> {
     let existing = sqlx::query(
-        "SELECT action, payload_hash, session_id, operation_id, status FROM lifecycle_command_reservations WHERE room_id = ? AND principal_id = ? AND request_id = ?",
+        "SELECT action, payload_hash, session_id, operation_id, status, phase, prepared_result_json FROM lifecycle_command_reservations WHERE room_id = ? AND principal_id = ? AND request_id = ?",
     )
     .bind(&reservation.principal.room_id)
     .bind(&reservation.principal.principal_id)
@@ -48,7 +108,9 @@ pub(crate) async fn claim_lifecycle_command(
         let matches = row.get::<String, _>("action") == reservation.action
             && row.get::<String, _>("payload_hash") == reservation.payload_hash
             && row.get::<String, _>("session_id") == reservation.session_id
-            && row.get::<String, _>("operation_id") == reservation.operation_id;
+            && row.get::<String, _>("operation_id") == reservation.operation_id
+            && row.get::<String, _>("phase") == reservation.phase
+            && row.get::<String, _>("prepared_result_json") == reservation.prepared_result_json;
         if !matches {
             return Err(PersistenceError::CommandConflict);
         }
@@ -62,7 +124,7 @@ pub(crate) async fn claim_lifecycle_command(
         };
     }
     sqlx::query(
-        "INSERT INTO lifecycle_command_reservations(room_id, principal_id, request_id, action, payload_hash, session_id, operation_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')",
+        "INSERT INTO lifecycle_command_reservations(room_id, principal_id, request_id, action, payload_hash, session_id, operation_id, status, phase, prepared_result_json) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)",
     )
     .bind(&reservation.principal.room_id)
     .bind(&reservation.principal.principal_id)
@@ -71,6 +133,8 @@ pub(crate) async fn claim_lifecycle_command(
     .bind(reservation.payload_hash)
     .bind(reservation.session_id)
     .bind(reservation.operation_id)
+    .bind(reservation.phase)
+    .bind(reservation.prepared_result_json)
     .execute(&mut **transaction)
     .await?;
     Ok(())
@@ -124,7 +188,7 @@ pub(crate) async fn finish_lifecycle_command(
     reservation: &LifecycleReservation<'_>,
 ) -> Result<(), PersistenceError> {
     let removed = sqlx::query(
-        "DELETE FROM lifecycle_command_reservations WHERE room_id = ? AND principal_id = ? AND request_id = ? AND action = ? AND payload_hash = ? AND session_id = ? AND operation_id = ? AND status = 'pending'",
+        "DELETE FROM lifecycle_command_reservations WHERE room_id = ? AND principal_id = ? AND request_id = ? AND action = ? AND payload_hash = ? AND session_id = ? AND operation_id = ? AND status = 'pending' AND phase = ? AND prepared_result_json = ?",
     )
     .bind(&reservation.principal.room_id)
     .bind(&reservation.principal.principal_id)
@@ -133,6 +197,8 @@ pub(crate) async fn finish_lifecycle_command(
     .bind(reservation.payload_hash)
     .bind(reservation.session_id)
     .bind(reservation.operation_id)
+    .bind(reservation.phase)
+    .bind(reservation.prepared_result_json)
     .execute(&mut **transaction)
     .await?
     .rows_affected();

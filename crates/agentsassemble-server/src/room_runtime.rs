@@ -1,14 +1,13 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
-use agentsassemble_domain::{AuthenticatedPrincipal, RoomEvent};
+use agentsassemble_domain::{
+    AuthenticatedPrincipal, RoomEvent, public_event_for_principal, public_value_for_principal,
+};
 use agentsassemble_persistence::{
-    AgentRuntimeStarted, AgentStartPlan, AgentStopPlan, AgentTurnAssignment, AgentTurnCommit,
-    CommandOutcome, PersistenceError, ProviderTurnAuthority, RoomCommandMutation, SqliteStore,
+    AgentRuntimeStarted, AgentStartPlan, AgentStopPlan, AgentTurnAssignment, CommandOutcome,
+    PersistenceError, RoomCommandMutation, SqliteStore,
 };
-use agentsassemble_provider::{
-    ProviderAdapter, ProviderAdapterError, ProviderCatalogService, ProviderRoomObservation,
-    ProviderRuntimeStarted, ProviderTurnCompleted, ProviderTurnOutcome, ProviderTurnRequest,
-};
+use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService, ProviderRuntimeStarted};
 use serde_json::Value;
 use thiserror::Error;
 use tokio::{
@@ -17,6 +16,13 @@ use tokio::{
     time::Instant,
 };
 use tokio_util::sync::CancellationToken;
+
+use crate::{
+    agent_create_runtime::AgentCreateExecution,
+    provider_turn::{
+        ProviderTurnTaskResult, commit_provider_result, publish_turn_commit, spawn_provider_turn,
+    },
+};
 
 const ROOM_QUEUE_CAPACITY: usize = 128;
 const EVENT_RECEIVER_CAPACITY: usize = 256;
@@ -160,7 +166,7 @@ impl RoomRuntime {
         if let Some(handle) = rooms.get(room_id) {
             return handle.clone();
         }
-        let (command_tx, mut command_rx) = mpsc::channel::<RoomCommand>(ROOM_QUEUE_CAPACITY);
+        let (command_tx, command_rx) = mpsc::channel::<RoomCommand>(ROOM_QUEUE_CAPACITY);
         let (event_tx, _) = broadcast::channel(EVENT_RECEIVER_CAPACITY);
         let handle = RoomHandle {
             commands: command_tx,
@@ -171,198 +177,124 @@ impl RoomRuntime {
         let provider_catalog = self.provider_catalog.clone();
         let provider_adapter = self.provider_adapter.clone();
         let cancellation = self.cancellation.clone();
-        let task = tokio::spawn(async move {
-            let mut turn_tasks = JoinSet::new();
-            loop {
-                let input = tokio::select! {
-                    () = cancellation.cancelled() => {
-                        turn_tasks.abort_all();
-                        while turn_tasks.join_next().await.is_some() {}
-                        break;
-                    }
-                    command = command_rx.recv() => {
-                        let Some(command) = command else { break; };
-                        RoomInput::Command(command)
-                    }
-                    result = turn_tasks.join_next(), if !turn_tasks.is_empty() => {
-                        let Some(result) = result else { continue; };
-                        RoomInput::Provider(Box::new(result))
-                    }
-                };
-                match input {
-                    RoomInput::Command(command) => {
-                        let execution =
-                            execute_command(&store, &provider_catalog, &provider_adapter, &command)
-                                .await;
-                        for event in &execution.committed_events {
-                            let _ = event_tx.send(event.clone());
-                        }
-                        if let Some(assignment) = execution.assignment {
-                            spawn_provider_turn(
-                                &mut turn_tasks,
-                                provider_adapter.clone(),
-                                assignment,
-                            );
-                        }
-                        let _ = command.reply.send(execution.reply);
-                    }
-                    RoomInput::Provider(result) => match *result {
-                        Ok(result) => {
-                            let room_id = result.assignment.session.public.room_id.clone();
-                            let session_id = result.assignment.session.public.session_id.clone();
-                            match commit_provider_result(&store, &provider_adapter, result).await {
-                                Ok(commit) => publish_turn_commit(
-                                    &event_tx,
-                                    &mut turn_tasks,
-                                    provider_adapter.clone(),
-                                    commit,
-                                ),
-                                Err(PersistenceError::CommandRejected {
-                                    code: "stale_provider_turn",
-                                    ..
-                                }) => tracing::debug!(
-                                    room_id,
-                                    session_id,
-                                    "discarded provider result after durable turn authority changed"
-                                ),
-                                Err(_) => tracing::error!(
-                                    room_id,
-                                    session_id,
-                                    "provider turn result could not be committed; durable restart recovery is required"
-                                ),
-                            }
-                        }
-                        Err(join_error) => tracing::error!(
-                            cancelled = join_error.is_cancelled(),
-                            panic = join_error.is_panic(),
-                            "provider turn task ended without a result; durable restart recovery is required"
-                        ),
-                    },
-                }
-            }
-        });
+        let task = spawn_room_task(
+            store,
+            provider_catalog,
+            provider_adapter,
+            cancellation,
+            command_rx,
+            event_tx,
+        );
         self.tasks.lock().await.push(task);
         handle
     }
 }
 
+fn spawn_room_task(
+    store: SqliteStore,
+    provider_catalog: ProviderCatalogService,
+    provider_adapter: ProviderAdapter,
+    cancellation: CancellationToken,
+    mut command_rx: mpsc::Receiver<RoomCommand>,
+    event_tx: broadcast::Sender<RoomEvent>,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut turn_tasks = JoinSet::new();
+        loop {
+            let input = tokio::select! {
+                () = cancellation.cancelled() => {
+                    turn_tasks.abort_all();
+                    while turn_tasks.join_next().await.is_some() {}
+                    break;
+                }
+                command = command_rx.recv() => {
+                    let Some(command) = command else { break; };
+                    RoomInput::Command(command)
+                }
+                result = turn_tasks.join_next(), if !turn_tasks.is_empty() => {
+                    let Some(result) = result else { continue; };
+                    RoomInput::Provider(Box::new(result))
+                }
+            };
+            match input {
+                RoomInput::Command(mut command) => {
+                    let execution = match store.resolve_principal(&command.principal).await {
+                        Ok(principal) => {
+                            command.principal = principal;
+                            execute_command(&store, &provider_catalog, &provider_adapter, &command)
+                                .await
+                        }
+                        Err(error) => CommandExecution::failure(error),
+                    };
+                    let CommandExecution {
+                        reply,
+                        committed_events,
+                        assignment,
+                    } = execution;
+                    for event in &committed_events {
+                        let _ = event_tx.send(event.clone());
+                    }
+                    if let Some(assignment) = assignment {
+                        spawn_provider_turn(&mut turn_tasks, provider_adapter.clone(), assignment);
+                    }
+                    let reply = reply
+                        .and_then(|outcome| public_command_outcome(&command.principal, outcome));
+                    let _ = command.reply.send(reply);
+                }
+                RoomInput::Provider(result) => match *result {
+                    Ok(result) => {
+                        let room_id = result.assignment.session.public.room_id.clone();
+                        let session_id = result.assignment.session.public.session_id.clone();
+                        match commit_provider_result(&store, &provider_adapter, result).await {
+                            Ok(commit) => publish_turn_commit(
+                                &event_tx,
+                                &mut turn_tasks,
+                                provider_adapter.clone(),
+                                commit,
+                            ),
+                            Err(PersistenceError::CommandRejected {
+                                code: "stale_provider_turn",
+                                ..
+                            }) => tracing::debug!(
+                                room_id,
+                                session_id,
+                                "discarded provider result after durable turn authority changed"
+                            ),
+                            Err(_) => tracing::error!(
+                                room_id,
+                                session_id,
+                                "provider turn result could not be committed; durable restart recovery is required"
+                            ),
+                        }
+                    }
+                    Err(join_error) => tracing::error!(
+                        cancelled = join_error.is_cancelled(),
+                        panic = join_error.is_panic(),
+                        "provider turn task ended without a result; durable restart recovery is required"
+                    ),
+                },
+            }
+        }
+    })
+}
+
+fn public_command_outcome(
+    principal: &AuthenticatedPrincipal,
+    mut outcome: CommandOutcome,
+) -> Result<CommandOutcome, PersistenceError> {
+    outcome.result = public_value_for_principal(&outcome.result, principal)?;
+    outcome.event = public_event_for_principal(&outcome.event, principal);
+    outcome.events = outcome
+        .events
+        .iter()
+        .map(|event| public_event_for_principal(event, principal))
+        .collect();
+    Ok(outcome)
+}
+
 enum RoomInput {
     Command(RoomCommand),
     Provider(Box<Result<ProviderTurnTaskResult, tokio::task::JoinError>>),
-}
-
-struct ProviderTurnTaskResult {
-    assignment: AgentTurnAssignment,
-    result: Result<ProviderTurnCompleted, ProviderAdapterError>,
-}
-
-fn spawn_provider_turn(
-    tasks: &mut JoinSet<ProviderTurnTaskResult>,
-    provider_adapter: ProviderAdapter,
-    assignment: AgentTurnAssignment,
-) {
-    tasks.spawn(async move {
-        let request = ProviderTurnRequest {
-            turn_id: assignment.turn_id.clone(),
-            input: assignment.provider_input.clone(),
-            room_observation: Some(ProviderRoomObservation {
-                input_up_to_seq: assignment.session.input_up_to_seq,
-                view: assignment.room_view.clone(),
-                allowed_agent_ids: assignment.room_agent_ids.clone(),
-            }),
-        };
-        let result = provider_adapter
-            .send_turn(&assignment.session, &request)
-            .await;
-        ProviderTurnTaskResult { assignment, result }
-    });
-}
-
-async fn commit_provider_result(
-    store: &SqliteStore,
-    provider_adapter: &ProviderAdapter,
-    completed: ProviderTurnTaskResult,
-) -> Result<AgentTurnCommit, PersistenceError> {
-    let room_id = &completed.assignment.session.public.room_id;
-    let session_id = &completed.assignment.session.public.session_id;
-    let turn_id = &completed.assignment.turn_id;
-    match completed.result {
-        Ok(result) => match result.outcome {
-            ProviderTurnOutcome::Message {
-                content,
-                target_agent_id,
-            } => {
-                store
-                    .complete_agent_turn(
-                        room_id,
-                        session_id,
-                        ProviderTurnAuthority {
-                            turn_id,
-                            provider_turn_id: &result.provider_turn_id,
-                            provider_session_id: result.provider_session_id.as_deref(),
-                        },
-                        &content,
-                        &target_agent_id,
-                    )
-                    .await
-            }
-            ProviderTurnOutcome::Declined { reason_code } => {
-                store
-                    .decline_agent_turn(
-                        room_id,
-                        session_id,
-                        ProviderTurnAuthority {
-                            turn_id,
-                            provider_turn_id: &result.provider_turn_id,
-                            provider_session_id: result.provider_session_id.as_deref(),
-                        },
-                        &reason_code,
-                    )
-                    .await
-            }
-        },
-        Err(error) => {
-            let confirmed_stop = error.runtime_stopped.then_some((
-                error.runtime_handle_id.as_str(),
-                error.runtime_owner_id.as_str(),
-            ));
-            let commit = store
-                .fail_agent_turn(
-                    room_id,
-                    session_id,
-                    turn_id,
-                    error.code,
-                    error.message,
-                    confirmed_stop,
-                )
-                .await?;
-            if error.runtime_stopped {
-                provider_adapter
-                    .release_confirmed_stop(
-                        room_id,
-                        session_id,
-                        &error.runtime_handle_id,
-                        &error.runtime_owner_id,
-                    )
-                    .await;
-            }
-            Ok(commit)
-        }
-    }
-}
-
-fn publish_turn_commit(
-    event_tx: &broadcast::Sender<RoomEvent>,
-    tasks: &mut JoinSet<ProviderTurnTaskResult>,
-    provider_adapter: ProviderAdapter,
-    commit: AgentTurnCommit,
-) {
-    for event in commit.events {
-        let _ = event_tx.send(event);
-    }
-    if let Some(assignment) = commit.next_assignment {
-        spawn_provider_turn(tasks, provider_adapter, assignment);
-    }
 }
 
 async fn join_room_tasks(
@@ -394,7 +326,10 @@ async fn execute_command(
     command: &RoomCommand,
 ) -> CommandExecution {
     let result = match command.action.as_str() {
-        "agent.create" => execute_agent_create(store, provider_catalog, command).await,
+        "agent.create" => {
+            execute_agent_create_command(store, provider_catalog, provider_adapter, command).await
+        }
+        "agent.configure" => execute_agent_configure(store, provider_catalog, command).await,
         "agent.start" | "agent.resume" => {
             execute_agent_start(store, provider_adapter, command).await
         }
@@ -410,6 +345,82 @@ async fn execute_command(
             .map(CommandExecution::mutation),
     };
     result.unwrap_or_else(CommandExecution::failure)
+}
+
+async fn execute_agent_create_command(
+    store: &SqliteStore,
+    provider_catalog: &ProviderCatalogService,
+    provider_adapter: &ProviderAdapter,
+    command: &RoomCommand,
+) -> Result<CommandExecution, PersistenceError> {
+    let AgentCreateExecution {
+        reply,
+        committed_events,
+        advance_ordered_floor,
+    } = crate::agent_create_runtime::execute_agent_create(
+        store,
+        provider_catalog,
+        provider_adapter,
+        &command.principal,
+        &command.request_id,
+        &command.payload,
+    )
+    .await?;
+    let execution = CommandExecution {
+        reply,
+        committed_events,
+        assignment: None,
+    };
+    if advance_ordered_floor {
+        Ok(progress_execution(store, &command.principal.room_id, execution).await)
+    } else {
+        Ok(execution)
+    }
+}
+
+async fn execute_agent_configure(
+    store: &SqliteStore,
+    provider_catalog: &ProviderCatalogService,
+    command: &RoomCommand,
+) -> Result<CommandExecution, PersistenceError> {
+    if let Some(outcome) = store
+        .replay_command(
+            &command.principal,
+            &command.request_id,
+            &command.action,
+            &command.payload,
+        )
+        .await?
+    {
+        return Ok(CommandExecution::success(outcome));
+    }
+    let current = store
+        .agent_configuration_candidate(&command.principal, &command.payload)
+        .await?;
+    let expected_profile_key = current.runtime_profile_key.clone();
+    let selection = provider_catalog
+        .validate_configuration(
+            &command.principal.room_id,
+            &command.principal.principal_id,
+            &command.request_id,
+            &current,
+            &command.payload,
+        )
+        .await
+        .map_err(|error| PersistenceError::CommandRejected {
+            code: error.code,
+            message: error.message,
+        })?;
+    store
+        .execute_agent_configuration(
+            &command.principal,
+            &command.request_id,
+            &command.payload,
+            &expected_profile_key,
+            &selection.into(),
+        )
+        .await
+        .map(CommandExecution::success)
 }
 
 struct CommandExecution {
@@ -460,45 +471,6 @@ impl CommandExecution {
             assignment: None,
         }
     }
-}
-
-async fn execute_agent_create(
-    store: &SqliteStore,
-    provider_catalog: &ProviderCatalogService,
-    command: &RoomCommand,
-) -> Result<CommandExecution, PersistenceError> {
-    if let Some(outcome) = store
-        .replay_command(
-            &command.principal,
-            &command.request_id,
-            &command.action,
-            &command.payload,
-        )
-        .await?
-    {
-        return Ok(CommandExecution::success(outcome));
-    }
-    let selection = provider_catalog
-        .validate_creation(
-            &command.principal.room_id,
-            &command.principal.principal_id,
-            &command.request_id,
-            &command.payload,
-        )
-        .await
-        .map_err(|error| PersistenceError::CommandRejected {
-            code: error.code,
-            message: error.message,
-        })?;
-    store
-        .execute_agent_create(
-            &command.principal,
-            &command.request_id,
-            &command.payload,
-            &selection.into(),
-        )
-        .await
-        .map(CommandExecution::success)
 }
 
 async fn execute_agent_start(
@@ -599,7 +571,14 @@ async fn progressed_execution(
     room_id: &str,
     outcome: CommandOutcome,
 ) -> CommandExecution {
-    let mut execution = CommandExecution::success(outcome);
+    progress_execution(store, room_id, CommandExecution::success(outcome)).await
+}
+
+async fn progress_execution(
+    store: &SqliteStore,
+    room_id: &str,
+    mut execution: CommandExecution,
+) -> CommandExecution {
     match store.assign_pending_turn(room_id).await {
         Ok(Some(commit)) => {
             execution.committed_events.extend(commit.events);

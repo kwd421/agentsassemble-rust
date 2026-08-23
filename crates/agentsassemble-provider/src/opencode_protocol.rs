@@ -45,28 +45,44 @@ pub(crate) fn assistant_message(value: &Value) -> Result<AssistantMessage, Drive
         id,
         parent_id,
         content,
-        observed_model: observed_model(info),
+        observed_model: observed_model(info)?.ok_or_else(protocol_error)?,
     })
 }
 
-fn observed_model(info: &Map<String, Value>) -> String {
-    let nested = info.get("model").and_then(Value::as_object);
-    let provider = info
-        .get("providerID")
-        .and_then(Value::as_str)
-        .or_else(|| nested?.get("providerID")?.as_str())
-        .unwrap_or_default();
-    let model = info
-        .get("modelID")
-        .and_then(Value::as_str)
-        .or_else(|| nested?.get("modelID")?.as_str())
-        .or_else(|| nested?.get("id")?.as_str())
-        .unwrap_or_default();
-    if provider.is_empty() || model.is_empty() {
-        String::new()
-    } else {
-        format!("{provider}/{model}")
+pub(crate) fn observed_model(info: &Map<String, Value>) -> Result<Option<String>, DriverError> {
+    let nested = match info.get("model") {
+        Some(value) => Some(value.as_object().ok_or_else(protocol_error)?),
+        None => None,
+    };
+    let provider = exact_alias([
+        info.get("providerID"),
+        nested.and_then(|model| model.get("providerID")),
+    ])?;
+    let model = exact_alias([
+        info.get("modelID"),
+        nested.and_then(|model| model.get("modelID")),
+        nested.and_then(|model| model.get("id")),
+    ])?;
+    match (provider, model) {
+        (Some(provider), Some(model)) => Ok(Some(format!("{provider}/{model}"))),
+        (None, None) => Ok(None),
+        _ => Err(protocol_error()),
     }
+}
+
+fn exact_alias<const N: usize>(values: [Option<&Value>; N]) -> Result<Option<&str>, DriverError> {
+    let mut observed = None;
+    for value in values.into_iter().flatten() {
+        let value = value.as_str().ok_or_else(protocol_error)?;
+        if value.is_empty() || value.len() > 128 || value.chars().any(char::is_control) {
+            return Err(protocol_error());
+        }
+        if observed.is_some_and(|current| current != value) {
+            return Err(protocol_error());
+        }
+        observed = Some(value);
+    }
+    Ok(observed)
 }
 
 pub(crate) fn validate_profile(session: &DurableAgentSession) -> Result<(), DriverError> {
@@ -138,7 +154,9 @@ pub(crate) fn turn_transport_error(error: impl Into<TurnTransportError>) -> Driv
             interactive_request_error()
         }
         TurnTransportError::Events(
-            OpenCodeEventError::Transport | OpenCodeEventError::TooLarge,
+            OpenCodeEventError::Transport
+            | OpenCodeEventError::TooLarge
+            | OpenCodeEventError::Protocol,
         ) => protocol_error(),
     }
 }
@@ -182,6 +200,13 @@ pub(crate) const fn spawn_error() -> DriverError {
     DriverError::new(
         "provider_spawn_failed",
         "The OpenCode server process could not be started.",
+    )
+}
+
+pub(crate) const fn config_error() -> DriverError {
+    DriverError::new(
+        "provider_config_unavailable",
+        "The OpenCode provider configuration could not be isolated.",
     )
 }
 
@@ -334,5 +359,40 @@ mod tests {
         assert_eq!(message.parent_id, "user-1");
         assert_eq!(message.content, "hello");
         assert_eq!(message.observed_model, "opencode/hy3-free");
+    }
+
+    #[test]
+    fn assistant_response_requires_one_exact_nonconflicting_model_identity() {
+        assert!(
+            assistant_message(&json!({
+                "info": {
+                    "id": "assistant-1", "parentID": "user-1", "role": "assistant"
+                },
+                "parts": []
+            }))
+            .is_err()
+        );
+        assert!(
+            assistant_message(&json!({
+                "info": {
+                    "id": "assistant-1", "parentID": "user-1", "role": "assistant",
+                    "providerID": "opencode", "modelID": "hy3-free",
+                    "model": {"providerID": "other", "modelID": "hy3-free"}
+                },
+                "parts": []
+            }))
+            .is_err()
+        );
+        assert!(
+            assistant_message(&json!({
+                "info": {
+                    "id": "assistant-1", "parentID": "user-1", "role": "assistant",
+                    "providerID": "opencode", "modelID": "hy3-free",
+                    "model": {"providerID": "opencode", "modelID": "other", "id": "hy3-free"}
+                },
+                "parts": []
+            }))
+            .is_err()
+        );
     }
 }

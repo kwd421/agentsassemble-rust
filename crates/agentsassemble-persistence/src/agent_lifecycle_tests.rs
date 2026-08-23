@@ -45,6 +45,7 @@ pub(super) async fn fixture() -> (SqliteStore, AuthenticatedPrincipal, tempfile:
         room_id: "general".to_owned(),
         client_kind: ClientKind::Browser,
         invite_scope: InviteScope::ReadWrite,
+        is_operator: true,
         capabilities: CapabilitySet::local_operator(ClientKind::Browser, InviteScope::ReadWrite),
     };
     (store, principal, directory)

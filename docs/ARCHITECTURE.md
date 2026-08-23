@@ -38,9 +38,35 @@ The mutation transaction orders work as follows:
 
 No ACK or event is externally visible before commit.
 
+Commands that own external provider effects use the same global command namespace,
+but the database and an OS process are not one atomic transaction. The first
+durable commit for `agent.create(start=true)` reserves the request namespace,
+action, canonical payload hash, derived Agent Session ID, start intent, and current
+phase. Session creation, lifecycle preparation, the external effect, observed
+runtime evidence, and the terminal command result are explicit durable phases.
+Crashes and concurrent retries resume that one reservation; they cannot create a
+second session, lifecycle intent, or provider process. The public result preserves
+the original created-session, participant, and optional-start fields. Partial or
+uncertain start outcomes remain explicit rather than being collapsed into success
+or a stopped session.
+
+ACK and event delivery happens only after the owning commit. The protocol contract
+must state the permitted post-commit ordering: a connection may observe the event
+before its ACK, and reconnect may recover the event before command-result replay.
+Clients therefore correlate results and advance durable cursors, but never turn an
+optimistic ordering assumption into state authority.
+
 ### Room event cursor
 
 Room event `seq` is positive, durable, monotonic, and scoped to one room. A client advances only over contiguous sequences. Initial, resume, gap, and resynchronization responses preserve the existing frontend meaning. Missing or inconsistent ranges fail visibly and trigger authoritative resynchronization.
+
+Snapshot, catch-up/history, and live fanout use one viewer visibility policy. Each
+durable sequence is projected for each authenticated viewer as either its public
+event or a minimal `event_hidden` envelope retaining `id`, `seq`, `room_id`, and
+`created_at`; an invisible event is never deleted from that viewer's cursor. ACKs,
+command results, errors, and resynchronization payloads cross their own public
+redaction boundary and cannot disclose private runtime profiles, provider
+conversation identities, workspace/executable authority, or internal diagnostics.
 
 ### Protocol
 
@@ -53,6 +79,19 @@ The existing outer envelope remains compatible:
 
 Action payloads are added only by the slice that implements them.
 
+### Application and transport boundary
+
+HTTP and WebSocket adapters authenticate, decode, and encode. They do not own
+product mutations. Both call the same application command owner, which performs
+authorization, persistence, result shaping, and post-commit event publication.
+Authentication/OAuth, WebSocket ticket issuance, pre-connection directory and
+admission, server-wide profile and credential operations, files, paginated reads,
+and health/version may remain HTTP when that is their reachable entry point.
+Connection-, cursor-, and ordered-ACK-coupled realtime commands remain WebSocket.
+An HTTP mutation may commit through the application owner and then fan out its
+durable event over WebSocket. Neither transport is a fallback for the other, and a
+mutation is never implemented twice merely because both transports exist.
+
 ### Authentication and authorization
 
 A credential resolves once to an `AuthenticatedPrincipal` containing stable identity, room scope, client kind, and server-derived capabilities. Client-supplied roles, operator flags, participant type, or capabilities are never authority.
@@ -60,6 +99,32 @@ A credential resolves once to an `AuthenticatedPrincipal` containing stable iden
 Opaque, short-lived, one-use WebSocket tickets remain the connection credential. Browser-compatible HTTP ticket issuance stays an adapter while it is a reachable flow and always requires a high-entropy host secret or an authenticated session. Desktop mode cannot start with an empty host secret; Tauri generates it per owned runtime and returns only a one-use ticket plus the validated loopback WebSocket origin to React over IPC.
 
 The local HTTP/WebSocket adapter has explicit resource budgets: admission is bounded immediately after TCP accept, incomplete HTTP headers and request bodies have real deadlines, WebSocket admission is independently bounded, frames/messages stop at 256 KiB, the first subscription has a ten-second deadline, and authenticated ingress has message, byte, and control-frame windows. Binary frames are rejected. Room queue admission never waits and returns `room_busy` when saturated.
+
+Authorization is evaluated from the current principal and durable room state when
+the application command runs, not frozen as a hard-coded local-operator identity at
+connection construction. Capability changes therefore affect later commands on an
+existing connection without accepting client-supplied authority.
+
+### Identity and profile ownership
+
+The canonical human profile is keyed by authenticated `user_id`. The left-bottom
+profile card is the UI display reference for that human identity; member lists,
+message authors, and other room surfaces consume a revisioned projection of the
+same profile. Participant display name and avatar stored with a room are projection
+cache, not a second human-profile authority. Room membership, role, mute state, and
+permissions remain room authority and are never overwritten by a profile update.
+Each Agent Session owns its own Agent display, avatar, and configuration and never
+inherits or merges the owner's human profile.
+
+A committed human-profile revision durably schedules every affected room
+projection update. Per-room application state and durable events make partial
+progress restartable; an in-memory broadcast loop is not completion. The HTTP
+result semantics—whether success means the canonical profile commit or completion
+of all current room checkpoints—must be fixed by the active identity slice before
+implementation. In either case, retry of the same mutation reuses the same profile
+revision and cannot create duplicate revisions. A legacy local profile may be
+imported only by an explicit one-time migration with a completion marker, never by
+an ongoing read fallback.
 
 ### Runtime lifecycle
 
@@ -73,11 +138,23 @@ Room snapshots are read in one SQLite transaction. Their `oldest_seq` and `last_
 
 A resume cursor ahead of durable state produces `resync_required` with the durable latest sequence. The browser transport then clears its local cursor and reconnects for an authoritative initial snapshot; it does not retry the impossible cursor indefinitely.
 
+PostgreSQL central hosting is a later vertical slice, not a reason to introduce
+`sqlx::Any`, speculative repository frameworks, or mock backends now. SQLite SQL,
+row types, pragmas, and connection types stay inside persistence. Server code calls
+meaningful persistence operations such as command commit and lifecycle preparation
+rather than assembling raw rows or issuing SQL. Sequence allocation, idempotency,
+lifecycle reservation, and commit-before-fanout are application/persistence
+contracts so a later concrete PostgreSQL implementation can supply a shared
+application transaction, per-room advisory transaction lock, exact schema
+authority marker, and fail-closed startup without a SQLite fallback.
+
 ### Provider catalog and Agent Sessions
 
 The provider crate owns installed-provider discovery, catalog normalization, catalog revisioning, and selection validation. Provider probes run in dedicated owned process trees, inherit only an explicit credential-free environment allowlist, and have bounded time and output. Cancellation kills and reaps the full tree. Windows creates the probe suspended, assigns its Job Object, then resumes it; Unix starts it as a new process-group leader. OpenCode subscription models are restricted to the original managed namespaces. Public catalogs are bounded before publication; the server cannot turn a missing, malformed, oversized, or provenance-invalid catalog into a startable provider. The provider crate does not own rooms or persistence.
 
 An Agent Session's configured and desired state is durable room state. Its public projection deliberately excludes workspace paths, executable paths, filesystem identities, runtime handles, provider conversation identities, lifecycle intents, and the runtime profile key/version; those fields exist only in the private durable record. Exact workspace input is canonicalized without text cleanup. The workspace identity and the executable identity—bound to both its opened filesystem object and complete bytes—are revalidated between a short replay transaction and the final write transaction. The final transaction reauthorizes the room and rechecks command replay before committing, while slow filesystem work never holds the single SQLite writer. Filesystem validation uses a fixed-capacity set of detached standard threads with deadlines; a stalled operation retains its permit until it actually exits but cannot make Tokio runtime shutdown join a blocked filesystem worker. Rooms admit at most 64 sessions so non-event snapshot metadata remains bounded. Live provider processes and their task handles are observed resources owned by one server supervisor. Lifecycle effects begin only from committed intent and report completion through the room mutation owner. Stop confirmation is durably marked before finalization so a retry cannot repeat an already-applied external effect. Replayed commands reuse their durable result before consulting a newer catalog or launching an effect.
+
+`agent.configure` follows the same two-phase authority rule as creation without changing Agent Session identity. The room owner first authorizes and loads one exact stopped private profile, then the provider catalog merges only the client-selectable runtime controls with that stored provider/workspace authority. The final transaction reauthorizes, rechecks replay and the original profile key, revalidates the selected filesystem identities, and atomically replaces both the private profile and public projection. Running, active-turn, owned-handle, and lifecycle-intent states fail closed; a successful profile save upgrades the durable profile version and emits a canonical `agent_session_state` event. Empty string values from the copied React controls remain compatible for optional controls and `max_output_tokens` while provider/runtime/transport identity stays server-owned.
 
 Provider diagnostics are untrusted process output. Before an error enters a durable Agent Session, room event, command result, snapshot, or public projection, the shared domain boundary removes local paths, credentials, authorization headers, secret-shaped options and assignments, URL user information, JWTs, and private keys, then applies the field's size limit. The common provider adapter exposes only stable public error codes and messages; protocol payloads and stderr never cross directly into room authority.
 
@@ -88,6 +165,10 @@ Startup reconciliation is a three-owner protocol: persistence loads a complete p
 The common provider adapter owns live runtime slots, one supervisor identity, and the provider-neutral room-observation lifecycle independently of room persistence. A driver may know Codex JSONL, Antigravity PTY/ConPTY, or OpenCode HTTP/SSE, but it does not decide room lifecycle, replay, publication, handoff, decline, or recovery semantics. One common outcome is either a bounded public message with an optional exact Agent Session handoff or an explicit supported decline. The Codex driver binds the verified executable object through process creation: Linux and Android copy the verified bytes into a sealed executable `memfd`, other Unix targets execute a byte-verified `0500` copy held inside an explicitly verified private `0700` staging directory, and Windows holds the verified image without write/delete sharing. Staged bytes are hashed directly with the already-open source object's stable identity. Linux/Android bind the running server through `/proc/self/exe`; on macOS the desktop supervisor opens the current executable, verifies its device/inode against the process's mapped text vnodes, and launches the server from a private staged copy of those open bytes. The server refuses provider custody without that launch proof, and the guardian then binds the exact running server object before either helper re-executes. Codex uses the provider environment allowlist plus one process-private RoomPortal bearer, `app-server --stdio`, process-local model/effort/tier/sandbox/approval, an exact runtime `untrusted` workspace entry, and private RoomPortal MCP configuration, one bounded JSONL reader, a 256-message/2 MiB aggregate pre-turn notification queue, and default-denied server requests. The runtime trust entry disables workspace `.codex/config.toml`, hooks, and exec policies while leaving the session-flag RoomPortal MCP active; ordinary `AGENTS.md` discovery remains part of the thread contract. On Unix the complete provider launch manifest, including that bearer, crosses an anonymous inherited descriptor rather than argv or the guardian environment; Windows adds it only to the exact owned provider environment. Each RoomPortal generates a fresh unpredictable environment-variable name containing `TOKEN`, so pre-existing user configuration cannot name the bearer as another MCP credential. Codex's built-in sensitive-name exclusions are forced on for model-reachable tool children without replacing either legacy or canonical user filter fields, and this owned app-server disables shell snapshots so the bearer cannot be copied into snapshot state and replayed around the filter. The RoomPortal itself remains in server memory and is exposed through an unguessable process-lifetime path plus independently authenticated bearer on an ephemeral loopback HTTP listener. The locked rmcp streamable-HTTP implementation bounds request bodies. A hard eight-connection semaphore bounds pre-authentication tasks and file descriptors; when full, the accept owner aborts the oldest registry-locked unauthenticated connection and waits for its permit to return before admitting a replacement. Exact constant-time bearer validation and the authenticated transition are one operation under that same registry mutex, so a successfully authenticated connection cannot be evicted between those steps. Unauthenticated requests never consume the separate eight authenticated request permits, every connection has an absolute deadline and disables keep-alive, incomplete headers and bodies expire, stateless JSON responses validate the exact Host and capability path, and cancellation closes every accepted connection with the portal. The bearer never appears in provider argv. Codex explicitly approves only this server's three room tools and the app-server pump accepts only the exact `agentsassemble_room` MCP-tool elicitation shape, leaving every other provider request denied. Codex therefore creates no portal sidecar, receives no portal filesystem path, and cannot turn ordinary output into room authority. Process reuse also requires live guardian custody and the exact provider anchor group; Linux/Android then perform a final bounded `/proc/<pid>/stat` check and reject zombie or dead leaders, which retain a PID and PGID until their guardian parent reaps them.
 
 After Codex process initialization, the driver starts or resumes one bounded exact provider thread before reporting the provider session active. A cancelled request remains bound to its method, parameters, and JSON-RPC ID, so retry reads the original response rather than repeating the external effect. A definitive initialize failure is poisoned on that process. The complete attachment response is retained until all original-compatible identity and model locations are normalized; missing, malformed, changed, or conflicting thread identities and any reported model different from the exact configured model fail closed instead of opening or committing another conversation. A poisoned driver can never satisfy runtime reuse: fatal turn poison is stopped under the exact runtime owner and held as a confirmed-stop tombstone until persistence checkpoints it, while other poisoned attachment state returns an explicit restart-required failure.
+
+Antigravity uses one persistent native PTY session and never invokes print mode. Its workspace hook file is an exclusive managed boundary: any pre-existing project hook refuses launch, the installed document contains only the AgentsAssemble policy hook, and the hook command resolves through the guardian-staged private `agentsassemble-room` helper placed first in that provider process's `PATH`. A fresh launch nonce and exact durable turn ID enter every terminal prompt, so concurrent sessions cannot claim the same newly created transcript from equal room text. New attachment remains unbound until exactly one transcript contains that input; multiple candidates fail closed. Cache files, per-poll transcript tails, line sizes, and event counts are all bounded before JSON allocation, while resume reads only new rows from the exact durable conversation path.
+
+OpenCode uses one persistent loopback `serve --pure` process and native HTTP/SSE session identity. The process gets a private empty configuration root, disables project configuration, default and external plugins, and external skill discovery, while retaining the installed native data store needed for authentication and durable provider sessions. RoomPortal is registered after the bounded health check through the strict loopback client. Assistant responses and SSE events share one provider-specific model parser: every supplied direct or nested alias must be a bounded nonempty string, all aliases must agree, both provider and model components must exist, and both channels must exactly match the configured model before a turn can complete.
 
 Provider turns enter through the common adapter only when durable active-turn, provider-session, runtime-handle, owner, profile, and filesystem authority all match. Ordered turns additionally carry a bounded 20,000-character canonical RoomPortal view, its exact input sequence, and at most 64 unique Agent Session handles. The adapter prepares the portal before provider I/O and accepts completion only after an exact read receipt plus exactly one turn-scoped message publication or supported decline; ordinary assistant final text is ignored as room authority. The portal creates an unguessable turn generation at `begin_observation`. A message or decline may be staged before or after `read_discussion`, matching the original tolerant order, but finalization requires the receipt generation and staged outcome generation to equal that exact active turn generation. Retrying a cancelled caller reuses the exact portal state, including an already staged terminal action. The adapter releases the outer runtime-slot mutex before waiting on a long turn, clones the runtime's inner serialized driver owner, and races driver work against an exact-runtime cancellation token; stop and shutdown can therefore cancel the wait, acquire the driver, and reap the owned process within their existing bound. A Codex turn uses `turn/start` with the original app-server workspace/model/effort/approval/sandbox-policy settings, room-observation orientation, and source metadata. Its response must expose one bounded exact provider-turn identity across original-compatible aliases; a bounded process-lifetime history prevents that identity from being rebound to another logical turn. Every reported model, including a `model/rerouted` destination, must still match the selected model. Output-bearing notifications require both exact thread and turn identities, while malformed unscoped output poisons the turn instead of entering its result. Official `hook/*` control notifications are thread-scoped: their thread identity remains mandatory and their nullable turn identity is compared only when present. Valid unmatched notifications remain under the aggregate queue budget, that budget is decremented when a match is consumed, and completion accepts either an explicit signal or the original final-message-plus-thread-idle grace signal. A cancelled caller continues the same pending request or active turn; a different logical turn cannot replace it.
 

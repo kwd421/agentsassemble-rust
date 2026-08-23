@@ -2,6 +2,11 @@
 
 Status: source-derived migration inventory, 2026-08-23
 
+Comparison baseline: original
+`d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust
+`87a6aec05b54dcc0a840eedbe44741e218712122`. Local uncommitted code and
+local verification are not promoted to public implementation status in this file.
+
 ## Scope and method
 
 This inventory compares the reachable source registrations in the Python product at
@@ -61,8 +66,9 @@ not by itself a product gap.
 
 The Rust server currently exposes `GET /healthz`, `GET /api/host-challenge`,
 `POST /api/ws-ticket`, static `/app`, and `/ws`. Its room command implementation
-currently completes `message.send`, `agent.create`, `agent.start`, `agent.resume`,
-and `agent.stop`.
+at the public comparison commit completes `message.send`, `agent.create`,
+`agent.start`, `agent.resume`, and `agent.stop`. A local uncommitted
+`agent.configure` path is active work, not a connected public surface.
 Everything below must remain visibly unavailable or failed until its Rust owner is
 implemented; the frontend must not silently substitute Python or local fake data.
 
@@ -74,30 +80,62 @@ implemented; the frontend must not silently substitute Python or local fake data
 | Roster, profile, friends, and channels | Room members, role/mute HTTP compatibility, user profile, room friends, room channels, voice presence, and side chat. |
 | Attachments, personas, pins, and search | Attachment upload/read, persona list/import/thumbnail, message pins, room search/context. |
 | Provider settings and diagnostics | Login, catalog refresh HTTP response, credential CRUD, provider usage, local resources, release health, and runtime version. The original `/api/local/workspace-picker` HTTP route is absent, but packaged desktop creation uses the native Tauri directory picker instead. |
-| Games and plugins | Mafia HTTP operations and plugin WebSocket frames. |
-| Canonical room commands | History, vote summary, edit/delete, settings, random operations, re-add/configure, pause/interrupt, participant controls, room lifecycle, and provider request resolution. Stopped-session `agent.resume` is connected. |
+| Games and plugins | Mafia HTTP operations and generic plugin WebSocket hosting remain unimplemented. The copied RimWorld view is an external plugin consumer; its Python plugin package/runtime is intentionally outside the current Rust core-migration scope and is not a core parity exit condition. |
+| Canonical room commands | History, vote summary, edit/delete, settings, random operations, re-add/configure, pause/interrupt, participant controls, room lifecycle, and provider request resolution. Stopped-session `agent.resume` is connected at the public comparison commit; `agent.configure` remains active uncommitted work. |
 | Canonical room events | The React projector recognizes the broader original event vocabulary; only Rust-emitted snapshot/events are currently verified. |
 
-## Connected Rust slice and live evidence
+## Public Rust slice, active gap, and provenance gate
 
 The frontend source, styles, assets, and component hierarchy were copied from the
-original React frontend rather than recreated. Rust-specific changes stay at the
-desktop and transport boundaries:
+original React frontend rather than recreated, but that statement is not parity
+evidence by itself. The frontend provenance is original commit `d504647…`.
+Every Rust-only frontend change must be allowlisted with its file and reason. The
+allowlist is limited to runtime bootstrap, ticket/transport, Tauri native boundary,
+and behavior-preserving structure-gate splits. Product-controller orchestration,
+client-owned authority, changed DOM order, or changed CSS cascade is not justified
+by the allowlist.
+
+At the public Rust comparison commit:
 
 - Tauri obtains a short-lived ticket, WebSocket base URL, and proof key through
   its existing `runtime_ticket` command.
 - The WebSocket client verifies the Rust runtime's initial snapshot proof before
   accepting events or sending queued commands.
 - Rust snapshots drive the original room timeline, provider catalog, participant
-  list, Agent Session list, and the original create/start/resume/stop controls.
+  list, Agent Session list, and create/start/resume/stop controls.
 - The original create dialog uses a native Tauri directory picker in the packaged
-  desktop build. Desktop creation preserves the original atomic intent by issuing
-  the Rust backend's durable create and start commands in order, then resyncing.
+  desktop build.
+- Create-and-start does **not** yet preserve the original server-owned intent: the
+  public desktop controller sends create with `start=false`, then a second
+  `agent.start`, then normal-path resync. The Rust server does not own the original
+  `agent.create(start=true)` contract. This remains incomplete until one command
+  reservation owns creation and the optional lifecycle intent and committed
+  ACK/events update the UI without success-path resync.
+- Snapshot projection exists, but live fanout does not yet prove the same
+  viewer-specific projection and hidden-sequence contract. This is a prerequisite,
+  not a later security hardening item.
 - Unsupported original controls fail with the Rust command error. They are not
   hidden by a substitute result and do not fall back to Python.
 
-Packaged-release UI verification on 2026-08-23 exercised the original controls
-against real native sessions, not mocked adapters:
+Frontend parity for each vertical slice compares assets, selectors/classes,
+component and DOM hierarchy, responsive breakpoints, and rendered geometry at fixed
+viewports. Geometry evidence includes left/right panel widths, central chat bounds,
+composer, and left-bottom profile-card overlap/clipping. The same gate exercises
+create stopped, create-and-start, re-add, stop, resume/restart, reconnect, and the
+provider reply. Unsupported controls remain explicit unavailable/error states, not
+fake data or no-ops.
+
+The RimWorld package under the original repository's `plugins/rimworld/` tree is
+tracked as a separately migratable plugin, not as part of the core Rust product
+cutover. Its copied frontend consumer may remain present for source provenance,
+but it must not be backed by placeholder snapshots, a fake plugin host, or a Python
+fallback. Until a later plugin slice is explicitly opened, attempts to use it stay
+visibly unsupported.
+
+Historical packaged-release UI verification on 2026-08-23 exercised native
+sessions, not mocked adapters, but it does not complete the active slice because
+the exact public evidence commit and the corrected command/projection contracts
+were not recorded together:
 
 | Provider | Verified path |
 | --- | --- |
@@ -108,5 +146,10 @@ against real native sessions, not mocked adapters:
 The OpenCode resume check also verifies that `agent.resume` keeps its own durable
 request/result identity while sharing the provider launch effect with `agent.start`.
 It does not silently rewrite a resume request into a start request.
+
+The exact matrix must be rerun on the eventual completed public slice commit and
+recorded in `docs/VERIFICATION.md` with command flow, process/session ownership,
+restart, hidden-cursor, and cleanup evidence before this section may describe the
+Agent Session slice as complete.
 
 This file must be updated when either side gains or removes a reachable surface.

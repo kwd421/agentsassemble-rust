@@ -20,6 +20,26 @@ pub(crate) async fn commit_launch_result(
     runtime_reused: bool,
     command_action: &'static str,
 ) -> Result<CommandOutcome, PersistenceError> {
+    let events = append_launch_events(transaction, principal, session, joined).await?;
+    let result = launch_result(session, runtime_reused, &events);
+    store_result(
+        transaction,
+        principal,
+        request_id,
+        command_action,
+        payload_hash,
+        result,
+        events,
+    )
+    .await
+}
+
+pub(crate) async fn append_launch_events(
+    transaction: &mut Transaction<'_, Sqlite>,
+    principal: &AuthenticatedPrincipal,
+    session: &DurableAgentSession,
+    joined: bool,
+) -> Result<Vec<agentsassemble_domain::RoomEvent>, PersistenceError> {
     let mut events = Vec::with_capacity(3);
     if joined {
         events.push(
@@ -44,20 +64,18 @@ pub(crate) async fn commit_launch_result(
         .await?,
     );
     events.push(append_state_event(transaction, principal, &session.public).await?);
-    let result = json!({
+    Ok(events)
+}
+
+pub(crate) fn launch_result(
+    session: &DurableAgentSession,
+    runtime_reused: bool,
+    events: &[agentsassemble_domain::RoomEvent],
+) -> serde_json::Value {
+    json!({
         "agent_session": session.public,
         "runtime_reused": runtime_reused,
         "events": events,
         "event": events.last(),
-    });
-    store_result(
-        transaction,
-        principal,
-        request_id,
-        command_action,
-        payload_hash,
-        result,
-        events,
-    )
-    .await
+    })
 }

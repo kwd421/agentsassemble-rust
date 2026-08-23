@@ -170,6 +170,7 @@ mod tests {
             room_id: room_id.to_owned(),
             client_kind: ClientKind::Browser,
             invite_scope: InviteScope::ReadWrite,
+            is_operator: true,
             capabilities: CapabilitySet::local_operator(
                 ClientKind::Browser,
                 InviteScope::ReadWrite,

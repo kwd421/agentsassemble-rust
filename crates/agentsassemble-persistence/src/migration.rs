@@ -3,7 +3,7 @@ use sqlx::{Row, Sqlite, Transaction};
 
 use crate::{PersistenceError, SqliteStore};
 
-pub(crate) const CURRENT_SCHEMA_VERSION: i64 = 5;
+pub(crate) const CURRENT_SCHEMA_VERSION: i64 = 6;
 
 impl SqliteStore {
     pub(crate) async fn migrate_schema(&self) -> Result<(), PersistenceError> {
@@ -47,6 +47,18 @@ impl SqliteStore {
         if version < 5 {
             sqlx::query(
                 "ALTER TABLE lifecycle_command_reservations ADD COLUMN status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'owner_lost'))",
+            )
+            .execute(&mut *transaction)
+            .await?;
+        }
+        if version < 6 {
+            sqlx::query(
+                "ALTER TABLE lifecycle_command_reservations ADD COLUMN phase TEXT NOT NULL DEFAULT 'lifecycle_prepared'",
+            )
+            .execute(&mut *transaction)
+            .await?;
+            sqlx::query(
+                "ALTER TABLE lifecycle_command_reservations ADD COLUMN prepared_result_json TEXT NOT NULL DEFAULT '{}'",
             )
             .execute(&mut *transaction)
             .await?;
@@ -116,6 +128,8 @@ async fn redact_legacy_agent_results(
 
 #[cfg(test)]
 mod tests {
+    use sqlx::Row as _;
+
     use crate::SqliteStore;
 
     #[tokio::test]
@@ -286,6 +300,55 @@ mod tests {
         .await
         .unwrap_or_else(|error| panic!("read migrated reservation: {error}"));
         assert_eq!(status, "pending");
+    }
+
+    #[tokio::test]
+    async fn version_five_reservations_gain_explicit_phase_and_result() {
+        let directory =
+            tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
+        let path = directory.path().join("runtime.sqlite3");
+        let store = SqliteStore::open_path(&path)
+            .await
+            .unwrap_or_else(|error| panic!("create store: {error}"));
+        sqlx::query(
+            "INSERT INTO rooms(room_id, room_json, settings_json) VALUES ('general', '{}', '{}')",
+        )
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("insert room: {error}"));
+        sqlx::query("DROP TABLE lifecycle_command_reservations")
+            .execute(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("remove v6 table: {error}"));
+        sqlx::query(
+            "CREATE TABLE lifecycle_command_reservations (room_id TEXT NOT NULL, principal_id TEXT NOT NULL, request_id TEXT NOT NULL, action TEXT NOT NULL, payload_hash TEXT NOT NULL, session_id TEXT NOT NULL, operation_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'owner_lost')), PRIMARY KEY(room_id, principal_id, request_id), FOREIGN KEY(room_id) REFERENCES rooms(room_id) ON DELETE CASCADE)",
+        )
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("create v5 table: {error}"));
+        sqlx::query(
+            "INSERT INTO lifecycle_command_reservations(room_id, principal_id, request_id, action, payload_hash, session_id, operation_id) VALUES ('general', 'operator', 'pending-start', 'agent.start', 'hash', 'agent-1', 'operation-1')",
+        )
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("insert v5 reservation: {error}"));
+        sqlx::query("UPDATE runtime_metadata SET value = '5' WHERE key = 'schema_version'")
+            .execute(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("set v5 marker: {error}"));
+        drop(store);
+
+        let reopened = SqliteStore::open_path(&path)
+            .await
+            .unwrap_or_else(|error| panic!("migrate v5 store: {error}"));
+        let row = sqlx::query(
+            "SELECT phase, prepared_result_json FROM lifecycle_command_reservations WHERE request_id = 'pending-start'",
+        )
+        .fetch_one(&reopened.pool)
+        .await
+        .unwrap_or_else(|error| panic!("read migrated reservation: {error}"));
+        assert_eq!(row.get::<String, _>("phase"), "lifecycle_prepared");
+        assert_eq!(row.get::<String, _>("prepared_result_json"), "{}");
     }
 
     #[tokio::test]

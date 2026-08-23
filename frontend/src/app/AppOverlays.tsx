@@ -1,3 +1,5 @@
+import { createPortal } from "react-dom";
+
 import type { AppController } from "./useAppController";
 import AgentCreateModal from "../views/components/AgentCreateModal";
 import CreateChannelModal from "../views/components/CreateChannelModal";
@@ -6,7 +8,6 @@ import GuestJoinProfilePanel from "../views/components/GuestJoinProfilePanel";
 import LeaveRoomDialog from "../views/components/LeaveRoomDialog";
 import RoomInviteModal from "../views/components/RoomInviteModal";
 import RoomSettingsModal from "../views/components/RoomSettingsModal";
-import { isDesktopWebview } from "../lib/desktopBridge";
 
 export default function AppOverlays({ controller }: { controller: AppController }) {
   const {
@@ -30,8 +31,8 @@ export default function AppOverlays({ controller }: { controller: AppController 
     stopInviteTunnel, updateRoom,
   } = controller;
 
-  return (
-    <>
+  return createPortal(
+    <div data-app-overlays style={{ position: "relative", zIndex: 220 }}>
         {leaveRoomTarget && (
           <LeaveRoomDialog
             roomLabel={leaveRoomTarget.label}
@@ -170,8 +171,7 @@ export default function AppOverlays({ controller }: { controller: AppController 
                 start: Boolean(request.startNow),
               });
             } else {
-              const desktopRuntime = isDesktopWebview();
-              const created = await roomSocket.command("agent.create", {
+              await roomSocket.command("agent.create", {
                 provider_id: request.providerId,
                 catalog_revision: request.catalogRevision || "",
                 display_name: request.displayName,
@@ -185,19 +185,8 @@ export default function AppOverlays({ controller }: { controller: AppController 
                 permission_mode: request.permissionMode || "meeting_read_only",
                 max_output_tokens: request.maxOutputTokens || 0,
                 persona_card_id: request.personaCardId || "",
-                start: desktopRuntime ? false : Boolean(request.startNow),
+                start: Boolean(request.startNow),
               });
-              if (desktopRuntime && request.startNow) {
-                const session = created.result?.agent_session;
-                const sessionId = session && typeof session === "object"
-                  ? (session as Record<string, unknown>).session_id
-                  : undefined;
-                if (typeof sessionId !== "string" || !sessionId) {
-                  throw new Error("생성된 Agent Session 식별자를 확인할 수 없습니다");
-                }
-                await roomSocket.command("agent.start", { agent_id: sessionId });
-              }
-              if (desktopRuntime) roomSocket.resync?.();
             }
           }}
           onCreated={() => refreshMembers()}
@@ -236,6 +225,7 @@ export default function AppOverlays({ controller }: { controller: AppController 
           />
         )}
 
-    </>
+    </div>,
+    document.body
   );
 }

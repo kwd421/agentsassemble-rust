@@ -1,3 +1,4 @@
+import "./app/originalImportOrder";
 import AppView from "./app/AppView";
 import { useAppController } from "./app/useAppController";
 import StartupIdentityGate from "./views/components/StartupIdentityGate";

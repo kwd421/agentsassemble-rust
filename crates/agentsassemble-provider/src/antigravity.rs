@@ -85,6 +85,7 @@ pub(crate) struct AntigravityDriver {
     startup_drained: bool,
     terminal_query_tail: Vec<u8>,
     permission_policy: AntigravityRoomPermissionPolicy,
+    transcript_nonce: Uuid,
     active_turn: Option<ActiveTurn>,
     completed_turn: Option<(ProviderTurnRequest, ProviderTurnCompleted)>,
     terminal_tail: Vec<u8>,
@@ -146,6 +147,7 @@ impl AntigravityDriver {
             startup_drained: false,
             terminal_query_tail: Vec::new(),
             permission_policy: AntigravityRoomPermissionPolicy::default(),
+            transcript_nonce: Uuid::new_v4(),
             active_turn: None,
             completed_turn: None,
             terminal_tail: Vec::new(),
@@ -232,20 +234,19 @@ impl AntigravityDriver {
             .attached_session_id
             .as_deref()
             .ok_or_else(session_missing)?;
-        if let Some((completed_request, completed)) = &self.completed_turn {
-            if completed_request == request {
-                let native = completed.provider_session_id.as_deref().unwrap_or(attached);
-                if session.provider_session_id != attached
-                    && !(session
-                        .provider_session_id
-                        .starts_with(PENDING_SESSION_PREFIX)
-                        && native == attached)
-                {
-                    return self.poison(session_mismatch());
-                }
-                return Ok(completed.clone());
+        if let Some((completed_request, completed)) = &self.completed_turn
+            && completed_request == request
+        {
+            let native = completed.provider_session_id.as_deref().unwrap_or(attached);
+            if session.provider_session_id != attached
+                && !(session
+                    .provider_session_id
+                    .starts_with(PENDING_SESSION_PREFIX)
+                    && native == attached)
+            {
+                return self.poison(session_mismatch());
             }
-            return Err(turn_conflict());
+            return Ok(completed.clone());
         }
         if session.provider_session_id != attached {
             return self.poison(session_mismatch());
@@ -257,7 +258,7 @@ impl AntigravityDriver {
         } else {
             self.drain_terminal_available().await?;
             self.permission_policy.begin_turn();
-            let prompt = terminal_prompt(request);
+            let prompt = terminal_prompt(request, self.transcript_nonce);
             self.transcript.begin_turn(&prompt)?;
             self.write_terminal(format!("\x1b[200~{prompt}\x1b[201~").as_bytes())
                 .await?;
@@ -524,10 +525,10 @@ impl Drop for AntigravityDriver {
     }
 }
 
-fn terminal_prompt(request: &ProviderTurnRequest) -> String {
+fn terminal_prompt(request: &ProviderTurnRequest, transcript_nonce: Uuid) -> String {
     format!(
-        "{}\n\nAntigravity room transport: first run `agentsassemble-room help`, then run `agentsassemble-room read`. Finish with exactly one `agentsassemble-room speak 'message'`, `agentsassemble-room speak-to agent-id 'message'`, or `agentsassemble-room decline reason`. Run one helper command per terminal tool call. Ordinary assistant final text is not a room publication.",
-        request.input
+        "{}\n\n<agentsassemble-transport turn=\"{}\" launch=\"{transcript_nonce}\">Antigravity room transport: first run `agentsassemble-room help`, then run `agentsassemble-room read`. Finish with exactly one `agentsassemble-room speak 'message'`, `agentsassemble-room speak-to agent-id 'message'`, or `agentsassemble-room decline reason`. Run one helper command per terminal tool call. Ordinary assistant final text is not a room publication.</agentsassemble-transport>",
+        request.input, request.turn_id
     )
 }
 

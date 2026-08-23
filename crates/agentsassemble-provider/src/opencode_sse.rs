@@ -4,6 +4,8 @@ use reqwest::Response;
 use serde_json::Value;
 use thiserror::Error;
 
+use crate::opencode_protocol::observed_model;
+
 const MAX_EVENT_STREAM_BYTES: usize = 8 * 1024 * 1024;
 const MAX_EVENT_LINE_BYTES: usize = 512 * 1024;
 const MAX_EVENTS: usize = 8_192;
@@ -14,6 +16,8 @@ pub(crate) enum OpenCodeEventError {
     Transport,
     #[error("the OpenCode event stream exceeded its bound")]
     TooLarge,
+    #[error("the OpenCode event stream protocol was invalid")]
+    Protocol,
     #[error("OpenCode requested unsupported interactive input")]
     InteractiveRequest,
     #[error("OpenCode reported a provider error")]
@@ -78,7 +82,15 @@ impl EventState {
                         == Some(self.turn.request_message.as_str())
                 {
                     self.turn.assistant_message = message_id;
-                    self.turn.observed_model = observed_model(info);
+                    if let Some(model) =
+                        observed_model(info).map_err(|_| OpenCodeEventError::Protocol)?
+                    {
+                        if !self.turn.observed_model.is_empty() && self.turn.observed_model != model
+                        {
+                            return Err(OpenCodeEventError::Protocol);
+                        }
+                        self.turn.observed_model = model;
+                    }
                     if info.get("error").is_some_and(Value::is_object) {
                         self.provider_error = true;
                     }
@@ -153,26 +165,6 @@ pub(crate) async fn collect_turn_events(
     .map_err(|_| OpenCodeEventError::Transport)?
 }
 
-fn observed_model(info: &serde_json::Map<String, Value>) -> String {
-    let model = info.get("model").and_then(Value::as_object);
-    let provider_id = info
-        .get("providerID")
-        .and_then(Value::as_str)
-        .or_else(|| model?.get("providerID")?.as_str())
-        .unwrap_or_default();
-    let model_id = info
-        .get("modelID")
-        .and_then(Value::as_str)
-        .or_else(|| model?.get("modelID")?.as_str())
-        .or_else(|| model?.get("id")?.as_str())
-        .unwrap_or_default();
-    if provider_id.is_empty() || model_id.is_empty() {
-        String::new()
-    } else {
-        format!("{provider_id}/{model_id}")
-    }
-}
-
 fn clean_id(value: &str) -> String {
     let value = value.trim();
     if value.is_empty() || value.len() > 128 || value.chars().any(char::is_control) {
@@ -243,6 +235,48 @@ mod tests {
                 "properties": {"sessionID": "session-1", "id": "permission-1"}
             })),
             Err(OpenCodeEventError::InteractiveRequest)
+        );
+    }
+
+    #[test]
+    fn model_may_arrive_late_but_cannot_change_or_remain_missing_at_completion() {
+        let mut state = EventState::new("session-1");
+        state
+            .accept(&json!({
+                "type": "message.updated",
+                "properties": {"sessionID": "session-1", "info": {
+                    "id": "user-1", "role": "user"
+                }}
+            }))
+            .unwrap_or_else(|error| panic!("accept user event: {error}"));
+        state
+            .accept(&json!({
+                "type": "message.updated",
+                "properties": {"sessionID": "session-1", "info": {
+                    "id": "assistant-1", "parentID": "user-1", "role": "assistant"
+                }}
+            }))
+            .unwrap_or_else(|error| panic!("accept initial assistant event: {error}"));
+        assert!(state.turn.observed_model.is_empty());
+        state
+            .accept(&json!({
+                "type": "message.updated",
+                "properties": {"sessionID": "session-1", "info": {
+                    "id": "assistant-1", "parentID": "user-1", "role": "assistant",
+                    "model": {"providerID": "opencode", "modelID": "hy3-free"}
+                }}
+            }))
+            .unwrap_or_else(|error| panic!("accept exact assistant model: {error}"));
+        assert_eq!(state.turn.observed_model, "opencode/hy3-free");
+        assert_eq!(
+            state.accept(&json!({
+                "type": "message.updated",
+                "properties": {"sessionID": "session-1", "info": {
+                    "id": "assistant-1", "parentID": "user-1", "role": "assistant",
+                    "providerID": "opencode", "modelID": "other"
+                }}
+            })),
+            Err(OpenCodeEventError::Protocol)
         );
     }
 }

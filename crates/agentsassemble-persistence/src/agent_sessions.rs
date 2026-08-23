@@ -1,18 +1,13 @@
-use std::collections::BTreeMap;
-
 use agentsassemble_domain::{
-    Actor, AgentSession, AgentSessionDraft, AuthenticatedPrincipal,
-    CURRENT_RUNTIME_PROFILE_VERSION, ClientKind, DurableAgentSession, Participant,
-    ParticipantStatus, RoomEvent, canonical_payload_hash,
+    AgentSessionDraft, AuthenticatedPrincipal, ClientKind, canonical_payload_hash,
 };
-use chrono::Utc;
-use serde_json::{Value, json};
-use uuid::Uuid;
+use serde_json::Value;
 
 use crate::{
-    CommandOutcome, PersistenceError, SqliteStore, authority::active_room_for_principal,
-    command_admission::admit_non_lifecycle_command,
-    filesystem_authority::revalidate_runtime_authority, sqlite::MAX_AGENT_SESSIONS_PER_ROOM,
+    CommandOutcome, PersistenceError, SqliteStore,
+    agent_creation_records::create_or_reuse_agent_records, agent_lifecycle_events::store_result,
+    authority::active_room_for_principal, command_admission::admit_non_lifecycle_command,
+    filesystem_authority::revalidate_runtime_authority,
 };
 
 impl SqliteStore {
@@ -49,7 +44,6 @@ impl SqliteStore {
     /// # Errors
     ///
     /// Returns authorization, identity, idempotency, or persistence failures.
-    #[allow(clippy::too_many_lines)] // One transaction must keep records, event, and ACK cohesive.
     pub async fn execute_agent_create(
         &self,
         principal: &AuthenticatedPrincipal,
@@ -99,212 +93,21 @@ impl SqliteStore {
             transaction.commit().await?;
             return Ok(outcome);
         }
-        let session_count =
-            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM agent_sessions WHERE room_id = ?")
-                .bind(&principal.room_id)
-                .fetch_one(&mut *transaction)
-                .await?;
-        if session_count >= MAX_AGENT_SESSIONS_PER_ROOM {
-            return Err(PersistenceError::CommandRejected {
-                code: "agent_session_capacity",
-                message: "This room has reached its Agent Session capacity.".to_owned(),
-            });
-        }
-        let collision = sqlx::query_scalar::<_, i64>(
-            "SELECT (SELECT COUNT(*) FROM participants WHERE room_id = ? AND participant_id = ?) + (SELECT COUNT(*) FROM agent_sessions WHERE room_id = ? AND session_id = ?)",
+        let records =
+            create_or_reuse_agent_records(&mut transaction, principal, draft, None, false).await?;
+        let outcome = store_result(
+            &mut transaction,
+            principal,
+            request_id,
+            ACTION,
+            payload_hash,
+            records.result,
+            records.committed_events,
         )
-        .bind(&principal.room_id)
-        .bind(&draft.agent_id)
-        .bind(&principal.room_id)
-        .bind(&draft.agent_id)
-        .fetch_one(&mut *transaction)
-        .await?;
-        if collision != 0 {
-            return Err(PersistenceError::CommandRejected {
-                code: "session_exists",
-                message: "An Agent Session with this identity already exists.".to_owned(),
-            });
-        }
-        let now = Utc::now();
-        let participant = Participant {
-            room_id: principal.room_id.clone(),
-            participant_id: draft.agent_id.clone(),
-            display_name: draft.display_name.clone(),
-            participant_type: "agent".to_owned(),
-            status: ParticipantStatus::Detached,
-            role: "agent".to_owned(),
-            owner_id: principal.principal_id.clone(),
-            muted: false,
-            created_at: now,
-            updated_at: now,
-        };
-        let (last_message_id, last_message_seq) =
-            latest_message_cursor(&mut transaction, &principal.room_id).await?;
-        let public_session = AgentSession {
-            room_id: principal.room_id.clone(),
-            session_id: draft.agent_id.clone(),
-            participant_id: draft.agent_id.clone(),
-            display_name: draft.display_name.clone(),
-            status: "available".to_owned(),
-            runtime_status: "stopped".to_owned(),
-            enabled: false,
-            provider_kind: draft.provider_kind.clone(),
-            runtime_kind: draft.runtime_kind.clone(),
-            connection_kind: "native_cli_bridge".to_owned(),
-            external_owned: false,
-            process_ownership: "server".to_owned(),
-            model: draft.model.clone(),
-            reasoning_effort: draft.reasoning_effort.clone(),
-            service_tier: draft.service_tier.clone(),
-            variant: draft.variant.clone(),
-            execution_harness: draft.execution_harness.clone(),
-            permission_mode: draft.permission_mode.clone(),
-            max_output_tokens: draft.max_output_tokens,
-            catalog_revision: draft.catalog_revision.clone(),
-            transport: draft.transport.clone(),
-            last_seen_event_id: last_message_id.clone(),
-            last_seen_seq: last_message_seq,
-            last_provider_sync_event_id: last_message_id,
-            last_provider_sync_seq: last_message_seq,
-            bootstrap_cutoff_seq: last_message_seq,
-            turn_count: 0,
-            active_turn_id: String::new(),
-            turn_phase: String::new(),
-            last_error: String::new(),
-            last_error_code: String::new(),
-            recovery_required: false,
-            provider_session_active: false,
-            provider_session_reused: false,
-            created_at: now,
-            updated_at: now,
-        };
-        let session = DurableAgentSession {
-            public: public_session.clone(),
-            executable: draft.executable.clone(),
-            executable_identity: draft.executable_identity.clone(),
-            workspace: draft.workspace.clone(),
-            workspace_identity: draft.workspace_identity.clone(),
-            runtime_profile_key: draft.runtime_profile_key.clone(),
-            runtime_profile_version: CURRENT_RUNTIME_PROFILE_VERSION,
-            provider_session_id: String::new(),
-            runtime_handle_id: String::new(),
-            runtime_owner_id: String::new(),
-            pending_event_ids: Vec::new(),
-            inflight_event_ids: Vec::new(),
-            active_source_event_id: String::new(),
-            input_up_to_event_id: String::new(),
-            input_up_to_seq: 0,
-            lifecycle_intent_action: String::new(),
-            lifecycle_intent_id: String::new(),
-            lifecycle_intent_status: String::new(),
-        };
-        sqlx::query(
-            "INSERT INTO participants(room_id, participant_id, participant_json) VALUES (?, ?, ?)",
-        )
-        .bind(&principal.room_id)
-        .bind(&participant.participant_id)
-        .bind(serde_json::to_string(&participant)?)
-        .execute(&mut *transaction)
-        .await?;
-        sqlx::query(
-            "INSERT INTO agent_sessions(room_id, session_id, session_json) VALUES (?, ?, ?)",
-        )
-        .bind(&principal.room_id)
-        .bind(&session.public.session_id)
-        .bind(serde_json::to_string(&session)?)
-        .execute(&mut *transaction)
-        .await?;
-        let sequence = next_sequence(&mut transaction, &principal.room_id).await?;
-        let mut extra = BTreeMap::new();
-        extra.insert("session_id".to_owned(), json!(public_session.session_id));
-        extra.insert(
-            "provider_kind".to_owned(),
-            json!(public_session.provider_kind),
-        );
-        let event = RoomEvent {
-            v: 1,
-            id: Uuid::new_v4().to_string(),
-            seq: sequence,
-            created_at: now,
-            room_id: principal.room_id.clone(),
-            event_type: "agent_session_created".to_owned(),
-            actor: Actor {
-                participant_id: principal.participant_id.clone(),
-                participant_type: "human".to_owned(),
-            },
-            participant_id: Some(public_session.participant_id.clone()),
-            participant_type: Some("agent".to_owned()),
-            actor_id: Some(principal.participant_id.clone()),
-            actor_type: Some("human".to_owned()),
-            display_name: Some(public_session.display_name.clone()),
-            content: None,
-            message_kind: None,
-            relay_depth: None,
-            extra,
-        };
-        sqlx::query("INSERT INTO room_events(room_id, seq, event_json) VALUES (?, ?, ?)")
-            .bind(&principal.room_id)
-            .bind(sequence)
-            .bind(serde_json::to_string(&event)?)
-            .execute(&mut *transaction)
-            .await?;
-        let result = json!({
-            "status": "created",
-            "agent_session": public_session,
-            "participant": participant,
-            "event_seq": sequence,
-            "event": event,
-        });
-        sqlx::query(
-            "INSERT INTO command_results(room_id, principal_id, request_id, action, payload_hash, result_json) VALUES (?, ?, ?, ?, ?, ?)",
-        )
-        .bind(&principal.room_id)
-        .bind(&principal.principal_id)
-        .bind(request_id)
-        .bind(ACTION)
-        .bind(payload_hash)
-        .bind(serde_json::to_string(&result)?)
-        .execute(&mut *transaction)
         .await?;
         transaction.commit().await?;
-        Ok(CommandOutcome {
-            result,
-            event: event.clone(),
-            events: vec![event],
-            deduplicated: false,
-        })
+        Ok(outcome)
     }
-}
-
-async fn latest_message_cursor(
-    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    room_id: &str,
-) -> Result<(String, i64), PersistenceError> {
-    let event_json = sqlx::query_scalar::<_, String>(
-        "SELECT event_json FROM room_events WHERE room_id = ? AND json_extract(event_json, '$.type') = 'message_final' ORDER BY seq DESC LIMIT 1",
-    )
-    .bind(room_id)
-    .fetch_optional(&mut **transaction)
-    .await?;
-    event_json.map_or_else(
-        || Ok((String::new(), 0)),
-        |event_json| {
-            let event: RoomEvent = serde_json::from_str(&event_json)?;
-            Ok((event.id, event.seq))
-        },
-    )
-}
-
-async fn next_sequence(
-    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    room_id: &str,
-) -> Result<i64, PersistenceError> {
-    Ok(sqlx::query_scalar::<_, i64>(
-        "SELECT COALESCE(MAX(seq), 0) + 1 FROM room_events WHERE room_id = ?",
-    )
-    .bind(room_id)
-    .fetch_one(&mut **transaction)
-    .await?)
 }
 
 #[cfg(test)]
@@ -356,6 +159,7 @@ mod tests {
             room_id: "general".to_owned(),
             client_kind: ClientKind::Browser,
             invite_scope: InviteScope::ReadWrite,
+            is_operator: true,
             capabilities: CapabilitySet::local_operator(
                 ClientKind::Browser,
                 InviteScope::ReadWrite,

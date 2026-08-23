@@ -276,34 +276,7 @@ impl SqliteStore {
             &expected_operation_id,
         );
         finish_lifecycle_command(&mut transaction, &reservation).await?;
-        "attached".clone_into(&mut session.public.status);
-        session.public.enabled = true;
-        if !started.runtime_reused
-            || !matches!(
-                session.public.runtime_status.as_str(),
-                "idle" | "busy" | "paused"
-            )
-        {
-            "idle".clone_into(&mut session.public.runtime_status);
-        }
-        session.public.provider_session_active = started.provider_session_active;
-        session.public.provider_session_reused = started.provider_session_reused;
-        session.public.last_error.clear();
-        session.public.last_error_code.clear();
-        session.public.recovery_required = false;
-        session
-            .runtime_handle_id
-            .clone_from(&started.runtime_handle_id);
-        session
-            .runtime_owner_id
-            .clone_from(&started.runtime_owner_id);
-        if !started.provider_session_id.is_empty() {
-            session
-                .provider_session_id
-                .clone_from(&started.provider_session_id);
-        }
-        clear_intent(&mut session);
-        session.public.updated_at = Utc::now();
+        apply_runtime_started(&mut session, started);
         save_session(&mut transaction, &session).await?;
         let mut participant =
             load_participant(&mut transaction, &principal.room_id, &agent_id).await?;
@@ -735,7 +708,7 @@ pub(crate) async fn save_session(
     Ok(())
 }
 
-async fn load_participant(
+pub(crate) async fn load_participant(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
     participant_id: &str,
@@ -751,7 +724,7 @@ async fn load_participant(
     Ok(serde_json::from_str(&encoded)?)
 }
 
-async fn save_participant(
+pub(crate) async fn save_participant(
     transaction: &mut Transaction<'_, Sqlite>,
     participant: &Participant,
 ) -> Result<(), PersistenceError> {
@@ -764,6 +737,40 @@ async fn save_participant(
     .execute(&mut **transaction)
     .await?;
     Ok(())
+}
+
+pub(crate) fn apply_runtime_started(
+    session: &mut DurableAgentSession,
+    started: &AgentRuntimeStarted,
+) {
+    "attached".clone_into(&mut session.public.status);
+    session.public.enabled = true;
+    if !started.runtime_reused
+        || !matches!(
+            session.public.runtime_status.as_str(),
+            "idle" | "busy" | "paused"
+        )
+    {
+        "idle".clone_into(&mut session.public.runtime_status);
+    }
+    session.public.provider_session_active = started.provider_session_active;
+    session.public.provider_session_reused = started.provider_session_reused;
+    session.public.last_error.clear();
+    session.public.last_error_code.clear();
+    session.public.recovery_required = false;
+    session
+        .runtime_handle_id
+        .clone_from(&started.runtime_handle_id);
+    session
+        .runtime_owner_id
+        .clone_from(&started.runtime_owner_id);
+    if !started.provider_session_id.is_empty() {
+        session
+            .provider_session_id
+            .clone_from(&started.provider_session_id);
+    }
+    clear_intent(session);
+    session.public.updated_at = Utc::now();
 }
 
 fn rejected(code: &'static str, message: impl Into<String>) -> PersistenceError {

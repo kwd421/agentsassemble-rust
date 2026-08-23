@@ -500,6 +500,7 @@ async fn undirected_agent_message_prefers_an_eligible_director() {
         room_id: "general".to_owned(),
         client_kind: ClientKind::Browser,
         invite_scope: InviteScope::ReadWrite,
+        is_operator: true,
         capabilities: CapabilitySet::local_operator(ClientKind::Browser, InviteScope::ReadWrite),
     };
     let mutation = store
@@ -641,6 +642,7 @@ async fn fixture() -> (SqliteStore, AuthenticatedPrincipal, tempfile::TempDir) {
         room_id: "general".to_owned(),
         client_kind: ClientKind::Browser,
         invite_scope: InviteScope::ReadWrite,
+        is_operator: true,
         capabilities: CapabilitySet::local_operator(ClientKind::Browser, InviteScope::ReadWrite),
     };
     (store, principal, directory)

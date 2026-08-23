@@ -84,9 +84,38 @@ impl SqliteStore {
     ) -> Result<Vec<RoomEvent>, PersistenceError> {
         let agent_id = payload_agent_id(payload)?;
         let payload_hash = canonical_payload_hash(payload);
+        self.fail_agent_launch_command(
+            principal,
+            request_id,
+            &payload_hash,
+            &agent_id,
+            operation_id,
+            error_code,
+            message,
+            command_action,
+            "lifecycle_prepared",
+            "{}",
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn fail_agent_launch_command(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request_id: &str,
+        payload_hash: &str,
+        agent_id: &str,
+        operation_id: &str,
+        error_code: &'static str,
+        message: &str,
+        command_action: &'static str,
+        reservation_phase: &str,
+        prepared_result_json: &str,
+    ) -> Result<Vec<RoomEvent>, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
         active_room_for_principal(&mut transaction, principal).await?;
-        let mut session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
+        let mut session = load_session(&mut transaction, &principal.room_id, agent_id).await?;
         require_intent(
             &session,
             START,
@@ -94,18 +123,17 @@ impl SqliteStore {
             "prepared",
             "stale_start_confirmation",
         )?;
-        finish_lifecycle_command(
-            &mut transaction,
-            &LifecycleReservation::new(
-                principal,
-                request_id,
-                command_action,
-                &payload_hash,
-                &agent_id,
-                operation_id,
-            ),
-        )
-        .await?;
+        let reservation = LifecycleReservation {
+            principal,
+            request_id,
+            action: command_action,
+            payload_hash,
+            session_id: agent_id,
+            operation_id,
+            phase: reservation_phase,
+            prepared_result_json,
+        };
+        finish_lifecycle_command(&mut transaction, &reservation).await?;
         "unavailable".clone_into(&mut session.public.status);
         session.public.enabled = false;
         "error".clone_into(&mut session.public.runtime_status);

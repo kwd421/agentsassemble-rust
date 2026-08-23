@@ -9,6 +9,7 @@ mod antigravity_transcript;
 mod catalog;
 mod codex;
 mod codex_identity;
+mod configuration;
 mod filesystem;
 #[cfg(unix)]
 mod guardian;
@@ -45,4 +46,4 @@ pub use runtime::{
     ProviderRuntimeObservation, ProviderRuntimeStarted, ProviderShutdownOutcome,
     ProviderTurnCompleted, ProviderTurnRequest,
 };
-pub use selection::{ProviderSelection, ProviderSelectionError};
+pub use selection::{ProviderSelection, ProviderSelectionError, creation_start_requested};

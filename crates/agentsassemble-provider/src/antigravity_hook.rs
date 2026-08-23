@@ -20,7 +20,6 @@ const MAX_HOOKS_BYTES: u64 = 64 * 1024;
 
 struct Registration {
     count: usize,
-    previous: Option<Value>,
     definition: Value,
 }
 
@@ -33,7 +32,7 @@ pub(crate) struct AntigravityHookRegistration {
 impl AntigravityHookRegistration {
     pub(crate) fn register(workspace: &Path) -> Result<Self, DriverError> {
         let workspace = workspace.to_path_buf();
-        let definition = hook_definition()?;
+        let definition = hook_definition();
         let registry = REGISTRATIONS.get_or_init(|| Mutex::new(HashMap::new()));
         let mut registrations = registry.lock().map_err(|_| hook_error())?;
         if let Some(active) = registrations.get_mut(&workspace) {
@@ -46,14 +45,15 @@ impl AntigravityHookRegistration {
         let directory = HookDirectory::open(&workspace)?;
         let _lock = directory.lock()?;
         let mut document = directory.read_document()?;
-        let previous = document.get(HOOK_NAME).cloned();
+        if !document.is_empty() {
+            return Err(hook_error());
+        }
         document.insert(HOOK_NAME.to_owned(), definition.clone());
         directory.write_document(&document)?;
         registrations.insert(
             workspace.clone(),
             Registration {
                 count: 1,
-                previous,
                 definition,
             },
         );
@@ -76,7 +76,6 @@ impl Drop for AntigravityHookRegistration {
             active.count -= 1;
             return;
         }
-        let previous = active.previous.clone();
         let definition = active.definition.clone();
         registrations.remove(&self.workspace);
         let Ok(directory) = HookDirectory::open(&self.workspace) else {
@@ -91,33 +90,22 @@ impl Drop for AntigravityHookRegistration {
         if document.get(HOOK_NAME) != Some(&definition) {
             return;
         }
-        if let Some(previous) = previous {
-            document.insert(HOOK_NAME.to_owned(), previous);
-        } else {
-            document.remove(HOOK_NAME);
-        }
+        document.remove(HOOK_NAME);
         let _ = directory.write_document(&document);
     }
 }
 
-fn hook_definition() -> Result<Value, DriverError> {
-    let executable = std::env::current_exe().map_err(|_| hook_error())?;
-    let executable = executable.to_str().ok_or_else(hook_error)?;
-    let executable = shlex::try_quote(executable).map_err(|_| hook_error())?;
-    let command = format!("{executable} --agentsassemble-antigravity-hook");
-    if command.len() > 4096 {
-        return Err(hook_error());
-    }
-    Ok(json!({
+fn hook_definition() -> Value {
+    json!({
         "PreToolUse": [{
             "matcher": "run_command|ask_permission|ask_question",
             "hooks": [{
                 "type": "command",
-                "command": command,
+                "command": "agentsassemble-room hook",
                 "timeout": 900
             }]
         }]
-    }))
+    })
 }
 
 struct HookDirectory {
@@ -241,39 +229,52 @@ const fn hook_error() -> DriverError {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::{Value, json};
+    use serde_json::Value;
 
     use super::{AntigravityHookRegistration, HOOK_NAME};
 
     #[test]
-    fn registration_restores_the_exact_previous_hook() {
+    fn registration_rejects_existing_project_hooks() {
         let workspace =
             tempfile::tempdir().unwrap_or_else(|error| panic!("create hook workspace: {error}"));
         let directory = workspace.path().join(".agents");
         std::fs::create_dir(&directory)
             .unwrap_or_else(|error| panic!("create hook directory: {error}"));
-        let previous = json!({"custom": true});
         let mut document = serde_json::Map::new();
-        document.insert(HOOK_NAME.to_owned(), previous.clone());
+        document.insert(
+            "project-hook".to_owned(),
+            serde_json::json!({"custom": true}),
+        );
         std::fs::write(
             directory.join("hooks.json"),
             serde_json::to_vec(&document).unwrap_or_default(),
         )
         .unwrap_or_else(|error| panic!("write previous hook: {error}"));
+        assert!(AntigravityHookRegistration::register(workspace.path()).is_err());
+    }
+
+    #[test]
+    fn registration_owns_one_managed_hook_and_removes_it_on_last_drop() {
+        let workspace =
+            tempfile::tempdir().unwrap_or_else(|error| panic!("create hook workspace: {error}"));
+        let directory = workspace.path().join(".agents");
         {
             let first = AntigravityHookRegistration::register(workspace.path())
                 .unwrap_or_else(|error| panic!("register first hook: {error}"));
             let second = AntigravityHookRegistration::register(workspace.path())
                 .unwrap_or_else(|error| panic!("register second hook: {error}"));
             drop(first);
-            assert!(directory.join("hooks.json").is_file());
+            let installed: Value = serde_json::from_slice(
+                &std::fs::read(directory.join("hooks.json"))
+                    .unwrap_or_else(|error| panic!("read installed hook: {error}")),
+            )
+            .unwrap_or_else(|error| panic!("decode installed hook: {error}"));
+            assert_eq!(
+                installed[HOOK_NAME]["PreToolUse"][0]["hooks"][0]["command"],
+                "agentsassemble-room hook"
+            );
             drop(second);
         }
-        let restored: Value = serde_json::from_slice(
-            &std::fs::read(directory.join("hooks.json"))
-                .unwrap_or_else(|error| panic!("read restored hook: {error}")),
-        )
-        .unwrap_or_else(|error| panic!("decode restored hook: {error}"));
-        assert_eq!(restored[HOOK_NAME], previous);
+        assert!(!directory.join("hooks.json").exists());
     }
 }

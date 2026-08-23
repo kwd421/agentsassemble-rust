@@ -57,7 +57,8 @@ pub async fn issue_local_ticket(
             room_id,
             client_kind,
             invite_scope,
-            capabilities: CapabilitySet::local_operator(client_kind, invite_scope),
+            is_operator: true,
+            capabilities: CapabilitySet::for_principal(client_kind, invite_scope, true),
         })
         .await
         .map_err(|_| TicketIssueError::Unavailable)?;

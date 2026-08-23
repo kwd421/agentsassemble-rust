@@ -37,7 +37,7 @@ async fn command_uses_app_server_and_process_local_profile_settings() {
             .any(|value| value == "sandbox_mode=\"workspace-write\"")
     );
     assert!(arguments.iter().any(|value| {
-        value == "projects={ \"/tmp/work space\" = { trust_level = \"trusted\" } }"
+        value == "projects={ \"/tmp/work space\" = { trust_level = \"untrusted\" } }"
     }));
     assert!(
         arguments

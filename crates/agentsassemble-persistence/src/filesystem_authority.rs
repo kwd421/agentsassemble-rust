@@ -17,6 +17,8 @@ use crate::PersistenceError;
 const FILESYSTEM_TIMEOUT: Duration = Duration::from_secs(10);
 const FILESYSTEM_WORKERS: usize = 4;
 static WORKERS: OnceLock<Arc<Semaphore>> = OnceLock::new();
+#[cfg(test)]
+static TEST_REVALIDATION_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum AuthorityFailure {
@@ -29,6 +31,12 @@ enum AuthorityFailure {
 pub(crate) async fn revalidate_runtime_authority(
     draft: &AgentSessionDraft,
 ) -> Result<(), PersistenceError> {
+    // Unit tests share this process-global production pool across independent
+    // Tokio runtimes. Keep their unrelated authority checks from consuming one
+    // another's production capacity while preserving the real four-worker gate.
+    #[cfg(test)]
+    let _test_revalidation_guard = TEST_REVALIDATION_LOCK.lock().await;
+
     let draft = draft.clone();
     let outcome = run_with(
         Arc::clone(WORKERS.get_or_init(|| Arc::new(Semaphore::new(FILESYSTEM_WORKERS)))),

@@ -2,6 +2,7 @@ mod command;
 mod diagnostic;
 mod identity;
 mod model;
+mod projection;
 mod text;
 
 pub use command::{CommandRejection, MessageSend, canonical_payload_hash, prepare_message_event};
@@ -15,6 +16,7 @@ pub use model::{
     PublicRoomSettings, Room, RoomAppearance, RoomEvent, RoomSettings, RoomStatus, SnapshotMode,
     public_settings,
 };
+pub use projection::{public_event_for_principal, public_value_for_principal};
 pub use text::{
     clean_identifier, clean_message, clean_single_line, has_visible_text, validate_room_id,
 };

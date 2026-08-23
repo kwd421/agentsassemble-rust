@@ -44,6 +44,7 @@ async fn initialized_store() -> (SqliteStore, AuthenticatedPrincipal, Room, Part
         room_id: room.room_id.clone(),
         client_kind: ClientKind::Browser,
         invite_scope: InviteScope::ReadWrite,
+        is_operator: true,
         capabilities: CapabilitySet::local_operator(ClientKind::Browser, InviteScope::ReadWrite),
     };
     (store, principal, room, participant)

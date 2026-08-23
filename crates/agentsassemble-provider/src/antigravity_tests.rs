@@ -129,6 +129,55 @@ fn resumed_transcript_reads_only_new_rows_from_the_exact_conversation() {
     assert_eq!(snapshot.provider_session_id, "conversation-1");
 }
 
+#[test]
+fn new_transcript_binding_rejects_more_than_one_matching_session() {
+    let home = tempfile::tempdir()
+        .unwrap_or_else(|error| panic!("create ambiguous Antigravity home: {error}"));
+    let workspace = home.path().join("workspace");
+    fs::create_dir(&workspace).unwrap_or_else(|error| panic!("create workspace fixture: {error}"));
+    let mut source = AntigravityTranscript::new(home.path().to_path_buf(), workspace);
+    source
+        .prepare_start(None)
+        .unwrap_or_else(|error| panic!("prepare ambiguous source: {error}"));
+    source
+        .begin_turn("input with launch nonce")
+        .unwrap_or_else(|error| panic!("begin ambiguous turn: {error}"));
+    for id in ["conversation-1", "conversation-2"] {
+        write_rows(
+            &transcript_path(home.path(), id),
+            &[
+                user_row("input with launch nonce"),
+                final_row("ambiguous answer"),
+            ],
+        );
+    }
+    assert!(source.poll().is_err());
+}
+
+#[test]
+fn transcript_tail_is_bounded_before_json_allocation() {
+    let home = tempfile::tempdir()
+        .unwrap_or_else(|error| panic!("create bounded Antigravity home: {error}"));
+    let workspace = home.path().join("workspace");
+    fs::create_dir(&workspace).unwrap_or_else(|error| panic!("create workspace fixture: {error}"));
+    let mut source = AntigravityTranscript::new(home.path().to_path_buf(), workspace);
+    source
+        .prepare_start(None)
+        .unwrap_or_else(|error| panic!("prepare bounded source: {error}"));
+    source
+        .begin_turn("bounded input")
+        .unwrap_or_else(|error| panic!("begin bounded turn: {error}"));
+    let path = transcript_path(home.path(), "conversation-large");
+    fs::create_dir_all(
+        path.parent()
+            .unwrap_or_else(|| panic!("transcript parent missing")),
+    )
+    .unwrap_or_else(|error| panic!("create transcript fixture: {error}"));
+    fs::write(&path, vec![b'x'; 2 * 1024 * 1024 + 1])
+        .unwrap_or_else(|error| panic!("write oversized transcript: {error}"));
+    assert!(source.poll().is_err());
+}
+
 fn transcript_path(home: &std::path::Path, id: &str) -> std::path::PathBuf {
     home.join(".gemini/antigravity-cli/brain")
         .join(id)

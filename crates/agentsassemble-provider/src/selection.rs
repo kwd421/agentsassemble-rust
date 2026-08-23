@@ -31,6 +31,7 @@ pub struct ProviderSelection {
     pub catalog_revision: String,
     pub runtime_profile_key: String,
     pub transport: String,
+    pub start_requested: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -59,12 +60,6 @@ impl ProviderSelection {
         catalog: &ProviderCatalog,
     ) -> Result<Self, ProviderSelectionError> {
         let input = SelectionInput::parse(payload)?;
-        if input.start_requested {
-            return Err(ProviderSelectionError::new(
-                "agent_start_unavailable",
-                "Starting an Agent Session is not available in this runtime slice.",
-            ));
-        }
         if catalog.status != "ready" || catalog.catalog_revision.is_empty() {
             return Err(ProviderSelectionError::new(
                 "catalog_not_ready",
@@ -176,6 +171,7 @@ impl ProviderSelection {
             catalog_revision: revision,
             runtime_profile_key: String::new(),
             transport,
+            start_requested: input.start_requested,
         };
         selected.runtime_profile_key = selected.profile_key();
         Ok(selected)
@@ -198,6 +194,15 @@ impl ProviderSelection {
             self.transport.as_str(),
         ])
     }
+}
+
+/// Parses the server-owned create/start choice without consulting mutable provider state.
+///
+/// # Errors
+///
+/// Returns the same strict payload errors used by full provider selection.
+pub fn creation_start_requested(payload: &Value) -> Result<bool, ProviderSelectionError> {
+    Ok(SelectionInput::parse(payload)?.start_requested)
 }
 
 impl From<ProviderSelection> for AgentSessionDraft {
@@ -533,7 +538,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn stale_relation_and_start_requests_fail_closed() {
+    async fn stale_relations_fail_closed_and_start_is_preserved() {
         let workspace =
             tempfile::tempdir().unwrap_or_else(|error| panic!("create workspace: {error}"));
         let base = json!({
@@ -586,7 +591,7 @@ mod tests {
         let mut starting = base;
         starting["reasoning_effort"] = json!("medium");
         starting["start_now"] = json!(true);
-        let error = ProviderSelection::from_catalog(
+        let selected = ProviderSelection::from_catalog(
             "general",
             "operator-local-user",
             "create-2",
@@ -594,9 +599,8 @@ mod tests {
             &catalog(),
         )
         .await
-        .err()
-        .unwrap_or_else(|| panic!("start_now must not produce a fake stopped success"));
-        assert_eq!(error.code, "agent_start_unavailable");
+        .unwrap_or_else(|error| panic!("start_now must retain its server-owned intent: {error}"));
+        assert!(selected.start_requested);
     }
 
     #[tokio::test]

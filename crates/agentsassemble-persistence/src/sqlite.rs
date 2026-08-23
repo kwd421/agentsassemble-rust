@@ -1,8 +1,8 @@
 use std::{fs::File, io, path::PathBuf, sync::Arc};
 
 use agentsassemble_domain::{
-    AgentSession, AuthenticatedPrincipal, DurableAgentSession, Participant, Room, RoomEvent,
-    RoomSettings, SnapshotMode,
+    AgentSession, AuthenticatedPrincipal, CapabilitySet, DurableAgentSession, Participant, Room,
+    RoomEvent, RoomSettings, SnapshotMode,
 };
 use serde_json::Value;
 use sqlx::{Row, Sqlite, SqlitePool, Transaction};
@@ -199,6 +199,36 @@ impl SqliteStore {
         authorize_session(&mut transaction, principal).await?;
         transaction.commit().await?;
         Ok(())
+    }
+
+    /// Re-resolves current membership display data and server-derived capabilities.
+    ///
+    /// The credential supplies stable identity facts. Stored capability bits are a
+    /// projection and are deliberately ignored when a command or snapshot begins.
+    ///
+    /// # Errors
+    ///
+    /// Returns a stable session rejection or an underlying persistence error.
+    pub async fn resolve_principal(
+        &self,
+        credential: &AuthenticatedPrincipal,
+    ) -> Result<AuthenticatedPrincipal, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        let participant = load_active_participant(
+            &mut transaction,
+            &credential.room_id,
+            &credential.participant_id,
+        )
+        .await?;
+        transaction.commit().await?;
+        let mut principal = credential.clone();
+        principal.display_name = participant.display_name;
+        principal.capabilities = CapabilitySet::for_principal(
+            principal.client_kind,
+            principal.invite_scope,
+            principal.is_operator,
+        );
+        Ok(principal)
     }
 
     /// Loads a participant only when both membership and room are active.
@@ -455,12 +485,28 @@ mod tests {
             room_id: "general".to_owned(),
             client_kind: ClientKind::Browser,
             invite_scope: InviteScope::ReadWrite,
+            is_operator: true,
             capabilities: CapabilitySet::local_operator(
                 ClientKind::Browser,
                 InviteScope::ReadWrite,
             ),
         };
         (store, principal)
+    }
+
+    #[tokio::test]
+    async fn principal_resolution_ignores_stale_capability_projection() {
+        let (store, mut credential) = fixture().await;
+        credential.is_operator = false;
+        credential.capabilities =
+            CapabilitySet::local_operator(credential.client_kind, credential.invite_scope);
+        let resolved = store
+            .resolve_principal(&credential)
+            .await
+            .unwrap_or_else(|error| panic!("resolve principal: {error}"));
+        assert!(!resolved.capabilities.agent_control);
+        assert!(!resolved.capabilities.room_manage);
+        assert!(resolved.capabilities.message_send);
     }
 
     #[tokio::test]

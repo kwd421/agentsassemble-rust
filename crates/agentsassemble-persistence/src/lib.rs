@@ -1,3 +1,6 @@
+mod agent_configuration;
+mod agent_create_start;
+mod agent_creation_records;
 mod agent_launch_events;
 mod agent_lifecycle;
 mod agent_lifecycle_authority;
@@ -22,6 +25,9 @@ mod turn_queue;
 #[cfg(test)]
 mod persistence_security_tests;
 
+pub use agent_create_start::{
+    AgentCreateStartCommit, AgentCreateStartEffect, AgentCreateStartPlan,
+};
 pub use agent_lifecycle::{
     AgentRuntimeStarted, AgentStartEffect, AgentStartPlan, AgentStopEffect, AgentStopPlan,
 };

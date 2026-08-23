@@ -120,6 +120,15 @@ pub struct CapabilitySet {
 impl CapabilitySet {
     #[must_use]
     pub fn local_operator(client_kind: ClientKind, invite_scope: InviteScope) -> Self {
+        Self::for_principal(client_kind, invite_scope, true)
+    }
+
+    #[must_use]
+    pub fn for_principal(
+        client_kind: ClientKind,
+        invite_scope: InviteScope,
+        is_operator: bool,
+    ) -> Self {
         let bridge = client_kind == ClientKind::AgentBridge;
         let writable = invite_scope == InviteScope::ReadWrite;
         Self {
@@ -128,12 +137,12 @@ impl CapabilitySet {
             room_random: writable && !bridge,
             message_send: writable && !bridge,
             message_modify: writable && !bridge,
-            room_manage: true,
-            room_delete: true,
+            room_manage: is_operator,
+            room_delete: is_operator,
             participant_leave: !bridge,
-            participant_kick: true,
-            participant_mute: true,
-            agent_control: true,
+            participant_kick: is_operator,
+            participant_mute: is_operator,
+            agent_control: is_operator,
             provider_request_resolve: writable && !bridge,
             bridge_report: bridge,
             bridge_publish: bridge && writable,
@@ -149,6 +158,7 @@ pub struct AuthenticatedPrincipal {
     pub room_id: String,
     pub client_kind: ClientKind,
     pub invite_scope: InviteScope,
+    pub is_operator: bool,
     pub capabilities: CapabilitySet,
 }
 

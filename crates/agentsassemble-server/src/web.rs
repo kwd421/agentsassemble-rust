@@ -1,6 +1,6 @@
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
-use agentsassemble_domain::{SnapshotMode, public_settings};
+use agentsassemble_domain::{SnapshotMode, public_event_for_principal, public_settings};
 use agentsassemble_persistence::PersistenceError;
 use agentsassemble_protocol::{
     ClientFrame, CommandAck, CommandNack, ProtocolError, RoomSnapshot, ServerFrame,
@@ -262,6 +262,25 @@ async fn socket_session(
         proof_key,
     } = grant;
     let (mut sender, mut receiver) = socket.split();
+    let principal = match state.store.resolve_principal(&principal).await {
+        Ok(principal) => principal,
+        Err(error) => {
+            if persistence_error_is_internal(&error) {
+                tracing::error!(error = ?error, "principal resolution failed");
+            }
+            let (code, message) = persistence_error(&error);
+            let _ = send_nack(
+                &mut sender,
+                &state.shutdown,
+                "",
+                "subscribe",
+                code,
+                &message,
+            )
+            .await;
+            return;
+        }
+    };
     let incoming = tokio::select! {
         () = state.shutdown.cancelled() => return,
         incoming = tokio::time::timeout(HANDSHAKE_TIMEOUT, receiver.next()) => {
@@ -375,7 +394,11 @@ async fn socket_session(
         agent_sessions: snapshot_data.agent_sessions,
         provider_requests: Vec::new(),
         active_turns: Vec::new(),
-        events: snapshot_data.events,
+        events: snapshot_data
+            .events
+            .iter()
+            .map(|event| public_event_for_principal(event, &principal))
+            .collect(),
         oldest_seq: snapshot_data.oldest_seq,
         last_seq: snapshot_data.last_seq,
         has_more_before: snapshot_data.has_more_before,
@@ -474,21 +497,28 @@ async fn socket_session(
             published = events.recv() => {
                 match published {
                     Ok(event) => {
-                        if state.store.authorize_session(&principal).await.is_err() {
-                            let _ = send_nack(
-                                &mut sender,
-                                &state.shutdown,
-                                "",
-                                "session",
-                                "session_revoked",
-                                "This room session has ended.",
-                            ).await;
-                            return;
-                        }
+                        let current_principal = match state.store.resolve_principal(&principal).await {
+                            Ok(principal) => principal,
+                            Err(error) => {
+                                if persistence_error_is_internal(&error) {
+                                    tracing::error!(error = ?error, room_id = %principal.room_id, "live principal resolution failed");
+                                }
+                                let (code, message) = persistence_error(&error);
+                                let _ = send_nack(
+                                    &mut sender,
+                                    &state.shutdown,
+                                    "",
+                                    "session",
+                                    code,
+                                    &message,
+                                ).await;
+                                return;
+                            }
+                        };
                         let latest_seq = event.seq;
                         let frame = ServerFrame::Event {
                             stream: "room_events",
-                            events: vec![event],
+                            events: vec![public_event_for_principal(&event, &current_principal)],
                             latest_seq,
                         };
                         if send_frame(&mut sender, &state.shutdown, &frame).await.is_err() { return; }

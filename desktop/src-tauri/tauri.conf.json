@@ -13,10 +13,10 @@
       {
         "label": "main",
         "title": "AgentsAssemble",
-        "width": 1200,
-        "height": 820,
-        "minWidth": 760,
-        "minHeight": 560
+        "width": 1440,
+        "height": 900,
+        "minWidth": 900,
+        "minHeight": 620
       }
     ],
     "security": {

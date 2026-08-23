@@ -26,7 +26,7 @@ use crate::{
     launch_error::DriverLaunchError,
     loopback_http::{JsonResponse, LoopbackHttp},
     opencode_protocol::{
-        TurnTransportError, assistant_message, clean_session_id, executable_error,
+        TurnTransportError, assistant_message, clean_session_id, config_error, executable_error,
         http_driver_error, model_id, model_mismatch, portal_driver_error, portal_unavailable,
         profile_error, protocol_error, provider_id, provider_request_error, runtime_exited,
         session_mismatch, session_missing, session_path, session_unconfirmed, spawn_error,
@@ -63,6 +63,7 @@ pub(crate) struct OpenCodeDriver {
     stderr_task: JoinHandle<()>,
     http: LoopbackHttp,
     room_portal: RoomPortal,
+    _config_root: tempfile::TempDir,
     attached_session_id: Option<String>,
     attached_reused: bool,
     mcp_registered: bool,
@@ -92,17 +93,11 @@ impl OpenCodeDriver {
     ) -> Result<Self, DriverLaunchError> {
         validate_profile(session)?;
         let workspace = Path::new(&session.workspace);
+        let config_root = isolated_config_root()?;
+        let environment = isolated_environment(config_root.path())?;
         let port = reserve_loopback_port().await?;
         let endpoint = format!("http://127.0.0.1:{port}/");
-        let arguments = vec![
-            "serve".to_owned(),
-            "--hostname".to_owned(),
-            "127.0.0.1".to_owned(),
-            "--port".to_owned(),
-            port.to_string(),
-            "--log-level".to_owned(),
-            "ERROR".to_owned(),
-        ];
+        let arguments = server_arguments(port);
         let executable = bind_executable_with_children(
             session.executable.clone(),
             session.executable_identity.clone(),
@@ -116,7 +111,7 @@ impl OpenCodeDriver {
             guardian,
             &executable,
             &arguments,
-            &[],
+            &environment,
             workspace,
         )
         .await?;
@@ -139,6 +134,7 @@ impl OpenCodeDriver {
                     .stderr(Stdio::piped());
             });
             sanitize_environment(command.command_mut());
+            command.command_mut().envs(environment.iter().cloned());
             command.wrap(KillOnDrop);
             #[cfg(windows)]
             command.wrap(JobObject);
@@ -172,6 +168,7 @@ impl OpenCodeDriver {
             stderr_task,
             http,
             room_portal,
+            _config_root: config_root,
             attached_session_id: None,
             attached_reused: false,
             mcp_registered: false,
@@ -429,17 +426,15 @@ impl OpenCodeDriver {
         if !events.assistant_message.is_empty() && message.id != events.assistant_message {
             return Err(turn_mismatch());
         }
-        let observed_model = if events.observed_model.is_empty() {
-            message.observed_model.clone()
-        } else {
-            events.observed_model
-        };
-        if !observed_model.is_empty() && observed_model != session.public.model {
+        if message.observed_model != session.public.model
+            || events.observed_model != session.public.model
+            || message.observed_model != events.observed_model
+        {
             return Err(model_mismatch());
         }
         if message.content.is_empty() {
             message.content = self
-                .assistant_text_for_parent(attached, &events.request_message)
+                .assistant_text_for_parent(attached, &events.request_message, &session.public.model)
                 .await?;
         }
         if message.content.is_empty() {
@@ -460,6 +455,7 @@ impl OpenCodeDriver {
         &self,
         attached: &str,
         parent_id: &str,
+        configured_model: &str,
     ) -> Result<String, DriverError> {
         let path = format!("{}/message", session_path(attached)?);
         let response = self
@@ -470,17 +466,21 @@ impl OpenCodeDriver {
         if !response.status.is_success() {
             return Err(provider_request_error());
         }
-        Ok(response
-            .value
-            .as_array()
-            .into_iter()
-            .flatten()
-            .rev()
-            .find_map(|value| {
-                let message = assistant_message(value).ok()?;
-                (message.parent_id == parent_id).then_some(message.content)
-            })
-            .unwrap_or_default())
+        let messages = response.value.as_array().ok_or_else(protocol_error)?;
+        for value in messages.iter().rev() {
+            if value.pointer("/info/role").and_then(Value::as_str) != Some("assistant") {
+                continue;
+            }
+            let message = assistant_message(value)?;
+            if message.parent_id != parent_id {
+                continue;
+            }
+            if message.observed_model != configured_model {
+                return Err(model_mismatch());
+            }
+            return Ok(message.content);
+        }
+        Ok(String::new())
     }
 
     async fn abort_session(&self, session_id: &str) {
@@ -527,6 +527,69 @@ impl OpenCodeDriver {
         self.poisoned = true;
         Err(error)
     }
+}
+
+fn server_arguments(port: u16) -> Vec<String> {
+    vec![
+        "serve".to_owned(),
+        "--pure".to_owned(),
+        "--hostname".to_owned(),
+        "127.0.0.1".to_owned(),
+        "--port".to_owned(),
+        port.to_string(),
+        "--log-level".to_owned(),
+        "ERROR".to_owned(),
+    ]
+}
+
+fn isolated_config_root() -> Result<tempfile::TempDir, DriverLaunchError> {
+    let root = tempfile::Builder::new()
+        .prefix("agentsassemble-opencode-config-")
+        .tempdir()
+        .map_err(|_| DriverLaunchError::safe(config_error()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
+            .map_err(|_| DriverLaunchError::safe(config_error()))?;
+        let metadata = std::fs::symlink_metadata(root.path())
+            .map_err(|_| DriverLaunchError::safe(config_error()))?;
+        if !metadata.is_dir() || metadata.permissions().mode() & 0o077 != 0 {
+            return Err(DriverLaunchError::safe(config_error()));
+        }
+    }
+    Ok(root)
+}
+
+fn isolated_environment(root: &Path) -> Result<Vec<(String, String)>, DriverLaunchError> {
+    let root = root
+        .to_str()
+        .filter(|value| !value.is_empty() && value.len() <= 4096)
+        .ok_or_else(|| DriverLaunchError::safe(config_error()))?
+        .to_owned();
+    Ok(vec![
+        ("XDG_CONFIG_HOME".to_owned(), root.clone()),
+        ("OPENCODE_CONFIG_DIR".to_owned(), root),
+        (
+            "OPENCODE_CONFIG_CONTENT".to_owned(),
+            "{\"plugin\":[],\"mcp\":{}}".to_owned(),
+        ),
+        ("OPENCODE_DISABLE_PROJECT_CONFIG".to_owned(), "1".to_owned()),
+        (
+            "OPENCODE_DISABLE_DEFAULT_PLUGINS".to_owned(),
+            "1".to_owned(),
+        ),
+        (
+            "OPENCODE_DISABLE_EXTERNAL_SKILLS".to_owned(),
+            "1".to_owned(),
+        ),
+        (
+            "OPENCODE_DISABLE_CLAUDE_CODE_SKILLS".to_owned(),
+            "1".to_owned(),
+        ),
+        ("OPENCODE_PURE".to_owned(), "1".to_owned()),
+    ])
 }
 
 impl ProviderDriver for OpenCodeDriver {
@@ -615,4 +678,36 @@ async fn reserve_loopback_port() -> Result<u16, DriverError> {
 async fn drain_output<R: AsyncRead + Unpin>(mut output: R) {
     let mut buffer = [0_u8; 8 * 1024];
     while output.read(&mut buffer).await.is_ok_and(|count| count != 0) {}
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{isolated_config_root, isolated_environment, server_arguments};
+
+    #[test]
+    fn server_launch_disables_external_and_project_configuration() {
+        let arguments = server_arguments(43123);
+        assert!(arguments.iter().any(|argument| argument == "--pure"));
+
+        let root = tempfile::tempdir()
+            .unwrap_or_else(|error| panic!("create OpenCode config fixture: {error}"));
+        let environment = isolated_environment(root.path())
+            .unwrap_or_else(|_| panic!("build OpenCode environment"));
+        let value = |name: &str| {
+            environment
+                .iter()
+                .find_map(|(key, value)| (key == name).then_some(value.as_str()))
+        };
+        assert_eq!(value("OPENCODE_DISABLE_PROJECT_CONFIG"), Some("1"));
+        assert_eq!(value("OPENCODE_PURE"), Some("1"));
+        assert_eq!(value("OPENCODE_DISABLE_EXTERNAL_SKILLS"), Some("1"));
+        assert_eq!(value("XDG_CONFIG_HOME"), root.path().to_str());
+    }
+
+    #[test]
+    fn isolated_config_root_is_private_on_the_running_platform() {
+        let root = isolated_config_root()
+            .unwrap_or_else(|error| panic!("create isolated OpenCode config root: {error:?}"));
+        assert!(root.path().is_dir());
+    }
 }

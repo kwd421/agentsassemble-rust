@@ -594,7 +594,7 @@ fn command_arguments(
         &mut arguments,
         "projects",
         &format!(
-            "{{ {} = {{ trust_level = \"trusted\" }} }}",
+            "{{ {} = {{ trust_level = \"untrusted\" }} }}",
             json_string(&session.workspace)?
         ),
     );
