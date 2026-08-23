@@ -8,7 +8,7 @@ Verification claims only the boundary actually observed. Build, lint, unit tests
 
 The active comparison baseline is original
 `d5046473010d1353a81ee38337360e6d98f7bd6f` and public Rust
-`6bfe73ed2c080eb36d942674fa1de3f04a2584a1`. Local uncommitted behavior
+`3d0257532d7cb706b349fb11b15ca7709e1672b3`. Local uncommitted behavior
 is never described as public completion. Every completed-slice evidence entry must
 name the tested Rust commit, original provenance commit, platform/build, exact
 entry point and command flow, viewer identity, provider/model where applicable,
@@ -128,7 +128,7 @@ required, and did not create a replacement thread or invoke a fallback. A Codex
 session with one completed turn passed the normal create-and-start flow. This
 zero-turn provider limitation is not reported as successful restart parity.
 
-## Published Windows transport evidence: `6bfe73e`
+## Published Windows transport and helper-binding evidence: `3d02575`
 
 Rust commit `6bfe73ed2c080eb36d942674fa1de3f04a2584a1` replaces the previously
 unimplemented Windows Antigravity branch with one managed, resident system-ConPTY
@@ -149,6 +149,19 @@ then executed on `windows-latest`: Windows workspace-hook registration/removal
 passed, and one actual ConPTY test process accepted two sequential inputs through
 the same bidirectional terminal, returned both responses, remained alive between
 turns, and exited under managed custody.
+
+Web review then found that the original bare `agentsassemble-room` hook and prompt
+could let a workspace executable win Windows current-directory search before the
+private helper on `PATH`. Public commits `7698afb` through `3d02575` bind the hook
+document, provider prompt, terminal permission policy, and hook policy to the same
+quoted absolute private-helper invocation and reject the bare basename. Windows
+run [`32652867488`](https://github.com/kwd421/agentsassemble-rust/actions/runs/32652867488)
+placed a decoy helper in the selected workspace, executed both the installed hook
+command and an auto-approved room command under that cwd and environment, proved
+that the decoy was never executed, and then reran the resident ConPTY test. Earlier
+runs `32652173385`, `32652401445`, and `32652641770` failed while making the new
+fixture represent the runner's DOS-short temp path and raw `cmd` quoting correctly;
+none is counted as passing evidence and the security assertions were not removed.
 
 This is Windows OS transport evidence, not a claim that an authenticated
 Antigravity Flash account or the copied desktop UI was exercised on Windows. The
