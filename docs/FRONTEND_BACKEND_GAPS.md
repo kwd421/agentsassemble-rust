@@ -4,7 +4,7 @@ Status: source-derived migration inventory, 2026-08-24
 
 Comparison baseline: original
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust
-`3d0257532d7cb706b349fb11b15ca7709e1672b3`. Local uncommitted code and
+`11e9b8547580c3da8b2f32ed40ff5034d7683ec2`. Local uncommitted code and
 local verification are not promoted to public implementation status in this file.
 
 ## Scope and method

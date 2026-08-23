@@ -8,7 +8,7 @@ Verification claims only the boundary actually observed. Build, lint, unit tests
 
 The active comparison baseline is original
 `d5046473010d1353a81ee38337360e6d98f7bd6f` and public Rust
-`3d0257532d7cb706b349fb11b15ca7709e1672b3`. Local uncommitted behavior
+`11e9b8547580c3da8b2f32ed40ff5034d7683ec2`. Local uncommitted behavior
 is never described as public completion. Every completed-slice evidence entry must
 name the tested Rust commit, original provenance commit, platform/build, exact
 entry point and command flow, viewer identity, provider/model where applicable,
@@ -128,7 +128,7 @@ required, and did not create a replacement thread or invoke a fallback. A Codex
 session with one completed turn passed the normal create-and-start flow. This
 zero-turn provider limitation is not reported as successful restart parity.
 
-## Published Windows transport and helper-binding evidence: `3d02575`
+## Published Windows transport and helper-binding evidence: `11e9b85`
 
 Rust commit `6bfe73ed2c080eb36d942674fa1de3f04a2584a1` replaces the previously
 unimplemented Windows Antigravity branch with one managed, resident system-ConPTY
@@ -162,6 +162,18 @@ that the decoy was never executed, and then reran the resident ConPTY test. Earl
 runs `32652173385`, `32652401445`, and `32652641770` failed while making the new
 fixture represent the runner's DOS-short temp path and raw `cmd` quoting correctly;
 none is counted as passing evidence and the security assertions were not removed.
+
+A follow-up web review found that per-session absolute hook paths made the second
+concurrent Antigravity session in one workspace conflict with the first workspace
+registration. Commit `11e9b8547580c3da8b2f32ed40ff5034d7683ec2`
+keeps the first verified absolute hook executable alive under the workspace
+reference count, while each provider process receives its own canonical helper
+prefix and retains its own portal authority. Windows run
+[`32653761776`](https://github.com/kwd421/agentsassemble-rust/actions/runs/32653761776)
+registered two different private helpers in the same workspace, retained the
+shared hook after the first registration dropped, executed the second helper,
+removed `hooks.json` only after the final drop, proved the workspace decoy was
+never run, and then passed the resident ConPTY fixture again.
 
 This is Windows OS transport evidence, not a claim that an authenticated
 Antigravity Flash account or the copied desktop UI was exercised on Windows. The
