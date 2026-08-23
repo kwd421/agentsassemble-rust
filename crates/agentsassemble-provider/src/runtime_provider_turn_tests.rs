@@ -100,6 +100,42 @@ async fn codex_turn_infers_completion_after_final_message_and_thread_idle() {
 }
 
 #[tokio::test]
+async fn nullable_hook_turn_identity_does_not_poison_an_active_turn() {
+    let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
+    let directory = tempfile::tempdir()
+        .unwrap_or_else(|error| panic!("create nullable-hook provider-turn fixture: {error}"));
+    let transcript = directory.path().join("requests.jsonl");
+    let script = turn_fixture(
+        &transcript,
+        "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"hook/started\",\"params\":{\"threadId\":\"thread-1\",\"turnId\":null,\"run\":{}}}'\n",
+        "{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"turn\":{\"id\":\"provider-turn-1\"}}}",
+        concat!(
+            "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"agent_message/completed\",\"params\":{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\",\"text\":\"answer after hook\"}}'\n",
+            "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"turn/completed\",\"params\":{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\"}}'\n",
+        ),
+    );
+    let session = fixture_session(directory.path(), &script).await;
+    let adapter = ProviderAdapter::new();
+    let started = adapter
+        .start(&session)
+        .await
+        .unwrap_or_else(|error| panic!("start nullable-hook provider-turn fixture: {error}"));
+    let active = active_session(&session, &started, "room-turn-1");
+    let completed = adapter
+        .send_turn(
+            &active,
+            &ProviderTurnRequest {
+                turn_id: "room-turn-1".to_owned(),
+                input: "Continue after the thread hook.".to_owned(),
+            },
+        )
+        .await
+        .unwrap_or_else(|error| panic!("complete provider turn after hook: {error}"));
+    assert_eq!(completed.content, "answer after hook");
+    stop_and_release(&adapter, &active, &started).await;
+}
+
+#[tokio::test]
 async fn cancelled_codex_turn_start_continues_without_retransmission() {
     let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
     let directory = tempfile::tempdir()

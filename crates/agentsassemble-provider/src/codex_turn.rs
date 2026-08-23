@@ -287,7 +287,7 @@ fn message_matches(message: &Value, thread_id: &str, turn_id: &str) -> Result<bo
     if turn_scoped_method(method) && (message_thread.is_none() || message_turn.is_none()) {
         return Err(protocol_error());
     }
-    if method == "thread/status/changed" && message_thread.is_none() {
+    if thread_scoped_method(method) && message_thread.is_none() {
         return Err(protocol_error());
     }
     Ok(message_thread
@@ -299,7 +299,6 @@ fn message_matches(message: &Value, thread_id: &str, turn_id: &str) -> Result<bo
 fn turn_scoped_method(method: &str) -> bool {
     method.starts_with("turn/")
         || method.starts_with("item/")
-        || method.starts_with("hook/")
         || method.starts_with("agent_message/")
         || method.starts_with("agent-message/")
         || matches!(
@@ -309,6 +308,10 @@ fn turn_scoped_method(method: &str) -> bool {
                 | "file_change/request_approval"
                 | "permissions/request_approval"
         )
+}
+
+fn thread_scoped_method(method: &str) -> bool {
+    method == "thread/status/changed" || method.starts_with("hook/")
 }
 
 impl CodexDriver {
