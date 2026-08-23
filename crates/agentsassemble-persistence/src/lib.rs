@@ -15,6 +15,7 @@ mod room_turns;
 mod schema;
 mod sqlite;
 mod store_open;
+mod turn_queue;
 
 #[cfg(test)]
 mod persistence_security_tests;

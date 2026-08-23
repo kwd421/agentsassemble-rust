@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 
 use agentsassemble_domain::{
     AuthenticatedPrincipal, CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession, Participant,
@@ -23,6 +23,7 @@ use crate::{
     },
     authority::active_room_for_principal,
     command_admission::existing_command,
+    turn_queue::bounded_event_ids,
 };
 
 const START: &str = "agent.start";
@@ -399,7 +400,7 @@ impl SqliteStore {
             "prepared",
             "stale_stop_confirmation",
         )?;
-        session.pending_event_ids = dedupe(
+        session.pending_event_ids = bounded_event_ids(
             session
                 .inflight_event_ids
                 .iter()
@@ -490,7 +491,7 @@ impl SqliteStore {
             &operation_id,
         );
         finish_lifecycle_command(&mut transaction, &reservation).await?;
-        session.pending_event_ids = dedupe(
+        session.pending_event_ids = bounded_event_ids(
             session
                 .inflight_event_ids
                 .iter()
@@ -656,14 +657,6 @@ pub(crate) fn clear_intent(session: &mut DurableAgentSession) {
     session.lifecycle_intent_action.clear();
     session.lifecycle_intent_id.clear();
     session.lifecycle_intent_status.clear();
-}
-
-fn dedupe<'a>(values: impl Iterator<Item = &'a String>) -> Vec<String> {
-    let mut seen = HashSet::new();
-    values
-        .filter(|value| !value.is_empty() && seen.insert((*value).clone()))
-        .cloned()
-        .collect()
 }
 
 pub(crate) async fn load_session(

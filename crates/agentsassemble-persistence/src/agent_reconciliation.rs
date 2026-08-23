@@ -7,6 +7,7 @@ use sqlx::{Row, Sqlite, Transaction};
 
 use crate::{
     PersistenceError, SqliteStore, agent_lifecycle_reservations::mark_lifecycle_owner_lost,
+    turn_queue::bounded_event_ids,
 };
 
 const ACTIVE_RUNTIME_STATES: [&str; 6] = [
@@ -493,17 +494,12 @@ fn invalidate_previous_runtime_owner(session: &mut DurableAgentSession) -> bool 
 }
 
 fn merge_inflight_events(session: &mut DurableAgentSession) {
-    let mut pending = Vec::new();
-    for event_id in session
-        .inflight_event_ids
-        .iter()
-        .chain(&session.pending_event_ids)
-    {
-        if !event_id.is_empty() && !pending.contains(event_id) {
-            pending.push(event_id.clone());
-        }
-    }
-    session.pending_event_ids = pending;
+    session.pending_event_ids = bounded_event_ids(
+        session
+            .inflight_event_ids
+            .iter()
+            .chain(&session.pending_event_ids),
+    );
     session.inflight_event_ids.clear();
     session.active_source_event_id.clear();
     session.input_up_to_event_id.clear();

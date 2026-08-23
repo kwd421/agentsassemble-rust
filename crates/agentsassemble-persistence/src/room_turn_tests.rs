@@ -11,6 +11,67 @@ use crate::{PersistenceError, SqliteStore};
 const AGENT_ID: &str = "codex-00000000-0000-5000-8000-000000000001";
 
 #[tokio::test]
+async fn ordered_floor_queue_limit_rejects_the_source_message_atomically() {
+    let (store, principal, _directory) = fixture().await;
+    let active = store
+        .execute_message_with_turn(
+            &principal,
+            "queue-limit-active",
+            "message.send",
+            &json!({"content": "@Terra hold the floor"}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("start active turn: {error}"));
+    assert!(active.assignment.is_some());
+
+    let mut session = stored_session(&store).await;
+    session.pending_event_ids = (0..super::super::turn_queue::MAX_QUEUED_EVENT_IDS - 2)
+        .map(|index| format!("queued-event-{index}"))
+        .collect();
+    save_stored_session(&store, &session).await;
+
+    store
+        .execute_message_with_turn(
+            &principal,
+            "queue-limit-last-slot",
+            "message.send",
+            &json!({"content": "@Terra fill the last queue slot"}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("fill final queue slot: {error}"));
+    let before = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM room_events")
+        .fetch_one(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("count events before overflow: {error}"));
+
+    let Err(error) = store
+        .execute_message_with_turn(
+            &principal,
+            "queue-limit-overflow",
+            "message.send",
+            &json!({"content": "@Terra this must roll back"}),
+        )
+        .await
+    else {
+        panic!("an oversized ordered-floor queue must reject the source message");
+    };
+    assert_rejection_code(&error, "ordered_floor_queue_full");
+    let after = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM room_events")
+        .fetch_one(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("count events after overflow: {error}"));
+    assert_eq!(after, before);
+    let stored = stored_session(&store).await;
+    assert_eq!(
+        stored
+            .inflight_event_ids
+            .len()
+            .saturating_add(stored.pending_event_ids.len()),
+        super::super::turn_queue::MAX_QUEUED_EVENT_IDS
+    );
+}
+
+#[tokio::test]
 async fn ordered_assignment_and_finalization_are_durable_and_exact() {
     let (store, principal, _directory) = fixture().await;
     let first_payload = json!({"content": "@Terra take the first turn"});

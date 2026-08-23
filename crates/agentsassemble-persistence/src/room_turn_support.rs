@@ -14,6 +14,7 @@ use super::{AgentTurnAssignment, PreparedAssignment};
 use crate::{
     PersistenceError,
     agent_lifecycle::{load_session, save_session},
+    turn_queue::{MAX_QUEUED_EVENT_IDS, event_id_queue_is_canonical},
 };
 
 const MAX_PROVIDER_INPUT_CHARS: usize = 20_000;
@@ -58,6 +59,16 @@ pub(super) async fn queue_ordered_message(
     };
     let mut session = load_session(transaction, &event.room_id, &selected).await?;
     if !session.pending_event_ids.iter().any(|id| id == &event.id) {
+        let queued = session
+            .inflight_event_ids
+            .len()
+            .saturating_add(session.pending_event_ids.len());
+        if queued >= MAX_QUEUED_EVENT_IDS {
+            return Err(rejected(
+                "ordered_floor_queue_full",
+                "The selected Agent Session ordered-floor queue is full.",
+            ));
+        }
         session.pending_event_ids.push(event.id.clone());
         session.public.updated_at = Utc::now();
         save_session(transaction, &session).await?;
@@ -334,6 +345,17 @@ fn session_is_assignable(session: &DurableAgentSession) -> bool {
 }
 
 fn turn_authority_is_active(session: &DurableAgentSession) -> Result<bool, PersistenceError> {
+    if !event_id_queue_is_canonical(
+        session
+            .inflight_event_ids
+            .iter()
+            .chain(&session.pending_event_ids),
+    ) {
+        return Err(rejected(
+            "stored_turn_authority_invalid",
+            "Stored Agent Session turn queue authority is inconsistent or oversized.",
+        ));
+    }
     let active = !session.public.active_turn_id.is_empty()
         && session.public.enabled
         && session.public.status == "attached"
@@ -740,15 +762,6 @@ pub(super) fn public_error_code(value: &str) -> &'static str {
         "provider_protocol_invalid" | "provider_protocol_mismatch" => "provider_protocol_invalid",
         _ => "provider_turn_failed",
     }
-}
-
-pub(super) fn dedupe_ids<'a>(values: impl IntoIterator<Item = &'a String>) -> Vec<String> {
-    let mut seen = HashSet::new();
-    values
-        .into_iter()
-        .filter(|value| !value.is_empty() && seen.insert((*value).clone()))
-        .cloned()
-        .collect()
 }
 
 pub(super) fn rejection(error: agentsassemble_domain::CommandRejection) -> PersistenceError {

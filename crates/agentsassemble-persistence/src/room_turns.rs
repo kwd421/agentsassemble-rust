@@ -9,6 +9,7 @@ use crate::{
     CommandOutcome, PersistenceError, SqliteStore,
     agent_lifecycle::{load_session, save_session},
     command_admission::admit_non_lifecycle_command,
+    turn_queue::bounded_event_ids,
 };
 
 #[derive(Debug, Clone)]
@@ -261,7 +262,7 @@ impl SqliteStore {
         };
         let error = error_event(&mut transaction, &session, turn_id, code, &message).await?;
         let finished = turn_finished_event(&mut transaction, &session, turn_id, "error").await?;
-        session.pending_event_ids = dedupe_ids(
+        session.pending_event_ids = bounded_event_ids(
             session
                 .inflight_event_ids
                 .iter()
@@ -299,10 +300,10 @@ mod routing;
 mod support;
 
 use support::{
-    agent_final_event, assign_oldest_pending, clear_active_turn_fields, dedupe_ids, error_event,
-    insert_event, load_active_room, load_participant, next_sequence, public_error_code,
-    queue_ordered_message, rejected, rejection, require_active_turn, session_state_event,
-    turn_finished_event, validate_identifier, validate_input_cursor,
+    agent_final_event, assign_oldest_pending, clear_active_turn_fields, error_event, insert_event,
+    load_active_room, load_participant, next_sequence, public_error_code, queue_ordered_message,
+    rejected, rejection, require_active_turn, session_state_event, turn_finished_event,
+    validate_identifier, validate_input_cursor,
 };
 
 #[cfg(test)]
