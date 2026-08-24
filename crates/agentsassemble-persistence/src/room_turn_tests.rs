@@ -659,6 +659,7 @@ fn participant(
         room_id: "general".to_owned(),
         participant_id: id.to_owned(),
         display_name: name.to_owned(),
+        avatar_image_url: String::new(),
         participant_type: participant_type.to_owned(),
         status: ParticipantStatus::Joined,
         role: role.to_owned(),

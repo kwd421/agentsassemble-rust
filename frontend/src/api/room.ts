@@ -495,6 +495,7 @@ export function fetchRoomMembers(meetingId: string, sessionToken = "") {
 export type UserProfileIdentity = {
   sessionToken?: string;
   deviceToken?: string;
+  roomId?: string;
 };
 
 export function fetchUserProfile(identity: UserProfileIdentity = {}): Promise<UserProfile> {

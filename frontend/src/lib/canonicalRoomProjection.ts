@@ -3,6 +3,7 @@ import type {
   ProviderCatalogSnapshot,
   RoomSocketAuth,
 } from "../roomSocketClient";
+import { resolveDesktopRuntimeResource } from "./desktopBridge";
 
 export type CanonicalRoomHistoryState = {
   initialized: boolean;
@@ -63,6 +64,7 @@ export function normalizeRoomParticipant(
       (participant.role !== "human" ? "agent_session" : "room"),
     created_at: participant.created_at || "",
     updated_at: participant.updated_at || "",
+    avatar_image_url: resolveDesktopRuntimeResource(participant.avatar_image_url),
   };
 }
 
@@ -117,7 +119,7 @@ export function applyParticipantEvents(current: RoomMember[], incoming: RoomEven
       role: String(update.role || participant.role) as RoomMember["role"],
       avatar_image_url:
         "avatar_image_url" in update
-          ? String(update.avatar_image_url || "") || undefined
+          ? resolveDesktopRuntimeResource(String(update.avatar_image_url || "") || undefined)
           : participant.avatar_image_url,
       updated_at: update.created_at || participant.updated_at,
     }];

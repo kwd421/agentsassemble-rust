@@ -1,6 +1,7 @@
 import { Camera, Headphones, Mic, MicOff, Palette, UserCircle } from "lucide-react";
 
 import type { UserProfile, UserProfileIdentity } from "../../api";
+import { resolveDesktopRuntimeResource } from "../../lib/desktopBridge";
 import GuestRecoverySettings from "./GuestRecoverySettings";
 import GoogleAccountSettings from "./GoogleAccountSettings";
 import "./UserSettingsPanel.css";
@@ -131,7 +132,9 @@ export default function UserSettingsPanel({
                     data-has-image={Boolean(draft.avatarImage)}
                     style={
                       draft.avatarImage
-                        ? { backgroundImage: `url(${draft.avatarImage})` }
+                        ? {
+                            backgroundImage: `url(${resolveDesktopRuntimeResource(draft.avatarImage)})`,
+                          }
                         : undefined
                     }
                     aria-hidden

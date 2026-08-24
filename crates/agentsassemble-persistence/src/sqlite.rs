@@ -182,6 +182,7 @@ impl SqliteStore {
         .bind(serde_json::to_string(participant)?)
         .execute(&mut *transaction)
         .await?;
+        crate::profile_store::insert_initial_local_profile(&mut transaction, participant).await?;
         transaction.commit().await?;
         Ok(())
     }
@@ -462,6 +463,7 @@ mod tests {
             room_id: "general".to_owned(),
             participant_id: "operator-local".to_owned(),
             display_name: "Host".to_owned(),
+            avatar_image_url: String::new(),
             participant_type: "human".to_owned(),
             status: ParticipantStatus::Joined,
             role: "host".to_owned(),

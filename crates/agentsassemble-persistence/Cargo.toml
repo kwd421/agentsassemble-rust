@@ -9,6 +9,7 @@ agentsassemble-domain = { path = "../agentsassemble-domain" }
 chrono.workspace = true
 fs2.workspace = true
 same-file.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true

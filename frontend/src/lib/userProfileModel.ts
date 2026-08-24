@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import type { UserProfile } from "../api";
+import { resolveDesktopRuntimeResource } from "./desktopBridge";
 
 export const DEFAULT_USER_PROFILE: UserProfile = {
   displayName: "SeiNel",
@@ -39,7 +40,9 @@ export function profileStatusLabel(status: UserProfile["status"]) {
 export function profileCssVars(profile: UserProfile): CSSProperties {
   return {
     "--profile-accent": profile.accentColor,
-    "--profile-avatar-image": profile.avatarImage ? `url("${profile.avatarImage}")` : undefined,
+    "--profile-avatar-image": profile.avatarImage
+      ? `url("${resolveDesktopRuntimeResource(profile.avatarImage)}")`
+      : undefined,
   } as CSSProperties;
 }
 

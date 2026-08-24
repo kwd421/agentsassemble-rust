@@ -1,6 +1,6 @@
 # Agent Session vertical slice
 
-Status: published implementation owner; web review complete, manual-security re-review pending
+Status: published implementation owner; web and manual-security review complete
 
 ## Definition
 
@@ -10,14 +10,13 @@ A host selects an installed provider/model from the authoritative live catalog, 
 
 The comparison baseline is original commit
 `d5046473010d1353a81ee38337360e6d98f7bd6f` and public Rust commit
-`3929e31f3407c60d829a030a527266daacaf9197`. Local uncommitted work is
+`5c31ccf1cf33146a4e91431df7400b8508aca82d`. Local uncommitted work is
 not completion evidence. At that Rust baseline one durable server-owned
 `agent.create(start=false|true)` reservation covers creation and optional start,
 the copied desktop sends only that command, and snapshot, catch-up, resync, and
 live fanout use the same authenticated-viewer projector. The exact published
 real-provider and copied-UI evidence is recorded in `docs/VERIFICATION.md`; web
-review is complete and the separate manual-security fix awaits re-review before
-this slice is closed.
+review and the separate Daybreak Blue high manual-security re-review are complete.
 
 Implementation order is mandatory:
 

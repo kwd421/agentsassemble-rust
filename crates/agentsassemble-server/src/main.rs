@@ -302,7 +302,8 @@ async fn initialize_room(store: &SqliteStore, room_id: &str) -> anyhow::Result<(
     let participant = Participant {
         room_id: room_id.to_owned(),
         participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
-        display_name: "Host".to_owned(),
+        display_name: "SeiNel".to_owned(),
+        avatar_image_url: String::new(),
         participant_type: "human".to_owned(),
         status: ParticipantStatus::Joined,
         role: "host".to_owned(),

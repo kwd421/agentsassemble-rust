@@ -3,7 +3,7 @@ use sqlx::{Row, Sqlite, Transaction};
 
 use crate::{PersistenceError, SqliteStore};
 
-pub(crate) const CURRENT_SCHEMA_VERSION: i64 = 6;
+pub(crate) const CURRENT_SCHEMA_VERSION: i64 = 7;
 
 impl SqliteStore {
     pub(crate) async fn migrate_schema(&self) -> Result<(), PersistenceError> {
@@ -62,6 +62,24 @@ impl SqliteStore {
             )
             .execute(&mut *transaction)
             .await?;
+        }
+        if version < 7 {
+            sqlx::query(
+                "CREATE TABLE user_profiles (user_id TEXT PRIMARY KEY, participant_id TEXT NOT NULL UNIQUE, profile_json TEXT NOT NULL)",
+            )
+            .execute(&mut *transaction)
+            .await?;
+            sqlx::query(
+                "CREATE TABLE profile_attachments (attachment_id TEXT PRIMARY KEY, owner_user_id TEXT NOT NULL, filename TEXT NOT NULL, content_type TEXT NOT NULL CHECK(content_type IN ('image/png', 'image/jpeg', 'image/gif', 'image/webp')), content BLOB NOT NULL, size INTEGER NOT NULL CHECK(size >= 0 AND size <= 10485760), created_at TEXT NOT NULL, FOREIGN KEY(owner_user_id) REFERENCES user_profiles(user_id) ON DELETE CASCADE)",
+            )
+            .execute(&mut *transaction)
+            .await?;
+            sqlx::query(
+                "CREATE INDEX profile_attachments_owner_idx ON profile_attachments(owner_user_id)",
+            )
+            .execute(&mut *transaction)
+            .await?;
+            crate::profile_store::migrate_local_profile_authority(&mut transaction).await?;
         }
         sqlx::query(
             "INSERT INTO runtime_metadata(key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -128,6 +146,8 @@ async fn redact_legacy_agent_results(
 
 #[cfg(test)]
 mod tests {
+    use agentsassemble_domain::{Participant, ParticipantStatus, Room, RoomSettings, UserProfile};
+    use chrono::Utc;
     use sqlx::Row as _;
 
     use crate::SqliteStore;
@@ -140,6 +160,7 @@ mod tests {
         let store = SqliteStore::open_path(&path)
             .await
             .unwrap_or_else(|error| panic!("create store: {error}"));
+        drop_v7_profile_tables(&store).await;
         sqlx::query(
             "INSERT INTO rooms(room_id, room_json, settings_json) VALUES ('general', '{}', '{}')",
         )
@@ -194,6 +215,7 @@ mod tests {
         let store = SqliteStore::open_path(&path)
             .await
             .unwrap_or_else(|error| panic!("create store: {error}"));
+        drop_v7_profile_tables(&store).await;
         sqlx::query("DROP TABLE agent_sessions")
             .execute(&store.pool)
             .await
@@ -262,6 +284,7 @@ mod tests {
         let store = SqliteStore::open_path(&path)
             .await
             .unwrap_or_else(|error| panic!("create store: {error}"));
+        drop_v7_profile_tables(&store).await;
         sqlx::query(
             "INSERT INTO rooms(room_id, room_json, settings_json) VALUES ('general', '{}', '{}')",
         )
@@ -310,6 +333,7 @@ mod tests {
         let store = SqliteStore::open_path(&path)
             .await
             .unwrap_or_else(|error| panic!("create store: {error}"));
+        drop_v7_profile_tables(&store).await;
         sqlx::query(
             "INSERT INTO rooms(room_id, room_json, settings_json) VALUES ('general', '{}', '{}')",
         )
@@ -422,5 +446,83 @@ mod tests {
             SqliteStore::open_path(&path).await,
             Err(crate::PersistenceError::IncompleteLifecycleMigration)
         ));
+    }
+
+    #[tokio::test]
+    async fn version_six_rooms_adopt_the_new_local_profile_authority() {
+        let directory =
+            tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
+        let path = directory.path().join("runtime.sqlite3");
+        let store = SqliteStore::open_path(&path)
+            .await
+            .unwrap_or_else(|error| panic!("create store: {error}"));
+        let now = Utc::now();
+        let room = Room::new("general".to_owned(), "General".to_owned(), now);
+        let participant = Participant {
+            room_id: "general".to_owned(),
+            participant_id: "operator-local".to_owned(),
+            display_name: "Host".to_owned(),
+            avatar_image_url: String::new(),
+            participant_type: "human".to_owned(),
+            status: ParticipantStatus::Joined,
+            role: "host".to_owned(),
+            owner_id: "room-owned".to_owned(),
+            muted: true,
+            created_at: now,
+            updated_at: now,
+        };
+        store
+            .initialize_room(
+                &room,
+                &RoomSettings::defaults("General".to_owned()),
+                &participant,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("initialize v6 room: {error}"));
+        drop_v7_profile_tables(&store).await;
+        sqlx::query("UPDATE runtime_metadata SET value = '6' WHERE key = 'schema_version'")
+            .execute(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("set v6 marker: {error}"));
+        drop(store);
+
+        let reopened = SqliteStore::open_path(&path)
+            .await
+            .unwrap_or_else(|error| panic!("migrate v6 store: {error}"));
+        let profile: UserProfile = serde_json::from_str(
+            &sqlx::query_scalar::<_, String>(
+                "SELECT profile_json FROM user_profiles WHERE user_id = 'operator-local-user'",
+            )
+            .fetch_one(&reopened.pool)
+            .await
+            .unwrap_or_else(|error| panic!("read migrated profile: {error}")),
+        )
+        .unwrap_or_else(|error| panic!("decode migrated profile: {error}"));
+        let membership = reopened
+            .participant("general", "operator-local")
+            .await
+            .unwrap_or_else(|error| panic!("read migrated participant: {error}"));
+        assert_eq!(profile.display_name, "SeiNel");
+        assert_eq!(membership.display_name, profile.display_name);
+        assert_eq!(membership.role, "host");
+        assert_eq!(membership.owner_id, "room-owned");
+        assert!(membership.muted);
+        assert_eq!(membership.status, ParticipantStatus::Joined);
+        let event_count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM room_events")
+            .fetch_one(&reopened.pool)
+            .await
+            .unwrap_or_else(|error| panic!("count migration events: {error}"));
+        assert_eq!(event_count, 0);
+    }
+
+    async fn drop_v7_profile_tables(store: &SqliteStore) {
+        sqlx::query("DROP TABLE profile_attachments")
+            .execute(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("remove v7 attachments table: {error}"));
+        sqlx::query("DROP TABLE user_profiles")
+            .execute(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("remove v7 profile table: {error}"));
     }
 }

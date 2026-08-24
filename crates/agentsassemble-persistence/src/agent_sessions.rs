@@ -136,6 +136,7 @@ mod tests {
             room_id: "general".to_owned(),
             participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
             display_name: "Host".to_owned(),
+            avatar_image_url: String::new(),
             participant_type: "human".to_owned(),
             status: ParticipantStatus::Joined,
             role: "host".to_owned(),

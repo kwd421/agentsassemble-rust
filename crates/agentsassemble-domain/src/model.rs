@@ -58,6 +58,8 @@ pub struct Participant {
     pub room_id: String,
     pub participant_id: String,
     pub display_name: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub avatar_image_url: String,
     pub participant_type: String,
     pub status: ParticipantStatus,
     #[serde(default, skip_serializing_if = "String::is_empty")]

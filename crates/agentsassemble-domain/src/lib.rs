@@ -2,6 +2,7 @@ mod command;
 mod diagnostic;
 mod identity;
 mod model;
+mod profile;
 mod projection;
 mod text;
 
@@ -16,6 +17,7 @@ pub use model::{
     PublicRoomSettings, Room, RoomAppearance, RoomEvent, RoomSettings, RoomStatus, SnapshotMode,
     public_settings,
 };
+pub use profile::{UserProfile, UserProfilePatch, avatar_attachment_id, canonical_avatar_url};
 pub use projection::{public_event_for_principal, public_value_for_principal};
 pub use text::{
     clean_identifier, clean_message, clean_single_line, has_visible_text, validate_room_id,

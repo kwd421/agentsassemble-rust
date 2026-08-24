@@ -103,7 +103,12 @@ export default function UserPanel({
     return () => {
       ignore = true;
     };
-  }, [guestProfile?.expired, profileIdentity.deviceToken, profileIdentity.sessionToken]);
+  }, [
+    guestProfile?.expired,
+    profileIdentity.deviceToken,
+    profileIdentity.roomId,
+    profileIdentity.sessionToken,
+  ]);
 
   useEffect(() => {
     if (!profileOpen && !settingsOpen && !avatarEditorOpen) return;
@@ -190,6 +195,7 @@ export default function UserPanel({
     try {
       const attachment = await uploadLobbyAttachment(file, {
         purpose: "profile_avatar",
+        roomId: profileIdentity.roomId,
         sessionToken: profileIdentity.sessionToken,
       });
       const error = await persistProfile({ ...profile, avatarImage: attachment.url });

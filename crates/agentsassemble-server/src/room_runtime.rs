@@ -131,6 +131,13 @@ impl RoomRuntime {
         self.handle(room_id).await.events.subscribe()
     }
 
+    pub async fn publish_committed_events(&self, events: &[RoomEvent]) {
+        for event in events {
+            let handle = self.handle(&event.room_id).await;
+            let _ = handle.events.send(event.clone());
+        }
+    }
+
     /// Cancels all room mutation owners and bounds their cooperative shutdown.
     ///
     /// # Errors

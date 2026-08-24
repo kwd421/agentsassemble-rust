@@ -46,7 +46,7 @@ const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 const WS_WRITE_TIMEOUT: Duration = Duration::from_secs(5);
 const TRACKED_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(6);
 const SOCKET_IDLE_TIMEOUT: Duration = Duration::from_mins(5);
-const CONTENT_SECURITY_POLICY: &str = "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' ws://127.0.0.1:*; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
+const CONTENT_SECURITY_POLICY: &str = "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*; img-src 'self' data: blob: http://127.0.0.1:*; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
 
 #[derive(Debug, Error)]
 pub enum ServeError {
@@ -71,7 +71,8 @@ pub fn router(state: AppState) -> Router {
         .route("/healthz", get(health))
         .route("/api/host-challenge", get(issue_host_challenge))
         .route("/api/ws-ticket", post(issue_ticket))
-        .route("/ws", get(upgrade_socket));
+        .route("/ws", get(upgrade_socket))
+        .merge(crate::profile_web::routes());
     if let Some(frontend_root) = frontend_root {
         let index = frontend_root.join("index.html");
         app = app

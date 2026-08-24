@@ -3,6 +3,7 @@ mod app_state;
 mod host_ticket;
 mod http_transport;
 mod ingress_budget;
+mod profile_web;
 mod provider_turn;
 mod room_runtime;
 mod runtime_reconciliation;

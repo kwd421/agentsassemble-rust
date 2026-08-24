@@ -5,6 +5,7 @@ import {
   fetchJsonWithToken,
   fileToBase64,
   postJson,
+  postJsonWithIdentity,
   postJsonModerator,
   postJsonWithToken,
   queryString,
@@ -115,17 +116,25 @@ export function uploadLobbyAttachment(
 ): Promise<LobbyAttachmentRef> {
   const resolved = typeof options === "string" ? { roomId: options } : options;
   return fileToBase64(file).then((dataBase64) => {
+    const body = {
+      room_id: resolved.roomId || "",
+      purpose: resolved.purpose || "room_attachment",
+      invite_token: resolved.inviteToken || "",
+      device_token: resolved.deviceToken || "",
+      filename: file.name || "attachment.bin",
+      content_type: file.type || "application/octet-stream",
+      data_base64: dataBase64,
+    };
+    if (resolved.purpose === "profile_avatar" && resolved.roomId) {
+      return postJsonWithIdentity<{ attachment: LobbyAttachmentRef }>(
+        "/api/attachments",
+        body,
+        { roomId: resolved.roomId, sessionToken: resolved.sessionToken }
+      );
+    }
     return postJsonModerator<{ attachment: LobbyAttachmentRef }>(
       "/api/attachments",
-      {
-        room_id: resolved.roomId || "",
-        purpose: resolved.purpose || "room_attachment",
-        invite_token: resolved.inviteToken || "",
-        device_token: resolved.deviceToken || "",
-        filename: file.name || "attachment.bin",
-        content_type: file.type || "application/octet-stream",
-        data_base64: dataBase64,
-      },
+      body,
       resolved.sessionToken || ""
     );
   }).then((payload) => {

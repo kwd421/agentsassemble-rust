@@ -15,6 +15,7 @@ mod database_target;
 mod filesystem_authority;
 mod migration;
 mod private_fs;
+mod profile_store;
 mod room_turns;
 mod schema;
 mod sqlite;
@@ -33,6 +34,7 @@ pub use agent_lifecycle::{
 };
 pub use agent_reconciliation::{RuntimeReconciliationCandidate, RuntimeReconciliationObservation};
 pub use private_fs::secure_private_directory;
+pub use profile_store::{ProfileAttachment, ProfileAttachmentMetadata, ProfileUpdateOutcome};
 pub use room_turns::{
     AgentTurnAssignment, AgentTurnCommit, ProviderTurnAuthority, RoomCommandMutation,
 };

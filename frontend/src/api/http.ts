@@ -1,4 +1,5 @@
 import { ApiError } from "../lib/apiErrors";
+import { fetchDesktopRuntime, isDesktopWebview } from "../lib/desktopBridge";
 
 const HOST_TOKEN_STORAGE_KEY = "agentsassemble.hostToken.v1";
 let inMemoryHostToken = "";
@@ -101,8 +102,13 @@ export async function postJsonWithToken<T>(url: string, body: object, sessionTok
 
 export async function fetchJsonWithIdentity<T>(
   url: string,
-  { sessionToken = "", deviceToken = "" }: { sessionToken?: string; deviceToken?: string }
+  { sessionToken = "", deviceToken = "", roomId = "" }: { sessionToken?: string; deviceToken?: string; roomId?: string }
 ): Promise<T> {
+  if (roomId && !sessionToken && isDesktopWebview()) {
+    const res = await fetchDesktopRuntime(roomId, url);
+    if (!res.ok) throw await responseError(res);
+    return res.json();
+  }
   const headers: Record<string, string> = {};
   if (sessionToken) headers.Authorization = `Bearer ${sessionToken}`;
   if (deviceToken) headers["X-Device-Token"] = deviceToken;
@@ -114,8 +120,17 @@ export async function fetchJsonWithIdentity<T>(
 export async function postJsonWithIdentity<T>(
   url: string,
   body: object,
-  { sessionToken = "", deviceToken = "" }: { sessionToken?: string; deviceToken?: string }
+  { sessionToken = "", deviceToken = "", roomId = "" }: { sessionToken?: string; deviceToken?: string; roomId?: string }
 ): Promise<T> {
+  if (roomId && !sessionToken && isDesktopWebview()) {
+    const res = await fetchDesktopRuntime(roomId, url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw await responseError(res);
+    return res.json();
+  }
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (sessionToken) headers.Authorization = `Bearer ${sessionToken}`;
   if (deviceToken) headers["X-Device-Token"] = deviceToken;
