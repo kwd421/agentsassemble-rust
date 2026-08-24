@@ -168,9 +168,33 @@ async fn load_profile(
     transaction: &mut Transaction<'_, Sqlite>,
     principal: &AuthenticatedPrincipal,
 ) -> Result<UserProfile, PersistenceError> {
+    load_profile_for_identity(
+        transaction,
+        &principal.principal_id,
+        &principal.participant_id,
+    )
+    .await
+}
+
+pub(crate) async fn load_local_operator_profile(
+    transaction: &mut Transaction<'_, Sqlite>,
+) -> Result<UserProfile, PersistenceError> {
+    load_profile_for_identity(
+        transaction,
+        LOCAL_OPERATOR_USER_ID,
+        LOCAL_OPERATOR_PARTICIPANT_ID,
+    )
+    .await
+}
+
+async fn load_profile_for_identity(
+    transaction: &mut Transaction<'_, Sqlite>,
+    user_id: &str,
+    participant_id: &str,
+) -> Result<UserProfile, PersistenceError> {
     let row =
         sqlx::query("SELECT participant_id, profile_json FROM user_profiles WHERE user_id = ?")
-            .bind(&principal.principal_id)
+            .bind(user_id)
             .fetch_optional(&mut **transaction)
             .await?
             .ok_or_else(|| {
@@ -179,7 +203,7 @@ async fn load_profile(
                     "Authenticated user profile was not found.",
                 )
             })?;
-    if row.get::<String, _>("participant_id") != principal.participant_id {
+    if row.get::<String, _>("participant_id") != participant_id {
         return Err(rejected(
             "profile_authority_mismatch",
             "Authenticated user profile does not own this participant.",

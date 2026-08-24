@@ -17,7 +17,7 @@ type UseRoomDirectoryOptions = {
 };
 
 type RoomDirectorySyncIssue = {
-  category: "room_directory_unavailable";
+  category: "room_directory_unconfirmed" | "room_directory_unavailable";
   message: string;
 };
 
@@ -27,7 +27,14 @@ export function useRoomDirectory({
 }: UseRoomDirectoryOptions) {
   const roomsRef = useRef<RoomDockItem[]>(initialRooms);
   const [rooms, setRooms] = useState<RoomDockItem[]>(initialRooms);
-  const [syncIssue, setSyncIssue] = useState<RoomDirectorySyncIssue | null>(null);
+  const [syncIssue, setSyncIssue] = useState<RoomDirectorySyncIssue | null>(() =>
+    hostEnabled
+      ? {
+          category: "room_directory_unconfirmed",
+          message: "Room directory is waiting for server confirmation.",
+        }
+      : null
+  );
   const membershipRevisionRef = useRef(0);
   const metadataRevisionRef = useRef(0);
   const hydrationEpochRef = useRef(0);
@@ -130,6 +137,10 @@ export function useRoomDirectory({
       setSyncIssue(null);
       return;
     }
+    setSyncIssue({
+      category: "room_directory_unconfirmed",
+      message: "Room directory is waiting for server confirmation.",
+    });
     const hydrationEpoch = hydrationEpochRef.current + 1;
     hydrationEpochRef.current = hydrationEpoch;
     let cancelled = false;

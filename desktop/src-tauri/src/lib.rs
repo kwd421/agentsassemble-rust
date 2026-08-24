@@ -1,9 +1,10 @@
 mod local_runtime;
 #[cfg(windows)]
 mod private_fs;
+mod room_directory_cache;
 mod runtime_supervisor;
 
-use local_runtime::{LocalRuntime, TicketGrant};
+use local_runtime::{LocalRuntime, OperatorHttpTicketGrant, TicketGrant};
 use serde::Serialize;
 use tauri::{Manager, RunEvent, WebviewWindow};
 
@@ -41,6 +42,34 @@ async fn runtime_ticket(
     })
     .await
     .map_err(|error| format!("runtime ticket worker failed: {error}"))?
+}
+
+#[tauri::command]
+async fn runtime_operator_ticket(
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+) -> Result<OperatorHttpTicketGrant, String> {
+    caller_is_bundled_ui(&window)?;
+    let runtime_app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        runtime_app
+            .state::<LocalRuntime>()
+            .issue_operator_http_ticket(&runtime_app)
+    })
+    .await
+    .map_err(|error| format!("runtime operator ticket worker failed: {error}"))?
+}
+
+#[tauri::command]
+async fn cache_selected_room_directory(
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+    rooms: String,
+) -> Result<(), String> {
+    caller_is_bundled_ui(&window)?;
+    tauri::async_runtime::spawn_blocking(move || room_directory_cache::store(&app, &rooms))
+        .await
+        .map_err(|error| format!("room directory cache worker failed: {error}"))?
 }
 
 fn workspace_selection(path: Option<std::path::PathBuf>) -> Result<WorkspaceSelection, String> {
@@ -87,6 +116,8 @@ pub fn run() {
         .manage(LocalRuntime::default())
         .invoke_handler(tauri::generate_handler![
             runtime_ticket,
+            runtime_operator_ticket,
+            cache_selected_room_directory,
             choose_local_workspace
         ])
         .build(tauri::generate_context!())

@@ -75,6 +75,27 @@ describe("useRoomDirectory", () => {
     vi.clearAllMocks();
   });
 
+  it("marks cached rooms unconfirmed until the server directory answers", async () => {
+    const localRoom = makeRoom("cached");
+    const inFlight = deferred<{ server_id: string; rooms: ReturnType<typeof serverRoom>[] }>();
+    apiMocks.fetchRooms.mockReturnValueOnce(inFlight.promise);
+    const { result } = renderHook(() =>
+      useRoomDirectory({ initialRooms: [localRoom], hostEnabled: true })
+    );
+
+    expect(result.current.rooms).toEqual([localRoom]);
+    expect(result.current.syncIssue?.category).toBe("room_directory_unconfirmed");
+    await act(async () => {
+      inFlight.resolve({
+        server_id: "server-1",
+        rooms: [serverRoom(localRoom.meetingId, "Canonical")],
+      });
+      await inFlight.promise;
+    });
+    await waitFor(() => expect(result.current.syncIssue).toBeNull());
+    expect(result.current.rooms[0].label).toBe("Canonical");
+  });
+
   it("persists host startup rooms and merges the server registry", async () => {
     const localRoom = makeRoom("local", { meetingId: "local-meeting", label: "Local" });
     apiMocks.fetchRooms.mockResolvedValueOnce({

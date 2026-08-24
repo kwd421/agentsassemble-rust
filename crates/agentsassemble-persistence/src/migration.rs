@@ -3,7 +3,7 @@ use sqlx::{Row, Sqlite, Transaction};
 
 use crate::{PersistenceError, SqliteStore};
 
-pub(crate) const CURRENT_SCHEMA_VERSION: i64 = 8;
+pub(crate) const CURRENT_SCHEMA_VERSION: i64 = 9;
 
 impl SqliteStore {
     pub(crate) async fn migrate_schema(&self) -> Result<(), PersistenceError> {
@@ -84,6 +84,7 @@ impl SqliteStore {
         if version < 8 {
             migrate_profile_and_publication_v8(&mut transaction).await?;
         }
+        ensure_server_id(&mut transaction).await?;
         sqlx::query(
             "INSERT INTO runtime_metadata(key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         )
@@ -93,6 +94,23 @@ impl SqliteStore {
         transaction.commit().await?;
         Ok(())
     }
+}
+
+async fn ensure_server_id(
+    transaction: &mut Transaction<'_, Sqlite>,
+) -> Result<(), PersistenceError> {
+    sqlx::query("INSERT OR IGNORE INTO runtime_metadata(key, value) VALUES ('server_id', ?)")
+        .bind(uuid::Uuid::new_v4().to_string())
+        .execute(&mut **transaction)
+        .await?;
+    let server_id = sqlx::query_scalar::<_, String>(
+        "SELECT value FROM runtime_metadata WHERE key = 'server_id'",
+    )
+    .fetch_one(&mut **transaction)
+    .await?;
+    uuid::Uuid::parse_str(&server_id)
+        .map(|_| ())
+        .map_err(|_| PersistenceError::InvalidServerId)
 }
 
 async fn migrate_profile_and_publication_v8(

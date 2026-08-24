@@ -11,8 +11,8 @@ use agentsassemble_persistence::{SqliteStore, secure_private_directory};
 use agentsassemble_protocol::{LocalControlRequest, LocalControlResponse};
 use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService};
 use agentsassemble_server::{
-    AppState, HostSecret, TicketIssueError, TicketStore, issue_local_ticket,
-    reconcile_runtime_ownership, serve,
+    AppState, HostSecret, TicketIssueError, TicketStore, issue_local_operator_http_ticket,
+    issue_local_ticket, reconcile_runtime_ownership, serve,
 };
 use anyhow::Context;
 use chrono::Utc;
@@ -185,13 +185,26 @@ async fn run_control_pipe<R, W>(
                     Err(error) => control_error(request_id, error),
                 }
             }
-            Ok(LocalControlRequest::IssueTicket { request_id, .. }) => {
-                LocalControlResponse::Error {
-                    request_id,
-                    code: "request_id_invalid".to_owned(),
-                    message: "Control request id is invalid.".to_owned(),
+            Ok(LocalControlRequest::IssueOperatorHttpTicket { request_id })
+                if !request_id.is_empty() && request_id.len() <= 128 =>
+            {
+                match issue_local_operator_http_ticket(&state).await {
+                    Ok(ticket) => LocalControlResponse::OperatorHttpOk {
+                        request_id,
+                        ticket: ticket.ticket,
+                        ttl_seconds: ticket.ttl_seconds,
+                    },
+                    Err(error) => control_error(request_id, error),
                 }
             }
+            Ok(
+                LocalControlRequest::IssueTicket { request_id, .. }
+                | LocalControlRequest::IssueOperatorHttpTicket { request_id },
+            ) => LocalControlResponse::Error {
+                request_id,
+                code: "request_id_invalid".to_owned(),
+                message: "Control request id is invalid.".to_owned(),
+            },
             Err(_) => LocalControlResponse::Error {
                 request_id: String::new(),
                 code: "control_request_invalid".to_owned(),

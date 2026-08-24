@@ -69,7 +69,6 @@ import { useRoomSideChat } from "./useRoomSideChat";
 import { useSidebarResize } from "./useSidebarResize";
 
 export function useAppController() {
-  const desktopRuntime = isDesktopWebview();
   const [operatorPairingToken, setOperatorPairingToken] = useState(
     consumeOperatorPairingTokenFromUrl
   );
@@ -129,7 +128,7 @@ export function useAppController() {
     syncIssue: roomDirectorySyncIssue,
   } = useRoomDirectory({
     initialRooms: startupRoute.startupRooms,
-    hostEnabled: startupHostEnabled && !desktopRuntime,
+    hostEnabled: startupHostEnabled,
   });
   const [activeRoomId, setActiveRoomId] = useState(() => startupRoute.activeRoomId);
   const [roomMenu, setRoomMenu] = useState<RoomMenuState>(null);

@@ -21,6 +21,12 @@ export interface DesktopRuntimeTicket {
   server_proof_key: string;
 }
 
+export interface DesktopOperatorHttpTicket {
+  ticket: string;
+  ttl_seconds: number;
+  http_base_url: string;
+}
+
 export interface DesktopWorkspaceSelection {
   selected: boolean;
   path: string;
@@ -28,12 +34,36 @@ export interface DesktopWorkspaceSelection {
 
 let desktopRuntimeHttpBase = "";
 
+function validatedDesktopHttpBase(value: string): string {
+  const endpoint = new URL(value);
+  if (
+    endpoint.protocol !== "http:" ||
+    endpoint.hostname !== "127.0.0.1" ||
+    !endpoint.port ||
+    endpoint.username ||
+    endpoint.password ||
+    endpoint.pathname !== "/" ||
+    endpoint.search ||
+    endpoint.hash
+  ) {
+    throw new Error("데스크톱 Rust 런타임 주소가 안전하지 않습니다.");
+  }
+  return `http://127.0.0.1:${endpoint.port}`;
+}
+
 function rememberDesktopRuntime(ticket: DesktopRuntimeTicket): DesktopRuntimeTicket {
   const endpoint = new URL(ticket.websocket_base_url);
   if (endpoint.protocol !== "ws:" || endpoint.hostname !== "127.0.0.1" || !endpoint.port) {
     throw new Error("데스크톱 Rust 런타임 주소가 안전하지 않습니다.");
   }
   desktopRuntimeHttpBase = `http://127.0.0.1:${endpoint.port}`;
+  return ticket;
+}
+
+function rememberDesktopOperatorRuntime(
+  ticket: DesktopOperatorHttpTicket
+): DesktopOperatorHttpTicket {
+  desktopRuntimeHttpBase = validatedDesktopHttpBase(ticket.http_base_url);
   return ticket;
 }
 
@@ -49,6 +79,16 @@ export async function requestDesktopRuntimeTicket(
     .then(rememberDesktopRuntime);
 }
 
+export async function requestDesktopOperatorTicket(): Promise<DesktopOperatorHttpTicket> {
+  const tauri = tauriInternals();
+  if (!tauri) {
+    throw new Error("데스크톱 Rust 런타임을 사용할 수 없습니다.");
+  }
+  return tauri
+    .invoke<DesktopOperatorHttpTicket>("runtime_operator_ticket")
+    .then(rememberDesktopOperatorRuntime);
+}
+
 export async function fetchDesktopRuntime(
   roomId: string,
   path: string,
@@ -58,6 +98,19 @@ export async function fetchDesktopRuntime(
     throw new Error("데스크톱 Rust 런타임 경로가 잘못되었습니다.");
   }
   const issued = await requestDesktopRuntimeTicket(roomId);
+  const headers = new Headers(init.headers);
+  headers.set("Authorization", `Bearer ${issued.ticket}`);
+  return fetch(`${desktopRuntimeHttpBase}${path}`, { ...init, headers });
+}
+
+export async function fetchDesktopOperatorRuntime(
+  path: string,
+  init: RequestInit = {}
+): Promise<Response> {
+  if (!path.startsWith("/") || path.startsWith("//")) {
+    throw new Error("데스크톱 Rust 런타임 경로가 잘못되었습니다.");
+  }
+  const issued = await requestDesktopOperatorTicket();
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${issued.ticket}`);
   return fetch(`${desktopRuntimeHttpBase}${path}`, { ...init, headers });

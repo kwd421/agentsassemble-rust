@@ -3,7 +3,7 @@ use agentsassemble_domain::{
     LOCAL_OPERATOR_USER_ID, validate_room_id,
 };
 use agentsassemble_persistence::PersistenceError;
-use agentsassemble_protocol::TicketResponse;
+use agentsassemble_protocol::{OperatorHttpTicketResponse, TicketResponse};
 use thiserror::Error;
 
 use crate::AppState;
@@ -66,5 +66,24 @@ pub async fn issue_local_ticket(
         ticket: issued.ticket,
         ttl_seconds: state.tickets.ttl_seconds(),
         server_proof_key: issued.proof_key,
+    })
+}
+
+/// Issues a private-control-derived one-use credential for server-wide operator HTTP routes.
+///
+/// # Errors
+///
+/// Returns a bounded ticket-capacity error. The caller must already own the private control pipe.
+pub async fn issue_local_operator_http_ticket(
+    state: &AppState,
+) -> Result<OperatorHttpTicketResponse, TicketIssueError> {
+    let issued = state
+        .tickets
+        .issue_server_operator(LOCAL_OPERATOR_USER_ID.to_owned())
+        .await
+        .map_err(|_| TicketIssueError::Unavailable)?;
+    Ok(OperatorHttpTicketResponse {
+        ticket: issued.ticket,
+        ttl_seconds: state.tickets.ttl_seconds(),
     })
 }

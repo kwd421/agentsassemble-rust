@@ -4,6 +4,9 @@ type RoomSyncIssue = {
 };
 
 function noticeMessage(category: string) {
+  if (category === "room_directory_unconfirmed") {
+    return "저장된 방 목록을 서버 원본과 확인하고 있습니다.";
+  }
   if (category === "room_directory_unavailable") {
     return "서버의 방 목록을 확인하지 못했습니다. 연결 상태를 확인한 뒤 새로고침해 주세요.";
   }

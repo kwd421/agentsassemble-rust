@@ -265,7 +265,7 @@ impl RoomSettings {
 ///
 /// Returns the serialization error if a settings field cannot be encoded.
 pub fn public_settings(settings: &RoomSettings) -> Result<PublicRoomSettings, serde_json::Error> {
-    let canonical = serde_json::to_vec(settings)?;
+    let canonical = serde_json::to_vec(&serde_json::to_value(settings)?)?;
     let revision = format!("room-settings-v1-{:x}", Sha256::digest(canonical));
     Ok(PublicRoomSettings {
         settings_revision: revision,
@@ -449,6 +449,22 @@ impl DurableAgentSession {
     #[must_use]
     pub fn public(&self) -> AgentSession {
         self.public.clone()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{RoomSettings, public_settings};
+
+    #[test]
+    fn room_settings_revision_matches_the_original_sorted_json_contract() {
+        let settings = RoomSettings::defaults("General".to_owned());
+        let public = public_settings(&settings)
+            .unwrap_or_else(|error| panic!("serialize canonical settings: {error}"));
+        assert_eq!(
+            public.settings_revision,
+            "room-settings-v1-d8d5762ea0f913e1f3ec543b3f9b06cecb163a3deed10b58aca9ef60b8d275e6"
+        );
     }
 }
 

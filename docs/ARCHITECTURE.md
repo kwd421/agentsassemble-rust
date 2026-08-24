@@ -22,6 +22,25 @@ The cutover unit is an authoritative contract owner, not a feature label. Routin
 
 Each room has one bounded command queue and one mutation task. That task serializes validation, domain transition, durable event sequence allocation, command-result persistence, and publication. Different rooms may execute concurrently. A cache, timer, queue, or projection is derived state and never a second room authority.
 
+### Server and room-directory identity
+
+One SQLite authority owns one stable opaque `server_id`, generated at database
+creation or schema migration and rejected if missing or malformed. A listening
+port, sidecar process, Tauri window, browser origin, or cached room list is never
+server identity. Each directory entry is projected from the durable `Room` and its
+canonical room-global settings; stable room UID, label, status, timestamps, and
+appearance are not independently reconstructed by React or Tauri.
+
+Creating a room commits its room record, default settings, publication cursor,
+initial human membership, and exactly one `room_created` event in one SQLite
+transaction. The human display/avatar projection comes from the server-wide
+profile, while role, joined state, mute, and later transitions are room-owned.
+Repeating creation preserves the room UID and does not append another creation
+event. The copied room rail may display a bounded cached projection during first
+paint only while visibly unconfirmed; the authenticated server response removes
+stale local entries and becomes the projection. A client-fabricated `general` is
+not authority—the fresh-runtime bootstrap creates the real durable room.
+
 ### Durable commands
 
 `(room_id, principal_id, request_id)` identifies a command attempt. Repeating the same action and canonical payload returns its committed result. Reusing the key with a different action or payload is a conflict.
@@ -96,7 +115,15 @@ mutation is never implemented twice merely because both transports exist.
 
 A credential resolves once to an `AuthenticatedPrincipal` containing stable identity, room scope, client kind, and server-derived capabilities. Client-supplied roles, operator flags, participant type, or capabilities are never authority.
 
-Opaque, short-lived, one-use WebSocket tickets remain the connection credential. Browser-compatible HTTP ticket issuance stays an adapter while it is a reachable flow and always requires a high-entropy host secret or an authenticated session. Desktop mode cannot start with an empty host secret; Tauri generates it per owned runtime and returns only a one-use ticket plus the validated loopback WebSocket origin to React over IPC.
+Opaque, short-lived, one-use WebSocket tickets remain the room-connection
+credential. Browser-compatible HTTP ticket issuance stays an adapter while it is
+a reachable flow and always requires a high-entropy host secret or an authenticated
+session. Desktop mode cannot start with an empty host secret; Tauri generates it
+per owned runtime. Its private control pipe issues either a room WebSocket ticket
+with the validated loopback WebSocket origin or a purpose-separated server-operator
+HTTP ticket with the validated loopback HTTP origin. React receives neither the
+host secret nor a reusable credential. A ticket presented to the wrong transport
+or scope is consumed and rejected rather than interpreted as another authority.
 
 The local HTTP/WebSocket adapter has explicit resource budgets: admission is bounded immediately after TCP accept, incomplete HTTP headers and request bodies have real deadlines, WebSocket admission is independently bounded, frames/messages stop at 256 KiB, the first subscription has a ten-second deadline, and authenticated ingress has message, byte, and control-frame windows. Binary frames are rejected. Room queue admission never waits and returns `room_busy` when saturated.
 
@@ -145,7 +172,14 @@ Tauri owns the local sidecar it starts. The sidecar binds loopback, reports one 
 
 ### Persistence
 
-SQLite is the local durable authority. The Rust schema owns its version and cutover marker, while an adjacent process-lifetime exclusive writer lease prevents two Rust runtimes from becoming concurrent room authorities. A nonempty database without the Rust owner marker is rejected before any schema write; ownership changes require explicit migration. A command result and its event commit in one transaction. Persistence failure is an error, never an in-memory success.
+SQLite is the local durable authority. The Rust schema owns its version, stable
+server identity, and cutover marker, while an adjacent process-lifetime exclusive
+writer lease prevents two Rust runtimes from becoming concurrent room authorities.
+A nonempty database without the Rust owner marker is rejected before any schema
+write; ownership changes require explicit migration. A command result and its
+event commit in one transaction, as do canonical room creation and its initial
+membership/event boundary. Persistence failure is an error, never an in-memory
+success.
 
 Room snapshots are read in one SQLite transaction. Their `oldest_seq` and `last_seq` describe the returned event range, not an independently sampled global range. Initial connections receive the newest bounded tail; resumes receive every event after the cursor when it fits, an explicit gap tail otherwise, and the empty `(oldest_seq=0, last_seq=cursor)` boundary when already current.
 

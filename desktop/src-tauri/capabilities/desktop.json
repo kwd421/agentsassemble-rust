@@ -4,5 +4,10 @@
   "description": "Allow the bundled room UI to request one-use runtime tickets and choose a local workspace.",
   "windows": ["main"],
   "local": true,
-  "permissions": ["allow-runtime-ticket", "allow-choose-local-workspace"]
+  "permissions": [
+    "allow-runtime-ticket",
+    "allow-runtime-operator-ticket",
+    "allow-cache-selected-room-directory",
+    "allow-choose-local-workspace"
+  ]
 }

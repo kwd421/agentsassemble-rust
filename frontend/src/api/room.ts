@@ -6,10 +6,12 @@ import {
 } from "../lib/desktopBridge";
 import {
   fetchJson,
+  fetchJsonServerOperator,
   fetchJsonWithIdentity,
   fetchJsonWithToken,
   deleteJson,
   postJson,
+  postJsonServerOperator,
   postJsonHost,
   postJsonWithIdentity,
   postJsonWithToken,
@@ -464,7 +466,7 @@ export function fetchRoomFriends() {
 }
 
 export function createRoom(roomId: string, label = "") {
-  return postJson<{ status: string; server_id: string; room: ServerRoom }>("/api/rooms", {
+  return postJsonServerOperator<{ status: string; server_id: string; room: ServerRoom }>("/api/rooms", {
     room_id: roomId,
     label,
   });
@@ -472,9 +474,9 @@ export function createRoom(roomId: string, label = "") {
 
 export function fetchRooms(includeArchived = false) {
   if (includeArchived) {
-    return fetchJson<ServerRoomsResponse>("/api/rooms?include_archived=true");
+    return fetchJsonServerOperator<ServerRoomsResponse>("/api/rooms?include_archived=true");
   }
-  return fetchJson<ServerRoomsResponse>("/api/rooms");
+  return fetchJsonServerOperator<ServerRoomsResponse>("/api/rooms");
 }
 
 export function addRoomFriend(friend: Partial<RoomFriend>) {

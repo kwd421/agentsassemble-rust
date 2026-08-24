@@ -70,6 +70,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/host-challenge", get(issue_host_challenge))
         .route("/api/ws-ticket", post(issue_ticket))
         .route("/ws", get(upgrade_socket))
+        .merge(crate::room_directory_web::routes())
         .merge(crate::profile_web::routes());
     if let Some(frontend_root) = frontend_root {
         let index = frontend_root.join("index.html");
@@ -623,7 +624,8 @@ fn persistence_error(error: &PersistenceError) -> (&'static str, String) {
         | PersistenceError::InitializationNotAllowed
         | PersistenceError::InvalidSchemaVersion(_)
         | PersistenceError::UnsupportedSchemaVersion { .. }
-        | PersistenceError::IncompleteLifecycleMigration => (
+        | PersistenceError::IncompleteLifecycleMigration
+        | PersistenceError::InvalidServerId => (
             "persistence_failed",
             "Persistence operation failed.".to_owned(),
         ),

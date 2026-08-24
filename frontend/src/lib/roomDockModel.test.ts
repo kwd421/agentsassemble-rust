@@ -19,6 +19,16 @@ describe("createStartupRoute", () => {
   beforeEach(() => {
     window.localStorage.clear();
     window.history.replaceState({}, "", "/");
+    Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+  });
+
+  it("does not fabricate a desktop general room before server hydration", () => {
+    Object.assign(window, { __TAURI_INTERNALS__: { invoke: () => Promise.resolve() } });
+
+    const route = createStartupRoute();
+
+    expect(route.startupRooms).toEqual([]);
+    expect(route.activeRoomId).toBe("");
   });
 
   it("keeps a stored room session while a new invite is preflighted", () => {

@@ -39,6 +39,8 @@ pub enum PersistenceError {
     UnsupportedSchemaVersion { found: i64, supported: i64 },
     #[error("database contains a lifecycle intent that cannot be safely migrated")]
     IncompleteLifecycleMigration,
+    #[error("database server identity is missing or invalid")]
+    InvalidServerId,
     #[error("room does not exist")]
     RoomMissing,
     #[error("participant does not exist")]
@@ -109,6 +111,10 @@ impl SqliteStore {
                     .await?;
             }
         }
+        sqlx::query("INSERT INTO runtime_metadata(key, value) VALUES ('server_id', ?)")
+            .bind(uuid::Uuid::new_v4().to_string())
+            .execute(&mut *transaction)
+            .await?;
         sqlx::query(
             "INSERT INTO runtime_metadata(key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         )

@@ -14,7 +14,6 @@ import {
   loadRoomDockItems,
   type PersistedRoomDockItem,
 } from "./roomDockPersistence";
-import { isDesktopWebview } from "./desktopBridge";
 
 export type RoomDockItem = {
   id: string;
@@ -148,20 +147,7 @@ export function roomDockIdentity(
 export function initialOperatorRooms(directRoom?: RoomDockItem | null) {
   const persisted = loadRoomDockItems()
     .map(hydratePersistedRoom);
-  const rooms = persisted.length || !isDesktopWebview()
-    ? persisted
-    : [{
-        id: "server-general",
-        label: "general",
-        meetingId: "general",
-        roomOrigin: "local" as const,
-        connectionState: "local" as const,
-        topic: "general",
-        shortLabel: "G",
-        icon: Radio,
-        createdAt: "",
-        tone: "resident" as const,
-      }];
+  const rooms = persisted;
   if (!directRoom) return rooms;
   const existingIndex = rooms.findIndex(
     (room) => room.id === directRoom.id || roomDockIdentity(room) === roomDockIdentity(directRoom)

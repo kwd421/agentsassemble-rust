@@ -40,4 +40,19 @@ describe("RoomSyncNotice", () => {
       "방 서버에 연결하지 못했습니다"
     );
   });
+
+  it("labels cached room-directory state as unconfirmed", () => {
+    render(
+      <RoomSyncNotice
+        issue={{
+          category: "room_directory_unconfirmed",
+          message: "pending",
+        }}
+      />
+    );
+
+    expect(screen.getByRole("status").textContent).toContain(
+      "서버 원본과 확인"
+    );
+  });
 });

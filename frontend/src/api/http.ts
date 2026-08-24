@@ -1,5 +1,9 @@
 import { ApiError } from "../lib/apiErrors";
-import { fetchDesktopRuntime, isDesktopWebview } from "../lib/desktopBridge";
+import {
+  fetchDesktopOperatorRuntime,
+  fetchDesktopRuntime,
+  isDesktopWebview,
+} from "../lib/desktopBridge";
 
 const HOST_TOKEN_STORAGE_KEY = "agentsassemble.hostToken.v1";
 let inMemoryHostToken = "";
@@ -46,6 +50,28 @@ export async function postJson<T>(url: string, body: object): Promise<T> {
     throw await responseError(res);
   }
   return res.json();
+}
+
+export async function fetchJsonServerOperator<T>(url: string): Promise<T> {
+  if (isDesktopWebview()) {
+    const res = await fetchDesktopOperatorRuntime(url);
+    if (!res.ok) throw await responseError(res);
+    return res.json();
+  }
+  return fetchJson<T>(url);
+}
+
+export async function postJsonServerOperator<T>(url: string, body: object): Promise<T> {
+  if (isDesktopWebview()) {
+    const res = await fetchDesktopOperatorRuntime(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw await responseError(res);
+    return res.json();
+  }
+  return postJson<T>(url, body);
 }
 
 export async function postJsonHost<T>(url: string, body: object): Promise<T> {

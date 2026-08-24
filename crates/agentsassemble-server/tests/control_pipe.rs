@@ -62,6 +62,30 @@ impl ControlledServer {
         serde_json::from_str(line.trim())
             .unwrap_or_else(|error| panic!("decode control response: {error}"))
     }
+
+    async fn issue_operator_ticket(&mut self) -> LocalControlResponse {
+        let request = LocalControlRequest::IssueOperatorHttpTicket {
+            request_id: "control-operator-ticket-1".to_owned(),
+        };
+        let mut encoded = serde_json::to_vec(&request)
+            .unwrap_or_else(|error| panic!("encode operator control request: {error}"));
+        encoded.push(b'\n');
+        self.control
+            .write_all(&encoded)
+            .await
+            .unwrap_or_else(|error| panic!("write operator control request: {error}"));
+        self.control
+            .flush()
+            .await
+            .unwrap_or_else(|error| panic!("flush operator control request: {error}"));
+        let mut line = String::new();
+        tokio::time::timeout(Duration::from_secs(2), self.output.read_line(&mut line))
+            .await
+            .unwrap_or_else(|_| panic!("operator control response timed out"))
+            .unwrap_or_else(|error| panic!("read operator control response: {error}"));
+        serde_json::from_str(line.trim())
+            .unwrap_or_else(|error| panic!("decode operator control response: {error}"))
+    }
 }
 
 #[tokio::test]
@@ -94,6 +118,27 @@ async fn owned_control_pipe_issues_proof_bound_ticket_without_http_secret() {
     assert_eq!(ticket.len(), 64);
     assert!(ttl_seconds > 0);
     assert_eq!(server_proof_key.len(), 64);
+    server.close_parent_pipe().await;
+}
+
+#[tokio::test]
+async fn owned_control_pipe_issues_a_distinct_operator_http_ticket() {
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
+    let database = directory.path().join("runtime.sqlite3");
+    let mut server = start_controlled(&database).await;
+    let response = server.issue_operator_ticket().await;
+    let LocalControlResponse::OperatorHttpOk {
+        request_id,
+        ticket,
+        ttl_seconds,
+    } = response
+    else {
+        panic!("operator HTTP ticket request was rejected");
+    };
+    assert_eq!(request_id, "control-operator-ticket-1");
+    assert_eq!(ticket.len(), 64);
+    assert!(ttl_seconds > 0);
     server.close_parent_pipe().await;
 }
 

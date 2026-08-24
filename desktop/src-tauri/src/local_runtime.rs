@@ -32,6 +32,13 @@ pub struct TicketGrant {
     server_proof_key: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct OperatorHttpTicketGrant {
+    ticket: String,
+    ttl_seconds: u64,
+    http_base_url: String,
+}
+
 #[derive(Default)]
 pub struct LocalRuntime {
     process: Mutex<Option<RuntimeProcess>>,
@@ -74,24 +81,32 @@ impl LocalRuntime {
             .process
             .lock()
             .map_err(|_| "local runtime state lock is poisoned".to_owned())?;
-        let must_start = match process.as_mut() {
-            Some(runtime) => runtime
-                .child
-                .try_wait()
-                .map_err(|error| format!("cannot inspect local runtime: {error}"))?
-                .is_some(),
-            None => true,
-        };
-        if must_start {
-            if let Some(mut stopped) = process.take() {
-                terminate_owned_runtime(&mut stopped);
-            }
-            *process = Some(start_runtime(app, &room_id)?);
-        }
-        let runtime = process
-            .as_mut()
-            .ok_or_else(|| "local runtime did not start".to_owned())?;
+        let runtime = ensure_runtime(&mut process, app, &room_id)?;
         let result = request_ticket(runtime, &room_id);
+        match result {
+            Ok(grant) => Ok(grant),
+            Err(TicketFailure::Rejected(message)) => Err(message),
+            Err(TicketFailure::Broken(message)) => {
+                if let Some(mut broken) = process.take() {
+                    terminate_owned_runtime(&mut broken);
+                }
+                Err(format!(
+                    "{message}; the owned runtime was stopped and will restart on the next attempt"
+                ))
+            }
+        }
+    }
+
+    pub fn issue_operator_http_ticket(
+        &self,
+        app: &AppHandle,
+    ) -> Result<OperatorHttpTicketGrant, String> {
+        let mut process = self
+            .process
+            .lock()
+            .map_err(|_| "local runtime state lock is poisoned".to_owned())?;
+        let runtime = ensure_runtime(&mut process, app, "general")?;
+        let result = request_operator_http_ticket(runtime);
         match result {
             Ok(grant) => Ok(grant),
             Err(TicketFailure::Rejected(message)) => Err(message),
@@ -114,6 +129,30 @@ impl LocalRuntime {
             terminate_owned_runtime(&mut runtime);
         }
     }
+}
+
+fn ensure_runtime<'a>(
+    process: &'a mut Option<RuntimeProcess>,
+    app: &AppHandle,
+    bootstrap_room_id: &str,
+) -> Result<&'a mut RuntimeProcess, String> {
+    let must_start = match process.as_mut() {
+        Some(runtime) => runtime
+            .child
+            .try_wait()
+            .map_err(|error| format!("cannot inspect local runtime: {error}"))?
+            .is_some(),
+        None => true,
+    };
+    if must_start {
+        if let Some(mut stopped) = process.take() {
+            terminate_owned_runtime(&mut stopped);
+        }
+        *process = Some(start_runtime(app, bootstrap_room_id)?);
+    }
+    process
+        .as_mut()
+        .ok_or_else(|| "local runtime did not start".to_owned())
 }
 
 fn start_runtime(app: &AppHandle, room_id: &str) -> Result<RuntimeProcess, String> {
@@ -201,47 +240,12 @@ fn request_ticket(
     runtime: &mut RuntimeProcess,
     room_id: &str,
 ) -> Result<TicketGrant, TicketFailure> {
-    if runtime
-        .child
-        .try_wait()
-        .map_err(|error| TicketFailure::Broken(format!("cannot inspect local runtime: {error}")))?
-        .is_some()
-    {
-        return Err(TicketFailure::Broken(
-            "the owned Rust runtime exited before ticket issuance".to_owned(),
-        ));
-    }
     let request_id = Uuid::new_v4().to_string();
     let request = LocalControlRequest::IssueTicket {
         request_id: request_id.clone(),
         meeting_id: room_id.to_owned(),
     };
-    let mut encoded = serde_json::to_vec(&request).map_err(|error| {
-        TicketFailure::Broken(format!("cannot encode local ticket request: {error}"))
-    })?;
-    encoded.push(b'\n');
-    let control = runtime
-        .control
-        .as_mut()
-        .ok_or_else(|| TicketFailure::Broken("local runtime control pipe is closed".to_owned()))?;
-    control
-        .write_all(&encoded)
-        .and_then(|()| control.flush())
-        .map_err(|error| {
-            TicketFailure::Broken(format!("cannot write local ticket request: {error}"))
-        })?;
-    let response = runtime
-        .output
-        .recv_timeout(REQUEST_TIMEOUT)
-        .map_err(|error| {
-            TicketFailure::Broken(format!("local runtime ticket response timed out: {error}"))
-        })?
-        .map_err(TicketFailure::Broken)?;
-    let RuntimeOutput::Control(response) = response else {
-        return Err(TicketFailure::Broken(
-            "local runtime returned a duplicate startup record".to_owned(),
-        ));
-    };
+    let response = request_control(runtime, &request)?;
     let (ticket, ttl_seconds, server_proof_key) = match response {
         LocalControlResponse::Ok {
             request_id: response_id,
@@ -287,6 +291,95 @@ fn request_ticket(
         websocket_base_url: format!("ws://127.0.0.1:{port}"),
         server_proof_key,
     })
+}
+
+fn request_operator_http_ticket(
+    runtime: &mut RuntimeProcess,
+) -> Result<OperatorHttpTicketGrant, TicketFailure> {
+    let request_id = Uuid::new_v4().to_string();
+    let request = LocalControlRequest::IssueOperatorHttpTicket {
+        request_id: request_id.clone(),
+    };
+    let response = request_control(runtime, &request)?;
+    let (ticket, ttl_seconds) = match response {
+        LocalControlResponse::OperatorHttpOk {
+            request_id: response_id,
+            ticket,
+            ttl_seconds,
+        } if response_id == request_id => (ticket, ttl_seconds),
+        LocalControlResponse::Error {
+            request_id: response_id,
+            code,
+            message,
+        } if response_id == request_id => {
+            return if is_application_rejection(&code) {
+                Err(TicketFailure::Rejected(message))
+            } else {
+                Err(TicketFailure::Broken(message))
+            };
+        }
+        _ => {
+            return Err(TicketFailure::Broken(
+                "local runtime operator ticket response did not match the request".to_owned(),
+            ));
+        }
+    };
+    if ticket.len() != 64
+        || !ticket.bytes().all(|byte| byte.is_ascii_hexdigit())
+        || ttl_seconds == 0
+    {
+        return Err(TicketFailure::Broken(
+            "local runtime returned an invalid operator ticket grant".to_owned(),
+        ));
+    }
+    Ok(OperatorHttpTicketGrant {
+        ticket,
+        ttl_seconds,
+        http_base_url: runtime.address.to_string().trim_end_matches('/').to_owned(),
+    })
+}
+
+fn request_control(
+    runtime: &mut RuntimeProcess,
+    request: &LocalControlRequest,
+) -> Result<LocalControlResponse, TicketFailure> {
+    if runtime
+        .child
+        .try_wait()
+        .map_err(|error| TicketFailure::Broken(format!("cannot inspect local runtime: {error}")))?
+        .is_some()
+    {
+        return Err(TicketFailure::Broken(
+            "the owned Rust runtime exited before ticket issuance".to_owned(),
+        ));
+    }
+    let mut encoded = serde_json::to_vec(request).map_err(|error| {
+        TicketFailure::Broken(format!("cannot encode local ticket request: {error}"))
+    })?;
+    encoded.push(b'\n');
+    let control = runtime
+        .control
+        .as_mut()
+        .ok_or_else(|| TicketFailure::Broken("local runtime control pipe is closed".to_owned()))?;
+    control
+        .write_all(&encoded)
+        .and_then(|()| control.flush())
+        .map_err(|error| {
+            TicketFailure::Broken(format!("cannot write local ticket request: {error}"))
+        })?;
+    let response = runtime
+        .output
+        .recv_timeout(REQUEST_TIMEOUT)
+        .map_err(|error| {
+            TicketFailure::Broken(format!("local runtime ticket response timed out: {error}"))
+        })?
+        .map_err(TicketFailure::Broken)?;
+    let RuntimeOutput::Control(response) = response else {
+        return Err(TicketFailure::Broken(
+            "local runtime returned a duplicate startup record".to_owned(),
+        ));
+    };
+    Ok(response)
 }
 
 fn is_application_rejection(code: &str) -> bool {
@@ -376,26 +469,26 @@ fn copy_capped(
 }
 
 #[cfg(unix)]
-fn make_private_directory(path: &Path) -> std::io::Result<()> {
+pub(crate) fn make_private_directory(path: &Path) -> std::io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
 
     fs::set_permissions(path, fs::Permissions::from_mode(0o700))
 }
 
 #[cfg(windows)]
-fn make_private_directory(path: &Path) -> std::io::Result<()> {
+pub(crate) fn make_private_directory(path: &Path) -> std::io::Result<()> {
     crate::private_fs::secure_directory(path)
 }
 
 #[cfg(unix)]
-fn make_private_file(file: &File) -> std::io::Result<()> {
+pub(crate) fn make_private_file(file: &File) -> std::io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
 
     file.set_permissions(fs::Permissions::from_mode(0o600))
 }
 
 #[cfg(windows)]
-fn make_private_file(file: &File) -> std::io::Result<()> {
+pub(crate) fn make_private_file(file: &File) -> std::io::Result<()> {
     crate::private_fs::secure_file(file)
 }
 

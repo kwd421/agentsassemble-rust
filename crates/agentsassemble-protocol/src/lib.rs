@@ -108,12 +108,21 @@ pub struct TicketResponse {
     pub server_proof_key: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+pub struct OperatorHttpTicketResponse {
+    pub ticket: String,
+    pub ttl_seconds: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum LocalControlRequest {
     IssueTicket {
         request_id: String,
         meeting_id: String,
+    },
+    IssueOperatorHttpTicket {
+        request_id: String,
     },
 }
 
@@ -125,6 +134,11 @@ pub enum LocalControlResponse {
         ticket: String,
         ttl_seconds: u64,
         server_proof_key: String,
+    },
+    OperatorHttpOk {
+        request_id: String,
+        ticket: String,
+        ttl_seconds: u64,
     },
     Error {
         request_id: String,

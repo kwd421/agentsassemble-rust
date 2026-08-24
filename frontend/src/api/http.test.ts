@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { fetchJsonWithIdentity, postJsonWithIdentity } from "./http";
+import {
+  fetchJsonServerOperator,
+  fetchJsonWithIdentity,
+  postJsonServerOperator,
+  postJsonWithIdentity,
+} from "./http";
 
 describe("desktop profile HTTP routing", () => {
   afterEach(() => {
@@ -83,5 +88,55 @@ describe("desktop profile HTTP routing", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/user-profile", {
       headers: { Authorization: "Bearer guest-session" },
     });
+  });
+
+  it("uses purpose-separated one-use operator tickets for room control HTTP", async () => {
+    const invoke = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ticket: "operator-list",
+        ttl_seconds: 30,
+        http_base_url: "http://127.0.0.1:49153",
+      })
+      .mockResolvedValueOnce({
+        ticket: "operator-create",
+        ttl_seconds: 30,
+        http_base_url: "http://127.0.0.1:49153",
+      });
+    Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ server_id: "server", rooms: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ status: "ready", server_id: "server", room: {} }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchJsonServerOperator("/api/rooms?include_archived=true");
+    await postJsonServerOperator("/api/rooms", {
+      room_id: "project-room",
+      label: "Project Room",
+    });
+
+    expect(invoke).toHaveBeenNthCalledWith(1, "runtime_operator_ticket");
+    expect(invoke).toHaveBeenNthCalledWith(2, "runtime_operator_ticket");
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "http://127.0.0.1:49153/api/rooms?include_archived=true",
+      expect.objectContaining({ headers: expect.any(Headers) })
+    );
+    const listHeaders = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
+    const createHeaders = fetchMock.mock.calls[1]?.[1]?.headers as Headers;
+    expect(listHeaders.get("Authorization")).toBe("Bearer operator-list");
+    expect(createHeaders.get("Authorization")).toBe("Bearer operator-create");
+    expect(createHeaders.get("Content-Type")).toBe("application/json");
   });
 });

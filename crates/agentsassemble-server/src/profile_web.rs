@@ -10,9 +10,14 @@ use axum::{
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde::Deserialize;
 use serde_json::json;
-use tower_http::cors::{AllowOrigin, CorsLayer};
+use tower_http::cors::CorsLayer;
 
-use crate::AppState;
+use crate::{
+    AppState,
+    http_api::{
+        BodyDecodeError, bearer_ticket, decode_json_body, ensure_empty_body, exact_tauri_cors,
+    },
+};
 
 const MAX_PROFILE_BODY_BYTES: usize = 16 * 1024;
 const MAX_ATTACHMENT_BYTES: usize = 10 * 1024 * 1024;
@@ -35,15 +40,7 @@ pub(crate) fn routes() -> Router<AppState> {
 }
 
 fn profile_cors() -> CorsLayer {
-    let origins = [
-        HeaderValue::from_static("tauri://localhost"),
-        HeaderValue::from_static("http://tauri.localhost"),
-        HeaderValue::from_static("https://tauri.localhost"),
-    ];
-    CorsLayer::new()
-        .allow_origin(AllowOrigin::list(origins))
-        .allow_methods([Method::GET, Method::POST])
-        .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
+    exact_tauri_cors([Method::GET, Method::POST])
 }
 
 async fn read_profile(
@@ -51,7 +48,9 @@ async fn read_profile(
     request: Request,
 ) -> Result<Json<serde_json::Value>, ProfileHttpError> {
     let principal = consume_principal(&state, request.headers()).await?;
-    ensure_empty_body(request, MAX_PROFILE_BODY_BYTES).await?;
+    ensure_empty_body(request, MAX_PROFILE_BODY_BYTES)
+        .await
+        .map_err(ProfileHttpError::from_body)?;
     let profile = state.store.user_profile(&principal).await?;
     Ok(Json(json!({"profile": profile})))
 }
@@ -61,7 +60,9 @@ async fn update_profile(
     request: Request,
 ) -> Result<Json<serde_json::Value>, ProfileHttpError> {
     let principal = consume_principal(&state, request.headers()).await?;
-    let patch: UserProfilePatch = decode_json_body(request, MAX_PROFILE_BODY_BYTES).await?;
+    let patch: UserProfilePatch = decode_json_body(request, MAX_PROFILE_BODY_BYTES)
+        .await
+        .map_err(ProfileHttpError::from_body)?;
     let outcome = state.store.update_user_profile(&principal, patch).await?;
     state.rooms.notify_committed_events(&outcome.events).await;
     Ok(Json(json!({"profile": outcome.profile})))
@@ -72,7 +73,9 @@ async fn upload_attachment(
     request: Request,
 ) -> Result<Json<serde_json::Value>, ProfileHttpError> {
     let principal = consume_principal(&state, request.headers()).await?;
-    let payload: AttachmentUpload = decode_json_body(request, MAX_ATTACHMENT_BODY_BYTES).await?;
+    let payload: AttachmentUpload = decode_json_body(request, MAX_ATTACHMENT_BODY_BYTES)
+        .await
+        .map_err(ProfileHttpError::from_body)?;
     if payload.purpose.trim() != "profile_avatar" {
         return Err(ProfileHttpError::bad_request(
             "Only profile_avatar attachments are available in this runtime.",
@@ -154,62 +157,13 @@ async fn consume_principal(
     state: &AppState,
     headers: &axum::http::HeaderMap,
 ) -> Result<AuthenticatedPrincipal, ProfileHttpError> {
-    let authorization = headers
-        .get(header::AUTHORIZATION)
-        .and_then(|value| value.to_str().ok())
-        .ok_or_else(ProfileHttpError::unauthorized)?;
-    let ticket = authorization
-        .strip_prefix("Bearer ")
-        .filter(|value| !value.is_empty() && !value.bytes().any(|byte| byte.is_ascii_whitespace()))
-        .ok_or_else(ProfileHttpError::unauthorized)?;
+    let ticket = bearer_ticket(headers).ok_or_else(ProfileHttpError::unauthorized)?;
     state
         .tickets
         .consume(ticket)
         .await
         .map(|grant| grant.principal)
         .map_err(|_| ProfileHttpError::unauthorized())
-}
-
-async fn ensure_empty_body(request: Request, limit: usize) -> Result<(), ProfileHttpError> {
-    reject_declared_oversize(request.headers(), limit)?;
-    let encoded = body::to_bytes(request.into_body(), limit)
-        .await
-        .map_err(|_| ProfileHttpError::payload_too_large())?;
-    if encoded.is_empty() {
-        Ok(())
-    } else {
-        Err(ProfileHttpError::bad_request(
-            "GET user-profile requests must not contain a body.",
-        ))
-    }
-}
-
-async fn decode_json_body<T: serde::de::DeserializeOwned>(
-    request: Request,
-    limit: usize,
-) -> Result<T, ProfileHttpError> {
-    reject_declared_oversize(request.headers(), limit)?;
-    let encoded = body::to_bytes(request.into_body(), limit)
-        .await
-        .map_err(|_| ProfileHttpError::payload_too_large())?;
-    serde_json::from_slice(&encoded)
-        .map_err(|_| ProfileHttpError::bad_request("Request JSON is invalid."))
-}
-
-fn reject_declared_oversize(
-    headers: &axum::http::HeaderMap,
-    limit: usize,
-) -> Result<(), ProfileHttpError> {
-    if headers
-        .get(header::CONTENT_LENGTH)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.parse::<usize>().ok())
-        .is_some_and(|length| length > limit)
-    {
-        Err(ProfileHttpError::payload_too_large())
-    } else {
-        Ok(())
-    }
 }
 
 #[derive(Debug)]
@@ -220,6 +174,15 @@ struct ProfileHttpError {
 }
 
 impl ProfileHttpError {
+    fn from_body(error: BodyDecodeError) -> Self {
+        match error {
+            BodyDecodeError::PayloadTooLarge => Self::payload_too_large(),
+            BodyDecodeError::InvalidJson => Self::bad_request("Request JSON is invalid."),
+            BodyDecodeError::NonEmpty => {
+                Self::bad_request("GET user-profile requests must not contain a body.")
+            }
+        }
+    }
     fn bad_request(message: impl Into<String>) -> Self {
         Self {
             status: StatusCode::BAD_REQUEST,

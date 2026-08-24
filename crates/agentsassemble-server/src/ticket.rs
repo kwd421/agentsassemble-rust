@@ -7,9 +7,15 @@ use uuid::Uuid;
 
 #[derive(Debug, Clone)]
 struct StoredTicketGrant {
-    principal: AuthenticatedPrincipal,
+    authority: TicketAuthority,
     proof_key: String,
     expires_at: Instant,
+}
+
+#[derive(Debug, Clone)]
+enum TicketAuthority {
+    Room(AuthenticatedPrincipal),
+    ServerOperator { principal_id: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -22,6 +28,11 @@ pub struct IssuedTicket {
 pub struct ConsumedTicket {
     pub principal: AuthenticatedPrincipal,
     pub proof_key: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConsumedServerOperatorTicket {
+    pub principal_id: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
@@ -56,6 +67,29 @@ impl TicketStore {
         &self,
         principal: AuthenticatedPrincipal,
     ) -> Result<IssuedTicket, TicketError> {
+        self.issue_authority(TicketAuthority::Room(principal)).await
+    }
+
+    /// Issues one server-operator HTTP credential that cannot authenticate a room socket.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` when the bounded grant store is full or the identity is empty.
+    pub async fn issue_server_operator(
+        &self,
+        principal_id: String,
+    ) -> Result<IssuedTicket, TicketError> {
+        if principal_id.is_empty() {
+            return Err(TicketError::Invalid);
+        }
+        self.issue_authority(TicketAuthority::ServerOperator { principal_id })
+            .await
+    }
+
+    async fn issue_authority(
+        &self,
+        authority: TicketAuthority,
+    ) -> Result<IssuedTicket, TicketError> {
         let now = Instant::now();
         let mut grants = self.grants.lock().await;
         grants.retain(|_, grant| grant.expires_at > now);
@@ -67,7 +101,7 @@ impl TicketStore {
         grants.insert(
             ticket.clone(),
             StoredTicketGrant {
-                principal,
+                authority,
                 proof_key: proof_key.clone(),
                 expires_at: now + self.ttl,
             },
@@ -81,6 +115,35 @@ impl TicketStore {
     ///
     /// Returns `Invalid` for unknown, expired, or previously consumed tickets.
     pub async fn consume(&self, ticket: &str) -> Result<ConsumedTicket, TicketError> {
+        let grant = self.consume_grant(ticket).await?;
+        let TicketAuthority::Room(principal) = grant.authority else {
+            return Err(TicketError::Invalid);
+        };
+        Ok(ConsumedTicket {
+            principal,
+            proof_key: grant.proof_key,
+        })
+    }
+
+    /// Removes and resolves a server-operator HTTP credential exactly once.
+    ///
+    /// A room credential is consumed and rejected instead of being accepted across scopes.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` for the wrong purpose, unknown, expired, or reused tickets.
+    pub async fn consume_server_operator(
+        &self,
+        ticket: &str,
+    ) -> Result<ConsumedServerOperatorTicket, TicketError> {
+        let grant = self.consume_grant(ticket).await?;
+        let TicketAuthority::ServerOperator { principal_id } = grant.authority else {
+            return Err(TicketError::Invalid);
+        };
+        Ok(ConsumedServerOperatorTicket { principal_id })
+    }
+
+    async fn consume_grant(&self, ticket: &str) -> Result<StoredTicketGrant, TicketError> {
         let grant = self
             .grants
             .lock()
@@ -90,10 +153,7 @@ impl TicketStore {
         if grant.expires_at <= Instant::now() {
             return Err(TicketError::Invalid);
         }
-        Ok(ConsumedTicket {
-            principal: grant.principal,
-            proof_key: grant.proof_key,
-        })
+        Ok(grant)
     }
 
     #[must_use]
@@ -151,5 +211,32 @@ mod tests {
             store.consume(&ticket.ticket).await,
             Err(TicketError::Invalid)
         );
+    }
+
+    #[tokio::test]
+    async fn ticket_purposes_are_one_use_and_never_interchangeable() {
+        let store = TicketStore::new(Duration::from_secs(30), 8);
+        let operator = store
+            .issue_server_operator("operator-local-user".to_owned())
+            .await
+            .unwrap_or_else(|error| panic!("issue operator ticket: {error}"));
+        assert_eq!(
+            store.consume(&operator.ticket).await,
+            Err(TicketError::Invalid)
+        );
+        assert_eq!(
+            store.consume_server_operator(&operator.ticket).await,
+            Err(TicketError::Invalid)
+        );
+
+        let room = store
+            .issue(principal())
+            .await
+            .unwrap_or_else(|error| panic!("issue room ticket: {error}"));
+        assert_eq!(
+            store.consume_server_operator(&room.ticket).await,
+            Err(TicketError::Invalid)
+        );
+        assert_eq!(store.consume(&room.ticket).await, Err(TicketError::Invalid));
     }
 }

@@ -1,0 +1,234 @@
+use agentsassemble_domain::{
+    LOCAL_OPERATOR_USER_ID, RoomStatus, clean_single_line, public_settings, validate_room_id,
+};
+use agentsassemble_persistence::{PersistenceError, StoredRoomSummary};
+use axum::{
+    Json, Router,
+    extract::{Query, Request, State},
+    http::{Method, StatusCode},
+    response::{IntoResponse, Response},
+    routing::get,
+};
+use serde::Deserialize;
+use serde_json::{Value, json};
+
+use crate::{
+    AppState,
+    http_api::{
+        BodyDecodeError, bearer_ticket, decode_json_body, ensure_empty_body, exact_tauri_cors,
+    },
+};
+
+const MAX_DIRECTORY_BODY_BYTES: usize = 8 * 1024;
+
+#[derive(Debug, Default, Deserialize)]
+struct DirectoryQuery {
+    #[serde(default)]
+    include_archived: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateRoomRequest {
+    room_id: String,
+    #[serde(default)]
+    label: String,
+}
+
+pub(crate) fn routes() -> Router<AppState> {
+    Router::new()
+        .route("/api/rooms", get(list_rooms).post(create_room))
+        .layer(exact_tauri_cors([Method::GET, Method::POST]))
+}
+
+async fn list_rooms(
+    State(state): State<AppState>,
+    Query(query): Query<DirectoryQuery>,
+    request: Request,
+) -> Result<Json<Value>, DirectoryHttpError> {
+    consume_operator(&state, request.headers()).await?;
+    ensure_empty_body(request, MAX_DIRECTORY_BODY_BYTES)
+        .await
+        .map_err(DirectoryHttpError::from_body)?;
+    let include_archived = matches!(
+        query.include_archived.trim().to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "on"
+    );
+    let server_id = state.store.server_id().await?;
+    let rooms = state.store.list_room_directory(include_archived).await?;
+    let rooms = rooms
+        .iter()
+        .map(|room| room_payload(room, "agent_session"))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(Json(json!({"server_id": server_id, "rooms": rooms})))
+}
+
+async fn create_room(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<Value>, DirectoryHttpError> {
+    consume_operator(&state, request.headers()).await?;
+    let payload: CreateRoomRequest = decode_json_body(request, MAX_DIRECTORY_BODY_BYTES)
+        .await
+        .map_err(DirectoryHttpError::from_body)?;
+    let room_id = validate_room_id(&payload.room_id)
+        .map_err(|error| DirectoryHttpError::bad_request(error.message))?;
+    let label = clean_single_line(&payload.label, 128);
+    let label = if label.is_empty() {
+        room_id.as_str()
+    } else {
+        label.as_str()
+    };
+    let commit = state
+        .store
+        .create_room_for_local_operator(&room_id, label)
+        .await?;
+    state.rooms.notify_committed_events(&commit.events).await;
+    let server_id = state.store.server_id().await?;
+    let room = room_identity_payload(&commit.room, &commit.settings, "frontend_room");
+    Ok(Json(
+        json!({"status": "ready", "server_id": server_id, "room": room}),
+    ))
+}
+
+async fn consume_operator(
+    state: &AppState,
+    headers: &axum::http::HeaderMap,
+) -> Result<(), DirectoryHttpError> {
+    let ticket = bearer_ticket(headers).ok_or_else(DirectoryHttpError::unauthorized)?;
+    let grant = state
+        .tickets
+        .consume_server_operator(ticket)
+        .await
+        .map_err(|_| DirectoryHttpError::unauthorized())?;
+    if grant.principal_id != LOCAL_OPERATOR_USER_ID {
+        return Err(DirectoryHttpError::unauthorized());
+    }
+    Ok(())
+}
+
+fn room_payload(room: &StoredRoomSummary, origin: &str) -> Result<Value, DirectoryHttpError> {
+    let mut settings = serde_json::to_value(public_settings(&room.settings)?)?;
+    settings
+        .as_object_mut()
+        .ok_or_else(DirectoryHttpError::internal)?
+        .insert(
+            "room_id".to_owned(),
+            Value::String(room.room.room_id.clone()),
+        );
+    let mut payload = room_identity_payload(&room.room, &room.settings, origin);
+    payload
+        .as_object_mut()
+        .ok_or_else(DirectoryHttpError::internal)?
+        .insert("room_settings".to_owned(), settings);
+    Ok(payload)
+}
+
+fn room_identity_payload(
+    room: &agentsassemble_domain::Room,
+    settings: &agentsassemble_domain::RoomSettings,
+    origin: &str,
+) -> Value {
+    json!({
+        "room_id": room.room_id,
+        "room_uid": room.room_uid,
+        "label": settings.label,
+        "last_active_at": room.updated_at,
+        "archived": room.status == RoomStatus::Archived,
+        "status": room_status(room.status),
+        "origin": origin,
+    })
+}
+
+const fn room_status(status: RoomStatus) -> &'static str {
+    match status {
+        RoomStatus::Active => "active",
+        RoomStatus::Closed => "closed",
+        RoomStatus::Archived => "archived",
+    }
+}
+
+#[derive(Debug)]
+struct DirectoryHttpError {
+    status: StatusCode,
+    code: &'static str,
+    message: String,
+}
+
+impl DirectoryHttpError {
+    fn bad_request(message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::BAD_REQUEST,
+            code: "bad_request",
+            message: message.into(),
+        }
+    }
+
+    fn unauthorized() -> Self {
+        Self {
+            status: StatusCode::UNAUTHORIZED,
+            code: "unauthorized",
+            message: "A valid one-use server-operator ticket is required.".to_owned(),
+        }
+    }
+
+    fn from_body(error: BodyDecodeError) -> Self {
+        match error {
+            BodyDecodeError::PayloadTooLarge => Self {
+                status: StatusCode::PAYLOAD_TOO_LARGE,
+                code: "payload_too_large",
+                message: "Request body exceeds the route limit.".to_owned(),
+            },
+            BodyDecodeError::InvalidJson => Self::bad_request("Request JSON is invalid."),
+            BodyDecodeError::NonEmpty => {
+                Self::bad_request("GET room-directory requests must not contain a body.")
+            }
+        }
+    }
+
+    fn internal() -> Self {
+        Self {
+            status: StatusCode::SERVICE_UNAVAILABLE,
+            code: "persistence_failed",
+            message: "Persistence operation failed.".to_owned(),
+        }
+    }
+}
+
+impl From<PersistenceError> for DirectoryHttpError {
+    fn from(error: PersistenceError) -> Self {
+        match error {
+            PersistenceError::CommandRejected { code, message } => {
+                let status = match code {
+                    "room_membership_inactive" => StatusCode::FORBIDDEN,
+                    "invalid_state" => StatusCode::CONFLICT,
+                    _ => StatusCode::BAD_REQUEST,
+                };
+                Self {
+                    status,
+                    code,
+                    message,
+                }
+            }
+            internal => {
+                tracing::error!(error = ?internal, "room directory persistence operation failed");
+                Self::internal()
+            }
+        }
+    }
+}
+
+impl From<serde_json::Error> for DirectoryHttpError {
+    fn from(_: serde_json::Error) -> Self {
+        Self::internal()
+    }
+}
+
+impl IntoResponse for DirectoryHttpError {
+    fn into_response(self) -> Response {
+        (
+            self.status,
+            Json(json!({"error": self.message, "code": self.code})),
+        )
+            .into_response()
+    }
+}
