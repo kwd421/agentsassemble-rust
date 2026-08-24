@@ -848,9 +848,19 @@ DMG were moved to
 `/Users/seinel/.Trash/AgentsAssemble-Start-Authority-Verify-20260825-0422`;
 the failed-attempt data remains separately recoverable at
 `/Users/seinel/.Trash/AgentsAssemble-Start-Authority-Verify-Failed-20260825-0415`.
-Original-product data and unrelated processes were untouched. Publication and
-same-session dual manual re-review are still required before this correction is
-approved.
+Original-product data and unrelated processes were untouched. The complete
+correction was committed and pushed as
+`745e8832059a893f73e798a10369c2d52c5d0903`. Daybreaker Blue High then manually
+reviewed the exact public `fbc44c5..745e883` range and reported no new
+Critical, High, or Medium finding: `APPROVE`. The replacement critical web
+session independently reviewed the same range in GPT-5.6 Sol Pro, including
+ACK/event publication ordering, safe and uncertain launch failure, exact-request
+retry/replay, snapshot authority, strict decoding, schema-16 fail-closed, and
+private-authority exposure. It withdrew its final safe-failure retry concern
+after tracing the same-session resume and single-creation-event contract, found
+no reachable blocker, and returned explicit `APPROVE`. That approved session was
+then changed and visibly verified as GPT-5.6 Sol `매우 높음` (fourth of five) for
+subsequent critical reviews.
 
 ## API verification scope
 
