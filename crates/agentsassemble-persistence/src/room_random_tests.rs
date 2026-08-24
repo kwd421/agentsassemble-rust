@@ -69,6 +69,16 @@ async fn human_room_random_is_tabletop_only_atomic_and_replayable() {
     .await
     .unwrap_or_else(|error| panic!("count room random events: {error}"));
     assert_eq!(result_count, 1);
+    let write_count = sqlx::query_scalar::<_, i64>(
+        "SELECT command_count FROM room_write_budgets WHERE room_id = 'general'",
+    )
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("read human room write budget: {error}"));
+    assert_eq!(
+        write_count, 2,
+        "replay and rejected chat-mode use must not be charged"
+    );
 }
 
 #[tokio::test]
@@ -138,6 +148,16 @@ async fn provider_room_random_revalidates_turn_and_enforces_durable_budget() {
     .await
     .unwrap_or_else(|error| panic!("count durable provider room results: {error}"));
     assert_eq!(committed, 32);
+    let write_count = sqlx::query_scalar::<_, i64>(
+        "SELECT command_count FROM room_write_budgets WHERE room_id = 'general'",
+    )
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("read provider room write budget: {error}"));
+    assert_eq!(
+        write_count, 34,
+        "settings, source message, and every provider result share one durable room budget"
+    );
 }
 
 async fn enable_tabletop(store: &SqliteStore, principal: &AuthenticatedPrincipal) {

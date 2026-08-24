@@ -142,6 +142,7 @@ impl SqliteStore {
                 &operation_id,
                 &prepared_result_json,
             ),
+            payload,
         )
         .await?;
         let newly_committed_events = records.committed_events.clone();

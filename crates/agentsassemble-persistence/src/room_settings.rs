@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::{
     CommandOutcome, PersistenceError, SqliteStore, authority::active_room_for_principal,
-    command_admission::admit_non_lifecycle_command,
+    command_admission::admit_non_lifecycle_command, room_write_budget::command_size,
 };
 
 trait AssetReferenceTransition {
@@ -71,6 +71,7 @@ impl SqliteStore {
             request_id,
             "room.settings.update",
             &payload_hash,
+            command_size(request_id, "room.settings.update", payload)?,
         )
         .await?
         {

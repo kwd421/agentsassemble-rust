@@ -12,6 +12,7 @@ use crate::{
     authority::active_room_for_principal,
     command_admission::admit_non_lifecycle_command,
     filesystem_authority::revalidate_runtime_authority,
+    room_write_budget::command_size,
 };
 
 const ACTION: &str = "agent.configure";
@@ -62,6 +63,7 @@ impl SqliteStore {
             request_id,
             ACTION,
             &payload_hash,
+            command_size(request_id, ACTION, payload)?,
         )
         .await?
         {

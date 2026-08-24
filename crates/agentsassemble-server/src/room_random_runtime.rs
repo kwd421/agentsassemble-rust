@@ -1,8 +1,12 @@
 use agentsassemble_domain::{RoomRandomRequest, RoomRandomResult};
-use agentsassemble_persistence::{PersistenceError, ProviderRoomRandomCommit, SqliteStore};
+use agentsassemble_persistence::{
+    PersistenceError, ProviderRoomRandomCommit, SqliteStore, room_write_command_size,
+};
 use agentsassemble_provider::{ProviderRoomToolCommand, ProviderRoomToolError};
 use tokio::sync::broadcast;
 use uuid::Uuid;
+
+use crate::principal_write_budget::PrincipalWriteBudget;
 
 #[must_use]
 pub(crate) fn generate_room_random(request: &RoomRandomRequest) -> RoomRandomResult {
@@ -43,13 +47,30 @@ pub(crate) async fn handle_provider_room_tool(
     event_tx: &broadcast::Sender<agentsassemble_domain::RoomEvent>,
     room_id: &str,
     mut command: ProviderRoomToolCommand,
+    write_budget: &mut PrincipalWriteBudget,
 ) {
     if let Err(error) = command.begin_commit() {
         command.complete(Err(error));
         return;
     }
-    let result = generate_room_random(command.request());
     let result_id = format!("result-{}", Uuid::new_v4().simple());
+    let payload = command.request().canonical_payload();
+    let payload_bytes =
+        match room_write_command_size(&result_id, command.request().room_action(), &payload) {
+            Ok(payload_bytes) => payload_bytes,
+            Err(error) => {
+                command.complete(Err(public_tool_error(error)));
+                return;
+            }
+        };
+    if let Err(error) = write_budget.admit(
+        &format!("agent-session:{}", command.session_id()),
+        payload_bytes,
+    ) {
+        command.complete(Err(public_tool_error(error)));
+        return;
+    }
+    let result = generate_room_random(command.request());
     let committed = store
         .commit_provider_room_random(ProviderRoomRandomCommit {
             room_id,

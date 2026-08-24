@@ -61,7 +61,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     openMobileSidebar, openRoomMenu, openRoomSettings, pendingMessageSearchTarget,
     quotaViewer, refreshSessionAndMembers, rightPanelMode, rightPanelSearchQuery,
     roomAppearances, roomDirectorySyncIssue, roomMenu, roomMessageSearch,
-    roomSocket, rooms, scopedAgents, scopedMentionables,
+    roomSettings, roomSocket, rooms, scopedAgents, scopedMentionables,
     scopedOnlineCount, scopedViewerDisplayName, selectDirectoryFriend, selectHomeFriend,
     selectRoom, selectedHomeFriendId, sendAgentConfigure, sendAgentControl,
     sendParticipantKick, sendParticipantMute, setAdminOpen, setChannelNotifications,
@@ -313,6 +313,8 @@ export default function AppView({ controller }: { controller: AppController }) {
             <ChannelContextMenu
               channelLabel={menuChannelDisplay.label}
               settings={activeChannelSettings[channelMenu.channelId]}
+              preferenceStatus={roomSettings.preferenceStateFor(activeRoom).status}
+              preferenceError={roomSettings.preferenceStateFor(activeRoom).error?.message || ""}
               x={channelMenu.x}
               y={channelMenu.y}
               onMarkRead={() => markChannelRead(channelMenu.channelId)}

@@ -126,6 +126,26 @@ impl RoomRandomRequest {
     }
 
     #[must_use]
+    pub const fn room_action(&self) -> &'static str {
+        match self {
+            Self::Roll { .. } => "room.random.roll",
+            Self::Choose { .. } => "room.random.choose",
+        }
+    }
+
+    #[must_use]
+    pub fn canonical_payload(&self) -> Value {
+        match self {
+            Self::Roll {
+                notation, reason, ..
+            } => serde_json::json!({"notation": notation, "reason": reason}),
+            Self::Choose { options, reason } => {
+                serde_json::json!({"options": options, "reason": reason})
+            }
+        }
+    }
+
+    #[must_use]
     pub fn reason(&self) -> &str {
         match self {
             Self::Roll { reason, .. } | Self::Choose { reason, .. } => reason,

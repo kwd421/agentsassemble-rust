@@ -47,6 +47,8 @@ function renderSettings(
       channelSettings={{}}
       settingsStatus={settingsStatus}
       settingsError={settingsStatus === "error" ? "offline" : ""}
+      preferenceStatus="ready"
+      preferenceError=""
       conversationMode={conversationMode}
       toolMode={conversationMode ? "chat" : null}
       orderedExcludePreviousSpeaker={conversationMode ? true : null}
@@ -55,7 +57,7 @@ function renderSettings(
       onInvite={() => undefined}
       onRoomChange={() => undefined}
       onAppearanceChange={onAppearanceChange}
-      onChannelSettingChange={() => undefined}
+      onChannelSettingChange={async () => undefined}
       onConversationModeChange={onConversationModeChange}
       onToolModeChange={onToolModeChange}
       onOrderedExcludePreviousSpeakerChange={onOrderedExcludePreviousSpeakerChange}
@@ -158,7 +160,7 @@ describe("RoomSettingsModal conversation mode", () => {
   });
 
   it("offers channel notification controls only for current navigable room channels", async () => {
-    const onChannelSettingChange = vi.fn();
+    const onChannelSettingChange = vi.fn().mockResolvedValue(undefined);
     render(
       <RoomSettingsModal
         room={room}
@@ -166,6 +168,8 @@ describe("RoomSettingsModal conversation mode", () => {
         channelSettings={{}}
         settingsStatus="ready"
         settingsError=""
+        preferenceStatus="ready"
+        preferenceError=""
         conversationMode="ordered"
         toolMode="chat"
         orderedExcludePreviousSpeaker

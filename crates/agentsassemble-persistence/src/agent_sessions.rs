@@ -5,9 +5,12 @@ use serde_json::Value;
 
 use crate::{
     CommandOutcome, PersistenceError, SqliteStore,
-    agent_creation_records::create_or_reuse_agent_records, agent_lifecycle_events::store_result,
-    authority::active_room_for_principal, command_admission::admit_non_lifecycle_command,
+    agent_creation_records::create_or_reuse_agent_records,
+    agent_lifecycle_events::store_result,
+    authority::active_room_for_principal,
+    command_admission::{admit_non_lifecycle_command, inspect_non_lifecycle_command},
     filesystem_authority::revalidate_runtime_authority,
+    room_write_budget::command_size,
 };
 
 impl SqliteStore {
@@ -26,7 +29,7 @@ impl SqliteStore {
         let payload_hash = canonical_payload_hash(payload);
         let mut transaction = self.pool.begin().await?;
         active_room_for_principal(&mut transaction, principal).await?;
-        let outcome = admit_non_lifecycle_command(
+        let outcome = inspect_non_lifecycle_command(
             &mut transaction,
             &principal.room_id,
             &principal.principal_id,
@@ -63,7 +66,7 @@ impl SqliteStore {
         {
             let mut transaction = self.pool.begin().await?;
             active_room_for_principal(&mut transaction, principal).await?;
-            let outcome = admit_non_lifecycle_command(
+            let outcome = inspect_non_lifecycle_command(
                 &mut transaction,
                 &principal.room_id,
                 &principal.principal_id,
@@ -87,6 +90,7 @@ impl SqliteStore {
             request_id,
             ACTION,
             &payload_hash,
+            command_size(request_id, ACTION, payload)?,
         )
         .await?
         {

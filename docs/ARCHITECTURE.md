@@ -58,8 +58,9 @@ change only behavior whose server authority and reachable UI effect are complete
 channels, invite scope, activity hosting, and asset URLs fail explicitly until
 their owning slices exist. The settings, synchronized room label/time, one event,
 and command replay result commit atomically. Scheduler reconciliation runs after
-that commit, cannot rewrite its ACK as a NACK, and is retried from later lifecycle
-triggers when progression fails.
+one fresh commit, cannot rewrite its ACK as a NACK, and is retried from later
+lifecycle triggers when progression fails. An exact command replay returns only
+its stored outcome and never re-executes floor progression.
 
 Authenticated room preferences are a separate complete row keyed by stable
 `(user_id, room_id)`. They may affect only that user's notifications and read
@@ -67,7 +68,10 @@ cursors. Channel preference keys accept the four builtin IDs or the original
 canonical `c` plus twelve lowercase hexadecimal characters without treating the
 preference row as channel authority. Fresh one-use purpose-scoped HTTP tickets,
 authentication before body admission, and current membership gate every read and
-write. Global settings stay WebSocket-owned; preferences stay HTTP-owned.
+write. Global settings stay WebSocket-owned; preferences stay HTTP-owned. Until
+that HTTP owner is present, the copied controller exposes an unavailable
+preference state, disables its notification controls, and never presents local
+defaults or optimistic writes as confirmed persistence.
 
 Room appearance bytes are neither settings nor public authority on upload. A
 pending, expiring, room-and-owner-bound `ra_` capability becomes reachable only
@@ -83,15 +87,28 @@ cross-room references, and cross-owner binding fail closed.
 
 `(room_id, principal_id, request_id)` identifies a command attempt. Repeating the same action and canonical payload returns its committed result. Reusing the key with a different action or payload is a conflict.
 
+One room-owned write admission boundary covers every authenticated WebSocket
+mutation and provider RoomPortal random result. Each room task shares a rolling
+60-second principal window across all sockets and provider ingress; opening a new
+ticket or connection cannot reset it. A separate room-wide 60-second command and
+payload window is durable in SQLite and is reserved in the same transaction as
+the command result, lifecycle intent, or provider tool event. Exact committed
+replays and matching lifecycle resumes are recognized before either budget is
+charged. `agent.stop` and already-owned terminal completion remain available at
+saturation so resource cleanup cannot be denied by the admission guard.
+
 The mutation transaction orders work as follows:
 
 1. authenticate and authorize the principal;
-2. validate the command and current room state;
-3. apply the state transition;
-4. append any canonical event and allocate its room sequence;
-5. persist the correlated command result;
-6. commit;
-7. publish the event and return the ACK.
+2. identify an exact replay or lifecycle resume before write admission;
+3. admit the new request to the shared principal window;
+4. stage the durable room-wide reservation and validate current state inside the
+   owning mutation transaction—any later rejection rolls the reservation back;
+5. apply the state transition;
+6. append any canonical event and allocate its room sequence;
+7. persist the correlated command result;
+8. commit;
+9. publish the event and return the ACK.
 
 No ACK or event is externally visible before commit.
 
@@ -308,8 +325,10 @@ Combined queue capacity remains 256 unique IDs. Invalid, duplicate, oversized,
 missing, wrong-room, or self-origin authority fails rather than being repaired or
 truncated.
 
-Ordered routing resolves an explicit target before idle eligibility and otherwise
-uses director, prior-speaker, sample, and least-recent policy. Ambient queues every
+Ordered routing treats a structured handoff as the earliest direct target; a later
+explicit body mention wins, and the final nonactor direct target resolves before
+idle eligibility. Undirected work uses director, prior-speaker, sample, and
+least-recent policy. Ambient queues every
 eligible or runtime-busy nonactor independently. Mode changes never delete
 active/inflight work. Multiple active turns are valid after an ordered/ambient
 transition, while ordered mode simply blocks a new assignment whenever any active

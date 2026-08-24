@@ -5,6 +5,7 @@ mod host_ticket;
 mod http_api;
 mod http_transport;
 mod ingress_budget;
+mod principal_write_budget;
 mod profile_web;
 mod provider_turn;
 mod room_agent_lifecycle_runtime;

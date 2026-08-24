@@ -1,9 +1,11 @@
-use agentsassemble_domain::RoomEvent;
+use agentsassemble_domain::{AuthenticatedPrincipal, RoomEvent, canonical_payload_hash};
 use serde_json::Value;
 use sqlx::{Row, Sqlite, Transaction};
 
 use crate::{
-    CommandOutcome, PersistenceError, agent_lifecycle_reservations::reject_reserved_request_id,
+    CommandOutcome, PersistenceError, SqliteStore,
+    agent_lifecycle_reservations::reject_reserved_request_id, authority::active_room_for_principal,
+    room_write_budget::reserve_room_write_budget,
 };
 
 pub(crate) async fn existing_command(
@@ -50,7 +52,7 @@ pub(crate) async fn existing_command(
     }))
 }
 
-pub(crate) async fn admit_non_lifecycle_command(
+pub(crate) async fn inspect_non_lifecycle_command(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
     principal_id: &str,
@@ -69,4 +71,104 @@ pub(crate) async fn admit_non_lifecycle_command(
     .await?;
     reject_reserved_request_id(transaction, room_id, principal_id, request_id).await?;
     Ok(outcome)
+}
+
+pub(crate) async fn admit_non_lifecycle_command(
+    transaction: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    principal_id: &str,
+    request_id: &str,
+    action: &str,
+    payload_hash: &str,
+    payload_bytes: usize,
+) -> Result<Option<CommandOutcome>, PersistenceError> {
+    let outcome = inspect_non_lifecycle_command(
+        transaction,
+        room_id,
+        principal_id,
+        request_id,
+        action,
+        payload_hash,
+    )
+    .await?;
+    if outcome.is_none() {
+        reserve_room_write_budget(transaction, room_id, payload_bytes).await?;
+    }
+    Ok(outcome)
+}
+
+impl SqliteStore {
+    /// Reports whether one exact new authenticated command should consume the
+    /// process-wide principal window before slow validation or provider work.
+    ///
+    /// Committed replays and matching lifecycle retries never consume another
+    /// principal slot. Conflicting request reuse fails visibly.
+    ///
+    /// # Errors
+    ///
+    /// Returns authorization, request-conflict, stored-state, or database errors.
+    pub async fn command_requires_principal_budget(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request_id: &str,
+        action: &str,
+        payload: &Value,
+    ) -> Result<bool, PersistenceError> {
+        let payload_hash = canonical_payload_hash(payload);
+        let mut transaction = self.pool.begin().await?;
+        active_room_for_principal(&mut transaction, principal).await?;
+        let required = existing_request_identity(
+            &mut transaction,
+            &principal.room_id,
+            &principal.principal_id,
+            request_id,
+            action,
+            &payload_hash,
+        )
+        .await?
+        .is_none();
+        transaction.commit().await?;
+        Ok(required)
+    }
+}
+
+pub(crate) async fn existing_request_identity(
+    transaction: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    principal_id: &str,
+    request_id: &str,
+    action: &str,
+    payload_hash: &str,
+) -> Result<Option<()>, PersistenceError> {
+    let command = sqlx::query(
+        "SELECT action, payload_hash FROM command_results WHERE room_id = ? AND principal_id = ? AND request_id = ?",
+    )
+    .bind(room_id)
+    .bind(principal_id)
+    .bind(request_id)
+    .fetch_optional(&mut **transaction)
+    .await?;
+    let reservation = sqlx::query(
+        "SELECT action, payload_hash FROM lifecycle_command_reservations WHERE room_id = ? AND principal_id = ? AND request_id = ?",
+    )
+    .bind(room_id)
+    .bind(principal_id)
+    .bind(request_id)
+    .fetch_optional(&mut **transaction)
+    .await?;
+    if command.is_some() && reservation.is_some() {
+        return Err(PersistenceError::CommandRejected {
+            code: "invalid_state",
+            message: "A room request has conflicting durable owners.".to_owned(),
+        });
+    }
+    let Some(row) = command.or(reservation) else {
+        return Ok(None);
+    };
+    if row.try_get::<String, _>("action")? != action
+        || row.try_get::<String, _>("payload_hash")? != payload_hash
+    {
+        return Err(PersistenceError::CommandConflict);
+    }
+    Ok(Some(()))
 }

@@ -1,7 +1,11 @@
 use agentsassemble_domain::AuthenticatedPrincipal;
+use serde_json::Value;
 use sqlx::{Row, Sqlite, Transaction};
 
-use crate::PersistenceError;
+use crate::{
+    PersistenceError,
+    room_write_budget::{command_size, reserve_room_write_budget},
+};
 
 pub(crate) struct LifecycleReservation<'a> {
     pub principal: &'a AuthenticatedPrincipal,
@@ -95,6 +99,7 @@ pub(crate) async fn load_lifecycle_reservation(
 pub(crate) async fn claim_lifecycle_command(
     transaction: &mut Transaction<'_, Sqlite>,
     reservation: &LifecycleReservation<'_>,
+    payload: &Value,
 ) -> Result<(), PersistenceError> {
     let existing = sqlx::query(
         "SELECT action, payload_hash, session_id, operation_id, status, phase, prepared_result_json FROM lifecycle_command_reservations WHERE room_id = ? AND principal_id = ? AND request_id = ?",
@@ -122,6 +127,14 @@ pub(crate) async fn claim_lifecycle_command(
             }),
             _ => Err(invalid_reservation()),
         };
+    }
+    if reservation.action != "agent.stop" {
+        reserve_room_write_budget(
+            transaction,
+            &reservation.principal.room_id,
+            command_size(reservation.request_id, reservation.action, payload)?,
+        )
+        .await?;
     }
     sqlx::query(
         "INSERT INTO lifecycle_command_reservations(room_id, principal_id, request_id, action, payload_hash, session_id, operation_id, status, phase, prepared_result_json) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)",

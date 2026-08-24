@@ -42,6 +42,8 @@ export default function RoomSettingsModal({
   channelSettings,
   settingsStatus,
   settingsError,
+  preferenceStatus,
+  preferenceError,
   conversationMode,
   toolMode,
   orderedExcludePreviousSpeaker,
@@ -63,6 +65,8 @@ export default function RoomSettingsModal({
   channelSettings: Record<string, ChannelSettings>;
   settingsStatus: "loading" | "ready" | "saving" | "stale" | "error";
   settingsError: string;
+  preferenceStatus: "loading" | "ready" | "saving" | "stale" | "error";
+  preferenceError: string;
   conversationMode: ConversationMode | null;
   toolMode: RoomToolMode | null;
   orderedExcludePreviousSpeaker: boolean | null;
@@ -71,7 +75,10 @@ export default function RoomSettingsModal({
   onInvite: () => void;
   onRoomChange: (updates: Partial<Pick<RoomDockItem, "label" | "topic" | "shortLabel">>) => void;
   onAppearanceChange: (updates: Partial<RoomAppearance>) => Promise<void>;
-  onChannelSettingChange: (channelId: string, updates: Partial<ChannelSettings>) => void;
+  onChannelSettingChange: (
+    channelId: string,
+    updates: Partial<ChannelSettings>
+  ) => Promise<void>;
   onConversationModeChange: (mode: ConversationMode) => void;
   onToolModeChange: (mode: RoomToolMode) => void;
   onOrderedExcludePreviousSpeakerChange: (exclude: boolean) => void;
@@ -84,6 +91,7 @@ export default function RoomSettingsModal({
   const [deleting, setDeleting] = useState(false);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const routingSettingsReady = settingsStatus === "ready";
+  const preferenceSettingsReady = preferenceStatus === "ready";
   const routingSettingsMessage =
     settingsStatus === "loading"
       ? "서버 대화 설정을 불러오는 중입니다."
@@ -93,6 +101,16 @@ export default function RoomSettingsModal({
           ? "서버 설정 동기화에 실패했습니다. 확인된 이전 값은 읽기 전용으로 표시됩니다."
           : settingsStatus === "error"
             ? "서버 대화 설정을 확인할 수 없어 변경할 수 없습니다."
+            : "";
+  const preferenceSettingsMessage =
+    preferenceStatus === "loading"
+      ? "내 알림 설정을 불러오는 중입니다."
+      : preferenceStatus === "saving"
+        ? "내 알림 설정을 저장하는 중입니다."
+        : preferenceStatus === "stale"
+          ? "내 알림 설정 저장에 실패해 확인된 이전 값으로 되돌렸습니다."
+          : preferenceStatus === "error"
+            ? "내 알림 설정을 확인할 수 없어 변경할 수 없습니다."
             : "";
 
   useEffect(() => {
@@ -354,6 +372,20 @@ export default function RoomSettingsModal({
 
           <section id="settings-channels" className="dc-settings-section">
             <h3>채널 설정</h3>
+            {preferenceSettingsMessage && (
+              <div
+                className="mb-3 flex items-center justify-between gap-3 text-[13px] text-text-muted"
+                role={preferenceStatus === "error" || preferenceStatus === "stale" ? "alert" : "status"}
+                title={preferenceError || undefined}
+              >
+                <span className="preserve-words">{preferenceSettingsMessage}</span>
+                {(preferenceStatus === "error" || preferenceStatus === "stale") && (
+                  <button type="button" className="dc-upload-button shrink-0" onClick={onRetrySettings}>
+                    다시 불러오기
+                  </button>
+                )}
+              </div>
+            )}
             <div className="dc-channel-settings-list">
               {ROOM_CHANNEL_OPTIONS.map((channel) => {
                 const setting = channelSettings[channel.id] || { notifications: "default" };
@@ -367,11 +399,12 @@ export default function RoomSettingsModal({
                     </span>
                     <select
                       value={setting.notifications}
-                      onChange={(event) =>
-                        onChannelSettingChange(channel.id, {
+                      disabled={!preferenceSettingsReady}
+                      onChange={(event) => {
+                        void onChannelSettingChange(channel.id, {
                           notifications: event.target.value as ChannelNotificationSetting,
-                        })
-                      }
+                        }).catch(() => undefined);
+                      }}
                     >
                       {CHANNEL_NOTIFICATION_LABELS.map((option) => (
                         <option key={option.value} value={option.value}>
@@ -387,6 +420,15 @@ export default function RoomSettingsModal({
 
           <section id="settings-notify" className="dc-settings-section">
             <h3>알림</h3>
+            {preferenceSettingsMessage && (
+              <p
+                className="mb-3 text-[13px] text-text-muted preserve-words"
+                role={preferenceStatus === "error" || preferenceStatus === "stale" ? "alert" : "status"}
+                title={preferenceError || undefined}
+              >
+                {preferenceSettingsMessage}
+              </p>
+            )}
             <div className="dc-radio-stack">
               {[
                 ["all", "모든 메시지"],
@@ -398,6 +440,7 @@ export default function RoomSettingsModal({
                     type="radio"
                     name="room-notifications"
                     checked={appearance.notifications === value}
+                    disabled={!preferenceSettingsReady}
                     onChange={() =>
                       void onAppearanceChange({
                         notifications: value as RoomAppearance["notifications"],

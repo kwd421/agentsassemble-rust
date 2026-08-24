@@ -25,6 +25,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     agent_create_runtime::AgentCreateExecution,
+    principal_write_budget::PrincipalWriteBudget,
     provider_turn::{
         ProviderTurnTaskResult, commit_provider_result, publish_turn_commit, spawn_provider_turn,
     },
@@ -77,6 +78,16 @@ struct RoomTaskContext {
     cancellation: CancellationToken,
     event_tx: broadcast::Sender<RoomEvent>,
     room_tool_ingress: ProviderRoomToolIngress,
+}
+
+struct RoomCommandOwners<'a> {
+    store: &'a SqliteStore,
+    provider_catalog: &'a ProviderCatalogService,
+    provider_adapter: &'a ProviderAdapter,
+    event_tx: &'a broadcast::Sender<RoomEvent>,
+    turn_tasks: &'a mut JoinSet<ProviderTurnTaskResult>,
+    room_tool_ingress: &'a ProviderRoomToolIngress,
+    write_budget: &'a mut PrincipalWriteBudget,
 }
 
 #[derive(Clone)]
@@ -261,6 +272,7 @@ fn spawn_room_task(
         } = context;
         let mut turn_tasks = JoinSet::new();
         let mut publication_retry = tokio::time::interval(PUBLICATION_RETRY_INTERVAL);
+        let mut write_budget = PrincipalWriteBudget::new();
         publication_retry.set_missed_tick_behavior(MissedTickBehavior::Delay);
         publish_durable_room_events(&store, &event_tx, &room_id).await;
         loop {
@@ -291,13 +303,16 @@ fn spawn_room_task(
             match input {
                 RoomInput::Command(command) => {
                     handle_room_command(
-                        &store,
-                        &provider_catalog,
-                        &provider_adapter,
-                        &event_tx,
-                        &mut turn_tasks,
+                        RoomCommandOwners {
+                            store: &store,
+                            provider_catalog: &provider_catalog,
+                            provider_adapter: &provider_adapter,
+                            event_tx: &event_tx,
+                            turn_tasks: &mut turn_tasks,
+                            room_tool_ingress: &room_tool_ingress,
+                            write_budget: &mut write_budget,
+                        },
                         command,
-                        &room_tool_ingress,
                     )
                     .await;
                 }
@@ -314,7 +329,11 @@ fn spawn_room_task(
                 }
                 RoomInput::Tool(command) => {
                     crate::room_random_runtime::handle_provider_room_tool(
-                        &store, &event_tx, &room_id, command,
+                        &store,
+                        &event_tx,
+                        &room_id,
+                        command,
+                        &mut write_budget,
                     )
                     .await;
                 }
@@ -329,26 +348,41 @@ fn spawn_room_task(
     })
 }
 
-async fn handle_room_command(
-    store: &SqliteStore,
-    provider_catalog: &ProviderCatalogService,
-    provider_adapter: &ProviderAdapter,
-    event_tx: &broadcast::Sender<RoomEvent>,
-    turn_tasks: &mut JoinSet<ProviderTurnTaskResult>,
-    mut command: RoomCommand,
-    room_tool_ingress: &ProviderRoomToolIngress,
-) {
+async fn handle_room_command(owners: RoomCommandOwners<'_>, mut command: RoomCommand) {
+    let RoomCommandOwners {
+        store,
+        provider_catalog,
+        provider_adapter,
+        event_tx,
+        turn_tasks,
+        room_tool_ingress,
+        write_budget,
+    } = owners;
     let execution = match store.resolve_principal(&command.principal).await {
         Ok(principal) => {
             command.principal = principal;
-            execute_command(
-                store,
-                provider_catalog,
-                provider_adapter,
-                event_tx,
-                &command,
-            )
-            .await
+            match write_budget
+                .admit_command(
+                    store,
+                    &command.principal,
+                    &command.request_id,
+                    &command.action,
+                    &command.payload,
+                )
+                .await
+            {
+                Ok(()) => {
+                    execute_command(
+                        store,
+                        provider_catalog,
+                        provider_adapter,
+                        event_tx,
+                        &command,
+                    )
+                    .await
+                }
+                Err(error) => CommandExecution::failure(error),
+            }
         }
         Err(error) => CommandExecution::failure(error),
     };
@@ -497,6 +531,7 @@ async fn execute_command(
             .execute_room_settings_update(&command.principal, &command.request_id, &command.payload)
             .await
         {
+            Ok(outcome) if outcome.deduplicated => Ok(CommandExecution::success(outcome)),
             Ok(outcome) => {
                 Ok(progressed_execution(store, &command.principal.room_id, outcome).await)
             }

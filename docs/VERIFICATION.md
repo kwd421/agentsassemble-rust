@@ -492,6 +492,38 @@ run. The required copied-UI flow with persistent Codex Terra, Antigravity Flash,
 and OpenCode Hy3-free sessions, critical web review, and Daybreak Blue manual
 security review remain pending after the feature commit is pushed.
 
+The first post-push Daybreak Blue high manual review found that the existing
+WebSocket ingress limiter was connection-local and provider random results did
+not share the original durable room write budget. The correction under
+verification keeps the transport frame limiter as a secondary guard, adds one
+room-task principal command/byte window shared across sockets and RoomPortal,
+and reserves one SQLite room-wide command/byte window atomically with every
+budgeted command result, lifecycle intent, or provider random event. Exact replay
+and lifecycle resume are checked before admission, failed transactions roll the
+durable reservation back, and `agent.stop` remains available at saturation. No
+Deep Scan or automated security scanner was used for this review.
+
+The in-progress Pro critical review confirmed three Stage A integration defects in the
+public candidate: settings replay re-entered floor progression, the copied
+preference controller swallowed the absent HTTP owner's failures and left local
+optimism looking successful, and a structured handoff incorrectly outranked a
+later direct body mention. The correction under verification skips progression
+for deduplicated settings outcomes, gives preferences an explicit
+loading/ready/saving/stale/error authority state with confirmed-value rollback
+across the modal, channel menu, and header actions,
+and restores the original final-direct-mention routing order. Focused frontend
+contracts and the production build pass; the routing regression proves a later
+`@Flash` mention overrides an earlier structured Terra handoff.
+
+The corrected worktree then passed the complete `make verify` gate: architecture,
+source-growth, logical-line, and 800-line checks; formatting and generated
+bindings; the copied frontend production build and CSS provenance check; 67
+frontend files with 341 tests; 14 Tauri tests; 16 domain, 79 persistence, two
+protocol, 100 provider, and 13 server unit tests; 19 Rust integration tests; all
+documentation tests; warning-denied workspace and desktop Clippy; and final diff
+validation. No provider or packaged application was started by this deterministic
+run.
+
 ## API verification scope
 
 When a reachable flow specifically needs an API-backed provider, the allowed paid/provider-specific candidates are the official DeepSeek API and the designated Flash provider path. Every other API-backed verification uses only an explicitly free API or free model. Missing credentials, exhausted free quota, or unavailable models fail visibly; they do not trigger a paid substitution or a fallback provider.

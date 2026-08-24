@@ -12,6 +12,7 @@ use crate::{
     CommandOutcome, PersistenceError, SqliteStore,
     agent_lifecycle::{load_session, save_session},
     command_admission::admit_non_lifecycle_command,
+    room_write_budget::command_size,
     turn_queue::merge_room_inputs,
 };
 
@@ -147,6 +148,7 @@ impl SqliteStore {
             request_id,
             action,
             &payload_hash,
+            command_size(request_id, action, payload)?,
         )
         .await?
         {

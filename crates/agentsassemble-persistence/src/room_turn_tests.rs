@@ -416,6 +416,39 @@ async fn stopped_direct_target_keeps_every_message_and_assigns_only_the_visible_
 }
 
 #[tokio::test]
+async fn final_body_mention_overrides_an_earlier_structured_handoff() {
+    let (store, principal, _directory) = fixture().await;
+    let now = Utc::now();
+    let second_participant = participant(SECOND_AGENT_ID, "Flash", "agent", "agent", now);
+    let mut second_session = attached_session(now);
+    SECOND_AGENT_ID.clone_into(&mut second_session.public.session_id);
+    SECOND_AGENT_ID.clone_into(&mut second_session.public.participant_id);
+    "Flash".clone_into(&mut second_session.public.display_name);
+    "provider-thread-2".clone_into(&mut second_session.provider_session_id);
+    "owned-runtime-2".clone_into(&mut second_session.runtime_handle_id);
+    insert_agent(&store, &second_participant, &second_session).await;
+
+    let mutation = store
+        .execute_message_with_turn(
+            &principal,
+            "final-mention-wins",
+            "message.send",
+            &json!({
+                "content": "The structured handoff is stale; @Flash take the floor.",
+                "target_agent_id": AGENT_ID,
+            }),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("route final direct mention: {error}"));
+    let assignment = mutation
+        .assignments
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| panic!("the final direct mention must assign a turn"));
+    assert_eq!(assignment.session.public.session_id, SECOND_AGENT_ID);
+}
+
+#[tokio::test]
 async fn character_bound_defers_whole_messages_instead_of_advancing_past_them() {
     let (store, principal, _directory) = fixture().await;
     let mut stopped = stored_session(&store).await;

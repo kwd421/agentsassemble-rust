@@ -127,20 +127,22 @@ async fn ordered_targets(
         .get("target_agent_id")
         .and_then(Value::as_str)
         .filter(|target| {
-            sessions
-                .iter()
-                .any(|(session, _)| session.public.session_id == *target)
+            sessions.iter().any(|(session, _)| {
+                session.public.session_id == *target && !is_actor(session, event)
+            })
         })
         .map(str::to_owned);
-    let direct = structured_target.or_else(|| {
-        last_direct_target(
-            content,
-            sessions
-                .iter()
-                .filter(|(session, _)| !is_actor(session, event))
-                .map(|(session, _)| session),
-        )
-    });
+    // The structured handoff is the earliest direct target. A later explicit
+    // mention in the message body owns the floor, matching the product's
+    // final-mention rule for model recaps followed by a next-speaker call.
+    let direct = last_direct_target(
+        content,
+        sessions
+            .iter()
+            .filter(|(session, _)| !is_actor(session, event))
+            .map(|(session, _)| session),
+    )
+    .or(structured_target);
     let selected = if let Some(direct) = direct {
         let participant = sessions
             .iter()

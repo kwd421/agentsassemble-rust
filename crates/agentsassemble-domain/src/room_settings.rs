@@ -56,6 +56,7 @@ pub struct RoomSettings {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
 pub struct PublicRoomSettings {
     pub settings_revision: String,
     pub label: String,
@@ -640,6 +641,14 @@ mod tests {
         let mut value = serde_json::to_value(RoomSettings::defaults("General"))
             .unwrap_or_else(|error| panic!("settings value: {error}"));
         value["topic"] = json!(" line\nwrap ");
+        assert!(serde_json::from_value::<RoomSettings>(value).is_err());
+    }
+
+    #[test]
+    fn strict_decode_rejects_unknown_nested_settings_fields() {
+        let mut value = serde_json::to_value(RoomSettings::defaults("General"))
+            .unwrap_or_else(|error| panic!("settings value: {error}"));
+        value["appearance"]["continuous"] = json!(true);
         assert!(serde_json::from_value::<RoomSettings>(value).is_err());
     }
 }

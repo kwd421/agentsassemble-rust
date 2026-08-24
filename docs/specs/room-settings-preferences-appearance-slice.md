@@ -36,6 +36,8 @@ below must be reviewed with the resulting implementation.
 - Settings commit precedes scheduler reconciliation. A post-commit progression
   failure cannot turn the committed ACK into a NACK; it is exposed as durable
   public floor-progression failure and retried from later lifecycle triggers.
+  Exact settings replay returns the stored result without running progression
+  again.
 - Current conversation modes are `ordered` and `ambient`. The original also parses
   `continuous` only to display an existing legacy relay room; the normal settings
   UI never offers it. Rust does not accept, create, migrate, or execute that mode.
@@ -112,9 +114,10 @@ Mode transitions never delete or cancel active/inflight work.
 
 Routing preserves the original distinction between addressed and unaddressed work.
 
-- Ordered direct targeting resolves configured sessions before idle eligibility,
-  so busy/stopped/detached addressed sessions may retain queued work unless their
-  participant is kicked or muted. Undirected work uses the original director,
+- Ordered direct targeting treats a structured handoff as the earliest target and
+  lets a later body mention own the floor, then resolves configured sessions
+  before idle eligibility. Busy/stopped/detached addressed sessions may retain
+  queued work unless their participant is kicked or muted. Undirected work uses the original director,
   previous-speaker, sample, and least-recent-speaker policy.
 - Ambient queues every nonactor participant that is eligible or runtime-busy, then
   assigns independently under per-session capacity.
@@ -201,12 +204,16 @@ transport is a fallback for the other.
   authoritative state unless the contract explicitly committed before a later
   reconciliation failure.
 - Replay of the same request/action/payload returns its committed result without a
-  second event; conflicting reuse fails.
+  second event or another settings-progression attempt; conflicting reuse fails.
 - Deterministic tests cover ordered/ambient transition timing, multiple active
   turns, delivery batching, read receipt, terminal-first and reservation-first
   barriers, cancellation phases, close tombstones, and parallel/durable 32-call
-  budget enforcement. They also prove that legacy `continuous` values and older
-  schema records fail instead of being migrated or executed.
+  budget enforcement. Shared principal command/byte admission cannot be reset by
+  another WebSocket, while one durable room-wide window is atomically consumed by
+  human commands, lifecycle intents, and provider random results; replay and
+  rollback do not consume another slot. Tests also prove that legacy `continuous`
+  values, unknown nested settings fields, and older schema records fail instead
+  of being migrated or executed.
 - Stage B tests cover two-user isolation, wrong-room and replayed tickets,
   auth-before-body, custom preference key grammar, shared raster admission,
   pending preview/expiry, bind/replacement/clear, restart, and reference cleanup.

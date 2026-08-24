@@ -138,7 +138,7 @@ impl SqliteStore {
             &agent_id,
             &operation_id,
         );
-        claim_lifecycle_command(&mut transaction, &reservation).await?;
+        claim_lifecycle_command(&mut transaction, &reservation, payload).await?;
         let mut session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
         require_valid_turn_authority(&session)?;
         let participant = load_participant(&mut transaction, &principal.room_id, &agent_id).await?;
@@ -337,7 +337,7 @@ impl SqliteStore {
             &agent_id,
             &operation_id,
         );
-        claim_lifecycle_command(&mut transaction, &reservation).await?;
+        claim_lifecycle_command(&mut transaction, &reservation, payload).await?;
         let mut session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
         require_valid_turn_authority(&session)?;
         if matches!(

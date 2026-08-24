@@ -104,6 +104,8 @@ export default function AppOverlays({ controller }: { controller: AppController 
             channelSettings={roomSettings.channelSettingsFor(settingsModalRoom)}
             settingsStatus={roomSettings.settingsStateFor(settingsModalRoom).status}
             settingsError={roomSettings.settingsStateFor(settingsModalRoom).error?.message || ""}
+            preferenceStatus={roomSettings.preferenceStateFor(settingsModalRoom).status}
+            preferenceError={roomSettings.preferenceStateFor(settingsModalRoom).error?.message || ""}
             conversationMode={roomSettings.conversationModeFor(settingsModalRoom)}
             toolMode={roomSettings.toolModeFor(settingsModalRoom)}
             orderedExcludePreviousSpeaker={

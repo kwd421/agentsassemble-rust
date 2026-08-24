@@ -15,6 +15,7 @@ use crate::{
     authority::active_room_for_principal,
     command_admission::admit_non_lifecycle_command,
     room_turns::support::{insert_event, load_active_room, load_participant, next_sequence},
+    room_write_budget::{command_size, reserve_room_write_budget},
     turn_authority::active_turn_authority,
 };
 
@@ -67,6 +68,7 @@ impl SqliteStore {
             request_id,
             action,
             &payload_hash,
+            command_size(request_id, action, payload)?,
         )
         .await?
         {
@@ -168,6 +170,13 @@ impl SqliteStore {
                 "This Agent Session turn reached its room-random result limit.",
             ));
         }
+        let payload = request.canonical_payload();
+        reserve_room_write_budget(
+            &mut transaction,
+            room_id,
+            command_size(result_id, request.room_action(), &payload)?,
+        )
+        .await?;
         let event = random_event(
             &mut transaction,
             room_id,

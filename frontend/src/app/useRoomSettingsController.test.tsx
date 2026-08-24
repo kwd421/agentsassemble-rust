@@ -283,6 +283,63 @@ describe("useRoomSettingsController", () => {
     expect(hook.result.current.appearanceFor(roomA).notifications).toBe("mute");
   });
 
+  it("exposes preference load failure instead of presenting defaults as authoritative", async () => {
+    apiMocks.fetchRoomSettings.mockRejectedValue(new Error("preferences offline"));
+    const hook = renderHook(() =>
+      useRoomSettingsController({
+        activeRoom: roomA,
+        sessionToken: "session-a",
+        deviceToken: "device-test",
+        canonicalGlobalSettings: globalSettings(roomA, "forest"),
+        saveCanonicalGlobalSettings,
+        onRoomMetadataLoaded: vi.fn(),
+        onMembersChanged: vi.fn(),
+      })
+    );
+
+    await waitFor(() =>
+      expect(hook.result.current.preferenceStateFor(roomA)).toMatchObject({
+        status: "error",
+        error: { message: "preferences offline" },
+      })
+    );
+  });
+
+  it("rolls an optimistic preference back to the last confirmed value on failure", async () => {
+    apiMocks.saveRoomSettings.mockRejectedValue(new Error("preference save failed"));
+    const hook = renderHook(() =>
+      useRoomSettingsController({
+        activeRoom: roomA,
+        sessionToken: "session-a",
+        deviceToken: "device-test",
+        canonicalGlobalSettings: globalSettings(roomA, "forest"),
+        saveCanonicalGlobalSettings,
+        onRoomMetadataLoaded: vi.fn(),
+        onMembersChanged: vi.fn(),
+      })
+    );
+    await waitFor(() =>
+      expect(hook.result.current.preferenceStateFor(roomA).status).toBe("ready")
+    );
+
+    let saveResult!: Promise<void>;
+    act(() => {
+      saveResult = hook.result.current.updateAppearance(roomA, {
+        notifications: "mute",
+      });
+    });
+    expect(hook.result.current.appearanceFor(roomA).notifications).toBe("mute");
+    await act(async () => {
+      await saveResult.catch(() => undefined);
+    });
+
+    expect(hook.result.current.appearanceFor(roomA).notifications).toBe("mentions");
+    expect(hook.result.current.preferenceStateFor(roomA)).toMatchObject({
+      status: "stale",
+      error: { message: "preference save failed" },
+    });
+  });
+
   it("serializes preference saves so the server receives them in user order", async () => {
     const firstSave = deferred<RoomSettings>();
     const secondSave = deferred<RoomSettings>();

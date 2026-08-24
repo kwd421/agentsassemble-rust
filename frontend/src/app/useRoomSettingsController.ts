@@ -46,9 +46,21 @@ export type RoomSettingsAuthorityState =
   | { status: "stale"; value: AuthoritativeRoomSettings; error: Error }
   | { status: "error"; value: null; error: Error };
 
+export type RoomPreferenceAuthorityState =
+  | { status: "loading"; error: null }
+  | { status: "ready"; error: null }
+  | { status: "saving"; error: null }
+  | { status: "stale"; error: Error }
+  | { status: "error"; error: Error };
+
 const LOADING_SETTINGS_STATE: RoomSettingsAuthorityState = {
   status: "loading",
   value: null,
+  error: null,
+};
+
+const LOADING_PREFERENCE_STATE: RoomPreferenceAuthorityState = {
+  status: "loading",
   error: null,
 };
 
@@ -86,9 +98,13 @@ export function useRoomSettingsController({
   const [authorityStates, setAuthorityStates] = useState<
     Record<string, RoomSettingsAuthorityState>
   >({});
+  const [preferenceStates, setPreferenceStates] = useState<
+    Record<string, RoomPreferenceAuthorityState>
+  >({});
   const operationGenerationsRef = useRef<Record<string, number>>({});
   const globalWriteChainsRef = useRef<Record<string, Promise<void>>>({});
   const confirmedGlobalSettingsRef = useRef<Record<string, RoomGlobalSettings>>({});
+  const confirmedPreferencesRef = useRef<Record<string, RoomSettings>>({});
   const preferenceOperationGenerationsRef = useRef<Record<string, number>>({});
   const preferenceWriteChainsRef = useRef<Record<string, Promise<void>>>({});
   const onRoomMetadataLoadedRef = useRef(onRoomMetadataLoaded);
@@ -117,6 +133,11 @@ export function useRoomSettingsController({
     (room: RoomDockItem): RoomSettingsAuthorityState =>
       authorityStates[roomSettingsKey(room)] ?? LOADING_SETTINGS_STATE,
     [authorityStates]
+  );
+  const preferenceStateFor = useCallback(
+    (room: RoomDockItem): RoomPreferenceAuthorityState =>
+      preferenceStates[roomSettingsKey(room)] ?? LOADING_PREFERENCE_STATE,
+    [preferenceStates]
   );
   const conversationModeFor = useCallback(
     (room: RoomDockItem): ConversationMode | null =>
@@ -181,6 +202,7 @@ export function useRoomSettingsController({
   );
 
   const applyPreferences = useCallback((key: string, settings: RoomSettings) => {
+    confirmedPreferencesRef.current[key] = settings;
     setAppearances((previous) => ({
       ...previous,
       [key]: completeRoomAppearance({
@@ -191,6 +213,10 @@ export function useRoomSettingsController({
     setChannelSettings((previous) => ({
       ...previous,
       [key]: settings.channelSettings,
+    }));
+    setPreferenceStates((previous) => ({
+      ...previous,
+      [key]: { status: "ready", error: null },
     }));
   }, []);
 
@@ -230,6 +256,10 @@ export function useRoomSettingsController({
     const pendingWrite =
       preferenceWriteChainsRef.current[key] || Promise.resolve();
     let cancelled = false;
+    setPreferenceStates((previous) => ({
+      ...previous,
+      [key]: { status: "loading", error: null },
+    }));
     void pendingWrite
       .catch(() => undefined)
       .then(() => {
@@ -250,7 +280,21 @@ export function useRoomSettingsController({
           applyPreferences(key, settings);
         }
       })
-      .catch(() => undefined);
+      .catch((errorValue) => {
+        if (
+          cancelled ||
+          !isCurrentPreferenceOperation(key, generation)
+        ) {
+          return;
+        }
+        setPreferenceStates((previous) => ({
+          ...previous,
+          [key]: {
+            status: "error",
+            error: settingsError(errorValue, "Room preferences load failed"),
+          },
+        }));
+      });
     return () => {
       cancelled = true;
     };
@@ -270,12 +314,17 @@ export function useRoomSettingsController({
       room: RoomDockItem,
       updates: Omit<Parameters<typeof saveRoomSettings>[0], "roomId" | "identity">
     ) => {
-      if (!room.meetingId) return;
+      if (!room.meetingId) return Promise.resolve();
       const key = roomSettingsKey(room);
       const generation = beginPreferenceOperation(key);
+      setPreferenceStates((previous) => ({
+        ...previous,
+        [key]: { status: "saving", error: null },
+      }));
       const previousWrite =
         preferenceWriteChainsRef.current[key] || Promise.resolve();
       const write = previousWrite
+        .catch(() => undefined)
         .then(() =>
           saveRoomSettings({
             roomId: room.meetingId,
@@ -288,8 +337,30 @@ export function useRoomSettingsController({
             applyPreferences(key, settings);
           }
         })
-        .catch(() => undefined);
-      preferenceWriteChainsRef.current[key] = write;
+        .catch((errorValue) => {
+          if (isCurrentPreferenceOperation(key, generation)) {
+            const error = settingsError(errorValue, "Room preferences save failed");
+            const confirmed = confirmedPreferencesRef.current[key];
+            if (confirmed) {
+              applyPreferences(key, confirmed);
+              setPreferenceStates((previous) => ({
+                ...previous,
+                [key]: { status: "stale", error },
+              }));
+            } else {
+              setPreferenceStates((previous) => ({
+                ...previous,
+                [key]: { status: "error", error },
+              }));
+            }
+          }
+          throw errorValue;
+        });
+      preferenceWriteChainsRef.current[key] = write.then(
+        () => undefined,
+        () => undefined
+      );
+      return write;
     },
     [
       applyPreferences,
@@ -387,7 +458,7 @@ export function useRoomSettingsController({
         channelSettings?: Record<string, ChannelSettings>;
       }
     ) => {
-      savePreferences(room, {
+      return savePreferences(room, {
         ...(updates.notifications
           ? { appearance: { notifications: updates.notifications } }
           : {}),
@@ -411,10 +482,10 @@ export function useRoomSettingsController({
               appearance: globalUpdates as Partial<RoomGlobalAppearance>,
             })
           : Promise.resolve();
-      if (notifications) {
-        persistPreferences(room, { notifications });
-      }
-      return globalWrite;
+      const preferenceWrite = notifications
+        ? persistPreferences(room, { notifications })
+        : Promise.resolve();
+      return Promise.all([globalWrite, preferenceWrite]).then(() => undefined);
     },
     [appearanceFor, persist, persistPreferences]
   );
@@ -448,7 +519,7 @@ export function useRoomSettingsController({
       };
       const nextSettings = { ...currentSettings, [channelId]: nextSetting };
       setChannelSettings((previous) => ({ ...previous, [key]: nextSettings }));
-      persistPreferences(room, { channelSettings: nextSettings });
+      return persistPreferences(room, { channelSettings: nextSettings });
     },
     [channelSettingsFor, persistPreferences]
   );
@@ -485,6 +556,32 @@ export function useRoomSettingsController({
   const refresh = useCallback(
     (room: RoomDockItem) => {
       const key = roomSettingsKey(room);
+      const generation = beginPreferenceOperation(key);
+      setPreferenceStates((previous) => ({
+        ...previous,
+        [key]: { status: "loading", error: null },
+      }));
+      const pendingWrite =
+        preferenceWriteChainsRef.current[key] || Promise.resolve();
+      void pendingWrite
+        .then(() =>
+          fetchRoomSettings(room.meetingId, { sessionToken, deviceToken })
+        )
+        .then((settings) => {
+          if (isCurrentPreferenceOperation(key, generation)) {
+            applyPreferences(key, settings);
+          }
+        })
+        .catch((errorValue) => {
+          if (!isCurrentPreferenceOperation(key, generation)) return;
+          setPreferenceStates((previous) => ({
+            ...previous,
+            [key]: {
+              status: "error",
+              error: settingsError(errorValue, "Room preferences load failed"),
+            },
+          }));
+        });
       if (
         canonicalGlobalSettings &&
         canonicalGlobalSettings.roomId === room.meetingId
@@ -500,8 +597,13 @@ export function useRoomSettingsController({
     },
     [
       applyGlobalSettings,
+      applyPreferences,
+      beginPreferenceOperation,
       beginSettingsOperation,
       canonicalGlobalSettings,
+      deviceToken,
+      isCurrentPreferenceOperation,
+      sessionToken,
     ]
   );
 
@@ -510,6 +612,7 @@ export function useRoomSettingsController({
     appearanceFor,
     channelSettingsFor,
     settingsStateFor,
+    preferenceStateFor,
     conversationModeFor,
     toolModeFor,
     orderedExcludePreviousSpeakerFor,

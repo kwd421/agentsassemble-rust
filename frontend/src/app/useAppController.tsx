@@ -710,7 +710,7 @@ export function useAppController() {
   }
 
   function updateChannelSetting(channelId: string, updates: Partial<ChannelSettings>) {
-    roomSettings.updateChannelSetting(activeRoom, channelId, updates);
+    void roomSettings.updateChannelSetting(activeRoom, channelId, updates).catch(() => undefined);
   }
 
   function markChannelRead(channelId: string, cursor = "") {
@@ -732,7 +732,7 @@ export function useAppController() {
       notificationSummary: channelNotificationSummary(setting),
       lastReadSummary: channelLastReadSummary(setting),
       lastReadCursor: setting?.lastReadAt || "",
-      onMarkRead: (cursor) => markChannelRead(channelId, cursor),
+      onMarkRead: roomSettings.preferenceStateFor(activeRoom).status === "ready" ? (cursor) => markChannelRead(channelId, cursor) : undefined,
       onOpenSettings: guestLocked ? undefined : () => openRoomSettings(activeRoom.id),
     };
   }

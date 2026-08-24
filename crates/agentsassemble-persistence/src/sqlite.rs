@@ -536,6 +536,12 @@ mod tests {
             .unwrap_or_else(|error| panic!("read snapshot: {error}"));
         assert!(snapshot.events.is_empty());
         assert_eq!(snapshot.last_seq, 0);
+        let write_budget_rows =
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM room_write_budgets")
+                .fetch_one(&store.pool)
+                .await
+                .unwrap_or_else(|error| panic!("count rolled-back write budget: {error}"));
+        assert_eq!(write_budget_rows, 0);
     }
 
     #[tokio::test]

@@ -9,7 +9,7 @@ Purpose: route the asynchronous Rust reimplementation without duplicating its co
 - Owner: [`docs/specs/room-settings-preferences-appearance-slice.md`](docs/specs/room-settings-preferences-appearance-slice.md)
 - Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - Real-client verification: [`docs/VERIFICATION.md`](docs/VERIFICATION.md)
-- Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust `5aaa04b`. Uncommitted work is not public completion evidence.
+- Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`; public Stage A baseline `d111c29`. The active review correction is tracked by the current `main` candidate and is not completion evidence until both critical reviews approve it.
 - Required order:
   1. remove the uncommitted compatibility migration and legacy continuous-relay implementation, then critically review the corrected current-product design;
   2. implement and publish Stage A settings, typed durable input, ordered/ambient schedulers, and human/provider tabletop as one complete authority boundary;

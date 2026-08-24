@@ -22,6 +22,7 @@ mod room_event_publication;
 mod room_random;
 mod room_settings;
 mod room_turns;
+mod room_write_budget;
 mod schema;
 mod schema_version;
 mod sqlite;
@@ -47,4 +48,5 @@ pub use room_random::{ProviderRoomRandomCommit, RoomRandomCommit};
 pub use room_turns::{
     AgentTurnAssignment, AgentTurnCommit, ProviderTurnAuthority, RoomCommandMutation,
 };
+pub use room_write_budget::command_size as room_write_command_size;
 pub use sqlite::{CommandOutcome, PersistenceError, RoomSnapshotData, SqliteStore};

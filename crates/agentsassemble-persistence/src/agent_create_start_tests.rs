@@ -102,10 +102,24 @@ fn started() -> AgentRuntimeStarted {
     }
 }
 
+async fn assert_principal_budget(
+    store: &SqliteStore,
+    principal: &AuthenticatedPrincipal,
+    payload: &serde_json::Value,
+    expected: bool,
+) {
+    let actual = store
+        .command_requires_principal_budget(principal, "create-start-1", "agent.create", payload)
+        .await
+        .unwrap_or_else(|error| panic!("inspect principal budget: {error}"));
+    assert_eq!(actual, expected);
+}
+
 #[tokio::test]
 async fn create_start_first_commit_replays_one_intent_and_preserves_result_shape() {
     let (store, principal, directory) = fixture().await;
     let payload = json!({"start": true, "provider_id": "codex"});
+    assert_principal_budget(&store, &principal, &payload, true).await;
     assert!(matches!(
         store
             .inspect_agent_create_start(&principal, "create-start-1", &payload)
@@ -132,6 +146,7 @@ async fn create_start_first_commit_replays_one_intent_and_preserves_result_shape
     let AgentCreateStartPlan::Start(replay) = replay else {
         panic!("committed create/start must resume its exact effect");
     };
+    assert_principal_budget(&store, &principal, &payload, false).await;
     assert_eq!(first.operation_id, replay.operation_id);
     assert_eq!(
         first.session.public.session_id,
@@ -184,6 +199,17 @@ async fn create_start_first_commit_replays_one_intent_and_preserves_result_shape
     };
     assert!(replay.deduplicated);
     assert_eq!(replay.result, commit.outcome.result);
+    assert_principal_budget(&store, &principal, &payload, false).await;
+    let write_count = sqlx::query_scalar::<_, i64>(
+        "SELECT command_count FROM room_write_budgets WHERE room_id = 'general'",
+    )
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("read lifecycle write budget: {error}"));
+    assert_eq!(
+        write_count, 1,
+        "intent resume and completed replay must reuse one write admission"
+    );
 }
 
 #[tokio::test]
