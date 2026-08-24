@@ -28,7 +28,7 @@ function event(sequence: number, type: string, content = ""): RoomEvent {
 }
 
 function rawRoomSettings(
-  conversationMode: "ordered" | "ambient" | "continuous" = "ordered"
+  conversationMode: "ordered" | "ambient" = "ordered"
 ): RoomSocketSnapshot["room_settings"] {
   return {
     settings_revision: `settings-${conversationMode}`,
@@ -44,7 +44,6 @@ function rawRoomSettings(
     conversation_mode: conversationMode,
     tool_mode: "chat",
     ordered_exclude_previous_speaker: true,
-    max_relay_turns: 6,
     channels: [],
     activity_plugin: "",
   };
@@ -130,7 +129,7 @@ describe("useCanonicalRoom synchronization", () => {
       harness.handlers()?.onRoomEvents?.([
         {
           ...event(7, "room_settings_updated"),
-          room_settings: rawRoomSettings("continuous"),
+          room_settings: rawRoomSettings("ordered"),
         },
       ])
     );
@@ -142,8 +141,8 @@ describe("useCanonicalRoom synchronization", () => {
       });
     });
 
-    expect(returnedSettings?.conversationMode).toBe("continuous");
-    expect(result.current.roomSettings?.conversationMode).toBe("continuous");
+    expect(returnedSettings?.conversationMode).toBe("ordered");
+    expect(result.current.roomSettings?.conversationMode).toBe("ordered");
   });
 
   it("rejects a settings ACK whose result and canonical event disagree", async () => {
@@ -158,7 +157,7 @@ describe("useCanonicalRoom synchronization", () => {
       action,
       result: {
         event: ackEvent,
-        room_settings: rawRoomSettings("continuous"),
+        room_settings: rawRoomSettings("ordered"),
       },
     }) satisfies RoomCommandAck);
     const harness = socketHarness(command);

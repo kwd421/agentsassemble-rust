@@ -5,6 +5,7 @@ use std::{
     time::Duration,
 };
 
+use agentsassemble_domain::RoomRandomRequest;
 use bytes::Bytes;
 use futures_util::future::{AbortHandle, Abortable};
 use http_body_util::{BodyExt, Empty, combinators::BoxBody};
@@ -20,12 +21,12 @@ use rmcp::{
     ServerHandler,
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::{ServerCapabilities, ServerInfo},
-    schemars, tool, tool_handler, tool_router,
+    tool, tool_handler, tool_router,
     transport::streamable_http_server::{
         StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
     },
 };
-use serde::Deserialize;
+use serde_json::json;
 use subtle::ConstantTimeEq;
 use tokio::{
     net::TcpListener,
@@ -36,8 +37,10 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::room_portal::{
-    PortalState, RoomPortalError, StagedOutcome, canonical_message, valid_decline_reason,
+    PortalState, RoomPortalError, StagedOutcome, canonical_message, reserve_room_tool,
+    valid_decline_reason,
 };
+use crate::room_portal_tool_contract::{ChooseRandom, DeclineToSpeak, PublishMessage, RollDice};
 
 const MAX_MCP_REQUEST_BYTES: usize = 64 * 1024;
 const MAX_PORTAL_CONNECTIONS: usize = 8;
@@ -392,16 +395,16 @@ impl RoomPortalMcp {
     }
 }
 
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
-struct PublishMessage {
-    content: String,
-    #[serde(default)]
-    next_agent_id: String,
-}
-
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
-struct DeclineToSpeak {
-    reason_code: String,
+impl RoomPortalMcp {
+    async fn execute_room_random(&self, request: RoomRandomRequest) -> Result<String, String> {
+        let (authority, reservation, ingress) = reserve_room_tool(&self.state)?;
+        let result = ingress
+            .submit(authority, request, reservation)
+            .await
+            .map_err(|error| error.message)?;
+        serde_json::to_string(&result)
+            .map_err(|_| "The room tool result could not be encoded.".to_owned())
+    }
 }
 
 #[tool_router]
@@ -436,8 +439,11 @@ impl RoomPortalMcp {
             .as_mut()
             .ok_or_else(|| "No active room observation.".to_owned())?;
         let receipt_generation = active.turn_generation;
-        if active.outcome.is_some() {
+        if active.closing || active.outcome.is_some() {
             return Err("This turn already has a terminal room action.".to_owned());
+        }
+        if !active.tool_reservations.is_empty() {
+            return Err("Wait for pending room tools before publishing.".to_owned());
         }
         let content = canonical_message(&input.content)
             .ok_or_else(|| "The room publication is invalid.".to_owned())?;
@@ -474,8 +480,11 @@ impl RoomPortalMcp {
             .as_mut()
             .ok_or_else(|| "No active room observation.".to_owned())?;
         let receipt_generation = active.turn_generation;
-        if active.outcome.is_some() {
+        if active.closing || active.outcome.is_some() {
             return Err("This turn already has a terminal room action.".to_owned());
+        }
+        if !active.tool_reservations.is_empty() {
+            return Err("Wait for pending room tools before declining.".to_owned());
         }
         if !valid_decline_reason(&input.reason_code) {
             return Err("The decline reason is unsupported.".to_owned());
@@ -485,6 +494,33 @@ impl RoomPortalMcp {
             reason_code: input.reason_code,
         });
         Ok("Declined this shared-room turn.".to_owned())
+    }
+
+    #[tool(
+        description = "Roll bounded server-owned dice in tabletop mode. Read the discussion first."
+    )]
+    async fn roll_dice(&self, Parameters(input): Parameters<RollDice>) -> Result<String, String> {
+        let request = RoomRandomRequest::parse(
+            "room.random.roll",
+            &json!({"notation": input.notation, "reason": input.reason}),
+        )
+        .map_err(|error| error.message)?;
+        self.execute_room_random(request).await
+    }
+
+    #[tool(
+        description = "Choose one bounded option with server-owned randomness in tabletop mode. Read the discussion first."
+    )]
+    async fn choose_random(
+        &self,
+        Parameters(input): Parameters<ChooseRandom>,
+    ) -> Result<String, String> {
+        let request = RoomRandomRequest::parse(
+            "room.random.choose",
+            &json!({"options": input.options, "reason": input.reason}),
+        )
+        .map_err(|error| error.message)?;
+        self.execute_room_random(request).await
     }
 }
 
@@ -570,10 +606,12 @@ mod tests {
             .unwrap_or_else(|error| panic!("create room portal fixture: {error}"));
         portal
             .begin_observation(
+                "agent-1",
                 "turn-1",
                 7,
                 "Room: General\n#7 Human: hello",
                 &["agent-2".to_owned()],
+                None,
             )
             .unwrap_or_else(|error| panic!("begin room observation: {error}"));
         let client = ()
@@ -593,9 +631,11 @@ mod tests {
         assert_eq!(
             names,
             BTreeSet::from([
+                "choose_random".to_owned(),
                 "decline_to_speak".to_owned(),
                 "publish_message".to_owned(),
                 "read_discussion".to_owned(),
+                "roll_dice".to_owned(),
             ])
         );
         let early = call_tool(

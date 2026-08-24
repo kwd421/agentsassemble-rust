@@ -1,36 +1,41 @@
 use agentsassemble_domain::{
-    AuthenticatedPrincipal, DurableAgentSession, MessageSend, RoomEvent, canonical_payload_hash,
-    clean_message, has_visible_text, prepare_message_event, redact_persisted_diagnostic_text,
+    Actor, AuthenticatedPrincipal, DurableAgentSession, MessageSend, RoomEvent,
+    RoomInputDeliveryKind, canonical_payload_hash, clean_message, has_visible_text,
+    prepare_message_event, redact_persisted_diagnostic_text,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
+use std::collections::BTreeMap;
+use uuid::Uuid;
 
 use crate::{
     CommandOutcome, PersistenceError, SqliteStore,
     agent_lifecycle::{load_session, save_session},
     command_admission::admit_non_lifecycle_command,
-    turn_queue::merge_event_ids,
+    turn_queue::merge_room_inputs,
 };
 
 #[derive(Debug, Clone)]
 pub struct AgentTurnAssignment {
     pub session: DurableAgentSession,
     pub turn_id: String,
+    pub delivery_kind: RoomInputDeliveryKind,
     pub provider_input: String,
     pub room_view: String,
     pub room_agent_ids: Vec<String>,
+    pub tabletop_tools: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct RoomCommandMutation {
     pub outcome: CommandOutcome,
-    pub assignment: Option<AgentTurnAssignment>,
+    pub assignments: Vec<AgentTurnAssignment>,
 }
 
 #[derive(Debug, Clone)]
 pub struct AgentTurnCommit {
     pub events: Vec<RoomEvent>,
-    pub next_assignment: Option<AgentTurnAssignment>,
+    pub next_assignments: Vec<AgentTurnAssignment>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -40,7 +45,7 @@ pub struct ProviderTurnAuthority<'a> {
     pub provider_session_id: Option<&'a str>,
 }
 
-struct PreparedAssignment {
+pub(super) struct PreparedAssignment {
     assignment: AgentTurnAssignment,
     events: Vec<RoomEvent>,
 }
@@ -57,16 +62,67 @@ impl SqliteStore {
     ) -> Result<Option<AgentTurnCommit>, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
         let (room, settings) = load_active_room(&mut transaction, room_id).await?;
-        let Some(prepared) = assign_oldest_pending(&mut transaction, &room, &settings).await?
-        else {
+        let prepared = assign_available_pending(&mut transaction, &room, &settings).await?;
+        if prepared.is_empty() {
             transaction.commit().await?;
             return Ok(None);
-        };
+        }
+        let mut events = Vec::new();
+        let mut assignments = Vec::with_capacity(prepared.len());
+        for item in prepared {
+            events.extend(item.events);
+            assignments.push(item.assignment);
+        }
         transaction.commit().await?;
         Ok(Some(AgentTurnCommit {
-            events: prepared.events,
-            next_assignment: Some(prepared.assignment),
+            events,
+            next_assignments: assignments,
         }))
+    }
+
+    /// Records a post-commit room-floor progression failure without changing the
+    /// already committed command result.
+    ///
+    /// # Errors
+    ///
+    /// Returns a storage failure when the public error event cannot be committed.
+    pub async fn record_floor_progression_failure(
+        &self,
+        room_id: &str,
+        assignment_error_code: &str,
+    ) -> Result<Vec<RoomEvent>, PersistenceError> {
+        let assignment_error_code = public_assignment_error_code(assignment_error_code);
+        let mut transaction = self.pool.begin().await?;
+        let _ = load_active_room(&mut transaction, room_id).await?;
+        let event = RoomEvent {
+            v: 1,
+            id: Uuid::new_v4().to_string(),
+            seq: next_sequence(&mut transaction, room_id).await?,
+            created_at: Utc::now(),
+            room_id: room_id.to_owned(),
+            event_type: "error".to_owned(),
+            actor: Actor {
+                participant_id: "room-system".to_owned(),
+                participant_type: "system".to_owned(),
+            },
+            participant_id: None,
+            participant_type: Some("system".to_owned()),
+            actor_id: Some("room-system".to_owned()),
+            actor_type: Some("system".to_owned()),
+            display_name: Some("Room System".to_owned()),
+            content: Some("Queued Agent Session work could not be advanced.".to_owned()),
+            message_kind: None,
+            extra: BTreeMap::from([
+                ("error_code".to_owned(), json!("floor_progression_failed")),
+                (
+                    "diagnostics".to_owned(),
+                    json!({"assignment_error_code": assignment_error_code}),
+                ),
+            ]),
+        };
+        insert_event(&mut transaction, &event).await?;
+        transaction.commit().await?;
+        Ok(vec![event])
     }
 
     /// Commits a room message and its ordered-floor queue/assignment atomically.
@@ -97,7 +153,7 @@ impl SqliteStore {
             transaction.commit().await?;
             return Ok(RoomCommandMutation {
                 outcome,
-                assignment: None,
+                assignments: Vec::new(),
             });
         }
         if action != "message.send" {
@@ -117,13 +173,14 @@ impl SqliteStore {
         let event = prepare_message_event(principal, &participant, &command, sequence, Utc::now())
             .map_err(rejection)?;
         insert_event(&mut transaction, &event).await?;
-        queue_ordered_message(&mut transaction, &settings, &event).await?;
-        let prepared = assign_oldest_pending(&mut transaction, &room, &settings).await?;
+        route_message(&mut transaction, &settings, &event).await?;
+        let prepared = assign_available_pending(&mut transaction, &room, &settings).await?;
         let mut events = vec![event.clone()];
-        let assignment = prepared.map(|prepared| {
-            events.extend(prepared.events);
-            prepared.assignment
-        });
+        let mut assignments = Vec::with_capacity(prepared.len());
+        for item in prepared {
+            events.extend(item.events);
+            assignments.push(item.assignment);
+        }
         let result = json!({"event": event, "event_seq": sequence});
         sqlx::query(
             "INSERT INTO command_results(room_id, principal_id, request_id, action, payload_hash, result_json) VALUES (?, ?, ?, ?, ?, ?)",
@@ -144,7 +201,7 @@ impl SqliteStore {
                 events,
                 deduplicated: false,
             },
-            assignment,
+            assignments,
         })
     }
 
@@ -223,17 +280,18 @@ impl SqliteStore {
         complete_session_state(&mut session, &input_event_id, input_seq);
         save_session(&mut transaction, &session).await?;
         let state = session_state_event(&mut transaction, &session).await?;
-        queue_ordered_message(&mut transaction, &settings, &final_event).await?;
-        let prepared = assign_oldest_pending(&mut transaction, &room, &settings).await?;
+        route_message(&mut transaction, &settings, &final_event).await?;
+        let prepared = assign_available_pending(&mut transaction, &room, &settings).await?;
         let mut events = vec![final_event, finished, state];
-        let next_assignment = prepared.map(|prepared| {
-            events.extend(prepared.events);
-            prepared.assignment
-        });
+        let mut next_assignments = Vec::with_capacity(prepared.len());
+        for item in prepared {
+            events.extend(item.events);
+            next_assignments.push(item.assignment);
+        }
         transaction.commit().await?;
         Ok(AgentTurnCommit {
             events,
-            next_assignment,
+            next_assignments,
         })
     }
 
@@ -284,16 +342,17 @@ impl SqliteStore {
         complete_session_state(&mut session, &input_event_id, input_seq);
         save_session(&mut transaction, &session).await?;
         let state = session_state_event(&mut transaction, &session).await?;
-        let prepared = assign_oldest_pending(&mut transaction, &room, &settings).await?;
+        let prepared = assign_available_pending(&mut transaction, &room, &settings).await?;
         let mut events = vec![finished, state];
-        let next_assignment = prepared.map(|prepared| {
-            events.extend(prepared.events);
-            prepared.assignment
-        });
+        let mut next_assignments = Vec::with_capacity(prepared.len());
+        for item in prepared {
+            events.extend(item.events);
+            next_assignments.push(item.assignment);
+        }
         transaction.commit().await?;
         Ok(AgentTurnCommit {
             events,
-            next_assignment,
+            next_assignments,
         })
     }
 
@@ -341,11 +400,11 @@ impl SqliteStore {
         let error = error_event(&mut transaction, &session, turn_id, code, &message).await?;
         let finished =
             turn_finished_event(&mut transaction, &session, turn_id, "error", None, None).await?;
-        session.pending_event_ids = merge_event_ids(
+        session.pending_inputs = merge_room_inputs(
             session
-                .inflight_event_ids
+                .inflight_inputs
                 .iter()
-                .chain(&session.pending_event_ids),
+                .chain(&session.pending_inputs),
         )
         .map_err(|_| {
             rejected(
@@ -353,7 +412,7 @@ impl SqliteStore {
                 "Stored Agent Session turn queue authority is inconsistent or oversized.",
             )
         })?;
-        session.inflight_event_ids.clear();
+        session.inflight_inputs.clear();
         "error".clone_into(&mut session.public.status);
         "error".clone_into(&mut session.public.runtime_status);
         session.public.turn_phase.clear();
@@ -365,17 +424,30 @@ impl SqliteStore {
         session.public.updated_at = Utc::now();
         save_session(&mut transaction, &session).await?;
         let state = session_state_event(&mut transaction, &session).await?;
-        let prepared = assign_oldest_pending(&mut transaction, &room, &settings).await?;
+        let prepared = assign_available_pending(&mut transaction, &room, &settings).await?;
         let mut events = vec![error, finished, state];
-        let next_assignment = prepared.map(|prepared| {
-            events.extend(prepared.events);
-            prepared.assignment
-        });
+        let mut next_assignments = Vec::with_capacity(prepared.len());
+        for item in prepared {
+            events.extend(item.events);
+            next_assignments.push(item.assignment);
+        }
         transaction.commit().await?;
         Ok(AgentTurnCommit {
             events,
-            next_assignment,
+            next_assignments,
         })
+    }
+}
+
+fn public_assignment_error_code(value: &str) -> &'static str {
+    match value {
+        "agent_session_capacity" => "agent_session_capacity",
+        "provider_sync_cursor_mismatch" => "provider_sync_cursor_mismatch",
+        "queued_room_event_invalid" => "queued_room_event_invalid",
+        "room_event_missing" => "room_event_missing",
+        "provider_turn_input_invalid" => "provider_turn_input_invalid",
+        "stored_turn_authority_invalid" => "stored_turn_authority_invalid",
+        _ => "internal_assignment_error",
     }
 }
 
@@ -423,7 +495,7 @@ fn complete_session_state(session: &mut DurableAgentSession, input_event_id: &st
     session.public.last_error.clear();
     session.public.last_error_code.clear();
     session.public.recovery_required = false;
-    session.inflight_event_ids.clear();
+    session.inflight_inputs.clear();
     clear_active_turn_fields(session);
     session.public.updated_at = Utc::now();
 }
@@ -477,14 +549,16 @@ async fn validate_publication_target(
 mod context;
 #[path = "room_turn_routing.rs"]
 mod routing;
+#[path = "room_turn_scheduler.rs"]
+mod scheduler;
 #[path = "room_turn_support.rs"]
-mod support;
+pub(crate) mod support;
 
+use scheduler::{assign_available_pending, route_message};
 use support::{
-    agent_final_event, assign_oldest_pending, clear_active_turn_fields, error_event, insert_event,
-    load_active_room, load_participant, next_sequence, public_error_code, queue_ordered_message,
-    rejected, rejection, require_active_turn, session_state_event, turn_finished_event,
-    validate_identifier, validate_input_cursor,
+    agent_final_event, clear_active_turn_fields, error_event, insert_event, load_active_room,
+    load_participant, next_sequence, public_error_code, rejected, rejection, require_active_turn,
+    session_state_event, turn_finished_event, validate_identifier, validate_input_cursor,
 };
 
 #[cfg(test)]

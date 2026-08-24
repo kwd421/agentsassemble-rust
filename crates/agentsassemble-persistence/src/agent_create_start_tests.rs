@@ -21,7 +21,7 @@ async fn fixture() -> (SqliteStore, AuthenticatedPrincipal, tempfile::TempDir) {
     store
         .initialize_room(
             &Room::new("general".to_owned(), "General".to_owned(), now),
-            &RoomSettings::defaults("General".to_owned()),
+            &RoomSettings::defaults("General"),
             &Participant {
                 room_id: "general".to_owned(),
                 participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),

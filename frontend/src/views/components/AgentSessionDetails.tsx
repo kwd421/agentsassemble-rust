@@ -80,8 +80,8 @@ function sessionErrorMessage(session: RoomAgentSession) {
   if (session.last_error_code === "provider_rate_limited") {
     return "Provider 요청 속도 제한에 걸렸습니다. 할당량 소진으로 단정할 수는 없습니다.";
   }
-  if (session.last_error_code === "profile_migration_required") {
-    return "저장된 실행 프로필이 현재 provider 설정 형식과 달라 재사용할 수 없습니다. 아래 실행 설정을 확인한 뒤 다시 저장하세요.";
+  if (session.last_error_code === "runtime_profile_unsupported") {
+    return "저장된 실행 프로필은 현재 runtime에서 지원하지 않습니다. 현재 provider 설정으로 다시 구성하세요.";
   }
   return session.last_error || "";
 }

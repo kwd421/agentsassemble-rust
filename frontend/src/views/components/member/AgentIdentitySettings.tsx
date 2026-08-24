@@ -1,10 +1,5 @@
 import { useEffect, useState, type RefObject } from "react";
 import { uploadLobbyAttachment, type RoomAgentSession } from "../../../api";
-import {
-  removeAgentProfileSettings,
-  saveAgentProfileSettings,
-  type AgentProfileSettings,
-} from "../../../lib/agentProfileSettings";
 import ImageCropper from "../ImageCropper";
 import type { MemberEntry } from "./memberTypes";
 import "./AgentIdentitySettings.css";
@@ -15,7 +10,6 @@ export default function AgentIdentitySettings({
   avatarInputRef,
   roomSessionToken = "",
   onSessionActionComplete,
-  onAgentProfileSettingsChange,
   onAgentConfigure,
 }: {
   entry: MemberEntry;
@@ -23,51 +17,39 @@ export default function AgentIdentitySettings({
   avatarInputRef?: RefObject<HTMLInputElement | null>;
   roomSessionToken?: string;
   onSessionActionComplete?: () => void;
-  onAgentProfileSettingsChange?: (settings: Record<string, AgentProfileSettings>) => void;
   onAgentConfigure?: (
     session: RoomAgentSession,
     settings: Record<string, string>
   ) => void | Promise<void>;
 }) {
   const [name, setName] = useState(
-    entry.agentProfile?.displayName || entry.agentDisplayName || entry.displayName || ""
+    entry.agentDisplayName || entry.displayName || ""
   );
-  const [avatar, setAvatar] = useState(
-    entry.agentProfile?.avatarImage || entry.avatarImage || ""
-  );
+  const [avatar, setAvatar] = useState(entry.avatarImage || "");
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [status, setStatus] = useState("");
 
   useEffect(() => {
     setName(
-      entry.agentProfile?.displayName || entry.agentDisplayName || entry.displayName || ""
+      entry.agentDisplayName || entry.displayName || ""
     );
-    setAvatar(entry.agentProfile?.avatarImage || entry.avatarImage || "");
+    setAvatar(entry.avatarImage || "");
     setStatus("");
   }, [
     entry.agent?.agent_id,
     entry.agentDisplayName,
-    entry.agentProfile?.avatarImage,
-    entry.agentProfile?.displayName,
     entry.avatarImage,
     entry.displayName,
   ]);
 
   async function persistProfile(nextAvatar: string) {
-    let profiles: Record<string, AgentProfileSettings>;
-    if (entry.agentSession && onAgentConfigure) {
-      await onAgentConfigure(entry.agentSession, {
-        display_name: name,
-        avatar_image_url: nextAvatar,
-      });
-      profiles = removeAgentProfileSettings(agent.agent_id);
-    } else {
-      profiles = saveAgentProfileSettings(agent.agent_id, {
-        displayName: name,
-        avatarImage: nextAvatar,
-      });
+    if (!entry.agentSession || !onAgentConfigure) {
+      throw new Error("이 에이전트 프로필의 Agent Session 권위를 사용할 수 없습니다.");
     }
-    onAgentProfileSettingsChange?.(profiles);
+    await onAgentConfigure(entry.agentSession, {
+      display_name: name,
+      avatar_image_url: nextAvatar,
+    });
     onSessionActionComplete?.();
   }
 
@@ -97,7 +79,7 @@ export default function AgentIdentitySettings({
     }
   }
 
-  if (!entry.ownedByViewer) return null;
+  if (!entry.ownedByViewer || !entry.agentSession || !onAgentConfigure) return null;
   return (
     <section className="dc-agent-profile-inline" aria-label={`${entry.displayName} 에이전트 프로필`}>
       <label className="dc-agent-profile-field">

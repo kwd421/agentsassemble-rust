@@ -548,10 +548,12 @@ impl ProviderDriver for AntigravityDriver {
             .ok_or_else(portal_missing)?;
         self.room_portal
             .begin_observation(
+                &observation.session_id,
                 &request.turn_id,
                 observation.input_up_to_seq,
                 &observation.view,
                 &observation.allowed_agent_ids,
+                observation.room_tool_ingress.clone(),
             )
             .map_err(portal_driver_error)
     }
@@ -585,9 +587,18 @@ impl Drop for AntigravityDriver {
 }
 
 fn terminal_prompt(request: &ProviderTurnRequest, transcript_nonce: Uuid, helper: &str) -> String {
+    let random_instruction = request
+        .room_observation
+        .as_ref()
+        .and_then(|observation| observation.room_tool_ingress.as_ref())
+        .map_or_else(String::new, |_| {
+            format!(
+                " For official game randomness, run exactly one `{helper} roll '<NdS±M>'` or `{helper} choose '<json-options>'` command and wait for its result."
+            )
+        });
     format!(
-        "{}\n\n<agentsassemble-transport turn=\"{}\" launch=\"{transcript_nonce}\">Antigravity room transport: first run `{helper} help`, then run `{helper} read`. Finish with exactly one `{helper} speak 'message'`, `{helper} speak-to agent-id 'message'`, or `{helper} decline reason`. Run one helper command per terminal tool call. Ordinary assistant final text is not a room publication.</agentsassemble-transport>",
-        request.input, request.turn_id
+        "{}\n\n<agentsassemble-transport turn=\"{}\" launch=\"{transcript_nonce}\">Antigravity room transport: first run `{helper} help`, then run `{helper} read`.{random_instruction} Finish with exactly one `{helper} speak 'message'`, `{helper} speak-to agent-id 'message'`, or `{helper} decline reason`. Run one helper command per terminal tool call. Ordinary assistant final text is not a room publication.</agentsassemble-transport>",
+        request.input, request.turn_id,
     )
 }
 

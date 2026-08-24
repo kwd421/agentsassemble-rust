@@ -4,7 +4,10 @@ use super::{
     MAX_PENDING_NOTIFICATION_BYTES, MAX_PENDING_NOTIFICATIONS, command_arguments,
     is_room_portal_approval, next_notification_budget,
 };
-use crate::room_portal::{ROOM_PORTAL_TOKEN_ENV_PREFIX, RoomPortal};
+use crate::{
+    room_portal::{ROOM_PORTAL_TOKEN_ENV_PREFIX, RoomPortal},
+    test_support::durable_session,
+};
 
 #[tokio::test]
 async fn command_uses_app_server_and_process_local_profile_settings() {
@@ -93,40 +96,18 @@ async fn command_uses_app_server_and_process_local_profile_settings() {
 }
 
 fn codex_session_fixture() -> DurableAgentSession {
-    serde_json::from_value::<DurableAgentSession>(serde_json::json!({
-        "room_id": "room",
-        "session_id": "agent",
-        "participant_id": "agent",
-        "display_name": "Codex",
-        "status": "available",
-        "runtime_status": "starting",
-        "enabled": true,
-        "provider_kind": "codex_live_session",
-        "runtime_kind": "live_cli",
-        "connection_kind": "native_cli_bridge",
-        "external_owned": false,
-        "process_ownership": "server",
-        "model": "gpt-5.6-terra",
-        "reasoning_effort": "high",
-        "service_tier": "priority",
-        "variant": "",
-        "execution_harness": "builtin",
-        "permission_mode": "workspace_write",
-        "max_output_tokens": 0,
-        "catalog_revision": "revision",
-        "transport": "stdio_jsonl",
-        "last_seen_event_id": "",
-        "last_seen_seq": 0,
-        "last_provider_sync_event_id": "",
-        "last_provider_sync_seq": 0,
-        "bootstrap_cutoff_seq": 0,
-        "turn_count": 0,
-        "created_at": "2026-08-23T00:00:00Z",
-        "updated_at": "2026-08-23T00:00:00Z",
-        "workspace": "/tmp/work space",
-        "runtime_profile_key": "profile"
-    }))
-    .unwrap_or_else(|error| panic!("decode session fixture: {error}"))
+    let mut session = durable_session(
+        "room",
+        "agent",
+        "Codex",
+        "codex_live_session",
+        "gpt-5.6-terra",
+        "stdio_jsonl",
+    );
+    session.public.service_tier = "priority".to_owned();
+    session.public.permission_mode = "workspace_write".to_owned();
+    session.workspace = "/tmp/work space".to_owned();
+    session
 }
 
 #[test]

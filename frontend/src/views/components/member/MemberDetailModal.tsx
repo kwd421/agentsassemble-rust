@@ -1,7 +1,6 @@
 import { useRef } from "react";
 import { Camera, X } from "lucide-react";
 import type { RoomAgentSession } from "../../../api";
-import type { AgentProfileSettings } from "../../../lib/agentProfileSettings";
 import type { AgentSessionControlAction } from "../AgentSessionDetails";
 import type { NativeCliProviderAvailability } from "../../../roomSocketClient";
 import ProviderLogo from "../ProviderLogo";
@@ -15,7 +14,6 @@ export type MemberDetailModalProps = {
   roomSessionToken?: string;
   onClose: () => void;
   onSessionActionComplete?: () => void;
-  onAgentProfileSettingsChange?: (settings: Record<string, AgentProfileSettings>) => void;
   onParticipantKick?: (participantId: string) => void | Promise<void>;
   onAgentControl?: (
     session: RoomAgentSession,
@@ -35,7 +33,6 @@ export default function MemberDetailModal({
   roomSessionToken = "",
   onClose,
   onSessionActionComplete,
-  onAgentProfileSettingsChange,
   onParticipantKick,
   onAgentControl,
   availableProviders = [],
@@ -144,7 +141,6 @@ export default function MemberDetailModal({
           avatarInputRef={agentAvatarInputRef}
           roomSessionToken={roomSessionToken}
           onSessionActionComplete={onSessionActionComplete}
-          onAgentProfileSettingsChange={onAgentProfileSettingsChange}
           onAgentConfigure={onAgentConfigure}
         />
         {entry.agentSession && (

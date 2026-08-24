@@ -1,11 +1,12 @@
 use std::{os::unix::fs::PermissionsExt, path::Path, time::Duration};
 
-use agentsassemble_domain::{CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession};
+use agentsassemble_domain::DurableAgentSession;
 
 use super::{ProviderAdapter, ProviderRuntimeObservation};
 use crate::filesystem::{canonical_workspace, executable_identity};
 use crate::profile::runtime_profile_key;
 use crate::runtime::test_cleanup::{ExactProcessCleanup, ExactProcessGroupCleanup};
+use crate::test_support::durable_session;
 
 pub(super) static RUNTIME_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
@@ -730,42 +731,17 @@ fn session(
     workspace: &str,
     workspace_identity: &str,
 ) -> DurableAgentSession {
-    let mut session = serde_json::from_value::<DurableAgentSession>(serde_json::json!({
-        "room_id": "general",
-        "session_id": "codex-agent",
-        "participant_id": "codex-agent",
-        "display_name": "Codex",
-        "status": "available",
-        "runtime_status": "starting",
-        "enabled": true,
-        "provider_kind": "codex_live_session",
-        "runtime_kind": "live_cli",
-        "connection_kind": "native_cli_bridge",
-        "external_owned": false,
-        "process_ownership": "server",
-        "model": "gpt-5.6-terra",
-        "reasoning_effort": "high",
-        "service_tier": "default",
-        "variant": "",
-        "execution_harness": "builtin",
-        "permission_mode": "meeting_read_only",
-        "max_output_tokens": 0,
-        "catalog_revision": "revision",
-        "transport": "stdio_jsonl",
-        "last_seen_event_id": "",
-        "last_seen_seq": 0,
-        "last_provider_sync_event_id": "",
-        "last_provider_sync_seq": 0,
-        "bootstrap_cutoff_seq": 0,
-        "turn_count": 0,
-        "created_at": "2026-08-23T00:00:00Z",
-        "updated_at": "2026-08-23T00:00:00Z",
-        "workspace": workspace,
-        "workspace_identity": workspace_identity,
-        "runtime_profile_key": "codex-profile",
-        "runtime_profile_version": CURRENT_RUNTIME_PROFILE_VERSION
-    }))
-    .unwrap_or_else(|error| panic!("decode runtime session: {error}"));
+    let mut session = durable_session(
+        "general",
+        "codex-agent",
+        "Codex",
+        "codex_live_session",
+        "gpt-5.6-terra",
+        "stdio_jsonl",
+    );
+    "default".clone_into(&mut session.public.service_tier);
+    workspace.clone_into(&mut session.workspace);
+    workspace_identity.clone_into(&mut session.workspace_identity);
     session.executable = executable;
     session.executable_identity = executable_identity;
     session.runtime_profile_key = runtime_profile_key([

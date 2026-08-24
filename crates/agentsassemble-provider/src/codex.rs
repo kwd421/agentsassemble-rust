@@ -526,10 +526,12 @@ impl ProviderDriver for CodexDriver {
             .ok_or_else(room_portal_unavailable)?;
         self.room_portal
             .begin_observation(
+                &observation.session_id,
                 &request.turn_id,
                 observation.input_up_to_seq,
                 &observation.view,
                 &observation.allowed_agent_ids,
+                observation.room_tool_ingress.clone(),
             )
             .map_err(portal_driver_error)
     }

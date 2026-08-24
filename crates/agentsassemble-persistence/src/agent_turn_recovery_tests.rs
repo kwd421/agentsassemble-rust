@@ -17,7 +17,7 @@ async fn adopted_runtime_requeues_an_active_turn_instead_of_leaving_it_stuck() {
     .unwrap_or_else(|error| panic!("load recovery fixture session: {error}"));
     let mut clean_session: DurableAgentSession = serde_json::from_str(&encoded)
         .unwrap_or_else(|error| panic!("decode recovery fixture session: {error}"));
-    clean_session.pending_event_ids.clear();
+    clean_session.pending_inputs.clear();
     sqlx::query(
         "UPDATE agent_sessions SET session_json = ? WHERE room_id = 'general' AND session_id = ?",
     )
@@ -64,7 +64,9 @@ async fn adopted_runtime_requeues_an_active_turn_instead_of_leaving_it_stuck() {
         .await
         .unwrap_or_else(|error| panic!("assign turn before restart: {error}"));
     let assignment = mutation
-        .assignment
+        .assignments
+        .into_iter()
+        .next()
         .unwrap_or_else(|| panic!("message must have an active turn before restart"));
     let candidate = store
         .load_runtime_reconciliation_candidates()
@@ -96,10 +98,10 @@ async fn adopted_runtime_requeues_an_active_turn_instead_of_leaving_it_stuck() {
     let reconciled: DurableAgentSession = serde_json::from_str(&encoded)
         .unwrap_or_else(|error| panic!("decode reconciled session: {error}"));
     assert_eq!(
-        reconciled.pending_event_ids,
-        assignment.session.inflight_event_ids
+        reconciled.pending_inputs,
+        assignment.session.inflight_inputs
     );
-    assert!(reconciled.inflight_event_ids.is_empty());
+    assert!(reconciled.inflight_inputs.is_empty());
     assert!(reconciled.public.active_turn_id.is_empty());
     assert!(reconciled.active_source_event_id.is_empty());
     assert_eq!(reconciled.public.runtime_status, "recovering");

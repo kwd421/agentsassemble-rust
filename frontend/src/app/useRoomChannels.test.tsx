@@ -38,7 +38,6 @@ function settings(channels: RoomChannel[] = [firstChannel]): RoomGlobalSettings 
     conversationMode: "ordered",
     toolMode: "chat",
     orderedExcludePreviousSpeaker: true,
-    maxRelayTurns: 6,
     channels,
   };
 }

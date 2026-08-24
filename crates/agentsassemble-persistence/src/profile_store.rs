@@ -122,48 +122,6 @@ pub(crate) async fn insert_initial_local_profile(
     Ok(())
 }
 
-pub(crate) async fn migrate_local_profile_authority(
-    transaction: &mut Transaction<'_, Sqlite>,
-) -> Result<(), PersistenceError> {
-    let profile = UserProfile::defaults(Utc::now());
-    sqlx::query(
-        "INSERT INTO user_profiles(user_id, participant_id, profile_json) VALUES (?, ?, ?)",
-    )
-    .bind(LOCAL_OPERATOR_USER_ID)
-    .bind(LOCAL_OPERATOR_PARTICIPANT_ID)
-    .bind(serde_json::to_string(&profile)?)
-    .execute(&mut **transaction)
-    .await?;
-    let rows = sqlx::query(
-        "SELECT room_id, participant_json FROM participants WHERE participant_id = ? ORDER BY room_id",
-    )
-    .bind(LOCAL_OPERATOR_PARTICIPANT_ID)
-    .fetch_all(&mut **transaction)
-    .await?;
-    for row in rows {
-        let room_id = row.get::<String, _>("room_id");
-        let mut participant: Participant =
-            serde_json::from_str(row.get::<String, _>("participant_json").as_str())?;
-        if participant.participant_type != "human" {
-            continue;
-        }
-        participant.display_name.clone_from(&profile.display_name);
-        participant
-            .avatar_image_url
-            .clone_from(&profile.avatar_image_url);
-        participant.updated_at = profile.updated_at;
-        sqlx::query(
-            "UPDATE participants SET participant_json = ? WHERE room_id = ? AND participant_id = ?",
-        )
-        .bind(serde_json::to_string(&participant)?)
-        .bind(room_id)
-        .bind(LOCAL_OPERATOR_PARTICIPANT_ID)
-        .execute(&mut **transaction)
-        .await?;
-    }
-    Ok(())
-}
-
 async fn load_profile(
     transaction: &mut Transaction<'_, Sqlite>,
     principal: &AuthenticatedPrincipal,
@@ -296,7 +254,6 @@ async fn participant_updated_event(
         display_name: Some(profile.display_name.clone()),
         content: None,
         message_kind: None,
-        relay_depth: None,
         extra: BTreeMap::from([
             (
                 "avatar_image_url".to_owned(),
@@ -349,11 +306,7 @@ mod tests {
             updated_at: now,
         };
         store
-            .initialize_room(
-                &room,
-                &RoomSettings::defaults("General".to_owned()),
-                &participant,
-            )
+            .initialize_room(&room, &RoomSettings::defaults("General"), &participant)
             .await
             .unwrap_or_else(|error| panic!("initialize profile fixture: {error}"));
         let principal = AuthenticatedPrincipal {
@@ -486,7 +439,7 @@ mod tests {
                     .unwrap_or_else(|error| panic!("encode room: {error}")),
             )
             .bind(
-                serde_json::to_string(&RoomSettings::defaults("Second".to_owned()))
+                serde_json::to_string(&RoomSettings::defaults("Second"))
                     .unwrap_or_else(|error| panic!("encode settings: {error}")),
             )
             .execute(&store.pool)

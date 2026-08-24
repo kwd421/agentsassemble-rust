@@ -7,6 +7,21 @@ pub(super) fn last_direct_target<'a>(
     content: &str,
     sessions: impl Iterator<Item = &'a DurableAgentSession>,
 ) -> Option<String> {
+    let aliases = unique_aliases(sessions);
+    let content = content.to_lowercase();
+    aliases
+        .into_iter()
+        .filter_map(|(alias, owner)| {
+            let owner = owner?;
+            last_mention_position(&content, &alias).map(|position| (position, owner))
+        })
+        .max()
+        .map(|(_, owner)| owner)
+}
+
+fn unique_aliases<'a>(
+    sessions: impl Iterator<Item = &'a DurableAgentSession>,
+) -> BTreeMap<String, Option<String>> {
     let mut aliases = BTreeMap::<String, Option<String>>::new();
     for session in sessions {
         let session_id = &session.public.session_id;
@@ -30,15 +45,7 @@ pub(super) fn last_direct_target<'a>(
                 .or_insert_with(|| Some(session_id.clone()));
         }
     }
-    let content = content.to_lowercase();
     aliases
-        .into_iter()
-        .filter_map(|(alias, owner)| {
-            let owner = owner?;
-            last_mention_position(&content, &alias).map(|position| (position, owner))
-        })
-        .max()
-        .map(|(_, owner)| owner)
 }
 
 pub(super) fn sampled_candidate_indexes(length: usize) -> Vec<usize> {
@@ -111,7 +118,8 @@ fn is_alias_separator(character: char) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use agentsassemble_domain::DurableAgentSession;
+    use agentsassemble_domain::{AgentSession, DurableAgentSession};
+    use chrono::Utc;
 
     use super::last_direct_target;
 
@@ -141,41 +149,63 @@ mod tests {
     }
 
     fn session(id: &str, display_name: &str) -> DurableAgentSession {
-        let mut value = serde_json::json!({
-            "room_id": "general",
-            "session_id": id,
-            "participant_id": id,
-            "display_name": display_name,
-            "status": "attached",
-            "runtime_status": "idle",
-            "enabled": true,
-            "provider_kind": "test",
-            "runtime_kind": "test",
-            "connection_kind": "test",
-            "external_owned": false,
-            "process_ownership": "server",
-            "model": "test",
-            "reasoning_effort": "",
-            "service_tier": "",
-            "variant": "",
-            "execution_harness": "builtin",
-            "permission_mode": "meeting_read_only",
-            "max_output_tokens": 0,
-            "catalog_revision": "test",
-            "transport": "test",
-            "last_seen_event_id": "",
-            "last_seen_seq": 0,
-            "last_provider_sync_event_id": "",
-            "last_provider_sync_seq": 0,
-            "bootstrap_cutoff_seq": 0,
-            "turn_count": 0,
-            "created_at": "2026-08-23T00:00:00Z",
-            "updated_at": "2026-08-23T00:00:00Z",
-            "workspace": "/test",
-            "runtime_profile_key": "test"
-        });
-        value["provider_session_active"] = serde_json::json!(true);
-        serde_json::from_value(value)
-            .unwrap_or_else(|error| panic!("decode routing fixture: {error}"))
+        let now = Utc::now();
+        DurableAgentSession {
+            public: AgentSession {
+                room_id: "general".to_owned(),
+                session_id: id.to_owned(),
+                participant_id: id.to_owned(),
+                display_name: display_name.to_owned(),
+                status: "attached".to_owned(),
+                runtime_status: "idle".to_owned(),
+                enabled: true,
+                provider_kind: "test".to_owned(),
+                runtime_kind: "test".to_owned(),
+                connection_kind: "test".to_owned(),
+                external_owned: false,
+                process_ownership: "server".to_owned(),
+                model: "test".to_owned(),
+                reasoning_effort: String::new(),
+                service_tier: String::new(),
+                variant: String::new(),
+                execution_harness: "builtin".to_owned(),
+                permission_mode: "meeting_read_only".to_owned(),
+                max_output_tokens: 0,
+                catalog_revision: "test".to_owned(),
+                transport: "test".to_owned(),
+                last_seen_event_id: String::new(),
+                last_seen_seq: 0,
+                last_provider_sync_event_id: String::new(),
+                last_provider_sync_seq: 0,
+                bootstrap_cutoff_seq: 0,
+                turn_count: 0,
+                active_turn_id: String::new(),
+                turn_phase: String::new(),
+                last_error: String::new(),
+                last_error_code: String::new(),
+                recovery_required: false,
+                provider_session_active: true,
+                provider_session_reused: false,
+                created_at: now,
+                updated_at: now,
+            },
+            executable: "/test/provider".to_owned(),
+            executable_identity: "test-provider".to_owned(),
+            workspace: "/test".to_owned(),
+            workspace_identity: "test-workspace".to_owned(),
+            runtime_profile_key: "test".to_owned(),
+            runtime_profile_version: 3,
+            provider_session_id: "test-session".to_owned(),
+            runtime_handle_id: "test-handle".to_owned(),
+            runtime_owner_id: "test-owner".to_owned(),
+            pending_inputs: Vec::new(),
+            inflight_inputs: Vec::new(),
+            active_source_event_id: String::new(),
+            input_up_to_event_id: String::new(),
+            input_up_to_seq: 0,
+            lifecycle_intent_action: String::new(),
+            lifecycle_intent_id: String::new(),
+            lifecycle_intent_status: String::new(),
+        }
     }
 }

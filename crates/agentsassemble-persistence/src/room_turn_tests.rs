@@ -1,7 +1,7 @@
 use agentsassemble_domain::{
     AgentSession, AuthenticatedPrincipal, CURRENT_RUNTIME_PROFILE_VERSION, CapabilitySet,
     ClientKind, DurableAgentSession, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID, Participant,
-    ParticipantStatus, Room, RoomSettings,
+    ParticipantStatus, QueuedRoomInput, Room, RoomInputDeliveryKind, RoomSettings,
 };
 use chrono::Utc;
 use serde_json::json;
@@ -24,11 +24,14 @@ async fn ordered_floor_queue_limit_rejects_the_source_message_atomically() {
         )
         .await
         .unwrap_or_else(|error| panic!("start active turn: {error}"));
-    assert!(active.assignment.is_some());
+    assert_eq!(active.assignments.len(), 1);
 
     let mut session = stored_session(&store).await;
-    session.pending_event_ids = (0..super::super::turn_queue::MAX_QUEUED_EVENT_IDS - 2)
-        .map(|index| format!("queued-event-{index}"))
+    session.pending_inputs = (0..super::super::turn_queue::MAX_QUEUED_EVENT_IDS - 2)
+        .map(|index| QueuedRoomInput {
+            event_id: format!("queued-event-{index}"),
+            delivery_kind: RoomInputDeliveryKind::OrderedObservation,
+        })
         .collect();
     save_stored_session(&store, &session).await;
 
@@ -66,9 +69,9 @@ async fn ordered_floor_queue_limit_rejects_the_source_message_atomically() {
     let stored = stored_session(&store).await;
     assert_eq!(
         stored
-            .inflight_event_ids
+            .inflight_inputs
             .len()
-            .saturating_add(stored.pending_event_ids.len()),
+            .saturating_add(stored.pending_inputs.len()),
         super::super::turn_queue::MAX_QUEUED_EVENT_IDS
     );
 }
@@ -90,9 +93,10 @@ async fn ordered_assignment_and_finalization_are_durable_and_exact() {
             "agent_session_state",
         ]
     );
-    let Some(first_assignment) = first.assignment else {
-        panic!("first message must assign Terra");
-    };
+    let first_assignment = first
+        .assignments
+        .first()
+        .unwrap_or_else(|| panic!("first message must assign Terra"));
     assert_eq!(first_assignment.session.public.session_id, AGENT_ID);
     assert!(
         first_assignment
@@ -106,7 +110,7 @@ async fn ordered_assignment_and_finalization_are_durable_and_exact() {
         .await
         .unwrap_or_else(|error| panic!("replay first message: {error}"));
     assert!(replay.outcome.deduplicated);
-    assert!(replay.assignment.is_none());
+    assert!(replay.assignments.is_empty());
 
     let second = store
         .execute_message_with_turn(
@@ -118,7 +122,7 @@ async fn ordered_assignment_and_finalization_are_durable_and_exact() {
         .await
         .unwrap_or_else(|error| panic!("commit second message: {error}"));
     assert_eq!(event_types(&second.outcome.events), ["message_final"]);
-    assert!(second.assignment.is_none());
+    assert!(second.assignments.is_empty());
 
     let first_turn_id = first_assignment.turn_id.clone();
     let committed = store
@@ -142,9 +146,10 @@ async fn ordered_assignment_and_finalization_are_durable_and_exact() {
             "agent_session_state",
         ]
     );
-    let Some(next) = committed.next_assignment else {
-        panic!("queued message must get the next turn");
-    };
+    let next = committed
+        .next_assignments
+        .first()
+        .unwrap_or_else(|| panic!("queued message must get the next turn"));
     assert_ne!(next.turn_id, first_turn_id);
     assert!(next.room_view.contains("queue this while busy"));
 
@@ -160,7 +165,10 @@ async fn ordered_assignment_and_finalization_are_durable_and_exact() {
         first.outcome.event.seq
     );
     assert_eq!(stored.active_source_event_id, second.outcome.event.id);
-    assert_eq!(stored.inflight_event_ids, [second.outcome.event.id]);
+    assert_eq!(
+        input_ids(&stored.inflight_inputs),
+        [second.outcome.event.id]
+    );
 
     let Err(stale) = store
         .complete_agent_turn(
@@ -196,7 +204,9 @@ async fn first_antigravity_final_promotes_the_native_session_id_atomically() {
         .await
         .unwrap_or_else(|error| panic!("assign first Antigravity turn: {error}"));
     let assignment = mutation
-        .assignment
+        .assignments
+        .into_iter()
+        .next()
         .unwrap_or_else(|| panic!("first Antigravity turn must be assigned"));
     store
         .complete_agent_turn(
@@ -226,7 +236,9 @@ async fn first_antigravity_final_promotes_the_native_session_id_atomically() {
         )
         .await
         .unwrap_or_else(|error| panic!("assign second Antigravity turn: {error}"))
-        .assignment
+        .assignments
+        .into_iter()
+        .next()
         .unwrap_or_else(|| panic!("second Antigravity turn must be assigned"));
     let Err(error) = store
         .complete_agent_turn(
@@ -263,9 +275,11 @@ async fn provider_failure_restores_input_and_clears_active_authority() {
         .await
         .unwrap_or_else(|error| panic!("commit source message: {error}"));
     let source_id = mutation.outcome.event.id;
-    let Some(assignment) = mutation.assignment else {
-        panic!("source message must assign Terra");
-    };
+    let assignment = mutation
+        .assignments
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| panic!("source message must assign Terra"));
     let committed = store
         .fail_agent_turn(
             "general",
@@ -281,7 +295,7 @@ async fn provider_failure_restores_input_and_clears_active_authority() {
         event_types(&committed.events),
         ["error", "turn_finished", "agent_session_state",]
     );
-    assert!(committed.next_assignment.is_none());
+    assert!(committed.next_assignments.is_empty());
     let diagnostic = committed.events[0].content.as_deref().unwrap_or_default();
     assert!(!diagnostic.contains("alice"));
     assert!(!diagnostic.contains("sk-live"));
@@ -298,8 +312,8 @@ async fn provider_failure_restores_input_and_clears_active_authority() {
     assert!(stored.active_source_event_id.is_empty());
     assert!(stored.input_up_to_event_id.is_empty());
     assert_eq!(stored.input_up_to_seq, 0);
-    assert!(stored.inflight_event_ids.is_empty());
-    assert_eq!(stored.pending_event_ids, [source_id]);
+    assert!(stored.inflight_inputs.is_empty());
+    assert_eq!(input_ids(&stored.pending_inputs), [source_id]);
     assert!(stored.public.recovery_required);
 }
 
@@ -365,11 +379,11 @@ async fn stopped_direct_target_keeps_every_message_and_assigns_only_the_visible_
             )
             .await
             .unwrap_or_else(|error| panic!("queue stopped direct target {index}: {error}"));
-        assert!(mutation.assignment.is_none());
+        assert!(mutation.assignments.is_empty());
         event_ids.push(mutation.outcome.event.id);
     }
     let queued = stored_session(&store).await;
-    assert_eq!(queued.pending_event_ids, event_ids);
+    assert_eq!(input_ids(&queued.pending_inputs), event_ids);
 
     let mut attached = queued;
     "attached".clone_into(&mut attached.public.status);
@@ -383,10 +397,18 @@ async fn stopped_direct_target_keeps_every_message_and_assigns_only_the_visible_
         .unwrap_or_else(|error| panic!("assign stopped direct backlog: {error}"))
         .unwrap_or_else(|| panic!("stopped direct backlog must become assignable"));
     let assignment = commit
-        .next_assignment
+        .next_assignments
+        .into_iter()
+        .next()
         .unwrap_or_else(|| panic!("backlog commit must carry an assignment"));
-    assert_eq!(assignment.session.inflight_event_ids, event_ids[..50]);
-    assert_eq!(assignment.session.pending_event_ids, event_ids[50..]);
+    assert_eq!(
+        input_ids(&assignment.session.inflight_inputs),
+        event_ids[..50]
+    );
+    assert_eq!(
+        input_ids(&assignment.session.pending_inputs),
+        event_ids[50..]
+    );
     assert_eq!(assignment.session.input_up_to_event_id, event_ids[49]);
     assert!(assignment.room_view.contains("queued message 00"));
     assert!(assignment.room_view.contains("queued message 49"));
@@ -436,14 +458,16 @@ async fn character_bound_defers_whole_messages_instead_of_advancing_past_them() 
         .unwrap_or_else(|error| panic!("assign character-bounded input: {error}"))
         .unwrap_or_else(|| panic!("bounded input must become assignable"));
     let assignment = commit
-        .next_assignment
+        .next_assignments
+        .into_iter()
+        .next()
         .unwrap_or_else(|| panic!("bounded input commit must carry an assignment"));
     assert_eq!(
-        assignment.session.inflight_event_ids.as_slice(),
+        input_ids(&assignment.session.inflight_inputs).as_slice(),
         std::slice::from_ref(&first.outcome.event.id)
     );
     assert_eq!(
-        assignment.session.pending_event_ids.as_slice(),
+        input_ids(&assignment.session.pending_inputs).as_slice(),
         std::slice::from_ref(&second.outcome.event.id)
     );
     assert_eq!(
@@ -513,17 +537,28 @@ async fn undirected_agent_message_prefers_an_eligible_director() {
         .await
         .unwrap_or_else(|error| panic!("route undirected agent message: {error}"));
     let assignment = mutation
-        .assignment
+        .assignments
+        .into_iter()
+        .next()
         .unwrap_or_else(|| panic!("undirected agent message must assign a director"));
     assert_eq!(assignment.session.public.session_id, AGENT_ID);
     assert!(assignment.room_view.contains(SECOND_AGENT_ID));
 }
+
+#[path = "room_random_tests.rs"]
+mod room_random_tests;
+#[path = "room_settings_scheduler_tests.rs"]
+mod room_settings_scheduler_tests;
 
 fn event_types(events: &[agentsassemble_domain::RoomEvent]) -> Vec<&str> {
     events
         .iter()
         .map(|event| event.event_type.as_str())
         .collect()
+}
+
+fn input_ids(inputs: &[QueuedRoomInput]) -> Vec<String> {
+    inputs.iter().map(|input| input.event_id.clone()).collect()
 }
 
 fn assert_rejection_code(error: &PersistenceError, expected: &str) {
@@ -609,7 +644,7 @@ async fn fixture() -> (SqliteStore, AuthenticatedPrincipal, tempfile::TempDir) {
     store
         .initialize_room(
             &Room::new("general".to_owned(), "General".to_owned(), now),
-            &RoomSettings::defaults("General".to_owned()),
+            &RoomSettings::defaults("General"),
             &host,
         )
         .await
@@ -719,8 +754,8 @@ fn attached_session(now: chrono::DateTime<Utc>) -> DurableAgentSession {
         provider_session_id: "provider-thread-1".to_owned(),
         runtime_handle_id: "owned-runtime-1".to_owned(),
         runtime_owner_id: "supervisor-instance-1".to_owned(),
-        pending_event_ids: Vec::new(),
-        inflight_event_ids: Vec::new(),
+        pending_inputs: Vec::new(),
+        inflight_inputs: Vec::new(),
         active_source_event_id: String::new(),
         input_up_to_event_id: String::new(),
         input_up_to_seq: 0,

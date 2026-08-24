@@ -33,7 +33,6 @@ pub(crate) async fn append_session_event(
         display_name: Some(session.display_name.clone()),
         content: None,
         message_kind: None,
-        relay_depth: None,
         extra,
     };
     sqlx::query("INSERT INTO room_events(room_id, seq, event_json) VALUES (?, ?, ?)")

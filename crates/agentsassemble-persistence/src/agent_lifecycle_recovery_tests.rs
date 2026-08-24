@@ -1,4 +1,6 @@
-use agentsassemble_domain::{DurableAgentSession, Participant};
+use agentsassemble_domain::{
+    DurableAgentSession, Participant, QueuedRoomInput, RoomInputDeliveryKind,
+};
 use serde_json::json;
 
 use super::{AgentRuntimeStarted, AgentStartPlan, AgentStopPlan};
@@ -32,8 +34,11 @@ async fn oversized_turn_queue_fails_before_lifecycle_or_reconciliation_effects()
     .unwrap_or_else(|error| panic!("read session: {error}"));
     let mut session = serde_json::from_str::<DurableAgentSession>(&encoded)
         .unwrap_or_else(|error| panic!("decode session: {error}"));
-    session.pending_event_ids = (0..=crate::turn_queue::MAX_QUEUED_EVENT_IDS)
-        .map(|index| format!("event-{index}"))
+    session.pending_inputs = (0..=crate::turn_queue::MAX_QUEUED_EVENT_IDS)
+        .map(|index| QueuedRoomInput {
+            event_id: format!("event-{index}"),
+            delivery_kind: RoomInputDeliveryKind::OrderedObservation,
+        })
         .collect();
     sqlx::query(
         "UPDATE agent_sessions SET session_json = ? WHERE room_id = 'general' AND session_id = ?",

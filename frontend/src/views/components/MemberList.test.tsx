@@ -50,7 +50,9 @@ describe("MemberList component wiring", () => {
     );
 
     const agentRow = screen.getByText("Agent One");
-    expect(agentRow.closest(".dc-person-member-group")?.textContent).toContain("SeiNel");
+    expect(agentRow.closest(".dc-person-member-group")?.textContent).toContain(
+      "소유자 정보 없음"
+    );
     fireEvent.click(agentRow);
 
     const dialog = screen.getByRole("dialog", { name: "Agent One" });
@@ -248,17 +250,7 @@ describe("MemberList component wiring", () => {
     expect(screen.queryByText("다른 사람's Agent One")).toBeNull();
   });
 
-  it("does not let a legacy local profile override canonical room identity", () => {
-    localStorage.setItem(
-      "agentsassemble.agentProfiles.v1",
-      JSON.stringify({
-        "agent-1": {
-          displayName: "Local Makima",
-          avatarImage: "/api/attachments/stale-local-avatar?view=1",
-        },
-      })
-    );
-
+  it("renders canonical room identity for an Agent Session", () => {
     render(
       <MemberList
         agents={[AGENT]}
@@ -288,19 +280,9 @@ describe("MemberList component wiring", () => {
     expect(canonicalRow).not.toBeNull();
     expect(canonicalRow?.querySelector(".dc-member-avatar-image")).toBeNull();
     expect(canonicalRow?.querySelector('[data-provider-brand="codex"]')).not.toBeNull();
-    expect(screen.queryByText("Local Makima")).toBeNull();
   });
 
-  it("moves a legacy local profile into canonical Agent Session state on save", async () => {
-    localStorage.setItem(
-      "agentsassemble.agentProfiles.v1",
-      JSON.stringify({
-        "agent-1": {
-          displayName: "Makima",
-          avatarImage: "/api/attachments/makima-avatar?view=1",
-        },
-      })
-    );
+  it("saves profile changes only through Agent Session authority", async () => {
     const onAgentConfigure = vi.fn().mockResolvedValue(undefined);
 
     render(
@@ -323,18 +305,18 @@ describe("MemberList component wiring", () => {
     );
     expect(avatarInputClick).toHaveBeenCalledOnce();
     expect((within(dialog).getByRole("textbox", { name: "표시 이름" }) as HTMLInputElement).value)
-      .toBe("Makima");
+      .toBe("Agent One");
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "표시 이름" }), {
+      target: { value: "Makima" },
+    });
     fireEvent.click(within(dialog).getByRole("button", { name: "프로필 저장" }));
 
     await waitFor(() =>
       expect(onAgentConfigure).toHaveBeenCalledWith(SESSION, {
         display_name: "Makima",
-        avatar_image_url: "/api/attachments/makima-avatar?view=1",
+        avatar_image_url: "",
       })
     );
-    const savedProfiles = JSON.parse(
-      localStorage.getItem("agentsassemble.agentProfiles.v1") || "{}"
-    );
-    expect(savedProfiles["agent-1"]).toBeUndefined();
+    expect(localStorage.getItem("agentsassemble.agentProfiles.v1")).toBeNull();
   });
 });

@@ -146,7 +146,7 @@ function buildMobileMembers({
   );
   const self: MobileMemberRow = {
     id: viewerMember?.participant_id || viewerParticipantId || "human:self",
-    displayName: viewerMember?.display_name || "SeiNel",
+    displayName: viewerMember?.display_name || viewerParticipantId,
     detail: "사람",
     active: viewerMember ? isActivePresence(viewerMember.status) : true,
     role: "human",

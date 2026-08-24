@@ -289,11 +289,7 @@ async fn fixture() -> SqliteStore {
         updated_at: now,
     };
     store
-        .initialize_room(
-            &room,
-            &RoomSettings::defaults("General".to_owned()),
-            &participant,
-        )
+        .initialize_room(&room, &RoomSettings::defaults("General"), &participant)
         .await
         .unwrap_or_else(|error| panic!("bootstrap room directory fixture: {error}"));
     store

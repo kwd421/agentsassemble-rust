@@ -59,7 +59,7 @@ describe("AgentCreateModal", () => {
           {
             id: "codex",
             display_name: "Codex",
-            provider_kind: "codex_cli",
+            provider_kind: "codex_live_session",
             runtime_kind: "live_cli",
             connection_kind: "native_cli_bridge",
             executable: "codex",
@@ -118,7 +118,7 @@ describe("AgentCreateModal", () => {
           {
             id: "codex",
             display_name: "Codex",
-            provider_kind: "codex_cli",
+            provider_kind: "codex_live_session",
             runtime_kind: "live_cli",
             connection_kind: "native_cli_bridge",
             executable: "codex",
@@ -138,7 +138,7 @@ describe("AgentCreateModal", () => {
             status: "detached",
             runtime_status: "stopped",
             enabled: false,
-            provider_kind: "codex_cli",
+            provider_kind: "codex_live_session",
             runtime_kind: "live_cli",
             connection_kind: "native_cli_bridge",
             model: "gpt-5.6-luna",

@@ -1,345 +1,16 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::BTreeMap;
 
 use agentsassemble_domain::{
-    Actor, DurableAgentSession, Participant, ParticipantStatus, Room, RoomEvent, RoomSettings,
-    RoomStatus,
+    Actor, DurableAgentSession, Participant, Room, RoomEvent, RoomSettings, RoomStatus,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
 use sqlx::{Row, Sqlite, Transaction};
 use uuid::Uuid;
 
-use super::context::prepare_room_input;
-use super::routing::{last_direct_target, sampled_candidate_indexes};
-use super::{AgentTurnAssignment, PreparedAssignment};
-use crate::{
-    PersistenceError,
-    agent_lifecycle::{load_session, save_session},
-    turn_authority::active_turn_authority,
-    turn_queue::MAX_QUEUED_EVENT_IDS,
-};
+use crate::{PersistenceError, turn_authority::active_turn_authority};
 
 const MAX_PROVIDER_TURN_ID_BYTES: usize = 128;
-
-pub(super) async fn queue_ordered_message(
-    transaction: &mut Transaction<'_, Sqlite>,
-    settings: &RoomSettings,
-    event: &RoomEvent,
-) -> Result<(), PersistenceError> {
-    if settings.conversation_mode != "ordered" || event.event_type != "message_final" {
-        return Ok(());
-    }
-    let sessions = route_sessions(transaction, event).await?;
-    let content = event.content.as_deref().unwrap_or_default();
-    let structured_target = event
-        .extra
-        .get("target_agent_id")
-        .and_then(Value::as_str)
-        .filter(|target| {
-            sessions
-                .iter()
-                .any(|(session, _)| session.public.session_id == *target)
-        })
-        .map(str::to_owned);
-    let direct = structured_target
-        .or_else(|| last_direct_target(content, sessions.iter().map(|(session, _)| session)));
-    let selected = if let Some(direct) = direct {
-        let participant = sessions
-            .iter()
-            .find(|(session, _)| session.public.session_id == direct)
-            .map(|(_, participant)| participant)
-            .ok_or_else(|| {
-                rejected("ordered_floor_empty", "The direct floor target is missing.")
-            })?;
-        if participant.status == ParticipantStatus::Kicked || participant.muted {
-            return Ok(());
-        }
-        direct
-    } else {
-        let mut candidates = sessions
-            .iter()
-            .filter(|(session, participant)| route_session_is_eligible(session, participant))
-            .collect::<Vec<_>>();
-        if event.actor.participant_type == "agent" {
-            let actor =
-                load_participant(transaction, &event.room_id, &event.actor.participant_id).await?;
-            if actor.role != "director" {
-                let directors = candidates
-                    .iter()
-                    .copied()
-                    .filter(|(_, participant)| participant.role == "director")
-                    .collect::<Vec<_>>();
-                if !directors.is_empty() {
-                    candidates = directors;
-                }
-            }
-        }
-        if candidates.is_empty() {
-            return Ok(());
-        }
-        let (message_counts, previous_speaker) =
-            recent_agent_speaking_state(transaction, &event.room_id, event.seq).await?;
-        if settings.ordered_exclude_previous_speaker && candidates.len() > 1 {
-            candidates.retain(|(session, _)| session.public.session_id != previous_speaker);
-        }
-        candidates.sort_by(|left, right| left.0.public.session_id.cmp(&right.0.public.session_id));
-        let sampled = sampled_candidate_indexes(candidates.len());
-        sampled
-            .into_iter()
-            .map(|index| &candidates[index].0)
-            .min_by_key(|session| {
-                message_counts
-                    .get(&session.public.session_id)
-                    .copied()
-                    .unwrap_or(0)
-            })
-            .map(|session| session.public.session_id.clone())
-            .ok_or_else(|| rejected("ordered_floor_empty", "No ordered floor target remained."))?
-    };
-    let mut session = load_session(transaction, &event.room_id, &selected).await?;
-    if !session.pending_event_ids.iter().any(|id| id == &event.id) {
-        let queued = session
-            .inflight_event_ids
-            .len()
-            .saturating_add(session.pending_event_ids.len());
-        if queued >= MAX_QUEUED_EVENT_IDS {
-            return Err(rejected(
-                "ordered_floor_queue_full",
-                "The selected Agent Session ordered-floor queue is full.",
-            ));
-        }
-        session.pending_event_ids.push(event.id.clone());
-        session.public.updated_at = Utc::now();
-        save_session(transaction, &session).await?;
-    }
-    Ok(())
-}
-
-pub(super) async fn assign_oldest_pending(
-    transaction: &mut Transaction<'_, Sqlite>,
-    room: &Room,
-    settings: &RoomSettings,
-) -> Result<Option<PreparedAssignment>, PersistenceError> {
-    if settings.conversation_mode != "ordered"
-        || room_has_active_turn(transaction, &room.room_id).await?
-    {
-        return Ok(None);
-    }
-    let rows = sqlx::query(
-        "SELECT session_json FROM agent_sessions WHERE room_id = ? ORDER BY session_id LIMIT 65",
-    )
-    .bind(&room.room_id)
-    .fetch_all(&mut **transaction)
-    .await?;
-    if rows.len() > 64 {
-        return Err(rejected(
-            "agent_session_capacity",
-            "This room exceeds its Agent Session capacity.",
-        ));
-    }
-    let mut candidates = Vec::new();
-    for row in rows {
-        let mut session: DurableAgentSession =
-            serde_json::from_str(row.get::<String, _>("session_json").as_str())?;
-        let _ = turn_authority_is_active(&session)?;
-        if !session_is_assignable(&session) {
-            continue;
-        }
-        let participant =
-            load_participant(transaction, &room.room_id, &session.public.participant_id).await?;
-        if participant.status != ParticipantStatus::Joined || participant.muted {
-            continue;
-        }
-        let valid = valid_pending_ids(transaction, &session).await?;
-        if valid != session.pending_event_ids {
-            session.pending_event_ids.clone_from(&valid);
-            save_session(transaction, &session).await?;
-        }
-        let Some(first) = valid.first() else {
-            continue;
-        };
-        let sequence = event_sequence(transaction, &room.room_id, first).await?;
-        candidates.push((sequence, session));
-    }
-    candidates.sort_by(|left, right| {
-        (left.0, left.1.public.session_id.as_str())
-            .cmp(&(right.0, right.1.public.session_id.as_str()))
-    });
-    let Some((_, mut session)) = candidates.into_iter().next() else {
-        return Ok(None);
-    };
-    let prepared_input =
-        prepare_room_input(transaction, room, &session, &session.pending_event_ids).await?;
-    let inflight = prepared_input.inflight_event_ids;
-    let source_event_id = prepared_input.source_event_id;
-    let input_up_to_seq = prepared_input.input_up_to_seq;
-    let turn_id = format!("turn-{}", &Uuid::new_v4().simple().to_string()[..12]);
-    "busy".clone_into(&mut session.public.runtime_status);
-    "thinking".clone_into(&mut session.public.turn_phase);
-    session.public.active_turn_id.clone_from(&turn_id);
-    session.inflight_event_ids = inflight.clone();
-    session.pending_event_ids.drain(..inflight.len());
-    session.active_source_event_id.clone_from(&source_event_id);
-    session.input_up_to_event_id.clone_from(&source_event_id);
-    session.input_up_to_seq = input_up_to_seq;
-    session.public.updated_at = Utc::now();
-    save_session(transaction, &session).await?;
-    let started = turn_started_event(transaction, &session).await?;
-    let state = turn_state_event(transaction, &session).await?;
-    let session_event = session_state_event(transaction, &session).await?;
-    Ok(Some(PreparedAssignment {
-        assignment: AgentTurnAssignment {
-            session,
-            turn_id,
-            provider_input: prepared_input.provider_input,
-            room_view: prepared_input.room_view,
-            room_agent_ids: prepared_input.room_agent_ids,
-        },
-        events: vec![started, state, session_event],
-    }))
-}
-
-async fn route_sessions(
-    transaction: &mut Transaction<'_, Sqlite>,
-    event: &RoomEvent,
-) -> Result<Vec<(DurableAgentSession, Participant)>, PersistenceError> {
-    let rows = sqlx::query(
-        "SELECT session_json FROM agent_sessions WHERE room_id = ? ORDER BY session_id LIMIT 65",
-    )
-    .bind(&event.room_id)
-    .fetch_all(&mut **transaction)
-    .await?;
-    if rows.len() > 64 {
-        return Err(rejected(
-            "agent_session_capacity",
-            "This room exceeds its Agent Session capacity.",
-        ));
-    }
-    let actor_id = &event.actor.participant_id;
-    let mut sessions = Vec::new();
-    for row in rows {
-        let session: DurableAgentSession =
-            serde_json::from_str(row.get::<String, _>("session_json").as_str())?;
-        let _ = turn_authority_is_active(&session)?;
-        if session.public.participant_id == *actor_id {
-            continue;
-        }
-        validate_provider_cursor(transaction, &session).await?;
-        let participant =
-            load_participant(transaction, &event.room_id, &session.public.participant_id).await?;
-        sessions.push((session, participant));
-    }
-    Ok(sessions)
-}
-
-fn route_session_is_eligible(session: &DurableAgentSession, participant: &Participant) -> bool {
-    participant.status == ParticipantStatus::Joined
-        && !participant.muted
-        && session.public.enabled
-        && session.public.status == "attached"
-        && matches!(session.public.runtime_status.as_str(), "idle" | "busy")
-        && session.public.provider_session_active
-        && session.lifecycle_intent_action.is_empty()
-}
-
-async fn recent_agent_speaking_state(
-    transaction: &mut Transaction<'_, Sqlite>,
-    room_id: &str,
-    before_seq: i64,
-) -> Result<(HashMap<String, u64>, String), PersistenceError> {
-    let rows = sqlx::query(
-        "SELECT event_json FROM room_events WHERE room_id = ? AND seq < ? ORDER BY seq DESC LIMIT 100",
-    )
-    .bind(room_id)
-    .bind(before_seq)
-    .fetch_all(&mut **transaction)
-    .await?;
-    let mut counts = HashMap::new();
-    let mut previous = String::new();
-    for row in rows {
-        let event: RoomEvent = serde_json::from_str(row.get::<String, _>("event_json").as_str())?;
-        if event.event_type != "message_final" || event.actor.participant_type != "agent" {
-            continue;
-        }
-        if previous.is_empty() {
-            previous.clone_from(&event.actor.participant_id);
-        }
-        *counts.entry(event.actor.participant_id).or_insert(0) += 1;
-    }
-    Ok((counts, previous))
-}
-
-async fn valid_pending_ids(
-    transaction: &mut Transaction<'_, Sqlite>,
-    session: &DurableAgentSession,
-) -> Result<Vec<String>, PersistenceError> {
-    let mut seen = HashSet::new();
-    let mut valid = Vec::new();
-    for event_id in &session.pending_event_ids {
-        if event_id.is_empty() || !seen.insert(event_id.clone()) {
-            continue;
-        }
-        let event = load_event(transaction, &session.public.room_id, event_id)
-            .await?
-            .ok_or_else(|| rejected("room_event_missing", "Queued room input is missing."))?;
-        if event.event_type != "message_final"
-            || event.actor.participant_id == session.public.participant_id
-        {
-            return Err(rejected(
-                "queued_room_event_invalid",
-                "Queued room input does not match ordered-floor authority.",
-            ));
-        }
-        if event.seq > session.public.last_provider_sync_seq {
-            valid.push(event_id.clone());
-        }
-    }
-    Ok(valid)
-}
-
-fn session_is_assignable(session: &DurableAgentSession) -> bool {
-    session.public.enabled
-        && session.public.status == "attached"
-        && session.public.runtime_status == "idle"
-        && session.public.provider_session_active
-        && session.public.active_turn_id.is_empty()
-        && session.inflight_event_ids.is_empty()
-        && session.lifecycle_intent_action.is_empty()
-}
-
-fn turn_authority_is_active(session: &DurableAgentSession) -> Result<bool, PersistenceError> {
-    active_turn_authority(session).map_err(|_| {
-        rejected(
-            "stored_turn_authority_invalid",
-            "Stored Agent Session turn authority is inconsistent.",
-        )
-    })
-}
-
-async fn room_has_active_turn(
-    transaction: &mut Transaction<'_, Sqlite>,
-    room_id: &str,
-) -> Result<bool, PersistenceError> {
-    let rows = sqlx::query("SELECT session_json FROM agent_sessions WHERE room_id = ? LIMIT 65")
-        .bind(room_id)
-        .fetch_all(&mut **transaction)
-        .await?;
-    let mut active_count = 0_u8;
-    for row in rows {
-        let session: DurableAgentSession =
-            serde_json::from_str(row.get::<String, _>("session_json").as_str())?;
-        if turn_authority_is_active(&session)? {
-            active_count = active_count.saturating_add(1);
-        }
-    }
-    if active_count > 1 {
-        return Err(rejected(
-            "stored_turn_authority_invalid",
-            "More than one Agent Session owns the ordered room turn.",
-        ));
-    }
-    Ok(active_count == 1)
-}
 
 async fn provider_cursor_is_valid(
     transaction: &mut Transaction<'_, Sqlite>,
@@ -392,7 +63,7 @@ pub(super) async fn validate_input_cursor(
     Ok(())
 }
 
-pub(super) async fn load_active_room(
+pub(crate) async fn load_active_room(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
 ) -> Result<(Room, RoomSettings), PersistenceError> {
@@ -412,7 +83,7 @@ pub(super) async fn load_active_room(
     Ok((room, settings))
 }
 
-pub(super) async fn load_participant(
+pub(crate) async fn load_participant(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
     participant_id: &str,
@@ -445,18 +116,7 @@ pub(super) async fn load_event(
         .transpose()
 }
 
-async fn event_sequence(
-    transaction: &mut Transaction<'_, Sqlite>,
-    room_id: &str,
-    event_id: &str,
-) -> Result<i64, PersistenceError> {
-    load_event(transaction, room_id, event_id)
-        .await?
-        .map(|event| event.seq)
-        .ok_or_else(|| rejected("room_event_missing", "Queued room input is missing."))
-}
-
-pub(super) async fn next_sequence(
+pub(crate) async fn next_sequence(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
 ) -> Result<i64, PersistenceError> {
@@ -468,7 +128,7 @@ pub(super) async fn next_sequence(
     .await?)
 }
 
-pub(super) async fn insert_event(
+pub(crate) async fn insert_event(
     transaction: &mut Transaction<'_, Sqlite>,
     event: &RoomEvent,
 ) -> Result<(), PersistenceError> {
@@ -513,14 +173,13 @@ async fn internal_event(
         display_name: Some(session.public.display_name.clone()),
         content,
         message_kind: (event_type == "message_final").then(|| "message".to_owned()),
-        relay_depth: (event_type == "message_final").then_some(0),
         extra,
     };
     insert_event(transaction, &event).await?;
     Ok(event)
 }
 
-async fn turn_started_event(
+pub(super) async fn turn_started_event(
     transaction: &mut Transaction<'_, Sqlite>,
     session: &DurableAgentSession,
 ) -> Result<RoomEvent, PersistenceError> {
@@ -546,7 +205,7 @@ async fn turn_started_event(
     .await
 }
 
-async fn turn_state_event(
+pub(super) async fn turn_state_event(
     transaction: &mut Transaction<'_, Sqlite>,
     session: &DurableAgentSession,
 ) -> Result<RoomEvent, PersistenceError> {
@@ -596,13 +255,31 @@ pub(super) async fn agent_final_event(
     content: String,
     target_agent_id: &str,
 ) -> Result<RoomEvent, PersistenceError> {
-    internal_event(
-        transaction,
-        session,
-        "message_final",
-        true,
-        Some(content),
-        BTreeMap::from([
+    session.inflight_inputs.first().ok_or_else(|| {
+        rejected(
+            "stored_turn_authority_invalid",
+            "Active provider turn has no canonical input provenance.",
+        )
+    })?;
+    let event = RoomEvent {
+        v: 1,
+        id: Uuid::new_v4().to_string(),
+        seq: next_sequence(transaction, &session.public.room_id).await?,
+        created_at: Utc::now(),
+        room_id: session.public.room_id.clone(),
+        event_type: "message_final".to_owned(),
+        actor: Actor {
+            participant_id: session.public.participant_id.clone(),
+            participant_type: "agent".to_owned(),
+        },
+        participant_id: Some(session.public.participant_id.clone()),
+        participant_type: Some("agent".to_owned()),
+        actor_id: Some(session.public.participant_id.clone()),
+        actor_type: Some("agent".to_owned()),
+        display_name: Some(session.public.display_name.clone()),
+        content: Some(content),
+        message_kind: Some("message".to_owned()),
+        extra: BTreeMap::from([
             ("session_id".to_owned(), json!(session.public.session_id)),
             ("turn_id".to_owned(), json!(turn_id)),
             ("provider_turn_id".to_owned(), json!(provider_turn_id)),
@@ -610,8 +287,9 @@ pub(super) async fn agent_final_event(
             ("target_agent_id".to_owned(), json!(target_agent_id)),
             ("message_source".to_owned(), json!("room_portal")),
         ]),
-    )
-    .await
+    };
+    insert_event(transaction, &event).await?;
+    Ok(event)
 }
 
 pub(super) async fn turn_finished_event(
@@ -672,6 +350,15 @@ pub(super) fn require_active_turn(
         ));
     }
     Ok(())
+}
+
+fn turn_authority_is_active(session: &DurableAgentSession) -> Result<bool, PersistenceError> {
+    active_turn_authority(session).map_err(|_| {
+        rejected(
+            "stored_turn_authority_invalid",
+            "Stored Agent Session turn authority is inconsistent.",
+        )
+    })
 }
 
 pub(super) fn clear_active_turn_fields(session: &mut DurableAgentSession) {

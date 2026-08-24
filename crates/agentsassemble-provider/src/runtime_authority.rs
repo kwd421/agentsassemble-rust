@@ -11,7 +11,7 @@ pub(crate) async fn revalidate_runtime_authority(
 ) -> Result<(), DriverError> {
     if session.runtime_profile_version != CURRENT_RUNTIME_PROFILE_VERSION {
         return Err(DriverError::new(
-            "profile_migration_required",
+            "runtime_profile_unsupported",
             "The provider runtime profile version is unsupported.",
         ));
     }

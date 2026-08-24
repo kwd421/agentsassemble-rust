@@ -45,7 +45,6 @@ export default function RoomSettingsModal({
   conversationMode,
   toolMode,
   orderedExcludePreviousSpeaker,
-  maxRelayTurns,
   canInvite,
   onClose,
   onInvite,
@@ -55,7 +54,6 @@ export default function RoomSettingsModal({
   onConversationModeChange,
   onToolModeChange,
   onOrderedExcludePreviousSpeakerChange,
-  onMaxRelayTurnsChange,
   onRetrySettings,
   onDeleteRoom,
 }: {
@@ -68,7 +66,6 @@ export default function RoomSettingsModal({
   conversationMode: ConversationMode | null;
   toolMode: RoomToolMode | null;
   orderedExcludePreviousSpeaker: boolean | null;
-  maxRelayTurns: number | null;
   canInvite: boolean;
   onClose: () => void;
   onInvite: () => void;
@@ -78,7 +75,6 @@ export default function RoomSettingsModal({
   onConversationModeChange: (mode: ConversationMode) => void;
   onToolModeChange: (mode: RoomToolMode) => void;
   onOrderedExcludePreviousSpeakerChange: (exclude: boolean) => void;
-  onMaxRelayTurnsChange: (turns: number) => void;
   onRetrySettings: () => void;
   onDeleteRoom: (confirmationName: string) => Promise<void>;
 }) {
@@ -249,20 +245,6 @@ export default function RoomSettingsModal({
                     자유 토론 (실험적) — 새 메시지가 생기면 연결된 에이전트들이 방을 확인하고, 각자 말할지 정합니다.
                   </span>
                 </label>
-                {conversationMode === "continuous" && (
-                  <label>
-                    <input
-                      type="radio"
-                      name="conversation-mode"
-                      checked
-                      disabled={!routingSettingsReady}
-                      onChange={() => onConversationModeChange("continuous")}
-                    />
-                    <span className="preserve-words">
-                      기존 연쇄 대화 — 이전 방과의 호환을 위해 유지되는 레거시 모드입니다.
-                    </span>
-                  </label>
-                )}
               </div>
               {conversationMode === "ordered" && (
                 <label className="mt-3 flex items-start gap-3">
@@ -277,22 +259,6 @@ export default function RoomSettingsModal({
                   <span className="preserve-words">
                     직전 발언자 연속 선택 방지 — 다른 선택 가능한 에이전트가 있으면 직전 발언자를 다음 일반 선택 후보에서 제외합니다. @멘션은 이 제한보다 우선합니다.
                   </span>
-                </label>
-              )}
-              {conversationMode === "continuous" && (
-                <label>
-                  최대 연쇄 발언 수
-                  <input
-                    className="ops-input"
-                    type="number"
-                    min={2}
-                    max={20}
-                    value={maxRelayTurns ?? ""}
-                    disabled={!routingSettingsReady}
-                    onChange={(event) =>
-                      onMaxRelayTurnsChange(Math.min(20, Math.max(2, Number(event.target.value) || 2)))
-                    }
-                  />
                 </label>
               )}
             </div>

@@ -13,8 +13,8 @@ The cutover unit is an authoritative contract owner, not a feature label. Routin
 - Runtime failure never falls through to the other implementation.
 - Shadow comparison may read copied input but cannot write durable state, publish events, or affect a response.
 - A completed cutover disables the replaced writer.
-- Data cutover is atomic: validate the input version, acquire exclusive ownership, migrate transactionally, write the completion marker, then permit Rust writes.
-- Rust writes are never followed by automatic Python rollback. Reversal requires an explicit, separately verified migration.
+- Rust opens only a fresh authority created at the current schema or an already-current Rust authority. It does not import or convert Python or older Rust data.
+- Rust writes are never followed by automatic Python rollback or a compatibility writer.
 
 ## Stable boundaries
 
@@ -25,7 +25,7 @@ Each room has one bounded command queue and one mutation task. That task seriali
 ### Server and room-directory identity
 
 One SQLite authority owns one stable opaque `server_id`, generated at database
-creation or schema migration and rejected if missing or malformed. A listening
+creation and rejected if missing or malformed. A listening
 port, sidecar process, Tauri window, browser origin, or cached room list is never
 server identity. Each directory entry is projected from the durable `Room` and its
 canonical room-global settings; stable room UID, label, status, timestamps, and
@@ -34,10 +34,10 @@ appearance are not independently reconstructed by React or Tauri.
 Fresh schema metadata, `server_id`, initial room/settings, publication cursor,
 local human membership, and human profile share one transaction. Startup also
 recognizes an interrupted empty SQLite file as uninitialized and may initialize
-it only after exclusive file-authority validation. A valid Rust authority left
-by an older two-transaction bootstrap may fill its missing initial product state
-only when both room and profile authority are empty; its committed `server_id` is
-preserved. File existence alone is never a durable bootstrap phase.
+it only after exclusive file-authority validation. Once current schema metadata
+exists, the initial room, settings, publication cursor, local membership, and
+profile must already be complete; startup never repairs or fills a partial product
+state. File existence alone is never a durable bootstrap phase.
 
 Creating a room commits its room record, default settings, publication cursor,
 initial human membership, and exactly one `room_created` event in one SQLite
@@ -149,6 +149,46 @@ An HTTP mutation may commit through the application owner and then fan out its
 durable event over WebSocket. Neither transport is a fallback for the other, and a
 mutation is never implemented twice merely because both transports exist.
 
+### Admission and public-ingress lifecycle
+
+Invite preflight, browser admission, external-session admission, and operator
+pairing begin over HTTP because no room WebSocket authority exists yet. An HTTP
+join response is not a completed user flow: the admitted principal must obtain the
+canonical room WebSocket, receive its authenticated initial snapshot, and reach
+the capability-appropriate ready state. A normal `room` invite must then be able
+to issue permitted room commands; a `read_only` invite must remain visibly unable
+to post. The server derives that distinction from the invite and room state. A
+missing realtime connection is a failed admission flow, not a read-only downgrade
+or an HTTP fallback mode.
+
+Human browser admission, an externally owned RoomConnector session, and a managed
+Agent Session are separate product identities. They may reuse admission and
+realtime mechanisms, but one cannot be represented by another or inherit its
+lifecycle owner. Operator pairing is a purpose-separated, exact-public-origin,
+short-lived one-use credential. Redemption removes the secret from browser
+history, restores the canonical operator identity, and makes every replay fail
+without consulting an existing browser session as fallback authority.
+
+The owned public-tunnel lifecycle includes process custody, generated origin
+credential, public URL publication, stable-entry ownership, ingress revocation,
+and confirmed cleanup. Shutdown is incomplete until the exact cloudflared process
+has exited, the managed ingress and public URL are revoked, and the owned stable
+entry has durably cleared or reported an explicit cleanup failure. A daemon task
+that may be abandoned at process exit is not cleanup authority. Internally this
+boundary may share maintained HTTP, WebSocket, process, and Cloudflare mechanisms;
+optimization may not weaken origin binding, credential separation, or completion
+semantics.
+
+### Destructive mutation semantics
+
+Client confirmation is a safety gate, not mutation authority. Message deletion,
+participant kick, and room deletion execute through the room application owner,
+commit canonical state once, and publish the resulting tombstone, roster removal,
+room deletion, or session revocation to every affected connection. Permanent room
+deletion additionally requires the exact current room name at the server command
+boundary. A local list removal, optimistic tombstone, or disconnected client is
+not completion evidence.
+
 ### Authentication and authorization
 
 A credential resolves once to an `AuthenticatedPrincipal` containing stable identity, room scope, client kind, and server-derived capabilities. Client-supplied roles, operator flags, participant type, or capabilities are never authority.
@@ -191,8 +231,8 @@ cursor backlog that the room owner retries; no profile-only broadcast path exist
 WebSocket delivery suppresses duplicate sequence numbers and requires the next
 exact sequence, otherwise it closes with resynchronization. Retry of the same
 profile mutation reuses the same revision and cannot create duplicate revisions.
-A legacy local profile may be imported only by an explicit one-time migration with
-a completion marker, never by an ongoing read fallback.
+No local profile file, cached browser name, or older profile record is imported or
+used as read fallback.
 
 Profile-avatar uploads are capabilities with two durable states rather than public
 blobs on receipt. The authenticated upload path verifies declared type against
@@ -200,9 +240,9 @@ bytes, decodes under bounded resources, and re-encodes one static PNG. A pending
 opaque ID is hidden and expires after 15 minutes; the profile swap transaction
 promotes the new ID, removes the prior bound object, and publishes the new URL.
 Only bound PNG bytes are public, and responses are non-cacheable so removing an
-avatar also removes the server-readable capability. Version-seven referenced
-avatars are validated and canonicalized during migration; unreferenced legacy
-objects are retained as non-public quarantine instead of being deleted by migration.
+avatar also removes the server-readable capability. The current schema creates
+this representation directly; older attachment records are rejected with their
+schema instead of being converted or exposed.
 
 ### Runtime lifecycle
 
@@ -214,7 +254,8 @@ SQLite is the local durable authority. The Rust schema owns its version, stable
 server identity, and cutover marker, while an adjacent process-lifetime exclusive
 writer lease prevents two Rust runtimes from becoming concurrent room authorities.
 A nonempty database without the Rust owner marker is rejected before any schema
-write; ownership changes require explicit migration. A command result and its
+write, and any non-current schema version is rejected before product state is read.
+A command result and its
 event commit in one transaction, as do canonical room creation and its initial
 membership/event boundary. Persistence failure is an error, never an in-memory
 success.
@@ -239,15 +280,15 @@ The provider crate owns installed-provider discovery, catalog normalization, cat
 
 An Agent Session's configured and desired state is durable room state. Its public projection deliberately excludes workspace paths, executable paths, filesystem identities, runtime handles, provider conversation identities, lifecycle intents, and the runtime profile key/version; those fields exist only in the private durable record. Exact workspace input is canonicalized without text cleanup. The workspace identity and the executable identity—bound to both its opened filesystem object and complete bytes—are revalidated between a short replay transaction and the final write transaction. The final transaction reauthorizes the room and rechecks command replay before committing, while slow filesystem work never holds the single SQLite writer. Filesystem validation uses a fixed-capacity set of detached standard threads with deadlines; a stalled operation retains its permit until it actually exits but cannot make Tokio runtime shutdown join a blocked filesystem worker. Rooms admit at most 64 sessions so non-event snapshot metadata remains bounded. Live provider processes and their task handles are observed resources owned by one server supervisor. Lifecycle effects begin only from committed intent and report completion through the room mutation owner. Stop confirmation is durably marked before finalization so a retry cannot repeat an already-applied external effect. Replayed commands reuse their durable result before consulting a newer catalog or launching an effect.
 
-`agent.configure` follows the same two-phase authority rule as creation without changing Agent Session identity. The room owner first authorizes and loads one exact stopped private profile, then the provider catalog merges only the client-selectable runtime controls with that stored provider/workspace authority. The final transaction reauthorizes, rechecks replay and the original profile key, revalidates the selected filesystem identities, and atomically replaces both the private profile and public projection. Running, active-turn, owned-handle, and lifecycle-intent states fail closed; a successful profile save upgrades the durable profile version and emits a canonical `agent_session_state` event. Empty string values from the copied React controls remain compatible for optional controls and `max_output_tokens` while provider/runtime/transport identity stays server-owned.
+`agent.configure` follows the same two-phase authority rule as creation without changing Agent Session identity. The room owner first authorizes and loads one exact stopped private profile, then the provider catalog merges only the client-selectable runtime controls with that stored provider/workspace authority. The final transaction reauthorizes, rechecks replay and the original profile key, revalidates the selected filesystem identities, and atomically replaces both the private profile and public projection. Running, active-turn, owned-handle, and lifecycle-intent states fail closed; a successful profile save writes the current durable profile version and emits a canonical `agent_session_state` event. Empty string values are accepted for the copied React controls whose current contract makes those controls optional, while provider/runtime/transport identity stays server-owned.
 
 Provider diagnostics are untrusted process output. Before an error enters a durable Agent Session, room event, command result, snapshot, or public projection, the shared domain boundary removes local paths, credentials, authorization headers, secret-shaped options and assignments, URL user information, JWTs, and private keys, then applies the field's size limit. The common provider adapter exposes only stable public error codes and messages; protocol payloads and stderr never cross directly into room authority.
 
-Lifecycle command payloads carry exactly one unchanged Agent Session identifier alias and no unknown keys. The external-effect operation identity binds the exact room, principal, request ID, and action; only that operation may resume or finalize its prepared work, and an opposite lifecycle command cannot replace it. Before an incomplete lifecycle command leaves its write transaction, a room/principal/request reservation also binds its action, payload hash, Agent Session, operation ID, and phase. Every non-lifecycle command admission checks that same request namespace, so the reservation is the in-flight or terminal-failure phase of one global command authority rather than a second authority beside completed results. It survives recoverable failures and restart, and a completed command replaces it with the durable command result in the same transaction. A pre-reservation schema containing an incomplete lifecycle intent cannot reconstruct that binding and fails migration closed. Process reuse and provider-conversation reuse are independent observations; an app-server process is not proof that a Codex thread is active, and a reused conversation must retain its exact durable identity. Every runtime handle is paired with its private supervisor-instance owner. Ambiguous start or shutdown retains its exact operation and any observed handle rather than turning uncertainty into success or a new generation. A confirmed stop is held as an in-memory tombstone until persistence checkpoints `effect_applied`, so a checkpoint retry cannot repeat the external stop. Persistence never emits a stop effect with a missing handle or owner and never accepts a DB-only reused start.
+Lifecycle command payloads carry exactly one unchanged Agent Session identifier alias and no unknown keys. The external-effect operation identity binds the exact room, principal, request ID, and action; only that operation may resume or finalize its prepared work, and an opposite lifecycle command cannot replace it. Before an incomplete lifecycle command leaves its write transaction, a room/principal/request reservation also binds its action, payload hash, Agent Session, operation ID, and phase. Every non-lifecycle command admission checks that same request namespace, so the reservation is the in-flight or terminal-failure phase of one global command authority rather than a second authority beside completed results. It survives recoverable failures and restart, and a completed command replaces it with the durable command result in the same transaction. A schema without that reservation contract is rejected before lifecycle state is loaded. Process reuse and provider-conversation reuse are independent observations; an app-server process is not proof that a Codex thread is active, and a reused conversation must retain its exact durable identity. Every runtime handle is paired with its private supervisor-instance owner. Ambiguous start or shutdown retains its exact operation and any observed handle rather than turning uncertainty into success or a new generation. A confirmed stop is held as an in-memory tombstone until persistence checkpoints `effect_applied`, so a checkpoint retry cannot repeat the external stop. Persistence never emits a stop effect with a missing handle or owner and never accepts a DB-only reused start.
 
 Startup reconciliation is a three-owner protocol: persistence loads a complete private candidate outside process I/O, the common provider supervisor reports `Adopted`, `Gone`, `LeaseUncertain`, or `Ambiguous`, and persistence validates and commits the lifecycle-specific transition with an exact candidate CAS. Drivers report facts and never choose `owner_lost`. A gone pending stop becomes `effect_applied`; a confirmed checkpoint never repeats an effect; an adoptable runtime is rebound to the current supervisor only after filesystem authority revalidation; an exact uncertain lease stays recovery-locked with its handle/owner; ambiguous start intent remains locked against duplicate spawn; and ambiguous or foreign stop ownership becomes terminal `owner_lost`. Runtime adoption never asserts provider-conversation activity. Network admission occurs only after every loaded candidate has committed a current observation.
 
-The common provider adapter owns live runtime slots, one supervisor identity, and the provider-neutral room-observation lifecycle independently of room persistence. A driver may know Codex JSONL, Antigravity PTY/ConPTY, or OpenCode HTTP/SSE, but it does not decide room lifecycle, replay, publication, handoff, decline, or recovery semantics. One common outcome is either a bounded public message with an optional exact Agent Session handoff or an explicit supported decline. The Codex driver binds the verified executable object through process creation: Linux and Android copy the verified bytes into a sealed executable `memfd`, other Unix targets execute a byte-verified `0500` copy held inside an explicitly verified private `0700` staging directory, and Windows holds the verified image without write/delete sharing. Staged bytes are hashed directly with the already-open source object's stable identity. Linux/Android bind the running server through `/proc/self/exe`; on macOS the desktop supervisor opens the current executable, verifies its device/inode against the process's mapped text vnodes, and launches the server from a private staged copy of those open bytes. The server refuses provider custody without that launch proof, and the guardian then binds the exact running server object before either helper re-executes. Codex uses the provider environment allowlist plus one process-private RoomPortal bearer, `app-server --stdio`, process-local model/effort/tier/sandbox/approval, an exact runtime `untrusted` workspace entry, and private RoomPortal MCP configuration, one bounded JSONL reader, a 256-message/2 MiB aggregate pre-turn notification queue, and default-denied server requests. The runtime trust entry disables workspace `.codex/config.toml`, hooks, and exec policies while leaving the session-flag RoomPortal MCP active; ordinary `AGENTS.md` discovery remains part of the thread contract. On Unix the complete provider launch manifest, including that bearer, crosses an anonymous inherited descriptor rather than argv or the guardian environment; Windows adds it only to the exact owned provider environment. Each RoomPortal generates a fresh unpredictable environment-variable name containing `TOKEN`, so pre-existing user configuration cannot name the bearer as another MCP credential. Codex's built-in sensitive-name exclusions are forced on for model-reachable tool children without replacing either legacy or canonical user filter fields, and this owned app-server disables shell snapshots so the bearer cannot be copied into snapshot state and replayed around the filter. The RoomPortal itself remains in server memory and is exposed through an unguessable process-lifetime path plus independently authenticated bearer on an ephemeral loopback HTTP listener. The locked rmcp streamable-HTTP implementation bounds request bodies. A hard eight-connection semaphore bounds pre-authentication tasks and file descriptors; when full, the accept owner aborts the oldest registry-locked unauthenticated connection and waits for its permit to return before admitting a replacement. Exact constant-time bearer validation and the authenticated transition are one operation under that same registry mutex, so a successfully authenticated connection cannot be evicted between those steps. Unauthenticated requests never consume the separate eight authenticated request permits, every connection has an absolute deadline and disables keep-alive, incomplete headers and bodies expire, stateless JSON responses validate the exact Host and capability path, and cancellation closes every accepted connection with the portal. The bearer never appears in provider argv. Codex explicitly approves only this server's three room tools and the app-server pump accepts only the exact `agentsassemble_room` MCP-tool elicitation shape, leaving every other provider request denied. Codex therefore creates no portal sidecar, receives no portal filesystem path, and cannot turn ordinary output into room authority. Process reuse also requires live guardian custody and the exact provider anchor group; Linux/Android then perform a final bounded `/proc/<pid>/stat` check and reject zombie or dead leaders, which retain a PID and PGID until their guardian parent reaps them.
+The common provider adapter owns live runtime slots, one supervisor identity, and the provider-neutral room-observation lifecycle independently of room persistence. A driver may know Codex JSONL, Antigravity PTY/ConPTY, or OpenCode HTTP/SSE, but it does not decide room lifecycle, replay, publication, handoff, decline, or recovery semantics. One common outcome is either a bounded public message with an optional exact Agent Session handoff or an explicit supported decline. The Codex driver binds the verified executable object through process creation: Linux and Android copy the verified bytes into a sealed executable `memfd`, other Unix targets execute a byte-verified `0500` copy held inside an explicitly verified private `0700` staging directory, and Windows holds the verified image without write/delete sharing. Staged bytes are hashed directly with the already-open source object's stable identity. Linux/Android bind the running server through `/proc/self/exe`; on macOS the desktop supervisor opens the current executable, verifies its device/inode against the process's mapped text vnodes, and launches the server from a private staged copy of those open bytes. The server refuses provider custody without that launch proof, and the guardian then binds the exact running server object before either helper re-executes. Codex uses the provider environment allowlist plus one process-private RoomPortal bearer, `app-server --stdio`, process-local model/effort/tier/sandbox/approval, an exact runtime `untrusted` workspace entry, and private RoomPortal MCP configuration, one bounded JSONL reader, a 256-message/2 MiB aggregate pre-turn notification queue, and default-denied server requests. The runtime trust entry disables workspace `.codex/config.toml`, hooks, and exec policies while leaving the session-flag RoomPortal MCP active; ordinary `AGENTS.md` discovery remains part of the thread contract. On Unix the complete provider launch manifest, including that bearer, crosses an anonymous inherited descriptor rather than argv or the guardian environment; Windows adds it only to the exact owned provider environment. Each RoomPortal generates a fresh unpredictable environment-variable name containing `TOKEN`, so pre-existing user configuration cannot name the bearer as another MCP credential. Codex's built-in sensitive-name exclusions are forced on for model-reachable tool children without replacing either pre-existing or current user filter fields, and this owned app-server disables shell snapshots so the bearer cannot be copied into snapshot state and replayed around the filter. The RoomPortal itself remains in server memory and is exposed through an unguessable process-lifetime path plus independently authenticated bearer on an ephemeral loopback HTTP listener. The locked rmcp streamable-HTTP implementation bounds request bodies. A hard eight-connection semaphore bounds pre-authentication tasks and file descriptors; when full, the accept owner aborts the oldest registry-locked unauthenticated connection and waits for its permit to return before admitting a replacement. Exact constant-time bearer validation and the authenticated transition are one operation under that same registry mutex, so a successfully authenticated connection cannot be evicted between those steps. Unauthenticated requests never consume the separate eight authenticated request permits, every connection has an absolute deadline and disables keep-alive, incomplete headers and bodies expire, stateless JSON responses validate the exact Host and capability path, and cancellation closes every accepted connection with the portal. The bearer never appears in provider argv. Codex explicitly approves only the private server that exposes the exact five room tools—read, publish, decline, roll, and choose—and the app-server pump accepts only the exact `agentsassemble_room` MCP-tool elicitation shape. The installed app-server protocol does not provide a trustworthy tool-name field on that elicitation, so the private server boundary and its fixed route set are the approval scope, leaving every other provider request denied. Codex therefore creates no portal sidecar, receives no portal filesystem path, and cannot turn ordinary output into room authority. Process reuse also requires live guardian custody and the exact provider anchor group; Linux/Android then perform a final bounded `/proc/<pid>/stat` check and reject zombie or dead leaders, which retain a PID and PGID until their guardian parent reaps them.
 
 After Codex process initialization, the driver starts or resumes one bounded exact provider thread before reporting the provider session active. A cancelled request remains bound to its method, parameters, and JSON-RPC ID, so retry reads the original response rather than repeating the external effect. A definitive initialize failure is poisoned on that process. The complete attachment response is retained until all original-compatible identity and model locations are normalized; missing, malformed, changed, or conflicting thread identities and any reported model different from the exact configured model fail closed instead of opening or committing another conversation. A poisoned driver can never satisfy runtime reuse: fatal turn poison is stopped under the exact runtime owner and held as a confirmed-stop tombstone until persistence checkpoints it, while other poisoned attachment state returns an explicit restart-required failure.
 
@@ -259,35 +300,28 @@ Provider turns enter through the common adapter only when durable active-turn, p
 
 The room mutation task owns scheduling, while SQLite owns its durable authority.
 Each private queue item binds an event ID to its provider delivery semantic—ordered
-observation, ambient observation, or transcript—and relay depth. Pending and
-inflight vectors are the only queue record; no parallel mode/depth map exists. One
-assignment moves only the oldest contiguous prefix with one delivery kind and one
-relay depth that fits the existing message/view limits, so the active source and
-resulting relay depth are unambiguous and no omitted event can fall behind the
-cursor. Combined queue capacity remains 256 unique IDs. Invalid, duplicate,
-oversized, missing, wrong-room, or self-origin authority fails rather than being
-repaired or truncated.
+or ambient observation. Pending and inflight vectors are the only queue record; no
+parallel delivery map exists. One assignment moves only the oldest contiguous
+prefix with one delivery kind that fits the existing message/view limits, so the
+active source is unambiguous and no omitted event can fall behind the cursor.
+Combined queue capacity remains 256 unique IDs. Invalid, duplicate, oversized,
+missing, wrong-room, or self-origin authority fails rather than being repaired or
+truncated.
 
 Ordered routing resolves an explicit target before idle eligibility and otherwise
 uses director, prior-speaker, sample, and least-recent policy. Ambient queues every
-eligible or runtime-busy nonactor independently. Continuous keeps addressed and
-unaddressed work distinct: mention, structured target, and `@all` queue addressed
-nonactors unless kicked or muted, while only unaddressed work filters explicit
-default responders and chooses one strictly eligible session in stable circular
-order. Agent transcript relay stops at the room limit. Mode changes never delete
-active/inflight work. Observation cleanup on entry to continuous is deliberately
-lazy at each session's next assignment attempt; transcript work survives leaving
-continuous. Multiple active turns are valid after a transition, while ordered
-mode simply blocks a new assignment whenever any active turn exists.
+eligible or runtime-busy nonactor independently. Mode changes never delete
+active/inflight work. Multiple active turns are valid after an ordered/ambient
+transition, while ordered mode simply blocks a new assignment whenever any active
+turn exists. The compatibility-only original continuous relay is not accepted or
+executed.
 
-Schema migration changes v9 string queues transactionally to ordered-observation,
-depth-zero typed items only after checking the old active source, cursor, sequence,
-event rows, and active-or-clear tuple. It preserves ordering and every runtime and
-lifecycle field. Interruption rolls back the entire conversion; committed data is
-handled by the existing startup reconciliation. Lifecycle preparation and startup
-candidate loading validate authority before provider effects. Failure, stop, and
-restart recovery merge queues in bounded linear time. An adopted runtime with an
-active turn requeues inflight input, clears active authority, disables and detaches
+The current clean schema creates typed queue items directly. Older Rust/Python
+schema records are not converted or repaired by a compatibility migration.
+Lifecycle preparation and startup candidate loading validate current authority
+before provider effects. Failure, stop, and restart recovery merge queues in
+bounded linear time. An adopted runtime with an active turn requeues inflight
+input, clears active authority, disables and detaches
 the session, and requires explicit recovery because the provider task was lost.
 
 Provider I/O runs in an owned child task rather than holding the room mutation

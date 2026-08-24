@@ -33,8 +33,8 @@ describe("ProviderLogo", () => {
     });
   });
 
-  it("keeps compatibility aliases and rejects unknown providers", () => {
-    expect(providerBrandKey(undefined, "codex_cli")).toBe("codex");
+  it("recognizes current provider identifiers and rejects unknown providers", () => {
+    expect(providerBrandKey(undefined, "codex_live_session")).toBe("codex");
     expect(providerBrandKey(undefined, "local_cli")).toBeUndefined();
   });
 });

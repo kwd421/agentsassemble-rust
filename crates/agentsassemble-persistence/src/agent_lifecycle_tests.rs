@@ -1,7 +1,7 @@
 use agentsassemble_domain::{
     AgentSession, AuthenticatedPrincipal, CURRENT_RUNTIME_PROFILE_VERSION, CapabilitySet,
     ClientKind, DurableAgentSession, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID, Participant,
-    ParticipantStatus, Room, RoomSettings,
+    ParticipantStatus, QueuedRoomInput, Room, RoomInputDeliveryKind, RoomSettings,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -33,7 +33,7 @@ pub(super) async fn fixture() -> (SqliteStore, AuthenticatedPrincipal, tempfile:
     store
         .initialize_room(
             &Room::new("general".to_owned(), "General".to_owned(), now),
-            &RoomSettings::defaults("General".to_owned()),
+            &RoomSettings::defaults("General"),
             &host,
         )
         .await
@@ -114,8 +114,11 @@ async fn seed_agent(store: &SqliteStore, now: chrono::DateTime<Utc>) {
         provider_session_id: String::new(),
         runtime_handle_id: String::new(),
         runtime_owner_id: String::new(),
-        pending_event_ids: vec!["pending-1".to_owned()],
-        inflight_event_ids: Vec::new(),
+        pending_inputs: vec![QueuedRoomInput {
+            event_id: "pending-1".to_owned(),
+            delivery_kind: RoomInputDeliveryKind::OrderedObservation,
+        }],
+        inflight_inputs: Vec::new(),
         active_source_event_id: String::new(),
         input_up_to_event_id: String::new(),
         input_up_to_seq: 0,
@@ -449,23 +452,52 @@ async fn unversioned_runtime_profile_fails_before_a_start_effect() {
     .bind(AGENT_ID)
     .execute(&store.pool)
     .await
-    .unwrap_or_else(|error| panic!("write legacy session: {error}"));
+    .unwrap_or_else(|error| panic!("write unsupported profile version: {error}"));
 
     let outcome = store
-        .prepare_agent_start(&principal, "start-legacy", &json!({"agent_id": AGENT_ID}))
+        .prepare_agent_start(
+            &principal,
+            "start-unsupported-profile",
+            &json!({"agent_id": AGENT_ID}),
+        )
         .await;
     assert!(matches!(
         outcome,
         Err(PersistenceError::CommandRejected {
-            code: "profile_migration_required",
+            code: "runtime_profile_unsupported",
             ..
         })
     ));
     let snapshot = store
         .snapshot("general", 0, 10)
         .await
-        .unwrap_or_else(|error| panic!("snapshot legacy session: {error}"));
+        .unwrap_or_else(|error| panic!("snapshot rejected session: {error}"));
     assert_eq!(snapshot.agent_sessions[0].runtime_status, "stopped");
+
+    let mut unsupported: serde_json::Value = serde_json::from_str(&encoded)
+        .unwrap_or_else(|error| panic!("decode current session document: {error}"));
+    unsupported["default_responder"] = json!(true);
+    sqlx::query(
+        "UPDATE agent_sessions SET session_json = ? WHERE room_id = 'general' AND session_id = ?",
+    )
+    .bind(
+        serde_json::to_string(&unsupported)
+            .unwrap_or_else(|error| panic!("encode unsupported session field: {error}")),
+    )
+    .bind(AGENT_ID)
+    .execute(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("write unsupported session field: {error}"));
+    assert!(matches!(
+        store
+            .prepare_agent_start(
+                &principal,
+                "start-unsupported-field",
+                &json!({"agent_id": AGENT_ID}),
+            )
+            .await,
+        Err(PersistenceError::Json(_))
+    ));
 }
 
 #[tokio::test]

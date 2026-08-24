@@ -623,8 +623,7 @@ fn persistence_error(error: &PersistenceError) -> (&'static str, String) {
         | PersistenceError::UnsafeDatabasePath(_)
         | PersistenceError::InitializationNotAllowed
         | PersistenceError::InvalidSchemaVersion(_)
-        | PersistenceError::UnsupportedSchemaVersion { .. }
-        | PersistenceError::IncompleteLifecycleMigration
+        | PersistenceError::SchemaVersionMismatch { .. }
         | PersistenceError::InvalidServerId => (
             "persistence_failed",
             "Persistence operation failed.".to_owned(),
@@ -730,7 +729,8 @@ fn persistence_error_is_internal(error: &PersistenceError) -> bool {
             | PersistenceError::UnsafeDatabasePath(_)
             | PersistenceError::InitializationNotAllowed
             | PersistenceError::InvalidSchemaVersion(_)
-            | PersistenceError::UnsupportedSchemaVersion { .. }
+            | PersistenceError::SchemaVersionMismatch { .. }
+            | PersistenceError::InvalidServerId
     )
 }
 

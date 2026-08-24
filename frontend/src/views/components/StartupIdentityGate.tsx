@@ -46,19 +46,18 @@ type Screen = "choice" | "guest" | "recover" | "recovery-code";
 async function saveLocalProfile(displayName: string, deviceToken: string) {
   const name = displayName.trim();
   if (!name) return;
-  rememberGuestProfile({ displayName: name });
-  try {
-    await saveUserProfile(
-      {
-        ...DEFAULT_USER_PROFILE,
-        displayName: name,
-        avatarLabel: name.slice(0, 2).toUpperCase(),
-      },
-      { deviceToken }
-    );
-  } catch {
-    // Central identity and local profile remain independently recoverable.
-  }
+  const saved = await saveUserProfile(
+    {
+      ...DEFAULT_USER_PROFILE,
+      displayName: name,
+      avatarLabel: name.slice(0, 2).toUpperCase(),
+    },
+    { deviceToken }
+  );
+  rememberGuestProfile({
+    displayName: saved.displayName,
+    avatarImage: saved.avatarImage,
+  });
 }
 
 export default function StartupIdentityGate({
@@ -283,13 +282,20 @@ export default function StartupIdentityGate({
     }
   }
 
-  async function continueLegacyGuest() {
+  async function continueLocalGuest() {
     const name = displayName.trim();
     if (!name || busy) return;
     setBusy(true);
-    await saveLocalProfile(name, deviceToken);
-    rememberStartupIdentitySelection();
-    onComplete();
+    setError("");
+    try {
+      await saveLocalProfile(name, deviceToken);
+      rememberStartupIdentitySelection();
+      onComplete();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "로컬 프로필을 저장하지 못했습니다.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (checking) {
@@ -343,7 +349,7 @@ export default function StartupIdentityGate({
             type="button"
             className="min-h-10 rounded-md bg-[#5865f2] px-4 text-[13px] font-black text-white disabled:opacity-50"
             disabled={!displayName.trim() || busy}
-            onClick={() => void continueLegacyGuest()}
+            onClick={() => void continueLocalGuest()}
           >
             게스트로 계속
           </button>

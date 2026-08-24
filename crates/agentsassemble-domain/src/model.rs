@@ -3,9 +3,10 @@ use std::collections::BTreeMap;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 use ts_rs::TS;
 use uuid::Uuid;
+
+use crate::QueuedRoomInput;
 
 pub const LOCAL_OPERATOR_USER_ID: &str = "operator-local-user";
 pub const LOCAL_OPERATOR_PARTICIPANT_ID: &str = "operator-local";
@@ -20,6 +21,7 @@ pub enum RoomStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
 pub struct Room {
     pub room_id: String,
     pub room_uid: Uuid,
@@ -54,19 +56,16 @@ pub enum ParticipantStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
 pub struct Participant {
     pub room_id: String,
     pub participant_id: String,
     pub display_name: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub avatar_image_url: String,
     pub participant_type: String,
     pub status: ParticipantStatus,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub role: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub owner_id: String,
-    #[serde(default)]
     pub muted: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -194,91 +193,8 @@ pub struct RoomEvent {
     pub content: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message_kind: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub relay_depth: Option<u32>,
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-pub struct RoomAppearance {
-    pub banner_preset: String,
-    pub banner_image_url: String,
-    pub icon_image_url: String,
-    pub icon_label: String,
-    pub invite_scope: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-pub struct RoomSettings {
-    pub label: String,
-    pub topic: String,
-    pub appearance: RoomAppearance,
-    pub conversation_mode: String,
-    pub tool_mode: String,
-    pub ordered_exclude_previous_speaker: bool,
-    pub max_relay_turns: u32,
-    pub channels: Vec<Value>,
-    pub activity_plugin: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-pub struct PublicRoomSettings {
-    pub settings_revision: String,
-    pub label: String,
-    pub topic: String,
-    pub appearance: RoomAppearance,
-    pub conversation_mode: String,
-    pub tool_mode: String,
-    pub ordered_exclude_previous_speaker: bool,
-    pub max_relay_turns: u32,
-    pub channels: Vec<Value>,
-    pub activity_plugin: String,
-}
-
-impl RoomSettings {
-    #[must_use]
-    pub fn defaults(label: String) -> Self {
-        Self {
-            label,
-            topic: String::new(),
-            appearance: RoomAppearance {
-                banner_preset: "default".to_owned(),
-                banner_image_url: String::new(),
-                icon_image_url: String::new(),
-                icon_label: String::new(),
-                invite_scope: "room".to_owned(),
-            },
-            conversation_mode: "ordered".to_owned(),
-            tool_mode: "chat".to_owned(),
-            ordered_exclude_previous_speaker: true,
-            max_relay_turns: 6,
-            channels: Vec::new(),
-            activity_plugin: String::new(),
-        }
-    }
-}
-
-/// Serializes room settings and attaches their public content revision.
-///
-/// # Errors
-///
-/// Returns the serialization error if a settings field cannot be encoded.
-pub fn public_settings(settings: &RoomSettings) -> Result<PublicRoomSettings, serde_json::Error> {
-    let canonical = serde_json::to_vec(&serde_json::to_value(settings)?)?;
-    let revision = format!("room-settings-v1-{:x}", Sha256::digest(canonical));
-    Ok(PublicRoomSettings {
-        settings_revision: revision,
-        label: settings.label.clone(),
-        topic: settings.topic.clone(),
-        appearance: settings.appearance.clone(),
-        conversation_mode: settings.conversation_mode.clone(),
-        tool_mode: settings.tool_mode.clone(),
-        ordered_exclude_previous_speaker: settings.ordered_exclude_previous_speaker,
-        max_relay_turns: settings.max_relay_turns,
-        channels: settings.channels.clone(),
-        activity_plugin: settings.activity_plugin.clone(),
-    })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -361,6 +277,7 @@ pub struct ProviderAvailability {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[allow(clippy::struct_excessive_bools)] // Public runtime observations are independent wire facts.
+#[serde(deny_unknown_fields)]
 pub struct AgentSession {
     pub room_id: String,
     pub session_id: String,
@@ -389,82 +306,103 @@ pub struct AgentSession {
     pub last_provider_sync_seq: i64,
     pub bootstrap_cutoff_seq: i64,
     pub turn_count: u64,
-    #[serde(default)]
     pub active_turn_id: String,
-    #[serde(default)]
     pub turn_phase: String,
-    #[serde(default)]
     pub last_error: String,
-    #[serde(default)]
     pub last_error_code: String,
-    #[serde(default)]
     pub recovery_required: bool,
-    #[serde(default)]
     pub provider_session_active: bool,
-    #[serde(default)]
     pub provider_session_reused: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct DurableAgentSession {
     #[serde(flatten)]
     pub public: AgentSession,
-    #[serde(default)]
     pub executable: String,
-    #[serde(default)]
     pub executable_identity: String,
     pub workspace: String,
-    #[serde(default)]
     pub workspace_identity: String,
     pub runtime_profile_key: String,
-    #[serde(default)]
     pub runtime_profile_version: u32,
-    #[serde(default)]
     pub provider_session_id: String,
-    #[serde(default)]
     pub runtime_handle_id: String,
-    #[serde(default)]
     pub runtime_owner_id: String,
-    #[serde(default)]
-    pub pending_event_ids: Vec<String>,
-    #[serde(default)]
-    pub inflight_event_ids: Vec<String>,
-    #[serde(default)]
+    pub pending_inputs: Vec<QueuedRoomInput>,
+    pub inflight_inputs: Vec<QueuedRoomInput>,
     pub active_source_event_id: String,
-    #[serde(default)]
     pub input_up_to_event_id: String,
-    #[serde(default)]
     pub input_up_to_seq: i64,
-    #[serde(default)]
     pub lifecycle_intent_action: String,
-    #[serde(default)]
     pub lifecycle_intent_id: String,
-    #[serde(default)]
     pub lifecycle_intent_status: String,
+}
+
+#[derive(Deserialize)]
+struct RawDurableAgentSession {
+    #[serde(flatten)]
+    public: AgentSession,
+    executable: String,
+    executable_identity: String,
+    workspace: String,
+    workspace_identity: String,
+    runtime_profile_key: String,
+    runtime_profile_version: u32,
+    provider_session_id: String,
+    runtime_handle_id: String,
+    runtime_owner_id: String,
+    pending_inputs: Vec<QueuedRoomInput>,
+    inflight_inputs: Vec<QueuedRoomInput>,
+    active_source_event_id: String,
+    input_up_to_event_id: String,
+    input_up_to_seq: i64,
+    lifecycle_intent_action: String,
+    lifecycle_intent_id: String,
+    lifecycle_intent_status: String,
+    #[serde(flatten)]
+    unknown: BTreeMap<String, Value>,
+}
+
+impl<'de> Deserialize<'de> for DurableAgentSession {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let raw = RawDurableAgentSession::deserialize(deserializer)?;
+        if let Some(field) = raw.unknown.keys().next() {
+            return Err(serde::de::Error::custom(format!(
+                "unknown Agent Session field `{field}`"
+            )));
+        }
+        Ok(Self {
+            public: raw.public,
+            executable: raw.executable,
+            executable_identity: raw.executable_identity,
+            workspace: raw.workspace,
+            workspace_identity: raw.workspace_identity,
+            runtime_profile_key: raw.runtime_profile_key,
+            runtime_profile_version: raw.runtime_profile_version,
+            provider_session_id: raw.provider_session_id,
+            runtime_handle_id: raw.runtime_handle_id,
+            runtime_owner_id: raw.runtime_owner_id,
+            pending_inputs: raw.pending_inputs,
+            inflight_inputs: raw.inflight_inputs,
+            active_source_event_id: raw.active_source_event_id,
+            input_up_to_event_id: raw.input_up_to_event_id,
+            input_up_to_seq: raw.input_up_to_seq,
+            lifecycle_intent_action: raw.lifecycle_intent_action,
+            lifecycle_intent_id: raw.lifecycle_intent_id,
+            lifecycle_intent_status: raw.lifecycle_intent_status,
+        })
+    }
 }
 
 impl DurableAgentSession {
     #[must_use]
     pub fn public(&self) -> AgentSession {
         self.public.clone()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{RoomSettings, public_settings};
-
-    #[test]
-    fn room_settings_revision_matches_the_original_sorted_json_contract() {
-        let settings = RoomSettings::defaults("General".to_owned());
-        let public = public_settings(&settings)
-            .unwrap_or_else(|error| panic!("serialize canonical settings: {error}"));
-        assert_eq!(
-            public.settings_revision,
-            "room-settings-v1-d8d5762ea0f913e1f3ec543b3f9b06cecb163a3deed10b58aca9ef60b8d275e6"
-        );
     }
 }
 

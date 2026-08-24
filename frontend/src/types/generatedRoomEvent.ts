@@ -73,7 +73,6 @@ export interface PublicRoomGlobalSettings {
   conversation_mode: string;
   tool_mode: string;
   ordered_exclude_previous_speaker: boolean;
-  max_relay_turns: number;
   channels: PublicRoomGlobalChannel[];
   activity_plugin?: string;
 }
@@ -126,7 +125,6 @@ export interface RoomEvent {
   diagnostics?: Record<string, unknown>;
   agent_session?: RoomAgentSession;
   message_source?: string;
-  relay_depth?: number;
   reason_code?: string;
   room_settings?: PublicRoomGlobalSettings;
   provider_request?: PublicProviderRequest;

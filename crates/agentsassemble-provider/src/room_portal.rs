@@ -1,9 +1,11 @@
 use std::{
-    collections::HashSet,
+    collections::{BTreeMap, HashSet},
     sync::{Arc, Mutex, MutexGuard},
 };
 
+use agentsassemble_domain::{RoomRandomRequest, RoomRandomResult};
 use thiserror::Error;
+use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
 #[cfg(windows)]
@@ -20,6 +22,7 @@ const MAX_ROOM_VIEW_BYTES: usize = 96 * 1024;
 const MAX_TURN_ID_BYTES: usize = 128;
 const MAX_AGENT_IDS: usize = 64;
 pub(super) const MAX_MESSAGE_CHARS: usize = 12_000;
+const MAX_ROOM_RANDOM_RESULTS: usize = 32;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProviderTurnOutcome {
@@ -48,8 +51,135 @@ pub enum RoomPortalError {
     Mcp,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[error("{message}")]
+pub struct ProviderRoomToolError {
+    pub code: &'static str,
+    pub message: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProviderRoomToolIngress {
+    sender: mpsc::Sender<ProviderRoomToolCommand>,
+}
+
+impl PartialEq for ProviderRoomToolIngress {
+    fn eq(&self, other: &Self) -> bool {
+        self.sender.same_channel(&other.sender)
+    }
+}
+
+impl Eq for ProviderRoomToolIngress {}
+
+impl ProviderRoomToolIngress {
+    #[must_use]
+    pub fn channel(capacity: usize) -> (Self, mpsc::Receiver<ProviderRoomToolCommand>) {
+        let (sender, receiver) = mpsc::channel(capacity);
+        (Self { sender }, receiver)
+    }
+
+    pub(super) async fn submit(
+        &self,
+        authority: RoomToolAuthority,
+        request: RoomRandomRequest,
+        reservation: RoomToolReservation,
+    ) -> Result<RoomRandomResult, ProviderRoomToolError> {
+        let (reply, response) = oneshot::channel();
+        let command = ProviderRoomToolCommand {
+            authority,
+            request,
+            reservation,
+            reply: Some(reply),
+            resolved: false,
+        };
+        if let Err(error) = self.sender.try_send(command) {
+            let (command, failure) = match error {
+                mpsc::error::TrySendError::Full(command) => (
+                    command,
+                    tool_error("room_busy", "The room tool queue is full."),
+                ),
+                mpsc::error::TrySendError::Closed(command) => (
+                    command,
+                    tool_error("room_unavailable", "The room tool owner stopped."),
+                ),
+            };
+            command.complete(Err(failure));
+        }
+        response.await.unwrap_or_else(|_| {
+            Err(tool_error(
+                "room_unavailable",
+                "The room tool response was lost.",
+            ))
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct ProviderRoomToolCommand {
+    authority: RoomToolAuthority,
+    request: RoomRandomRequest,
+    reservation: RoomToolReservation,
+    reply: Option<oneshot::Sender<Result<RoomRandomResult, ProviderRoomToolError>>>,
+    resolved: bool,
+}
+
+impl ProviderRoomToolCommand {
+    #[must_use]
+    pub fn session_id(&self) -> &str {
+        &self.authority.session_id
+    }
+
+    #[must_use]
+    pub fn turn_id(&self) -> &str {
+        &self.authority.turn_id
+    }
+
+    #[must_use]
+    pub const fn input_up_to_seq(&self) -> i64 {
+        self.authority.input_up_to_seq
+    }
+
+    #[must_use]
+    pub fn request(&self) -> &RoomRandomRequest {
+        &self.request
+    }
+
+    /// Transfers a queued portal reservation to the room actor's commit phase.
+    ///
+    /// # Errors
+    ///
+    /// Rejects stale, closing, missing, or already-consumed turn authority.
+    pub fn begin_commit(&mut self) -> Result<(), ProviderRoomToolError> {
+        self.reservation.begin_commit()
+    }
+
+    pub fn complete(mut self, result: Result<RoomRandomResult, ProviderRoomToolError>) {
+        self.reservation.resolve(result.is_ok());
+        self.resolved = true;
+        if let Some(reply) = self.reply.take() {
+            let _ = reply.send(result);
+        }
+    }
+}
+
+impl Drop for ProviderRoomToolCommand {
+    fn drop(&mut self) {
+        if self.resolved {
+            return;
+        }
+        self.reservation.resolve(false);
+        if let Some(reply) = self.reply.take() {
+            let _ = reply.send(Err(tool_error(
+                "room_unavailable",
+                "The room tool command was not committed.",
+            )));
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct TurnAuthority {
+    pub(super) session_id: String,
     pub(super) turn_id: String,
     pub(super) input_up_to_seq: i64,
     pub(super) allowed_agent_ids: Vec<String>,
@@ -75,6 +205,82 @@ pub(super) struct ActiveObservation {
     pub(super) turn_generation: Uuid,
     pub(super) receipt_generation: Option<Uuid>,
     pub(super) outcome: Option<StagedOutcome>,
+    pub(super) tool_ingress: Option<ProviderRoomToolIngress>,
+    pub(super) tool_reservations: BTreeMap<Uuid, ToolReservationStatus>,
+    pub(super) successful_tool_results: usize,
+    pub(super) closing: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ToolReservationStatus {
+    Queued,
+    Committing,
+}
+
+#[derive(Debug)]
+pub(super) struct RoomToolReservation {
+    state: Arc<Mutex<PortalState>>,
+    turn_generation: Uuid,
+    reservation_id: Uuid,
+    resolved: bool,
+}
+
+impl RoomToolReservation {
+    fn begin_commit(&mut self) -> Result<(), ProviderRoomToolError> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| tool_error("room_unavailable", "Room tool authority is unavailable."))?;
+        let active = state
+            .active
+            .as_mut()
+            .filter(|active| active.turn_generation == self.turn_generation && !active.closing)
+            .ok_or_else(|| tool_error("stale_provider_turn", "The room turn has ended."))?;
+        let status = active
+            .tool_reservations
+            .get_mut(&self.reservation_id)
+            .ok_or_else(|| tool_error("stale_provider_turn", "The room tool reservation ended."))?;
+        if *status != ToolReservationStatus::Queued {
+            return Err(tool_error(
+                "room_tool_conflict",
+                "The room tool reservation was already consumed.",
+            ));
+        }
+        *status = ToolReservationStatus::Committing;
+        Ok(())
+    }
+
+    fn resolve(&mut self, successful: bool) {
+        if self.resolved {
+            return;
+        }
+        self.resolved = true;
+        let Ok(mut state) = self.state.lock() else {
+            return;
+        };
+        let remove_tombstone = if let Some(active) = state
+            .active
+            .as_mut()
+            .filter(|active| active.turn_generation == self.turn_generation)
+        {
+            let removed = active.tool_reservations.remove(&self.reservation_id);
+            if successful && removed == Some(ToolReservationStatus::Committing) {
+                active.successful_tool_results = active.successful_tool_results.saturating_add(1);
+            }
+            active.closing && active.tool_reservations.is_empty()
+        } else {
+            false
+        };
+        if remove_tombstone {
+            state.active = None;
+        }
+    }
+}
+
+impl Drop for RoomToolReservation {
+    fn drop(&mut self) {
+        self.resolve(false);
+    }
 }
 
 #[derive(Debug, Default)]
@@ -179,12 +385,15 @@ impl RoomPortal {
 
     pub(crate) fn begin_observation(
         &self,
+        session_id: &str,
         turn_id: &str,
         input_up_to_seq: i64,
         room_view: &str,
         allowed_agent_ids: &[String],
+        tool_ingress: Option<ProviderRoomToolIngress>,
     ) -> Result<(), RoomPortalError> {
         self.require_server()?;
+        validate_turn_id(session_id)?;
         validate_turn_id(turn_id)?;
         let unique_agent_ids = allowed_agent_ids.iter().collect::<HashSet<_>>();
         if input_up_to_seq <= 0
@@ -197,6 +406,7 @@ impl RoomPortal {
             return Err(RoomPortalError::Observation);
         }
         let authority = TurnAuthority {
+            session_id: session_id.to_owned(),
             turn_id: turn_id.to_owned(),
             input_up_to_seq,
             allowed_agent_ids: allowed_agent_ids.to_vec(),
@@ -216,6 +426,10 @@ impl RoomPortal {
                     turn_generation: Uuid::new_v4(),
                     receipt_generation: None,
                     outcome: None,
+                    tool_ingress,
+                    tool_reservations: BTreeMap::new(),
+                    successful_tool_results: 0,
+                    closing: false,
                 });
                 Ok(())
             }
@@ -232,6 +446,8 @@ impl RoomPortal {
         let active = state.active.as_ref().ok_or(RoomPortalError::Observation)?;
         if active.authority.turn_id != turn_id
             || active.authority.input_up_to_seq != input_up_to_seq
+            || active.closing
+            || !active.tool_reservations.is_empty()
         {
             return Err(RoomPortalError::Observation);
         }
@@ -275,7 +491,17 @@ impl RoomPortal {
     }
 
     pub(crate) fn end_observation(&self) -> Result<(), RoomPortalError> {
-        self.lock_state()?.active = None;
+        let mut state = self.lock_state()?;
+        let Some(active) = state.active.as_mut() else {
+            return Ok(());
+        };
+        active.closing = true;
+        active
+            .tool_reservations
+            .retain(|_, status| *status == ToolReservationStatus::Committing);
+        if active.tool_reservations.is_empty() {
+            state.active = None;
+        }
         Ok(())
     }
 
@@ -307,6 +533,71 @@ impl RoomPortal {
 
     fn lock_state(&self) -> Result<MutexGuard<'_, PortalState>, RoomPortalError> {
         self.state.lock().map_err(|_| RoomPortalError::Authority)
+    }
+}
+
+pub(super) fn reserve_room_tool(
+    state: &Arc<Mutex<PortalState>>,
+) -> Result<
+    (
+        RoomToolAuthority,
+        RoomToolReservation,
+        ProviderRoomToolIngress,
+    ),
+    String,
+> {
+    let mut portal = state
+        .lock()
+        .map_err(|_| "The shared room authority is unavailable.".to_owned())?;
+    let active = portal
+        .active
+        .as_mut()
+        .ok_or_else(|| "No active room observation.".to_owned())?;
+    if active.closing || active.outcome.is_some() {
+        return Err("This turn already has a terminal room action.".to_owned());
+    }
+    if active.receipt_generation != Some(active.turn_generation) {
+        return Err("Read the discussion before using a room tool.".to_owned());
+    }
+    let ingress = active
+        .tool_ingress
+        .clone()
+        .ok_or_else(|| "Room randomness is available only in tabletop mode.".to_owned())?;
+    if active.successful_tool_results + active.tool_reservations.len() >= MAX_ROOM_RANDOM_RESULTS {
+        return Err("This turn reached its room-random result limit.".to_owned());
+    }
+    let reservation_id = Uuid::new_v4();
+    active
+        .tool_reservations
+        .insert(reservation_id, ToolReservationStatus::Queued);
+    let authority = RoomToolAuthority {
+        session_id: active.authority.session_id.clone(),
+        turn_id: active.authority.turn_id.clone(),
+        input_up_to_seq: active.authority.input_up_to_seq,
+    };
+    Ok((
+        authority,
+        RoomToolReservation {
+            state: state.clone(),
+            turn_generation: active.turn_generation,
+            reservation_id,
+            resolved: false,
+        },
+        ingress,
+    ))
+}
+
+#[derive(Debug)]
+pub(super) struct RoomToolAuthority {
+    session_id: String,
+    turn_id: String,
+    input_up_to_seq: i64,
+}
+
+fn tool_error(code: &'static str, message: impl Into<String>) -> ProviderRoomToolError {
+    ProviderRoomToolError {
+        code,
+        message: message.into(),
     }
 }
 
@@ -347,3 +638,7 @@ pub(super) fn valid_decline_reason(value: &str) -> bool {
         "nothing_useful_to_add" | "not_addressed" | "duplicate"
     )
 }
+
+#[cfg(test)]
+#[path = "room_portal_tabletop_tests.rs"]
+mod tabletop_tests;

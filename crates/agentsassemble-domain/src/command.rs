@@ -121,7 +121,6 @@ pub fn prepare_message_event(
         display_name: Some(participant.display_name.clone()),
         content: Some(command.content.clone()),
         message_kind: Some("message".to_owned()),
-        relay_depth: Some(0),
         extra: BTreeMap::new(),
     })
 }

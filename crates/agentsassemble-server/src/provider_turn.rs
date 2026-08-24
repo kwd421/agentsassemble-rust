@@ -1,9 +1,10 @@
+use agentsassemble_domain::RoomInputDeliveryKind;
 use agentsassemble_persistence::{
     AgentTurnAssignment, AgentTurnCommit, PersistenceError, ProviderTurnAuthority, SqliteStore,
 };
 use agentsassemble_provider::{
-    ProviderAdapter, ProviderAdapterError, ProviderRoomObservation, ProviderTurnCompleted,
-    ProviderTurnOutcome, ProviderTurnRequest,
+    ProviderAdapter, ProviderAdapterError, ProviderRoomObservation, ProviderRoomToolIngress,
+    ProviderTurnCompleted, ProviderTurnOutcome, ProviderTurnRequest,
 };
 use tokio::{sync::broadcast, task::JoinSet};
 
@@ -16,16 +17,24 @@ pub(crate) fn spawn_provider_turn(
     tasks: &mut JoinSet<ProviderTurnTaskResult>,
     provider_adapter: ProviderAdapter,
     assignment: AgentTurnAssignment,
+    room_tool_ingress: ProviderRoomToolIngress,
 ) {
     tasks.spawn(async move {
+        let room_observation = matches!(
+            assignment.delivery_kind,
+            RoomInputDeliveryKind::OrderedObservation | RoomInputDeliveryKind::AmbientObservation
+        )
+        .then(|| ProviderRoomObservation {
+            session_id: assignment.session.public.session_id.clone(),
+            input_up_to_seq: assignment.session.input_up_to_seq,
+            view: assignment.room_view.clone(),
+            allowed_agent_ids: assignment.room_agent_ids.clone(),
+            room_tool_ingress: assignment.tabletop_tools.then_some(room_tool_ingress),
+        });
         let request = ProviderTurnRequest {
             turn_id: assignment.turn_id.clone(),
             input: assignment.provider_input.clone(),
-            room_observation: Some(ProviderRoomObservation {
-                input_up_to_seq: assignment.session.input_up_to_seq,
-                view: assignment.room_view.clone(),
-                allowed_agent_ids: assignment.room_agent_ids.clone(),
-            }),
+            room_observation,
         };
         let result = provider_adapter
             .send_turn(&assignment.session, &request)
@@ -112,6 +121,7 @@ pub(crate) async fn publish_turn_commit(
     event_tx: &broadcast::Sender<agentsassemble_domain::RoomEvent>,
     tasks: &mut JoinSet<ProviderTurnTaskResult>,
     provider_adapter: ProviderAdapter,
+    room_tool_ingress: ProviderRoomToolIngress,
     commit: AgentTurnCommit,
 ) {
     let room_id = commit
@@ -120,8 +130,8 @@ pub(crate) async fn publish_turn_commit(
         .map(|event| event.room_id.clone())
         .or_else(|| {
             commit
-                .next_assignment
-                .as_ref()
+                .next_assignments
+                .first()
                 .map(|assignment| assignment.session.public.room_id.clone())
         });
     if let Some(room_id) = room_id
@@ -134,7 +144,12 @@ pub(crate) async fn publish_turn_commit(
             "provider-turn events remain durably pending for publication retry"
         );
     }
-    if let Some(assignment) = commit.next_assignment {
-        spawn_provider_turn(tasks, provider_adapter, assignment);
+    for assignment in commit.next_assignments {
+        spawn_provider_turn(
+            tasks,
+            provider_adapter.clone(),
+            assignment,
+            room_tool_ingress.clone(),
+        );
     }
 }

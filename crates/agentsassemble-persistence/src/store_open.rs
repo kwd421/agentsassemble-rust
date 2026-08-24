@@ -28,9 +28,6 @@ impl SqliteStore {
 
     /// Opens one file authority and atomically installs its initial product state.
     ///
-    /// An older interrupted authority that committed schema metadata but no room or
-    /// profile is repaired by the same all-or-nothing room transaction.
-    ///
     /// # Errors
     ///
     /// Returns a database, authority, or initial-state validation error.
@@ -77,7 +74,7 @@ impl SqliteStore {
         } else {
             store.verify_owner().await?;
             if let Some(initial_room) = initial_room {
-                store.restore_missing_initial_room(initial_room).await?;
+                store.verify_initial_product_state(initial_room).await?;
             }
         }
         Ok(store)
@@ -116,7 +113,7 @@ mod tests {
     fn initial_room() -> (Room, RoomSettings, Participant) {
         let now = Utc::now();
         let room = Room::new("general".to_owned(), "general".to_owned(), now);
-        let settings = RoomSettings::defaults("general".to_owned());
+        let settings = RoomSettings::defaults("general");
         let participant = Participant {
             room_id: "general".to_owned(),
             participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
@@ -190,88 +187,45 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn schema_only_authority_restores_initial_product_state() {
+    async fn schema_only_authority_is_not_reinterpreted_as_a_complete_bootstrap() {
         let directory = tempfile::tempdir().unwrap_or_else(|error| panic!("tempdir: {error}"));
         let path = directory.path().join("runtime.sqlite3");
         let schema_only = SqliteStore::open_path(&path)
             .await
             .unwrap_or_else(|error| panic!("initialize schema: {error}"));
-        let server_id = schema_only
-            .server_id()
-            .await
-            .unwrap_or_else(|error| panic!("server id: {error}"));
         drop(schema_only);
 
         let (room, settings, participant) = initial_room();
-        let restored =
-            SqliteStore::open_path_with_initial_room(&path, &room, &settings, &participant)
-                .await
-                .unwrap_or_else(|error| panic!("restore initial room: {error}"));
-        assert_eq!(
-            restored
-                .server_id()
-                .await
-                .unwrap_or_else(|error| panic!("restored server id: {error}")),
-            server_id
-        );
-        assert_eq!(
-            restored
-                .list_room_directory(true)
-                .await
-                .unwrap_or_else(|error| panic!("restored directory: {error}"))
-                .len(),
-            1
-        );
-    }
+        assert!(matches!(
+            SqliteStore::open_path_with_initial_room(&path, &room, &settings, &participant).await,
+            Err(crate::PersistenceError::InitializationNotAllowed)
+        ));
 
-    #[tokio::test]
-    async fn failed_schema_only_restore_rolls_back_and_can_retry() {
-        let directory = tempfile::tempdir().unwrap_or_else(|error| panic!("tempdir: {error}"));
-        let path = directory.path().join("runtime.sqlite3");
-        let schema_only = SqliteStore::open_path(&path)
-            .await
-            .unwrap_or_else(|error| panic!("initialize schema: {error}"));
-        sqlx::query(
-            "CREATE TRIGGER reject_initial_profile BEFORE INSERT ON user_profiles BEGIN SELECT RAISE(ABORT, 'injected initial profile failure'); END",
+        let incomplete_path = directory.path().join("incomplete-current.sqlite3");
+        let complete = SqliteStore::open_path_with_initial_room(
+            &incomplete_path,
+            &room,
+            &settings,
+            &participant,
         )
-        .execute(&schema_only.pool)
         .await
-        .unwrap_or_else(|error| panic!("install trigger: {error}"));
-        drop(schema_only);
-
-        let (room, settings, participant) = initial_room();
-        assert!(
-            SqliteStore::open_path_with_initial_room(&path, &room, &settings, &participant)
-                .await
-                .is_err()
-        );
-        let inspect = SqliteStore::open_path(&path)
+        .unwrap_or_else(|error| panic!("initialize complete authority: {error}"));
+        sqlx::query("DELETE FROM participants WHERE room_id = ? AND participant_id = ?")
+            .bind(&room.room_id)
+            .bind(&participant.participant_id)
+            .execute(&complete.pool)
             .await
-            .unwrap_or_else(|error| panic!("reopen failed restore: {error}"));
-        let product_rows = sqlx::query_scalar::<_, i64>(
-            "SELECT (SELECT COUNT(*) FROM rooms) + (SELECT COUNT(*) FROM participants) + (SELECT COUNT(*) FROM user_profiles)",
-        )
-        .fetch_one(&inspect.pool)
-        .await
-        .unwrap_or_else(|error| panic!("count rolled back rows: {error}"));
-        assert_eq!(product_rows, 0);
-        sqlx::query("DROP TRIGGER reject_initial_profile")
-            .execute(&inspect.pool)
-            .await
-            .unwrap_or_else(|error| panic!("remove trigger: {error}"));
-        drop(inspect);
-
-        let restored =
-            SqliteStore::open_path_with_initial_room(&path, &room, &settings, &participant)
-                .await
-                .unwrap_or_else(|error| panic!("retry restore: {error}"));
-        assert_eq!(
-            restored
-                .list_room_directory(true)
-                .await
-                .unwrap_or_else(|error| panic!("restored directory: {error}"))
-                .len(),
-            1
-        );
+            .unwrap_or_else(|error| panic!("remove required participant: {error}"));
+        drop(complete);
+        assert!(matches!(
+            SqliteStore::open_path_with_initial_room(
+                &incomplete_path,
+                &room,
+                &settings,
+                &participant
+            )
+            .await,
+            Err(crate::PersistenceError::InitializationNotAllowed)
+        ));
     }
 }

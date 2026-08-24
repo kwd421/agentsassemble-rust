@@ -26,7 +26,7 @@ import {
 
 export type { RoomChannel } from "./roomChannelCodec";
 
-export type ConversationMode = "ordered" | "ambient" | "continuous";
+export type ConversationMode = "ordered" | "ambient";
 export type RoomToolMode = "chat" | "tabletop";
 
 export type RoomGlobalAppearance = Omit<RoomAppearance, "notifications">;
@@ -41,7 +41,6 @@ export interface RoomGlobalSettings {
   conversationMode: ConversationMode;
   toolMode: RoomToolMode;
   orderedExcludePreviousSpeaker: boolean;
-  maxRelayTurns: number;
   channels: RoomChannel[];
   activityPlugin?: string;
 }
@@ -54,7 +53,6 @@ export type RoomGlobalSettingsUpdate = {
   conversationMode?: ConversationMode;
   toolMode?: RoomToolMode;
   orderedExcludePreviousSpeaker?: boolean;
-  maxRelayTurns?: number;
   channels?: RoomChannel[];
   activityPlugin?: string;
 };
@@ -73,11 +71,9 @@ export interface RoomSettings {
   shortLabel: string;
   appearance: RoomAppearance;
   channelSettings: Record<string, ChannelSettings>;
-  // continuous is retained only for rooms that already use the legacy relay mode.
   conversationMode: ConversationMode;
   toolMode: RoomToolMode;
   orderedExcludePreviousSpeaker: boolean;
-  maxRelayTurns: number;
 }
 
 export interface ServerRoom {
@@ -198,7 +194,6 @@ type ApiRoomSettings = {
   conversation_mode?: ConversationMode;
   tool_mode?: RoomToolMode;
   ordered_exclude_previous_speaker?: boolean;
-  max_relay_turns?: number;
   channels?: ApiRoomChannel[];
   activity_plugin?: string;
 };
@@ -209,6 +204,7 @@ type ApiChannelSettings = {
 };
 
 type ApiUserProfile = {
+  revision?: number;
   display_name?: string;
   handle?: string;
   status?: UserProfile["status"];
@@ -239,14 +235,10 @@ function normalizeRoomSettings(payload: ApiRoomSettings | undefined, fallbackRoo
       inviteScope: appearance.invite_scope || "room",
     },
     channelSettings: normalizeChannelSettings(payload?.channel_settings),
-    conversationMode:
-      payload?.conversation_mode === "ambient" || payload?.conversation_mode === "continuous"
-        ? payload.conversation_mode
-        : "ordered",
+    conversationMode: payload?.conversation_mode === "ambient" ? "ambient" : "ordered",
     toolMode: payload?.tool_mode === "tabletop" ? "tabletop" : "chat",
     orderedExcludePreviousSpeaker:
       payload?.ordered_exclude_previous_speaker !== false,
-    maxRelayTurns: Math.min(20, Math.max(2, Number(payload?.max_relay_turns || 6))),
   };
 }
 
@@ -269,10 +261,9 @@ export function normalizeRoomGlobalSettings(
     typeof appearance.icon_image_url !== "string" ||
     typeof appearance.icon_label !== "string" ||
     typeof appearance.invite_scope !== "string" ||
-    !["ordered", "ambient", "continuous"].includes(String(payload.conversation_mode || "")) ||
+    !["ordered", "ambient"].includes(String(payload.conversation_mode || "")) ||
     !["chat", "tabletop"].includes(String(payload.tool_mode || "")) ||
     typeof payload.ordered_exclude_previous_speaker !== "boolean" ||
-    !Number.isInteger(payload.max_relay_turns) ||
     !Array.isArray(payload.channels)
   ) {
     return null;
@@ -293,7 +284,6 @@ export function normalizeRoomGlobalSettings(
     conversationMode: payload.conversation_mode as ConversationMode,
     toolMode: payload.tool_mode as RoomToolMode,
     orderedExcludePreviousSpeaker: payload.ordered_exclude_previous_speaker,
-    maxRelayTurns: Number(payload.max_relay_turns),
     channels: normalizeRoomChannelList(payload.channels as ApiRoomChannel[]),
     activityPlugin: String(payload.activity_plugin || ""),
   };
@@ -312,9 +302,6 @@ export function roomGlobalSettingsUpdateToApi(
   if (updates.orderedExcludePreviousSpeaker !== undefined) {
     payload.ordered_exclude_previous_speaker =
       updates.orderedExcludePreviousSpeaker;
-  }
-  if (updates.maxRelayTurns !== undefined) {
-    payload.max_relay_turns = updates.maxRelayTurns;
   }
   if (updates.channels !== undefined) {
     payload.channels = roomChannelListToApi(updates.channels);
@@ -382,19 +369,40 @@ function channelSettingsToApi(
 }
 
 function normalizeUserProfile(payload: ApiUserProfile | undefined): UserProfile {
+  if (
+    !payload ||
+    !Number.isInteger(payload.revision) ||
+    Number(payload.revision) < 1 ||
+    typeof payload.display_name !== "string" ||
+    typeof payload.handle !== "string" ||
+    !["online", "idle", "dnd", "offline"].includes(String(payload.status || "")) ||
+    typeof payload.custom_status !== "string" ||
+    typeof payload.avatar_label !== "string" ||
+    typeof payload.avatar_image_url !== "string" ||
+    !["default", "forest", "midnight", "ember", "custom"].includes(
+      String(payload.banner_preset || "")
+    ) ||
+    typeof payload.accent_color !== "string" ||
+    typeof payload.mic_muted !== "boolean" ||
+    typeof payload.deafened !== "boolean" ||
+    typeof payload.created_at !== "string" ||
+    typeof payload.updated_at !== "string"
+  ) {
+    throw new Error("서버 사용자 프로필 응답이 현재 계약과 일치하지 않습니다.");
+  }
   return {
-    displayName: String(payload?.display_name || "SeiNel"),
-    handle: String(payload?.handle || "seinel."),
-    status: payload?.status || "online",
-    customStatus: String(payload?.custom_status || "AgentsAssemble"),
-    avatarLabel: String(payload?.avatar_label || "나"),
-    avatarImage: payload?.avatar_image_url || undefined,
-    bannerPreset: payload?.banner_preset || "default",
-    accentColor: String(payload?.accent_color || "#5865f2"),
-    micMuted: Boolean(payload?.mic_muted ?? true),
-    deafened: Boolean(payload?.deafened ?? false),
-    createdAt: payload?.created_at,
-    updatedAt: payload?.updated_at,
+    displayName: payload.display_name,
+    handle: payload.handle,
+    status: payload.status as UserProfile["status"],
+    customStatus: payload.custom_status,
+    avatarLabel: payload.avatar_label,
+    avatarImage: payload.avatar_image_url || undefined,
+    bannerPreset: payload.banner_preset as UserProfile["bannerPreset"],
+    accentColor: payload.accent_color,
+    micMuted: payload.mic_muted,
+    deafened: payload.deafened,
+    createdAt: payload.created_at,
+    updatedAt: payload.updated_at,
   };
 }
 
@@ -442,7 +450,6 @@ export function saveRoomSettings({
   appearance,
   channelSettings,
   conversationMode,
-  maxRelayTurns,
   identity = {},
 }: RoomSettingsUpdate): Promise<RoomSettings> {
   return postJsonWithIdentity<{ room_id: string; settings: ApiRoomSettings }>(
@@ -455,7 +462,6 @@ export function saveRoomSettings({
       appearance: roomAppearanceToApi(appearance),
       channel_settings: channelSettingsToApi(channelSettings),
       conversation_mode: conversationMode,
-      max_relay_turns: maxRelayTurns,
     },
     identity
   ).then((payload) => normalizeRoomSettings(payload.settings, payload.room_id || roomId));

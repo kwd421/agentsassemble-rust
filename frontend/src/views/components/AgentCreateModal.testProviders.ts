@@ -4,7 +4,7 @@ export function codexProvider(): NativeCliProviderAvailability {
   return {
     id: "codex",
     display_name: "Codex",
-    provider_kind: "codex_cli",
+    provider_kind: "codex_live_session",
     runtime_kind: "live_cli" as const,
     connection_kind: "native_cli_bridge" as const,
     executable: "codex",

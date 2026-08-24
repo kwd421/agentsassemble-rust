@@ -45,7 +45,3 @@ export function profileCssVars(profile: UserProfile): CSSProperties {
       : undefined,
   } as CSSProperties;
 }
-
-export function saveDisplayNameForComposers(profile: UserProfile) {
-  window.localStorage.setItem("agentsassemble.name", profile.displayName);
-}

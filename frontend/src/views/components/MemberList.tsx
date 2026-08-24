@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { Bot, Search, UserMinus, Volume2, VolumeX } from "lucide-react";
 import type {
@@ -6,10 +6,6 @@ import type {
   RoomAgentSession,
   RoomMember,
 } from "../../api";
-import {
-  loadAgentProfileSettings,
-  type AgentProfileSettings,
-} from "../../lib/agentProfileSettings";
 
 import type {
   AgentQuotaVisibilityViewer,
@@ -28,16 +24,11 @@ import "./member/MemberOwnership.css";
 
 export type { RoleId };
 
-function roleStorageKey(roomId: string) {
-  return `agentsassemble.roomRoles.${roomId || "default"}`;
-}
-
 export default function MemberList({
   agents,
   members = [],
   roomSessionToken = "",
   viewerParticipantId = "operator-local",
-  roomId,
   roomName,
   roleOverrides,
   onRoleChange,
@@ -89,27 +80,21 @@ export default function MemberList({
   agentActivityVisibility?: Record<string, boolean>;
   onAgentActivityVisibilityChange?: (session: RoomAgentSession, visible: boolean) => void;
 }) {
-  const [localRoleOverrides, setLocalRoleOverrides] = useState<Record<string, RoleId>>({});
   const [localQuery, setLocalQuery] = useState("");
   const [detailEntryId, setDetailEntryId] = useState("");
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [memberMenu, setMemberMenu] = useState<{ x: number; y: number; entry: MemberEntry } | null>(null);
   const [muteBusy, setMuteBusy] = useState(false);
   const [roleChangeError, setRoleChangeError] = useState("");
-  const [agentProfileSettings, setAgentProfileSettings] = useState<Record<string, AgentProfileSettings>>(
-    () => loadAgentProfileSettings()
-  );
   const query = searchQuery ?? localQuery;
   const { entries, contextBadges } = useMemberEntries({
     agents,
     members,
     viewerParticipantId,
     roleOverrides,
-    localRoleOverrides,
     agentSessions,
     quotaViewer,
     canEditRoles,
-    agentProfileSettings,
   });
   const detailEntry = useMemo(
     () => entries.find((entry) => entry.id === detailEntryId) || null,
@@ -119,19 +104,6 @@ export default function MemberList({
     () => buildMemberOwnerGroups(entries, viewerParticipantId, query),
     [entries, query, viewerParticipantId]
   );
-
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(roleStorageKey(roomId));
-      setLocalRoleOverrides(stored ? JSON.parse(stored) : {});
-    } catch {
-      setLocalRoleOverrides({});
-    }
-  }, [roomId]);
-
-  useEffect(() => {
-    setAgentProfileSettings(loadAgentProfileSettings());
-  }, [roomId]);
 
   function handleMemberContextMenu(entry: MemberEntry, event: ReactMouseEvent<HTMLElement>) {
     // Host-only moderation: right-clicking a participant opens the mute menu.
@@ -190,15 +162,7 @@ export default function MemberList({
       }
       return;
     }
-    setLocalRoleOverrides((previous) => {
-      const next = { ...previous, [memberId]: role };
-      try {
-        localStorage.setItem(roleStorageKey(roomId), JSON.stringify(next));
-      } catch {
-        // Local role grouping is a UI preference; keep the in-memory state if storage is unavailable.
-      }
-      return next;
-    });
+    setRoleChangeError("방 역할 권위를 사용할 수 없습니다.");
   }
 
   function toggleGroup(groupId: string) {
@@ -312,7 +276,6 @@ export default function MemberList({
           roomSessionToken={roomSessionToken}
           onClose={() => setDetailEntryId("")}
           onSessionActionComplete={onSessionActionComplete}
-          onAgentProfileSettingsChange={setAgentProfileSettings}
           onParticipantKick={canModerate ? onParticipantKick : undefined}
           onAgentControl={onAgentControl}
           availableProviders={availableProviders}

@@ -111,6 +111,7 @@ dependencies = [
  "hmac 0.12.1",
  "hyper",
  "hyper-util",
+ "rand 0.10.2",
  "reqwest",
  "rmcp",
  "same-file",

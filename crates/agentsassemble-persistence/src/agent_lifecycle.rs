@@ -25,7 +25,7 @@ use crate::{
     authority::active_room_for_principal,
     command_admission::existing_command,
     turn_authority::active_turn_authority,
-    turn_queue::merge_event_ids,
+    turn_queue::merge_room_inputs,
 };
 
 const START: &str = "agent.start";
@@ -150,8 +150,8 @@ impl SqliteStore {
         }
         if session.runtime_profile_version != CURRENT_RUNTIME_PROFILE_VERSION {
             return Err(rejected(
-                "profile_migration_required",
-                "This Agent Session runtime profile must be saved again before it can start.",
+                "runtime_profile_unsupported",
+                "This Agent Session runtime profile is not supported by the current runtime.",
             ));
         }
         let incomplete = matching_start_intent(&mut session, &operation_id)?;
@@ -445,8 +445,8 @@ impl SqliteStore {
             "prepared",
             "stale_stop_confirmation",
         )?;
-        session.pending_event_ids = merged_turn_queue(&session)?;
-        session.inflight_event_ids.clear();
+        session.pending_inputs = merged_turn_queue(&session)?;
+        session.inflight_inputs.clear();
         "unavailable".clone_into(&mut session.public.status);
         session.public.enabled = false;
         "disconnected".clone_into(&mut session.public.runtime_status);
@@ -531,8 +531,8 @@ impl SqliteStore {
             &operation_id,
         );
         finish_lifecycle_command(&mut transaction, &reservation).await?;
-        session.pending_event_ids = merged_turn_queue(&session)?;
-        session.inflight_event_ids.clear();
+        session.pending_inputs = merged_turn_queue(&session)?;
+        session.inflight_inputs.clear();
         "detached".clone_into(&mut session.public.status);
         session.public.enabled = false;
         "stopped".clone_into(&mut session.public.runtime_status);
@@ -651,12 +651,14 @@ fn require_valid_turn_authority(session: &DurableAgentSession) -> Result<(), Per
     }
 }
 
-fn merged_turn_queue(session: &DurableAgentSession) -> Result<Vec<String>, PersistenceError> {
-    merge_event_ids(
+fn merged_turn_queue(
+    session: &DurableAgentSession,
+) -> Result<Vec<agentsassemble_domain::QueuedRoomInput>, PersistenceError> {
+    merge_room_inputs(
         session
-            .inflight_event_ids
+            .inflight_inputs
             .iter()
-            .chain(&session.pending_event_ids),
+            .chain(&session.pending_inputs),
     )
     .map_err(|_| invalid_turn_queue())
 }

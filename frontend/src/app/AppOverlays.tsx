@@ -109,7 +109,6 @@ export default function AppOverlays({ controller }: { controller: AppController 
             orderedExcludePreviousSpeaker={
               roomSettings.orderedExcludePreviousSpeakerFor(settingsModalRoom)
             }
-            maxRelayTurns={roomSettings.maxRelayTurnsFor(settingsModalRoom)}
             canInvite={!guestLocked}
             onClose={() => setSettingsModal(null)}
             onInvite={() => {
@@ -144,9 +143,6 @@ export default function AppOverlays({ controller }: { controller: AppController 
                 settingsModalRoom,
                 exclude
               )
-            }
-            onMaxRelayTurnsChange={(turns) =>
-              roomSettings.updateMaxRelayTurns(settingsModalRoom, turns)
             }
             onRetrySettings={() => roomSettings.refresh(settingsModalRoom)}
             onDeleteRoom={(confirmationName) => deleteRoom(settingsModalRoom.id, confirmationName)}

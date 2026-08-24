@@ -2,4 +2,4 @@
 import type { Actor } from "./Actor.js";
 import type { JsonValue } from "./serde_json/JsonValue.js";
 
-export type RoomEvent = { v: number, id: string, seq: number, created_at: string, room_id: string, type: string, actor: Actor, participant_id?: string | null, participant_type?: string | null, actor_id?: string | null, actor_type?: string | null, display_name?: string | null, content?: string | null, message_kind?: string | null, relay_depth?: number | null, } & ({ [key in string]: number | string | boolean | Array<JsonValue> | { [key in string]: JsonValue } | null });
+export type RoomEvent = { v: number, id: string, seq: number, created_at: string, room_id: string, type: string, actor: Actor, participant_id?: string | null, participant_type?: string | null, actor_id?: string | null, actor_type?: string | null, display_name?: string | null, content?: string | null, message_kind?: string | null, } & ({ [key in string]: number | string | boolean | Array<JsonValue> | { [key in string]: JsonValue } | null });

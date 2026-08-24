@@ -144,10 +144,10 @@ describe("projectRoomEventsToTimeline", () => {
     expect(boundedHistory).toEqual([]);
   });
 
-  it("groups legacy delta and final events by source event and actor", () => {
+  it("groups delta and final events by source event and actor", () => {
     const timeline = projectRoomEventsToTimeline([
-      event({ id: "legacy-delta", seq: 1, type: "message_delta", source_event_id: "human-1", content: "clean" }),
-      event({ id: "legacy-final", seq: 2, type: "message_final", source_event_id: "human-1", content: "clean final" }),
+      event({ id: "delta-1", seq: 1, type: "message_delta", source_event_id: "human-1", content: "clean" }),
+      event({ id: "final-1", seq: 2, type: "message_final", source_event_id: "human-1", content: "clean final" }),
     ]);
 
     expect(timeline).toHaveLength(1);
@@ -315,7 +315,7 @@ describe("projectRoomEventsToTimeline", () => {
 
   it("keeps the event author snapshot only when the participant is unavailable", () => {
     const timeline = projectRoomEventsToTimeline([
-      event({ display_name: "Imported Agent", content: "legacy" }),
+      event({ display_name: "Imported Agent", content: "imported" }),
     ]);
 
     expect(timeline[0].name).toBe("Imported Agent");

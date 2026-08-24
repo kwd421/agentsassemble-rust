@@ -8,6 +8,7 @@ import {
   rememberGuestProfile,
   rememberStartupIdentitySelection,
 } from "../../lib/deviceIdentity";
+import { DEFAULT_USER_PROFILE } from "../../lib/userProfileModel";
 import StartupIdentityGate from "./StartupIdentityGate";
 
 const centralMocks = vi.hoisted(() => ({
@@ -58,7 +59,10 @@ describe("StartupIdentityGate", () => {
       account: null,
       google: { enabled: false, client_id: "", unavailable_reason: "" },
     });
-    vi.mocked(saveUserProfile).mockResolvedValue({} as never);
+    vi.mocked(saveUserProfile).mockResolvedValue({
+      ...DEFAULT_USER_PROFILE,
+      displayName: "Local Guest",
+    });
     const onComplete = vi.fn();
 
     render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
@@ -68,7 +72,10 @@ describe("StartupIdentityGate", () => {
     await userEvent.type(name, "Local Guest");
     await userEvent.click(screen.getByRole("button", { name: "게스트로 계속" }));
 
-    expect(rememberGuestProfile).toHaveBeenCalledWith({ displayName: "Local Guest" });
+    expect(rememberGuestProfile).toHaveBeenCalledWith({
+      displayName: "Local Guest",
+      avatarImage: undefined,
+    });
     expect(saveUserProfile).toHaveBeenCalled();
     expect(onComplete).toHaveBeenCalledOnce();
   });

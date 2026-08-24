@@ -35,10 +35,8 @@ pub enum PersistenceError {
     InitializationNotAllowed,
     #[error("database schema version marker is invalid: {0}")]
     InvalidSchemaVersion(String),
-    #[error("database schema version {found} is newer than supported version {supported}")]
-    UnsupportedSchemaVersion { found: i64, supported: i64 },
-    #[error("database contains a lifecycle intent that cannot be safely migrated")]
-    IncompleteLifecycleMigration,
+    #[error("database schema version {found} does not match required version {required}")]
+    SchemaVersionMismatch { found: i64, required: i64 },
     #[error("database server identity is missing or invalid")]
     InvalidServerId,
     #[error("room does not exist")]
@@ -99,7 +97,7 @@ impl SqliteStore {
         .fetch_optional(&self.pool)
         .await?;
         match owner {
-            Some(owner) if owner == SCHEMA_OWNER => self.migrate_schema().await,
+            Some(owner) if owner == SCHEMA_OWNER => self.validate_schema_version().await,
             Some(owner) => Err(PersistenceError::AuthorityConflict(owner)),
             None => Err(PersistenceError::UnownedDatabase),
         }
@@ -396,11 +394,7 @@ mod tests {
             updated_at: now,
         };
         store
-            .initialize_room(
-                &room,
-                &RoomSettings::defaults("General".to_owned()),
-                &participant,
-            )
+            .initialize_room(&room, &RoomSettings::defaults("General"), &participant)
             .await
             .unwrap_or_else(|error| panic!("bootstrap fixture: {error}"));
         let principal = AuthenticatedPrincipal {

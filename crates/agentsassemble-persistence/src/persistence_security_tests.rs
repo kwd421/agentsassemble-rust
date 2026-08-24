@@ -31,11 +31,7 @@ async fn initialized_store() -> (SqliteStore, AuthenticatedPrincipal, Room, Part
         updated_at: now,
     };
     store
-        .initialize_room(
-            &room,
-            &RoomSettings::defaults("General".to_owned()),
-            &participant,
-        )
+        .initialize_room(&room, &RoomSettings::defaults("General"), &participant)
         .await
         .unwrap_or_else(|error| panic!("initialize fixture: {error}"));
     let principal = AuthenticatedPrincipal {
@@ -191,11 +187,7 @@ async fn existing_authority_cannot_recreate_first_run_membership() {
         updated_at: now,
     };
     first
-        .initialize_room(
-            &room,
-            &RoomSettings::defaults("General".to_owned()),
-            &participant,
-        )
+        .initialize_room(&room, &RoomSettings::defaults("General"), &participant)
         .await
         .unwrap_or_else(|error| panic!("initialize authority: {error}"));
     drop(first);
@@ -205,11 +197,7 @@ async fn existing_authority_cannot_recreate_first_run_membership() {
     assert!(!reopened.was_created());
     assert!(matches!(
         reopened
-            .initialize_room(
-                &room,
-                &RoomSettings::defaults("General".to_owned()),
-                &participant,
-            )
+            .initialize_room(&room, &RoomSettings::defaults("General"), &participant,)
             .await,
         Err(PersistenceError::InitializationNotAllowed)
     ));

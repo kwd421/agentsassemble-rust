@@ -32,12 +32,15 @@ mod room_portal;
 mod room_portal_mcp;
 #[cfg(any(unix, windows))]
 mod room_portal_terminal;
+mod room_portal_tool_contract;
 mod runtime;
 mod runtime_authority;
 mod runtime_lease;
 mod runtime_recovery;
 mod selection;
 mod selection_input;
+#[cfg(test)]
+mod test_support;
 #[cfg(unix)]
 mod unix_custody;
 #[cfg(unix)]
@@ -46,7 +49,9 @@ mod unix_process_tree;
 pub use catalog::ProviderCatalogService;
 #[cfg(unix)]
 pub use guardian::run_process_helper_if_requested;
-pub use room_portal::ProviderTurnOutcome;
+pub use room_portal::{
+    ProviderRoomToolCommand, ProviderRoomToolError, ProviderRoomToolIngress, ProviderTurnOutcome,
+};
 #[cfg(any(unix, windows))]
 pub use room_portal_terminal::run_room_helper_if_requested;
 pub use runtime::{

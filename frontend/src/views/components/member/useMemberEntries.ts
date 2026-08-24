@@ -5,9 +5,6 @@ import type {
   RoomAgentSession,
   RoomMember,
 } from "../../../api";
-import type {
-  AgentProfileSettings,
-} from "../../../lib/agentProfileSettings";
 import { providerExecutionLabel, roomContextSummaryBadges } from "../../../lib/agentLabels";
 import {
   canViewAgentQuota,
@@ -33,37 +30,25 @@ type MemberEntriesOptions = {
   members: RoomMember[];
   viewerParticipantId: string;
   roleOverrides?: Record<string, string>;
-  localRoleOverrides: Record<string, RoleId>;
   agentSessions: RoomAgentSession[];
   quotaViewer?: AgentQuotaVisibilityViewer;
   canEditRoles: boolean;
-  agentProfileSettings: Record<string, AgentProfileSettings>;
 };
-
-function localViewerDisplayName() {
-  try {
-    return String(window.localStorage.getItem("agentsassemble.name") || "").trim();
-  } catch {
-    return "";
-  }
-}
 
 export function useMemberEntries({
   agents,
   members,
   viewerParticipantId,
   roleOverrides,
-  localRoleOverrides,
   agentSessions,
   quotaViewer,
   canEditRoles,
-  agentProfileSettings,
 }: MemberEntriesOptions): {
   entries: MemberEntry[];
   contextBadges: ReturnType<typeof roomContextSummaryBadges>;
 } {
   const contextBadges = roomContextSummaryBadges(agents);
-  const effectiveRoleOverrides = (roleOverrides || localRoleOverrides) as Record<string, RoleId>;
+  const effectiveRoleOverrides = (roleOverrides || {}) as Record<string, RoleId>;
 
   const entries = useMemo<MemberEntry[]>(() => {
     const memberById = new Map(members.map((member) => [member.participant_id, member]));
@@ -72,11 +57,9 @@ export function useMemberEntries({
     );
     const mutedById = new Map(members.map((member) => [member.participant_id, Boolean(member.muted)]));
     const viewerMember = memberById.get(viewerParticipantId);
-    const viewerEntryId = viewerMember?.participant_id || viewerParticipantId || "human:self";
-    const viewerDisplayName = String(
-      viewerMember?.display_name || localViewerDisplayName() || "SeiNel"
-    ).trim();
-    const human: MemberEntry = {
+    const viewerEntryId = viewerMember?.participant_id || viewerParticipantId;
+    const viewerDisplayName = String(viewerMember?.display_name || "").trim();
+    const human: MemberEntry | null = viewerMember ? {
       id: viewerEntryId,
       member: viewerMember,
       displayName: viewerDisplayName,
@@ -94,13 +77,12 @@ export function useMemberEntries({
       ownerId: viewerEntryId,
       ownerDisplayName: viewerDisplayName,
       icon: UserCheck,
-    };
+    } : null;
     const agentEntries = agents.map((agent) => {
       const member = memberById.get(agent.agent_id);
       const agentSession = sessionByParticipantId.get(agent.agent_id);
       const inferredRole = inferAgentRole(agent);
       const role = effectiveRoleOverrides[agent.agent_id] || inferredRole;
-      const profile = agentProfileSettings[agent.agent_id] || {};
       const canViewQuotaForAgent = canViewAgentQuota(agent, quotaViewer);
       const ownerId = String(member?.owner_id || agent.owner_id || "").trim();
       const ownedByViewer = ownerId
@@ -115,11 +97,11 @@ export function useMemberEntries({
       const agentDisplayName = String(
         canonicalIdentity
           ? canonicalIdentity.display_name || agent.agent_id
-          : profile.displayName || agent.display_name || agent.agent_id
+          : agent.display_name || agent.agent_id
       ).trim();
       const avatarImage = canonicalIdentity
         ? canonicalIdentity.avatar_image_url
-        : profile.avatarImage || agent.avatar_image_url;
+        : agent.avatar_image_url;
       const executionDetail = providerExecutionLabel(agent);
       const modelLabel = String(agentSession?.model || agent.model_id || "").trim();
       const reasoningEffort = String(
@@ -166,7 +148,6 @@ export function useMemberEntries({
         ownerId: ownerId || (ownedByViewer ? viewerEntryId : undefined),
         ownerDisplayName,
         agentDisplayName,
-        agentProfile: profile,
         avatarImage,
         providerKind: String(
           canonicalIdentity?.provider_kind || agent.provider_kind || ""
@@ -240,9 +221,8 @@ export function useMemberEntries({
           icon: ROLE_OPTIONS.find((option) => option.id === role)?.icon || typeMeta.icon,
         } satisfies MemberEntry;
       });
-    return [human, ...agentEntries, ...invitedEntries];
+    return [...(human ? [human] : []), ...agentEntries, ...invitedEntries];
   }, [
-    agentProfileSettings,
     agentSessions,
     agents,
     canEditRoles,

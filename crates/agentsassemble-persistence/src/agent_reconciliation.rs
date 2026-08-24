@@ -7,7 +7,7 @@ use sqlx::{Row, Sqlite, Transaction};
 
 use crate::{
     PersistenceError, SqliteStore, agent_lifecycle_reservations::mark_lifecycle_owner_lost,
-    turn_authority::active_turn_authority, turn_queue::merge_event_ids,
+    turn_authority::active_turn_authority, turn_queue::merge_room_inputs,
 };
 
 const ACTIVE_RUNTIME_STATES: [&str; 6] = [
@@ -112,7 +112,7 @@ impl SqliteStore {
     }
 
     #[cfg(test)]
-    /// Applies an ambiguous observation to every candidate for legacy recovery tests.
+    /// Applies an ambiguous observation to every candidate for recovery tests.
     ///
     /// # Errors
     ///
@@ -444,7 +444,7 @@ fn confirmed_stop_needs_reconciliation(session: &DurableAgentSession) -> bool {
             || session.public.provider_session_reused
             || !session.public.active_turn_id.is_empty()
             || !session.public.turn_phase.is_empty()
-            || !session.inflight_event_ids.is_empty()
+            || !session.inflight_inputs.is_empty()
             || session.public.status != "unavailable")
 }
 
@@ -531,14 +531,14 @@ fn invalidate_previous_runtime_owner(session: &mut DurableAgentSession) -> bool 
 }
 
 fn merge_inflight_events(session: &mut DurableAgentSession) -> Result<(), PersistenceError> {
-    session.pending_event_ids = merge_event_ids(
+    session.pending_inputs = merge_room_inputs(
         session
-            .inflight_event_ids
+            .inflight_inputs
             .iter()
-            .chain(&session.pending_event_ids),
+            .chain(&session.pending_inputs),
     )
     .map_err(|_| invalid_stored_authority())?;
-    session.inflight_event_ids.clear();
+    session.inflight_inputs.clear();
     session.active_source_event_id.clear();
     session.input_up_to_event_id.clear();
     session.input_up_to_seq = 0;

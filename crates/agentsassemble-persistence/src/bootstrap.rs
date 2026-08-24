@@ -56,29 +56,44 @@ impl SqliteStore {
         Ok(())
     }
 
-    pub(crate) async fn restore_missing_initial_room(
+    pub(crate) async fn verify_initial_product_state(
         &self,
         initial_room: InitialRoom<'_>,
     ) -> Result<(), PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        let room_count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM rooms")
-            .fetch_one(&mut *transaction)
-            .await?;
-        if room_count != 0 {
-            transaction.commit().await?;
-            return Ok(());
-        }
-        let profile_count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM user_profiles")
-            .fetch_one(&mut *transaction)
-            .await?;
-        if profile_count != 0 {
-            transaction.commit().await?;
-            return Ok(());
-        }
-        require_empty_product_state(&mut transaction).await?;
-        insert_initial_room(&mut transaction, initial_room).await?;
+        let room_count =
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM rooms WHERE room_id = ?")
+                .bind(&initial_room.room.room_id)
+                .fetch_one(&mut *transaction)
+                .await?;
+        let profile_count =
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM user_profiles WHERE user_id = ?")
+                .bind(agentsassemble_domain::LOCAL_OPERATOR_USER_ID)
+                .fetch_one(&mut *transaction)
+                .await?;
+        let participant_count = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM participants WHERE room_id = ? AND participant_id = ?",
+        )
+        .bind(&initial_room.room.room_id)
+        .bind(&initial_room.participant.participant_id)
+        .fetch_one(&mut *transaction)
+        .await?;
+        let publication_cursor_count = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM room_event_publication_cursors WHERE room_id = ?",
+        )
+        .bind(&initial_room.room.room_id)
+        .fetch_one(&mut *transaction)
+        .await?;
         transaction.commit().await?;
-        Ok(())
+        if room_count == 1
+            && profile_count == 1
+            && participant_count == 1
+            && publication_cursor_count == 1
+        {
+            Ok(())
+        } else {
+            Err(PersistenceError::InitializationNotAllowed)
+        }
     }
 }
 
@@ -109,7 +124,7 @@ async fn install_metadata(
     sqlx::query(
         "INSERT INTO runtime_metadata(key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
     )
-    .bind(crate::migration::CURRENT_SCHEMA_VERSION.to_string())
+    .bind(crate::schema_version::CURRENT_SCHEMA_VERSION.to_string())
     .execute(&mut **transaction)
     .await?;
     Ok(())

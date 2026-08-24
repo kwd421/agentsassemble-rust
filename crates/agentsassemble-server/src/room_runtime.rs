@@ -5,13 +5,15 @@ use std::{
 };
 
 use agentsassemble_domain::{
-    AuthenticatedPrincipal, RoomEvent, public_event_for_principal, public_value_for_principal,
+    AuthenticatedPrincipal, RoomEvent, RoomRandomRequest, public_event_for_principal,
+    public_value_for_principal,
 };
 use agentsassemble_persistence::{
-    AgentRuntimeStarted, AgentStartPlan, AgentStopPlan, AgentTurnAssignment, CommandOutcome,
-    PersistenceError, RoomCommandMutation, SqliteStore,
+    AgentTurnAssignment, CommandOutcome, PersistenceError, RoomCommandMutation, SqliteStore,
 };
-use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService, ProviderRuntimeStarted};
+use agentsassemble_provider::{
+    ProviderAdapter, ProviderCatalogService, ProviderRoomToolCommand, ProviderRoomToolIngress,
+};
 use serde_json::Value;
 use thiserror::Error;
 use tokio::{
@@ -30,6 +32,7 @@ use crate::{
 };
 
 const ROOM_QUEUE_CAPACITY: usize = 128;
+const ROOM_TOOL_QUEUE_CAPACITY: usize = 64;
 const EVENT_RECEIVER_CAPACITY: usize = 256;
 const PUBLICATION_WAKE_CAPACITY: usize = 128;
 const PUBLICATION_RETRY_INTERVAL: Duration = Duration::from_millis(250);
@@ -47,11 +50,11 @@ pub enum RoomShutdownError {
     Persistence(String),
 }
 
-struct RoomCommand {
-    principal: AuthenticatedPrincipal,
-    request_id: String,
-    action: String,
-    payload: Value,
+pub(crate) struct RoomCommand {
+    pub(crate) principal: AuthenticatedPrincipal,
+    pub(crate) request_id: String,
+    pub(crate) action: String,
+    pub(crate) payload: Value,
     reply: oneshot::Sender<Result<CommandOutcome, PersistenceError>>,
 }
 
@@ -73,6 +76,7 @@ struct RoomTaskContext {
     provider_adapter: ProviderAdapter,
     cancellation: CancellationToken,
     event_tx: broadcast::Sender<RoomEvent>,
+    room_tool_ingress: ProviderRoomToolIngress,
 }
 
 #[derive(Clone)]
@@ -208,6 +212,8 @@ impl RoomRuntime {
         let (command_tx, command_rx) = mpsc::channel::<RoomCommand>(ROOM_QUEUE_CAPACITY);
         let (event_tx, _) = broadcast::channel(EVENT_RECEIVER_CAPACITY);
         let (publication_tx, publication_rx) = mpsc::channel(PUBLICATION_WAKE_CAPACITY);
+        let (room_tool_ingress, room_tool_rx) =
+            ProviderRoomToolIngress::channel(ROOM_TOOL_QUEUE_CAPACITY);
         let handle = RoomHandle {
             commands: command_tx,
             events: event_tx.clone(),
@@ -226,9 +232,11 @@ impl RoomRuntime {
                 provider_adapter,
                 cancellation,
                 event_tx,
+                room_tool_ingress,
             },
             command_rx,
             publication_rx,
+            room_tool_rx,
         );
         self.tasks.lock().await.push(task);
         handle
@@ -239,6 +247,7 @@ fn spawn_room_task(
     context: RoomTaskContext,
     mut command_rx: mpsc::Receiver<RoomCommand>,
     mut publication_rx: mpsc::Receiver<PublicationWake>,
+    mut room_tool_rx: mpsc::Receiver<ProviderRoomToolCommand>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
         let RoomTaskContext {
@@ -248,6 +257,7 @@ fn spawn_room_task(
             provider_adapter,
             cancellation,
             event_tx,
+            room_tool_ingress,
         } = context;
         let mut turn_tasks = JoinSet::new();
         let mut publication_retry = tokio::time::interval(PUBLICATION_RETRY_INTERVAL);
@@ -273,6 +283,10 @@ fn spawn_room_task(
                     let Some(result) = result else { continue; };
                     RoomInput::Provider(Box::new(result))
                 }
+                tool = room_tool_rx.recv() => {
+                    let Some(tool) = tool else { break; };
+                    RoomInput::Tool(tool)
+                }
             };
             match input {
                 RoomInput::Command(command) => {
@@ -283,6 +297,7 @@ fn spawn_room_task(
                         &event_tx,
                         &mut turn_tasks,
                         command,
+                        &room_tool_ingress,
                     )
                     .await;
                 }
@@ -293,6 +308,13 @@ fn spawn_room_task(
                         &event_tx,
                         &mut turn_tasks,
                         *result,
+                        &room_tool_ingress,
+                    )
+                    .await;
+                }
+                RoomInput::Tool(command) => {
+                    crate::room_random_runtime::handle_provider_room_tool(
+                        &store, &event_tx, &room_id, command,
                     )
                     .await;
                 }
@@ -314,6 +336,7 @@ async fn handle_room_command(
     event_tx: &broadcast::Sender<RoomEvent>,
     turn_tasks: &mut JoinSet<ProviderTurnTaskResult>,
     mut command: RoomCommand,
+    room_tool_ingress: &ProviderRoomToolIngress,
 ) {
     let execution = match store.resolve_principal(&command.principal).await {
         Ok(principal) => {
@@ -332,13 +355,18 @@ async fn handle_room_command(
     let CommandExecution {
         reply,
         committed_events,
-        assignment,
+        assignments,
     } = execution;
     if !committed_events.is_empty() {
         publish_durable_room_events(store, event_tx, &command.principal.room_id).await;
     }
-    if let Some(assignment) = assignment {
-        spawn_provider_turn(turn_tasks, provider_adapter.clone(), assignment);
+    for assignment in assignments {
+        spawn_provider_turn(
+            turn_tasks,
+            provider_adapter.clone(),
+            assignment,
+            room_tool_ingress.clone(),
+        );
     }
     let reply = reply.and_then(|outcome| public_command_outcome(&command.principal, outcome));
     let _ = command.reply.send(reply);
@@ -350,6 +378,7 @@ async fn handle_provider_result(
     event_tx: &broadcast::Sender<RoomEvent>,
     turn_tasks: &mut JoinSet<ProviderTurnTaskResult>,
     result: Result<ProviderTurnTaskResult, tokio::task::JoinError>,
+    room_tool_ingress: &ProviderRoomToolIngress,
 ) {
     let result = match result {
         Ok(result) => result,
@@ -371,6 +400,7 @@ async fn handle_provider_result(
                 event_tx,
                 turn_tasks,
                 provider_adapter.clone(),
+                room_tool_ingress.clone(),
                 commit,
             )
             .await;
@@ -425,6 +455,7 @@ enum RoomInput {
     Command(RoomCommand),
     Provider(Box<Result<ProviderTurnTaskResult, tokio::task::JoinError>>),
     Publication(Option<PublicationWake>),
+    Tool(ProviderRoomToolCommand),
 }
 
 async fn execute_command(
@@ -447,9 +478,31 @@ async fn execute_command(
         }
         "agent.configure" => execute_agent_configure(store, provider_catalog, command).await,
         "agent.start" | "agent.resume" => {
-            execute_agent_start(store, provider_adapter, command).await
+            crate::room_agent_lifecycle_runtime::execute_agent_start(
+                store,
+                provider_adapter,
+                command,
+            )
+            .await
         }
-        "agent.stop" => execute_agent_stop(store, provider_adapter, command).await,
+        "agent.stop" => {
+            crate::room_agent_lifecycle_runtime::execute_agent_stop(
+                store,
+                provider_adapter,
+                command,
+            )
+            .await
+        }
+        "room.settings.update" => match store
+            .execute_room_settings_update(&command.principal, &command.request_id, &command.payload)
+            .await
+        {
+            Ok(outcome) => {
+                Ok(progressed_execution(store, &command.principal.room_id, outcome).await)
+            }
+            Err(error) => Err(error),
+        },
+        "room.random.roll" | "room.random.choose" => execute_room_random(store, command).await,
         _ => store
             .execute_message_with_turn(
                 &command.principal,
@@ -461,6 +514,40 @@ async fn execute_command(
             .map(CommandExecution::mutation),
     };
     result.unwrap_or_else(CommandExecution::failure)
+}
+
+async fn execute_room_random(
+    store: &SqliteStore,
+    command: &RoomCommand,
+) -> Result<CommandExecution, PersistenceError> {
+    if let Some(outcome) = store
+        .replay_command(
+            &command.principal,
+            &command.request_id,
+            &command.action,
+            &command.payload,
+        )
+        .await?
+    {
+        return Ok(CommandExecution::success(outcome));
+    }
+    let request = RoomRandomRequest::parse(&command.action, &command.payload).map_err(|error| {
+        PersistenceError::CommandRejected {
+            code: "invalid_room_random_request",
+            message: error.message,
+        }
+    })?;
+    let result = crate::room_random_runtime::generate_room_random(&request);
+    store
+        .execute_room_random_command(
+            &command.principal,
+            &command.request_id,
+            &command.action,
+            &command.payload,
+            &result,
+        )
+        .await
+        .map(CommandExecution::success)
 }
 
 async fn execute_agent_create_command(
@@ -487,7 +574,7 @@ async fn execute_agent_create_command(
     let execution = CommandExecution {
         reply,
         committed_events,
-        assignment: None,
+        assignments: Vec::new(),
     };
     if advance_ordered_floor {
         Ok(progress_execution(store, &command.principal.room_id, execution).await)
@@ -541,10 +628,10 @@ async fn execute_agent_configure(
         .map(CommandExecution::success)
 }
 
-struct CommandExecution {
+pub(crate) struct CommandExecution {
     reply: Result<CommandOutcome, PersistenceError>,
     committed_events: Vec<RoomEvent>,
-    assignment: Option<AgentTurnAssignment>,
+    assignments: Vec<AgentTurnAssignment>,
 }
 
 impl CommandExecution {
@@ -557,7 +644,7 @@ impl CommandExecution {
         Self {
             reply: Ok(outcome),
             committed_events,
-            assignment: None,
+            assignments: Vec::new(),
         }
     }
 
@@ -570,7 +657,7 @@ impl CommandExecution {
         Self {
             reply: Ok(mutation.outcome),
             committed_events,
-            assignment: mutation.assignment,
+            assignments: mutation.assignments,
         }
     }
 
@@ -578,113 +665,23 @@ impl CommandExecution {
         Self {
             reply: Err(error),
             committed_events: Vec::new(),
-            assignment: None,
+            assignments: Vec::new(),
         }
     }
 
-    fn committed_failure(error: PersistenceError, committed_events: Vec<RoomEvent>) -> Self {
+    pub(crate) fn committed_failure(
+        error: PersistenceError,
+        committed_events: Vec<RoomEvent>,
+    ) -> Self {
         Self {
             reply: Err(error),
             committed_events,
-            assignment: None,
+            assignments: Vec::new(),
         }
     }
 }
 
-async fn execute_agent_start(
-    store: &SqliteStore,
-    provider_adapter: &ProviderAdapter,
-    command: &RoomCommand,
-) -> Result<CommandExecution, PersistenceError> {
-    let plan = if command.action == "agent.resume" {
-        store
-            .prepare_agent_resume(&command.principal, &command.request_id, &command.payload)
-            .await?
-    } else {
-        store
-            .prepare_agent_start(&command.principal, &command.request_id, &command.payload)
-            .await?
-    };
-    let effect = match plan {
-        AgentStartPlan::Outcome(outcome) => {
-            return Ok(progressed_execution(store, &command.principal.room_id, *outcome).await);
-        }
-        AgentStartPlan::Start(effect) => effect,
-    };
-    match provider_adapter.start(&effect.session).await {
-        Ok(started) => {
-            let persisted = persisted_start(started);
-            let outcome = if command.action == "agent.resume" {
-                store
-                    .complete_agent_resume(
-                        &command.principal,
-                        &command.request_id,
-                        &command.payload,
-                        &effect.operation_id,
-                        &persisted,
-                    )
-                    .await?
-            } else {
-                store
-                    .complete_agent_start(
-                        &command.principal,
-                        &command.request_id,
-                        &command.payload,
-                        &effect.operation_id,
-                        &persisted,
-                    )
-                    .await?
-            };
-            Ok(progressed_execution(store, &command.principal.room_id, outcome).await)
-        }
-        Err(error) => {
-            let events = if error.effect_uncertain {
-                store
-                    .mark_agent_start_unconfirmed(
-                        &command.principal,
-                        &effect.session.public.session_id,
-                        &effect.operation_id,
-                        &error.runtime_handle_id,
-                        &error.runtime_owner_id,
-                        error.code,
-                        error.message,
-                    )
-                    .await?
-            } else if command.action == "agent.resume" {
-                store
-                    .fail_agent_resume(
-                        &command.principal,
-                        &command.request_id,
-                        &command.payload,
-                        &effect.operation_id,
-                        error.code,
-                        error.message,
-                    )
-                    .await?
-            } else {
-                store
-                    .fail_agent_start(
-                        &command.principal,
-                        &command.request_id,
-                        &command.payload,
-                        &effect.operation_id,
-                        error.code,
-                        error.message,
-                    )
-                    .await?
-            };
-            Ok(CommandExecution::committed_failure(
-                PersistenceError::CommandRejected {
-                    code: error.code,
-                    message: error.message.to_owned(),
-                },
-                events,
-            ))
-        }
-    }
-}
-
-async fn progressed_execution(
+pub(crate) async fn progressed_execution(
     store: &SqliteStore,
     room_id: &str,
     outcome: CommandOutcome,
@@ -700,12 +697,12 @@ async fn progress_execution(
     match store.assign_pending_turn(room_id).await {
         Ok(Some(commit)) => {
             execution.committed_events.extend(commit.events);
-            execution.assignment = commit.next_assignment;
+            execution.assignments.extend(commit.next_assignments);
         }
         Ok(None) => {}
         Err(error) => {
-            let code = match error {
-                PersistenceError::CommandRejected { code, .. } => code,
+            let code = match &error {
+                PersistenceError::CommandRejected { code, .. } => *code,
                 _ => "persistence_error",
             };
             tracing::error!(
@@ -713,86 +710,15 @@ async fn progress_execution(
                 room_id,
                 "committed lifecycle command could not advance the ordered floor"
             );
+            match store.record_floor_progression_failure(room_id, code).await {
+                Ok(events) => execution.committed_events.extend(events),
+                Err(recording_error) => tracing::error!(
+                    error = ?recording_error,
+                    room_id,
+                    "room floor progression failure could not be recorded durably"
+                ),
+            }
         }
     }
     execution
-}
-
-async fn execute_agent_stop(
-    store: &SqliteStore,
-    provider_adapter: &ProviderAdapter,
-    command: &RoomCommand,
-) -> Result<CommandExecution, PersistenceError> {
-    match store
-        .prepare_agent_stop(&command.principal, &command.request_id, &command.payload)
-        .await?
-    {
-        AgentStopPlan::Outcome(outcome) => {
-            Ok(progressed_execution(store, &command.principal.room_id, *outcome).await)
-        }
-        AgentStopPlan::Finalize => {
-            let outcome = store
-                .finalize_agent_stop(&command.principal, &command.request_id, &command.payload)
-                .await?;
-            Ok(progressed_execution(store, &command.principal.room_id, outcome).await)
-        }
-        AgentStopPlan::Stop(effect) => {
-            let stop = provider_adapter
-                .stop(
-                    &command.principal.room_id,
-                    &effect.session_id,
-                    &effect.runtime_handle_id,
-                    &effect.runtime_owner_id,
-                )
-                .await;
-            if let Err(error) = stop {
-                let events = store
-                    .mark_agent_stop_unconfirmed(
-                        &command.principal,
-                        &effect.session_id,
-                        &effect.operation_id,
-                        error.code,
-                        error.message,
-                    )
-                    .await?;
-                return Ok(CommandExecution::committed_failure(
-                    PersistenceError::CommandRejected {
-                        code: error.code,
-                        message: error.message.to_owned(),
-                    },
-                    events,
-                ));
-            }
-            store
-                .record_agent_stop_effect(
-                    &command.principal.room_id,
-                    &effect.session_id,
-                    &effect.operation_id,
-                )
-                .await?;
-            provider_adapter
-                .release_confirmed_stop(
-                    &command.principal.room_id,
-                    &effect.session_id,
-                    &effect.runtime_handle_id,
-                    &effect.runtime_owner_id,
-                )
-                .await;
-            let outcome = store
-                .finalize_agent_stop(&command.principal, &command.request_id, &command.payload)
-                .await?;
-            Ok(progressed_execution(store, &command.principal.room_id, outcome).await)
-        }
-    }
-}
-
-fn persisted_start(started: ProviderRuntimeStarted) -> AgentRuntimeStarted {
-    AgentRuntimeStarted {
-        runtime_handle_id: started.runtime_handle_id,
-        runtime_owner_id: started.runtime_owner_id,
-        provider_session_id: started.provider_session_id,
-        runtime_reused: started.runtime_reused,
-        provider_session_reused: started.provider_session_reused,
-        provider_session_active: started.provider_session_active,
-    }
 }

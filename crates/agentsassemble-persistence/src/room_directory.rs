@@ -120,7 +120,7 @@ impl SqliteStore {
         } else {
             let profile = load_local_operator_profile(&mut transaction).await?;
             let room = Room::new(room_id.to_owned(), label.to_owned(), now);
-            let settings = RoomSettings::defaults(label.to_owned());
+            let settings = RoomSettings::defaults(label);
             let participant = Participant {
                 room_id: room_id.to_owned(),
                 participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
@@ -215,7 +215,6 @@ fn room_created_event(room_id: &str, label: &str, now: chrono::DateTime<Utc>) ->
         display_name: None,
         content: None,
         message_kind: None,
-        relay_depth: None,
         extra,
     }
 }
@@ -380,11 +379,7 @@ mod tests {
             updated_at: now,
         };
         store
-            .initialize_room(
-                &room,
-                &RoomSettings::defaults("General".to_owned()),
-                &participant,
-            )
+            .initialize_room(&room, &RoomSettings::defaults("General"), &participant)
             .await
             .unwrap_or_else(|error| panic!("bootstrap room directory fixture: {error}"));
     }

@@ -70,6 +70,37 @@ When Computer Use is used for frontend verification, every resource created sole
 
 Cleanup resolves exact owned process and session identities before stopping them. It never closes user-owned tabs, applications, providers, or unrelated processes. Cleanup failure is reported and is not treated as a clean run.
 
+## Admission, public ingress, and destructive-flow evidence
+
+The future admission/public-ingress slice is not complete from HTTP route tests or
+an opened screen. Its published Rust commit must exercise the copied production
+frontend against a disposable authority and prove:
+
+- separate normal-human and read-only invites, including server-derived scope,
+  token removal from browser history, canonical roster projection, an initial
+  authenticated WebSocket snapshot, permitted normal posting, and visibly denied
+  read-only posting;
+- one external-AI invite consumed by an actual supported RoomConnector app or CLI
+  session, one acknowledged WebSocket publication, host-timeline projection, and
+  exact leave/revocation cleanup; a mock connector or an unavailable plugin remains
+  failed or `unknown`;
+- operator pairing at the exact public origin, canonical operator projection,
+  secret removal from history, first-use success, and isolated-browser replay
+  rejection;
+- owned public-tunnel startup, public React load, WebSocket operation, stop, exact
+  cloudflared cleanup, retired-origin failure, and stable-entry health reporting a
+  null target before the owning runtime exits. Cleanup is failed if the stable
+  entry still redirects to a dead quick-tunnel origin;
+- explicit failure classification: HTTP admission followed by a permanently
+  unready room socket is a realtime defect, never a read-only pass or degraded
+  success.
+
+The later moderation/destructive slice must use disposable messages, participants,
+and rooms to prove the visible confirmation gate and the server result: message
+tombstone, kicked roster/session revocation, exact-name room deletion, removal from
+the host directory, and immediate failure of already connected public sessions.
+Only verification-owned data may be destroyed.
+
 ## Real Agent matrix
 
 Frontend flows that require real Agent Sessions use exactly this matrix:
@@ -128,8 +159,8 @@ allocation, dimension, pixel, and concurrency limits, and re-encodes one static
 PNG. New blobs remain non-public pending capabilities until the profile transaction
 binds them; replacement deletes the previous bound blob atomically, expired
 pending uploads are collected and excluded from quota, and served avatars use
-`private, no-store`. Version-seven referenced avatars are canonicalized while
-unreferenced legacy blobs remain hidden quarantine.
+`private, no-store`. The active runtime now accepts only the complete current
+schema and does not convert or expose older attachment records.
 
 Commit `a9c9630ae3db197594b654b7c789ace13618dcb2` removes the copied React default
 as an initial profile authority. The exact packaged debug application first showed
@@ -429,6 +460,37 @@ mutex serialization, poison-independent guardian cleanup, post-connect zero-byte
 boundary, and JSON/SSE single-socket behavior, with no remaining credential
 disclosure, deadlock, custody-loss, cleanup, or authority-bypass finding. No
 second Deep Scan or automated scanner was used.
+
+## Stage A settings/scheduling/tabletop candidate: 2026-08-24
+
+The complete candidate passed `make verify` after the legacy/compatibility cleanup
+and the current Stage A implementation. The run included the mandatory
+architecture, source-growth, logical-line, and 800-line gates; generated protocol
+bindings; the copied frontend production build and original-CSS provenance check;
+66 frontend files with 338 tests; 14 Tauri tests; 15 domain, 77 persistence, two
+protocol, 100 provider, 12 server, and 19 Rust integration tests; warning-denied
+workspace and desktop Clippy; documentation tests; and the final diff check.
+
+The transition contract exercises ordered to ambient to ordered with an existing
+active turn. It proves stale settings revisions write nothing, ambient may create
+a second active turn, and queued `OrderedObservation`/`AmbientObservation` values
+retain their original delivery semantics across both transitions. Separate
+contracts cover strict old-schema rejection without conversion, human replay and
+tabletop gating, the durable provider 32-result budget, same-turn read receipt,
+reservation-first and terminal-first ordering, and close tombstone resolution.
+
+The first identical verification attempt exhausted local disk during the duplicate
+desktop link step after the architecture gates, frontend build, and all 338
+frontend tests had passed. Only Cargo-generated build artifacts were cleaned. The
+successful rerun used one shared Cargo target directory with incremental output
+and debug symbols disabled; no source, gate, warning level, assertion, product
+data, or runtime behavior was changed.
+
+This is deterministic candidate evidence, not packaged real-client or provider
+parity evidence. No real provider or Computer Use session was started for this
+run. The required copied-UI flow with persistent Codex Terra, Antigravity Flash,
+and OpenCode Hy3-free sessions, critical web review, and Daybreak Blue manual
+security review remain pending after the feature commit is pushed.
 
 ## API verification scope
 

@@ -56,7 +56,6 @@ function settings(room: RoomDockItem, bannerPreset: "forest" | "ember"): RoomSet
     conversationMode: "ordered",
     toolMode: "chat",
     orderedExcludePreviousSpeaker: true,
-    maxRelayTurns: 6,
   };
 }
 
@@ -92,7 +91,6 @@ function globalSettings(
     conversationMode: "ordered",
     toolMode: "chat",
     orderedExcludePreviousSpeaker: true,
-    maxRelayTurns: 6,
     channels: [],
     ...overrides,
   };
@@ -355,7 +353,6 @@ describe("useRoomSettingsController", () => {
     expect(hook.result.current.settingsStateFor(roomA).status).toBe("loading");
     expect(hook.result.current.conversationModeFor(roomA)).toBeNull();
     expect(hook.result.current.orderedExcludePreviousSpeakerFor(roomA)).toBeNull();
-    expect(hook.result.current.maxRelayTurnsFor(roomA)).toBeNull();
   });
 
   it("saves a mode-only update through the canonical socket path", async () => {
@@ -381,7 +378,6 @@ describe("useRoomSettingsController", () => {
       value: {
         conversationMode: "ambient",
         orderedExcludePreviousSpeaker: true,
-        maxRelayTurns: 6,
       },
     });
     await waitFor(() =>
@@ -474,7 +470,6 @@ describe("useRoomSettingsController", () => {
       value: {
         conversationMode: "ordered",
         orderedExcludePreviousSpeaker: true,
-        maxRelayTurns: 6,
       },
       error: { message: "canonical save failed" },
     });
@@ -534,7 +529,7 @@ describe("useRoomSettingsController", () => {
     );
 
     act(() => hook.result.current.updateConversationMode(roomA, "ambient"));
-    act(() => hook.result.current.updateMaxRelayTurns(roomA, 8));
+    act(() => hook.result.current.updateToolMode(roomA, "tabletop"));
     await waitFor(() =>
       expect(saveCanonicalGlobalSettings).toHaveBeenCalledTimes(1)
     );
@@ -559,7 +554,6 @@ describe("useRoomSettingsController", () => {
       value: {
         conversationMode: "ambient",
         orderedExcludePreviousSpeaker: true,
-        maxRelayTurns: 6,
       },
       error: { message: "second save failed" },
     });
@@ -585,7 +579,7 @@ describe("useRoomSettingsController", () => {
     await waitFor(() => expect(hook.result.current.settingsStateFor(roomA).status).toBe("ready"));
 
     act(() => hook.result.current.updateConversationMode(roomA, "ambient"));
-    act(() => hook.result.current.updateMaxRelayTurns(roomA, 8));
+    act(() => hook.result.current.updateToolMode(roomA, "tabletop"));
     await waitFor(() =>
       expect(saveCanonicalGlobalSettings).toHaveBeenCalledTimes(1)
     );
@@ -606,14 +600,14 @@ describe("useRoomSettingsController", () => {
       expect(saveCanonicalGlobalSettings).toHaveBeenCalledTimes(2)
     );
     expect(saveCanonicalGlobalSettings).toHaveBeenNthCalledWith(2, {
-      maxRelayTurns: 8,
+      toolMode: "tabletop",
     });
 
     await act(async () => {
       secondSave.resolve(
         globalSettings(roomA, "forest", {
           conversationMode: "ambient",
-          maxRelayTurns: 8,
+          toolMode: "tabletop",
         })
       );
       await secondSave.promise;
@@ -625,7 +619,7 @@ describe("useRoomSettingsController", () => {
         value: {
           conversationMode: "ambient",
           orderedExcludePreviousSpeaker: true,
-          maxRelayTurns: 8,
+          toolMode: "tabletop",
         },
       })
     );

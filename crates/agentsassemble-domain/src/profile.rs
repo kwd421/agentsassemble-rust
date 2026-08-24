@@ -8,8 +8,8 @@ const DEFAULT_AVATAR_LABEL: &str = "나";
 const DEFAULT_ACCENT_COLOR: &str = "#5865f2";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UserProfile {
-    #[serde(default)]
     pub revision: i64,
     pub display_name: String,
     pub handle: String,

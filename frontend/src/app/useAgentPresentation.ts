@@ -126,7 +126,7 @@ export function useAgentPresentation({
   const scopedViewerDisplayName =
     activeRoomMembers.find(
       (member) => member.participant_id === scopedViewerParticipantId
-    )?.display_name || guestSession?.displayName || "SeiNel";
+    )?.display_name || guestSession?.displayName || scopedViewerParticipantId;
   const changeAgentActivityVisibility = useCallback(
     (session: { participant_id: string }, visible: boolean) => {
       setAgentActivityVisibility((previous) => {

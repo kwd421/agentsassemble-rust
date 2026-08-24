@@ -18,13 +18,14 @@ const PRIVATE_PUBLIC_KEYS: &[&str] = &[
     "executable_identity",
     "file_path",
     "inflight_event_ids",
-    "legacy_source_path",
+    "inflight_inputs",
     "lifecycle_intent_action",
     "lifecycle_intent_id",
     "lifecycle_intent_status",
     "path",
     "pending_event_ids",
     "pending_event_observation_kinds",
+    "pending_inputs",
     "pending_provider_request",
     "pid",
     "provider_endpoint",
@@ -101,7 +102,6 @@ pub fn public_event_for_principal(
         display_name: None,
         content: None,
         message_kind: None,
-        relay_depth: None,
         extra: BTreeMap::from([("visibility".to_owned(), json!("owner"))]),
     }
 }
@@ -251,7 +251,6 @@ mod tests {
             display_name: Some("Owner".to_owned()),
             content: Some("private".to_owned()),
             message_kind: None,
-            relay_depth: None,
             extra: BTreeMap::from([
                 ("visibility".to_owned(), json!("owner")),
                 ("workspace".to_owned(), json!("/private/workspace")),

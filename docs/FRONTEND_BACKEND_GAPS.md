@@ -1,11 +1,11 @@
 # Frontend/backend exposure map
 
-Status: source-derived migration inventory, 2026-08-24
+Status: source-derived reimplementation exposure inventory, 2026-08-24
 
 Comparison baseline: original
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust
-`6568810`. Local uncommitted code and
-local verification are not promoted to public implementation status in this file.
+`5aaa04b`. The Stage A feature candidate built from this baseline is recorded
+separately below until its review and real-client evidence are complete.
 
 ## Scope and method
 
@@ -44,25 +44,119 @@ Test fixtures and example asset URLs are not counted as frontend integration.
 | Export a participant | `POST /api/room-participants/export` and `participant.export` | Kick, mute, role changes, and leave are exposed; export is not. |
 | Close a room without archiving/deleting it | `POST /api/rooms/close` and `room.close` | Archive is exposed through the moderation client and delete through the room socket; close has no React control. |
 | Run or inspect a rolling restart | `GET/POST /api/runtime/rolling-restart` in `web/routes/runtime.py` | The frontend shows version/update status but has no rolling-restart call. |
-| Submit the Mafia night/action operation | `POST /api/play/mafia/action` in `features/mafia/routes.py` | Start, chat, vote, and resolve are called from `api.ts`; action is not. |
+| Use the release-health administration panel | `GET /api/release-health` and `GET /api/release-health/queue` | `AdminPanel.tsx` calls both routes, but production `App.tsx` never sets `adminOpen` to `true`; the component has no reachable opener. |
+| Use Mafia from the canonical client | `GET /api/play/mafia` plus `POST /api/play/mafia/start`, `/chat`, `/vote`, `/resolve`, and `/action` | `api.ts` defines start/chat/vote/resolve calls and `useActiveMafiaGame.ts` defines a poller, but no production component imports or invokes them. `/action` has no React call at all. The canonical UI has no Mafia start or control entry point. |
 | Server-side random roll/choice commands | `room.random.roll`, `room.random.choose` in `room/commands.py` | The composer sends messages and votes; it has no command or control for these two actions. |
+| Configure a custom text or voice channel after creation | Canonical room settings accept the persisted `channels` list and per-channel settings | The React client can create a custom channel, but custom channel buttons have no context-menu handler and `RoomSettingsModal.tsx` hard-codes only `lobby` for channel notification settings. Rename, delete, and per-custom-channel notification controls are absent. |
 
-### Alternative, compatibility, or service-facing surfaces
+### Original alternate or service-facing surfaces excluded from Rust parity
 
-These are implemented and unreferenced by React, but the absence of a button is
-not by itself a product gap.
+These original surfaces are implemented and unreferenced by React, but the absence
+of a button is not a product gap. Alternate or compatibility-only entries in this
+table are original-product evidence, not Rust requirements; Rust does not recreate
+them unless a separately verified current user or service flow depends on them.
 
 | Backend surface | Why it is not a direct React call |
 | --- | --- |
-| `POST /api/agent-sessions` | Compatibility HTTP creation; the canonical room UI uses the atomic `agent.create` WebSocket command. |
-| `GET /api/providers`, `GET /api/model-catalog`, `GET /api/provider-sessions/local` | Compatibility/discovery reads; the canonical catalog and local sessions arrive in the room snapshot, while login and forced refresh use dedicated HTTP routes. |
+| `POST /api/agent-sessions` | Alternate HTTP creation; the canonical room UI uses the atomic `agent.create` WebSocket command. |
+| `GET /api/providers`, `GET /api/model-catalog`, `GET /api/provider-sessions/local` | Alternate discovery reads; the canonical catalog and local sessions arrive in the room snapshot, while login and forced refresh use dedicated HTTP routes. |
 | `GET /api/room-events/stream`, `GET /api/rooms/state` | Alternate SSE/state reads; the canonical room projection uses the WebSocket snapshot/event stream. |
-| `POST /api/room-members/mute`, `POST /api/room-participants/kick`, `POST /api/room-participants/leave` | HTTP compatibility controls; React uses `participant.mute`, `participant.kick`, and `participant.leave` WebSocket commands. |
+| `POST /api/room-members/mute`, `POST /api/room-participants/kick`, `POST /api/room-participants/leave` | Alternate HTTP controls; React uses `participant.mute`, `participant.kick`, and `participant.leave` WebSocket commands. |
 | `GET /api/central-login/callback`, `GET /central-login-complete` | OAuth return pages reached by browser navigation after the frontend starts the handoff, not by `fetch`. |
 | `POST /api/server-info/challenge` | Server-to-directory proof flow; the local room UI does not own this challenge. |
 | `bridge.*`, `room.observed`, `room.check`, `room.result.publish`, `room.attachment.read`, `turn.*`, `activity.update`, `message.delta`, `message.final`, `provider.request.open`, `provider.request.closed` | Agent-Bridge/provider command surface. Browser authority intentionally exposes only `provider.request.resolve` from this family. |
 
-## Canonical React behavior not yet provided by the Rust backend
+## Original real-client findings
+
+On 2026-08-24, original commit `d504647…` was run from a fresh isolated output
+root after the tracked legacy Python files were removed. Five current-module
+imports were disconnected only far enough to start the current GUI; this was a
+diagnostic run, not a clean-source release claim. The Safari desktop client was
+driven with Computer Use. The tested room used the canonical React entry points,
+and the provider matrix used the installed real native sessions rather than mocks
+or print/one-shot substitutes.
+
+Verified reachable behavior:
+
+- room creation, room name/topic, ordered and ambient modes, chat and tabletop
+  tool modes, appearance, room/channel notifications, and invite scope;
+- general and custom text chat, side chat, mention and emoji insertion, attachment
+  stage/remove/send, image preview, search, read cursor, pin, edit, vote create/
+  cast/withdraw/close, and the `/vote` command dialog including no-deadline mode;
+- human profile/avatar/status, Agent Session profile/avatar/runtime/activity
+  settings, member role and room mute authority, and provider lifecycle controls;
+- custom voice-channel create, join, mute/unmute, and leave. The product explicitly
+  labels this as presence-only; no audio transport is currently claimed;
+- CCv3 persona-card import, automatic library selection, and the safe notice that
+  stored scripts, regexes, and triggers are not executed;
+- real Codex Terra, Antigravity Flash, and OpenCode Hy3-free room replies. Pause,
+  resume, stop, and stopped-session resume controls were exercised where exposed.
+
+Observed original-product defects and reachability limits:
+
+- The left-bottom human profile card can paint above the Agent Add and User
+  Settings modal backdrops. This reproduces the old stacking defect in the
+  original client; a copied Rust client must retain the verified Rust overlay fix,
+  not reintroduce the original geometry.
+- Human profile projection is not one SSoT in the original flow. The saved name
+  updated the main timeline and member list, while channel search retained the old
+  name, a custom-channel message/pin used generic `호스트`, and voice presence also
+  displayed generic `호스트`.
+- A read-only local guest preview correctly disables all posting controls, but it
+  remained at `불러오는 중...`, never projected room messages, and displayed the
+  operator's human profile as guest `YOU`.
+- `응답 중단` acknowledged the request but did not cancel or transition an active
+  Antigravity response; only Stop settled the session.
+- A manually saved friend retained the supplied provider identifier in the invite
+  row, but its profile rendered a generic Claude/Codex/Cursor/Antigravity family
+  string. Friend deletion has no confirmation step and immediately calls the
+  delete route.
+- The member context-menu label `내보내기` executes kick, not participant export.
+  Agent-detail kick does have a confirmation dialog, whose Korean copy currently
+  renders `에이전트을`.
+- Custom channels have no React context menu or settings row after creation, as
+  confirmed by both the real client and the source owners above.
+- Reused stopped-session model controls can expose inconsistent accessible values
+  versus their visible child label. The model drill-down is also incompletely
+  exposed through Safari accessibility, so keyboard/search accessibility remains
+  unverified rather than clean.
+- `continuous` is not offered when creating or editing a normal current room.
+  `RoomSettingsModal.tsx` renders it only when persisted room state is already
+  `continuous` and labels it an old compatibility/legacy relay mode. It is not a
+  current-mode parity requirement for the Rust reimplementation.
+
+A supplemental Chrome Computer Use run on the same original commit exercised the
+previously unknown credential, public-tunnel, and destructive paths against a
+disposable output root:
+
+- The built-in Cloudflare quick tunnel reached `running`, produced an HTTPS public
+  origin, served the real React client, and stopped with the owning GUI process.
+  The retired quick-tunnel origin returned HTTP 530 after cleanup. The stable
+  Worker entry initially kept redirecting to that dead origin because GUI shutdown
+  schedules its KV delete on a daemon thread and exits without waiting for it.
+  An ownership-checked explicit clear completed and the Worker then reported a
+  null target; the unawaited shutdown clear is an original lifecycle defect.
+- A public human invite was generated and admitted `InviteGuest`; the one-time
+  token was removed from browser history and the host roster projected the guest.
+  However, that public guest client remained at `불러오는 중...`. Sending a
+  message failed with `방 연결이 준비되지 않았습니다`, even after waiting, so
+  public browser admission passes but its post-join realtime path does not.
+- A one-use external-AI invite was consumed by the original `RoomConnector` over
+  the public origin. Its WebSocket command received an event ACK, and the host
+  React timeline rendered `EXTERNAL_AI_INVITE_OK`. The installed Room Connector
+  test plugin's separate MCP endpoint was unavailable, so the original local
+  connector runtime was used rather than claiming that plugin path passed.
+- An operator-pairing link redeemed on the public origin as the canonical `SeiNel`
+  operator, removed its token from browser history, and a second isolated-browser
+  redemption was rejected as `pairing_already_used`.
+- Host member `내보내기` displayed its confirmation and kicked the disposable
+  guest, confirming again that the label maps to kick rather than export.
+- Message deletion displayed the confirmation dialog and projected a
+  `삭제된 메시지입니다` tombstone. Permanent server deletion remained disabled
+  until the exact server name was entered, then removed the disposable room and
+  immediately revoked the paired public session.
+
+## Canonical React behavior not provided at Rust baseline `5aaa04b`
 
 The Rust server currently exposes `GET /healthz`, `GET /api/host-challenge`,
 `POST /api/ws-ticket`, authenticated `GET/POST /api/rooms`, authenticated
@@ -77,14 +171,32 @@ implemented; the frontend must not silently substitute Python or local fake data
 | React feature group | Missing Rust surface |
 | --- | --- |
 | Startup identity and accounts | `/api/account`, Google account challenge/connect/delete, central-login callback start/poll, guest recovery-code create/redeem. |
-| Room lifecycle and settings | Archive/close/delete compatibility routes, room-global settings mutation, per-user room preferences, public server info, and central-directory registration proof. |
+| Room lifecycle and settings | Canonical archive/delete lifecycle, room-global settings mutation, per-user room preferences, public server info, and central-directory registration proof. |
 | Admission and invites | Host claim, room invite create/join/admission/companion/leave, operator pairing create/redeem, and public-invite status/URL/tunnel controls. |
-| Roster, friends, and channels | Room members, role/mute HTTP compatibility, room friends, room channels, voice presence, and side chat. |
+| Roster, friends, and channels | Canonical participant role/mute controls, room friends, room channels, voice presence, and side chat. |
 | Attachments, personas, pins, and search | General-message and room-appearance attachment purposes, persona list/import/thumbnail, message pins, room search/context. Profile-avatar upload/read is implemented. |
 | Provider settings and diagnostics | Login, catalog refresh HTTP response, credential CRUD, provider usage, local resources, release health, and runtime version. The original `/api/local/workspace-picker` HTTP route is absent, but packaged desktop creation uses the native Tauri directory picker instead. |
 | Games and plugins | Mafia HTTP operations and generic plugin WebSocket hosting remain unimplemented. The copied RimWorld view is an external plugin consumer; its Python plugin package/runtime is intentionally outside the current Rust core-migration scope and is not a core parity exit condition. |
 | Canonical room commands | History, vote summary, edit/delete, settings, random operations, re-add, pause/interrupt, participant controls, room lifecycle, and provider request resolution. Stopped-session `agent.resume` and `agent.configure` are connected at the public comparison commit. |
 | Canonical room events | The React projector recognizes the broader original event vocabulary; only Rust-emitted snapshot/events are currently verified. |
+
+## Stage A feature-candidate delta
+
+The active Stage A candidate removes the discarded conversion and relay prototype
+before adding any new authority. It accepts only a fresh or exact-current Rust
+schema, rejects `continuous` and older queue/profile/attachment shapes, and has no
+Python, older-Rust, local-profile, provider-alias, or client-side compatibility
+path.
+
+The candidate adds one canonical `room.settings.update` WebSocket transaction for
+the currently implemented settings controls, typed ordered/ambient queue items,
+mode-transition-safe scheduling, and shared human/provider tabletop randomness.
+Provider roll/choose uses the existing private `RoomPortal` on Codex and the exact
+bound helper on Antigravity/OpenCode; it is not print mode or a client-side result.
+The original React client still has no direct human roll/choose control, so the
+human commands remain a reachable server contract without a fabricated button.
+Preferences, appearance assets, custom channels, invites, and plugin hosting stay
+explicitly incomplete until their complete owners exist.
 
 ## Public Rust slice, active gap, and provenance gate
 

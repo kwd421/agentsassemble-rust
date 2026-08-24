@@ -109,7 +109,7 @@ impl SqliteStore {
     ///
     /// # Errors
     ///
-    /// Pending, expired, quarantined, malformed, and unknown identifiers all fail as not found.
+    /// Pending, expired, malformed, and unknown identifiers all fail as not found.
     pub async fn profile_attachment(
         &self,
         attachment_id: &str,
@@ -210,42 +210,6 @@ pub(crate) async fn replace_profile_avatar(
         .execute(&mut **transaction)
         .await?;
     }
-    Ok(())
-}
-
-pub(crate) async fn migrate_profile_attachments(
-    transaction: &mut Transaction<'_, Sqlite>,
-) -> Result<(), PersistenceError> {
-    let rows = sqlx::query(
-        "SELECT attachment_id, owner_user_id, filename, content_type, content FROM profile_attachments ORDER BY attachment_id",
-    )
-    .fetch_all(&mut **transaction)
-    .await?;
-    for row in rows {
-        let attachment_id = row.get::<String, _>("attachment_id");
-        let owner_user_id = row.get::<String, _>("owner_user_id");
-        if !profile_references_attachment(transaction, &owner_user_id, &attachment_id).await? {
-            continue;
-        }
-        let declared_format = declared_image_format(row.get::<String, _>("content_type").as_str())?;
-        let canonical = canonicalize_avatar(
-            sanitize_filename(row.get::<String, _>("filename").as_str()),
-            declared_format,
-            row.get::<Vec<u8>, _>("content"),
-        )
-        .await?;
-        let size = i64::try_from(canonical.content.len()).map_err(|_| invalid_stored_avatar())?;
-        sqlx::query(
-            "UPDATE profile_attachments SET filename = ?, content_type = 'image/png', content = ?, size = ?, state = 'bound', expires_at = NULL WHERE attachment_id = ?",
-        )
-        .bind(canonical.filename)
-        .bind(canonical.content)
-        .bind(size)
-        .bind(attachment_id)
-        .execute(&mut **transaction)
-        .await?;
-    }
-    verify_profile_avatar_bindings(transaction).await?;
     Ok(())
 }
 
@@ -367,53 +331,6 @@ async fn ensure_profile_exists(
             "profile_authority_mismatch",
             "Authenticated user profile does not own this participant.",
         ));
-    }
-    Ok(())
-}
-
-async fn profile_references_attachment(
-    transaction: &mut Transaction<'_, Sqlite>,
-    user_id: &str,
-    attachment_id: &str,
-) -> Result<bool, PersistenceError> {
-    let profile_json =
-        sqlx::query_scalar::<_, String>("SELECT profile_json FROM user_profiles WHERE user_id = ?")
-            .bind(user_id)
-            .fetch_optional(&mut **transaction)
-            .await?;
-    let Some(profile_json) = profile_json else {
-        return Ok(false);
-    };
-    let profile: agentsassemble_domain::UserProfile = serde_json::from_str(&profile_json)?;
-    Ok(avatar_attachment_id(&profile.avatar_image_url) == Some(attachment_id))
-}
-
-async fn verify_profile_avatar_bindings(
-    transaction: &mut Transaction<'_, Sqlite>,
-) -> Result<(), PersistenceError> {
-    let rows = sqlx::query("SELECT user_id, profile_json FROM user_profiles ORDER BY user_id")
-        .fetch_all(&mut **transaction)
-        .await?;
-    for row in rows {
-        let user_id = row.get::<String, _>("user_id");
-        let profile: agentsassemble_domain::UserProfile =
-            serde_json::from_str(row.get::<String, _>("profile_json").as_str())?;
-        let Some(attachment_id) = avatar_attachment_id(&profile.avatar_image_url) else {
-            continue;
-        };
-        let valid = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM profile_attachments WHERE attachment_id = ? AND owner_user_id = ? AND state = 'bound'",
-        )
-        .bind(attachment_id)
-        .bind(user_id)
-        .fetch_one(&mut **transaction)
-        .await?;
-        if valid != 1 {
-            return Err(rejected(
-                "invalid_state",
-                "Stored profile avatar authority is invalid.",
-            ));
-        }
     }
     Ok(())
 }
@@ -731,11 +648,7 @@ mod tests {
             updated_at: now,
         };
         store
-            .initialize_room(
-                &room,
-                &RoomSettings::defaults("General".to_owned()),
-                &participant,
-            )
+            .initialize_room(&room, &RoomSettings::defaults("General"), &participant)
             .await
             .unwrap_or_else(|error| panic!("initialize attachment fixture: {error}"));
         let principal = AuthenticatedPrincipal {

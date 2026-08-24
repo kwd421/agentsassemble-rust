@@ -339,5 +339,5 @@ fn initial_room(room_id: &str) -> anyhow::Result<(Room, RoomSettings, Participan
         created_at: now,
         updated_at: now,
     };
-    Ok((room, RoomSettings::defaults(label), participant))
+    Ok((room, RoomSettings::defaults(&label), participant))
 }

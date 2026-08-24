@@ -36,12 +36,9 @@ export type ProviderBrand = {
 
 const PROVIDER_ALIASES: Record<string, ProviderBrandKey> = {
   codex: "codex",
-  codex_cli: "codex",
   codex_live_session: "codex",
   antigravity: "antigravity",
-  antigravity_cli: "antigravity",
   antigravity_live_session: "antigravity",
-  agy: "antigravity",
   grok: "grok",
   grok_live_session: "grok",
   claude: "claude",
@@ -58,7 +55,6 @@ const PROVIDER_ALIASES: Record<string, ProviderBrandKey> = {
   ollama_api: "ollama",
   lmstudio: "lmstudio",
   lmstudio_api: "lmstudio",
-  lm_studio: "lmstudio",
   llmgateway: "llmgateway",
   llm_gateway_api: "llmgateway",
   openrouter: "openrouter",

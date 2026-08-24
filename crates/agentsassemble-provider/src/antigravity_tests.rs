@@ -4,25 +4,27 @@ use agentsassemble_domain::DurableAgentSession;
 use serde_json::json;
 
 use super::{AntigravityTranscript, command_arguments};
+use crate::test_support::durable_session;
 
 fn session() -> DurableAgentSession {
-    serde_json::from_value(json!({
-        "room_id": "room-1", "session_id": "agy-1", "participant_id": "agy-1",
-        "display_name": "Antigravity", "status": "stopped", "runtime_status": "stopped",
-        "enabled": false, "provider_kind": "antigravity_live_session", "runtime_kind": "live_cli",
-        "connection_kind": "native_cli_bridge", "external_owned": false,
-        "process_ownership": "server", "model": "gemini-3.6-flash",
-        "reasoning_effort": "medium", "service_tier": "", "variant": "",
-        "execution_harness": "builtin", "permission_mode": "meeting_read_only",
-        "max_output_tokens": 0, "catalog_revision": "catalog", "transport": "pty",
-        "last_seen_event_id": "", "last_seen_seq": 0, "last_provider_sync_event_id": "",
-        "last_provider_sync_seq": 0, "bootstrap_cutoff_seq": 0, "turn_count": 0,
-        "created_at": "2026-08-23T00:00:00Z", "updated_at": "2026-08-23T00:00:00Z",
-        "executable": "/usr/bin/agy", "executable_identity": "sha256:test",
-        "workspace": "/workspace", "workspace_identity": "workspace:test",
-        "runtime_profile_key": "profile"
-    }))
-    .unwrap_or_else(|error| panic!("decode Antigravity session fixture: {error}"))
+    let mut session = durable_session(
+        "room-1",
+        "agy-1",
+        "Antigravity",
+        "antigravity_live_session",
+        "gemini-3.6-flash",
+        "pty",
+    );
+    session.public.status = "stopped".to_owned();
+    session.public.runtime_status = "stopped".to_owned();
+    session.public.enabled = false;
+    session.public.reasoning_effort = "medium".to_owned();
+    session.public.catalog_revision = "catalog".to_owned();
+    session.executable = "/usr/bin/agy".to_owned();
+    session.executable_identity = "sha256:test".to_owned();
+    session.workspace = "/workspace".to_owned();
+    session.workspace_identity = "workspace:test".to_owned();
+    session
 }
 
 #[test]

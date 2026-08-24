@@ -1,6 +1,6 @@
 # WORKBOARD
 
-Status: Phase 4 — canonical room settings, scheduling, and tabletop are the active migration slice.
+Status: Phase 4 — canonical current room settings, ordered/ambient scheduling, and tabletop are the active reimplementation slice; the uncommitted legacy-contaminated prototype is not completion evidence.
 
 Purpose: route the asynchronous Rust reimplementation without duplicating its contracts.
 
@@ -9,14 +9,14 @@ Purpose: route the asynchronous Rust reimplementation without duplicating its co
 - Owner: [`docs/specs/room-settings-preferences-appearance-slice.md`](docs/specs/room-settings-preferences-appearance-slice.md)
 - Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - Real-client verification: [`docs/VERIFICATION.md`](docs/VERIFICATION.md)
-- Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust `5c9035f`. Uncommitted work is not public completion evidence.
+- Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust `5aaa04b`. Uncommitted work is not public completion evidence.
 - Required order:
-  1. publish the critically approved settings/scheduler/tabletop design;
-  2. implement and publish Stage A settings, typed durable input, all three schedulers, and human/provider tabletop as one complete authority boundary;
+  1. remove the uncommitted compatibility migration and legacy continuous-relay implementation, then critically review the corrected current-product design;
+  2. implement and publish Stage A settings, typed durable input, ordered/ambient schedulers, and human/provider tabletop as one complete authority boundary;
   3. verify Stage A through deterministic contracts, mandatory gates, packaged UI, and the three approved persistent real providers, then obtain critical web and manual-security review;
   4. implement, publish, verify, and review Stage B user preferences plus room appearance on the Stage A transaction boundary;
   5. route the next incomplete original product contract from the exposure map.
-- Exit: copied settings controls mutate only completed Rust behavior; ordered, ambient, and continuous scheduling plus tabletop survive restart with exact authority; the authenticated user retains isolated preferences and safe room appearance; every public feature commit is reviewed; and no verification-owned process or UI resource remains running.
+- Exit: copied current settings controls mutate only completed Rust behavior; ordered and ambient scheduling plus tabletop survive restart with exact authority; legacy/compatibility state is neither imported nor executed; the authenticated user retains isolated preferences and safe room appearance; every public feature commit is reviewed; and no verification-owned process or UI resource remains running.
 
 ## Read routes
 

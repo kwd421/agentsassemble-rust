@@ -45,7 +45,7 @@ function session(status = "idle"): RoomAgentSession {
 }
 
 function rawRoomSettings(
-  conversationMode: "ordered" | "ambient" | "continuous" = "ordered"
+  conversationMode: "ordered" | "ambient" = "ordered"
 ): RoomSocketSnapshot["room_settings"] {
   return {
     settings_revision: `settings-${conversationMode}`,
@@ -61,7 +61,6 @@ function rawRoomSettings(
     conversation_mode: conversationMode,
     tool_mode: "chat",
     ordered_exclude_previous_speaker: true,
-    max_relay_turns: 6,
     channels: [],
   };
 }
@@ -154,7 +153,7 @@ describe("useCanonicalRoom", () => {
       handlers?.onRoomEvents?.([
         {
           ...event(4, "room_settings_updated"),
-          room_settings: rawRoomSettings("continuous"),
+          room_settings: rawRoomSettings("ambient"),
         },
       ])
     );
@@ -787,7 +786,7 @@ describe("useCanonicalRoom", () => {
     );
     await waitFor(() => expect(openSocket).toHaveBeenCalledOnce());
 
-    act(() => handlers?.onError?.(new Error("legacy flow unavailable")));
+    act(() => handlers?.onError?.(new Error("unrelated flow unavailable")));
     expect(onUnauthorized).not.toHaveBeenCalled();
 
     act(() => handlers?.onError?.(new ApiError(401, "invalid or expired session")));

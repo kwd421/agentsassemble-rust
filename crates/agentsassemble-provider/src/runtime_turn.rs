@@ -23,9 +23,11 @@ pub struct ProviderTurnRequest {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProviderRoomObservation {
+    pub session_id: String,
     pub input_up_to_seq: i64,
     pub view: String,
     pub allowed_agent_ids: Vec<String>,
+    pub room_tool_ingress: Option<crate::ProviderRoomToolIngress>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -235,7 +237,8 @@ fn validate_request(
     }
     if let Some(observation) = &request.room_observation {
         let unique_ids = observation.allowed_agent_ids.iter().collect::<HashSet<_>>();
-        if observation.input_up_to_seq <= 0
+        if observation.session_id != session.public.session_id
+            || observation.input_up_to_seq <= 0
             || observation.view.chars().count() > MAX_ROOM_VIEW_CHARS
             || observation.view.len() > MAX_ROOM_VIEW_BYTES
             || observation.view.contains('\0')

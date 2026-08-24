@@ -16,6 +16,15 @@ Fallbacks are forbidden by default.
 When a path fails, find and fix the root cause.
 Do not introduce new fallback behavior without explicit user approval.
 
+Never narrow a migration slice by substituting placeholder data, fake authority,
+disabled synchronization, authentication bypasses, compatibility shims, or client-side
+orchestration for an original server-owned contract. If preserving the reachable behavior
+requires a larger implementation boundary, expand the work and implement that boundary
+before calling the feature complete. An incomplete path must remain explicitly incomplete;
+passing tests or a superficially working screen is not parity. Completion requires the same
+reachable entry point, authority owner, state transition, retry/failure semantics, and real
+user flow as the original product, with only the internal language and infrastructure changed.
+
 Do not add tests merely because code changed.
 Keep a small number of high-value tests for meaningful contracts and failure modes.
 Do not optimize for test count or coverage.

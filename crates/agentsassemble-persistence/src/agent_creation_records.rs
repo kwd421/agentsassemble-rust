@@ -148,8 +148,8 @@ async fn create_agent_records(
         provider_session_id: String::new(),
         runtime_handle_id: String::new(),
         runtime_owner_id: String::new(),
-        pending_event_ids: Vec::new(),
-        inflight_event_ids: Vec::new(),
+        pending_inputs: Vec::new(),
+        inflight_inputs: Vec::new(),
         active_source_event_id: String::new(),
         input_up_to_event_id: String::new(),
         input_up_to_seq: 0,
@@ -218,7 +218,6 @@ async fn append_creation_event(
         display_name: Some(session.display_name.clone()),
         content: None,
         message_kind: None,
-        relay_depth: None,
         extra: BTreeMap::from([
             ("session_id".to_owned(), json!(session.session_id)),
             ("provider_kind".to_owned(), json!(session.provider_kind)),

@@ -204,15 +204,7 @@ async fn run_helper(executable: PathBuf) -> Result<(), &'static str> {
     let mut arguments = env::args().skip(1);
     let action = arguments.next().unwrap_or_else(|| "help".to_owned());
     if action == "help" {
-        if arguments.next().is_some() {
-            return Err("usage: agentsassemble-room help");
-        }
-        let helper = absolute_helper_command(&executable)
-            .map_err(|_| "room helper invocation is unavailable")?;
-        println!(
-            "{helper} read | speak <message> | speak-to <agent-id> <message> | decline <reason>"
-        );
-        return Ok(());
+        return print_helper_help(&executable, &mut arguments);
     }
     if action == "hook" {
         if arguments.next().is_some() {
@@ -229,7 +221,31 @@ async fn run_helper(executable: PathBuf) -> Result<(), &'static str> {
             .parent()
             .ok_or("room helper authority is unavailable")?,
     )?;
-    let (tool, payload) = match action.as_str() {
+    let (tool, payload) = helper_tool(&action, arguments)?;
+    let result = call_tool(&authority, tool, payload).await?;
+    render_helper_result(tool, &result)
+}
+
+fn print_helper_help(
+    executable: &Path,
+    arguments: &mut impl Iterator<Item = String>,
+) -> Result<(), &'static str> {
+    if arguments.next().is_some() {
+        return Err("usage: agentsassemble-room help");
+    }
+    let helper =
+        absolute_helper_command(executable).map_err(|_| "room helper invocation is unavailable")?;
+    println!(
+        "{helper} read | speak <message> | speak-to <agent-id> <message> | decline <reason> | roll <NdS+M> | choose <json-options>"
+    );
+    Ok(())
+}
+
+fn helper_tool(
+    action: &str,
+    mut arguments: impl Iterator<Item = String>,
+) -> Result<(&'static str, Value), &'static str> {
+    let (tool, payload) = match action {
         "read" if arguments.next().is_none() => ("read_discussion", json!({})),
         "speak" => {
             let content = arguments.collect::<Vec<_>>().join(" ").trim().to_owned();
@@ -270,9 +286,35 @@ async fn run_helper(executable: PathBuf) -> Result<(), &'static str> {
             }
             ("decline_to_speak", json!({"reason_code": reason}))
         }
+        "roll" => {
+            let notation = arguments
+                .next()
+                .ok_or("usage: agentsassemble-room roll <NdS+M>")?;
+            if arguments.next().is_some() {
+                return Err("usage: agentsassemble-room roll <NdS+M>");
+            }
+            ("roll_dice", json!({"notation": notation, "reason": ""}))
+        }
+        "choose" => {
+            let encoded = arguments
+                .next()
+                .ok_or("usage: agentsassemble-room choose <json-options>")?;
+            if arguments.next().is_some() {
+                return Err("usage: agentsassemble-room choose <json-options>");
+            }
+            let options: Value = serde_json::from_str(&encoded)
+                .map_err(|_| "random options must be a JSON array")?;
+            ("choose_random", json!({"options": options, "reason": ""}))
+        }
         _ => return Err("unsupported room helper command"),
     };
-    let result = call_tool(&authority, tool, payload).await?;
+    Ok((tool, payload))
+}
+
+fn render_helper_result(
+    tool: &str,
+    result: &rmcp::model::CallToolResult,
+) -> Result<(), &'static str> {
     if result.is_error == Some(true) {
         return Err("room helper action was rejected");
     }
@@ -286,6 +328,14 @@ async fn run_helper(executable: PathBuf) -> Result<(), &'static str> {
         print!("{content}");
     } else if tool == "decline_to_speak" {
         println!("{{\"declined\":true}}");
+    } else if matches!(tool, "roll_dice" | "choose_random") {
+        let content = result
+            .content
+            .first()
+            .and_then(|content| content.as_text())
+            .map(|content| content.text.as_str())
+            .ok_or("room helper returned no random result")?;
+        println!("{content}");
     } else {
         println!("room message staged");
     }
@@ -446,6 +496,24 @@ pub(crate) fn safe_room_command(command: &str, command_prefix: &str) -> bool {
             parts.len() >= 3
                 && valid_agent_id(&parts[1])
                 && parts[2..].iter().all(|part| !part.starts_with('~'))
+        }
+        "roll" => {
+            parts.len() == 2
+                && agentsassemble_domain::RoomRandomRequest::parse(
+                    "room.random.roll",
+                    &json!({"notation": parts[1], "reason": ""}),
+                )
+                .is_ok()
+        }
+        "choose" => {
+            parts.len() == 2
+                && serde_json::from_str::<Value>(&parts[1]).is_ok_and(|options| {
+                    agentsassemble_domain::RoomRandomRequest::parse(
+                        "room.random.choose",
+                        &json!({"options": options, "reason": ""}),
+                    )
+                    .is_ok()
+                })
         }
         _ => false,
     }
@@ -675,6 +743,8 @@ mod tests {
             format!("{HELPER} speak 'hello room'"),
             format!("{HELPER} speak-to agent-2 'your turn'"),
             format!("{HELPER} decline duplicate"),
+            format!("{HELPER} roll '2d6+1'"),
+            format!(r#"{HELPER} choose '["north","south"]'"#),
         ] {
             assert!(
                 safe_room_command(&command, HELPER),

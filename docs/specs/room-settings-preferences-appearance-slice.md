@@ -1,29 +1,33 @@
 # Room Settings, Scheduling, Tabletop, Preferences, and Appearance Slice
 
-Status: approved implementation design; Stage A is routed and not yet implemented
+Status: corrected implementation design; compatibility paths removed, Stage A implementation under verification
 
 ## Definition
 
-This slice completes the reachable settings controls without creating storage-only
-success. Stage A owns canonical room settings, the conversation schedulers that
-those settings change, typed durable provider input, and human/provider tabletop
-randomness. Stage B owns the authenticated user's room preferences and the room
-appearance asset lifecycle. Custom channels, voice/text streams, invites, and
-activity-plugin hosting remain closed until their complete product slices exist.
+This slice completes the reachable current settings controls without creating
+storage-only success. Stage A owns canonical room settings, the ordered and ambient
+conversation schedulers that those settings change, typed durable provider input,
+and human/provider tabletop randomness. Stage B owns the authenticated user's room
+preferences and the room appearance asset lifecycle. Custom channels, voice/text
+streams, invites, activity-plugin hosting, and the original legacy relay mode
+remain outside this reimplementation.
 
 The comparison baseline is original commit
-`d5046473010d1353a81ee38337360e6d98f7bd6f` and public Rust commit `5c9035f`.
-The design was critically reviewed in the continuing GPT-5 Pro, very-high-reasoning
-web session. Its initial and follow-up `REVISE` findings produced the queue,
-routing, migration, and random-tool reservation contracts below; the final design
-returned `APPROVE` before implementation began.
+`d5046473010d1353a81ee38337360e6d98f7bd6f` and public Rust commit `5aaa04b`.
+The earlier reviewed draft included the original compatibility-only continuous
+relay and a v9-to-v10 data conversion. Real-client and source verification later
+proved that continuous is shown only for a room already carrying that legacy value.
+The user explicitly requires a Rust product with no legacy or compatibility
+migration. That part of the earlier approval is superseded; the corrected design
+below must be reviewed with the resulting implementation.
 
 ## Original reachable contract
 
 - `settings_json` is the room-global SSoT for label, topic, appearance,
-  `conversation_mode`, `tool_mode`, ordered-speaker exclusion, relay limit,
-  channels, and activity plugin. Changing the label updates the room summary in
-  the same transaction.
+  `conversation_mode`, `tool_mode`, ordered-speaker exclusion, channels, and
+  activity plugin. The original record can also contain a legacy relay limit, but
+  no normal current-room control reaches it. Changing the label updates the room
+  summary in the same transaction.
 - `room.settings.update` requires current `room.manage`, a nonempty strict partial
   update, and the exact current `expected_revision`. Settings, room metadata, one
   `room_settings_updated` event, and the replay result commit before publication.
@@ -32,9 +36,11 @@ returned `APPROVE` before implementation began.
 - Settings commit precedes scheduler reconciliation. A post-commit progression
   failure cannot turn the committed ACK into a NACK; it is exposed as durable
   public floor-progression failure and retried from later lifecycle triggers.
-- Conversation modes are `ordered`, `ambient`, and `continuous`. Provider input
-  orientation is an independent delivery semantic: ordered observation, ambient
-  observation, or transcript.
+- Current conversation modes are `ordered` and `ambient`. The original also parses
+  `continuous` only to display an existing legacy relay room; the normal settings
+  UI never offers it. Rust does not accept, create, migrate, or execute that mode.
+  Provider input orientation is an independent delivery semantic: ordered or
+  ambient observation.
 - Human `room.random.roll` and `room.random.choose` validate bounded notation,
   options, and reason, generate server-owned randomness, and publish canonical
   `message_source=room_tool_result` system messages. Provider tools expose the
@@ -51,16 +57,15 @@ returned `APPROVE` before implementation began.
 
 ## Stage A: strict settings availability
 
-`RoomSettings` understands and validates the complete original record. Fresh
-defaults, migration, snapshot/directory projection, revision generation, and
-mutation all use the same domain validator. The record is not equivalent to the
-set of mutations currently available.
+`RoomSettings` understands and validates the current record. Fresh construction,
+snapshot/directory projection, revision generation, and mutation all use the same
+domain validator. The record is not equivalent to the set of mutations currently
+available.
 
 Stage A permits mutations only for behavior completed in the same stage:
 
 - label and topic;
-- `conversation_mode`, `tool_mode`, ordered previous-speaker exclusion, and
-  `max_relay_turns`;
+- `conversation_mode`, `tool_mode`, and ordered previous-speaker exclusion;
 - visual `banner_preset` and `icon_label`, which the copied UI already renders.
 
 Stage A rejects, with stable explicit unsupported errors and no write:
@@ -75,49 +80,32 @@ boundary from the start. Stage A's implementation rejects every URL transition;
 Stage B activates this same boundary. No route keeps a second allowlist, and no
 unsupported field is silently preserved as a successful mutation.
 
-A v9 authority containing a value that no reachable v9 Rust path could create—
-nonempty channels/activity plugin, a room-asset URL, or nondefault invite scope—
-fails migration visibly. Migration does not repair, discard, or reinterpret it.
+The active reimplementation does not import or convert an older Rust/Python room,
+settings, queue, participant, or Agent Session record. A database that does not
+match the current clean schema fails visibly. It is not repaired, reinterpreted,
+or copied through a compatibility migration.
 
 ## Stage A: typed durable provider input
 
-The v10 private Agent Session record replaces string `pending_event_ids` and
-`inflight_event_ids` with only:
+The current private Agent Session record stores provider input only as:
 
 ```text
 QueuedRoomInput {
     event_id,
-    delivery_kind: OrderedObservation | AmbientObservation | Transcript,
-    relay_depth,
+    delivery_kind: OrderedObservation | AmbientObservation,
 }
 ```
 
 No parallel metadata map is allowed. One assignment contains only the oldest
-contiguous items with the same delivery kind and relay depth, subject to the
-existing event, message, and rendered-view bounds. That depth becomes the active
-turn and resulting durable message relay depth.
-
-The v9-to-v10 conversion runs inside one SQLite migration transaction. Each old
-row and referenced room event is strictly checked for uniqueness, capacity,
-room/actor identity, sequence, active source/cursor, and complete active-or-clear
-turn authority. Existing pending and inflight order is retained and every item is
-converted to `OrderedObservation` at relay depth zero, because the only v9 producer
-was ordered and had no relay-depth metadata. Active turn ID, source, cursor,
-sequence, runtime fields, and lifecycle fields are unchanged. Missing, wrong-room,
-self-origin, duplicate, overflowing, or inconsistent authority aborts migration.
-SQLite rollback makes interruption before schema-version commit a complete no-op;
-after commit, normal startup reconciliation sees the same active authority.
+contiguous items with the same delivery kind, subject to the existing event,
+message, and rendered-view bounds. The current schema creates this representation
+directly; no older queue representation is accepted or converted.
 
 ## Stage A: scheduling and transitions
 
 Mode transitions never delete or cancel active/inflight work.
 
 - `ordered` to or from `ambient` preserves every queued delivery kind.
-- `continuous` to `ordered` or `ambient` preserves queued transcript work.
-- Switching to `continuous` does not eagerly delete queued observations. As in the
-  original, each session lazily removes observation items only when its
-  `assign_pending` path next runs while the current mode is continuous. Switching
-  back before that point leaves them intact.
 - Multiple active turns are valid after a transition. Each session tuple remains
   strict; ordered scheduling merely refrains from a new assignment while
   `active_count >= 1` and does not call `active_count > 1` corruption.
@@ -130,19 +118,6 @@ Routing preserves the original distinction between addressed and unaddressed wor
   previous-speaker, sample, and least-recent-speaker policy.
 - Ambient queues every nonactor participant that is eligible or runtime-busy, then
   assigns independently under per-session capacity.
-- Continuous mention, structured target, and `@all` queue addressed nonactor
-  sessions without an idle prefilter; kicked or muted participants are rejected.
-  Assignment still requires current attach/enable/idle/bridge authority.
-- Only unaddressed continuous work filters `default_responder=true`, applies strict
-  floor eligibility, and selects one session in stable provider/session-ID circular
-  order after the actor.
-- An agent-origin continuous message at `max_relay_turns` is not routed. Otherwise
-  the new transcript item's relay depth is incoming depth plus one.
-
-Existing v9 sessions migrate with `default_responder=true`, preserving the current
-Rust candidate behavior. New sessions project the explicit canonical provider
-profile/adapter value into the Agent Session SSoT; this is not a permanent
-redefinition that every provider must be a default responder.
 
 Actor startup, provider-session activation, provider completion, and new-work
 progression retry durable reconciliation. None may alter an already committed
@@ -227,10 +202,11 @@ transport is a fallback for the other.
   reconciliation failure.
 - Replay of the same request/action/payload returns its committed result without a
   second event; conflicting reuse fails.
-- Deterministic tests cover mode-transition timing, multiple active turns,
-  default-responder routing, relay batching, migration rollback/restart, read
-  receipt, terminal-first and reservation-first barriers, cancellation phases,
-  close tombstones, and parallel/durable 32-call budget enforcement.
+- Deterministic tests cover ordered/ambient transition timing, multiple active
+  turns, delivery batching, read receipt, terminal-first and reservation-first
+  barriers, cancellation phases, close tombstones, and parallel/durable 32-call
+  budget enforcement. They also prove that legacy `continuous` values and older
+  schema records fail instead of being migrated or executed.
 - Stage B tests cover two-user isolation, wrong-room and replayed tickets,
   auth-before-body, custom preference key grammar, shared raster admission,
   pending preview/expiry, bind/replacement/clear, restart, and reference cleanup.

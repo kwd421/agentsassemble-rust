@@ -558,7 +558,7 @@ describe("useRoomAdmission", () => {
     expect(window.sessionStorage.length).toBe(0);
   });
 
-  it("keeps a stored guest session independent from legacy surface errors", async () => {
+  it("keeps a stored guest session independent from unrelated surface errors", async () => {
     persistRoomGuestSession(SESSION);
     apiMocks.preflightRoomInvite.mockResolvedValue({
       status: "existing_session",
@@ -589,7 +589,7 @@ describe("useRoomAdmission", () => {
     await waitFor(() => expect(result.current.guestAdmissionBusy).toBe(false));
     expect(result.current.guestExpired).toBe(false);
     await act(async () => {
-      rerender({ unrelatedError: new ApiError(401, "legacy flow unavailable") });
+      rerender({ unrelatedError: new ApiError(401, "unrelated flow unavailable") });
     });
 
     expect(result.current.guestExpired).toBe(false);

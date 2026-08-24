@@ -24,7 +24,6 @@ import {
   profileCssVars,
   profileStatusClass,
   profileStatusLabel,
-  saveDisplayNameForComposers,
 } from "../../lib/userProfileModel";
 import ImageCropper from "./ImageCropper";
 import UserSettingsPanel, { type UserSettingsSection } from "./UserSettingsPanel";
@@ -97,7 +96,6 @@ export default function UserPanel({
         setProfile(loadedProfile);
         setDraft(loadedProfile);
         setProfileHydrated(true);
-        saveDisplayNameForComposers(loadedProfile);
       })
       .catch((error: Error) => {
         if (ignore) return;
@@ -169,7 +167,6 @@ export default function UserPanel({
       const savedProfile = await saveUserProfile(nextProfile, profileIdentity);
       setProfile(savedProfile);
       setDraft(savedProfile);
-      saveDisplayNameForComposers(savedProfile);
       return "";
     } catch (error) {
       const message = error instanceof Error ? error.message : "프로필을 저장하지 못했습니다.";
