@@ -1,21 +1,19 @@
 import {
   getWsTicket,
-  type LobbyEvent,
   type RoomEvent,
-  type RoomMember,
   type RoomSocketAuth,
-  type SideChatEvent,
 } from "./api";
 import {
   agentCreationProjectionFromEvent,
   joinedParticipantFromEvent,
 } from "./lib/participantEventContract";
 import {
-  parsePluginEnvelopeBatch,
-  PluginStreamProtocolError,
-  type PluginEnvelope,
-} from "./pluginSocketProtocol";
-import { createServerChallenge, verifyServerProof } from "./lib/serverProof";
+  SubscriptionContractError,
+  type SubscriptionReceipt,
+  verifyBoundSnapshot,
+  verifySubscriptionReceipt,
+} from "./lib/roomSubscriptionContract";
+import { createServerChallenge, isHex32Bytes } from "./lib/serverProof";
 import {
   RoomSocketSayError,
   type ProviderCatalogSnapshot,
@@ -45,17 +43,12 @@ export type {
 
 const ROOM_SOCKET_COMMAND_TIMEOUT_MS = 20_000;
 
-function wsBaseUrl(): string {
-  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${proto}//${window.location.host}`;
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function isNonNegativeInteger(value: unknown): value is number {
-  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+function isSequence(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
 function participantProjectionIsValid(event: RoomEvent): boolean {
@@ -79,7 +72,7 @@ function commandAckResultIsValid(
     event &&
     typeof event.id === "string" &&
     event.id &&
-    isNonNegativeInteger(event.seq) &&
+    isSequence(event.seq) &&
     event.seq > 0 &&
     result.event_seq === event.seq
   );
@@ -95,17 +88,14 @@ function commandAckResultIsValid(
   }
   if (action === "room.history") {
     return Boolean(
-      isRecord(result) &&
       Array.isArray(result.events) &&
-      isNonNegativeInteger(result.oldest_seq) &&
-      isNonNegativeInteger(result.last_seq) &&
+      isSequence(result.oldest_seq) &&
+      isSequence(result.last_seq) &&
       typeof result.has_more_before === "boolean"
     );
   }
   if (action === "participant.kick") {
-    const participant = isRecord(result) && isRecord(result.participant)
-      ? result.participant
-      : null;
+    const participant = isRecord(result.participant) ? result.participant : null;
     return Boolean(
       participant &&
       participant.participant_id === payload.participant_id &&
@@ -113,10 +103,7 @@ function commandAckResultIsValid(
     );
   }
   if (action === "participant.role.update") {
-    const participant = isRecord(result) && isRecord(result.participant)
-      ? result.participant
-      : null;
-    const event = isRecord(result) && isRecord(result.event) ? result.event : null;
+    const participant = isRecord(result.participant) ? result.participant : null;
     return Boolean(
       participant &&
       event &&
@@ -128,10 +115,7 @@ function commandAckResultIsValid(
     );
   }
   if (action === "room.settings.update") {
-    return Boolean(
-      isRecord(result.room_settings) &&
-      event?.type === "room_settings_updated"
-    );
+    return Boolean(isRecord(result.room_settings) && event?.type === "room_settings_updated");
   }
   if (action === "participant.mute") {
     const participant = isRecord(result.participant) ? result.participant : null;
@@ -166,7 +150,7 @@ function commandAckResultIsValid(
     return Boolean(
       typeof result.question === "string" &&
       isRecord(result.tallies) &&
-      isNonNegativeInteger(result.total_votes)
+      isSequence(result.total_votes)
     );
   }
   return true;
@@ -184,9 +168,7 @@ function snapshotValidationError(
     value.op !== "snapshot" ||
     value.stream !== "room_events" ||
     !isRecord(value.room) ||
-    typeof value.room.room_id !== "string" ||
-    !value.room.room_id ||
-    (Boolean(expectedRoomId) && value.room.room_id !== expectedRoomId) ||
+    value.room.room_id !== expectedRoomId ||
     !isRecord(value.room_settings) ||
     !Array.isArray(value.participants) ||
     !Array.isArray(value.agent_sessions) ||
@@ -214,8 +196,8 @@ function snapshotValidationError(
     value.resume_gap !== (mode === "gap") ||
     (mode === "initial" && currentLastSeq !== 0) ||
     (mode !== "initial" && currentLastSeq <= 0) ||
-    !isNonNegativeInteger(value.oldest_seq) ||
-    !isNonNegativeInteger(value.last_seq) ||
+    !isSequence(value.oldest_seq) ||
+    !isSequence(value.last_seq) ||
     value.last_seq < currentLastSeq
   ) {
     return new RoomSocketSayError(
@@ -232,7 +214,7 @@ function snapshotValidationError(
       event.room_id !== expectedRoomId ||
       typeof event.type !== "string" ||
       !event.type ||
-      !isNonNegativeInteger(event.seq) ||
+      !isSequence(event.seq) ||
       event.seq <= 0 ||
       !participantProjectionIsValid(event as unknown as RoomEvent)
     ) {
@@ -243,26 +225,23 @@ function snapshotValidationError(
     }
     sequences.push(event.seq);
   }
-  for (let index = 1; index < sequences.length; index += 1) {
-    if (sequences[index] !== sequences[index - 1] + 1) {
-      return new RoomSocketSayError(
-        "Room snapshot event sequence was not contiguous; reconnecting.",
-        "snapshot_sequence_invalid"
-      );
-    }
+  if (sequences.some((sequence, index) => index > 0 && sequence !== sequences[index - 1] + 1)) {
+    return new RoomSocketSayError(
+      "Room snapshot event sequence was not contiguous; reconnecting.",
+      "snapshot_sequence_invalid"
+    );
   }
   if (!sequences.length) {
     const validEmptyBoundary =
       value.oldest_seq === 0 &&
       ((mode === "initial" && value.last_seq === 0) ||
         (mode === "resume" && value.last_seq === currentLastSeq));
-    if (!validEmptyBoundary) {
-      return new RoomSocketSayError(
-        "Room snapshot omitted events required by its sequence boundary; reconnecting.",
-        "snapshot_sequence_invalid"
-      );
-    }
-    return null;
+    return validEmptyBoundary
+      ? null
+      : new RoomSocketSayError(
+          "Room snapshot omitted events required by its sequence boundary; reconnecting.",
+          "snapshot_sequence_invalid"
+        );
   }
   const firstSeq = sequences[0];
   const finalSeq = sequences[sequences.length - 1];
@@ -279,26 +258,58 @@ function snapshotValidationError(
   return null;
 }
 
+function validateClientAuthority(
+  streams: readonly string[],
+  dependencies: RoomSocketClientDependencies
+) {
+  const surface = dependencies.serverSurface;
+  if (
+    surface.revision !== 1 ||
+    !isHex32Bytes(surface.digest) ||
+    !dependencies.expectedRoomId ||
+    !dependencies.expectedParticipantId ||
+    streams.length !== 1 ||
+    streams[0] !== "room_events" ||
+    surface.websocket_streams.length !== 1 ||
+    surface.websocket_streams[0] !== "room_events"
+  ) {
+    throw new RoomSocketSayError(
+      "The room transport is not bound to the canonical server product surface.",
+      "surface_stream_unavailable"
+    );
+  }
+}
+
+function ticketSocketUrl(websocketBaseUrl: string, ticket: string): string {
+  const base = new URL(websocketBaseUrl);
+  if ((base.protocol !== "ws:" && base.protocol !== "wss:") || base.username || base.password) {
+    throw new RoomSocketSayError(
+      "The desktop runtime returned an invalid WebSocket authority.",
+      "websocket_authority_invalid"
+    );
+  }
+  const url = new URL("/ws", base);
+  url.searchParams.set("ticket", ticket);
+  return url.toString();
+}
+
 /**
- * Open the canonical room transport. It owns ticket renewal, reconnect cursor,
- * correlated commands, and bounded-delivery recovery; React state lives above it.
+ * Opens the canonical room transport. The socket becomes ready only after a signed
+ * receipt, its exact snapshot bytes, and the finite C+1..H catch-up have all verified.
  */
 export function openRoomSocket(
   auth: RoomSocketAuth,
   streams: string[],
   handlers: RoomSocketHandlers,
-  dependencies: RoomSocketClientDependencies = {}
+  dependencies: RoomSocketClientDependencies
 ): RoomSocketHandle {
   let socket: WebSocket | null = null;
   let closed = false;
   let reconnectTimer = 0;
   let reconnectAttempt = 0;
   let lastSeq = 0;
-  let lastPluginSeq = 0;
-  let roomSnapshotAccepted = false;
-  let transportAuthenticated = false;
-  let canonicalRoomId = auth.kind === "host" ? auth.meetingId : "";
   let requestCounter = 0;
+  let transportReady = false;
   const requestTicket = dependencies.getTicket || getWsTicket;
   const createSocket = dependencies.createSocket || ((url: string) => new WebSocket(url));
   const pending = new Map<
@@ -321,16 +332,14 @@ export function openRoomSocket(
   }
 
   function sendPending() {
-    if (!socket || socket.readyState !== WebSocket.OPEN || !transportAuthenticated) return;
+    if (!socket || socket.readyState !== WebSocket.OPEN || !transportReady) return;
     pending.forEach((command, requestId) => {
-      socket?.send(
-        JSON.stringify({
-          op: "command",
-          request_id: requestId,
-          action: command.action,
-          payload: command.payload,
-        })
-      );
+      socket?.send(JSON.stringify({
+        op: "command",
+        request_id: requestId,
+        action: command.action,
+        payload: command.payload,
+      }));
     });
   }
 
@@ -342,323 +351,250 @@ export function openRoomSocket(
     pending.clear();
   }
 
-  function reconnectForProtocolError(error: RoomSocketSayError) {
-    handlers.onError?.(error);
-    socket?.close();
+  function fail(currentSocket: WebSocket, error: unknown) {
+    const normalized =
+      error instanceof SubscriptionContractError
+        ? new RoomSocketSayError(error.message, error.code)
+        : error instanceof RoomSocketSayError
+          ? error
+          : error instanceof SyntaxError
+            ? new RoomSocketSayError(
+                "Room socket received malformed JSON; reconnecting.",
+                "frame_json_invalid"
+              )
+            : error instanceof Error
+              ? error
+              : new Error("Room WebSocket protocol failed.");
+    handlers.onError?.(normalized);
+    if (socket === currentSocket) currentSocket.close();
   }
 
-  function dispatchFrame(raw: string) {
-    const msg = JSON.parse(raw) as {
-      op?: string;
-      stream?: string;
-      events?: LobbyEvent[];
-      members?: RoomMember[];
-      request_id?: string;
-      accepted?: boolean;
-      action?: string;
-      result?: Record<string, unknown>;
-      error?: { code?: string; message?: string };
-      category?: string;
-      message?: string;
-      reason?: string;
-      catalog?: ProviderCatalogSnapshot;
-      room_id?: string;
-      room_name?: string;
-      latest_seq?: number;
-      snapshot?: boolean;
-    };
-    if ((msg.op === "ack" || msg.op === "nack") && msg.request_id) {
-      const command = pending.get(msg.request_id);
-      if (!command) return;
-      if (msg.op === "nack" || msg.accepted === false) {
-        pending.delete(msg.request_id);
-        window.clearTimeout(command.timerId);
-        command.reject(
-          new RoomSocketSayError(
-            String(msg.error?.message || msg.message || "Room command was rejected."),
-            String(msg.error?.code || msg.category || "rejected")
-          )
-        );
-        return;
-      }
-      if (msg.action !== command.action) {
-        reconnectForProtocolError(
-          new RoomSocketSayError(
-            `Room ACK action mismatch (expected ${command.action}, received ${String(msg.action || "missing")}); reconnecting.`,
-            "ack_action_mismatch"
-          )
-        );
-        return;
-      }
-      if (msg.op !== "ack" || msg.accepted !== true) {
-        reconnectForProtocolError(
-          new RoomSocketSayError(
-            "Room ACK did not explicitly confirm acceptance; reconnecting.",
-            "ack_acceptance_invalid"
-          )
-        );
-        return;
-      }
-      if (!commandAckResultIsValid(command.action, command.payload, msg.result)) {
-        reconnectForProtocolError(
-          new RoomSocketSayError(
-            `Room ACK result for ${command.action} did not match its contract; reconnecting.`,
-            "ack_result_invalid"
-          )
-        );
-        return;
-      }
-      pending.delete(msg.request_id);
-      window.clearTimeout(command.timerId);
-      command.resolve(msg as RoomCommandAck);
-      return;
-    }
-    if (msg.op === "plugin_nack") {
-      handlers.onPlugin?.(
-        [
-          {
-            type: "plugin.error",
-            code: String(msg.error?.code || msg.category || "plugin_rejected"),
-            message: String(
-              msg.error?.message || msg.message || "Plugin command was rejected."
-            ),
-          },
-        ],
-        false
+  function acceptEventFrame(
+    currentSocket: WebSocket,
+    msg: Record<string, unknown>,
+    highWater: number,
+    establishing: boolean
+  ) {
+    if (
+      msg.op !== "event" ||
+      msg.stream !== "room_events" ||
+      !Array.isArray(msg.events) ||
+      !isSequence(msg.latest_seq)
+    ) {
+      throw new RoomSocketSayError(
+        "The subscription catch-up contained an invalid event frame.",
+        "event_frame_invalid"
       );
-      return;
     }
-    if (msg.op === "error") {
-      handlers.onError?.(
-        new RoomSocketSayError(
-          String(msg.message || "Room message was rejected."),
-          String(msg.category || "rejected")
-        )
-      );
-      return;
-    }
-    if (msg.op === "resync_required") {
-      if (isNonNegativeInteger(msg.latest_seq) && msg.latest_seq < lastSeq) {
-        lastSeq = 0;
-      }
-      handlers.onError?.(
-        new RoomSocketSayError(
-          String(msg.reason || "Room event delivery fell behind; reconnecting."),
-          "resync_required"
-        )
-      );
-      socket?.close();
-      return;
-    }
-    if (msg.op === "room_deleted") {
-      closed = true;
-      window.clearTimeout(reconnectTimer);
-      rejectAll(
-        new RoomSocketSayError("Room was deleted.", "room_deleted")
-      );
-      handlers.onRoomDeleted?.(
-        String(msg.room_id || ""),
-        String(msg.room_name || "")
-      );
-      socket?.close();
-      return;
-    }
-    if (msg.op === "snapshot" && msg.stream === "room_events") {
-      const validationError = snapshotValidationError(msg, {
-        expectedRoomId: canonicalRoomId,
-        currentLastSeq: lastSeq,
-      });
-      if (validationError) {
-        reconnectForProtocolError(validationError);
-        return;
-      }
-      const snapshot = msg as unknown as RoomSocketSnapshot;
-      const accepted = handlers.onRoomSnapshot?.(snapshot);
-      if (accepted === false) return;
-      canonicalRoomId = String((snapshot.room as Record<string, unknown>).room_id || canonicalRoomId);
-      lastSeq = snapshot.last_seq;
-      roomSnapshotAccepted = true;
-      return;
-    }
-    if (msg.op === "provider_catalog_updated" && msg.catalog) {
-      handlers.onProviderCatalog?.(msg.catalog);
-      return;
-    }
-    if (msg.op === "event" && msg.stream === "room_events" && Array.isArray(msg.events)) {
-      if (!roomSnapshotAccepted) {
-        reconnectForProtocolError(
-          new RoomSocketSayError(
-            "Room events arrived before the connection established a canonical snapshot; reconnecting.",
-            "snapshot_required"
-          )
+    const freshEvents: RoomEvent[] = [];
+    let nextSeq = lastSeq;
+    for (const rawEvent of msg.events) {
+      if (
+        !isRecord(rawEvent) ||
+        typeof rawEvent.id !== "string" ||
+        !rawEvent.id ||
+        rawEvent.room_id !== dependencies.expectedRoomId ||
+        typeof rawEvent.type !== "string" ||
+        !rawEvent.type ||
+        !isSequence(rawEvent.seq) ||
+        rawEvent.seq <= 0 ||
+        !participantProjectionIsValid(rawEvent as unknown as RoomEvent)
+      ) {
+        throw new RoomSocketSayError(
+          "Room event did not match the canonical event schema; reconnecting.",
+          "event_schema_invalid"
         );
-        return;
       }
-      const events = msg.events as unknown as RoomEvent[];
-      const freshEvents: RoomEvent[] = [];
-      let nextSeq = lastSeq;
-      for (const event of events) {
-        if (
-          !isRecord(event) ||
-          typeof event.id !== "string" ||
-          !event.id ||
-          typeof event.room_id !== "string" ||
-          !event.room_id ||
-          (Boolean(canonicalRoomId) && event.room_id !== canonicalRoomId) ||
-          typeof event.type !== "string" ||
-          !event.type ||
-          !participantProjectionIsValid(event as RoomEvent)
-        ) {
-          reconnectForProtocolError(
-            new RoomSocketSayError(
-              "Room event did not match the canonical event schema; reconnecting.",
-              "event_schema_invalid"
-            )
-          );
-          return;
-        }
-        const eventSeq = Number(event.seq || 0);
-        if (!Number.isInteger(eventSeq) || eventSeq <= 0) {
-          handlers.onError?.(
-            new RoomSocketSayError(
-              "Room event did not contain a valid durable sequence; reconnecting.",
-              "event_sequence_invalid"
-            )
-          );
-          socket?.close();
-          return;
-        }
-        if (eventSeq <= nextSeq) continue;
-        if (nextSeq > 0 && eventSeq !== nextSeq + 1) {
-          handlers.onError?.(
-            new RoomSocketSayError(
-              `Room event sequence gap detected (expected ${nextSeq + 1}, received ${eventSeq}); reconnecting.`,
-              "event_sequence_gap"
-            )
-          );
-          socket?.close();
-          return;
-        }
-        freshEvents.push(event);
-        nextSeq = eventSeq;
-        if (!canonicalRoomId) canonicalRoomId = event.room_id;
-      }
-      lastSeq = nextSeq;
-      if (freshEvents.length) handlers.onRoomEvents?.(freshEvents);
-      return;
-    }
-    if (msg.op === "event" && msg.stream === "plugin" && Array.isArray(msg.events)) {
-      let parsed: { events: PluginEnvelope[]; latestSequence: number };
-      try {
-        parsed = parsePluginEnvelopeBatch(msg.events, {
-          currentSequence: lastPluginSeq,
-          advertisedLatestSequence: msg.latest_seq,
-        });
-      } catch (error) {
-        if (!(error instanceof PluginStreamProtocolError)) throw error;
-        if (error.code === "plugin_event_gap") lastPluginSeq = 0;
-        reconnectForProtocolError(
-          new RoomSocketSayError(error.message, error.code)
+      if (establishing && rawEvent.seq <= nextSeq) {
+        throw new RoomSocketSayError(
+          "Subscription catch-up repeated an already delivered event.",
+          "subscription_catchup_invalid"
         );
-        return;
       }
-      lastPluginSeq = parsed.latestSequence;
-      if (parsed.events.length || msg.snapshot) {
-        handlers.onPlugin?.(parsed.events, Boolean(msg.snapshot));
+      if (rawEvent.seq <= nextSeq) continue;
+      if (rawEvent.seq !== nextSeq + 1) {
+        throw new RoomSocketSayError(
+          `Room event sequence gap detected (expected ${nextSeq + 1}, received ${rawEvent.seq}); reconnecting.`,
+          "event_sequence_gap"
+        );
       }
-      return;
+      if (establishing && rawEvent.seq > highWater) {
+        throw new RoomSocketSayError(
+          "Subscription catch-up exceeded its authenticated high-water mark.",
+          "subscription_catchup_overflow"
+        );
+      }
+      freshEvents.push(rawEvent as unknown as RoomEvent);
+      nextSeq = rawEvent.seq;
     }
-    if (msg.op === "event" && msg.stream === "lobby" && Array.isArray(msg.events)) {
-      handlers.onLobby?.(msg.events);
-    } else if (msg.op === "event" && msg.stream === "roster" && Array.isArray(msg.members)) {
-      handlers.onRoster?.(msg.members);
-    } else if (msg.op === "event" && msg.stream === "side_chat" && Array.isArray(msg.events)) {
-      handlers.onSideChat?.(msg.events as SideChatEvent[]);
+    if (!freshEvents.length || msg.latest_seq !== nextSeq) {
+      throw new RoomSocketSayError(
+        "Room event frame did not match its advertised durable cursor.",
+        "event_sequence_invalid"
+      );
     }
+    lastSeq = nextSeq;
+    handlers.onRoomEvents?.(freshEvents);
+    if (socket !== currentSocket) throw new Error("stale room socket");
   }
 
   async function connect() {
     try {
+      validateClientAuthority(streams, dependencies);
       const issued = await requestTicket(auth);
       if (closed) return;
-      const ticket = typeof issued === "string" ? issued : issued.ticket;
-      const proofKey = typeof issued === "string" ? "" : issued.server_proof_key || "";
-      const websocketBaseUrl =
-        typeof issued === "string" ? wsBaseUrl() : issued.websocket_base_url || wsBaseUrl();
-      const serverChallenge = proofKey ? createServerChallenge() : "";
-      const currentSocket = createSocket(
-        `${websocketBaseUrl}/ws?ticket=${encodeURIComponent(ticket)}`
-      );
+      if (
+        !issued ||
+        typeof issued.ticket !== "string" ||
+        !isHex32Bytes(issued.ticket) ||
+        typeof issued.websocket_base_url !== "string" ||
+        !isHex32Bytes(issued.server_proof_key)
+      ) {
+        throw new RoomSocketSayError(
+          "The desktop runtime ticket contract is incomplete.",
+          "runtime_ticket_invalid"
+        );
+      }
+      const serverChallenge = createServerChallenge();
+      const currentSocket = createSocket(ticketSocketUrl(issued.websocket_base_url, issued.ticket));
       socket = currentSocket;
-      roomSnapshotAccepted = false;
-      transportAuthenticated = false;
-      let serverVerified = !proofKey;
+      transportReady = false;
+      let receipt: SubscriptionReceipt | null = null;
+      let snapshotAccepted = false;
       let verificationQueue = Promise.resolve();
-      const handleFrameError = (error: unknown) => {
-        if (error instanceof SyntaxError) {
-          reconnectForProtocolError(
-            new RoomSocketSayError(
-              "Room socket received malformed JSON; reconnecting before accepting more events.",
-              "frame_json_invalid"
-            )
-          );
+
+      const markReady = () => {
+        if (
+          transportReady ||
+          !receipt ||
+          !snapshotAccepted ||
+          lastSeq !== receipt.catchup_high_water
+        ) return;
+        transportReady = true;
+        reconnectAttempt = 0;
+        handlers.onOpen?.();
+        sendPending();
+      };
+
+      const processFrame = async (raw: string) => {
+        const msg = JSON.parse(raw) as unknown;
+        if (!receipt) {
+          receipt = await verifySubscriptionReceipt(msg, {
+            ticket: issued.ticket,
+            proofKey: issued.server_proof_key,
+            serverChallenge,
+            roomId: dependencies.expectedRoomId,
+            participantId: dependencies.expectedParticipantId,
+            streams,
+            serverSurface: dependencies.serverSurface,
+          });
           return;
         }
-        handlers.onError?.(error as Error);
+        if (!snapshotAccepted) {
+          await verifyBoundSnapshot(raw, msg, receipt);
+          const validationError = snapshotValidationError(msg, {
+            expectedRoomId: dependencies.expectedRoomId,
+            currentLastSeq: lastSeq,
+          });
+          if (validationError) throw validationError;
+          const snapshot = msg as RoomSocketSnapshot;
+          if (handlers.onRoomSnapshot?.(snapshot) === false) {
+            throw new RoomSocketSayError(
+              "The room projection rejected its authenticated snapshot.",
+              "snapshot_rejected"
+            );
+          }
+          lastSeq = snapshot.last_seq;
+          snapshotAccepted = true;
+          markReady();
+          return;
+        }
+        if (!isRecord(msg)) {
+          throw new RoomSocketSayError("Room socket frame was invalid.", "frame_schema_invalid");
+        }
+        if (!transportReady) {
+          acceptEventFrame(currentSocket, msg, receipt.catchup_high_water, true);
+          markReady();
+          return;
+        }
+        if (msg.op === "event") {
+          acceptEventFrame(currentSocket, msg, Number.MAX_SAFE_INTEGER, false);
+          return;
+        }
+        if (msg.op === "provider_catalog_updated" && isRecord(msg.catalog)) {
+          handlers.onProviderCatalog?.(msg.catalog as unknown as ProviderCatalogSnapshot);
+          return;
+        }
+        if (msg.op === "resync_required") {
+          throw new RoomSocketSayError(
+            String(msg.reason || "Room event delivery fell behind; reconnecting."),
+            "resync_required"
+          );
+        }
+        if ((msg.op === "ack" || msg.op === "nack") && typeof msg.request_id === "string") {
+          const command = pending.get(msg.request_id);
+          if (!command) return;
+          if (msg.op === "nack" || msg.accepted === false) {
+            pending.delete(msg.request_id);
+            window.clearTimeout(command.timerId);
+            const error = isRecord(msg.error) ? msg.error : {};
+            command.reject(new RoomSocketSayError(
+              String(error.message || "Room command was rejected."),
+              String(error.code || "rejected")
+            ));
+            return;
+          }
+          if (
+            msg.op !== "ack" ||
+            msg.accepted !== true ||
+            msg.action !== command.action ||
+            !commandAckResultIsValid(command.action, command.payload, msg.result)
+          ) {
+            throw new RoomSocketSayError(
+              "Room ACK did not match its pending command contract; reconnecting.",
+              "ack_contract_invalid"
+            );
+          }
+          pending.delete(msg.request_id);
+          window.clearTimeout(command.timerId);
+          command.resolve(msg as unknown as RoomCommandAck);
+          return;
+        }
+        if (msg.op === "pong") return;
+        throw new RoomSocketSayError(
+          "Room socket returned a frame outside the bound product protocol.",
+          "frame_unexpected"
+        );
       };
+
       currentSocket.onopen = () => {
-        reconnectAttempt = 0;
-        transportAuthenticated = !proofKey;
-        const subscription: Record<string, unknown> = {
+        currentSocket.send(JSON.stringify({
           op: "subscribe",
           streams,
           resume_from_seq: lastSeq,
-        };
-        if (serverChallenge) subscription.server_challenge = serverChallenge;
-        if (streams.includes("plugin")) {
-          subscription.plugin_resume_from_seq = lastPluginSeq;
-        }
-        currentSocket.send(JSON.stringify(subscription));
-        if (transportAuthenticated) sendPending();
-        handlers.onOpen?.();
+          server_challenge: serverChallenge,
+        }));
       };
       currentSocket.onmessage = (event) => {
-        const raw = event.data as string;
-        if (!proofKey) {
-          try {
-            dispatchFrame(raw);
-          } catch (error) {
-            handleFrameError(error);
-          }
+        const raw = event.data;
+        if (typeof raw !== "string") {
+          fail(currentSocket, new RoomSocketSayError(
+            "Binary WebSocket frames are not supported.",
+            "binary_frame_unsupported"
+          ));
           return;
         }
-        verificationQueue = verificationQueue.then(async () => {
-          if (socket !== currentSocket || currentSocket.readyState !== WebSocket.OPEN) return;
-          if (!serverVerified) {
-            const frame = JSON.parse(raw) as { op?: string; server_proof?: string };
-            const verified =
-              frame.op === "snapshot" &&
-              typeof frame.server_proof === "string" &&
-              await verifyServerProof(proofKey, serverChallenge, frame.server_proof);
-            if (!verified) {
-              reconnectForProtocolError(
-                new RoomSocketSayError(
-                  "The desktop runtime did not prove ownership of its control channel.",
-                  "server_identity_invalid"
-                )
-              );
-              return;
-            }
-            serverVerified = true;
-            transportAuthenticated = true;
-          }
-          dispatchFrame(raw);
-          if (roomSnapshotAccepted) sendPending();
-        }).catch(handleFrameError);
+        verificationQueue = verificationQueue
+          .then(async () => {
+            if (socket !== currentSocket || currentSocket.readyState !== WebSocket.OPEN) return;
+            await processFrame(raw);
+          })
+          .catch((error) => fail(currentSocket, error));
       };
       currentSocket.onerror = (event) => handlers.onError?.(event);
       currentSocket.onclose = () => {
         if (socket === currentSocket) socket = null;
+        transportReady = false;
         handlers.onClose?.();
         if (closed) return;
         reconnectAttempt += 1;
@@ -681,16 +617,11 @@ export function openRoomSocket(
         reject(new RoomSocketSayError("Room socket is closed.", "socket_closed"));
         return;
       }
-      if (
-        dependencies.allowedActions &&
-        !dependencies.allowedActions.some((allowed) => allowed === action)
-      ) {
-        reject(
-          new RoomSocketSayError(
-            `Room action ${action} is not present in the bound server product surface.`,
-            "surface_action_unavailable"
-          )
-        );
+      if (!(dependencies.serverSurface.websocket_actions as readonly string[]).includes(action)) {
+        reject(new RoomSocketSayError(
+          `Room action ${action} is not present in the bound server product surface.`,
+          "surface_action_unavailable"
+        ));
         return;
       }
       const requestId = nextRequestId();
@@ -710,23 +641,14 @@ export function openRoomSocket(
   return {
     close: () => {
       closed = true;
+      transportReady = false;
       window.clearTimeout(reconnectTimer);
       rejectAll(new RoomSocketSayError("Room socket closed.", "socket_closed"));
       socket?.close();
     },
-    resync: () => {
-      socket?.close();
-    },
-    ready: () => socket?.readyState === WebSocket.OPEN,
+    resync: () => socket?.close(),
+    ready: () => transportReady,
     command,
-    plugin: streams.includes("plugin") ? (payload) => {
-      if (socket?.readyState !== WebSocket.OPEN) {
-        throw new RoomSocketSayError("Room socket is closed.", "socket_closed");
-      }
-      socket.send(
-        JSON.stringify({ op: "plugin", ...payload, request_id: nextRequestId() })
-      );
-    } : undefined,
     historyBefore: async (beforeSeq, limit = 200) => {
       const ack = await command("room.history", { before_seq: beforeSeq, limit });
       const result = ack.result || {};
@@ -738,9 +660,7 @@ export function openRoomSocket(
       };
     },
     say: async (request) => {
-      await command("message.send", {
-        content: request.message,
-      });
+      await command("message.send", { content: request.message });
       return { events: [] };
     },
   };

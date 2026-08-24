@@ -2,7 +2,7 @@ use std::{fs, path::PathBuf};
 
 use agentsassemble_protocol::{
     CommandAck, HostProductSurface, HttpMethod, HttpRouteSurface, RoomAction, RoomSnapshot,
-    RoomStream, ServerProductSurface, TicketResponse,
+    RoomStream, ServerProductSurface, Subscribed, TicketResponse,
 };
 use ts_rs::{Config, TS};
 
@@ -15,6 +15,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_large_int("number")
         .with_import_extension(Some("js"));
     RoomSnapshot::export_all(&config)?;
+    Subscribed::export_all(&config)?;
     CommandAck::export_all(&config)?;
     TicketResponse::export_all(&config)?;
     HttpMethod::export_all(&config)?;

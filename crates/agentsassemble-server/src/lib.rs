@@ -54,6 +54,7 @@ mod room_directory_web;
 mod room_random_runtime;
 mod room_runtime;
 mod room_shutdown;
+mod room_socket;
 mod runtime_reconciliation;
 mod security_headers;
 mod server_proof;

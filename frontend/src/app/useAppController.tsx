@@ -311,7 +311,7 @@ export function useAppController() {
     roomId: startupIdentityResolved && roomSurfaceReady ? activeOperationalMeetingId : "",
     auth: roomSurfaceReady ? canonicalRoomAuth : undefined,
     streams: serverProductSurface?.websocket_streams || [],
-    actions: serverProductSurface?.websocket_actions || [],
+    serverSurface: serverProductSurface,
     viewerParticipantId: guestSession?.agentId || "operator-local",
     onSideChat: handleSideChatRealtimeEvents,
     onError: handleSideChatError,

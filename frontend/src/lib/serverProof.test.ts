@@ -1,20 +1,38 @@
 import { describe, expect, it } from "vitest";
-import { createServerChallenge, verifyServerProof } from "./serverProof";
+import {
+  deriveConnectionNonce,
+  digestPermissions,
+} from "./serverProof";
 
-describe("desktop runtime server proof", () => {
-  it("verifies the protocol HMAC and rejects a changed challenge", async () => {
-    const key = "a".repeat(64);
-    const challenge = "b".repeat(64);
-    const proof = "1487f06e7937ce6a3b94b947bc3f1141e73662cb9851fc5a59381facc497782c";
-    await expect(verifyServerProof(key, challenge, proof)).resolves.toBe(true);
-    await expect(verifyServerProof(key, "c".repeat(64), proof)).resolves.toBe(false);
+describe("subscription proof primitives", () => {
+  it("binds each one-use ticket to a distinct connection nonce", async () => {
+    await expect(deriveConnectionNonce("a".repeat(64))).resolves.not.toBe(
+      await deriveConnectionNonce("b".repeat(64))
+    );
   });
 
-  it("generates a fresh 32-byte hexadecimal challenge", () => {
-    const first = createServerChallenge();
-    const second = createServerChallenge();
-    expect(first).toMatch(/^[0-9a-f]{64}$/);
-    expect(second).toMatch(/^[0-9a-f]{64}$/);
-    expect(second).not.toBe(first);
+  it("rejects non-canonical permission maps and hashes exact booleans", async () => {
+    const permissions = {
+      "agent.control": true,
+      "bridge.publish": false,
+      "bridge.report": false,
+      "message.modify": true,
+      "message.send": true,
+      "participant.kick": true,
+      "participant.leave": true,
+      "participant.mute": true,
+      "provider.request.resolve": true,
+      "room.delete": true,
+      "room.history": true,
+      "room.manage": true,
+      "room.random": true,
+      "room.vote.summary": true,
+    };
+    const digest = await digestPermissions(permissions);
+    expect(digest).toMatch(/^[0-9a-f]{64}$/);
+    await expect(digestPermissions({ ...permissions, unknown: false })).resolves.toBeNull();
+    await expect(
+      digestPermissions({ ...permissions, "message.send": false })
+    ).resolves.not.toBe(digest);
   });
 });

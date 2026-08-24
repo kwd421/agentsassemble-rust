@@ -31,6 +31,42 @@ export const EMPTY_PROVIDER_CATALOG: ProviderCatalogSnapshot = {
   providers: [],
 };
 
+export type CanonicalParticipantProfile = {
+  displayName?: string;
+  avatarImageUrl?: string;
+  providerKind?: string;
+  role?: string;
+};
+
+export function canonicalParticipantProfiles(
+  sessions: RoomAgentSession[],
+  participants: RoomMember[]
+): Record<string, CanonicalParticipantProfile> {
+  const profiles: Record<string, CanonicalParticipantProfile> = {};
+  sessions.forEach((session) => {
+    if (!session.participant_id) return;
+    profiles[session.participant_id] = {
+      displayName: session.display_name,
+      avatarImageUrl: session.avatar_image_url,
+      providerKind: session.provider_kind,
+    };
+  });
+  participants.forEach((participant) => {
+    if (!participant.participant_id) return;
+    const previous = profiles[participant.participant_id] || {};
+    profiles[participant.participant_id] = {
+      displayName: participant.display_name || previous.displayName,
+      avatarImageUrl:
+        participant.avatar_image_url !== undefined
+          ? participant.avatar_image_url
+          : previous.avatarImageUrl,
+      providerKind: participant.provider_kind || previous.providerKind,
+      role: participant.role,
+    };
+  });
+  return profiles;
+}
+
 export function mergeRoomEvents(
   current: RoomEvent[],
   incoming: RoomEvent[],

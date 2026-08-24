@@ -6,6 +6,15 @@ Comparison baseline: original
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; Rust
 `6de2671848b951fb16dc13bb2dd2dfeb25c1e88f`.
 
+Implementation checkpoint, 2026-08-25: immutable local authority/zero-room
+bootstrap, server-wide human profile, canonical directory/create-room flow, and
+derived server/native product surfaces are published. The proof-bound finite
+subscription section is implemented in the current candidate with strict
+one-use ticket credentials, exact-byte Snapshot binding, a transactional bounded
+`(C,H]` reader, client high-water readiness, and no string-ticket/non-desktop
+fallback. Process-wide admission and participant role/mute/provider-custody work
+below remain active and are not implied complete by this checkpoint.
+
 ## Definition
 
 This slice replaces the fixture-shaped bootstrap with a restartable local

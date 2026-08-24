@@ -47,6 +47,10 @@ pub enum PersistenceError {
     CommandConflict,
     #[error("snapshot cursor is ahead of durable room history at {durable_last_seq}")]
     InvalidCursor { durable_last_seq: i64 },
+    #[error("subscription catch-up through {high_water} exceeds the limit of {limit} events")]
+    SubscriptionCatchUpExceeded { high_water: i64, limit: i64 },
+    #[error("subscription event sequence is not contiguous: expected {expected}, found {found}")]
+    SubscriptionSequenceGap { expected: i64, found: i64 },
     #[error("command rejected: {code}: {message}")]
     CommandRejected { code: &'static str, message: String },
 }

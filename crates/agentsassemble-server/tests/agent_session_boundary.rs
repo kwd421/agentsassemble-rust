@@ -511,14 +511,24 @@ async fn subscribe<S>(socket: &mut WebSocketStream<S>)
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
+    let challenge = "d".repeat(64);
     socket
         .send(Message::Text(
-            json!({"op": "subscribe", "streams": ["room_events"], "resume_from_seq": 0})
-                .to_string()
-                .into(),
+            json!({
+                "op": "subscribe",
+                "streams": ["room_events"],
+                "resume_from_seq": 0,
+                "server_challenge": challenge,
+            })
+            .to_string()
+            .into(),
         ))
         .await
         .unwrap_or_else(|error| panic!("send subscription: {error}"));
+    let receipt = receive_json(socket).await;
+    assert_eq!(receipt["op"], "subscribed");
+    assert_eq!(receipt["server_challenge"], challenge);
+    assert_eq!(receipt["streams"], json!(["room_events"]));
 }
 
 async fn send_create<S>(socket: &mut WebSocketStream<S>, request_id: &str, payload: &Value)

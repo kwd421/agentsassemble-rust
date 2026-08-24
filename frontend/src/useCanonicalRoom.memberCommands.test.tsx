@@ -1,3 +1,4 @@
+import { TEST_SERVER_PRODUCT_SURFACE } from "./test/serverProductSurface";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { RoomEvent, RoomMember } from "./api";
@@ -58,6 +59,7 @@ describe("useCanonicalRoom member commands", () => {
     });
     const { result } = renderHook(() =>
       useCanonicalRoom({
+        serverSurface: TEST_SERVER_PRODUCT_SURFACE,
         roomId: "general",
         auth: { kind: "host", meetingId: "general" },
         openSocket,

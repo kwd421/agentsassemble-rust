@@ -945,6 +945,52 @@ crypto-failure behavior, startup side-effect order, lifetime drift, runtime
 replacement, and non-desktop reachability. It likewise returned explicit
 `APPROVE` with no Critical, High, or Medium blocker.
 
+### Proof-bound finite subscription candidate: 2026-08-25
+
+The room socket now registers its live receiver before constructing the durable
+snapshot, serializes the exact final Snapshot frame at cursor `C`, and fixes one
+transactional bounded catch-up high-water `H`. A new strict `Subscribed` receipt
+binds the one-use ticket-derived connection nonce, client challenge, exact room,
+principal and participant, protocol and stream set, pinned product surface,
+canonical permissions digest, `C`, `H`, and SHA-256 of the exact Snapshot UTF-8
+bytes with a versioned 64-bit length-delimited HMAC transcript. The client
+serializes asynchronous verification, accepts no command before the receipt and
+Snapshot verify and `C+1..H` arrives contiguously, and exposes readiness only at
+`H`. String-ticket and non-desktop ticket fallbacks were removed; central and
+guest room admission remain explicitly incomplete instead of borrowing desktop
+authority.
+
+The complete unchanged `make verify` passed in one continuous run: mandatory
+architecture, source-growth, logical-line, and 800-line gates; generated Rust to
+TypeScript bindings; production frontend build and original CSS/cascade check;
+71 frontend files with 348 tests; 15 Tauri tests; 18 domain, 86 persistence, four
+protocol, 100 provider, and 16 server unit tests; 20 Rust integration tests;
+documentation tests; warning-denied workspace and desktop Clippy; and final diff
+validation.
+
+Computer Use then drove a fresh debug package named
+`AgentsAssemble Subscription Verify` under isolated identifier
+`app.agentsassemble.rust.subscriptionverify`. The central URL was intentionally
+unset so the documented local-authority entry point, rather than the separately
+incomplete central admission surface, owned the run. The real UI initialized
+`Subscription Verify`, created its first SQLite-backed room, mounted the
+proof-bound `room_events` subscription and sent `SUBSCRIPTION_PROOF_READY_OK`.
+Normal quit removed the exact app, supervisor, and sidecar. A second Computer Use
+launch recovered the same room and message through a new subscription, then sent
+`SUBSCRIPTION_RECONNECT_OK` through the live timeline.
+
+Final normal quit left no exact verification app, supervisor, or sidecar process.
+Its Application Support data, cache, WebKit data, and app bundle were moved to
+the recoverable Trash directory
+`/Users/seinel/.Trash/AgentsAssemble-Subscription-Verify-Zx7qIO`. The two
+preflight packages whose build identity or central configuration was rejected
+before evidence collection remain separately recoverable at
+`/Users/seinel/.Trash/AgentsAssemble-Subscription-Preflight-AWq58f` and
+`/Users/seinel/.Trash/AgentsAssemble-Subscription-Misconfigured-EH5dwE`.
+Original-product data and unrelated processes were untouched. This candidate
+still requires exact public-diff cross-review by the critical web session and
+Daybreaker Blue High.
+
 ## API verification scope
 
 When a reachable flow specifically needs an API-backed provider, the allowed paid/provider-specific candidates are the official DeepSeek API and the designated Flash provider path. Every other API-backed verification uses only an explicitly free API or free model. Missing credentials, exhausted free quota, or unavailable models fail visibly; they do not trigger a paid substitution or a fallback provider.

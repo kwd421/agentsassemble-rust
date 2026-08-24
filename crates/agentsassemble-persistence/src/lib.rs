@@ -21,6 +21,7 @@ mod room_directory;
 mod room_event_publication;
 mod room_random;
 mod room_settings;
+mod room_subscription;
 mod room_turns;
 mod room_write_budget;
 mod schema;
@@ -46,6 +47,7 @@ pub use profile_attachments::{ProfileAttachment, ProfileAttachmentMetadata};
 pub use profile_store::ProfileUpdateOutcome;
 pub use room_directory::{RoomCreateCommit, StoredRoomSummary};
 pub use room_random::{ProviderRoomRandomCommit, RoomRandomCommit};
+pub use room_subscription::RoomCatchUp;
 pub use room_turns::{
     AgentTurnAssignment, AgentTurnCommit, ProviderTurnAuthority, RoomCommandMutation,
 };

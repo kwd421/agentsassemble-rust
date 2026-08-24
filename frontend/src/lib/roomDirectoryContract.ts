@@ -1,5 +1,6 @@
 import type { ServerRoomDockSource } from "./roomDockModel";
 import type { ServerProductSurface } from "../types/generated/ServerProductSurface";
+import { lengthDelimitedTranscript, sha256Hex } from "./lengthDelimitedCrypto";
 
 export type StrictRoomDirectory = {
   server_id: string;
@@ -269,19 +270,10 @@ function validateServerProductSurface(value: unknown): ServerProductSurface {
   return surface as unknown as ServerProductSurface;
 }
 
-function lengthDelimited(value: string): Uint8Array {
-  const encoded = new TextEncoder().encode(value);
-  const field = new Uint8Array(8 + encoded.length);
-  new DataView(field.buffer).setBigUint64(0, BigInt(encoded.length), false);
-  field.set(encoded, 8);
-  return field;
-}
-
 async function canonicalServerSurfaceDigest(
   surface: ServerProductSurface
 ): Promise<string> {
   const fields = [
-    "agentsassemble.server-product-surface.v1",
     String(surface.revision),
     ...surface.http_routes.map((route) => `${route.method} ${route.path}`),
     "streams",
@@ -289,17 +281,12 @@ async function canonicalServerSurfaceDigest(
     "actions",
     ...surface.websocket_actions,
   ];
-  const encoded = fields.map(lengthDelimited);
-  const transcript = new Uint8Array(
-    encoded.reduce((total, field) => total + field.length, 0)
+  return sha256Hex(
+    lengthDelimitedTranscript(
+      "agentsassemble.server-product-surface.v1",
+      fields
+    )
   );
-  let offset = 0;
-  for (const field of encoded) {
-    transcript.set(field, offset);
-    offset += field.length;
-  }
-  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", transcript));
-  return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 async function assertServerProductSurfaceIntegrity(

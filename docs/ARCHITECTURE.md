@@ -171,9 +171,26 @@ The Rust protocol crate owns WebSocket envelopes, request correlation, error sha
 The existing outer envelope remains compatible:
 
 - client: `subscribe`, `command`, `ping`;
-- server: `snapshot`, `event`, `ack`, `nack`, `resync_required`, `pong`.
+- server: `subscribed`, `snapshot`, `event`, `ack`, `nack`,
+  `resync_required`, `pong`.
 
 Action payloads are added only by the slice that implements them.
+
+One-use room tickets also carry a private proof key. The server registers the
+canonical live receiver before reading a durable snapshot, serializes the exact
+final Snapshot frame at cursor `C`, and fixes one transactionally authorized
+high-water `H`. A versioned length-delimited `Subscribed` HMAC binds the ticket-
+derived connection nonce, challenge, room/principal/participant, protocol and
+accepted streams, current server product surface, exact permissions digest,
+`C`, `H`, and the SHA-256 digest of the exact Snapshot UTF-8 bytes. The server
+sends `Subscribed`, that exact Snapshot, then the bounded contiguous durable
+range `C+1..H`; overflow or a missing sequence closes without readiness.
+
+The browser compares the receipt with its already pinned native/server surface,
+recomputes the connection nonce, HMAC, Snapshot-byte digest, and canonical
+permission digest, and reaches ready only at `delivered_seq == H`. TCP open is
+not product readiness, and queued commands cannot cross the socket before that
+boundary. A single absolute deadline owns the whole establishment flow.
 
 ### Application and transport boundary
 

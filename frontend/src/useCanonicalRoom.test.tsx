@@ -1,3 +1,4 @@
+import { TEST_SERVER_PRODUCT_SURFACE } from "./test/serverProductSurface";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type {
@@ -11,7 +12,6 @@ import type {
   RoomSocketHandlers,
   RoomSocketSnapshot,
 } from "./roomSocketClient";
-import { ApiError } from "./lib/apiErrors";
 import { useCanonicalRoom } from "./useCanonicalRoom";
 
 function event(sequence: number, type: string, content = ""): RoomEvent {
@@ -98,6 +98,7 @@ describe("useCanonicalRoom", () => {
   it("rejects lifecycle commands when the canonical room socket is unavailable", async () => {
     const { result } = renderHook(() =>
       useCanonicalRoom({
+        serverSurface: TEST_SERVER_PRODUCT_SURFACE,
         roomId: "general",
       })
     );
@@ -138,6 +139,7 @@ describe("useCanonicalRoom", () => {
     });
     const { result } = renderHook(() =>
       useCanonicalRoom({
+        serverSurface: TEST_SERVER_PRODUCT_SURFACE,
         roomId: "general",
         auth: { kind: "host", meetingId: "general" },
         openSocket,
@@ -184,6 +186,7 @@ describe("useCanonicalRoom", () => {
     });
     const { result } = renderHook(() =>
       useCanonicalRoom({
+        serverSurface: TEST_SERVER_PRODUCT_SURFACE,
         roomId: "general",
         auth: { kind: "host", meetingId: "general" },
         openSocket,
@@ -235,6 +238,7 @@ describe("useCanonicalRoom", () => {
     });
     const { result } = renderHook(() =>
       useCanonicalRoom({
+        serverSurface: TEST_SERVER_PRODUCT_SURFACE,
         roomId: "general",
         auth: { kind: "host", meetingId: "general" },
         openSocket,
@@ -283,6 +287,7 @@ describe("useCanonicalRoom", () => {
     });
     const { result } = renderHook(() =>
       useCanonicalRoom({
+        serverSurface: TEST_SERVER_PRODUCT_SURFACE,
         roomId: "general",
         auth: { kind: "host", meetingId: "general" },
         viewerParticipantId: "operator-local",
@@ -340,6 +345,7 @@ describe("useCanonicalRoom", () => {
     });
     const { result } = renderHook(() =>
       useCanonicalRoom({
+        serverSurface: TEST_SERVER_PRODUCT_SURFACE,
         roomId: "general",
         auth: { kind: "host", meetingId: "general" },
         openSocket,
@@ -424,6 +430,7 @@ describe("useCanonicalRoom", () => {
       });
       const { result } = renderHook(() =>
         useCanonicalRoom({
+        serverSurface: TEST_SERVER_PRODUCT_SURFACE,
           roomId: "general",
           auth: { kind: "host", meetingId: "general" },
           openSocket,
@@ -516,6 +523,7 @@ describe("useCanonicalRoom", () => {
     });
     const { result } = renderHook(() =>
       useCanonicalRoom({
+        serverSurface: TEST_SERVER_PRODUCT_SURFACE,
         roomId: "general",
         auth: { kind: "host", meetingId: "general" },
         openSocket,
@@ -560,6 +568,7 @@ describe("useCanonicalRoom", () => {
     });
     const { result } = renderHook(() =>
       useCanonicalRoom({
+        serverSurface: TEST_SERVER_PRODUCT_SURFACE,
         roomId: "general",
         auth: { kind: "host", meetingId: "general" },
         openSocket,
@@ -642,6 +651,7 @@ describe("useCanonicalRoom", () => {
     });
     const { result } = renderHook(() =>
       useCanonicalRoom({
+        serverSurface: TEST_SERVER_PRODUCT_SURFACE,
         roomId: "general",
         auth: { kind: "host", meetingId: "general" },
         openSocket,
@@ -688,110 +698,5 @@ describe("useCanonicalRoom", () => {
     expect(result.current.timelineEvents.every((item) => item.name === "Makima")).toBe(true);
   });
 
-  it("ignores late callbacks from the room socket it already replaced", async () => {
-    const handlersByRoom = new Map<string, RoomSocketHandlers>();
-    const handle = (): RoomSocketHandle => ({
-      close: vi.fn(),
-      ready: () => true,
-      command: vi.fn(),
-      say: vi.fn(),
-      historyBefore: vi.fn(),
-    });
-    const openSocket = vi.fn((auth, _streams, handlers: RoomSocketHandlers) => {
-      const targetRoom = auth.kind === "host" ? auth.meetingId : "guest";
-      handlersByRoom.set(targetRoom, handlers);
-      return handle();
-    });
-    const { result, rerender } = renderHook(
-      ({ roomId }) =>
-        useCanonicalRoom({
-          roomId,
-          auth: { kind: "host", meetingId: roomId },
-          openSocket,
-        }),
-      { initialProps: { roomId: "general" } }
-    );
-    await waitFor(() => expect(openSocket).toHaveBeenCalledTimes(1));
-    act(() => handlersByRoom.get("general")?.onOpen?.());
-    expect(result.current.connectionState).toBe("connected");
-
-    rerender({ roomId: "second-room" });
-    await waitFor(() => expect(openSocket).toHaveBeenCalledTimes(2));
-    act(() => handlersByRoom.get("second-room")?.onOpen?.());
-    act(() => handlersByRoom.get("general")?.onClose?.());
-
-    expect(result.current.connectionState).toBe("connected");
-  });
-
-  it("forwards deletion only from the currently connected room", async () => {
-    const handlersByRoom = new Map<string, RoomSocketHandlers>();
-    const openSocket = vi.fn((auth, _streams, handlers: RoomSocketHandlers) => {
-      const targetRoom = auth.kind === "host" ? auth.meetingId : "guest";
-      handlersByRoom.set(targetRoom, handlers);
-      return {
-        close: vi.fn(),
-        ready: () => true,
-        command: vi.fn(),
-        say: vi.fn(),
-        historyBefore: vi.fn(),
-      } satisfies RoomSocketHandle;
-    });
-    const onRoomDeleted = vi.fn();
-    const { rerender } = renderHook(
-      ({ roomId }) =>
-        useCanonicalRoom({
-          roomId,
-          auth: { kind: "host", meetingId: roomId },
-          openSocket,
-          onRoomDeleted,
-        }),
-      { initialProps: { roomId: "general" } }
-    );
-    await waitFor(() => expect(openSocket).toHaveBeenCalledTimes(1));
-
-    rerender({ roomId: "second-room" });
-    await waitFor(() => expect(openSocket).toHaveBeenCalledTimes(2));
-    act(() =>
-      handlersByRoom.get("general")?.onRoomDeleted?.("general", "General")
-    );
-    expect(onRoomDeleted).not.toHaveBeenCalled();
-
-    act(() =>
-      handlersByRoom
-        .get("second-room")
-        ?.onRoomDeleted?.("second-room", "Second")
-    );
-    expect(onRoomDeleted).toHaveBeenCalledWith("second-room", "Second");
-  });
-
-  it("expires a guest only when the canonical room connection is unauthorized", async () => {
-    let handlers: RoomSocketHandlers | undefined;
-    const openSocket = vi.fn((_auth, _streams, nextHandlers: RoomSocketHandlers) => {
-      handlers = nextHandlers;
-      return {
-        close: vi.fn(),
-        ready: () => false,
-        command: vi.fn(),
-        say: vi.fn(),
-        historyBefore: vi.fn(),
-      } satisfies RoomSocketHandle;
-    });
-    const onUnauthorized = vi.fn();
-    renderHook(() =>
-      useCanonicalRoom({
-        roomId: "general",
-        auth: { kind: "session", sessionToken: "guest-session" },
-        openSocket,
-        onUnauthorized,
-      })
-    );
-    await waitFor(() => expect(openSocket).toHaveBeenCalledOnce());
-
-    act(() => handlers?.onError?.(new Error("unrelated flow unavailable")));
-    expect(onUnauthorized).not.toHaveBeenCalled();
-
-    act(() => handlers?.onError?.(new ApiError(401, "invalid or expired session")));
-    expect(onUnauthorized).toHaveBeenCalledOnce();
-  });
 
 });

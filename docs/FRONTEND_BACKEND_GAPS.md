@@ -6,7 +6,9 @@ Comparison baseline: original
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust
 `6de2671848b951fb16dc13bb2dd2dfeb25c1e88f`. The active local-authority,
 surface, admission, subscription, and moderation boundary is design-approved but
-not implementation evidence.
+not complete as one boundary. Local authority and product-surface slices are
+published; proof-bound finite subscription is implemented in the current
+candidate, while process-wide admission and canonical role/mute remain open.
 
 ## Scope and method
 
@@ -298,8 +300,13 @@ At the public Rust comparison commit:
 - The copied left-bottom human profile reads and updates the authenticated Rust
   user profile, including bounded canonical profile-avatar publication, without
   overwriting room role/join/mute authority or Agent Session profiles.
-- The WebSocket client verifies the Rust runtime's initial snapshot proof before
-  accepting events or sending queued commands.
+- The WebSocket client requires the one-use ticket/proof-key object, validates a
+  signed `Subscribed` receipt against the already pinned server surface and the
+  expected room/participant, recomputes the exact Snapshot-byte and permissions
+  digests, and withholds product readiness plus queued commands until the
+  contiguous finite catch-up reaches authenticated high-water `H`. The prior
+  proofless string-ticket/non-desktop path is removed; central and guest socket
+  ticket authority stays explicitly incomplete until its real owner is cut over.
 - Rust snapshots drive the original room timeline, provider catalog, participant
   list, Agent Session list, and create/start/resume/stop controls.
 - The original create dialog uses a native Tauri directory picker in the packaged

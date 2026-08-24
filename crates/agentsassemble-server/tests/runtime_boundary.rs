@@ -17,6 +17,13 @@ use tokio::{
 use tokio_tungstenite::{WebSocketStream, connect_async, tungstenite::Message};
 use tokio_util::sync::CancellationToken;
 
+#[path = "support/subscription_proof.rs"]
+mod subscription_proof;
+
+use subscription_proof::{
+    connection_nonce_for_ticket, expected_subscription_proof, permissions_digest, sha256_hex,
+};
+
 const HOST_TOKEN: &str = "boundary-test-host-token-0000000001";
 const HOST_CHALLENGE_CONTEXT: &str = "agentsassemble-host-challenge-v1\0";
 const HOST_REQUEST_CONTEXT: &str = "agentsassemble-host-ticket-request-v1\0";
@@ -127,8 +134,7 @@ async fn external_client_recovers_committed_command_after_restart() {
             .is_err()
     );
     let mut cursor_ahead = connect(&second_server.base_url).await;
-    subscribe(&mut cursor_ahead, 50).await;
-    let resync = receive_json(&mut cursor_ahead).await;
+    let resync = subscribe(&mut cursor_ahead, 50).await;
     assert_eq!(resync["op"], "resync_required");
     assert_eq!(resync["latest_seq"], 2);
     second_server.stop().await;
@@ -406,11 +412,30 @@ async fn websocket_snapshot_proves_the_private_ticket_control_channel() {
         ))
         .await
         .unwrap_or_else(|error| panic!("send proved subscription: {error}"));
-    let snapshot = receive_json(&mut socket).await;
-    let received = snapshot["server_proof"]
+    let receipt = receive_json(&mut socket).await;
+    assert_eq!(receipt["op"], "subscribed");
+    let received = receipt["proof"]
         .as_str()
-        .unwrap_or_else(|| panic!("snapshot is missing server proof"));
-    assert_eq!(received, expected_server_proof(proof_key, &challenge));
+        .unwrap_or_else(|| panic!("subscription receipt is missing proof"));
+    assert_eq!(received, expected_subscription_proof(proof_key, &receipt));
+    assert_eq!(
+        receipt["connection_nonce"],
+        connection_nonce_for_ticket(ticket)
+    );
+    let raw_snapshot = receive_text(&mut socket).await;
+    let snapshot: Value = serde_json::from_str(&raw_snapshot)
+        .unwrap_or_else(|error| panic!("decode proved snapshot: {error}"));
+    assert_eq!(snapshot["op"], "snapshot");
+    assert_eq!(
+        receipt["snapshot_digest"],
+        sha256_hex(raw_snapshot.as_bytes())
+    );
+    assert_eq!(
+        receipt["permissions_digest"],
+        permissions_digest(&snapshot["capabilities"])
+    );
+    assert_eq!(receipt["snapshot_cursor"], snapshot["last_seq"]);
+    assert!(receipt["catchup_high_water"].as_i64() >= snapshot["last_seq"].as_i64());
     server.stop().await;
 }
 
@@ -581,18 +606,29 @@ fn expected_hmac(secret: &str, context: &str, fields: &[&str]) -> String {
         })
 }
 
-async fn subscribe<S>(socket: &mut WebSocketStream<S>, cursor: i64)
+async fn subscribe<S>(socket: &mut WebSocketStream<S>, cursor: i64) -> Value
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
+    let challenge = "d".repeat(64);
     socket
         .send(Message::Text(
-            json!({"op": "subscribe", "streams": ["room_events"], "resume_from_seq": cursor})
-                .to_string()
-                .into(),
+            json!({
+                "op": "subscribe",
+                "streams": ["room_events"],
+                "resume_from_seq": cursor,
+                "server_challenge": challenge,
+            })
+            .to_string()
+            .into(),
         ))
         .await
         .unwrap_or_else(|error| panic!("send subscription: {error}"));
+    let first = receive_json(socket).await;
+    if first["op"] == "subscribed" {
+        assert_eq!(first["server_challenge"], challenge);
+    }
+    first
 }
 
 async fn send_command<S>(socket: &mut WebSocketStream<S>)
@@ -618,13 +654,21 @@ async fn receive_json<S>(socket: &mut WebSocketStream<S>) -> Value
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
+    let text = receive_text(socket).await;
+    serde_json::from_str(&text).unwrap_or_else(|error| panic!("decode WebSocket JSON: {error}"))
+}
+
+async fn receive_text<S>(socket: &mut WebSocketStream<S>) -> String
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
     let message = tokio::time::timeout(Duration::from_secs(2), socket.next())
         .await
         .unwrap_or_else(|_| panic!("timed out waiting for WebSocket frame"))
         .unwrap_or_else(|| panic!("WebSocket closed before the expected frame"))
         .unwrap_or_else(|error| panic!("receive WebSocket frame: {error}"));
-    serde_json::from_slice(&message.into_data())
-        .unwrap_or_else(|error| panic!("decode WebSocket JSON: {error}"))
+    String::from_utf8(message.into_data().to_vec())
+        .unwrap_or_else(|error| panic!("WebSocket JSON is not UTF-8: {error}"))
 }
 
 async fn header_only_request(address: &str, request: &str) -> String {
@@ -642,22 +686,6 @@ async fn header_only_request(address: &str, request: &str) -> String {
         .unwrap_or_else(|error| panic!("read raw HTTP response: {error}"));
     String::from_utf8(response)
         .unwrap_or_else(|error| panic!("raw HTTP response was not UTF-8: {error}"))
-}
-
-fn expected_server_proof(proof_key: &str, challenge: &str) -> String {
-    let mut signer = Hmac::<Sha256>::new_from_slice(proof_key.as_bytes())
-        .unwrap_or_else(|error| panic!("construct proof signer: {error}"));
-    signer.update(b"agentsassemble-server-proof-v1\0");
-    signer.update(challenge.as_bytes());
-    signer
-        .finalize()
-        .into_bytes()
-        .iter()
-        .fold(String::with_capacity(64), |mut encoded, byte| {
-            write!(encoded, "{byte:02x}")
-                .unwrap_or_else(|error| panic!("encode proof byte: {error}"));
-            encoded
-        })
 }
 
 async fn bootstrap(store: &SqliteStore) {

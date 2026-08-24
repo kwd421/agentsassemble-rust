@@ -1,3 +1,4 @@
+import { TEST_SERVER_PRODUCT_SURFACE } from "./test/serverProductSurface";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -172,6 +173,7 @@ describe("useCanonicalRoom agent creation projection", () => {
     const test = harness();
     const { result } = renderHook(() =>
       useCanonicalRoom({
+        serverSurface: TEST_SERVER_PRODUCT_SURFACE,
         roomId: "general",
         auth: { kind: "host", meetingId: "general" },
         openSocket: test.openSocket,
@@ -217,6 +219,7 @@ describe("useCanonicalRoom agent creation projection", () => {
     const test = harness();
     const { result } = renderHook(() =>
       useCanonicalRoom({
+        serverSurface: TEST_SERVER_PRODUCT_SURFACE,
         roomId: "general",
         auth: { kind: "host", meetingId: "general" },
         openSocket: test.openSocket,
@@ -240,6 +243,7 @@ describe("useCanonicalRoom agent creation projection", () => {
     const test = harness();
     const { result } = renderHook(() =>
       useCanonicalRoom({
+        serverSurface: TEST_SERVER_PRODUCT_SURFACE,
         roomId: "general",
         auth: { kind: "host", meetingId: "general" },
         openSocket: test.openSocket,
@@ -277,6 +281,7 @@ describe("useCanonicalRoom agent creation projection", () => {
     const test = harness(historyBefore);
     const { result } = renderHook(() =>
       useCanonicalRoom({
+        serverSurface: TEST_SERVER_PRODUCT_SURFACE,
         roomId: "general",
         auth: { kind: "host", meetingId: "general" },
         openSocket: test.openSocket,

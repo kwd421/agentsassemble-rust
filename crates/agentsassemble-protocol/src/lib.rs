@@ -193,8 +193,7 @@ pub enum ClientFrame {
         streams: Vec<RoomStream>,
         #[serde(default)]
         resume_from_seq: i64,
-        #[serde(default)]
-        server_challenge: Option<String>,
+        server_challenge: String,
     },
     Command {
         request_id: String,
@@ -211,6 +210,7 @@ pub enum ClientFrame {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum ServerFrame {
+    Subscribed(Box<Subscribed>),
     Snapshot(Box<RoomSnapshot>),
     Event {
         stream: &'static str,
@@ -232,6 +232,25 @@ pub enum ServerFrame {
     },
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct Subscribed {
+    pub streams: Vec<RoomStream>,
+    pub protocol_version: u32,
+    pub server_challenge: String,
+    pub connection_nonce: String,
+    pub room_id: String,
+    pub principal_id: String,
+    pub participant_id: String,
+    pub server_surface_revision: u32,
+    pub server_surface_digest: String,
+    pub permissions_digest: String,
+    pub snapshot_cursor: i64,
+    pub catchup_high_water: i64,
+    pub snapshot_digest: String,
+    pub proof: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 pub struct RoomSnapshot {
     pub stream: &'static str,
@@ -251,8 +270,6 @@ pub struct RoomSnapshot {
     pub provider_catalog: ProviderCatalog,
     pub available_providers: Vec<ProviderAvailability>,
     pub capabilities: CapabilitySet,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub server_proof: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

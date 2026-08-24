@@ -1,10 +1,8 @@
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
-use agentsassemble_domain::{SnapshotMode, public_event_for_principal, public_settings};
+use agentsassemble_domain::public_event_for_principal;
 use agentsassemble_persistence::PersistenceError;
-use agentsassemble_protocol::{
-    ClientFrame, CommandAck, CommandNack, ProtocolError, RoomSnapshot, ServerFrame,
-};
+use agentsassemble_protocol::{ClientFrame, CommandAck, ServerFrame};
 use axum::{
     Json, Router, body,
     extract::{
@@ -16,7 +14,7 @@ use axum::{
     response::{IntoResponse, Redirect, Response},
     routing::get,
 };
-use futures_util::{SinkExt, StreamExt};
+use futures_util::StreamExt;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use thiserror::Error;
@@ -36,14 +34,15 @@ use crate::{
     http_transport::{MAX_HTTP_CONNECTIONS, RejectionCounter, serve_connection},
     ingress_budget::IngressBudget,
     issue_local_ticket, reconcile_runtime_ownership,
-    server_proof::{challenge_is_valid, sign_challenge},
+    room_socket::{
+        EstablishedSubscription, establish, persistence_error, persistence_error_is_internal,
+        send_frame, send_nack,
+    },
 };
 
 const MAX_WS_MESSAGE_BYTES: usize = 256 * 1024;
 const HTTP_BODY_DEADLINE: Duration = Duration::from_secs(10);
 const MAX_TICKET_BODY_BYTES: usize = 4 * 1024;
-const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
-const WS_WRITE_TIMEOUT: Duration = Duration::from_secs(5);
 const TRACKED_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(6);
 const SOCKET_IDLE_TIMEOUT: Duration = Duration::from_mins(5);
 #[derive(Debug, Error)]
@@ -237,177 +236,16 @@ async fn socket_session(
     grant: ConsumedTicket,
     _permit: OwnedSemaphorePermit,
 ) {
-    let ConsumedTicket {
-        principal,
-        proof_key,
-    } = grant;
     let (mut sender, mut receiver) = socket.split();
-    let principal = match state.store.resolve_principal(&principal).await {
-        Ok(principal) => principal,
-        Err(error) => {
-            if persistence_error_is_internal(&error) {
-                tracing::error!(error = ?error, "principal resolution failed");
-            }
-            let (code, message) = persistence_error(&error);
-            let _ = send_nack(
-                &mut sender,
-                &state.shutdown,
-                "",
-                "subscribe",
-                code,
-                &message,
-            )
-            .await;
-            return;
-        }
-    };
-    let incoming = tokio::select! {
-        () = state.shutdown.cancelled() => return,
-        incoming = tokio::time::timeout(HANDSHAKE_TIMEOUT, receiver.next()) => {
-            let Ok(incoming) = incoming else {
-                let _ = send_nack(&mut sender, &state.shutdown, "", "subscribe", "subscribe_timeout", "Subscription was not received within 10 seconds.").await;
-                return;
-            };
-            incoming
-        },
-    };
-    let Some(Ok(Message::Text(raw))) = incoming else {
-        return;
-    };
-    let Ok(ClientFrame::Subscribe {
-        streams,
-        resume_from_seq,
-        server_challenge,
-    }) = serde_json::from_str(raw.as_str())
+    let Some(EstablishedSubscription {
+        principal,
+        mut events,
+        mut catalog_updates,
+        mut delivered_seq,
+    }) = establish(&mut sender, &mut receiver, &state, grant).await
     else {
-        let _ = send_nack(
-            &mut sender,
-            &state.shutdown,
-            "",
-            "subscribe",
-            "subscribe_required",
-            "The first frame must be a valid subscription.",
-        )
-        .await;
         return;
     };
-    if streams != [agentsassemble_protocol::RoomStream::RoomEvents] || resume_from_seq < 0 {
-        let _ = send_nack(
-            &mut sender,
-            &state.shutdown,
-            "",
-            "subscribe",
-            "invalid_subscription",
-            "room_events and a non-negative cursor are required.",
-        )
-        .await;
-        return;
-    }
-    let server_proof = match server_challenge {
-        Some(challenge) if challenge_is_valid(&challenge) => sign_challenge(&proof_key, &challenge),
-        Some(_) => {
-            let _ = send_nack(
-                &mut sender,
-                &state.shutdown,
-                "",
-                "subscribe",
-                "server_challenge_invalid",
-                "The server challenge must be 32 random bytes encoded as hexadecimal.",
-            )
-            .await;
-            return;
-        }
-        None => String::new(),
-    };
-    let mut events = state.rooms.subscribe(&principal.room_id).await;
-    let snapshot_data = match state
-        .store
-        .snapshot_for(&principal, resume_from_seq, 200)
-        .await
-    {
-        Ok(snapshot) => snapshot,
-        Err(PersistenceError::InvalidCursor { durable_last_seq }) => {
-            let frame = ServerFrame::ResyncRequired {
-                stream: "room_events",
-                reason: "resume cursor is ahead of durable room state".to_owned(),
-                latest_seq: durable_last_seq,
-            };
-            let _ = send_frame(&mut sender, &state.shutdown, &frame).await;
-            return;
-        }
-        Err(error) => {
-            tracing::error!(error = ?error, room_id = %principal.room_id, "room snapshot failed");
-            let _ = send_nack(
-                &mut sender,
-                &state.shutdown,
-                "",
-                "subscribe",
-                "snapshot_failed",
-                "Room snapshot failed.",
-            )
-            .await;
-            return;
-        }
-    };
-    let settings = match public_settings(&snapshot_data.settings) {
-        Ok(settings) => settings,
-        Err(error) => {
-            let _ = send_nack(
-                &mut sender,
-                &state.shutdown,
-                "",
-                "subscribe",
-                "snapshot_failed",
-                &error.to_string(),
-            )
-            .await;
-            return;
-        }
-    };
-    let mut catalog_updates = state.provider_catalog.subscribe();
-    let provider_catalog = catalog_updates.borrow_and_update().clone();
-    let snapshot = RoomSnapshot {
-        stream: "room_events",
-        room: snapshot_data.room,
-        room_settings: settings,
-        participants: snapshot_data.participants,
-        agent_sessions: snapshot_data.agent_sessions,
-        provider_requests: Vec::new(),
-        active_turns: Vec::new(),
-        events: snapshot_data
-            .events
-            .iter()
-            .map(|event| public_event_for_principal(event, &principal))
-            .collect(),
-        oldest_seq: snapshot_data.oldest_seq,
-        last_seq: snapshot_data.last_seq,
-        has_more_before: snapshot_data.has_more_before,
-        resume_gap: snapshot_data.resume_gap,
-        snapshot_mode: snapshot_data.snapshot_mode,
-        available_providers: provider_catalog.providers.clone(),
-        provider_catalog,
-        capabilities: principal.capabilities.clone(),
-        server_proof,
-    };
-    let Some(snapshot) = fit_snapshot_frame(snapshot) else {
-        let _ = send_nack(
-            &mut sender,
-            &state.shutdown,
-            "",
-            "subscribe",
-            "snapshot_too_large",
-            "Room metadata exceeds the WebSocket snapshot limit.",
-        )
-        .await;
-        return;
-    };
-    if send_frame(&mut sender, &state.shutdown, &snapshot)
-        .await
-        .is_err()
-    {
-        return;
-    }
-    let mut delivered_seq = snapshot_data.last_seq;
     let mut ingress = IngressBudget::new();
     loop {
         tokio::select! {
@@ -535,103 +373,6 @@ async fn socket_session(
     }
 }
 
-async fn send_nack<S>(
-    sender: &mut S,
-    cancellation: &CancellationToken,
-    request_id: &str,
-    action: &str,
-    code: &str,
-    message: &str,
-) -> Result<(), axum::Error>
-where
-    S: futures_util::Sink<Message, Error = axum::Error> + Unpin,
-{
-    send_frame(
-        sender,
-        cancellation,
-        &ServerFrame::Nack(CommandNack {
-            request_id: request_id.to_owned(),
-            accepted: false,
-            action: action.to_owned(),
-            error: ProtocolError {
-                code: code.to_owned(),
-                message: message.to_owned(),
-            },
-        }),
-    )
-    .await
-}
-
-async fn send_frame<S>(
-    sender: &mut S,
-    cancellation: &CancellationToken,
-    frame: &ServerFrame,
-) -> Result<(), axum::Error>
-where
-    S: futures_util::Sink<Message, Error = axum::Error> + Unpin,
-{
-    let encoded = serde_json::to_string(frame).map_err(axum::Error::new)?;
-    tokio::select! {
-        () = cancellation.cancelled() => Err(axum::Error::new(std::io::Error::new(
-            std::io::ErrorKind::Interrupted,
-            "runtime shutdown interrupted WebSocket send",
-        ))),
-        result = tokio::time::timeout(WS_WRITE_TIMEOUT, sender.send(Message::Text(encoded.into()))) => {
-            result.map_err(axum::Error::new)?
-        }
-    }
-}
-
-fn fit_snapshot_frame(mut snapshot: RoomSnapshot) -> Option<ServerFrame> {
-    loop {
-        let frame = ServerFrame::Snapshot(Box::new(snapshot.clone()));
-        if serde_json::to_vec(&frame).ok()?.len() <= MAX_WS_MESSAGE_BYTES {
-            return Some(frame);
-        }
-        if snapshot.events.is_empty() {
-            return None;
-        }
-        let remove = (snapshot.events.len() / 2).max(1);
-        snapshot.events.drain(..remove);
-        snapshot.oldest_seq = snapshot
-            .events
-            .first()
-            .map_or(snapshot.last_seq, |event| event.seq);
-        snapshot.has_more_before = true;
-        if snapshot.snapshot_mode != SnapshotMode::Initial {
-            snapshot.resume_gap = true;
-            snapshot.snapshot_mode = SnapshotMode::Gap;
-        }
-    }
-}
-
-fn persistence_error(error: &PersistenceError) -> (&'static str, String) {
-    match error {
-        PersistenceError::CommandConflict => ("command_conflict", error.to_string()),
-        PersistenceError::CommandRejected { code, message } => (code, message.clone()),
-        PersistenceError::ParticipantMissing => ("session_revoked", error.to_string()),
-        PersistenceError::RoomMissing => ("room_not_found", error.to_string()),
-        PersistenceError::Database(_)
-        | PersistenceError::Json(_)
-        | PersistenceError::RuntimeAuthorityTask(_)
-        | PersistenceError::AuthorityConflict(_)
-        | PersistenceError::UnownedDatabase
-        | PersistenceError::WriterAlreadyActive(_)
-        | PersistenceError::WriterLease(_)
-        | PersistenceError::UnsafeDatabasePath(_)
-        | PersistenceError::InitializationNotAllowed
-        | PersistenceError::InvalidSchemaVersion(_)
-        | PersistenceError::SchemaVersionMismatch { .. }
-        | PersistenceError::InvalidServerId => (
-            "persistence_failed",
-            "Persistence operation failed.".to_owned(),
-        ),
-        PersistenceError::InvalidCursor { .. } => {
-            ("invalid_cursor", "Room cursor is invalid.".to_owned())
-        }
-    }
-}
-
 #[derive(Debug)]
 struct ApiError {
     status: StatusCode,
@@ -718,23 +459,6 @@ impl IntoResponse for ApiError {
 #[allow(dead_code)]
 fn _socket_address_is_send(_: SocketAddr) {}
 
-fn persistence_error_is_internal(error: &PersistenceError) -> bool {
-    matches!(
-        error,
-        PersistenceError::Database(_)
-            | PersistenceError::Json(_)
-            | PersistenceError::AuthorityConflict(_)
-            | PersistenceError::UnownedDatabase
-            | PersistenceError::WriterAlreadyActive(_)
-            | PersistenceError::WriterLease(_)
-            | PersistenceError::UnsafeDatabasePath(_)
-            | PersistenceError::InitializationNotAllowed
-            | PersistenceError::InvalidSchemaVersion(_)
-            | PersistenceError::SchemaVersionMismatch { .. }
-            | PersistenceError::InvalidServerId
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use std::{io, path::PathBuf};
@@ -743,8 +467,8 @@ mod tests {
 
     use crate::ingress_budget::{CONTROL_FRAMES_PER_WINDOW, IngressBudget};
 
-    use super::persistence_error;
     use crate::HostSecret;
+    use crate::room_socket::persistence_error;
 
     #[test]
     fn host_secret_invariant_cannot_be_bypassed_by_an_adapter() {

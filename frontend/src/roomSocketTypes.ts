@@ -14,7 +14,7 @@ import type {
   PublicRoomGlobalSettings,
 } from "./types/generatedRoomEvent";
 import type { PluginEnvelope } from "./pluginSocketProtocol";
-import type { RoomAction } from "./types/generated/RoomAction";
+import type { ServerProductSurface } from "./types/generated/ServerProductSurface";
 
 export interface RoomSocketHandlers {
   onLobby?: (events: LobbyEvent[]) => void;
@@ -129,11 +129,10 @@ export interface RoomSocketSnapshot {
   last_seq: number;
   has_more_before: boolean;
   resume_gap: boolean;
-  snapshot_mode: "initial" | "resume" | "gap" | "bridge";
+  snapshot_mode: "initial" | "resume" | "gap";
   provider_catalog: ProviderCatalogSnapshot;
   available_providers: NativeCliProviderAvailability[];
   capabilities: Record<string, boolean>;
-  server_proof?: string;
 }
 
 export interface RoomCommandAck {
@@ -147,13 +146,14 @@ export interface RoomCommandAck {
 
 export interface RoomSocketClientDependencies {
   getTicket?: (auth: RoomSocketAuth) => Promise<
-    | string
-    | {
-        ticket: string;
-        websocket_base_url?: string;
-        server_proof_key?: string;
-      }
+    {
+      ticket: string;
+      websocket_base_url: string;
+      server_proof_key: string;
+    }
   >;
   createSocket?: (url: string) => WebSocket;
-  allowedActions?: readonly RoomAction[];
+  serverSurface: ServerProductSurface;
+  expectedRoomId: string;
+  expectedParticipantId: string;
 }

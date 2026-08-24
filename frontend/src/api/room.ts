@@ -12,9 +12,7 @@ import {
   deleteJson,
   postJson,
   postJsonServerOperator,
-  postJsonHost,
   postJsonWithIdentity,
-  postJsonWithToken,
   queryString,
 } from "./http";
 import {
@@ -533,22 +531,15 @@ export type RoomSocketAuth =
   | { kind: "session"; sessionToken: string }
   | { kind: "host"; meetingId: string };
 
-interface WsTicketResponse {
-  ticket: string;
-  ttl_seconds?: number;
-}
-
-export type RoomSocketTicket = string | DesktopRuntimeTicket;
+export type RoomSocketTicket = DesktopRuntimeTicket;
 
 export function getWsTicket(auth: RoomSocketAuth): Promise<RoomSocketTicket> {
   if (auth.kind === "host" && isDesktopWebview()) {
     return requestDesktopRuntimeTicket(auth.meetingId);
   }
-  const body = auth.kind === "host" ? { meeting_id: auth.meetingId } : {};
-  if (auth.kind === "host") {
-    return postJsonHost<WsTicketResponse>("/api/ws-ticket", body).then((response) => response.ticket);
-  }
-  return postJsonWithToken<{ ticket: string; ttl_seconds?: number }>("/api/ws-ticket", body, auth.sessionToken).then(
-    (response) => response.ticket
+  return Promise.reject(
+    new Error(
+      "Central and guest WebSocket ticket authority is not implemented by the Rust product surface."
+    )
   );
 }

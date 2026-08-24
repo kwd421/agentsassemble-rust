@@ -19,6 +19,7 @@ import {
   type RoomSocketAuth,
   type RoomSocketHandle,
   type RoomSocketHandlers,
+  type RoomSocketClientDependencies,
 } from "./roomSocketClient";
 import {
   projectRoomEventProgress,
@@ -29,7 +30,8 @@ import { isUnauthorizedApiError } from "./lib/apiErrors";
 import {
   applyParticipantEvents,
   agentSessionUpdatesFromEvents,
-  canonicalRoomProjectionScopeKey,
+    canonicalRoomProjectionScopeKey,
+    canonicalParticipantProfiles,
   EMPTY_CANONICAL_HISTORY,
   EMPTY_PROVIDER_CATALOG,
   mergeRoomEvents,
@@ -39,8 +41,8 @@ import {
   upsertRoomParticipants,
   type CanonicalRoomHistoryState,
 } from "./lib/canonicalRoomProjection";
-import type { RoomAction } from "./types/generated/RoomAction";
 import type { RoomStream } from "./types/generated/RoomStream";
+import type { ServerProductSurface } from "./types/generated/ServerProductSurface";
 import {
   applyProviderRequestEvents,
   normalizePendingProviderRequests,
@@ -54,11 +56,10 @@ type OpenRoomSocket = (
   auth: RoomSocketAuth,
   streams: string[],
   handlers: RoomSocketHandlers,
-  dependencies?: { allowedActions?: readonly RoomAction[] }
+  dependencies: RoomSocketClientDependencies
 ) => RoomSocketHandle;
 
 const NO_STREAMS: RoomStream[] = [];
-const NO_ACTIONS: RoomAction[] = [];
 type CanonicalRoomCallbacks = {
   onSideChat?: (events: SideChatEvent[]) => void;
   onError?: (error: Event | Error) => void;
@@ -70,7 +71,7 @@ export type UseCanonicalRoomOptions = CanonicalRoomCallbacks & {
   roomId: string;
   auth?: RoomSocketAuth;
   streams?: RoomStream[];
-  actions?: RoomAction[];
+  serverSurface?: ServerProductSurface | null;
   viewerParticipantId?: string;
   openSocket?: OpenRoomSocket;
 };
@@ -88,7 +89,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     roomId,
     auth,
     streams = NO_STREAMS,
-    actions = NO_ACTIONS,
+    serverSurface = null,
     viewerParticipantId = "",
     openSocket = openRoomSocket,
   } = options;
@@ -244,7 +245,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     Boolean(projectionScopeKey) && acceptedProjectionScope === projectionScopeKey;
 
   useEffect(() => {
-    if (!roomId || !auth) {
+    if (!roomId || !auth || !serverSurface) {
       connectionGenerationRef.current += 1;
       acceptedProjectionScopeRef.current = "";
       acceptedSocketRef.current = null;
@@ -447,7 +448,11 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
         if (unauthorized) callbacksRef.current.onUnauthorized?.();
         callbacksRef.current.onError?.(errorValue);
       },
-    }, { allowedActions: actions });
+    }, {
+      serverSurface,
+      expectedRoomId: roomId,
+      expectedParticipantId: viewerParticipantId,
+    });
     setSocket(currentSocket);
     return () => {
       if (connectionIsCurrent()) {
@@ -460,7 +465,16 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
       setSocket((current) => (current === currentSocket ? null : current));
       setConnectionState("disconnected");
     };
-  }, [actions, applyEvents, authKey, openSocket, projectionScopeKey, roomId, streams]);
+  }, [
+    applyEvents,
+    authKey,
+    openSocket,
+    projectionScopeKey,
+    roomId,
+    serverSurface,
+    streams,
+    viewerParticipantId,
+  ]);
 
   const requireCurrentProjectionSocket = useCallback(() => {
     if (
@@ -721,32 +735,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
   const participants = projectionIsCurrent ? participantsByRoom[roomId] || [] : [];
   const agentSessions = projectionIsCurrent ? sessionsByRoom[roomId] || [] : [];
   const participantProfiles = useMemo(() => {
-    const profiles: Record<
-      string,
-      { displayName?: string; avatarImageUrl?: string; providerKind?: string; role?: string }
-    > = {};
-    agentSessions.forEach((session) => {
-      if (!session.participant_id) return;
-      profiles[session.participant_id] = {
-        displayName: session.display_name,
-        avatarImageUrl: session.avatar_image_url,
-        providerKind: session.provider_kind,
-      };
-    });
-    participants.forEach((participant) => {
-      if (!participant.participant_id) return;
-      const previous = profiles[participant.participant_id] || {};
-      profiles[participant.participant_id] = {
-        displayName: participant.display_name || previous.displayName,
-        avatarImageUrl:
-          participant.avatar_image_url !== undefined
-            ? participant.avatar_image_url
-            : previous.avatarImageUrl,
-        providerKind: participant.provider_kind || previous.providerKind,
-        role: participant.role,
-      };
-    });
-    return profiles;
+    return canonicalParticipantProfiles(agentSessions, participants);
   }, [agentSessions, participants]);
   const timelineEvents: LobbyEvent[] = useMemo(
     () => projectRoomEventsToTimeline(events, { viewerParticipantId, participantProfiles }),

@@ -28,6 +28,7 @@ pub struct IssuedTicket {
 pub struct ConsumedTicket {
     pub principal: AuthenticatedPrincipal,
     pub proof_key: String,
+    pub connection_nonce: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -128,6 +129,7 @@ impl TicketStore {
         Ok(ConsumedTicket {
             principal,
             proof_key: grant.proof_key,
+            connection_nonce: crate::server_proof::derive_connection_nonce(ticket),
         })
     }
 

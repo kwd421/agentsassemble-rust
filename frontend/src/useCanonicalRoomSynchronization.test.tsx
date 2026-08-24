@@ -1,3 +1,4 @@
+import { TEST_SERVER_PRODUCT_SURFACE } from "./test/serverProductSurface";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type {
@@ -116,6 +117,7 @@ describe("useCanonicalRoom synchronization", () => {
     const harness = socketHarness(command);
     const { result } = renderHook(() =>
       useCanonicalRoom({
+        serverSurface: TEST_SERVER_PRODUCT_SURFACE,
         roomId: "general",
         auth: { kind: "host", meetingId: "general" },
         openSocket: harness.openSocket,
@@ -163,6 +165,7 @@ describe("useCanonicalRoom synchronization", () => {
     const harness = socketHarness(command);
     const { result } = renderHook(() =>
       useCanonicalRoom({
+        serverSurface: TEST_SERVER_PRODUCT_SURFACE,
         roomId: "general",
         auth: { kind: "host", meetingId: "general" },
         openSocket: harness.openSocket,
@@ -187,6 +190,7 @@ describe("useCanonicalRoom synchronization", () => {
     const harness = socketHarness();
     const { result } = renderHook(() =>
       useCanonicalRoom({
+        serverSurface: TEST_SERVER_PRODUCT_SURFACE,
         roomId: "general",
         auth: { kind: "host", meetingId: "general" },
         openSocket: harness.openSocket,
@@ -219,6 +223,7 @@ describe("useCanonicalRoom synchronization", () => {
     const harness = socketHarness();
     const { result } = renderHook(() =>
       useCanonicalRoom({
+        serverSurface: TEST_SERVER_PRODUCT_SURFACE,
         roomId: "general",
         auth: { kind: "host", meetingId: "general" },
         openSocket: harness.openSocket,
@@ -254,6 +259,7 @@ describe("useCanonicalRoom synchronization", () => {
     const harness = socketHarness();
     const { result } = renderHook(() =>
       useCanonicalRoom({
+        serverSurface: TEST_SERVER_PRODUCT_SURFACE,
         roomId: "general",
         auth: { kind: "host", meetingId: "general" },
         openSocket: harness.openSocket,

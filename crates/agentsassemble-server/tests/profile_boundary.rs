@@ -345,14 +345,23 @@ async fn connect_room(
         .await
         .unwrap_or_else(|error| panic!("connect profile socket: {error}"))
         .0;
+    let challenge = "d".repeat(64);
     socket
         .send(Message::Text(
-            json!({"op":"subscribe","streams":["room_events"],"resume_from_seq":0})
-                .to_string()
-                .into(),
+            json!({
+                "op":"subscribe",
+                "streams":["room_events"],
+                "resume_from_seq":0,
+                "server_challenge": challenge,
+            })
+            .to_string()
+            .into(),
         ))
         .await
         .unwrap_or_else(|error| panic!("subscribe profile socket: {error}"));
+    let receipt = receive_json(&mut socket).await;
+    assert_eq!(receipt["op"], "subscribed");
+    assert_eq!(receipt["server_challenge"], challenge);
     socket
 }
 
