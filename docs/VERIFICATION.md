@@ -669,6 +669,66 @@ This entry records candidate evidence, not post-push reviewer approval. The exac
 published correction range must still receive same-session critical web approval
 and Daybreaker Blue High manual-security approval before the blockers are closed.
 
+### Cross-review correction candidate: 2026-08-25
+
+Daybreaker Blue High's next manual pass over `6de2671..4e4a44b` found four
+remaining medium boundaries: Core-mount directory refresh used a loose response
+and did not retain lineage, the React room-create caller discarded its operation
+ID, a ticket issued before bootstrap corruption could reach the room mutation
+before Complete was rechecked, and the table-inventory test could silently skip
+an alternate valid DDL spelling. The same critical web session independently
+confirmed the missing client room-create operation owner and ongoing directory
+binding. It also found a separate roster regression: after the HTTP roster reader
+was removed, `participant_joined` did not contain or insert a new room participant,
+so a started Agent could remain absent until reconnect.
+
+The correction makes every room list and create response a strict closed-schema
+contract bound to the startup/native server and authority lineage. A dedicated
+React controller retains one request and room intent, performs at most one
+immediate exact replay for an ambiguous result, retains that same intent for a
+later user retry, and accepts the created room only after a strict canonical
+directory refresh. Room creation revalidates the full Complete bootstrap contract
+inside the same `BEGIN IMMEDIATE` transaction before replay, reservation, or
+mutation; its response uses the authority observed by that transaction rather
+than a later read.
+
+Schema installation and product classification now come from one table descriptor
+set, and the gate executes the declarations and compares the real SQLite table set
+instead of parsing a preferred SQL prefix. Agent launch now commits the canonical
+room-owned participant in its sequenced `participant_joined` event, whose strict
+client contract upserts the roster without deriving role, status, mute, or owner
+from Agent Session state. This persisted event-contract change advances the schema
+to 14; schema 13 is rejected without migration, conversion, or compatibility code.
+
+Focused contracts cover exact client replay across one response loss and a later
+user retry, rejection of loose directory/create payloads, declarative schema
+installation, bootstrap corruption before room mutation, complete joined-participant
+event publication, and immediate WS roster insertion. The exact worktree passed
+the full mandatory `make verify`: architecture, source-growth, logical-line, and
+800-line gates; generated bindings; production frontend build and original CSS;
+70 frontend files with 349 tests; 14 Tauri tests; 17 domain, 85 persistence, two
+protocol, 100 provider, and 14 server unit tests; 20 Rust integration tests; doc
+tests; warning-denied workspace and desktop Clippy; and final diff validation.
+
+Computer Use then drove a freshly packaged debug app under the isolated identifier
+`app.agentsassemble.rust.crossreviewverify`. It completed native startup with the
+stored `Cross Review Canonical` profile, reopened the real SQLite room, and showed
+the one canonical human participant. The Agent Add flow selected the allowed free
+OpenCode `opencode/hy3-free` model and the real project workspace, then started the
+actual provider session through the production UI. Without reconnecting or using
+an HTTP roster reader, the right panel immediately changed to `Agent — 1` and
+showed `opencode/hy3-free` in Waiting state. The member card exposed the running
+session controls, and its Stop action transitioned the same session to Stopped.
+No prompt or provider-private data was sent or displayed.
+
+Normal quit removed the exact app, supervisor, and sidecar processes. The isolated
+Application Support, WebKit, cache, and both verification-built app bundles were
+moved to `/Users/seinel/.Trash/AgentsAssemble-CrossReview-Verify-20260825-0312`;
+the original product data and unrelated processes were untouched. This entry
+records candidate evidence only. The exact published correction range must still
+receive same-session critical web approval and Daybreaker Blue High manual-security
+approval before these blockers are closed.
+
 ## API verification scope
 
 When a reachable flow specifically needs an API-backed provider, the allowed paid/provider-specific candidates are the official DeepSeek API and the designated Flash provider path. Every other API-backed verification uses only an explicitly free API or free model. Missing credentials, exhausted free quota, or unavailable models fail visibly; they do not trigger a paid substitution or a fallback provider.

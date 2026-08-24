@@ -237,7 +237,8 @@ impl SqliteStore {
         participant.updated_at = Utc::now();
         save_participant(&mut transaction, &participant).await?;
         let launch_events =
-            append_launch_events(&mut transaction, principal, &session, joined).await?;
+            append_launch_events(&mut transaction, principal, &session, &participant, joined)
+                .await?;
         let newly_committed_events = launch_events.clone();
         let start_result = launch_result(&session, started.runtime_reused, &launch_events);
         let mut committed_events = prepared_events(&prepared_result)?;

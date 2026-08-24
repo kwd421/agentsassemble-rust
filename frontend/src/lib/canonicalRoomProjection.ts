@@ -4,6 +4,7 @@ import type {
   RoomSocketAuth,
 } from "../roomSocketClient";
 import { resolveDesktopRuntimeResource } from "./desktopBridge";
+import { joinedParticipantFromEvent } from "./participantEventContract";
 
 export type CanonicalRoomHistoryState = {
   initialized: boolean;
@@ -89,42 +90,36 @@ export function upsertRoomParticipants(
 }
 
 export function applyParticipantEvents(current: RoomMember[], incoming: RoomEvent[]) {
-  const updatesByParticipant = new Map<string, RoomEvent>();
-  const latestMembershipEvent = new Map<string, RoomEvent["type"]>();
-  incoming.forEach((event) => {
-    if (event.type === "participant_updated" && event.participant_id) {
-      updatesByParticipant.set(event.participant_id, event);
-    }
-    if (
-      event.participant_id &&
-      ["participant_joined", "participant_left", "participant_kicked"].includes(event.type)
-    ) {
-      latestMembershipEvent.set(event.participant_id, event.type);
-    }
-  });
-  if (!updatesByParticipant.size && !latestMembershipEvent.size) return current;
+  const byId = new Map(current.map((participant) => [participant.participant_id, participant]));
   let changed = false;
-  const next = current.flatMap((participant) => {
-    const membershipEvent = latestMembershipEvent.get(participant.participant_id);
-    if (membershipEvent === "participant_left" || membershipEvent === "participant_kicked") {
+  for (const event of incoming) {
+    const participantId = String(event.participant_id || "");
+    if (event.type === "participant_joined") {
+      const joined = joinedParticipantFromEvent(event);
+      byId.set(participantId, normalizeRoomParticipant(joined, event.room_id));
       changed = true;
-      return [];
+      continue;
     }
-    const update = updatesByParticipant.get(participant.participant_id);
-    if (!update) return [participant];
-    changed = true;
-    return [{
+    if (event.type === "participant_left" || event.type === "participant_kicked") {
+      changed = byId.delete(participantId) || changed;
+      continue;
+    }
+    if (event.type !== "participant_updated") continue;
+    const participant = byId.get(participantId);
+    if (!participant) continue;
+    byId.set(participantId, {
       ...participant,
-      display_name: String(update.display_name || participant.display_name),
-      role: String(update.role || participant.role) as RoomMember["role"],
+      display_name: String(event.display_name || participant.display_name),
+      role: String(event.role || participant.role) as RoomMember["role"],
       avatar_image_url:
-        "avatar_image_url" in update
-          ? resolveDesktopRuntimeResource(String(update.avatar_image_url || "") || undefined)
+        "avatar_image_url" in event
+          ? resolveDesktopRuntimeResource(String(event.avatar_image_url || "") || undefined)
           : participant.avatar_image_url,
-      updated_at: update.created_at || participant.updated_at,
-    }];
-  });
-  return changed ? next : current;
+      updated_at: event.created_at || participant.updated_at,
+    });
+    changed = true;
+  }
+  return changed ? [...byId.values()] : current;
 }
 
 export function canonicalRoomAuthKey(auth?: RoomSocketAuth): string {

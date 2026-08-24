@@ -37,7 +37,7 @@ impl SqliteStore {
     pub(crate) async fn initialize(&self) -> Result<(), PersistenceError> {
         let mut transaction = self.pool.begin().await?;
         for statement in crate::schema::statements() {
-            sqlx::query(*statement).execute(&mut *transaction).await?;
+            sqlx::query(statement).execute(&mut *transaction).await?;
         }
         install_metadata(&mut transaction).await?;
         transaction.commit().await?;
@@ -318,6 +318,21 @@ async fn inspect_bootstrap(
     }
 }
 
+pub(crate) async fn require_complete_bootstrap_in_transaction(
+    connection: &mut SqliteConnection,
+) -> Result<LocalBootstrapStatus, PersistenceError> {
+    let marker = load_marker(connection).await?;
+    let server_id = load_server_id(connection).await?;
+    match marker.state.as_str() {
+        "complete" => inspect_complete(connection, &marker, &server_id).await,
+        "empty" => Err(rejected(
+            "bootstrap_required",
+            "Local identity bootstrap is not complete.",
+        )),
+        _ => Err(bootstrap_repair_required()),
+    }
+}
+
 async fn inspect_complete(
     connection: &mut SqliteConnection,
     marker: &BootstrapMarker,
@@ -425,8 +440,9 @@ async fn empty_marker_is_consistent(
     {
         return Ok(false);
     }
-    for (_, has_rows_sql) in crate::schema::PRODUCT_TABLES {
-        if sqlx::query_scalar::<_, bool>(*has_rows_sql)
+    for table in crate::schema::product_tables() {
+        let has_rows_sql = format!("SELECT EXISTS(SELECT 1 FROM {} LIMIT 1)", table.name);
+        if sqlx::query_scalar::<_, bool>(sqlx::AssertSqlSafe(has_rows_sql))
             .fetch_one(&mut *connection)
             .await?
         {

@@ -25,6 +25,10 @@ pub struct RoomCreateCommit {
     pub settings: RoomSettings,
     pub events: Vec<RoomEvent>,
     pub deduplicated: bool,
+    #[serde(skip)]
+    pub server_id: String,
+    #[serde(skip)]
+    pub authority_lineage_id: String,
 }
 
 impl SqliteStore {
@@ -104,9 +108,21 @@ impl SqliteStore {
         sqlx::query("BEGIN IMMEDIATE")
             .execute(&mut *connection)
             .await?;
-        let outcome =
-            create_room_in_transaction(&mut connection, request_id, room_id, label, &payload_hash)
-                .await;
+        let outcome = async {
+            let authority =
+                crate::bootstrap::require_complete_bootstrap_in_transaction(&mut connection)
+                    .await?;
+            create_room_in_transaction(
+                &mut connection,
+                request_id,
+                room_id,
+                label,
+                &payload_hash,
+                &authority,
+            )
+            .await
+        }
+        .await;
         match outcome {
             Ok(commit) => {
                 sqlx::query("COMMIT").execute(&mut *connection).await?;
@@ -126,29 +142,19 @@ async fn create_room_in_transaction(
     room_id: &str,
     label: &str,
     payload_hash: &str,
+    authority: &crate::LocalBootstrapStatus,
 ) -> Result<RoomCreateCommit, PersistenceError> {
-    if let Some(row) = sqlx::query(
-        "SELECT payload_hash, result_json FROM room_create_results WHERE principal_id = ? AND request_id = ?",
+    if let Some(replay) = replay_room_creation(
+        connection,
+        request_id,
+        room_id,
+        label,
+        payload_hash,
+        authority,
     )
-    .bind(LOCAL_OPERATOR_USER_ID)
-    .bind(request_id)
-    .fetch_optional(&mut *connection)
     .await?
     {
-        if row.get::<String, _>("payload_hash") != payload_hash {
-            return Err(rejected(
-                "room_create_request_conflict",
-                "Room creation request id was reused with a different payload.",
-            ));
-        }
-        let mut stored: RoomCreateCommit =
-            serde_json::from_str(row.get::<String, _>("result_json").as_str())?;
-        if stored.deduplicated || stored.room.room_id != room_id || stored.settings.label != label {
-            return Err(invalid_room_state());
-        }
-        stored.deduplicated = true;
-        stored.events.clear();
-        return Ok(stored);
+        return Ok(replay);
     }
 
     if let Some(row) = sqlx::query("SELECT room_json, settings_json FROM rooms WHERE room_id = ?")
@@ -214,6 +220,8 @@ async fn create_room_in_transaction(
         settings,
         events: vec![event],
         deduplicated: false,
+        server_id: authority.server_id.clone(),
+        authority_lineage_id: authority.authority_lineage_id.clone(),
     };
     sqlx::query(
         "INSERT INTO room_create_results(principal_id, request_id, payload_hash, result_json) VALUES (?, ?, ?, ?)",
@@ -225,6 +233,44 @@ async fn create_room_in_transaction(
     .execute(&mut *connection)
     .await?;
     Ok(commit)
+}
+
+async fn replay_room_creation(
+    connection: &mut SqliteConnection,
+    request_id: &str,
+    room_id: &str,
+    label: &str,
+    payload_hash: &str,
+    authority: &crate::LocalBootstrapStatus,
+) -> Result<Option<RoomCreateCommit>, PersistenceError> {
+    let Some(row) = sqlx::query(
+        "SELECT payload_hash, result_json FROM room_create_results WHERE principal_id = ? AND request_id = ?",
+    )
+    .bind(LOCAL_OPERATOR_USER_ID)
+    .bind(request_id)
+    .fetch_optional(&mut *connection)
+    .await?
+    else {
+        return Ok(None);
+    };
+    if row.get::<String, _>("payload_hash") != payload_hash {
+        return Err(rejected(
+            "room_create_request_conflict",
+            "Room creation request id was reused with a different payload.",
+        ));
+    }
+    let mut stored: RoomCreateCommit =
+        serde_json::from_str(row.get::<String, _>("result_json").as_str())?;
+    if stored.deduplicated || stored.room.room_id != room_id || stored.settings.label != label {
+        return Err(invalid_room_state());
+    }
+    stored.deduplicated = true;
+    stored.events.clear();
+    stored.server_id.clone_from(&authority.server_id);
+    stored
+        .authority_lineage_id
+        .clone_from(&authority.authority_lineage_id);
+    Ok(Some(stored))
 }
 
 fn room_created_event(room_id: &str, label: &str, now: chrono::DateTime<Utc>) -> RoomEvent {

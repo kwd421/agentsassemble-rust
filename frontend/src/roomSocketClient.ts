@@ -6,6 +6,7 @@ import {
   type RoomSocketAuth,
   type SideChatEvent,
 } from "./api";
+import { joinedParticipantFromEvent } from "./lib/participantEventContract";
 import {
   parsePluginEnvelopeBatch,
   PluginStreamProtocolError,
@@ -52,6 +53,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isNonNegativeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
+function participantProjectionIsValid(event: RoomEvent): boolean {
+  if (event.type !== "participant_joined") return true;
+  try {
+    joinedParticipantFromEvent(event);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function commandAckResultIsValid(
@@ -219,7 +230,8 @@ function snapshotValidationError(
       typeof event.type !== "string" ||
       !event.type ||
       !isNonNegativeInteger(event.seq) ||
-      event.seq <= 0
+      event.seq <= 0 ||
+      !participantProjectionIsValid(event as unknown as RoomEvent)
     ) {
       return new RoomSocketSayError(
         "Room snapshot contained an invalid canonical event; reconnecting.",
@@ -491,7 +503,8 @@ export function openRoomSocket(
           !event.room_id ||
           (Boolean(canonicalRoomId) && event.room_id !== canonicalRoomId) ||
           typeof event.type !== "string" ||
-          !event.type
+          !event.type ||
+          !participantProjectionIsValid(event as RoomEvent)
         ) {
           reconnectForProtocolError(
             new RoomSocketSayError(

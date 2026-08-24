@@ -10,6 +10,15 @@ import {
   persistRoomDockItems,
   syncNativeRoomDockItems,
 } from "../lib/roomDockPersistence";
+import {
+  assertSameRoomDirectoryAuthority,
+  currentRoomDirectoryAuthority,
+  type RoomDirectoryAuthority,
+} from "../lib/roomDirectoryContract";
+import {
+  isDesktopWebview,
+  requestDesktopBootstrapStatus,
+} from "../lib/desktopBridge";
 
 type UseRoomDirectoryOptions = {
   initialRooms: RoomDockItem[];
@@ -38,6 +47,9 @@ export function useRoomDirectory({
   const membershipRevisionRef = useRef(0);
   const metadataRevisionRef = useRef(0);
   const hydrationEpochRef = useRef(0);
+  const authorityRef = useRef<RoomDirectoryAuthority | null>(
+    currentRoomDirectoryAuthority()
+  );
 
   const commit = useCallback((update: (current: RoomDockItem[]) => RoomDockItem[]) => {
     const next = update(roomsRef.current);
@@ -123,6 +135,44 @@ export function useRoomDirectory({
     [commit]
   );
 
+  const verifyRoomDirectoryAuthority = useCallback(
+    async (actual: RoomDirectoryAuthority) => {
+      if (isDesktopWebview()) {
+        const bootstrap = await requestDesktopBootstrapStatus();
+        if (bootstrap.phase !== "complete") {
+          throw new Error("완료된 데스크톱 bootstrap 권위가 없습니다.");
+        }
+        assertSameRoomDirectoryAuthority(actual, bootstrap);
+        authorityRef.current = actual;
+        return;
+      }
+      if (authorityRef.current) {
+        assertSameRoomDirectoryAuthority(actual, authorityRef.current);
+      } else {
+        authorityRef.current = actual;
+      }
+    },
+    []
+  );
+
+  const fetchVerifiedRoomDirectory = useCallback(async () => {
+    const payload = await fetchRooms(true);
+    await verifyRoomDirectoryAuthority(payload);
+    return payload;
+  }, [verifyRoomDirectoryAuthority]);
+
+  const refreshRoomDirectory = useCallback(async () => {
+    const payload = await fetchVerifiedRoomDirectory();
+    const synchronized = commit((current) => mergeServerRoomsIntoDock(
+      current,
+      payload.rooms,
+      window.location.origin,
+      payload.server_id
+    ));
+    setSyncIssue(null);
+    return synchronized;
+  }, [commit, fetchVerifiedRoomDirectory]);
+
   useEffect(() => {
     const persistedRooms = rooms.map(persistableRoom);
     if (hostEnabled) {
@@ -158,7 +208,7 @@ export function useRoomDirectory({
       ) {
         const retryMembershipRevision = membershipRevisionRef.current;
         const retryMetadataRevision = metadataRevisionRef.current;
-        fetchRooms(true)
+        fetchVerifiedRoomDirectory()
           .then((retryPayload) => {
             if (!canPublish()) return;
             if (
@@ -169,9 +219,9 @@ export function useRoomDirectory({
             }
             commit((current) => mergeServerRoomsIntoDock(
               current,
-              retryPayload.rooms || [],
+              retryPayload.rooms,
               window.location.origin,
-              retryPayload.server_id || ""
+              retryPayload.server_id
             ));
             setSyncIssue(null);
           })
@@ -189,15 +239,15 @@ export function useRoomDirectory({
       }
       commit((current) => mergeServerRoomsIntoDock(
         current,
-        payload.rooms || [],
+        payload.rooms,
         window.location.origin,
-        payload.server_id || ""
+        payload.server_id
       ));
       setSyncIssue(null);
     };
     const capturedMembershipRevision = membershipRevisionRef.current;
     const capturedMetadataRevision = metadataRevisionRef.current;
-    fetchRooms(true)
+    fetchVerifiedRoomDirectory()
       .then((payload) =>
         applyHydration(
           payload,
@@ -219,7 +269,7 @@ export function useRoomDirectory({
       cancelled = true;
       hydrationEpochRef.current += 1;
     };
-  }, [commit, hostEnabled]);
+  }, [commit, fetchVerifiedRoomDirectory, hostEnabled]);
 
   return {
     rooms,
@@ -230,6 +280,8 @@ export function useRoomDirectory({
     removeRoom,
     updateRoom,
     updateRoomByMeetingId,
+    refreshRoomDirectory,
+    verifyRoomDirectoryAuthority,
     syncIssue,
   };
 }

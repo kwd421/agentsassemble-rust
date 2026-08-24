@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use agentsassemble_domain::{AuthenticatedPrincipal, DurableAgentSession};
+use agentsassemble_domain::{AuthenticatedPrincipal, DurableAgentSession, Participant};
 use serde_json::json;
 use sqlx::{Sqlite, Transaction};
 
@@ -16,11 +16,12 @@ pub(crate) async fn commit_launch_result(
     request_id: &str,
     payload_hash: String,
     session: &DurableAgentSession,
+    participant: &Participant,
     joined: bool,
     runtime_reused: bool,
     command_action: &'static str,
 ) -> Result<CommandOutcome, PersistenceError> {
-    let events = append_launch_events(transaction, principal, session, joined).await?;
+    let events = append_launch_events(transaction, principal, session, participant, joined).await?;
     let result = launch_result(session, runtime_reused, &events);
     store_result(
         transaction,
@@ -38,6 +39,7 @@ pub(crate) async fn append_launch_events(
     transaction: &mut Transaction<'_, Sqlite>,
     principal: &AuthenticatedPrincipal,
     session: &DurableAgentSession,
+    participant: &Participant,
     joined: bool,
 ) -> Result<Vec<agentsassemble_domain::RoomEvent>, PersistenceError> {
     let mut events = Vec::with_capacity(3);
@@ -48,7 +50,7 @@ pub(crate) async fn append_launch_events(
                 principal,
                 &session.public,
                 "participant_joined",
-                BTreeMap::new(),
+                BTreeMap::from([("participant".to_owned(), json!(participant))]),
             )
             .await?,
         );

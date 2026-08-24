@@ -291,6 +291,7 @@ impl SqliteStore {
             request_id,
             payload_hash,
             &session,
+            &participant,
             joined,
             started.runtime_reused,
             command_action,

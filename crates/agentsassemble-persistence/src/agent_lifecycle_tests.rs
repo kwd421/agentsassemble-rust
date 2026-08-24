@@ -186,6 +186,16 @@ async fn lifecycle_preserves_provider_identity_and_finalizes_stop_once() {
             "agent_session_state"
         ]
     );
+    let joined_event = outcome
+        .events
+        .iter()
+        .find(|event| event.event_type == "participant_joined")
+        .unwrap_or_else(|| panic!("launch outcome omitted participant_joined"));
+    assert_eq!(
+        joined_event.extra["participant"]["participant_id"],
+        AGENT_ID
+    );
+    assert_eq!(joined_event.extra["participant"]["status"], "joined");
     assert!(
         outcome.result["agent_session"]
             .get("provider_session_id")

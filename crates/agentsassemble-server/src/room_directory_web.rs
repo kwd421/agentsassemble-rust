@@ -93,15 +93,11 @@ async fn create_room(
         .create_room_for_local_operator(&payload.request_id, &room_id, label)
         .await?;
     state.rooms.notify_committed_events(&commit.events).await;
-    let bootstrap = state.store.local_bootstrap_status().await?;
-    if bootstrap.phase != LocalBootstrapPhase::Complete {
-        return Err(DirectoryHttpError::authority_unavailable());
-    }
     let room = room_identity_payload(&commit.room, &commit.settings, "frontend_room");
     Ok(Json(json!({
         "status": "ready",
-        "server_id": bootstrap.server_id,
-        "authority_lineage_id": bootstrap.authority_lineage_id,
+        "server_id": commit.server_id,
+        "authority_lineage_id": commit.authority_lineage_id,
         "room": room,
         "deduplicated": commit.deduplicated,
     })))

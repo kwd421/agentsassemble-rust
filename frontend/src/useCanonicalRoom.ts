@@ -189,7 +189,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     if (
       projectParticipantState &&
       incoming.some((event) =>
-        ["participant_updated", "participant_left", "participant_kicked"].includes(event.type)
+        ["participant_joined", "participant_updated", "participant_left", "participant_kicked"].includes(event.type)
       )
     ) {
       setParticipantsByRoom((previous) => ({
@@ -209,12 +209,6 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
       }
     }
 
-    if (
-      incoming.some((event) =>
-        ["participant_joined", "participant_updated", "participant_left", "participant_kicked"].includes(event.type)
-      )
-    ) {
-    }
     if (incoming.some((event) => event.type.startsWith("provider_request_"))) {
       setProviderRequestsByRoom((previous) => ({
         ...previous,

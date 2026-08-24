@@ -44,7 +44,10 @@ import {
   loadRoomDockItems,
   persistRoomDockItems,
 } from "../../lib/roomDockPersistence";
-import { parseStrictRoomDirectory } from "../../lib/roomDirectoryContract";
+import {
+  bindRoomDirectoryAuthority,
+  parseStrictRoomDirectory,
+} from "../../lib/roomDirectoryContract";
 import { DEFAULT_USER_PROFILE } from "../../lib/userProfileModel";
 import GoogleAccountSettings from "./GoogleAccountSettings";
 
@@ -145,6 +148,7 @@ export default function StartupIdentityGate({
       payload.server_id
     );
     persistRoomDockItems(synchronized.map(persistableRoom));
+    bindRoomDirectoryAuthority(payload);
     rememberStartupIdentitySelection();
     onComplete();
   }

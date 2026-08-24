@@ -18,6 +18,10 @@ import {
   queryString,
 } from "./http";
 import {
+  parseStrictRoomCreateResponse,
+  parseStrictRoomDirectory,
+} from "../lib/roomDirectoryContract";
+import {
   normalizeRoomChannelList,
   roomChannelListToApi,
   type ApiRoomChannel,
@@ -466,19 +470,20 @@ export function fetchRoomFriends() {
   return fetchJson<RoomFriendsResponse>("/api/room-friends");
 }
 
-export function createRoom(roomId: string, label = "") {
-  return postJsonServerOperator<{ status: string; server_id: string; room: ServerRoom }>("/api/rooms", {
-    request_id: globalThis.crypto.randomUUID(),
+export function createRoom(requestId: string, roomId: string, label = "") {
+  return postJsonServerOperator<unknown>("/api/rooms", {
+    request_id: requestId,
     room_id: roomId,
     label,
-  });
+  }).then(parseStrictRoomCreateResponse);
 }
 
 export function fetchRooms(includeArchived = false) {
   if (includeArchived) {
-    return fetchJsonServerOperator<ServerRoomsResponse>("/api/rooms?include_archived=true");
+    return fetchJsonServerOperator<unknown>("/api/rooms?include_archived=true")
+      .then(parseStrictRoomDirectory);
   }
-  return fetchJsonServerOperator<ServerRoomsResponse>("/api/rooms");
+  return fetchJsonServerOperator<unknown>("/api/rooms").then(parseStrictRoomDirectory);
 }
 
 export function addRoomFriend(friend: Partial<RoomFriend>) {

@@ -6,6 +6,19 @@ export type StrictRoomDirectory = {
   rooms: ServerRoomDockSource[];
 };
 
+export type RoomDirectoryAuthority = Pick<
+  StrictRoomDirectory,
+  "server_id" | "authority_lineage_id"
+>;
+
+export type StrictRoomCreateResponse = RoomDirectoryAuthority & {
+  status: "ready";
+  room: ServerRoomDockSource;
+  deduplicated: boolean;
+};
+
+let boundAuthority: { origin: string; authority: RoomDirectoryAuthority } | null = null;
+
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -147,20 +160,102 @@ function validateRoom(value: unknown, index: number): ServerRoomDockSource {
   return room as ServerRoomDockSource;
 }
 
+function validateCreatedRoom(value: unknown): ServerRoomDockSource {
+  const room = record(value, "생성된 방");
+  exactKeys(
+    room,
+    [
+      "room_id",
+      "room_uid",
+      "label",
+      "last_active_at",
+      "archived",
+      "status",
+      "origin",
+    ],
+    "생성된 방"
+  );
+  requiredString(room, "room_id", "생성된 방");
+  if (!UUID_PATTERN.test(requiredString(room, "room_uid", "생성된 방"))) {
+    throw new Error("생성된 방.room_uid가 UUID가 아닙니다.");
+  }
+  requiredString(room, "label", "생성된 방");
+  requiredString(room, "last_active_at", "생성된 방");
+  requiredString(room, "origin", "생성된 방");
+  if (typeof room.archived !== "boolean") {
+    throw new Error("생성된 방.archived가 올바르지 않습니다.");
+  }
+  if (!new Set(["active", "closed", "archived"]).has(requiredString(room, "status", "생성된 방"))) {
+    throw new Error("생성된 방.status가 올바르지 않습니다.");
+  }
+  return room as ServerRoomDockSource;
+}
+
+function validateAuthority(payload: Record<string, unknown>, label: string) {
+  const serverId = requiredString(payload, "server_id", label);
+  const lineageId = requiredString(payload, "authority_lineage_id", label);
+  if (!UUID_PATTERN.test(serverId) || !UUID_PATTERN.test(lineageId)) {
+    throw new Error(`${label}의 서버 또는 권위 계보 식별자가 UUID가 아닙니다.`);
+  }
+  return { server_id: serverId, authority_lineage_id: lineageId };
+}
+
 export function parseStrictRoomDirectory(value: unknown): StrictRoomDirectory {
   const payload = record(value, "방 목록");
   exactKeys(payload, ["server_id", "authority_lineage_id", "rooms"], "방 목록");
-  const serverId = requiredString(payload, "server_id", "방 목록");
-  const lineageId = requiredString(payload, "authority_lineage_id", "방 목록");
-  if (!UUID_PATTERN.test(serverId) || !UUID_PATTERN.test(lineageId)) {
-    throw new Error("방 목록의 서버 또는 권위 계보 식별자가 UUID가 아닙니다.");
-  }
+  const authority = validateAuthority(payload, "방 목록");
   if (!Array.isArray(payload.rooms)) {
     throw new Error("방 목록 rooms가 배열이 아닙니다.");
   }
   return {
-    server_id: serverId,
-    authority_lineage_id: lineageId,
+    ...authority,
     rooms: payload.rooms.map(validateRoom),
   };
+}
+
+export function parseStrictRoomCreateResponse(value: unknown): StrictRoomCreateResponse {
+  const payload = record(value, "방 생성");
+  exactKeys(
+    payload,
+    ["status", "server_id", "authority_lineage_id", "room", "deduplicated"],
+    "방 생성"
+  );
+  if (payload.status !== "ready" || typeof payload.deduplicated !== "boolean") {
+    throw new Error("방 생성 결과가 올바르지 않습니다.");
+  }
+  return {
+    status: "ready",
+    ...validateAuthority(payload, "방 생성"),
+    room: validateCreatedRoom(payload.room),
+    deduplicated: payload.deduplicated,
+  };
+}
+
+export function assertSameRoomDirectoryAuthority(
+  actual: RoomDirectoryAuthority,
+  expected: RoomDirectoryAuthority
+) {
+  if (
+    actual.server_id !== expected.server_id ||
+    actual.authority_lineage_id !== expected.authority_lineage_id
+  ) {
+    throw new Error("방 목록 권위가 bootstrap 서버 및 계보와 일치하지 않습니다.");
+  }
+}
+
+export function bindRoomDirectoryAuthority(
+  authority: RoomDirectoryAuthority,
+  origin = window.location.origin
+) {
+  if (boundAuthority?.origin === origin) {
+    assertSameRoomDirectoryAuthority(authority, boundAuthority.authority);
+    return;
+  }
+  boundAuthority = { origin, authority: { ...authority } };
+}
+
+export function currentRoomDirectoryAuthority(
+  origin = window.location.origin
+): RoomDirectoryAuthority | null {
+  return boundAuthority?.origin === origin ? { ...boundAuthority.authority } : null;
 }

@@ -42,9 +42,11 @@ positive allowlist of bootstrap-owned rows and resolves interrupted initializati
 to `Complete` or explicit `repair_required`. It never seeds, repairs, or
 reinterprets data through a fallback.
 `Empty` additionally requires every product table in the schema owner's inventory
-to contain no rows. A gate keeps that inventory equal to every current
-non-infrastructure table, so a partial room, event, reservation, budget, result,
-attachment, profile, or session cannot be absorbed into a new authority.
+to contain no rows. One declarative table descriptor owns installation and product
+classification; the gate installs those declarations into SQLite and compares the
+actual `sqlite_master` table set to the same descriptors. A partial room, event,
+reservation, budget, result, attachment, profile, or session therefore cannot be
+omitted by a second hand-maintained inventory or absorbed into a new authority.
 
 Room and server-operator tickets require a verified `Complete` marker. `Complete`
 with zero rooms is normal. The real room directory and create/join flow owns the
@@ -54,10 +56,14 @@ same canonical authority socket handed to Core, not a probe closed before a seco
 owner is opened.
 
 The directory response carries both `server_id` and `authority_lineage_id` and
-is closed-schema validated before zero rooms can be accepted. Room creation binds
-one UUID request ID and canonical payload hash to the server operator in the same
-transaction as room/settings/membership/event state. Only exact replay succeeds;
-room creation never doubles as rename, reopen, or membership restoration.
+is closed-schema validated before zero rooms can be accepted. Startup binds that
+authority for every later list and create response; desktop also compares it with
+the current native bootstrap grant. Room creation binds one UI-owned UUID request
+ID and canonical payload hash to the server operator in the same transaction as
+room/settings/membership/event state. The same writer transaction revalidates the
+complete bootstrap digest before replay or mutation, and an ambiguous HTTP result
+replays the same request rather than creating a new intent. Only exact replay
+succeeds; room creation never doubles as rename, reopen, or membership restoration.
 
 The canonical local human profile is server-wide and therefore remains readable,
 editable, and avatar-capable before the first room exists. A fresh one-use
@@ -86,6 +92,10 @@ Subscribe, stream, action, and action-payload decoding is strict and typed.
 Unknown fields, streams, or actions fail with a typed protocol result. Canonical
 `message.send` is content-only. The roster comes only from authenticated
 WebSocket snapshot/events; an HTTP participant merge is not another authority.
+When room membership becomes Joined, the room transaction includes its complete
+canonical public participant in `participant_joined`. The strict event contract
+upserts that projection directly, while role, mute, status, and ownership remain
+room-owned rather than being synthesized from Agent Session metadata.
 
 Participant roles are exactly `HumanLocal`, `AgentWorker`, `AgentObserver`,
 `ExternalHuman`, and `Service`. Role is collaboration/routing metadata and never

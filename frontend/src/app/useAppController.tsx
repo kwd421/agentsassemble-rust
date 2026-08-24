@@ -6,7 +6,6 @@ import type {
 } from "react";
 import {
   createCompanionRoomInvite,
-  createRoom,
   refreshProviderCatalog,
   type ChannelNotificationSetting,
   type ChannelSettings,
@@ -32,7 +31,6 @@ import {
 import { consumeGuestRecoveryRequestFromUrl } from "../lib/guestRecovery";
 import { roomAppearanceStyle } from "../lib/roomAppearance";
 import {
-  createFreshRoom,
   createStartupRoute,
   localPreviewInviteUrlForRoom,
   roomIsDisconnected,
@@ -61,6 +59,7 @@ import { useAgentPresentation } from "./useAgentPresentation";
 import { useDismissMenus } from "./useDismissMenus";
 import { useRoomAdmission } from "./useRoomAdmission";
 import { useRoomChannels } from "./useRoomChannels";
+import { useRoomCreation } from "./useRoomCreation";
 import { useRoomDirectory } from "./useRoomDirectory";
 import { useRoomInviteController } from "./useRoomInviteController";
 import { useRoomMembers } from "./useRoomMembers";
@@ -120,11 +119,12 @@ export function useAppController() {
   const {
     rooms,
     replaceRooms,
-    prependRoom,
     markRoomRead: markRoomDirectoryRead,
     removeRoom,
     updateRoom,
     updateRoomByMeetingId,
+    refreshRoomDirectory,
+    verifyRoomDirectoryAuthority,
     syncIssue: roomDirectorySyncIssue,
   } = useRoomDirectory({
     initialRooms: startupRoute.startupRooms,
@@ -217,6 +217,23 @@ export function useAppController() {
     initialSession: startupRoute.guestSession,
     onRoomJoined: onGuestRoomJoined,
     onResetToLobby: onGuestAdmissionReset,
+  });
+  const onRoomCreated = useCallback(
+    (room: RoomDockItem) => {
+      setActiveRoomId(room.id);
+      setAdminOpen(false);
+      setChannel("lobby");
+      setRoomMenu(null);
+      setChannelMenu(null);
+      closeMobileOverlays();
+    },
+    [closeMobileOverlays]
+  );
+  const { addFreshRoom } = useRoomCreation({
+    guestLocked,
+    refreshRoomDirectory,
+    verifyRoomDirectoryAuthority,
+    onCreated: onRoomCreated,
   });
   const {
     payload: homeFriendsPayload,
@@ -458,29 +475,6 @@ export function useAppController() {
     setChannelMenu(null);
     closeMobileOverlays();
     openFriendsAddView(draftName);
-  }
-
-  async function addFreshRoom() {
-    if (guestLocked) return;
-    const room = createFreshRoom();
-    try {
-      const created = await createRoom(room.meetingId, room.label);
-      const canonicalRoom = {
-        ...room,
-        id: `server-${created.server_id}-${created.room.room_uid}`,
-        roomUid: created.room.room_uid,
-        serverId: created.server_id,
-      };
-      prependRoom(canonicalRoom);
-      setActiveRoomId(canonicalRoom.id);
-      setAdminOpen(false);
-      setChannel("lobby");
-      setRoomMenu(null);
-      setChannelMenu(null);
-      closeMobileOverlays();
-    } catch (error) {
-      window.alert(error instanceof Error ? error.message : "방을 만들지 못했습니다.");
-    }
   }
 
   function openRoomMenu(event: ReactMouseEvent, room: RoomDockItem) {
