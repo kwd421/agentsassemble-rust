@@ -8,7 +8,7 @@ Verification claims only the boundary actually observed. Build, lint, unit tests
 
 The active comparison baseline is original
 `d5046473010d1353a81ee38337360e6d98f7bd6f` and public Rust
-`b0c55f6fde01d004954458fa54178bd06fce4aab`. Local uncommitted behavior
+`a9c9630ae3db197594b654b7c789ace13618dcb2`. Local uncommitted behavior
 is never described as public completion. Every completed-slice evidence entry must
 name the tested Rust commit, original provenance commit, platform/build, exact
 entry point and command flow, viewer identity, provider/model where applicable,
@@ -113,6 +113,42 @@ atomic multi-room profile projection, safe raster avatar upload/read, CORS and
 body limits, event delivery, restart persistence, and preservation of room-owned
 fields. No real provider was started because this profile flow does not create or
 run an Agent Session.
+
+## Published profile hardening evidence: `a9c9630`
+
+Public Rust commit `33ee7dcc8e3c5301b5bb487299cc170d432d57ff`
+routes every room event producer through one room-owned durable sequence publisher.
+The deterministic boundary test commits a withheld profile event N+1 and then a
+normal room command N+2, drains one durable cursor, and observes N+1 then N+2 with
+the same snapshot cursor. WebSocket delivery suppresses snapshot/publication
+overlap duplicates and closes for resynchronization on any sequence gap.
+
+The same commit validates declared avatar types against bytes, decodes under
+allocation, dimension, pixel, and concurrency limits, and re-encodes one static
+PNG. New blobs remain non-public pending capabilities until the profile transaction
+binds them; replacement deletes the previous bound blob atomically, expired
+pending uploads are collected and excluded from quota, and served avatars use
+`private, no-store`. Version-seven referenced avatars are canonicalized while
+unreferenced legacy blobs remain hidden quarantine.
+
+Commit `a9c9630ae3db197594b654b7c789ace13618dcb2` removes the copied React default
+as an initial profile authority. The exact packaged debug application first showed
+`프로필 불러오는 중`, then displayed the durable server value `SeiNel`; it never
+presented a copied identity while the authenticated read was pending. The Agent Add
+dialog remained above the left-bottom profile surface, and the room participant,
+existing human message attribution, and left-bottom profile all showed `SeiNel`.
+The prior temporary verification name was absent from both the final UI and SQLite.
+Normal quit removed the exact packaged Tauri process and both owned runtime
+processes; final process inspection found no verification-owned resource.
+
+The exact public code passed `make verify`: mandatory architecture/source-growth
+gates, generated bindings, production frontend and original CSS/cascade checks,
+66 Vitest files with 335 tests, 13 Tauri tests, all Rust workspace tests,
+warning-denied Clippy, and `git diff --check`. The warning-denied
+`x86_64-pc-windows-gnu` workspace all-target/all-feature check passed with the
+rustup stable compiler and target libraries explicitly paired. No provider was
+started because this profile and publication verification does not require an
+Agent Session.
 
 ## Published macOS evidence: `99165dd`
 

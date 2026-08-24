@@ -9,7 +9,7 @@ Purpose: route the asynchronous Rust reimplementation without duplicating its co
 - Owner: [`docs/specs/user-profile-slice.md`](docs/specs/user-profile-slice.md)
 - Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - Real-client verification: [`docs/VERIFICATION.md`](docs/VERIFICATION.md)
-- Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust `b0c55f6`. Uncommitted work is not public completion evidence.
+- Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust `a9c9630ae3db197594b654b7c789ace13618dcb2`. Uncommitted work is not public completion evidence.
 - Required order:
   1. establish the server-wide human profile and its authenticated HTTP owner;
   2. project only display name and avatar into current human room memberships;
