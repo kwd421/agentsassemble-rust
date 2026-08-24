@@ -4,7 +4,7 @@ Status: source-derived migration inventory, 2026-08-24
 
 Comparison baseline: original
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust
-`11e9b8547580c3da8b2f32ed40ff5034d7683ec2`. Local uncommitted code and
+`6624e51edbd71c450497c41812eab23bb0e74770`. Local uncommitted code and
 local verification are not promoted to public implementation status in this file.
 
 ## Scope and method
@@ -65,7 +65,9 @@ not by itself a product gap.
 ## Canonical React behavior not yet provided by the Rust backend
 
 The Rust server currently exposes `GET /healthz`, `GET /api/host-challenge`,
-`POST /api/ws-ticket`, static `/app`, and `/ws`. Its room command implementation
+`POST /api/ws-ticket`, authenticated `GET/POST /api/rooms`, authenticated
+`GET/POST /api/user-profile`, profile-avatar upload/read, static `/app`, and `/ws`.
+Its room command implementation
 at the public comparison commit completes `message.send`, atomic
 `agent.create(start=false|true)`, `agent.start`, `agent.resume`, `agent.stop`, and
 stopped-session `agent.configure`.
@@ -75,10 +77,10 @@ implemented; the frontend must not silently substitute Python or local fake data
 | React feature group | Missing Rust surface |
 | --- | --- |
 | Startup identity and accounts | `/api/account`, Google account challenge/connect/delete, central-login callback start/poll, guest recovery-code create/redeem. |
-| Room directory and lifecycle | `GET/POST /api/rooms`, archive/close/delete compatibility routes, room settings, public server info, and central-directory registration proof. |
+| Room lifecycle and settings | Archive/close/delete compatibility routes, room-global settings mutation, per-user room preferences, public server info, and central-directory registration proof. |
 | Admission and invites | Host claim, room invite create/join/admission/companion/leave, operator pairing create/redeem, and public-invite status/URL/tunnel controls. |
-| Roster, profile, friends, and channels | Room members, role/mute HTTP compatibility, user profile, room friends, room channels, voice presence, and side chat. |
-| Attachments, personas, pins, and search | Attachment upload/read, persona list/import/thumbnail, message pins, room search/context. |
+| Roster, friends, and channels | Room members, role/mute HTTP compatibility, room friends, room channels, voice presence, and side chat. |
+| Attachments, personas, pins, and search | General-message and room-appearance attachment purposes, persona list/import/thumbnail, message pins, room search/context. Profile-avatar upload/read is implemented. |
 | Provider settings and diagnostics | Login, catalog refresh HTTP response, credential CRUD, provider usage, local resources, release health, and runtime version. The original `/api/local/workspace-picker` HTTP route is absent, but packaged desktop creation uses the native Tauri directory picker instead. |
 | Games and plugins | Mafia HTTP operations and generic plugin WebSocket hosting remain unimplemented. The copied RimWorld view is an external plugin consumer; its Python plugin package/runtime is intentionally outside the current Rust core-migration scope and is not a core parity exit condition. |
 | Canonical room commands | History, vote summary, edit/delete, settings, random operations, re-add, pause/interrupt, participant controls, room lifecycle, and provider request resolution. Stopped-session `agent.resume` and `agent.configure` are connected at the public comparison commit. |
@@ -99,6 +101,13 @@ At the public Rust comparison commit:
 
 - Tauri obtains a short-lived ticket, WebSocket base URL, and proof key through
   its existing `runtime_ticket` command.
+- Tauri obtains a separate fresh one-use server-operator HTTP ticket for the
+  canonical room directory. The copied room rail remains visibly unconfirmed
+  until `GET /api/rooms` projects durable room/settings state, and its plus control
+  creates the complete SQLite room boundary before inserting a UI entry.
+- The copied left-bottom human profile reads and updates the authenticated Rust
+  user profile, including bounded canonical profile-avatar publication, without
+  overwriting room role/join/mute authority or Agent Session profiles.
 - The WebSocket client verifies the Rust runtime's initial snapshot proof before
   accepting events or sending queued commands.
 - Rust snapshots drive the original room timeline, provider catalog, participant

@@ -8,7 +8,7 @@ Verification claims only the boundary actually observed. Build, lint, unit tests
 
 The active comparison baseline is original
 `d5046473010d1353a81ee38337360e6d98f7bd6f` and public Rust
-`a9c9630ae3db197594b654b7c789ace13618dcb2`. Local uncommitted behavior
+`6624e51edbd71c450497c41812eab23bb0e74770`. Local uncommitted behavior
 is never described as public completion. Every completed-slice evidence entry must
 name the tested Rust commit, original provenance commit, platform/build, exact
 entry point and command flow, viewer identity, provider/model where applicable,
@@ -149,6 +149,40 @@ warning-denied Clippy, and `git diff --check`. The warning-denied
 rustup stable compiler and target libraries explicitly paired. No provider was
 started because this profile and publication verification does not require an
 Agent Session.
+
+## Published room-directory and creation evidence: `6624e51`
+
+On 2026-08-24, public Rust commit
+`6624e51edbd71c450497c41812eab23bb0e74770` was compared with original commit
+`d5046473010d1353a81ee38337360e6d98f7bd6f` for the packaged local-operator room
+directory and create-room flow. The exact release application at
+`desktop/src-tauri/target/release/bundle/macos/AgentsAssemble.app` was driven with
+Computer Use. Its first paint marked the cached directory as awaiting server
+confirmation; the authenticated Rust response then supplied the real durable
+`general` room and human profile instead of a client-fabricated room.
+
+The copied plus control created one canonical room through `POST /api/rooms`,
+entered it through a separately scoped WebSocket ticket, and published
+`Rust room directory packaged-flow verification` through the room composer. A
+normal quit removed the exact desktop, supervisor, and sidecar processes. The
+same release bundle was relaunched, confirmed the same stable server and room
+identities from SQLite, and displayed both the created room and its durable
+message through a new WebSocket connection. Opening Agent Add again showed the
+left-bottom profile surface below the modal backdrop. Final normal quit left no
+AgentsAssemble process or SQLite handle owned by the verification.
+
+The exact public code passed `make verify`: mandatory architecture and 800-line
+source-growth gates, generated TypeScript bindings, the production frontend build
+and original CSS/cascade verification, 66 Vitest files with 339 tests, 14 Tauri
+tests, every Rust workspace test, warning-denied Clippy, and `git diff --check`.
+Purpose-separated ticket, authentication-before-body, CORS, atomic creation,
+idempotent room UID/event behavior, stable database identity, corruption rollback,
+and immediate WebSocket admission were exercised at their public boundaries. The
+full workspace and Tauri shell also passed warning-denied all-target/all-feature
+`x86_64-pc-windows-gnu` source checks with the installed rustup compiler and target
+libraries explicitly paired. No provider was started because room directory and
+creation do not create or run an Agent Session. Critical web and manual-security
+review remain pending and are not claimed by this evidence.
 
 ## Published macOS evidence: `99165dd`
 

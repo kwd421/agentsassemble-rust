@@ -1,6 +1,6 @@
 # Room Directory and Creation Slice
 
-Status: implementation and local real-flow verification complete; publication review pending
+Status: public implementation `6624e51`; critical web and manual-security review pending
 
 ## Definition
 

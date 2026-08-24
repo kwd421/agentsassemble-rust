@@ -9,7 +9,7 @@ Purpose: route the asynchronous Rust reimplementation without duplicating its co
 - Owner: [`docs/specs/room-directory-creation-slice.md`](docs/specs/room-directory-creation-slice.md)
 - Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - Real-client verification: [`docs/VERIFICATION.md`](docs/VERIFICATION.md)
-- Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust `a9c9630ae3db197594b654b7c789ace13618dcb2`. Uncommitted work is not public completion evidence.
+- Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust `6624e51edbd71c450497c41812eab23bb0e74770`. Uncommitted work is not public completion evidence.
 - Required order:
   1. publish the locally verified canonical room-directory/creation slice;
   2. record its exact public comparison and packaged-app evidence;
