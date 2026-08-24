@@ -1,7 +1,7 @@
 use std::{io, time::Duration};
 
 use agentsassemble_protocol::{
-    AuthenticatedFrame, ClientFrame, CommandNack, ProtocolError, ServerFrame,
+    AuthenticatedFrame, ClientFrame, CommandNack, CommandResolution, ProtocolError, ServerFrame,
 };
 use axum::extract::ws::Message;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
@@ -73,8 +73,8 @@ impl AuthenticatedChannel {
         cancellation: &CancellationToken,
         request_id: &str,
         action: &str,
-        code: &str,
-        message: &str,
+        resolution: CommandResolution,
+        error: ProtocolError,
     ) -> Result<(), axum::Error>
     where
         S: Sink<Message, Error = axum::Error> + Unpin,
@@ -85,11 +85,9 @@ impl AuthenticatedChannel {
             &ServerFrame::Nack(CommandNack {
                 request_id: request_id.to_owned(),
                 accepted: false,
+                resolution,
                 action: action.to_owned(),
-                error: ProtocolError {
-                    code: code.to_owned(),
-                    message: message.to_owned(),
-                },
+                error,
             }),
         )
         .await

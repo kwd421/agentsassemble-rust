@@ -35,6 +35,7 @@ describe("VotePollCard", () => {
       op: "ack",
       request_id: "summary",
       accepted: true,
+      resolution: "committed",
       action: "room.vote.summary",
       result: {
         vote_id: "vote-1",
@@ -87,6 +88,7 @@ describe("VotePollCard", () => {
       op: "ack",
       request_id: "summary-ended",
       accepted: true,
+      resolution: "committed",
       action: "room.vote.summary",
       result: {
         vote_id: "vote-1",
@@ -128,6 +130,7 @@ describe("VotePollCard", () => {
       op: "ack",
       request_id: "summary-no-deadline",
       accepted: true,
+      resolution: "committed",
       action: "room.vote.summary",
       result: {
         vote_id: "vote-1",
@@ -167,6 +170,7 @@ describe("VotePollCard", () => {
       op: "ack",
       request_id: "summary-open",
       accepted: true,
+      resolution: "committed",
       action: "room.vote.summary",
       result: {
         vote_id: "vote-1",
@@ -221,6 +225,7 @@ describe("VotePollCard", () => {
       op: "ack",
       request_id: "summary-same-name",
       accepted: true,
+      resolution: "committed",
       action: "room.vote.summary",
       result: {
         vote_id: "vote-1",
@@ -263,6 +268,7 @@ describe("VotePollCard", () => {
       op: "ack",
       request_id: "summary-own-choice",
       accepted: true,
+      resolution: "committed",
       action: "room.vote.summary",
       result: {
         vote_id: "vote-1",

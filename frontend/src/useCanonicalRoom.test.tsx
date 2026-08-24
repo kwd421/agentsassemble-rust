@@ -121,6 +121,7 @@ describe("useCanonicalRoom", () => {
       op: "ack",
       request_id: "settings-1",
       accepted: true,
+      resolution: "committed",
       action,
       result: {
         event: updatedEvent,
@@ -258,6 +259,7 @@ describe("useCanonicalRoom", () => {
       op: "ack",
       request_id: "req-1",
       accepted: true,
+      resolution: "committed",
       action,
     }) satisfies RoomCommandAck);
     const historyBefore = vi
@@ -494,6 +496,7 @@ describe("useCanonicalRoom", () => {
       op: "ack",
       request_id: "kick-1",
       accepted: true,
+      resolution: "committed",
       action,
       result: {
         participant: {
@@ -626,6 +629,7 @@ describe("useCanonicalRoom", () => {
       op: "ack",
       request_id: "req-profile",
       accepted: true,
+      resolution: "committed",
       action,
       result: {
         status: "profile_updated",

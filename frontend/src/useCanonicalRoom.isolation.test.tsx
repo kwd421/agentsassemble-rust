@@ -134,6 +134,7 @@ describe("useCanonicalRoom projection isolation", () => {
                   op: "ack",
                   request_id: "guest-command",
                   accepted: true,
+                  resolution: "committed",
                   action,
                 } satisfies RoomCommandAck)
           ),
@@ -216,6 +217,7 @@ describe("useCanonicalRoom projection isolation", () => {
         op: "ack",
         request_id: "late-host-role",
         accepted: true,
+        resolution: "committed",
         action: "participant.role.update",
         result: {
           participant: participant("guest-user", "director"),

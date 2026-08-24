@@ -1081,6 +1081,59 @@ and the app bundle were moved recoverably to
 and unrelated processes were untouched. Both exact public-diff re-reviews remain
 required after this second correction is committed and pushed.
 
+Daybreaker Blue High then rejected the ACK-loss correction with one remaining
+Medium outcome ambiguity. A committed command whose ACK was lost could be replayed
+onto a fresh connection, but a queue, principal-resolution, or persistence failure
+could emit an authenticated NACK before the durable replay result was recovered.
+The browser treated every NACK as definitive, deleted the private request ID, and
+allowed a new-ID retry that could duplicate the original mutation.
+
+The current correction makes command outcome resolution a required server-owned
+protocol field. Successful ACKs are `committed`; NACKs are `rejected` only for a
+definitive command-owner rejection; queue, transport, lost-owner-reply, principal,
+persistence, and public-projection ambiguity is `unresolved`. The browser never
+infers certainty from an error code. It settles only committed/rejected responses;
+an unresolved, missing, malformed, or action-mismatched response closes the socket
+while retaining the exact private request ID and serialized command bytes for the
+next proof-bound connection. The room runtime preserves this distinction across
+queue admission, room-owner execution, committed provider failures, and post-commit
+public projection.
+
+Focused browser regressions now cover the full hostile path: ACK silence closes the
+first socket; a fresh connection replays byte-identical authority; an authenticated
+`unresolved` persistence NACK closes that socket without settling; a third
+connection replays the same bytes again and resolves only on a deduplicated
+`committed` ACK. A separate regression proves that an explicit `rejected` NACK is
+the only NACK that rejects the user promise without reconnecting. Server boundary
+tests require committed ACK resolution and unresolved transport/authentication
+NACK resolution. The first complete verification reached every test successfully
+but warning-denied Clippy rejected an eight-argument helper; no exception was
+added. Protocol error code/message were grouped into the existing `ProtocolError`
+value, simplifying the helper. The subsequent complete unchanged `make verify`
+passed every mandatory architecture/source-growth/logical-line/800-line gate,
+generated bindings, production frontend and original CSS verification, 72
+frontend files with 355 tests, 15 Tauri tests, 18 domain, 86 persistence, four
+protocol, 100 provider, 17 server unit tests, 21 Rust integration tests,
+documentation, warning-denied Clippy, and final diff validation.
+
+Computer Use drove a fresh debug package under isolated identifier
+`app.agentsassemble.rust.outcomeresolutionverify`. One preflight package exposed
+that merely unsetting the shell variable still allowed Vite's production `.env`
+central URL; it was quit normally and its exact Application Support, cache, WebKit,
+and app bundle were moved recoverably to
+`/Users/seinel/.Trash/AgentsAssemble-Outcome-Resolution-Preflight-sMIRZ3`. The
+package was rebuilt with the central URL explicitly empty. Fresh local identity
+`Outcome Resolution Verify` created a real SQLite room and visibly published
+`OUTCOME_RESOLUTION_UI_OK`. Normal quit left no exact app or runtime. Relaunch
+restored the same room and message over a fresh authenticated channel and visibly
+published `OUTCOME_RESOLUTION_RECONNECT_OK`; read-only SQLite inspection found
+those exact strings as `message_final` sequences 2 and 3. Final normal quit again
+left no exact app or sidecar. Application Support, cache, WebKit data, and the app
+bundle were moved recoverably to
+`/Users/seinel/.Trash/AgentsAssemble-Outcome-Resolution-Verify-Pmf8t2`; original
+data and unrelated processes were untouched. Exact public-diff re-review by both
+critical reviewers remains required after commit and push.
+
 ## API verification scope
 
 When a reachable flow specifically needs an API-backed provider, the allowed paid/provider-specific candidates are the official DeepSeek API and the designated Flash provider path. Every other API-backed verification uses only an explicitly free API or free model. Missing credentials, exhausted free quota, or unavailable models fail visibly; they do not trigger a paid substitution or a fallback provider.

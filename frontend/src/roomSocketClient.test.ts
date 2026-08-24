@@ -271,6 +271,7 @@ describe("proof-bound canonical room socket", () => {
     await receiveAuthenticated(sockets[0], frames, {
       op: "ack",
       accepted: true,
+      resolution: "committed",
       request_id: command.request_id,
       action: "message.send",
       result: { event: event(3), event_seq: 3 },
@@ -395,11 +396,41 @@ describe("proof-bound canonical room socket", () => {
     await receiveAuthenticated(sockets[0], frames, {
       op: "ack",
       accepted: true,
+      resolution: "committed",
       request_id: command.request_id,
       action: "room.random.roll",
       result: { event: event(1), event_seq: 1 },
     });
     await vi.waitFor(() => expect(errors.at(-1)?.category).toBe("ack_contract_invalid"));
+    handle.close();
+  });
+
+  it("settles a command only for a server-declared definitive rejection", async () => {
+    const { handle, sockets, tickets } = openHarness();
+    await flushPromises();
+    sockets[0].open();
+    const frames = await handshakeFrames(sockets[0], tickets[0], 0, 0);
+    sockets[0].receive(frames.receipt);
+    sockets[0].receiveRaw(frames.rawSnapshot);
+    await vi.waitFor(() => expect(handle.ready()).toBe(true));
+    const pending = handle.command("message.send", { content: "rejected" });
+    await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
+    const command = await sentAuthenticatedCommand(sockets[0], frames);
+
+    await receiveAuthenticated(sockets[0], frames, {
+      op: "nack",
+      accepted: false,
+      resolution: "rejected",
+      request_id: command.request_id,
+      action: "message.send",
+      error: {
+        code: "message_invalid",
+        message: "Message content is invalid.",
+      },
+    });
+
+    await expect(pending).rejects.toMatchObject({ category: "message_invalid" });
+    expect(sockets[0].readyState).toBe(WebSocket.OPEN);
     handle.close();
   });
 
@@ -463,15 +494,42 @@ describe("proof-bound canonical room socket", () => {
     expect(replayedCommand).toEqual(firstCommand);
 
     await receiveAuthenticated(sockets[1], secondFrames, {
+      op: "nack",
+      accepted: false,
+      resolution: "unresolved",
+      request_id: replayedCommand.request_id,
+      action: "message.send",
+      error: {
+        code: "persistence_failed",
+        message: "Persistence operation failed.",
+      },
+    });
+    await vi.waitFor(() => expect(sockets[1].readyState).toBe(WebSocket.CLOSED));
+    expect(settled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(500);
+    expect(sockets).toHaveLength(3);
+    sockets[2].open();
+    const thirdFrames = await handshakeFrames(sockets[2], tickets[2], 0, 0);
+    sockets[2].receive(thirdFrames.receipt);
+    sockets[2].receiveRaw(thirdFrames.rawSnapshot);
+    await vi.waitFor(() => expect(handle.ready()).toBe(true));
+    await vi.waitFor(() => expect(sockets[2].sent).toHaveLength(2));
+    const replayedAfterUnresolved = await sentAuthenticatedCommand(sockets[2], thirdFrames);
+    expect(replayedAfterUnresolved).toEqual(firstCommand);
+
+    await receiveAuthenticated(sockets[2], thirdFrames, {
       op: "ack",
       accepted: true,
-      request_id: replayedCommand.request_id,
+      resolution: "committed",
+      request_id: replayedAfterUnresolved.request_id,
       action: "message.send",
       result: { event: event(1), event_seq: 1 },
       deduplicated: true,
     });
     await expect(pendingCommand).resolves.toMatchObject({
       accepted: true,
+      resolution: "committed",
       deduplicated: true,
     });
     handle.close();

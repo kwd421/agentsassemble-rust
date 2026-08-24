@@ -108,6 +108,7 @@ describe("useCanonicalRoom synchronization", () => {
       op: "ack",
       request_id: "settings-stale",
       accepted: true,
+      resolution: "committed",
       action,
       result: {
         event: staleAckEvent,
@@ -156,6 +157,7 @@ describe("useCanonicalRoom synchronization", () => {
       op: "ack",
       request_id: "settings-mismatch",
       accepted: true,
+      resolution: "committed",
       action,
       result: {
         event: ackEvent,

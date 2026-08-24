@@ -154,7 +154,13 @@ optimistic ordering assumption into state authority. After a command is sent, an
 ACK deadline closes the connection but retains the exact request identity and
 payload for authenticated replay; it never converts an unknown commit outcome
 into a fresh-ID retry. Explicit shutdown reports that unresolved state as
-`outcome_unknown`.
+`outcome_unknown`. Every command response carries a server-owned resolution:
+an ACK is `committed`, a NACK is `rejected` only when the command owner can prove
+a definitive rejection, and queue, transport, principal-resolution, persistence,
+or public-projection ambiguity is `unresolved`. The client settles only the first
+two. An `unresolved`, missing, malformed, or mismatched resolution closes the
+socket while preserving the exact private request ID and serialized bytes for a
+fresh authenticated replay.
 
 ### Room event cursor
 

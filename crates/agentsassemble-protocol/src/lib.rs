@@ -286,16 +286,26 @@ pub struct RoomSnapshot {
 pub struct CommandAck {
     pub request_id: String,
     pub accepted: bool,
+    pub resolution: CommandResolution,
     pub action: String,
     pub result: Value,
     #[serde(default, skip_serializing_if = "is_false")]
     pub deduplicated: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum CommandResolution {
+    Committed,
+    Rejected,
+    Unresolved,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct CommandNack {
     pub request_id: String,
     pub accepted: bool,
+    pub resolution: CommandResolution,
     pub action: String,
     pub error: ProtocolError,
 }
@@ -304,6 +314,15 @@ pub struct CommandNack {
 pub struct ProtocolError {
     pub code: String,
     pub message: String,
+}
+
+impl ProtocolError {
+    pub fn new(code: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            code: code.into(),
+            message: message.into(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -487,8 +506,8 @@ mod tests {
     use serde_json::json;
 
     use super::{
-        ClientFrame, CommandAck, HostProductSurface, HttpMethod, HttpRouteSurface,
-        ProductSurfaceError, ServerFrame, ServerProductSurface,
+        ClientFrame, CommandAck, CommandResolution, HostProductSurface, HttpMethod,
+        HttpRouteSurface, ProductSurfaceError, ServerFrame, ServerProductSurface,
     };
 
     #[test]
@@ -509,6 +528,7 @@ mod tests {
         let frame = ServerFrame::Ack(CommandAck {
             request_id: "web-1".to_owned(),
             accepted: true,
+            resolution: CommandResolution::Committed,
             action: "message.send".to_owned(),
             result: json!({"event_seq": 1}),
             deduplicated: false,
@@ -517,6 +537,7 @@ mod tests {
             serde_json::to_value(frame).unwrap_or_else(|error| panic!("serializable ACK: {error}"));
         assert_eq!(value["op"], "ack");
         assert_eq!(value["accepted"], true);
+        assert_eq!(value["resolution"], "committed");
         assert!(value.get("deduplicated").is_none());
     }
 

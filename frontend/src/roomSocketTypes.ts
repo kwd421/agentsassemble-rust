@@ -139,6 +139,7 @@ export interface RoomCommandAck {
   op: "ack";
   request_id: string;
   accepted: true;
+  resolution: "committed";
   action: string;
   result?: Record<string, unknown>;
   deduplicated?: boolean;

@@ -29,6 +29,7 @@ use crate::{
     provider_turn::{
         ProviderTurnTaskResult, commit_provider_result, publish_turn_commit, spawn_provider_turn,
     },
+    room_command_result::CommandFailure,
     room_shutdown::join_room_tasks,
 };
 
@@ -57,7 +58,7 @@ pub(crate) struct RoomCommand {
     pub(crate) action: String,
     pub(crate) payload: Value,
     transport_bytes: usize,
-    reply: oneshot::Sender<Result<CommandOutcome, PersistenceError>>,
+    reply: oneshot::Sender<Result<CommandOutcome, CommandFailure>>,
 }
 
 #[derive(Clone)]
@@ -119,19 +120,16 @@ impl RoomRuntime {
         }
     }
 
-    /// Enqueues one durable command on its room's single mutation task.
-    ///
-    /// # Errors
-    ///
-    /// Returns the command or persistence failure, including a stopped room task.
-    pub async fn execute(
+    /// Enqueues one durable command on its room's single mutation task and reports whether a
+    /// failure definitively rejected the command or left its durable outcome unresolved.
+    pub(crate) async fn execute(
         &self,
         principal: AuthenticatedPrincipal,
         request_id: String,
         action: String,
         payload: Value,
         transport_bytes: usize,
-    ) -> Result<CommandOutcome, PersistenceError> {
+    ) -> Result<CommandOutcome, CommandFailure> {
         let handle = self.handle(&principal.room_id).await;
         let (reply, response) = oneshot::channel();
         handle
@@ -144,22 +142,24 @@ impl RoomRuntime {
                 transport_bytes,
                 reply,
             })
-            .map_err(|error| match error {
-                mpsc::error::TrySendError::Full(_) => PersistenceError::CommandRejected {
-                    code: "room_busy",
-                    message: "Room command queue is full.".to_owned(),
-                },
-                mpsc::error::TrySendError::Closed(_) => PersistenceError::CommandRejected {
-                    code: "room_unavailable",
-                    message: "Room mutation task stopped.".to_owned(),
-                },
+            .map_err(|error| {
+                CommandFailure::unresolved(match error {
+                    mpsc::error::TrySendError::Full(_) => PersistenceError::CommandRejected {
+                        code: "room_busy",
+                        message: "Room command queue is full.".to_owned(),
+                    },
+                    mpsc::error::TrySendError::Closed(_) => PersistenceError::CommandRejected {
+                        code: "room_unavailable",
+                        message: "Room mutation task stopped.".to_owned(),
+                    },
+                })
             })?;
-        response
-            .await
-            .map_err(|_| PersistenceError::CommandRejected {
+        response.await.map_err(|_| {
+            CommandFailure::unresolved(PersistenceError::CommandRejected {
                 code: "room_unavailable",
                 message: "Room mutation response was lost.".to_owned(),
-            })?
+            })
+        })?
     }
 
     pub async fn subscribe(&self, room_id: &str) -> broadcast::Receiver<RoomEvent> {
@@ -374,14 +374,14 @@ async fn handle_room_command(owners: RoomCommandOwners<'_>, mut command: RoomCom
                             )
                             .await
                         }
-                        Err(error) => CommandExecution::failure(error),
+                        Err(error) => CommandExecution::admission_failure(error),
                     }
                 }
-                Err(error) => CommandExecution::failure(error),
+                Err(error) => CommandExecution::unresolved_failure(error),
             },
-            Err(error) => CommandExecution::failure(error),
+            Err(error) => CommandExecution::rejected_failure(error),
         },
-        Err(error) => CommandExecution::failure(error),
+        Err(error) => CommandExecution::unresolved_failure(error),
     };
     let CommandExecution {
         reply,
@@ -399,7 +399,12 @@ async fn handle_room_command(owners: RoomCommandOwners<'_>, mut command: RoomCom
             room_tool_ingress.clone(),
         );
     }
-    let reply = reply.and_then(|outcome| public_command_outcome(&command.principal, outcome));
+    let reply = match reply {
+        Ok(outcome) => {
+            public_command_outcome(&command.principal, outcome).map_err(CommandFailure::unresolved)
+        }
+        Err(failure) => Err(failure),
+    };
     let _ = command.reply.send(reply);
 }
 
@@ -618,7 +623,7 @@ async fn execute_agent_create_command(
     )
     .await?;
     let execution = CommandExecution {
-        reply,
+        reply: reply.map_err(CommandFailure::rejected),
         committed_events,
         assignments: Vec::new(),
     };
@@ -675,7 +680,7 @@ async fn execute_agent_configure(
 }
 
 pub(crate) struct CommandExecution {
-    reply: Result<CommandOutcome, PersistenceError>,
+    reply: Result<CommandOutcome, CommandFailure>,
     committed_events: Vec<RoomEvent>,
     assignments: Vec<AgentTurnAssignment>,
 }
@@ -709,7 +714,31 @@ impl CommandExecution {
 
     fn failure(error: PersistenceError) -> Self {
         Self {
-            reply: Err(error),
+            reply: Err(CommandFailure::after_execution(error)),
+            committed_events: Vec::new(),
+            assignments: Vec::new(),
+        }
+    }
+
+    fn rejected_failure(error: PersistenceError) -> Self {
+        Self {
+            reply: Err(CommandFailure::rejected(error)),
+            committed_events: Vec::new(),
+            assignments: Vec::new(),
+        }
+    }
+
+    fn unresolved_failure(error: PersistenceError) -> Self {
+        Self {
+            reply: Err(CommandFailure::unresolved(error)),
+            committed_events: Vec::new(),
+            assignments: Vec::new(),
+        }
+    }
+
+    fn admission_failure(error: PersistenceError) -> Self {
+        Self {
+            reply: Err(CommandFailure::after_admission(error)),
             committed_events: Vec::new(),
             assignments: Vec::new(),
         }
@@ -720,7 +749,7 @@ impl CommandExecution {
         committed_events: Vec<RoomEvent>,
     ) -> Self {
         Self {
-            reply: Err(error),
+            reply: Err(CommandFailure::rejected(error)),
             committed_events,
             assignments: Vec::new(),
         }

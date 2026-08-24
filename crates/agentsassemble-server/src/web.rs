@@ -2,7 +2,9 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use agentsassemble_domain::public_event_for_principal;
 use agentsassemble_persistence::PersistenceError;
-use agentsassemble_protocol::{ClientFrame, CommandAck, ServerFrame};
+use agentsassemble_protocol::{
+    ClientFrame, CommandAck, CommandResolution, ProtocolError, ServerFrame,
+};
 use axum::{
     Json, Router, body,
     extract::{
@@ -259,12 +261,12 @@ async fn socket_session(
                     Message::Close(_) => return,
                 };
                 if !ingress.admit(frame_bytes, control_frame) {
-                    let _ = channel.send_nack(&mut sender, &state.shutdown, "", "frame", "ingress_limited", "WebSocket ingress budget exceeded.").await;
+                    let _ = channel.send_nack(&mut sender, &state.shutdown, "", "frame", CommandResolution::Unresolved, ProtocolError::new("ingress_limited", "WebSocket ingress budget exceeded.")).await;
                     return;
                 }
                 let Message::Text(raw) = message else {
                     if matches!(message, Message::Binary(_)) {
-                        let _ = channel.send_nack(&mut sender, &state.shutdown, "", "frame", "binary_frame_unsupported", "Binary WebSocket frames are not supported.").await;
+                        let _ = channel.send_nack(&mut sender, &state.shutdown, "", "frame", CommandResolution::Unresolved, ProtocolError::new("binary_frame_unsupported", "Binary WebSocket frames are not supported.")).await;
                         return;
                     }
                     continue;
@@ -272,7 +274,7 @@ async fn socket_session(
                 let Ok((client_frame, authenticated_bytes)) =
                     channel.decode_client(raw.as_str())
                 else {
-                    let _ = channel.send_nack(&mut sender, &state.shutdown, "", "frame", "frame_authentication_invalid", "WebSocket frame authentication failed.").await;
+                    let _ = channel.send_nack(&mut sender, &state.shutdown, "", "frame", CommandResolution::Unresolved, ProtocolError::new("frame_authentication_invalid", "WebSocket frame authentication failed.")).await;
                     return;
                 };
                 match client_frame {
@@ -286,18 +288,19 @@ async fn socket_session(
                                 let frame = ServerFrame::Ack(CommandAck {
                                     request_id,
                                     accepted: true,
+                                    resolution: CommandResolution::Committed,
                                     action,
                                     result: outcome.result,
                                     deduplicated: outcome.deduplicated,
                                 });
                                 if channel.send(&mut sender, &state.shutdown, &frame).await.is_err() { return; }
                             }
-                            Err(error) => {
-                                if persistence_error_is_internal(&error) {
-                                    tracing::error!(error = ?error, room_id = %principal.room_id, action = %action, "room command persistence failed");
+                            Err(failure) => {
+                                if persistence_error_is_internal(&failure.error) {
+                                    tracing::error!(error = ?failure.error, room_id = %principal.room_id, action = %action, "room command persistence failed");
                                 }
-                                let (code, message) = persistence_error(&error);
-                                if channel.send_nack(&mut sender, &state.shutdown, &request_id, &action, code, &message).await.is_err() { return; }
+                                let (code, message) = persistence_error(&failure.error);
+                                if channel.send_nack(&mut sender, &state.shutdown, &request_id, &action, failure.resolution, ProtocolError::new(code, message)).await.is_err() { return; }
                             }
                         }
                     }
@@ -305,7 +308,7 @@ async fn socket_session(
                         if channel.send(&mut sender, &state.shutdown, &ServerFrame::Pong { nonce }).await.is_err() { return; }
                     }
                     ClientFrame::Subscribe { .. } => {
-                        if channel.send_nack(&mut sender, &state.shutdown, "", "subscribe", "already_subscribed", "This socket is already subscribed.").await.is_err() { return; }
+                        if channel.send_nack(&mut sender, &state.shutdown, "", "subscribe", CommandResolution::Unresolved, ProtocolError::new("already_subscribed", "This socket is already subscribed.")).await.is_err() { return; }
                     }
                 }
             }
@@ -336,8 +339,8 @@ async fn socket_session(
                                     &state.shutdown,
                                     "",
                                     "session",
-                                    code,
-                                    &message,
+                                    CommandResolution::Unresolved,
+                                    ProtocolError::new(code, message),
                                 ).await;
                                 return;
                             }

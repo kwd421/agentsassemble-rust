@@ -44,6 +44,7 @@ describe("useCanonicalRoom member commands", () => {
       op: "ack",
       request_id: "role-1",
       accepted: true,
+      resolution: "committed",
       action,
       result: { participant: updatedParticipant, event: roleEvent("reviewer") },
     }) satisfies RoomCommandAck);

@@ -145,7 +145,13 @@ connection, and replays those same bytes over a fresh authenticated channel unti
 the durable idempotency result is recovered. Only a command that never crossed
 the send boundary may expire as an ordinary timeout. Explicit client shutdown
 reports `outcome_unknown` for an unresolved sent command instead of authorizing
-a new-ID retry.
+a new-ID retry. ACK/NACK frames carry a required server-owned resolution of
+`committed`, `rejected`, or `unresolved`. Only a committed ACK or a definitive
+rejected NACK may retire the private request identity. Queue saturation, lost
+room-owner reply, principal/persistence failure before authoritative replay, and
+any unclassified server failure are unresolved; the browser closes and replays
+the same authenticated inner bytes. Missing or invalid resolution fails closed
+the same way rather than falling back to error-code inference.
 
 ## Proof-bound finite subscription
 

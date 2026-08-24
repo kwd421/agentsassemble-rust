@@ -6,8 +6,8 @@ use agentsassemble_domain::{
 };
 use agentsassemble_persistence::{PersistenceError, RoomCatchUp};
 use agentsassemble_protocol::{
-    ClientFrame, CommandNack, PROTOCOL_VERSION, ProtocolError, RoomSnapshot, RoomStream,
-    ServerFrame, Subscribed,
+    ClientFrame, CommandNack, CommandResolution, PROTOCOL_VERSION, ProtocolError, RoomSnapshot,
+    RoomStream, ServerFrame, Subscribed,
 };
 use axum::extract::ws::Message;
 use futures_util::{Sink, Stream, StreamExt};
@@ -434,6 +434,7 @@ where
         &ServerFrame::Nack(CommandNack {
             request_id: request_id.to_owned(),
             accepted: false,
+            resolution: CommandResolution::Unresolved,
             action: action.to_owned(),
             error: ProtocolError {
                 code: code.to_owned(),

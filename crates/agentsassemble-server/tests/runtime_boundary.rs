@@ -100,6 +100,7 @@ async fn external_client_recovers_committed_command_after_restart() {
     }
     let event = committed_event.unwrap_or_else(|| panic!("event frame was not delivered"));
     let ack = committed_ack.unwrap_or_else(|| panic!("ACK frame was not delivered"));
+    assert_eq!(ack["resolution"], "committed");
     assert_eq!(event["events"][0]["seq"], 2);
     assert_eq!(ack["result"]["event_seq"], 2);
     assert_eq!(ack["result"]["event"]["id"], event["events"][0]["id"]);
@@ -124,6 +125,7 @@ async fn external_client_recovers_committed_command_after_restart() {
     send_command(&mut second_socket).await;
     let retry = receive_json(&mut second_socket).await;
     assert_eq!(retry["op"], "ack");
+    assert_eq!(retry["resolution"], "committed");
     assert_eq!(retry["deduplicated"], true);
     assert_eq!(retry["result"]["event_seq"], 2);
     assert!(
@@ -348,6 +350,7 @@ async fn authenticated_binary_frame_is_rejected_and_closed() {
     assert_eq!(snapshot["op"], "snapshot");
     socket.send_binary(vec![1, 2, 3]).await;
     let nack = receive_json(&mut socket).await;
+    assert_eq!(nack["resolution"], "unresolved");
     assert_eq!(nack["error"]["code"], "binary_frame_unsupported");
     assert!(socket.wait_closed().await);
     server.stop().await;
@@ -383,6 +386,7 @@ async fn tampered_authenticated_command_cannot_create_a_durable_mutation() {
     });
     socket.send_tampered_json(&signed, &transmitted).await;
     let nack = receive_json(&mut socket).await;
+    assert_eq!(nack["resolution"], "unresolved");
     assert_eq!(nack["error"]["code"], "frame_authentication_invalid");
     assert!(socket.wait_closed().await);
     server.stop().await;

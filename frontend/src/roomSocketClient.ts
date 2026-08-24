@@ -439,19 +439,38 @@ export function openRoomSocket(
         if ((msg.op === "ack" || msg.op === "nack") && typeof msg.request_id === "string") {
           const command = pending.get(msg.request_id);
           if (!command) return;
-          if (msg.op === "nack" || msg.accepted === false) {
+          if (msg.op === "nack") {
+            if (
+              msg.accepted !== false ||
+              msg.action !== command.action ||
+              (msg.resolution !== "rejected" && msg.resolution !== "unresolved") ||
+              !isRecord(msg.error) ||
+              typeof msg.error.code !== "string" ||
+              typeof msg.error.message !== "string"
+            ) {
+              throw new RoomSocketSayError(
+                "Room NACK did not carry a server-owned outcome resolution; reconnecting.",
+                "nack_contract_invalid"
+              );
+            }
+            if (msg.resolution === "unresolved") {
+              if (command.timerId !== null) window.clearTimeout(command.timerId);
+              command.timerId = null;
+              currentSocket.close();
+              return;
+            }
             pending.delete(msg.request_id);
             if (command.timerId !== null) window.clearTimeout(command.timerId);
-            const error = isRecord(msg.error) ? msg.error : {};
             command.reject(new RoomSocketSayError(
-              String(error.message || "Room command was rejected."),
-              String(error.code || "rejected")
+              msg.error.message,
+              msg.error.code
             ));
             return;
           }
           if (
             msg.op !== "ack" ||
             msg.accepted !== true ||
+            msg.resolution !== "committed" ||
             msg.action !== command.action ||
             !commandAckResultIsValid(command.action, command.payload, msg.result)
           ) {

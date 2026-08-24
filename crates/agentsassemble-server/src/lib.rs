@@ -51,6 +51,7 @@ mod product_surface;
 mod profile_web;
 mod provider_turn;
 mod room_agent_lifecycle_runtime;
+mod room_command_result;
 mod room_directory_web;
 mod room_random_runtime;
 mod room_runtime;
