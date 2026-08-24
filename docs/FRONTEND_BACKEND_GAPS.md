@@ -4,8 +4,9 @@ Status: source-derived reimplementation exposure inventory, 2026-08-24
 
 Comparison baseline: original
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust
-`5aaa04b`. The Stage A feature candidate built from this baseline is recorded
-separately below until its review and real-client evidence are complete.
+`5aaa04b`. The current published Stage A review candidate is `865ad02`; its
+delta is recorded separately below and is not completion evidence until critical
+review and real-client evidence are complete.
 
 ## Scope and method
 
@@ -30,6 +31,23 @@ Evidence owners:
 The HTTP comparison is method-aware. A route used only through another backend
 flow is marked indirect rather than incorrectly reported as a missing screen.
 Test fixtures and example asset URLs are not counted as frontend integration.
+
+## Completion reporting contract
+
+This file is the single exposure inventory for final reimplementation reporting.
+It must be updated whenever a Rust backend surface or copied frontend entry point
+becomes reachable, becomes intentionally service-only, or is removed. Before the
+reimplementation is called complete, the final handoff must explicitly enumerate:
+
+- Rust backend behavior that has no reachable frontend entry point;
+- partially connected frontend flows and the exact missing operation or state;
+- intentionally indirect or service-only backend surfaces that do not need a UI;
+- controls kept visibly unavailable because their complete authority boundary is
+  not implemented.
+
+A backend route, command, or event existing in source is not evidence that the
+frontend exposes its real user flow. Tests, copied components, fixtures, and local
+fake state likewise cannot close an exposure row.
 
 ## Python backend behavior with no direct React exposure
 
