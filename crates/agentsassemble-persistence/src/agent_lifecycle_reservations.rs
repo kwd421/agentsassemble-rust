@@ -100,6 +100,7 @@ pub(crate) async fn claim_lifecycle_command(
     transaction: &mut Transaction<'_, Sqlite>,
     reservation: &LifecycleReservation<'_>,
     payload: &Value,
+    reserve_budget: bool,
 ) -> Result<(), PersistenceError> {
     let existing = sqlx::query(
         "SELECT action, payload_hash, session_id, operation_id, status, phase, prepared_result_json FROM lifecycle_command_reservations WHERE room_id = ? AND principal_id = ? AND request_id = ?",
@@ -128,7 +129,7 @@ pub(crate) async fn claim_lifecycle_command(
             _ => Err(invalid_reservation()),
         };
     }
-    if reservation.action != "agent.stop" {
+    if reserve_budget {
         reserve_room_write_budget(
             transaction,
             &reservation.principal.room_id,

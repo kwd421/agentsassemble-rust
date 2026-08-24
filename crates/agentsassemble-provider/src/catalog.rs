@@ -200,7 +200,7 @@ fn loading_provider(
         display_name: display_name.to_owned(),
         provider_kind: provider_kind.to_owned(),
         runtime_kind: runtime_kind.to_owned(),
-        catalog_group: "subscription".to_owned(),
+        catalog_group: "harness".to_owned(),
         workspace_required: true,
         connection_kind: "native_cli_bridge".to_owned(),
         executable: executable.to_owned(),

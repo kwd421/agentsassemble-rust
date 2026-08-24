@@ -124,6 +124,15 @@ pub(crate) fn lifecycle_intent_is_empty(session: &DurableAgentSession) -> bool {
         && session.lifecycle_intent_status.is_empty()
 }
 
+pub(crate) fn agent_stop_requires_cleanup(session: &DurableAgentSession) -> bool {
+    !matches!(
+        session.public.runtime_status.as_str(),
+        "stopped" | "available"
+    ) || !session.runtime_handle_id.is_empty()
+        || !session.runtime_owner_id.is_empty()
+        || !lifecycle_intent_is_empty(session)
+}
+
 pub(crate) fn require_intent(
     session: &DurableAgentSession,
     action: &str,

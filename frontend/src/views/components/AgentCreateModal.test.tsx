@@ -61,6 +61,7 @@ describe("AgentCreateModal", () => {
             display_name: "Codex",
             provider_kind: "codex_live_session",
             runtime_kind: "live_cli",
+            catalog_group: "harness",
             connection_kind: "native_cli_bridge",
             executable: "codex",
             default_model: "gpt-5.6-luna",
@@ -120,6 +121,7 @@ describe("AgentCreateModal", () => {
             display_name: "Codex",
             provider_kind: "codex_live_session",
             runtime_kind: "live_cli",
+            catalog_group: "harness",
             connection_kind: "native_cli_bridge",
             executable: "codex",
             default_model: "gpt-5.6-luna",
@@ -632,7 +634,7 @@ describe("AgentCreateModal", () => {
     );
   });
 
-  it("projects one mixed-location provider into matching Subscription and Local model lists", async () => {
+  it("projects one mixed-location provider into matching Harness and Local model lists", async () => {
     const onCreate = vi.fn().mockResolvedValue(undefined);
     render(
       <AgentCreateModal

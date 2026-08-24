@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
-import { Bot } from "lucide-react";
+import { Bot, Braces } from "lucide-react";
 import {
-  PROVIDER_BRANDS,
   providerBrandKey,
+  resolveProviderPresentation,
   type ProviderBrandKey,
 } from "./providerBranding";
 
@@ -22,17 +22,17 @@ export default function ProviderLogo({
   fallback?: ReactNode;
   decorative?: boolean;
 }) {
-  const brandKey = providerBrandKey(providerId, providerKind);
-  if (!brandKey) {
+  const presentation = resolveProviderPresentation({ providerId, providerKind });
+  if (!presentation.brandKey || !presentation.brand) {
     return fallback ?? <Bot size={Math.max(14, Math.round(size * 0.52))} />;
   }
-  const brand = PROVIDER_BRANDS[brandKey];
+  const { brandKey, brand } = presentation;
   return (
     <span
       className="dc-provider-logo"
       data-provider-brand={brandKey}
       aria-hidden={decorative || undefined}
-      aria-label={decorative ? undefined : `${brand.label} 로고`}
+      aria-label={decorative ? undefined : `${brand.logoLabel} 로고`}
       role={decorative ? undefined : "img"}
       style={{
         width: size,
@@ -40,12 +40,16 @@ export default function ProviderLogo({
         background: brand.background,
       }}
     >
-      <img
-        src={brand.logo}
-        alt=""
-        draggable={false}
-        style={{ width: brand.scale, height: brand.scale }}
-      />
+      {brand.logo ? (
+        <img
+          src={brand.logo}
+          alt=""
+          draggable={false}
+          style={{ width: brand.scale, height: brand.scale }}
+        />
+      ) : (
+        <Braces color="#ffffff" size={Math.round(size * 0.58)} strokeWidth={2.2} />
+      )}
     </span>
   );
 }

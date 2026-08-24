@@ -428,16 +428,8 @@ async fn socket_session(
                 };
                 match serde_json::from_str::<ClientFrame>(raw.as_str()) {
                     Ok(ClientFrame::Command { request_id, action, payload }) => {
-                        if request_id.is_empty()
-                            || request_id.chars().count() > 128
-                            || action.is_empty()
-                            || action.chars().count() > 64
-                        {
-                            if send_nack(&mut sender, &state.shutdown, &request_id, &action, "command_envelope_invalid", "request_id or action is invalid.").await.is_err() { return; }
-                            continue;
-                        }
                         let outcome = state.rooms.execute(
-                            principal.clone(), request_id.clone(), action.clone(), payload,
+                            principal.clone(), request_id.clone(), action.clone(), payload, frame_bytes,
                         ).await;
                         match outcome {
                             Ok(outcome) => {

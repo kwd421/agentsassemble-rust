@@ -30,6 +30,7 @@ import ProviderControlToggle from "./ProviderControlToggle";
 import AgentPersonaPicker from "./AgentPersonaPicker";
 import ProviderCredentialField from "./ProviderCredentialField";
 import WorkspacePickerField from "./WorkspacePickerField";
+import { resolveProviderPresentation } from "./providerBranding";
 import {
   defaultAgentDisplayName,
   deriveAgentCreateStatus,
@@ -59,7 +60,7 @@ export default function AgentCreateModal({
   onCreated,
 }: AgentCreateModalProps) {
   const [providerGroup, setProviderGroup] = useState<ProviderCatalogGroup | "">(
-    "subscription"
+    "harness"
   );
   const [providerId, setProviderId] = useState("");
   const [existingSessionId, setExistingSessionId] = useState("");
@@ -385,12 +386,18 @@ export default function AgentCreateModal({
   }
 
   function renderProviderChoice(provider: NativeCliProviderAvailability) {
+    const presentation = resolveProviderPresentation({
+      providerId: provider.id,
+      providerKind: provider.provider_kind,
+      providerDisplayName: provider.display_name,
+    });
     return (
       <button
         key={provider.id}
         type="button"
         role="listitem"
-        aria-label={provider.display_name}
+        aria-label={presentation.providerName}
+        title={presentation.providerName}
         data-active={provider.id === selectedProvider?.id}
         disabled={!provider.available}
         onClick={() => {
@@ -403,7 +410,7 @@ export default function AgentCreateModal({
           providerKind={provider.provider_kind}
           size={22}
         />
-        <span>{provider.display_name}</span>
+        <span className="min-w-0 truncate">{presentation.providerName}</span>
       </button>
     );
   }
@@ -469,9 +476,10 @@ export default function AgentCreateModal({
             </section>
           )}
 
-          <section className="dc-agent-section">
-            <p className="dc-agent-section-title">기본 정보</p>
-            <div className="dc-agent-field-grid">
+          {selectedProvider && (
+            <section className="dc-agent-section">
+              <p className="dc-agent-section-title">기본 정보</p>
+              <div className="dc-agent-field-grid">
               {reusableSessions.length > 0 && (
                 <label className="dc-agent-field">
                   <span>기존 세션</span>
@@ -513,8 +521,9 @@ export default function AgentCreateModal({
                   onError={setStatus}
                 />
               )}
-            </div>
-          </section>
+              </div>
+            </section>
+          )}
 
           {selectedProvider?.custom_endpoint && !existingSessionId && (
             <section className="dc-agent-section">

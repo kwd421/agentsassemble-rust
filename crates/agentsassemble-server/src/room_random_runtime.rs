@@ -63,7 +63,7 @@ pub(crate) async fn handle_provider_room_tool(
                 return;
             }
         };
-    if let Err(error) = write_budget.admit(
+    if let Err(error) = write_budget.admit_mutation(
         &format!("agent-session:{}", command.session_id()),
         payload_bytes,
     ) {

@@ -12,8 +12,9 @@ use crate::{
     CommandOutcome, PersistenceError, SqliteStore,
     agent_launch_events::commit_launch_result,
     agent_lifecycle_authority::{
-        authorize_control, lifecycle_intent_is_empty, lifecycle_operation_id, payload_agent_id,
-        require_intent, require_matching_operation, validate_runtime_started,
+        agent_stop_requires_cleanup, authorize_control, lifecycle_intent_is_empty,
+        lifecycle_operation_id, payload_agent_id, require_intent, require_matching_operation,
+        validate_runtime_started,
     },
     agent_lifecycle_events::{
         append_error_event, append_session_event, append_state_event, commit_already_stopped,
@@ -138,7 +139,7 @@ impl SqliteStore {
             &agent_id,
             &operation_id,
         );
-        claim_lifecycle_command(&mut transaction, &reservation, payload).await?;
+        claim_lifecycle_command(&mut transaction, &reservation, payload, true).await?;
         let mut session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
         require_valid_turn_authority(&session)?;
         let participant = load_participant(&mut transaction, &principal.room_id, &agent_id).await?;
@@ -337,16 +338,11 @@ impl SqliteStore {
             &agent_id,
             &operation_id,
         );
-        claim_lifecycle_command(&mut transaction, &reservation, payload).await?;
         let mut session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
         require_valid_turn_authority(&session)?;
-        if matches!(
-            session.public.runtime_status.as_str(),
-            "stopped" | "available"
-        ) && session.runtime_handle_id.is_empty()
-            && session.runtime_owner_id.is_empty()
-            && lifecycle_intent_is_empty(&session)
-        {
+        let cleanup_required = agent_stop_requires_cleanup(&session);
+        claim_lifecycle_command(&mut transaction, &reservation, payload, !cleanup_required).await?;
+        if !cleanup_required {
             finish_lifecycle_command(&mut transaction, &reservation).await?;
             let outcome = commit_already_stopped(
                 &mut transaction,
@@ -785,6 +781,10 @@ fn rejected(code: &'static str, message: impl Into<String>) -> PersistenceError 
 #[cfg(test)]
 #[path = "agent_lifecycle_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "agent_lifecycle_budget_tests.rs"]
+mod budget_tests;
 
 #[cfg(test)]
 #[path = "agent_lifecycle_recovery_tests.rs"]

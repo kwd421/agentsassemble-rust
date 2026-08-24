@@ -72,7 +72,7 @@ export interface NativeCliProviderAvailability {
   display_name: string;
   provider_kind: string;
   runtime_kind: "live_cli" | "opencode" | "api";
-  catalog_group?: "subscription" | "api" | "local";
+  catalog_group: "harness" | "api" | "local";
   workspace_required?: boolean;
   work_harness_available?: boolean;
   custom_endpoint?: boolean;

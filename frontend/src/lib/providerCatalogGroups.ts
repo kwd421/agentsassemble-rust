@@ -1,26 +1,25 @@
-import { Cloud, CreditCard, HardDrive } from "lucide-react";
+import { Cable, Cloud, HardDrive } from "lucide-react";
 import type { NativeCliProviderAvailability } from "../roomSocketClient";
 
-export type ProviderCatalogGroup = "subscription" | "api" | "local";
+export type ProviderCatalogGroup = "harness" | "api" | "local";
 
 export const PROVIDER_GROUPS = [
-  { id: "subscription", label: "Subscription", Icon: CreditCard },
+  { id: "harness", label: "Harness", Icon: Cable },
   { id: "api", label: "API", Icon: Cloud },
   { id: "local", label: "Local", Icon: HardDrive },
 ] as const;
 
 export function providerCatalogGroup(
-  provider: NativeCliProviderAvailability | undefined
+  provider: NativeCliProviderAvailability
 ): ProviderCatalogGroup {
-  if (provider?.catalog_group) return provider.catalog_group;
-  return provider?.runtime_kind === "api" ? "api" : "subscription";
+  return provider.catalog_group;
 }
 
 export function projectProvidersByCatalogGroup(
   providers: NativeCliProviderAvailability[]
 ): Record<ProviderCatalogGroup, NativeCliProviderAvailability[]> {
   return {
-    subscription: projectProviders(providers, "subscription"),
+    harness: projectProviders(providers, "harness"),
     api: projectProviders(providers, "api"),
     local: projectProviders(providers, "local"),
   };

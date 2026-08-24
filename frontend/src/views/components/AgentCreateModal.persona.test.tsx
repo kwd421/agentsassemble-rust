@@ -78,6 +78,7 @@ function deepSeekProvider(): NativeCliProviderAvailability {
     display_name: "DeepSeek",
     provider_kind: "deepseek_api",
     runtime_kind: "api",
+    catalog_group: "api",
     connection_kind: "native_cli_bridge",
     executable: "",
     default_model: "deepseek-chat",

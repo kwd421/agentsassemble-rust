@@ -2,6 +2,7 @@ import claudeLogo from "../../assets/provider-logos/claude.svg";
 import cerebrasLogo from "../../assets/provider-logos/cerebras.svg";
 import cursorLogo from "../../assets/provider-logos/cursor.png";
 import deepSeekLogo from "../../assets/provider-logos/deepseek.png";
+import freebuffLogo from "../../assets/provider-logos/freebuff.png";
 import geminiLogo from "../../assets/provider-logos/gemini.webp";
 import grokLogo from "../../assets/provider-logos/grok.png";
 import lmStudioLogo from "../../assets/provider-logos/lmstudio.png";
@@ -10,6 +11,7 @@ import ollamaLogo from "../../assets/provider-logos/ollama.png";
 import openAILogo from "../../assets/provider-logos/openai.svg";
 import openCodeLogo from "../../assets/provider-logos/opencode.png";
 import openRouterLogo from "../../assets/provider-logos/openrouter.svg";
+import tokenRouterLogo from "../../assets/provider-logos/tokenrouter.png";
 import vercelLogo from "../../assets/provider-logos/vercel.svg";
 
 export type ProviderBrandKey =
@@ -18,6 +20,7 @@ export type ProviderBrandKey =
   | "grok"
   | "claude"
   | "cursor"
+  | "freebuff"
   | "opencode"
   | "deepseek"
   | "cerebras"
@@ -25,13 +28,23 @@ export type ProviderBrandKey =
   | "lmstudio"
   | "llmgateway"
   | "openrouter"
+  | "tokenrouter"
+  | "custom_api"
   | "vercel";
 
 export type ProviderBrand = {
-  label: string;
-  logo: string;
+  productName: string;
+  logoLabel: string;
+  logo?: string;
   background: string;
   scale: string;
+};
+
+export type ProviderPresentation = {
+  brandKey?: ProviderBrandKey;
+  brand?: ProviderBrand;
+  providerName: string;
+  defaultAgentName: string;
 };
 
 const PROVIDER_ALIASES: Record<string, ProviderBrandKey> = {
@@ -45,6 +58,8 @@ const PROVIDER_ALIASES: Record<string, ProviderBrandKey> = {
   claude_code: "claude",
   cursor: "cursor",
   cursor_live_session: "cursor",
+  freebuff: "freebuff",
+  freebuff_live_session: "freebuff",
   opencode: "opencode",
   opencode_server: "opencode",
   deepseek: "deepseek",
@@ -59,6 +74,10 @@ const PROVIDER_ALIASES: Record<string, ProviderBrandKey> = {
   llm_gateway_api: "llmgateway",
   openrouter: "openrouter",
   openrouter_api: "openrouter",
+  tokenrouter: "tokenrouter",
+  tokenrouter_api: "tokenrouter",
+  custom_api: "custom_api",
+  custom_openai_api: "custom_api",
   vercel: "vercel",
   vercel_ai_gateway: "vercel",
 };
@@ -68,79 +87,112 @@ const PROVIDER_ALIASES: Record<string, ProviderBrandKey> = {
 // image canvas.
 export const PROVIDER_BRANDS: Record<ProviderBrandKey, ProviderBrand> = {
   codex: {
-    label: "OpenAI",
+    productName: "Codex",
+    logoLabel: "OpenAI",
     logo: openAILogo,
     background: "#000000",
     scale: "141%",
   },
   antigravity: {
-    label: "Google Gemini",
+    productName: "Antigravity",
+    logoLabel: "Google Gemini",
     logo: geminiLogo,
     background: "#ffffff",
     scale: "79%",
   },
   grok: {
-    label: "Grok",
+    productName: "Grok",
+    logoLabel: "Grok",
     logo: grokLogo,
     background: "#000000",
     scale: "133%",
   },
   claude: {
-    label: "Claude",
+    productName: "Claude",
+    logoLabel: "Claude",
     logo: claudeLogo,
     background: "#d97757",
     scale: "96%",
   },
   cursor: {
-    label: "Cursor",
+    productName: "Cursor",
+    logoLabel: "Cursor",
     logo: cursorLogo,
     background: "#0f0e0b",
     scale: "103%",
   },
+  freebuff: {
+    productName: "Freebuff",
+    logoLabel: "Freebuff",
+    logo: freebuffLogo,
+    background: "#000000",
+    scale: "100%",
+  },
   opencode: {
-    label: "OpenCode",
+    productName: "OpenCode",
+    logoLabel: "OpenCode",
     logo: openCodeLogo,
     background: "#171515",
     scale: "111%",
   },
   deepseek: {
-    label: "DeepSeek",
+    productName: "DeepSeek",
+    logoLabel: "DeepSeek",
     logo: deepSeekLogo,
     background: "#ffffff",
     scale: "70%",
   },
   cerebras: {
-    label: "Cerebras",
+    productName: "Cerebras",
+    logoLabel: "Cerebras",
     logo: cerebrasLogo,
     background: "#ffffff",
     scale: "70%",
   },
   ollama: {
-    label: "Ollama",
+    productName: "Ollama",
+    logoLabel: "Ollama",
     logo: ollamaLogo,
     background: "#ffffff",
     scale: "87%",
   },
   lmstudio: {
-    label: "LM Studio",
+    productName: "LM Studio",
+    logoLabel: "LM Studio",
     logo: lmStudioLogo,
     background: "#5d45dd",
     scale: "89%",
   },
   llmgateway: {
-    label: "LLM Gateway",
+    productName: "LLM Gateway",
+    logoLabel: "LLM Gateway",
     logo: llmGatewayLogo,
     background: "#151515",
     scale: "76%",
   },
   openrouter: {
-    label: "OpenRouter",
+    productName: "OpenRouter",
+    logoLabel: "OpenRouter",
     logo: openRouterLogo,
     background: "#ffffff",
     scale: "82%",
   },
+  tokenrouter: {
+    productName: "TokenRouter",
+    logoLabel: "TokenRouter",
+    logo: tokenRouterLogo,
+    background: "#0b1020",
+    scale: "74%",
+  },
+  custom_api: {
+    productName: "Custom API",
+    logoLabel: "Custom API",
+    background: "#475569",
+    scale: "58%",
+  },
   vercel: {
-    label: "Vercel AI Gateway",
+    productName: "Vercel AI Gateway",
+    logoLabel: "Vercel",
     logo: vercelLogo,
     background: "#000000",
     scale: "74%",
@@ -159,4 +211,37 @@ export function providerBrandKey(
     PROVIDER_ALIASES[normalizeProviderIdentifier(providerId)] ||
     PROVIDER_ALIASES[normalizeProviderIdentifier(providerKind)]
   );
+}
+
+function modelAlreadyNamesProvider(modelName: string, providerName: string): boolean {
+  const providerToken = providerName.toLocaleLowerCase();
+  const modelToken = modelName.toLocaleLowerCase();
+  return (
+    modelToken === providerToken ||
+    [" ", "-", "·", "/", ":"].some((separator) =>
+      modelToken.startsWith(`${providerToken}${separator}`)
+    )
+  );
+}
+
+export function resolveProviderPresentation({
+  providerId,
+  providerKind,
+  providerDisplayName,
+  modelLabel,
+}: {
+  providerId?: string;
+  providerKind?: string;
+  providerDisplayName?: string;
+  modelLabel?: string;
+}): ProviderPresentation {
+  const brandKey = providerBrandKey(providerId, providerKind);
+  const brand = brandKey ? PROVIDER_BRANDS[brandKey] : undefined;
+  const providerName = String(providerDisplayName || "").trim() || brand?.productName || "";
+  const modelName = String(modelLabel || "").trim();
+  const defaultAgentName =
+    !providerName || !modelName || modelAlreadyNamesProvider(modelName, providerName)
+      ? modelName || providerName
+      : `${providerName} · ${modelName}`;
+  return { brandKey, brand, providerName, defaultAgentName };
 }

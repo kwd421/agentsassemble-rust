@@ -73,6 +73,7 @@ function codexProvider(): NativeCliProviderAvailability {
     display_name: "Codex",
     provider_kind: "codex_live_session",
     runtime_kind: "live_cli",
+    catalog_group: "harness",
     connection_kind: "native_cli_bridge",
     executable: "codex",
     default_model: "gpt-current",

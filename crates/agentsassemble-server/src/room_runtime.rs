@@ -56,6 +56,7 @@ pub(crate) struct RoomCommand {
     pub(crate) request_id: String,
     pub(crate) action: String,
     pub(crate) payload: Value,
+    transport_bytes: usize,
     reply: oneshot::Sender<Result<CommandOutcome, PersistenceError>>,
 }
 
@@ -133,6 +134,7 @@ impl RoomRuntime {
         request_id: String,
         action: String,
         payload: Value,
+        transport_bytes: usize,
     ) -> Result<CommandOutcome, PersistenceError> {
         let handle = self.handle(&principal.room_id).await;
         let (reply, response) = oneshot::channel();
@@ -143,6 +145,7 @@ impl RoomRuntime {
                 request_id,
                 action,
                 payload,
+                transport_bytes,
                 reply,
             })
             .map_err(|error| match error {
@@ -358,32 +361,40 @@ async fn handle_room_command(owners: RoomCommandOwners<'_>, mut command: RoomCom
         room_tool_ingress,
         write_budget,
     } = owners;
-    let execution = match store.resolve_principal(&command.principal).await {
-        Ok(principal) => {
-            command.principal = principal;
-            match write_budget
-                .admit_command(
-                    store,
-                    &command.principal,
-                    &command.request_id,
-                    &command.action,
-                    &command.payload,
-                )
-                .await
-            {
-                Ok(()) => {
-                    execute_command(
-                        store,
-                        provider_catalog,
-                        provider_adapter,
-                        event_tx,
-                        &command,
-                    )
-                    .await
+    let execution = match write_budget
+        .admit_transport(&command.principal.principal_id, command.transport_bytes)
+    {
+        Ok(()) => match validate_command_envelope(&command) {
+            Ok(()) => match store.resolve_principal(&command.principal).await {
+                Ok(principal) => {
+                    command.principal = principal;
+                    match write_budget
+                        .admit_command(
+                            store,
+                            &command.principal,
+                            &command.request_id,
+                            &command.action,
+                            &command.payload,
+                        )
+                        .await
+                    {
+                        Ok(()) => {
+                            execute_command(
+                                store,
+                                provider_catalog,
+                                provider_adapter,
+                                event_tx,
+                                &command,
+                            )
+                            .await
+                        }
+                        Err(error) => CommandExecution::failure(error),
+                    }
                 }
                 Err(error) => CommandExecution::failure(error),
-            }
-        }
+            },
+            Err(error) => CommandExecution::failure(error),
+        },
         Err(error) => CommandExecution::failure(error),
     };
     let CommandExecution {
@@ -404,6 +415,20 @@ async fn handle_room_command(owners: RoomCommandOwners<'_>, mut command: RoomCom
     }
     let reply = reply.and_then(|outcome| public_command_outcome(&command.principal, outcome));
     let _ = command.reply.send(reply);
+}
+
+fn validate_command_envelope(command: &RoomCommand) -> Result<(), PersistenceError> {
+    if command.request_id.is_empty()
+        || command.request_id.chars().count() > 128
+        || command.action.is_empty()
+        || command.action.chars().count() > 64
+    {
+        return Err(PersistenceError::CommandRejected {
+            code: "command_envelope_invalid",
+            message: "request_id or action is invalid.".to_owned(),
+        });
+    }
+    Ok(())
 }
 
 async fn handle_provider_result(

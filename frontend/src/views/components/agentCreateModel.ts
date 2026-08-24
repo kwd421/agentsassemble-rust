@@ -2,6 +2,7 @@ import type {
   NativeCliProviderAvailability,
   ProviderControl,
 } from "../../roomSocketClient";
+import { resolveProviderPresentation } from "./providerBranding";
 
 export function deriveAgentCreateStatus({
   status,
@@ -66,16 +67,10 @@ export function defaultAgentDisplayName(
   const modelControl = provider.controls.find((control) => control.key === "model");
   const modelOption = modelControl?.options.find((option) => option.value === settings.model);
   const modelName = String(modelOption?.label || "").trim();
-  if (!modelName) return providerName;
-
-  const providerToken = providerName.toLocaleLowerCase();
-  const modelToken = modelName.toLocaleLowerCase();
-  if (
-    modelToken === providerToken ||
-    modelToken.startsWith(`${providerToken} `) ||
-    modelToken.startsWith(`${providerToken}-`)
-  ) {
-    return modelName;
-  }
-  return `${providerName} ${modelName}`;
+  return resolveProviderPresentation({
+    providerId: provider.id,
+    providerKind: provider.provider_kind,
+    providerDisplayName: providerName,
+    modelLabel: modelName,
+  }).defaultAgentName;
 }
