@@ -170,8 +170,10 @@ export function agentCreationProjectionFromEvent(event: RoomEvent): {
     String(participant.participant_type) !== "agent" ||
     participant.role !== "agent" ||
     session.status !== "available" ||
-    session.runtime_status !== "stopped" ||
-    session.enabled !== false ||
+    !(
+      (session.runtime_status === "stopped" && session.enabled === false) ||
+      (session.runtime_status === "starting" && session.enabled === true)
+    ) ||
     session.external_owned !== false ||
     session.process_ownership !== "server"
   ) {

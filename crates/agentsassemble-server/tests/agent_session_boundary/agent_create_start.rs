@@ -42,6 +42,14 @@ async fn create_with_start_is_one_command_with_original_nested_result_and_replay
         created["result"]["events"][0]["type"],
         "agent_session_created"
     );
+    assert_eq!(
+        created["result"]["events"][0]["agent_session"]["runtime_status"],
+        "starting"
+    );
+    assert_eq!(
+        created["result"]["events"][0]["agent_session"]["enabled"],
+        true
+    );
     send_create(&mut socket, "create-and-start", &payload).await;
     let replay = receive_json(&mut socket).await;
     assert_eq!(replay["op"], "ack");
@@ -109,6 +117,15 @@ async fn shutdown_checkpoints_gone_after_aborting_initialization() {
         })
         .unwrap_or_else(|| panic!("snapshot omitted the durable agent creation event"));
     assert_eq!(snapshot_created["seq"], created_sequence);
+    assert_eq!(
+        snapshot_created["agent_session"],
+        concurrent_snapshot["agent_sessions"][0]
+    );
+    assert_eq!(
+        snapshot_created["agent_session"]["runtime_status"],
+        "starting"
+    );
+    assert_eq!(snapshot_created["agent_session"]["enabled"], true);
     assert_eq!(
         concurrent_snapshot["agent_sessions"][0]["session_id"],
         created["events"][0]["participant_id"]

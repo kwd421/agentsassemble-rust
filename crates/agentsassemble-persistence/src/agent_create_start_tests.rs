@@ -1,8 +1,9 @@
 use std::{fs::File, path::Path};
 
 use agentsassemble_domain::{
-    AgentSessionDraft, AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope,
-    LOCAL_OPERATOR_PARTICIPANT_ID, stable_content_identity, stable_identity_hash,
+    AgentSession, AgentSessionDraft, AuthenticatedPrincipal, CapabilitySet, ClientKind,
+    InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID, RoomEvent, stable_content_identity,
+    stable_identity_hash,
 };
 use same_file::Handle;
 use serde_json::json;
@@ -91,6 +92,16 @@ fn started() -> AgentRuntimeStarted {
     }
 }
 
+fn assert_starting_creation_projection(event: &RoomEvent, session: &AgentSession) {
+    assert_eq!(
+        event.extra.get("agent_session"),
+        Some(&json!(session)),
+        "the creation event must expose the exact public session stored by its commit"
+    );
+    assert_eq!(event.extra["agent_session"]["runtime_status"], "starting");
+    assert_eq!(event.extra["agent_session"]["enabled"], true);
+}
+
 async fn assert_principal_budget(
     store: &SqliteStore,
     principal: &AuthenticatedPrincipal,
@@ -145,6 +156,7 @@ async fn create_start_first_commit_replays_one_intent_and_preserves_result_shape
     assert_eq!(first.committed_events.len(), 1);
     assert_eq!(first.newly_committed_events, first.committed_events);
     assert!(replay.newly_committed_events.is_empty());
+    assert_starting_creation_projection(&first.committed_events[0], &first.session.public);
 
     let commit = store
         .complete_agent_create_start(

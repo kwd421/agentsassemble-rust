@@ -162,7 +162,7 @@ async fn create_agent_records(
     }
     insert_agent_authority(transaction, principal, &participant, &session).await?;
     let event =
-        append_creation_event(transaction, principal, &participant, &public_session, now).await?;
+        append_creation_event(transaction, principal, &participant, &session.public, now).await?;
     let committed_events = vec![event];
     let result = base_result(&public_session, &participant, &committed_events);
     Ok(AgentCreationRecords {

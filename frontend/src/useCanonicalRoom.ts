@@ -331,8 +331,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
         applyEvents(roomId, snapshot.events || [], {
           replace: !projectionAlreadyAccepted || snapshot.snapshot_mode !== "resume",
           projectParticipantState: false,
-          projectSessionState:
-            projectionAlreadyAccepted && snapshot.snapshot_mode === "resume",
+          projectSessionState: false,
         });
         setProviderRequestsByRoom((previous) => ({
           ...previous,

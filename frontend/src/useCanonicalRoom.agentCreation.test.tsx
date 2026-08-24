@@ -24,7 +24,10 @@ function event(sequence: number, type: string): RoomEvent {
   };
 }
 
-function createdAgentEvent(sequence = 2): RoomEvent {
+function createdAgentEvent(
+  sequence = 2,
+  runtimeStatus: "stopped" | "starting" = "stopped"
+): RoomEvent {
   return {
     ...event(sequence, "agent_session_created"),
     participant_id: "opencode-stopped",
@@ -50,8 +53,8 @@ function createdAgentEvent(sequence = 2): RoomEvent {
       participant_id: "opencode-stopped",
       display_name: "OpenCode",
       status: "available",
-      runtime_status: "stopped",
-      enabled: false,
+      runtime_status: runtimeStatus,
+      enabled: runtimeStatus === "starting",
       provider_kind: "opencode",
       runtime_kind: "opencode",
       connection_kind: "native_cli_bridge",
@@ -207,6 +210,60 @@ describe("useCanonicalRoom agent creation projection", () => {
     expect(result.current.agentSessions[0]).toMatchObject({
       runtime_status: "error",
       last_error_code: "provider_start_failed",
+    });
+  });
+
+  it("projects the exact starting creation committed before provider launch", async () => {
+    const test = harness();
+    const { result } = renderHook(() =>
+      useCanonicalRoom({
+        roomId: "general",
+        auth: { kind: "host", meetingId: "general" },
+        openSocket: test.openSocket,
+      })
+    );
+    await waitFor(() => expect(test.openSocket).toHaveBeenCalledOnce());
+    act(() => test.handlers()?.onRoomSnapshot?.(snapshot()));
+
+    act(() => test.handlers()?.onRoomEvents?.([createdAgentEvent(2, "starting")]));
+
+    expect(result.current.agentSessions).toEqual([
+      expect.objectContaining({
+        session_id: "opencode-stopped",
+        runtime_status: "starting",
+        enabled: true,
+      }),
+    ]);
+  });
+
+  it("uses resume snapshot arrays as the sole current roster and session authority", async () => {
+    const test = harness();
+    const { result } = renderHook(() =>
+      useCanonicalRoom({
+        roomId: "general",
+        auth: { kind: "host", meetingId: "general" },
+        openSocket: test.openSocket,
+      })
+    );
+    await waitFor(() => expect(test.openSocket).toHaveBeenCalledOnce());
+    act(() =>
+      test.handlers()?.onRoomSnapshot?.(
+        snapshot([currentParticipant()], [currentSession()], [event(3, "message_final")])
+      )
+    );
+    const resumed = snapshot(
+      [currentParticipant()],
+      [currentSession()],
+      [createdAgentEvent(2)]
+    );
+    resumed.snapshot_mode = "resume";
+
+    act(() => test.handlers()?.onRoomSnapshot?.(resumed));
+
+    expect(result.current.participants[0].status).toBe("joined");
+    expect(result.current.agentSessions[0]).toMatchObject({
+      runtime_status: "idle",
+      enabled: true,
     });
   });
 

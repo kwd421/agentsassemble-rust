@@ -790,6 +790,68 @@ modified or signalled. This is pre-push candidate evidence; the exact published
 correction still requires same-session critical web and Daybreaker Blue High
 manual-security re-review.
 
+### Create/start snapshot-authority correction candidate: 2026-08-25
+
+The same critical web session and Daybreaker Blue High independently rejected
+public range `7fa1694..fbc44c5` for the same reachable Medium authority race.
+For `agent.create(start=true)`, the first transaction stored the Agent Session as
+`starting/enabled=true` but put its pre-intent `stopped/enabled=false` projection
+in the creation event. A live viewer therefore disagreed with a concurrent
+snapshot viewer while provider launch was pending. A resume snapshot could also
+install its current Agent Session array and then replay the older creation event
+over it, exposing stopped controls for a currently starting or later session.
+
+The correction makes every creation event contain the exact public Agent Session
+stored by that same transaction: `stopped/disabled` for `start=false`, or
+`starting/enabled` for `start=true`. The strict browser contract admits only those
+two coherent creation-state pairs. Initial, resume, and resync snapshots now use
+their Participant and Agent Session arrays as the sole current-state authority;
+snapshot events remain timeline/history and only separately delivered live events
+can update current roster/session state. Focused persistence and server tests
+prove creation-event equality with the durable concurrent snapshot, while the
+React regression test proves an old stopped creation event in a resume snapshot
+cannot rewind an idle current session. Because schema-15 data can contain the
+inconsistent create/start event contract, the clean schema advances to 16 and
+schema 15 is rejected without migration, compatibility decoding, or fallback.
+
+The corrected worktree passed the complete unchanged `make verify`: architecture,
+source-growth, logical-line, and 800-line gates; generated bindings; production
+frontend build and original CSS/cascade verification; 71 frontend files with 355
+tests; 14 Tauri tests; 17 domain, 85 persistence, two protocol, 100 provider, and
+14 server unit tests; 20 Rust integration tests; documentation tests;
+warning-denied workspace and desktop Clippy; and final diff validation. Clippy
+initially rejected a four-line overrun in the focused persistence test, so its
+creation-projection assertion was extracted by responsibility; no exception or
+gate change was added.
+
+Computer Use drove a fresh debug application under isolated identifier
+`app.agentsassemble.rust.startauthorityverify`. A first production-central build
+made the configured external guest request and failed visibly with `Load failed`;
+read-only inspection showed a clean schema-16 `empty` bootstrap and no partial
+profile or room. After normal shutdown, its exact data was moved to recoverable
+Trash. The verification build was then rebuilt with only the central URL unset,
+matching the documented local-authority scope rather than adding a product
+fallback. It initialized `Start Authority Verify`, created the first real room,
+selected OpenCode `opencode/hy3-free` and the actual Rust project workspace, and
+left `추가하자마자 실행` on.
+
+The real provider launched through the production UI. Without reconnect or HTTP
+roster refresh, the right panel showed `에이전트 — 1`, `opencode/hy3-free 대기`,
+and enabled running-session controls. Read-only SQLite inspection confirmed
+schema 16, `agent_session_created.agent_session=starting/enabled=true`, and the
+same durable session at `idle/enabled=true`; the exact provider guardian, anchor,
+and `serve --pure` child were present under the verification server. The UI Stop
+control transitioned the same card to `중지됨`, persisted `stopped/disabled`, and
+removed those exact provider processes. Normal app quit then removed the exact
+app, supervisor, and sidecar. Application Support, cache, WebKit, app bundle, and
+DMG were moved to
+`/Users/seinel/.Trash/AgentsAssemble-Start-Authority-Verify-20260825-0422`;
+the failed-attempt data remains separately recoverable at
+`/Users/seinel/.Trash/AgentsAssemble-Start-Authority-Verify-Failed-20260825-0415`.
+Original-product data and unrelated processes were untouched. Publication and
+same-session dual manual re-review are still required before this correction is
+approved.
+
 ## API verification scope
 
 When a reachable flow specifically needs an API-backed provider, the allowed paid/provider-specific candidates are the official DeepSeek API and the designated Flash provider path. Every other API-backed verification uses only an explicitly free API or free model. Missing credentials, exhausted free quota, or unavailable models fail visibly; they do not trigger a paid substitution or a fallback provider.
