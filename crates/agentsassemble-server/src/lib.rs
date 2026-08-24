@@ -1,12 +1,15 @@
 mod agent_create_runtime;
 mod app_state;
+mod event_publication;
 mod host_ticket;
 mod http_transport;
 mod ingress_budget;
 mod profile_web;
 mod provider_turn;
 mod room_runtime;
+mod room_shutdown;
 mod runtime_reconciliation;
+mod security_headers;
 mod server_proof;
 mod ticket;
 mod ticket_issuer;

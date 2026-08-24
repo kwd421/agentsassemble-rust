@@ -116,15 +116,28 @@ permissions remain room authority and are never overwritten by a profile update.
 Each Agent Session owns its own Agent display, avatar, and configuration and never
 inherits or merges the owner's human profile.
 
-A committed human-profile revision durably schedules every affected room
-projection update. Per-room application state and durable events make partial
-progress restartable; an in-memory broadcast loop is not completion. The HTTP
-result semantics—whether success means the canonical profile commit or completion
-of all current room checkpoints—must be fixed by the active identity slice before
-implementation. In either case, retry of the same mutation reuses the same profile
-revision and cannot create duplicate revisions. A legacy local profile may be
-imported only by an explicit one-time migration with a completion marker, never by
-an ongoing read fallback.
+A committed human-profile revision atomically writes every affected room projection
+and its durable event. `room_events` plus one durable per-room publication cursor
+form the live outbox for every event producer; only the room actor drains that
+history in sequence order and updates the cursor. HTTP success therefore means the
+canonical profile, projections, and publication work are durable, not that every
+receiver consumed them. Handler cancellation, queue pressure, and restart leave a
+cursor backlog that the room owner retries; no profile-only broadcast path exists.
+WebSocket delivery suppresses duplicate sequence numbers and requires the next
+exact sequence, otherwise it closes with resynchronization. Retry of the same
+profile mutation reuses the same revision and cannot create duplicate revisions.
+A legacy local profile may be imported only by an explicit one-time migration with
+a completion marker, never by an ongoing read fallback.
+
+Profile-avatar uploads are capabilities with two durable states rather than public
+blobs on receipt. The authenticated upload path verifies declared type against
+bytes, decodes under bounded resources, and re-encodes one static PNG. A pending
+opaque ID is hidden and expires after 15 minutes; the profile swap transaction
+promotes the new ID, removes the prior bound object, and publishes the new URL.
+Only bound PNG bytes are public, and responses are non-cacheable so removing an
+avatar also removes the server-readable capability. Version-seven referenced
+avatars are validated and canonicalized during migration; unreferenced legacy
+objects are retained as non-public quarantine instead of being deleted by migration.
 
 ### Runtime lifecycle
 

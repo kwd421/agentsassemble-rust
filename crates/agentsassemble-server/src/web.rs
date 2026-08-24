@@ -11,7 +11,7 @@ use axum::{
         Query, Request, State, WebSocketUpgrade,
         ws::{Message, WebSocket},
     },
-    http::{HeaderValue, StatusCode, header},
+    http::{StatusCode, header},
     middleware,
     response::{IntoResponse, Redirect, Response},
     routing::{get, post},
@@ -46,8 +46,6 @@ const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 const WS_WRITE_TIMEOUT: Duration = Duration::from_secs(5);
 const TRACKED_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(6);
 const SOCKET_IDLE_TIMEOUT: Duration = Duration::from_mins(5);
-const CONTENT_SECURITY_POLICY: &str = "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*; img-src 'self' data: blob: http://127.0.0.1:*; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
-
 #[derive(Debug, Error)]
 pub enum ServeError {
     #[error("server I/O failed: {0}")]
@@ -84,7 +82,7 @@ pub fn router(state: AppState) -> Router {
     }
     app.with_state(state)
         .layer(RequestBodyDeadlineLayer::new(HTTP_BODY_DEADLINE))
-        .layer(middleware::map_response(security_headers))
+        .layer(middleware::map_response(crate::security_headers::apply))
 }
 
 /// Serves the loopback runtime until its explicit cancellation token fires.
@@ -145,31 +143,6 @@ pub async fn serve(
     room_shutdown?;
     provider_shutdown?;
     result.map_err(ServeError::Io)
-}
-
-async fn security_headers(mut response: Response) -> Response {
-    let is_upgrade = response.status() == StatusCode::SWITCHING_PROTOCOLS;
-    let headers = response.headers_mut();
-    headers.insert(
-        header::CONTENT_SECURITY_POLICY,
-        HeaderValue::from_static(CONTENT_SECURITY_POLICY),
-    );
-    headers.insert(
-        header::X_CONTENT_TYPE_OPTIONS,
-        HeaderValue::from_static("nosniff"),
-    );
-    headers.insert(
-        header::HeaderName::from_static("x-frame-options"),
-        HeaderValue::from_static("DENY"),
-    );
-    headers.insert(
-        header::REFERRER_POLICY,
-        HeaderValue::from_static("no-referrer"),
-    );
-    if !is_upgrade {
-        headers.insert(header::CONNECTION, HeaderValue::from_static("close"));
-    }
-    response
 }
 
 async fn health() -> Json<Value> {
@@ -428,6 +401,7 @@ async fn socket_session(
     {
         return;
     }
+    let mut delivered_seq = snapshot_data.last_seq;
     let mut ingress = IngressBudget::new();
     loop {
         tokio::select! {
@@ -498,6 +472,18 @@ async fn socket_session(
             published = events.recv() => {
                 match published {
                     Ok(event) => {
+                        if event.seq <= delivered_seq {
+                            continue;
+                        }
+                        if event.seq != delivered_seq.saturating_add(1) {
+                            let frame = ServerFrame::ResyncRequired {
+                                stream: "room_events",
+                                reason: "live room event sequence is not contiguous".to_owned(),
+                                latest_seq: state.store.snapshot(&principal.room_id, 0, 1).await.map_or(delivered_seq, |snapshot| snapshot.last_seq),
+                            };
+                            let _ = send_frame(&mut sender, &state.shutdown, &frame).await;
+                            return;
+                        }
                         let current_principal = match state.store.resolve_principal(&principal).await {
                             Ok(principal) => principal,
                             Err(error) => {
@@ -523,6 +509,7 @@ async fn socket_session(
                             latest_seq,
                         };
                         if send_frame(&mut sender, &state.shutdown, &frame).await.is_err() { return; }
+                        delivered_seq = latest_seq;
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
                         let frame = ServerFrame::ResyncRequired {

@@ -63,7 +63,7 @@ async fn update_profile(
     let principal = consume_principal(&state, request.headers()).await?;
     let patch: UserProfilePatch = decode_json_body(request, MAX_PROFILE_BODY_BYTES).await?;
     let outcome = state.store.update_user_profile(&principal, patch).await?;
-    state.rooms.publish_committed_events(&outcome.events).await;
+    state.rooms.notify_committed_events(&outcome.events).await;
     Ok(Json(json!({"profile": outcome.profile})))
 }
 
@@ -145,7 +145,7 @@ fn attachment_response(
     );
     response.headers_mut().insert(
         header::CACHE_CONTROL,
-        HeaderValue::from_static("private, max-age=3600"),
+        HeaderValue::from_static("private, no-store"),
     );
     Ok(response)
 }
@@ -265,7 +265,10 @@ impl From<PersistenceError> for ProfileHttpError {
                     }
                     "attachment_quota_reached" => StatusCode::TOO_MANY_REQUESTS,
                     "attachment_too_large" => StatusCode::PAYLOAD_TOO_LARGE,
-                    "attachment_type_unsupported" => StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                    "attachment_type_unsupported"
+                    | "attachment_type_mismatch"
+                    | "attachment_invalid_image"
+                    | "attachment_image_limits" => StatusCode::UNSUPPORTED_MEDIA_TYPE,
                     _ => StatusCode::BAD_REQUEST,
                 };
                 Self {

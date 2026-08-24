@@ -4,42 +4,21 @@ use agentsassemble_domain::{
     Actor, AuthenticatedPrincipal, LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID,
     Participant, RoomEvent, UserProfile, UserProfilePatch, avatar_attachment_id,
 };
-use chrono::{DateTime, Utc};
-use serde::Serialize;
+use chrono::Utc;
 use serde_json::json;
 use sqlx::{Row, Sqlite, Transaction};
 use uuid::Uuid;
 
-use crate::{PersistenceError, SqliteStore, authority::authorize_session};
-
-const MAX_ATTACHMENT_BYTES: usize = 10 * 1024 * 1024;
-const MAX_ATTACHMENTS_PER_USER: i64 = 64;
-const MAX_ATTACHMENT_BYTES_PER_USER: i64 = 128 * 1024 * 1024;
-const MAX_ATTACHMENTS_TOTAL: i64 = 4096;
-const MAX_ATTACHMENT_BYTES_TOTAL: i64 = 8 * 1024 * 1024 * 1024;
-const SAFE_IMAGE_TYPES: [&str; 4] = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+use crate::{
+    PersistenceError, SqliteStore,
+    authority::authorize_session,
+    profile_attachments::{authorize_profile_avatar, replace_profile_avatar},
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProfileUpdateOutcome {
     pub profile: UserProfile,
     pub events: Vec<RoomEvent>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct ProfileAttachmentMetadata {
-    pub id: String,
-    pub filename: String,
-    pub content_type: String,
-    pub size: usize,
-    pub is_image: bool,
-    pub url: String,
-    pub download_url: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ProfileAttachment {
-    pub metadata: ProfileAttachmentMetadata,
-    pub content: Vec<u8>,
 }
 
 impl SqliteStore {
@@ -74,10 +53,16 @@ impl SqliteStore {
         let mut profile = load_profile(&mut transaction, principal).await?;
         let previous_display_name = profile.display_name.clone();
         let previous_avatar_url = profile.avatar_image_url.clone();
-        let changed = profile.apply_patch(patch, Utc::now());
+        let now = Utc::now();
+        let changed = profile.apply_patch(patch, now);
         if let Some(attachment_id) = avatar_attachment_id(&profile.avatar_image_url) {
-            authorize_avatar_reference(&mut transaction, &principal.principal_id, attachment_id)
-                .await?;
+            authorize_profile_avatar(
+                &mut transaction,
+                &principal.principal_id,
+                attachment_id,
+                now,
+            )
+            .await?;
         }
         if !changed {
             transaction.commit().await?;
@@ -91,6 +76,15 @@ impl SqliteStore {
             .bind(&principal.principal_id)
             .execute(&mut *transaction)
             .await?;
+        if profile.avatar_image_url != previous_avatar_url {
+            replace_profile_avatar(
+                &mut transaction,
+                &principal.principal_id,
+                &previous_avatar_url,
+                &profile.avatar_image_url,
+            )
+            .await?;
+        }
         let events = if profile.display_name != previous_display_name
             || profile.avatar_image_url != previous_avatar_url
         {
@@ -100,109 +94,6 @@ impl SqliteStore {
         };
         transaction.commit().await?;
         Ok(ProfileUpdateOutcome { profile, events })
-    }
-
-    /// Stores one bounded safe-raster avatar owned by the authenticated human.
-    ///
-    /// # Errors
-    ///
-    /// Fails closed on stale authority, unsupported content, quota exhaustion, or `SQLite` errors.
-    pub async fn store_profile_attachment(
-        &self,
-        principal: &AuthenticatedPrincipal,
-        filename: &str,
-        content_type: &str,
-        content: Vec<u8>,
-    ) -> Result<ProfileAttachmentMetadata, PersistenceError> {
-        if content.len() > MAX_ATTACHMENT_BYTES {
-            return Err(rejected(
-                "attachment_too_large",
-                "Profile avatar exceeds the 10 MiB item limit.",
-            ));
-        }
-        let content_type = normalize_safe_content_type(content_type)?;
-        let filename = sanitize_filename(filename);
-        let size = i64::try_from(content.len()).map_err(|_| {
-            rejected(
-                "attachment_too_large",
-                "Profile avatar exceeds the supported size.",
-            )
-        })?;
-        let mut transaction = self.pool.begin().await?;
-        authorize_session(&mut transaction, principal).await?;
-        let _profile = load_profile(&mut transaction, principal).await?;
-        enforce_attachment_quota(&mut transaction, &principal.principal_id, size).await?;
-        let attachment_id = Uuid::new_v4().simple().to_string();
-        let created_at = Utc::now();
-        sqlx::query(
-            "INSERT INTO profile_attachments(attachment_id, owner_user_id, filename, content_type, content, size, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind(&attachment_id)
-        .bind(&principal.principal_id)
-        .bind(&filename)
-        .bind(&content_type)
-        .bind(content)
-        .bind(size)
-        .bind(created_at.to_rfc3339())
-        .execute(&mut *transaction)
-        .await?;
-        transaction.commit().await?;
-        Ok(attachment_metadata(
-            attachment_id,
-            filename,
-            content_type,
-            usize::try_from(size).unwrap_or(MAX_ATTACHMENT_BYTES),
-        ))
-    }
-
-    /// Reads one public profile-avatar blob by opaque identifier.
-    ///
-    /// # Errors
-    ///
-    /// Returns a stable not-found rejection or a stored-data error.
-    pub async fn profile_attachment(
-        &self,
-        attachment_id: &str,
-    ) -> Result<ProfileAttachment, PersistenceError> {
-        if !valid_attachment_id(attachment_id) {
-            return Err(rejected(
-                "attachment_missing",
-                "Profile avatar was not found.",
-            ));
-        }
-        let row = sqlx::query(
-            "SELECT filename, content_type, content, size, created_at FROM profile_attachments WHERE attachment_id = ?",
-        )
-        .bind(attachment_id)
-        .fetch_optional(&self.pool)
-        .await?
-        .ok_or_else(|| rejected("attachment_missing", "Profile avatar was not found."))?;
-        let content_type =
-            normalize_safe_content_type(row.get::<String, _>("content_type").as_str())?;
-        let content = row.get::<Vec<u8>, _>("content");
-        let size = row.get::<i64, _>("size");
-        let stored_created_at = row.get::<String, _>("created_at");
-        let _created_at = DateTime::parse_from_rfc3339(&stored_created_at).map_err(|_| {
-            rejected(
-                "invalid_state",
-                "Stored profile avatar metadata is invalid.",
-            )
-        })?;
-        if size < 0 || usize::try_from(size).ok() != Some(content.len()) {
-            return Err(rejected(
-                "invalid_state",
-                "Stored profile avatar size is invalid.",
-            ));
-        }
-        Ok(ProfileAttachment {
-            metadata: attachment_metadata(
-                attachment_id.to_owned(),
-                sanitize_filename(row.get::<String, _>("filename").as_str()),
-                content_type,
-                content.len(),
-            ),
-            content,
-        })
     }
 }
 
@@ -304,27 +195,6 @@ async fn load_profile(
     Ok(profile)
 }
 
-async fn authorize_avatar_reference(
-    transaction: &mut Transaction<'_, Sqlite>,
-    user_id: &str,
-    attachment_id: &str,
-) -> Result<(), PersistenceError> {
-    let owner = sqlx::query_scalar::<_, String>(
-        "SELECT owner_user_id FROM profile_attachments WHERE attachment_id = ?",
-    )
-    .bind(attachment_id)
-    .fetch_optional(&mut **transaction)
-    .await?
-    .ok_or_else(|| rejected("attachment_missing", "Profile avatar was not found."))?;
-    if owner != user_id {
-        return Err(rejected(
-            "attachment_owner_mismatch",
-            "Profile avatar belongs to another user.",
-        ));
-    }
-    Ok(())
-}
-
 async fn project_profile_into_rooms(
     transaction: &mut Transaction<'_, Sqlite>,
     principal: &AuthenticatedPrincipal,
@@ -411,100 +281,6 @@ async fn participant_updated_event(
             ("profile_revision".to_owned(), json!(profile.revision)),
         ]),
     })
-}
-
-async fn enforce_attachment_quota(
-    transaction: &mut Transaction<'_, Sqlite>,
-    user_id: &str,
-    size: i64,
-) -> Result<(), PersistenceError> {
-    let subject = sqlx::query(
-        "SELECT COUNT(*) AS count, COALESCE(SUM(size), 0) AS bytes FROM profile_attachments WHERE owner_user_id = ?",
-    )
-    .bind(user_id)
-    .fetch_one(&mut **transaction)
-    .await?;
-    let total = sqlx::query(
-        "SELECT COUNT(*) AS count, COALESCE(SUM(size), 0) AS bytes FROM profile_attachments",
-    )
-    .fetch_one(&mut **transaction)
-    .await?;
-    if subject.get::<i64, _>("count") >= MAX_ATTACHMENTS_PER_USER
-        || subject.get::<i64, _>("bytes").saturating_add(size) > MAX_ATTACHMENT_BYTES_PER_USER
-    {
-        return Err(rejected(
-            "attachment_quota_reached",
-            "Profile avatar uploader quota reached.",
-        ));
-    }
-    if total.get::<i64, _>("count") >= MAX_ATTACHMENTS_TOTAL
-        || total.get::<i64, _>("bytes").saturating_add(size) > MAX_ATTACHMENT_BYTES_TOTAL
-    {
-        return Err(rejected(
-            "attachment_quota_reached",
-            "Profile avatar server quota reached.",
-        ));
-    }
-    Ok(())
-}
-
-fn normalize_safe_content_type(value: &str) -> Result<String, PersistenceError> {
-    let value = value
-        .split(';')
-        .next()
-        .unwrap_or_default()
-        .trim()
-        .to_ascii_lowercase();
-    if SAFE_IMAGE_TYPES.contains(&value.as_str()) {
-        Ok(value)
-    } else {
-        Err(rejected(
-            "attachment_type_unsupported",
-            "Profile avatars must be PNG, JPEG, GIF, or WebP.",
-        ))
-    }
-}
-
-fn sanitize_filename(value: &str) -> String {
-    let normalized = value.replace('\\', "/");
-    let name = normalized.rsplit('/').next().unwrap_or_default();
-    let name: String = name
-        .chars()
-        .filter(|character| !character.is_control() && *character != '/' && *character != '\\')
-        .collect::<String>()
-        .trim()
-        .chars()
-        .take(120)
-        .collect();
-    if name.is_empty() || matches!(name.as_str(), "." | "..") {
-        "attachment.bin".to_owned()
-    } else {
-        name
-    }
-}
-
-fn attachment_metadata(
-    id: String,
-    filename: String,
-    content_type: String,
-    size: usize,
-) -> ProfileAttachmentMetadata {
-    ProfileAttachmentMetadata {
-        url: format!("/api/attachments/{id}?view=1"),
-        download_url: format!("/api/attachments/{id}?download=1"),
-        id,
-        filename,
-        content_type,
-        size,
-        is_image: true,
-    }
-}
-
-fn valid_attachment_id(value: &str) -> bool {
-    (8..=64).contains(&value.len())
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
 }
 
 fn rejected(code: &'static str, message: &str) -> PersistenceError {

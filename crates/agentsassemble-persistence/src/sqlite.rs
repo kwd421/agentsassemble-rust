@@ -175,6 +175,12 @@ impl SqliteStore {
             .execute(&mut *transaction)
             .await?;
         sqlx::query(
+            "INSERT INTO room_event_publication_cursors(room_id, published_seq) VALUES (?, 0)",
+        )
+        .bind(&room.room_id)
+        .execute(&mut *transaction)
+        .await?;
+        sqlx::query(
             "INSERT INTO participants(room_id, participant_id, participant_json) VALUES (?, ?, ?)",
         )
         .bind(&participant.room_id)
@@ -537,6 +543,60 @@ mod tests {
                 .await,
             Err(PersistenceError::CommandConflict)
         ));
+    }
+
+    #[tokio::test]
+    async fn publication_cursor_advances_only_through_exact_contiguous_events() {
+        let (store, principal) = fixture().await;
+        for (request_id, content) in [("publication-1", "one"), ("publication-2", "two")] {
+            store
+                .execute_message(
+                    &principal,
+                    request_id,
+                    "message.send",
+                    &json!({"content": content}),
+                )
+                .await
+                .unwrap_or_else(|error| panic!("commit publication fixture: {error}"));
+        }
+        let pending = store
+            .pending_room_publications("general")
+            .await
+            .unwrap_or_else(|error| panic!("load pending publications: {error}"));
+        assert_eq!(
+            pending.iter().map(|event| event.seq).collect::<Vec<_>>(),
+            vec![1, 2]
+        );
+        store
+            .acknowledge_room_publication("general", 1)
+            .await
+            .unwrap_or_else(|error| panic!("ack first publication: {error}"));
+        let pending = store
+            .pending_room_publications("general")
+            .await
+            .unwrap_or_else(|error| panic!("reload pending publications: {error}"));
+        assert_eq!(
+            pending.iter().map(|event| event.seq).collect::<Vec<_>>(),
+            vec![2]
+        );
+        assert!(matches!(
+            store.acknowledge_room_publication("general", 1).await,
+            Err(PersistenceError::CommandRejected {
+                code: "event_publication_state_invalid",
+                ..
+            })
+        ));
+        store
+            .acknowledge_room_publication("general", 2)
+            .await
+            .unwrap_or_else(|error| panic!("ack second publication: {error}"));
+        assert!(
+            store
+                .pending_room_publications("general")
+                .await
+                .unwrap_or_else(|error| panic!("read drained publications: {error}"))
+                .is_empty()
+        );
     }
 
     #[tokio::test]

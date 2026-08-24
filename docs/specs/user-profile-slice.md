@@ -36,16 +36,23 @@ viewer through canonical room events.
   authority. Invalid credentials, bodies, or stored data fail visibly.
 - A content-changing save advances one durable profile revision. An identical
   retry returns the existing revision without changing `updated_at` or emitting
-  duplicate projection events. A profile mutation and every affected participant projection commit before the
-  response. Each affected room receives one ordered `participant_updated` event
-  containing only the human participant ID, display name, and avatar projection.
+  duplicate projection events. A profile mutation, every affected participant
+  projection, and their durable room events commit before the response. Each
+  affected room receives one ordered `participant_updated` event containing only
+  the human participant ID, display name, and avatar projection. All room events,
+  including later room commands, pass through the same per-room publication owner,
+  which drains durable sequence order and checkpoints its cursor.
 - Snapshots and reconnects read the updated participant rows, so live delivery is
   not a second authority.
 - The copied profile-avatar flow uses `POST /api/attachments` with exact purpose
-  `profile_avatar`, bounded base64 data, and only PNG/JPEG/GIF/WebP. Rust stores
-  opaque attachment IDs and serves only validated safe raster content from
-  `/api/attachments/{id}?view=1`. Other attachment purposes remain explicitly
-  unsupported until their own migration slice.
+  `profile_avatar`, bounded base64 data, and declared PNG/JPEG/GIF/WebP input.
+  Rust requires the bytes to match the declaration, decodes within fixed
+  allocation/pixel/dimension limits, and canonicalizes the visible result to a
+  static PNG so trailing data and later animation frames are never served. A new
+  opaque attachment is non-public `pending` for at most 15 minutes. The profile
+  transaction alone promotes it to `bound` and deletes the previous bound avatar;
+  public reads serve only bound content with `no-store`. Other attachment purposes
+  remain explicitly unsupported until their own migration slice.
 
 ## Failure and retry semantics
 
@@ -55,10 +62,16 @@ viewer through canonical room events.
   profile. A changed display name or avatar produces a new room projection event;
   changing only local profile preferences does not create room events.
 - The response may race live event delivery, but both describe already committed
-  state. A reconnect recovers the same participant projection without client-side
-  synthesis.
-- Attachment bodies, counts, and bytes are bounded. Unsupported content, invalid
-  base64, path-shaped IDs, ownership mismatch, or quota exhaustion fail closed.
+  state. HTTP success means the canonical profile, projections, and events are
+  durably committed; live publication is restartable independently. The room
+  owner attempts publication before the response and periodically retries any
+  cursor backlog. A reconnect recovers the same participant projection without
+  client-side synthesis. Live clients ignore duplicate sequence numbers and
+  require the next exact sequence or request resynchronization.
+- Attachment bodies, decoded resources, counts, and bytes are bounded. Unsupported
+  or mismatched content, invalid base64, path-shaped IDs, expired pending uploads,
+  ownership mismatch, or quota exhaustion fail closed. Expired pending uploads do
+  not count toward quota and are deleted on the next attachment/profile operation.
 
 ## Verification
 
@@ -66,8 +79,11 @@ viewer through canonical room events.
   multi-room display/avatar projection, preservation of room-owned fields, and
   separation from Agent Session profiles;
 - server boundary tests cover one-use authentication, body limits, invalid
-  profile input, safe avatar upload/read, unsupported purpose rejection, and
-  canonical event publication;
+  profile input, pending/bound avatar publication, safe canonical upload/read,
+  unsupported purpose rejection, and canonical event publication;
+- deterministic publication tests commit profile event N+1, then a normal room
+  event N+2 while publication is withheld, and require one publisher to emit
+  N+1 then N+2 with a matching snapshot cursor;
 - copied frontend tests cover desktop runtime routing and UserPanel state;
 - the exact packaged app changes the left-bottom profile, observes matching room
   roster/message attribution after reconnect and runtime restart, verifies modal

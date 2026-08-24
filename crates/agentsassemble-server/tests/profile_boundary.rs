@@ -111,7 +111,7 @@ async fn assert_profile_auth_and_upload(client: &Client, base_url: &str) -> Stri
         .header("authorization", format!("Bearer {upload_ticket}"))
         .json(&json!({
             "purpose": "profile_avatar", "filename": "../profile.png",
-            "content_type": "image/png", "data_base64": "iVBORw0KGgo="
+            "content_type": "image/png", "data_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMQ0bD5DwACRAF4aig0hQAAAABJRU5ErkJggg=="
         }))
         .send()
         .await
@@ -127,13 +127,19 @@ async fn assert_profile_auth_and_upload(client: &Client, base_url: &str) -> Stri
         .as_str()
         .unwrap_or_else(|| panic!("profile avatar response has no URL"))
         .to_owned();
+    let pending = client
+        .get(format!("{base_url}{avatar_url}"))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("read pending profile avatar: {error}"));
+    assert_eq!(pending.status(), reqwest::StatusCode::NOT_FOUND);
     let unsupported_ticket = request_ticket(base_url).await;
     let unsupported = client
         .post(format!("{base_url}/api/attachments"))
         .header("authorization", format!("Bearer {unsupported_ticket}"))
         .json(&json!({
             "purpose": "room_attachment", "filename": "message.png",
-            "content_type": "image/png", "data_base64": "iVBORw0KGgo="
+            "content_type": "image/png", "data_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMQ0bD5DwACRAF4aig0hQAAAABJRU5ErkJggg=="
         }))
         .send()
         .await
@@ -192,15 +198,19 @@ async fn assert_profile_update_and_avatar(
     assert_eq!(avatar.status(), reqwest::StatusCode::OK);
     assert_eq!(avatar.headers()["content-type"], "image/png");
     assert_eq!(avatar.headers()["x-content-type-options"], "nosniff");
+    assert_eq!(avatar.headers()["cache-control"], "private, no-store");
     assert!(
         avatar.headers()["content-disposition"]
             .to_str()
             .unwrap_or_default()
             .starts_with("inline;")
     );
-    assert_eq!(
-        avatar.bytes().await.unwrap_or_default().as_ref(),
-        b"\x89PNG\r\n\x1a\n"
+    assert!(
+        avatar
+            .bytes()
+            .await
+            .unwrap_or_default()
+            .starts_with(b"\x89PNG\r\n\x1a\n")
     );
 
     socket

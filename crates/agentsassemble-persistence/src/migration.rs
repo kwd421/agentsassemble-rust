@@ -3,7 +3,7 @@ use sqlx::{Row, Sqlite, Transaction};
 
 use crate::{PersistenceError, SqliteStore};
 
-pub(crate) const CURRENT_SCHEMA_VERSION: i64 = 7;
+pub(crate) const CURRENT_SCHEMA_VERSION: i64 = 8;
 
 impl SqliteStore {
     pub(crate) async fn migrate_schema(&self) -> Result<(), PersistenceError> {
@@ -81,6 +81,9 @@ impl SqliteStore {
             .await?;
             crate::profile_store::migrate_local_profile_authority(&mut transaction).await?;
         }
+        if version < 8 {
+            migrate_profile_and_publication_v8(&mut transaction).await?;
+        }
         sqlx::query(
             "INSERT INTO runtime_metadata(key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         )
@@ -90,6 +93,31 @@ impl SqliteStore {
         transaction.commit().await?;
         Ok(())
     }
+}
+
+async fn migrate_profile_and_publication_v8(
+    transaction: &mut Transaction<'_, Sqlite>,
+) -> Result<(), PersistenceError> {
+    sqlx::query(
+        "ALTER TABLE profile_attachments ADD COLUMN state TEXT NOT NULL DEFAULT 'quarantined' CHECK(state IN ('pending', 'bound', 'quarantined'))",
+    )
+    .execute(&mut **transaction)
+    .await?;
+    sqlx::query("ALTER TABLE profile_attachments ADD COLUMN expires_at INTEGER")
+        .execute(&mut **transaction)
+        .await?;
+    crate::profile_attachments::migrate_profile_attachments(transaction).await?;
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS room_event_publication_cursors (room_id TEXT PRIMARY KEY, published_seq INTEGER NOT NULL CHECK(published_seq >= 0), FOREIGN KEY(room_id) REFERENCES rooms(room_id) ON DELETE CASCADE)",
+    )
+    .execute(&mut **transaction)
+    .await?;
+    sqlx::query(
+        "INSERT OR IGNORE INTO room_event_publication_cursors(room_id, published_seq) SELECT rooms.room_id, COALESCE(MAX(room_events.seq), 0) FROM rooms LEFT JOIN room_events ON room_events.room_id = rooms.room_id GROUP BY rooms.room_id",
+    )
+    .execute(&mut **transaction)
+    .await?;
+    Ok(())
 }
 
 async fn reject_unmigratable_lifecycle_intents(
@@ -146,8 +174,11 @@ async fn redact_legacy_agent_results(
 
 #[cfg(test)]
 mod tests {
+    use std::io::Cursor;
+
     use agentsassemble_domain::{Participant, ParticipantStatus, Room, RoomSettings, UserProfile};
     use chrono::Utc;
+    use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba};
     use sqlx::Row as _;
 
     use crate::SqliteStore;
@@ -513,6 +544,135 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("count migration events: {error}"));
         assert_eq!(event_count, 0);
+    }
+
+    #[tokio::test]
+    async fn version_seven_binds_only_referenced_validated_avatars_and_seeds_publication() {
+        let directory =
+            tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
+        let path = directory.path().join("runtime.sqlite3");
+        let store = SqliteStore::open_path(&path)
+            .await
+            .unwrap_or_else(|error| panic!("create store: {error}"));
+        let now = Utc::now();
+        let room = Room::new("general".to_owned(), "General".to_owned(), now);
+        let participant = Participant {
+            room_id: "general".to_owned(),
+            participant_id: "operator-local".to_owned(),
+            display_name: "SeiNel".to_owned(),
+            avatar_image_url: String::new(),
+            participant_type: "human".to_owned(),
+            status: ParticipantStatus::Joined,
+            role: "host".to_owned(),
+            owner_id: String::new(),
+            muted: false,
+            created_at: now,
+            updated_at: now,
+        };
+        store
+            .initialize_room(
+                &room,
+                &RoomSettings::defaults("General".to_owned()),
+                &participant,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("initialize v7 room: {error}"));
+        install_v7_avatar_fixture(&store, now).await;
+        drop(store);
+
+        let reopened = SqliteStore::open_path(&path)
+            .await
+            .unwrap_or_else(|error| panic!("migrate v7 store: {error}"));
+        reopened
+            .profile_attachment("legacyavatar01")
+            .await
+            .unwrap_or_else(|error| panic!("read migrated bound avatar: {error}"));
+        let states = sqlx::query_as::<_, (String, String)>(
+            "SELECT attachment_id, state FROM profile_attachments ORDER BY attachment_id",
+        )
+        .fetch_all(&reopened.pool)
+        .await
+        .unwrap_or_else(|error| panic!("read migrated attachment states: {error}"));
+        assert_eq!(
+            states,
+            vec![
+                ("legacyavatar01".to_owned(), "bound".to_owned()),
+                ("legacyorphan01".to_owned(), "quarantined".to_owned())
+            ]
+        );
+        let cursor = sqlx::query_scalar::<_, i64>(
+            "SELECT published_seq FROM room_event_publication_cursors WHERE room_id = 'general'",
+        )
+        .fetch_one(&reopened.pool)
+        .await
+        .unwrap_or_else(|error| panic!("read migrated publication cursor: {error}"));
+        assert_eq!(cursor, 0);
+    }
+
+    async fn install_v7_avatar_fixture(store: &SqliteStore, now: chrono::DateTime<Utc>) {
+        sqlx::query("DROP TABLE profile_attachments")
+            .execute(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("drop current attachment table: {error}"));
+        sqlx::query(
+            "CREATE TABLE profile_attachments (attachment_id TEXT PRIMARY KEY, owner_user_id TEXT NOT NULL, filename TEXT NOT NULL, content_type TEXT NOT NULL CHECK(content_type IN ('image/png', 'image/jpeg', 'image/gif', 'image/webp')), content BLOB NOT NULL, size INTEGER NOT NULL CHECK(size >= 0 AND size <= 10485760), created_at TEXT NOT NULL, FOREIGN KEY(owner_user_id) REFERENCES user_profiles(user_id) ON DELETE CASCADE)",
+        )
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("create v7 attachment table: {error}"));
+        let png = valid_png();
+        for (attachment_id, content) in [
+            ("legacyavatar01", png.clone()),
+            ("legacyorphan01", b"untrusted orphan".to_vec()),
+        ] {
+            sqlx::query(
+                "INSERT INTO profile_attachments(attachment_id, owner_user_id, filename, content_type, content, size, created_at) VALUES (?, 'operator-local-user', 'legacy.png', 'image/png', ?, ?, ?)",
+            )
+            .bind(attachment_id)
+            .bind(&content)
+            .bind(i64::try_from(content.len()).unwrap_or_default())
+            .bind(now.to_rfc3339())
+            .execute(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("insert v7 attachment: {error}"));
+        }
+        let mut profile: UserProfile = serde_json::from_str(
+            &sqlx::query_scalar::<_, String>(
+                "SELECT profile_json FROM user_profiles WHERE user_id = 'operator-local-user'",
+            )
+            .fetch_one(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("read v7 profile: {error}")),
+        )
+        .unwrap_or_else(|error| panic!("decode v7 profile: {error}"));
+        profile.avatar_image_url = "/api/attachments/legacyavatar01?view=1".to_owned();
+        sqlx::query(
+            "UPDATE user_profiles SET profile_json = ? WHERE user_id = 'operator-local-user'",
+        )
+        .bind(
+            serde_json::to_string(&profile)
+                .unwrap_or_else(|error| panic!("encode v7 profile: {error}")),
+        )
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("bind legacy profile avatar: {error}"));
+        sqlx::query("DROP TABLE room_event_publication_cursors")
+            .execute(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("drop current publication table: {error}"));
+        sqlx::query("UPDATE runtime_metadata SET value = '7' WHERE key = 'schema_version'")
+            .execute(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("set v7 marker: {error}"));
+    }
+
+    fn valid_png() -> Vec<u8> {
+        let image = DynamicImage::ImageRgba8(ImageBuffer::from_pixel(2, 2, Rgba([1, 2, 3, 255])));
+        let mut encoded = Cursor::new(Vec::new());
+        image
+            .write_to(&mut encoded, ImageFormat::Png)
+            .unwrap_or_else(|error| panic!("encode v7 png: {error}"));
+        encoded.into_inner()
     }
 
     async fn drop_v7_profile_tables(store: &SqliteStore) {

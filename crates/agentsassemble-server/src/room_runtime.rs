@@ -1,4 +1,8 @@
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+    time::Duration,
+};
 
 use agentsassemble_domain::{
     AuthenticatedPrincipal, RoomEvent, public_event_for_principal, public_value_for_principal,
@@ -13,7 +17,7 @@ use thiserror::Error;
 use tokio::{
     sync::{Mutex, broadcast, mpsc, oneshot},
     task::{JoinHandle, JoinSet},
-    time::Instant,
+    time::MissedTickBehavior,
 };
 use tokio_util::sync::CancellationToken;
 
@@ -22,10 +26,13 @@ use crate::{
     provider_turn::{
         ProviderTurnTaskResult, commit_provider_result, publish_turn_commit, spawn_provider_turn,
     },
+    room_shutdown::join_room_tasks,
 };
 
 const ROOM_QUEUE_CAPACITY: usize = 128;
 const EVENT_RECEIVER_CAPACITY: usize = 256;
+const PUBLICATION_WAKE_CAPACITY: usize = 128;
+const PUBLICATION_RETRY_INTERVAL: Duration = Duration::from_millis(250);
 const ROOM_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(3);
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -52,6 +59,20 @@ struct RoomCommand {
 struct RoomHandle {
     commands: mpsc::Sender<RoomCommand>,
     events: broadcast::Sender<RoomEvent>,
+    publication_wake: mpsc::Sender<PublicationWake>,
+}
+
+struct PublicationWake {
+    completion: oneshot::Sender<()>,
+}
+
+struct RoomTaskContext {
+    room_id: String,
+    store: SqliteStore,
+    provider_catalog: ProviderCatalogService,
+    provider_adapter: ProviderAdapter,
+    cancellation: CancellationToken,
+    event_tx: broadcast::Sender<RoomEvent>,
 }
 
 #[derive(Clone)]
@@ -131,10 +152,21 @@ impl RoomRuntime {
         self.handle(room_id).await.events.subscribe()
     }
 
-    pub async fn publish_committed_events(&self, events: &[RoomEvent]) {
+    pub async fn notify_committed_events(&self, events: &[RoomEvent]) {
+        let mut notified_rooms = HashSet::new();
         for event in events {
+            if !notified_rooms.insert(event.room_id.clone()) {
+                continue;
+            }
             let handle = self.handle(&event.room_id).await;
-            let _ = handle.events.send(event.clone());
+            let (completion, completed) = oneshot::channel();
+            if handle
+                .publication_wake
+                .try_send(PublicationWake { completion })
+                .is_ok()
+            {
+                let _ = completed.await;
+            }
         }
     }
 
@@ -175,9 +207,11 @@ impl RoomRuntime {
         }
         let (command_tx, command_rx) = mpsc::channel::<RoomCommand>(ROOM_QUEUE_CAPACITY);
         let (event_tx, _) = broadcast::channel(EVENT_RECEIVER_CAPACITY);
+        let (publication_tx, publication_rx) = mpsc::channel(PUBLICATION_WAKE_CAPACITY);
         let handle = RoomHandle {
             commands: command_tx,
             events: event_tx.clone(),
+            publication_wake: publication_tx,
         };
         rooms.insert(room_id.to_owned(), handle.clone());
         let store = self.store.clone();
@@ -185,12 +219,16 @@ impl RoomRuntime {
         let provider_adapter = self.provider_adapter.clone();
         let cancellation = self.cancellation.clone();
         let task = spawn_room_task(
-            store,
-            provider_catalog,
-            provider_adapter,
-            cancellation,
+            RoomTaskContext {
+                room_id: room_id.to_owned(),
+                store,
+                provider_catalog,
+                provider_adapter,
+                cancellation,
+                event_tx,
+            },
             command_rx,
-            event_tx,
+            publication_rx,
         );
         self.tasks.lock().await.push(task);
         handle
@@ -198,15 +236,23 @@ impl RoomRuntime {
 }
 
 fn spawn_room_task(
-    store: SqliteStore,
-    provider_catalog: ProviderCatalogService,
-    provider_adapter: ProviderAdapter,
-    cancellation: CancellationToken,
+    context: RoomTaskContext,
     mut command_rx: mpsc::Receiver<RoomCommand>,
-    event_tx: broadcast::Sender<RoomEvent>,
+    mut publication_rx: mpsc::Receiver<PublicationWake>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
+        let RoomTaskContext {
+            room_id,
+            store,
+            provider_catalog,
+            provider_adapter,
+            cancellation,
+            event_tx,
+        } = context;
         let mut turn_tasks = JoinSet::new();
+        let mut publication_retry = tokio::time::interval(PUBLICATION_RETRY_INTERVAL);
+        publication_retry.set_missed_tick_behavior(MissedTickBehavior::Delay);
+        publish_durable_room_events(&store, &event_tx, &room_id).await;
         loop {
             let input = tokio::select! {
                 () = cancellation.cancelled() => {
@@ -218,77 +264,147 @@ fn spawn_room_task(
                     let Some(command) = command else { break; };
                     RoomInput::Command(command)
                 }
+                wake = publication_rx.recv() => {
+                    let Some(wake) = wake else { break; };
+                    RoomInput::Publication(Some(wake))
+                }
+                _ = publication_retry.tick() => RoomInput::Publication(None),
                 result = turn_tasks.join_next(), if !turn_tasks.is_empty() => {
                     let Some(result) = result else { continue; };
                     RoomInput::Provider(Box::new(result))
                 }
             };
             match input {
-                RoomInput::Command(mut command) => {
-                    let execution = match store.resolve_principal(&command.principal).await {
-                        Ok(principal) => {
-                            command.principal = principal;
-                            execute_command(
-                                &store,
-                                &provider_catalog,
-                                &provider_adapter,
-                                &event_tx,
-                                &command,
-                            )
-                            .await
-                        }
-                        Err(error) => CommandExecution::failure(error),
-                    };
-                    let CommandExecution {
-                        reply,
-                        committed_events,
-                        assignment,
-                    } = execution;
-                    for event in &committed_events {
-                        let _ = event_tx.send(event.clone());
-                    }
-                    if let Some(assignment) = assignment {
-                        spawn_provider_turn(&mut turn_tasks, provider_adapter.clone(), assignment);
-                    }
-                    let reply = reply
-                        .and_then(|outcome| public_command_outcome(&command.principal, outcome));
-                    let _ = command.reply.send(reply);
+                RoomInput::Command(command) => {
+                    handle_room_command(
+                        &store,
+                        &provider_catalog,
+                        &provider_adapter,
+                        &event_tx,
+                        &mut turn_tasks,
+                        command,
+                    )
+                    .await;
                 }
-                RoomInput::Provider(result) => match *result {
-                    Ok(result) => {
-                        let room_id = result.assignment.session.public.room_id.clone();
-                        let session_id = result.assignment.session.public.session_id.clone();
-                        match commit_provider_result(&store, &provider_adapter, result).await {
-                            Ok(commit) => publish_turn_commit(
-                                &event_tx,
-                                &mut turn_tasks,
-                                provider_adapter.clone(),
-                                commit,
-                            ),
-                            Err(PersistenceError::CommandRejected {
-                                code: "stale_provider_turn",
-                                ..
-                            }) => tracing::debug!(
-                                room_id,
-                                session_id,
-                                "discarded provider result after durable turn authority changed"
-                            ),
-                            Err(_) => tracing::error!(
-                                room_id,
-                                session_id,
-                                "provider turn result could not be committed; durable restart recovery is required"
-                            ),
-                        }
+                RoomInput::Provider(result) => {
+                    handle_provider_result(
+                        &store,
+                        &provider_adapter,
+                        &event_tx,
+                        &mut turn_tasks,
+                        *result,
+                    )
+                    .await;
+                }
+                RoomInput::Publication(completion) => {
+                    publish_durable_room_events(&store, &event_tx, &room_id).await;
+                    if let Some(completion) = completion {
+                        let _ = completion.completion.send(());
                     }
-                    Err(join_error) => tracing::error!(
-                        cancelled = join_error.is_cancelled(),
-                        panic = join_error.is_panic(),
-                        "provider turn task ended without a result; durable restart recovery is required"
-                    ),
-                },
+                }
             }
         }
     })
+}
+
+async fn handle_room_command(
+    store: &SqliteStore,
+    provider_catalog: &ProviderCatalogService,
+    provider_adapter: &ProviderAdapter,
+    event_tx: &broadcast::Sender<RoomEvent>,
+    turn_tasks: &mut JoinSet<ProviderTurnTaskResult>,
+    mut command: RoomCommand,
+) {
+    let execution = match store.resolve_principal(&command.principal).await {
+        Ok(principal) => {
+            command.principal = principal;
+            execute_command(
+                store,
+                provider_catalog,
+                provider_adapter,
+                event_tx,
+                &command,
+            )
+            .await
+        }
+        Err(error) => CommandExecution::failure(error),
+    };
+    let CommandExecution {
+        reply,
+        committed_events,
+        assignment,
+    } = execution;
+    if !committed_events.is_empty() {
+        publish_durable_room_events(store, event_tx, &command.principal.room_id).await;
+    }
+    if let Some(assignment) = assignment {
+        spawn_provider_turn(turn_tasks, provider_adapter.clone(), assignment);
+    }
+    let reply = reply.and_then(|outcome| public_command_outcome(&command.principal, outcome));
+    let _ = command.reply.send(reply);
+}
+
+async fn handle_provider_result(
+    store: &SqliteStore,
+    provider_adapter: &ProviderAdapter,
+    event_tx: &broadcast::Sender<RoomEvent>,
+    turn_tasks: &mut JoinSet<ProviderTurnTaskResult>,
+    result: Result<ProviderTurnTaskResult, tokio::task::JoinError>,
+) {
+    let result = match result {
+        Ok(result) => result,
+        Err(join_error) => {
+            tracing::error!(
+                cancelled = join_error.is_cancelled(),
+                panic = join_error.is_panic(),
+                "provider turn task ended without a result; durable restart recovery is required"
+            );
+            return;
+        }
+    };
+    let room_id = result.assignment.session.public.room_id.clone();
+    let session_id = result.assignment.session.public.session_id.clone();
+    match commit_provider_result(store, provider_adapter, result).await {
+        Ok(commit) => {
+            publish_turn_commit(
+                store,
+                event_tx,
+                turn_tasks,
+                provider_adapter.clone(),
+                commit,
+            )
+            .await;
+        }
+        Err(PersistenceError::CommandRejected {
+            code: "stale_provider_turn",
+            ..
+        }) => tracing::debug!(
+            room_id,
+            session_id,
+            "discarded provider result after durable turn authority changed"
+        ),
+        Err(_) => tracing::error!(
+            room_id,
+            session_id,
+            "provider turn result could not be committed; durable restart recovery is required"
+        ),
+    }
+}
+
+async fn publish_durable_room_events(
+    store: &SqliteStore,
+    event_tx: &broadcast::Sender<RoomEvent>,
+    room_id: &str,
+) {
+    if let Err(error) =
+        crate::event_publication::drain_room_publications(store, event_tx, room_id).await
+    {
+        tracing::error!(
+            error = ?error,
+            room_id,
+            "durable room-event publication failed; the room owner will retry"
+        );
+    }
 }
 
 fn public_command_outcome(
@@ -308,28 +424,7 @@ fn public_command_outcome(
 enum RoomInput {
     Command(RoomCommand),
     Provider(Box<Result<ProviderTurnTaskResult, tokio::task::JoinError>>),
-}
-
-async fn join_room_tasks(
-    tasks: Vec<JoinHandle<()>>,
-    timeout: Duration,
-) -> Result<(), RoomShutdownError> {
-    let deadline = Instant::now() + timeout;
-    let mut failure = None;
-    for mut task in tasks {
-        match tokio::time::timeout_at(deadline, &mut task).await {
-            Ok(Ok(())) => {}
-            Ok(Err(error)) => {
-                failure.get_or_insert_with(|| RoomShutdownError::TaskFailed(error.to_string()));
-            }
-            Err(_) => {
-                task.abort();
-                let _ = task.await;
-                failure.get_or_insert(RoomShutdownError::TimedOut);
-            }
-        }
-    }
-    failure.map_or(Ok(()), Err)
+    Publication(Option<PublicationWake>),
 }
 
 async fn execute_command(
@@ -699,19 +794,5 @@ fn persisted_start(started: ProviderRuntimeStarted) -> AgentRuntimeStarted {
         runtime_reused: started.runtime_reused,
         provider_session_reused: started.provider_session_reused,
         provider_session_active: started.provider_session_active,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::time::Duration;
-
-    use super::{RoomShutdownError, join_room_tasks};
-
-    #[tokio::test]
-    async fn stalled_room_task_is_aborted_within_one_deadline() {
-        let task = tokio::spawn(std::future::pending::<()>());
-        let result = join_room_tasks(vec![task], Duration::from_millis(10)).await;
-        assert_eq!(result, Err(RoomShutdownError::TimedOut));
     }
 }

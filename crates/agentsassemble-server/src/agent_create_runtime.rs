@@ -102,7 +102,10 @@ async fn execute_agent_create_start(
             ));
         }
     };
-    publish_events(event_tx, &effect.newly_committed_events);
+    if !effect.newly_committed_events.is_empty() {
+        crate::event_publication::drain_room_publications(store, event_tx, &principal.room_id)
+            .await?;
+    }
     match provider_adapter.start(&effect.session).await {
         Ok(started) => {
             let commit = store
@@ -151,12 +154,6 @@ async fn execute_agent_create_start(
                 advance_ordered_floor: false,
             })
         }
-    }
-}
-
-fn publish_events(event_tx: &broadcast::Sender<RoomEvent>, events: &[RoomEvent]) {
-    for event in events {
-        let _ = event_tx.send(event.clone());
     }
 }
 

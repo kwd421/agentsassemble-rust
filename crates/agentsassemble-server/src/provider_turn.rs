@@ -107,14 +107,32 @@ pub(crate) async fn commit_provider_result(
     }
 }
 
-pub(crate) fn publish_turn_commit(
+pub(crate) async fn publish_turn_commit(
+    store: &SqliteStore,
     event_tx: &broadcast::Sender<agentsassemble_domain::RoomEvent>,
     tasks: &mut JoinSet<ProviderTurnTaskResult>,
     provider_adapter: ProviderAdapter,
     commit: AgentTurnCommit,
 ) {
-    for event in commit.events {
-        let _ = event_tx.send(event);
+    let room_id = commit
+        .events
+        .first()
+        .map(|event| event.room_id.clone())
+        .or_else(|| {
+            commit
+                .next_assignment
+                .as_ref()
+                .map(|assignment| assignment.session.public.room_id.clone())
+        });
+    if let Some(room_id) = room_id
+        && let Err(error) =
+            crate::event_publication::drain_room_publications(store, event_tx, &room_id).await
+    {
+        tracing::error!(
+            error = ?error,
+            room_id,
+            "provider-turn events remain durably pending for publication retry"
+        );
     }
     if let Some(assignment) = commit.next_assignment {
         spawn_provider_turn(tasks, provider_adapter, assignment);
