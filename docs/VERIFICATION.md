@@ -561,6 +561,64 @@ directories and application bundles were deleted after process absence was
 confirmed. The installed Python application, the existing Rust user database,
 and unrelated processes were not modified or signalled.
 
+## Restartable local bootstrap and zero-room product candidate: 2026-08-25
+
+A debug macOS application was built under the verification-only bundle identifier
+`app.agentsassemble.rust.bootstrapverify`. Its Application Support, WebKit, cache,
+and application-bundle paths were separate from the installed Rust and original
+Python products. The copied production central-directory URL was deliberately
+unset for this run because the central identity/native OAuth owner is still an
+explicitly incomplete later slice; this run is evidence for the complete local
+authority path only and is not central-account evidence.
+
+Computer Use started from a fresh empty data root. The Rust runtime created schema
+and immutable bootstrap lineage without creating a room, the copied startup gate
+accepted `Local Operator Verify`, and the resulting complete authority exposed a
+real zero-room directory. A second application build restarted against the same
+authority without showing bootstrap again. The left-bottom profile loaded the
+stored name through a fresh one-use server-operator profile ticket even though no
+room existed.
+
+The copied room-rail plus control then created the first real SQLite room
+(`새 회의실`) and entered its authenticated WebSocket flow. The copied composer
+published `bootstrap runtime verification message`; the timeline projected that
+committed message. The user settings UI changed the server-wide human profile to
+`Canonical Operator`. One profile revision atomically updated the left-bottom
+card, right member panel, and historical message author projection without
+changing room role, join state, or mute authority. Read-only SQLite inspection
+confirmed bootstrap `complete`, profile revision 2, one durable room, and one each
+of `room_created`, `message_final`, and `participant_updated`.
+
+The Agent Add dialog was opened while the left-bottom profile card was expanded.
+Opening the dialog closed the card and the modal backdrop remained above all
+room/profile surfaces. Before provider selection there was no display-name input;
+the live Harness catalog showed Codex, Antigravity, and OpenCode with their shared
+icon presentation, and selecting Codex introduced the catalog-derived name and
+settings fields. No workspace was selected, no Agent Session was created, and no
+provider was started.
+
+A final restart restored `Canonical Operator`, the real room, and the committed
+message. The run also truthfully exposed separate incomplete surfaces: the copied
+friends view failed because Rust has no `/api/room-friends`, and public-account
+settings returned 404 because the account routes are not yet cut over. They were
+not replaced with client data or hidden success.
+
+The exact candidate then passed the complete `make verify`: mandatory
+architecture, source-growth, logical-line, and 800-line gates; formatting and
+generated bindings; the copied production frontend build and original CSS/cascade
+check; 67 frontend files with 344 tests; 14 Tauri tests; 17 domain, 82 persistence,
+two protocol, 100 provider, and 14 server unit tests; 20 Rust integration tests;
+all documentation tests; warning-denied workspace and desktop Clippy; and final
+diff validation.
+
+After evidence collection the exact verification app, supervisor, and sidecar
+were closed and their absence was confirmed. The verification-only Application
+Support, WebKit, cache, and app-bundle paths were moved to Trash. Two earlier
+verification-only diagnostic roots that exposed the still-incomplete central
+identity boundary were also left recoverable in Trash. Existing user product data,
+original-project processes, and unrelated processes were not modified or
+signalled.
+
 ## API verification scope
 
 When a reachable flow specifically needs an API-backed provider, the allowed paid/provider-specific candidates are the official DeepSeek API and the designated Flash provider path. Every other API-backed verification uses only an explicitly free API or free model. Missing credentials, exhausted free quota, or unavailable models fail visibly; they do not trigger a paid substitution or a fallback provider.

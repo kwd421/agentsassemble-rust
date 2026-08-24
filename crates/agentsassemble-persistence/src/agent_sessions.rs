@@ -118,10 +118,8 @@ impl SqliteStore {
 mod tests {
     use agentsassemble_domain::{
         AgentSessionDraft, AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope,
-        LOCAL_OPERATOR_PARTICIPANT_ID, Participant, ParticipantStatus, Room, RoomSettings,
-        stable_content_identity, stable_identity_hash,
+        LOCAL_OPERATOR_PARTICIPANT_ID, stable_content_identity, stable_identity_hash,
     };
-    use chrono::Utc;
     use same_file::Handle;
     use serde_json::json;
     use std::{fs::File, path::Path};
@@ -134,25 +132,14 @@ mod tests {
         let store = SqliteStore::open_path(&directory.path().join("runtime.sqlite3"))
             .await
             .unwrap_or_else(|error| panic!("open store: {error}"));
-        let now = Utc::now();
-        let room = Room::new("general".to_owned(), "General".to_owned(), now);
-        let participant = Participant {
-            room_id: "general".to_owned(),
-            participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
-            display_name: "Host".to_owned(),
-            avatar_image_url: String::new(),
-            participant_type: "human".to_owned(),
-            status: ParticipantStatus::Joined,
-            role: "host".to_owned(),
-            owner_id: String::new(),
-            muted: false,
-            created_at: now,
-            updated_at: now,
-        };
         store
-            .initialize_room(&room, &RoomSettings::defaults("General"), &participant)
+            .bootstrap_local_authority("42aebf93-31ce-46fd-b792-0a791b644668", "Host")
             .await
-            .unwrap_or_else(|error| panic!("initialize room: {error}"));
+            .unwrap_or_else(|error| panic!("bootstrap identity: {error}"));
+        store
+            .create_room_for_local_operator("general", "General")
+            .await
+            .unwrap_or_else(|error| panic!("create room: {error}"));
         let principal = AuthenticatedPrincipal {
             principal_id: "operator-local-user".to_owned(),
             participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
@@ -297,7 +284,8 @@ mod tests {
             .unwrap_or_else(|error| panic!("snapshot: {error}"));
         assert_eq!(snapshot.agent_sessions.len(), 1);
         assert_eq!(snapshot.agent_sessions[0].model, "gpt-5.6-terra");
-        assert_eq!(snapshot.events[0].event_type, "agent_session_created");
+        assert_eq!(snapshot.events[0].event_type, "room_created");
+        assert_eq!(snapshot.events[1].event_type, "agent_session_created");
     }
 
     #[tokio::test]
@@ -328,7 +316,8 @@ mod tests {
             .unwrap_or_else(|error| panic!("snapshot: {error}"));
         assert!(snapshot.agent_sessions.is_empty());
         assert_eq!(snapshot.participants.len(), 1);
-        assert!(snapshot.events.is_empty());
+        assert_eq!(snapshot.events.len(), 1);
+        assert_eq!(snapshot.events[0].event_type, "room_created");
     }
 
     #[tokio::test]
@@ -363,7 +352,7 @@ mod tests {
         .fetch_one(&store.pool)
         .await
         .unwrap_or_else(|error| panic!("inspect rejected create: {error}"));
-        assert_eq!(counts, (0, 0, 0));
+        assert_eq!(counts, (0, 1, 0));
     }
 
     #[tokio::test]
@@ -403,7 +392,8 @@ mod tests {
             .unwrap_or_else(|error| panic!("snapshot after authority rejection: {error}"));
         assert!(snapshot.agent_sessions.is_empty());
         assert_eq!(snapshot.participants.len(), 1);
-        assert!(snapshot.events.is_empty());
+        assert_eq!(snapshot.events.len(), 1);
+        assert_eq!(snapshot.events[0].event_type, "room_created");
     }
 
     #[tokio::test]
@@ -448,7 +438,7 @@ mod tests {
         .unwrap_or_else(|error| panic!("inspect capacity rejection: {error}"));
         assert_eq!(
             counts,
-            (crate::sqlite::MAX_AGENT_SESSIONS_PER_ROOM, 1, 0, 0)
+            (crate::sqlite::MAX_AGENT_SESSIONS_PER_ROOM, 1, 1, 0)
         );
     }
 
@@ -481,6 +471,7 @@ mod tests {
             .unwrap_or_else(|error| panic!("snapshot: {error}"));
         assert!(snapshot.agent_sessions.is_empty());
         assert_eq!(snapshot.participants.len(), 1);
-        assert!(snapshot.events.is_empty());
+        assert_eq!(snapshot.events.len(), 1);
+        assert_eq!(snapshot.events[0].event_type, "room_created");
     }
 }

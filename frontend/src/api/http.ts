@@ -8,6 +8,11 @@ import {
 const HOST_TOKEN_STORAGE_KEY = "agentsassemble.hostToken.v1";
 let inMemoryHostToken = "";
 
+function isServerWideProfileRoute(url: string): boolean {
+  const path = url.split("?", 1)[0];
+  return path === "/api/user-profile" || path === "/api/attachments";
+}
+
 export function loadHostToken(): string {
   try {
     return String(sessionStorage.getItem(HOST_TOKEN_STORAGE_KEY) || inMemoryHostToken || "").trim();
@@ -130,6 +135,11 @@ export async function fetchJsonWithIdentity<T>(
   url: string,
   { sessionToken = "", deviceToken = "", roomId = "" }: { sessionToken?: string; deviceToken?: string; roomId?: string }
 ): Promise<T> {
+  if (!sessionToken && isDesktopWebview() && isServerWideProfileRoute(url)) {
+    const res = await fetchDesktopOperatorRuntime(url);
+    if (!res.ok) throw await responseError(res);
+    return res.json();
+  }
   if (roomId && !sessionToken && isDesktopWebview()) {
     const res = await fetchDesktopRuntime(roomId, url);
     if (!res.ok) throw await responseError(res);
@@ -148,6 +158,15 @@ export async function postJsonWithIdentity<T>(
   body: object,
   { sessionToken = "", deviceToken = "", roomId = "" }: { sessionToken?: string; deviceToken?: string; roomId?: string }
 ): Promise<T> {
+  if (!sessionToken && isDesktopWebview() && isServerWideProfileRoute(url)) {
+    const res = await fetchDesktopOperatorRuntime(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw await responseError(res);
+    return res.json();
+  }
   if (roomId && !sessionToken && isDesktopWebview()) {
     const res = await fetchDesktopRuntime(roomId, url, {
       method: "POST",

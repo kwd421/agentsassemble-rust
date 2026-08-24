@@ -40,6 +40,7 @@ pub use agent_lifecycle::{
     AgentRuntimeStarted, AgentStartEffect, AgentStartPlan, AgentStopEffect, AgentStopPlan,
 };
 pub use agent_reconciliation::{RuntimeReconciliationCandidate, RuntimeReconciliationObservation};
+pub use bootstrap::{LocalBootstrapCommit, LocalBootstrapPhase, LocalBootstrapStatus};
 pub use private_fs::secure_private_directory;
 pub use profile_attachments::{ProfileAttachment, ProfileAttachmentMetadata};
 pub use profile_store::ProfileUpdateOutcome;

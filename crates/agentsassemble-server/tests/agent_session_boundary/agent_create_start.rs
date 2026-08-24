@@ -100,7 +100,15 @@ async fn shutdown_checkpoints_gone_after_aborting_initialization() {
     subscribe(&mut snapshot_viewer).await;
     let concurrent_snapshot = receive_json(&mut snapshot_viewer).await;
     assert_eq!(concurrent_snapshot["last_seq"], created_sequence);
-    assert_eq!(concurrent_snapshot["events"][0]["seq"], created_sequence);
+    let snapshot_created = concurrent_snapshot["events"]
+        .as_array()
+        .and_then(|events| {
+            events
+                .iter()
+                .find(|event| event["type"] == "agent_session_created")
+        })
+        .unwrap_or_else(|| panic!("snapshot omitted the durable agent creation event"));
+    assert_eq!(snapshot_created["seq"], created_sequence);
     assert_eq!(
         concurrent_snapshot["agent_sessions"][0]["session_id"],
         created["events"][0]["participant_id"]

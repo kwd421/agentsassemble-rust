@@ -1,7 +1,7 @@
 use agentsassemble_domain::{
     AgentSession, AuthenticatedPrincipal, CURRENT_RUNTIME_PROFILE_VERSION, CapabilitySet,
     ClientKind, DurableAgentSession, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID, Participant,
-    ParticipantStatus, QueuedRoomInput, Room, RoomInputDeliveryKind, RoomSettings,
+    ParticipantStatus, QueuedRoomInput, RoomInputDeliveryKind,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -17,27 +17,14 @@ pub(super) async fn fixture() -> (SqliteStore, AuthenticatedPrincipal, tempfile:
         .await
         .unwrap_or_else(|error| panic!("open store: {error}"));
     let now = Utc::now();
-    let host = Participant {
-        room_id: "general".to_owned(),
-        participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
-        display_name: "Host".to_owned(),
-        avatar_image_url: String::new(),
-        participant_type: "human".to_owned(),
-        status: ParticipantStatus::Joined,
-        role: "host".to_owned(),
-        owner_id: String::new(),
-        muted: false,
-        created_at: now,
-        updated_at: now,
-    };
     store
-        .initialize_room(
-            &Room::new("general".to_owned(), "General".to_owned(), now),
-            &RoomSettings::defaults("General"),
-            &host,
-        )
+        .bootstrap_local_authority("ecaa2428-2d0d-4b0f-8b63-49c17732728a", "Host")
         .await
-        .unwrap_or_else(|error| panic!("initialize room: {error}"));
+        .unwrap_or_else(|error| panic!("bootstrap identity: {error}"));
+    store
+        .create_room_for_local_operator("general", "General")
+        .await
+        .unwrap_or_else(|error| panic!("create room: {error}"));
     seed_agent(&store, now).await;
     let principal = AuthenticatedPrincipal {
         principal_id: "operator-local-user".to_owned(),

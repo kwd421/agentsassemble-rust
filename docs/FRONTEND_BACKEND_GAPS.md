@@ -1,12 +1,12 @@
 # Frontend/backend exposure map
 
-Status: source-derived reimplementation exposure inventory, 2026-08-24
+Status: source-derived reimplementation exposure inventory, 2026-08-25
 
 Comparison baseline: original
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust
-`5aaa04b`. The current published Stage A review candidate is `865ad02`; its
-delta is recorded separately below and is not completion evidence until critical
-review and real-client evidence are complete.
+`92e6bb44e3154f2c8d4d2f7b50761ebcf8e92bb7`. The active local-authority,
+surface, admission, subscription, and moderation boundary is design-approved but
+not implementation evidence.
 
 ## Scope and method
 
@@ -188,7 +188,7 @@ implemented; the frontend must not silently substitute Python or local fake data
 
 | React feature group | Missing Rust surface |
 | --- | --- |
-| Startup identity and accounts | `/api/account`, Google account challenge/connect/delete, central-login callback start/poll, guest recovery-code create/redeem. |
+| Startup identity and accounts | The fresh local desktop identity/bootstrap path is implemented. `/api/account`, Google account challenge/connect/delete, central-login callback start/poll, central guest/recovery, and server-directory registration remain incomplete. The copied production central URL must not be counted as desktop support: the native OAuth command and secure desktop device-key owner are not implemented, and the current CSP does not authorize that remote origin. |
 | Room lifecycle and settings | Canonical archive/delete lifecycle, room-global settings mutation, per-user room preferences, public server info, and central-directory registration proof. |
 | Admission and invites | Host claim, room invite create/join/admission/companion/leave, operator pairing create/redeem, and public-invite status/URL/tunnel controls. |
 | Roster, friends, and channels | Canonical participant role/mute controls, room friends, room channels, voice presence, and side chat. |
@@ -197,6 +197,41 @@ implemented; the frontend must not silently substitute Python or local fake data
 | Games and plugins | Mafia HTTP operations and generic plugin WebSocket hosting remain unimplemented. The copied RimWorld view is an external plugin consumer; its Python plugin package/runtime is intentionally outside the current Rust core-migration scope and is not a core parity exit condition. |
 | Canonical room commands | History, vote summary, edit/delete, settings, random operations, re-add, pause/interrupt, participant controls, room lifecycle, and provider request resolution. Stopped-session `agent.resume` and `agent.configure` are connected at the public comparison commit. |
 | Canonical room events | The React projector recognizes the broader original event vocabulary; only Rust-emitted snapshot/events are currently verified. |
+
+### Active local-authority exposure delta: 2026-08-25
+
+The current candidate replaces fixture bootstrap with an immutable-lineage local
+authority. Fresh startup creates schema and the bootstrap marker only. The copied
+desktop gate commits the real local human profile, admits a real zero-room
+directory, and the room-rail plus control creates the first complete room through
+the server-operator HTTP surface. Exact request replay is idempotent; conflicting
+reuse, incomplete bootstrap, and inconsistent authority fail closed.
+
+The server-wide local human profile is reachable before the first room through a
+fresh one-use operator credential. The same profile remains the SSoT after room
+creation and projects display-name/avatar revisions into every current human room
+membership. Room role, join state, room mute, and Agent Session profiles remain
+owned by their separate authorities. Packaged Computer Use verified zero-room
+startup, room create/join, one committed chat message, profile projection, modal
+z-order, conditional Agent Add fields, and restart durability.
+
+The same run confirmed these still-open frontend/backend rows rather than hiding
+them:
+
+- `/api/room-friends` is called by the copied Friends view but has no Rust route,
+  so the view visibly reports `Load failed`.
+- `/api/account` is called by Public Account settings but has no Rust route, so
+  that section visibly reports 404.
+- Desktop central guest/Google/recovery is not cut over. A diagnostic build that
+  temporarily allowed the configured Worker origin reached the copied central
+  code but stalled before issuing a network request while no device-key record
+  was committed. The native Google handoff command is also absent. This requires
+  one secure desktop credential/handoff owner in the later identity slice; CSP
+  broadening or an IndexedDB/private-key workaround alone is not completion.
+
+The local-only packaged verification used an explicitly empty central URL and is
+not evidence for any central account, server-directory synchronization, or OAuth
+flow.
 
 ## Stage A feature-candidate delta
 

@@ -31,12 +31,13 @@ server identity. Each directory entry is projected from the durable `Room` and i
 canonical room-global settings; stable room UID, label, status, timestamps, and
 appearance are not independently reconstructed by React or Tauri.
 
-Fresh schema metadata, `server_id`, initial room/settings, publication cursor,
-local human membership, and human profile share one transaction. Startup also
-recognizes an interrupted empty SQLite file as uninitialized and may initialize
-it only after exclusive file-authority validation. Once current schema metadata
-exists, the initial room, settings, publication cursor, local membership, and
-profile must already be complete; startup never repairs or fills a partial product
+Fresh schema installation creates infrastructure and stable `server_id` without
+fabricating a room, participant, or profile. A separate bootstrap sidecar owns an
+immutable authority lineage and restartable `Empty | Initializing | Complete`
+transition under `BEGIN IMMEDIATE`. Ticket issuance requires verified Complete,
+while Complete with zero rooms is a normal product state. Recovery checks only
+bootstrap-owned rows and either proves the immutable lineage complete or fails
+with explicit repair-required state; it never seeds or fills partial product
 state. File existence alone is never a durable bootstrap phase.
 
 Creating a room commits its room record, default settings, publication cursor,
@@ -47,7 +48,8 @@ Repeating creation preserves the room UID and does not append another creation
 event. The copied room rail may display a bounded cached projection during first
 paint only while visibly unconfirmed; the authenticated server response removes
 stale local entries and becomes the projection. A client-fabricated `general` is
-not authority—the fresh-runtime bootstrap creates the real durable room.
+not authority; a fresh complete authority stays empty until the user creates a
+canonical room through the real directory flow.
 
 ### Room settings, preferences, and appearance
 

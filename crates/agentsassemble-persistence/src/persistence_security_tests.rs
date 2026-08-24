@@ -1,8 +1,7 @@
 use agentsassemble_domain::{
     AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, Participant, ParticipantStatus,
-    Room, RoomSettings, RoomStatus,
+    Room, RoomStatus,
 };
-use chrono::Utc;
 use serde_json::json;
 
 use crate::{PersistenceError, SqliteStore};
@@ -15,25 +14,19 @@ async fn initialized_store() -> (SqliteStore, AuthenticatedPrincipal, Room, Part
     let store = SqliteStore::open(&url)
         .await
         .unwrap_or_else(|error| panic!("open fixture: {error}"));
-    let now = Utc::now();
-    let room = Room::new("general".to_owned(), "General".to_owned(), now);
-    let participant = Participant {
-        room_id: "general".to_owned(),
-        participant_id: "operator-local".to_owned(),
-        display_name: "Host".to_owned(),
-        avatar_image_url: String::new(),
-        participant_type: "human".to_owned(),
-        status: ParticipantStatus::Joined,
-        role: "host".to_owned(),
-        owner_id: String::new(),
-        muted: false,
-        created_at: now,
-        updated_at: now,
-    };
     store
-        .initialize_room(&room, &RoomSettings::defaults("General"), &participant)
+        .bootstrap_local_authority("4528692e-9e3d-4c0a-b7bb-a5197641fe80", "Host")
         .await
-        .unwrap_or_else(|error| panic!("initialize fixture: {error}"));
+        .unwrap_or_else(|error| panic!("bootstrap fixture: {error}"));
+    let room = store
+        .create_room_for_local_operator("general", "General")
+        .await
+        .unwrap_or_else(|error| panic!("create fixture room: {error}"))
+        .room;
+    let participant = store
+        .active_participant(&room.room_id, "operator-local")
+        .await
+        .unwrap_or_else(|error| panic!("load fixture participant: {error}"));
     let principal = AuthenticatedPrincipal {
         principal_id: "operator-local-user".to_owned(),
         participant_id: participant.participant_id.clone(),
@@ -171,36 +164,41 @@ async fn existing_authority_cannot_recreate_first_run_membership() {
     let first = SqliteStore::open(&url)
         .await
         .unwrap_or_else(|error| panic!("open new authority: {error}"));
-    let now = Utc::now();
-    let room = Room::new("general".to_owned(), "General".to_owned(), now);
-    let participant = Participant {
-        room_id: "general".to_owned(),
-        participant_id: "operator-local".to_owned(),
-        display_name: "Host".to_owned(),
-        avatar_image_url: String::new(),
-        participant_type: "human".to_owned(),
-        status: ParticipantStatus::Joined,
-        role: "host".to_owned(),
-        owner_id: String::new(),
-        muted: false,
-        created_at: now,
-        updated_at: now,
-    };
+    let request_id = "675c30b1-4341-4ff0-b03b-772b549ee547";
     first
-        .initialize_room(&room, &RoomSettings::defaults("General"), &participant)
+        .bootstrap_local_authority(request_id, "Host")
         .await
-        .unwrap_or_else(|error| panic!("initialize authority: {error}"));
+        .unwrap_or_else(|error| panic!("bootstrap authority: {error}"));
+    first
+        .create_room_for_local_operator("general", "General")
+        .await
+        .unwrap_or_else(|error| panic!("create authority room: {error}"));
     drop(first);
     let reopened = SqliteStore::open(&url)
         .await
         .unwrap_or_else(|error| panic!("reopen authority: {error}"));
     assert!(!reopened.was_created());
-    assert!(matches!(
+    assert!(
         reopened
-            .initialize_room(&room, &RoomSettings::defaults("General"), &participant,)
-            .await,
-        Err(PersistenceError::InitializationNotAllowed)
-    ));
+            .bootstrap_local_authority(request_id, "Host")
+            .await
+            .unwrap_or_else(|error| panic!("replay bootstrap: {error}"))
+            .deduplicated
+    );
+    assert!(
+        reopened
+            .bootstrap_local_authority("26d021bc-686a-4269-a4ee-8851bcf49a7c", "Host")
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        reopened
+            .list_room_directory(true)
+            .await
+            .unwrap_or_else(|error| panic!("reopened room directory: {error}"))
+            .len(),
+        1
+    );
 }
 
 #[tokio::test]

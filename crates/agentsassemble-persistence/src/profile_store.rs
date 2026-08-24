@@ -21,6 +21,28 @@ pub struct ProfileUpdateOutcome {
     pub events: Vec<RoomEvent>,
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct ProfileIdentity<'a> {
+    pub(crate) user_id: &'a str,
+    pub(crate) participant_id: &'a str,
+}
+
+impl<'a> ProfileIdentity<'a> {
+    fn from_principal(principal: &'a AuthenticatedPrincipal) -> Self {
+        Self {
+            user_id: &principal.principal_id,
+            participant_id: &principal.participant_id,
+        }
+    }
+
+    pub(crate) const fn local_operator() -> Self {
+        Self {
+            user_id: LOCAL_OPERATOR_USER_ID,
+            participant_id: LOCAL_OPERATOR_PARTICIPANT_ID,
+        }
+    }
+}
+
 impl SqliteStore {
     /// Reads the authenticated human profile from its server-wide authority.
     ///
@@ -33,7 +55,21 @@ impl SqliteStore {
     ) -> Result<UserProfile, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
         authorize_session(&mut transaction, principal).await?;
-        let profile = load_profile(&mut transaction, principal).await?;
+        let profile =
+            load_profile(&mut transaction, ProfileIdentity::from_principal(principal)).await?;
+        transaction.commit().await?;
+        Ok(profile)
+    }
+
+    /// Reads the bootstrapped local human profile without inventing a room membership.
+    ///
+    /// # Errors
+    ///
+    /// Fails when local bootstrap is incomplete or the profile authority is corrupt.
+    pub async fn local_operator_profile(&self) -> Result<UserProfile, PersistenceError> {
+        self.require_local_bootstrap_complete().await?;
+        let mut transaction = self.pool.begin().await?;
+        let profile = load_profile(&mut transaction, ProfileIdentity::local_operator()).await?;
         transaction.commit().await?;
         Ok(profile)
     }
@@ -50,88 +86,86 @@ impl SqliteStore {
     ) -> Result<ProfileUpdateOutcome, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
         authorize_session(&mut transaction, principal).await?;
-        let mut profile = load_profile(&mut transaction, principal).await?;
-        let previous_display_name = profile.display_name.clone();
-        let previous_avatar_url = profile.avatar_image_url.clone();
-        let now = Utc::now();
-        let changed = profile.apply_patch(patch, now);
-        if let Some(attachment_id) = avatar_attachment_id(&profile.avatar_image_url) {
-            authorize_profile_avatar(
-                &mut transaction,
-                &principal.principal_id,
-                attachment_id,
-                now,
-            )
-            .await?;
-        }
-        if !changed {
-            transaction.commit().await?;
-            return Ok(ProfileUpdateOutcome {
-                profile,
-                events: Vec::new(),
-            });
-        }
-        sqlx::query("UPDATE user_profiles SET profile_json = ? WHERE user_id = ?")
-            .bind(serde_json::to_string(&profile)?)
-            .bind(&principal.principal_id)
-            .execute(&mut *transaction)
-            .await?;
-        if profile.avatar_image_url != previous_avatar_url {
-            replace_profile_avatar(
-                &mut transaction,
-                &principal.principal_id,
-                &previous_avatar_url,
-                &profile.avatar_image_url,
-            )
-            .await?;
-        }
-        let events = if profile.display_name != previous_display_name
-            || profile.avatar_image_url != previous_avatar_url
-        {
-            project_profile_into_rooms(&mut transaction, principal, &profile).await?
-        } else {
-            Vec::new()
-        };
+        let outcome = update_profile_in_transaction(
+            &mut transaction,
+            ProfileIdentity::from_principal(principal),
+            patch,
+        )
+        .await?;
         transaction.commit().await?;
-        Ok(ProfileUpdateOutcome { profile, events })
+        Ok(outcome)
+    }
+
+    /// Updates the server-wide local human profile and all existing room projections.
+    ///
+    /// # Errors
+    ///
+    /// Fails when local bootstrap is incomplete, profile authority is corrupt, or projection fails.
+    pub async fn update_local_operator_profile(
+        &self,
+        patch: UserProfilePatch,
+    ) -> Result<ProfileUpdateOutcome, PersistenceError> {
+        self.require_local_bootstrap_complete().await?;
+        let mut transaction = self.pool.begin().await?;
+        let outcome = update_profile_in_transaction(
+            &mut transaction,
+            ProfileIdentity::local_operator(),
+            patch,
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(outcome)
     }
 }
 
-pub(crate) async fn insert_initial_local_profile(
+async fn update_profile_in_transaction(
     transaction: &mut Transaction<'_, Sqlite>,
-    participant: &Participant,
-) -> Result<(), PersistenceError> {
-    if participant.participant_id != LOCAL_OPERATOR_PARTICIPANT_ID
-        || participant.participant_type != "human"
-    {
-        return Ok(());
+    identity: ProfileIdentity<'_>,
+    patch: UserProfilePatch,
+) -> Result<ProfileUpdateOutcome, PersistenceError> {
+    let mut profile = load_profile(transaction, identity).await?;
+    let previous_display_name = profile.display_name.clone();
+    let previous_avatar_url = profile.avatar_image_url.clone();
+    let now = Utc::now();
+    let changed = profile.apply_patch(patch, now);
+    if let Some(attachment_id) = avatar_attachment_id(&profile.avatar_image_url) {
+        authorize_profile_avatar(transaction, identity.user_id, attachment_id, now).await?;
     }
-    let mut profile = UserProfile::defaults(participant.created_at);
-    profile.display_name.clone_from(&participant.display_name);
-    profile
-        .avatar_image_url
-        .clone_from(&participant.avatar_image_url);
-    sqlx::query(
-        "INSERT INTO user_profiles(user_id, participant_id, profile_json) VALUES (?, ?, ?)",
-    )
-    .bind(LOCAL_OPERATOR_USER_ID)
-    .bind(LOCAL_OPERATOR_PARTICIPANT_ID)
-    .bind(serde_json::to_string(&profile)?)
-    .execute(&mut **transaction)
-    .await?;
-    Ok(())
+    if !changed {
+        return Ok(ProfileUpdateOutcome {
+            profile,
+            events: Vec::new(),
+        });
+    }
+    sqlx::query("UPDATE user_profiles SET profile_json = ? WHERE user_id = ?")
+        .bind(serde_json::to_string(&profile)?)
+        .bind(identity.user_id)
+        .execute(&mut **transaction)
+        .await?;
+    if profile.avatar_image_url != previous_avatar_url {
+        replace_profile_avatar(
+            transaction,
+            identity.user_id,
+            &previous_avatar_url,
+            &profile.avatar_image_url,
+        )
+        .await?;
+    }
+    let events = if profile.display_name != previous_display_name
+        || profile.avatar_image_url != previous_avatar_url
+    {
+        project_profile_into_rooms(transaction, identity, &profile).await?
+    } else {
+        Vec::new()
+    };
+    Ok(ProfileUpdateOutcome { profile, events })
 }
 
 async fn load_profile(
     transaction: &mut Transaction<'_, Sqlite>,
-    principal: &AuthenticatedPrincipal,
+    identity: ProfileIdentity<'_>,
 ) -> Result<UserProfile, PersistenceError> {
-    load_profile_for_identity(
-        transaction,
-        &principal.principal_id,
-        &principal.participant_id,
-    )
-    .await
+    load_profile_for_identity(transaction, identity.user_id, identity.participant_id).await
 }
 
 pub(crate) async fn load_local_operator_profile(
@@ -179,13 +213,13 @@ async fn load_profile_for_identity(
 
 async fn project_profile_into_rooms(
     transaction: &mut Transaction<'_, Sqlite>,
-    principal: &AuthenticatedPrincipal,
+    identity: ProfileIdentity<'_>,
     profile: &UserProfile,
 ) -> Result<Vec<RoomEvent>, PersistenceError> {
     let rows = sqlx::query(
         "SELECT room_id, participant_json FROM participants WHERE participant_id = ? ORDER BY room_id",
     )
-    .bind(&principal.participant_id)
+    .bind(identity.participant_id)
     .fetch_all(&mut **transaction)
     .await?;
     let mut events = Vec::new();
@@ -209,10 +243,10 @@ async fn project_profile_into_rooms(
         )
         .bind(serde_json::to_string(&participant)?)
         .bind(&room_id)
-        .bind(&principal.participant_id)
+        .bind(identity.participant_id)
         .execute(&mut **transaction)
         .await?;
-        let event = participant_updated_event(transaction, principal, profile, room_id).await?;
+        let event = participant_updated_event(transaction, identity, profile, room_id).await?;
         sqlx::query("INSERT INTO room_events(room_id, seq, event_json) VALUES (?, ?, ?)")
             .bind(&event.room_id)
             .bind(event.seq)
@@ -226,7 +260,7 @@ async fn project_profile_into_rooms(
 
 async fn participant_updated_event(
     transaction: &mut Transaction<'_, Sqlite>,
-    principal: &AuthenticatedPrincipal,
+    identity: ProfileIdentity<'_>,
     profile: &UserProfile,
     room_id: String,
 ) -> Result<RoomEvent, PersistenceError> {
@@ -244,12 +278,12 @@ async fn participant_updated_event(
         room_id,
         event_type: "participant_updated".to_owned(),
         actor: Actor {
-            participant_id: principal.participant_id.clone(),
+            participant_id: identity.participant_id.to_owned(),
             participant_type: "human".to_owned(),
         },
-        participant_id: Some(principal.participant_id.clone()),
+        participant_id: Some(identity.participant_id.to_owned()),
         participant_type: Some("human".to_owned()),
-        actor_id: Some(principal.participant_id.clone()),
+        actor_id: Some(identity.participant_id.to_owned()),
         actor_type: Some("human".to_owned()),
         display_name: Some(profile.display_name.clone()),
         content: None,
@@ -290,25 +324,14 @@ mod tests {
         let store = SqliteStore::open(&url)
             .await
             .unwrap_or_else(|error| panic!("open profile fixture: {error}"));
-        let now = Utc::now();
-        let room = Room::new("general".to_owned(), "General".to_owned(), now);
-        let participant = Participant {
-            room_id: "general".to_owned(),
-            participant_id: "operator-local".to_owned(),
-            display_name: "SeiNel".to_owned(),
-            avatar_image_url: String::new(),
-            participant_type: "human".to_owned(),
-            status: ParticipantStatus::Joined,
-            role: "host".to_owned(),
-            owner_id: String::new(),
-            muted: false,
-            created_at: now,
-            updated_at: now,
-        };
         store
-            .initialize_room(&room, &RoomSettings::defaults("General"), &participant)
+            .bootstrap_local_authority("e91430a8-e9ad-4a8a-a4ff-ebee75fc1dcc", "SeiNel")
             .await
-            .unwrap_or_else(|error| panic!("initialize profile fixture: {error}"));
+            .unwrap_or_else(|error| panic!("bootstrap profile identity: {error}"));
+        store
+            .create_room_for_local_operator("general", "General")
+            .await
+            .unwrap_or_else(|error| panic!("create profile room: {error}"));
         let principal = AuthenticatedPrincipal {
             principal_id: "operator-local-user".to_owned(),
             participant_id: "operator-local".to_owned(),
@@ -423,7 +446,7 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("count rolled-back events: {error}"))
             .get::<i64, _>("count");
-        assert_eq!(event_count, 0);
+        assert_eq!(event_count, 1);
     }
 
     async fn insert_secondary_profile_boundaries(

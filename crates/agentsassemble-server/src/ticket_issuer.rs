@@ -16,6 +16,8 @@ pub enum TicketIssueError {
     RoomMissing,
     #[error("local operator is not an active room participant")]
     ParticipantInactive,
+    #[error("local bootstrap is not complete")]
+    BootstrapIncomplete,
     #[error("persistence operation failed")]
     Persistence(#[source] PersistenceError),
     #[error("ticket capacity is unavailable")]
@@ -31,6 +33,11 @@ pub async fn issue_local_ticket(
     state: &AppState,
     requested_room_id: &str,
 ) -> Result<TicketResponse, TicketIssueError> {
+    state
+        .store
+        .require_local_bootstrap_complete()
+        .await
+        .map_err(map_bootstrap_error)?;
     let room_id = validate_room_id(requested_room_id)
         .map_err(|error| TicketIssueError::InvalidRoom(error.message))?;
     let participant = state
@@ -77,6 +84,11 @@ pub async fn issue_local_ticket(
 pub async fn issue_local_operator_http_ticket(
     state: &AppState,
 ) -> Result<OperatorHttpTicketResponse, TicketIssueError> {
+    state
+        .store
+        .require_local_bootstrap_complete()
+        .await
+        .map_err(map_bootstrap_error)?;
     let issued = state
         .tickets
         .issue_server_operator(LOCAL_OPERATOR_USER_ID.to_owned())
@@ -86,4 +98,14 @@ pub async fn issue_local_operator_http_ticket(
         ticket: issued.ticket,
         ttl_seconds: state.tickets.ttl_seconds(),
     })
+}
+
+fn map_bootstrap_error(error: PersistenceError) -> TicketIssueError {
+    match error {
+        PersistenceError::CommandRejected {
+            code: "bootstrap_required" | "bootstrap_repair_required",
+            ..
+        } => TicketIssueError::BootstrapIncomplete,
+        error => TicketIssueError::Persistence(error),
+    }
 }

@@ -237,10 +237,8 @@ fn invalid_room_state() -> PersistenceError {
 mod tests {
     use agentsassemble_domain::{
         AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope,
-        LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, Participant, ParticipantStatus,
-        Room, RoomSettings, UserProfilePatch,
+        LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, UserProfilePatch,
     };
-    use chrono::Utc;
 
     use crate::SqliteStore;
 
@@ -363,25 +361,14 @@ mod tests {
     }
 
     async fn bootstrap(store: &SqliteStore) {
-        let now = Utc::now();
-        let room = Room::new("general".to_owned(), "General".to_owned(), now);
-        let participant = Participant {
-            room_id: "general".to_owned(),
-            participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
-            display_name: "SeiNel".to_owned(),
-            avatar_image_url: String::new(),
-            participant_type: "human".to_owned(),
-            status: ParticipantStatus::Joined,
-            role: "host".to_owned(),
-            owner_id: String::new(),
-            muted: false,
-            created_at: now,
-            updated_at: now,
-        };
         store
-            .initialize_room(&room, &RoomSettings::defaults("General"), &participant)
+            .bootstrap_local_authority("c58407c8-bf45-4916-a84e-579e9331c512", "SeiNel")
             .await
-            .unwrap_or_else(|error| panic!("bootstrap room directory fixture: {error}"));
+            .unwrap_or_else(|error| panic!("bootstrap room directory identity: {error}"));
+        store
+            .create_room_for_local_operator("general", "General")
+            .await
+            .unwrap_or_else(|error| panic!("create room directory fixture: {error}"));
     }
 
     fn local_principal(room_id: &str) -> AuthenticatedPrincipal {

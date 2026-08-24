@@ -4,6 +4,7 @@ mod private_fs;
 mod room_directory_cache;
 mod runtime_supervisor;
 
+use agentsassemble_protocol::LocalBootstrapGrant;
 use local_runtime::{LocalRuntime, OperatorHttpTicketGrant, TicketGrant};
 use serde::Serialize;
 use tauri::{Manager, RunEvent, WebviewWindow};
@@ -25,6 +26,42 @@ fn caller_is_bundled_ui(window: &WebviewWindow) -> Result<(), String> {
     } else {
         Err("runtime tickets are available only to the bundled desktop UI".to_owned())
     }
+}
+
+#[tauri::command]
+async fn runtime_bootstrap_status(
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+) -> Result<LocalBootstrapGrant, String> {
+    caller_is_bundled_ui(&window)?;
+    let runtime_app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        runtime_app
+            .state::<LocalRuntime>()
+            .bootstrap_status(&runtime_app)
+    })
+    .await
+    .map_err(|error| format!("runtime bootstrap status worker failed: {error}"))?
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn runtime_bootstrap_initialize(
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+    request_id: String,
+    display_name: String,
+) -> Result<LocalBootstrapGrant, String> {
+    caller_is_bundled_ui(&window)?;
+    let runtime_app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        runtime_app.state::<LocalRuntime>().initialize_bootstrap(
+            &runtime_app,
+            &request_id,
+            &display_name,
+        )
+    })
+    .await
+    .map_err(|error| format!("runtime bootstrap initialize worker failed: {error}"))?
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -115,6 +152,8 @@ pub fn run() {
     let app = tauri::Builder::default()
         .manage(LocalRuntime::default())
         .invoke_handler(tauri::generate_handler![
+            runtime_bootstrap_status,
+            runtime_bootstrap_initialize,
             runtime_ticket,
             runtime_operator_ticket,
             cache_selected_room_directory,

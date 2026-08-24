@@ -1,4 +1,4 @@
-use agentsassemble_domain::{AuthenticatedPrincipal, UserProfilePatch};
+use agentsassemble_domain::{AuthenticatedPrincipal, LOCAL_OPERATOR_USER_ID, UserProfilePatch};
 use agentsassemble_persistence::{PersistenceError, ProfileAttachment};
 use axum::{
     Json, Router, body,
@@ -13,7 +13,7 @@ use serde_json::json;
 use tower_http::cors::CorsLayer;
 
 use crate::{
-    AppState,
+    AppState, ConsumedProfileTicket,
     http_api::{
         BodyDecodeError, bearer_ticket, decode_json_body, ensure_empty_body, exact_tauri_cors,
     },
@@ -47,11 +47,14 @@ async fn read_profile(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<serde_json::Value>, ProfileHttpError> {
-    let principal = consume_principal(&state, request.headers()).await?;
+    let authority = consume_profile_authority(&state, request.headers()).await?;
     ensure_empty_body(request, MAX_PROFILE_BODY_BYTES)
         .await
         .map_err(ProfileHttpError::from_body)?;
-    let profile = state.store.user_profile(&principal).await?;
+    let profile = match authority {
+        ProfileAuthority::Room(principal) => state.store.user_profile(&principal).await?,
+        ProfileAuthority::LocalOperator => state.store.local_operator_profile().await?,
+    };
     Ok(Json(json!({"profile": profile})))
 }
 
@@ -59,11 +62,16 @@ async fn update_profile(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<serde_json::Value>, ProfileHttpError> {
-    let principal = consume_principal(&state, request.headers()).await?;
+    let authority = consume_profile_authority(&state, request.headers()).await?;
     let patch: UserProfilePatch = decode_json_body(request, MAX_PROFILE_BODY_BYTES)
         .await
         .map_err(ProfileHttpError::from_body)?;
-    let outcome = state.store.update_user_profile(&principal, patch).await?;
+    let outcome = match authority {
+        ProfileAuthority::Room(principal) => {
+            state.store.update_user_profile(&principal, patch).await?
+        }
+        ProfileAuthority::LocalOperator => state.store.update_local_operator_profile(patch).await?,
+    };
     state.rooms.notify_committed_events(&outcome.events).await;
     Ok(Json(json!({"profile": outcome.profile})))
 }
@@ -72,7 +80,7 @@ async fn upload_attachment(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<serde_json::Value>, ProfileHttpError> {
-    let principal = consume_principal(&state, request.headers()).await?;
+    let authority = consume_profile_authority(&state, request.headers()).await?;
     let payload: AttachmentUpload = decode_json_body(request, MAX_ATTACHMENT_BODY_BYTES)
         .await
         .map_err(ProfileHttpError::from_body)?;
@@ -88,15 +96,29 @@ async fn upload_attachment(
     let content = STANDARD
         .decode(encoded)
         .map_err(|_| ProfileHttpError::bad_request("data_base64 is invalid."))?;
-    let attachment = state
-        .store
-        .store_profile_attachment(
-            &principal,
-            &payload.filename,
-            &payload.content_type,
-            content,
-        )
-        .await?;
+    let attachment = match authority {
+        ProfileAuthority::Room(principal) => {
+            state
+                .store
+                .store_profile_attachment(
+                    &principal,
+                    &payload.filename,
+                    &payload.content_type,
+                    content,
+                )
+                .await?
+        }
+        ProfileAuthority::LocalOperator => {
+            state
+                .store
+                .store_local_operator_profile_attachment(
+                    &payload.filename,
+                    &payload.content_type,
+                    content,
+                )
+                .await?
+        }
+    };
     Ok(Json(json!({"attachment": attachment})))
 }
 
@@ -153,17 +175,30 @@ fn attachment_response(
     Ok(response)
 }
 
-async fn consume_principal(
+enum ProfileAuthority {
+    Room(AuthenticatedPrincipal),
+    LocalOperator,
+}
+
+async fn consume_profile_authority(
     state: &AppState,
     headers: &axum::http::HeaderMap,
-) -> Result<AuthenticatedPrincipal, ProfileHttpError> {
+) -> Result<ProfileAuthority, ProfileHttpError> {
     let ticket = bearer_ticket(headers).ok_or_else(ProfileHttpError::unauthorized)?;
-    state
+    match state
         .tickets
-        .consume(ticket)
+        .consume_profile(ticket)
         .await
-        .map(|grant| grant.principal)
-        .map_err(|_| ProfileHttpError::unauthorized())
+        .map_err(|_| ProfileHttpError::unauthorized())?
+    {
+        ConsumedProfileTicket::Room(principal) => Ok(ProfileAuthority::Room(principal)),
+        ConsumedProfileTicket::ServerOperator { principal_id }
+            if principal_id == LOCAL_OPERATOR_USER_ID =>
+        {
+            Ok(ProfileAuthority::LocalOperator)
+        }
+        ConsumedProfileTicket::ServerOperator { .. } => Err(ProfileHttpError::unauthorized()),
+    }
 }
 
 #[derive(Debug)]

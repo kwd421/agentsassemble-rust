@@ -92,11 +92,6 @@ fn budget_exceeded() -> PersistenceError {
 
 #[cfg(test)]
 mod tests {
-    use agentsassemble_domain::{
-        LOCAL_OPERATOR_PARTICIPANT_ID, Participant, ParticipantStatus, Room, RoomSettings,
-    };
-    use chrono::Utc;
-
     use super::reserve_room_write_budget_with_limits;
     use crate::SqliteStore;
 
@@ -104,25 +99,17 @@ mod tests {
     async fn durable_room_budget_cannot_be_sharded_by_principal_or_store_reopen() {
         let directory = tempfile::tempdir().unwrap_or_else(|error| panic!("tempdir: {error}"));
         let path = directory.path().join("runtime.sqlite3");
-        let now = Utc::now();
-        let room = Room::new("general".to_owned(), "General".to_owned(), now);
-        let settings = RoomSettings::defaults("General");
-        let participant = Participant {
-            room_id: "general".to_owned(),
-            participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
-            display_name: "Operator".to_owned(),
-            avatar_image_url: String::new(),
-            participant_type: "human".to_owned(),
-            status: ParticipantStatus::Joined,
-            role: "host".to_owned(),
-            owner_id: String::new(),
-            muted: false,
-            created_at: now,
-            updated_at: now,
-        };
-        let store = SqliteStore::open_path_with_initial_room(&path, &room, &settings, &participant)
+        let store = SqliteStore::open_path(&path)
             .await
             .unwrap_or_else(|error| panic!("store: {error}"));
+        store
+            .bootstrap_local_authority("d00e3420-cf87-4182-a93c-51a5a20eb3aa", "Operator")
+            .await
+            .unwrap_or_else(|error| panic!("bootstrap identity: {error}"));
+        store
+            .create_room_for_local_operator("general", "General")
+            .await
+            .unwrap_or_else(|error| panic!("create room: {error}"));
         let mut transaction = store
             .pool
             .begin()

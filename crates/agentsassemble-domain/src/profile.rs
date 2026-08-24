@@ -60,6 +60,45 @@ impl UserProfile {
         }
     }
 
+    #[must_use]
+    pub fn for_local_identity(display_name: &str, now: DateTime<Utc>) -> Option<Self> {
+        let display_name = clean_text(display_name, 120);
+        if display_name.is_empty() {
+            return None;
+        }
+        let avatar_label = display_name
+            .chars()
+            .take(2)
+            .collect::<String>()
+            .to_uppercase();
+        let handle = display_name
+            .chars()
+            .filter(|character| character.is_alphanumeric() || *character == '_')
+            .flat_map(char::to_lowercase)
+            .take(119)
+            .collect::<String>();
+        let handle = if handle.is_empty() {
+            "local".to_owned()
+        } else {
+            format!("{handle}.")
+        };
+        Some(Self {
+            revision: 1,
+            display_name,
+            handle,
+            status: "online".to_owned(),
+            custom_status: DEFAULT_CUSTOM_STATUS.to_owned(),
+            avatar_label,
+            avatar_image_url: String::new(),
+            banner_preset: "default".to_owned(),
+            accent_color: DEFAULT_ACCENT_COLOR.to_owned(),
+            mic_muted: true,
+            deafened: false,
+            created_at: now,
+            updated_at: now,
+        })
+    }
+
     pub fn apply_patch(&mut self, patch: UserProfilePatch, now: DateTime<Utc>) -> bool {
         let previous = self.clone();
         if let Some(value) = patch.display_name {
@@ -189,6 +228,17 @@ mod tests {
     use chrono::Utc;
 
     use super::{UserProfile, UserProfilePatch};
+
+    #[test]
+    fn local_identity_profile_is_derived_from_canonical_display_name() {
+        let profile = UserProfile::for_local_identity("  Local\n사용자  ", Utc::now())
+            .unwrap_or_else(|| panic!("nonempty local identity must create a profile"));
+
+        assert_eq!(profile.display_name, "Local 사용자");
+        assert_eq!(profile.handle, "local사용자.");
+        assert_eq!(profile.avatar_label, "LO");
+        assert!(UserProfile::for_local_identity(" \n\t ", Utc::now()).is_none());
+    }
 
     #[test]
     fn patch_normalizes_original_profile_shapes_without_crossing_authority() {

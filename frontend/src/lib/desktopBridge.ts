@@ -21,6 +21,17 @@ export interface DesktopRuntimeTicket {
   server_proof_key: string;
 }
 
+export interface DesktopBootstrapGrant {
+  phase: "empty" | "initializing" | "complete" | "repair_required";
+  authority_lineage_id: string;
+  server_id: string;
+  profile?: {
+    display_name: string;
+    avatar_image_url: string;
+  } | null;
+  deduplicated: boolean;
+}
+
 export interface DesktopOperatorHttpTicket {
   ticket: string;
   ttl_seconds: number;
@@ -77,6 +88,28 @@ export async function requestDesktopRuntimeTicket(
   return tauri
     .invoke<DesktopRuntimeTicket>("runtime_ticket", { roomId })
     .then(rememberDesktopRuntime);
+}
+
+export async function requestDesktopBootstrapStatus(): Promise<DesktopBootstrapGrant> {
+  const tauri = tauriInternals();
+  if (!tauri) {
+    throw new Error("데스크톱 Rust 런타임을 사용할 수 없습니다.");
+  }
+  return tauri.invoke<DesktopBootstrapGrant>("runtime_bootstrap_status");
+}
+
+export async function initializeDesktopBootstrap(
+  requestId: string,
+  displayName: string
+): Promise<DesktopBootstrapGrant> {
+  const tauri = tauriInternals();
+  if (!tauri) {
+    throw new Error("데스크톱 Rust 런타임을 사용할 수 없습니다.");
+  }
+  return tauri.invoke<DesktopBootstrapGrant>("runtime_bootstrap_initialize", {
+    requestId,
+    displayName,
+  });
 }
 
 export async function requestDesktopOperatorTicket(): Promise<DesktopOperatorHttpTicket> {

@@ -2,10 +2,8 @@ use std::{fs::File, path::Path};
 
 use agentsassemble_domain::{
     AgentSessionDraft, AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope,
-    LOCAL_OPERATOR_PARTICIPANT_ID, Participant, ParticipantStatus, Room, RoomSettings,
-    stable_content_identity, stable_identity_hash,
+    LOCAL_OPERATOR_PARTICIPANT_ID, stable_content_identity, stable_identity_hash,
 };
-use chrono::Utc;
 use same_file::Handle;
 use serde_json::json;
 
@@ -17,27 +15,14 @@ async fn fixture() -> (SqliteStore, AuthenticatedPrincipal, tempfile::TempDir) {
     let store = SqliteStore::open_path(&directory.path().join("runtime.sqlite3"))
         .await
         .unwrap_or_else(|error| panic!("open store: {error}"));
-    let now = Utc::now();
     store
-        .initialize_room(
-            &Room::new("general".to_owned(), "General".to_owned(), now),
-            &RoomSettings::defaults("General"),
-            &Participant {
-                room_id: "general".to_owned(),
-                participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
-                display_name: "Host".to_owned(),
-                avatar_image_url: String::new(),
-                participant_type: "human".to_owned(),
-                status: ParticipantStatus::Joined,
-                role: "host".to_owned(),
-                owner_id: String::new(),
-                muted: false,
-                created_at: now,
-                updated_at: now,
-            },
-        )
+        .bootstrap_local_authority("90b4b9d3-c12e-4495-9955-f0f70d44e55c", "Host")
         .await
-        .unwrap_or_else(|error| panic!("initialize room: {error}"));
+        .unwrap_or_else(|error| panic!("bootstrap identity: {error}"));
+    store
+        .create_room_for_local_operator("general", "General")
+        .await
+        .unwrap_or_else(|error| panic!("create room: {error}"));
     let principal = AuthenticatedPrincipal {
         principal_id: "operator-local-user".to_owned(),
         participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),

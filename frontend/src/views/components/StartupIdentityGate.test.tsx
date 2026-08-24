@@ -15,9 +15,21 @@ const centralMocks = vi.hoisted(() => ({
   configured: false,
   login: vi.fn(),
 }));
+const desktopMocks = vi.hoisted(() => ({
+  desktop: false,
+  fetchOperatorRuntime: vi.fn(),
+  initializeBootstrap: vi.fn(),
+  requestBootstrapStatus: vi.fn(),
+}));
 
 vi.mock("../../api/identity", () => ({ fetchAccountStatus: vi.fn() }));
 vi.mock("../../api/room", () => ({ saveUserProfile: vi.fn() }));
+vi.mock("../../lib/desktopBridge", () => ({
+  fetchDesktopOperatorRuntime: desktopMocks.fetchOperatorRuntime,
+  initializeDesktopBootstrap: desktopMocks.initializeBootstrap,
+  isDesktopWebview: () => desktopMocks.desktop,
+  requestDesktopBootstrapStatus: desktopMocks.requestBootstrapStatus,
+}));
 vi.mock("../../lib/deviceIdentity", () => ({
   rememberGuestProfile: vi.fn(),
   rememberStartupIdentitySelection: vi.fn(),
@@ -40,7 +52,9 @@ vi.mock("./GoogleAccountSettings", () => ({
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
   centralMocks.configured = false;
+  desktopMocks.desktop = false;
   vi.clearAllMocks();
 });
 
@@ -55,6 +69,15 @@ describe("StartupIdentityGate", () => {
   });
 
   it("keeps the product gated until a local guest identity is persisted", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ server_id: "server-1", rooms: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      )
+    );
     vi.mocked(fetchAccountStatus).mockResolvedValue({
       account: null,
       google: { enabled: false, client_id: "", unavailable_reason: "" },
@@ -80,7 +103,39 @@ describe("StartupIdentityGate", () => {
     expect(onComplete).toHaveBeenCalledOnce();
   });
 
+  it("does not bypass a failed authoritative room-directory synchronization", async () => {
+    vi.mocked(fetchAccountStatus).mockResolvedValue({
+      account: null,
+      google: { enabled: false, client_id: "", unavailable_reason: "" },
+    });
+    vi.mocked(saveUserProfile).mockResolvedValue({
+      ...DEFAULT_USER_PROFILE,
+      displayName: "Local Guest",
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 503 })));
+    const onComplete = vi.fn();
+
+    render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
+    await userEvent.type(
+      await screen.findByRole("textbox", { name: "게스트 표시 이름" }),
+      "Local Guest"
+    );
+    await userEvent.click(screen.getByRole("button", { name: "게스트로 계속" }));
+
+    await vi.waitFor(() => expect(saveUserProfile).toHaveBeenCalledOnce());
+    expect(onComplete).not.toHaveBeenCalled();
+  });
+
   it("resumes an already linked account without asking for a guest name", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ server_id: "server-1", rooms: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      )
+    );
     vi.mocked(fetchAccountStatus).mockResolvedValue({
       account: {
         account_id: "acct-1",
@@ -98,6 +153,48 @@ describe("StartupIdentityGate", () => {
     await vi.waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
     expect(rememberStartupIdentitySelection).toHaveBeenCalledOnce();
     expect(screen.queryByRole("textbox", { name: "표시 이름" })).toBeNull();
+  });
+
+  it("initializes desktop authority before fetching the real empty room directory", async () => {
+    desktopMocks.desktop = true;
+    desktopMocks.requestBootstrapStatus.mockResolvedValue({
+      phase: "empty",
+      authority_lineage_id: "lineage-1",
+      server_id: "server-1",
+      profile: null,
+      deduplicated: false,
+    });
+    desktopMocks.initializeBootstrap.mockResolvedValue({
+      phase: "complete",
+      authority_lineage_id: "lineage-1",
+      server_id: "server-1",
+      profile: { display_name: "Desktop User", avatar_image_url: "" },
+      deduplicated: false,
+    });
+    desktopMocks.fetchOperatorRuntime.mockResolvedValue(
+      new Response(JSON.stringify({ server_id: "server-1", rooms: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    const onComplete = vi.fn();
+
+    render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
+    await userEvent.type(
+      await screen.findByRole("textbox", { name: "게스트 표시 이름" }),
+      "Desktop User"
+    );
+    await userEvent.click(screen.getByRole("button", { name: "게스트로 계속" }));
+
+    await vi.waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
+    expect(desktopMocks.initializeBootstrap).toHaveBeenCalledWith(
+      expect.any(String),
+      "Desktop User"
+    );
+    expect(desktopMocks.fetchOperatorRuntime).toHaveBeenCalledWith("/api/rooms", {
+      cache: "no-store",
+    });
+    expect(saveUserProfile).not.toHaveBeenCalled();
   });
 
   it("lets the user cancel a central Google handoff that is still pending", async () => {

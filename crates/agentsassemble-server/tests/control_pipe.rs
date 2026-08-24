@@ -27,9 +27,18 @@ struct ControlledServer {
     child: Child,
     control: ChildStdin,
     output: BufReader<ChildStdout>,
+    address: String,
 }
 
 impl ControlledServer {
+    async fn initialize_bootstrap(&mut self) -> LocalControlResponse {
+        let request = LocalControlRequest::InitializeBootstrap {
+            request_id: "572341d5-a6a7-47cc-8a74-a5b328645f05".to_owned(),
+            display_name: "Control Operator".to_owned(),
+        };
+        self.send_control(&request).await
+    }
+
     async fn close_parent_pipe(mut self) {
         drop(self.control);
         let status = tokio::time::timeout(Duration::from_secs(3), self.child.wait())
@@ -44,7 +53,18 @@ impl ControlledServer {
             request_id: "control-ticket-1".to_owned(),
             meeting_id: "general".to_owned(),
         };
-        let mut encoded = serde_json::to_vec(&request)
+        self.send_control(&request).await
+    }
+
+    async fn issue_operator_ticket(&mut self) -> LocalControlResponse {
+        let request = LocalControlRequest::IssueOperatorHttpTicket {
+            request_id: "control-operator-ticket-1".to_owned(),
+        };
+        self.send_control(&request).await
+    }
+
+    async fn send_control(&mut self, request: &LocalControlRequest) -> LocalControlResponse {
+        let mut encoded = serde_json::to_vec(request)
             .unwrap_or_else(|error| panic!("encode control request: {error}"));
         encoded.push(b'\n');
         self.control
@@ -63,30 +83,6 @@ impl ControlledServer {
         serde_json::from_str(line.trim())
             .unwrap_or_else(|error| panic!("decode control response: {error}"))
     }
-
-    async fn issue_operator_ticket(&mut self) -> LocalControlResponse {
-        let request = LocalControlRequest::IssueOperatorHttpTicket {
-            request_id: "control-operator-ticket-1".to_owned(),
-        };
-        let mut encoded = serde_json::to_vec(&request)
-            .unwrap_or_else(|error| panic!("encode operator control request: {error}"));
-        encoded.push(b'\n');
-        self.control
-            .write_all(&encoded)
-            .await
-            .unwrap_or_else(|error| panic!("write operator control request: {error}"));
-        self.control
-            .flush()
-            .await
-            .unwrap_or_else(|error| panic!("flush operator control request: {error}"));
-        let mut line = String::new();
-        tokio::time::timeout(Duration::from_secs(2), self.output.read_line(&mut line))
-            .await
-            .unwrap_or_else(|_| panic!("operator control response timed out"))
-            .unwrap_or_else(|error| panic!("read operator control response: {error}"));
-        serde_json::from_str(line.trim())
-            .unwrap_or_else(|error| panic!("decode operator control response: {error}"))
-    }
 }
 
 #[tokio::test]
@@ -95,7 +91,12 @@ async fn control_pipe_eof_releases_database_for_restart() {
         tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
     let database = directory.path().join("runtime.sqlite3");
 
-    start_controlled(&database).await.close_parent_pipe().await;
+    let mut first_server = start_controlled(&database).await;
+    assert!(matches!(
+        first_server.initialize_bootstrap().await,
+        LocalControlResponse::BootstrapOk { .. }
+    ));
+    first_server.close_parent_pipe().await;
     let first = SqliteStore::open_path(&database)
         .await
         .unwrap_or_else(|error| panic!("open first initialized authority: {error}"));
@@ -107,8 +108,7 @@ async fn control_pipe_eof_releases_database_for_restart() {
         .list_room_directory(true)
         .await
         .unwrap_or_else(|error| panic!("read first room directory: {error}"));
-    assert_eq!(first_rooms.len(), 1);
-    assert_eq!(first_rooms[0].room.room_id, "general");
+    assert!(first_rooms.is_empty());
     drop(first);
 
     start_controlled(&database).await.close_parent_pipe().await;
@@ -126,8 +126,7 @@ async fn control_pipe_eof_releases_database_for_restart() {
         .list_room_directory(true)
         .await
         .unwrap_or_else(|error| panic!("read reopened room directory: {error}"));
-    assert_eq!(reopened_rooms.len(), 1);
-    assert_eq!(reopened_rooms[0].room.room_id, "general");
+    assert!(reopened_rooms.is_empty());
 }
 
 #[tokio::test]
@@ -136,6 +135,26 @@ async fn owned_control_pipe_issues_proof_bound_ticket_without_http_secret() {
         tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
     let database = directory.path().join("runtime.sqlite3");
     let mut server = start_controlled(&database).await;
+    assert!(matches!(
+        server.issue_ticket().await,
+        LocalControlResponse::Error { code, .. } if code == "bootstrap_required"
+    ));
+    assert!(matches!(
+        server.initialize_bootstrap().await,
+        LocalControlResponse::BootstrapOk { .. }
+    ));
+    let operator = server.issue_operator_ticket().await;
+    let LocalControlResponse::OperatorHttpOk { ticket, .. } = operator else {
+        panic!("operator ticket request was rejected");
+    };
+    let created = reqwest::Client::new()
+        .post(format!("{}/api/rooms", server.address))
+        .bearer_auth(ticket)
+        .json(&serde_json::json!({"room_id": "general", "label": "General"}))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("create first room: {error}"));
+    assert!(created.status().is_success());
     let response = server.issue_ticket().await;
     let LocalControlResponse::Ok {
         request_id,
@@ -159,6 +178,10 @@ async fn owned_control_pipe_issues_a_distinct_operator_http_ticket() {
         tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
     let database = directory.path().join("runtime.sqlite3");
     let mut server = start_controlled(&database).await;
+    assert!(matches!(
+        server.initialize_bootstrap().await,
+        LocalControlResponse::BootstrapOk { .. }
+    ));
     let response = server.issue_operator_ticket().await;
     let LocalControlResponse::OperatorHttpOk {
         request_id,
@@ -183,8 +206,6 @@ async fn start_controlled(database: &Path) -> ControlledServer {
             database
                 .to_str()
                 .unwrap_or_else(|| panic!("database path is not UTF-8")),
-            "--initialize-room",
-            "general",
         ])
         .env_remove("AGENTSASSEMBLE_HOST_TOKEN")
         .stdin(Stdio::piped())
@@ -220,10 +241,16 @@ async fn start_controlled(database: &Path) -> ControlledServer {
     assert_eq!(record["status"], "ready");
     assert_eq!(record["runtime"], "rust");
     assert_eq!(record["pid"].as_u64(), child.id().map(u64::from));
+    let address = record["address"]
+        .as_str()
+        .unwrap_or_else(|| panic!("controlled server has no address"))
+        .trim_end_matches('/')
+        .to_owned();
 
     ControlledServer {
         child,
         control,
         output,
+        address,
     }
 }

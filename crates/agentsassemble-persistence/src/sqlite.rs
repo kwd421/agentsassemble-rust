@@ -361,10 +361,8 @@ mod tests {
     use std::str::FromStr;
 
     use agentsassemble_domain::{
-        AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, Participant,
-        ParticipantStatus, Room, RoomSettings, SnapshotMode,
+        AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, SnapshotMode,
     };
-    use chrono::Utc;
     use serde_json::json;
     use sqlx::{SqlitePool, sqlite::SqliteConnectOptions};
 
@@ -378,25 +376,14 @@ mod tests {
         let store = SqliteStore::open(&url)
             .await
             .unwrap_or_else(|error| panic!("open fixture: {error}"));
-        let now = Utc::now();
-        let room = Room::new("general".to_owned(), "General".to_owned(), now);
-        let participant = Participant {
-            room_id: "general".to_owned(),
-            participant_id: "operator-local".to_owned(),
-            display_name: "Host".to_owned(),
-            avatar_image_url: String::new(),
-            participant_type: "human".to_owned(),
-            status: ParticipantStatus::Joined,
-            role: "host".to_owned(),
-            owner_id: String::new(),
-            muted: false,
-            created_at: now,
-            updated_at: now,
-        };
         store
-            .initialize_room(&room, &RoomSettings::defaults("General"), &participant)
+            .bootstrap_local_authority("203052bb-19cb-44fc-8f35-f6be4ef36b71", "Host")
             .await
-            .unwrap_or_else(|error| panic!("bootstrap fixture: {error}"));
+            .unwrap_or_else(|error| panic!("bootstrap fixture identity: {error}"));
+        store
+            .create_room_for_local_operator("general", "General")
+            .await
+            .unwrap_or_else(|error| panic!("create fixture room: {error}"));
         let principal = AuthenticatedPrincipal {
             principal_id: "operator-local-user".to_owned(),
             participant_id: "operator-local".to_owned(),
@@ -459,6 +446,10 @@ mod tests {
     #[tokio::test]
     async fn publication_cursor_advances_only_through_exact_contiguous_events() {
         let (store, principal) = fixture().await;
+        store
+            .acknowledge_room_publication("general", 1)
+            .await
+            .unwrap_or_else(|error| panic!("ack room creation publication: {error}"));
         for (request_id, content) in [("publication-1", "one"), ("publication-2", "two")] {
             store
                 .execute_message(
@@ -476,10 +467,10 @@ mod tests {
             .unwrap_or_else(|error| panic!("load pending publications: {error}"));
         assert_eq!(
             pending.iter().map(|event| event.seq).collect::<Vec<_>>(),
-            vec![1, 2]
+            vec![2, 3]
         );
         store
-            .acknowledge_room_publication("general", 1)
+            .acknowledge_room_publication("general", 2)
             .await
             .unwrap_or_else(|error| panic!("ack first publication: {error}"));
         let pending = store
@@ -488,17 +479,17 @@ mod tests {
             .unwrap_or_else(|error| panic!("reload pending publications: {error}"));
         assert_eq!(
             pending.iter().map(|event| event.seq).collect::<Vec<_>>(),
-            vec![2]
+            vec![3]
         );
         assert!(matches!(
-            store.acknowledge_room_publication("general", 1).await,
+            store.acknowledge_room_publication("general", 2).await,
             Err(PersistenceError::CommandRejected {
                 code: "event_publication_state_invalid",
                 ..
             })
         ));
         store
-            .acknowledge_room_publication("general", 2)
+            .acknowledge_room_publication("general", 3)
             .await
             .unwrap_or_else(|error| panic!("ack second publication: {error}"));
         assert!(
@@ -534,8 +525,9 @@ mod tests {
             .snapshot("general", 0, 200)
             .await
             .unwrap_or_else(|error| panic!("read snapshot: {error}"));
-        assert!(snapshot.events.is_empty());
-        assert_eq!(snapshot.last_seq, 0);
+        assert_eq!(snapshot.events.len(), 1);
+        assert_eq!(snapshot.events[0].event_type, "room_created");
+        assert_eq!(snapshot.last_seq, 1);
         let write_budget_rows =
             sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM room_write_budgets")
                 .fetch_one(&store.pool)
@@ -627,31 +619,31 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("initial snapshot: {error}"));
         assert_eq!(initial.snapshot_mode, SnapshotMode::Initial);
-        assert_eq!((initial.oldest_seq, initial.last_seq), (6, 205));
+        assert_eq!((initial.oldest_seq, initial.last_seq), (7, 206));
         assert!(initial.has_more_before);
 
         let resume = store
-            .snapshot("general", 5, 200)
+            .snapshot("general", 6, 200)
             .await
             .unwrap_or_else(|error| panic!("resume snapshot: {error}"));
         assert_eq!(resume.snapshot_mode, SnapshotMode::Resume);
-        assert_eq!((resume.oldest_seq, resume.last_seq), (6, 205));
+        assert_eq!((resume.oldest_seq, resume.last_seq), (7, 206));
         assert!(!resume.resume_gap);
 
         let gap = store
-            .snapshot("general", 4, 200)
+            .snapshot("general", 5, 200)
             .await
             .unwrap_or_else(|error| panic!("gap snapshot: {error}"));
         assert_eq!(gap.snapshot_mode, SnapshotMode::Gap);
-        assert_eq!((gap.oldest_seq, gap.last_seq), (6, 205));
+        assert_eq!((gap.oldest_seq, gap.last_seq), (7, 206));
         assert!(gap.resume_gap);
 
         let current = store
-            .snapshot("general", 205, 200)
+            .snapshot("general", 206, 200)
             .await
             .unwrap_or_else(|error| panic!("current snapshot: {error}"));
         assert_eq!(current.snapshot_mode, SnapshotMode::Resume);
         assert!(current.events.is_empty());
-        assert_eq!((current.oldest_seq, current.last_seq), (0, 205));
+        assert_eq!((current.oldest_seq, current.last_seq), (0, 206));
     }
 }

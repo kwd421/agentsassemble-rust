@@ -8,6 +8,7 @@ use sqlx::{Row, Sqlite, Transaction};
 use tokio::sync::Semaphore;
 use uuid::Uuid;
 
+use crate::profile_store::ProfileIdentity;
 use crate::{PersistenceError, SqliteStore, authority::authorize_session};
 
 const MAX_ATTACHMENT_BYTES: usize = 10 * 1024 * 1024;
@@ -56,53 +57,47 @@ impl SqliteStore {
         content_type: &str,
         content: Vec<u8>,
     ) -> Result<ProfileAttachmentMetadata, PersistenceError> {
-        if content.is_empty() || content.len() > MAX_ATTACHMENT_BYTES {
-            return Err(rejected(
-                "attachment_too_large",
-                "Profile avatar must be between 1 byte and 10 MiB.",
-            ));
-        }
-        let declared_format = declared_image_format(content_type)?;
-        let filename = sanitize_filename(filename);
-        let canonical = canonicalize_avatar(filename, declared_format, content).await?;
-        let size = i64::try_from(canonical.content.len()).map_err(|_| {
-            rejected(
-                "attachment_too_large",
-                "Canonical profile avatar exceeds the supported size.",
-            )
-        })?;
-        let now = Utc::now();
-        let expires_at = (now + PENDING_ATTACHMENT_TTL).timestamp();
+        let (canonical, size) = prepare_profile_attachment(filename, content_type, content).await?;
         let mut transaction = self.pool.begin().await?;
         authorize_session(&mut transaction, principal).await?;
-        ensure_profile_exists(&mut transaction, principal).await?;
-        delete_expired_pending(&mut transaction, now.timestamp()).await?;
-        enforce_attachment_quota(
+        let metadata = store_profile_attachment_in_transaction(
             &mut transaction,
-            &principal.principal_id,
+            ProfileIdentity {
+                user_id: &principal.principal_id,
+                participant_id: &principal.participant_id,
+            },
+            canonical,
             size,
-            now.timestamp(),
         )
-        .await?;
-        let attachment_id = Uuid::new_v4().simple().to_string();
-        sqlx::query(
-            "INSERT INTO profile_attachments(attachment_id, owner_user_id, filename, content_type, content, size, created_at, state, expires_at) VALUES (?, ?, ?, 'image/png', ?, ?, ?, 'pending', ?)",
-        )
-        .bind(&attachment_id)
-        .bind(&principal.principal_id)
-        .bind(&canonical.filename)
-        .bind(canonical.content)
-        .bind(size)
-        .bind(now.to_rfc3339())
-        .bind(expires_at)
-        .execute(&mut *transaction)
         .await?;
         transaction.commit().await?;
-        Ok(attachment_metadata(
-            attachment_id,
-            canonical.filename,
-            usize::try_from(size).unwrap_or(MAX_ATTACHMENT_BYTES),
-        ))
+        Ok(metadata)
+    }
+
+    /// Stores one local-operator avatar before any room exists.
+    ///
+    /// # Errors
+    ///
+    /// Fails closed on incomplete bootstrap, malformed image bytes, quota exhaustion, or storage
+    /// errors.
+    pub async fn store_local_operator_profile_attachment(
+        &self,
+        filename: &str,
+        content_type: &str,
+        content: Vec<u8>,
+    ) -> Result<ProfileAttachmentMetadata, PersistenceError> {
+        self.require_local_bootstrap_complete().await?;
+        let (canonical, size) = prepare_profile_attachment(filename, content_type, content).await?;
+        let mut transaction = self.pool.begin().await?;
+        let metadata = store_profile_attachment_in_transaction(
+            &mut transaction,
+            ProfileIdentity::local_operator(),
+            canonical,
+            size,
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(metadata)
     }
 
     /// Reads one bound public profile-avatar blob by opaque identifier.
@@ -144,6 +139,60 @@ impl SqliteStore {
             content,
         })
     }
+}
+
+async fn prepare_profile_attachment(
+    filename: &str,
+    content_type: &str,
+    content: Vec<u8>,
+) -> Result<(CanonicalAvatar, i64), PersistenceError> {
+    if content.is_empty() || content.len() > MAX_ATTACHMENT_BYTES {
+        return Err(rejected(
+            "attachment_too_large",
+            "Profile avatar must be between 1 byte and 10 MiB.",
+        ));
+    }
+    let declared_format = declared_image_format(content_type)?;
+    let filename = sanitize_filename(filename);
+    let canonical = canonicalize_avatar(filename, declared_format, content).await?;
+    let size = i64::try_from(canonical.content.len()).map_err(|_| {
+        rejected(
+            "attachment_too_large",
+            "Canonical profile avatar exceeds the supported size.",
+        )
+    })?;
+    Ok((canonical, size))
+}
+
+async fn store_profile_attachment_in_transaction(
+    transaction: &mut Transaction<'_, Sqlite>,
+    identity: ProfileIdentity<'_>,
+    canonical: CanonicalAvatar,
+    size: i64,
+) -> Result<ProfileAttachmentMetadata, PersistenceError> {
+    let now = Utc::now();
+    let expires_at = (now + PENDING_ATTACHMENT_TTL).timestamp();
+    ensure_profile_exists(transaction, identity).await?;
+    delete_expired_pending(transaction, now.timestamp()).await?;
+    enforce_attachment_quota(transaction, identity.user_id, size, now.timestamp()).await?;
+    let attachment_id = Uuid::new_v4().simple().to_string();
+    sqlx::query(
+            "INSERT INTO profile_attachments(attachment_id, owner_user_id, filename, content_type, content, size, created_at, state, expires_at) VALUES (?, ?, ?, 'image/png', ?, ?, ?, 'pending', ?)",
+        )
+        .bind(&attachment_id)
+        .bind(identity.user_id)
+        .bind(&canonical.filename)
+        .bind(canonical.content)
+        .bind(size)
+        .bind(now.to_rfc3339())
+        .bind(expires_at)
+        .execute(&mut **transaction)
+        .await?;
+    Ok(attachment_metadata(
+        attachment_id,
+        canonical.filename,
+        usize::try_from(size).unwrap_or(MAX_ATTACHMENT_BYTES),
+    ))
 }
 
 pub(crate) async fn authorize_profile_avatar(
@@ -312,12 +361,12 @@ fn declared_image_format(content_type: &str) -> Result<ImageFormat, PersistenceE
 
 async fn ensure_profile_exists(
     transaction: &mut Transaction<'_, Sqlite>,
-    principal: &AuthenticatedPrincipal,
+    identity: ProfileIdentity<'_>,
 ) -> Result<(), PersistenceError> {
     let participant_id = sqlx::query_scalar::<_, String>(
         "SELECT participant_id FROM user_profiles WHERE user_id = ?",
     )
-    .bind(&principal.principal_id)
+    .bind(identity.user_id)
     .fetch_optional(&mut **transaction)
     .await?
     .ok_or_else(|| {
@@ -326,7 +375,7 @@ async fn ensure_profile_exists(
             "Authenticated user profile was not found.",
         )
     })?;
-    if participant_id != principal.participant_id {
+    if participant_id != identity.participant_id {
         return Err(rejected(
             "profile_authority_mismatch",
             "Authenticated user profile does not own this participant.",
@@ -464,10 +513,8 @@ mod tests {
     use std::io::Cursor;
 
     use agentsassemble_domain::{
-        AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, Participant,
-        ParticipantStatus, Room, RoomSettings, UserProfilePatch,
+        AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, UserProfilePatch,
     };
-    use chrono::Utc;
     use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba};
 
     use crate::{PersistenceError, SqliteStore};
@@ -632,25 +679,14 @@ mod tests {
         let store = SqliteStore::open(&url)
             .await
             .unwrap_or_else(|error| panic!("open attachment fixture: {error}"));
-        let now = Utc::now();
-        let room = Room::new("general".to_owned(), "General".to_owned(), now);
-        let participant = Participant {
-            room_id: "general".to_owned(),
-            participant_id: "operator-local".to_owned(),
-            display_name: "SeiNel".to_owned(),
-            avatar_image_url: String::new(),
-            participant_type: "human".to_owned(),
-            status: ParticipantStatus::Joined,
-            role: "host".to_owned(),
-            owner_id: String::new(),
-            muted: false,
-            created_at: now,
-            updated_at: now,
-        };
         store
-            .initialize_room(&room, &RoomSettings::defaults("General"), &participant)
+            .bootstrap_local_authority("c238aa38-30d3-416a-9778-97e8e2d15a09", "SeiNel")
             .await
-            .unwrap_or_else(|error| panic!("initialize attachment fixture: {error}"));
+            .unwrap_or_else(|error| panic!("bootstrap attachment identity: {error}"));
+        store
+            .create_room_for_local_operator("general", "General")
+            .await
+            .unwrap_or_else(|error| panic!("create attachment room: {error}"));
         let principal = AuthenticatedPrincipal {
             principal_id: "operator-local-user".to_owned(),
             participant_id: "operator-local".to_owned(),

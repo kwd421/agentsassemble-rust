@@ -1,6 +1,6 @@
 use agentsassemble_domain::{
     AgentSession, CapabilitySet, Participant, ProviderAvailability, ProviderCatalog,
-    PublicRoomSettings, Room, RoomEvent, SnapshotMode,
+    PublicRoomSettings, Room, RoomEvent, SnapshotMode, UserProfile,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -115,8 +115,15 @@ pub struct OperatorHttpTicketResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "op", rename_all = "snake_case")]
+#[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum LocalControlRequest {
+    InspectBootstrap {
+        request_id: String,
+    },
+    InitializeBootstrap {
+        request_id: String,
+        display_name: String,
+    },
     IssueTicket {
         request_id: String,
         meeting_id: String,
@@ -126,9 +133,32 @@ pub enum LocalControlRequest {
     },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub enum LocalBootstrapPhase {
+    Empty,
+    Initializing,
+    Complete,
+    RepairRequired,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "status", rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
+pub struct LocalBootstrapGrant {
+    pub phase: LocalBootstrapPhase,
+    pub authority_lineage_id: String,
+    pub server_id: String,
+    pub profile: Option<UserProfile>,
+    pub deduplicated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case", deny_unknown_fields)]
 pub enum LocalControlResponse {
+    BootstrapOk {
+        request_id: String,
+        bootstrap: Box<LocalBootstrapGrant>,
+    },
     Ok {
         request_id: String,
         ticket: String,

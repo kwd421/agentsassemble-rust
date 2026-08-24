@@ -1,13 +1,11 @@
 use std::{collections::BTreeMap, fmt::Write, path::Path, time::Duration};
 
 use agentsassemble_domain::{
-    Participant, ParticipantStatus, ProviderAvailability, ProviderCatalog, ProviderControl,
-    ProviderControlOption, Room, RoomSettings,
+    ProviderAvailability, ProviderCatalog, ProviderControl, ProviderControlOption,
 };
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService};
 use agentsassemble_server::{AppState, HostSecret, TicketStore, serve};
-use chrono::Utc;
 use futures_util::{SinkExt, StreamExt};
 use hmac::{Hmac, Mac};
 use reqwest::Client;
@@ -606,25 +604,14 @@ where
 }
 
 async fn bootstrap(store: &SqliteStore) {
-    let now = Utc::now();
-    let room = Room::new("general".to_owned(), "General".to_owned(), now);
-    let participant = Participant {
-        room_id: "general".to_owned(),
-        participant_id: "operator-local".to_owned(),
-        display_name: "Host".to_owned(),
-        avatar_image_url: String::new(),
-        participant_type: "human".to_owned(),
-        status: ParticipantStatus::Joined,
-        role: "host".to_owned(),
-        owner_id: String::new(),
-        muted: false,
-        created_at: now,
-        updated_at: now,
-    };
     store
-        .initialize_room(&room, &RoomSettings::defaults("General"), &participant)
+        .bootstrap_local_authority("91605e65-f5d7-4b58-be4e-962b3041714a", "Host")
         .await
-        .unwrap_or_else(|error| panic!("bootstrap boundary room: {error}"));
+        .unwrap_or_else(|error| panic!("bootstrap boundary identity: {error}"));
+    store
+        .create_room_for_local_operator("general", "General")
+        .await
+        .unwrap_or_else(|error| panic!("create boundary room: {error}"));
 }
 
 fn agent_catalog(root: &Path) -> ProviderCatalog {

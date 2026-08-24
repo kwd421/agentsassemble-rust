@@ -24,12 +24,11 @@ pub(crate) async fn drain_room_publications(
 #[cfg(test)]
 mod tests {
     use agentsassemble_domain::{
-        AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, Participant,
-        ParticipantStatus, ProviderCatalog, Room, RoomSettings, UserProfilePatch,
+        AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, ProviderCatalog,
+        UserProfilePatch,
     };
     use agentsassemble_persistence::SqliteStore;
     use agentsassemble_provider::ProviderCatalogService;
-    use chrono::Utc;
 
     use crate::RoomRuntime;
 
@@ -56,7 +55,7 @@ mod tests {
             .recv()
             .await
             .unwrap_or_else(|error| panic!("receive durable profile event: {error}"));
-        assert_eq!(event.seq, 1);
+        assert_eq!(event.seq, 2);
         assert_eq!(event.display_name.as_deref(), Some("Publication Owner"));
         assert!(
             store
@@ -84,7 +83,7 @@ mod tests {
             )
             .await
             .unwrap_or_else(|error| panic!("commit blocked profile event: {error}"));
-        assert_eq!(profile.events[0].seq, 1);
+        assert_eq!(profile.events[0].seq, 2);
         let command = store
             .execute_message(
                 &principal,
@@ -94,7 +93,7 @@ mod tests {
             )
             .await
             .unwrap_or_else(|error| panic!("commit later room event: {error}"));
-        assert_eq!(command.event.seq, 2);
+        assert_eq!(command.event.seq, 3);
 
         let (sender, mut receiver) = tokio::sync::broadcast::channel(4);
         super::drain_room_publications(&store, &sender, "general")
@@ -108,7 +107,7 @@ mod tests {
             .recv()
             .await
             .unwrap_or_else(|error| panic!("receive second publication: {error}"));
-        assert_eq!((first.seq, second.seq), (1, 2));
+        assert_eq!((first.seq, second.seq), (2, 3));
         assert_eq!(first.event_type, "participant_updated");
         assert_eq!(second.event_type, "message_final");
         let snapshot = store
@@ -126,25 +125,18 @@ mod tests {
         let store = SqliteStore::open(&url)
             .await
             .unwrap_or_else(|error| panic!("open publication fixture: {error}"));
-        let now = Utc::now();
-        let room = Room::new("general".to_owned(), "General".to_owned(), now);
-        let participant = Participant {
-            room_id: "general".to_owned(),
-            participant_id: "operator-local".to_owned(),
-            display_name: "SeiNel".to_owned(),
-            avatar_image_url: String::new(),
-            participant_type: "human".to_owned(),
-            status: ParticipantStatus::Joined,
-            role: "host".to_owned(),
-            owner_id: String::new(),
-            muted: false,
-            created_at: now,
-            updated_at: now,
-        };
         store
-            .initialize_room(&room, &RoomSettings::defaults("General"), &participant)
+            .bootstrap_local_authority("46173b61-52ee-4270-bc9f-f140d64064f0", "SeiNel")
             .await
-            .unwrap_or_else(|error| panic!("initialize publication fixture: {error}"));
+            .unwrap_or_else(|error| panic!("bootstrap publication identity: {error}"));
+        store
+            .create_room_for_local_operator("general", "General")
+            .await
+            .unwrap_or_else(|error| panic!("create publication room: {error}"));
+        store
+            .acknowledge_room_publication("general", 1)
+            .await
+            .unwrap_or_else(|error| panic!("publish room creation baseline: {error}"));
         let principal = AuthenticatedPrincipal {
             principal_id: "operator-local-user".to_owned(),
             participant_id: "operator-local".to_owned(),

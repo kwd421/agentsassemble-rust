@@ -35,6 +35,12 @@ pub struct ConsumedServerOperatorTicket {
     pub principal_id: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConsumedProfileTicket {
+    Room(AuthenticatedPrincipal),
+    ServerOperator { principal_id: String },
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 pub enum TicketError {
     #[error("ticket is invalid, expired, or already used")]
@@ -141,6 +147,27 @@ impl TicketStore {
             return Err(TicketError::Invalid);
         };
         Ok(ConsumedServerOperatorTicket { principal_id })
+    }
+
+    /// Removes and resolves a one-use credential accepted by the server-wide profile surface.
+    ///
+    /// Room participants retain their own profile authority, while the private-control-derived
+    /// server operator may access only the canonical local human profile selected by the route.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` for an unknown, expired, or reused ticket.
+    pub async fn consume_profile(
+        &self,
+        ticket: &str,
+    ) -> Result<ConsumedProfileTicket, TicketError> {
+        let grant = self.consume_grant(ticket).await?;
+        Ok(match grant.authority {
+            TicketAuthority::Room(principal) => ConsumedProfileTicket::Room(principal),
+            TicketAuthority::ServerOperator { principal_id } => {
+                ConsumedProfileTicket::ServerOperator { principal_id }
+            }
+        })
     }
 
     async fn consume_grant(&self, ticket: &str) -> Result<StoredTicketGrant, TicketError> {

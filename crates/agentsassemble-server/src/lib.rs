@@ -25,7 +25,8 @@ pub use host_ticket::{HostSecret, InvalidHostSecret};
 pub use room_runtime::{RoomRuntime, RoomShutdownError};
 pub use runtime_reconciliation::reconcile_runtime_ownership;
 pub use ticket::{
-    ConsumedServerOperatorTicket, ConsumedTicket, IssuedTicket, TicketError, TicketStore,
+    ConsumedProfileTicket, ConsumedServerOperatorTicket, ConsumedTicket, IssuedTicket, TicketError,
+    TicketStore,
 };
 pub use ticket_issuer::{TicketIssueError, issue_local_operator_http_ticket, issue_local_ticket};
 pub use web::{ServeError, router, serve};

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-runtime-bootstrap-initialize"
+description = "Enables the runtime_bootstrap_initialize command without any pre-configured scope."
+commands.allow = ["runtime_bootstrap_initialize"]
+
+[[permission]]
+identifier = "deny-runtime-bootstrap-initialize"
+description = "Denies the runtime_bootstrap_initialize command without any pre-configured scope."
+commands.deny = ["runtime_bootstrap_initialize"]

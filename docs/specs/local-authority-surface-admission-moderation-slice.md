@@ -1,0 +1,232 @@
+# Local Authority, Product Surface, Admission, and Moderation Slice
+
+Status: active implementation design; Pro critical review approved 2026-08-25
+
+Comparison baseline: original
+`d5046473010d1353a81ee38337360e6d98f7bd6f`; Rust
+`92e6bb44e3154f2c8d4d2f7b50761ebcf8e92bb7`.
+
+## Definition
+
+This slice replaces the fixture-shaped bootstrap with a restartable local
+authority, derives every reachable product surface from its real owner, makes
+WebSocket readiness proof-bearing and gap-free, centralizes pre-parse admission,
+and completes canonical participant role/mute behavior.
+
+The slice is intentionally larger than one screen. The frontend must not compose
+bootstrap, room, stream, role, or mute behavior until the server or native host
+that owns it carries the same authority through the real flow. Placeholder rooms,
+hard-coded profiles, compatibility readers, fake capabilities, client-owned
+orchestration, and best-effort side effects are forbidden.
+
+## Local bootstrap authority
+
+Schema installation creates infrastructure only. It does not create a room,
+participant, or user profile. A separate bootstrap sidecar records immutable
+`authority_lineage_id`, `Empty | Initializing | Complete`, owning request ID,
+schema revision, creation metadata, selected canonical user/profile IDs, and a
+digest of the immutable initialization contract.
+
+`Complete` is verified from lineage, required canonical rows, and reference
+ownership. It is not a comparison against mutable initial display values, so a
+normal later profile edit cannot be overwritten by bootstrap retry.
+
+Bootstrap runs under `BEGIN IMMEDIATE`. Marker and product rows transition in one
+writer transaction. An exact request replay returns its stored result; a different
+concurrent request receives a typed conflict. Startup recovery validates only a
+positive allowlist of bootstrap-owned rows and resolves interrupted initialization
+to `Complete` or explicit `repair_required`. It never seeds, repairs, or
+reinterprets data through a fallback.
+
+Room and server-operator tickets require a verified `Complete` marker. `Complete`
+with zero rooms is normal. The real room directory and create/join flow owns the
+first room; startup does not fabricate `general`. Tauri owns its local bootstrap
+controller and `HostProductSurface`. The socket validated for bootstrap is the
+same canonical authority socket handed to Core, not a probe closed before a second
+owner is opened.
+
+The canonical local human profile is server-wide and therefore remains readable,
+editable, and avatar-capable before the first room exists. A fresh one-use
+private-control-derived operator credential reaches that profile without
+inventing a room membership. Room-session credentials retain the same profile
+surface for admitted participants. The route consumes either credential exactly
+once and selects only its matching profile authority; a server-operator credential
+cannot authenticate a room socket. Profile projection may update only the human
+display/avatar fields in existing memberships and never owns room role, join,
+mute, permission, or Agent Session profile state.
+
+## Product surfaces and strict protocol
+
+`ServerProductSurface` is generated from the actual HTTP router and WebSocket
+action/stream registries. `GET /api/rooms` projects that same surface revision and
+digest. `HostProductSurface` is generated from the intersection of registered
+Tauri commands and their permission capabilities. WebSocket never advertises
+native-host commands.
+
+The frontend composes in identity, authority, then product-surface order. A hook,
+effect, stream, or control absent from its owner surface is not mounted. Copied
+source and reachable composition are reported separately in
+`docs/FRONTEND_BACKEND_GAPS.md`.
+
+Subscribe, stream, action, and action-payload decoding is strict and typed.
+Unknown fields, streams, or actions fail with a typed protocol result. Canonical
+`message.send` is content-only. The roster comes only from authenticated
+WebSocket snapshot/events; an HTTP participant merge is not another authority.
+
+Participant roles are exactly `HumanLocal`, `AgentWorker`, `AgentObserver`,
+`ExternalHuman`, and `Service`. Role is collaboration/routing metadata and never
+operator authorization.
+
+## Connection, raw ingress, and mutation admission
+
+Before HTTP 101, one process-wide owner computes and acquires global, principal,
+and room connection leases atomically. Rejection charges no scope. Idle/LRU key
+eviction is bounded, and generation-bearing leases prevent an old release from
+freeing a replacement key.
+
+The WebSocket codec owns hard byte bounds for frame, reassembled message, and
+write buffer memory. This contract does not claim a fragment-count or rate limit
+unless a separate codec-owned implementation is added.
+
+Before JSON parsing or room queueing, one process-wide raw ingress governor
+atomically charges global, principal, and room byte/rate scopes. The debit is
+permanent and includes unknown or unsupported raw frames. The room actor does not
+retain a sharded transport charge.
+
+After strict decoding, implemented-action classification, and exact replay or
+prepared-resume detection, a fresh human mutation receives a permanent
+process-wide principal debit. Permission denial, validation failure, missing
+targets, conflict, room busy, timeout, disconnect, cancellation, SQLite rollback,
+and provider failure do not refund it. Exact replay and prepared resume do not
+debit twice. Only a separate in-flight permit is RAII-released. Durable room
+budget remains in the command transaction and rolls back with it. Ambiguous
+commit outcome is resolved from request ID and idempotency record. Human-principal
+and provider-session mutation governors remain separate.
+
+## Proof-bound finite subscription
+
+The server acquires the canonical receiver/barrier before snapshot construction.
+It pre-serializes the exact final Snapshot UTF-8 frame at cursor `C`, then fixes a
+finite durable publication high-water `H >= C`.
+
+The versioned, length-delimited `Subscribed` proof transcript binds context,
+server challenge, ticket/connection nonce, room/principal/participant IDs,
+protocol version, sorted accepted streams, server-surface revision and digest,
+canonical permissions or their exact digest, `C`, `H`, and the exact final
+Snapshot bytes digest. Proof appears only in `Subscribed`, avoiding recursion.
+
+`Subscribed` and Snapshot are encoded and size-checked before either is sent.
+The server then delivers `C+1..H` contiguously. Receiver lag or a gap is refilled
+from durable `(C,H]`; an unresolved gap or overflow resynchronizes/closes and
+never reports readiness.
+
+The client verifies proof and snapshot digest and becomes ready only when
+`delivered_seq == H`. `H == C` becomes ready immediately after Snapshot; later
+events are normal live delivery. One absolute deadline covers strict Subscribe,
+principal/surface lookup, barrier, snapshot, high-water, encoding, sending,
+catch-up, and readiness. Traffic cannot extend it.
+
+## Participant role and mute authority
+
+A role update validates permission, target, and exact enum, then commits
+participant state, event, result, and replay atomically.
+
+`participant.mute=true` rejects human targets and atomically commits agent mute,
+scheduler exclusion, public event, command result/replay, exact current turn
+identity, and a prepared interrupt effect. It never stops or detaches the
+persistent runtime or Agent Session. If busy, it interrupts only the exact current
+turn as the reachable original product does.
+
+Only new active-turn assignment increments `turn_generation`. Active `turn_id`
+and generation remain immutable; mute reads them and terminal persistence
+validates them. Interrupt effects have a separate ID and sequence.
+
+Every terminal-publication transaction revalidates exact room, session,
+participant, turn, generation, runtime handle/owner epoch, `muted=false`, and no
+unresolved effect. A mismatch cannot publish ordinary success.
+
+### Provider-start serialization
+
+Assignment creates the active turn and durable `ProviderTurnExecution` in one
+transaction. Execution phases are `Assigned`, `StartAuthorized`, `Running`,
+`InterruptPending`, `Quiesced`, and `Terminal`.
+
+Before start authorization, the provider owner installs an exact in-memory
+`ActiveProviderTurnSlot` in `Preparing`. The authorization transaction verifies
+active identity, unmuted participant, no unresolved effect, and `Assigned` before
+recording `StartAuthorized` plus monotonic start epoch.
+
+If mute committed first, authorization is denied, provider call count stays zero,
+and the Preparing slot quiesces into typed interruption. If authorization committed
+first, mute targets the already-installed Preparing or Running slot, transitions
+durable execution to `InterruptPending`, and interrupts that exact per-turn token.
+SQLite commit order is authority; another DB read immediately before provider I/O
+is not a TOCTOU substitute.
+
+### Durable interrupt effects
+
+Effect states are `Prepared`, `Claimed`, `InterruptIssuedWaitingTerminal`,
+`AlreadyIssuedWaitingTerminal`, `NotCurrentWaitingAuthority`, `Unconfirmed`,
+`Finalized`, and `Superseded`. All but the last two fence provider start and
+ordinary terminal publication. Claims carry owner, generation, and expiry and
+are safely reacquired. `NotCurrent` remains unresolved while the database still
+says the exact turn is active.
+
+Issuing a token or out-of-band interrupt is not terminal evidence. The provider
+owner must unwind `send_turn`, observe cleanup, remove the exact slot, and settle
+its terminal latch before emitting typed interruption with effect, turn, runtime
+handle, and owner-epoch identity. Only then may the room actor finalize and
+progress later work. A confirmed runtime exit is checkpointed in the same UOW.
+
+Duplicate mute for one generation shares one durable effect owner and may not
+issue a second physical interrupt or strand a second fence. Command replay never
+reclaims a post-commit effect; only the reconciler owns unfinished effects.
+
+### Restart and runtime custody
+
+Before network admission, startup reconciliation claims every nonterminal provider
+execution, including executions without an interrupt effect. Runtime custody binds
+handle, owner, owner epoch, custody lease, provider runtime instance nonce, and
+observation ID.
+
+Exact runtime-gone observation finalizes runtime checkpoint, interrupted turn,
+session state, pending progression, execution, and effect in one UOW. Confirmed
+`O1 -> O2` adoption must prove same handle, instance nonce, custody chain,
+previous/new owners, and active generation before atomically rebinding session,
+execution, and effect and incrementing owner epoch.
+
+The new owner installs a recovery slot and resumes exact request interruption and
+quiescence. If exact reattachment is unavailable but the supervisor can stop only
+the exact owned runtime and prove exit, that explicit custody terminalization path
+ends in runtime-gone. If neither can be proved, the effect remains fail-closed and
+the provider mute capability is absent. Reachable parity providers implement the
+verified control contract before advertising mute.
+
+`InterruptIssuedWaitingTerminal` is never finalized from issue state alone. Exact
+request quiescence, exact runtime gone, or exact-generation provider terminal
+observation is required. Unmute commits canonical `muted=false` plus pending
+reconciliation and advances scheduling idempotently. Stop cleanup suppresses only
+exact benign already-stopped/not-running outcomes.
+
+## Frontend and verification
+
+The latest original frontend remains provenance. Shared resolvers/components own
+provider presentation, profile-card/modal stacking, panel geometry, conditional
+nickname input, and harness terminology; no approximate shell is introduced.
+
+High-value deterministic contracts cover bootstrap concurrency/restart, lease ABA,
+permanent debit/replay, proof transcript and `H == C`/gap/deadline, roster/roles,
+mute-before-authorize, authorize-before-mute, Preparing-slot mute, duplicate mute,
+pre-registration, every execution crash phase, claim expiry, owner-adoption ABA,
+runtime nonce mismatch, typed quiescence, terminal suppression, runtime reuse, and
+unmute progression.
+
+`make verify` and packaged Computer Use are required. Computer Use verifies
+identity/bootstrap, zero-room directory/create/join, chat/roster/panels/profile and
+Agent Add overlays, surface-gated absence, role/mute busy interruption, runtime
+reuse, unmute, reconnect, and finite catch-up. Only resources created by that
+verification run may be stopped or deleted.
+
+Each complete vertical slice is committed and pushed before same-session critical
+diff and Daybreaker Blue High manual-security review. An incomplete owner remains
+unexposed and is not completion evidence.

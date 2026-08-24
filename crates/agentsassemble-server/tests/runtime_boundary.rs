@@ -1,10 +1,9 @@
 use std::{fmt::Write, path::PathBuf, time::Duration};
 
-use agentsassemble_domain::{Participant, ParticipantStatus, ProviderCatalog, Room, RoomSettings};
+use agentsassemble_domain::ProviderCatalog;
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_provider::ProviderCatalogService;
 use agentsassemble_server::{AppState, HostSecret, TicketStore, serve};
-use chrono::Utc;
 use futures_util::{SinkExt, StreamExt};
 use hmac::{Hmac, Mac};
 use reqwest::Client;
@@ -78,7 +77,8 @@ async fn external_client_recovers_committed_command_after_restart() {
     subscribe(&mut first_socket, 0).await;
     let initial = receive_json(&mut first_socket).await;
     assert_eq!(initial["op"], "snapshot");
-    assert_eq!(initial["last_seq"], 0);
+    assert_eq!(initial["last_seq"], 1);
+    assert_eq!(initial["events"][0]["type"], "room_created");
     send_command(&mut first_socket).await;
     let mut committed_event = None;
     let mut committed_ack = None;
@@ -92,8 +92,8 @@ async fn external_client_recovers_committed_command_after_restart() {
     }
     let event = committed_event.unwrap_or_else(|| panic!("event frame was not delivered"));
     let ack = committed_ack.unwrap_or_else(|| panic!("ACK frame was not delivered"));
-    assert_eq!(event["events"][0]["seq"], 1);
-    assert_eq!(ack["result"]["event_seq"], 1);
+    assert_eq!(event["events"][0]["seq"], 2);
+    assert_eq!(ack["result"]["event_seq"], 2);
     assert_eq!(ack["result"]["event"]["id"], event["events"][0]["id"]);
     assert_eq!(event["events"][0]["id"].as_str().map(str::len), Some(36));
     first_socket
@@ -110,13 +110,17 @@ async fn external_client_recovers_committed_command_after_restart() {
     subscribe(&mut second_socket, 0).await;
     let recovered = receive_json(&mut second_socket).await;
     assert_eq!(recovered["op"], "snapshot");
-    assert_eq!(recovered["last_seq"], 1);
-    assert_eq!(recovered["events"][0]["content"], "boundary hello");
+    assert_eq!(recovered["last_seq"], 2);
+    let recovered_message = recovered["events"]
+        .as_array()
+        .and_then(|events| events.iter().find(|event| event["type"] == "message_final"))
+        .unwrap_or_else(|| panic!("recovered snapshot omitted the committed message"));
+    assert_eq!(recovered_message["content"], "boundary hello");
     send_command(&mut second_socket).await;
     let retry = receive_json(&mut second_socket).await;
     assert_eq!(retry["op"], "ack");
     assert_eq!(retry["deduplicated"], true);
-    assert_eq!(retry["result"]["event_seq"], 1);
+    assert_eq!(retry["result"]["event_seq"], 2);
     assert!(
         tokio::time::timeout(Duration::from_millis(100), second_socket.next())
             .await
@@ -126,7 +130,7 @@ async fn external_client_recovers_committed_command_after_restart() {
     subscribe(&mut cursor_ahead, 50).await;
     let resync = receive_json(&mut cursor_ahead).await;
     assert_eq!(resync["op"], "resync_required");
-    assert_eq!(resync["latest_seq"], 1);
+    assert_eq!(resync["latest_seq"], 2);
     second_server.stop().await;
 }
 
@@ -263,14 +267,14 @@ async fn snapshot_is_trimmed_to_the_websocket_message_budget() {
     let encoded =
         serde_json::to_vec(&snapshot).unwrap_or_else(|error| panic!("re-encode snapshot: {error}"));
     assert!(encoded.len() <= 256 * 1024);
-    assert_eq!(snapshot["last_seq"], 32);
+    assert_eq!(snapshot["last_seq"], 33);
     assert_eq!(snapshot["has_more_before"], true);
     assert_eq!(snapshot["resume_gap"], false);
     assert_eq!(snapshot["snapshot_mode"], "initial");
     assert!(snapshot["events"].as_array().is_some_and(|events| {
         !events.is_empty()
-            && events.len() < 32
-            && events.last().is_some_and(|event| event["seq"] == 32)
+            && events.len() < 33
+            && events.last().is_some_and(|event| event["seq"] == 33)
     }));
     server.stop().await;
 }
@@ -657,23 +661,12 @@ fn expected_server_proof(proof_key: &str, challenge: &str) -> String {
 }
 
 async fn bootstrap(store: &SqliteStore) {
-    let now = Utc::now();
-    let room = Room::new("general".to_owned(), "General".to_owned(), now);
-    let participant = Participant {
-        room_id: "general".to_owned(),
-        participant_id: "operator-local".to_owned(),
-        display_name: "Host".to_owned(),
-        avatar_image_url: String::new(),
-        participant_type: "human".to_owned(),
-        status: ParticipantStatus::Joined,
-        role: "host".to_owned(),
-        owner_id: String::new(),
-        muted: false,
-        created_at: now,
-        updated_at: now,
-    };
     store
-        .initialize_room(&room, &RoomSettings::defaults("General"), &participant)
+        .bootstrap_local_authority("f5d0e901-efbc-491e-8745-781e95cb61f3", "Host")
         .await
-        .unwrap_or_else(|error| panic!("bootstrap boundary room: {error}"));
+        .unwrap_or_else(|error| panic!("bootstrap boundary identity: {error}"));
+    store
+        .create_room_for_local_operator("general", "General")
+        .await
+        .unwrap_or_else(|error| panic!("create boundary room: {error}"));
 }

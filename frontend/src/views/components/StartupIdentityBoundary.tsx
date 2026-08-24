@@ -76,13 +76,16 @@ function startupIdentityRunsOnThisOrigin(): boolean {
 
 export default function StartupIdentityBoundary({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(
-    () =>
-      startupIdentityBypassRequested() ||
-      isDesktopWebview() ||
-      !startupIdentityRunsOnThisOrigin() ||
-      hasStartupIdentitySelection() ||
-      Boolean(loadRememberedGuestProfile()) ||
-      hasStoredGuestSession()
+    () => {
+      if (startupIdentityBypassRequested()) return true;
+      if (isDesktopWebview()) return false;
+      return (
+        !startupIdentityRunsOnThisOrigin() ||
+        hasStartupIdentitySelection() ||
+        Boolean(loadRememberedGuestProfile()) ||
+        hasStoredGuestSession()
+      );
+    }
   );
   const [deviceToken] = useState(getOrCreateDeviceToken);
 

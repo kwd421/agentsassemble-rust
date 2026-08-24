@@ -1,10 +1,9 @@
 use std::{fmt::Write, time::Duration};
 
-use agentsassemble_domain::{Participant, ParticipantStatus, ProviderCatalog, Room, RoomSettings};
+use agentsassemble_domain::{LOCAL_OPERATOR_USER_ID, ParticipantStatus, ProviderCatalog};
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_provider::ProviderCatalogService;
 use agentsassemble_server::{AppState, HostSecret, TicketStore, serve};
-use chrono::Utc;
 use futures_util::StreamExt;
 use hmac::{Hmac, Mac};
 use reqwest::Client;
@@ -21,6 +20,79 @@ struct RunningServer {
     base_url: String,
     cancellation: CancellationToken,
     task: JoinHandle<()>,
+}
+
+#[tokio::test]
+async fn server_operator_profile_authority_works_before_the_first_room() {
+    let store = SqliteStore::open("sqlite::memory:")
+        .await
+        .unwrap_or_else(|error| panic!("open zero-room profile store: {error}"));
+    store
+        .bootstrap_local_authority("4f6f1746-fc26-4a10-a7a0-8651a17baa43", "Zero Room Operator")
+        .await
+        .unwrap_or_else(|error| panic!("bootstrap zero-room operator: {error}"));
+    let inspection_store = store.clone();
+    let tickets = TicketStore::new(Duration::from_secs(30), 16);
+    let issuer = tickets.clone();
+    let server = start_with_tickets(store, tickets).await;
+    let client = Client::new();
+
+    let read_ticket = issue_operator_ticket(&issuer).await;
+    let profile: Value = client
+        .get(format!("{}/api/user-profile", server.base_url))
+        .header("authorization", format!("Bearer {read_ticket}"))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("read zero-room profile: {error}"))
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("decode zero-room profile: {error}"));
+    assert_eq!(profile["profile"]["display_name"], "Zero Room Operator");
+
+    let upload_ticket = issue_operator_ticket(&issuer).await;
+    let upload: Value = client
+        .post(format!("{}/api/attachments", server.base_url))
+        .header("authorization", format!("Bearer {upload_ticket}"))
+        .json(&json!({
+            "purpose": "profile_avatar", "filename": "profile.png",
+            "content_type": "image/png", "data_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMQ0bD5DwACRAF4aig0hQAAAABJRU5ErkJggg=="
+        }))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("upload zero-room avatar: {error}"))
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("decode zero-room avatar: {error}"));
+    let avatar_url = upload["attachment"]["url"]
+        .as_str()
+        .unwrap_or_else(|| panic!("zero-room avatar URL is missing"));
+
+    let update_ticket = issue_operator_ticket(&issuer).await;
+    let updated = client
+        .post(format!("{}/api/user-profile", server.base_url))
+        .header("authorization", format!("Bearer {update_ticket}"))
+        .json(&json!({
+            "display_name": "Canonical Before Room",
+            "avatar_image_url": avatar_url
+        }))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("update zero-room profile: {error}"));
+    assert_eq!(updated.status(), reqwest::StatusCode::OK);
+    assert!(
+        inspection_store
+            .list_room_directory(true)
+            .await
+            .unwrap_or_else(|error| panic!("inspect zero-room directory: {error}"))
+            .is_empty()
+    );
+    let stored = inspection_store
+        .local_operator_profile()
+        .await
+        .unwrap_or_else(|error| panic!("inspect zero-room profile: {error}"));
+    assert_eq!(stored.display_name, "Canonical Before Room");
+    assert_eq!(stored.avatar_image_url, avatar_url);
+    server.stop().await;
 }
 
 impl RunningServer {
@@ -220,6 +292,10 @@ async fn assert_profile_update_and_avatar(
 }
 
 async fn start(store: SqliteStore) -> RunningServer {
+    start_with_tickets(store, TicketStore::new(Duration::from_secs(30), 16)).await
+}
+
+async fn start_with_tickets(store: SqliteStore, tickets: TicketStore) -> RunningServer {
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
         .unwrap_or_else(|error| panic!("bind profile runtime: {error}"));
@@ -230,7 +306,7 @@ async fn start(store: SqliteStore) -> RunningServer {
     let server_cancellation = cancellation.clone();
     let state = AppState::local(
         store,
-        TicketStore::new(Duration::from_secs(30), 16),
+        tickets,
         HostSecret::new(HOST_TOKEN)
             .unwrap_or_else(|error| panic!("validate profile host secret: {error}")),
         ProviderCatalogService::fixed(ProviderCatalog::default()),
@@ -245,6 +321,14 @@ async fn start(store: SqliteStore) -> RunningServer {
         cancellation,
         task,
     }
+}
+
+async fn issue_operator_ticket(tickets: &TicketStore) -> String {
+    tickets
+        .issue_server_operator(LOCAL_OPERATOR_USER_ID.to_owned())
+        .await
+        .unwrap_or_else(|error| panic!("issue server operator profile ticket: {error}"))
+        .ticket
 }
 
 async fn connect_room(
@@ -335,23 +419,12 @@ fn expected_hmac(context: &str, fields: &[&str]) -> String {
 }
 
 async fn bootstrap(store: &SqliteStore) {
-    let now = Utc::now();
-    let room = Room::new("general".to_owned(), "General".to_owned(), now);
-    let participant = Participant {
-        room_id: "general".to_owned(),
-        participant_id: "operator-local".to_owned(),
-        display_name: "SeiNel".to_owned(),
-        avatar_image_url: String::new(),
-        participant_type: "human".to_owned(),
-        status: ParticipantStatus::Joined,
-        role: "host".to_owned(),
-        owner_id: String::new(),
-        muted: false,
-        created_at: now,
-        updated_at: now,
-    };
     store
-        .initialize_room(&room, &RoomSettings::defaults("General"), &participant)
+        .bootstrap_local_authority("f83f761a-0a6a-4d92-956e-f2d0dadf50c9", "SeiNel")
         .await
-        .unwrap_or_else(|error| panic!("bootstrap profile room: {error}"));
+        .unwrap_or_else(|error| panic!("bootstrap profile identity: {error}"));
+    store
+        .create_room_for_local_operator("general", "General")
+        .await
+        .unwrap_or_else(|error| panic!("create profile room: {error}"));
 }

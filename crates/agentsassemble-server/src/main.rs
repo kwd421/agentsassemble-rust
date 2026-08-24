@@ -4,19 +4,19 @@ use std::{
     time::Duration,
 };
 
-use agentsassemble_domain::{
-    LOCAL_OPERATOR_PARTICIPANT_ID, Participant, ParticipantStatus, Room, RoomSettings,
-    validate_room_id,
+use agentsassemble_persistence::{
+    LocalBootstrapPhase as PersistenceBootstrapPhase, LocalBootstrapStatus, PersistenceError,
+    SqliteStore, secure_private_directory,
 };
-use agentsassemble_persistence::{SqliteStore, secure_private_directory};
-use agentsassemble_protocol::{LocalControlRequest, LocalControlResponse};
+use agentsassemble_protocol::{
+    LocalBootstrapGrant, LocalBootstrapPhase, LocalControlRequest, LocalControlResponse,
+};
 use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService};
 use agentsassemble_server::{
     AppState, HostSecret, TicketIssueError, TicketStore, issue_local_operator_http_ticket,
     issue_local_ticket, reconcile_runtime_ownership, serve,
 };
 use anyhow::Context;
-use chrono::Utc;
 use clap::Parser;
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, Stdin},
@@ -35,8 +35,6 @@ struct Args {
     bind: SocketAddr,
     #[arg(long, default_value = ".agentsassemble-rust/runtime.sqlite3")]
     database: PathBuf,
-    #[arg(long)]
-    initialize_room: Option<String>,
     #[arg(long)]
     frontend: Option<PathBuf>,
 }
@@ -138,19 +136,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn open_store(args: &Args) -> anyhow::Result<SqliteStore> {
-    let initial_room = args
-        .initialize_room
-        .as_deref()
-        .map(initial_room)
-        .transpose()?;
-    if let Some((room, settings, participant)) = initial_room.as_ref() {
-        Ok(
-            SqliteStore::open_path_with_initial_room(&args.database, room, settings, participant)
-                .await?,
-        )
-    } else {
-        Ok(SqliteStore::open_path(&args.database).await?)
-    }
+    Ok(SqliteStore::open_path(&args.database).await?)
 }
 
 async fn run_internal_provider_mode() -> bool {
@@ -183,10 +169,37 @@ async fn run_control_pipe<R, W>(
             return;
         };
         let response = match serde_json::from_slice::<LocalControlRequest>(&line) {
+            Ok(LocalControlRequest::InspectBootstrap { request_id })
+                if valid_control_request_id(&request_id) =>
+            {
+                match state.store.local_bootstrap_status().await {
+                    Ok(status) => LocalControlResponse::BootstrapOk {
+                        request_id,
+                        bootstrap: Box::new(bootstrap_grant(status, false)),
+                    },
+                    Err(error) => bootstrap_control_error(request_id, error),
+                }
+            }
+            Ok(LocalControlRequest::InitializeBootstrap {
+                request_id,
+                display_name,
+            }) if valid_control_request_id(&request_id) => {
+                match state
+                    .store
+                    .bootstrap_local_authority(&request_id, &display_name)
+                    .await
+                {
+                    Ok(commit) => LocalControlResponse::BootstrapOk {
+                        request_id,
+                        bootstrap: Box::new(bootstrap_grant(commit.status, commit.deduplicated)),
+                    },
+                    Err(error) => bootstrap_control_error(request_id, error),
+                }
+            }
             Ok(LocalControlRequest::IssueTicket {
                 request_id,
                 meeting_id,
-            }) if !request_id.is_empty() && request_id.len() <= 128 => {
+            }) if valid_control_request_id(&request_id) => {
                 match issue_local_ticket(&state, &meeting_id).await {
                     Ok(ticket) => LocalControlResponse::Ok {
                         request_id,
@@ -198,7 +211,7 @@ async fn run_control_pipe<R, W>(
                 }
             }
             Ok(LocalControlRequest::IssueOperatorHttpTicket { request_id })
-                if !request_id.is_empty() && request_id.len() <= 128 =>
+                if valid_control_request_id(&request_id) =>
             {
                 match issue_local_operator_http_ticket(&state).await {
                     Ok(ticket) => LocalControlResponse::OperatorHttpOk {
@@ -210,7 +223,9 @@ async fn run_control_pipe<R, W>(
                 }
             }
             Ok(
-                LocalControlRequest::IssueTicket { request_id, .. }
+                LocalControlRequest::InspectBootstrap { request_id }
+                | LocalControlRequest::InitializeBootstrap { request_id, .. }
+                | LocalControlRequest::IssueTicket { request_id, .. }
                 | LocalControlRequest::IssueOperatorHttpTicket { request_id },
             ) => LocalControlResponse::Error {
                 request_id,
@@ -229,6 +244,41 @@ async fn run_control_pipe<R, W>(
     }
 }
 
+fn valid_control_request_id(request_id: &str) -> bool {
+    !request_id.is_empty() && request_id.len() <= 128
+}
+
+fn bootstrap_grant(status: LocalBootstrapStatus, deduplicated: bool) -> LocalBootstrapGrant {
+    let phase = match status.phase {
+        PersistenceBootstrapPhase::Empty => LocalBootstrapPhase::Empty,
+        PersistenceBootstrapPhase::Initializing => LocalBootstrapPhase::Initializing,
+        PersistenceBootstrapPhase::Complete => LocalBootstrapPhase::Complete,
+        PersistenceBootstrapPhase::RepairRequired => LocalBootstrapPhase::RepairRequired,
+    };
+    LocalBootstrapGrant {
+        phase,
+        authority_lineage_id: status.authority_lineage_id,
+        server_id: status.server_id,
+        profile: status.profile,
+        deduplicated,
+    }
+}
+
+fn bootstrap_control_error(request_id: String, error: PersistenceError) -> LocalControlResponse {
+    let (code, message) = match error {
+        PersistenceError::CommandRejected { code, message } => (code.to_owned(), message),
+        _ => (
+            "bootstrap_persistence_failed".to_owned(),
+            "Local bootstrap authority could not be read or changed.".to_owned(),
+        ),
+    };
+    LocalControlResponse::Error {
+        request_id,
+        code,
+        message,
+    }
+}
+
 fn control_error(request_id: String, error: TicketIssueError) -> LocalControlResponse {
     let (code, message) = match error {
         TicketIssueError::InvalidRoom(message) => ("bad_request", message),
@@ -236,6 +286,10 @@ fn control_error(request_id: String, error: TicketIssueError) -> LocalControlRes
         TicketIssueError::ParticipantInactive => (
             "session_revoked",
             "The local operator is not an active room participant.".to_owned(),
+        ),
+        TicketIssueError::BootstrapIncomplete => (
+            "bootstrap_required",
+            "Local identity bootstrap is not complete.".to_owned(),
         ),
         TicketIssueError::Persistence(_) => (
             "persistence_failed",
@@ -318,26 +372,4 @@ fn ensure_parent_alive(cancellation: &CancellationToken) -> anyhow::Result<()> {
         anyhow::bail!("parent control pipe closed during startup");
     }
     Ok(())
-}
-
-fn initial_room(room_id: &str) -> anyhow::Result<(Room, RoomSettings, Participant)> {
-    let room_id = validate_room_id(room_id)
-        .map_err(|error| anyhow::anyhow!("invalid initial room: {}", error.message))?;
-    let now = Utc::now();
-    let label = room_id.replace(['-', '_'], " ");
-    let room = Room::new(room_id.clone(), label.clone(), now);
-    let participant = Participant {
-        room_id,
-        participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
-        display_name: "SeiNel".to_owned(),
-        avatar_image_url: String::new(),
-        participant_type: "human".to_owned(),
-        status: ParticipantStatus::Joined,
-        role: "host".to_owned(),
-        owner_id: String::new(),
-        muted: false,
-        created_at: now,
-        updated_at: now,
-    };
-    Ok((room, RoomSettings::defaults(&label), participant))
 }

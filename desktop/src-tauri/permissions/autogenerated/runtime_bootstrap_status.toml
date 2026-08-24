@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-runtime-bootstrap-status"
+description = "Enables the runtime_bootstrap_status command without any pre-configured scope."
+commands.allow = ["runtime_bootstrap_status"]
+
+[[permission]]
+identifier = "deny-runtime-bootstrap-status"
+description = "Denies the runtime_bootstrap_status command without any pre-configured scope."
+commands.deny = ["runtime_bootstrap_status"]

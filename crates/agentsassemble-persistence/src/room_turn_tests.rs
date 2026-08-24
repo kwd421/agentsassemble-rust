@@ -1,7 +1,7 @@
 use agentsassemble_domain::{
     AgentSession, AuthenticatedPrincipal, CURRENT_RUNTIME_PROFILE_VERSION, CapabilitySet,
     ClientKind, DurableAgentSession, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID, Participant,
-    ParticipantStatus, QueuedRoomInput, Room, RoomInputDeliveryKind, RoomSettings,
+    ParticipantStatus, QueuedRoomInput, RoomInputDeliveryKind,
 };
 use chrono::Utc;
 use serde_json::json;
@@ -355,7 +355,7 @@ async fn inconsistent_turn_or_provider_cursor_authority_fails_the_message_transa
         .fetch_one(&store.pool)
         .await
         .unwrap_or_else(|error| panic!("count rolled-back events: {error}"));
-    assert_eq!(event_count, 0);
+    assert_eq!(event_count, 1);
 }
 
 #[tokio::test]
@@ -673,15 +673,14 @@ async fn fixture() -> (SqliteStore, AuthenticatedPrincipal, tempfile::TempDir) {
         .await
         .unwrap_or_else(|error| panic!("open store: {error}"));
     let now = Utc::now();
-    let host = participant(LOCAL_OPERATOR_PARTICIPANT_ID, "Host", "human", "host", now);
     store
-        .initialize_room(
-            &Room::new("general".to_owned(), "General".to_owned(), now),
-            &RoomSettings::defaults("General"),
-            &host,
-        )
+        .bootstrap_local_authority("166538ea-8477-4bb4-a07c-b7193457175e", "Host")
         .await
-        .unwrap_or_else(|error| panic!("initialize room: {error}"));
+        .unwrap_or_else(|error| panic!("bootstrap identity: {error}"));
+    store
+        .create_room_for_local_operator("general", "General")
+        .await
+        .unwrap_or_else(|error| panic!("create room: {error}"));
     let agent = participant(AGENT_ID, "Terra", "agent", "agent", now);
     let session = attached_session(now);
     sqlx::query(

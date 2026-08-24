@@ -1,6 +1,6 @@
 # Room Directory and Creation Slice
 
-Status: public implementation `6624e51`; crash-consistency correction `6568810`; critical web and manual-security cross-review approved
+Status: directory/create implementation published; bootstrap clauses superseded and reopened by `local-authority-surface-admission-moderation-slice.md`
 
 ## Definition
 
@@ -16,11 +16,10 @@ never room authority and remains visibly unconfirmed until the server answers.
   projection shown in the directory.
 - One stable opaque `server_id` belongs to the database authority rather than a
   port, process, room, browser cache, or Tauri window.
-- On a fresh authority, schema metadata, `server_id`, the initial room,
-  publication cursor, local human membership, and profile commit in one
-  transaction. An interrupted empty database file may be initialized on retry;
-  an older valid Rust authority with no room and no profile resumes only the
-  missing product bootstrap while preserving its existing `server_id`.
+- On a fresh authority, schema metadata and stable server identity are installed
+  without fabricating a room, participant, or profile. The active local-bootstrap
+  specification owns immutable lineage, retry, and recovery. A verified complete
+  authority with zero rooms is normal and reaches the real create/join flow.
 - The server-wide human profile supplies only display name and avatar when a
   newly created room receives its initial local-operator membership. Role,
   joined state, mute state, permissions, and later membership transitions stay
@@ -59,8 +58,8 @@ never room authority and remains visibly unconfirmed until the server answers.
   is pending or failed; a successful response removes stale local entries,
   preserves unrelated remote-server entries as disconnected, and becomes the
   local directory projection. A fabricated default `general` room is never
-  shown as authority. On a fresh database, the server's existing bootstrap path
-  creates the real durable `general` room before the directory response.
+  shown as authority. On a fresh complete authority the directory is empty until
+  the user creates a canonical room through the existing plus control.
 - A directory response that raced with a newer WebSocket metadata projection is
   discarded and fetched once more, as in the copied current client contract.
 

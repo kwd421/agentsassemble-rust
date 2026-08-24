@@ -25,6 +25,12 @@ import {
   registerLocalServer,
 } from "../../lib/centralIdentity";
 import {
+  fetchDesktopOperatorRuntime,
+  initializeDesktopBootstrap,
+  isDesktopWebview,
+  requestDesktopBootstrapStatus,
+} from "../../lib/desktopBridge";
+import {
   rememberGuestProfile,
   rememberStartupIdentitySelection,
 } from "../../lib/deviceIdentity";
@@ -43,9 +49,28 @@ import GoogleAccountSettings from "./GoogleAccountSettings";
 
 type Screen = "choice" | "guest" | "recover" | "recovery-code";
 
-async function saveLocalProfile(displayName: string, deviceToken: string) {
+async function saveLocalProfile(
+  displayName: string,
+  deviceToken: string,
+  bootstrapRequestId: string
+) {
   const name = displayName.trim();
   if (!name) return;
+  if (isDesktopWebview()) {
+    const current = await requestDesktopBootstrapStatus();
+    const bootstrap =
+      current.phase === "empty"
+        ? await initializeDesktopBootstrap(bootstrapRequestId, name)
+        : current;
+    if (bootstrap.phase !== "complete" || !bootstrap.profile) {
+      throw new Error("로컬 신원 권위를 안전하게 초기화하지 못했습니다.");
+    }
+    rememberGuestProfile({
+      displayName: bootstrap.profile.display_name,
+      avatarImage: bootstrap.profile.avatar_image_url,
+    });
+    return;
+  }
   const saved = await saveUserProfile(
     {
       ...DEFAULT_USER_PROFILE,
@@ -79,6 +104,7 @@ export default function StartupIdentityGate({
   const [status, setStatus] = useState("저장된 사용자 확인 중");
   const [error, setError] = useState("");
   const googleAbortController = useRef<AbortController | null>(null);
+  const bootstrapRequestId = useRef(globalThis.crypto.randomUUID());
 
   useEffect(
     () => () => {
@@ -90,24 +116,22 @@ export default function StartupIdentityGate({
   async function enterApplication() {
     setChecking(true);
     setStatus("로컬 엔진과 방 목록을 준비하는 중");
-    try {
-      const response = await fetch("/api/rooms", { cache: "no-store" });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const payload = (await response.json()) as {
-        rooms?: ServerRoomDockSource[];
-        server_id?: string;
-      };
-      const current = loadRoomDockItems().map(hydratePersistedRoom);
-      const synchronized = mergeServerRoomsIntoDock(
-        current,
-        payload.rooms || [],
-        window.location.origin,
-        String(payload.server_id || "")
-      );
-      persistRoomDockItems(synchronized.map(persistableRoom));
-    } catch {
-      // The cached/local-first application still opens when synchronization fails.
-    }
+    const response = isDesktopWebview()
+      ? await fetchDesktopOperatorRuntime("/api/rooms", { cache: "no-store" })
+      : await fetch("/api/rooms", { cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = (await response.json()) as {
+      rooms?: ServerRoomDockSource[];
+      server_id?: string;
+    };
+    const current = loadRoomDockItems().map(hydratePersistedRoom);
+    const synchronized = mergeServerRoomsIntoDock(
+      current,
+      payload.rooms || [],
+      window.location.origin,
+      String(payload.server_id || "")
+    );
+    persistRoomDockItems(synchronized.map(persistableRoom));
     rememberStartupIdentitySelection();
     onComplete();
   }
@@ -116,13 +140,39 @@ export default function StartupIdentityGate({
     if (!savedRecoveryCode || busy) return;
     setBusy(true);
     clearPendingCentralRecoveryCode();
-    await registerLocalServer(deviceToken).catch(() => undefined);
+    await registerLocalServer(deviceToken);
     await enterApplication();
   }
 
   useEffect(() => {
     let active = true;
     async function initialize() {
+      if (isDesktopWebview()) {
+        try {
+          const bootstrap = await requestDesktopBootstrapStatus();
+          if (bootstrap.phase === "complete") {
+            if (active) await enterApplication();
+            return;
+          }
+          if (bootstrap.phase !== "empty") {
+            throw new Error("로컬 신원 권위에 명시적 복구가 필요합니다.");
+          }
+        } catch (reason) {
+          if (active) {
+            setError(
+              reason instanceof Error
+                ? reason.message
+                : "로컬 신원 권위를 확인하지 못했습니다."
+            );
+            setChecking(false);
+          }
+          return;
+        }
+        if (!centralEnabled) {
+          if (active) setChecking(false);
+          return;
+        }
+      }
       if (centralEnabled) {
         const pendingRecoveryCode = loadPendingCentralRecoveryCode();
         if (pendingRecoveryCode) {
@@ -144,7 +194,13 @@ export default function StartupIdentityGate({
         try {
           setStatus("중앙 신원과 서버 목록을 확인하는 중");
           await bootstrapCentral();
-          await registerLocalServer(deviceToken).catch(() => undefined);
+          await saveLocalProfile(
+            existing.person.display_name,
+            deviceToken,
+            bootstrapRequestId.current
+          );
+          await registerLocalServer(deviceToken);
+          if (active) await enterApplication();
         } catch (reason) {
           if (isCentralAuthenticationError(reason)) {
             if (active) {
@@ -153,24 +209,35 @@ export default function StartupIdentityGate({
             }
             return;
           }
-          // Once a device has a valid remembered identity, central downtime must not prevent local startup.
-        }
-        if (active) await enterApplication();
-        return;
-      }
-      fetchAccountStatus({ deviceToken })
-        .then((account) => {
-          if (!active) return;
-          if (account.account) {
-            rememberStartupIdentitySelection();
-            onComplete();
-          } else {
+          if (active) {
+            setError(
+              reason instanceof Error
+                ? reason.message
+                : "중앙 신원과 로컬 권위를 동기화하지 못했습니다."
+            );
             setChecking(false);
           }
-        })
-        .catch(() => {
-          if (active) setChecking(false);
-        });
+        }
+        return;
+      }
+      try {
+        const account = await fetchAccountStatus({ deviceToken });
+        if (!active) return;
+        if (account.account) {
+          await enterApplication();
+        } else {
+          setChecking(false);
+        }
+      } catch (reason) {
+        if (active) {
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : "저장된 사용자와 방 목록을 확인하지 못했습니다."
+          );
+          setChecking(false);
+        }
+      }
     }
     void initialize();
     return () => {
@@ -186,8 +253,12 @@ export default function StartupIdentityGate({
     setStatus("복구 가능한 게스트 신원을 만드는 중");
     try {
       const result = await createCentralGuest(name);
-      await saveLocalProfile(result.person.display_name || name, deviceToken);
-      await registerLocalServer(deviceToken).catch(() => undefined);
+      await saveLocalProfile(
+        result.person.display_name || name,
+        deviceToken,
+        bootstrapRequestId.current
+      );
+      await registerLocalServer(deviceToken);
       setIssuedRecoveryCode(result.recovery_code);
       setSavedRecoveryCode(false);
       setCopied(false);
@@ -218,8 +289,12 @@ export default function StartupIdentityGate({
     setStatus("게스트 신원을 복구하고 이전 코드를 폐기하는 중");
     try {
       const result = await recoverCentralGuest(recoveryInput);
-      await saveLocalProfile(result.person.display_name || "Guest", deviceToken);
-      await registerLocalServer(deviceToken).catch(() => undefined);
+      await saveLocalProfile(
+        result.person.display_name || "Guest",
+        deviceToken,
+        bootstrapRequestId.current
+      );
+      await registerLocalServer(deviceToken);
       setIssuedRecoveryCode(result.recovery_code);
       setSavedRecoveryCode(false);
       setCopied(false);
@@ -250,8 +325,13 @@ export default function StartupIdentityGate({
     setBusy(true);
     setError("");
     try {
-      await loginCentralGoogle(setStatus, controller.signal);
-      await registerLocalServer(deviceToken).catch(() => undefined);
+      const session = await loginCentralGoogle(setStatus, controller.signal);
+      await saveLocalProfile(
+        session.person.display_name,
+        deviceToken,
+        bootstrapRequestId.current
+      );
+      await registerLocalServer(deviceToken);
       await enterApplication();
     } catch (reason) {
       setChecking(false);
@@ -288,9 +368,8 @@ export default function StartupIdentityGate({
     setBusy(true);
     setError("");
     try {
-      await saveLocalProfile(name, deviceToken);
-      rememberStartupIdentitySelection();
-      onComplete();
+      await saveLocalProfile(name, deviceToken, bootstrapRequestId.current);
+      await enterApplication();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "로컬 프로필을 저장하지 못했습니다.");
     } finally {
@@ -324,17 +403,18 @@ export default function StartupIdentityGate({
               중앙 디렉터리가 설정되지 않아 기존 로컬 신원 모드로 시작합니다.
             </p>
           </header>
-          <GoogleAccountSettings
-            identity={{ deviceToken }}
-            onAccountConnected={() => {
-              rememberStartupIdentitySelection();
-              onComplete();
-            }}
-          />
-          <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-wider text-text-muted">
-            <span className="h-px flex-1 bg-white/10" /> 또는{" "}
-            <span className="h-px flex-1 bg-white/10" />
-          </div>
+          {!isDesktopWebview() && (
+            <>
+              <GoogleAccountSettings
+                identity={{ deviceToken }}
+                onAccountConnected={() => void enterApplication()}
+              />
+              <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-wider text-text-muted">
+                <span className="h-px flex-1 bg-white/10" /> 또는{" "}
+                <span className="h-px flex-1 bg-white/10" />
+              </div>
+            </>
+          )}
           <label className="grid gap-2 text-[11px] font-black text-text-secondary">
             게스트 표시 이름
             <input

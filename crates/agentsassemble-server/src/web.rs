@@ -690,6 +690,9 @@ impl From<TicketIssueError> for ApiError {
             TicketIssueError::ParticipantInactive => {
                 Self::unauthorized("The local operator is not an active room participant.")
             }
+            TicketIssueError::BootstrapIncomplete => {
+                Self::unauthorized("Local identity bootstrap is not complete.")
+            }
             TicketIssueError::Persistence(error) => Self::from(error),
             TicketIssueError::Unavailable => Self::unavailable("Ticket capacity is unavailable."),
         }

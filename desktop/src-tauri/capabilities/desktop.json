@@ -5,6 +5,8 @@
   "windows": ["main"],
   "local": true,
   "permissions": [
+    "allow-runtime-bootstrap-status",
+    "allow-runtime-bootstrap-initialize",
     "allow-runtime-ticket",
     "allow-runtime-operator-ticket",
     "allow-cache-selected-room-directory",

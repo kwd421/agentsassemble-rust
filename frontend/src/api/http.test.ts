@@ -13,20 +13,18 @@ describe("desktop profile HTTP routing", () => {
     Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
   });
 
-  it("uses a fresh one-use runtime ticket for every local profile operation", async () => {
+  it("uses a fresh server-wide operator ticket for every local profile operation", async () => {
     const invoke = vi
       .fn()
       .mockResolvedValueOnce({
         ticket: "ticket-read",
         ttl_seconds: 30,
-        websocket_base_url: "ws://127.0.0.1:49152",
-        server_proof_key: "proof-read",
+        http_base_url: "http://127.0.0.1:49152",
       })
       .mockResolvedValueOnce({
         ticket: "ticket-write",
         ttl_seconds: 30,
-        websocket_base_url: "ws://127.0.0.1:49152",
-        server_proof_key: "proof-write",
+        http_base_url: "http://127.0.0.1:49152",
       });
     Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
     const fetchMock = vi
@@ -52,8 +50,8 @@ describe("desktop profile HTTP routing", () => {
       { roomId: "general" }
     );
 
-    expect(invoke).toHaveBeenNthCalledWith(1, "runtime_ticket", { roomId: "general" });
-    expect(invoke).toHaveBeenNthCalledWith(2, "runtime_ticket", { roomId: "general" });
+    expect(invoke).toHaveBeenNthCalledWith(1, "runtime_operator_ticket");
+    expect(invoke).toHaveBeenNthCalledWith(2, "runtime_operator_ticket");
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       "http://127.0.0.1:49152/api/user-profile",

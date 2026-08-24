@@ -2,12 +2,11 @@ use std::time::Duration;
 
 use agentsassemble_domain::{
     AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID,
-    LOCAL_OPERATOR_USER_ID, Participant, ParticipantStatus, ProviderCatalog, Room, RoomSettings,
+    LOCAL_OPERATOR_USER_ID, ProviderCatalog,
 };
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_provider::ProviderCatalogService;
 use agentsassemble_server::{AppState, HostSecret, TicketStore, serve};
-use chrono::Utc;
 use futures_util::{SinkExt, StreamExt};
 use reqwest::Client;
 use serde_json::{Value, json};
@@ -273,25 +272,14 @@ async fn fixture() -> SqliteStore {
     let store = SqliteStore::open(&url)
         .await
         .unwrap_or_else(|error| panic!("open room directory fixture: {error}"));
-    let now = Utc::now();
-    let room = Room::new("general".to_owned(), "General".to_owned(), now);
-    let participant = Participant {
-        room_id: "general".to_owned(),
-        participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
-        display_name: "SeiNel".to_owned(),
-        avatar_image_url: String::new(),
-        participant_type: "human".to_owned(),
-        status: ParticipantStatus::Joined,
-        role: "host".to_owned(),
-        owner_id: String::new(),
-        muted: false,
-        created_at: now,
-        updated_at: now,
-    };
     store
-        .initialize_room(&room, &RoomSettings::defaults("General"), &participant)
+        .bootstrap_local_authority("149ce88d-61cd-471f-82a1-e03242ff210f", "SeiNel")
         .await
-        .unwrap_or_else(|error| panic!("bootstrap room directory fixture: {error}"));
+        .unwrap_or_else(|error| panic!("bootstrap room directory identity: {error}"));
+    store
+        .create_room_for_local_operator("general", "General")
+        .await
+        .unwrap_or_else(|error| panic!("create room directory fixture: {error}"));
     store
 }
 
