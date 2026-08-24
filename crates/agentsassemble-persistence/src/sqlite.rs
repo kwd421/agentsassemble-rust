@@ -10,7 +10,7 @@ use thiserror::Error;
 
 use crate::authority::{authorize_session, load_active_participant};
 
-const SCHEMA_OWNER: &str = "agentsassemble-rust-v1";
+pub(crate) const SCHEMA_OWNER: &str = "agentsassemble-rust-v1";
 pub(crate) const MAX_AGENT_SESSIONS_PER_ROOM: i64 = 64;
 
 #[derive(Debug, Error)]
@@ -84,47 +84,6 @@ pub struct SqliteStore {
 }
 
 impl SqliteStore {
-    /// Installs the current schema in one transaction.
-    ///
-    /// # Errors
-    ///
-    /// Returns a database or authority error if initialization cannot complete.
-    pub(crate) async fn initialize(&self) -> Result<(), PersistenceError> {
-        let mut transaction = self.pool.begin().await?;
-        for statement in crate::schema::statements() {
-            sqlx::query(*statement).execute(&mut *transaction).await?;
-        }
-        let owner = sqlx::query_scalar::<_, String>(
-            "SELECT value FROM runtime_metadata WHERE key = 'schema_owner'",
-        )
-        .fetch_optional(&mut *transaction)
-        .await?;
-        match owner {
-            Some(owner) if owner != SCHEMA_OWNER => {
-                return Err(PersistenceError::AuthorityConflict(owner));
-            }
-            Some(_) => {}
-            None => {
-                sqlx::query("INSERT INTO runtime_metadata(key, value) VALUES ('schema_owner', ?)")
-                    .bind(SCHEMA_OWNER)
-                    .execute(&mut *transaction)
-                    .await?;
-            }
-        }
-        sqlx::query("INSERT INTO runtime_metadata(key, value) VALUES ('server_id', ?)")
-            .bind(uuid::Uuid::new_v4().to_string())
-            .execute(&mut *transaction)
-            .await?;
-        sqlx::query(
-            "INSERT INTO runtime_metadata(key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-        )
-        .bind(crate::migration::CURRENT_SCHEMA_VERSION.to_string())
-        .execute(&mut *transaction)
-        .await?;
-        transaction.commit().await?;
-        Ok(())
-    }
-
     pub(crate) async fn verify_owner(&self) -> Result<(), PersistenceError> {
         let metadata_table = sqlx::query_scalar::<_, i64>(
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'runtime_metadata'",
@@ -149,54 +108,6 @@ impl SqliteStore {
     #[must_use]
     pub const fn was_created(&self) -> bool {
         self.created
-    }
-
-    /// Inserts an explicit room fixture and its host participant if absent.
-    ///
-    /// # Errors
-    ///
-    /// Returns a persistence or serialization error; partial inserts roll back.
-    pub async fn initialize_room(
-        &self,
-        room: &Room,
-        settings: &RoomSettings,
-        participant: &Participant,
-    ) -> Result<(), PersistenceError> {
-        if !self.created {
-            return Err(PersistenceError::InitializationNotAllowed);
-        }
-        let mut transaction = self.pool.begin().await?;
-        let existing_rows = sqlx::query_scalar::<_, i64>(
-            "SELECT (SELECT COUNT(*) FROM rooms) + (SELECT COUNT(*) FROM participants)",
-        )
-        .fetch_one(&mut *transaction)
-        .await?;
-        if existing_rows != 0 {
-            return Err(PersistenceError::InitializationNotAllowed);
-        }
-        sqlx::query("INSERT INTO rooms(room_id, room_json, settings_json) VALUES (?, ?, ?)")
-            .bind(&room.room_id)
-            .bind(serde_json::to_string(room)?)
-            .bind(serde_json::to_string(settings)?)
-            .execute(&mut *transaction)
-            .await?;
-        sqlx::query(
-            "INSERT INTO room_event_publication_cursors(room_id, published_seq) VALUES (?, 0)",
-        )
-        .bind(&room.room_id)
-        .execute(&mut *transaction)
-        .await?;
-        sqlx::query(
-            "INSERT INTO participants(room_id, participant_id, participant_json) VALUES (?, ?, ?)",
-        )
-        .bind(&participant.room_id)
-        .bind(&participant.participant_id)
-        .bind(serde_json::to_string(participant)?)
-        .execute(&mut *transaction)
-        .await?;
-        crate::profile_store::insert_initial_local_profile(&mut transaction, participant).await?;
-        transaction.commit().await?;
-        Ok(())
     }
 
     /// Verifies that a principal still maps to an active room membership.

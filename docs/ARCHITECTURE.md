@@ -31,6 +31,14 @@ server identity. Each directory entry is projected from the durable `Room` and i
 canonical room-global settings; stable room UID, label, status, timestamps, and
 appearance are not independently reconstructed by React or Tauri.
 
+Fresh schema metadata, `server_id`, initial room/settings, publication cursor,
+local human membership, and human profile share one transaction. Startup also
+recognizes an interrupted empty SQLite file as uninitialized and may initialize
+it only after exclusive file-authority validation. A valid Rust authority left
+by an older two-transaction bootstrap may fill its missing initial product state
+only when both room and profile authority are empty; its committed `server_id` is
+preserved. File existence alone is never a durable bootstrap phase.
+
 Creating a room commits its room record, default settings, publication cursor,
 initial human membership, and exactly one `room_created` event in one SQLite
 transaction. The human display/avatar projection comes from the server-wide

@@ -1,5 +1,6 @@
 use std::{path::Path, process::Stdio, time::Duration};
 
+use agentsassemble_persistence::SqliteStore;
 use agentsassemble_protocol::{LocalControlRequest, LocalControlResponse};
 use serde_json::Value;
 use tokio::{
@@ -95,7 +96,38 @@ async fn control_pipe_eof_releases_database_for_restart() {
     let database = directory.path().join("runtime.sqlite3");
 
     start_controlled(&database).await.close_parent_pipe().await;
+    let first = SqliteStore::open_path(&database)
+        .await
+        .unwrap_or_else(|error| panic!("open first initialized authority: {error}"));
+    let first_server_id = first
+        .server_id()
+        .await
+        .unwrap_or_else(|error| panic!("read first server identity: {error}"));
+    let first_rooms = first
+        .list_room_directory(true)
+        .await
+        .unwrap_or_else(|error| panic!("read first room directory: {error}"));
+    assert_eq!(first_rooms.len(), 1);
+    assert_eq!(first_rooms[0].room.room_id, "general");
+    drop(first);
+
     start_controlled(&database).await.close_parent_pipe().await;
+    let reopened = SqliteStore::open_path(&database)
+        .await
+        .unwrap_or_else(|error| panic!("reopen initialized authority: {error}"));
+    assert_eq!(
+        reopened
+            .server_id()
+            .await
+            .unwrap_or_else(|error| panic!("read reopened server identity: {error}")),
+        first_server_id
+    );
+    let reopened_rooms = reopened
+        .list_room_directory(true)
+        .await
+        .unwrap_or_else(|error| panic!("read reopened room directory: {error}"));
+    assert_eq!(reopened_rooms.len(), 1);
+    assert_eq!(reopened_rooms[0].room.room_id, "general");
 }
 
 #[tokio::test]

@@ -6,6 +6,7 @@ use std::{
 
 use agentsassemble_domain::{
     LOCAL_OPERATOR_PARTICIPANT_ID, Participant, ParticipantStatus, Room, RoomSettings,
+    validate_room_id,
 };
 use agentsassemble_persistence::{SqliteStore, secure_private_directory};
 use agentsassemble_protocol::{LocalControlRequest, LocalControlResponse};
@@ -64,17 +65,12 @@ async fn main() -> anyhow::Result<()> {
         secure_private_directory(parent)
             .with_context(|| format!("secure database directory {}", parent.display()))?;
     }
-    let store = SqliteStore::open_path(&args.database).await?;
+    let store = open_store(&args).await?;
     let database_path = args
         .database
         .canonicalize()
         .with_context(|| format!("resolve database path {}", args.database.display()))?;
     ensure_parent_alive(&cancellation)?;
-    if store.was_created()
-        && let Some(room_id) = args.initialize_room.as_deref()
-    {
-        initialize_room(&store, room_id).await?;
-    }
     let provider_adapter = ProviderAdapter::new();
     let reconciled_sessions = reconcile_runtime_ownership(&store, &provider_adapter).await?;
     if reconciled_sessions > 0 {
@@ -139,6 +135,22 @@ async fn main() -> anyhow::Result<()> {
     });
     serve(listener, state, cancellation).await?;
     Ok(())
+}
+
+async fn open_store(args: &Args) -> anyhow::Result<SqliteStore> {
+    let initial_room = args
+        .initialize_room
+        .as_deref()
+        .map(initial_room)
+        .transpose()?;
+    if let Some((room, settings, participant)) = initial_room.as_ref() {
+        Ok(
+            SqliteStore::open_path_with_initial_room(&args.database, room, settings, participant)
+                .await?,
+        )
+    } else {
+        Ok(SqliteStore::open_path(&args.database).await?)
+    }
 }
 
 async fn run_internal_provider_mode() -> bool {
@@ -308,12 +320,14 @@ fn ensure_parent_alive(cancellation: &CancellationToken) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn initialize_room(store: &SqliteStore, room_id: &str) -> anyhow::Result<()> {
+fn initial_room(room_id: &str) -> anyhow::Result<(Room, RoomSettings, Participant)> {
+    let room_id = validate_room_id(room_id)
+        .map_err(|error| anyhow::anyhow!("invalid initial room: {}", error.message))?;
     let now = Utc::now();
     let label = room_id.replace(['-', '_'], " ");
-    let room = Room::new(room_id.to_owned(), label.clone(), now);
+    let room = Room::new(room_id.clone(), label.clone(), now);
     let participant = Participant {
-        room_id: room_id.to_owned(),
+        room_id,
         participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
         display_name: "SeiNel".to_owned(),
         avatar_image_url: String::new(),
@@ -325,8 +339,5 @@ async fn initialize_room(store: &SqliteStore, room_id: &str) -> anyhow::Result<(
         created_at: now,
         updated_at: now,
     };
-    store
-        .initialize_room(&room, &RoomSettings::defaults(label), &participant)
-        .await?;
-    Ok(())
+    Ok((room, RoomSettings::defaults(label), participant))
 }

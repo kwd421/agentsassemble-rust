@@ -10,6 +10,7 @@ mod agent_reconciliation;
 mod agent_sessions;
 mod agent_start_failure;
 mod authority;
+mod bootstrap;
 mod command_admission;
 mod database_target;
 mod filesystem_authority;

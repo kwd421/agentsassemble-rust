@@ -1,6 +1,6 @@
 # Room Directory and Creation Slice
 
-Status: public implementation `6624e51`; critical web and manual-security review pending
+Status: public implementation `6624e51`; web crash-consistency finding fixed locally, public re-review pending
 
 ## Definition
 
@@ -16,6 +16,11 @@ never room authority and remains visibly unconfirmed until the server answers.
   projection shown in the directory.
 - One stable opaque `server_id` belongs to the database authority rather than a
   port, process, room, browser cache, or Tauri window.
+- On a fresh authority, schema metadata, `server_id`, the initial room,
+  publication cursor, local human membership, and profile commit in one
+  transaction. An interrupted empty database file may be initialized on retry;
+  an older valid Rust authority with no room and no profile resumes only the
+  missing product bootstrap while preserving its existing `server_id`.
 - The server-wide human profile supplies only display name and avatar when a
   newly created room receives its initial local-operator membership. Role,
   joined state, mute state, permissions, and later membership transitions stay
@@ -64,6 +69,11 @@ never room authority and remains visibly unconfirmed until the server answers.
 - Database creation, settings, cursor, participant, event, and command-visible
   state commit together or do not change. A failed create cannot leave a room
   rail entry produced only by the client.
+- Process death before or during first bootstrap cannot strand an unowned empty
+  file or a valid schema-only authority. Retrying the same startup either
+  installs the complete initial state or observes the previously committed
+  complete state; it never generates a second identity for an already owned
+  authority.
 - A wrong-purpose, unknown, expired, or reused operator ticket fails before
   body decoding. An operator HTTP ticket cannot open a WebSocket.
 - Stored room/settings/profile corruption fails visibly rather than producing
@@ -79,9 +89,14 @@ never room authority and remains visibly unconfirmed until the server answers.
 - persistence tests cover stable `server_id`/room UID across reopen, canonical
   sorting/filtering, atomic new-room creation, profile-derived human projection,
   preservation of room-owned membership state, idempotent retry, and rollback;
+- deterministic bootstrap tests cover retry from an interrupted empty file, a
+  fresh all-in-one commit, recovery of the prior schema-only crash state while
+  preserving `server_id`, and an injected profile-write failure that rolls back
+  every product row before a successful retry;
 - server boundary tests cover purpose-separated one-use tickets, Tauri CORS,
-  body-before-auth rejection, real `GET/POST /api/rooms`, and immediate WebSocket
-  admission to the newly created room;
+  body-before-auth rejection, real `GET/POST /api/rooms`, immediate WebSocket
+  admission to the newly created room, and a production-entry-point restart
+  that preserves the initial room and `server_id`;
 - copied frontend tests cover desktop authenticated routing, pending/failed
   unconfirmed state, stale-cache removal, remote entry preservation, hydration
   race retry, and no client-only success entry;

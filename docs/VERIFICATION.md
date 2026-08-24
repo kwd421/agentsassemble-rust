@@ -184,6 +184,43 @@ libraries explicitly paired. No provider was started because room directory and
 creation do not create or run an Agent Session. Critical web and manual-security
 review remain pending and are not claimed by this evidence.
 
+The subsequent critical web review returned `REVISE` with one reproducible
+crash-consistency blocker in public commit `6624e51`: schema/`server_id` and the
+initial room/profile were committed in separate transactions gated by the
+process-local file-creation boolean. Death after file creation could leave an
+unowned empty file, while death after schema commit could leave a valid v9
+authority with no room/profile that every restart permanently skipped. The
+normal shutdown/restart evidence above did not cover either crash window.
+
+The local correction moves fresh schema, server identity, room/settings,
+publication cursor, participant, and profile into one SQLite transaction. It
+also treats an existing SQLite file with no user schema as an interrupted empty
+authority only after the normal exclusive path and file-identity checks, and
+repairs the older valid schema-only state only when both room and profile
+authority are empty, preserving the committed `server_id`. Four deterministic
+tests prove retry from an interrupted empty file, the fresh all-in-one state,
+prior schema-only recovery, and rollback of every product row after an injected
+profile insert failure before a successful retry. The actual server control-pipe
+boundary additionally starts from a fresh path, shuts down normally, verifies
+the durable `general` directory and
+`server_id`, restarts through the same production bootstrap entry point, and
+proves both identities remain unchanged.
+
+The corrected source passed `make verify`: all mandatory architecture and
+800-line source-growth gates, generated bindings, production frontend and
+original CSS/cascade checks, 66 Vitest files with 339 tests, 14 Tauri tests,
+every Rust workspace test (including 82 persistence tests), warning-denied
+Clippy, and `git diff --check`. Both the workspace and Tauri shell passed their
+warning-denied all-target/all-feature `x86_64-pc-windows-gnu` source checks with
+the installed stable compiler and target libraries explicitly paired. The exact
+release bundle was then rebuilt and driven with Computer Use: it recovered the
+durable `general` room, profile `SeiNel`, historical messages, and Agent Session
+projections; opening Agent Add showed the left-bottom profile surface below the
+modal backdrop. Normal quit removed the exact app and its owned Rust sidecar.
+No provider was started because bootstrap recovery does not require an Agent
+Session. This remains local correction evidence until its commit is pushed and
+the critical web review approves the public revision.
+
 ## Published macOS evidence: `99165dd`
 
 On 2026-08-24, the packaged release candidate that became Rust commit
