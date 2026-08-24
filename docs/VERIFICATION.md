@@ -1037,6 +1037,50 @@ output, and app bundle were moved recoverably to
 unrelated processes were untouched. The correction still requires exact
 public-diff re-review by both critical reviewers.
 
+Daybreaker Blue High re-reviewed public range `0e7d75e..8870778`, confirmed that
+the original frame-tampering High was closed, and rejected one remaining Medium
+retry ambiguity. An active loopback modifier could suppress an authenticated ACK
+and every later counter frame without closing TCP. The former 20-second browser
+timer then deleted the committed command's request ID and rejected it as an
+ordinary timeout, allowing a user retry under a new ID to commit a duplicate.
+The asynchronous signing queue also needed to recheck pending ownership after
+the timer could delete a not-yet-sent command.
+
+The correction now distinguishes commands that never crossed `WebSocket.send`
+from commands with an unknown outcome. A pre-send command may expire normally.
+Once sent, an ACK deadline closes the socket without deleting the pending
+request; the next proof-bound connection replays the exact request ID, action,
+and payload and resolves from the durable deduplication record. Explicit handle
+shutdown reports `outcome_unknown` for any unresolved sent command. Pending
+ownership is checked again after asynchronous signing and before send. A
+connection generation is also checked after every receipt, key-derivation,
+snapshot, and authenticated-frame crypto await and before readiness or
+projection, preventing an old socket from reviving successor state.
+
+Focused browser regressions prove that ACK silence closes the first connection,
+keeps the promise unresolved, replays byte-equivalent command authority on a
+fresh ticket, and resolves a deduplicated ACK; that a command whose pre-send
+deadline expires while signing is never transmitted; and that a snapshot whose
+verification completes after its socket closes cannot project or mark the
+transport ready. The complete unchanged `make verify` then passed: all mandatory
+architecture/source-growth/logical-line/800-line gates, generated bindings,
+production frontend and original CSS verification, 72 frontend files with 354
+tests, 15 Tauri tests, 18 domain, 86 persistence, four protocol, 100 provider,
+17 server unit tests, 21 Rust integration tests, documentation, warning-denied
+Clippy, and final diff validation.
+
+Computer Use drove a newly packaged debug app under isolated identifier
+`app.agentsassemble.rust.ackrecoveryverify`, with the central URL explicitly
+empty. Fresh local identity `Ack Recovery Verify` created a real SQLite room and
+published `ACK_RECOVERY_UI_OK`. Normal quit removed the exact app and runtime. A
+second launch recovered the same room and message over a fresh authenticated
+connection and published `ACK_RECOVERY_RECONNECT_OK`. Final normal quit again
+left no exact app or sidecar process. Application Support, cache, WebKit data,
+and the app bundle were moved recoverably to
+`/Users/seinel/.Trash/AgentsAssemble-Ack-Recovery-Verify-vsI6O6`; original data
+and unrelated processes were untouched. Both exact public-diff re-reviews remain
+required after this second correction is committed and pushed.
+
 ## API verification scope
 
 When a reachable flow specifically needs an API-backed provider, the allowed paid/provider-specific candidates are the official DeepSeek API and the designated Flash provider path. Every other API-backed verification uses only an explicitly free API or free model. Missing credentials, exhausted free quota, or unavailable models fail visibly; they do not trigger a paid substitution or a fallback provider.

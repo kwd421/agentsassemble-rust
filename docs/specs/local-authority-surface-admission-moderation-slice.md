@@ -138,6 +138,15 @@ budget remains in the command transaction and rolls back with it. Ambiguous
 commit outcome is resolved from request ID and idempotency record. Human-principal
 and provider-session mutation governors remain separate.
 
+Once a client command has crossed the WebSocket send boundary, loss of its ACK is
+an unknown outcome, never an ordinary timeout that frees its request ID. The
+client retains the exact serialized request ID, action, and payload, closes that
+connection, and replays those same bytes over a fresh authenticated channel until
+the durable idempotency result is recovered. Only a command that never crossed
+the send boundary may expire as an ordinary timeout. Explicit client shutdown
+reports `outcome_unknown` for an unresolved sent command instead of authorizing
+a new-ID retry.
+
 ## Proof-bound finite subscription
 
 The server acquires the canonical receiver/barrier before snapshot construction.
@@ -169,7 +178,10 @@ never reports readiness.
 The client verifies proof and snapshot digest, then verifies every authenticated
 catch-up frame before projection, and becomes ready only when
 `delivered_seq == H`. `H == C` becomes ready immediately after Snapshot; later
-events are normal live delivery. One absolute deadline covers strict Subscribe,
+events are normal live delivery. Connection generation is rechecked after every
+asynchronous cryptographic operation and before projection or readiness, so an
+old socket cannot mutate the successor connection's state. One absolute deadline
+covers strict Subscribe,
 principal/surface lookup, barrier, snapshot, high-water, encoding, sending,
 catch-up, and readiness. Traffic cannot extend it.
 

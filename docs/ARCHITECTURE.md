@@ -150,7 +150,11 @@ ACK and event delivery happens only after the owning commit. The protocol contra
 must state the permitted post-commit ordering: a connection may observe the event
 before its ACK, and reconnect may recover the event before command-result replay.
 Clients therefore correlate results and advance durable cursors, but never turn an
-optimistic ordering assumption into state authority.
+optimistic ordering assumption into state authority. After a command is sent, an
+ACK deadline closes the connection but retains the exact request identity and
+payload for authenticated replay; it never converts an unknown commit outcome
+into a fresh-ID retry. Explicit shutdown reports that unresolved state as
+`outcome_unknown`.
 
 ### Room event cursor
 

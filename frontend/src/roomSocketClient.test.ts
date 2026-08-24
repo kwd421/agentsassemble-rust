@@ -16,6 +16,7 @@ import type { SubscriptionReceipt } from "./lib/roomSubscriptionContract";
 import { TEST_SERVER_PRODUCT_SURFACE } from "./test/serverProductSurface";
 
 const PROOF_KEY = "b".repeat(64);
+const ROOM_SOCKET_COMMAND_TIMEOUT_MS_FOR_TEST = 20_000;
 const CAPABILITIES = {
   "agent.control": true,
   "bridge.publish": false,
@@ -226,6 +227,7 @@ async function flushPromises() {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.useRealTimers();
 });
 
@@ -421,6 +423,126 @@ describe("proof-bound canonical room socket", () => {
         providers: [],
       })
     );
+    handle.close();
+  });
+
+  it("replays the exact request after authenticated ACK silence", async () => {
+    vi.useFakeTimers();
+    const { handle, sockets, tickets } = openHarness();
+    await flushPromises();
+    sockets[0].open();
+    const firstFrames = await handshakeFrames(sockets[0], tickets[0], 0, 0);
+    sockets[0].receive(firstFrames.receipt);
+    sockets[0].receiveRaw(firstFrames.rawSnapshot);
+    await vi.waitFor(() => expect(handle.ready()).toBe(true));
+
+    const commandPayload = { content: "commit once" };
+    const pendingCommand = handle.command("message.send", commandPayload);
+    let settled = false;
+    void pendingCommand.then(
+      () => { settled = true; },
+      () => { settled = true; }
+    );
+    await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
+    const firstCommand = await sentAuthenticatedCommand(sockets[0], firstFrames);
+    commandPayload.content = "mutated after send";
+
+    await vi.advanceTimersByTimeAsync(ROOM_SOCKET_COMMAND_TIMEOUT_MS_FOR_TEST);
+    expect(sockets[0].readyState).toBe(WebSocket.CLOSED);
+    expect(settled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(500);
+    expect(sockets).toHaveLength(2);
+    sockets[1].open();
+    const secondFrames = await handshakeFrames(sockets[1], tickets[1], 0, 0);
+    sockets[1].receive(secondFrames.receipt);
+    sockets[1].receiveRaw(secondFrames.rawSnapshot);
+    await vi.waitFor(() => expect(handle.ready()).toBe(true));
+    await vi.waitFor(() => expect(sockets[1].sent).toHaveLength(2));
+    const replayedCommand = await sentAuthenticatedCommand(sockets[1], secondFrames);
+    expect(replayedCommand).toEqual(firstCommand);
+
+    await receiveAuthenticated(sockets[1], secondFrames, {
+      op: "ack",
+      accepted: true,
+      request_id: replayedCommand.request_id,
+      action: "message.send",
+      result: { event: event(1), event_seq: 1 },
+      deduplicated: true,
+    });
+    await expect(pendingCommand).resolves.toMatchObject({
+      accepted: true,
+      deduplicated: true,
+    });
+    handle.close();
+  });
+
+  it("does not project an old socket after asynchronous snapshot verification", async () => {
+    const onOpen = vi.fn();
+    const onSnapshot = vi.fn();
+    const { handle, sockets, tickets } = openHarness({
+      onOpen,
+      onRoomSnapshot: onSnapshot,
+    });
+    await flushPromises();
+    sockets[0].open();
+    const frames = await handshakeFrames(sockets[0], tickets[0], 0, 0);
+    sockets[0].receive(frames.receipt);
+    await flushPromises();
+
+    let releaseDigest = () => {};
+    let reportDigestStarted = () => {};
+    const digestStarted = new Promise<void>((resolve) => { reportDigestStarted = resolve; });
+    const digestGate = new Promise<void>((resolve) => { releaseDigest = resolve; });
+    const realDigest = crypto.subtle.digest.bind(crypto.subtle);
+    vi.spyOn(crypto.subtle, "digest").mockImplementationOnce(async (algorithm, data) => {
+      reportDigestStarted();
+      await digestGate;
+      return realDigest(algorithm, data);
+    });
+
+    sockets[0].receiveRaw(frames.rawSnapshot);
+    await digestStarted;
+    sockets[0].close();
+    releaseDigest();
+    await flushPromises();
+
+    expect(onSnapshot).not.toHaveBeenCalled();
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(handle.ready()).toBe(false);
+    handle.close();
+  });
+
+  it("does not transmit a command whose pre-send deadline expired during signing", async () => {
+    vi.useFakeTimers();
+    const { handle, sockets, tickets } = openHarness();
+    await flushPromises();
+    sockets[0].open();
+    const frames = await handshakeFrames(sockets[0], tickets[0], 0, 0);
+    sockets[0].receive(frames.receipt);
+    sockets[0].receiveRaw(frames.rawSnapshot);
+    await vi.waitFor(() => expect(handle.ready()).toBe(true));
+
+    let releaseSignature = () => {};
+    let reportSignatureStarted = () => {};
+    const signatureStarted = new Promise<void>((resolve) => { reportSignatureStarted = resolve; });
+    const signatureGate = new Promise<void>((resolve) => { releaseSignature = resolve; });
+    const realSign = crypto.subtle.sign.bind(crypto.subtle);
+    vi.spyOn(crypto.subtle, "sign").mockImplementationOnce(async (algorithm, key, data) => {
+      reportSignatureStarted();
+      await signatureGate;
+      return realSign(algorithm, key, data);
+    });
+
+    const command = handle.command("message.send", { content: "never sent" });
+    const rejection = expect(command).rejects.toMatchObject({ category: "timeout" });
+    await signatureStarted;
+    await vi.advanceTimersByTimeAsync(ROOM_SOCKET_COMMAND_TIMEOUT_MS_FOR_TEST);
+    await rejection;
+    releaseSignature();
+    await flushPromises();
+
+    expect(sockets[0].sent).toHaveLength(1);
     handle.close();
   });
 });
