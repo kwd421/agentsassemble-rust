@@ -1,6 +1,6 @@
 # Room Directory and Creation Slice
 
-Status: public implementation `6624e51`; web crash-consistency finding fixed locally, public re-review pending
+Status: public implementation `6624e51`; crash-consistency correction `6568810`; critical web and manual-security cross-review approved
 
 ## Definition
 

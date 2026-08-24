@@ -181,8 +181,9 @@ and immediate WebSocket admission were exercised at their public boundaries. The
 full workspace and Tauri shell also passed warning-denied all-target/all-feature
 `x86_64-pc-windows-gnu` source checks with the installed rustup compiler and target
 libraries explicitly paired. No provider was started because room directory and
-creation do not create or run an Agent Session. Critical web and manual-security
-review remain pending and are not claimed by this evidence.
+creation do not create or run an Agent Session. The later correction and review
+evidence below closes the critical-review condition; it does not retroactively
+make this first public revision crash-consistent.
 
 The subsequent critical web review returned `REVISE` with one reproducible
 crash-consistency blocker in public commit `6624e51`: schema/`server_id` and the
@@ -192,7 +193,7 @@ unowned empty file, while death after schema commit could leave a valid v9
 authority with no room/profile that every restart permanently skipped. The
 normal shutdown/restart evidence above did not cover either crash window.
 
-The local correction moves fresh schema, server identity, room/settings,
+Public correction `6568810` moves fresh schema, server identity, room/settings,
 publication cursor, participant, and profile into one SQLite transaction. It
 also treats an existing SQLite file with no user schema as an interrupted empty
 authority only after the normal exclusive path and file-identity checks, and
@@ -218,8 +219,16 @@ durable `general` room, profile `SeiNel`, historical messages, and Agent Session
 projections; opening Agent Add showed the left-bottom profile surface below the
 modal backdrop. Normal quit removed the exact app and its owned Rust sidecar.
 No provider was started because bootstrap recovery does not require an Agent
-Session. This remains local correction evidence until its commit is pushed and
-the critical web review approves the public revision.
+Session. The same GPT-5 Pro critical-review session re-read public correction
+`6568810`, the original `d504647` baseline, and the earlier `6624e51` slice at
+very-high reasoning. Its manual parity and security cross-check examined the
+fresh transaction boundary, empty-file authority classification, schema-only
+repair scope and `server_id` preservation, completed-authority protection,
+pre-mutation input validation, cancellation/crash retry, and the production
+entry point. It returned `APPROVE` with no remaining blocker. This web review
+also served as the user-authorized manual-security cross-check because the same
+Daybreak review task twice terminated without producing a review body; no
+additional Deep Scan or automated scanner was run.
 
 ## Published macOS evidence: `99165dd`
 
