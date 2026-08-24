@@ -49,6 +49,36 @@ paint only while visibly unconfirmed; the authenticated server response removes
 stale local entries and becomes the projection. A client-fabricated `general` is
 not authority—the fresh-runtime bootstrap creates the real durable room.
 
+### Room settings, preferences, and appearance
+
+SQLite `rooms.settings_json` is the only room-global settings record. One strict
+domain validator owns its complete shape and sorted-key compact-JSON revision, but
+field recognition does not imply mutation availability. A settings command may
+change only behavior whose server authority and reachable UI effect are complete;
+channels, invite scope, activity hosting, and asset URLs fail explicitly until
+their owning slices exist. The settings, synchronized room label/time, one event,
+and command replay result commit atomically. Scheduler reconciliation runs after
+that commit, cannot rewrite its ACK as a NACK, and is retried from later lifecycle
+triggers when progression fails.
+
+Authenticated room preferences are a separate complete row keyed by stable
+`(user_id, room_id)`. They may affect only that user's notifications and read
+cursors. Channel preference keys accept the four builtin IDs or the original
+canonical `c` plus twelve lowercase hexadecimal characters without treating the
+preference row as channel authority. Fresh one-use purpose-scoped HTTP tickets,
+authentication before body admission, and current membership gate every read and
+write. Global settings stay WebSocket-owned; preferences stay HTTP-owned.
+
+Room appearance bytes are neither settings nor public authority on upload. A
+pending, expiring, room-and-owner-bound `ra_` capability becomes reachable only
+when the existing settings transaction promotes its exact URL. Banner and icon
+references are transitioned together and an old bound object is removed only when
+neither field still references it. Profile and room images share one safe-raster
+decoder and one global decode-admission semaphore; accepted raster input is
+bounded and re-encoded to static PNG. Pending preview and bound reads are
+non-cacheable, `nosniff`, and `no-referrer`; active content, arbitrary URLs,
+cross-room references, and cross-owner binding fail closed.
+
 ### Durable commands
 
 `(room_id, principal_id, request_id)` identifies a command attempt. Repeating the same action and canonical payload returns its committed result. Reusing the key with a different action or payload is a conflict.
@@ -227,7 +257,62 @@ OpenCode uses one persistent loopback `serve --pure` process and native HTTP/SSE
 
 Provider turns enter through the common adapter only when durable active-turn, provider-session, runtime-handle, owner, profile, and filesystem authority all match. Ordered turns additionally carry a bounded 20,000-character canonical RoomPortal view, its exact input sequence, and at most 64 unique Agent Session handles. The adapter prepares the portal before provider I/O and accepts completion only after an exact read receipt plus exactly one turn-scoped message publication or supported decline; ordinary assistant final text is ignored as room authority. The portal creates an unguessable turn generation at `begin_observation`. A message or decline may be staged before or after `read_discussion`, matching the original tolerant order, but finalization requires the receipt generation and staged outcome generation to equal that exact active turn generation. Retrying a cancelled caller reuses the exact portal state, including an already staged terminal action. The adapter releases the outer runtime-slot mutex before waiting on a long turn, clones the runtime's inner serialized driver owner, and races driver work against an exact-runtime cancellation token; stop and shutdown can therefore cancel the wait, acquire the driver, and reap the owned process within their existing bound. A Codex turn uses `turn/start` with the original app-server workspace/model/effort/approval/sandbox-policy settings, room-observation orientation, and source metadata. Its response must expose one bounded exact provider-turn identity across original-compatible aliases; a bounded process-lifetime history prevents that identity from being rebound to another logical turn. Every reported model, including a `model/rerouted` destination, must still match the selected model. Output-bearing notifications require both exact thread and turn identities, while malformed unscoped output poisons the turn instead of entering its result. Official `hook/*` control notifications are thread-scoped: their thread identity remains mandatory and their nullable turn identity is compared only when present. Valid unmatched notifications remain under the aggregate queue budget, that budget is decremented when a match is consumed, and completion accepts either an explicit signal or the original final-message-plus-thread-idle grace signal. A cancelled caller continues the same pending request or active turn; a different logical turn cannot replace it.
 
-The room mutation task owns ordered-floor serialization, while SQLite owns its durable authority. A source message, unique ordered target queueing, and an immediately available assignment commit together. Direct target resolution considers every configured session before eligibility, so stopped or detached targets retain their queued floor unless kicked or muted; an undirected agent-origin update prefers an eligible director before sampled least-recent-speaker selection. At most one session in a room may carry an exact busy active-turn tuple; `busy` with empty or partial active authority is invalid rather than clear. Its private record binds pending and inflight event IDs, the exact source event, and the canonical provider-input cursor; the combined queue is capped at 256 unique IDs and overflow rejects the source transaction. Assignment moves only the oldest complete prefix that fits 50 messages and the canonical view bound, so no omitted queued event can fall behind an advanced cursor. Lifecycle preparation and startup candidate loading validate this authority before any provider effect. Failure, stop, and restart recovery merge it with one bounded `HashSet` pass; oversized, empty, or duplicate state returns an error instead of truncating queued messages. An adopted runtime with an active turn requeues inflight input, clears active authority, disables and detaches the session, and requires explicit recovery because the provider task was lost. Public `turn_started`, `turn_state`, and `agent_session_state` events are derived from the private record. Provider I/O runs in an owned child task rather than holding the room mutation loop. Completion re-enters that loop and atomically commits the server-owned RoomPortal publication or explicit decline, terminal turn event, provider-sync cursor, idle state, and next queued assignment. Failure restores inflight IDs to pending and clears active authority before exposing a bounded redacted error. Successful or replayed start and stop paths preserve their already committed ACK if later floor progression fails, report that progression failure only through stable diagnostics, and attempt recovered pending work. A stale provider result after stop or authority replacement cannot publish. The browser validates public session state carried by live events, upserts it independently, and renders only room-visible final messages rather than internal coordination events.
+The room mutation task owns scheduling, while SQLite owns its durable authority.
+Each private queue item binds an event ID to its provider delivery semantic—ordered
+observation, ambient observation, or transcript—and relay depth. Pending and
+inflight vectors are the only queue record; no parallel mode/depth map exists. One
+assignment moves only the oldest contiguous prefix with one delivery kind and one
+relay depth that fits the existing message/view limits, so the active source and
+resulting relay depth are unambiguous and no omitted event can fall behind the
+cursor. Combined queue capacity remains 256 unique IDs. Invalid, duplicate,
+oversized, missing, wrong-room, or self-origin authority fails rather than being
+repaired or truncated.
+
+Ordered routing resolves an explicit target before idle eligibility and otherwise
+uses director, prior-speaker, sample, and least-recent policy. Ambient queues every
+eligible or runtime-busy nonactor independently. Continuous keeps addressed and
+unaddressed work distinct: mention, structured target, and `@all` queue addressed
+nonactors unless kicked or muted, while only unaddressed work filters explicit
+default responders and chooses one strictly eligible session in stable circular
+order. Agent transcript relay stops at the room limit. Mode changes never delete
+active/inflight work. Observation cleanup on entry to continuous is deliberately
+lazy at each session's next assignment attempt; transcript work survives leaving
+continuous. Multiple active turns are valid after a transition, while ordered
+mode simply blocks a new assignment whenever any active turn exists.
+
+Schema migration changes v9 string queues transactionally to ordered-observation,
+depth-zero typed items only after checking the old active source, cursor, sequence,
+event rows, and active-or-clear tuple. It preserves ordering and every runtime and
+lifecycle field. Interruption rolls back the entire conversion; committed data is
+handled by the existing startup reconciliation. Lifecycle preparation and startup
+candidate loading validate authority before provider effects. Failure, stop, and
+restart recovery merge queues in bounded linear time. An adopted runtime with an
+active turn requeues inflight input, clears active authority, disables and detaches
+the session, and requires explicit recovery because the provider task was lost.
+
+Provider I/O runs in an owned child task rather than holding the room mutation
+loop. Completion re-enters that loop and atomically commits the server-owned
+RoomPortal publication or explicit decline, terminal turn event, provider-sync
+cursor, idle state, and subsequent assignments. Failure restores inflight work and
+clears active authority before exposing a bounded redacted error. Successful or
+replayed lifecycle ACKs survive later progression failure. A stale provider result
+after stop or authority replacement cannot publish. The browser validates public
+session state carried by live events and renders only room-visible final messages.
+
+Human and provider tabletop operations share one bounded parser and server RNG.
+Provider calls use a turn-scoped sender that stamps room/session/turn IDs; only the
+room actor owns the receiver, persistence, and publication. A same-generation
+RoomPortal read receipt is required. Random calls and terminal publication share a
+short-held witness mutex with opaque `Queued` to `Committing` reservations.
+Terminal publication cannot overtake live reservations, and a reservation cannot
+start after terminal publication. The actor revalidates the durable active tuple,
+inflight source, current tabletop mode, room write budget, and a durable maximum of
+32 successful tool results per turn before commit. Caller cancellation releases no
+queued ownership already transferred to the actor, and committing work is removed
+only after SQLite commit or rollback. Turn close invalidates queued reservations
+but retains a closing tombstone until committing work resolves. No provider-driver
+mutex or witness lock is held while waiting on provider I/O, the room actor, or
+SQLite.
 
 Every current-profile runtime acquires a generation-tokened exact room/session lease before the provider can spawn. The common adapter installs that lease and its handle/owner identity in a `Launching` slot, then atomically changes Unix `pending:<generation>` to `launching:<generation>` before the driver future can first execute, so cancellation cannot discard custody or admit a replacement generation. Unlocked `launching` is never absence proof; `pending` remains reserved for work that provably has not entered a driver. A typed launch result distinguishes failures that are still pre-effect from failures after provider creation. Windows keeps its process lock in the supervisor. Unix uses an internal guardian and a stable process-group anchor plus a separate lifetime lease. The guardian runs in a process group independent of the server, becomes the actual parent of a stopped provider launcher, and continues it only after the anchor has atomically changed the locked launch marker to its group identity. The provider inherits both an unguessable generation tag and a shared lock descriptor for the exact lifetime-file inode. A server or desktop loss closes the guardian control pipe and enters the same cleanup path as a requested stop. Guardian shutdown freezes the anchored group before inspecting escaped ownership. Linux and Android mark the guardian as a child subreaper so ordinary `setsid`, double-fork, cleared-environment, and closed-descriptor descendants return to its observable lineage. Linux acquires start-time-revalidated pidfds for group-external descendants, accepts lifetime ownership only when the matching descriptor's bounded `/proc/<pid>/fdinfo` contains a shared `FLOCK` record, signals only through pidfds, reaps exited children, and waits for the exact group and every captured `(pid,start_time)` to disappear. Android detects escaped lineage but fails closed rather than signaling a numeric PID. macOS registers a kernel `kqueue` fork/exit watcher while the launcher is still stopped; any observed fork or a provider exit before shutdown proof prevents a cleanup receipt. After bounded cleanup the guardian alone changes the exact locked `unix:<generation>:<group>` marker to `gone:<generation>`. A `Launching` slot is released only by that exact receipt, never by the broader lease observation used for truly pre-effect recovery. A failure after guardian spawn is safe only when the receipt is observed; timeout, non-receipt, missing state, or guardian failure remains effect-uncertain with its original handle/owner and blocks replacement. An unlocked `unix` marker is never absence proof, even when its group, tag, and lifetime lock have vanished, so guardian death and ordinary daemon signal stripping cannot create false `Gone`. Confirmed normal-shutdown observations retain the exact lease generation until their absence is durably checkpointed, then remove only that generation. Initialization failure likewise retains exact uncertain authority until shutdown is confirmed. Process start and provider thread attachment remain separate checkpoints.
 

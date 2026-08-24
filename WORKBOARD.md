@@ -1,21 +1,22 @@
 # WORKBOARD
 
-Status: Phase 3 — server-owned room directory and canonical creation are the active migration slice.
+Status: Phase 4 — canonical room settings, scheduling, and tabletop are the active migration slice.
 
 Purpose: route the asynchronous Rust reimplementation without duplicating its contracts.
 
 ## Active work
 
-- Owner: [`docs/specs/room-directory-creation-slice.md`](docs/specs/room-directory-creation-slice.md)
+- Owner: [`docs/specs/room-settings-preferences-appearance-slice.md`](docs/specs/room-settings-preferences-appearance-slice.md)
 - Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - Real-client verification: [`docs/VERIFICATION.md`](docs/VERIFICATION.md)
-- Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust `6624e51edbd71c450497c41812eab23bb0e74770`. Uncommitted work is not public completion evidence.
+- Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust `5c9035f`. Uncommitted work is not public completion evidence.
 - Required order:
-  1. publish the locally verified canonical room-directory/creation slice;
-  2. record its exact public comparison and packaged-app evidence;
-  3. obtain critical web and manual-security review and fix validated findings;
-  4. route the next incomplete original product contract from the exposure map.
-- Exit: the copied room rail is hydrated from durable Rust authority, creates and enters a real room, retains stable server/room identity and message history across restart, and leaves no verification-owned process or UI resource running.
+  1. publish the critically approved settings/scheduler/tabletop design;
+  2. implement and publish Stage A settings, typed durable input, all three schedulers, and human/provider tabletop as one complete authority boundary;
+  3. verify Stage A through deterministic contracts, mandatory gates, packaged UI, and the three approved persistent real providers, then obtain critical web and manual-security review;
+  4. implement, publish, verify, and review Stage B user preferences plus room appearance on the Stage A transaction boundary;
+  5. route the next incomplete original product contract from the exposure map.
+- Exit: copied settings controls mutate only completed Rust behavior; ordered, ambient, and continuous scheduling plus tabletop survive restart with exact authority; the authenticated user retains isolated preferences and safe room appearance; every public feature commit is reviewed; and no verification-owned process or UI resource remains running.
 
 ## Read routes
 
