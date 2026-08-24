@@ -933,6 +933,18 @@ bundle were moved to the recoverable Trash directory
 `/Users/seinel/.Trash/AgentsAssemble-Surface-Auth-Verify-1FMoFt`; original data
 and unrelated processes were untouched. No provider was required or started.
 
+The correction was committed and pushed as
+`1bcd09c877161570e1a1705312579893e60687db`. Daybreaker Blue High manually
+re-reviewed exact public range `ce77535..1bcd09c`, independently reproduced the
+canonical normal and downgraded digests, confirmed that both the retained-digest
+and attacker-recomputed-digest variants fail before persistence/composition, and
+returned `APPROVE` with no new Critical, High, or Medium finding. The same GPT-5.6
+Sol `매우 높음` critical web session independently traced the native control
+pipe, immutable shared `AppState` surface, Rust/TypeScript byte transcript,
+crypto-failure behavior, startup side-effect order, lifetime drift, runtime
+replacement, and non-desktop reachability. It likewise returned explicit
+`APPROVE` with no Critical, High, or Medium blocker.
+
 ## API verification scope
 
 When a reachable flow specifically needs an API-backed provider, the allowed paid/provider-specific candidates are the official DeepSeek API and the designated Flash provider path. Every other API-backed verification uses only an explicitly free API or free model. Missing credentials, exhausted free quota, or unavailable models fail visibly; they do not trigger a paid substitution or a fallback provider.
