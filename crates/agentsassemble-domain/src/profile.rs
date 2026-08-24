@@ -199,7 +199,7 @@ mod tests {
                 status: Some("not-a-status".to_owned()),
                 avatar_image_url: Some("/api/attachments/avatar_1234?view=1".to_owned()),
                 accent_color: Some("#A0B1C2".to_owned()),
-                custom_status: Some("".to_owned()),
+                custom_status: Some(String::new()),
                 mic_muted: Some(false),
                 ..UserProfilePatch::default()
             },
