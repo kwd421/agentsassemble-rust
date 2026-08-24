@@ -8,7 +8,7 @@ Verification claims only the boundary actually observed. Build, lint, unit tests
 
 The active comparison baseline is original
 `d5046473010d1353a81ee38337360e6d98f7bd6f` and public Rust
-`5c31ccf1cf33146a4e91431df7400b8508aca82d`. Local uncommitted behavior
+`b0c55f6fde01d004954458fa54178bd06fce4aab`. Local uncommitted behavior
 is never described as public completion. Every completed-slice evidence entry must
 name the tested Rust commit, original provenance commit, platform/build, exact
 entry point and command flow, viewer identity, provider/model where applicable,
@@ -81,6 +81,38 @@ Frontend flows that require real Agent Sessions use exactly this matrix:
 The verification records the exact provider/model identifiers exposed by the installed runtime at execution time. Missing login, unavailable capability, unsupported model, or provider failure remains visible as failed or `unknown`; it never triggers model substitution, a mock pass, or a fallback provider.
 
 Provider credentials, private conversation state, hidden reasoning, and provider-private identifiers are excluded from screenshots, logs, fixtures, public events, and committed artifacts.
+
+## Published macOS human-profile evidence: `b0c55f6`
+
+On 2026-08-24, public Rust commit
+`b0c55f6fde01d004954458fa54178bd06fce4aab` was compared with original commit
+`d5046473010d1353a81ee38337360e6d98f7bd6f` for the reachable local-operator
+profile flow. The exact packaged debug application at
+`desktop/src-tauri/target/debug/bundle/macos/AgentsAssemble.app` was driven with
+Computer Use as the local operator. Saving `Profile Head E2E` through the copied
+settings UI changed the left-bottom profile, the room roster, and existing human
+message attribution from the same canonical participant projection. Room role,
+join state, mute, permissions, and every Agent Session profile remained separate.
+
+Opening the left-bottom profile card and then Agent Add closed the card and left
+the whole profile bar below the modal backdrop; no profile surface painted above
+the dialog. A normal application quit removed the exact Tauri and Rust sidecar
+processes. Relaunching the same bundle restored `Profile Head E2E` after the
+authenticated runtime profile synchronization, proving that the value came from
+SQLite rather than the initial React default. The profile was then restored to
+`SeiNel`, the application was quit normally, and final app/process inspection
+found no verification-owned AgentsAssemble or `agentsassemble-server` process.
+
+The exact public code passed `make verify`: mandatory architecture and source-
+growth gates, generated bindings, the production frontend build, original CSS
+and cascade verification, 66 Vitest files with 334 tests, 13 Tauri tests, every
+Rust workspace test, warning-denied Clippy, and `git diff --check`. A separate
+warning-denied `x86_64-pc-windows-gnu` workspace all-target/all-feature check also
+passed. The authenticated HTTP boundary test exercised fresh one-use tickets,
+atomic multi-room profile projection, safe raster avatar upload/read, CORS and
+body limits, event delivery, restart persistence, and preservation of room-owned
+fields. No real provider was started because this profile flow does not create or
+run an Agent Session.
 
 ## Published macOS evidence: `99165dd`
 
