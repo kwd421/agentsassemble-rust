@@ -4,14 +4,18 @@ use agentsassemble_domain::{LOCAL_OPERATOR_USER_ID, ParticipantStatus, ProviderC
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_provider::ProviderCatalogService;
 use agentsassemble_server::{AppState, HostSecret, TicketStore, serve};
-use futures_util::StreamExt;
 use hmac::{Hmac, Mac};
 use reqwest::Client;
 use serde_json::{Value, json};
 use sha2::Sha256;
 use tokio::{net::TcpListener, task::JoinHandle};
-use tokio_tungstenite::{connect_async, tungstenite::Message};
+use tokio_tungstenite::connect_async;
 use tokio_util::sync::CancellationToken;
+
+#[path = "support/subscription_proof.rs"]
+mod subscription_proof;
+
+use subscription_proof::AuthenticatedTestSocket;
 
 const HOST_TOKEN: &str = "profile-boundary-host-token-000000001";
 const HOST_REQUEST_CONTEXT: &str = "agentsassemble-host-ticket-request-v1\0";
@@ -285,10 +289,7 @@ async fn assert_profile_update_and_avatar(
             .starts_with(b"\x89PNG\r\n\x1a\n")
     );
 
-    socket
-        .close(None)
-        .await
-        .unwrap_or_else(|error| panic!("close profile socket: {error}"));
+    socket.close().await;
 }
 
 async fn start(store: SqliteStore) -> RunningServer {
@@ -333,52 +334,48 @@ async fn issue_operator_ticket(tickets: &TicketStore) -> String {
 
 async fn connect_room(
     base_url: &str,
-) -> tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
-    use futures_util::SinkExt as _;
-
-    let ticket = request_ticket(base_url).await;
+) -> AuthenticatedTestSocket<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
+    let grant = request_ticket_grant(base_url).await;
+    let ticket = grant["ticket"]
+        .as_str()
+        .unwrap_or_else(|| panic!("profile ticket is missing"))
+        .to_owned();
+    let proof_key = grant["server_proof_key"]
+        .as_str()
+        .unwrap_or_else(|| panic!("profile proof key is missing"))
+        .to_owned();
     let url = format!(
         "{}/ws?ticket={ticket}",
         base_url.replacen("http://", "ws://", 1)
     );
-    let mut socket = connect_async(url)
+    let socket = connect_async(url)
         .await
         .unwrap_or_else(|error| panic!("connect profile socket: {error}"))
         .0;
-    let challenge = "d".repeat(64);
-    socket
-        .send(Message::Text(
-            json!({
-                "op":"subscribe",
-                "streams":["room_events"],
-                "resume_from_seq":0,
-                "server_challenge": challenge,
-            })
-            .to_string()
-            .into(),
-        ))
-        .await
-        .unwrap_or_else(|error| panic!("subscribe profile socket: {error}"));
-    let receipt = receive_json(&mut socket).await;
+    let mut socket = AuthenticatedTestSocket::new(socket, ticket, proof_key);
+    let receipt = socket.subscribe(0).await;
     assert_eq!(receipt["op"], "subscribed");
-    assert_eq!(receipt["server_challenge"], challenge);
     socket
 }
 
-async fn receive_json<S>(socket: &mut tokio_tungstenite::WebSocketStream<S>) -> Value
+async fn receive_json<S>(socket: &mut AuthenticatedTestSocket<S>) -> Value
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
-    let message = tokio::time::timeout(Duration::from_secs(2), socket.next())
+    socket
+        .receive_json_with_timeout(Duration::from_secs(2))
         .await
-        .unwrap_or_else(|_| panic!("profile WebSocket frame timed out"))
-        .unwrap_or_else(|| panic!("profile WebSocket closed"))
-        .unwrap_or_else(|error| panic!("read profile WebSocket: {error}"));
-    serde_json::from_slice(&message.into_data())
-        .unwrap_or_else(|error| panic!("decode profile WebSocket: {error}"))
 }
 
 async fn request_ticket(base_url: &str) -> String {
+    let grant = request_ticket_grant(base_url).await;
+    grant["ticket"]
+        .as_str()
+        .unwrap_or_else(|| panic!("profile ticket is missing"))
+        .to_owned()
+}
+
+async fn request_ticket_grant(base_url: &str) -> Value {
     let challenge: Value = Client::new()
         .get(format!("{base_url}/api/host-challenge"))
         .send()
@@ -402,10 +399,7 @@ async fn request_ticket(base_url: &str) -> String {
         .json()
         .await
         .unwrap_or_else(|error| panic!("decode profile ticket: {error}"));
-    grant["ticket"]
-        .as_str()
-        .unwrap_or_else(|| panic!("profile ticket is missing"))
-        .to_owned()
+    grant
 }
 
 fn expected_hmac(context: &str, fields: &[&str]) -> String {

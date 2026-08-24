@@ -4,7 +4,17 @@ export function lengthDelimitedTranscript(
   context: string,
   fields: readonly string[]
 ): Uint8Array<ArrayBuffer> {
-  const values = [context, ...fields].map((value) => encoder.encode(value));
+  return lengthDelimitedByteTranscript(
+    context,
+    fields.map((value) => encoder.encode(value))
+  );
+}
+
+export function lengthDelimitedByteTranscript(
+  context: string,
+  fields: readonly Uint8Array<ArrayBuffer>[]
+): Uint8Array<ArrayBuffer> {
+  const values = [encoder.encode(context), ...fields];
   const size = values.reduce((total, value) => total + 8 + value.length, 0);
   const transcript = new Uint8Array(size);
   const view = new DataView(transcript.buffer);

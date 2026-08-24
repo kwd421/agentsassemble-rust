@@ -21,7 +21,8 @@ use tokio_util::sync::CancellationToken;
 mod subscription_proof;
 
 use subscription_proof::{
-    connection_nonce_for_ticket, expected_subscription_proof, permissions_digest, sha256_hex,
+    AuthenticatedTestSocket, connection_nonce_for_ticket, expected_subscription_proof,
+    permissions_digest, sha256_hex,
 };
 
 const HOST_TOKEN: &str = "boundary-test-host-token-0000000001";
@@ -103,10 +104,7 @@ async fn external_client_recovers_committed_command_after_restart() {
     assert_eq!(ack["result"]["event_seq"], 2);
     assert_eq!(ack["result"]["event"]["id"], event["events"][0]["id"]);
     assert_eq!(event["events"][0]["id"].as_str().map(str::len), Some(36));
-    first_socket
-        .close(None)
-        .await
-        .unwrap_or_else(|error| panic!("close first socket: {error}"));
+    first_socket.close().await;
     first_server.stop().await;
 
     let reopened = SqliteStore::open(&database_url)
@@ -129,9 +127,9 @@ async fn external_client_recovers_committed_command_after_restart() {
     assert_eq!(retry["deduplicated"], true);
     assert_eq!(retry["result"]["event_seq"], 2);
     assert!(
-        tokio::time::timeout(Duration::from_millis(100), second_socket.next())
+        second_socket
+            .has_no_frame_for(Duration::from_millis(100))
             .await
-            .is_err()
     );
     let mut cursor_ahead = connect(&second_server.base_url).await;
     let resync = subscribe(&mut cursor_ahead, 50).await;
@@ -246,26 +244,18 @@ async fn snapshot_is_trimmed_to_the_websocket_message_budget() {
     let content = "x".repeat(12_000);
     for index in 0..32 {
         socket
-            .send(Message::Text(
-                json!({
-                    "op": "command",
-                    "request_id": format!("snapshot-budget-{index}"),
-                    "action": "message.send",
-                    "payload": {"content": content}
-                })
-                .to_string()
-                .into(),
-            ))
-            .await
-            .unwrap_or_else(|error| panic!("send snapshot fixture command: {error}"));
+            .send_json(&json!({
+                "op": "command",
+                "request_id": format!("snapshot-budget-{index}"),
+                "action": "message.send",
+                "payload": {"content": content}
+            }))
+            .await;
         for _ in 0..2 {
             let _ = receive_json(&mut socket).await;
         }
     }
-    socket
-        .close(None)
-        .await
-        .unwrap_or_else(|error| panic!("close fixture socket: {error}"));
+    socket.close().await;
 
     let mut resumed = connect(&server.base_url).await;
     subscribe(&mut resumed, 0).await;
@@ -356,18 +346,60 @@ async fn authenticated_binary_frame_is_rejected_and_closed() {
     subscribe(&mut socket, 0).await;
     let snapshot = receive_json(&mut socket).await;
     assert_eq!(snapshot["op"], "snapshot");
-    socket
-        .send(Message::Binary(vec![1, 2, 3].into()))
-        .await
-        .unwrap_or_else(|error| panic!("send binary frame: {error}"));
+    socket.send_binary(vec![1, 2, 3]).await;
     let nack = receive_json(&mut socket).await;
     assert_eq!(nack["error"]["code"], "binary_frame_unsupported");
-    let closed = tokio::time::timeout(Duration::from_secs(1), socket.next()).await;
-    assert!(matches!(
-        closed,
-        Ok(None | Some(Ok(Message::Close(_)) | Err(_)))
-    ));
+    assert!(socket.wait_closed().await);
     server.stop().await;
+}
+
+#[tokio::test]
+async fn tampered_authenticated_command_cannot_create_a_durable_mutation() {
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
+    let database_url = format!(
+        "sqlite://{}",
+        directory.path().join("runtime.sqlite3").display()
+    );
+    let store = SqliteStore::open(&database_url)
+        .await
+        .unwrap_or_else(|error| panic!("open test store: {error}"));
+    bootstrap(&store).await;
+    let server = start(store).await;
+    let mut socket = connect(&server.base_url).await;
+    subscribe(&mut socket, 0).await;
+    assert_eq!(receive_json(&mut socket).await["op"], "snapshot");
+    let signed = json!({
+        "op": "command",
+        "request_id": "tampered-command",
+        "action": "message.send",
+        "payload": {"content": "signed content"}
+    });
+    let transmitted = json!({
+        "op": "command",
+        "request_id": "tampered-command",
+        "action": "message.send",
+        "payload": {"content": "attacker content"}
+    });
+    socket.send_tampered_json(&signed, &transmitted).await;
+    let nack = receive_json(&mut socket).await;
+    assert_eq!(nack["error"]["code"], "frame_authentication_invalid");
+    assert!(socket.wait_closed().await);
+    server.stop().await;
+
+    let reopened = SqliteStore::open(&database_url)
+        .await
+        .unwrap_or_else(|error| panic!("reopen tamper test store: {error}"));
+    let snapshot = reopened
+        .snapshot("general", 0, 200)
+        .await
+        .unwrap_or_else(|error| panic!("read tamper test snapshot: {error}"));
+    assert!(
+        snapshot
+            .events
+            .iter()
+            .all(|event| event.content.as_deref() != Some("attacker content"))
+    );
 }
 
 #[tokio::test]
@@ -412,7 +444,7 @@ async fn websocket_snapshot_proves_the_private_ticket_control_channel() {
         ))
         .await
         .unwrap_or_else(|error| panic!("send proved subscription: {error}"));
-    let receipt = receive_json(&mut socket).await;
+    let receipt = receive_raw_json(&mut socket).await;
     assert_eq!(receipt["op"], "subscribed");
     let received = receipt["proof"]
         .as_str()
@@ -484,19 +516,25 @@ async fn start_server(
 
 async fn connect(
     base_url: &str,
-) -> WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
+) -> AuthenticatedTestSocket<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
     let grant = request_ticket(base_url).await;
     let ticket = grant["ticket"]
         .as_str()
-        .unwrap_or_else(|| panic!("ticket response has no ticket"));
+        .unwrap_or_else(|| panic!("ticket response has no ticket"))
+        .to_owned();
+    let proof_key = grant["server_proof_key"]
+        .as_str()
+        .unwrap_or_else(|| panic!("ticket response has no proof key"))
+        .to_owned();
     let url = format!(
         "{}/ws?ticket={ticket}",
         base_url.replacen("http://", "ws://", 1)
     );
-    connect_async(url)
+    let socket = connect_async(url)
         .await
         .unwrap_or_else(|error| panic!("connect WebSocket: {error}"))
-        .0
+        .0;
+    AuthenticatedTestSocket::new(socket, ticket, proof_key)
 }
 
 async fn request_ticket(base_url: &str) -> Value {
@@ -606,51 +644,35 @@ fn expected_hmac(secret: &str, context: &str, fields: &[&str]) -> String {
         })
 }
 
-async fn subscribe<S>(socket: &mut WebSocketStream<S>, cursor: i64) -> Value
+async fn subscribe<S>(socket: &mut AuthenticatedTestSocket<S>, cursor: i64) -> Value
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
-    let challenge = "d".repeat(64);
-    socket
-        .send(Message::Text(
-            json!({
-                "op": "subscribe",
-                "streams": ["room_events"],
-                "resume_from_seq": cursor,
-                "server_challenge": challenge,
-            })
-            .to_string()
-            .into(),
-        ))
-        .await
-        .unwrap_or_else(|error| panic!("send subscription: {error}"));
-    let first = receive_json(socket).await;
-    if first["op"] == "subscribed" {
-        assert_eq!(first["server_challenge"], challenge);
-    }
-    first
+    socket.subscribe(cursor).await
 }
 
-async fn send_command<S>(socket: &mut WebSocketStream<S>)
+async fn send_command<S>(socket: &mut AuthenticatedTestSocket<S>)
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
     socket
-        .send(Message::Text(
-            json!({
-                "op": "command",
-                "request_id": "boundary-request-1",
-                "action": "message.send",
-                "payload": {"content": "boundary hello"}
-            })
-            .to_string()
-            .into(),
-        ))
-        .await
-        .unwrap_or_else(|error| panic!("send command: {error}"));
+        .send_json(&json!({
+            "op": "command",
+            "request_id": "boundary-request-1",
+            "action": "message.send",
+            "payload": {"content": "boundary hello"}
+        }))
+        .await;
 }
 
-async fn receive_json<S>(socket: &mut WebSocketStream<S>) -> Value
+async fn receive_json<S>(socket: &mut AuthenticatedTestSocket<S>) -> Value
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    socket.receive_json().await
+}
+
+async fn receive_raw_json<S>(socket: &mut WebSocketStream<S>) -> Value
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {

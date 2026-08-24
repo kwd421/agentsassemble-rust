@@ -4,10 +4,28 @@ use agentsassemble_domain::CapabilitySet;
 use agentsassemble_protocol::Subscribed;
 use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256};
+use subtle::ConstantTimeEq;
 
 const CONNECTION_NONCE_CONTEXT: &str = "agentsassemble.ws-connection-nonce.v1";
 const PERMISSIONS_CONTEXT: &str = "agentsassemble.permissions.v1";
 const SUBSCRIPTION_PROOF_CONTEXT: &str = "agentsassemble.subscription-proof.v1";
+const FRAME_KEY_CONTEXT: &str = "agentsassemble.ws-frame-key.v1";
+const FRAME_PROOF_CONTEXT: &str = "agentsassemble.ws-frame-proof.v1";
+
+#[derive(Clone, Copy)]
+pub(crate) enum FrameDirection {
+    Client,
+    Server,
+}
+
+impl FrameDirection {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Client => "client",
+            Self::Server => "server",
+        }
+    }
+}
 
 pub(crate) fn challenge_is_valid(challenge: &str) -> bool {
     challenge.len() == 64 && challenge.bytes().all(|byte| byte.is_ascii_hexdigit())
@@ -54,6 +72,51 @@ pub(crate) fn sign_subscription(proof_key: &str, receipt: &Subscribed) -> String
         add_field(&mut signer, field.as_bytes());
     }
     encode_hex(&signer.finalize().into_bytes())
+}
+
+pub(crate) fn sign_frame(
+    proof_key: &str,
+    connection_nonce: &str,
+    direction: FrameDirection,
+    counter: u64,
+    payload: &[u8],
+) -> String {
+    let connection_key = derive_frame_key(proof_key, connection_nonce);
+    let mut signer = Hmac::<Sha256>::new_from_slice(&connection_key)
+        .unwrap_or_else(|_| unreachable!("HMAC accepts keys of every length"));
+    add_field(&mut signer, FRAME_PROOF_CONTEXT.as_bytes());
+    add_field(&mut signer, connection_nonce.as_bytes());
+    add_field(&mut signer, direction.as_str().as_bytes());
+    add_field(&mut signer, counter.to_string().as_bytes());
+    add_field(&mut signer, payload);
+    encode_hex(&signer.finalize().into_bytes())
+}
+
+pub(crate) fn verify_frame_proof(
+    proof_key: &str,
+    connection_nonce: &str,
+    direction: FrameDirection,
+    counter: u64,
+    payload: &[u8],
+    proof: &str,
+) -> bool {
+    proof.len() == 64
+        && proof
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        && bool::from(
+            sign_frame(proof_key, connection_nonce, direction, counter, payload)
+                .as_bytes()
+                .ct_eq(proof.as_bytes()),
+        )
+}
+
+fn derive_frame_key(proof_key: &str, connection_nonce: &str) -> [u8; 32] {
+    let mut signer = Hmac::<Sha256>::new_from_slice(proof_key.as_bytes())
+        .unwrap_or_else(|_| unreachable!("HMAC accepts keys of every length"));
+    add_field(&mut signer, FRAME_KEY_CONTEXT.as_bytes());
+    add_field(&mut signer, connection_nonce.as_bytes());
+    signer.finalize().into_bytes().into()
 }
 
 fn subscription_fields(receipt: &Subscribed) -> Vec<String> {
@@ -136,7 +199,8 @@ mod tests {
     use agentsassemble_protocol::{PROTOCOL_VERSION, RoomStream, Subscribed};
 
     use super::{
-        challenge_is_valid, derive_connection_nonce, permissions_digest, sign_subscription,
+        FrameDirection, challenge_is_valid, derive_connection_nonce, permissions_digest,
+        sign_frame, sign_subscription, verify_frame_proof,
     };
 
     fn receipt() -> Subscribed {
@@ -178,5 +242,45 @@ mod tests {
             derive_connection_nonce(&"a".repeat(64)),
             derive_connection_nonce(&"b".repeat(64))
         );
+    }
+
+    #[test]
+    fn frame_proof_binds_connection_direction_counter_and_exact_bytes() {
+        let proof_key = "b".repeat(64);
+        let nonce = derive_connection_nonce(&"c".repeat(64));
+        let payload = br#"{"op":"ping","nonce":"exact"}"#;
+        let proof = sign_frame(&proof_key, &nonce, FrameDirection::Client, 7, payload);
+        assert!(verify_frame_proof(
+            &proof_key,
+            &nonce,
+            FrameDirection::Client,
+            7,
+            payload,
+            &proof,
+        ));
+        assert!(!verify_frame_proof(
+            &proof_key,
+            &nonce,
+            FrameDirection::Server,
+            7,
+            payload,
+            &proof,
+        ));
+        assert!(!verify_frame_proof(
+            &proof_key,
+            &nonce,
+            FrameDirection::Client,
+            8,
+            payload,
+            &proof,
+        ));
+        assert!(!verify_frame_proof(
+            &proof_key,
+            &nonce,
+            FrameDirection::Client,
+            7,
+            br#"{"op":"ping","nonce":"changed"}"#,
+            &proof,
+        ));
     }
 }

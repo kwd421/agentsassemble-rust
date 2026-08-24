@@ -40,6 +40,7 @@ macro_rules! registered_routes {
 
 mod agent_create_runtime;
 mod app_state;
+mod authenticated_channel;
 mod event_publication;
 mod host_ticket;
 mod http_api;

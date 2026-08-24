@@ -991,6 +991,52 @@ Original-product data and unrelated processes were untouched. This candidate
 still requires exact public-diff cross-review by the critical web session and
 Daybreaker Blue High.
 
+Daybreaker Blue High rejected public range `27181cd..0e7d75e` with one High
+channel-integrity finding. The signed receipt bound `C`, `H`, and the exact
+Snapshot but did not authenticate catch-up/live events, ACK/NACK frames, or
+client command bytes. An active loopback modifier could relay the genuine
+receipt and Snapshot, change an event body without changing its sequence shape,
+or retain a command action/request ID while replacing `message.send` content.
+Those frames could pass the former structural checks and the command variant
+could create attacker-selected durable state.
+
+The correction derives a connection-specific HMAC key from the private ticket
+proof key and receipt-bound nonce. After the plain receipt-bound Snapshot, every
+frame in both directions uses one strict authenticated envelope. Its versioned,
+64-bit length-delimited transcript binds nonce, `client` or `server` direction,
+an independently contiguous counter beginning at one, and the exact decoded
+inner JSON UTF-8 bytes. Canonical base64 carries the inner frame. Product bytes
+remain limited to 256 KiB and the envelope to 384 KiB. Proof, counter,
+direction, canonical-encoding, or inner-schema failure is rejected before event
+projection or room action execution and closes the connection. The browser also
+serializes outbound signing, sends each pending request at most once per
+connection, and retains the same request ID for a fresh authenticated retry
+after reconnect.
+
+The unchanged complete `make verify` passed after the correction: all mandatory
+architecture/source-growth/logical-line/800-line gates, generated bindings,
+production frontend and original CSS verification, 72 frontend files with 351
+tests, 15 Tauri tests, 18 domain, 86 persistence, four protocol, 100 provider,
+17 server unit tests, and 21 Rust integration tests, documentation,
+warning-denied Clippy, and final diff validation. New regressions reject exact
+catch-up content mutation, command payload mutation, replay, counter gaps, and
+direction reflection. A real server boundary test proves a command whose
+authenticated payload is replaced cannot execute and leaves no attacker content
+in SQLite.
+
+Computer Use then drove a new packaged debug application under isolated
+identifier `app.agentsassemble.rust.frameauthverify`, with the central URL
+explicitly unset. Fresh local identity `Frame Auth Verify` created the first
+SQLite room and published `FRAME_AUTH_CHANNEL_OK` through the authenticated
+command/event path. Normal quit removed the exact application and runtime. A
+second launch recovered the same room and message through a fresh connection and
+published `FRAME_AUTH_RECONNECT_OK`. Final normal quit again left no exact app or
+sidecar process. Its Application Support data, cache, WebKit data, preflight
+output, and app bundle were moved recoverably to
+`/Users/seinel/.Trash/AgentsAssemble-Frame-Auth-Verify-uwlYKa`; original data and
+unrelated processes were untouched. The correction still requires exact
+public-diff re-review by both critical reviewers.
+
 ## API verification scope
 
 When a reachable flow specifically needs an API-backed provider, the allowed paid/provider-specific candidates are the official DeepSeek API and the designated Flash provider path. Every other API-backed verification uses only an explicitly free API or free model. Missing credentials, exhausted free quota, or unavailable models fail visibly; they do not trigger a paid substitution or a fallback provider.

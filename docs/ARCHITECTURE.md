@@ -259,7 +259,7 @@ HTTP ticket with the validated loopback HTTP origin. React receives neither the
 host secret nor a reusable credential. A ticket presented to the wrong transport
 or scope is consumed and rejected rather than interpreted as another authority.
 
-The local HTTP/WebSocket adapter has explicit resource budgets: admission is bounded immediately after TCP accept, incomplete HTTP headers and request bodies have real deadlines, WebSocket admission is independently bounded, frames/messages stop at 256 KiB, the first subscription has a ten-second deadline, and authenticated ingress has message, byte, and control-frame windows. Binary frames are rejected. Room queue admission never waits and returns `room_busy` when saturated.
+The local HTTP/WebSocket adapter has explicit resource budgets: admission is bounded immediately after TCP accept, incomplete HTTP headers and request bodies have real deadlines, WebSocket admission is independently bounded, inner product frames stop at 256 KiB and their authenticated wire envelopes at 384 KiB, the first subscription has a ten-second deadline, and authenticated ingress has message, byte, and control-frame windows. The one-use ticket proof establishes a connection key; after the receipt-bound plain Snapshot, every frame in both directions is authenticated over connection nonce, direction, a strict contiguous counter, and exact inner bytes before projection or command execution. Binary frames are rejected. Room queue admission never waits and returns `room_busy` when saturated.
 
 Authorization is evaluated from the current principal and durable room state when
 the application command runs, not frozen as a hard-coded local-operator identity at

@@ -207,6 +207,16 @@ pub enum ClientFrame {
     },
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
+pub enum AuthenticatedFrame {
+    Authenticated {
+        counter: u64,
+        payload: String,
+        proof: String,
+    },
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum ServerFrame {

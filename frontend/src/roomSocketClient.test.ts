@@ -7,6 +7,11 @@ import {
   subscriptionProofTranscript,
 } from "./lib/serverProof";
 import { utf8 } from "./lib/lengthDelimitedCrypto";
+import {
+  decodeAuthenticatedFrame,
+  deriveAuthenticatedFrameKey,
+  encodeAuthenticatedFrame,
+} from "./lib/authenticatedFrames";
 import type { SubscriptionReceipt } from "./lib/roomSubscriptionContract";
 import { TEST_SERVER_PRODUCT_SURFACE } from "./test/serverProductSurface";
 
@@ -137,7 +142,46 @@ async function handshakeFrames(
   };
   mutateReceipt?.(receipt);
   receipt.proof = await signReceipt(receipt);
-  return { receipt, snap, rawSnapshot };
+  return {
+    receipt,
+    snap,
+    rawSnapshot,
+    frameKey: await deriveAuthenticatedFrameKey(PROOF_KEY, receipt.connection_nonce),
+    connectionNonce: receipt.connection_nonce,
+    serverCounter: 0,
+  };
+}
+
+async function receiveAuthenticated(
+  socket: FakeWebSocket,
+  frames: Awaited<ReturnType<typeof handshakeFrames>>,
+  message: Record<string, unknown>
+) {
+  frames.serverCounter += 1;
+  socket.receiveRaw(await encodeAuthenticatedFrame(
+    frames.frameKey,
+    frames.connectionNonce,
+    "server",
+    frames.serverCounter,
+    JSON.stringify(message)
+  ));
+}
+
+async function sentAuthenticatedCommand(
+  socket: FakeWebSocket,
+  frames: Awaited<ReturnType<typeof handshakeFrames>>,
+  index = 1,
+  counter = 1
+) {
+  const raw = JSON.stringify(socket.sent[index]);
+  const payload = await decodeAuthenticatedFrame(
+    frames.frameKey,
+    frames.connectionNonce,
+    "client",
+    counter,
+    raw
+  );
+  return JSON.parse(payload) as Record<string, unknown>;
 }
 
 function openHarness(handlers: Parameters<typeof openRoomSocket>[2] = {}) {
@@ -206,7 +250,7 @@ describe("proof-bound canonical room socket", () => {
     expect(onOpen).not.toHaveBeenCalled();
     expect(sockets[0].sent).toHaveLength(1);
 
-    sockets[0].receive({
+    await receiveAuthenticated(sockets[0], frames, {
       op: "event",
       stream: "room_events",
       events: [event(2)],
@@ -216,13 +260,13 @@ describe("proof-bound canonical room socket", () => {
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     expect(onOpen).toHaveBeenCalledOnce();
     expect(onEvents).toHaveBeenCalledWith([event(2)]);
-    const command = sockets[0].sent[1];
+    const command = await sentAuthenticatedCommand(sockets[0], frames);
     expect(command).toMatchObject({
       op: "command",
       action: "message.send",
       payload: { content: "hello" },
     });
-    sockets[0].receive({
+    await receiveAuthenticated(sockets[0], frames, {
       op: "ack",
       accepted: true,
       request_id: command.request_id,
@@ -284,7 +328,7 @@ describe("proof-bound canonical room socket", () => {
     const frames = await handshakeFrames(sockets[0], tickets[0], 1, 3);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
-    sockets[0].receive({
+    await receiveAuthenticated(sockets[0], frames, {
       op: "event",
       stream: "room_events",
       events: [event(3)],
@@ -309,14 +353,14 @@ describe("proof-bound canonical room socket", () => {
     sockets[0].receive(first.receipt);
     sockets[0].receiveRaw(first.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
-    sockets[0].receive({
+    await receiveAuthenticated(sockets[0], first, {
       op: "event",
       stream: "room_events",
       events: [event(1)],
       latest_seq: 1,
     });
     await vi.waitFor(() => expect(onEvents).toHaveBeenCalledWith([event(1)]));
-    sockets[0].receive({
+    await receiveAuthenticated(sockets[0], first, {
       op: "resync_required",
       stream: "room_events",
       latest_seq: 1,
@@ -345,8 +389,8 @@ describe("proof-bound canonical room socket", () => {
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     void handle.command("message.send", { content: "hello" }).catch(() => {});
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
-    const command = sockets[0].sent[1];
-    sockets[0].receive({
+    const command = await sentAuthenticatedCommand(sockets[0], frames);
+    await receiveAuthenticated(sockets[0], frames, {
       op: "ack",
       accepted: true,
       request_id: command.request_id,
@@ -366,7 +410,7 @@ describe("proof-bound canonical room socket", () => {
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await flushPromises();
-    sockets[0].receive({
+    await receiveAuthenticated(sockets[0], frames, {
       op: "provider_catalog_updated",
       catalog: { status: "ready", catalog_revision: "cat-2", providers: [] },
     });

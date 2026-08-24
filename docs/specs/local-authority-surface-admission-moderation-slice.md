@@ -150,12 +150,24 @@ protocol version, sorted accepted streams, server-surface revision and digest,
 canonical permissions or their exact digest, `C`, `H`, and the exact final
 Snapshot bytes digest. Proof appears only in `Subscribed`, avoiding recursion.
 
+That receipt establishes a connection-specific authenticated channel. A distinct
+frame key is derived from the ticket proof key and connection nonce. After the
+plain, receipt-bound Snapshot, every server catch-up/live/event/ACK/NACK/catalog/
+resync/pong frame and every client command/ping frame uses one strict envelope.
+Its HMAC binds a versioned length-delimited context, connection nonce, direction,
+an independently contiguous counter starting at one, and the exact decoded inner
+JSON UTF-8 bytes. Base64 is canonical, inner product frames remain bounded at
+256 KiB, and the authenticated wire envelope remains bounded at 384 KiB. A
+counter replay/gap, direction reflection, noncanonical payload, or proof failure
+is rejected before projection or command execution and closes the connection.
+
 `Subscribed` and Snapshot are encoded and size-checked before either is sent.
 The server then delivers `C+1..H` contiguously. Receiver lag or a gap is refilled
 from durable `(C,H]`; an unresolved gap or overflow resynchronizes/closes and
 never reports readiness.
 
-The client verifies proof and snapshot digest and becomes ready only when
+The client verifies proof and snapshot digest, then verifies every authenticated
+catch-up frame before projection, and becomes ready only when
 `delivered_seq == H`. `H == C` becomes ready immediately after Snapshot; later
 events are normal live delivery. One absolute deadline covers strict Subscribe,
 principal/surface lookup, barrier, snapshot, high-water, encoding, sending,

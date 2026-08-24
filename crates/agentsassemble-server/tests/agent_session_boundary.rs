@@ -6,13 +6,12 @@ use agentsassemble_domain::{
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService};
 use agentsassemble_server::{AppState, HostSecret, TicketStore, serve};
-use futures_util::{SinkExt, StreamExt};
 use hmac::{Hmac, Mac};
 use reqwest::Client;
 use serde_json::{Value, json};
 use sha2::Sha256;
 use tokio::{net::TcpListener, task::JoinHandle};
-use tokio_tungstenite::{WebSocketStream, connect_async, tungstenite::Message};
+use tokio_tungstenite::connect_async;
 use tokio_util::sync::CancellationToken;
 
 #[cfg(unix)]
@@ -21,6 +20,11 @@ mod room_portal_fixture;
 
 #[path = "support/provider_fixture.rs"]
 mod provider_fixture;
+
+#[path = "support/subscription_proof.rs"]
+mod subscription_proof;
+
+use subscription_proof::AuthenticatedTestSocket;
 
 #[cfg(unix)]
 #[path = "agent_session_boundary/agent_configuration.rs"]
@@ -118,10 +122,7 @@ async fn create_replay_conflict_and_restart_share_one_durable_authority() {
         receive_json(&mut socket).await["error"]["code"],
         "command_conflict"
     );
-    socket
-        .close(None)
-        .await
-        .unwrap_or_else(|error| panic!("close agent socket: {error}"));
+    socket.close().await;
     first.stop().await;
 
     let reopened = SqliteStore::open(&database_url)
@@ -215,10 +216,7 @@ async fn lifecycle_commands_use_the_owned_codex_app_server_before_committing() {
     let running = receive_until_ack(&mut socket, 3).await;
     assert_eq!(running["result"]["agent_session"]["runtime_status"], "idle");
     assert_session_flag(&running, "provider_session_reused");
-    socket
-        .close(None)
-        .await
-        .unwrap_or_else(|error| panic!("close lifecycle socket: {error}"));
+    socket.close().await;
     server.stop().await;
     let reopened = SqliteStore::open(&database_url)
         .await
@@ -444,7 +442,7 @@ async fn start(store: SqliteStore, catalog: ProviderCatalog) -> RunningServer {
 
 async fn connect(
     base_url: &str,
-) -> WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
+) -> AuthenticatedTestSocket<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
     let challenge = request_challenge(base_url).await;
     let proof = expected_hmac(
         "agentsassemble-host-ticket-request-v1\0",
@@ -463,14 +461,20 @@ async fn connect(
         .unwrap_or_else(|error| panic!("decode ticket: {error}"));
     let ticket = grant["ticket"]
         .as_str()
-        .unwrap_or_else(|| panic!("ticket response has no ticket"));
-    connect_async(format!(
+        .unwrap_or_else(|| panic!("ticket response has no ticket"))
+        .to_owned();
+    let proof_key = grant["server_proof_key"]
+        .as_str()
+        .unwrap_or_else(|| panic!("ticket response has no proof key"))
+        .to_owned();
+    let socket = connect_async(format!(
         "{}/ws?ticket={ticket}",
         base_url.replacen("http://", "ws://", 1)
     ))
     .await
     .unwrap_or_else(|error| panic!("connect WebSocket: {error}"))
-    .0
+    .0;
+    AuthenticatedTestSocket::new(socket, ticket, proof_key)
 }
 
 async fn request_challenge(base_url: &str) -> String {
@@ -507,47 +511,27 @@ fn expected_hmac(context: &str, fields: &[&str]) -> String {
         })
 }
 
-async fn subscribe<S>(socket: &mut WebSocketStream<S>)
+async fn subscribe<S>(socket: &mut AuthenticatedTestSocket<S>)
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
-    let challenge = "d".repeat(64);
-    socket
-        .send(Message::Text(
-            json!({
-                "op": "subscribe",
-                "streams": ["room_events"],
-                "resume_from_seq": 0,
-                "server_challenge": challenge,
-            })
-            .to_string()
-            .into(),
-        ))
-        .await
-        .unwrap_or_else(|error| panic!("send subscription: {error}"));
-    let receipt = receive_json(socket).await;
+    let receipt = socket.subscribe(0).await;
     assert_eq!(receipt["op"], "subscribed");
-    assert_eq!(receipt["server_challenge"], challenge);
     assert_eq!(receipt["streams"], json!(["room_events"]));
 }
 
-async fn send_create<S>(socket: &mut WebSocketStream<S>, request_id: &str, payload: &Value)
+async fn send_create<S>(socket: &mut AuthenticatedTestSocket<S>, request_id: &str, payload: &Value)
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
     socket
-        .send(Message::Text(
-            json!({"op": "command", "request_id": request_id, "action": "agent.create", "payload": payload})
-                .to_string()
-                .into(),
-        ))
-        .await
-        .unwrap_or_else(|error| panic!("send agent create: {error}"));
+        .send_json(&json!({"op": "command", "request_id": request_id, "action": "agent.create", "payload": payload}))
+        .await;
 }
 
 #[cfg(unix)]
 async fn send_command<S>(
-    socket: &mut WebSocketStream<S>,
+    socket: &mut AuthenticatedTestSocket<S>,
     request_id: &str,
     action: &str,
     payload: &Value,
@@ -555,17 +539,12 @@ async fn send_command<S>(
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
     socket
-        .send(Message::Text(
-            json!({"op": "command", "request_id": request_id, "action": action, "payload": payload})
-                .to_string()
-                .into(),
-        ))
-        .await
-        .unwrap_or_else(|error| panic!("send {action}: {error}"));
+        .send_json(&json!({"op": "command", "request_id": request_id, "action": action, "payload": payload}))
+        .await;
 }
 
 #[cfg(unix)]
-async fn receive_until_ack<S>(socket: &mut WebSocketStream<S>, limit: usize) -> Value
+async fn receive_until_ack<S>(socket: &mut AuthenticatedTestSocket<S>, limit: usize) -> Value
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
@@ -580,7 +559,7 @@ where
 }
 
 #[cfg(unix)]
-async fn receive_command_ack<S>(socket: &mut WebSocketStream<S>) -> Value
+async fn receive_command_ack<S>(socket: &mut AuthenticatedTestSocket<S>) -> Value
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
@@ -593,24 +572,21 @@ where
     panic!("command ACK was not delivered");
 }
 
-async fn receive_json<S>(socket: &mut WebSocketStream<S>) -> Value
+async fn receive_json<S>(socket: &mut AuthenticatedTestSocket<S>) -> Value
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
     receive_json_with_timeout(socket, Duration::from_secs(5)).await
 }
 
-async fn receive_json_with_timeout<S>(socket: &mut WebSocketStream<S>, timeout: Duration) -> Value
+async fn receive_json_with_timeout<S>(
+    socket: &mut AuthenticatedTestSocket<S>,
+    timeout: Duration,
+) -> Value
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
-    let message = tokio::time::timeout(timeout, socket.next())
-        .await
-        .unwrap_or_else(|_| panic!("timed out waiting for WebSocket frame"))
-        .unwrap_or_else(|| panic!("WebSocket closed before expected frame"))
-        .unwrap_or_else(|error| panic!("receive WebSocket frame: {error}"));
-    serde_json::from_slice(&message.into_data())
-        .unwrap_or_else(|error| panic!("decode WebSocket JSON: {error}"))
+    socket.receive_json_with_timeout(timeout).await
 }
 
 async fn bootstrap(store: &SqliteStore) {

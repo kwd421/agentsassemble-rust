@@ -10,18 +10,19 @@ use agentsassemble_protocol::{
     ServerFrame, Subscribed,
 };
 use axum::extract::ws::Message;
-use futures_util::{Sink, SinkExt, Stream, StreamExt};
+use futures_util::{Sink, Stream, StreamExt};
 use tokio::sync::{broadcast, watch};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
     AppState, ConsumedTicket,
+    authenticated_channel::{
+        AuthenticatedChannel, encode_server_frame, send_plain_encoded, send_plain_frame,
+    },
     server_proof::{challenge_is_valid, permissions_digest, sign_subscription, snapshot_digest},
 };
 
-const MAX_WS_MESSAGE_BYTES: usize = 256 * 1024;
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
-const WS_WRITE_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_SUBSCRIPTION_CATCH_UP_EVENTS: i64 = 256;
 
 pub(crate) struct EstablishedSubscription {
@@ -29,6 +30,7 @@ pub(crate) struct EstablishedSubscription {
     pub events: broadcast::Receiver<RoomEvent>,
     pub catalog_updates: watch::Receiver<ProviderCatalog>,
     pub delivered_seq: i64,
+    pub channel: AuthenticatedChannel,
 }
 
 struct ValidatedSubscription {
@@ -87,17 +89,19 @@ where
         &principal,
         &request,
         &proof_key,
-        connection_nonce,
+        connection_nonce.clone(),
         &prepared,
         catch_up.high_water,
     );
     send_subscription_start(sender, &state.shutdown, receipt, &prepared.encoded).await?;
+    let mut channel = AuthenticatedChannel::new(proof_key, connection_nonce);
     let delivered_seq = send_catch_up(
         sender,
         &state.shutdown,
         &principal,
         prepared.cursor,
         catch_up,
+        &mut channel,
     )
     .await?;
     Some(EstablishedSubscription {
@@ -105,6 +109,7 @@ where
         events: prepared.events,
         catalog_updates: prepared.catalog_updates,
         delivered_seq,
+        channel,
     })
 }
 
@@ -206,7 +211,7 @@ where
     {
         Ok(snapshot) => snapshot,
         Err(PersistenceError::InvalidCursor { durable_last_seq }) => {
-            let _ = send_frame(
+            let _ = send_plain_frame(
                 sender,
                 &state.shutdown,
                 &ServerFrame::ResyncRequired {
@@ -365,13 +370,13 @@ where
     S: Sink<Message, Error = axum::Error> + Unpin,
 {
     let receipt_frame = ServerFrame::Subscribed(Box::new(receipt));
-    let Ok(encoded_receipt) = encode_frame(&receipt_frame) else {
+    let Ok(encoded_receipt) = encode_server_frame(&receipt_frame) else {
         return None;
     };
-    if send_encoded(sender, cancellation, encoded_receipt)
+    if send_plain_encoded(sender, cancellation, encoded_receipt)
         .await
         .is_err()
-        || send_encoded(sender, cancellation, encoded_snapshot.to_owned())
+        || send_plain_encoded(sender, cancellation, encoded_snapshot.to_owned())
             .await
             .is_err()
     {
@@ -386,6 +391,7 @@ async fn send_catch_up<S>(
     principal: &AuthenticatedPrincipal,
     snapshot_cursor: i64,
     catch_up: RoomCatchUp,
+    channel: &mut AuthenticatedChannel,
 ) -> Option<i64>
 where
     S: Sink<Message, Error = axum::Error> + Unpin,
@@ -400,7 +406,7 @@ where
             latest_seq: event.seq,
             events: vec![public_event_for_principal(&event, principal)],
         };
-        if send_frame(sender, cancellation, &frame).await.is_err() {
+        if channel.send(sender, cancellation, &frame).await.is_err() {
             return None;
         }
         delivered_seq = event.seq;
@@ -422,7 +428,7 @@ pub(crate) async fn send_nack<S>(
 where
     S: Sink<Message, Error = axum::Error> + Unpin,
 {
-    send_frame(
+    send_plain_frame(
         sender,
         cancellation,
         &ServerFrame::Nack(CommandNack {
@@ -438,53 +444,10 @@ where
     .await
 }
 
-pub(crate) async fn send_frame<S>(
-    sender: &mut S,
-    cancellation: &CancellationToken,
-    frame: &ServerFrame,
-) -> Result<(), axum::Error>
-where
-    S: Sink<Message, Error = axum::Error> + Unpin,
-{
-    let encoded = encode_frame(frame).map_err(axum::Error::new)?;
-    send_encoded(sender, cancellation, encoded).await
-}
-
-async fn send_encoded<S>(
-    sender: &mut S,
-    cancellation: &CancellationToken,
-    encoded: String,
-) -> Result<(), axum::Error>
-where
-    S: Sink<Message, Error = axum::Error> + Unpin,
-{
-    tokio::select! {
-        () = cancellation.cancelled() => Err(axum::Error::new(std::io::Error::new(
-            std::io::ErrorKind::Interrupted,
-            "runtime shutdown interrupted WebSocket send",
-        ))),
-        result = tokio::time::timeout(
-            WS_WRITE_TIMEOUT,
-            sender.send(Message::Text(encoded.into())),
-        ) => result.map_err(axum::Error::new)?,
-    }
-}
-
-fn encode_frame(frame: &ServerFrame) -> Result<String, std::io::Error> {
-    let encoded = serde_json::to_string(frame).map_err(std::io::Error::other)?;
-    if encoded.len() > MAX_WS_MESSAGE_BYTES {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "WebSocket frame exceeds the product limit",
-        ));
-    }
-    Ok(encoded)
-}
-
 fn fit_snapshot_frame(mut snapshot: RoomSnapshot) -> Option<String> {
     loop {
         let frame = ServerFrame::Snapshot(Box::new(snapshot.clone()));
-        if let Ok(encoded) = encode_frame(&frame) {
+        if let Ok(encoded) = encode_server_frame(&frame) {
             return Some(encoded);
         }
         if snapshot.events.is_empty() {

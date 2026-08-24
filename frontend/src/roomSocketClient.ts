@@ -13,6 +13,11 @@ import {
   verifyBoundSnapshot,
   verifySubscriptionReceipt,
 } from "./lib/roomSubscriptionContract";
+import {
+  decodeAuthenticatedFrame,
+  deriveAuthenticatedFrameKey,
+  encodeAuthenticatedFrame,
+} from "./lib/authenticatedFrames";
 import { createServerChallenge, isHex32Bytes } from "./lib/serverProof";
 import {
   RoomSocketSayError,
@@ -42,6 +47,7 @@ export type {
 } from "./roomSocketTypes";
 
 const ROOM_SOCKET_COMMAND_TIMEOUT_MS = 20_000;
+const MAX_ROOM_SOCKET_WIRE_CHARS = 384 * 1024;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -310,6 +316,7 @@ export function openRoomSocket(
   let lastSeq = 0;
   let requestCounter = 0;
   let transportReady = false;
+  let sendPendingForConnection: (() => void) | null = null;
   const requestTicket = dependencies.getTicket || getWsTicket;
   const createSocket = dependencies.createSocket || ((url: string) => new WebSocket(url));
   const pending = new Map<
@@ -332,15 +339,7 @@ export function openRoomSocket(
   }
 
   function sendPending() {
-    if (!socket || socket.readyState !== WebSocket.OPEN || !transportReady) return;
-    pending.forEach((command, requestId) => {
-      socket?.send(JSON.stringify({
-        op: "command",
-        request_id: requestId,
-        action: command.action,
-        payload: command.payload,
-      }));
-    });
+    sendPendingForConnection?.();
   }
 
   function rejectAll(error: Error) {
@@ -462,6 +461,50 @@ export function openRoomSocket(
       let receipt: SubscriptionReceipt | null = null;
       let snapshotAccepted = false;
       let verificationQueue = Promise.resolve();
+      let outboundQueue = Promise.resolve();
+      let frameKey: CryptoKey | null = null;
+      let nextServerCounter = 1;
+      let nextClientCounter = 1;
+      const sentRequestIds = new Set<string>();
+
+      sendPendingForConnection = () => {
+        if (
+          socket !== currentSocket ||
+          currentSocket.readyState !== WebSocket.OPEN ||
+          !transportReady ||
+          !frameKey
+        ) return;
+        pending.forEach((command, requestId) => {
+          if (sentRequestIds.has(requestId)) return;
+          sentRequestIds.add(requestId);
+          const payload = JSON.stringify({
+            op: "command",
+            request_id: requestId,
+            action: command.action,
+            payload: command.payload,
+          });
+          outboundQueue = outboundQueue
+            .then(async () => {
+              if (
+                socket !== currentSocket ||
+                currentSocket.readyState !== WebSocket.OPEN ||
+                !transportReady ||
+                !frameKey
+              ) return;
+              const encoded = await encodeAuthenticatedFrame(
+                frameKey,
+                receipt?.connection_nonce || "",
+                "client",
+                nextClientCounter,
+                payload
+              );
+              if (socket !== currentSocket || currentSocket.readyState !== WebSocket.OPEN) return;
+              currentSocket.send(encoded);
+              nextClientCounter += 1;
+            })
+            .catch((error) => fail(currentSocket, error));
+        });
+      };
 
       const markReady = () => {
         if (
@@ -477,8 +520,14 @@ export function openRoomSocket(
       };
 
       const processFrame = async (raw: string) => {
-        const msg = JSON.parse(raw) as unknown;
+        if (raw.length > MAX_ROOM_SOCKET_WIRE_CHARS) {
+          throw new RoomSocketSayError(
+            "Room socket frame exceeded the product wire limit.",
+            "frame_too_large"
+          );
+        }
         if (!receipt) {
+          const msg = JSON.parse(raw) as unknown;
           receipt = await verifySubscriptionReceipt(msg, {
             ticket: issued.ticket,
             proofKey: issued.server_proof_key,
@@ -488,9 +537,14 @@ export function openRoomSocket(
             streams,
             serverSurface: dependencies.serverSurface,
           });
+          frameKey = await deriveAuthenticatedFrameKey(
+            issued.server_proof_key,
+            receipt.connection_nonce
+          );
           return;
         }
         if (!snapshotAccepted) {
+          const msg = JSON.parse(raw) as unknown;
           await verifyBoundSnapshot(raw, msg, receipt);
           const validationError = snapshotValidationError(msg, {
             expectedRoomId: dependencies.expectedRoomId,
@@ -509,6 +563,29 @@ export function openRoomSocket(
           markReady();
           return;
         }
+        if (!frameKey) {
+          throw new RoomSocketSayError(
+            "The authenticated room channel key is unavailable.",
+            "frame_authentication_invalid"
+          );
+        }
+        let payload: string;
+        try {
+          payload = await decodeAuthenticatedFrame(
+            frameKey,
+            receipt.connection_nonce,
+            "server",
+            nextServerCounter,
+            raw
+          );
+        } catch {
+          throw new RoomSocketSayError(
+            "Room socket frame authentication failed; reconnecting.",
+            "frame_authentication_invalid"
+          );
+        }
+        nextServerCounter += 1;
+        const msg = JSON.parse(payload) as unknown;
         if (!isRecord(msg)) {
           throw new RoomSocketSayError("Room socket frame was invalid.", "frame_schema_invalid");
         }
@@ -593,7 +670,10 @@ export function openRoomSocket(
       };
       currentSocket.onerror = (event) => handlers.onError?.(event);
       currentSocket.onclose = () => {
-        if (socket === currentSocket) socket = null;
+        if (socket === currentSocket) {
+          socket = null;
+          sendPendingForConnection = null;
+        }
         transportReady = false;
         handlers.onClose?.();
         if (closed) return;
@@ -642,6 +722,7 @@ export function openRoomSocket(
     close: () => {
       closed = true;
       transportReady = false;
+      sendPendingForConnection = null;
       window.clearTimeout(reconnectTimer);
       rejectAll(new RoomSocketSayError("Room socket closed.", "socket_closed"));
       socket?.close();

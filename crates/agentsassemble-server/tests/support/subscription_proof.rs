@@ -1,8 +1,259 @@
-use std::fmt::Write;
+#![allow(dead_code)] // Each integration binary exercises a different subset of this shared peer.
 
+use std::{fmt::Write, time::Duration};
+
+use base64::{Engine as _, engine::general_purpose::STANDARD};
+use futures_util::{SinkExt, StreamExt};
 use hmac::{Hmac, Mac};
-use serde_json::Value;
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
+use tokio_tungstenite::{WebSocketStream, tungstenite::Message};
+
+const FRAME_KEY_CONTEXT: &str = "agentsassemble.ws-frame-key.v1";
+const FRAME_PROOF_CONTEXT: &str = "agentsassemble.ws-frame-proof.v1";
+
+pub struct AuthenticatedTestSocket<S> {
+    socket: WebSocketStream<S>,
+    ticket: String,
+    proof_key: String,
+    connection_nonce: Option<String>,
+    snapshot_pending: bool,
+    next_client_counter: u64,
+    next_server_counter: u64,
+}
+
+impl<S> AuthenticatedTestSocket<S>
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    pub fn new(socket: WebSocketStream<S>, ticket: String, proof_key: String) -> Self {
+        Self {
+            socket,
+            ticket,
+            proof_key,
+            connection_nonce: None,
+            snapshot_pending: false,
+            next_client_counter: 1,
+            next_server_counter: 1,
+        }
+    }
+
+    pub async fn subscribe(&mut self, cursor: i64) -> Value {
+        let challenge = "d".repeat(64);
+        self.send_plain(&json!({
+            "op": "subscribe",
+            "streams": ["room_events"],
+            "resume_from_seq": cursor,
+            "server_challenge": challenge,
+        }))
+        .await;
+        let receipt = parse_json(&receive_wire_text(&mut self.socket).await);
+        if receipt["op"] == "subscribed" {
+            assert_eq!(receipt["server_challenge"], challenge);
+            let nonce = connection_nonce_for_ticket(&self.ticket);
+            assert_eq!(receipt["connection_nonce"], nonce);
+            self.connection_nonce = Some(nonce);
+            self.snapshot_pending = true;
+        }
+        receipt
+    }
+
+    pub async fn send_json(&mut self, frame: &Value) {
+        let payload = frame.to_string();
+        let nonce = self
+            .connection_nonce
+            .as_deref()
+            .unwrap_or_else(|| panic!("authenticated test socket has not subscribed"));
+        let counter = self.next_client_counter;
+        let envelope = authenticated_envelope(
+            &self.proof_key,
+            nonce,
+            "client",
+            counter,
+            payload.as_bytes(),
+        );
+        self.socket
+            .send(Message::Text(envelope.to_string().into()))
+            .await
+            .unwrap_or_else(|error| panic!("send authenticated test frame: {error}"));
+        self.next_client_counter += 1;
+    }
+
+    pub async fn send_tampered_json(&mut self, signed: &Value, transmitted: &Value) {
+        let signed_payload = signed.to_string();
+        let transmitted_payload = transmitted.to_string();
+        let nonce = self
+            .connection_nonce
+            .as_deref()
+            .unwrap_or_else(|| panic!("authenticated test socket has not subscribed"));
+        let counter = self.next_client_counter;
+        let mut envelope = authenticated_envelope(
+            &self.proof_key,
+            nonce,
+            "client",
+            counter,
+            signed_payload.as_bytes(),
+        );
+        envelope["payload"] = Value::String(STANDARD.encode(transmitted_payload.as_bytes()));
+        self.socket
+            .send(Message::Text(envelope.to_string().into()))
+            .await
+            .unwrap_or_else(|error| panic!("send tampered test frame: {error}"));
+        self.next_client_counter += 1;
+    }
+
+    pub async fn receive_json(&mut self) -> Value {
+        parse_json(&self.receive_text().await)
+    }
+
+    pub async fn receive_json_with_timeout(&mut self, timeout: Duration) -> Value {
+        parse_json(&self.receive_text_with_timeout(timeout).await)
+    }
+
+    pub async fn receive_text(&mut self) -> String {
+        self.receive_text_with_timeout(Duration::from_secs(5)).await
+    }
+
+    async fn receive_text_with_timeout(&mut self, timeout: Duration) -> String {
+        let raw = receive_wire_text_with_timeout(&mut self.socket, timeout).await;
+        if self.snapshot_pending {
+            self.snapshot_pending = false;
+            return raw;
+        }
+        let Some(nonce) = self.connection_nonce.as_deref() else {
+            return raw;
+        };
+        let envelope = parse_json(&raw);
+        assert_eq!(envelope["op"], "authenticated");
+        let counter = envelope["counter"]
+            .as_u64()
+            .unwrap_or_else(|| panic!("authenticated server frame omitted its counter"));
+        assert_eq!(counter, self.next_server_counter);
+        let encoded = envelope["payload"]
+            .as_str()
+            .unwrap_or_else(|| panic!("authenticated server frame omitted its payload"));
+        let payload = STANDARD
+            .decode(encoded)
+            .unwrap_or_else(|error| panic!("decode authenticated server payload: {error}"));
+        assert_eq!(STANDARD.encode(&payload), encoded);
+        let received = envelope["proof"]
+            .as_str()
+            .unwrap_or_else(|| panic!("authenticated server frame omitted its proof"));
+        assert_eq!(
+            received,
+            expected_frame_proof(&self.proof_key, nonce, "server", counter, &payload,)
+        );
+        self.next_server_counter += 1;
+        String::from_utf8(payload)
+            .unwrap_or_else(|error| panic!("authenticated server payload is not UTF-8: {error}"))
+    }
+
+    pub async fn send_binary(&mut self, bytes: Vec<u8>) {
+        self.socket
+            .send(Message::Binary(bytes.into()))
+            .await
+            .unwrap_or_else(|error| panic!("send binary test frame: {error}"));
+    }
+
+    pub async fn close(&mut self) {
+        self.socket
+            .close(None)
+            .await
+            .unwrap_or_else(|error| panic!("close authenticated test socket: {error}"));
+    }
+
+    pub async fn wait_closed(&mut self) -> bool {
+        let closed = tokio::time::timeout(Duration::from_secs(1), self.socket.next()).await;
+        matches!(closed, Ok(None | Some(Ok(Message::Close(_)) | Err(_))))
+    }
+
+    pub async fn has_no_frame_for(&mut self, duration: Duration) -> bool {
+        tokio::time::timeout(duration, self.socket.next())
+            .await
+            .is_err()
+    }
+
+    async fn send_plain(&mut self, frame: &Value) {
+        self.socket
+            .send(Message::Text(frame.to_string().into()))
+            .await
+            .unwrap_or_else(|error| panic!("send plain test frame: {error}"));
+    }
+}
+
+pub fn expected_frame_proof(
+    proof_key: &str,
+    connection_nonce: &str,
+    direction: &str,
+    counter: u64,
+    payload: &[u8],
+) -> String {
+    let connection_key = frame_key(proof_key, connection_nonce);
+    let mut signer = Hmac::<Sha256>::new_from_slice(&connection_key)
+        .unwrap_or_else(|error| panic!("construct frame signer: {error}"));
+    add_mac_field(&mut signer, FRAME_PROOF_CONTEXT.as_bytes());
+    add_mac_field(&mut signer, connection_nonce.as_bytes());
+    add_mac_field(&mut signer, direction.as_bytes());
+    add_mac_field(&mut signer, counter.to_string().as_bytes());
+    add_mac_field(&mut signer, payload);
+    hex(&signer.finalize().into_bytes())
+}
+
+fn authenticated_envelope(
+    proof_key: &str,
+    connection_nonce: &str,
+    direction: &str,
+    counter: u64,
+    payload: &[u8],
+) -> Value {
+    json!({
+        "op": "authenticated",
+        "counter": counter,
+        "payload": STANDARD.encode(payload),
+        "proof": expected_frame_proof(
+            proof_key,
+            connection_nonce,
+            direction,
+            counter,
+            payload,
+        ),
+    })
+}
+
+fn frame_key(proof_key: &str, connection_nonce: &str) -> [u8; 32] {
+    let mut signer = Hmac::<Sha256>::new_from_slice(proof_key.as_bytes())
+        .unwrap_or_else(|error| panic!("construct frame key signer: {error}"));
+    add_mac_field(&mut signer, FRAME_KEY_CONTEXT.as_bytes());
+    add_mac_field(&mut signer, connection_nonce.as_bytes());
+    signer.finalize().into_bytes().into()
+}
+
+fn parse_json(raw: &str) -> Value {
+    serde_json::from_str(raw).unwrap_or_else(|error| panic!("decode WebSocket JSON: {error}"))
+}
+
+async fn receive_wire_text<S>(socket: &mut WebSocketStream<S>) -> String
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    receive_wire_text_with_timeout(socket, Duration::from_secs(5)).await
+}
+
+async fn receive_wire_text_with_timeout<S>(
+    socket: &mut WebSocketStream<S>,
+    timeout: Duration,
+) -> String
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    let message = tokio::time::timeout(timeout, socket.next())
+        .await
+        .unwrap_or_else(|_| panic!("timed out waiting for WebSocket frame"))
+        .unwrap_or_else(|| panic!("WebSocket closed before the expected frame"))
+        .unwrap_or_else(|error| panic!("receive WebSocket frame: {error}"));
+    String::from_utf8(message.into_data().to_vec())
+        .unwrap_or_else(|error| panic!("WebSocket JSON is not UTF-8: {error}"))
+}
 
 pub fn expected_subscription_proof(proof_key: &str, receipt: &Value) -> String {
     let mut signer = Hmac::<Sha256>::new_from_slice(proof_key.as_bytes())
