@@ -34,6 +34,9 @@ viewer through canonical room events.
 - Profile input is bounded and normalized with the original accepted status,
   banner, accent, text, and avatar-reference shapes. Unknown fields do not grant
   authority. Invalid credentials, bodies, or stored data fail visibly.
+- The copied left-bottom UserPanel reads this server profile before presenting a
+  human identity. While that initial read is pending it shows an explicit loading
+  state instead of treating the copied default profile as authority.
 - A content-changing save advances one durable profile revision. An identical
   retry returns the existing revision without changing `updated_at` or emitting
   duplicate projection events. A profile mutation, every affected participant

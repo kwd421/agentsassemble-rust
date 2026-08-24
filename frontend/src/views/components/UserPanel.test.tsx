@@ -27,6 +27,33 @@ describe("UserPanel", () => {
     apiMocks.uploadLobbyAttachment.mockReset();
   });
 
+  it("does not present the local default as authority before server hydration", async () => {
+    let resolveProfile: ((profile: typeof DEFAULT_USER_PROFILE) => void) | undefined;
+    apiMocks.fetchUserProfile.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveProfile = resolve;
+        })
+    );
+
+    render(
+      <UserPanel
+        onlineCount={1}
+        agentCount={0}
+        hasBackendError={false}
+        profileIdentity={{ roomId: "general" }}
+      />
+    );
+
+    expect(screen.queryByRole("button", { name: /SeiNel/ })).toBeNull();
+    expect(screen.getByRole("status", { name: "프로필 불러오는 중" })).toBeTruthy();
+
+    resolveProfile?.({ ...DEFAULT_USER_PROFILE, displayName: "Server Authority" });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Server Authority/ })).toBeTruthy()
+    );
+  });
+
   it("lets an admitted guest edit the same authenticated profile shown in the room", async () => {
     const loaded = {
       ...DEFAULT_USER_PROFILE,
@@ -96,9 +123,6 @@ describe("UserPanel", () => {
       />
     );
 
-    fireEvent.click(
-      within(view.container).getByRole("button", { name: "사용자 설정" })
-    );
     await within(view.container).findByText("authenticated user profile required");
 
     view.rerender(

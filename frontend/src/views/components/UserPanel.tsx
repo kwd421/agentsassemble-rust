@@ -75,6 +75,7 @@ export default function UserPanel({
   const [avatarStatus, setAvatarStatus] = useState("");
   const [saving, setSaving] = useState(false);
   const [profileError, setProfileError] = useState("");
+  const [profileHydrated, setProfileHydrated] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const statusClass = profileStatusClass(profile, hasBackendError);
   const hasAvatarImage = Boolean(profile.avatarImage);
@@ -88,16 +89,19 @@ export default function UserPanel({
   useEffect(() => {
     if (guestProfile?.expired) return;
     let ignore = false;
+    setProfileHydrated(false);
     setProfileError("");
     fetchUserProfile(profileIdentity)
       .then((loadedProfile) => {
         if (ignore) return;
         setProfile(loadedProfile);
         setDraft(loadedProfile);
+        setProfileHydrated(true);
         saveDisplayNameForComposers(loadedProfile);
       })
       .catch((error: Error) => {
         if (ignore) return;
+        setProfileHydrated(false);
         setProfileError(error.message || "프로필을 불러오지 못했습니다.");
       });
     return () => {
@@ -255,6 +259,32 @@ export default function UserPanel({
               </button>
             </div>
           )}
+        </div>
+      </div>
+    );
+  }
+
+  if (!profileHydrated) {
+    return (
+      <div className="dc-user-panel" ref={rootRef}>
+        <div className="dc-current-user">
+          <div
+            className="dc-user-identity"
+            aria-label={profileError ? "프로필 불러오기 실패" : "프로필 불러오는 중"}
+            role="status"
+          >
+            <span className="dc-self-avatar" aria-hidden>
+              …
+            </span>
+            <span className="min-w-0 flex-1 text-left">
+              <span className="block truncate text-[14px] font-bold leading-5 text-text-primary">
+                {profileError || "프로필 불러오는 중"}
+              </span>
+              <span className="block truncate text-[12px] leading-4 text-text-muted">
+                {profileError ? "서버 사용자 정보 확인 실패" : "서버 사용자 정보 확인 중"}
+              </span>
+            </span>
+          </div>
         </div>
       </div>
     );
