@@ -208,12 +208,15 @@ transport is a fallback for the other.
 - Deterministic tests cover ordered/ambient transition timing, multiple active
   turns, delivery batching, read receipt, terminal-first and reservation-first
   barriers, cancellation phases, close tombstones, and parallel/durable 32-call
-  budget enforcement. Shared principal command/byte admission cannot be reset by
-  another WebSocket, while one durable room-wide window is atomically consumed by
-  human commands, lifecycle intents, and provider random results; replay and
-  rollback do not consume another slot. Tests also prove that legacy `continuous`
-  values, unknown nested settings fields, and older schema records fail instead
-  of being migrated or executed.
+  budget enforcement. The room-owned transport window charges every decoded raw
+  command frame, including replay, before envelope validation and cannot be reset
+  by another WebSocket. The separate principal mutation window and durable
+  room-wide window are consumed by fresh human commands, lifecycle intents, and
+  provider random results; replay and rollback do not consume another mutation or
+  durable slot. Only an `agent.stop` that owns real cleanup bypasses those two
+  mutation budgets; a fresh already-stopped no-op stop is limited normally. Tests
+  also prove that legacy `continuous` values, unknown nested settings fields, and
+  older schema records fail instead of being migrated or executed.
 - Stage B tests cover two-user isolation, wrong-room and replayed tickets,
   auth-before-body, custom preference key grammar, shared raster admission,
   pending preview/expiry, bind/replacement/clear, restart, and reference cleanup.

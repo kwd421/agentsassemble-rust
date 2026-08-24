@@ -87,15 +87,20 @@ cross-room references, and cross-owner binding fail closed.
 
 `(room_id, principal_id, request_id)` identifies a command attempt. Repeating the same action and canonical payload returns its committed result. Reusing the key with a different action or payload is a conflict.
 
-One room-owned write admission boundary covers every authenticated WebSocket
-mutation and provider RoomPortal random result. Each room task shares a rolling
-60-second principal window across all sockets and provider ingress; opening a new
-ticket or connection cannot reset it. A separate room-wide 60-second command and
-payload window is durable in SQLite and is reserved in the same transaction as
-the command result, lifecycle intent, or provider tool event. Exact committed
-replays and matching lifecycle resumes are recognized before either budget is
-charged. `agent.stop` and already-owned terminal completion remain available at
-saturation so resource cleanup cannot be denied by the admission guard.
+One room-owned admission boundary covers every authenticated WebSocket mutation
+and provider RoomPortal random result. Each room task first charges every decoded
+WebSocket command frame, before envelope validation or replay lookup, to a rolling
+10-second per-principal transport window shared across all sockets (256 commands,
+2 MiB of raw frame bytes). Opening a new ticket or connection cannot reset it, and
+exact replay does not bypass it. A separate rolling 60-second per-principal
+mutation window (3,600 commands, 8 MiB of canonical command bytes) applies only to
+new supported writes. A third room-wide 60-second command and payload window is
+durable in SQLite and is reserved in the same transaction as the command result,
+lifecycle intent, or provider tool event. Exact committed replays and matching
+lifecycle resumes are recognized before the mutation and durable budgets are
+charged. Only an `agent.stop` that owns actual runtime or lifecycle-intent cleanup,
+and an already-owned terminal completion, remain available at saturation; a fresh
+already-stopped no-op stop consumes the normal mutation and durable budgets.
 
 The mutation transaction orders work as follows:
 
