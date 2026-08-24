@@ -11,8 +11,8 @@ import {
   syncNativeRoomDockItems,
 } from "../lib/roomDockPersistence";
 import {
-  assertSameRoomDirectoryAuthority,
   currentRoomDirectoryAuthority,
+  retainRoomDirectoryAuthority,
   type RoomDirectoryAuthority,
 } from "../lib/roomDirectoryContract";
 import {
@@ -142,15 +142,14 @@ export function useRoomDirectory({
         if (bootstrap.phase !== "complete") {
           throw new Error("완료된 데스크톱 bootstrap 권위가 없습니다.");
         }
-        assertSameRoomDirectoryAuthority(actual, bootstrap);
-        authorityRef.current = actual;
+        authorityRef.current = retainRoomDirectoryAuthority(
+          actual,
+          authorityRef.current,
+          bootstrap
+        );
         return;
       }
-      if (authorityRef.current) {
-        assertSameRoomDirectoryAuthority(actual, authorityRef.current);
-      } else {
-        authorityRef.current = actual;
-      }
+      authorityRef.current = retainRoomDirectoryAuthority(actual, authorityRef.current);
     },
     []
   );

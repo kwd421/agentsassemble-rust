@@ -729,6 +729,67 @@ records candidate evidence only. The exact published correction range must still
 receive same-session critical web approval and Daybreaker Blue High manual-security
 approval before these blockers are closed.
 
+### Stopped-creation live-projection correction candidate: 2026-08-25
+
+Daybreaker Blue High manually reviewed public range `4e4a44b..7fa1694`
+without Deep Scan and returned `APPROVE`, with no Critical, High, or Medium
+finding. The same critical web session independently rejected that range for one
+reachable Medium parity defect: `agent.create(start=false)` durably created a
+detached Participant and stopped Agent Session but published only their IDs, so
+the copied React client could not show either authority until reconnect. The web
+review also retained one Low lifetime-binding issue: a desktop directory response
+could replace the existing webview authority pin when a fresh native bootstrap
+grant matched the replacement.
+
+The correction makes the creation transaction append its exact complete public
+Participant and Agent Session projections in `agent_session_created`. Snapshot and
+live socket admission closed-schema validate both nested records, their room,
+session, participant, provider, name, status, ownership, and public-field
+relations. React upserts both records from that canonical event for every viewer;
+the issuer ACK remains irrelevant to UI authority. A later start success or
+failure updates the same visible session, while history pagination cannot replay
+old participant or session state over the current snapshot. The webview directory
+pin is now compared before native bootstrap is consulted and can never be
+overwritten by a replacement grant. Because already persisted schema-14 creation
+events do not satisfy the new complete event contract, the clean schema advances
+to 15 and schema 14 is rejected without migration or compatibility decoding.
+
+The complete `make verify` gate passed unchanged: architecture, source-growth,
+logical-line, and 800-line gates; generated bindings; copied production frontend
+build and original CSS/cascade verification; 71 frontend files with 353 tests;
+14 Tauri tests; 17 domain, 85 persistence, two protocol, 100 provider, and 14
+server unit tests; 20 Rust integration tests; documentation tests; warning-denied
+workspace and desktop Clippy; and final diff validation. The new hook test was
+split at its Agent-creation responsibility boundary when the mandatory 800-line
+gate rejected growth in the general hook test; no exception or gate change was
+made. A subsequent loaded-host run also exposed that an existing integration
+fixture allowed only two seconds to observe a verified provider child before
+testing shutdown. The focused failure reproduced; its test-only observation bound
+is now ten seconds, while product launch, protocol, cancellation, and shutdown
+deadlines are unchanged. The focused contract and the final full gate both passed.
+
+Computer Use then drove a fresh debug application under isolated identifier
+`app.agentsassemble.rust.stoppedcreateverify`. It initialized the real schema-15
+local authority as `Stopped Create Verify`, created the first real SQLite room,
+selected OpenCode `opencode/hy3-free` and the actual Rust project directory in the
+copied Agent Add flow, and explicitly turned `추가하자마자 실행` off. Without
+reconnect, resync, or an HTTP roster request, completing `추가` immediately changed
+the same right panel to `에이전트 — 1` and rendered `opencode/hy3-free 중지됨`.
+Its member card showed stopped state with only Start enabled. Read-only SQLite
+inspection confirmed schema 15 and one creation event containing
+`participant.status=detached`, `agent_session.runtime_status=stopped`, and
+`agent_session.enabled=false`. Process inspection confirmed that no OpenCode
+provider was launched.
+
+Normal quit removed the exact app, supervisor, and sidecar processes. The isolated
+Application Support, cache, WebKit, and application-bundle paths were moved to the
+recoverable Trash directory
+`/Users/seinel/.Trash/AgentsAssemble-Stopped-Create-Verify-20260825-0352`.
+Original-product data and processes and unrelated existing processes were not
+modified or signalled. This is pre-push candidate evidence; the exact published
+correction still requires same-session critical web and Daybreaker Blue High
+manual-security re-review.
+
 ## API verification scope
 
 When a reachable flow specifically needs an API-backed provider, the allowed paid/provider-specific candidates are the official DeepSeek API and the designated Flash provider path. Every other API-backed verification uses only an explicitly free API or free model. Missing credentials, exhausted free quota, or unavailable models fail visibly; they do not trigger a paid substitution or a fallback provider.

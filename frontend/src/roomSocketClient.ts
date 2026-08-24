@@ -6,7 +6,10 @@ import {
   type RoomSocketAuth,
   type SideChatEvent,
 } from "./api";
-import { joinedParticipantFromEvent } from "./lib/participantEventContract";
+import {
+  agentCreationProjectionFromEvent,
+  joinedParticipantFromEvent,
+} from "./lib/participantEventContract";
 import {
   parsePluginEnvelopeBatch,
   PluginStreamProtocolError,
@@ -56,9 +59,9 @@ function isNonNegativeInteger(value: unknown): value is number {
 }
 
 function participantProjectionIsValid(event: RoomEvent): boolean {
-  if (event.type !== "participant_joined") return true;
   try {
-    joinedParticipantFromEvent(event);
+    if (event.type === "participant_joined") joinedParticipantFromEvent(event);
+    if (event.type === "agent_session_created") agentCreationProjectionFromEvent(event);
     return true;
   } catch {
     return false;

@@ -4,7 +4,10 @@ import type {
   RoomSocketAuth,
 } from "../roomSocketClient";
 import { resolveDesktopRuntimeResource } from "./desktopBridge";
-import { joinedParticipantFromEvent } from "./participantEventContract";
+import {
+  agentCreationProjectionFromEvent,
+  joinedParticipantFromEvent,
+} from "./participantEventContract";
 
 export type CanonicalRoomHistoryState = {
   initialized: boolean;
@@ -51,6 +54,18 @@ export function upsertAgentSessions(
   return [...byId.values()];
 }
 
+export function agentSessionUpdatesFromEvents(incoming: RoomEvent[]): RoomAgentSession[] {
+  return incoming.flatMap((event) => {
+    if (event.type === "agent_session_state" && event.agent_session) {
+      return [event.agent_session];
+    }
+    if (event.type === "agent_session_created") {
+      return [agentCreationProjectionFromEvent(event).agentSession];
+    }
+    return [];
+  });
+}
+
 export function normalizeRoomParticipant(
   participant: RoomMember,
   roomId: string
@@ -94,6 +109,12 @@ export function applyParticipantEvents(current: RoomMember[], incoming: RoomEven
   let changed = false;
   for (const event of incoming) {
     const participantId = String(event.participant_id || "");
+    if (event.type === "agent_session_created") {
+      const created = agentCreationProjectionFromEvent(event).participant;
+      byId.set(participantId, normalizeRoomParticipant(created, event.room_id));
+      changed = true;
+      continue;
+    }
     if (event.type === "participant_joined") {
       const joined = joinedParticipantFromEvent(event);
       byId.set(participantId, normalizeRoomParticipant(joined, event.room_id));

@@ -28,6 +28,7 @@ import {
 import { isUnauthorizedApiError } from "./lib/apiErrors";
 import {
   applyParticipantEvents,
+  agentSessionUpdatesFromEvents,
   canonicalRoomProjectionScopeKey,
   EMPTY_CANONICAL_HISTORY,
   EMPTY_PROVIDER_CATALOG,
@@ -174,11 +175,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
       }
     }
 
-    const sessionUpdates = projectSessionState
-      ? incoming.flatMap((event) =>
-          event.type === "agent_session_state" && event.agent_session ? [event.agent_session] : []
-        )
-      : [];
+    const sessionUpdates = projectSessionState ? agentSessionUpdatesFromEvents(incoming) : [];
     if (sessionUpdates.length) {
       setSessionsByRoom((previous) => ({
         ...previous,
@@ -189,7 +186,13 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     if (
       projectParticipantState &&
       incoming.some((event) =>
-        ["participant_joined", "participant_updated", "participant_left", "participant_kicked"].includes(event.type)
+        [
+          "agent_session_created",
+          "participant_joined",
+          "participant_updated",
+          "participant_left",
+          "participant_kicked",
+        ].includes(event.type)
       )
     ) {
       setParticipantsByRoom((previous) => ({
@@ -481,6 +484,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
       requireCurrentProjectionSocket();
       applyEvents(roomId, events, {
         projectProgress: false,
+        projectParticipantState: false,
         projectSessionState: false,
       });
       setHistoryByRoom((previous) => ({

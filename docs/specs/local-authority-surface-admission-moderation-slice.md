@@ -57,8 +57,10 @@ owner is opened.
 
 The directory response carries both `server_id` and `authority_lineage_id` and
 is closed-schema validated before zero rooms can be accepted. Startup binds that
-authority for every later list and create response; desktop also compares it with
-the current native bootstrap grant. Room creation binds one UI-owned UUID request
+authority for the webview lifetime. Every later list and create response must match
+that immutable pin; desktop independently compares the same response with a fresh
+native bootstrap grant, but a matching replacement grant can never rebind or
+overwrite the existing webview pin. Room creation binds one UI-owned UUID request
 ID and canonical payload hash to the server operator in the same transaction as
 room/settings/membership/event state. The same writer transaction revalidates the
 complete bootstrap digest before replay or mutation, and an ambiguous HTTP result

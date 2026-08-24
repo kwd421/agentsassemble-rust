@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseStrictRoomCreateResponse,
   parseStrictRoomDirectory,
+  retainRoomDirectoryAuthority,
 } from "./roomDirectoryContract";
 
 const serverId = "10000000-0000-4000-8000-000000000001";
@@ -41,5 +42,17 @@ describe("room directory contracts", () => {
     expect(() =>
       parseStrictRoomCreateResponse({ ...payload, ignored: true })
     ).toThrow(/계약/);
+  });
+
+  it("never rebinds a lifetime pin even when native bootstrap matches the replacement", () => {
+    const pinned = { server_id: serverId, authority_lineage_id: lineageId };
+    const replacement = {
+      server_id: "40000000-0000-4000-8000-000000000004",
+      authority_lineage_id: "50000000-0000-4000-8000-000000000005",
+    };
+    expect(() =>
+      retainRoomDirectoryAuthority(replacement, pinned, replacement)
+    ).toThrow(/bootstrap 서버 및 계보/);
+    expect(retainRoomDirectoryAuthority(pinned, pinned, pinned)).toEqual(pinned);
   });
 });

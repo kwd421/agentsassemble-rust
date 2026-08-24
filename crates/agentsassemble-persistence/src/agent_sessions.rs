@@ -290,6 +290,29 @@ mod tests {
         assert_eq!(snapshot.agent_sessions[0].model, "gpt-5.6-terra");
         assert_eq!(snapshot.events[0].event_type, "room_created");
         assert_eq!(snapshot.events[1].event_type, "agent_session_created");
+        let created = &snapshot.events[1];
+        assert_eq!(created.extra["participant"]["status"], "detached");
+        assert_eq!(
+            created.extra["participant"]["participant_id"],
+            session.agent_id
+        );
+        assert_eq!(
+            created.extra["agent_session"]["session_id"],
+            session.agent_id
+        );
+        assert_eq!(created.extra["agent_session"]["runtime_status"], "stopped");
+        assert_eq!(created.extra["agent_session"]["enabled"], false);
+        for private in [
+            "executable",
+            "workspace",
+            "runtime_profile_key",
+            "provider_session_id",
+            "runtime_handle_id",
+            "runtime_owner_id",
+            "lifecycle_intent_action",
+        ] {
+            assert!(created.extra["agent_session"].get(private).is_none());
+        }
     }
 
     #[tokio::test]

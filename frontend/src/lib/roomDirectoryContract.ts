@@ -243,6 +243,16 @@ export function assertSameRoomDirectoryAuthority(
   }
 }
 
+export function retainRoomDirectoryAuthority(
+  actual: RoomDirectoryAuthority,
+  pinned: RoomDirectoryAuthority | null,
+  bootstrap: RoomDirectoryAuthority | null = null
+): RoomDirectoryAuthority {
+  if (pinned) assertSameRoomDirectoryAuthority(actual, pinned);
+  if (bootstrap) assertSameRoomDirectoryAuthority(actual, bootstrap);
+  return pinned ? { ...pinned } : { ...actual };
+}
+
 export function bindRoomDirectoryAuthority(
   authority: RoomDirectoryAuthority,
   origin = window.location.origin

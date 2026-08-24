@@ -683,13 +683,20 @@ fn agent_catalog_with_fixture(root: &Path, fixture: &[u8]) -> ProviderCatalog {
 
 #[cfg(unix)]
 async fn wait_for_file(path: &Path) {
-    for _ in 0..200 {
-        if path.is_file() {
-            return;
+    let observed = tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if path.is_file() {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
         }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
-    panic!("fixture did not publish {}", path.display());
+    })
+    .await;
+    assert!(
+        observed.is_ok(),
+        "fixture did not publish {}",
+        path.display()
+    );
 }
 
 #[cfg(unix)]

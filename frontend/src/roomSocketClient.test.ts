@@ -527,6 +527,60 @@ describe("canonical room socket client", () => {
     handle.close();
   });
 
+  it("rejects an incomplete canonical agent creation projection", async () => {
+    vi.useFakeTimers();
+    const sockets: FakeWebSocket[] = [];
+    const errors: RoomSocketSayError[] = [];
+    const handle = openRoomSocket(
+      { kind: "host", meetingId: "general" },
+      ["room_events"],
+      {
+        onError: (error) => {
+          if (error instanceof RoomSocketSayError) errors.push(error);
+        },
+      },
+      {
+        getTicket: async () => "ticket-1",
+        createSocket: () => {
+          const socket = new FakeWebSocket();
+          sockets.push(socket);
+          return socket as unknown as WebSocket;
+        },
+      }
+    );
+    await flushPromises();
+    sockets[0].open();
+    sockets[0].receive({
+      op: "snapshot",
+      stream: "room_events",
+      room: { room_id: "general" },
+      room_settings: {},
+      participants: [],
+      agent_sessions: [],
+      active_turns: [],
+      events: [{
+        id: "evt-1",
+        room_id: "general",
+        seq: 1,
+        type: "agent_session_created",
+        participant_id: "agent-1",
+        session_id: "agent-1",
+      }],
+      oldest_seq: 1,
+      last_seq: 1,
+      has_more_before: false,
+      resume_gap: false,
+      snapshot_mode: "initial",
+      provider_catalog: { status: "ready", catalog_revision: "", providers: [] },
+      available_providers: [],
+      capabilities: {},
+    });
+
+    expect(errors.at(-1)?.category).toBe("snapshot_event_invalid");
+    expect(sockets[0].readyState).toBe(WebSocket.CLOSED);
+    handle.close();
+  });
+
   it("does not accept durable events before the connection receives a valid snapshot", async () => {
     vi.useFakeTimers();
     const sockets: FakeWebSocket[] = [];

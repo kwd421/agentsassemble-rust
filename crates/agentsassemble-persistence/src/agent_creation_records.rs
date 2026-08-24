@@ -161,7 +161,8 @@ async fn create_agent_records(
         prepare_start(&mut session, operation_id);
     }
     insert_agent_authority(transaction, principal, &participant, &session).await?;
-    let event = append_creation_event(transaction, principal, &public_session, now).await?;
+    let event =
+        append_creation_event(transaction, principal, &participant, &public_session, now).await?;
     let committed_events = vec![event];
     let result = base_result(&public_session, &participant, &committed_events);
     Ok(AgentCreationRecords {
@@ -197,6 +198,7 @@ async fn insert_agent_authority(
 async fn append_creation_event(
     transaction: &mut Transaction<'_, Sqlite>,
     principal: &AuthenticatedPrincipal,
+    participant: &Participant,
     session: &AgentSession,
     now: chrono::DateTime<Utc>,
 ) -> Result<RoomEvent, PersistenceError> {
@@ -221,6 +223,8 @@ async fn append_creation_event(
         extra: BTreeMap::from([
             ("session_id".to_owned(), json!(session.session_id)),
             ("provider_kind".to_owned(), json!(session.provider_kind)),
+            ("participant".to_owned(), json!(participant)),
+            ("agent_session".to_owned(), json!(session)),
         ]),
     };
     sqlx::query("INSERT INTO room_events(room_id, seq, event_json) VALUES (?, ?, ?)")
