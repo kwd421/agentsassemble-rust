@@ -4,10 +4,37 @@ mod private_fs;
 mod room_directory_cache;
 mod runtime_supervisor;
 
-use agentsassemble_protocol::LocalBootstrapGrant;
+use agentsassemble_protocol::{HostProductSurface, LocalBootstrapGrant};
 use local_runtime::{LocalRuntime, OperatorHttpTicketGrant, TicketGrant};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{Manager, RunEvent, WebviewWindow};
+
+struct RegisteredCommand {
+    name: &'static str,
+    permission: &'static str,
+}
+
+#[derive(Deserialize)]
+struct DesktopCapability {
+    permissions: Vec<String>,
+}
+
+macro_rules! desktop_commands {
+    ($($command:ident => $permission:literal),+ $(,)?) => {
+        const REGISTERED_COMMANDS: &[RegisteredCommand] = &[
+            $(RegisteredCommand {
+                name: stringify!($command),
+                permission: $permission,
+            },)+
+        ];
+
+        macro_rules! registered_invoke_handler {
+            () => {
+                tauri::generate_handler![$($command),+]
+            };
+        }
+    };
+}
 
 #[derive(Serialize)]
 struct WorkspaceSelection {
@@ -142,6 +169,35 @@ async fn choose_local_workspace(window: WebviewWindow) -> Result<WorkspaceSelect
     .map_err(|error| format!("workspace_picker_failed: {error}"))?
 }
 
+#[tauri::command]
+async fn host_product_surface(
+    window: WebviewWindow,
+    surface: tauri::State<'_, HostProductSurface>,
+) -> Result<HostProductSurface, String> {
+    caller_is_bundled_ui(&window)?;
+    Ok(surface.inner().clone())
+}
+
+include!("../command_registry.rs");
+
+fn registered_host_product_surface() -> HostProductSurface {
+    let capability: DesktopCapability =
+        serde_json::from_str(include_str!("../capabilities/desktop.json"))
+            .unwrap_or_else(|error| panic!("desktop capability registry is invalid: {error}"));
+    let commands = REGISTERED_COMMANDS
+        .iter()
+        .filter(|command| {
+            capability
+                .permissions
+                .iter()
+                .any(|permission| permission == command.permission)
+        })
+        .map(|command| command.name.to_owned())
+        .collect();
+    HostProductSurface::from_commands(commands)
+        .unwrap_or_else(|error| panic!("desktop product-surface registry is invalid: {error}"))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 /// Runs the desktop shell until its application event loop exits.
 ///
@@ -151,14 +207,8 @@ async fn choose_local_workspace(window: WebviewWindow) -> Result<WorkspaceSelect
 pub fn run() {
     let app = tauri::Builder::default()
         .manage(LocalRuntime::default())
-        .invoke_handler(tauri::generate_handler![
-            runtime_bootstrap_status,
-            runtime_bootstrap_initialize,
-            runtime_ticket,
-            runtime_operator_ticket,
-            cache_selected_room_directory,
-            choose_local_workspace
-        ])
+        .manage(registered_host_product_surface())
+        .invoke_handler(registered_invoke_handler!())
         .build(tauri::generate_context!())
         .unwrap_or_else(|error| panic!("AgentsAssemble desktop failed to initialize: {error}"));
     app.run(|handle, event| {
@@ -175,7 +225,7 @@ pub fn run_runtime_supervisor_if_requested() -> Option<i32> {
 
 #[cfg(test)]
 mod tests {
-    use super::workspace_selection;
+    use super::{registered_host_product_surface, workspace_selection};
 
     #[test]
     fn workspace_selection_is_canonical_and_cancel_is_empty() {
@@ -194,5 +244,23 @@ mod tests {
             .unwrap_or_else(|error| panic!("cancel workspace fixture: {error}"));
         assert!(!cancelled.selected);
         assert!(cancelled.path.is_empty());
+    }
+
+    #[test]
+    fn host_surface_is_the_registered_permission_intersection() {
+        let surface = registered_host_product_surface();
+        assert_eq!(surface.commands.len(), 7);
+        assert!(
+            surface
+                .commands
+                .iter()
+                .any(|command| command == "host_product_surface")
+        );
+        assert!(
+            !surface
+                .commands
+                .iter()
+                .any(|command| command == "open_central_google_login")
+        );
     }
 }

@@ -33,7 +33,7 @@ pub struct MessageSend {
 }
 
 impl MessageSend {
-    /// Parses and normalizes the existing `message.send` payload.
+    /// Parses and normalizes the canonical content-only `message.send` payload.
     ///
     /// # Errors
     ///
@@ -42,16 +42,20 @@ impl MessageSend {
         let object = payload
             .as_object()
             .ok_or_else(|| CommandRejection::new("bad_request", "payload must be an object."))?;
-        let raw = object
-            .get("content")
-            .or_else(|| object.get("message"))
-            .and_then(Value::as_str)
-            .unwrap_or_default();
+        if object.len() != 1 || !object.contains_key("content") {
+            return Err(CommandRejection::new(
+                "bad_request",
+                "message.send accepts exactly one content field.",
+            ));
+        }
+        let raw = object["content"].as_str().ok_or_else(|| {
+            CommandRejection::new("bad_request", "message.send content must be a string.")
+        })?;
         let content = clean_message(raw, 12_000);
         if !has_visible_text(&content) {
             return Err(CommandRejection::new(
                 "empty",
-                "Message content or an attachment is required.",
+                "Message content is required.",
             ));
         }
         Ok(Self { content })
@@ -174,13 +178,27 @@ fn encode_json_string(value: &str) -> String {
 mod tests {
     use serde_json::json;
 
-    use super::canonical_payload_hash;
+    use super::{MessageSend, canonical_payload_hash};
 
     #[test]
     fn canonical_hash_ignores_object_key_order() {
         assert_eq!(
             canonical_payload_hash(&json!({"b": 2, "a": "line\n"})),
             canonical_payload_hash(&json!({"a": "line\n", "b": 2}))
+        );
+    }
+
+    #[test]
+    fn message_send_rejects_aliases_and_extra_fields() {
+        assert!(MessageSend::from_payload(&json!({"message": "alias"})).is_err());
+        assert!(
+            MessageSend::from_payload(&json!({"content": "hello", "kind": "message"})).is_err()
+        );
+        assert_eq!(
+            MessageSend::from_payload(&json!({"content": "hello"}))
+                .unwrap_or_else(|error| panic!("canonical message: {error}"))
+                .content,
+            "hello"
         );
     }
 }

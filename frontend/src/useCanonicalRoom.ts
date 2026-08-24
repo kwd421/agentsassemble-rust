@@ -37,8 +37,10 @@ import {
   participantIsActive,
   upsertAgentSessions,
   upsertRoomParticipants,
+  type CanonicalRoomHistoryState,
 } from "./lib/canonicalRoomProjection";
-import type { CanonicalRoomHistoryState } from "./lib/canonicalRoomProjection";
+import type { RoomAction } from "./types/generated/RoomAction";
+import type { RoomStream } from "./types/generated/RoomStream";
 import {
   applyProviderRequestEvents,
   normalizePendingProviderRequests,
@@ -51,9 +53,12 @@ export type { CanonicalRoomHistoryState } from "./lib/canonicalRoomProjection";
 type OpenRoomSocket = (
   auth: RoomSocketAuth,
   streams: string[],
-  handlers: RoomSocketHandlers
+  handlers: RoomSocketHandlers,
+  dependencies?: { allowedActions?: readonly RoomAction[] }
 ) => RoomSocketHandle;
 
+const NO_STREAMS: RoomStream[] = [];
+const NO_ACTIONS: RoomAction[] = [];
 type CanonicalRoomCallbacks = {
   onSideChat?: (events: SideChatEvent[]) => void;
   onError?: (error: Event | Error) => void;
@@ -64,6 +69,8 @@ type CanonicalRoomCallbacks = {
 export type UseCanonicalRoomOptions = CanonicalRoomCallbacks & {
   roomId: string;
   auth?: RoomSocketAuth;
+  streams?: RoomStream[];
+  actions?: RoomAction[];
   viewerParticipantId?: string;
   openSocket?: OpenRoomSocket;
 };
@@ -77,7 +84,14 @@ type ApplyRoomEventsOptions = {
 
 /** Owns canonical room socket lifecycle and its room-indexed React projection. */
 export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
-  const { roomId, auth, viewerParticipantId = "", openSocket = openRoomSocket } = options;
+  const {
+    roomId,
+    auth,
+    streams = NO_STREAMS,
+    actions = NO_ACTIONS,
+    viewerParticipantId = "",
+    openSocket = openRoomSocket,
+  } = options;
   const callbacksRef = useRef<CanonicalRoomCallbacks>({});
   callbacksRef.current = {
     onSideChat: options.onSideChat,
@@ -247,7 +261,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     const connectionIsCurrent = () => connectionGenerationRef.current === connectionGeneration;
     setLastError(null);
     setConnectionState("connecting");
-    const currentSocket = openSocket(auth, ["room_events", "side_chat", "plugin"], {
+    const currentSocket = openSocket(auth, streams, {
       onRoomSnapshot: (snapshot) => {
         if (!connectionIsCurrent()) return false;
         const snapshotRoomId = String(snapshot.room?.room_id || "").trim();
@@ -433,7 +447,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
         if (unauthorized) callbacksRef.current.onUnauthorized?.();
         callbacksRef.current.onError?.(errorValue);
       },
-    });
+    }, { allowedActions: actions });
     setSocket(currentSocket);
     return () => {
       if (connectionIsCurrent()) {
@@ -446,7 +460,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
       setSocket((current) => (current === currentSocket ? null : current));
       setConnectionState("disconnected");
     };
-  }, [applyEvents, authKey, openSocket, projectionScopeKey, roomId]);
+  }, [actions, applyEvents, authKey, openSocket, projectionScopeKey, roomId, streams]);
 
   const requireCurrentProjectionSocket = useCallback(() => {
     if (

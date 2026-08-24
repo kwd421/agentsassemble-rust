@@ -51,6 +51,7 @@ dependencies = [
  "agentsassemble-domain",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror 2.0.20",
  "ts-rs",
 ]

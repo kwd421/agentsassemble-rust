@@ -318,7 +318,7 @@ describe("canonical room socket client", () => {
     await expect(pending).rejects.toMatchObject({ category: "socket_closed" });
   });
 
-  it("forwards vote duration on the canonical message command", async () => {
+  it("keeps canonical message.send content-only", async () => {
     const sockets: FakeWebSocket[] = [];
     const handle = openRoomSocket(
       { kind: "host", meetingId: "general" },
@@ -349,10 +349,6 @@ describe("canonical room socket client", () => {
       action: "message.send",
       payload: {
         content: "",
-        kind: "vote",
-        vote_question: "어느 길로 갈까요?",
-        vote_options: ["북쪽", "남쪽"],
-        vote_duration_seconds: 900,
       },
     });
 

@@ -61,7 +61,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     openMobileSidebar, openRoomMenu, openRoomSettings, pendingMessageSearchTarget,
     quotaViewer, rightPanelMode, rightPanelSearchQuery,
     roomAppearances, roomDirectorySyncIssue, roomMenu, roomMessageSearch,
-    roomSettings, roomSocket, rooms, scopedAgents, scopedMentionables,
+    roomSettings, roomSocket, rooms, scopedAgents, scopedMentionables, serverProductSurface,
     scopedOnlineCount, scopedViewerDisplayName, selectDirectoryFriend, selectHomeFriend,
     selectRoom, selectedHomeFriendId, sendAgentConfigure, sendAgentControl,
     sendParticipantKick, sendParticipantMute, setAdminOpen, setChannelNotifications,
@@ -401,7 +401,8 @@ export default function AppView({ controller }: { controller: AppController }) {
           ) : adminOpen ? (
             <AdminPanel onClose={() => setAdminOpen(false)} activeMeetingId={activeRoom.meetingId} />
           ) : channel === "lobby" ? (
-            canonicalRoom.roomSettings?.activityPlugin === "rimworld" ? (
+            canonicalRoom.roomSettings?.activityPlugin === "rimworld" &&
+            (serverProductSurface?.websocket_streams as string[] | undefined)?.includes("plugin") ? (
               <RimWorldPluginView
                 roomId={activeRoom.id}
                 envelopes={canonicalRoom.pluginEnvelopes}

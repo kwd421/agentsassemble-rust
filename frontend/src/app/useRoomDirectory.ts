@@ -11,6 +11,7 @@ import {
   syncNativeRoomDockItems,
 } from "../lib/roomDockPersistence";
 import {
+  bindRoomDirectoryAuthority,
   currentRoomDirectoryAuthority,
   retainRoomDirectoryAuthority,
   type RoomDirectoryAuthority,
@@ -157,6 +158,7 @@ export function useRoomDirectory({
   const fetchVerifiedRoomDirectory = useCallback(async () => {
     const payload = await fetchRooms(true);
     await verifyRoomDirectoryAuthority(payload);
+    bindRoomDirectoryAuthority(payload);
     return payload;
   }, [verifyRoomDirectoryAuthority]);
 

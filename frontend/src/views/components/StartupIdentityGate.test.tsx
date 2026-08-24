@@ -20,9 +20,33 @@ const desktopMocks = vi.hoisted(() => ({
   fetchOperatorRuntime: vi.fn(),
   initializeBootstrap: vi.fn(),
   requestBootstrapStatus: vi.fn(),
+  requestHostProductSurface: vi.fn(),
 }));
 const SERVER_ID = "30000000-0000-4000-8000-000000000001";
 const LINEAGE_ID = "30000000-0000-4000-8000-000000000002";
+const SERVER_SURFACE = {
+  revision: 1,
+  digest: "0".repeat(64),
+  http_routes: [],
+  websocket_streams: ["room_events"],
+  websocket_actions: [
+    "agent.configure",
+    "agent.create",
+    "agent.resume",
+    "agent.start",
+    "agent.stop",
+    "message.send",
+    "room.random.choose",
+    "room.random.roll",
+    "room.settings.update",
+  ],
+};
+const directory = (authority_lineage_id = LINEAGE_ID) => ({
+  server_id: SERVER_ID,
+  authority_lineage_id,
+  server_product_surface: SERVER_SURFACE,
+  rooms: [],
+});
 const desktopProfile = {
   revision: 1,
   display_name: "Desktop User",
@@ -46,6 +70,7 @@ vi.mock("../../lib/desktopBridge", () => ({
   initializeDesktopBootstrap: desktopMocks.initializeBootstrap,
   isDesktopWebview: () => desktopMocks.desktop,
   requestDesktopBootstrapStatus: desktopMocks.requestBootstrapStatus,
+  requestDesktopHostProductSurface: desktopMocks.requestHostProductSurface,
 }));
 vi.mock("../../lib/deviceIdentity", () => ({
   rememberGuestProfile: vi.fn(),
@@ -73,6 +98,11 @@ afterEach(() => {
   centralMocks.configured = false;
   desktopMocks.desktop = false;
   vi.clearAllMocks();
+  desktopMocks.requestHostProductSurface.mockResolvedValue({
+    revision: 1,
+    digest: "1".repeat(64),
+    commands: ["host_product_surface"],
+  });
 });
 
 describe("StartupIdentityGate", () => {
@@ -89,7 +119,7 @@ describe("StartupIdentityGate", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ server_id: SERVER_ID, authority_lineage_id: LINEAGE_ID, rooms: [] }), {
+        new Response(JSON.stringify(directory()), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         })
@@ -147,7 +177,7 @@ describe("StartupIdentityGate", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ server_id: SERVER_ID, authority_lineage_id: LINEAGE_ID, rooms: [] }), {
+        new Response(JSON.stringify(directory()), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         })
@@ -189,7 +219,7 @@ describe("StartupIdentityGate", () => {
       deduplicated: false,
     });
     desktopMocks.fetchOperatorRuntime.mockResolvedValue(
-      new Response(JSON.stringify({ server_id: SERVER_ID, authority_lineage_id: LINEAGE_ID, rooms: [] }), {
+      new Response(JSON.stringify(directory()), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       })
@@ -218,11 +248,7 @@ describe("StartupIdentityGate", () => {
     ["missing", {}],
     [
       "detached",
-      {
-        server_id: SERVER_ID,
-        authority_lineage_id: "30000000-0000-4000-8000-000000000099",
-        rooms: [],
-      },
+      directory("30000000-0000-4000-8000-000000000099"),
     ],
   ])("rejects a %s zero-room response", async (_case, payload) => {
     desktopMocks.desktop = true;

@@ -1,3 +1,5 @@
+import type { HostProductSurface } from "../types/generated/HostProductSurface";
+
 type TauriInternals = {
   invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>;
 };
@@ -55,6 +57,16 @@ export interface DesktopWorkspaceSelection {
 }
 
 let desktopRuntimeHttpBase = "";
+let desktopHostSurface: HostProductSurface | null = null;
+
+function requireDesktopHostCommand(command: string) {
+  if (!desktopHostSurface) {
+    throw new Error("데스크톱 호스트 제품 표면이 아직 고정되지 않았습니다.");
+  }
+  if (!desktopHostSurface.commands.includes(command)) {
+    throw new Error(`데스크톱 호스트 명령 ${command}은 현재 제품 표면에 없습니다.`);
+  }
+}
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -77,6 +89,44 @@ function exactObject(
     throw new Error(`${label} 응답 계약이 일치하지 않습니다.`);
   }
   return object;
+}
+
+function validateHostProductSurface(value: unknown): HostProductSurface {
+  const surface = exactObject(value, ["revision", "digest", "commands"], "호스트 제품 표면");
+  if (
+    surface.revision !== 1 ||
+    !/^[0-9a-f]{64}$/.test(String(surface.digest)) ||
+    !Array.isArray(surface.commands)
+  ) {
+    throw new Error("호스트 제품 표면이 올바르지 않습니다.");
+  }
+  const commands = surface.commands;
+  if (commands.some((command) => typeof command !== "string")) {
+    throw new Error("호스트 제품 표면 명령 등록부가 올바르지 않습니다.");
+  }
+  const sorted = [...commands].sort();
+  if (
+    sorted.length !== new Set(sorted).size ||
+    sorted.some((command, index) => command !== commands[index])
+  ) {
+    throw new Error("호스트 제품 표면 명령 등록부가 올바르지 않습니다.");
+  }
+  return surface as unknown as HostProductSurface;
+}
+
+export async function requestDesktopHostProductSurface(): Promise<HostProductSurface> {
+  const tauri = tauriInternals();
+  if (!tauri) {
+    throw new Error("데스크톱 호스트 제품 표면을 사용할 수 없습니다.");
+  }
+  const surface = validateHostProductSurface(
+    await tauri.invoke<unknown>("host_product_surface")
+  );
+  if (desktopHostSurface && desktopHostSurface.digest !== surface.digest) {
+    throw new Error("데스크톱 호스트 제품 표면이 실행 중 변경되었습니다.");
+  }
+  desktopHostSurface = surface;
+  return structuredClone(surface);
 }
 
 function validateDesktopBootstrapGrant(value: unknown): DesktopBootstrapGrant {
@@ -184,6 +234,7 @@ export async function requestDesktopRuntimeTicket(
   if (!tauri) {
     throw new Error("데스크톱 Rust 런타임을 사용할 수 없습니다.");
   }
+  requireDesktopHostCommand("runtime_ticket");
   return tauri
     .invoke<DesktopRuntimeTicket>("runtime_ticket", { roomId })
     .then(rememberDesktopRuntime);
@@ -194,6 +245,7 @@ export async function requestDesktopBootstrapStatus(): Promise<DesktopBootstrapG
   if (!tauri) {
     throw new Error("데스크톱 Rust 런타임을 사용할 수 없습니다.");
   }
+  requireDesktopHostCommand("runtime_bootstrap_status");
   return tauri
     .invoke<unknown>("runtime_bootstrap_status")
     .then(validateDesktopBootstrapGrant);
@@ -207,6 +259,7 @@ export async function initializeDesktopBootstrap(
   if (!tauri) {
     throw new Error("데스크톱 Rust 런타임을 사용할 수 없습니다.");
   }
+  requireDesktopHostCommand("runtime_bootstrap_initialize");
   return tauri
     .invoke<unknown>("runtime_bootstrap_initialize", {
       requestId,
@@ -220,6 +273,7 @@ export async function requestDesktopOperatorTicket(): Promise<DesktopOperatorHtt
   if (!tauri) {
     throw new Error("데스크톱 Rust 런타임을 사용할 수 없습니다.");
   }
+  requireDesktopHostCommand("runtime_operator_ticket");
   return tauri
     .invoke<DesktopOperatorHttpTicket>("runtime_operator_ticket")
     .then(rememberDesktopOperatorRuntime);
@@ -262,6 +316,7 @@ export async function chooseDesktopWorkspace(): Promise<DesktopWorkspaceSelectio
   if (!tauri) {
     throw new Error("workspace_picker_unavailable");
   }
+  requireDesktopHostCommand("choose_local_workspace");
   return tauri.invoke<DesktopWorkspaceSelection>("choose_local_workspace");
 }
 
@@ -270,12 +325,14 @@ export async function openDesktopCentralGoogleLogin(url: string): Promise<void> 
   if (!tauri) {
     throw new Error("데스크톱 중앙 로그인 기능을 사용할 수 없습니다.");
   }
+  requireDesktopHostCommand("open_central_google_login");
   await tauri.invoke("open_central_google_login", { url });
 }
 
 export async function cacheNativeRoomDirectory(rooms: unknown[]): Promise<void> {
   const tauri = tauriInternals();
   if (!tauri) return;
+  requireDesktopHostCommand("cache_selected_room_directory");
   await tauri.invoke("cache_selected_room_directory", {
     rooms: JSON.stringify(rooms),
   });

@@ -14,6 +14,7 @@ import type {
   PublicRoomGlobalSettings,
 } from "./types/generatedRoomEvent";
 import type { PluginEnvelope } from "./pluginSocketProtocol";
+import type { RoomAction } from "./types/generated/RoomAction";
 
 export interface RoomSocketHandlers {
   onLobby?: (events: LobbyEvent[]) => void;
@@ -154,4 +155,5 @@ export interface RoomSocketClientDependencies {
       }
   >;
   createSocket?: (url: string) => WebSocket;
+  allowedActions?: readonly RoomAction[];
 }

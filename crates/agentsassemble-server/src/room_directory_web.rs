@@ -7,7 +7,6 @@ use axum::{
     extract::{Query, Request, State},
     http::{Method, StatusCode},
     response::{IntoResponse, Response},
-    routing::get,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -38,9 +37,13 @@ struct CreateRoomRequest {
 }
 
 pub(crate) fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/api/rooms", get(list_rooms).post(create_room))
-        .layer(exact_tauri_cors([Method::GET, Method::POST]))
+    directory_routes().layer(exact_tauri_cors([Method::GET, Method::POST]))
+}
+
+registered_routes! {
+    fn directory_routes<AppState>() {
+        "/api/rooms" => get(list_rooms).post(create_room),
+    }
 }
 
 async fn list_rooms(
@@ -68,6 +71,7 @@ async fn list_rooms(
     Ok(Json(json!({
         "server_id": bootstrap.server_id,
         "authority_lineage_id": bootstrap.authority_lineage_id,
+        "server_product_surface": state.server_product_surface,
         "rooms": rooms,
     })))
 }

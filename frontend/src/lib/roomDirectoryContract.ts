@@ -1,8 +1,10 @@
 import type { ServerRoomDockSource } from "./roomDockModel";
+import type { ServerProductSurface } from "../types/generated/ServerProductSurface";
 
 export type StrictRoomDirectory = {
   server_id: string;
   authority_lineage_id: string;
+  server_product_surface: ServerProductSurface;
   rooms: ServerRoomDockSource[];
 };
 
@@ -18,6 +20,7 @@ export type StrictRoomCreateResponse = RoomDirectoryAuthority & {
 };
 
 let boundAuthority: { origin: string; authority: RoomDirectoryAuthority } | null = null;
+let boundSurface: { origin: string; surface: ServerProductSurface } | null = null;
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -200,15 +203,81 @@ function validateAuthority(payload: Record<string, unknown>, label: string) {
   return { server_id: serverId, authority_lineage_id: lineageId };
 }
 
+function validateServerProductSurface(value: unknown): ServerProductSurface {
+  const surface = record(value, "서버 제품 표면");
+  exactKeys(
+    surface,
+    ["revision", "digest", "http_routes", "websocket_streams", "websocket_actions"],
+    "서버 제품 표면"
+  );
+  if (surface.revision !== 1 || !/^[0-9a-f]{64}$/.test(String(surface.digest))) {
+    throw new Error("서버 제품 표면 revision 또는 digest가 올바르지 않습니다.");
+  }
+  if (!Array.isArray(surface.http_routes)) {
+    throw new Error("서버 제품 표면 HTTP route가 배열이 아닙니다.");
+  }
+  const routes = surface.http_routes.map((value, index) => {
+    const route = record(value, `서버 제품 표면 HTTP route[${index}]`);
+    exactKeys(route, ["method", "path"], `서버 제품 표면 HTTP route[${index}]`);
+    if (
+      !new Set(["GET", "POST"]).has(String(route.method)) ||
+      typeof route.path !== "string" ||
+      !route.path.startsWith("/")
+    ) {
+      throw new Error(`서버 제품 표면 HTTP route[${index}]가 올바르지 않습니다.`);
+    }
+    return `${route.method} ${route.path}`;
+  });
+  const streams = surface.websocket_streams;
+  const actions = surface.websocket_actions;
+  if (
+    !Array.isArray(streams) ||
+    streams.some((stream) => stream !== "room_events") ||
+    !Array.isArray(actions) ||
+    actions.some(
+      (action) =>
+        typeof action !== "string" ||
+        !new Set([
+          "message.send",
+          "room.settings.update",
+          "room.random.roll",
+          "room.random.choose",
+          "agent.create",
+          "agent.configure",
+          "agent.start",
+          "agent.resume",
+          "agent.stop",
+        ]).has(action)
+    )
+  ) {
+    throw new Error("서버 제품 표면 WebSocket 등록부가 올바르지 않습니다.");
+  }
+  for (const values of [routes, streams, actions]) {
+    const canonical = [...values].sort();
+    if (
+      canonical.length !== new Set(canonical).size ||
+      canonical.some((entry, index) => entry !== values[index])
+    ) {
+      throw new Error("서버 제품 표면 등록부가 정렬되지 않았거나 중복되었습니다.");
+    }
+  }
+  return surface as unknown as ServerProductSurface;
+}
+
 export function parseStrictRoomDirectory(value: unknown): StrictRoomDirectory {
   const payload = record(value, "방 목록");
-  exactKeys(payload, ["server_id", "authority_lineage_id", "rooms"], "방 목록");
+  exactKeys(
+    payload,
+    ["server_id", "authority_lineage_id", "server_product_surface", "rooms"],
+    "방 목록"
+  );
   const authority = validateAuthority(payload, "방 목록");
   if (!Array.isArray(payload.rooms)) {
     throw new Error("방 목록 rooms가 배열이 아닙니다.");
   }
   return {
     ...authority,
+    server_product_surface: validateServerProductSurface(payload.server_product_surface),
     rooms: payload.rooms.map(validateRoom),
   };
 }
@@ -254,18 +323,38 @@ export function retainRoomDirectoryAuthority(
 }
 
 export function bindRoomDirectoryAuthority(
-  authority: RoomDirectoryAuthority,
+  authority: StrictRoomDirectory,
   origin = window.location.origin
 ) {
   if (boundAuthority?.origin === origin) {
     assertSameRoomDirectoryAuthority(authority, boundAuthority.authority);
+    if (
+      boundSurface?.origin !== origin ||
+      boundSurface.surface.revision !== authority.server_product_surface.revision ||
+      boundSurface.surface.digest !== authority.server_product_surface.digest
+    ) {
+      throw new Error("서버 제품 표면이 고정된 권위와 일치하지 않습니다.");
+    }
     return;
   }
-  boundAuthority = { origin, authority: { ...authority } };
+  boundAuthority = {
+    origin,
+    authority: {
+      server_id: authority.server_id,
+      authority_lineage_id: authority.authority_lineage_id,
+    },
+  };
+  boundSurface = { origin, surface: structuredClone(authority.server_product_surface) };
 }
 
 export function currentRoomDirectoryAuthority(
   origin = window.location.origin
 ): RoomDirectoryAuthority | null {
   return boundAuthority?.origin === origin ? { ...boundAuthority.authority } : null;
+}
+
+export function currentServerProductSurface(
+  origin = window.location.origin
+): ServerProductSurface | null {
+  return boundSurface?.origin === origin ? structuredClone(boundSurface.surface) : null;
 }

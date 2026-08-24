@@ -38,6 +38,7 @@ import {
 } from "../lib/roomDockModel";
 import { consumeOperatorPairingTokenFromUrl } from "../lib/roomGuestSession";
 import { roomPostingState } from "../lib/roomGuestPosting";
+import { currentServerProductSurface } from "../lib/roomDirectoryContract";
 import { remoteClientPacketPreview } from "../lib/roomInviteCopy";
 import { roomRailMenuPosition } from "../lib/roomRailMenuPosition";
 import type { HomeFilter } from "./friendsDirectoryTypes";
@@ -130,6 +131,10 @@ export function useAppController() {
     initialRooms: startupRoute.startupRooms,
     hostEnabled: startupHostEnabled,
   });
+  const serverProductSurface = useMemo(
+    () => currentServerProductSurface(),
+    [roomDirectorySyncIssue, startupIdentityResolved]
+  );
   const [activeRoomId, setActiveRoomId] = useState(() => startupRoute.activeRoomId);
   const [roomMenu, setRoomMenu] = useState<RoomMenuState>(null);
   const [channelMenu, setChannelMenu] = useState<ChannelMenuState>(null);
@@ -299,9 +304,14 @@ export function useAppController() {
     : activeRoom.meetingId
       ? ({ kind: "host" as const, meetingId: activeRoom.meetingId })
       : undefined;
+  const roomSurfaceReady = Boolean(
+    serverProductSurface?.websocket_streams.includes("room_events")
+  );
   const canonicalRoom = useCanonicalRoom({
-    roomId: startupIdentityResolved ? activeOperationalMeetingId : "",
-    auth: canonicalRoomAuth,
+    roomId: startupIdentityResolved && roomSurfaceReady ? activeOperationalMeetingId : "",
+    auth: roomSurfaceReady ? canonicalRoomAuth : undefined,
+    streams: serverProductSurface?.websocket_streams || [],
+    actions: serverProductSurface?.websocket_actions || [],
     viewerParticipantId: guestSession?.agentId || "operator-local",
     onSideChat: handleSideChatRealtimeEvents,
     onError: handleSideChatError,
@@ -768,7 +778,7 @@ export function useAppController() {
     requestGuestJoin, retryOperatorPairing, rightPanelMode,
     rightPanelSearchQuery, roomAppearances, roomDirectorySyncIssue, roomInvite,
     roomMenu, roomMessageSearch, roomSettings, roomSocket,
-    rooms, saveHostTokenFromDraft, scopedAgents, scopedMentionables,
+    rooms, saveHostTokenFromDraft, scopedAgents, scopedMentionables, serverProductSurface,
     scopedOnlineCount, scopedViewerDisplayName, secureInviteUrl, selectDirectoryFriend,
     selectHomeFriend, selectRoom, selectedHomeFriendId, sendAgentConfigure,
     sendAgentControl, sendParticipantKick, sendParticipantMute, setAdminOpen,

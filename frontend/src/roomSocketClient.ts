@@ -681,6 +681,18 @@ export function openRoomSocket(
         reject(new RoomSocketSayError("Room socket is closed.", "socket_closed"));
         return;
       }
+      if (
+        dependencies.allowedActions &&
+        !dependencies.allowedActions.some((allowed) => allowed === action)
+      ) {
+        reject(
+          new RoomSocketSayError(
+            `Room action ${action} is not present in the bound server product surface.`,
+            "surface_action_unavailable"
+          )
+        );
+        return;
+      }
       const requestId = nextRequestId();
       const timerId = window.setTimeout(() => {
         const waiting = pending.get(requestId);
@@ -707,14 +719,14 @@ export function openRoomSocket(
     },
     ready: () => socket?.readyState === WebSocket.OPEN,
     command,
-    plugin: (payload) => {
+    plugin: streams.includes("plugin") ? (payload) => {
       if (socket?.readyState !== WebSocket.OPEN) {
         throw new RoomSocketSayError("Room socket is closed.", "socket_closed");
       }
       socket.send(
         JSON.stringify({ op: "plugin", ...payload, request_id: nextRequestId() })
       );
-    },
+    } : undefined,
     historyBefore: async (beforeSeq, limit = 200) => {
       const ack = await command("room.history", { before_seq: beforeSeq, limit });
       const result = ack.result || {};
@@ -728,13 +740,6 @@ export function openRoomSocket(
     say: async (request) => {
       await command("message.send", {
         content: request.message,
-        attachments: request.attachments || [],
-        kind: request.kind || "message",
-        vote_id: request.voteId || "",
-        vote_question: request.voteQuestion || "",
-        vote_options: request.voteOptions || [],
-        vote_choice: request.voteChoice || "",
-        vote_duration_seconds: request.voteDurationSeconds || 0,
       });
       return { events: [] };
     },

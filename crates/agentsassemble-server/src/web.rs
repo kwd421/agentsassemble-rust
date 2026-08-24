@@ -14,7 +14,7 @@ use axum::{
     http::{StatusCode, header},
     middleware,
     response::{IntoResponse, Redirect, Response},
-    routing::{get, post},
+    routing::get,
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
@@ -65,11 +65,7 @@ struct TicketQuery {
 
 pub fn router(state: AppState) -> Router {
     let frontend_root = state.frontend_root.clone();
-    let mut app = Router::new()
-        .route("/healthz", get(health))
-        .route("/api/host-challenge", get(issue_host_challenge))
-        .route("/api/ws-ticket", post(issue_ticket))
-        .route("/ws", get(upgrade_socket))
+    let mut app = core_routes()
         .merge(crate::room_directory_web::routes())
         .merge(crate::profile_web::routes());
     if let Some(frontend_root) = frontend_root {
@@ -84,6 +80,15 @@ pub fn router(state: AppState) -> Router {
     app.with_state(state)
         .layer(RequestBodyDeadlineLayer::new(HTTP_BODY_DEADLINE))
         .layer(middleware::map_response(crate::security_headers::apply))
+}
+
+registered_routes! {
+    fn core_routes<AppState>() {
+        "/healthz" => get(health),
+        "/api/host-challenge" => get(issue_host_challenge),
+        "/api/ws-ticket" => post(issue_ticket),
+        "/ws" => get(upgrade_socket),
+    }
 }
 
 /// Serves the loopback runtime until its explicit cancellation token fires.
@@ -286,7 +291,7 @@ async fn socket_session(
         .await;
         return;
     };
-    if !streams.iter().any(|stream| stream == "room_events") || resume_from_seq < 0 {
+    if streams != [agentsassemble_protocol::RoomStream::RoomEvents] || resume_from_seq < 0 {
         let _ = send_nack(
             &mut sender,
             &state.shutdown,
@@ -428,6 +433,7 @@ async fn socket_session(
                 };
                 match serde_json::from_str::<ClientFrame>(raw.as_str()) {
                     Ok(ClientFrame::Command { request_id, action, payload }) => {
+                        let action = action.as_str().to_owned();
                         let outcome = state.rooms.execute(
                             principal.clone(), request_id.clone(), action.clone(), payload, frame_bytes,
                         ).await;

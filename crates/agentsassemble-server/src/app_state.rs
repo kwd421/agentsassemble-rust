@@ -1,6 +1,7 @@
 use std::{path::PathBuf, sync::Arc};
 
 use agentsassemble_persistence::SqliteStore;
+use agentsassemble_protocol::ServerProductSurface;
 use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService};
 use tokio::sync::Semaphore;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
@@ -20,6 +21,7 @@ pub struct AppState {
     pub shutdown: CancellationToken,
     pub connections: TaskTracker,
     pub connection_admission: Arc<Semaphore>,
+    pub server_product_surface: Arc<ServerProductSurface>,
     pub frontend_root: Option<PathBuf>,
 }
 
@@ -62,12 +64,15 @@ impl AppState {
             shutdown: CancellationToken::new(),
             connections: TaskTracker::new(),
             connection_admission: Arc::new(Semaphore::new(MAX_WS_CONNECTIONS)),
+            server_product_surface: Arc::new(crate::product_surface::server_product_surface(false)),
             frontend_root: None,
         }
     }
 
     #[must_use]
     pub fn with_frontend(mut self, frontend_root: PathBuf) -> Self {
+        self.server_product_surface =
+            Arc::new(crate::product_surface::server_product_surface(true));
         self.frontend_root = Some(frontend_root);
         self
     }

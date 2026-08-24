@@ -1,3 +1,43 @@
+macro_rules! http_method {
+    (get) => {
+        agentsassemble_protocol::HttpMethod::Get
+    };
+    (post) => {
+        agentsassemble_protocol::HttpMethod::Post
+    };
+}
+
+macro_rules! registered_routes {
+    ($visibility:vis fn $function:ident<$state:ty>() {
+        $($path:literal => $first_method:ident($first_handler:expr)
+            $(.$more_method:ident($more_handler:expr))*),+ $(,)?
+    }) => {
+        pub(crate) const HTTP_ROUTES: &[crate::product_surface::RegisteredHttpRoute] = &[
+            $(
+                crate::product_surface::RegisteredHttpRoute {
+                    method: http_method!($first_method),
+                    path: $path,
+                },
+                $(
+                    crate::product_surface::RegisteredHttpRoute {
+                        method: http_method!($more_method),
+                        path: $path,
+                    },
+                )*
+            )+
+        ];
+
+        $visibility fn $function() -> axum::Router<$state> {
+            axum::Router::new()
+                $(.route(
+                    $path,
+                    axum::routing::$first_method($first_handler)
+                        $(.$more_method($more_handler))*
+                ))+
+        }
+    };
+}
+
 mod agent_create_runtime;
 mod app_state;
 mod event_publication;
@@ -6,6 +46,7 @@ mod http_api;
 mod http_transport;
 mod ingress_budget;
 mod principal_write_budget;
+mod product_surface;
 mod profile_web;
 mod provider_turn;
 mod room_agent_lifecycle_runtime;

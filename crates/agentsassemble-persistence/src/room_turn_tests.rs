@@ -420,7 +420,7 @@ async fn stopped_direct_target_keeps_every_message_and_assigns_only_the_visible_
 }
 
 #[tokio::test]
-async fn final_body_mention_overrides_an_earlier_structured_handoff() {
+async fn final_body_mention_routes_to_the_named_agent() {
     let (store, principal, _directory) = fixture().await;
     let now = Utc::now();
     let second_participant = participant(SECOND_AGENT_ID, "Flash", "agent", "agent", now);
@@ -437,10 +437,7 @@ async fn final_body_mention_overrides_an_earlier_structured_handoff() {
             &principal,
             "final-mention-wins",
             "message.send",
-            &json!({
-                "content": "The structured handoff is stale; @Flash take the floor.",
-                "target_agent_id": AGENT_ID,
-            }),
+            &json!({"content": "@Flash take the floor."}),
         )
         .await
         .unwrap_or_else(|error| panic!("route final direct mention: {error}"));

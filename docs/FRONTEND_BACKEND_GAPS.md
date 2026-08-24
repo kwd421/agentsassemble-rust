@@ -225,6 +225,21 @@ authenticated WebSocket projection; another room or disabled stream exposes no
 cached members. No `/api/room-members` placeholder or failure-swallowing merge was
 added.
 
+The server directory now carries a closed `ServerProductSurface` whose HTTP
+routes come from the same declarative registrations that construct the Axum
+router, and whose WebSocket streams/actions come from the strict protocol enums
+accepted by the socket. The desktop `HostProductSurface` is the intersection of
+one shared Tauri command registry and the capability permission file; the build
+manifest, invoke handler, and advertised command list consume that same registry.
+The webview pins both surface digests for its lifetime before opening a room
+socket. Production room composition requests only advertised streams, rejects
+commands absent from the advertised action set, and sends canonical
+`message.send` as content-only. Consequently copied side-chat/plugin socket code
+and the RimWorld view remain source provenance but are not mounted or requested
+by the current Rust product surface. The absent native central-login command is
+also rejected at the host-surface boundary rather than being attempted as an
+unregistered Tauri invocation.
+
 The same run confirmed these still-open frontend/backend rows rather than hiding
 them:
 

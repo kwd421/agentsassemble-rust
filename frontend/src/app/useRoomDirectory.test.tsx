@@ -26,6 +26,13 @@ vi.mock("../lib/roomDockPersistence", async () => ({
   syncNativeRoomDockItems: persistenceMocks.syncNativeRoomDockItems,
 }));
 
+vi.mock("../lib/roomDirectoryContract", async () => ({
+  ...(await vi.importActual<typeof import("../lib/roomDirectoryContract")>(
+    "../lib/roomDirectoryContract"
+  )),
+  bindRoomDirectoryAuthority: vi.fn(),
+}));
+
 function makeRoom(id: string, overrides: Partial<RoomDockItem> = {}): RoomDockItem {
   return {
     id,

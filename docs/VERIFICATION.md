@@ -862,6 +862,41 @@ no reachable blocker, and returned explicit `APPROVE`. That approved session was
 then changed and visibly verified as GPT-5.6 Sol `매우 높음` (fourth of five) for
 subsequent critical reviews.
 
+### Derived product-surface candidate: 2026-08-25
+
+The server now derives its advertised HTTP routes, canonical WebSocket stream,
+and currently implemented room actions from the same registries that build the
+real Axum routers and strict protocol enums. The Tauri host likewise derives its
+advertised command surface from the intersection of one shared command registry
+and the checked-in desktop capability. The webview validates and pins both
+surfaces for its lifetime, rejects unadvertised native commands and room actions,
+and no longer mounts copied plugin UI unless the server advertises its stream.
+`message.send` also uses its actual content-only server contract; aliases and
+extra client-owned routing fields fail closed.
+
+The unchanged full `make verify` gate passed: architecture, source-growth,
+logical-line, and 800-line gates; generated bindings; production frontend build
+and original CSS/cascade verification; 71 frontend files with 355 tests; 15
+Tauri tests; 18 domain, 85 persistence, four protocol, 100 provider, and 15
+server unit tests; 20 Rust integration tests; documentation tests;
+warning-denied workspace and desktop Clippy; and final diff validation.
+
+Computer Use then drove a fresh debug application under isolated identifier
+`app.agentsassemble.rust.surfaceverify`, with the central URL intentionally unset
+to exercise the documented local-authority entry point. The real startup flow
+initialized `Surface Verify`, created the first SQLite-backed room, joined it as
+the human host, opened the canonical `room_events` WebSocket, and sent
+`SURFACE_CONTRACT_OK`. The message returned through the room timeline and the
+composer cleared. The reachable tree exposed the canonical room, channel,
+profile, and roster surfaces but no unadvertised RimWorld/plugin UI. No provider
+was started for this provider-independent contract slice.
+
+Normal quit removed the exact app and sidecar processes. Its Application Support,
+cache, WebKit data, and app bundle were moved to the recoverable Trash directory
+`/Users/seinel/.Trash/AgentsAssemble-Surface-Verify-bZkrfr`; original-product
+data and unrelated processes were untouched. The published candidate still
+requires cross-review by the critical web session and Daybreaker Blue High.
+
 ## API verification scope
 
 When a reachable flow specifically needs an API-backed provider, the allowed paid/provider-specific candidates are the official DeepSeek API and the designated Flash provider path. Every other API-backed verification uses only an explicitly free API or free model. Missing credentials, exhausted free quota, or unavailable models fail visibly; they do not trigger a paid substitution or a fallback provider.

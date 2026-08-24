@@ -6,6 +6,13 @@ import {
   postJsonServerOperator,
   postJsonWithIdentity,
 } from "./http";
+import { requestDesktopHostProductSurface } from "../lib/desktopBridge";
+
+const HOST_SURFACE = {
+  revision: 1,
+  digest: "1".repeat(64),
+  commands: ["host_product_surface", "runtime_operator_ticket"],
+};
 
 describe("desktop profile HTTP routing", () => {
   afterEach(() => {
@@ -16,6 +23,7 @@ describe("desktop profile HTTP routing", () => {
   it("uses a fresh server-wide operator ticket for every local profile operation", async () => {
     const invoke = vi
       .fn()
+      .mockResolvedValueOnce(HOST_SURFACE)
       .mockResolvedValueOnce({
         ticket: "ticket-read",
         ttl_seconds: 30,
@@ -43,6 +51,7 @@ describe("desktop profile HTTP routing", () => {
       );
     vi.stubGlobal("fetch", fetchMock);
 
+    await requestDesktopHostProductSurface();
     await fetchJsonWithIdentity("/api/user-profile", { roomId: "general" });
     await postJsonWithIdentity(
       "/api/user-profile",
@@ -50,8 +59,9 @@ describe("desktop profile HTTP routing", () => {
       { roomId: "general" }
     );
 
-    expect(invoke).toHaveBeenNthCalledWith(1, "runtime_operator_ticket");
+    expect(invoke).toHaveBeenNthCalledWith(1, "host_product_surface");
     expect(invoke).toHaveBeenNthCalledWith(2, "runtime_operator_ticket");
+    expect(invoke).toHaveBeenNthCalledWith(3, "runtime_operator_ticket");
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       "http://127.0.0.1:49152/api/user-profile",
@@ -91,6 +101,7 @@ describe("desktop profile HTTP routing", () => {
   it("uses purpose-separated one-use operator tickets for room control HTTP", async () => {
     const invoke = vi
       .fn()
+      .mockResolvedValueOnce(HOST_SURFACE)
       .mockResolvedValueOnce({
         ticket: "operator-list",
         ttl_seconds: 30,
@@ -118,14 +129,16 @@ describe("desktop profile HTTP routing", () => {
       );
     vi.stubGlobal("fetch", fetchMock);
 
+    await requestDesktopHostProductSurface();
     await fetchJsonServerOperator("/api/rooms?include_archived=true");
     await postJsonServerOperator("/api/rooms", {
       room_id: "project-room",
       label: "Project Room",
     });
 
-    expect(invoke).toHaveBeenNthCalledWith(1, "runtime_operator_ticket");
+    expect(invoke).toHaveBeenNthCalledWith(1, "host_product_surface");
     expect(invoke).toHaveBeenNthCalledWith(2, "runtime_operator_ticket");
+    expect(invoke).toHaveBeenNthCalledWith(3, "runtime_operator_ticket");
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       "http://127.0.0.1:49153/api/rooms?include_archived=true",

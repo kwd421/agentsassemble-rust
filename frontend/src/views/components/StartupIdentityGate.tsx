@@ -28,6 +28,7 @@ import {
   fetchDesktopOperatorRuntime,
   initializeDesktopBootstrap,
   isDesktopWebview,
+  requestDesktopHostProductSurface,
   requestDesktopBootstrapStatus,
   type DesktopBootstrapGrant,
 } from "../../lib/desktopBridge";
@@ -166,6 +167,7 @@ export default function StartupIdentityGate({
     async function initialize() {
       if (isDesktopWebview()) {
         try {
+          await requestDesktopHostProductSurface();
           const bootstrap = await requestDesktopBootstrapStatus();
           if (bootstrap.phase === "complete") {
             if (active) await enterApplication(bootstrap);

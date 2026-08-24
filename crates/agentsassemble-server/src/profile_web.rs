@@ -5,7 +5,6 @@ use axum::{
     extract::{Path, Query, Request, State},
     http::{HeaderValue, Method, StatusCode, header},
     response::{IntoResponse, Response},
-    routing::{get, post},
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde::Deserialize;
@@ -32,11 +31,15 @@ struct AttachmentUpload {
 }
 
 pub(crate) fn routes() -> Router<AppState> {
-    Router::new()
-        .route("/api/user-profile", get(read_profile).post(update_profile))
-        .route("/api/attachments", post(upload_attachment))
-        .route("/api/attachments/{attachment_id}", get(read_attachment))
-        .layer(profile_cors())
+    profile_routes().layer(profile_cors())
+}
+
+registered_routes! {
+    fn profile_routes<AppState>() {
+        "/api/user-profile" => get(read_profile).post(update_profile),
+        "/api/attachments" => post(upload_attachment),
+        "/api/attachments/{attachment_id}" => get(read_attachment),
+    }
 }
 
 fn profile_cors() -> CorsLayer {
