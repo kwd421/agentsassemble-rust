@@ -524,6 +524,43 @@ documentation tests; warning-denied workspace and desktop Clippy; and final diff
 validation. No provider or packaged application was started by this deterministic
 run.
 
+### Command-admission and provider-presentation correction: `865ad02`
+
+The next correction adds the actor-owned raw transport budget required by the
+manual security finding and narrows saturated `agent.stop` admission to sessions
+that actually own runtime or lifecycle-intent cleanup. The complete `make verify`
+passed with every mandatory architecture and 800-line gate unchanged, 67 frontend
+files with 342 tests, 14 Tauri tests, 16 domain, 80 persistence, two protocol, 100
+provider, and 14 server unit tests, the Rust integration boundary suites,
+warning-denied Clippy, generated bindings, original-CSS provenance, and the final
+diff check.
+
+Computer Use first exposed an existing user-data boundary rather than hiding it:
+the installed Rust data authority was schema version 9 and the current runtime
+requires version 11, so startup failed visibly. No migration, compatibility path,
+fallback, or user-data edit was introduced. A release application was rebuilt
+under a verification-only bundle identifier, creating a fresh schema-11 Rust
+authority while leaving the user's existing data untouched.
+
+In that isolated packaged application, the copied Agent Add modal showed the
+`Harness`, `API`, and `Local` groups and Codex, Antigravity, and OpenCode from the
+real Rust catalog. Before a provider was selected, neither `표시 이름` nor its
+text field existed in the accessibility tree or rendered modal. Selecting each
+provider made the field appear with its catalog-derived name: Codex and
+Antigravity used the shared `provider · model` presentation, while the already
+provider-qualified OpenCode model label remained unchanged. The original icon
+card geometry and the existing per-mark scales were preserved; the three live
+catalog marks were visually checked in the packaged modal. Freebuff and
+TokenRouter are not yet exposed by the Rust live catalog, so their official assets,
+recorded hashes, alpha bounds, and central renderer tests are evidence only and
+were not misreported as a reachable packaged flow.
+
+No Agent Session was created and no provider was started. The modal was closed,
+the application and Rust sidecar were shut down, and both verification-only data
+directories and application bundles were deleted after process absence was
+confirmed. The installed Python application, the existing Rust user database,
+and unrelated processes were not modified or signalled.
+
 ## API verification scope
 
 When a reachable flow specifically needs an API-backed provider, the allowed paid/provider-specific candidates are the official DeepSeek API and the designated Flash provider path. Every other API-backed verification uses only an explicitly free API or free model. Missing credentials, exhausted free quota, or unavailable models fail visibly; they do not trigger a paid substitution or a fallback provider.
