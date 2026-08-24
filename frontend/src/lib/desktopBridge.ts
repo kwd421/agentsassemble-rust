@@ -27,6 +27,8 @@ export interface DesktopBootstrapGrant {
   phase: "empty" | "initializing" | "complete" | "repair_required";
   authority_lineage_id: string;
   server_id: string;
+  server_product_surface_revision: number;
+  server_product_surface_digest: string;
   profile: {
     revision: number;
     display_name: string;
@@ -132,7 +134,15 @@ export async function requestDesktopHostProductSurface(): Promise<HostProductSur
 function validateDesktopBootstrapGrant(value: unknown): DesktopBootstrapGrant {
   const grant = exactObject(
     value,
-    ["phase", "authority_lineage_id", "server_id", "profile", "deduplicated"],
+    [
+      "phase",
+      "authority_lineage_id",
+      "server_id",
+      "server_product_surface_revision",
+      "server_product_surface_digest",
+      "profile",
+      "deduplicated",
+    ],
     "데스크톱 bootstrap"
   );
   if (
@@ -143,6 +153,8 @@ function validateDesktopBootstrapGrant(value: unknown): DesktopBootstrapGrant {
     !UUID_PATTERN.test(grant.authority_lineage_id) ||
     typeof grant.server_id !== "string" ||
     !UUID_PATTERN.test(grant.server_id) ||
+    grant.server_product_surface_revision !== 1 ||
+    !/^[0-9a-f]{64}$/.test(String(grant.server_product_surface_digest)) ||
     typeof grant.deduplicated !== "boolean"
   ) {
     throw new Error("데스크톱 bootstrap 권위 식별자가 올바르지 않습니다.");

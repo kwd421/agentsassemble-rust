@@ -13,6 +13,11 @@ export type RoomDirectoryAuthority = Pick<
   "server_id" | "authority_lineage_id"
 >;
 
+export type TrustedServerProductSurface = Pick<
+  ServerProductSurface,
+  "revision" | "digest"
+>;
+
 export type StrictRoomCreateResponse = RoomDirectoryAuthority & {
   status: "ready";
   room: ServerRoomDockSource;
@@ -264,6 +269,55 @@ function validateServerProductSurface(value: unknown): ServerProductSurface {
   return surface as unknown as ServerProductSurface;
 }
 
+function lengthDelimited(value: string): Uint8Array {
+  const encoded = new TextEncoder().encode(value);
+  const field = new Uint8Array(8 + encoded.length);
+  new DataView(field.buffer).setBigUint64(0, BigInt(encoded.length), false);
+  field.set(encoded, 8);
+  return field;
+}
+
+async function canonicalServerSurfaceDigest(
+  surface: ServerProductSurface
+): Promise<string> {
+  const fields = [
+    "agentsassemble.server-product-surface.v1",
+    String(surface.revision),
+    ...surface.http_routes.map((route) => `${route.method} ${route.path}`),
+    "streams",
+    ...surface.websocket_streams,
+    "actions",
+    ...surface.websocket_actions,
+  ];
+  const encoded = fields.map(lengthDelimited);
+  const transcript = new Uint8Array(
+    encoded.reduce((total, field) => total + field.length, 0)
+  );
+  let offset = 0;
+  for (const field of encoded) {
+    transcript.set(field, offset);
+    offset += field.length;
+  }
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", transcript));
+  return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function assertServerProductSurfaceIntegrity(
+  surface: ServerProductSurface,
+  trusted: TrustedServerProductSurface | null
+) {
+  const computed = await canonicalServerSurfaceDigest(surface);
+  if (computed !== surface.digest) {
+    throw new Error("서버 제품 표면 digest가 등록부 내용과 일치하지 않습니다.");
+  }
+  if (
+    trusted &&
+    (trusted.revision !== surface.revision || trusted.digest !== surface.digest)
+  ) {
+    throw new Error("서버 제품 표면이 네이티브 bootstrap 권위와 일치하지 않습니다.");
+  }
+}
+
 export function parseStrictRoomDirectory(value: unknown): StrictRoomDirectory {
   const payload = record(value, "방 목록");
   exactKeys(
@@ -322,10 +376,15 @@ export function retainRoomDirectoryAuthority(
   return pinned ? { ...pinned } : { ...actual };
 }
 
-export function bindRoomDirectoryAuthority(
+export async function bindRoomDirectoryAuthority(
   authority: StrictRoomDirectory,
+  trustedSurface: TrustedServerProductSurface | null = null,
   origin = window.location.origin
 ) {
+  await assertServerProductSurfaceIntegrity(
+    authority.server_product_surface,
+    trustedSurface
+  );
   if (boundAuthority?.origin === origin) {
     assertSameRoomDirectoryAuthority(authority, boundAuthority.authority);
     if (

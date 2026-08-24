@@ -10,6 +10,7 @@ use agentsassemble_persistence::{
 };
 use agentsassemble_protocol::{
     LocalBootstrapGrant, LocalBootstrapPhase, LocalControlRequest, LocalControlResponse,
+    ServerProductSurface,
 };
 use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService};
 use agentsassemble_server::{
@@ -175,7 +176,11 @@ async fn run_control_pipe<R, W>(
                 match state.store.local_bootstrap_status().await {
                     Ok(status) => LocalControlResponse::BootstrapOk {
                         request_id,
-                        bootstrap: Box::new(bootstrap_grant(status, false)),
+                        bootstrap: Box::new(bootstrap_grant(
+                            status,
+                            false,
+                            &state.server_product_surface,
+                        )),
                     },
                     Err(error) => bootstrap_control_error(request_id, error),
                 }
@@ -191,7 +196,11 @@ async fn run_control_pipe<R, W>(
                 {
                     Ok(commit) => LocalControlResponse::BootstrapOk {
                         request_id,
-                        bootstrap: Box::new(bootstrap_grant(commit.status, commit.deduplicated)),
+                        bootstrap: Box::new(bootstrap_grant(
+                            commit.status,
+                            commit.deduplicated,
+                            &state.server_product_surface,
+                        )),
                     },
                     Err(error) => bootstrap_control_error(request_id, error),
                 }
@@ -248,7 +257,11 @@ fn valid_control_request_id(request_id: &str) -> bool {
     !request_id.is_empty() && request_id.len() <= 128
 }
 
-fn bootstrap_grant(status: LocalBootstrapStatus, deduplicated: bool) -> LocalBootstrapGrant {
+fn bootstrap_grant(
+    status: LocalBootstrapStatus,
+    deduplicated: bool,
+    surface: &ServerProductSurface,
+) -> LocalBootstrapGrant {
     let phase = match status.phase {
         PersistenceBootstrapPhase::Empty => LocalBootstrapPhase::Empty,
         PersistenceBootstrapPhase::Initializing => LocalBootstrapPhase::Initializing,
@@ -259,6 +272,8 @@ fn bootstrap_grant(status: LocalBootstrapStatus, deduplicated: bool) -> LocalBoo
         phase,
         authority_lineage_id: status.authority_lineage_id,
         server_id: status.server_id,
+        server_product_surface_revision: surface.revision,
+        server_product_surface_digest: surface.digest.clone(),
         profile: status.profile,
         deduplicated,
     }

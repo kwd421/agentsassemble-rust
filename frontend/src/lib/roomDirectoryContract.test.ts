@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  bindRoomDirectoryAuthority,
   parseStrictRoomCreateResponse,
   parseStrictRoomDirectory,
   retainRoomDirectoryAuthority,
@@ -9,6 +10,24 @@ import {
 const serverId = "10000000-0000-4000-8000-000000000001";
 const lineageId = "20000000-0000-4000-8000-000000000002";
 const roomUid = "30000000-0000-4000-8000-000000000003";
+const actions = [
+  "agent.configure",
+  "agent.create",
+  "agent.resume",
+  "agent.start",
+  "agent.stop",
+  "message.send",
+  "room.random.choose",
+  "room.random.roll",
+  "room.settings.update",
+] as const;
+const surface = {
+  revision: 1,
+  digest: "f70f761ba879dfb9083d0d677ea814cbd46734b48c5447d8220128d950488aa8",
+  http_routes: [],
+  websocket_streams: ["room_events"],
+  websocket_actions: [...actions],
+} as const;
 
 function room() {
   return {
@@ -54,5 +73,46 @@ describe("room directory contracts", () => {
       retainRoomDirectoryAuthority(replacement, pinned, replacement)
     ).toThrow(/bootstrap 서버 및 계보/);
     expect(retainRoomDirectoryAuthority(pinned, pinned, pinned)).toEqual(pinned);
+  });
+
+  it("rejects a self-asserted surface downgrade before binding native authority", async () => {
+    const authority = {
+      server_id: serverId,
+      authority_lineage_id: lineageId,
+      server_product_surface: surface,
+      rooms: [],
+    };
+    await bindRoomDirectoryAuthority(
+      parseStrictRoomDirectory(authority),
+      surface,
+      "https://surface-valid.example"
+    );
+    await expect(
+      bindRoomDirectoryAuthority(
+        parseStrictRoomDirectory({
+          ...authority,
+          server_product_surface: {
+            ...surface,
+            websocket_streams: [],
+          },
+        }),
+        surface,
+        "https://surface-forged-digest.example"
+      )
+    ).rejects.toThrow(/digest/);
+    await expect(
+      bindRoomDirectoryAuthority(
+        parseStrictRoomDirectory({
+          ...authority,
+          server_product_surface: {
+            ...surface,
+            digest: "8db3827e292550a461d7da90d256be7c88b7830542109e82f1306e42a372577a",
+            websocket_streams: [],
+          },
+        }),
+        surface,
+        "https://surface-recomputed-digest.example"
+      )
+    ).rejects.toThrow(/bootstrap/);
   });
 });

@@ -141,6 +141,15 @@ export default function StartupIdentityGate({
     ) {
       throw new Error("방 목록 권위가 네이티브 bootstrap 계보와 일치하지 않습니다.");
     }
+    await bindRoomDirectoryAuthority(
+      payload,
+      desktopAuthority
+        ? {
+            revision: desktopAuthority.server_product_surface_revision,
+            digest: desktopAuthority.server_product_surface_digest,
+          }
+        : null
+    );
     const current = loadRoomDockItems().map(hydratePersistedRoom);
     const synchronized = mergeServerRoomsIntoDock(
       current,
@@ -149,7 +158,6 @@ export default function StartupIdentityGate({
       payload.server_id
     );
     persistRoomDockItems(synchronized.map(persistableRoom));
-    bindRoomDirectoryAuthority(payload);
     rememberStartupIdentitySelection();
     onComplete();
   }

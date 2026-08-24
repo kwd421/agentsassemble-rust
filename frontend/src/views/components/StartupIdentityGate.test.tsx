@@ -26,7 +26,7 @@ const SERVER_ID = "30000000-0000-4000-8000-000000000001";
 const LINEAGE_ID = "30000000-0000-4000-8000-000000000002";
 const SERVER_SURFACE = {
   revision: 1,
-  digest: "0".repeat(64),
+  digest: "f70f761ba879dfb9083d0d677ea814cbd46734b48c5447d8220128d950488aa8",
   http_routes: [],
   websocket_streams: ["room_events"],
   websocket_actions: [
@@ -208,6 +208,8 @@ describe("StartupIdentityGate", () => {
       phase: "empty",
       authority_lineage_id: LINEAGE_ID,
       server_id: SERVER_ID,
+      server_product_surface_revision: SERVER_SURFACE.revision,
+      server_product_surface_digest: SERVER_SURFACE.digest,
       profile: null,
       deduplicated: false,
     });
@@ -215,6 +217,8 @@ describe("StartupIdentityGate", () => {
       phase: "complete",
       authority_lineage_id: LINEAGE_ID,
       server_id: SERVER_ID,
+      server_product_surface_revision: SERVER_SURFACE.revision,
+      server_product_surface_digest: SERVER_SURFACE.digest,
       profile: desktopProfile,
       deduplicated: false,
     });
@@ -256,6 +260,8 @@ describe("StartupIdentityGate", () => {
       phase: "complete",
       authority_lineage_id: LINEAGE_ID,
       server_id: SERVER_ID,
+      server_product_surface_revision: SERVER_SURFACE.revision,
+      server_product_surface_digest: SERVER_SURFACE.digest,
       profile: desktopProfile,
       deduplicated: false,
     });

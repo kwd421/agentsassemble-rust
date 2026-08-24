@@ -326,6 +326,8 @@ pub struct LocalBootstrapGrant {
     pub phase: LocalBootstrapPhase,
     pub authority_lineage_id: String,
     pub server_id: String,
+    pub server_product_surface_revision: u32,
+    pub server_product_surface_digest: String,
     pub profile: Option<UserProfile>,
     pub deduplicated: bool,
 }

@@ -868,8 +868,8 @@ The server now derives its advertised HTTP routes, canonical WebSocket stream,
 and currently implemented room actions from the same registries that build the
 real Axum routers and strict protocol enums. The Tauri host likewise derives its
 advertised command surface from the intersection of one shared command registry
-and the checked-in desktop capability. The webview validates and pins both
-surfaces for its lifetime, rejects unadvertised native commands and room actions,
+and the checked-in desktop capability. The published candidate structurally
+validates and pins both surfaces for its lifetime, rejects unadvertised native commands and room actions,
 and no longer mounts copied plugin UI unless the server advertises its stream.
 `message.send` also uses its actual content-only server contract; aliases and
 extra client-owned routing fields fail closed.
@@ -896,6 +896,42 @@ cache, WebKit data, and app bundle were moved to the recoverable Trash directory
 `/Users/seinel/.Trash/AgentsAssemble-Surface-Verify-bZkrfr`; original-product
 data and unrelated processes were untouched. The published candidate still
 requires cross-review by the critical web session and Daybreaker Blue High.
+
+Daybreaker Blue High rejected public range `be3e895..ce77535` with one reachable
+Medium downgrade. The first directory response's surface digest was only checked
+for 64-hex shape, not recomputed, and native bootstrap bound only server and
+lineage IDs. A loopback response modifier could therefore keep the genuine IDs
+and digest while replacing streams or actions with a valid strict subset. That
+self-asserted subset became the immutable webview pin and could keep the room
+socket or controls unmounted for the webview lifetime.
+
+The correction makes the private control bootstrap grant carry the server
+surface revision and digest. Before any room list is persisted or composed, the
+webview reproduces Rust's versioned, 64-bit length-delimited canonical transcript
+and recomputes SHA-256 with Web Crypto, then requires both the response digest
+and the private-control digest to match. Recomputing an attacker's downgraded
+digest therefore still fails against native authority, while retaining the
+original digest fails against the received registry bytes. The lifetime pin is
+installed only after both checks pass.
+
+The correction passed the complete unchanged `make verify`: all mandatory
+architecture/source-growth/logical-line/800-line gates, generated bindings,
+production frontend and original CSS verification, 71 frontend files with 356
+tests, 15 Tauri tests, 18 domain, 85 persistence, four protocol, 100 provider,
+15 server, and 20 Rust integration tests, documentation, warning-denied Clippy,
+and final diff validation.
+
+Computer Use then drove a new packaged debug application under isolated
+identifier `app.agentsassemble.rust.surfaceauthverify`. Its private-control
+surface grant and HTTP directory surface passed the new independent digest
+checks, the real local identity `Surface Auth Verify` completed, and the genuine
+zero-room UI appeared. Creating the first real room then mounted the canonical
+channel, host roster, and chat composer, demonstrating that the correction does
+not reject or disable the legitimate server registry. Normal quit left no exact
+app or sidecar process. Application Support, cache, WebKit data, and the app
+bundle were moved to the recoverable Trash directory
+`/Users/seinel/.Trash/AgentsAssemble-Surface-Auth-Verify-1FMoFt`; original data
+and unrelated processes were untouched. No provider was required or started.
 
 ## API verification scope
 

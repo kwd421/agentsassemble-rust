@@ -15,6 +15,7 @@ import {
   currentRoomDirectoryAuthority,
   retainRoomDirectoryAuthority,
   type RoomDirectoryAuthority,
+  type TrustedServerProductSurface,
 } from "../lib/roomDirectoryContract";
 import {
   isDesktopWebview,
@@ -136,8 +137,10 @@ export function useRoomDirectory({
     [commit]
   );
 
-  const verifyRoomDirectoryAuthority = useCallback(
-    async (actual: RoomDirectoryAuthority) => {
+  const resolveTrustedRoomDirectoryAuthority = useCallback(
+    async (
+      actual: RoomDirectoryAuthority
+    ): Promise<TrustedServerProductSurface | null> => {
       if (isDesktopWebview()) {
         const bootstrap = await requestDesktopBootstrapStatus();
         if (bootstrap.phase !== "complete") {
@@ -148,19 +151,30 @@ export function useRoomDirectory({
           authorityRef.current,
           bootstrap
         );
-        return;
+        return {
+          revision: bootstrap.server_product_surface_revision,
+          digest: bootstrap.server_product_surface_digest,
+        };
       }
       authorityRef.current = retainRoomDirectoryAuthority(actual, authorityRef.current);
+      return null;
     },
     []
   );
 
+  const verifyRoomDirectoryAuthority = useCallback(
+    async (actual: RoomDirectoryAuthority): Promise<void> => {
+      await resolveTrustedRoomDirectoryAuthority(actual);
+    },
+    [resolveTrustedRoomDirectoryAuthority]
+  );
+
   const fetchVerifiedRoomDirectory = useCallback(async () => {
     const payload = await fetchRooms(true);
-    await verifyRoomDirectoryAuthority(payload);
-    bindRoomDirectoryAuthority(payload);
+    const trustedSurface = await resolveTrustedRoomDirectoryAuthority(payload);
+    await bindRoomDirectoryAuthority(payload, trustedSurface);
     return payload;
-  }, [verifyRoomDirectoryAuthority]);
+  }, [resolveTrustedRoomDirectoryAuthority]);
 
   const refreshRoomDirectory = useCallback(async () => {
     const payload = await fetchVerifiedRoomDirectory();
