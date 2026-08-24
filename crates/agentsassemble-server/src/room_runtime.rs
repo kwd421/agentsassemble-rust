@@ -5,8 +5,7 @@ use std::{
 };
 
 use agentsassemble_domain::{
-    AuthenticatedPrincipal, RoomEvent, RoomRandomRequest, public_event_for_principal,
-    public_value_for_principal,
+    AuthenticatedPrincipal, RoomEvent, public_event_for_principal, public_value_for_principal,
 };
 use agentsassemble_persistence::{
     AgentTurnAssignment, CommandOutcome, PersistenceError, RoomCommandMutation, SqliteStore,
@@ -515,7 +514,7 @@ async fn execute_command(
     event_tx: &broadcast::Sender<RoomEvent>,
     command: &RoomCommand,
 ) -> CommandExecution {
-    let result = match command.action.as_str() {
+    match command.action.as_str() {
         "agent.create" => {
             execute_agent_create_command(
                 store,
@@ -526,7 +525,9 @@ async fn execute_command(
             )
             .await
         }
-        "agent.configure" => execute_agent_configure(store, provider_catalog, command).await,
+        "agent.configure" => execute_agent_configure(store, provider_catalog, command)
+            .await
+            .unwrap_or_else(CommandExecution::transactional_failure),
         "agent.start" | "agent.resume" => {
             crate::room_agent_lifecycle_runtime::execute_agent_start(
                 store,
@@ -547,14 +548,17 @@ async fn execute_command(
             .execute_room_settings_update(&command.principal, &command.request_id, &command.payload)
             .await
         {
-            Ok(outcome) if outcome.deduplicated => Ok(CommandExecution::success(outcome)),
-            Ok(outcome) => {
-                Ok(progressed_execution(store, &command.principal.room_id, outcome).await)
-            }
-            Err(error) => Err(error),
+            Ok(outcome) if outcome.deduplicated => CommandExecution::success(outcome),
+            Ok(outcome) => progressed_execution(store, &command.principal.room_id, outcome).await,
+            Err(error) => CommandExecution::transactional_failure(error),
         },
-        "room.random.roll" | "room.random.choose" => execute_room_random(store, command).await,
-        _ => store
+        "room.random.roll" | "room.random.choose" => {
+            match crate::room_random_runtime::execute_room_random(store, command).await {
+                Ok(outcome) => CommandExecution::success(outcome),
+                Err(error) => CommandExecution::transactional_failure(error),
+            }
+        }
+        _ => match store
             .execute_message_with_turn(
                 &command.principal,
                 &command.request_id,
@@ -562,43 +566,11 @@ async fn execute_command(
                 &command.payload,
             )
             .await
-            .map(CommandExecution::mutation),
-    };
-    result.unwrap_or_else(CommandExecution::failure)
-}
-
-async fn execute_room_random(
-    store: &SqliteStore,
-    command: &RoomCommand,
-) -> Result<CommandExecution, PersistenceError> {
-    if let Some(outcome) = store
-        .replay_command(
-            &command.principal,
-            &command.request_id,
-            &command.action,
-            &command.payload,
-        )
-        .await?
-    {
-        return Ok(CommandExecution::success(outcome));
+        {
+            Ok(mutation) => CommandExecution::mutation(mutation),
+            Err(error) => CommandExecution::transactional_failure(error),
+        },
     }
-    let request = RoomRandomRequest::parse(&command.action, &command.payload).map_err(|error| {
-        PersistenceError::CommandRejected {
-            code: "invalid_room_random_request",
-            message: error.message,
-        }
-    })?;
-    let result = crate::room_random_runtime::generate_room_random(&request);
-    store
-        .execute_room_random_command(
-            &command.principal,
-            &command.request_id,
-            &command.action,
-            &command.payload,
-            &result,
-        )
-        .await
-        .map(CommandExecution::success)
 }
 
 async fn execute_agent_create_command(
@@ -607,12 +579,12 @@ async fn execute_agent_create_command(
     provider_adapter: &ProviderAdapter,
     event_tx: &broadcast::Sender<RoomEvent>,
     command: &RoomCommand,
-) -> Result<CommandExecution, PersistenceError> {
+) -> CommandExecution {
     let AgentCreateExecution {
         reply,
         committed_events,
         advance_ordered_floor,
-    } = crate::agent_create_runtime::execute_agent_create(
+    } = match crate::agent_create_runtime::execute_agent_create(
         store,
         provider_catalog,
         provider_adapter,
@@ -621,16 +593,20 @@ async fn execute_agent_create_command(
         &command.request_id,
         &command.payload,
     )
-    .await?;
+    .await
+    {
+        Ok(execution) => execution,
+        Err(failure) => return CommandExecution::failure(failure),
+    };
     let execution = CommandExecution {
-        reply: reply.map_err(CommandFailure::rejected),
+        reply,
         committed_events,
         assignments: Vec::new(),
     };
     if advance_ordered_floor {
-        Ok(progress_execution(store, &command.principal.room_id, execution).await)
+        progress_execution(store, &command.principal.room_id, execution).await
     } else {
-        Ok(execution)
+        execution
     }
 }
 
@@ -712,12 +688,16 @@ impl CommandExecution {
         }
     }
 
-    fn failure(error: PersistenceError) -> Self {
+    fn failure(failure: CommandFailure) -> Self {
         Self {
-            reply: Err(CommandFailure::after_execution(error)),
+            reply: Err(failure),
             committed_events: Vec::new(),
             assignments: Vec::new(),
         }
+    }
+
+    pub(crate) fn transactional_failure(error: PersistenceError) -> Self {
+        Self::failure(CommandFailure::transactional(error))
     }
 
     fn rejected_failure(error: PersistenceError) -> Self {
@@ -728,10 +708,21 @@ impl CommandExecution {
         }
     }
 
-    fn unresolved_failure(error: PersistenceError) -> Self {
+    pub(crate) fn unresolved_failure(error: PersistenceError) -> Self {
         Self {
             reply: Err(CommandFailure::unresolved(error)),
             committed_events: Vec::new(),
+            assignments: Vec::new(),
+        }
+    }
+
+    pub(crate) fn unresolved_failure_with_events(
+        error: PersistenceError,
+        committed_events: Vec<RoomEvent>,
+    ) -> Self {
+        Self {
+            reply: Err(CommandFailure::unresolved(error)),
+            committed_events,
             assignments: Vec::new(),
         }
     }

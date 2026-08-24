@@ -14,6 +14,8 @@ import type {
   PublicRoomGlobalSettings,
 } from "./types/generatedRoomEvent";
 import type { PluginEnvelope } from "./pluginSocketProtocol";
+import type { CommandAck } from "./types/generated/CommandAck";
+import type { CommandResolution } from "./types/generated/CommandResolution";
 import type { ServerProductSurface } from "./types/generated/ServerProductSurface";
 
 export interface RoomSocketHandlers {
@@ -135,15 +137,15 @@ export interface RoomSocketSnapshot {
   capabilities: Record<string, boolean>;
 }
 
-export interface RoomCommandAck {
+export type RoomCommandAck = Pick<
+  CommandAck,
+  "request_id" | "action" | "deduplicated"
+> & {
   op: "ack";
-  request_id: string;
   accepted: true;
-  resolution: "committed";
-  action: string;
+  resolution: Extract<CommandResolution, "committed">;
   result?: Record<string, unknown>;
-  deduplicated?: boolean;
-}
+};
 
 export interface RoomSocketClientDependencies {
   getTicket?: (auth: RoomSocketAuth) => Promise<

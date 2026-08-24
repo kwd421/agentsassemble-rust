@@ -22,7 +22,7 @@ impl CommandFailure {
         }
     }
 
-    pub(crate) fn after_execution(error: PersistenceError) -> Self {
+    pub(crate) fn transactional(error: PersistenceError) -> Self {
         if matches!(
             error,
             PersistenceError::CommandConflict | PersistenceError::CommandRejected { .. }

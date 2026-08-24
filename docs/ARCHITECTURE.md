@@ -162,6 +162,15 @@ two. An `unresolved`, missing, malformed, or mismatched resolution closes the
 socket while preserving the exact private request ID and serialized bytes for a
 fresh authenticated replay.
 
+Resolution is owned at each action's effect boundary, not inferred globally from
+an error enum. A deterministic failure inside a transaction that cannot have
+committed is `rejected`. A safely failed provider launch is rejected only after
+its terminal failure state is committed. Once creation/lifecycle preparation has
+committed, a provider effect is uncertain or applied, or completion/publication
+may have failed after commit, every nonterminal failure is `unresolved` even when
+its diagnostic uses a command-rejection-shaped error. An uncertain failure may
+publish its committed recovery events without releasing the request identity.
+
 ### Room event cursor
 
 Room event `seq` is positive, durable, monotonic, and scoped to one room. A client advances only over contiguous sequences. Initial, resume, gap, and resynchronization responses preserve the existing frontend meaning. Missing or inconsistent ranges fail visibly and trigger authoritative resynchronization.

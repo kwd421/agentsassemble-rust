@@ -405,6 +405,39 @@ describe("proof-bound canonical room socket", () => {
     handle.close();
   });
 
+  it("fails closed on an authenticated command response for an unknown request", async () => {
+    const errors: RoomSocketSayError[] = [];
+    const { handle, sockets, tickets } = openHarness({
+      onError: (error) => {
+        if (error instanceof RoomSocketSayError) errors.push(error);
+      },
+    });
+    await flushPromises();
+    sockets[0].open();
+    const frames = await handshakeFrames(sockets[0], tickets[0], 0, 0);
+    sockets[0].receive(frames.receipt);
+    sockets[0].receiveRaw(frames.rawSnapshot);
+    await vi.waitFor(() => expect(handle.ready()).toBe(true));
+
+    await receiveAuthenticated(sockets[0], frames, {
+      op: "nack",
+      accepted: false,
+      resolution: "rejected",
+      request_id: "unknown-request",
+      action: "message.send",
+      error: {
+        code: "message_invalid",
+        message: "Message content is invalid.",
+      },
+    });
+
+    await vi.waitFor(() =>
+      expect(errors.at(-1)?.category).toBe("command_response_unexpected")
+    );
+    expect(sockets[0].readyState).toBe(WebSocket.CLOSED);
+    handle.close();
+  });
+
   it("settles a command only for a server-declared definitive rejection", async () => {
     const { handle, sockets, tickets } = openHarness();
     await flushPromises();

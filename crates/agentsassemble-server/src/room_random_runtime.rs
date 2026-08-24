@@ -1,12 +1,46 @@
 use agentsassemble_domain::{RoomRandomRequest, RoomRandomResult};
 use agentsassemble_persistence::{
-    PersistenceError, ProviderRoomRandomCommit, SqliteStore, room_write_command_size,
+    CommandOutcome, PersistenceError, ProviderRoomRandomCommit, SqliteStore,
+    room_write_command_size,
 };
 use agentsassemble_provider::{ProviderRoomToolCommand, ProviderRoomToolError};
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
-use crate::principal_write_budget::PrincipalWriteBudget;
+use crate::{principal_write_budget::PrincipalWriteBudget, room_runtime::RoomCommand};
+
+pub(crate) async fn execute_room_random(
+    store: &SqliteStore,
+    command: &RoomCommand,
+) -> Result<CommandOutcome, PersistenceError> {
+    if let Some(outcome) = store
+        .replay_command(
+            &command.principal,
+            &command.request_id,
+            &command.action,
+            &command.payload,
+        )
+        .await?
+    {
+        return Ok(outcome);
+    }
+    let request = RoomRandomRequest::parse(&command.action, &command.payload).map_err(|error| {
+        PersistenceError::CommandRejected {
+            code: "invalid_room_random_request",
+            message: error.message,
+        }
+    })?;
+    let result = generate_room_random(&request);
+    store
+        .execute_room_random_command(
+            &command.principal,
+            &command.request_id,
+            &command.action,
+            &command.payload,
+            &result,
+        )
+        .await
+}
 
 #[must_use]
 pub(crate) fn generate_room_random(request: &RoomRandomRequest) -> RoomRandomResult {

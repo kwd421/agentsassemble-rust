@@ -1134,6 +1134,61 @@ bundle were moved recoverably to
 data and unrelated processes were untouched. Exact public-diff re-review by both
 critical reviewers remains required after commit and push.
 
+The critical web reviewer approved public range `9553f97..90448b3`, but the
+independent Daybreaker Blue High review rejected it with one Medium phase error.
+`room_command_result` globally treated every execution-time `CommandRejected` as
+definitive even though `agent.create(start=true)` can commit creation and a start
+intent before publication/provider completion returns that generic error shape.
+Start, resume, and stop likewise cross durable-prepare and external-effect
+boundaries before some completion failures. A rejected NACK at those points could
+retire the private request identity even though the operation was nonterminal.
+
+The correction moves certainty classification into each action owner. Atomic
+no-effect failures use the transactional classifier. A safely failed provider
+launch becomes rejected only after its terminal failure state is committed.
+Publication failure after create/prepare, uncertain provider effects, confirmed
+effects whose completion checkpoint fails, and stop finalization after an applied
+effect are unresolved. Recovery events committed for an uncertain failure are
+still published without converting that failure to a definitive rejection. The
+general room actor no longer infers certainty from the persistence error variant.
+Random-command transaction ownership was moved intact into its existing runtime
+module to keep the room actor under the mandatory 800-line gate; no compatibility
+path or second implementation was added.
+
+The browser now also fails closed when an authenticated ACK/NACK names a request
+ID it does not own, instead of silently ignoring the frame. Its public ACK type
+derives the shared request/action/deduplication fields and resolution union from
+the generated Rust protocol binding while retaining action-specific validated
+result projection. The focused regression confirms that an unknown response
+closes the channel, and the existing exact-byte replay tests continue to prove
+that only committed/rejected server resolution settles a sent intent.
+
+The final unchanged `make verify` passed mandatory architecture, source-growth,
+logical-line, and 800-line gates (`room_runtime.rs` is 790 lines), generated
+bindings, production frontend/CSS verification, 72 frontend files with 356 tests,
+15 Tauri tests, 18 domain, 86 persistence, four protocol, 100 provider, 17 server
+unit tests, 21 Rust integration tests, documentation checks, warning-denied
+Clippy, and final diff validation. Two earlier full runs stopped as intended: the
+first exposed the generated-JSON/application-type mismatch during the optional
+binding cleanup; the second exposed 105/100- and then 114/100-line action
+functions. Both were fixed at their owner boundaries without an allow or gate
+change before the clean full run.
+
+Computer Use drove a fresh package with identifier
+`app.agentsassemble.rust.commandphaseverify` and an explicitly empty central URL.
+Fresh local identity `Command Phase Verify` created a real SQLite room and visibly
+published `COMMAND_PHASE_UI_OK`. Normal quit left no exact app or server process.
+Relaunch restored the same room and message over a fresh authenticated channel
+and visibly published `COMMAND_PHASE_RECONNECT_OK`; read-only SQLite inspection
+found the two exact strings as `message_final` sequences 2 and 3. Final normal
+quit again left no exact app or sidecar. The isolated application data, cache,
+WebKit data, app bundle, frontend distribution, generated Tauri schemas, copied
+sidecar, and repository Cargo targets were then removed; the two Cargo target
+trees accounted for 23.1 GiB of regenerable output. Dependency installations,
+source files, original application data, and unrelated processes were untouched.
+The corrected public diff still requires both reviewers to re-review after commit
+and push.
+
 ## API verification scope
 
 When a reachable flow specifically needs an API-backed provider, the allowed paid/provider-specific candidates are the official DeepSeek API and the designated Flash provider path. Every other API-backed verification uses only an explicitly free API or free model. Missing credentials, exhausted free quota, or unavailable models fail visibly; they do not trigger a paid substitution or a fallback provider.

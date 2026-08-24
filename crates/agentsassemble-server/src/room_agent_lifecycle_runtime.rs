@@ -1,7 +1,8 @@
 use agentsassemble_persistence::{
-    AgentRuntimeStarted, AgentStartPlan, AgentStopPlan, PersistenceError, SqliteStore,
+    AgentRuntimeStarted, AgentStartEffect, AgentStartPlan, AgentStopPlan, PersistenceError,
+    SqliteStore,
 };
-use agentsassemble_provider::{ProviderAdapter, ProviderRuntimeStarted};
+use agentsassemble_provider::{ProviderAdapter, ProviderAdapterError, ProviderRuntimeStarted};
 
 use crate::room_runtime::{CommandExecution, RoomCommand, progressed_execution};
 
@@ -9,112 +10,151 @@ pub(crate) async fn execute_agent_start(
     store: &SqliteStore,
     provider_adapter: &ProviderAdapter,
     command: &RoomCommand,
-) -> Result<CommandExecution, PersistenceError> {
+) -> CommandExecution {
     let plan = if command.action == "agent.resume" {
         store
             .prepare_agent_resume(&command.principal, &command.request_id, &command.payload)
-            .await?
+            .await
     } else {
         store
             .prepare_agent_start(&command.principal, &command.request_id, &command.payload)
-            .await?
+            .await
+    };
+    let plan = match plan {
+        Ok(plan) => plan,
+        Err(error) => return CommandExecution::transactional_failure(error),
     };
     let effect = match plan {
         AgentStartPlan::Outcome(outcome) => {
-            return Ok(progressed_execution(store, &command.principal.room_id, *outcome).await);
+            return progressed_execution(store, &command.principal.room_id, *outcome).await;
         }
         AgentStartPlan::Start(effect) => effect,
     };
     match provider_adapter.start(&effect.session).await {
-        Ok(started) => {
-            let persisted = persisted_start(started);
-            let outcome = if command.action == "agent.resume" {
-                store
-                    .complete_agent_resume(
-                        &command.principal,
-                        &command.request_id,
-                        &command.payload,
-                        &effect.operation_id,
-                        &persisted,
-                    )
-                    .await?
-            } else {
-                store
-                    .complete_agent_start(
-                        &command.principal,
-                        &command.request_id,
-                        &command.payload,
-                        &effect.operation_id,
-                        &persisted,
-                    )
-                    .await?
-            };
-            Ok(progressed_execution(store, &command.principal.room_id, outcome).await)
-        }
-        Err(error) => {
-            let events = if error.effect_uncertain {
-                store
-                    .mark_agent_start_unconfirmed(
-                        &command.principal,
-                        &effect.session.public.session_id,
-                        &effect.operation_id,
-                        &error.runtime_handle_id,
-                        &error.runtime_owner_id,
-                        error.code,
-                        error.message,
-                    )
-                    .await?
-            } else if command.action == "agent.resume" {
-                store
-                    .fail_agent_resume(
-                        &command.principal,
-                        &command.request_id,
-                        &command.payload,
-                        &effect.operation_id,
-                        error.code,
-                        error.message,
-                    )
-                    .await?
-            } else {
-                store
-                    .fail_agent_start(
-                        &command.principal,
-                        &command.request_id,
-                        &command.payload,
-                        &effect.operation_id,
-                        error.code,
-                        error.message,
-                    )
-                    .await?
-            };
-            Ok(CommandExecution::committed_failure(
-                PersistenceError::CommandRejected {
-                    code: error.code,
-                    message: error.message.to_owned(),
-                },
-                events,
-            ))
-        }
+        Ok(started) => complete_agent_start(store, command, &effect, started).await,
+        Err(error) => record_agent_start_failure(store, command, &effect, error).await,
     }
+}
+
+async fn complete_agent_start(
+    store: &SqliteStore,
+    command: &RoomCommand,
+    effect: &AgentStartEffect,
+    started: ProviderRuntimeStarted,
+) -> CommandExecution {
+    let persisted = persisted_start(started);
+    let outcome = if command.action == "agent.resume" {
+        store
+            .complete_agent_resume(
+                &command.principal,
+                &command.request_id,
+                &command.payload,
+                &effect.operation_id,
+                &persisted,
+            )
+            .await
+    } else {
+        store
+            .complete_agent_start(
+                &command.principal,
+                &command.request_id,
+                &command.payload,
+                &effect.operation_id,
+                &persisted,
+            )
+            .await
+    };
+    match outcome {
+        Ok(outcome) => progressed_execution(store, &command.principal.room_id, outcome).await,
+        Err(error) => CommandExecution::unresolved_failure(error),
+    }
+}
+
+async fn record_agent_start_failure(
+    store: &SqliteStore,
+    command: &RoomCommand,
+    effect: &AgentStartEffect,
+    error: ProviderAdapterError,
+) -> CommandExecution {
+    if error.effect_uncertain {
+        let events = match store
+            .mark_agent_start_unconfirmed(
+                &command.principal,
+                &effect.session.public.session_id,
+                &effect.operation_id,
+                &error.runtime_handle_id,
+                &error.runtime_owner_id,
+                error.code,
+                error.message,
+            )
+            .await
+        {
+            Ok(events) => events,
+            Err(recording_error) => {
+                return CommandExecution::unresolved_failure(recording_error);
+            }
+        };
+        return CommandExecution::unresolved_failure_with_events(
+            rejected(error.code, error.message),
+            events,
+        );
+    }
+    let events = if command.action == "agent.resume" {
+        store
+            .fail_agent_resume(
+                &command.principal,
+                &command.request_id,
+                &command.payload,
+                &effect.operation_id,
+                error.code,
+                error.message,
+            )
+            .await
+    } else {
+        store
+            .fail_agent_start(
+                &command.principal,
+                &command.request_id,
+                &command.payload,
+                &effect.operation_id,
+                error.code,
+                error.message,
+            )
+            .await
+    };
+    let events = match events {
+        Ok(events) => events,
+        Err(recording_error) => return CommandExecution::unresolved_failure(recording_error),
+    };
+    CommandExecution::committed_failure(rejected(error.code, error.message), events)
 }
 
 pub(crate) async fn execute_agent_stop(
     store: &SqliteStore,
     provider_adapter: &ProviderAdapter,
     command: &RoomCommand,
-) -> Result<CommandExecution, PersistenceError> {
-    match store
+) -> CommandExecution {
+    let plan = match store
         .prepare_agent_stop(&command.principal, &command.request_id, &command.payload)
-        .await?
+        .await
     {
+        Ok(plan) => plan,
+        Err(error) => return CommandExecution::transactional_failure(error),
+    };
+    match plan {
         AgentStopPlan::Outcome(outcome) => {
-            Ok(progressed_execution(store, &command.principal.room_id, *outcome).await)
+            progressed_execution(store, &command.principal.room_id, *outcome).await
         }
         AgentStopPlan::Finalize => {
-            let outcome = store
+            match store
                 .finalize_agent_stop(&command.principal, &command.request_id, &command.payload)
-                .await?;
-            Ok(progressed_execution(store, &command.principal.room_id, outcome).await)
+                .await
+            {
+                Ok(outcome) => {
+                    progressed_execution(store, &command.principal.room_id, outcome).await
+                }
+                Err(error) => CommandExecution::unresolved_failure(error),
+            }
         }
         AgentStopPlan::Stop(effect) => {
             let stop = provider_adapter
@@ -126,7 +166,7 @@ pub(crate) async fn execute_agent_stop(
                 )
                 .await;
             if let Err(error) = stop {
-                let events = store
+                let events = match store
                     .mark_agent_stop_unconfirmed(
                         &command.principal,
                         &effect.session_id,
@@ -134,22 +174,31 @@ pub(crate) async fn execute_agent_stop(
                         error.code,
                         error.message,
                     )
-                    .await?;
-                return Ok(CommandExecution::committed_failure(
+                    .await
+                {
+                    Ok(events) => events,
+                    Err(recording_error) => {
+                        return CommandExecution::unresolved_failure(recording_error);
+                    }
+                };
+                return CommandExecution::unresolved_failure_with_events(
                     PersistenceError::CommandRejected {
                         code: error.code,
                         message: error.message.to_owned(),
                     },
                     events,
-                ));
+                );
             }
-            store
+            if let Err(error) = store
                 .record_agent_stop_effect(
                     &command.principal.room_id,
                     &effect.session_id,
                     &effect.operation_id,
                 )
-                .await?;
+                .await
+            {
+                return CommandExecution::unresolved_failure(error);
+            }
             provider_adapter
                 .release_confirmed_stop(
                     &command.principal.room_id,
@@ -158,11 +207,23 @@ pub(crate) async fn execute_agent_stop(
                     &effect.runtime_owner_id,
                 )
                 .await;
-            let outcome = store
+            match store
                 .finalize_agent_stop(&command.principal, &command.request_id, &command.payload)
-                .await?;
-            Ok(progressed_execution(store, &command.principal.room_id, outcome).await)
+                .await
+            {
+                Ok(outcome) => {
+                    progressed_execution(store, &command.principal.room_id, outcome).await
+                }
+                Err(error) => CommandExecution::unresolved_failure(error),
+            }
         }
+    }
+}
+
+fn rejected(code: &'static str, message: &str) -> PersistenceError {
+    PersistenceError::CommandRejected {
+        code,
+        message: message.to_owned(),
     }
 }
 

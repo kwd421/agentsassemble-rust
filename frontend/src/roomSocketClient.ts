@@ -438,7 +438,12 @@ export function openRoomSocket(
         }
         if ((msg.op === "ack" || msg.op === "nack") && typeof msg.request_id === "string") {
           const command = pending.get(msg.request_id);
-          if (!command) return;
+          if (!command) {
+            throw new RoomSocketSayError(
+              "Room command response did not match an owned pending request; reconnecting.",
+              "command_response_unexpected"
+            );
+          }
           if (msg.op === "nack") {
             if (
               msg.accepted !== false ||
