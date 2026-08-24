@@ -299,12 +299,9 @@ export function useAppController() {
   const roomMembers = useRoomMembers({
     activeRoom,
     canonicalParticipants: canonicalRoom.participants,
-    membershipRevision: canonicalRoom.membershipRevision,
-    sessionToken: admittedSessionToken,
     enabled: startupIdentityResolved && !activeRoomDisconnected,
   });
   const activeRoomMembers = roomMembers.activeMembers;
-  const refreshMembers = roomMembers.refresh;
   const roomSettings = useRoomSettingsController({
     activeRoom,
     sessionToken: admittedSessionToken,
@@ -312,7 +309,6 @@ export function useAppController() {
     canonicalGlobalSettings: canonicalRoom.roomSettings,
     saveCanonicalGlobalSettings: canonicalRoom.sendRoomSettingsUpdate,
     onRoomMetadataLoaded: updateRoomByMeetingId,
-    onMembersChanged: roomMembers.replaceMembers,
     enabled: startupIdentityResolved && !activeRoomDisconnected,
   });
   const roomAppearances = roomSettings.appearances;
@@ -368,7 +364,6 @@ export function useAppController() {
     scopedAgents,
     scopedViewerDisplayName,
     changeAgentActivityVisibility,
-    refreshSessionAndMembers,
     scopedMentionables,
     scopedOnlineCount,
     typingIndicators,
@@ -380,7 +375,6 @@ export function useAppController() {
     guestSession,
     agentActivityVisibility,
     setAgentActivityVisibility,
-    refreshMembers,
   });
   useDismissMenus(roomMenu, channelMenu, setRoomMenu, setChannelMenu);
   useEffect(() => {
@@ -685,7 +679,7 @@ export function useAppController() {
     ? localPreviewInviteUrlForRoom(inviteModalRoom)
     : "";
   const inviteModalMembers = inviteModalRoom
-    ? roomMembers.cachedMembersFor(inviteModalRoom)
+    ? roomMembers.membersFor(inviteModalRoom)
     : [];
   const activeAppearance = roomSettings.appearanceFor(activeRoom);
   const activeRoomStyle = useMemo(() => roomAppearanceStyle(activeAppearance), [activeAppearance]);
@@ -776,8 +770,8 @@ export function useAppController() {
     openCrossChannelSearchResult, openMobileProfileFromPanel, openMobileRoomInfo, openMobileSidebar,
     openRoomMenu, openRoomSettings, operatorPairingPending, operatorPairingState,
     operatorPairingUrl, pendingGuestAvatarImage, pendingGuestDisplayName, pendingMessageSearchTarget,
-    publicInviteStatus, publicInviteUrlDraft, quotaViewer, refreshMembers,
-    refreshSessionAndMembers, requestGuestJoin, retryOperatorPairing, rightPanelMode,
+    publicInviteStatus, publicInviteUrlDraft, quotaViewer,
+    requestGuestJoin, retryOperatorPairing, rightPanelMode,
     rightPanelSearchQuery, roomAppearances, roomDirectorySyncIssue, roomInvite,
     roomMenu, roomMessageSearch, roomSettings, roomSocket,
     rooms, saveHostTokenFromDraft, scopedAgents, scopedMentionables,

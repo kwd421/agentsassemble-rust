@@ -1,14 +1,13 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { Hash } from "lucide-react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { RoomGlobalSettings, RoomMember, RoomSettings } from "../api";
+import type { RoomGlobalSettings, RoomSettings } from "../api";
 import type { RoomDockItem } from "../lib/roomDockModel";
 import { useRoomSettingsController } from "./useRoomSettingsController";
 
 const apiMocks = vi.hoisted(() => ({
   fetchRoomSettings: vi.fn(),
   saveRoomSettings: vi.fn(),
-  updateRoomMemberRole: vi.fn(),
 }));
 
 vi.mock("../api", async () => ({
@@ -27,20 +26,6 @@ const roomA: RoomDockItem = {
   tone: "fresh",
 };
 const roomB: RoomDockItem = { ...roomA, id: "room-b", meetingId: "meeting-b", label: "Room B" };
-const agentMember: RoomMember = {
-  meeting_id: roomA.meetingId,
-  participant_id: "agent-a",
-  display_name: "Agent A",
-  role: "agent",
-  participant_type: "subscription_ai",
-  provider_kind: "codex",
-  connection_kind: "agent_session",
-  status: "idle",
-  source: "agent_session",
-  created_at: "2026-07-12T00:00:00Z",
-  updated_at: "2026-07-12T00:00:00Z",
-};
-
 function settings(room: RoomDockItem, bannerPreset: "forest" | "ember"): RoomSettings {
   return {
     roomId: room.meetingId,
@@ -122,7 +107,6 @@ describe("useRoomSettingsController", () => {
       .mockReturnValueOnce(roomARequest.promise)
       .mockResolvedValueOnce(settings(roomB, "ember"));
     const onRoomMetadataLoaded = vi.fn();
-    const onMembersChanged = vi.fn();
     const hook = renderHook(
       ({ room, canonical }) =>
         useRoomSettingsController({
@@ -132,7 +116,6 @@ describe("useRoomSettingsController", () => {
           canonicalGlobalSettings: canonical,
           saveCanonicalGlobalSettings,
           onRoomMetadataLoaded,
-          onMembersChanged,
         }),
       {
         initialProps: {
@@ -166,53 +149,9 @@ describe("useRoomSettingsController", () => {
     });
   });
 
-  it("persists a role change and publishes the canonical member list", async () => {
-    apiMocks.fetchRoomSettings.mockResolvedValue(settings(roomA, "forest"));
-    apiMocks.updateRoomMemberRole.mockResolvedValue({
-      members: [{ participant_id: "agent-a", role: "reviewer" }],
-    });
-    const onMembersChanged = vi.fn();
-    const onRoomMetadataLoaded = vi.fn();
-    const hook = renderHook(() =>
-      useRoomSettingsController({
-        activeRoom: roomA,
-        sessionToken: "",
-        deviceToken: "device-test",
-        canonicalGlobalSettings: globalSettings(roomA, "forest"),
-        saveCanonicalGlobalSettings,
-        onRoomMetadataLoaded,
-        onMembersChanged,
-      })
-    );
-    await waitFor(() => expect(hook.result.current.appearanceFor(roomA).bannerPreset).toBe("forest"));
-
-    act(() => {
-      hook.result.current.updateMemberRole(
-        roomA,
-        [agentMember],
-        "agent-a",
-        "reviewer"
-      );
-    });
-
-    await waitFor(() => expect(onMembersChanged).toHaveBeenCalledTimes(1));
-    expect(apiMocks.saveRoomSettings).not.toHaveBeenCalled();
-    expect(apiMocks.updateRoomMemberRole).toHaveBeenCalledWith({
-      meetingId: roomA.meetingId,
-      participantId: "agent-a",
-      role: "reviewer",
-      sessionToken: "",
-    });
-    expect(onMembersChanged).toHaveBeenCalledWith(
-      roomA,
-      [{ participant_id: "agent-a", role: "reviewer" }]
-    );
-  });
-
   it("persists channel preferences without rewriting room-global settings", async () => {
     apiMocks.fetchRoomSettings.mockResolvedValue(settings(roomA, "forest"));
     const onRoomMetadataLoaded = vi.fn();
-    const onMembersChanged = vi.fn();
     const hook = renderHook(() =>
       useRoomSettingsController({
         activeRoom: roomA,
@@ -221,7 +160,6 @@ describe("useRoomSettingsController", () => {
         canonicalGlobalSettings: globalSettings(roomA, "forest"),
         saveCanonicalGlobalSettings,
         onRoomMetadataLoaded,
-        onMembersChanged,
       })
     );
     await waitFor(() => expect(hook.result.current.appearanceFor(roomA).bannerPreset).toBe("forest"));
@@ -257,7 +195,6 @@ describe("useRoomSettingsController", () => {
         canonicalGlobalSettings: globalSettings(roomA, "forest"),
         saveCanonicalGlobalSettings,
         onRoomMetadataLoaded: vi.fn(),
-        onMembersChanged: vi.fn(),
       })
     );
     await waitFor(() => expect(apiMocks.fetchRoomSettings).toHaveBeenCalledTimes(1));
@@ -293,7 +230,6 @@ describe("useRoomSettingsController", () => {
         canonicalGlobalSettings: globalSettings(roomA, "forest"),
         saveCanonicalGlobalSettings,
         onRoomMetadataLoaded: vi.fn(),
-        onMembersChanged: vi.fn(),
       })
     );
 
@@ -315,7 +251,6 @@ describe("useRoomSettingsController", () => {
         canonicalGlobalSettings: globalSettings(roomA, "forest"),
         saveCanonicalGlobalSettings,
         onRoomMetadataLoaded: vi.fn(),
-        onMembersChanged: vi.fn(),
       })
     );
     await waitFor(() =>
@@ -354,7 +289,6 @@ describe("useRoomSettingsController", () => {
         canonicalGlobalSettings: globalSettings(roomA, "forest"),
         saveCanonicalGlobalSettings,
         onRoomMetadataLoaded: vi.fn(),
-        onMembersChanged: vi.fn(),
       })
     );
     await waitFor(() =>
@@ -403,7 +337,6 @@ describe("useRoomSettingsController", () => {
         canonicalGlobalSettings: null,
         saveCanonicalGlobalSettings,
         onRoomMetadataLoaded: vi.fn(),
-        onMembersChanged: vi.fn(),
       })
     );
 
@@ -423,7 +356,6 @@ describe("useRoomSettingsController", () => {
         canonicalGlobalSettings: globalSettings(roomA, "forest"),
         saveCanonicalGlobalSettings,
         onRoomMetadataLoaded: vi.fn(),
-        onMembersChanged: vi.fn(),
       })
     );
     await waitFor(() => expect(hook.result.current.settingsStateFor(roomA).status).toBe("ready"));
@@ -466,7 +398,6 @@ describe("useRoomSettingsController", () => {
         canonicalGlobalSettings: globalSettings(roomA, "forest"),
         saveCanonicalGlobalSettings,
         onRoomMetadataLoaded: vi.fn(),
-        onMembersChanged: vi.fn(),
       })
     );
     await waitFor(() => expect(hook.result.current.settingsStateFor(roomA).status).toBe("ready"));
@@ -510,7 +441,6 @@ describe("useRoomSettingsController", () => {
         canonicalGlobalSettings: globalSettings(roomA, "forest"),
         saveCanonicalGlobalSettings,
         onRoomMetadataLoaded: vi.fn(),
-        onMembersChanged: vi.fn(),
       })
     );
     await waitFor(() =>
@@ -542,7 +472,6 @@ describe("useRoomSettingsController", () => {
         canonicalGlobalSettings: globalSettings(roomA, "forest"),
         saveCanonicalGlobalSettings,
         onRoomMetadataLoaded: vi.fn(),
-        onMembersChanged: vi.fn(),
       })
     );
     await waitFor(() =>
@@ -578,7 +507,6 @@ describe("useRoomSettingsController", () => {
         canonicalGlobalSettings: globalSettings(roomA, "forest"),
         saveCanonicalGlobalSettings,
         onRoomMetadataLoaded: vi.fn(),
-        onMembersChanged: vi.fn(),
       })
     );
     await waitFor(() =>
@@ -630,7 +558,6 @@ describe("useRoomSettingsController", () => {
         canonicalGlobalSettings: globalSettings(roomA, "forest"),
         saveCanonicalGlobalSettings,
         onRoomMetadataLoaded: vi.fn(),
-        onMembersChanged: vi.fn(),
       })
     );
     await waitFor(() => expect(hook.result.current.settingsStateFor(roomA).status).toBe("ready"));
@@ -696,7 +623,6 @@ describe("useRoomSettingsController", () => {
         }),
         saveCanonicalGlobalSettings,
         onRoomMetadataLoaded,
-        onMembersChanged: vi.fn(),
       })
     );
 

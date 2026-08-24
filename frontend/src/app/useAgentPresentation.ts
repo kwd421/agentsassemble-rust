@@ -29,7 +29,6 @@ type AgentPresentationOptions = {
   guestSession: RoomGuestSession | null;
   agentActivityVisibility: AgentActivityVisibility;
   setAgentActivityVisibility: Dispatch<SetStateAction<AgentActivityVisibility>>;
-  refreshMembers: () => void;
 };
 
 export function useAgentPresentation({
@@ -40,7 +39,6 @@ export function useAgentPresentation({
   guestSession,
   agentActivityVisibility,
   setAgentActivityVisibility,
-  refreshMembers,
 }: AgentPresentationOptions) {
   const [providerUsage, setProviderUsage] = useState<Record<string, ProviderUsageSnapshot>>({});
   const activeRoomAgentSessions = canonicalRoom.agentSessions;
@@ -137,9 +135,6 @@ export function useAgentPresentation({
     },
     [setAgentActivityVisibility]
   );
-  const refreshSessionAndMembers = useCallback(() => {
-    refreshMembers();
-  }, [refreshMembers]);
   const scopedMentionables = useMemo(
     () =>
       roomMentionables({
@@ -177,7 +172,6 @@ export function useAgentPresentation({
     scopedAgents,
     scopedViewerDisplayName,
     changeAgentActivityVisibility,
-    refreshSessionAndMembers,
     scopedMentionables,
     scopedOnlineCount,
     typingIndicators,

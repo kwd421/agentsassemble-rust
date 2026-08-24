@@ -29,6 +29,7 @@ import {
   initializeDesktopBootstrap,
   isDesktopWebview,
   requestDesktopBootstrapStatus,
+  type DesktopBootstrapGrant,
 } from "../../lib/desktopBridge";
 import {
   rememberGuestProfile,
@@ -38,12 +39,12 @@ import {
   hydratePersistedRoom,
   mergeServerRoomsIntoDock,
   persistableRoom,
-  type ServerRoomDockSource,
 } from "../../lib/roomDockModel";
 import {
   loadRoomDockItems,
   persistRoomDockItems,
 } from "../../lib/roomDockPersistence";
+import { parseStrictRoomDirectory } from "../../lib/roomDirectoryContract";
 import { DEFAULT_USER_PROFILE } from "../../lib/userProfileModel";
 import GoogleAccountSettings from "./GoogleAccountSettings";
 
@@ -69,7 +70,7 @@ async function saveLocalProfile(
       displayName: bootstrap.profile.display_name,
       avatarImage: bootstrap.profile.avatar_image_url,
     });
-    return;
+    return bootstrap;
   }
   const saved = await saveUserProfile(
     {
@@ -83,6 +84,7 @@ async function saveLocalProfile(
     displayName: saved.displayName,
     avatarImage: saved.avatarImage,
   });
+  return undefined;
 }
 
 export default function StartupIdentityGate({
@@ -113,23 +115,34 @@ export default function StartupIdentityGate({
     []
   );
 
-  async function enterApplication() {
+  async function enterApplication(expectedDesktopAuthority?: DesktopBootstrapGrant) {
     setChecking(true);
     setStatus("로컬 엔진과 방 목록을 준비하는 중");
-    const response = isDesktopWebview()
+    const desktop = isDesktopWebview();
+    const desktopAuthority = desktop
+      ? expectedDesktopAuthority || (await requestDesktopBootstrapStatus())
+      : undefined;
+    if (desktop && desktopAuthority?.phase !== "complete") {
+      throw new Error("완료된 데스크톱 권위가 방 목록을 소유하지 않습니다.");
+    }
+    const response = desktop
       ? await fetchDesktopOperatorRuntime("/api/rooms", { cache: "no-store" })
       : await fetch("/api/rooms", { cache: "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const payload = (await response.json()) as {
-      rooms?: ServerRoomDockSource[];
-      server_id?: string;
-    };
+    const payload = parseStrictRoomDirectory(await response.json());
+    if (
+      desktopAuthority &&
+      (payload.server_id !== desktopAuthority.server_id ||
+        payload.authority_lineage_id !== desktopAuthority.authority_lineage_id)
+    ) {
+      throw new Error("방 목록 권위가 네이티브 bootstrap 계보와 일치하지 않습니다.");
+    }
     const current = loadRoomDockItems().map(hydratePersistedRoom);
     const synchronized = mergeServerRoomsIntoDock(
       current,
-      payload.rooms || [],
+      payload.rooms,
       window.location.origin,
-      String(payload.server_id || "")
+      payload.server_id
     );
     persistRoomDockItems(synchronized.map(persistableRoom));
     rememberStartupIdentitySelection();
@@ -151,7 +164,7 @@ export default function StartupIdentityGate({
         try {
           const bootstrap = await requestDesktopBootstrapStatus();
           if (bootstrap.phase === "complete") {
-            if (active) await enterApplication();
+            if (active) await enterApplication(bootstrap);
             return;
           }
           if (bootstrap.phase !== "empty") {
@@ -194,13 +207,13 @@ export default function StartupIdentityGate({
         try {
           setStatus("중앙 신원과 서버 목록을 확인하는 중");
           await bootstrapCentral();
-          await saveLocalProfile(
+          const localAuthority = await saveLocalProfile(
             existing.person.display_name,
             deviceToken,
             bootstrapRequestId.current
           );
           await registerLocalServer(deviceToken);
-          if (active) await enterApplication();
+          if (active) await enterApplication(localAuthority);
         } catch (reason) {
           if (isCentralAuthenticationError(reason)) {
             if (active) {
@@ -326,13 +339,13 @@ export default function StartupIdentityGate({
     setError("");
     try {
       const session = await loginCentralGoogle(setStatus, controller.signal);
-      await saveLocalProfile(
+      const localAuthority = await saveLocalProfile(
         session.person.display_name,
         deviceToken,
         bootstrapRequestId.current
       );
       await registerLocalServer(deviceToken);
-      await enterApplication();
+      await enterApplication(localAuthority);
     } catch (reason) {
       setChecking(false);
       setError(
@@ -368,8 +381,12 @@ export default function StartupIdentityGate({
     setBusy(true);
     setError("");
     try {
-      await saveLocalProfile(name, deviceToken, bootstrapRequestId.current);
-      await enterApplication();
+      const localAuthority = await saveLocalProfile(
+        name,
+        deviceToken,
+        bootstrapRequestId.current
+      );
+      await enterApplication(localAuthority);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "로컬 프로필을 저장하지 못했습니다.");
     } finally {
@@ -403,6 +420,14 @@ export default function StartupIdentityGate({
               중앙 디렉터리가 설정되지 않아 기존 로컬 신원 모드로 시작합니다.
             </p>
           </header>
+          {error && (
+            <p
+              role="alert"
+              className="rounded-md bg-[#3a2526] p-3 text-[11px] font-bold leading-5 text-[#ffb4b5]"
+            >
+              {error}
+            </p>
+          )}
           {!isDesktopWebview() && (
             <>
               <GoogleAccountSettings

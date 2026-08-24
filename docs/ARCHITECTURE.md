@@ -38,18 +38,33 @@ transition under `BEGIN IMMEDIATE`. Ticket issuance requires verified Complete,
 while Complete with zero rooms is a normal product state. Recovery checks only
 bootstrap-owned rows and either proves the immutable lineage complete or fails
 with explicit repair-required state; it never seeds or fills partial product
-state. File existence alone is never a durable bootstrap phase.
+state. `Empty` also means that every table in the schema-owned product inventory
+is empty; the inventory is gated against all current non-infrastructure tables.
+File existence alone is never a durable bootstrap phase.
 
 Creating a room commits its room record, default settings, publication cursor,
 initial human membership, and exactly one `room_created` event in one SQLite
 transaction. The human display/avatar projection comes from the server-wide
 profile, while role, joined state, mute, and later transitions are room-owned.
-Repeating creation preserves the room UID and does not append another creation
-event. The copied room rail may display a bounded cached projection during first
+Creation reserves one UUID request and canonical payload hash under the server
+operator in that same transaction. Only an exact replay returns the stored room
+UID without another creation event; another payload or a fresh request for the
+same room ID conflicts instead of renaming or reopening it. The copied room rail may display a bounded cached projection during first
 paint only while visibly unconfirmed; the authenticated server response removes
 stale local entries and becomes the projection. A client-fabricated `general` is
 not authority; a fresh complete authority stays empty until the user creates a
 canonical room through the real directory flow.
+
+The desktop startup gate validates the closed room-directory response and binds
+both its server ID and immutable authority lineage to the immediately preceding
+native bootstrap grant. Missing fields, protocol drift, a stale/reused loopback
+endpoint, and legacy invite/query routes cannot turn an unverified response into
+a successful zero-room authority.
+
+The active-room participant projection has one browser owner: the authenticated
+WebSocket snapshot plus its sequenced participant events. React does not fetch,
+cache, merge, or silently ignore a second HTTP roster. Sequence gaps and stale
+scope are resolved only by the canonical WebSocket resynchronization boundary.
 
 ### Room settings, preferences, and appearance
 
@@ -245,8 +260,10 @@ permissions remain room authority and are never overwritten by a profile update.
 Each Agent Session owns its own Agent display, avatar, and configuration and never
 inherits or merges the owner's human profile.
 
-A committed human-profile revision atomically writes every affected room projection
-and its durable event. `room_events` plus one durable per-room publication cursor
+A committed human-profile revision atomically writes every affected projection in
+an Active room where that human membership is still Joined, plus its durable event.
+Ended memberships retain their historical identity instead of receiving later
+profile disclosures. `room_events` plus one durable per-room publication cursor
 form the live outbox for every event producer; only the room actor drains that
 history in sequence order and updates the cursor. HTTP success therefore means the
 canonical profile, projections, and publication work are durable, not that every

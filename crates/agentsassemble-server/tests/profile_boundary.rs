@@ -424,7 +424,11 @@ async fn bootstrap(store: &SqliteStore) {
         .await
         .unwrap_or_else(|error| panic!("bootstrap profile identity: {error}"));
     store
-        .create_room_for_local_operator("general", "General")
+        .create_room_for_local_operator(
+            "20000000-0000-4000-8000-000000000012",
+            "general",
+            "General",
+        )
         .await
         .unwrap_or_else(|error| panic!("create profile room: {error}"));
 }

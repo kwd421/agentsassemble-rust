@@ -19,7 +19,11 @@ async fn initialized_store() -> (SqliteStore, AuthenticatedPrincipal, Room, Part
         .await
         .unwrap_or_else(|error| panic!("bootstrap fixture: {error}"));
     let room = store
-        .create_room_for_local_operator("general", "General")
+        .create_room_for_local_operator(
+            "20000000-0000-4000-8000-000000000004",
+            "general",
+            "General",
+        )
         .await
         .unwrap_or_else(|error| panic!("create fixture room: {error}"))
         .room;
@@ -170,7 +174,11 @@ async fn existing_authority_cannot_recreate_first_run_membership() {
         .await
         .unwrap_or_else(|error| panic!("bootstrap authority: {error}"));
     first
-        .create_room_for_local_operator("general", "General")
+        .create_room_for_local_operator(
+            "20000000-0000-4000-8000-000000000005",
+            "general",
+            "General",
+        )
         .await
         .unwrap_or_else(|error| panic!("create authority room: {error}"));
     drop(first);

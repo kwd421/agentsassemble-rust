@@ -4,7 +4,7 @@ Status: source-derived reimplementation exposure inventory, 2026-08-25
 
 Comparison baseline: original
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust
-`92e6bb44e3154f2c8d4d2f7b50761ebcf8e92bb7`. The active local-authority,
+`6de2671848b951fb16dc13bb2dd2dfeb25c1e88f`. The active local-authority,
 surface, admission, subscription, and moderation boundary is design-approved but
 not implementation evidence.
 
@@ -191,7 +191,7 @@ implemented; the frontend must not silently substitute Python or local fake data
 | Startup identity and accounts | The fresh local desktop identity/bootstrap path is implemented. `/api/account`, Google account challenge/connect/delete, central-login callback start/poll, central guest/recovery, and server-directory registration remain incomplete. The copied production central URL must not be counted as desktop support: the native OAuth command and secure desktop device-key owner are not implemented, and the current CSP does not authorize that remote origin. |
 | Room lifecycle and settings | Canonical archive/delete lifecycle, room-global settings mutation, per-user room preferences, public server info, and central-directory registration proof. |
 | Admission and invites | Host claim, room invite create/join/admission/companion/leave, operator pairing create/redeem, and public-invite status/URL/tunnel controls. |
-| Roster, friends, and channels | Canonical participant role/mute controls, room friends, room channels, voice presence, and side chat. |
+| Roster, friends, and channels | The active-room roster projection is cut over to the authenticated WebSocket snapshot/events only. Canonical participant role/mute controls, room friends, room channels, voice presence, and side chat remain incomplete. |
 | Attachments, personas, pins, and search | General-message and room-appearance attachment purposes, persona list/import/thumbnail, message pins, room search/context. Profile-avatar upload/read is implemented. |
 | Provider settings and diagnostics | Login, catalog refresh HTTP response, credential CRUD, provider usage, local resources, release health, and runtime version. The original `/api/local/workspace-picker` HTTP route is absent, but packaged desktop creation uses the native Tauri directory picker instead. |
 | Games and plugins | Mafia HTTP operations and generic plugin WebSocket hosting remain unimplemented. The copied RimWorld view is an external plugin consumer; its Python plugin package/runtime is intentionally outside the current Rust core-migration scope and is not a core parity exit condition. |
@@ -204,16 +204,26 @@ The current candidate replaces fixture bootstrap with an immutable-lineage local
 authority. Fresh startup creates schema and the bootstrap marker only. The copied
 desktop gate commits the real local human profile, admits a real zero-room
 directory, and the room-rail plus control creates the first complete room through
-the server-operator HTTP surface. Exact request replay is idempotent; conflicting
-reuse, incomplete bootstrap, and inconsistent authority fail closed.
+the server-operator HTTP surface. The closed directory response is bound to the
+native bootstrap server ID and lineage. Room creation durably binds a UUID request
+and payload hash; exact replay is idempotent, while changed payloads or a separate
+request for an existing room conflict without renaming it. Incomplete bootstrap
+and inconsistent authority fail closed.
 
 The server-wide local human profile is reachable before the first room through a
 fresh one-use operator credential. The same profile remains the SSoT after room
-creation and projects display-name/avatar revisions into every current human room
-membership. Room role, join state, room mute, and Agent Session profiles remain
+creation and projects display-name/avatar revisions only into Active rooms where
+the human membership is still Joined. Ended memberships keep their historical
+identity projection. Room role, join state, room mute, and Agent Session profiles remain
 owned by their separate authorities. Packaged Computer Use verified zero-room
 startup, room create/join, one committed chat message, profile projection, modal
 z-order, conditional Agent Add fields, and restart durability.
+
+The production composition no longer mounts the original HTTP roster reader or
+role refresh. Active-room and invite-modal participant lists use only the current
+authenticated WebSocket projection; another room or disabled stream exposes no
+cached members. No `/api/room-members` placeholder or failure-swallowing merge was
+added.
 
 The same run confirmed these still-open frontend/backend rows rather than hiding
 them:

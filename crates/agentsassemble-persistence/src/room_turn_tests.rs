@@ -1,12 +1,16 @@
 use agentsassemble_domain::{
-    AgentSession, AuthenticatedPrincipal, CURRENT_RUNTIME_PROFILE_VERSION, CapabilitySet,
-    ClientKind, DurableAgentSession, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID, Participant,
-    ParticipantStatus, QueuedRoomInput, RoomInputDeliveryKind,
+    AuthenticatedPrincipal, CapabilitySet, ClientKind, DurableAgentSession, InviteScope,
+    LOCAL_OPERATOR_PARTICIPANT_ID, Participant, ParticipantStatus, QueuedRoomInput,
+    RoomInputDeliveryKind,
 };
 use chrono::Utc;
 use serde_json::json;
 
 use crate::{PersistenceError, SqliteStore};
+
+#[path = "room_turn_test_fixture.rs"]
+mod room_turn_test_fixture;
+use room_turn_test_fixture::attached_session;
 
 const AGENT_ID: &str = "codex-00000000-0000-5000-8000-000000000001";
 const SECOND_AGENT_ID: &str = "codex-00000000-0000-5000-8000-000000000002";
@@ -678,7 +682,11 @@ async fn fixture() -> (SqliteStore, AuthenticatedPrincipal, tempfile::TempDir) {
         .await
         .unwrap_or_else(|error| panic!("bootstrap identity: {error}"));
     store
-        .create_room_for_local_operator("general", "General")
+        .create_room_for_local_operator(
+            "20000000-0000-4000-8000-000000000003",
+            "general",
+            "General",
+        )
         .await
         .unwrap_or_else(|error| panic!("create room: {error}"));
     let agent = participant(AGENT_ID, "Terra", "agent", "agent", now);
@@ -734,65 +742,5 @@ fn participant(
         muted: false,
         created_at: now,
         updated_at: now,
-    }
-}
-
-fn attached_session(now: chrono::DateTime<Utc>) -> DurableAgentSession {
-    DurableAgentSession {
-        public: AgentSession {
-            room_id: "general".to_owned(),
-            session_id: AGENT_ID.to_owned(),
-            participant_id: AGENT_ID.to_owned(),
-            display_name: "Terra".to_owned(),
-            status: "attached".to_owned(),
-            runtime_status: "idle".to_owned(),
-            enabled: true,
-            provider_kind: "codex_live_session".to_owned(),
-            runtime_kind: "live_cli".to_owned(),
-            connection_kind: "native_cli_bridge".to_owned(),
-            external_owned: false,
-            process_ownership: "server".to_owned(),
-            model: "gpt-5.6-terra".to_owned(),
-            reasoning_effort: "medium".to_owned(),
-            service_tier: "default".to_owned(),
-            variant: String::new(),
-            execution_harness: "builtin".to_owned(),
-            permission_mode: "meeting_read_only".to_owned(),
-            max_output_tokens: 0,
-            catalog_revision: "catalog-1".to_owned(),
-            transport: "stdio_jsonl".to_owned(),
-            last_seen_event_id: String::new(),
-            last_seen_seq: 0,
-            last_provider_sync_event_id: String::new(),
-            last_provider_sync_seq: 0,
-            bootstrap_cutoff_seq: 0,
-            turn_count: 0,
-            active_turn_id: String::new(),
-            turn_phase: String::new(),
-            last_error: String::new(),
-            last_error_code: String::new(),
-            recovery_required: false,
-            provider_session_active: true,
-            provider_session_reused: false,
-            created_at: now,
-            updated_at: now,
-        },
-        executable: "/owned/codex".to_owned(),
-        executable_identity: "owned-codex-identity".to_owned(),
-        workspace: "/owned/workspace".to_owned(),
-        workspace_identity: "owned-workspace-identity".to_owned(),
-        runtime_profile_key: "profile-1".to_owned(),
-        runtime_profile_version: CURRENT_RUNTIME_PROFILE_VERSION,
-        provider_session_id: "provider-thread-1".to_owned(),
-        runtime_handle_id: "owned-runtime-1".to_owned(),
-        runtime_owner_id: "supervisor-instance-1".to_owned(),
-        pending_inputs: Vec::new(),
-        inflight_inputs: Vec::new(),
-        active_source_event_id: String::new(),
-        input_up_to_event_id: String::new(),
-        input_up_to_seq: 0,
-        lifecycle_intent_action: String::new(),
-        lifecycle_intent_id: String::new(),
-        lifecycle_intent_status: String::new(),
     }
 }

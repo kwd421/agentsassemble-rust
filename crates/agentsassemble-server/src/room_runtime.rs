@@ -64,11 +64,7 @@ pub(crate) struct RoomCommand {
 struct RoomHandle {
     commands: mpsc::Sender<RoomCommand>,
     events: broadcast::Sender<RoomEvent>,
-    publication_wake: mpsc::Sender<PublicationWake>,
-}
-
-struct PublicationWake {
-    completion: oneshot::Sender<()>,
+    publication_wake: mpsc::Sender<()>,
 }
 
 struct RoomTaskContext {
@@ -177,14 +173,7 @@ impl RoomRuntime {
                 continue;
             }
             let handle = self.handle(&event.room_id).await;
-            let (completion, completed) = oneshot::channel();
-            if handle
-                .publication_wake
-                .try_send(PublicationWake { completion })
-                .is_ok()
-            {
-                let _ = completed.await;
-            }
+            let _ = handle.publication_wake.try_send(());
         }
     }
 
@@ -260,7 +249,7 @@ impl RoomRuntime {
 fn spawn_room_task(
     context: RoomTaskContext,
     mut command_rx: mpsc::Receiver<RoomCommand>,
-    mut publication_rx: mpsc::Receiver<PublicationWake>,
+    mut publication_rx: mpsc::Receiver<()>,
     mut room_tool_rx: mpsc::Receiver<ProviderRoomToolCommand>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
@@ -290,10 +279,10 @@ fn spawn_room_task(
                     RoomInput::Command(command)
                 }
                 wake = publication_rx.recv() => {
-                    let Some(wake) = wake else { break; };
-                    RoomInput::Publication(Some(wake))
+                    let Some(()) = wake else { break; };
+                    RoomInput::Publication
                 }
-                _ = publication_retry.tick() => RoomInput::Publication(None),
+                _ = publication_retry.tick() => RoomInput::Publication,
                 result = turn_tasks.join_next(), if !turn_tasks.is_empty() => {
                     let Some(result) = result else { continue; };
                     RoomInput::Provider(Box::new(result))
@@ -340,11 +329,8 @@ fn spawn_room_task(
                     )
                     .await;
                 }
-                RoomInput::Publication(completion) => {
+                RoomInput::Publication => {
                     publish_durable_room_events(&store, &event_tx, &room_id).await;
-                    if let Some(completion) = completion {
-                        let _ = completion.completion.send(());
-                    }
                 }
             }
         }
@@ -513,7 +499,7 @@ fn public_command_outcome(
 enum RoomInput {
     Command(RoomCommand),
     Provider(Box<Result<ProviderTurnTaskResult, tokio::task::JoinError>>),
-    Publication(Option<PublicationWake>),
+    Publication,
     Tool(ProviderRoomToolCommand),
 }
 

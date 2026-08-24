@@ -2,13 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   fetchRoomSettings,
   saveRoomSettings,
-  updateRoomMemberRole as saveRoomMemberRole,
   type ChannelSettings,
   type ConversationMode,
   type RoomGlobalAppearance,
   type RoomGlobalSettings,
   type RoomGlobalSettingsUpdate,
-  type RoomMember,
   type RoomSettings,
   type RoomToolMode,
 } from "../api";
@@ -27,7 +25,6 @@ type UseRoomSettingsControllerOptions = {
     updates: RoomGlobalSettingsUpdate
   ) => Promise<RoomGlobalSettings>;
   onRoomMetadataLoaded: (meetingId: string, updates: Partial<RoomDockItem>) => void;
-  onMembersChanged: (room: RoomDockItem, members: RoomMember[]) => void;
   enabled?: boolean;
 };
 
@@ -88,7 +85,6 @@ export function useRoomSettingsController({
   canonicalGlobalSettings,
   saveCanonicalGlobalSettings,
   onRoomMetadataLoaded,
-  onMembersChanged,
   enabled = true,
 }: UseRoomSettingsControllerOptions) {
   const [appearances, setAppearances] = useState<Record<string, RoomAppearance>>({});
@@ -490,24 +486,6 @@ export function useRoomSettingsController({
     [appearanceFor, persist, persistPreferences]
   );
 
-  const updateMemberRole = useCallback(
-    (room: RoomDockItem, members: RoomMember[], memberId: string, role: RoomMember["role"]) => {
-      const existingMember = members.find((member) => member.participant_id === memberId);
-      if (!existingMember || !room.meetingId) return;
-      void saveRoomMemberRole({
-        meetingId: room.meetingId,
-        participantId: memberId,
-        role,
-        sessionToken,
-      })
-        .then((payload) => onMembersChanged(room, payload.members || []))
-        .catch(() => {
-          // Keep the optimistic grouping; the next roster refresh reconciles persistence.
-        });
-    },
-    [onMembersChanged, sessionToken]
-  );
-
   const updateChannelSetting = useCallback(
     (room: RoomDockItem, channelId: string, updates: Partial<ChannelSettings>) => {
       const key = roomSettingsKey(room);
@@ -619,7 +597,6 @@ export function useRoomSettingsController({
     refresh,
     persist,
     updateAppearance,
-    updateMemberRole,
     updateChannelSetting,
     updateConversationMode,
     updateToolMode,

@@ -23,7 +23,7 @@ export default function AppOverlays({ controller }: { controller: AppController 
     inviteRemoteClientPacket, inviteRoom, leaveRoom, leaveRoomTarget,
     localPreviewUrl, operatorPairingPending, operatorPairingState, operatorPairingUrl,
     pendingGuestAvatarImage, pendingGuestDisplayName, publicInviteStatus, publicInviteUrlDraft,
-    refreshMembers, requestGuestJoin, retryOperatorPairing, roomInvite,
+    requestGuestJoin, retryOperatorPairing, roomInvite,
     roomSettings, roomSocket, saveHostTokenFromDraft, secureInviteUrl,
     setAgentCreateOpen, setCreateChannelOpen, setGuestRecoveryRequest, setHostTokenDraft,
     setLeaveRoomTargetId, setPendingGuestAvatarImage, setPendingGuestDisplayName, setPublicInviteUrlDraft,
@@ -187,7 +187,6 @@ export default function AppOverlays({ controller }: { controller: AppController 
               });
             }
           }}
-          onCreated={() => refreshMembers()}
         />
 
         {guestRecoveryRequest && (

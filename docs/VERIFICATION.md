@@ -8,7 +8,7 @@ Verification claims only the boundary actually observed. Build, lint, unit tests
 
 The active comparison baseline is original
 `d5046473010d1353a81ee38337360e6d98f7bd6f` and public Rust
-`6624e51edbd71c450497c41812eab23bb0e74770`. Local uncommitted behavior
+`6de2671848b951fb16dc13bb2dd2dfeb25c1e88f`. Local uncommitted behavior
 is never described as public completion. Every completed-slice evidence entry must
 name the tested Rust commit, original provenance commit, platform/build, exact
 entry point and command flow, viewer identity, provider/model where applicable,
@@ -618,6 +618,56 @@ verification-only diagnostic roots that exposed the still-incomplete central
 identity boundary were also left recoverable in Trash. Existing user product data,
 original-project processes, and unrelated processes were not modified or
 signalled.
+
+### Manual-review correction candidate: 2026-08-25
+
+The first Daybreaker Blue High manual review of public range `92e6bb4..6de2671`
+returned six medium blockers: the immutable bootstrap digest did not bind its
+complete contract, room creation had no request owner, desktop URL modes could
+bypass native bootstrap, zero-room directory decoding was loose and detached
+from lineage, profile projection included ended memberships, and profile HTTP
+could wait indefinitely for room publication. The correction binds every initial
+profile and marker field with a versioned length-delimited digest; makes room
+creation a transactionally reserved UUID request with exact replay only; requires
+strict native grant/directory lineage before desktop entry; updates only Active,
+Joined human memberships; and leaves profile publication to the durable room
+cursor without waiting on a room actor.
+
+The same critical web session independently reviewed `92e6bb4..6de2671` without
+Deep Scan or a provider run and returned two additional medium blockers. The
+production React composition still mounted an unavailable HTTP roster reader,
+swallowed its failure, and merged its cache beneath canonical WebSocket
+participants. The `Empty` bootstrap check inspected only rooms, participants, and
+profiles, allowing another current product table to contain rows before bootstrap.
+The correction removes the HTTP roster/role-refresh APIs and every production
+refresh, merge, cache, departed-member, and ignored-failure path. The active room
+and its invite modal now project only the authenticated WebSocket snapshot and
+sequenced participant events. The schema owner now inventories every current
+product table with a static `EXISTS` statement; a gate proves that inventory is
+equal to every non-infrastructure table and that each query names its declared
+table. Any product row while the marker is Empty produces `RepairRequired`.
+
+The complete candidate passed `make verify`: every mandatory architecture,
+source-growth, logical-line, and 800-line gate; generated bindings; the production
+frontend build and original CSS/cascade check; 67 frontend files with 343 tests;
+14 Tauri tests; 17 domain, 85 persistence, two protocol, 100 provider, and 14
+server unit tests; 20 Rust integration tests; documentation tests;
+warning-denied workspace and desktop Clippy; and final diff validation.
+
+Computer Use drove a fresh debug app under verification-only identifier
+`app.agentsassemble.rust.reviewfixverify`. It completed a zero-room bootstrap as
+`Roster Canonical`, created the first real room, and showed exactly that one
+canonical human in the right roster. Normal quit removed the exact app,
+supervisor, and sidecar. Relaunch restored the same profile, room, and one-member
+roster through a new native bootstrap/directory/room connection. The app and all
+bundle-ID-specific Application Support, WebKit, cache, and app-bundle paths were
+then shut down and moved to Trash; no verification-owned process remained. No
+Agent Session or provider was started because this correction changes bootstrap,
+room creation, profile publication, and roster projection only.
+
+This entry records candidate evidence, not post-push reviewer approval. The exact
+published correction range must still receive same-session critical web approval
+and Daybreaker Blue High manual-security approval before the blockers are closed.
 
 ## API verification scope
 

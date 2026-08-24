@@ -112,6 +112,11 @@ async fn read_initial_directory(
         .unwrap_or_else(|| panic!("directory has no server id"))
         .to_owned();
     assert!(uuid::Uuid::parse_str(&server_id).is_ok());
+    assert!(
+        initial["authority_lineage_id"]
+            .as_str()
+            .is_some_and(|value| uuid::Uuid::parse_str(value).is_ok())
+    );
     assert_eq!(initial["rooms"][0]["room_id"], "general");
     assert!(
         initial["rooms"][0]["room_settings"]["settings_revision"]
@@ -131,7 +136,11 @@ async fn create_and_retry_room(
     let created = client
         .post(format!("{}/api/rooms", server.base_url))
         .header("authorization", format!("Bearer {create_ticket}"))
-        .json(&json!({"room_id": "project-room", "label": "Project Room"}))
+        .json(&json!({
+            "request_id": "22000000-0000-4000-8000-000000000001",
+            "room_id": "project-room",
+            "label": "Project Room"
+        }))
         .send()
         .await
         .unwrap_or_else(|error| panic!("create canonical room: {error}"));
@@ -144,21 +153,43 @@ async fn create_and_retry_room(
     assert_eq!(created["room"]["label"], "Project Room");
     assert_eq!(created["room"]["origin"], "frontend_room");
     assert!(created["room"].get("room_settings").is_none());
+    assert_eq!(created["deduplicated"], false);
     let room_uid = created["room"]["room_uid"].clone();
 
     let retry_ticket = issue_operator_ticket(tickets).await;
-    let retried: Value = client
+    let retried = client
         .post(format!("{}/api/rooms", server.base_url))
         .header("authorization", format!("Bearer {retry_ticket}"))
-        .json(&json!({"room_id": "project-room", "label": "Renamed Project"}))
+        .json(&json!({
+            "request_id": "22000000-0000-4000-8000-000000000001",
+            "room_id": "project-room",
+            "label": "Project Room"
+        }))
         .send()
         .await
-        .unwrap_or_else(|error| panic!("retry canonical room create: {error}"))
+        .unwrap_or_else(|error| panic!("retry canonical room create: {error}"));
+    assert_eq!(retried.status(), reqwest::StatusCode::OK);
+    let retried: Value = retried
         .json()
         .await
         .unwrap_or_else(|error| panic!("decode retried room: {error}"));
     assert_eq!(retried["room"]["room_uid"], room_uid);
-    assert_eq!(retried["room"]["label"], "Renamed Project");
+    assert_eq!(retried["room"]["label"], "Project Room");
+    assert_eq!(retried["deduplicated"], true);
+
+    let conflict_ticket = issue_operator_ticket(tickets).await;
+    let conflict = client
+        .post(format!("{}/api/rooms", server.base_url))
+        .header("authorization", format!("Bearer {conflict_ticket}"))
+        .json(&json!({
+            "request_id": "22000000-0000-4000-8000-000000000001",
+            "room_id": "project-room",
+            "label": "Renamed Project"
+        }))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("request conflicting room replay: {error}"));
+    assert_eq!(conflict.status(), reqwest::StatusCode::CONFLICT);
     room_uid
 }
 
@@ -182,7 +213,7 @@ async fn verify_created_room_socket(
     let snapshot = receive_json(&mut socket).await;
     assert_eq!(snapshot["op"], "snapshot");
     assert_eq!(&snapshot["room"]["room_uid"], room_uid);
-    assert_eq!(snapshot["room_settings"]["label"], "Renamed Project");
+    assert_eq!(snapshot["room_settings"]["label"], "Project Room");
     assert_eq!(snapshot["last_seq"], 1);
     assert_eq!(snapshot["events"][0]["type"], "room_created");
     assert_eq!(snapshot["participants"][0]["display_name"], "SeiNel");
@@ -277,7 +308,11 @@ async fn fixture() -> SqliteStore {
         .await
         .unwrap_or_else(|error| panic!("bootstrap room directory identity: {error}"));
     store
-        .create_room_for_local_operator("general", "General")
+        .create_room_for_local_operator(
+            "20000000-0000-4000-8000-000000000015",
+            "general",
+            "General",
+        )
         .await
         .unwrap_or_else(|error| panic!("create room directory fixture: {error}"));
     store

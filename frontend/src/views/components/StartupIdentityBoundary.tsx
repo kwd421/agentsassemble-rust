@@ -77,8 +77,8 @@ function startupIdentityRunsOnThisOrigin(): boolean {
 export default function StartupIdentityBoundary({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(
     () => {
-      if (startupIdentityBypassRequested()) return true;
       if (isDesktopWebview()) return false;
+      if (startupIdentityBypassRequested()) return true;
       return (
         !startupIdentityRunsOnThisOrigin() ||
         hasStartupIdentitySelection() ||

@@ -1,7 +1,7 @@
 use agentsassemble_domain::{
     LOCAL_OPERATOR_USER_ID, RoomStatus, clean_single_line, public_settings, validate_room_id,
 };
-use agentsassemble_persistence::{PersistenceError, StoredRoomSummary};
+use agentsassemble_persistence::{LocalBootstrapPhase, PersistenceError, StoredRoomSummary};
 use axum::{
     Json, Router,
     extract::{Query, Request, State},
@@ -22,13 +22,16 @@ use crate::{
 const MAX_DIRECTORY_BODY_BYTES: usize = 8 * 1024;
 
 #[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct DirectoryQuery {
     #[serde(default)]
     include_archived: String,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct CreateRoomRequest {
+    request_id: String,
     room_id: String,
     #[serde(default)]
     label: String,
@@ -53,13 +56,20 @@ async fn list_rooms(
         query.include_archived.trim().to_ascii_lowercase().as_str(),
         "1" | "true" | "yes" | "on"
     );
-    let server_id = state.store.server_id().await?;
+    let bootstrap = state.store.local_bootstrap_status().await?;
+    if bootstrap.phase != LocalBootstrapPhase::Complete {
+        return Err(DirectoryHttpError::authority_unavailable());
+    }
     let rooms = state.store.list_room_directory(include_archived).await?;
     let rooms = rooms
         .iter()
         .map(|room| room_payload(room, "agent_session"))
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(Json(json!({"server_id": server_id, "rooms": rooms})))
+    Ok(Json(json!({
+        "server_id": bootstrap.server_id,
+        "authority_lineage_id": bootstrap.authority_lineage_id,
+        "rooms": rooms,
+    })))
 }
 
 async fn create_room(
@@ -80,14 +90,21 @@ async fn create_room(
     };
     let commit = state
         .store
-        .create_room_for_local_operator(&room_id, label)
+        .create_room_for_local_operator(&payload.request_id, &room_id, label)
         .await?;
     state.rooms.notify_committed_events(&commit.events).await;
-    let server_id = state.store.server_id().await?;
+    let bootstrap = state.store.local_bootstrap_status().await?;
+    if bootstrap.phase != LocalBootstrapPhase::Complete {
+        return Err(DirectoryHttpError::authority_unavailable());
+    }
     let room = room_identity_payload(&commit.room, &commit.settings, "frontend_room");
-    Ok(Json(
-        json!({"status": "ready", "server_id": server_id, "room": room}),
-    ))
+    Ok(Json(json!({
+        "status": "ready",
+        "server_id": bootstrap.server_id,
+        "authority_lineage_id": bootstrap.authority_lineage_id,
+        "room": room,
+        "deduplicated": commit.deduplicated,
+    })))
 }
 
 async fn consume_operator(
@@ -192,6 +209,14 @@ impl DirectoryHttpError {
             message: "Persistence operation failed.".to_owned(),
         }
     }
+
+    fn authority_unavailable() -> Self {
+        Self {
+            status: StatusCode::CONFLICT,
+            code: "bootstrap_required",
+            message: "Local authority is not complete.".to_owned(),
+        }
+    }
 }
 
 impl From<PersistenceError> for DirectoryHttpError {
@@ -199,8 +224,9 @@ impl From<PersistenceError> for DirectoryHttpError {
         match error {
             PersistenceError::CommandRejected { code, message } => {
                 let status = match code {
-                    "room_membership_inactive" => StatusCode::FORBIDDEN,
-                    "invalid_state" => StatusCode::CONFLICT,
+                    "invalid_state" | "room_already_exists" | "room_create_request_conflict" => {
+                        StatusCode::CONFLICT
+                    }
                     _ => StatusCode::BAD_REQUEST,
                 };
                 Self {

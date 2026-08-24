@@ -21,6 +21,23 @@ const desktopMocks = vi.hoisted(() => ({
   initializeBootstrap: vi.fn(),
   requestBootstrapStatus: vi.fn(),
 }));
+const SERVER_ID = "30000000-0000-4000-8000-000000000001";
+const LINEAGE_ID = "30000000-0000-4000-8000-000000000002";
+const desktopProfile = {
+  revision: 1,
+  display_name: "Desktop User",
+  handle: "desktopuser.",
+  status: "online",
+  custom_status: "AgentsAssemble",
+  avatar_label: "DE",
+  avatar_image_url: "",
+  banner_preset: "default",
+  accent_color: "#5865f2",
+  mic_muted: true,
+  deafened: false,
+  created_at: "2026-08-25T00:00:00.000000000Z",
+  updated_at: "2026-08-25T00:00:00.000000000Z",
+};
 
 vi.mock("../../api/identity", () => ({ fetchAccountStatus: vi.fn() }));
 vi.mock("../../api/room", () => ({ saveUserProfile: vi.fn() }));
@@ -72,7 +89,7 @@ describe("StartupIdentityGate", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ server_id: "server-1", rooms: [] }), {
+        new Response(JSON.stringify({ server_id: SERVER_ID, authority_lineage_id: LINEAGE_ID, rooms: [] }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         })
@@ -130,7 +147,7 @@ describe("StartupIdentityGate", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ server_id: "server-1", rooms: [] }), {
+        new Response(JSON.stringify({ server_id: SERVER_ID, authority_lineage_id: LINEAGE_ID, rooms: [] }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         })
@@ -159,20 +176,20 @@ describe("StartupIdentityGate", () => {
     desktopMocks.desktop = true;
     desktopMocks.requestBootstrapStatus.mockResolvedValue({
       phase: "empty",
-      authority_lineage_id: "lineage-1",
-      server_id: "server-1",
+      authority_lineage_id: LINEAGE_ID,
+      server_id: SERVER_ID,
       profile: null,
       deduplicated: false,
     });
     desktopMocks.initializeBootstrap.mockResolvedValue({
       phase: "complete",
-      authority_lineage_id: "lineage-1",
-      server_id: "server-1",
-      profile: { display_name: "Desktop User", avatar_image_url: "" },
+      authority_lineage_id: LINEAGE_ID,
+      server_id: SERVER_ID,
+      profile: desktopProfile,
       deduplicated: false,
     });
     desktopMocks.fetchOperatorRuntime.mockResolvedValue(
-      new Response(JSON.stringify({ server_id: "server-1", rooms: [] }), {
+      new Response(JSON.stringify({ server_id: SERVER_ID, authority_lineage_id: LINEAGE_ID, rooms: [] }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       })
@@ -195,6 +212,40 @@ describe("StartupIdentityGate", () => {
       cache: "no-store",
     });
     expect(saveUserProfile).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["missing", {}],
+    [
+      "detached",
+      {
+        server_id: SERVER_ID,
+        authority_lineage_id: "30000000-0000-4000-8000-000000000099",
+        rooms: [],
+      },
+    ],
+  ])("rejects a %s zero-room response", async (_case, payload) => {
+    desktopMocks.desktop = true;
+    desktopMocks.requestBootstrapStatus.mockResolvedValue({
+      phase: "complete",
+      authority_lineage_id: LINEAGE_ID,
+      server_id: SERVER_ID,
+      profile: desktopProfile,
+      deduplicated: false,
+    });
+    desktopMocks.fetchOperatorRuntime.mockResolvedValue(
+      new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    const onComplete = vi.fn();
+
+    render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
+
+    await screen.findByRole("alert");
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(rememberStartupIdentitySelection).not.toHaveBeenCalled();
   });
 
   it("lets the user cancel a central Google handoff that is still pending", async () => {

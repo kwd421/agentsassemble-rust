@@ -34,19 +34,19 @@ never room authority and remains visibly unconfirmed until the server answers.
 
 ## Reachable contract
 
-- `GET /api/rooms` returns `server_id` and canonical room summaries sorted by
+- `GET /api/rooms` returns `server_id`, immutable `authority_lineage_id`, and canonical room summaries sorted by
   last activity, excluding archived rooms unless `include_archived=true`.
   Every summary includes the complete public room-global settings projection,
   so an inactive room does not invent a separate label or appearance.
-- `POST /api/rooms` accepts one bounded canonical `room_id` and label from the
+- `POST /api/rooms` accepts one UUID `request_id`, bounded canonical `room_id`, and label from the
   copied add-room flow. A new room transaction creates the room, default
   settings, publication cursor, local human membership projected from the
   current server profile, and exactly one durable `room_created` event.
-- Repeating creation for an existing room preserves its stable UID and never
-  emits a second `room_created` event. It may apply the original idempotent
-  label/status update only when the existing room and active local-operator
-  membership are valid; it never silently restores a left, kicked, exported,
-  or detached membership.
+- Room creation reserves `(server operator, request_id)` with a canonical payload
+  hash in the same SQLite transaction. An exact replay returns the original
+  result without a second event. Changed-payload reuse and a fresh request for an
+  existing room ID are conflicts; creation is never an implicit rename, reopen,
+  or membership restoration command.
 - HTTP authentication is consumed before a request body is read. Only the
   packaged local operator's one-use server ticket can enumerate every local
   room or create one in this slice. Guest/session-scoped directory projection
@@ -80,14 +80,15 @@ never room authority and remains visibly unconfirmed until the server answers.
 - A directory refresh failure keeps only the bounded cached projection and a
   visible unconfirmed notice. It does not report synchronization success,
   create a local room, or redirect to Python or another transport.
-- Retrying the same existing room create is idempotent at the product state
-  boundary; a conflicting/invalid request remains a visible error.
+- Retrying the exact request is idempotent at the durable request boundary; a
+  conflicting payload or independently owned room ID remains a visible error.
 
 ## Verification
 
 - persistence tests cover stable `server_id`/room UID across reopen, canonical
   sorting/filtering, atomic new-room creation, profile-derived human projection,
-  preservation of room-owned membership state, idempotent retry, and rollback;
+  request-owned concurrency, exact replay, payload/room conflicts, profile-derived
+  membership, and rollback;
 - deterministic bootstrap tests cover retry from an interrupted empty file, a
   fresh all-in-one commit, recovery of the prior schema-only crash state while
   preserving `server_id`, and an injected profile-write failure that rolls back

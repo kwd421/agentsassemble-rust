@@ -59,7 +59,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     mobileSidebarOpen, mobileViewportIsActive, openAddFriendView, openAgentCreate,
     openChannelMenu, openCrossChannelSearchResult, openMobileProfileFromPanel, openMobileRoomInfo,
     openMobileSidebar, openRoomMenu, openRoomSettings, pendingMessageSearchTarget,
-    quotaViewer, refreshSessionAndMembers, rightPanelMode, rightPanelSearchQuery,
+    quotaViewer, rightPanelMode, rightPanelSearchQuery,
     roomAppearances, roomDirectorySyncIssue, roomMenu, roomMessageSearch,
     roomSettings, roomSocket, rooms, scopedAgents, scopedMentionables,
     scopedOnlineCount, scopedViewerDisplayName, selectDirectoryFriend, selectHomeFriend,
@@ -611,7 +611,6 @@ export default function AppView({ controller }: { controller: AppController }) {
                 onCreateCompanionAiPacket={() => void createCompanionAiPacket()}
                 onCopyGuestAiPacket={() => void copyGuestAiPacket()}
                 channelNotifications={activeChannelSettings}
-                onSessionActionComplete={refreshSessionAndMembers}
                 quotaViewer={quotaViewer}
                 onAgentUsageRequest={loadProviderUsage}
                 onStartAddAgent={openAgentCreate}

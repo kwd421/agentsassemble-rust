@@ -1,5 +1,5 @@
 use agentsassemble_domain::{LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, UserProfile};
-use chrono::Utc;
+use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::{Row, Sqlite, SqliteConnection, Transaction};
@@ -155,7 +155,7 @@ async fn install_metadata(
     )
     .bind(uuid::Uuid::new_v4().to_string())
     .bind(crate::schema_version::CURRENT_SCHEMA_VERSION)
-    .bind(Utc::now().to_rfc3339())
+    .bind(canonical_timestamp(Utc::now()))
     .execute(&mut **transaction)
     .await?;
     Ok(())
@@ -169,92 +169,122 @@ async fn bootstrap_in_transaction(
     let marker = load_marker(connection).await?;
     let server_id = load_server_id(connection).await?;
     match marker.state.as_str() {
-        "complete" => {
-            let status = inspect_complete(connection, &marker, server_id).await?;
-            if marker.request_id != request_id {
-                return Err(rejected(
-                    "bootstrap_already_complete",
-                    "Local authority was completed by a different bootstrap request.",
-                ));
-            }
-            let requested_digest = bootstrap_digest(
-                &marker.authority_lineage_id,
-                request_id,
-                LOCAL_OPERATOR_USER_ID,
-                LOCAL_OPERATOR_PARTICIPANT_ID,
-                profile,
-            );
-            if requested_digest != marker.initialization_digest {
-                return Err(rejected(
-                    "bootstrap_request_conflict",
-                    "Bootstrap request id was reused with a different profile.",
-                ));
-            }
-            let stored: LocalBootstrapCommit = serde_json::from_str(&marker.result_json)?;
-            if stored.status.authority_lineage_id != status.authority_lineage_id
-                || stored.status.server_id != status.server_id
-            {
-                return Err(bootstrap_repair_required());
-            }
-            Ok(LocalBootstrapCommit {
-                status: stored.status,
-                deduplicated: true,
-            })
-        }
-        "empty" => {
-            require_empty_marker(connection, &marker).await?;
-            let claimed = sqlx::query(
-                "UPDATE local_bootstrap_authority SET state = 'initializing', request_id = ? WHERE singleton = 1 AND state = 'empty'",
-            )
-            .bind(request_id)
-            .execute(&mut *connection)
-            .await?;
-            if claimed.rows_affected() != 1 {
-                return Err(bootstrap_repair_required());
-            }
-            sqlx::query(
-                "INSERT INTO user_profiles(user_id, participant_id, profile_json) VALUES (?, ?, ?)",
-            )
-            .bind(LOCAL_OPERATOR_USER_ID)
-            .bind(LOCAL_OPERATOR_PARTICIPANT_ID)
-            .bind(serde_json::to_string(profile)?)
-            .execute(&mut *connection)
-            .await?;
-            let digest = bootstrap_digest(
-                &marker.authority_lineage_id,
-                request_id,
-                LOCAL_OPERATOR_USER_ID,
-                LOCAL_OPERATOR_PARTICIPANT_ID,
-                profile,
-            );
-            let status = LocalBootstrapStatus {
-                phase: LocalBootstrapPhase::Complete,
-                authority_lineage_id: marker.authority_lineage_id,
-                server_id,
-                profile: Some(profile.clone()),
-            };
-            let stored = LocalBootstrapCommit {
-                status: status.clone(),
-                deduplicated: false,
-            };
-            let completed = sqlx::query(
-                "UPDATE local_bootstrap_authority SET state = 'complete', initialization_digest = ?, user_id = ?, participant_id = ?, result_json = ?, completed_at = ? WHERE singleton = 1 AND state = 'initializing' AND request_id = ?",
-            )
-            .bind(digest)
-            .bind(LOCAL_OPERATOR_USER_ID)
-            .bind(LOCAL_OPERATOR_PARTICIPANT_ID)
-            .bind(serde_json::to_string(&stored)?)
-            .bind(Utc::now().to_rfc3339())
-            .bind(request_id)
-            .execute(&mut *connection)
-            .await?;
-            if completed.rows_affected() != 1 {
-                return Err(bootstrap_repair_required());
-            }
-            Ok(stored)
-        }
+        "complete" => replay_bootstrap(connection, &marker, &server_id, request_id, profile).await,
+        "empty" => complete_bootstrap(connection, marker, server_id, request_id, profile).await,
         _ => Err(bootstrap_repair_required()),
     }
+}
+
+async fn replay_bootstrap(
+    connection: &mut SqliteConnection,
+    marker: &BootstrapMarker,
+    server_id: &str,
+    request_id: &str,
+    profile: &UserProfile,
+) -> Result<LocalBootstrapCommit, PersistenceError> {
+    let status = inspect_complete(connection, marker, server_id).await?;
+    if marker.request_id != request_id {
+        return Err(rejected(
+            "bootstrap_already_complete",
+            "Local authority was completed by a different bootstrap request.",
+        ));
+    }
+    let stored: LocalBootstrapCommit = serde_json::from_str(&marker.result_json)?;
+    let Some(initial_profile) = stored.status.profile.as_ref() else {
+        return Err(bootstrap_repair_required());
+    };
+    let mut requested_profile = profile.clone();
+    requested_profile.created_at = initial_profile.created_at;
+    requested_profile.updated_at = initial_profile.updated_at;
+    let requested_digest = bootstrap_digest(&BootstrapDigestContract {
+        lineage_id: &marker.authority_lineage_id,
+        request_id,
+        user_id: LOCAL_OPERATOR_USER_ID,
+        participant_id: LOCAL_OPERATOR_PARTICIPANT_ID,
+        schema_revision: marker.schema_revision,
+        server_id,
+        created_at: &marker.created_at,
+        completed_at: marker.completed_at.as_deref().unwrap_or_default(),
+        profile: &requested_profile,
+    });
+    if requested_digest != marker.initialization_digest {
+        return Err(rejected(
+            "bootstrap_request_conflict",
+            "Bootstrap request id was reused with a different profile.",
+        ));
+    }
+    if stored.status.authority_lineage_id != status.authority_lineage_id
+        || stored.status.server_id != status.server_id
+    {
+        return Err(bootstrap_repair_required());
+    }
+    Ok(LocalBootstrapCommit {
+        status: stored.status,
+        deduplicated: true,
+    })
+}
+
+async fn complete_bootstrap(
+    connection: &mut SqliteConnection,
+    marker: BootstrapMarker,
+    server_id: String,
+    request_id: &str,
+    profile: &UserProfile,
+) -> Result<LocalBootstrapCommit, PersistenceError> {
+    require_empty_marker(connection, &marker).await?;
+    let claimed = sqlx::query(
+        "UPDATE local_bootstrap_authority SET state = 'initializing', request_id = ? WHERE singleton = 1 AND state = 'empty'",
+    )
+    .bind(request_id)
+    .execute(&mut *connection)
+    .await?;
+    if claimed.rows_affected() != 1 {
+        return Err(bootstrap_repair_required());
+    }
+    sqlx::query(
+        "INSERT INTO user_profiles(user_id, participant_id, profile_json) VALUES (?, ?, ?)",
+    )
+    .bind(LOCAL_OPERATOR_USER_ID)
+    .bind(LOCAL_OPERATOR_PARTICIPANT_ID)
+    .bind(serde_json::to_string(profile)?)
+    .execute(&mut *connection)
+    .await?;
+    let completed_at = canonical_timestamp(Utc::now());
+    let digest = bootstrap_digest(&BootstrapDigestContract {
+        lineage_id: &marker.authority_lineage_id,
+        request_id,
+        user_id: LOCAL_OPERATOR_USER_ID,
+        participant_id: LOCAL_OPERATOR_PARTICIPANT_ID,
+        schema_revision: marker.schema_revision,
+        server_id: &server_id,
+        created_at: &marker.created_at,
+        completed_at: &completed_at,
+        profile,
+    });
+    let stored = LocalBootstrapCommit {
+        status: LocalBootstrapStatus {
+            phase: LocalBootstrapPhase::Complete,
+            authority_lineage_id: marker.authority_lineage_id,
+            server_id,
+            profile: Some(profile.clone()),
+        },
+        deduplicated: false,
+    };
+    let completed = sqlx::query(
+        "UPDATE local_bootstrap_authority SET state = 'complete', initialization_digest = ?, user_id = ?, participant_id = ?, result_json = ?, completed_at = ? WHERE singleton = 1 AND state = 'initializing' AND request_id = ?",
+    )
+    .bind(digest)
+    .bind(LOCAL_OPERATOR_USER_ID)
+    .bind(LOCAL_OPERATOR_PARTICIPANT_ID)
+    .bind(serde_json::to_string(&stored)?)
+    .bind(completed_at)
+    .bind(request_id)
+    .execute(&mut *connection)
+    .await?;
+    if completed.rows_affected() != 1 {
+        return Err(bootstrap_repair_required());
+    }
+    Ok(stored)
 }
 
 async fn inspect_bootstrap(
@@ -271,7 +301,7 @@ async fn inspect_bootstrap(
                 profile: None,
             })
         }
-        "complete" => match inspect_complete(connection, &marker, server_id.clone()).await {
+        "complete" => match inspect_complete(connection, &marker, &server_id).await {
             Ok(status) => Ok(status),
             Err(PersistenceError::CommandRejected {
                 code: "bootstrap_repair_required",
@@ -291,8 +321,14 @@ async fn inspect_bootstrap(
 async fn inspect_complete(
     connection: &mut SqliteConnection,
     marker: &BootstrapMarker,
-    server_id: String,
+    server_id: &str,
 ) -> Result<LocalBootstrapStatus, PersistenceError> {
+    let created_at = parse_canonical_timestamp(&marker.created_at)?;
+    let completed_at = marker
+        .completed_at
+        .as_deref()
+        .ok_or_else(bootstrap_repair_required)
+        .and_then(parse_canonical_timestamp)?;
     if uuid::Uuid::parse_str(&marker.authority_lineage_id).is_err()
         || uuid::Uuid::parse_str(&marker.request_id).is_err()
         || marker.schema_revision != crate::schema_version::CURRENT_SCHEMA_VERSION
@@ -300,7 +336,7 @@ async fn inspect_complete(
         || marker.participant_id != LOCAL_OPERATOR_PARTICIPANT_ID
         || !valid_digest(&marker.initialization_digest)
         || marker.result_json.is_empty()
-        || marker.completed_at.is_none()
+        || created_at > completed_at
     {
         return Err(bootstrap_repair_required());
     }
@@ -314,13 +350,20 @@ async fn inspect_complete(
         || stored.status.authority_lineage_id != marker.authority_lineage_id
         || stored.status.server_id != server_id
         || initial_profile.revision != 1
-        || bootstrap_digest(
-            &marker.authority_lineage_id,
-            &marker.request_id,
-            LOCAL_OPERATOR_USER_ID,
-            LOCAL_OPERATOR_PARTICIPANT_ID,
-            initial_profile,
-        ) != marker.initialization_digest
+        || initial_profile.created_at != initial_profile.updated_at
+        || initial_profile.created_at < created_at
+        || initial_profile.created_at > completed_at
+        || bootstrap_digest(&BootstrapDigestContract {
+            lineage_id: &marker.authority_lineage_id,
+            request_id: &marker.request_id,
+            user_id: LOCAL_OPERATOR_USER_ID,
+            participant_id: LOCAL_OPERATOR_PARTICIPANT_ID,
+            schema_revision: marker.schema_revision,
+            server_id,
+            created_at: &marker.created_at,
+            completed_at: marker.completed_at.as_deref().unwrap_or_default(),
+            profile: initial_profile,
+        }) != marker.initialization_digest
     {
         return Err(bootstrap_repair_required());
     }
@@ -341,7 +384,7 @@ async fn inspect_complete(
     Ok(LocalBootstrapStatus {
         phase: LocalBootstrapPhase::Complete,
         authority_lineage_id: marker.authority_lineage_id.clone(),
-        server_id,
+        server_id: server_id.to_owned(),
         profile: Some(profile),
     })
 }
@@ -371,6 +414,7 @@ async fn empty_marker_is_consistent(
     marker: &BootstrapMarker,
 ) -> Result<bool, PersistenceError> {
     if uuid::Uuid::parse_str(&marker.authority_lineage_id).is_err()
+        || parse_canonical_timestamp(&marker.created_at).is_err()
         || marker.schema_revision != crate::schema_version::CURRENT_SCHEMA_VERSION
         || !marker.request_id.is_empty()
         || !marker.initialization_digest.is_empty()
@@ -381,12 +425,15 @@ async fn empty_marker_is_consistent(
     {
         return Ok(false);
     }
-    let product_rows = sqlx::query_scalar::<_, i64>(
-        "SELECT (SELECT COUNT(*) FROM rooms) + (SELECT COUNT(*) FROM participants) + (SELECT COUNT(*) FROM user_profiles)",
-    )
-    .fetch_one(&mut *connection)
-    .await?;
-    Ok(product_rows == 0)
+    for (_, has_rows_sql) in crate::schema::PRODUCT_TABLES {
+        if sqlx::query_scalar::<_, bool>(*has_rows_sql)
+            .fetch_one(&mut *connection)
+            .await?
+        {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
 async fn load_server_id(connection: &mut SqliteConnection) -> Result<String, PersistenceError> {
@@ -404,7 +451,7 @@ async fn load_marker(
     connection: &mut SqliteConnection,
 ) -> Result<BootstrapMarker, PersistenceError> {
     let row = sqlx::query(
-        "SELECT authority_lineage_id, state, request_id, schema_revision, initialization_digest, user_id, participant_id, result_json, completed_at FROM local_bootstrap_authority WHERE singleton = 1",
+        "SELECT authority_lineage_id, state, request_id, schema_revision, initialization_digest, user_id, participant_id, result_json, created_at, completed_at FROM local_bootstrap_authority WHERE singleton = 1",
     )
     .fetch_optional(&mut *connection)
     .await?
@@ -418,32 +465,68 @@ async fn load_marker(
         user_id: row.get("user_id"),
         participant_id: row.get("participant_id"),
         result_json: row.get("result_json"),
+        created_at: row.get("created_at"),
         completed_at: row.get("completed_at"),
     })
 }
 
-fn bootstrap_digest(
-    lineage_id: &str,
-    request_id: &str,
-    user_id: &str,
-    participant_id: &str,
-    profile: &UserProfile,
-) -> String {
+struct BootstrapDigestContract<'a> {
+    lineage_id: &'a str,
+    request_id: &'a str,
+    user_id: &'a str,
+    participant_id: &'a str,
+    schema_revision: i64,
+    server_id: &'a str,
+    created_at: &'a str,
+    completed_at: &'a str,
+    profile: &'a UserProfile,
+}
+
+fn bootstrap_digest(contract: &BootstrapDigestContract<'_>) -> String {
+    let profile = contract.profile;
     let mut digest = Sha256::new();
     digest.update(BOOTSTRAP_DIGEST_CONTEXT);
+    digest.update(contract.schema_revision.to_le_bytes());
     for field in [
-        lineage_id.as_bytes(),
-        request_id.as_bytes(),
-        user_id.as_bytes(),
-        participant_id.as_bytes(),
+        contract.lineage_id.as_bytes(),
+        contract.request_id.as_bytes(),
+        contract.user_id.as_bytes(),
+        contract.participant_id.as_bytes(),
+        contract.server_id.as_bytes(),
+        contract.created_at.as_bytes(),
+        contract.completed_at.as_bytes(),
+        &profile.revision.to_le_bytes(),
         profile.display_name.as_bytes(),
         profile.handle.as_bytes(),
+        profile.status.as_bytes(),
+        profile.custom_status.as_bytes(),
         profile.avatar_label.as_bytes(),
+        profile.avatar_image_url.as_bytes(),
+        profile.banner_preset.as_bytes(),
+        profile.accent_color.as_bytes(),
+        &[u8::from(profile.mic_muted)],
+        &[u8::from(profile.deafened)],
+        canonical_timestamp(profile.created_at).as_bytes(),
+        canonical_timestamp(profile.updated_at).as_bytes(),
     ] {
         digest.update(u64::try_from(field.len()).unwrap_or(u64::MAX).to_le_bytes());
         digest.update(field);
     }
     format!("bootstrap-v1-{:x}", digest.finalize())
+}
+
+fn canonical_timestamp(value: DateTime<Utc>) -> String {
+    value.to_rfc3339_opts(SecondsFormat::Nanos, true)
+}
+
+fn parse_canonical_timestamp(value: &str) -> Result<DateTime<Utc>, PersistenceError> {
+    let parsed = DateTime::parse_from_rfc3339(value)
+        .map_err(|_| bootstrap_repair_required())?
+        .with_timezone(&Utc);
+    if canonical_timestamp(parsed) != value {
+        return Err(bootstrap_repair_required());
+    }
+    Ok(parsed)
 }
 
 fn valid_digest(value: &str) -> bool {
@@ -476,5 +559,6 @@ struct BootstrapMarker {
     user_id: String,
     participant_id: String,
     result_json: String,
+    created_at: String,
     completed_at: Option<String>,
 }

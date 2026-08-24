@@ -263,15 +263,58 @@ mod tests {
             .bootstrap_local_authority("651d9765-9c65-47f6-8192-ce4871bce77e", "Operator")
             .await
             .unwrap_or_else(|error| panic!("complete authority: {error}"));
-        sqlx::query("DELETE FROM user_profiles")
+        sqlx::query(
+            "UPDATE local_bootstrap_authority SET result_json = json_set(result_json, '$.status.profile.status', 'tampered') WHERE singleton = 1",
+        )
             .execute(&store.pool)
             .await
-            .unwrap_or_else(|error| panic!("remove required profile: {error}"));
+            .unwrap_or_else(|error| panic!("tamper immutable bootstrap profile: {error}"));
         assert_eq!(
             store
                 .local_bootstrap_status()
                 .await
                 .unwrap_or_else(|error| panic!("repair-required bootstrap status: {error}"))
+                .phase,
+            LocalBootstrapPhase::RepairRequired
+        );
+        assert!(store.require_local_bootstrap_complete().await.is_err());
+
+        let empty = SqliteStore::open("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("initialize empty authority: {error}"));
+        sqlx::query(
+            "UPDATE local_bootstrap_authority SET created_at = 'not-a-canonical-timestamp' WHERE singleton = 1",
+        )
+        .execute(&empty.pool)
+        .await
+        .unwrap_or_else(|error| panic!("tamper bootstrap creation metadata: {error}"));
+        assert_eq!(
+            empty
+                .local_bootstrap_status()
+                .await
+                .unwrap_or_else(|error| panic!("inspect tampered empty authority: {error}"))
+                .phase,
+            LocalBootstrapPhase::RepairRequired
+        );
+    }
+
+    #[tokio::test]
+    async fn empty_bootstrap_rejects_non_bootstrap_product_rows() {
+        let store = SqliteStore::open("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("initialize empty authority: {error}"));
+        sqlx::query(
+            "INSERT INTO room_create_results(principal_id, request_id, payload_hash, result_json) VALUES ('orphan', 'orphan', 'orphan', '{}')",
+        )
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("insert non-bootstrap product row: {error}"));
+
+        assert_eq!(
+            store
+                .local_bootstrap_status()
+                .await
+                .unwrap_or_else(|error| panic!("inspect partial authority: {error}"))
                 .phase,
             LocalBootstrapPhase::RepairRequired
         );

@@ -2,11 +2,12 @@ use std::collections::BTreeMap;
 
 use agentsassemble_domain::{
     Actor, AuthenticatedPrincipal, LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID,
-    Participant, RoomEvent, UserProfile, UserProfilePatch, avatar_attachment_id,
+    Participant, ParticipantStatus, Room, RoomEvent, RoomStatus, UserProfile, UserProfilePatch,
+    avatar_attachment_id,
 };
 use chrono::Utc;
 use serde_json::json;
-use sqlx::{Row, Sqlite, Transaction};
+use sqlx::{Row, Sqlite, SqliteConnection, Transaction};
 use uuid::Uuid;
 
 use crate::{
@@ -169,14 +170,28 @@ async fn load_profile(
 }
 
 pub(crate) async fn load_local_operator_profile(
-    transaction: &mut Transaction<'_, Sqlite>,
+    connection: &mut SqliteConnection,
 ) -> Result<UserProfile, PersistenceError> {
-    load_profile_for_identity(
-        transaction,
-        LOCAL_OPERATOR_USER_ID,
-        LOCAL_OPERATOR_PARTICIPANT_ID,
-    )
-    .await
+    let row =
+        sqlx::query("SELECT participant_id, profile_json FROM user_profiles WHERE user_id = ?")
+            .bind(LOCAL_OPERATOR_USER_ID)
+            .fetch_optional(&mut *connection)
+            .await?
+            .ok_or_else(|| rejected("user_profile_missing", "Local user profile was not found."))?;
+    if row.get::<String, _>("participant_id") != LOCAL_OPERATOR_PARTICIPANT_ID {
+        return Err(rejected(
+            "profile_authority_mismatch",
+            "Local user profile does not own the operator participant.",
+        ));
+    }
+    let profile: UserProfile = serde_json::from_str(row.get::<String, _>("profile_json").as_str())?;
+    if profile.revision < 1 {
+        return Err(rejected(
+            "invalid_state",
+            "Stored user profile revision is invalid.",
+        ));
+    }
+    Ok(profile)
 }
 
 async fn load_profile_for_identity(
@@ -217,7 +232,7 @@ async fn project_profile_into_rooms(
     profile: &UserProfile,
 ) -> Result<Vec<RoomEvent>, PersistenceError> {
     let rows = sqlx::query(
-        "SELECT room_id, participant_json FROM participants WHERE participant_id = ? ORDER BY room_id",
+        "SELECT participants.room_id, participants.participant_json, rooms.room_json FROM participants JOIN rooms ON rooms.room_id = participants.room_id WHERE participants.participant_id = ? ORDER BY participants.room_id",
     )
     .bind(identity.participant_id)
     .fetch_all(&mut **transaction)
@@ -225,9 +240,18 @@ async fn project_profile_into_rooms(
     let mut events = Vec::new();
     for row in rows {
         let room_id = row.get::<String, _>("room_id");
+        let room: Room = serde_json::from_str(row.get::<String, _>("room_json").as_str())?;
         let mut participant: Participant =
             serde_json::from_str(row.get::<String, _>("participant_json").as_str())?;
-        if participant.participant_type != "human"
+        if room.room_id != room_id || participant.room_id != room_id {
+            return Err(rejected(
+                "invalid_state",
+                "Stored room profile projection is invalid.",
+            ));
+        }
+        if room.status != RoomStatus::Active
+            || participant.status != ParticipantStatus::Joined
+            || participant.participant_type != "human"
             || (participant.display_name == profile.display_name
                 && participant.avatar_image_url == profile.avatar_image_url)
         {
@@ -309,7 +333,7 @@ fn rejected(code: &'static str, message: &str) -> PersistenceError {
 mod tests {
     use agentsassemble_domain::{
         AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, Participant,
-        ParticipantStatus, Room, RoomSettings, UserProfilePatch,
+        ParticipantStatus, Room, RoomSettings, RoomStatus, UserProfilePatch,
     };
     use chrono::Utc;
     use sqlx::Row as _;
@@ -329,7 +353,11 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("bootstrap profile identity: {error}"));
         store
-            .create_room_for_local_operator("general", "General")
+            .create_room_for_local_operator(
+                "20000000-0000-4000-8000-000000000008",
+                "general",
+                "General",
+            )
             .await
             .unwrap_or_else(|error| panic!("create profile room: {error}"));
         let principal = AuthenticatedPrincipal {
@@ -351,7 +379,8 @@ mod tests {
     #[tokio::test]
     async fn one_profile_revision_projects_to_humans_without_crossing_room_or_agent_authority() {
         let (store, principal) = fixture().await;
-        let agent = insert_secondary_profile_boundaries(&store, &principal).await;
+        let (agent, ended_membership) =
+            insert_secondary_profile_boundaries(&store, &principal).await;
 
         let outcome = store
             .update_user_profile(
@@ -389,6 +418,11 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("read agent profile: {error}"));
         assert_eq!(unchanged_agent, agent);
+        let unchanged_ended = store
+            .participant("ended", &principal.participant_id)
+            .await
+            .unwrap_or_else(|error| panic!("read ended profile projection: {error}"));
+        assert_eq!(unchanged_ended, ended_membership);
 
         let retry = store
             .update_user_profile(
@@ -452,7 +486,7 @@ mod tests {
     async fn insert_secondary_profile_boundaries(
         store: &SqliteStore,
         principal: &AuthenticatedPrincipal,
-    ) -> Participant {
+    ) -> (Participant, Participant) {
         let now = Utc::now();
         let second_room = Room::new("second".to_owned(), "Second".to_owned(), now);
         sqlx::query("INSERT INTO rooms(room_id, room_json, settings_json) VALUES (?, ?, ?)")
@@ -468,6 +502,21 @@ mod tests {
             .execute(&store.pool)
             .await
             .unwrap_or_else(|error| panic!("insert second room: {error}"));
+        let mut ended_room = Room::new("ended".to_owned(), "Ended".to_owned(), now);
+        ended_room.status = RoomStatus::Closed;
+        sqlx::query("INSERT INTO rooms(room_id, room_json, settings_json) VALUES (?, ?, ?)")
+            .bind(&ended_room.room_id)
+            .bind(
+                serde_json::to_string(&ended_room)
+                    .unwrap_or_else(|error| panic!("encode ended room: {error}")),
+            )
+            .bind(
+                serde_json::to_string(&RoomSettings::defaults("Ended"))
+                    .unwrap_or_else(|error| panic!("encode ended settings: {error}")),
+            )
+            .execute(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("insert ended room: {error}"));
         let second_membership = Participant {
             room_id: "second".to_owned(),
             participant_id: principal.participant_id.clone(),
@@ -494,7 +543,20 @@ mod tests {
             created_at: now,
             updated_at: now,
         };
-        for participant in [&second_membership, &agent] {
+        let ended_membership = Participant {
+            room_id: "ended".to_owned(),
+            participant_id: principal.participant_id.clone(),
+            display_name: "historical-name".to_owned(),
+            avatar_image_url: "/historical/avatar.png".to_owned(),
+            participant_type: "human".to_owned(),
+            status: ParticipantStatus::Left,
+            role: "host".to_owned(),
+            owner_id: String::new(),
+            muted: false,
+            created_at: now,
+            updated_at: now,
+        };
+        for participant in [&second_membership, &agent, &ended_membership] {
             sqlx::query(
                 "INSERT INTO participants(room_id, participant_id, participant_json) VALUES (?, ?, ?)",
             )
@@ -508,6 +570,6 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("insert participant: {error}"));
         }
-        agent
+        (agent, ended_membership)
     }
 }

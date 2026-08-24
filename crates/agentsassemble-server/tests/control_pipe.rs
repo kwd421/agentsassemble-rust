@@ -150,7 +150,11 @@ async fn owned_control_pipe_issues_proof_bound_ticket_without_http_secret() {
     let created = reqwest::Client::new()
         .post(format!("{}/api/rooms", server.address))
         .bearer_auth(ticket)
-        .json(&serde_json::json!({"room_id": "general", "label": "General"}))
+        .json(&serde_json::json!({
+            "request_id": "22000000-0000-4000-8000-000000000020",
+            "room_id": "general",
+            "label": "General"
+        }))
         .send()
         .await
         .unwrap_or_else(|error| panic!("create first room: {error}"));

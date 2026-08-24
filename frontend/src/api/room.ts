@@ -89,6 +89,7 @@ export interface ServerRoom {
 
 export interface ServerRoomsResponse {
   server_id: string;
+  authority_lineage_id: string;
   rooms: ServerRoom[];
 }
 
@@ -145,12 +146,6 @@ export interface RoomMember {
 export interface RoomFriendsResponse {
   friends: RoomFriend[];
   candidates: RoomFriend[];
-}
-
-export interface RoomMembersResponse {
-  meeting_id: string;
-  members: RoomMember[];
-  roles: Array<{ id: string; label: string; description: string }>;
 }
 
 export interface UserProfile {
@@ -473,6 +468,7 @@ export function fetchRoomFriends() {
 
 export function createRoom(roomId: string, label = "") {
   return postJsonServerOperator<{ status: string; server_id: string; room: ServerRoom }>("/api/rooms", {
+    request_id: globalThis.crypto.randomUUID(),
     room_id: roomId,
     label,
   });
@@ -493,11 +489,6 @@ export function deleteRoomFriend(friendId: string) {
   return deleteJson<RoomFriendsResponse & { deleted: { friend_id: string } }>(
     `/api/room-friends${queryString({ friend_id: friendId })}`
   );
-}
-
-export function fetchRoomMembers(meetingId: string, sessionToken = "") {
-  const url = `/api/room-members${queryString({ meeting_id: meetingId })}`;
-  return sessionToken ? fetchJsonWithToken<RoomMembersResponse>(url, sessionToken) : fetchJson<RoomMembersResponse>(url);
 }
 
 export type UserProfileIdentity = {

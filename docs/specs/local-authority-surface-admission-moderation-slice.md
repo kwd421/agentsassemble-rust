@@ -4,7 +4,7 @@ Status: active implementation design; Pro critical review approved 2026-08-25
 
 Comparison baseline: original
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; Rust
-`92e6bb44e3154f2c8d4d2f7b50761ebcf8e92bb7`.
+`6de2671848b951fb16dc13bb2dd2dfeb25c1e88f`.
 
 ## Definition
 
@@ -30,6 +30,10 @@ digest of the immutable initialization contract.
 `Complete` is verified from lineage, required canonical rows, and reference
 ownership. It is not a comparison against mutable initial display values, so a
 normal later profile edit cannot be overwritten by bootstrap retry.
+The immutable digest uses a versioned length-delimited encoding of schema
+revision, server/lineage/request/user/participant IDs, canonical marker creation
+and completion metadata, and every field of the initial profile. Mutable current
+profile revisions are not reinterpreted as bootstrap input.
 
 Bootstrap runs under `BEGIN IMMEDIATE`. Marker and product rows transition in one
 writer transaction. An exact request replay returns its stored result; a different
@@ -37,6 +41,10 @@ concurrent request receives a typed conflict. Startup recovery validates only a
 positive allowlist of bootstrap-owned rows and resolves interrupted initialization
 to `Complete` or explicit `repair_required`. It never seeds, repairs, or
 reinterprets data through a fallback.
+`Empty` additionally requires every product table in the schema owner's inventory
+to contain no rows. A gate keeps that inventory equal to every current
+non-infrastructure table, so a partial room, event, reservation, budget, result,
+attachment, profile, or session cannot be absorbed into a new authority.
 
 Room and server-operator tickets require a verified `Complete` marker. `Complete`
 with zero rooms is normal. The real room directory and create/join flow owns the
@@ -44,6 +52,12 @@ first room; startup does not fabricate `general`. Tauri owns its local bootstrap
 controller and `HostProductSurface`. The socket validated for bootstrap is the
 same canonical authority socket handed to Core, not a probe closed before a second
 owner is opened.
+
+The directory response carries both `server_id` and `authority_lineage_id` and
+is closed-schema validated before zero rooms can be accepted. Room creation binds
+one UUID request ID and canonical payload hash to the server operator in the same
+transaction as room/settings/membership/event state. Only exact replay succeeds;
+room creation never doubles as rename, reopen, or membership restoration.
 
 The canonical local human profile is server-wide and therefore remains readable,
 editable, and avatar-capable before the first room exists. A fresh one-use

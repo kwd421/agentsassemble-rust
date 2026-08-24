@@ -117,7 +117,6 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     "disconnected"
   );
   const [lastError, setLastError] = useState<Error | null>(null);
-  const [membershipRevision, setMembershipRevision] = useState(0);
   const [acceptedProjectionScope, setAcceptedProjectionScope] = useState("");
   const acceptedProjectionScopeRef = useRef("");
   const acceptedSocketRef = useRef<RoomSocketHandle | null>(null);
@@ -215,7 +214,6 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
         ["participant_joined", "participant_updated", "participant_left", "participant_kicked"].includes(event.type)
       )
     ) {
-      setMembershipRevision((previous) => previous + 1);
     }
     if (incoming.some((event) => event.type.startsWith("provider_request_"))) {
       setProviderRequestsByRoom((previous) => ({
@@ -347,7 +345,6 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
           setProgressByRoom((previous) => ({ ...previous, [roomId]: null }));
           setPluginEnvelopesByRoom((previous) => ({ ...previous, [roomId]: [] }));
         }
-        setMembershipRevision((previous) => previous + 1);
         setLastError((previous) =>
           previous instanceof RoomSocketSayError &&
           previous.category === "plugin_event_gap"
@@ -542,7 +539,6 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
             roomId
           ),
         }));
-        setMembershipRevision((previous) => previous + 1);
       }
       if (updatedSession?.session_id) {
         setSessionsByRoom((previous) => ({
@@ -575,7 +571,6 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
           (current) => current.participant_id !== participantId
         ),
       }));
-      setMembershipRevision((previous) => previous + 1);
     },
     [requireCurrentProjectionSocket, roomId]
   );
@@ -619,7 +614,6 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
         ...previous,
         [roomId]: upsertRoomParticipants(previous[roomId] || [], [participant], roomId),
       }));
-      setMembershipRevision((previous) => previous + 1);
     },
     [requireCurrentProjectionSocket, roomId]
   );
@@ -767,7 +761,6 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
             message: lastError.message,
           }
         : null,
-    membershipRevision: projectionIsCurrent ? membershipRevision : 0,
     events,
     timelineEvents,
     participants,

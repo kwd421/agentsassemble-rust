@@ -381,7 +381,11 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("bootstrap fixture identity: {error}"));
         store
-            .create_room_for_local_operator("general", "General")
+            .create_room_for_local_operator(
+                "20000000-0000-4000-8000-000000000009",
+                "general",
+                "General",
+            )
             .await
             .unwrap_or_else(|error| panic!("create fixture room: {error}"));
         let principal = AuthenticatedPrincipal {
