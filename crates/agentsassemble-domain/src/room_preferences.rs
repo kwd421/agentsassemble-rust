@@ -88,14 +88,23 @@ impl RoomUserPreferences {
     ///
     /// A supplied `channel_settings` field replaces the complete map rather than
     /// merging individual channel entries.
-    #[must_use]
-    pub fn apply_patch(&self, patch: RoomUserPreferencesPatch) -> Self {
-        Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when a directly constructed patch would violate the
+    /// canonical channel or cursor contract.
+    pub fn apply_patch(
+        &self,
+        patch: RoomUserPreferencesPatch,
+    ) -> Result<Self, RoomPreferencesError> {
+        let updated = Self {
             notifications: patch.notifications.unwrap_or(self.notifications),
             channel_settings: patch
                 .channel_settings
                 .unwrap_or_else(|| self.channel_settings.clone()),
-        }
+        };
+        validate_channel_settings(&updated.channel_settings)?;
+        Ok(updated)
     }
 }
 
@@ -151,38 +160,57 @@ where
 fn canonical_channel_settings(
     raw: BTreeMap<String, RawChannelPreference>,
 ) -> Result<BTreeMap<String, ChannelPreference>, RoomPreferencesError> {
-    if raw.len() > MAX_PREFERENCE_CHANNELS {
+    let canonical = raw
+        .into_iter()
+        .map(|(channel_id, preference)| {
+            canonical_channel_preference(preference).map(|preference| (channel_id, preference))
+        })
+        .collect::<Result<BTreeMap<_, _>, _>>()?;
+    validate_channel_settings(&canonical)?;
+    Ok(canonical)
+}
+
+fn validate_channel_settings(
+    channel_settings: &BTreeMap<String, ChannelPreference>,
+) -> Result<(), RoomPreferencesError> {
+    if channel_settings.len() > MAX_PREFERENCE_CHANNELS {
         return Err(invalid(format!(
             "channel_settings cannot contain more than {MAX_PREFERENCE_CHANNELS} entries."
         )));
     }
-    raw.into_iter()
-        .map(|(channel_id, preference)| {
-            if !supported_channel_id(&channel_id) {
+    channel_settings
+        .iter()
+        .try_for_each(|(channel_id, preference)| {
+            if !supported_channel_id(channel_id) {
                 return Err(invalid(format!(
                     "Unsupported preference channel id: {channel_id}."
                 )));
             }
-            Ok((channel_id, canonical_channel_preference(preference)?))
+            validate_channel_preference(preference)
         })
-        .collect()
 }
 
 fn canonical_channel_preference(
     raw: RawChannelPreference,
 ) -> Result<ChannelPreference, RoomPreferencesError> {
-    if raw.last_read_at.chars().count() > READ_CURSOR_LIMIT
-        || raw
+    let canonical = ChannelPreference {
+        notifications: raw.notifications,
+        last_read_at: raw.last_read_at,
+    };
+    validate_channel_preference(&canonical)?;
+    Ok(canonical)
+}
+
+fn validate_channel_preference(preference: &ChannelPreference) -> Result<(), RoomPreferencesError> {
+    if preference.last_read_at.chars().count() > READ_CURSOR_LIMIT
+        || preference
             .last_read_at
             .chars()
             .any(|character| matches!(character, '\r' | '\n' | '\t'))
     {
         return Err(invalid("Read cursor is not canonical."));
     }
-    Ok(ChannelPreference {
-        notifications: raw.notifications,
-        last_read_at: raw.last_read_at,
-    })
+    Ok(())
 }
 
 fn supported_channel_id(value: &str) -> bool {
@@ -319,7 +347,9 @@ mod tests {
             }
         }))
         .unwrap_or_else(|error| panic!("parse preference patch: {error}"));
-        let updated = current.apply_patch(patch);
+        let updated = current
+            .apply_patch(patch)
+            .unwrap_or_else(|error| panic!("apply preference patch: {error}"));
         assert_eq!(updated.notifications, RoomNotificationMode::Mentions);
         assert_eq!(updated.channel_settings.len(), 1);
         assert_eq!(

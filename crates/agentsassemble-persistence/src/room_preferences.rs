@@ -44,7 +44,13 @@ impl SqliteStore {
         let mut transaction = self.pool.begin().await?;
         resolve_room_user_identity(&mut transaction, room_id, user_id, participant_id).await?;
         let current = load_room_preferences(&mut transaction, user_id, room_id).await?;
-        let preferences = current.apply_patch(patch);
+        let preferences =
+            current
+                .apply_patch(patch)
+                .map_err(|error| PersistenceError::CommandRejected {
+                    code: error.code,
+                    message: error.message,
+                })?;
         sqlx::query(
             "INSERT INTO room_user_preferences(user_id, room_id, preferences_json) VALUES (?, ?, ?) ON CONFLICT(user_id, room_id) DO UPDATE SET preferences_json = excluded.preferences_json",
         )
@@ -105,9 +111,11 @@ async fn load_room_settings(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use agentsassemble_domain::{
-        LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, Participant, RoomNotificationMode,
-        RoomUserPreferencesPatch,
+        ChannelNotificationMode, ChannelPreference, LOCAL_OPERATOR_PARTICIPANT_ID,
+        LOCAL_OPERATOR_USER_ID, Participant, RoomNotificationMode, RoomUserPreferencesPatch,
     };
     use serde_json::json;
 
@@ -188,6 +196,44 @@ mod tests {
                 .await,
             Err(PersistenceError::Json(_))
         ));
+    }
+
+    #[tokio::test]
+    async fn directly_constructed_invalid_patch_cannot_create_stored_state() {
+        let store = fixture().await;
+        let invalid_patch = RoomUserPreferencesPatch {
+            notifications: None,
+            channel_settings: Some(BTreeMap::from([(
+                "unsupported".to_owned(),
+                ChannelPreference {
+                    notifications: ChannelNotificationMode::Default,
+                    last_read_at: "cursor".to_owned(),
+                },
+            )])),
+        };
+
+        assert!(matches!(
+            store
+                .update_room_preferences(
+                    "general",
+                    LOCAL_OPERATOR_USER_ID,
+                    LOCAL_OPERATOR_PARTICIPANT_ID,
+                    invalid_patch,
+                )
+                .await,
+            Err(PersistenceError::CommandRejected {
+                code: "room_preferences_invalid",
+                ..
+            })
+        ));
+        let stored = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM room_user_preferences WHERE user_id = ? AND room_id = 'general'",
+        )
+        .bind(LOCAL_OPERATOR_USER_ID)
+        .fetch_one(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("count preference rows: {error}"));
+        assert_eq!(stored, 0);
     }
 
     async fn fixture() -> SqliteStore {
