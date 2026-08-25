@@ -55,4 +55,14 @@ describe("desktop central registration bridge", () => {
     expect(headers.get("Authorization")).toBe(`Bearer ${"a".repeat(64)}`);
     expect(headers.get("Content-Type")).toBe("application/json");
   });
+
+  it("rejects a non-POST method before requesting native authority", async () => {
+    const invoke = vi.fn();
+    Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
+
+    await expect(
+      fetchDesktopCentralRegistration({ method: "GET" })
+    ).rejects.toThrow("POST");
+    expect(invoke).not.toHaveBeenCalled();
+  });
 });
