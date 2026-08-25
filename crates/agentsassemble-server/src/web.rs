@@ -20,7 +20,7 @@ use futures_util::StreamExt;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use thiserror::Error;
-use tokio::{net::TcpListener, sync::Semaphore};
+use tokio::{net::TcpListener, sync::Semaphore, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 use tower_http::{
     services::{ServeDir, ServeFile},
@@ -50,8 +50,8 @@ const SOCKET_IDLE_TIMEOUT: Duration = Duration::from_mins(5);
 pub enum ServeError {
     #[error("server I/O failed: {0}")]
     Io(#[from] std::io::Error),
-    #[error("provider discovery task failed: {0}")]
-    ProviderDiscovery(#[from] tokio::task::JoinError),
+    #[error("runtime reconciliation task failed: {0}")]
+    RuntimeReconciliationTask(#[from] tokio::task::JoinError),
     #[error("room runtime shutdown failed: {0}")]
     RoomShutdown(#[from] RoomShutdownError),
     #[error("runtime reconciliation failed: {0}")]
@@ -133,7 +133,7 @@ pub async fn serve(
     let connection_shutdown = state.shutdown.clone();
     let http_admission = Arc::new(Semaphore::new(MAX_HTTP_CONNECTIONS));
     let rejected_connections = RejectionCounter::default();
-    connections.spawn(watch_runtime_reconciliation(
+    let reconciliation_owner = tokio::spawn(watch_runtime_reconciliation(
         state.store.clone(),
         state.provider_adapter.clone(),
         rooms.clone(),
@@ -175,11 +175,25 @@ pub async fn serve(
     if rejected > 0 {
         tracing::warn!(rejected, "HTTP overload connections were rejected");
     }
+    drain_reconciliation_owner(reconciliation_owner).await?;
     let room_shutdown = rooms.shutdown().await;
     let provider_shutdown = provider_catalog.shutdown().await;
     room_shutdown?;
     provider_shutdown?;
     result.map_err(ServeError::Io)
+}
+
+async fn drain_reconciliation_owner(
+    mut owner: JoinHandle<()>,
+) -> Result<(), tokio::task::JoinError> {
+    if let Ok(result) = tokio::time::timeout(TRACKED_SHUTDOWN_TIMEOUT, &mut owner).await {
+        result
+    } else {
+        tracing::warn!(
+            "runtime reconciliation exceeded the shutdown deadline; waiting for exact custody to drain"
+        );
+        owner.await
+    }
 }
 
 async fn health() -> Json<Value> {
