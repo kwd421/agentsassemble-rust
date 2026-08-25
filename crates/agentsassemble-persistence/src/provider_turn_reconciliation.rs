@@ -47,6 +47,50 @@ pub struct ProviderTurnReconciliationPage {
 }
 
 impl SqliteStore {
+    /// Loads the one blocking provider turn that owns a session's current runtime authority.
+    ///
+    /// # Errors
+    ///
+    /// Returns malformed or conflicting durable provider-turn authority as a failure.
+    pub async fn load_active_provider_turn_reconciliation_candidate(
+        &self,
+        room_id: &str,
+        session_id: &str,
+    ) -> Result<Option<ProviderTurnReconciliationCandidate>, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        let generations = sqlx::query_scalar::<_, i64>(
+            "SELECT turn_generation FROM provider_turn_executions \
+             WHERE room_id = ? AND session_id = ? \
+             AND phase IN ('assigned', 'start_dispatching', 'running', 'interrupt_pending', \
+               'quiescing', 'start_ambiguous', 'interrupt_ambiguous', 'recovery_required') \
+             ORDER BY turn_generation DESC LIMIT 2",
+        )
+        .bind(room_id)
+        .bind(session_id)
+        .fetch_all(&mut *transaction)
+        .await?;
+        let Some(generation) = generations.first().copied() else {
+            transaction.commit().await?;
+            return Ok(None);
+        };
+        if generations.len() != 1 {
+            return Err(invalid_reconciliation());
+        }
+        let generation = u64::try_from(generation).map_err(|_| invalid_reconciliation())?;
+        let execution =
+            load_execution_in(&mut transaction, room_id, session_id, generation).await?;
+        let session = load_session(&mut transaction, room_id, session_id).await?;
+        validate_candidate(&session, &execution)?;
+        let effect =
+            load_optional_effect_in(&mut transaction, room_id, session_id, generation).await?;
+        transaction.commit().await?;
+        Ok(Some(ProviderTurnReconciliationCandidate {
+            session,
+            execution,
+            effect,
+        }))
+    }
+
     /// Scans one bounded page of blocking provider-turn executions before admission.
     ///
     /// # Errors

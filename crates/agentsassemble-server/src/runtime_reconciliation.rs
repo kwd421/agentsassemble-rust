@@ -276,40 +276,49 @@ async fn commit_abandoned_pre_effect(
     }
 }
 
-pub(crate) async fn checkpoint_confirmed_shutdowns(
+pub(crate) async fn checkpoint_confirmed_shutdown(
     store: &SqliteStore,
-    gone: &[ProviderRuntimeGone],
+    stopped: &ProviderRuntimeGone,
 ) -> Result<(), PersistenceError> {
-    if gone.is_empty() {
-        return Ok(());
-    }
-    let candidates = store.load_runtime_reconciliation_candidates().await?;
-    for stopped in gone {
-        let Some(candidate) = candidates.iter().find(|candidate| {
-            candidate.session.public.room_id == stopped.room_id
-                && candidate.session.public.session_id == stopped.session_id
-        }) else {
-            continue;
-        };
-        let durable_identity_is_empty = candidate.session.runtime_handle_id.is_empty()
-            && candidate.session.runtime_owner_id.is_empty()
-            && candidate.session.runtime_lease_token.is_empty();
-        let durable_identity_matches = candidate.session.runtime_handle_id
-            == stopped.runtime_handle_id
-            && candidate.session.runtime_owner_id == stopped.runtime_owner_id
-            && candidate.session.runtime_lease_token == stopped.runtime_lease_token;
-        if !durable_identity_is_empty && !durable_identity_matches {
-            return Err(PersistenceError::CommandRejected {
-                code: "stale_reconciliation_candidate",
-                message: "Confirmed shutdown no longer matches durable runtime authority."
-                    .to_owned(),
-            });
+    if let Some(candidate) = store
+        .load_active_provider_turn_reconciliation_candidate(&stopped.room_id, &stopped.session_id)
+        .await?
+    {
+        let execution = &candidate.execution;
+        if execution.runtime_handle_id != stopped.runtime_handle_id
+            || execution.runtime_owner_id != stopped.runtime_owner_id
+            || execution.runtime_lease_token != stopped.runtime_lease_token
+        {
+            return Err(stale_shutdown_observation());
         }
         store
-            .apply_runtime_reconciliation(candidate, &RuntimeReconciliationObservation::Gone)
+            .finalize_provider_turn_runtime_gone(&candidate)
             .await?;
+        return Ok(());
     }
+    let Some(candidate) = store
+        .load_runtime_reconciliation_candidate(&stopped.room_id, &stopped.session_id)
+        .await?
+    else {
+        return Err(stale_shutdown_observation());
+    };
+    if candidate.session.runtime_handle_id != stopped.runtime_handle_id
+        || candidate.session.runtime_owner_id != stopped.runtime_owner_id
+        || candidate.session.runtime_lease_token != stopped.runtime_lease_token
+    {
+        return Err(stale_shutdown_observation());
+    }
+    store
+        .apply_runtime_reconciliation(&candidate, &RuntimeReconciliationObservation::Gone)
+        .await?;
     Ok(())
+}
+
+fn stale_shutdown_observation() -> PersistenceError {
+    PersistenceError::CommandRejected {
+        code: "stale_reconciliation_candidate",
+        message: "Confirmed shutdown no longer matches durable runtime authority.".to_owned(),
+    }
 }
 
 #[cfg(test)]

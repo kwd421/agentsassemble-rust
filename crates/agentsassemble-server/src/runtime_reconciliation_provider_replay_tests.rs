@@ -325,3 +325,41 @@ async fn live_provider_scan_revisits_a_transient_lease_until_exact_gone() {
         .await
         .unwrap_or_else(|error| panic!("shutdown room runtime: {error}"));
 }
+
+#[tokio::test]
+async fn shutdown_terminalizes_a_blocking_turn_before_releasing_its_runtime_lease() {
+    let _serial = RUNTIME_RECONCILIATION_TEST_LOCK.lock().await;
+    let fixture = stage_live_scan_fixture().await;
+    let shutdown_rooms = RoomRuntime::with_provider_adapter(
+        fixture.store.clone(),
+        ProviderCatalogService::fixed(ProviderCatalog::default()),
+        fixture.lease_owner.clone(),
+    );
+
+    shutdown_rooms
+        .shutdown()
+        .await
+        .unwrap_or_else(|error| panic!("checkpoint blocking turn during shutdown: {error}"));
+    assert_eq!(
+        fixture
+            .store
+            .provider_turn_execution("general", &fixture.session_id, fixture.turn_generation)
+            .await
+            .unwrap_or_else(|error| panic!("read shutdown-finalized execution: {error}"))
+            .phase,
+        ProviderTurnExecutionPhase::Failed
+    );
+    assert!(
+        fixture
+            .store
+            .load_active_provider_turn_reconciliation_candidate("general", &fixture.session_id)
+            .await
+            .unwrap_or_else(|error| panic!("reload blocking shutdown candidate: {error}"))
+            .is_none()
+    );
+    fixture
+        .rooms
+        .shutdown()
+        .await
+        .unwrap_or_else(|error| panic!("shutdown scan room runtime: {error}"));
+}
