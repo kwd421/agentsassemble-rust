@@ -4,8 +4,8 @@ use agentsassemble_persistence::{
     ProviderTurnEffectPhase, ProviderTurnInterruptEffect, ProviderTurnStartAuthority, SqliteStore,
 };
 use agentsassemble_provider::{
-    ProviderAdapter, ProviderAdapterError, ProviderRoomObservation, ProviderRoomToolIngress,
-    ProviderTurnCompleted, ProviderTurnOutcome, ProviderTurnRequest,
+    ProviderAdapter, ProviderAdapterError, ProviderExactTurnAuthority, ProviderRoomObservation,
+    ProviderRoomToolIngress, ProviderTurnCompleted, ProviderTurnOutcome, ProviderTurnRequest,
 };
 use futures_util::FutureExt;
 use std::panic::AssertUnwindSafe;
@@ -109,8 +109,6 @@ pub(crate) async fn commit_provider_result(
     provider_adapter: &ProviderAdapter,
     completed: ProviderTurnTaskResult,
 ) -> Result<AgentTurnCommit, PersistenceError> {
-    let room_id = &completed.assignment.session.public.room_id;
-    let session_id = &completed.assignment.session.public.session_id;
     let start_authority = completed.start_authority?;
     let Some(result) = completed.result else {
         return Err(PersistenceError::CommandUnresolved {
@@ -118,49 +116,72 @@ pub(crate) async fn commit_provider_result(
             message: "Provider turn start authorization remains unresolved.".to_owned(),
         });
     };
-    match result {
-        Ok(result) => match result.outcome {
-            ProviderTurnOutcome::Message {
-                ref content,
-                ref target_agent_id,
-            } => {
-                store
-                    .mark_provider_turn_running(&start_authority, &result.provider_turn_id)
-                    .await?;
-                store
-                    .complete_agent_turn(
-                        room_id,
-                        session_id,
-                        turn_authority(&start_authority, &result),
-                        content,
-                        target_agent_id,
-                    )
-                    .await
-            }
-            ProviderTurnOutcome::Declined { ref reason_code } => {
-                store
-                    .mark_provider_turn_running(&start_authority, &result.provider_turn_id)
-                    .await?;
-                store
-                    .decline_agent_turn(
-                        room_id,
-                        session_id,
-                        turn_authority(&start_authority, &result),
-                        reason_code,
-                    )
-                    .await
-            }
-        },
+    commit_exact_provider_result(store, provider_adapter, &start_authority, result).await
+}
+
+pub(crate) async fn commit_exact_provider_result(
+    store: &SqliteStore,
+    provider_adapter: &ProviderAdapter,
+    start: &ProviderTurnStartAuthority,
+    result: Result<ProviderTurnCompleted, ProviderAdapterError>,
+) -> Result<AgentTurnCommit, PersistenceError> {
+    let authority = exact_turn_authority(start);
+    let committed = match result {
+        Ok(result) => commit_completed_provider_result(store, start, &result).await,
         Err(error) => {
-            commit_provider_error(
-                store,
-                provider_adapter,
-                room_id,
-                session_id,
-                &start_authority,
-                error,
-            )
-            .await
+            return commit_provider_error(store, provider_adapter, start, error).await;
+        }
+    };
+    match committed {
+        Ok(commit) => {
+            provider_adapter.release_terminal_turn(&authority).await;
+            Ok(commit)
+        }
+        Err(error) => {
+            let interrupt_phase = exact_interrupt_phase(store, start).await?;
+            if interrupt_phase.is_some() {
+                if interrupt_phase == Some(ProviderTurnEffectPhase::Finalized) {
+                    provider_adapter.release_terminal_turn(&authority).await;
+                }
+                return Ok(empty_turn_commit());
+            }
+            Err(error)
+        }
+    }
+}
+
+async fn commit_completed_provider_result(
+    store: &SqliteStore,
+    start: &ProviderTurnStartAuthority,
+    result: &ProviderTurnCompleted,
+) -> Result<AgentTurnCommit, PersistenceError> {
+    store
+        .mark_provider_turn_running(start, &result.provider_turn_id)
+        .await?;
+    match &result.outcome {
+        ProviderTurnOutcome::Message {
+            content,
+            target_agent_id,
+        } => {
+            store
+                .complete_agent_turn(
+                    &start.room_id,
+                    &start.session_id,
+                    turn_authority(start, result),
+                    content,
+                    target_agent_id,
+                )
+                .await
+        }
+        ProviderTurnOutcome::Declined { reason_code } => {
+            store
+                .decline_agent_turn(
+                    &start.room_id,
+                    &start.session_id,
+                    turn_authority(start, result),
+                    reason_code,
+                )
+                .await
         }
     }
 }
@@ -168,24 +189,58 @@ pub(crate) async fn commit_provider_result(
 async fn commit_provider_error(
     store: &SqliteStore,
     provider_adapter: &ProviderAdapter,
-    room_id: &str,
-    session_id: &str,
     start: &ProviderTurnStartAuthority,
     error: ProviderAdapterError,
 ) -> Result<AgentTurnCommit, PersistenceError> {
+    let authority = exact_turn_authority(start);
+    if error.runtime_stopped {
+        match store
+            .provider_turn_interrupt_effect(
+                &start.room_id,
+                &start.session_id,
+                start.turn_generation,
+            )
+            .await
+        {
+            Ok(effect) if interrupt_effect_owns_result(start, &effect) => {
+                if effect.phase == ProviderTurnEffectPhase::Finalized {
+                    provider_adapter
+                        .release_confirmed_stop(
+                            &start.room_id,
+                            &start.session_id,
+                            &error.runtime_handle_id,
+                            &error.runtime_owner_id,
+                            &error.runtime_lease_token,
+                        )
+                        .await;
+                }
+                return Ok(empty_turn_commit());
+            }
+            Ok(_)
+            | Err(PersistenceError::CommandRejected {
+                code: "stale_provider_turn_effect",
+                ..
+            }) => {}
+            Err(persistence_error) => return Err(persistence_error),
+        }
+    }
     if error.code == "provider_turn_interrupted"
         && !error.effect_uncertain
         && !error.runtime_stopped
     {
         match store
-            .provider_turn_interrupt_effect(room_id, session_id, start.turn_generation)
+            .provider_turn_interrupt_effect(
+                &start.room_id,
+                &start.session_id,
+                start.turn_generation,
+            )
             .await
         {
             Ok(effect) if interrupt_effect_owns_result(start, &effect) => {
-                return Ok(AgentTurnCommit {
-                    events: Vec::new(),
-                    next_assignments: Vec::new(),
-                });
+                if effect.phase == ProviderTurnEffectPhase::Finalized {
+                    provider_adapter.release_terminal_turn(&authority).await;
+                }
+                return Ok(empty_turn_commit());
             }
             Ok(_)
             | Err(PersistenceError::CommandRejected {
@@ -209,11 +264,11 @@ async fn commit_provider_error(
     ));
     let commit = store
         .fail_agent_turn(
-            room_id,
-            session_id,
+            &start.room_id,
+            &start.session_id,
             ProviderTurnAuthority {
-                room_id,
-                session_id,
+                room_id: &start.room_id,
+                session_id: &start.session_id,
                 turn_id: &start.turn_id,
                 turn_generation: start.turn_generation,
                 execution_id: &start.execution_id,
@@ -232,15 +287,57 @@ async fn commit_provider_error(
     if error.runtime_stopped {
         provider_adapter
             .release_confirmed_stop(
-                room_id,
-                session_id,
+                &start.room_id,
+                &start.session_id,
                 &error.runtime_handle_id,
                 &error.runtime_owner_id,
                 &error.runtime_lease_token,
             )
             .await;
+    } else {
+        provider_adapter.release_terminal_turn(&authority).await;
     }
     Ok(commit)
+}
+
+async fn exact_interrupt_phase(
+    store: &SqliteStore,
+    start: &ProviderTurnStartAuthority,
+) -> Result<Option<ProviderTurnEffectPhase>, PersistenceError> {
+    match store
+        .provider_turn_interrupt_effect(&start.room_id, &start.session_id, start.turn_generation)
+        .await
+    {
+        Ok(effect) if interrupt_effect_owns_result(start, &effect) => Ok(Some(effect.phase)),
+        Ok(_)
+        | Err(PersistenceError::CommandRejected {
+            code: "stale_provider_turn_effect",
+            ..
+        }) => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
+pub(crate) fn exact_turn_authority(
+    start: &ProviderTurnStartAuthority,
+) -> ProviderExactTurnAuthority {
+    ProviderExactTurnAuthority {
+        room_id: start.room_id.clone(),
+        session_id: start.session_id.clone(),
+        execution_id: start.execution_id.clone(),
+        turn_id: start.turn_id.clone(),
+        turn_generation: start.turn_generation,
+        runtime_handle_id: start.runtime_handle_id.clone(),
+        runtime_owner_id: start.runtime_owner_id.clone(),
+        runtime_lease_token: start.runtime_lease_token.clone(),
+    }
+}
+
+fn empty_turn_commit() -> AgentTurnCommit {
+    AgentTurnCommit {
+        events: Vec::new(),
+        next_assignments: Vec::new(),
+    }
 }
 
 fn interrupt_effect_owns_result(
