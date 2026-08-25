@@ -52,7 +52,7 @@ async fn operator_directory_ticket_is_scope_separated_and_room_creation_is_canon
 async fn central_registration_is_one_use_signed_and_keeps_a_zero_room_authority() {
     let store = zero_room_fixture().await;
     let tickets = TicketStore::new(Duration::from_secs(30), 32);
-    let server = start(store, tickets.clone()).await;
+    let server = start_with_registration(store, tickets.clone()).await;
     let client = Client::new();
     let route = format!(
         "{}/api/central-directory/registration-proof",
@@ -60,6 +60,46 @@ async fn central_registration_is_one_use_signed_and_keeps_a_zero_room_authority(
     );
     verify_registration_admission(&client, &route, &tickets).await;
     verify_registration_and_zero_room(&client, &server, &route, &tickets).await;
+    server.stop().await;
+}
+
+#[tokio::test]
+async fn default_server_does_not_mount_or_advertise_central_registration() {
+    let store = zero_room_fixture().await;
+    let tickets = TicketStore::new(Duration::from_secs(30), 32);
+    let server = start(store, tickets.clone()).await;
+    let client = Client::new();
+    let registration_ticket = issue_registration_ticket(&tickets).await;
+    let response = client
+        .post(format!(
+            "{}/api/central-directory/registration-proof",
+            server.base_url
+        ))
+        .header("authorization", format!("Bearer {registration_ticket}"))
+        .json(&json!({"owner_person_id": "per_owner_12345678"}))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("request disabled registration route: {error}"));
+    assert_eq!(response.status(), reqwest::StatusCode::NOT_FOUND);
+
+    let directory_ticket = issue_operator_ticket(&tickets).await;
+    let directory: Value = client
+        .get(format!("{}/api/rooms", server.base_url))
+        .header("authorization", format!("Bearer {directory_ticket}"))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("request default server surface: {error}"))
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("decode default server surface: {error}"));
+    let routes = directory["server_product_surface"]["http_routes"]
+        .as_array()
+        .unwrap_or_else(|| panic!("default server product surface has no routes"));
+    assert!(
+        !routes
+            .iter()
+            .any(|surface| { surface["path"] == "/api/central-directory/registration-proof" })
+    );
     server.stop().await;
 }
 
@@ -414,6 +454,18 @@ async fn verify_created_room_socket(
 }
 
 async fn start(store: SqliteStore, tickets: TicketStore) -> RunningServer {
+    start_server(store, tickets, false).await
+}
+
+async fn start_with_registration(store: SqliteStore, tickets: TicketStore) -> RunningServer {
+    start_server(store, tickets, true).await
+}
+
+async fn start_server(
+    store: SqliteStore,
+    tickets: TicketStore,
+    central_registration: bool,
+) -> RunningServer {
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
         .unwrap_or_else(|error| panic!("bind room directory runtime: {error}"));
@@ -422,7 +474,7 @@ async fn start(store: SqliteStore, tickets: TicketStore) -> RunningServer {
         .unwrap_or_else(|error| panic!("read room directory address: {error}"));
     let cancellation = CancellationToken::new();
     let server_cancellation = cancellation.clone();
-    let state = AppState::local(
+    let mut state = AppState::local(
         store,
         tickets,
         HostSecret::new(HOST_TOKEN)
@@ -431,6 +483,9 @@ async fn start(store: SqliteStore, tickets: TicketStore) -> RunningServer {
     )
     .await
     .unwrap_or_else(|error| panic!("build directory app state: {error}"));
+    if central_registration {
+        state = state.with_central_registration();
+    }
     let task = tokio::spawn(async move {
         serve(listener, state, server_cancellation)
             .await
