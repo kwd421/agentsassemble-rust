@@ -55,6 +55,16 @@ pub enum ParticipantStatus {
     Detached,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ParticipantRole {
+    Human,
+    Director,
+    Implementer,
+    Reviewer,
+    Agent,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct Participant {
@@ -64,7 +74,7 @@ pub struct Participant {
     pub avatar_image_url: String,
     pub participant_type: String,
     pub status: ParticipantStatus,
-    pub role: String,
+    pub role: ParticipantRole,
     pub owner_id: String,
     pub muted: bool,
     pub created_at: DateTime<Utc>,

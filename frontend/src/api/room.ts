@@ -1,4 +1,5 @@
 import type { RoomAppearance } from "../lib/roomAppearance";
+import type { ParticipantRole } from "../types/generated/ParticipantRole";
 import {
   isDesktopWebview,
   requestDesktopRuntimeTicket,
@@ -120,7 +121,7 @@ export interface RoomMember {
   participant_id: string;
   display_name: string;
   avatar_image_url?: string;
-  role: "human" | "director" | "implementer" | "reviewer" | "agent";
+  role: ParticipantRole;
   participant_type: ParticipantType;
   provider_kind: string;
   connection_kind: string;

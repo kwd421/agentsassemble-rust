@@ -294,6 +294,10 @@ mod tests {
         let created = &snapshot.events[1];
         assert_eq!(created.extra["participant"]["status"], "detached");
         assert_eq!(
+            created.extra["participant"]["owner_id"],
+            principal.participant_id
+        );
+        assert_eq!(
             created.extra["participant"]["participant_id"],
             session.agent_id
         );

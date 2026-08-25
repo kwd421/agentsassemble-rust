@@ -110,9 +110,22 @@ canonical public participant in `participant_joined`. The strict event contract
 upserts that projection directly, while role, mute, status, and ownership remain
 room-owned rather than being synthesized from Agent Session metadata.
 
-Participant roles are exactly `HumanLocal`, `AgentWorker`, `AgentObserver`,
-`ExternalHuman`, and `Service`. Role is collaboration/routing metadata and never
-operator authorization.
+Participant roles are exactly the five currently reachable product values:
+`human`, `director`, `implementer`, `reviewer`, and `agent`. The Rust domain uses
+one typed enum with those exact snake-case wire values. Historical aliases and
+normalizing fallbacks are not part of the Rust contract. Role is room-owned
+collaboration/routing metadata and never operator authorization; human profiles,
+Agent Sessions, and presentation inference cannot overwrite it.
+
+`participant.role.update` requires freshly resolved `room.manage` authority and
+atomically commits the complete participant projection, one
+`participant_updated` event, and the replay result. The copied desktop and mobile
+member surfaces consume that canonical participant field directly. Agent-name
+inference is presentation-only and may run only when no room participant exists.
+Participant kind and ownership remain independent: role changes cannot move a human
+into an Agent Session group or turn an Agent Session into a person, and a locally
+created Agent Session records the authenticated owning participant ID used by the
+roster.
 
 ## Connection, raw ingress, and mutation admission
 
@@ -337,13 +350,14 @@ ends in runtime-gone. If neither can be proved, the effect remains fail-closed a
 the provider mute capability is absent. Reachable parity providers implement the
 verified control contract before advertising mute.
 
-Before process-wide admission proceeds, lifecycle recovery uses clean schema 22. Its
+Before process-wide admission proceeds, lifecycle recovery uses clean schema 23. Its
 private runtime identity is one indivisible handle/owner/lease-token tuple. Runtime-v5
 cross-binds the launch token with the hashed OS boot identity; an old-boot absence proof
 is accepted only when every available durable and lease witness names that same boot and
 launch generation. macOS uses immutable `kern.bootsessionuuid` through the maintained
 safe `sysctl` boundary. Missing, malformed, substituted, or unknown evidence remains
-`Ambiguous`; schema 21 is rejected without conversion or compatibility behavior.
+`Ambiguous`; schema 22 and every other non-current schema are rejected without
+conversion or compatibility behavior.
 
 `InterruptIssuedWaitingTerminal` is never finalized from issue state alone. Exact
 request quiescence, exact runtime gone, or exact-generation provider terminal

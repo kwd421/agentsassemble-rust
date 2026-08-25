@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
 use agentsassemble_domain::{
-    DurableAgentSession, Participant, ParticipantStatus, QueuedRoomInput, Room, RoomEvent,
-    RoomInputDeliveryKind, RoomSettings, has_visible_text,
+    DurableAgentSession, Participant, ParticipantRole, ParticipantStatus, QueuedRoomInput, Room,
+    RoomEvent, RoomInputDeliveryKind, RoomSettings, has_visible_text,
 };
 use chrono::Utc;
 use serde_json::Value;
@@ -165,11 +165,11 @@ async fn ordered_targets(
         if event.actor.participant_type == "agent" {
             let actor =
                 load_participant(transaction, &event.room_id, &event.actor.participant_id).await?;
-            if actor.role != "director" {
+            if actor.role != ParticipantRole::Director {
                 let directors = candidates
                     .iter()
                     .copied()
-                    .filter(|(_, participant)| participant.role == "director")
+                    .filter(|(_, participant)| participant.role == ParticipantRole::Director)
                     .collect::<Vec<_>>();
                 if !directors.is_empty() {
                     candidates = directors;

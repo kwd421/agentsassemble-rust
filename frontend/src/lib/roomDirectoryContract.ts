@@ -216,7 +216,7 @@ function validateServerProductSurface(value: unknown): ServerProductSurface {
     ["revision", "digest", "http_routes", "websocket_streams", "websocket_actions"],
     "서버 제품 표면"
   );
-  if (surface.revision !== 1 || !/^[0-9a-f]{64}$/.test(String(surface.digest))) {
+  if (surface.revision !== 2 || !/^[0-9a-f]{64}$/.test(String(surface.digest))) {
     throw new Error("서버 제품 표면 revision 또는 digest가 올바르지 않습니다.");
   }
   if (!Array.isArray(surface.http_routes)) {
@@ -245,6 +245,7 @@ function validateServerProductSurface(value: unknown): ServerProductSurface {
         typeof action !== "string" ||
         !new Set([
           "message.send",
+          "participant.role.update",
           "room.settings.update",
           "room.random.roll",
           "room.random.choose",

@@ -150,6 +150,110 @@ describe("MemberList component wiring", () => {
     expect(onRoleChange).toHaveBeenCalledWith("agent-1", "reviewer");
   });
 
+  it("renders room-owned roles without profile or Agent Session overrides", () => {
+    const members: RoomMember[] = [
+      {
+        meeting_id: "room-1",
+        participant_id: "operator-local",
+        display_name: "Host",
+        role: "director",
+        participant_type: "human",
+        provider_kind: "",
+        connection_kind: "browser",
+        status: "joined",
+        source: "room",
+        created_at: "",
+        updated_at: "",
+      },
+      {
+        meeting_id: "room-1",
+        participant_id: "agent-1",
+        display_name: "Canonical Agent",
+        role: "reviewer",
+        participant_type: "local",
+        provider_kind: "codex",
+        connection_kind: "agent_session",
+        status: "joined",
+        source: "agent_session",
+        created_at: "",
+        updated_at: "",
+      },
+    ];
+    render(
+      <MemberList
+        agents={[{ ...AGENT, display_name: "Implementation Coder" }]}
+        members={members}
+        viewerParticipantId="operator-local"
+        roomId="room-1"
+        roomName="Room One"
+        canEditRoles
+      />
+    );
+
+    expect(
+      (screen.getByRole("combobox", { name: "Host 역할" }) as HTMLSelectElement).value
+    ).toBe("director");
+    expect(
+      (screen.getByRole("combobox", {
+        name: "Canonical Agent 역할",
+      }) as HTMLSelectElement).value
+    ).toBe("reviewer");
+    expect(screen.getByText("Host").closest(".dc-owner-agent-list")).toBeNull();
+    expect(
+      screen.getByText("Canonical Agent").closest(".dc-owner-agent-list")
+    ).not.toBeNull();
+  });
+
+  it("keeps participant kind independent when roles cross presentation defaults", () => {
+    const members: RoomMember[] = [
+      {
+        meeting_id: "room-1",
+        participant_id: "operator-local",
+        display_name: "Human Reviewer",
+        role: "reviewer",
+        participant_type: "human",
+        provider_kind: "",
+        connection_kind: "browser",
+        status: "joined",
+        source: "",
+        created_at: "",
+        updated_at: "",
+      },
+      {
+        meeting_id: "room-1",
+        participant_id: "agent-1",
+        display_name: "Agent Human Role",
+        role: "human",
+        participant_type: "local",
+        provider_kind: "codex",
+        connection_kind: "agent_session",
+        owner_id: "operator-local",
+        status: "joined",
+        source: "",
+        created_at: "",
+        updated_at: "",
+      },
+    ];
+
+    render(
+      <MemberList
+        agents={[AGENT]}
+        members={members}
+        viewerParticipantId="operator-local"
+        roomId="room-1"
+        roomName="Room One"
+        canEditRoles
+      />
+    );
+
+    expect(
+      screen.getByText("Human Reviewer").closest(".dc-owner-agent-list")
+    ).toBeNull();
+    expect(
+      screen.getByText("Agent Human Role").closest(".dc-owner-agent-list")
+    ).not.toBeNull();
+  });
+
   it("keeps a session-only member open and retryable when moderation fails", async () => {
     const onParticipantKick = vi.fn().mockRejectedValue(
       new Error("moderation service unavailable")
@@ -201,7 +305,7 @@ describe("MemberList component wiring", () => {
         meeting_id: "room-1",
         participant_id: "operator-local",
         display_name: "호스트",
-        role: "host" as RoomMember["role"],
+        role: "human",
         participant_type: "human",
         provider_kind: "",
         connection_kind: "browser",
@@ -230,11 +334,6 @@ describe("MemberList component wiring", () => {
         agents={[AGENT]}
         members={members}
         viewerParticipantId="guest-1"
-        roleOverrides={{
-          "operator-local": "host",
-          "guest-1": "human",
-          "agent-1": "agent",
-        }}
         roomId="room-1"
         roomName="Room One"
         canEditRoles={false}

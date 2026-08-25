@@ -8,7 +8,11 @@ export type MemberOwnerGroup = {
 };
 
 function isAgentEntry(entry: MemberEntry) {
-  return Boolean(entry.agent || entry.agentSession) || entry.role !== "human";
+  return Boolean(
+    entry.agent ||
+      entry.agentSession ||
+      (entry.member && entry.member.participant_type !== "human")
+  );
 }
 
 function matchesQuery(entry: MemberEntry, needle: string) {

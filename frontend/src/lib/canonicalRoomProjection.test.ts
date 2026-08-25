@@ -47,4 +47,41 @@ describe("canonical participant event projection", () => {
     const malformed = { ...joinedEvent(), participant: undefined } as RoomEvent;
     expect(() => applyParticipantEvents([], [malformed])).toThrow(/참가자 투영/);
   });
+
+  it("rejects role aliases instead of inventing frontend compatibility", () => {
+    const original = joinedEvent() as RoomEvent & {
+      participant: Record<string, unknown>;
+    };
+    const malformed = {
+      ...original,
+      participant: { ...original.participant, role: "host" },
+    } as RoomEvent;
+    expect(() => applyParticipantEvents([], [malformed])).toThrow(/참가자 투영/);
+  });
+
+  it("derives presentation source from participant kind rather than room role", () => {
+    const original = joinedEvent() as RoomEvent & {
+      participant: Record<string, unknown>;
+    };
+    const humanDirector = {
+      ...original,
+      participant_id: "human-one",
+      participant_type: "human",
+      participant: {
+        ...original.participant,
+        participant_id: "human-one",
+        participant_type: "human",
+        role: "director",
+      },
+    } as RoomEvent;
+
+    expect(applyParticipantEvents([], [humanDirector])).toEqual([
+      expect.objectContaining({
+        participant_id: "human-one",
+        participant_type: "human",
+        role: "director",
+        source: "room",
+      }),
+    ]);
+  });
 });

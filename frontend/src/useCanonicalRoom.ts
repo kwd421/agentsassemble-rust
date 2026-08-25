@@ -30,13 +30,12 @@ import { isUnauthorizedApiError } from "./lib/apiErrors";
 import {
   applyParticipantEvents,
   agentSessionUpdatesFromEvents,
-    canonicalRoomProjectionScopeKey,
-    canonicalParticipantProfiles,
+  canonicalParticipantProfiles,
+  canonicalRoomProjectionScopeKey,
   EMPTY_CANONICAL_HISTORY,
   EMPTY_PROVIDER_CATALOG,
   mergeRoomEvents,
-  normalizeRoomParticipant,
-  participantIsActive,
+  normalizeActiveRoomParticipants,
   upsertAgentSessions,
   upsertRoomParticipants,
   type CanonicalRoomHistoryState,
@@ -292,6 +291,19 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
           currentSocket.resync?.();
           return false;
         }
+        let snapshotParticipants: RoomMember[];
+        try {
+          snapshotParticipants = normalizeActiveRoomParticipants(snapshot.participants || [], roomId);
+        } catch {
+          const error = new RoomSocketSayError(
+            "The server returned an invalid participant role; reconnecting.",
+            "participant_role_snapshot_invalid"
+          );
+          setLastError(error);
+          callbacksRef.current.onError?.(error);
+          currentSocket.resync?.();
+          return false;
+        }
         roomSettingsSeqRef.current = {
           ...roomSettingsSeqRef.current,
           [roomId]: Number(snapshot.last_seq || 0),
@@ -306,9 +318,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
         }));
         setParticipantsByRoom((previous) => ({
           ...previous,
-          [roomId]: (snapshot.participants || [])
-            .filter(participantIsActive)
-            .map((participant) => normalizeRoomParticipant(participant, roomId)),
+          [roomId]: snapshotParticipants,
         }));
         setSessionsByRoom((previous) => ({
           ...previous,

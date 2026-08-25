@@ -14,9 +14,9 @@ pub use identity::{stable_bundle_identity, stable_content_identity, stable_ident
 pub use model::{
     Actor, AgentSession, AgentSessionDraft, AuthenticatedPrincipal,
     CURRENT_RUNTIME_PROFILE_VERSION, CapabilitySet, ClientKind, DurableAgentSession, InviteScope,
-    LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, Participant, ParticipantStatus,
-    ProviderAvailability, ProviderCatalog, ProviderControl, ProviderControlOption, Room, RoomEvent,
-    RoomStatus, SnapshotMode,
+    LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, Participant, ParticipantRole,
+    ParticipantStatus, ProviderAvailability, ProviderCatalog, ProviderControl,
+    ProviderControlOption, Room, RoomEvent, RoomStatus, SnapshotMode,
 };
 pub use profile::{UserProfile, UserProfilePatch, avatar_attachment_id, canonical_avatar_url};
 pub use projection::{public_event_for_principal, public_value_for_principal};

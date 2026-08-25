@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use agentsassemble_domain::{
-    Actor, LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, Participant, ParticipantStatus,
-    Room, RoomEvent, RoomSettings, RoomStatus, canonical_payload_hash,
+    Actor, LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, Participant, ParticipantRole,
+    ParticipantStatus, Room, RoomEvent, RoomSettings, RoomStatus, canonical_payload_hash,
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -185,7 +185,7 @@ async fn create_room_in_transaction(
         avatar_image_url: profile.avatar_image_url,
         participant_type: "human".to_owned(),
         status: ParticipantStatus::Joined,
-        role: "host".to_owned(),
+        role: ParticipantRole::Human,
         owner_id: String::new(),
         muted: false,
         created_at: now,
@@ -316,7 +316,7 @@ fn invalid_room_state() -> PersistenceError {
 mod tests {
     use agentsassemble_domain::{
         AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope,
-        LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, UserProfilePatch,
+        LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, ParticipantRole, UserProfilePatch,
     };
 
     use crate::SqliteStore;
@@ -354,10 +354,10 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("read created membership: {error}"));
         assert_eq!(participant.display_name, "Directory Human");
-        assert_eq!(participant.role, "host");
+        assert_eq!(participant.role, ParticipantRole::Human);
 
         let mut changed_membership = participant;
-        changed_membership.role = "reviewer".to_owned();
+        changed_membership.role = ParticipantRole::Reviewer;
         changed_membership.muted = true;
         sqlx::query(
             "UPDATE participants SET participant_json = ? WHERE room_id = ? AND participant_id = ?",
@@ -416,7 +416,7 @@ mod tests {
             .participant("project-room", LOCAL_OPERATOR_PARTICIPANT_ID)
             .await
             .unwrap_or_else(|error| panic!("read preserved membership: {error}"));
-        assert_eq!(preserved.role, "reviewer");
+        assert_eq!(preserved.role, ParticipantRole::Reviewer);
         assert!(preserved.muted);
         let snapshot = store
             .snapshot("project-room", 0, 20)

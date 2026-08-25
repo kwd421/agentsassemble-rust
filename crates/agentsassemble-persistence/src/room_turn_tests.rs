@@ -1,7 +1,7 @@
 use agentsassemble_domain::{
     AuthenticatedPrincipal, CapabilitySet, ClientKind, DurableAgentSession, InviteScope,
-    LOCAL_OPERATOR_PARTICIPANT_ID, Participant, ParticipantStatus, QueuedRoomInput,
-    RoomInputDeliveryKind,
+    LOCAL_OPERATOR_PARTICIPANT_ID, Participant, ParticipantRole, ParticipantStatus,
+    QueuedRoomInput, RoomInputDeliveryKind,
 };
 use chrono::Utc;
 use serde_json::json;
@@ -423,7 +423,13 @@ async fn stopped_direct_target_keeps_every_message_and_assigns_only_the_visible_
 async fn final_body_mention_routes_to_the_named_agent() {
     let (store, principal, _directory) = fixture().await;
     let now = Utc::now();
-    let second_participant = participant(SECOND_AGENT_ID, "Flash", "agent", "agent", now);
+    let second_participant = participant(
+        SECOND_AGENT_ID,
+        "Flash",
+        "agent",
+        ParticipantRole::Agent,
+        now,
+    );
     let mut second_session = attached_session(now);
     SECOND_AGENT_ID.clone_into(&mut second_session.public.session_id);
     SECOND_AGENT_ID.clone_into(&mut second_session.public.participant_id);
@@ -516,7 +522,7 @@ async fn character_bound_defers_whole_messages_instead_of_advancing_past_them() 
 async fn undirected_agent_message_prefers_an_eligible_director() {
     let (store, _principal, _directory) = fixture().await;
     let now = Utc::now();
-    let mut director = participant(AGENT_ID, "Terra", "agent", "director", now);
+    let mut director = participant(AGENT_ID, "Terra", "agent", ParticipantRole::Director, now);
     director.updated_at = now;
     sqlx::query(
         "UPDATE participants SET participant_json = ? WHERE room_id = 'general' AND participant_id = ?",
@@ -530,7 +536,13 @@ async fn undirected_agent_message_prefers_an_eligible_director() {
     .await
     .unwrap_or_else(|error| panic!("promote director participant: {error}"));
 
-    let second_participant = participant(SECOND_AGENT_ID, "Flash", "agent", "agent", now);
+    let second_participant = participant(
+        SECOND_AGENT_ID,
+        "Flash",
+        "agent",
+        ParticipantRole::Agent,
+        now,
+    );
     let mut second_session = attached_session(now);
     SECOND_AGENT_ID.clone_into(&mut second_session.public.session_id);
     SECOND_AGENT_ID.clone_into(&mut second_session.public.participant_id);
@@ -538,7 +550,13 @@ async fn undirected_agent_message_prefers_an_eligible_director() {
     "provider-thread-2".clone_into(&mut second_session.provider_session_id);
     "owned-runtime-2".clone_into(&mut second_session.runtime_handle_id);
     insert_agent(&store, &second_participant, &second_session).await;
-    let speaker = participant(SPEAKER_AGENT_ID, "Worker", "agent", "agent", now);
+    let speaker = participant(
+        SPEAKER_AGENT_ID,
+        "Worker",
+        "agent",
+        ParticipantRole::Agent,
+        now,
+    );
     sqlx::query(
         "INSERT INTO participants(room_id, participant_id, participant_json) VALUES (?, ?, ?)",
     )
@@ -686,7 +704,7 @@ async fn fixture() -> (SqliteStore, AuthenticatedPrincipal, tempfile::TempDir) {
         )
         .await
         .unwrap_or_else(|error| panic!("create room: {error}"));
-    let agent = participant(AGENT_ID, "Terra", "agent", "agent", now);
+    let agent = participant(AGENT_ID, "Terra", "agent", ParticipantRole::Agent, now);
     let session = attached_session(now);
     sqlx::query(
         "INSERT INTO participants(room_id, participant_id, participant_json) VALUES (?, ?, ?)",
@@ -724,7 +742,7 @@ fn participant(
     id: &str,
     name: &str,
     participant_type: &str,
-    role: &str,
+    role: ParticipantRole,
     now: chrono::DateTime<Utc>,
 ) -> Participant {
     Participant {
@@ -734,7 +752,7 @@ fn participant(
         avatar_image_url: String::new(),
         participant_type: participant_type.to_owned(),
         status: ParticipantStatus::Joined,
-        role: role.to_owned(),
+        role,
         owner_id: "operator-local-user".to_owned(),
         muted: false,
         created_at: now,

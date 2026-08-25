@@ -96,7 +96,7 @@ function exactObject(
 function validateHostProductSurface(value: unknown): HostProductSurface {
   const surface = exactObject(value, ["revision", "digest", "commands"], "호스트 제품 표면");
   if (
-    surface.revision !== 1 ||
+    surface.revision !== 2 ||
     !/^[0-9a-f]{64}$/.test(String(surface.digest)) ||
     !Array.isArray(surface.commands)
   ) {
@@ -153,7 +153,7 @@ function validateDesktopBootstrapGrant(value: unknown): DesktopBootstrapGrant {
     !UUID_PATTERN.test(grant.authority_lineage_id) ||
     typeof grant.server_id !== "string" ||
     !UUID_PATTERN.test(grant.server_id) ||
-    grant.server_product_surface_revision !== 1 ||
+    grant.server_product_surface_revision !== 2 ||
     !/^[0-9a-f]{64}$/.test(String(grant.server_product_surface_digest)) ||
     typeof grant.deduplicated !== "boolean"
   ) {

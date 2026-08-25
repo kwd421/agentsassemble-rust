@@ -9,7 +9,7 @@ import {
 import { requestDesktopHostProductSurface } from "../lib/desktopBridge";
 
 const HOST_SURFACE = {
-  revision: 1,
+  revision: 2,
   digest: "1".repeat(64),
   commands: ["host_product_surface", "runtime_operator_ticket"],
 };

@@ -23,7 +23,6 @@ type RoomConnectionPanelProps = {
   members: RoomMember[];
   roomSessionToken?: string;
   viewerParticipantId?: string;
-  roleOverrides?: Record<string, string>;
   onRoleChange?: (memberId: string, role: RoleId) => void;
   guestLocked?: boolean;
   guestAiPacketPreview?: string;
@@ -66,7 +65,6 @@ export default function RoomConnectionPanel({
   members,
   roomSessionToken = "",
   viewerParticipantId = "operator-local",
-  roleOverrides,
   onRoleChange,
   guestLocked = false,
   guestAiPacketPreview = "",
@@ -151,7 +149,6 @@ export default function RoomConnectionPanel({
         viewerParticipantId={viewerParticipantId}
         roomId={room.id}
         roomName={room.label}
-        roleOverrides={roleOverrides}
         onRoleChange={onRoleChange}
         canEditRoles={Boolean(capabilities["room.manage"])}
         canModerate={Boolean(capabilities["participant.kick"] || capabilities["participant.mute"])}

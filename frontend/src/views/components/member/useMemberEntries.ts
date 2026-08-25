@@ -23,13 +23,12 @@ import {
   memberStatusLabel,
   ROLE_OPTIONS,
 } from "./memberHelpers";
-import type { MemberEntry, RoleId } from "./memberTypes";
+import type { MemberEntry } from "./memberTypes";
 
 type MemberEntriesOptions = {
   agents: LiveAgent[];
   members: RoomMember[];
   viewerParticipantId: string;
-  roleOverrides?: Record<string, string>;
   agentSessions: RoomAgentSession[];
   quotaViewer?: AgentQuotaVisibilityViewer;
   canEditRoles: boolean;
@@ -39,7 +38,6 @@ export function useMemberEntries({
   agents,
   members,
   viewerParticipantId,
-  roleOverrides,
   agentSessions,
   quotaViewer,
   canEditRoles,
@@ -48,8 +46,6 @@ export function useMemberEntries({
   contextBadges: ReturnType<typeof roomContextSummaryBadges>;
 } {
   const contextBadges = roomContextSummaryBadges(agents);
-  const effectiveRoleOverrides = (roleOverrides || {}) as Record<string, RoleId>;
-
   const entries = useMemo<MemberEntry[]>(() => {
     const memberById = new Map(members.map((member) => [member.participant_id, member]));
     const sessionByParticipantId = new Map(
@@ -65,9 +61,7 @@ export function useMemberEntries({
       displayName: viewerDisplayName,
       detail: "사람",
       statusLabel: viewerMember ? memberStatusLabel(viewerMember) : undefined,
-      role: viewerMember
-        ? memberRole(viewerMember, effectiveRoleOverrides[viewerEntryId])
-        : "human",
+      role: memberRole(viewerMember),
       owner: true,
       active: viewerMember ? memberActive(viewerMember) : true,
       muted: Boolean(viewerMember?.muted),
@@ -82,7 +76,7 @@ export function useMemberEntries({
       const member = memberById.get(agent.agent_id);
       const agentSession = sessionByParticipantId.get(agent.agent_id);
       const inferredRole = inferAgentRole(agent);
-      const role = effectiveRoleOverrides[agent.agent_id] || inferredRole;
+      const role = member ? memberRole(member) : inferredRole;
       const canViewQuotaForAgent = canViewAgentQuota(agent, quotaViewer);
       const ownerId = String(member?.owner_id || agent.owner_id || "").trim();
       const ownedByViewer = ownerId
@@ -165,7 +159,7 @@ export function useMemberEntries({
       )
       .map((member) => {
         const agentSession = sessionByParticipantId.get(member.participant_id);
-        const role = memberRole(member, effectiveRoleOverrides[member.participant_id]);
+        const role = memberRole(member);
         const typeMeta = participantTypeMeta(member.participant_type);
         const fullDetail = [
           typeMeta.label,
@@ -209,7 +203,7 @@ export function useMemberEntries({
           canViewQuota: false,
           ownedByViewer: Boolean(agentSession && !agentSession.external_owned),
           ownerId:
-            role === "human"
+            member.participant_type === "human"
               ? member.participant_id
               : String(member.owner_id || "").trim() || undefined,
           ownerDisplayName: String(
@@ -226,7 +220,6 @@ export function useMemberEntries({
     agentSessions,
     agents,
     canEditRoles,
-    effectiveRoleOverrides,
     members,
     quotaViewer,
     viewerParticipantId,

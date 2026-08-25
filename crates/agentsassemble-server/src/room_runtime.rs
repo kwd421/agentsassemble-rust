@@ -571,6 +571,17 @@ async fn execute_command(
             Ok(mutation) => CommandExecution::mutation(mutation),
             Err(error) => CommandExecution::transactional_failure(error),
         },
+        RoomAction::ParticipantRoleUpdate => match store
+            .execute_participant_role_update(
+                &command.principal,
+                &command.request_id,
+                &command.payload,
+            )
+            .await
+        {
+            Ok(outcome) => CommandExecution::success(outcome),
+            Err(error) => CommandExecution::transactional_failure(error),
+        },
     }
 }
 

@@ -2,7 +2,7 @@ use sqlx::Row;
 
 use crate::{PersistenceError, SqliteStore};
 
-pub(crate) const CURRENT_SCHEMA_VERSION: i64 = 22;
+pub(crate) const CURRENT_SCHEMA_VERSION: i64 = 23;
 
 impl SqliteStore {
     pub(crate) async fn validate_schema_version(&self) -> Result<(), PersistenceError> {

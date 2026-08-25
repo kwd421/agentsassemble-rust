@@ -1,7 +1,8 @@
 import type { LucideIcon } from "lucide-react";
 import type { LiveAgent, RoomAgentSession, RoomMember } from "../../../api";
+import type { ParticipantRole } from "../../../types/generated/ParticipantRole";
 
-export type RoleId = "human" | "director" | "implementer" | "reviewer" | "agent";
+export type RoleId = ParticipantRole;
 
 export type MemberEntry = {
   id: string;

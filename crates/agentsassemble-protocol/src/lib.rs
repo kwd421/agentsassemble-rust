@@ -9,7 +9,7 @@ use thiserror::Error;
 use ts_rs::TS;
 
 pub const PROTOCOL_VERSION: u32 = 1;
-pub const PRODUCT_SURFACE_REVISION: u32 = 1;
+pub const PRODUCT_SURFACE_REVISION: u32 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, TS)]
 #[serde(rename_all = "UPPERCASE")]
@@ -66,6 +66,8 @@ impl RoomStream {
 pub enum RoomAction {
     #[serde(rename = "message.send")]
     MessageSend,
+    #[serde(rename = "participant.role.update")]
+    ParticipantRoleUpdate,
     #[serde(rename = "room.settings.update")]
     RoomSettingsUpdate,
     #[serde(rename = "room.random.roll")]
@@ -85,13 +87,14 @@ pub enum RoomAction {
 }
 
 impl RoomAction {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::AgentConfigure,
         Self::AgentCreate,
         Self::AgentResume,
         Self::AgentStart,
         Self::AgentStop,
         Self::MessageSend,
+        Self::ParticipantRoleUpdate,
         Self::RoomRandomChoose,
         Self::RoomRandomRoll,
         Self::RoomSettingsUpdate,
@@ -101,6 +104,7 @@ impl RoomAction {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::MessageSend => "message.send",
+            Self::ParticipantRoleUpdate => "participant.role.update",
             Self::RoomSettingsUpdate => "room.settings.update",
             Self::RoomRandomRoll => "room.random.roll",
             Self::RoomRandomChoose => "room.random.choose",
@@ -549,6 +553,11 @@ mod tests {
         ])
         .unwrap_or_else(|error| panic!("build server surface: {error}"));
         assert_eq!(surface.http_routes[0].path, "/healthz");
+        assert!(
+            surface
+                .websocket_actions
+                .contains(&super::RoomAction::ParticipantRoleUpdate)
+        );
         assert_eq!(surface.digest.len(), 64);
         assert!(matches!(
             ServerProductSurface::from_http_routes(vec![

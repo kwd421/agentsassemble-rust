@@ -30,7 +30,6 @@ export default function MemberList({
   roomSessionToken = "",
   viewerParticipantId = "operator-local",
   roomName,
-  roleOverrides,
   onRoleChange,
   canEditRoles = true,
   onSessionActionComplete,
@@ -55,7 +54,6 @@ export default function MemberList({
   viewerParticipantId?: string;
   roomId: string;
   roomName: string;
-  roleOverrides?: Record<string, string>;
   onRoleChange?: (memberId: string, role: RoleId) => void | Promise<void>;
   canEditRoles?: boolean;
   onSessionActionComplete?: () => void;
@@ -91,7 +89,6 @@ export default function MemberList({
     agents,
     members,
     viewerParticipantId,
-    roleOverrides,
     agentSessions,
     quotaViewer,
     canEditRoles,

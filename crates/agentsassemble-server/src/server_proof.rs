@@ -212,7 +212,7 @@ mod tests {
             room_id: "general".to_owned(),
             principal_id: "operator".to_owned(),
             participant_id: "operator-local".to_owned(),
-            server_surface_revision: 1,
+            server_surface_revision: 2,
             server_surface_digest: "c".repeat(64),
             permissions_digest: permissions_digest(&CapabilitySet::local_operator(
                 ClientKind::Browser,

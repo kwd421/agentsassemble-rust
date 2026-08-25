@@ -4,6 +4,7 @@ import type {
   RoomSocketAuth,
 } from "../roomSocketClient";
 import { resolveDesktopRuntimeResource } from "./desktopBridge";
+import { isParticipantRole } from "./participantRole";
 import {
   agentCreationProjectionFromEvent,
   joinedParticipantFromEvent,
@@ -40,7 +41,7 @@ export type CanonicalParticipantProfile = {
 
 export function canonicalParticipantProfiles(
   sessions: RoomAgentSession[],
-  participants: RoomMember[]
+  participants: RoomMember[],
 ): Record<string, CanonicalParticipantProfile> {
   const profiles: Record<string, CanonicalParticipantProfile> = {};
   sessions.forEach((session) => {
@@ -70,27 +71,31 @@ export function canonicalParticipantProfiles(
 export function mergeRoomEvents(
   current: RoomEvent[],
   incoming: RoomEvent[],
-  replace: boolean
+  replace: boolean,
 ) {
-  const byId = new Map((replace ? [] : current).map((event) => [event.id, event]));
+  const byId = new Map(
+    (replace ? [] : current).map((event) => [event.id, event]),
+  );
   incoming.forEach((event) => {
     if (event.id) byId.set(event.id, event);
   });
   return [...byId.values()].sort(
-    (left, right) => Number(left.seq || 0) - Number(right.seq || 0)
+    (left, right) => Number(left.seq || 0) - Number(right.seq || 0),
   );
 }
 
 export function upsertAgentSessions(
   current: RoomAgentSession[],
-  incoming: RoomAgentSession[]
+  incoming: RoomAgentSession[],
 ) {
   const byId = new Map(current.map((session) => [session.session_id, session]));
   incoming.forEach((session) => byId.set(session.session_id, session));
   return [...byId.values()];
 }
 
-export function agentSessionUpdatesFromEvents(incoming: RoomEvent[]): RoomAgentSession[] {
+export function agentSessionUpdatesFromEvents(
+  incoming: RoomEvent[],
+): RoomAgentSession[] {
   return incoming.flatMap((event) => {
     if (event.type === "agent_session_state" && event.agent_session) {
       return [event.agent_session];
@@ -104,8 +109,11 @@ export function agentSessionUpdatesFromEvents(incoming: RoomEvent[]): RoomAgentS
 
 export function normalizeRoomParticipant(
   participant: RoomMember,
-  roomId: string
+  roomId: string,
 ): RoomMember {
+  if (!isParticipantRole(participant.role)) {
+    throw new Error("Room participant has an unsupported canonical role.");
+  }
   return {
     ...participant,
     meeting_id: participant.meeting_id || roomId,
@@ -113,10 +121,12 @@ export function normalizeRoomParticipant(
     connection_kind: participant.connection_kind || "",
     source:
       participant.source ||
-      (participant.role !== "human" ? "agent_session" : "room"),
+      (participant.participant_type === "human" ? "room" : "agent_session"),
     created_at: participant.created_at || "",
     updated_at: participant.updated_at || "",
-    avatar_image_url: resolveDesktopRuntimeResource(participant.avatar_image_url),
+    avatar_image_url: resolveDesktopRuntimeResource(
+      participant.avatar_image_url,
+    ),
   };
 }
 
@@ -124,24 +134,40 @@ export function participantIsActive(participant: RoomMember) {
   return !["left", "kicked"].includes(String(participant.status || ""));
 }
 
+export function normalizeActiveRoomParticipants(
+  participants: RoomMember[],
+  roomId: string,
+): RoomMember[] {
+  return participants
+    .filter(participantIsActive)
+    .map((participant) => normalizeRoomParticipant(participant, roomId));
+}
+
 export function upsertRoomParticipants(
   current: RoomMember[],
   incoming: RoomMember[],
-  roomId: string
+  roomId: string,
 ) {
-  const byId = new Map(current.map((participant) => [participant.participant_id, participant]));
+  const byId = new Map(
+    current.map((participant) => [participant.participant_id, participant]),
+  );
   incoming.forEach((participant) => {
     const existing = byId.get(participant.participant_id);
     byId.set(
       participant.participant_id,
-      normalizeRoomParticipant({ ...existing, ...participant }, roomId)
+      normalizeRoomParticipant({ ...existing, ...participant }, roomId),
     );
   });
   return [...byId.values()];
 }
 
-export function applyParticipantEvents(current: RoomMember[], incoming: RoomEvent[]) {
-  const byId = new Map(current.map((participant) => [participant.participant_id, participant]));
+export function applyParticipantEvents(
+  current: RoomMember[],
+  incoming: RoomEvent[],
+) {
+  const byId = new Map(
+    current.map((participant) => [participant.participant_id, participant]),
+  );
   let changed = false;
   for (const event of incoming) {
     const participantId = String(event.participant_id || "");
@@ -157,20 +183,31 @@ export function applyParticipantEvents(current: RoomMember[], incoming: RoomEven
       changed = true;
       continue;
     }
-    if (event.type === "participant_left" || event.type === "participant_kicked") {
+    if (
+      event.type === "participant_left" ||
+      event.type === "participant_kicked"
+    ) {
       changed = byId.delete(participantId) || changed;
       continue;
     }
     if (event.type !== "participant_updated") continue;
     const participant = byId.get(participantId);
     if (!participant) continue;
+    const role = "role" in event ? event.role : participant.role;
+    if (!isParticipantRole(role)) {
+      throw new Error(
+        "participant_updated event has an unsupported canonical role.",
+      );
+    }
     byId.set(participantId, {
       ...participant,
       display_name: String(event.display_name || participant.display_name),
-      role: String(event.role || participant.role) as RoomMember["role"],
+      role,
       avatar_image_url:
         "avatar_image_url" in event
-          ? resolveDesktopRuntimeResource(String(event.avatar_image_url || "") || undefined)
+          ? resolveDesktopRuntimeResource(
+              String(event.avatar_image_url || "") || undefined,
+            )
           : participant.avatar_image_url,
       updated_at: event.created_at || participant.updated_at,
     });
@@ -181,14 +218,16 @@ export function applyParticipantEvents(current: RoomMember[], incoming: RoomEven
 
 export function canonicalRoomAuthKey(auth?: RoomSocketAuth): string {
   if (!auth) return "";
-  return auth.kind === "host" ? `host:${auth.meetingId}` : `session:${auth.sessionToken}`;
+  return auth.kind === "host"
+    ? `host:${auth.meetingId}`
+    : `session:${auth.sessionToken}`;
 }
 
 export function canonicalRoomProjectionScopeKey(
   roomId: string,
   auth: RoomSocketAuth | undefined,
   viewerParticipantId: string,
-  origin = typeof window !== "undefined" ? window.location.origin : ""
+  origin = typeof window !== "undefined" ? window.location.origin : "",
 ): string {
   const authKey = canonicalRoomAuthKey(auth);
   return roomId && authKey

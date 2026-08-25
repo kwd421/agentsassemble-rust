@@ -1,4 +1,5 @@
 import type { RoomAgentSession, RoomEvent, RoomMember } from "../api";
+import { isParticipantRole } from "./participantRole";
 
 const PARTICIPANT_KEYS = [
   "room_id",
@@ -105,6 +106,7 @@ function participantFromEvent(
       (key) => typeof participant[key] !== "string"
     ) ||
     typeof participant.muted !== "boolean" ||
+    !isParticipantRole(participant.role) ||
     !participant.participant_id ||
     participant.participant_id !== event.participant_id ||
     participant.room_id !== event.room_id ||

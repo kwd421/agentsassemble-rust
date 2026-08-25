@@ -1,7 +1,7 @@
 use agentsassemble_domain::{
     AgentSession, AuthenticatedPrincipal, CURRENT_RUNTIME_PROFILE_VERSION, CapabilitySet,
     ClientKind, DurableAgentSession, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID, Participant,
-    ParticipantStatus, QueuedRoomInput, RoomInputDeliveryKind,
+    ParticipantRole, ParticipantStatus, QueuedRoomInput, RoomInputDeliveryKind,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -51,7 +51,7 @@ async fn seed_agent(store: &SqliteStore, now: chrono::DateTime<Utc>) {
         avatar_image_url: String::new(),
         participant_type: "agent".to_owned(),
         status: ParticipantStatus::Detached,
-        role: "agent".to_owned(),
+        role: ParticipantRole::Agent,
         owner_id: "operator-local-user".to_owned(),
         muted: false,
         created_at: now,

@@ -1829,8 +1829,8 @@ wording error, not an implementation or contract change.
 The complete `make verify` then passed
 every mandatory architecture, source-growth, logical-line, and 800-line gate; generated
 bindings; the production frontend build and original-CSS verification; 72 frontend files
-with 356 tests; 15 Tauri tests; 18 domain, 94 persistence, four protocol, 113 provider,
-and 30 server unit tests; 25 Rust integration tests; documentation tests;
+with 356 tests; 15 Tauri tests; 18 domain, 95 persistence, four protocol, 113 provider,
+and 31 server unit tests; 25 Rust integration tests; documentation tests;
 warning-denied workspace/desktop Clippy; and final diff validation.
 
 The installed `x86_64-pc-windows-gnu` target passed the workspace all-target/all-feature
@@ -1860,6 +1860,70 @@ and zero Agent Sessions. Final normal quit left no exact app, supervisor, or sid
 process. The exact package, Application Support, Caches, and WebKit paths were then
 permanently removed. Commit/push and both manual exact-diff reviews remain required before
 this candidate becomes completion evidence.
+
+## Canonical participant-role candidate: 2026-08-25
+
+The current original commit and copied frontend expose exactly `human`, `director`,
+`implementer`, `reviewer`, and `agent`; `director` also participates in reachable
+ordered-room routing. Rust now owns those values as one `ParticipantRole` enum and
+rejects old aliases instead of importing the Python compatibility normalizer.
+`participant.role.update` requires room-management authority and commits the target
+participant, `participant_updated` event, and idempotent command result in one SQLite
+transaction. Clean schema 23 rejects schema 22 rather than reading its unconstrained
+role strings.
+
+The desktop and mobile roster no longer allocate and thread a second
+`participant_id -> role` map derived from the same participant array. Both read the
+room participant directly, including a human assigned `director` or an agent assigned
+`reviewer`; human profile and Agent Session presentation cannot overwrite that field.
+Name/provider inference remains only for a presentation row that has no canonical room
+participant. This removes redundant per-render map construction and prop plumbing, but
+the optimization is intentionally secondary to eliminating duplicate authority; no
+cache or compatibility path replaces the canonical projection.
+
+Focused persistence checks cover atomic projection/event/result, snapshot visibility,
+exact replay, conflicting request reuse, unsupported alias rejection, missing targets,
+and missing room-management authority. Frontend checks prove human and Agent Session
+presentation preserve the room role and that malformed role aliases in participant
+events fail closed. They also prove that participant kind—not role—owns people/Agent
+Session grouping, so a human `director` stays a person and an Agent Session assigned
+`human` remains an Agent Session. Agent creation records the authenticated owning
+participant ID rather than the separate user principal ID; this preserves the original
+owner grouping without weakening authorization, which still resolves the current
+principal and participant before the transaction. Generated TypeScript bindings carry
+the same enum and product surface revision 2 advertises the newly reachable WebSocket
+action.
+
+The complete `make verify` passed every mandatory architecture, source-growth,
+logical-line, and 800-line gate; generated bindings; the production frontend build and
+original-CSS verification; 72 frontend files with 360 tests; 15 Tauri tests; 18 domain,
+97 persistence, four protocol, 113 provider, and 31 server unit tests; 25 Rust
+integration tests; documentation tests; warning-denied workspace/desktop Clippy; and
+final diff validation.
+
+Computer Use drove a fresh debug package named `AgentsAssemble Role Verify` under the
+isolated identifier `app.agentsassemble.rust.roleverify`, with the central URL explicitly
+empty. Fresh identity `Role SSoT Final` created a real schema-23 room. The copied room
+member control changed the human from `human` to `director`; the row remained a person.
+Agent Add exposed no display-name field before provider selection, then selected the
+retained Antigravity `gemini-3.6-flash` catalog entry and the real project workspace.
+`추가하자마자 실행` was disabled before creation, so the durable Agent Session remained
+stopped and no provider process was launched. The room control changed that Agent
+Session from `agent` to `reviewer`, and it remained nested under its owning person.
+
+After normal application quit and relaunch, both roles, the human/Agent Session grouping,
+and the stopped session returned over a fresh authenticated room socket. Read-only
+SQLite inspection found schema owner `agentsassemble-rust-v1`, schema version 23,
+`human/director` and `agent/reviewer` participant projections, the Agent Session owner
+`operator-local`, two sequenced `participant_updated` events, and two matching durable
+command results. The first real run exposed and caused correction of a stale frontend
+`role != human` kind inference; a later run exposed and caused correction of the Agent
+owner principal/participant mismatch. The final run verified both roots, not a visual
+workaround. Normal quit left no exact app, supervisor, or sidecar process. The exact
+package, Application Support, Caches, WebKit, and sidecar staging directories were then
+permanently removed. The web critical reviewer approved the exact five-role design and
+authority boundary (`B: APPROVE`). Commit/push and both manual exact-diff reviews remain
+required before this candidate becomes completion evidence.
 
 ## API verification scope
 

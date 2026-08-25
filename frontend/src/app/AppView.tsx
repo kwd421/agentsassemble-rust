@@ -39,7 +39,7 @@ const CustomChannelView = lazy(() => import("../views/CustomChannelView"));
 export default function AppView({ controller }: { controller: AppController }) {
   const {
     activateRightPanelMode, activateRightPanelModeFromPointer, activeAppearance, activeChannelDisplay,
-    activeChannelSettings, activeCustomChannel, activeCustomChannels, activeMemberRoles,
+    activeChannelSettings, activeCustomChannel, activeCustomChannels,
     activeRoom, activeRoomAgentSessions, activeRoomCapabilities, activeRoomDisconnected,
     activeRoomHistory, activeRoomMembers, activeSideChatMeetingId, addFreshRoom,
     addFriendsCandidate, addFriendsManual, adjustSidebarWidthWithKeyboard, adminOpen,
@@ -507,7 +507,6 @@ export default function AppView({ controller }: { controller: AppController }) {
           agents={scopedAgents}
           members={activeRoomMembers}
           viewerParticipantId={guestSession?.agentId || "operator-local"}
-          roleOverrides={activeMemberRoles}
           guestLocked={guestLocked}
           initialMode={mobileRoomInfoInitialMode}
           onClose={closeMobileRoomInfo}
@@ -604,7 +603,6 @@ export default function AppView({ controller }: { controller: AppController }) {
                 members={activeRoomMembers}
                 roomSessionToken={admittedSessionToken}
                 viewerParticipantId={guestSession?.agentId || "operator-local"}
-                roleOverrides={activeMemberRoles}
                 onRoleChange={updateMemberRole}
                 guestLocked={guestLocked}
                 guestAiPacketPreview={guestAiPacketPreview}

@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 
 use agentsassemble_domain::{
     Actor, AgentSession, AgentSessionDraft, AuthenticatedPrincipal,
-    CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession, Participant, ParticipantStatus,
-    RoomEvent,
+    CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession, Participant, ParticipantRole,
+    ParticipantStatus, RoomEvent,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -37,7 +37,7 @@ pub(crate) async fn create_or_reuse_agent_records(
             if allow_exact_reuse
                 && session.public.process_ownership == "server"
                 && session.runtime_profile_key == draft.runtime_profile_key
-                && participant.owner_id == principal.principal_id =>
+                && participant.owner_id == principal.participant_id =>
         {
             if !session.lifecycle_intent_action.is_empty()
                 || !session.lifecycle_intent_id.is_empty()
@@ -91,8 +91,8 @@ async fn create_agent_records(
         avatar_image_url: String::new(),
         participant_type: "agent".to_owned(),
         status: ParticipantStatus::Detached,
-        role: "agent".to_owned(),
-        owner_id: principal.principal_id.clone(),
+        role: ParticipantRole::Agent,
+        owner_id: principal.participant_id.clone(),
         muted: false,
         created_at: now,
         updated_at: now,

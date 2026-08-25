@@ -17,13 +17,14 @@ const actions = [
   "agent.start",
   "agent.stop",
   "message.send",
+  "participant.role.update",
   "room.random.choose",
   "room.random.roll",
   "room.settings.update",
 ] as const;
 const surface = {
-  revision: 1,
-  digest: "f70f761ba879dfb9083d0d677ea814cbd46734b48c5447d8220128d950488aa8",
+  revision: 2,
+  digest: "c9e9959a9a4269107ec4bcde1bcb515dd1730f979c80a2f338aef5899136e35d",
   http_routes: [],
   websocket_streams: ["room_events"],
   websocket_actions: [...actions],
@@ -106,7 +107,7 @@ describe("room directory contracts", () => {
           ...authority,
           server_product_surface: {
             ...surface,
-            digest: "8db3827e292550a461d7da90d256be7c88b7830542109e82f1306e42a372577a",
+            digest: "dfbd65a4abce01f1d9975a449a8523de30f1e2713fb850af80070d68781e267b",
             websocket_streams: [],
           },
         }),

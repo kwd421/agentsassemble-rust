@@ -25,8 +25,8 @@ const desktopMocks = vi.hoisted(() => ({
 const SERVER_ID = "30000000-0000-4000-8000-000000000001";
 const LINEAGE_ID = "30000000-0000-4000-8000-000000000002";
 const SERVER_SURFACE = {
-  revision: 1,
-  digest: "f70f761ba879dfb9083d0d677ea814cbd46734b48c5447d8220128d950488aa8",
+  revision: 2,
+  digest: "c9e9959a9a4269107ec4bcde1bcb515dd1730f979c80a2f338aef5899136e35d",
   http_routes: [],
   websocket_streams: ["room_events"],
   websocket_actions: [
@@ -36,6 +36,7 @@ const SERVER_SURFACE = {
     "agent.start",
     "agent.stop",
     "message.send",
+    "participant.role.update",
     "room.random.choose",
     "room.random.roll",
     "room.settings.update",
@@ -48,7 +49,7 @@ const directory = (authority_lineage_id = LINEAGE_ID) => ({
   rooms: [],
 });
 const desktopProfile = {
-  revision: 1,
+  revision: 2,
   display_name: "Desktop User",
   handle: "desktopuser.",
   status: "online",
@@ -99,7 +100,7 @@ afterEach(() => {
   desktopMocks.desktop = false;
   vi.clearAllMocks();
   desktopMocks.requestHostProductSurface.mockResolvedValue({
-    revision: 1,
+    revision: 2,
     digest: "1".repeat(64),
     commands: ["host_product_surface"],
   });

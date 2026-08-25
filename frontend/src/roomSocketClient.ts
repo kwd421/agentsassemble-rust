@@ -73,7 +73,7 @@ function validateClientAuthority(
 ) {
   const surface = dependencies.serverSurface;
   if (
-    surface.revision !== 1 ||
+    surface.revision !== 2 ||
     !isHex32Bytes(surface.digest) ||
     !dependencies.expectedRoomId ||
     !dependencies.expectedParticipantId ||

@@ -333,7 +333,7 @@ fn rejected(code: &'static str, message: &str) -> PersistenceError {
 mod tests {
     use agentsassemble_domain::{
         AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, Participant,
-        ParticipantStatus, Room, RoomSettings, RoomStatus, UserProfilePatch,
+        ParticipantRole, ParticipantStatus, Room, RoomSettings, RoomStatus, UserProfilePatch,
     };
     use chrono::Utc;
     use sqlx::Row as _;
@@ -406,11 +406,11 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("read second membership: {error}"));
         assert_eq!(first.display_name, "Canonical Human");
-        assert_eq!(first.role, "host");
+        assert_eq!(first.role, ParticipantRole::Human);
         assert!(!first.muted);
         assert_eq!(first.status, ParticipantStatus::Joined);
         assert_eq!(second.display_name, "Canonical Human");
-        assert_eq!(second.role, "moderator");
+        assert_eq!(second.role, ParticipantRole::Director);
         assert!(second.muted);
         assert_eq!(second.owner_id, "room-owner");
         let unchanged_agent = store
@@ -524,7 +524,7 @@ mod tests {
             avatar_image_url: String::new(),
             participant_type: "human".to_owned(),
             status: ParticipantStatus::Joined,
-            role: "moderator".to_owned(),
+            role: ParticipantRole::Director,
             owner_id: "room-owner".to_owned(),
             muted: true,
             created_at: now,
@@ -537,7 +537,7 @@ mod tests {
             avatar_image_url: "/agent/avatar.png".to_owned(),
             participant_type: "agent".to_owned(),
             status: ParticipantStatus::Joined,
-            role: "agent".to_owned(),
+            role: ParticipantRole::Agent,
             owner_id: principal.participant_id.clone(),
             muted: true,
             created_at: now,
@@ -550,7 +550,7 @@ mod tests {
             avatar_image_url: "/historical/avatar.png".to_owned(),
             participant_type: "human".to_owned(),
             status: ParticipantStatus::Left,
-            role: "host".to_owned(),
+            role: ParticipantRole::Human,
             owner_id: String::new(),
             muted: false,
             created_at: now,

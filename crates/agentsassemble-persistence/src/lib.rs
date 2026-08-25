@@ -35,6 +35,7 @@ mod store_open;
 mod turn_authority;
 mod turn_queue;
 
+mod participant_roles;
 #[cfg(test)]
 mod persistence_security_tests;
 

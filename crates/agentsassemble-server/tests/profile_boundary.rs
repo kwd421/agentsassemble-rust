@@ -1,6 +1,8 @@
 use std::{fmt::Write, time::Duration};
 
-use agentsassemble_domain::{LOCAL_OPERATOR_USER_ID, ParticipantStatus, ProviderCatalog};
+use agentsassemble_domain::{
+    LOCAL_OPERATOR_USER_ID, ParticipantRole, ParticipantStatus, ProviderCatalog,
+};
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_provider::ProviderCatalogService;
 use agentsassemble_server::{AppState, HostSecret, TicketStore, serve};
@@ -262,7 +264,7 @@ async fn assert_profile_update_and_avatar(
         .unwrap_or_else(|error| panic!("read projected participant: {error}"));
     assert_eq!(participant.display_name, "Canonical Human");
     assert_eq!(participant.avatar_image_url, avatar_url);
-    assert_eq!(participant.role, "host");
+    assert_eq!(participant.role, ParticipantRole::Human);
     assert_eq!(participant.status, ParticipantStatus::Joined);
     assert!(!participant.muted);
 

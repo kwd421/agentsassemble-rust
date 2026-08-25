@@ -1,4 +1,6 @@
-use agentsassemble_domain::{RoomInputDeliveryKind, RoomSettings, public_settings};
+use agentsassemble_domain::{
+    ParticipantRole, RoomInputDeliveryKind, RoomSettings, public_settings,
+};
 use serde_json::json;
 
 use super::{
@@ -108,7 +110,13 @@ async fn mode_transitions_preserve_delivery_kind_and_ambient_parallelism() {
 
 async fn insert_second_agent(store: &SqliteStore) {
     let now = chrono::Utc::now();
-    let second_participant = participant(SECOND_AGENT_ID, "Flash", "agent", "agent", now);
+    let second_participant = participant(
+        SECOND_AGENT_ID,
+        "Flash",
+        "agent",
+        ParticipantRole::Agent,
+        now,
+    );
     let mut second_session = attached_session(now);
     second_session.public.session_id = SECOND_AGENT_ID.to_owned();
     second_session.public.participant_id = SECOND_AGENT_ID.to_owned();

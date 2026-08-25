@@ -79,12 +79,8 @@ export function memberActive(member: RoomMember) {
   return isActivePresence(member.status);
 }
 
-export function memberRole(member: RoomMember, preferredRole?: string): RoleId {
-  if (member.participant_type === "human") return "human";
-  const role = preferredRole || member.role;
-  return ["human", "director", "implementer", "reviewer", "agent"].includes(role)
-    ? role as RoleId
-    : "agent";
+export function memberRole(member: RoomMember): RoleId {
+  return member.role;
 }
 
 export function memberStatusLabel(member: RoomMember) {

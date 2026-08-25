@@ -695,14 +695,6 @@ export function useAppController() {
       }) as CSSProperties,
     [activeRoomStyle, channelSidebarWidth]
   );
-  const activeMemberRoles = useMemo(
-    () =>
-      Object.fromEntries(
-        activeRoomMembers.map((member) => [member.participant_id, member.role])
-      ),
-    [activeRoomMembers]
-  );
-
   async function updateMemberRole(memberId: string, role: RoomMember["role"]) {
     await sendParticipantRole(memberId, role);
   }
@@ -745,7 +737,7 @@ export function useAppController() {
   return {
     acceptRecoveredSession, activateRightPanelMode, activateRightPanelModeFromPointer, activeAppearance,
     activeChannelDisplay, activeChannelSettings, activeCustomChannel, activeCustomChannels,
-    activeMemberRoles, activeRoom, activeRoomAgentSessions, activeRoomCapabilities,
+    activeRoom, activeRoomAgentSessions, activeRoomCapabilities,
     activeRoomDisconnected, activeRoomHistory, activeRoomMembers, activeSideChatMeetingId,
     addFreshRoom, addFriendsCandidate, addFriendsManual, adjustSidebarWidthWithKeyboard,
     adminOpen, admittedSessionToken, agentActivityVisibility, agentCreateOpen,

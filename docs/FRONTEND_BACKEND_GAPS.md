@@ -4,11 +4,11 @@ Status: source-derived reimplementation exposure inventory, 2026-08-25
 
 Comparison baseline: original
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust
-`6de2671848b951fb16dc13bb2dd2dfeb25c1e88f`. The active local-authority,
+`4776e6bfb12c7ccb1ef2ff0e536c571a6dda4fee`. The active local-authority,
 surface, admission, subscription, and moderation boundary is design-approved but
-not complete as one boundary. Local authority and product-surface slices are
-published; proof-bound finite subscription is implemented in the current
-candidate, while process-wide admission and canonical role/mute remain open.
+not complete as one boundary. Local authority, product-surface, subscription, and
+process-wide admission slices are published; canonical participant role is implemented
+in the current candidate, while participant mute remains open.
 
 ## Scope and method
 
@@ -193,11 +193,11 @@ implemented; the frontend must not silently substitute Python or local fake data
 | Startup identity and accounts | The fresh local desktop identity/bootstrap path is implemented. `/api/account`, Google account challenge/connect/delete, central-login callback start/poll, central guest/recovery, and server-directory registration remain incomplete. The copied production central URL must not be counted as desktop support: the native OAuth command and secure desktop device-key owner are not implemented, and the current CSP does not authorize that remote origin. |
 | Room lifecycle and settings | Canonical archive/delete lifecycle, room-global settings mutation, per-user room preferences, public server info, and central-directory registration proof. |
 | Admission and invites | Host claim, room invite create/join/admission/companion/leave, operator pairing create/redeem, and public-invite status/URL/tunnel controls. |
-| Roster, friends, and channels | The active-room roster projection is cut over to the authenticated WebSocket snapshot/events only. Canonical participant role/mute controls, room friends, room channels, voice presence, and side chat remain incomplete. |
+| Roster, friends, and channels | The active-room roster and strict participant-role control are cut over to authenticated WebSocket snapshot/events only. Participant mute, room friends, room channels, voice presence, and side chat remain incomplete. |
 | Attachments, personas, pins, and search | General-message and room-appearance attachment purposes, persona list/import/thumbnail, message pins, room search/context. Profile-avatar upload/read is implemented. |
 | Provider settings and diagnostics | Login, catalog refresh HTTP response, credential CRUD, provider usage, local resources, release health, and runtime version. The original `/api/local/workspace-picker` HTTP route is absent, but packaged desktop creation uses the native Tauri directory picker instead. |
 | Games and plugins | Mafia HTTP operations and generic plugin WebSocket hosting remain unimplemented. The copied RimWorld view is an external plugin consumer; its Python plugin package/runtime is intentionally outside the current Rust core-migration scope and is not a core parity exit condition. |
-| Canonical room commands | History, vote summary, edit/delete, settings, random operations, re-add, pause/interrupt, participant controls, room lifecycle, and provider request resolution. Stopped-session `agent.resume` and `agent.configure` are connected at the public comparison commit. |
+| Canonical room commands | History, vote summary, edit/delete, settings, random operations, re-add, pause/interrupt, participant mute/kick/leave, room lifecycle, and provider request resolution. Strict `participant.role.update`, stopped-session `agent.resume`, and `agent.configure` are connected in the current Rust state. |
 | Canonical room events | The React projector recognizes the broader original event vocabulary; only Rust-emitted snapshot/events are currently verified. |
 
 ### Active local-authority exposure delta: 2026-08-25
