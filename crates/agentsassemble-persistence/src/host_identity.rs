@@ -56,3 +56,62 @@ impl SqliteStore {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{PersistenceError, SqliteStore};
+
+    #[tokio::test]
+    async fn host_identity_remains_bound_to_the_server_across_reopen() {
+        let directory = tempfile::tempdir().unwrap_or_else(|error| panic!("tempdir: {error}"));
+        let path = directory.path().join("runtime.sqlite3");
+        let first = SqliteStore::open_path(&path)
+            .await
+            .unwrap_or_else(|error| panic!("create authority: {error}"));
+        let first_identity = first
+            .host_identity()
+            .await
+            .unwrap_or_else(|error| panic!("load first host identity: {error}"));
+        let first_server_id = first_identity.server_id().to_owned();
+        let first_seed = *first_identity.private_key_seed();
+        drop(first_identity);
+        drop(first);
+
+        let reopened = SqliteStore::open_path(&path)
+            .await
+            .unwrap_or_else(|error| panic!("reopen authority: {error}"));
+        let reopened_identity = reopened
+            .host_identity()
+            .await
+            .unwrap_or_else(|error| panic!("load reopened host identity: {error}"));
+        assert_eq!(reopened_identity.server_id(), first_server_id);
+        assert!(
+            reopened_identity
+                .private_key_seed()
+                .iter()
+                .zip(first_seed)
+                .all(|(left, right)| *left == right),
+            "host seed changed across reopen"
+        );
+    }
+
+    #[tokio::test]
+    async fn differently_bound_host_identity_rejects_the_current_schema() {
+        let directory = tempfile::tempdir().unwrap_or_else(|error| panic!("tempdir: {error}"));
+        let path = directory.path().join("runtime.sqlite3");
+        let store = SqliteStore::open_path(&path)
+            .await
+            .unwrap_or_else(|error| panic!("create authority: {error}"));
+        sqlx::query("UPDATE runtime_host_identity SET server_id = ? WHERE singleton = 1")
+            .bind(uuid::Uuid::new_v4().to_string())
+            .execute(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("substitute host server id: {error}"));
+        drop(store);
+
+        assert!(matches!(
+            SqliteStore::open_path(&path).await,
+            Err(PersistenceError::InvalidHostIdentity)
+        ));
+    }
+}
