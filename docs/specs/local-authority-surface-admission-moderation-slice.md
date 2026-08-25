@@ -437,7 +437,9 @@ ends in runtime-gone. If neither can be proved, the effect remains fail-closed a
 the provider mute capability is absent. Reachable parity providers implement the
 verified control contract before advertising mute.
 
-Before process-wide admission proceeds, lifecycle recovery uses clean schema 24. Its
+Before process-wide admission proceeds, lifecycle recovery uses clean schema 25. Version 25
+binds `participant.mute` command-result replay to its canonical `event_seq`; older result
+representations are rejected with their schema rather than converted. Its
 private runtime identity is one indivisible handle/owner/lease-token tuple. Runtime-v5
 cross-binds the launch token with the hashed OS boot identity; an old-boot absence proof
 is accepted only when every available durable and lease witness names that same boot and
