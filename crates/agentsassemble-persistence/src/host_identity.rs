@@ -147,6 +147,30 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn orphaned_host_key_never_rebinds_to_a_new_server_identity() {
+        let directory = tempfile::tempdir().unwrap_or_else(|error| panic!("tempdir: {error}"));
+        let database = directory.path().join("runtime.sqlite3");
+        let store = SqliteStore::open_path(&database)
+            .await
+            .unwrap_or_else(|error| panic!("create authority: {error}"));
+        drop(store);
+        std::fs::remove_file(&database)
+            .unwrap_or_else(|error| panic!("remove test database: {error}"));
+        assert!(key_path(directory.path()).is_file());
+
+        for attempt in 1..=2 {
+            assert!(matches!(
+                SqliteStore::open_path(&database).await,
+                Err(PersistenceError::InvalidHostIdentity)
+            ));
+            assert!(
+                !database.exists(),
+                "attempt {attempt} must not create an empty database that enables key reuse"
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn substituted_private_key_rejects_the_database_public_binding() {
         let first = tempfile::tempdir().unwrap_or_else(|error| panic!("first tempdir: {error}"));
         let second = tempfile::tempdir().unwrap_or_else(|error| panic!("second tempdir: {error}"));
