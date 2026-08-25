@@ -7,6 +7,24 @@ use super::{
 use agentsassemble_domain::ParticipantRole;
 use chrono::Utc;
 
+async fn insert_flash_agent(store: &crate::SqliteStore) {
+    let now = Utc::now();
+    let flash_participant = participant(
+        SECOND_AGENT_ID,
+        "Flash",
+        "agent",
+        ParticipantRole::Agent,
+        now,
+    );
+    let mut flash_session = attached_session(now);
+    SECOND_AGENT_ID.clone_into(&mut flash_session.public.session_id);
+    SECOND_AGENT_ID.clone_into(&mut flash_session.public.participant_id);
+    "Flash".clone_into(&mut flash_session.public.display_name);
+    "provider-thread-2".clone_into(&mut flash_session.provider_session_id);
+    "owned-runtime-2".clone_into(&mut flash_session.runtime_handle_id);
+    insert_agent(store, &flash_participant, &flash_session).await;
+}
+
 #[tokio::test]
 async fn mute_preempts_unstarted_exact_turn_and_unmute_reschedules_once() {
     let (store, principal, _directory) = fixture().await;
@@ -129,6 +147,7 @@ async fn human_mute_changes_only_room_participant_authority() {
 #[tokio::test]
 async fn pre_dispatch_provider_task_death_is_checkpointed_and_requeues_once() {
     let (store, principal, _directory) = fixture().await;
+    insert_flash_agent(&store).await;
     let mutation = store
         .execute_message_with_turn(
             &principal,
@@ -142,6 +161,16 @@ async fn pre_dispatch_provider_task_death_is_checkpointed_and_requeues_once() {
         .assignments
         .first()
         .unwrap_or_else(|| panic!("assigned task-death turn"));
+    let waiting = store
+        .execute_message_with_turn(
+            &principal,
+            "task-death-waiting",
+            "message.send",
+            &json!({"content": "@Flash wait behind the dead owner"}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("queue behind task-death floor: {error}"));
+    assert!(waiting.assignments.is_empty());
     let commit = store
         .record_provider_turn_task_death(
             "general",
@@ -155,9 +184,15 @@ async fn pre_dispatch_provider_task_death_is_checkpointed_and_requeues_once() {
         commit
             .events
             .iter()
+            .take(3)
             .map(|event| event.event_type.as_str())
             .collect::<Vec<_>>(),
         ["error", "turn_finished", "agent_session_state"]
+    );
+    assert_eq!(commit.next_assignments.len(), 1);
+    assert_eq!(
+        commit.next_assignments[0].session.public.session_id,
+        SECOND_AGENT_ID
     );
     let execution = store
         .provider_turn_execution("general", AGENT_ID, assignment.turn_generation)
@@ -169,6 +204,133 @@ async fn pre_dispatch_provider_task_death_is_checkpointed_and_requeues_once() {
     assert_eq!(session.pending_inputs.len(), 1);
     assert!(session.inflight_inputs.is_empty());
     assert!(session.public.recovery_required);
+}
+
+#[tokio::test]
+async fn recovered_confirmed_stop_releases_ordered_floor_in_its_final_uow() {
+    let (store, principal, _directory) = fixture().await;
+    insert_flash_agent(&store).await;
+
+    let active = store
+        .execute_message_with_turn(
+            &principal,
+            "stop-floor-active",
+            "message.send",
+            &json!({"content": "@Terra hold the floor until confirmed stop"}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("assign stop floor: {error}"));
+    assert_eq!(active.assignments.len(), 1);
+    let waiting = store
+        .execute_message_with_turn(
+            &principal,
+            "stop-floor-waiting",
+            "message.send",
+            &json!({"content": "@Flash wait behind confirmed stop"}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("queue behind stop floor: {error}"));
+    assert!(waiting.assignments.is_empty());
+
+    let payload = json!({"agent_id": AGENT_ID});
+    let crate::AgentStopPlan::Stop(stop) = store
+        .prepare_agent_stop(&principal, "stop-floor-owner", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare floor stop: {error}"))
+    else {
+        panic!("active floor owner must require provider stop");
+    };
+    store
+        .authorize_agent_stop_effect(&principal, "stop-floor-owner", &payload, &stop.operation_id)
+        .await
+        .unwrap_or_else(|error| panic!("authorize floor stop: {error}"));
+    store
+        .record_agent_stop_effect("general", AGENT_ID, &stop.operation_id)
+        .await
+        .unwrap_or_else(|error| panic!("checkpoint confirmed floor stop: {error}"));
+
+    let candidate = store
+        .load_runtime_reconciliation_candidate("general", AGENT_ID)
+        .await
+        .unwrap_or_else(|error| panic!("load confirmed stop recovery: {error}"))
+        .unwrap_or_else(|| panic!("confirmed stop recovery candidate"));
+    let assignments = store
+        .apply_runtime_reconciliation(&candidate, &crate::RuntimeReconciliationObservation::Gone)
+        .await
+        .unwrap_or_else(|error| panic!("finalize recovered stop: {error}"));
+    assert_eq!(assignments.len(), 1);
+    assert_eq!(assignments[0].session.public.session_id, SECOND_AGENT_ID);
+    assert!(!assignments[0].session.schedule_requested);
+    assert!(
+        store
+            .load_runtime_reconciliation_candidate("general", AGENT_ID)
+            .await
+            .unwrap_or_else(|error| panic!("rescan finalized stop: {error}"))
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn normal_confirmed_stop_assigns_the_next_floor_once_with_its_command_result() {
+    let (store, principal, _directory) = fixture().await;
+    insert_flash_agent(&store).await;
+    let active = store
+        .execute_message_with_turn(
+            &principal,
+            "normal-stop-floor-active",
+            "message.send",
+            &json!({"content": "@Terra hold the normal stop floor"}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("assign normal stop floor: {error}"));
+    assert_eq!(active.assignments.len(), 1);
+    let waiting = store
+        .execute_message_with_turn(
+            &principal,
+            "normal-stop-floor-waiting",
+            "message.send",
+            &json!({"content": "@Flash wait behind normal stop"}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("queue behind normal stop floor: {error}"));
+    assert!(waiting.assignments.is_empty());
+
+    let payload = json!({"agent_id": AGENT_ID});
+    let crate::AgentStopPlan::Stop(stop) = store
+        .prepare_agent_stop(&principal, "normal-stop-floor-owner", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare normal floor stop: {error}"))
+    else {
+        panic!("normal floor owner must require provider stop");
+    };
+    store
+        .authorize_agent_stop_effect(
+            &principal,
+            "normal-stop-floor-owner",
+            &payload,
+            &stop.operation_id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize normal floor stop: {error}"));
+    store
+        .record_agent_stop_effect("general", AGENT_ID, &stop.operation_id)
+        .await
+        .unwrap_or_else(|error| panic!("checkpoint normal floor stop: {error}"));
+    let finalized = store
+        .finalize_agent_stop(&principal, "normal-stop-floor-owner", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("finalize normal floor stop: {error}"));
+    assert_eq!(finalized.assignments.len(), 1);
+    assert_eq!(
+        finalized.assignments[0].session.public.session_id,
+        SECOND_AGENT_ID
+    );
+    let replay = store
+        .finalize_agent_stop(&principal, "normal-stop-floor-owner", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("replay normal floor stop: {error}"));
+    assert!(replay.outcome.deduplicated);
+    assert!(replay.assignments.is_empty());
 }
 
 #[tokio::test]
@@ -467,21 +629,7 @@ async fn blocking_turn_is_reconciled_before_lifecycle_and_exact_gone_detaches() 
 #[tokio::test]
 async fn runtime_gone_releases_ordered_floor_and_consumes_an_unmute_wake() {
     let (store, principal, _directory) = fixture().await;
-    let now = Utc::now();
-    let flash_participant = participant(
-        SECOND_AGENT_ID,
-        "Flash",
-        "agent",
-        ParticipantRole::Agent,
-        now,
-    );
-    let mut flash_session = attached_session(now);
-    SECOND_AGENT_ID.clone_into(&mut flash_session.public.session_id);
-    SECOND_AGENT_ID.clone_into(&mut flash_session.public.participant_id);
-    "Flash".clone_into(&mut flash_session.public.display_name);
-    "provider-thread-2".clone_into(&mut flash_session.provider_session_id);
-    "owned-runtime-2".clone_into(&mut flash_session.runtime_handle_id);
-    insert_agent(&store, &flash_participant, &flash_session).await;
+    insert_flash_agent(&store).await;
 
     let flash_turn = store
         .execute_message_with_turn(
