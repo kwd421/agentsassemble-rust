@@ -15,8 +15,27 @@ struct StoredTicketGrant {
 #[derive(Debug, Clone)]
 enum TicketAuthority {
     Room(AuthenticatedPrincipal),
+    RoomHttp(RoomHttpGrant),
+    SettingsDirectoryRead { principal_id: String },
     ServerOperator { principal_id: String },
     CentralRegistration { principal_id: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RoomHttpGrant {
+    room_id: String,
+    principal_id: String,
+    participant_id: String,
+    purpose: RoomHttpPurpose,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RoomHttpPurpose {
+    PreferencesRead,
+    PreferencesWrite,
+    AppearanceUpload,
+    PendingPreviewRead { asset_id: String },
+    BoundAppearanceRead { asset_id: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -39,6 +58,18 @@ pub struct ConsumedServerOperatorTicket {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConsumedCentralRegistrationTicket {
+    pub principal_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConsumedRoomHttpTicket {
+    pub room_id: String,
+    pub principal_id: String,
+    pub participant_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConsumedSettingsDirectoryReadTicket {
     pub principal_id: String,
 }
 
@@ -113,6 +144,149 @@ impl TicketStore {
         }
         self.issue_authority(TicketAuthority::CentralRegistration { principal_id })
             .await
+    }
+
+    /// Issues one exact preference-read credential for a resolved room human.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` for empty identity fields or exhausted ticket capacity.
+    pub async fn issue_preferences_read(
+        &self,
+        room_id: String,
+        principal_id: String,
+        participant_id: String,
+    ) -> Result<IssuedTicket, TicketError> {
+        self.issue_room_http(
+            room_id,
+            principal_id,
+            participant_id,
+            RoomHttpPurpose::PreferencesRead,
+        )
+        .await
+    }
+
+    /// Issues one exact preference-write credential for a resolved room human.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` for empty identity fields or exhausted ticket capacity.
+    pub async fn issue_preferences_write(
+        &self,
+        room_id: String,
+        principal_id: String,
+        participant_id: String,
+    ) -> Result<IssuedTicket, TicketError> {
+        self.issue_room_http(
+            room_id,
+            principal_id,
+            participant_id,
+            RoomHttpPurpose::PreferencesWrite,
+        )
+        .await
+    }
+
+    /// Issues one exact room-appearance upload credential.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` for empty identity fields or exhausted ticket capacity.
+    pub async fn issue_appearance_upload(
+        &self,
+        room_id: String,
+        principal_id: String,
+        participant_id: String,
+    ) -> Result<IssuedTicket, TicketError> {
+        self.issue_room_http(
+            room_id,
+            principal_id,
+            participant_id,
+            RoomHttpPurpose::AppearanceUpload,
+        )
+        .await
+    }
+
+    /// Issues one pending-preview credential bound to an exact asset.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` for empty identity or asset fields, or exhausted capacity.
+    pub async fn issue_pending_preview_read(
+        &self,
+        room_id: String,
+        principal_id: String,
+        participant_id: String,
+        asset_id: String,
+    ) -> Result<IssuedTicket, TicketError> {
+        if asset_id.is_empty() {
+            return Err(TicketError::Invalid);
+        }
+        self.issue_room_http(
+            room_id,
+            principal_id,
+            participant_id,
+            RoomHttpPurpose::PendingPreviewRead { asset_id },
+        )
+        .await
+    }
+
+    /// Issues one bound-appearance credential bound to an exact asset.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` for empty identity or asset fields, or exhausted capacity.
+    pub async fn issue_bound_appearance_read(
+        &self,
+        room_id: String,
+        principal_id: String,
+        participant_id: String,
+        asset_id: String,
+    ) -> Result<IssuedTicket, TicketError> {
+        if asset_id.is_empty() {
+            return Err(TicketError::Invalid);
+        }
+        self.issue_room_http(
+            room_id,
+            principal_id,
+            participant_id,
+            RoomHttpPurpose::BoundAppearanceRead { asset_id },
+        )
+        .await
+    }
+
+    /// Issues the server-wide local-operator settings-directory read credential.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` for an empty principal or exhausted ticket capacity.
+    pub async fn issue_settings_directory_read(
+        &self,
+        principal_id: String,
+    ) -> Result<IssuedTicket, TicketError> {
+        if principal_id.is_empty() {
+            return Err(TicketError::Invalid);
+        }
+        self.issue_authority(TicketAuthority::SettingsDirectoryRead { principal_id })
+            .await
+    }
+
+    async fn issue_room_http(
+        &self,
+        room_id: String,
+        principal_id: String,
+        participant_id: String,
+        purpose: RoomHttpPurpose,
+    ) -> Result<IssuedTicket, TicketError> {
+        if room_id.is_empty() || principal_id.is_empty() || participant_id.is_empty() {
+            return Err(TicketError::Invalid);
+        }
+        self.issue_authority(TicketAuthority::RoomHttp(RoomHttpGrant {
+            room_id,
+            principal_id,
+            participant_id,
+            purpose,
+        }))
+        .await
     }
 
     async fn issue_authority(
@@ -191,6 +365,118 @@ impl TicketStore {
         Ok(ConsumedCentralRegistrationTicket { principal_id })
     }
 
+    /// Consumes only an exact preference-read credential.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` after consuming a wrong-purpose, expired, unknown, or reused ticket.
+    pub async fn consume_preferences_read(
+        &self,
+        ticket: &str,
+    ) -> Result<ConsumedRoomHttpTicket, TicketError> {
+        self.consume_room_http(ticket, RoomHttpPurpose::PreferencesRead)
+            .await
+    }
+
+    /// Consumes only an exact preference-write credential.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` after consuming a wrong-purpose, expired, unknown, or reused ticket.
+    pub async fn consume_preferences_write(
+        &self,
+        ticket: &str,
+    ) -> Result<ConsumedRoomHttpTicket, TicketError> {
+        self.consume_room_http(ticket, RoomHttpPurpose::PreferencesWrite)
+            .await
+    }
+
+    /// Consumes only an exact room-appearance upload credential.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` after consuming a wrong-purpose, expired, unknown, or reused ticket.
+    pub async fn consume_appearance_upload(
+        &self,
+        ticket: &str,
+    ) -> Result<ConsumedRoomHttpTicket, TicketError> {
+        self.consume_room_http(ticket, RoomHttpPurpose::AppearanceUpload)
+            .await
+    }
+
+    /// Consumes only a pending-preview credential for the requested asset.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` after consuming a mismatched, expired, unknown, or reused ticket.
+    pub async fn consume_pending_preview_read(
+        &self,
+        ticket: &str,
+        asset_id: &str,
+    ) -> Result<ConsumedRoomHttpTicket, TicketError> {
+        self.consume_room_http(
+            ticket,
+            RoomHttpPurpose::PendingPreviewRead {
+                asset_id: asset_id.to_owned(),
+            },
+        )
+        .await
+    }
+
+    /// Consumes only a bound-appearance credential for the requested asset.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` after consuming a mismatched, expired, unknown, or reused ticket.
+    pub async fn consume_bound_appearance_read(
+        &self,
+        ticket: &str,
+        asset_id: &str,
+    ) -> Result<ConsumedRoomHttpTicket, TicketError> {
+        self.consume_room_http(
+            ticket,
+            RoomHttpPurpose::BoundAppearanceRead {
+                asset_id: asset_id.to_owned(),
+            },
+        )
+        .await
+    }
+
+    /// Consumes only the server-wide settings-directory read credential.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` after consuming a wrong-purpose, expired, unknown, or reused ticket.
+    pub async fn consume_settings_directory_read(
+        &self,
+        ticket: &str,
+    ) -> Result<ConsumedSettingsDirectoryReadTicket, TicketError> {
+        let grant = self.consume_grant(ticket).await?;
+        let TicketAuthority::SettingsDirectoryRead { principal_id } = grant.authority else {
+            return Err(TicketError::Invalid);
+        };
+        Ok(ConsumedSettingsDirectoryReadTicket { principal_id })
+    }
+
+    async fn consume_room_http(
+        &self,
+        ticket: &str,
+        expected: RoomHttpPurpose,
+    ) -> Result<ConsumedRoomHttpTicket, TicketError> {
+        let grant = self.consume_grant(ticket).await?;
+        let TicketAuthority::RoomHttp(room) = grant.authority else {
+            return Err(TicketError::Invalid);
+        };
+        if room.purpose != expected {
+            return Err(TicketError::Invalid);
+        }
+        Ok(ConsumedRoomHttpTicket {
+            room_id: room.room_id,
+            principal_id: room.principal_id,
+            participant_id: room.participant_id,
+        })
+    }
+
     /// Removes and resolves a one-use credential accepted by the server-wide profile surface.
     ///
     /// Room participants retain their own profile authority, while the private-control-derived
@@ -209,7 +495,9 @@ impl TicketStore {
             TicketAuthority::ServerOperator { principal_id } => {
                 ConsumedProfileTicket::ServerOperator { principal_id }
             }
-            TicketAuthority::CentralRegistration { .. } => return Err(TicketError::Invalid),
+            TicketAuthority::RoomHttp(_)
+            | TicketAuthority::SettingsDirectoryRead { .. }
+            | TicketAuthority::CentralRegistration { .. } => return Err(TicketError::Invalid),
         })
     }
 
@@ -339,6 +627,68 @@ mod tests {
         assert_eq!(
             store
                 .consume_central_registration(&profile_rejected.ticket)
+                .await,
+            Err(TicketError::Invalid)
+        );
+    }
+
+    #[tokio::test]
+    async fn room_http_purposes_and_asset_bindings_are_consumed_on_mismatch() {
+        let store = TicketStore::new(Duration::from_secs(30), 8);
+        let preference = store
+            .issue_preferences_read(
+                "general".to_owned(),
+                "operator-local-user".to_owned(),
+                "operator-local".to_owned(),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("issue preference read: {error}"));
+        assert_eq!(
+            store.consume_preferences_write(&preference.ticket).await,
+            Err(TicketError::Invalid)
+        );
+        assert_eq!(
+            store.consume_preferences_read(&preference.ticket).await,
+            Err(TicketError::Invalid)
+        );
+
+        let asset = store
+            .issue_pending_preview_read(
+                "general".to_owned(),
+                "operator-local-user".to_owned(),
+                "operator-local".to_owned(),
+                "ra_00000000000000000000000000000000".to_owned(),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("issue pending preview read: {error}"));
+        assert_eq!(
+            store
+                .consume_pending_preview_read(&asset.ticket, "ra_11111111111111111111111111111111",)
+                .await,
+            Err(TicketError::Invalid)
+        );
+        assert_eq!(
+            store
+                .consume_pending_preview_read(&asset.ticket, "ra_00000000000000000000000000000000",)
+                .await,
+            Err(TicketError::Invalid)
+        );
+    }
+
+    #[tokio::test]
+    async fn settings_directory_ticket_never_crosses_room_or_profile_scopes() {
+        let store = TicketStore::new(Duration::from_secs(30), 8);
+        let directory = store
+            .issue_settings_directory_read("operator-local-user".to_owned())
+            .await
+            .unwrap_or_else(|error| panic!("issue directory read: {error}"));
+        assert_eq!(
+            store.consume_profile(&directory.ticket).await,
+            Err(TicketError::Invalid)
+        );
+        assert_eq!(
+            store
+                .consume_settings_directory_read(&directory.ticket)
                 .await,
             Err(TicketError::Invalid)
         );
