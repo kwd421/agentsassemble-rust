@@ -1,5 +1,5 @@
-use agentsassemble_domain::DurableAgentSession;
-use serde_json::json;
+use agentsassemble_domain::{AuthenticatedPrincipal, DurableAgentSession};
+use serde_json::{Value, json};
 
 use super::{AgentRuntimeStarted, AgentStartPlan, AgentStopPlan, SqliteStore, tests::fixture};
 use crate::ProviderTurnExecutionPhase;
@@ -28,13 +28,18 @@ async fn clear_fixture_queue(store: &SqliteStore) {
     .unwrap_or_else(|error| panic!("clean recovery fixture queue: {error}"));
 }
 
-#[tokio::test]
-async fn blocking_provider_execution_owns_restart_before_lifecycle_reconciliation() {
-    let (store, principal, _directory) = fixture().await;
-    clear_fixture_queue(&store).await;
+async fn start_fixture_runtime(
+    store: &SqliteStore,
+    principal: &AuthenticatedPrincipal,
+    request_id: &str,
+    handle_id: &str,
+    owner_id: &str,
+    lease_token: &str,
+    provider_session_id: &str,
+) -> Value {
     let payload = json!({"agent_id": super::tests::AGENT_ID});
     let AgentStartPlan::Start(start) = store
-        .prepare_agent_start(&principal, "turn-recovery-start", &payload)
+        .prepare_agent_start(principal, request_id, &payload)
         .await
         .unwrap_or_else(|error| panic!("prepare recovery start: {error}"))
     else {
@@ -42,28 +47,28 @@ async fn blocking_provider_execution_owns_restart_before_lifecycle_reconciliatio
     };
     store
         .authorize_agent_start_effect(
-            &principal,
-            "turn-recovery-start",
+            principal,
+            request_id,
             &payload,
             &start.operation_id,
             "agent.start",
-            "adopted-runtime",
-            "previous-supervisor",
-            "lease-generation-1",
+            handle_id,
+            owner_id,
+            lease_token,
         )
         .await
         .unwrap_or_else(|error| panic!("authorize recovery start: {error}"));
     store
         .complete_agent_start(
-            &principal,
-            "turn-recovery-start",
+            principal,
+            request_id,
             &payload,
             &start.operation_id,
             &AgentRuntimeStarted {
-                runtime_handle_id: "adopted-runtime".to_owned(),
-                runtime_owner_id: "previous-supervisor".to_owned(),
-                runtime_lease_token: "lease-generation-1".to_owned(),
-                provider_session_id: "provider-thread".to_owned(),
+                runtime_handle_id: handle_id.to_owned(),
+                runtime_owner_id: owner_id.to_owned(),
+                runtime_lease_token: lease_token.to_owned(),
+                provider_session_id: provider_session_id.to_owned(),
                 runtime_reused: false,
                 provider_session_reused: false,
                 provider_session_active: true,
@@ -71,6 +76,23 @@ async fn blocking_provider_execution_owns_restart_before_lifecycle_reconciliatio
         )
         .await
         .unwrap_or_else(|error| panic!("complete recovery start: {error}"));
+    payload
+}
+
+#[tokio::test]
+async fn blocking_provider_execution_owns_restart_before_lifecycle_reconciliation() {
+    let (store, principal, _directory) = fixture().await;
+    clear_fixture_queue(&store).await;
+    let payload = start_fixture_runtime(
+        &store,
+        &principal,
+        "turn-recovery-start",
+        "adopted-runtime",
+        "previous-supervisor",
+        "lease-generation-1",
+        "provider-thread",
+    )
+    .await;
     let mutation = store
         .execute_message_with_turn(
             &principal,
@@ -161,45 +183,16 @@ async fn blocking_provider_execution_owns_restart_before_lifecycle_reconciliatio
 async fn ambiguous_stop_preserves_blocking_turn_authority_for_provider_reconciliation() {
     let (store, principal, _directory) = fixture().await;
     clear_fixture_queue(&store).await;
-    let payload = json!({"agent_id": super::tests::AGENT_ID});
-    let AgentStartPlan::Start(start) = store
-        .prepare_agent_start(&principal, "ambiguous-turn-start", &payload)
-        .await
-        .unwrap_or_else(|error| panic!("prepare ambiguous-turn start: {error}"))
-    else {
-        panic!("stopped fixture must require a start effect");
-    };
-    store
-        .authorize_agent_start_effect(
-            &principal,
-            "ambiguous-turn-start",
-            &payload,
-            &start.operation_id,
-            "agent.start",
-            "ambiguous-runtime",
-            "ambiguous-owner",
-            "ambiguous-lease",
-        )
-        .await
-        .unwrap_or_else(|error| panic!("authorize ambiguous runtime: {error}"));
-    store
-        .complete_agent_start(
-            &principal,
-            "ambiguous-turn-start",
-            &payload,
-            &start.operation_id,
-            &AgentRuntimeStarted {
-                runtime_handle_id: "ambiguous-runtime".to_owned(),
-                runtime_owner_id: "ambiguous-owner".to_owned(),
-                runtime_lease_token: "ambiguous-lease".to_owned(),
-                provider_session_id: "ambiguous-provider-session".to_owned(),
-                runtime_reused: false,
-                provider_session_reused: false,
-                provider_session_active: true,
-            },
-        )
-        .await
-        .unwrap_or_else(|error| panic!("complete ambiguous runtime: {error}"));
+    let payload = start_fixture_runtime(
+        &store,
+        &principal,
+        "ambiguous-turn-start",
+        "ambiguous-runtime",
+        "ambiguous-owner",
+        "ambiguous-lease",
+        "ambiguous-provider-session",
+    )
+    .await;
     let mutation = store
         .execute_message_with_turn(
             &principal,
