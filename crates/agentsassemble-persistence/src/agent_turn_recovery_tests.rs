@@ -2,7 +2,7 @@ use agentsassemble_domain::{AuthenticatedPrincipal, DurableAgentSession};
 use serde_json::{Value, json};
 
 use super::{AgentRuntimeStarted, AgentStartPlan, AgentStopPlan, SqliteStore, tests::fixture};
-use crate::ProviderTurnExecutionPhase;
+use crate::{PersistenceError, ProviderTurnAuthority, ProviderTurnExecutionPhase};
 
 async fn clear_fixture_queue(store: &SqliteStore) {
     let encoded = sqlx::query_scalar::<_, String>(
@@ -177,6 +177,105 @@ async fn blocking_provider_execution_owns_restart_before_lifecycle_reconciliatio
         .finalize_agent_stop(&principal, "stop-blocking-turn", &payload)
         .await
         .unwrap_or_else(|error| panic!("finalize blocking-turn stop: {error}"));
+}
+
+#[tokio::test]
+async fn prepared_stop_suppresses_a_late_ordinary_provider_final() {
+    let (store, principal, _directory) = fixture().await;
+    clear_fixture_queue(&store).await;
+    let payload = start_fixture_runtime(
+        &store,
+        &principal,
+        "late-final-start",
+        "late-final-runtime",
+        "late-final-owner",
+        "late-final-lease",
+        "late-final-provider-session",
+    )
+    .await;
+    let mutation = store
+        .execute_message_with_turn(
+            &principal,
+            "late-final-turn",
+            "message.send",
+            &json!({"content": "@Terra suppress this late final"}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("assign late-final turn: {error}"));
+    let assignment = &mutation.assignments[0];
+    let start = store
+        .authorize_provider_turn_start(
+            "general",
+            super::tests::AGENT_ID,
+            assignment.turn_generation,
+            &assignment.turn_id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize late-final turn: {error}"));
+    store
+        .mark_provider_turn_running(&start, "provider-turn-late-final")
+        .await
+        .unwrap_or_else(|error| panic!("mark late-final turn running: {error}"));
+    let AgentStopPlan::Stop(stop) = store
+        .prepare_agent_stop(&principal, "stop-before-late-final", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare stop before late final: {error}"))
+    else {
+        panic!("busy runtime must require an exact stop effect");
+    };
+
+    let late_final = store
+        .complete_agent_turn(
+            "general",
+            super::tests::AGENT_ID,
+            ProviderTurnAuthority {
+                room_id: &start.room_id,
+                session_id: &start.session_id,
+                turn_id: &start.turn_id,
+                turn_generation: start.turn_generation,
+                execution_id: &start.execution_id,
+                start_dispatch_nonce: &start.start_dispatch_nonce,
+                runtime_handle_id: &start.runtime_handle_id,
+                runtime_owner_id: &start.runtime_owner_id,
+                runtime_lease_token: &start.runtime_lease_token,
+                provider_turn_id: "provider-turn-late-final",
+                provider_session_id: None,
+            },
+            "This final lost the stop linearization race.",
+            "",
+        )
+        .await;
+    assert!(matches!(
+        late_final,
+        Err(PersistenceError::CommandRejected {
+            code: "stale_provider_turn",
+            ..
+        })
+    ));
+
+    store
+        .authorize_agent_stop_effect(
+            &principal,
+            "stop-before-late-final",
+            &payload,
+            &stop.operation_id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize stop after late final: {error}"));
+    store
+        .record_agent_stop_effect("general", super::tests::AGENT_ID, &stop.operation_id)
+        .await
+        .unwrap_or_else(|error| panic!("checkpoint stop after late final: {error}"));
+    let execution = store
+        .provider_turn_execution(
+            "general",
+            super::tests::AGENT_ID,
+            assignment.turn_generation,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("load stop-owned provider execution: {error}"));
+    assert_eq!(execution.phase, ProviderTurnExecutionPhase::Interrupted);
+    assert!(execution.requeue_finalized);
 }
 
 #[tokio::test]
