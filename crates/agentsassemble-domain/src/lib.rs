@@ -4,6 +4,7 @@ mod identity;
 mod model;
 mod profile;
 mod projection;
+mod room_preferences;
 mod room_settings;
 mod room_turn;
 mod text;
@@ -20,6 +21,10 @@ pub use model::{
 };
 pub use profile::{UserProfile, UserProfilePatch, avatar_attachment_id, canonical_avatar_url};
 pub use projection::{public_event_for_principal, public_value_for_principal};
+pub use room_preferences::{
+    ChannelNotificationMode, ChannelPreference, MAX_PREFERENCE_CHANNELS, READ_CURSOR_LIMIT,
+    RoomNotificationMode, RoomPreferencesError, RoomUserPreferences, RoomUserPreferencesPatch,
+};
 pub use room_settings::{
     PublicRoomSettings, RoomAppearance, RoomChannel, RoomSettings, RoomSettingsError,
     RoomSettingsPatch, public_settings,
