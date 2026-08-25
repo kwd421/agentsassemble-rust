@@ -1983,7 +1983,9 @@ conversation/turn binding. Provider-specific details do not leak into room,
 persistence, protocol, or frontend branching. The extracted files separate startup,
 prompt construction, exact-turn control, effect persistence, participant moderation,
 and reconciliation by change reason. No compatibility reader, Python path, fake
-authority, provider fallback, polling loop, or client-owned orchestration was added.
+authority, provider fallback, or client-owned orchestration was added. Recovery uses
+one explicitly bounded server-owned scan rather than browser retries or provider
+effect replay.
 
 The product-surface revision is now generated from the Rust protocol owner into
 TypeScript. The first packaged run exposed the previous duplicated frontend literal:
@@ -2039,6 +2041,45 @@ the exact bundle was no longer running, no verification-owned provider or server
 remained, and the exact package, Application Support, Caches, WebKit, and temporary
 hook-lock paths were permanently removed. Post-push Daybreaker and web critical reviews
 remain required before this candidate becomes completion evidence.
+
+## Participant-mute post-review correction candidate: 2026-08-26
+
+The independent web implementation review of public range `6681012..e4f5949`
+returned `REVISE` with six reachable blockers. The correction retains an exact
+`NotStartedRetained` or typed result tombstone until a durable terminal ACK, adds a
+server-lifetime provider-turn reconciliation cursor beside the lifecycle cursor,
+revisits transient lease observations, invokes the shared scheduler in the exact
+runtime-gone UOW, validates `participant_muted.participant_id` before any browser
+cursor advance, and terminalizes a busy `agent.stop` execution/effect before its
+lifecycle checkpoint. The lifecycle checkpoint and subsequent command-result UOW
+remain two explicit durable phases: `effect_applied` blocks other command admission
+and startup/live lifecycle recovery finishes it without repeating provider stop.
+
+The review also proved that the previous Antigravity implementation treated 300 ms
+of PTY silence after Ctrl-C as retained-runtime quiescence. The real
+`gemini-3.6-flash` run above remains valid evidence of what that build visibly did,
+but it is not evidence that late native output or workspace side effects were
+impossible. The correction deletes that silence heuristic. Antigravity now writes
+Ctrl-C only for the exact turn, poisons the driver, and requires the common H/O/T
+supervisor to stop and reap the exact runtime. Mute can finalize only from the
+resulting provider-neutral `RuntimeGone` proof and leaves the Agent Session stopped;
+an uncertain stop remains quarantined and reusable by nobody.
+
+Deterministic corrections cover retained completed results, retained pre-dispatch
+zero-call proof, exact runtime-stop notification, transient-lease revisit,
+runtime-gone ordered-floor scheduling, busy confirmed/ambiguous stop custody, and
+malformed mute-event cursor rejection. The correction implementation is split from
+`e5172e0` through `fc2b538` into independently reviewable provider, persistence,
+server connection, frontend, test-structure, and async-structure commits. Their
+changed-line sizes are respectively 924, 142, 458, 215, 660, 251, 97, 515, 107,
+484, 94, and 95; no correction commit reaches 1,000 changed lines.
+
+`make verify` passes after those corrections: all repository architecture/source
+growth and eight policy-gate tests, Rust format/check, 72 frontend files with 367
+tests plus the production build and original-CSS cascade check, 15 desktop tests,
+301 workspace Rust tests, workspace/desktop clippy with warnings denied, and the
+final diff check. A new packaged Antigravity mute flow, push, and both post-push
+reviews are still required before this correction is completion evidence.
 
 ## API verification scope
 

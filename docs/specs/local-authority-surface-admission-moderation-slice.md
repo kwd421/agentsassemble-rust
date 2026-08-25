@@ -468,6 +468,23 @@ second provider call owner. The driver cell waits on `Notify` only while ownersh
 is absent. These choices reduce lock residency and idle CPU without creating a
 cache or weakening exact H/O/T and generation checks.
 
+The server-lifetime recovery owner advances independent provider-turn and lifecycle
+cursors on one delayed one-second tick. Each provider-turn page contains at most 64
+captured rows, observes at most eight concurrently, and bounds each observation to
+two seconds; delayed missed ticks prevent catch-up bursts. Exact in-memory ownership
+and retained results avoid OS observations on healthy active turns. This bounded
+scan intentionally trades sub-second recovery latency for predictable SQLite, CPU,
+and file-descriptor load while ensuring transient lease uncertainty is revisited
+without a process restart.
+
+Exact active-turn state is heap-allocated only while a runtime owns a turn, keeping
+the common runtime-state enum small for idle sessions. The room command and startup
+reconciliation futures are pinned behind explicit owner boundaries instead of
+inflating the long-lived room/server actor future by roughly 18–19 KiB. This spends
+a bounded short-lived allocation at command or startup admission to reduce every
+resident actor's future footprint; it changes no authority, ordering, or retry
+semantics.
+
 SQLite partial unique indexes enforce one blocking execution per room-scoped
 Agent Session and immutable runtime handle. Ordinary publication, RoomPortal
 tools, mute, effect phase changes, terminalization, requeue, and scheduling use
