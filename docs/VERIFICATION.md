@@ -1934,6 +1934,33 @@ connection-generation fencing against `4c7b2a0..8554bb9` and returned `A: APPROV
 The role slice, including its cursor correction, is therefore completion evidence at
 `8554bb9`.
 
+## Participant-mute and exact-turn design gate: 2026-08-25
+
+No mute implementation was started before the concurrency and crash contract was
+reviewed. Daybreaker Blue High manually traced the proposed room, persistence,
+provider-control, task-lifetime, and runtime-custody boundaries and returned
+`APPROVE` with no remaining Critical, High, or Medium design blocker. Its final
+implementation reminders are that a cancelled exact-turn begin handshake must be
+joined or leave durable unresolved authority, and `schedule_requested` must be
+consumed only in the assignment UOW.
+
+The same design was independently reviewed in the carried web critical-review
+session using GPT-5.6 Sol at Pro. The first pass found unsafe restart resend and
+interrupt crash ambiguity; the second found ambiguity requeue, execution-owned
+scheduling, roomless execution keys, and mutable-owner runtime uniqueness. The
+design was corrected after each pass. The final pass approved blocking quarantine
+with zero speculative requeue, room-scoped Agent Session scheduling authority,
+`(room_id, session_id, turn_generation)` execution identity, immutable launch
+uniqueness with full H/O/T CAS fencing, live task-death transitions, provider-specific
+replay safety, and the two evidence-based terminal finalizers: `B: APPROVE`.
+
+After approval, that web session was changed from Pro to `매우 높음`. The visible
+control reported `매우 높음, 5개 중 4번째`, and the composer button also reported
+`매우 높음`; normal implementation reviews continue at that verified level. This
+entry freezes only the design. Implementation, deterministic tests, packaged UI and
+allowed-provider real validation, commit/push, and post-implementation cross-review
+remain required before mute becomes completion evidence.
+
 ## API verification scope
 
 When a reachable flow specifically needs an API-backed provider, the allowed paid/provider-specific candidates are the official DeepSeek API and the designated Flash provider path. Every other API-backed verification uses only an explicitly free API or free model. Missing credentials, exhausted free quota, or unavailable models fail visibly; they do not trigger a paid substitution or a fallback provider.

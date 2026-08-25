@@ -254,63 +254,144 @@ catch-up, and readiness. Traffic cannot extend it.
 A role update validates permission, target, and exact enum, then commits
 participant state, event, result, and replay atomically.
 
-`participant.mute=true` rejects human targets and atomically commits agent mute,
-scheduler exclusion, public event, command result/replay, exact current turn
-identity, and a prepared interrupt effect. It never stops or detaches the
-persistent runtime or Agent Session. If busy, it interrupts only the exact current
-turn as the reachable original product does.
+`participant.mute` uses its independent capability, not `room.manage`. Its strict
+payload contains exactly `participant_id` and `muted`. Both human and Agent
+participants are valid targets. The room-owned `Participant.muted` field is the
+canonical mute authority; a human profile or Agent Session profile cannot override
+it. Human mute has no provider effect. An Agent effect is selected only from the
+canonical participant type and the exact room-scoped Agent Session, never from a
+role label.
 
-Only new active-turn assignment increments `turn_generation`. Active `turn_id`
-and generation remain immutable; mute reads them and terminal persistence
-validates them. Interrupt effects have a separate ID and sequence.
+The command transaction reauthorizes the current principal and target membership,
+binds `(room, principal, request_id, action, payload_hash)`, and atomically commits
+the participant state, public event, result/replay, and, for an active Agent turn,
+one prepared interrupt effect. A repeated request replays that result and cannot
+create another effect. Mute excludes future floor assignment and the existing
+canonical message and room-random ingress reject a muted human or Agent. It is not
+a blanket ban on room administration.
 
-Every terminal-publication transaction revalidates exact room, session,
-participant, turn, generation, runtime handle/owner epoch, `muted=false`, and no
-unresolved effect. A mismatch cannot publish ordinary success.
+Mute never stops or detaches a persistent runtime or Agent Session. If the target
+Agent is busy, only the exact current turn is interrupted. Unmute never guesses that
+the turn has stopped and cannot authorize a replacement generation while an
+execution or effect remains blocking.
 
-### Provider-start serialization
+### Durable execution and scheduling authority
 
-Assignment creates the active turn and durable `ProviderTurnExecution` in one
-transaction. Execution phases are `Assigned`, `StartAuthorized`, `Running`,
-`InterruptPending`, `Quiesced`, and `Terminal`.
+Only a new active-turn assignment increments `turn_generation`. Assignment commits
+the session's active turn, inflight input ownership, and one
+`ProviderTurnExecution` in the same transaction. The execution identity is
+`(room_id, session_id, turn_generation)` and every Agent Session foreign key uses
+the room-scoped `(room_id, session_id)` key. Generation is monotonic within that
+session. Active `turn_id` and generation are immutable.
 
-Before start authorization, the provider owner installs an exact in-memory
-`ActiveProviderTurnSlot` in `Preparing`. The authorization transaction verifies
-active identity, unmuted participant, no unresolved effect, and `Assigned` before
-recording `StartAuthorized` plus monotonic start epoch.
+Execution phases are `Assigned`, `StartDispatching`, `Running`,
+`InterruptPending`, `Quiescing`, `StartAmbiguous`, `InterruptAmbiguous`,
+`RecoveryRequired`, and terminal phases. A partial unique index permits at most one
+blocking execution per `(room_id, session_id)` and includes every listed
+nonterminal or quarantine phase. A second blocking execution for the same immutable
+runtime launch handle is also forbidden, even across owner transfer.
 
-If mute committed first, authorization is denied, provider call count stays zero,
-and the Preparing slot quiesces into typed interruption. If authorization committed
-first, mute targets the already-installed Preparing or Running slot, transitions
-durable execution to `InterruptPending`, and interrupts that exact per-turn token.
-SQLite commit order is authority; another DB read immediately before provider I/O
-is not a TOCTOU substitute.
+`StartAmbiguous`, `InterruptAmbiguous`, and `RecoveryRequired` are blocking
+quarantine, not terminal success. Their execution retains its inflight inputs,
+does not copy them to pending, keeps `requeue_finalized=false`, and blocks new
+assignment and runtime reuse. Timeout, task death, or uncertain transport alone
+cannot terminalize or requeue work.
 
-### Durable interrupt effects
+`schedule_requested` belongs to the exact room-scoped durable Agent Session, not
+to an execution. Human participants have no scheduling row or synthetic execution.
+Agent unmute commits `muted=false` and sets the flag. The shared scheduler consumes
+it only when the same transaction either creates a real assignment or proves that
+no pending input exists. An unresolved execution, ordered-floor ownership, or
+current mute preserves the flag. The quiescence finalizer and an execution-free
+unmute use the same scheduler owner, so early unmute, remute, terminalization while
+muted, and later unmute cannot lose a wake.
 
-Effect states are `Prepared`, `Claimed`, `InterruptIssuedWaitingTerminal`,
-`AlreadyIssuedWaitingTerminal`, `NotCurrentWaitingAuthority`, `Unconfirmed`,
-`Finalized`, and `Superseded`. All but the last two fence provider start and
-ordinary terminal publication. Claims carry owner, generation, and expiry and
-are safely reacquired. `NotCurrent` remains unresolved while the database still
-says the exact turn is active.
+### Provider-start and interrupt serialization
 
-Issuing a token or out-of-band interrupt is not terminal evidence. The provider
-owner must unwind `send_turn`, observe cleanup, remove the exact slot, and settle
-its terminal latch before emitting typed interruption with effect, turn, runtime
-handle, and owner-epoch identity. Only then may the room actor finalize and
-progress later work. A confirmed runtime exit is checkpointed in the same UOW.
+The turn task is the sole owner of provider I/O. It exposes a cloneable exact-turn
+control handle rather than sharing a driver mutex across network, PTY, database,
+queue, or task-join awaits. Registry and slot locks are held only while copying or
+transitioning small authority values; database transactions, registry locks, and
+slot locks are never nested.
 
-Duplicate mute for one generation shares one durable effect owner and may not
-issue a second physical interrupt or strand a second fence. Command replay never
-reclaims a post-commit effect; only the reconciler owns unfinished effects.
+Before provider start, the owner installs `ActiveProviderTurnSlot::Preparing`. The
+durable CAS then verifies the exact room/session/participant/turn/generation and
+current `muted=false`, consumes the unique start authorization, and records
+`StartDispatching` plus a unique dispatch nonce before any provider I/O.
+`begin_exact_turn(operation_id)` atomically returns either `NotStarted` or
+`Started { control, completion }`.
 
-### Restart and runtime custody
+If mute commits first, start authorization fails and provider call count remains
+zero. If start authorization commits first, mute reserves the exact interrupt and
+joins the Preparing handshake. It may use no provider control after proved
+`NotStarted`; only `Started` can expose exact control and its completion latch.
+Cancelling the waiter cannot cancel the handshake owner or orphan an unrecorded
+external start. SQLite commit order is authority; another read immediately before
+I/O is not a substitute.
 
-Before network admission, startup reconciliation claims every nonterminal provider
-execution, including executions without an interrupt effect. Runtime custody binds
-handle, owner, owner epoch, custody lease, provider runtime instance nonce, and
-observation ID.
+`ProviderEffect` phases are `Prepared`, `Claimed`, `Dispatching`,
+`IssuedWaitingQuiescence`, and `Finalized`, with explicit ambiguous/quarantine
+outcomes. Claiming performs no provider I/O. `Dispatching` is durably recorded
+immediately before the first non-idempotent interrupt byte or request. An expired
+claim may be reacquired only where the provider replay class proves safety;
+`Dispatching` is never blindly replayed. Duplicate mute for one generation shares
+one durable effect owner and one physical interrupt at most.
+
+Provider control remains behind the common exact-turn contract while replay and
+quiescence stay in small provider modules:
+
+- Codex uses exact provider turn identity and the official turn interrupt. The
+  `turn/start` response is cancellation-shielded until `{threadId, turnId}` is
+  captured. A crash after request bytes but before that identity never resends
+  start blindly.
+- OpenCode uses exclusive current-turn session custody and observe-before-retry.
+  An unresolved `/abort` blocks session reuse and is never blindly replayed.
+- Antigravity preserves the current reachable PTY behavior. Ctrl-C is issued only
+  for a `Started` exact H/O/T/generation slot. A late or ambiguous Ctrl-C is never
+  sent to an idle or reused runtime; exact stop proof or quarantine is required.
+  This module can later be replaced without changing room, persistence, or common
+  control contracts.
+
+The live room owner retains the exact execution and dispatch nonce for every spawned
+provider task. A task that exits without a typed result is not log-only: proved
+pre-I/O `NotStarted` takes the safe failure path; death after start dispatch records
+`StartAmbiguous` or `RecoveryRequired`; death after interrupt dispatch records
+`InterruptAmbiguous` or `RecoveryRequired`. Post-I/O task death retains inflight
+ownership and requeues zero inputs.
+
+### Terminal finalizers and restart custody
+
+Every ordinary success, decline, tool, and terminal-publication transaction CASes
+the exact room/session/participant/turn/generation, complete current H/O/T custody,
+current `muted=false`, and absence of an unresolved effect. It cannot publish or
+clear authority through an interrupted or stale generation.
+
+`ExactTurnQuiescedRuntimeRetained` is available only after the send owner, provider
+transport, new RoomPortal admission, committing tool reservations, exact slot, and
+completion latch are quiescent. Its single UOW records `Interrupted`, finalizes the
+effect, emits exactly one interrupted `turn_finished`, requeues inflight input once,
+and retains the attached idle runtime plus H/O/T. If the session is unmuted and has
+a durable schedule request, the same UOW invokes the shared scheduler.
+
+`ExactRuntimeGone` requires positive exit proof for the exact H/O/T. Its single UOW
+records `Interrupted`, finalizes and requeues once, clears H/O/T and provider session
+authority, and enters the existing clean stopped/detached state. It never advertises
+an attached runtime. If neither exact quiescence nor exact runtime-gone is proved,
+the execution/effect remains quarantined and the relevant control/reuse capability
+fails closed.
+
+Runtime launch handle H is immutable and nonempty per launch generation and cannot
+be reused. Owner O is fresh and nonreused for every custody transfer. The full H/O/T
+tuple is rebound by atomic CAS, cleared only by exact runtime-gone, and cannot be
+resurrected after terminalization. Runtime blocking uniqueness uses immutable H;
+control and finalizer fencing use the complete current H/O/T. These private values
+never appear in public events, logs, prompts, fixtures, or client state.
+
+Before network admission, startup reconciliation scans every nonterminal execution
+and effect in bounded pages and with bounded concurrency. Only `Assigned` with a
+proved pre-dispatch state may start. `StartDispatching` and later states permit only
+exact same-runtime adoption/control, provider-safe observation, or exact runtime-gone
+proof; none authorizes blind start or interrupt replay.
 
 Lifecycle reservations retain the exact private principal, payload, and creating
 server-runtime generation required to finish an already-authorized recovery transition.
@@ -352,20 +433,20 @@ ends in runtime-gone. If neither can be proved, the effect remains fail-closed a
 the provider mute capability is absent. Reachable parity providers implement the
 verified control contract before advertising mute.
 
-Before process-wide admission proceeds, lifecycle recovery uses clean schema 23. Its
+Before process-wide admission proceeds, lifecycle recovery uses clean schema 24. Its
 private runtime identity is one indivisible handle/owner/lease-token tuple. Runtime-v5
 cross-binds the launch token with the hashed OS boot identity; an old-boot absence proof
 is accepted only when every available durable and lease witness names that same boot and
 launch generation. macOS uses immutable `kern.bootsessionuuid` through the maintained
 safe `sysctl` boundary. Missing, malformed, substituted, or unknown evidence remains
-`Ambiguous`; schema 22 and every other non-current schema are rejected without
-conversion or compatibility behavior.
+`Ambiguous`; every non-current schema is rejected without conversion or
+compatibility behavior.
 
-`InterruptIssuedWaitingTerminal` is never finalized from issue state alone. Exact
-request quiescence, exact runtime gone, or exact-generation provider terminal
-observation is required. Unmute commits canonical `muted=false` plus pending
-reconciliation and advances scheduling idempotently. Stop cleanup suppresses only
-exact benign already-stopped/not-running outcomes.
+An issued interrupt is never finalized from issue state alone. Exact turn
+quiescence or exact runtime-gone proof is required. The corresponding finalizer is
+the only owner allowed to requeue inflight input and sets `requeue_finalized=true`
+in the same UOW. Stop cleanup suppresses only exact benign already-stopped or
+not-running outcomes.
 
 ## Frontend and verification
 
@@ -377,8 +458,10 @@ High-value deterministic contracts cover bootstrap concurrency/restart, lease AB
 permanent debit/replay, proof transcript and `H == C`/gap/deadline, roster/roles,
 mute-before-authorize, authorize-before-mute, Preparing-slot mute, duplicate mute,
 pre-registration, every execution crash phase, claim expiry, owner-adoption ABA,
-runtime nonce mismatch, typed quiescence, terminal suppression, runtime reuse, and
-unmute progression.
+runtime nonce mismatch, typed quiescence, terminal suppression, runtime reuse,
+idle unmute, early-unmute/remute, ordered-floor wake preservation, quarantine
+requeue zero, later exact-proof requeue one, cross-room session identity,
+immutable-launch uniqueness, cross-room finalizer rejection, and unmute progression.
 
 Each completed owner is also inspected for avoidable CPU, memory, latency,
 task/process, serialization, and disk-write cost. Optimizations remain bounded and
