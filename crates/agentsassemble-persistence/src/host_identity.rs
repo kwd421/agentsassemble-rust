@@ -57,10 +57,46 @@ impl SqliteStore {
 
 #[cfg(test)]
 mod tests {
-    use crate::{PersistenceError, SqliteStore};
+    use std::fs::OpenOptions;
+
+    use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+
+    use crate::{
+        PersistenceError, SqliteStore,
+        host_key_file::{HostKeyMaterial, HostKeyPolicy},
+    };
 
     fn key_path(root: &std::path::Path) -> std::path::PathBuf {
         root.join("central-directory").join("host-ed25519.pk8")
+    }
+
+    async fn marker_only_database(root: &std::path::Path, nonce: &str) -> std::path::PathBuf {
+        let path = root.join("runtime.sqlite3");
+        let file = OpenOptions::new()
+            .create_new(true)
+            .read(true)
+            .write(true)
+            .open(&path)
+            .unwrap_or_else(|error| panic!("create marker database: {error}"));
+        crate::private_fs::secure_file(&file)
+            .unwrap_or_else(|error| panic!("secure marker database: {error}"));
+        drop(file);
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(SqliteConnectOptions::new().filename(&path))
+            .await
+            .unwrap_or_else(|error| panic!("open marker database: {error}"));
+        sqlx::query(crate::schema::HOST_INITIALIZATION_DDL)
+            .execute(&pool)
+            .await
+            .unwrap_or_else(|error| panic!("create host marker: {error}"));
+        sqlx::query("INSERT INTO runtime_host_initialization(singleton, nonce) VALUES (1, ?)")
+            .bind(nonce)
+            .execute(&pool)
+            .await
+            .unwrap_or_else(|error| panic!("insert host marker: {error}"));
+        pool.close().await;
+        path
     }
 
     #[tokio::test]
@@ -166,6 +202,60 @@ mod tests {
             assert!(
                 !database.exists(),
                 "attempt {attempt} must not create an empty database that enables key reuse"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn matching_marker_and_key_resume_one_interrupted_initialization() {
+        let directory = tempfile::tempdir().unwrap_or_else(|error| panic!("tempdir: {error}"));
+        let nonce = uuid::Uuid::new_v4().to_string();
+        let database = marker_only_database(directory.path(), &nonce).await;
+        drop(
+            HostKeyMaterial::load_or_create(
+                Some(&key_path(directory.path())),
+                HostKeyPolicy::CreateOnly,
+                &nonce,
+            )
+            .unwrap_or_else(|error| panic!("create matching host key: {error}")),
+        );
+
+        let restored = SqliteStore::open_path(&database)
+            .await
+            .unwrap_or_else(|error| panic!("resume marker-bound initialization: {error}"));
+        assert!(restored.was_created());
+        drop(restored);
+        assert!(
+            !SqliteStore::open_path(&database)
+                .await
+                .unwrap_or_else(|error| panic!("reopen restored authority: {error}"))
+                .was_created()
+        );
+    }
+
+    #[tokio::test]
+    async fn mismatched_marker_and_key_remain_rejected_across_reopen() {
+        let directory = tempfile::tempdir().unwrap_or_else(|error| panic!("tempdir: {error}"));
+        let marker_nonce = uuid::Uuid::new_v4().to_string();
+        let stale_nonce = uuid::Uuid::new_v4().to_string();
+        let database = marker_only_database(directory.path(), &marker_nonce).await;
+        drop(
+            HostKeyMaterial::load_or_create(
+                Some(&key_path(directory.path())),
+                HostKeyPolicy::CreateOnly,
+                &stale_nonce,
+            )
+            .unwrap_or_else(|error| panic!("create stale host key: {error}")),
+        );
+
+        for attempt in 1..=2 {
+            assert!(matches!(
+                SqliteStore::open_path(&database).await,
+                Err(PersistenceError::InvalidHostIdentity)
+            ));
+            assert!(
+                database.is_file(),
+                "attempt {attempt} lost its durable marker"
             );
         }
     }
