@@ -66,6 +66,44 @@ async fn exact_live_replay_reenters_start_only_after_gone_proof() {
 }
 
 #[tokio::test]
+async fn exact_effect_inflight_replay_remains_live_recovery_authority() {
+    let (store, principal, _directory) = fixture().await;
+    let payload = json!({"agent_id": AGENT_ID});
+    let AgentStartPlan::Start(effect) = store
+        .prepare_agent_start(&principal, "live-effect-inflight", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare effect-inflight start: {error}"))
+    else {
+        panic!("stopped session must prepare a start effect");
+    };
+    authorize_start(
+        &store,
+        &principal,
+        "live-effect-inflight",
+        &payload,
+        &effect,
+    )
+    .await;
+    let candidate = store
+        .load_lifecycle_reconciliation_candidate(
+            &principal,
+            "live-effect-inflight",
+            "agent.start",
+            &payload,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("load effect-inflight candidate: {error}"));
+    assert_eq!(candidate.session.lifecycle_intent_status, "effect_inflight");
+    assert_eq!(
+        store
+            .apply_live_runtime_reconciliation(&candidate, &RuntimeReconciliationObservation::Gone)
+            .await
+            .unwrap_or_else(|error| panic!("apply effect-inflight gone proof: {error}")),
+        LiveRuntimeReconciliation::RetryOriginalEffect
+    );
+}
+
+#[tokio::test]
 async fn exact_live_replay_resumes_only_the_adopted_owned_runtime() {
     let (store, principal, _directory) = fixture().await;
     let payload = json!({"agent_id": AGENT_ID});
@@ -255,6 +293,7 @@ async fn authorize_start(
 ) {
     let (handle_id, owner_id) = match request_id {
         "live-gone-start" => ("runtime-live-gone", "supervisor-live"),
+        "live-effect-inflight" => ("runtime-live-effect-inflight", "supervisor-live"),
         "live-adopted-start" => ("runtime-live-adopted", "supervisor-live"),
         "abandoned-start" => ("runtime-abandoned", "supervisor-dead"),
         "previous-supervisor-start" => ("runtime-previous-supervisor", "supervisor-previous"),

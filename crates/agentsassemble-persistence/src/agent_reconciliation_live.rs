@@ -42,7 +42,10 @@ impl SqliteStore {
             || reservation.request_id != request_id
             || reservation.action != action
             || reservation.payload != *payload
-            || candidate.session.lifecycle_intent_status != "unconfirmed"
+            || !matches!(
+                candidate.session.lifecycle_intent_status.as_str(),
+                "effect_inflight" | "unconfirmed"
+            )
         {
             return Err(PersistenceError::CommandConflict);
         }

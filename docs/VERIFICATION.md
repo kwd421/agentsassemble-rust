@@ -1391,28 +1391,58 @@ custodied running Codex runtime is adopted, exactly stopped, checkpointed, and f
 by a non-reused new runtime. Existing deterministic OpenCode coverage continues proving
 that an uncertain session-creation response cannot poll a second `POST /session`.
 
-The unchanged `make verify` passed every mandatory architecture, source-growth,
-logical-line, and 800-line gate; generated bindings; production frontend and original-CSS
-verification; 72 frontend files with 356 tests; 15 Tauri tests; 18 domain, 92 persistence,
-four protocol, 101 provider, and 21 server unit tests; 23 Rust integration tests;
-documentation tests; warning-denied workspace/desktop Clippy; and final diff validation.
-No allow, exception, threshold change, placeholder, fallback, or compatibility path was
-introduced.
+The first manual Daybreaker review and the independent web review both found a Unix
+pre-anchor crash gap: `launching:<generation>` could outlive the server before the
+guardian acquired its own process-lifetime proof. The correction overlaps the server and
+guardian shared locks on the exact token-bound lifetime inode. The guardian publishes a
+bounded readiness record but cannot create the anchor until the server releases its lock
+and sends the exact continue record. The guardian retains that lock while spawning an
+exact generation-tagged anchor, and the existing guardian-to-stopped-launcher descriptor
+handoff remains unchanged. `pending`/pre-anchor `launching` is therefore `Gone` only when
+both the lifetime lock and exact runtime tag are absent; any observation failure remains
+unknown, and an activated `unix` marker still requires the guardian's exact cleanup
+receipt. Guardian normal cleanup, guardian death without a receipt, cancellation before
+provider readiness, and cancellation after guardian spawn but before anchor creation are
+covered by focused process tests.
 
-The performance inspection removed a duplicate startup-wide reconciliation pass. Startup
-now performs that disk/process observation exactly once before network admission, while
-the live watcher retains its bounded 64-key SQLite page, eight-observation concurrency,
-and two-second per-observation timeout. Recovery reuses the captured candidate and exact
-request claim rather than introducing a cache, polling task per reservation, copied
-authority, or repeated provider effect. The intent is to remove redundant startup SQLite
-reads and provider observations at their server owner without changing admission order or
-creating another authority. The preserved invariants are reconciliation-before-admission,
-exact candidate CAS, bounded live discovery, and fail-closed uncertainty; the accepted
-trade-off is the existing bounded live scan rather than a lower-latency per-reservation
-task or cache. The unchanged full verification above proves behavior and structure; a
-runtime benchmark is not claimed because this correction removes one deterministically
-duplicated call rather than tuning a workload-dependent hot path. Packaged Computer Use
-and both pushed exact-diff reviews remain required before this correction is closed.
+The same review found that exact `effect_inflight` replay was admitted by persistence but
+rejected by the live-recovery candidate boundary. That phase now retains the same exact
+live recovery authority as `unconfirmed`; a focused persistence regression and the server
+owner-loss recovery tests prove that it remains unresolved/recoverable rather than being
+misclassified as a terminal command rejection.
+
+After the review corrections, the unchanged `make verify` passed every mandatory
+architecture, source-growth, logical-line, and 800-line gate; generated bindings;
+production frontend and original-CSS verification; 72 frontend files with 356 tests; 15
+Tauri tests; 18 domain, 93 persistence, four protocol, 101 provider, and 21 server unit
+tests; 23 Rust integration tests; documentation tests; warning-denied workspace/desktop
+Clippy; and final diff validation. The lifetime handshake was split at its owning boundary
+into `guardian_lifetime.rs`; `guardian.rs` is 795 lines and `unix_process_tree.rs` remains
+exactly 800. No allow, exception, threshold change, placeholder, fallback, compatibility
+path, or hidden schema migration was introduced.
+
+The performance inspection found two deterministic removable costs at the
+server/persistence owner: Tokio interval's immediate first tick repeated the pre-admission
+scan, and each candidate deserialized and allocated terminal reservation history that its
+pending-only CAS never consumed. The watcher now delays its first tick by the configured
+interval and loads only pending reservation rows. It retains ordered 64-Agent-Session
+pages, eight-observation concurrency, and the two-second per-observation timeout. Recovery
+still reuses the captured candidate and exact request claim rather than introducing a
+cache, task per reservation, copied authority, or repeated provider effect.
+
+The optimization intent is to remove redundant startup process/disk work and
+terminal-history allocation at their existing owners. The preserved invariants are
+reconciliation-before-admission, dynamic discovery and corruption detection across every
+Agent Session, exact candidate CAS, bounded paging/concurrency/timeout, and fail-closed
+uncertainty. A pending-reservation-first alternative was measured with SQLite `EXPLAIN
+QUERY PLAN` and rejected: without a schema-20 status/session index it scans the complete
+reservation history and builds a DISTINCT temporary B-tree each second. Adding that index
+would be an explicit future schema, not a hidden migration here. The accepted trade-off is
+the existing bounded per-session candidate read until that schema is designed and
+benchmarked. Phase behavior is covered by persistence/server regressions and the
+unchanged mandatory structure gates; no workload-calibrated latency claim is made.
+Packaged Computer Use and both pushed exact-diff re-reviews remain required before this
+correction is closed.
 
 ## API verification scope
 

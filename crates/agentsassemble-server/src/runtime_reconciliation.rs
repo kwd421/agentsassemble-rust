@@ -8,7 +8,7 @@ use agentsassemble_persistence::{
 use agentsassemble_provider::{ProviderAdapter, ProviderRuntimeGone, ProviderRuntimeObservation};
 use futures_util::{StreamExt, stream};
 use serde_json::Value;
-use tokio::time::MissedTickBehavior;
+use tokio::time::{Instant, MissedTickBehavior};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
@@ -107,7 +107,10 @@ pub(crate) async fn watch_runtime_reconciliation(
     cancellation: CancellationToken,
 ) {
     let mut cursor: Option<RuntimeReconciliationCursor> = None;
-    let mut interval = tokio::time::interval(RECOVERY_SCAN_INTERVAL);
+    let mut interval = tokio::time::interval_at(
+        Instant::now() + RECOVERY_SCAN_INTERVAL,
+        RECOVERY_SCAN_INTERVAL,
+    );
     interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
     loop {
         tokio::select! {

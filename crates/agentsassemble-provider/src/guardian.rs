@@ -280,6 +280,7 @@ impl GuardianLaunch {
     fn anchor_command(&self, lease_path: &Path, lease_token: &str) -> io::Result<Command> {
         let mut command = Command::new(self.executable.launch_path());
         command.env_clear();
+        command.env(crate::unix_process_tree::RUNTIME_TOKEN_ENV, lease_token);
         self.configure(&mut command, HelperMode::Anchor, lease_path, lease_token);
         self.executable.configure_std_command(&mut command)?;
         Ok(command)
@@ -511,6 +512,7 @@ fn run_guardian(
     launch: &GuardianLaunch,
     fork_policy: ProviderForkPolicy,
 ) -> io::Result<()> {
+    let launch_lifetime = crate::guardian_lifetime::accept_handoff(lease_path, lease_token)?;
     #[cfg(test)]
     if let Some(signal) = env::var_os(TEST_PRE_ANCHOR_SIGNAL_ENV) {
         std::fs::write(signal, b"spawned")?;
@@ -579,6 +581,10 @@ fn run_guardian(
             provider_pid,
         )
     })();
+    // The launched provider owns the continuing lifetime proof once the launch
+    // operation has completed. Releasing the guardian's copy before cleanup
+    // lets absence confirmation distinguish a dead provider from this helper.
+    drop(launch_lifetime);
     let cleanup = match provider.as_mut() {
         Some(provider) => terminate_runtime(
             &mut anchor,

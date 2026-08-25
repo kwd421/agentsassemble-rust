@@ -21,6 +21,8 @@ mod filesystem;
 mod guardian;
 #[cfg(unix)]
 mod guardian_health;
+#[cfg(unix)]
+mod guardian_lifetime;
 mod launch_error;
 mod loopback_http;
 mod opencode;

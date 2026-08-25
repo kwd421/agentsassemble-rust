@@ -8,13 +8,14 @@ use std::{
 
 use futures_util::StreamExt;
 use rustix::process::Pid;
+use tokio::io::AsyncWriteExt;
 use tokio::process::ChildStdin;
 use tokio_util::codec::{FramedRead, LinesCodec};
 
 use crate::{
     filesystem::BoundExecutable,
     guardian::{GuardianLaunch, ProviderForkPolicy, ProviderLaunchConfig},
-    guardian_health,
+    guardian_health, guardian_lifetime,
     launch_error::DriverLaunchError,
     runtime::DriverError,
     runtime_lease::{
@@ -211,31 +212,8 @@ impl UnixProcessCustody {
         launch: &GuardianLaunch,
         config: ProviderLaunchConfig<'_>,
     ) -> Result<Self, DriverLaunchError> {
-        let mut command = launch
-            .guardian_command(runtime_lease.path(), runtime_lease.token(), config)
-            .map_err(|_| custody_error())?;
-        command
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null());
-        let Ok(mut guardian) = command.spawn() else {
-            return Err(custody_error().into());
-        };
-        let Some(guardian_input) = guardian.stdin.take() else {
-            return Err(failed_started_guardian(&mut guardian, None, runtime_lease).await);
-        };
-        let Some(guardian_output) = guardian.stdout.take() else {
-            return Err(failed_started_guardian(
-                &mut guardian,
-                Some(guardian_input),
-                runtime_lease,
-            )
-            .await);
-        };
-        let mut guardian_output = FramedRead::new(
-            guardian_output,
-            LinesCodec::new_with_max_length(MAX_HELPER_LINE_BYTES),
-        );
+        let (mut guardian, guardian_input, mut guardian_output) =
+            establish_guardian_lifetime_custody(runtime_lease, launch, config).await?;
         let Ok(Ok((anchor_pid, provider_pid))) =
             tokio::time::timeout(HELPER_TIMEOUT, read_ready(&mut guardian_output)).await
         else {
@@ -361,6 +339,89 @@ impl UnixProcessCustody {
             drop(self.guardian_input.take());
         }
     }
+}
+
+async fn establish_guardian_lifetime_custody(
+    runtime_lease: &HeldRuntimeLease,
+    launch: &GuardianLaunch,
+    config: ProviderLaunchConfig<'_>,
+) -> Result<
+    (
+        tokio::process::Child,
+        ChildStdin,
+        FramedRead<tokio::process::ChildStdout, LinesCodec>,
+    ),
+    DriverLaunchError,
+> {
+    let command = launch.guardian_command(runtime_lease.path(), runtime_lease.token(), config);
+    let Ok(mut command) = command else {
+        runtime_lease.release_launch_lifetime();
+        return Err(custody_error().into());
+    };
+    command
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    let spawned = command.spawn();
+    drop(command);
+    let Ok(mut guardian) = spawned else {
+        runtime_lease.release_launch_lifetime();
+        return Err(custody_error().into());
+    };
+    let Some(guardian_input) = guardian.stdin.take() else {
+        return Err(abort_unacknowledged_guardian(&mut guardian, None, runtime_lease).await);
+    };
+    let Some(guardian_output) = guardian.stdout.take() else {
+        return Err(abort_unacknowledged_guardian(
+            &mut guardian,
+            Some(guardian_input),
+            runtime_lease,
+        )
+        .await);
+    };
+    let mut guardian_output = FramedRead::new(
+        guardian_output,
+        LinesCodec::new_with_max_length(MAX_HELPER_LINE_BYTES),
+    );
+    let mut guardian_input = guardian_input;
+    let ready =
+        tokio::time::timeout(HELPER_TIMEOUT, read_lifetime_ready(&mut guardian_output)).await;
+    if !matches!(ready, Ok(Ok(()))) {
+        return Err(abort_unacknowledged_guardian(
+            &mut guardian,
+            Some(guardian_input),
+            runtime_lease,
+        )
+        .await);
+    }
+    runtime_lease.release_launch_lifetime();
+    if write_lifetime_handoff(&mut guardian_input).await.is_err() {
+        return Err(
+            failed_started_guardian(&mut guardian, Some(guardian_input), runtime_lease).await,
+        );
+    }
+    Ok((guardian, guardian_input, guardian_output))
+}
+
+async fn write_lifetime_handoff(input: &mut ChildStdin) -> std::io::Result<()> {
+    input.write_all(guardian_lifetime::CONTINUE).await?;
+    input.flush().await
+}
+
+async fn read_lifetime_ready(
+    lines: &mut FramedRead<tokio::process::ChildStdout, LinesCodec>,
+) -> Result<(), DriverError> {
+    for _ in 0..MAX_HELPER_LINES {
+        let line = lines
+            .next()
+            .await
+            .ok_or_else(custody_error)?
+            .map_err(|_| custody_error())?;
+        if line == guardian_lifetime::READY {
+            return Ok(());
+        }
+    }
+    Err(custody_error())
 }
 
 struct HealthProbePoison<'a> {
@@ -490,6 +551,28 @@ async fn failed_started_guardian(
         let _ = guardian.wait().await;
     }
     if receipt {
+        DriverLaunchError::safe(custody_error())
+    } else {
+        DriverLaunchError::uncertain(custody_error())
+    }
+}
+
+async fn abort_unacknowledged_guardian(
+    guardian: &mut tokio::process::Child,
+    guardian_input: Option<ChildStdin>,
+    runtime_lease: &HeldRuntimeLease,
+) -> DriverLaunchError {
+    drop(guardian_input);
+    let mut exited = matches!(
+        tokio::time::timeout(HELPER_TIMEOUT, guardian.wait()).await,
+        Ok(Ok(_))
+    );
+    if !exited {
+        let _ = guardian.kill().await;
+        exited = guardian.wait().await.is_ok();
+    }
+    runtime_lease.release_launch_lifetime();
+    if exited {
         DriverLaunchError::safe(custody_error())
     } else {
         DriverLaunchError::uncertain(custody_error())

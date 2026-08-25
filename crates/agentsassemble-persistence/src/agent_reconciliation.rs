@@ -208,7 +208,7 @@ pub(crate) async fn load_candidate(
     let encoded_session = row.get::<String, _>("session_json");
     let session = serde_json::from_str::<DurableAgentSession>(&encoded_session)?;
     let reservation_rows = sqlx::query(
-        "SELECT principal_id, request_id, action, payload_hash, principal_json, payload_json, supervisor_generation, operation_id, status, phase, prepared_result_json, failure_code, failure_message FROM lifecycle_command_reservations WHERE room_id = ? AND session_id = ? ORDER BY principal_id, request_id",
+        "SELECT principal_id, request_id, action, payload_hash, principal_json, payload_json, supervisor_generation, operation_id, status, phase, prepared_result_json, failure_code, failure_message FROM lifecycle_command_reservations WHERE room_id = ? AND session_id = ? AND status = 'pending' ORDER BY principal_id, request_id",
     )
     .bind(room_id)
     .bind(session_id)

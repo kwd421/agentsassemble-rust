@@ -100,11 +100,12 @@ async fn guardian_runs_outside_the_server_process_group() {
     let mut guardian_child = command
         .spawn()
         .unwrap_or_else(|error| panic!("spawn guardian test command: {error}"));
+    drop(command);
     let guardian_pid = guardian_child
         .id()
         .unwrap_or_else(|| panic!("guardian pid is unavailable"));
     let mut cleanup = ExactProcessCleanup::new(guardian_pid);
-    let input = guardian_child
+    let mut input = guardian_child
         .stdin
         .take()
         .unwrap_or_else(|| panic!("guardian input is unavailable"));
@@ -112,7 +113,7 @@ async fn guardian_runs_outside_the_server_process_group() {
         .stdout
         .take()
         .unwrap_or_else(|| panic!("guardian output is unavailable"));
-    let (anchor_pid, _) = read_guardian_ready(output, "guardian group").await;
+    let (anchor_pid, _) = read_guardian_ready(output, "guardian group", &lease, &mut input).await;
     assert!(anchor_pid > 0);
     wait_until(Duration::from_secs(5), || {
         std::fs::read(&cwd_report)
@@ -199,15 +200,20 @@ async fn guardian_death_without_a_cleanup_receipt_never_proves_gone() {
     let mut guardian = command
         .spawn()
         .unwrap_or_else(|error| panic!("spawn guardian death command: {error}"));
+    drop(command);
     let guardian_pid = guardian
         .id()
         .unwrap_or_else(|| panic!("guardian death pid is unavailable"));
     let mut guardian_cleanup = ExactProcessCleanup::new(guardian_pid);
+    let mut input = guardian
+        .stdin
+        .take()
+        .unwrap_or_else(|| panic!("guardian death input is unavailable"));
     let output = guardian
         .stdout
         .take()
         .unwrap_or_else(|| panic!("guardian death output is unavailable"));
-    let (anchor_pid, _) = read_guardian_ready(output, "guardian death").await;
+    let (anchor_pid, _) = read_guardian_ready(output, "guardian death", &lease, &mut input).await;
     let mut group_cleanup = ExactProcessGroupCleanup::new(anchor_pid);
     guardian_cleanup.kill_now();
     tokio::time::timeout(Duration::from_secs(2), guardian.wait())
@@ -681,15 +687,28 @@ fn process_exists(raw_pid: u32) -> bool {
         })
 }
 
-async fn read_guardian_ready(output: tokio::process::ChildStdout, context: &str) -> (u32, u32) {
-    use tokio::io::{AsyncBufReadExt, BufReader};
+async fn read_guardian_ready(
+    output: tokio::process::ChildStdout,
+    context: &str,
+    lease: &crate::runtime_lease::HeldRuntimeLease,
+    input: &mut tokio::process::ChildStdin,
+) -> (u32, u32) {
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
     let ready = tokio::time::timeout(Duration::from_secs(5), async {
         let mut output = BufReader::new(output);
+        let mut lifetime_handed_off = false;
         for _ in 0..32 {
             let mut line = String::new();
             if output.read_line(&mut line).await? == 0 {
                 break;
+            }
+            if line.trim() == crate::guardian_lifetime::READY {
+                lease.release_launch_lifetime();
+                input.write_all(crate::guardian_lifetime::CONTINUE).await?;
+                input.flush().await?;
+                lifetime_handed_off = true;
+                continue;
             }
             if let Some(identities) = line
                 .trim()
@@ -699,6 +718,9 @@ async fn read_guardian_ready(output: tokio::process::ChildStdout, context: &str)
                     Some((anchor.parse::<u32>().ok()?, provider.parse::<u32>().ok()?))
                 })
             {
+                if !lifetime_handed_off {
+                    return Ok::<_, std::io::Error>(None);
+                }
                 return Ok::<_, std::io::Error>(Some(identities));
             }
         }
