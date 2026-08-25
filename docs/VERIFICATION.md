@@ -2102,6 +2102,40 @@ correction, and forged/missing-reservation regression. These approvals close the
 manual-review condition for those two correction ranges, but do not replace the still
 required fresh packaged product flow and allowed-provider verification.
 
+## Central guest registration and host-custody verification: 2026-08-26
+
+Public Rust commit `429127e` passed the complete `make verify` boundary: all
+architecture/source-growth/policy gates, Rust format/check and generated types, the
+production frontend build with original-CSS verification, 74 frontend files with 371
+tests, 15 desktop tests, all-feature workspace tests, warning-denied workspace and
+desktop Clippy, documentation tests, and the final diff check.
+
+Computer Use drove the release package `AgentsAssemble Central Verify` under the
+isolated identifier `app.agentsassemble.rust.centralregverify0826` with the normal
+production central-directory URL. A fresh guest display name created a real central
+guest, committed the native local profile, obtained the exact purpose-bound local
+registration proof, registered the local server, and reached the recovery-code screen.
+The recovery code was redacted from tool output and was neither copied nor recorded.
+After acknowledging that screen, the copied application reached the real zero-room
+directory. The room rail contained no fabricated room and retained its server-owned
+create-room entry.
+
+Normal quit stopped the package and its owned sidecar. Relaunch skipped the login gate
+and returned to the same zero-room application. Read-only SQLite inspection before and
+after restart found the same digest over the public `(server_id, host_public_key)`
+identity, bootstrap state `complete`, zero rooms, and exactly one durable host
+initialization marker. This verifies restart-stable registration custody without
+reading or logging the private key. The Friends view still reported `Load failed`;
+that is the separately inventoried, unimplemented `/api/room-friends` surface and was
+not counted as central or zero-room parity.
+
+After the run, Computer Use closed the application; no exact package, sidecar, or server
+process remained. The isolated Application Support, WebKit, cache, `.app`, and `.dmg`
+paths were permanently removed. Daybreaker Blue High and the independent web reviewer
+at verified `매우 높음` both manually reviewed the final nonce-bound correction and
+returned `APPROVE` with no remaining Critical, High, or Medium blocker. Neither review
+used Deep Scan, another automated scanner, or a real provider.
+
 ## API verification scope
 
 When a reachable flow specifically needs an API-backed provider, the allowed paid/provider-specific candidates are the official DeepSeek API and the designated Flash provider path. Every other API-backed verification uses only an explicitly free API or free model. Missing credentials, exhausted free quota, or unavailable models fail visibly; they do not trigger a paid substitution or a fallback provider.

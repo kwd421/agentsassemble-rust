@@ -1,6 +1,6 @@
 # WORKBOARD
 
-Status: Phase 4 — local authority, product surfaces, strict admission/subscription, and canonical role/mute are the active cutover boundary. Pro critical design review approved the complete boundary on 2026-08-25. The local mute/exact-turn candidate is implemented and passes deterministic gates; it is not completion evidence until public push, packaged real-provider verification, cleanup, and both post-implementation reviews pass.
+Status: Phase 4 — local authority, product surfaces, strict admission/subscription, and canonical role/mute are the active cutover boundary. Pro critical design review approved the complete boundary on 2026-08-25. Packaged central guest registration and restart-stable host custody are verified at `429127e`; the remaining mute/exact-turn boundary still requires its fresh packaged provider matrix and final completion review.
 
 Purpose: route the asynchronous Rust reimplementation without duplicating its contracts.
 

@@ -1,6 +1,7 @@
 # Local Authority, Product Surface, Admission, and Moderation Slice
 
-Status: active implementation design; Pro correction review pending 2026-08-26
+Status: active implementation; central registration correction verified 2026-08-26,
+remaining mute/provider exit evidence pending
 
 Comparison baseline: original
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; Rust

@@ -4,7 +4,7 @@ Status: source-derived reimplementation exposure inventory, 2026-08-25
 
 Comparison baseline: original
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust
-`8554bb9`. The active local-authority,
+`429127e`. The active local-authority,
 surface, admission, subscription, and moderation boundary is design-approved but
 not complete as one boundary. Local authority, product-surface, subscription, and
 process-wide admission and canonical participant-role slices, including the reviewed
@@ -190,8 +190,8 @@ implemented; the frontend must not silently substitute Python or local fake data
 
 | React feature group | Missing Rust surface |
 | --- | --- |
-| Startup identity and accounts | The fresh local desktop identity/bootstrap path is implemented. `/api/account`, Google account challenge/connect/delete, central-login callback start/poll, central guest/recovery, and server-directory registration remain incomplete. The copied production central URL must not be counted as desktop support: the native OAuth command and secure desktop device-key owner are not implemented, and the current CSP does not authorize that remote origin. |
-| Room lifecycle and settings | Canonical archive/delete lifecycle, room-global settings mutation, per-user room preferences, public server info, and central-directory registration proof. |
+| Startup identity and accounts | Fresh local desktop bootstrap, central guest creation/recovery, secure browser device identity, and proof-bound local-server registration are implemented. `/api/account`, Google account challenge/connect/delete, and the native Google handoff remain incomplete; the absent `open_central_google_login` host command keeps that button failed closed. |
+| Room lifecycle and settings | Canonical archive/delete lifecycle, room-global settings mutation, per-user room preferences, and public server info. |
 | Admission and invites | Host claim, room invite create/join/admission/companion/leave, operator pairing create/redeem, and public-invite status/URL/tunnel controls. |
 | Roster, friends, and channels | The active-room roster and strict participant-role control are cut over to authenticated WebSocket snapshot/events only. The current candidate connects the copied participant-mute control and canonical event projection to the exact Rust interrupt owner; it is not completion evidence until packaged provider verification and cross-review pass. Room friends, room channels, voice presence, and side chat remain incomplete. |
 | Attachments, personas, pins, and search | General-message and room-appearance attachment purposes, persona list/import/thumbnail, message pins, room search/context. Profile-avatar upload/read is implemented. |
@@ -238,9 +238,11 @@ socket. Production room composition requests only advertised streams, rejects
 commands absent from the advertised action set, and sends canonical
 `message.send` as content-only. Consequently copied side-chat/plugin socket code
 and the RimWorld view remain source provenance but are not mounted or requested
-by the current Rust product surface. The absent native central-login command is
+by the current Rust product surface. The absent native Google-login command is
 also rejected at the host-surface boundary rather than being attempted as an
-unregistered Tauri invocation.
+unregistered Tauri invocation. Central guest creation, recovery, bootstrap, and
+proof-bound local-server registration use their implemented owners and do not
+borrow that absent Google command.
 
 The same run confirmed these still-open frontend/backend rows rather than hiding
 them:
@@ -249,16 +251,14 @@ them:
   so the view visibly reports `Load failed`.
 - `/api/account` is called by Public Account settings but has no Rust route, so
   that section visibly reports 404.
-- Desktop central guest/Google/recovery is not cut over. A diagnostic build that
-  temporarily allowed the configured Worker origin reached the copied central
-  code but stalled before issuing a network request while no device-key record
-  was committed. The native Google handoff command is also absent. This requires
-  one secure desktop credential/handoff owner in the later identity slice; CSP
-  broadening or an IndexedDB/private-key workaround alone is not completion.
+- Desktop central guest creation/recovery and server-directory registration are
+  cut over and packaged-verified. Native Google handoff and the Public Account
+  settings routes remain incomplete; neither is inferred from guest success.
 
-The local-only packaged verification used an explicitly empty central URL and is
-not evidence for any central account, server-directory synchronization, or OAuth
-flow.
+The earlier local-only packages used an explicitly empty central URL and remain
+local-runtime evidence only. The separate 2026-08-26 production-central package
+is the evidence for the guest and server-registration rows above; it is not Google
+OAuth or Public Account settings evidence.
 
 ## Stage A feature-candidate delta
 
