@@ -183,10 +183,15 @@ pub async fn serve(
     result.map_err(ServeError::Io)
 }
 
-async fn drain_reconciliation_owner(
+async fn drain_reconciliation_owner(owner: JoinHandle<()>) -> Result<(), tokio::task::JoinError> {
+    drain_reconciliation_owner_after(owner, TRACKED_SHUTDOWN_TIMEOUT).await
+}
+
+async fn drain_reconciliation_owner_after(
     mut owner: JoinHandle<()>,
+    warning_after: Duration,
 ) -> Result<(), tokio::task::JoinError> {
-    if let Ok(result) = tokio::time::timeout(TRACKED_SHUTDOWN_TIMEOUT, &mut owner).await {
+    if let Ok(result) = tokio::time::timeout(warning_after, &mut owner).await {
         result
     } else {
         tracing::warn!(
@@ -510,12 +515,14 @@ fn _socket_address_is_send(_: SocketAddr) {}
 
 #[cfg(test)]
 mod tests {
-    use std::{io, path::PathBuf};
+    use std::{io, path::PathBuf, time::Duration};
 
     use agentsassemble_persistence::PersistenceError;
 
     use crate::HostSecret;
     use crate::room_socket::persistence_error;
+
+    use super::drain_reconciliation_owner_after;
 
     #[test]
     fn host_secret_invariant_cannot_be_bypassed_by_an_adapter() {
@@ -538,5 +545,30 @@ mod tests {
             assert_eq!(message, "Persistence operation failed.");
             assert!(!message.contains("/private"));
         }
+    }
+
+    #[tokio::test]
+    async fn reconciliation_owner_is_joined_after_its_warning_deadline() {
+        let (release, blocked) = tokio::sync::oneshot::channel();
+        let owner = tokio::spawn(async move {
+            let _ = blocked.await;
+        });
+        let drain = tokio::spawn(drain_reconciliation_owner_after(
+            owner,
+            Duration::from_millis(1),
+        ));
+
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        assert!(
+            !drain.is_finished(),
+            "warning timeout must not detach custody"
+        );
+        release
+            .send(())
+            .unwrap_or_else(|()| panic!("reconciliation owner was dropped before release"));
+        drain
+            .await
+            .unwrap_or_else(|error| panic!("join drain task: {error}"))
+            .unwrap_or_else(|error| panic!("join reconciliation owner: {error}"));
     }
 }
