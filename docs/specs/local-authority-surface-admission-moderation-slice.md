@@ -94,6 +94,44 @@ cannot authenticate a room socket. Profile projection may update only the human
 display/avatar fields in existing memberships and never owns room role, join,
 mute, permission, or Agent Session profile state.
 
+### Central server registration custody
+
+The currently composed desktop startup flow registers the exact local server after
+central person authentication. Schema installation creates one 32-byte Ed25519 host
+seed in the same SQLite transaction as `server_id`; both are infrastructure state.
+The existing owner-only database file is their single durable custody boundary, so a
+crash cannot persist a server ID without its signing identity and no second key file,
+cache, or compatibility reader can disagree. A current-schema database with a missing,
+malformed, or differently bound host identity is corrupt and fails closed. Older schema
+versions remain rejected rather than migrated.
+
+The server derives one public OKP/Ed25519 JWK from that seed through a maintained
+cryptography library. Its fingerprint is base64url-without-padding SHA-256 over the
+same sorted compact JWK JSON accepted by the central directory. Registration signs the
+exact UTF-8 transcript `AA-HOST-REGISTER-1\n{server_id}\n{owner_person_id}\n{issued_at}\n{nonce}`.
+The nonce is fresh OS-backed random data encoded as base64url without padding;
+`issued_at` is whole Unix seconds. Private seed material is never serialized into an
+HTTP response, log, error, test fixture, or frontend state.
+
+`POST /api/central-directory/registration-proof` is admitted only by a fresh one-use
+server-operator bearer obtained through the private desktop control pipe. The route
+consumes that credential before parsing a bounded exact JSON object containing only
+`owner_person_id`, validates the central directory's ASCII identifier grammar and
+length, and returns the public JWK, its fingerprint, and one signed proof. The Tauri
+client omits the original browser-only device-token header because native control-pipe
+custody is the actual local-operator authority; broad CORS headers and parallel browser
+authentication are not introduced.
+
+This increment does not advertise the original public `GET /api/server-info` or remote
+`POST /api/server-info/challenge` until their public-invite/admission owner is complete.
+It also does not claim the non-desktop startup path, whose local bootstrap authority is
+not implemented. Those paths remain absent rather than returning placeholder identity,
+borrowing the desktop credential, or accepting a device token the Rust runtime cannot
+authenticate. Acceptance for this increment is a fresh packaged desktop central guest
+flow that persists one stable server registration, reaches the strict zero-room
+directory, survives restart with the same server ID/key fingerprint, rejects ticket
+replay and malformed identifiers, and never emits secret material.
+
 ## Product surfaces and strict protocol
 
 `ServerProductSurface` is generated from the actual HTTP router and WebSocket
