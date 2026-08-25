@@ -16,6 +16,11 @@ const TABLES: &[TableDefinition] = &[
         infrastructure: true,
     },
     TableDefinition {
+        name: "runtime_host_identity",
+        ddl: "CREATE TABLE IF NOT EXISTS runtime_host_identity (singleton INTEGER PRIMARY KEY CHECK(singleton = 1), server_id TEXT NOT NULL UNIQUE, private_key_seed BLOB NOT NULL CHECK(length(private_key_seed) = 32))",
+        infrastructure: true,
+    },
+    TableDefinition {
         name: "rooms",
         ddl: "CREATE TABLE IF NOT EXISTS rooms (room_id TEXT PRIMARY KEY, room_json TEXT NOT NULL, settings_json TEXT NOT NULL)",
         infrastructure: false,

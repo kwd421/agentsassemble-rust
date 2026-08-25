@@ -140,10 +140,20 @@ async fn install_metadata(
                 .await?;
         }
     }
+    let server_id = uuid::Uuid::new_v4().to_string();
+    let mut private_key_seed = [0_u8; 32];
+    getrandom::fill(&mut private_key_seed).map_err(PersistenceError::HostIdentityEntropy)?;
     sqlx::query("INSERT INTO runtime_metadata(key, value) VALUES ('server_id', ?)")
-        .bind(uuid::Uuid::new_v4().to_string())
+        .bind(&server_id)
         .execute(&mut **transaction)
         .await?;
+    sqlx::query(
+        "INSERT INTO runtime_host_identity(singleton, server_id, private_key_seed) VALUES (1, ?, ?)",
+    )
+    .bind(&server_id)
+    .bind(private_key_seed.as_slice())
+    .execute(&mut **transaction)
+    .await?;
     sqlx::query(
         "INSERT INTO runtime_metadata(key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
     )

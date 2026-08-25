@@ -39,6 +39,10 @@ pub enum PersistenceError {
     SchemaVersionMismatch { found: i64, required: i64 },
     #[error("database server identity is missing or invalid")]
     InvalidServerId,
+    #[error("database host signing identity is missing or invalid")]
+    InvalidHostIdentity,
+    #[error("host signing identity entropy source failed")]
+    HostIdentityEntropy(#[source] getrandom::Error),
     #[error("room does not exist")]
     RoomMissing,
     #[error("participant does not exist")]

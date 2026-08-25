@@ -2,7 +2,7 @@ use sqlx::Row;
 
 use crate::{PersistenceError, SqliteStore};
 
-pub(crate) const CURRENT_SCHEMA_VERSION: i64 = 25;
+pub(crate) const CURRENT_SCHEMA_VERSION: i64 = 26;
 
 impl SqliteStore {
     pub(crate) async fn validate_schema_version(&self) -> Result<(), PersistenceError> {
@@ -30,7 +30,8 @@ impl SqliteStore {
         .ok_or(PersistenceError::InvalidServerId)?;
         uuid::Uuid::parse_str(&server_id)
             .map(|_| ())
-            .map_err(|_| PersistenceError::InvalidServerId)
+            .map_err(|_| PersistenceError::InvalidServerId)?;
+        self.host_identity().await.map(|_| ())
     }
 }
 

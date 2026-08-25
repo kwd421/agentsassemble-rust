@@ -19,6 +19,7 @@ mod bootstrap;
 mod command_admission;
 mod database_target;
 mod filesystem_authority;
+mod host_identity;
 mod private_fs;
 mod profile_attachments;
 mod profile_store;
@@ -58,6 +59,7 @@ pub use agent_reconciliation::{
 };
 pub use agent_reconciliation_scan::{RuntimeReconciliationCursor, RuntimeReconciliationPage};
 pub use bootstrap::{LocalBootstrapCommit, LocalBootstrapPhase, LocalBootstrapStatus};
+pub use host_identity::PersistentHostIdentity;
 pub use participant_mute::ParticipantMuteMutation;
 pub use private_fs::secure_private_directory;
 pub use profile_attachments::{ProfileAttachment, ProfileAttachmentMetadata};

@@ -8,6 +8,7 @@ license.workspace = true
 agentsassemble-domain = { path = "../agentsassemble-domain" }
 chrono.workspace = true
 fs2.workspace = true
+getrandom.workspace = true
 image.workspace = true
 same-file.workspace = true
 serde.workspace = true
