@@ -13,6 +13,7 @@ pub(crate) struct RegisteredHttpRoute {
 pub(crate) fn server_product_surface(frontend_enabled: bool) -> ServerProductSurface {
     let mut routes = Vec::new();
     extend_registered(&mut routes, crate::web::HTTP_ROUTES);
+    extend_registered(&mut routes, crate::central_registration_web::HTTP_ROUTES);
     extend_registered(&mut routes, crate::room_directory_web::HTTP_ROUTES);
     extend_registered(&mut routes, crate::profile_web::HTTP_ROUTES);
     if frontend_enabled {

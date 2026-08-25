@@ -542,7 +542,9 @@ async fn start_server(
         HostSecret::new(HOST_TOKEN)
             .unwrap_or_else(|error| panic!("validate test host secret: {error}")),
         ProviderCatalogService::fixed(catalog),
-    );
+    )
+    .await
+    .unwrap_or_else(|error| panic!("build test app state: {error}"));
     if let Some(frontend) = frontend {
         state = state.with_frontend(frontend);
     }

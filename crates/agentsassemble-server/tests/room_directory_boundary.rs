@@ -247,7 +247,9 @@ async fn start(store: SqliteStore, tickets: TicketStore) -> RunningServer {
         HostSecret::new(HOST_TOKEN)
             .unwrap_or_else(|error| panic!("validate directory host secret: {error}")),
         ProviderCatalogService::fixed(ProviderCatalog::default()),
-    );
+    )
+    .await
+    .unwrap_or_else(|error| panic!("build directory app state: {error}"));
     let task = tokio::spawn(async move {
         serve(listener, state, server_cancellation)
             .await

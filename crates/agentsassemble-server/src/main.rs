@@ -87,7 +87,8 @@ async fn main() -> anyhow::Result<()> {
         host_secret,
         ProviderCatalogService::discovering(),
         provider_adapter,
-    );
+    )
+    .await?;
     let frontend_path = if let Some(frontend) = args.frontend {
         let path = frontend
             .canonicalize()

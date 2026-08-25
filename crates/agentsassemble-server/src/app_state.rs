@@ -1,14 +1,23 @@
 use std::{path::PathBuf, sync::Arc};
 
-use agentsassemble_persistence::SqliteStore;
+use agentsassemble_persistence::{PersistenceError, SqliteStore};
 use agentsassemble_protocol::ServerProductSurface;
 use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService};
+use thiserror::Error;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
 use crate::{
-    HostSecret, RoomRuntime, TicketStore, connection_admission::ConnectionAdmission,
-    raw_ingress::RawIngressGovernor,
+    CentralHostIdentity, HostIdentityError, HostSecret, RoomRuntime, TicketStore,
+    connection_admission::ConnectionAdmission, raw_ingress::RawIngressGovernor,
 };
+
+#[derive(Debug, Error)]
+pub enum AppStateBuildError {
+    #[error("host identity persistence failed")]
+    Persistence(#[from] PersistenceError),
+    #[error("host identity projection failed")]
+    HostIdentity(#[from] HostIdentityError),
+}
 
 #[derive(Clone)]
 pub struct AppState {
@@ -18,6 +27,7 @@ pub struct AppState {
     pub host_token: HostSecret,
     pub provider_catalog: ProviderCatalogService,
     pub provider_adapter: ProviderAdapter,
+    pub(crate) central_host_identity: CentralHostIdentity,
     pub shutdown: CancellationToken,
     pub connections: TaskTracker,
     pub(crate) connection_admission: ConnectionAdmission,
@@ -27,13 +37,17 @@ pub struct AppState {
 }
 
 impl AppState {
-    #[must_use]
-    pub fn local(
+    /// Builds a local runtime with the default provider adapter.
+    ///
+    /// # Errors
+    ///
+    /// Rejects missing or malformed persistent host identity state.
+    pub async fn local(
         store: SqliteStore,
         tickets: TicketStore,
         host_token: HostSecret,
         provider_catalog: ProviderCatalogService,
-    ) -> Self {
+    ) -> Result<Self, AppStateBuildError> {
         Self::local_with_provider_adapter(
             store,
             tickets,
@@ -41,17 +55,25 @@ impl AppState {
             provider_catalog,
             ProviderAdapter::new(),
         )
+        .await
     }
 
-    #[must_use]
-    pub fn local_with_provider_adapter(
+    /// Builds a local runtime with the database-bound central host identity.
+    ///
+    /// # Errors
+    ///
+    /// Rejects missing or malformed persistent host identity state.
+    pub async fn local_with_provider_adapter(
         store: SqliteStore,
         tickets: TicketStore,
         host_token: HostSecret,
         provider_catalog: ProviderCatalogService,
         provider_adapter: ProviderAdapter,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, AppStateBuildError> {
+        let persistent_host_identity = store.host_identity().await?;
+        let central_host_identity =
+            CentralHostIdentity::from_persistent(&persistent_host_identity)?;
+        Ok(Self {
             rooms: RoomRuntime::with_provider_adapter(
                 store.clone(),
                 provider_catalog.clone(),
@@ -62,13 +84,14 @@ impl AppState {
             host_token,
             provider_catalog,
             provider_adapter,
+            central_host_identity,
             shutdown: CancellationToken::new(),
             connections: TaskTracker::new(),
             connection_admission: ConnectionAdmission::new(),
             raw_ingress: RawIngressGovernor::new(),
             server_product_surface: Arc::new(crate::product_surface::server_product_surface(false)),
             frontend_root: None,
-        }
+        })
     }
 
     #[must_use]

@@ -435,7 +435,9 @@ async fn start(store: SqliteStore, catalog: ProviderCatalog) -> RunningServer {
             .unwrap_or_else(|error| panic!("validate test host secret: {error}")),
         ProviderCatalogService::fixed(catalog),
         provider_adapter.clone(),
-    );
+    )
+    .await
+    .unwrap_or_else(|error| panic!("build test app state: {error}"));
     let task = tokio::spawn(async move {
         serve(listener, state, server_cancellation)
             .await
