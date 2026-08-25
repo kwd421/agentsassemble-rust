@@ -14,8 +14,8 @@ use agentsassemble_protocol::{
 };
 use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService};
 use agentsassemble_server::{
-    AppState, HostSecret, TicketIssueError, TicketStore, issue_local_operator_http_ticket,
-    issue_local_ticket, serve,
+    AppState, HostSecret, TicketIssueError, TicketStore, issue_central_registration_ticket,
+    issue_local_operator_http_ticket, issue_local_ticket, serve,
 };
 use anyhow::Context;
 use clap::Parser;
@@ -225,11 +225,17 @@ async fn run_control_pipe<R, W>(
                     Err(error) => control_error(request_id, error),
                 }
             }
+            Ok(LocalControlRequest::IssueCentralRegistrationTicket { request_id })
+                if valid_control_request_id(&request_id) =>
+            {
+                central_registration_control_response(&state, request_id).await
+            }
             Ok(
                 LocalControlRequest::InspectBootstrap { request_id }
                 | LocalControlRequest::InitializeBootstrap { request_id, .. }
                 | LocalControlRequest::IssueTicket { request_id, .. }
-                | LocalControlRequest::IssueOperatorHttpTicket { request_id },
+                | LocalControlRequest::IssueOperatorHttpTicket { request_id }
+                | LocalControlRequest::IssueCentralRegistrationTicket { request_id },
             ) => LocalControlResponse::Error {
                 request_id,
                 code: "request_id_invalid".to_owned(),
@@ -244,6 +250,20 @@ async fn run_control_pipe<R, W>(
         if write_json_line(writer, &response).await.is_err() {
             return;
         }
+    }
+}
+
+async fn central_registration_control_response(
+    state: &AppState,
+    request_id: String,
+) -> LocalControlResponse {
+    match issue_central_registration_ticket(state).await {
+        Ok(ticket) => LocalControlResponse::CentralRegistrationOk {
+            request_id,
+            ticket: ticket.ticket,
+            ttl_seconds: ticket.ttl_seconds,
+        },
+        Err(error) => control_error(request_id, error),
     }
 }
 

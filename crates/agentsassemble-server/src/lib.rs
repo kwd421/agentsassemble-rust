@@ -86,5 +86,8 @@ pub use ticket::{
     ConsumedCentralRegistrationTicket, ConsumedProfileTicket, ConsumedServerOperatorTicket,
     ConsumedTicket, IssuedTicket, TicketError, TicketStore,
 };
-pub use ticket_issuer::{TicketIssueError, issue_local_operator_http_ticket, issue_local_ticket};
+pub use ticket_issuer::{
+    TicketIssueError, issue_central_registration_ticket, issue_local_operator_http_ticket,
+    issue_local_ticket,
+};
 pub use web::{ServeError, router, serve};

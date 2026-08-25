@@ -363,6 +363,9 @@ pub enum LocalControlRequest {
     IssueOperatorHttpTicket {
         request_id: String,
     },
+    IssueCentralRegistrationTicket {
+        request_id: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -400,6 +403,11 @@ pub enum LocalControlResponse {
         server_proof_key: String,
     },
     OperatorHttpOk {
+        request_id: String,
+        ticket: String,
+        ttl_seconds: u64,
+    },
+    CentralRegistrationOk {
         request_id: String,
         ticket: String,
         ttl_seconds: u64,

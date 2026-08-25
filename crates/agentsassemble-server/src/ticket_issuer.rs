@@ -100,6 +100,30 @@ pub async fn issue_local_operator_http_ticket(
     })
 }
 
+/// Issues a private-control-derived credential for the exact central-registration route.
+///
+/// # Errors
+///
+/// Returns a bootstrap, persistence, or bounded ticket-capacity error.
+pub async fn issue_central_registration_ticket(
+    state: &AppState,
+) -> Result<OperatorHttpTicketResponse, TicketIssueError> {
+    state
+        .store
+        .require_local_bootstrap_complete()
+        .await
+        .map_err(map_bootstrap_error)?;
+    let issued = state
+        .tickets
+        .issue_central_registration(LOCAL_OPERATOR_USER_ID.to_owned())
+        .await
+        .map_err(|_| TicketIssueError::Unavailable)?;
+    Ok(OperatorHttpTicketResponse {
+        ticket: issued.ticket,
+        ttl_seconds: state.tickets.ttl_seconds(),
+    })
+}
+
 fn map_bootstrap_error(error: PersistenceError) -> TicketIssueError {
     match error {
         PersistenceError::CommandRejected {
