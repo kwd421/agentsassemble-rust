@@ -8,6 +8,7 @@ use crate::room_turns::{ProviderTurnAuthority, assign_pending_in};
 use crate::{
     AgentTurnCommit, PersistenceError, SqliteStore,
     agent_lifecycle::{load_session, save_session},
+    agent_lifecycle_authority::lifecycle_intent_is_empty,
     room_turns::support::{
         clear_active_turn_fields, error_event, load_active_room, load_participant,
         session_state_event, turn_finished_event,
@@ -551,6 +552,11 @@ pub(crate) async fn terminalize_ordinary_execution(
         || session.public.session_id != authority.session_id
         || session.public.active_turn_id != authority.turn_id
         || session.turn_generation != authority.turn_generation
+        || session.public.status != "attached"
+        || !session.public.enabled
+        || session.public.runtime_status != "busy"
+        || !session.public.provider_session_active
+        || !lifecycle_intent_is_empty(session)
         || session.runtime_handle_id != authority.runtime_handle_id
         || session.runtime_owner_id != authority.runtime_owner_id
         || session.runtime_lease_token != authority.runtime_lease_token
@@ -569,7 +575,12 @@ pub(crate) async fn terminalize_ordinary_execution(
         serde_json::from_str::<agentsassemble_domain::Participant>(&json)
             .map_err(PersistenceError::from)
     })?;
-    if participant.muted {
+    if participant.room_id != authority.room_id
+        || participant.participant_id != session.public.participant_id
+        || participant.status != ParticipantStatus::Joined
+        || participant.participant_type != "agent"
+        || participant.muted
+    {
         return Err(stale_execution());
     }
     let updated = sqlx::query(
