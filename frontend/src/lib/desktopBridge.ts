@@ -386,6 +386,9 @@ export async function fetchDesktopOperatorRuntime(
 export async function fetchDesktopCentralRegistration(
   init: RequestInit = {}
 ): Promise<DesktopCentralRegistrationResponse> {
+  if (init.method !== "POST") {
+    throw new Error("중앙 등록 증명은 POST 요청만 허용합니다.");
+  }
   const issued = await requestDesktopCentralRegistrationTicket();
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${issued.ticket}`);
