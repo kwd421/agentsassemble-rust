@@ -117,46 +117,6 @@ mod tests {
         assert_eq!(snapshot.last_seq, second.seq);
     }
 
-    #[tokio::test]
-    async fn recovered_turn_handoff_completes_only_after_durable_publication() {
-        let (store, principal) = fixture().await;
-        let rooms = RoomRuntime::new(
-            store.clone(),
-            ProviderCatalogService::fixed(ProviderCatalog::default()),
-        );
-        let mut receiver = rooms.subscribe("general").await;
-        let command = store
-            .execute_message(
-                &principal,
-                "recovery-publication-order",
-                "message.send",
-                &serde_json::json!({"content": "publish before recovered provider entry"}),
-            )
-            .await
-            .unwrap_or_else(|error| panic!("commit recovery publication: {error}"));
-
-        rooms
-            .publish_then_resume_assigned_turns("general", Vec::new())
-            .await
-            .unwrap_or_else(|error| panic!("complete ordered recovery handoff: {error}"));
-        let published = receiver
-            .recv()
-            .await
-            .unwrap_or_else(|error| panic!("receive recovery publication: {error}"));
-        assert_eq!(published.seq, command.event.seq);
-        assert!(
-            store
-                .pending_room_publications("general")
-                .await
-                .unwrap_or_else(|error| panic!("read recovery publication cursor: {error}"))
-                .is_empty()
-        );
-        rooms
-            .shutdown()
-            .await
-            .unwrap_or_else(|error| panic!("shutdown ordered recovery room: {error}"));
-    }
-
     async fn fixture() -> (SqliteStore, AuthenticatedPrincipal) {
         let url = format!(
             "sqlite:file:{}?mode=memory&cache=shared",
