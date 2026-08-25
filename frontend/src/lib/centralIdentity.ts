@@ -1,4 +1,5 @@
 import {
+  fetchDesktopCentralRegistration,
   fetchDesktopOperatorRuntime,
   isDesktopWebview,
   openDesktopCentralGoogleLogin,
@@ -597,18 +598,21 @@ export async function fetchLocalServerInfo(): Promise<LocalServerInfo> {
 export async function registerLocalServer(deviceToken: string): Promise<void> {
   const session = loadCentralSession();
   if (!session) return;
-  const proofResponse = await fetchLocalRuntime(
-    "/api/central-directory/registration-proof",
-    {
-      method: "POST",
-      cache: "no-store",
-      headers: {
-        "content-type": "application/json",
-        ...(isDesktopWebview() ? {} : { "x-device-token": deviceToken }),
-      },
-      body: JSON.stringify({ owner_person_id: session.person.person_id }),
-    }
-  );
+  const registrationRequest = {
+    method: "POST",
+    cache: "no-store",
+    headers: {
+      "content-type": "application/json",
+      ...(isDesktopWebview() ? {} : { "x-device-token": deviceToken }),
+    },
+    body: JSON.stringify({ owner_person_id: session.person.person_id }),
+  } satisfies RequestInit;
+  const proofResponse = isDesktopWebview()
+    ? await fetchDesktopCentralRegistration(registrationRequest)
+    : await fetch(
+        "/api/central-directory/registration-proof",
+        registrationRequest
+      );
   const local = await responsePayload<
     LocalServerInfo & {
       host_registration_proof: {

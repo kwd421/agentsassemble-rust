@@ -54,6 +54,8 @@ export interface DesktopOperatorHttpTicket {
   http_base_url: string;
 }
 
+export type DesktopCentralRegistrationTicket = DesktopOperatorHttpTicket;
+
 export interface DesktopWorkspaceSelection {
   selected: boolean;
   path: string;
@@ -292,6 +294,17 @@ export async function requestDesktopOperatorTicket(): Promise<DesktopOperatorHtt
     .then(rememberDesktopOperatorRuntime);
 }
 
+export async function requestDesktopCentralRegistrationTicket(): Promise<DesktopCentralRegistrationTicket> {
+  const tauri = tauriInternals();
+  if (!tauri) {
+    throw new Error("데스크톱 Rust 런타임을 사용할 수 없습니다.");
+  }
+  requireDesktopHostCommand("runtime_central_registration_ticket");
+  return tauri
+    .invoke<DesktopCentralRegistrationTicket>("runtime_central_registration_ticket")
+    .then(rememberDesktopOperatorRuntime);
+}
+
 export async function fetchDesktopRuntime(
   roomId: string,
   path: string,
@@ -317,6 +330,18 @@ export async function fetchDesktopOperatorRuntime(
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${issued.ticket}`);
   return fetch(`${desktopRuntimeHttpBase}${path}`, { ...init, headers });
+}
+
+export async function fetchDesktopCentralRegistration(
+  init: RequestInit = {}
+): Promise<Response> {
+  const issued = await requestDesktopCentralRegistrationTicket();
+  const headers = new Headers(init.headers);
+  headers.set("Authorization", `Bearer ${issued.ticket}`);
+  return fetch(
+    `${desktopRuntimeHttpBase}/api/central-directory/registration-proof`,
+    { ...init, headers }
+  );
 }
 
 export function resolveDesktopRuntimeResource(value: string | undefined): string | undefined {
