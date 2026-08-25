@@ -10,9 +10,10 @@ use crate::{
     agent_lifecycle::{load_session, save_session},
     provider_turn_effect::{load_optional_effect_in, require_exact_effect},
     provider_turn_execution::load_execution_in,
+    room_turns::assign_pending_in,
     room_turns::support::{
-        clear_active_turn_fields, error_event, load_participant, session_state_event,
-        turn_finished_event,
+        clear_active_turn_fields, error_event, load_active_room, load_participant,
+        session_state_event, turn_finished_event,
     },
     turn_authority::active_turn_authority,
     turn_queue::merge_room_inputs,
@@ -119,6 +120,32 @@ impl SqliteStore {
         Ok(ProviderTurnReconciliationPage {
             candidates,
             next_cursor,
+        })
+    }
+
+    /// Loads one exact blocking provider-turn candidate for a known durable generation.
+    ///
+    /// # Errors
+    ///
+    /// Returns missing, malformed, terminal, or changed stored authority as a failure.
+    pub async fn load_provider_turn_reconciliation_candidate(
+        &self,
+        room_id: &str,
+        session_id: &str,
+        turn_generation: u64,
+    ) -> Result<ProviderTurnReconciliationCandidate, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        let execution =
+            load_execution_in(&mut transaction, room_id, session_id, turn_generation).await?;
+        let session = load_session(&mut transaction, room_id, session_id).await?;
+        validate_candidate(&session, &execution)?;
+        let effect =
+            load_optional_effect_in(&mut transaction, room_id, session_id, turn_generation).await?;
+        transaction.commit().await?;
+        Ok(ProviderTurnReconciliationCandidate {
+            session,
+            execution,
+            effect,
         })
     }
 
@@ -318,6 +345,7 @@ async fn finalize_runtime_gone_session(
     execution: &ProviderTurnExecution,
     interrupted: bool,
 ) -> Result<AgentTurnCommit, PersistenceError> {
+    let (room, settings) = load_active_room(&mut transaction, &execution.room_id).await?;
     let mut events = Vec::with_capacity(3);
     if !interrupted {
         events.push(
@@ -380,10 +408,12 @@ async fn finalize_runtime_gone_session(
     participant.updated_at = Utc::now();
     save_participant(&mut transaction, &participant).await?;
     events.push(session_state_event(&mut transaction, &session).await?);
+    let scheduled = assign_pending_in(&mut transaction, &room, &settings).await?;
     transaction.commit().await?;
+    events.extend(scheduled.events);
     Ok(AgentTurnCommit {
         events,
-        next_assignments: Vec::new(),
+        next_assignments: scheduled.next_assignments,
     })
 }
 

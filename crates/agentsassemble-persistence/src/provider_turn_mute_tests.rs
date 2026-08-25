@@ -1,7 +1,11 @@
 use agentsassemble_domain::LOCAL_OPERATOR_PARTICIPANT_ID;
 use serde_json::json;
 
-use super::{AGENT_ID, fixture, stored_session};
+use super::{
+    AGENT_ID, SECOND_AGENT_ID, attached_session, fixture, insert_agent, participant, stored_session,
+};
+use agentsassemble_domain::ParticipantRole;
+use chrono::Utc;
 
 #[tokio::test]
 async fn mute_preempts_unstarted_exact_turn_and_unmute_reschedules_once() {
@@ -435,4 +439,104 @@ async fn blocking_turn_is_reconciled_before_lifecycle_and_exact_gone_detaches() 
     assert!(session.runtime_handle_id.is_empty());
     assert!(session.provider_session_id.is_empty());
     assert_eq!(session.pending_inputs.len(), 1);
+}
+
+#[tokio::test]
+async fn runtime_gone_releases_ordered_floor_and_consumes_an_unmute_wake() {
+    let (store, principal, _directory) = fixture().await;
+    let now = Utc::now();
+    let flash_participant = participant(
+        SECOND_AGENT_ID,
+        "Flash",
+        "agent",
+        ParticipantRole::Agent,
+        now,
+    );
+    let mut flash_session = attached_session(now);
+    SECOND_AGENT_ID.clone_into(&mut flash_session.public.session_id);
+    SECOND_AGENT_ID.clone_into(&mut flash_session.public.participant_id);
+    "Flash".clone_into(&mut flash_session.public.display_name);
+    "provider-thread-2".clone_into(&mut flash_session.provider_session_id);
+    "owned-runtime-2".clone_into(&mut flash_session.runtime_handle_id);
+    insert_agent(&store, &flash_participant, &flash_session).await;
+
+    let flash_turn = store
+        .execute_message_with_turn(
+            &principal,
+            "flash-floor-source",
+            "message.send",
+            &json!({"content": "@Flash hold the ordered floor"}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("assign Flash floor: {error}"));
+    let flash_assignment = &flash_turn.assignments[0];
+    let terra_waiting = store
+        .execute_message_with_turn(
+            &principal,
+            "terra-waiting-source",
+            "message.send",
+            &json!({"content": "@Terra wait behind Flash"}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("queue Terra behind floor: {error}"));
+    assert!(terra_waiting.assignments.is_empty());
+
+    let flash_effect = store
+        .execute_participant_mute(
+            &principal,
+            "mute-flash-floor",
+            &json!({"participant_id": SECOND_AGENT_ID, "muted": true}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("mute Flash floor: {error}"))
+        .interrupt_effect
+        .unwrap_or_else(|| panic!("Flash floor had no interrupt effect"));
+    assert_eq!(flash_effect.execution_id, flash_assignment.execution_id);
+    let flash_claim = store
+        .claim_provider_turn_interrupt(&flash_effect, "10000000-0000-4000-8000-000000000103")
+        .await
+        .unwrap_or_else(|error| panic!("claim Flash floor interrupt: {error}"));
+    let flash_waiting = store
+        .mark_unstarted_interrupt_waiting(&flash_claim)
+        .await
+        .unwrap_or_else(|error| panic!("wait for unstarted Flash floor: {error}"));
+    let terra_started = store
+        .finalize_interrupted_turn_retained(&flash_waiting)
+        .await
+        .unwrap_or_else(|error| panic!("release Flash floor: {error}"));
+    assert_eq!(terra_started.next_assignments.len(), 1);
+    assert_eq!(
+        terra_started.next_assignments[0].session.public.session_id,
+        AGENT_ID
+    );
+
+    let unmuted = store
+        .execute_participant_mute(
+            &principal,
+            "unmute-flash-waiting",
+            &json!({"participant_id": SECOND_AGENT_ID, "muted": false}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("unmute waiting Flash: {error}"));
+    assert!(unmuted.assignments.is_empty());
+
+    let page = store
+        .load_provider_turn_reconciliation_page(None)
+        .await
+        .unwrap_or_else(|error| panic!("load Terra floor recovery: {error}"));
+    let terra_candidate = page
+        .candidates
+        .iter()
+        .find(|candidate| candidate.execution.session_id == AGENT_ID)
+        .unwrap_or_else(|| panic!("missing Terra floor candidate"));
+    let resumed = store
+        .finalize_provider_turn_runtime_gone(terra_candidate)
+        .await
+        .unwrap_or_else(|error| panic!("finalize Terra runtime Gone: {error}"));
+    assert_eq!(resumed.next_assignments.len(), 1);
+    assert_eq!(
+        resumed.next_assignments[0].session.public.session_id,
+        SECOND_AGENT_ID
+    );
+    assert!(!resumed.next_assignments[0].session.schedule_requested);
 }
