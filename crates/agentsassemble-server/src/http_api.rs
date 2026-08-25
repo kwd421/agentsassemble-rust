@@ -46,6 +46,17 @@ pub(crate) async fn consume_local_operator(state: &AppState, headers: &HeaderMap
         .is_ok_and(|grant| grant.principal_id == agentsassemble_domain::LOCAL_OPERATOR_USER_ID)
 }
 
+pub(crate) async fn consume_central_registration(state: &AppState, headers: &HeaderMap) -> bool {
+    let Some(ticket) = bearer_ticket(headers) else {
+        return false;
+    };
+    state
+        .tickets
+        .consume_central_registration(ticket)
+        .await
+        .is_ok_and(|grant| grant.principal_id == agentsassemble_domain::LOCAL_OPERATOR_USER_ID)
+}
+
 pub(crate) async fn ensure_empty_body(
     request: Request,
     limit: usize,

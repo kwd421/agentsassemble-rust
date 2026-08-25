@@ -95,7 +95,17 @@ async fn verify_registration_admission(client: &Client, route: &str, tickets: &T
     assert!(allowed_headers.contains("content-type"));
     assert!(!allowed_headers.contains("x-device-token"));
 
-    let invalid_ticket = issue_operator_ticket(tickets).await;
+    let generic_operator = issue_operator_ticket(tickets).await;
+    let wrong_purpose = client
+        .post(route)
+        .header("authorization", format!("Bearer {generic_operator}"))
+        .json(&json!({"owner_person_id": "per_owner_12345678"}))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("request registration with generic operator: {error}"));
+    assert_eq!(wrong_purpose.status(), reqwest::StatusCode::FORBIDDEN);
+
+    let invalid_ticket = issue_registration_ticket(tickets).await;
     let invalid = client
         .post(route)
         .header("authorization", format!("Bearer {invalid_ticket}"))
@@ -121,7 +131,7 @@ async fn verify_registration_and_zero_room(
     tickets: &TicketStore,
 ) {
     let owner_person_id = "per_owner_12345678";
-    let ticket = issue_operator_ticket(tickets).await;
+    let ticket = issue_registration_ticket(tickets).await;
     let registered = client
         .post(route)
         .header("authorization", format!("Bearer {ticket}"))
@@ -438,6 +448,14 @@ async fn issue_operator_ticket(tickets: &TicketStore) -> String {
         .issue_server_operator(LOCAL_OPERATOR_USER_ID.to_owned())
         .await
         .unwrap_or_else(|error| panic!("issue operator ticket: {error}"))
+        .ticket
+}
+
+async fn issue_registration_ticket(tickets: &TicketStore) -> String {
+    tickets
+        .issue_central_registration(LOCAL_OPERATOR_USER_ID.to_owned())
+        .await
+        .unwrap_or_else(|error| panic!("issue registration ticket: {error}"))
         .ticket
 }
 

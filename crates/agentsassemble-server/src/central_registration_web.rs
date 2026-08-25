@@ -10,7 +10,7 @@ use serde_json::json;
 use crate::{
     AppState,
     central_host_identity::{HostIdentityError, HostRegistrationEnvelope},
-    http_api::{BodyDecodeError, consume_local_operator, decode_json_body, exact_tauri_cors},
+    http_api::{BodyDecodeError, consume_central_registration, decode_json_body, exact_tauri_cors},
 };
 
 const MAX_REGISTRATION_BODY_BYTES: usize = 4 * 1024;
@@ -35,7 +35,7 @@ async fn issue_registration_proof(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<HostRegistrationEnvelope>, RegistrationHttpError> {
-    if !consume_local_operator(&state, request.headers()).await {
+    if !consume_central_registration(&state, request.headers()).await {
         return Err(RegistrationHttpError::local_operator_required());
     }
     let payload: RegistrationRequest = decode_json_body(request, MAX_REGISTRATION_BODY_BYTES)

@@ -83,8 +83,8 @@ pub use room_runtime::RoomRuntime;
 pub use room_shutdown::RoomShutdownError;
 pub use runtime_reconciliation::{RuntimeReconciliationSummary, reconcile_runtime_ownership};
 pub use ticket::{
-    ConsumedProfileTicket, ConsumedServerOperatorTicket, ConsumedTicket, IssuedTicket, TicketError,
-    TicketStore,
+    ConsumedCentralRegistrationTicket, ConsumedProfileTicket, ConsumedServerOperatorTicket,
+    ConsumedTicket, IssuedTicket, TicketError, TicketStore,
 };
 pub use ticket_issuer::{TicketIssueError, issue_local_operator_http_ticket, issue_local_ticket};
 pub use web::{ServeError, router, serve};

@@ -16,6 +16,7 @@ struct StoredTicketGrant {
 enum TicketAuthority {
     Room(AuthenticatedPrincipal),
     ServerOperator { principal_id: String },
+    CentralRegistration { principal_id: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,6 +34,11 @@ pub struct ConsumedTicket {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConsumedServerOperatorTicket {
+    pub principal_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConsumedCentralRegistrationTicket {
     pub principal_id: String,
 }
 
@@ -90,6 +96,22 @@ impl TicketStore {
             return Err(TicketError::Invalid);
         }
         self.issue_authority(TicketAuthority::ServerOperator { principal_id })
+            .await
+    }
+
+    /// Issues one central-registration-only HTTP credential.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` when the bounded grant store is full or the identity is empty.
+    pub async fn issue_central_registration(
+        &self,
+        principal_id: String,
+    ) -> Result<IssuedTicket, TicketError> {
+        if principal_id.is_empty() {
+            return Err(TicketError::Invalid);
+        }
+        self.issue_authority(TicketAuthority::CentralRegistration { principal_id })
             .await
     }
 
@@ -151,6 +173,24 @@ impl TicketStore {
         Ok(ConsumedServerOperatorTicket { principal_id })
     }
 
+    /// Removes and resolves a central-registration credential exactly once.
+    ///
+    /// Every wrong-purpose credential is consumed and rejected.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` for the wrong purpose, unknown, expired, or reused tickets.
+    pub async fn consume_central_registration(
+        &self,
+        ticket: &str,
+    ) -> Result<ConsumedCentralRegistrationTicket, TicketError> {
+        let grant = self.consume_grant(ticket).await?;
+        let TicketAuthority::CentralRegistration { principal_id } = grant.authority else {
+            return Err(TicketError::Invalid);
+        };
+        Ok(ConsumedCentralRegistrationTicket { principal_id })
+    }
+
     /// Removes and resolves a one-use credential accepted by the server-wide profile surface.
     ///
     /// Room participants retain their own profile authority, while the private-control-derived
@@ -169,6 +209,7 @@ impl TicketStore {
             TicketAuthority::ServerOperator { principal_id } => {
                 ConsumedProfileTicket::ServerOperator { principal_id }
             }
+            TicketAuthority::CentralRegistration { .. } => return Err(TicketError::Invalid),
         })
     }
 
