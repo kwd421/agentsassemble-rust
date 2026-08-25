@@ -1884,8 +1884,10 @@ cache or compatibility path replaces the canonical projection.
 Focused persistence checks cover atomic projection/event/result, snapshot visibility,
 exact replay, conflicting request reuse, unsupported alias rejection, missing targets,
 and missing room-management authority. Frontend checks prove human and Agent Session
-presentation preserve the room role and that malformed role aliases in participant
-events fail closed. They also prove that participant kind—not role—owns people/Agent
+presentation preserve the room role. Signed snapshot, authenticated catch-up, and live
+event checks reject a malformed `participant_updated.role` before advancing the durable
+cursor, then reconnect from the last verified sequence. They also prove that participant
+kind—not role—owns people/Agent
 Session grouping, so a human `director` stays a person and an Agent Session assigned
 `human` remains an Agent Session. Agent creation records the authenticated owning
 participant ID rather than the separate user principal ID; this preserves the original
@@ -1896,7 +1898,7 @@ action.
 
 The complete `make verify` passed every mandatory architecture, source-growth,
 logical-line, and 800-line gate; generated bindings; the production frontend build and
-original-CSS verification; 72 frontend files with 360 tests; 15 Tauri tests; 18 domain,
+original-CSS verification; 72 frontend files with 363 tests; 15 Tauri tests; 18 domain,
 97 persistence, four protocol, 113 provider, and 31 server unit tests; 25 Rust
 integration tests; documentation tests; warning-denied workspace/desktop Clippy; and
 final diff validation.
@@ -1922,8 +1924,12 @@ owner principal/participant mismatch. The final run verified both roots, not a v
 workaround. Normal quit left no exact app, supervisor, or sidecar process. The exact
 package, Application Support, Caches, WebKit, and sidecar staging directories were then
 permanently removed. The web critical reviewer approved the exact five-role design and
-authority boundary (`B: APPROVE`). Commit/push and both manual exact-diff reviews remain
-required before this candidate becomes completion evidence.
+authority boundary (`B: APPROVE`). The role implementation was committed and pushed as
+`4c7b2a0`. Daybreaker then found that malformed role-update events were validated only
+inside projection, after socket cursor advancement. The correction moved that check to
+the shared pre-cursor event-schema boundary and added all three delivery-mode regressions
+above; this correction and the still-running web exact-diff review require final
+re-review before the role slice becomes completion evidence.
 
 ## API verification scope
 

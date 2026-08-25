@@ -9,7 +9,7 @@ Purpose: route the asynchronous Rust reimplementation without duplicating its co
 - Owner: [`docs/specs/local-authority-surface-admission-moderation-slice.md`](docs/specs/local-authority-surface-admission-moderation-slice.md)
 - Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - Real-client verification: [`docs/VERIFICATION.md`](docs/VERIFICATION.md)
-- Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust baseline `6de2671848b951fb16dc13bb2dd2dfeb25c1e88f`.
+- Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust baseline `4c7b2a0`.
 - Required order:
   1. replace schema-coupled seed/bootstrap with the reviewed immutable-lineage local authority and real zero-room directory/create/join flow;
   2. derive actual server/host product surfaces, enforce strict typed WebSocket subscription and process-wide pre-parse admission, and complete proof-bound finite catch-up;

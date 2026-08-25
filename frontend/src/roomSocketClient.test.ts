@@ -78,8 +78,21 @@ function event(seq: number) {
   };
 }
 
+function malformedRoleEvent(seq: number) {
+  return {
+    v: 1,
+    id: `evt-${seq}`,
+    room_id: "general",
+    seq,
+    type: "participant_updated",
+    participant_id: "agent-one",
+    role: "host",
+  };
+}
+
 function snapshot(cursor: number) {
-  const events = Array.from({ length: cursor }, (_, index) => event(index + 1));
+  const events: Array<ReturnType<typeof event> | ReturnType<typeof malformedRoleEvent>> =
+    Array.from({ length: cursor }, (_, index) => event(index + 1));
   return {
     op: "snapshot",
     stream: "room_events",
@@ -340,6 +353,91 @@ describe("proof-bound canonical room socket", () => {
     });
     await vi.waitFor(() => expect(errors.at(-1)?.category).toBe("event_sequence_gap"));
     expect(handle.ready()).toBe(false);
+    handle.close();
+  });
+
+  it("rejects a malformed role in the signed snapshot before consuming its cursor", async () => {
+    vi.useFakeTimers();
+    const errors: RoomSocketSayError[] = [];
+    const { handle, sockets, tickets } = openHarness({
+      onError: (error) => {
+        if (error instanceof RoomSocketSayError) errors.push(error);
+      },
+    });
+    await flushPromises();
+    sockets[0].open();
+    const frames = await handshakeFrames(sockets[0], tickets[0], 1, 1);
+    frames.snap.events = [malformedRoleEvent(1)];
+    frames.rawSnapshot = JSON.stringify(frames.snap);
+    frames.receipt.snapshot_digest = await digestSnapshotFrame(frames.rawSnapshot);
+    frames.receipt.proof = await signReceipt(frames.receipt);
+    sockets[0].receive(frames.receipt);
+    sockets[0].receiveRaw(frames.rawSnapshot);
+
+    await vi.waitFor(() => expect(errors.at(-1)?.category).toBe("snapshot_event_invalid"));
+    expect(handle.ready()).toBe(false);
+    await vi.advanceTimersByTimeAsync(500);
+    await vi.waitFor(() => expect(sockets).toHaveLength(2));
+    sockets[1].open();
+    expect(sockets[1].sent[0]).toMatchObject({ resume_from_seq: 0 });
+    handle.close();
+  });
+
+  it("rejects a malformed role during authenticated catch-up without consuming its cursor", async () => {
+    vi.useFakeTimers();
+    const errors: RoomSocketSayError[] = [];
+    const { handle, sockets, tickets } = openHarness({
+      onError: (error) => {
+        if (error instanceof RoomSocketSayError) errors.push(error);
+      },
+    });
+    await flushPromises();
+    sockets[0].open();
+    const frames = await handshakeFrames(sockets[0], tickets[0], 1, 2);
+    sockets[0].receive(frames.receipt);
+    sockets[0].receiveRaw(frames.rawSnapshot);
+    await receiveAuthenticated(sockets[0], frames, {
+      op: "event",
+      stream: "room_events",
+      events: [malformedRoleEvent(2)],
+      latest_seq: 2,
+    });
+
+    await vi.waitFor(() => expect(errors.at(-1)?.category).toBe("event_schema_invalid"));
+    expect(handle.ready()).toBe(false);
+    await vi.advanceTimersByTimeAsync(500);
+    await vi.waitFor(() => expect(sockets).toHaveLength(2));
+    sockets[1].open();
+    expect(sockets[1].sent[0]).toMatchObject({ resume_from_seq: 1 });
+    handle.close();
+  });
+
+  it("rejects a malformed live role event without consuming the last valid cursor", async () => {
+    vi.useFakeTimers();
+    const errors: RoomSocketSayError[] = [];
+    const { handle, sockets, tickets } = openHarness({
+      onError: (error) => {
+        if (error instanceof RoomSocketSayError) errors.push(error);
+      },
+    });
+    await flushPromises();
+    sockets[0].open();
+    const frames = await handshakeFrames(sockets[0], tickets[0], 1, 1);
+    sockets[0].receive(frames.receipt);
+    sockets[0].receiveRaw(frames.rawSnapshot);
+    await vi.waitFor(() => expect(handle.ready()).toBe(true));
+    await receiveAuthenticated(sockets[0], frames, {
+      op: "event",
+      stream: "room_events",
+      events: [malformedRoleEvent(2)],
+      latest_seq: 2,
+    });
+
+    await vi.waitFor(() => expect(errors.at(-1)?.category).toBe("event_schema_invalid"));
+    await vi.advanceTimersByTimeAsync(500);
+    await vi.waitFor(() => expect(sockets).toHaveLength(2));
+    sockets[1].open();
+    expect(sockets[1].sent[0]).toMatchObject({ resume_from_seq: 1 });
     handle.close();
   });
 

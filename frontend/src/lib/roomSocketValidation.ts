@@ -4,6 +4,7 @@ import {
   agentCreationProjectionFromEvent,
   joinedParticipantFromEvent,
 } from "./participantEventContract";
+import { isParticipantRole } from "./participantRole";
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -17,6 +18,13 @@ export function participantProjectionIsValid(event: RoomEvent): boolean {
   try {
     if (event.type === "participant_joined") joinedParticipantFromEvent(event);
     if (event.type === "agent_session_created") agentCreationProjectionFromEvent(event);
+    if (
+      event.type === "participant_updated" &&
+      "role" in event &&
+      !isParticipantRole(event.role)
+    ) {
+      return false;
+    }
     return true;
   } catch {
     return false;
