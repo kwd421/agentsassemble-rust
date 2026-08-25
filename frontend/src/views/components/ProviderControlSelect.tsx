@@ -143,6 +143,16 @@ export default function ProviderControlSelect({
     }
   }, [activeGroup, filteredOptions.length, freeOnly, menuPosition, open, query, reasoningOnly, visionOnly]);
 
+  useLayoutEffect(() => {
+    if (!open || !menuPosition || !menuRef.current) return;
+    const selector = activeGroup
+      ? '[role="option"]'
+      : showModelTools
+        ? 'input[aria-label="모델 검색"]'
+        : '[role="option"], [role^="menuitem"]';
+    menuRef.current.querySelector<HTMLElement>(selector)?.focus();
+  }, [activeGroup, menuPosition, open, showModelTools]);
+
   function toggleMenu() {
     if (controlDisabled || !buttonRef.current) return;
     if (open) {
