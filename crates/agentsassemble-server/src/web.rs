@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{future::Future, net::SocketAddr, sync::Arc, time::Duration};
 
 use agentsassemble_domain::public_event_for_principal;
 use agentsassemble_persistence::PersistenceError;
@@ -50,8 +50,10 @@ const SOCKET_IDLE_TIMEOUT: Duration = Duration::from_mins(5);
 pub enum ServeError {
     #[error("server I/O failed: {0}")]
     Io(#[from] std::io::Error),
+    #[error("provider discovery task failed: {0}")]
+    ProviderDiscovery(#[from] tokio::task::JoinError),
     #[error("runtime reconciliation task failed: {0}")]
-    RuntimeReconciliationTask(#[from] tokio::task::JoinError),
+    RuntimeReconciliationTask(tokio::task::JoinError),
     #[error("room runtime shutdown failed: {0}")]
     RoomShutdown(#[from] RoomShutdownError),
     #[error("runtime reconciliation failed: {0}")]
@@ -175,12 +177,25 @@ pub async fn serve(
     if rejected > 0 {
         tracing::warn!(rejected, "HTTP overload connections were rejected");
     }
-    drain_reconciliation_owner(reconciliation_owner).await?;
-    let room_shutdown = rooms.shutdown().await;
-    let provider_shutdown = provider_catalog.shutdown().await;
+    let (reconciliation_shutdown, (room_shutdown, provider_shutdown)) =
+        drain_reconciliation_then(reconciliation_owner, async {
+            let room_shutdown = rooms.shutdown().await;
+            let provider_shutdown = provider_catalog.shutdown().await;
+            (room_shutdown, provider_shutdown)
+        })
+        .await;
     room_shutdown?;
     provider_shutdown?;
+    reconciliation_shutdown.map_err(ServeError::RuntimeReconciliationTask)?;
     result.map_err(ServeError::Io)
+}
+
+async fn drain_reconciliation_then<T>(
+    owner: JoinHandle<()>,
+    shutdown: impl Future<Output = T>,
+) -> (Result<(), tokio::task::JoinError>, T) {
+    let reconciliation = drain_reconciliation_owner(owner).await;
+    (reconciliation, shutdown.await)
 }
 
 async fn drain_reconciliation_owner(owner: JoinHandle<()>) -> Result<(), tokio::task::JoinError> {
