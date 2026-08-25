@@ -1404,8 +1404,15 @@ now performs that disk/process observation exactly once before network admission
 the live watcher retains its bounded 64-key SQLite page, eight-observation concurrency,
 and two-second per-observation timeout. Recovery reuses the captured candidate and exact
 request claim rather than introducing a cache, polling task per reservation, copied
-authority, or repeated provider effect. Packaged Computer Use and both pushed exact-diff
-reviews remain required before this correction is closed.
+authority, or repeated provider effect. The intent is to remove redundant startup SQLite
+reads and provider observations at their server owner without changing admission order or
+creating another authority. The preserved invariants are reconciliation-before-admission,
+exact candidate CAS, bounded live discovery, and fail-closed uncertainty; the accepted
+trade-off is the existing bounded live scan rather than a lower-latency per-reservation
+task or cache. The unchanged full verification above proves behavior and structure; a
+runtime benchmark is not claimed because this correction removes one deterministically
+duplicated call rather than tuning a workload-dependent hot path. Packaged Computer Use
+and both pushed exact-diff reviews remain required before this correction is closed.
 
 ## API verification scope
 

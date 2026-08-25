@@ -14,6 +14,10 @@ Security takes priority over convenience.
 For each completed slice, inspect measurable CPU, memory, latency, task/process, and disk
 costs. Remove avoidable work and copying at the owning boundary, but do not trade product
 semantics, security, or maintainability for speculative micro-optimization.
+Record every material optimization where reviewers can find it: the prior cost or symptom,
+the optimization's intent and owning boundary, the product/security invariants preserved,
+the accepted trade-off, and the measurement or verification evidence. Code that is faster
+but whose reason cannot be reviewed is not a completed optimization.
 
 Fallbacks are forbidden by default.
 When a path fails, find and fix the root cause.

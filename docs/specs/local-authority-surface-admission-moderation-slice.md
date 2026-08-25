@@ -341,6 +341,10 @@ task/process, serialization, and disk-write cost. Optimizations remain bounded a
 evidence-driven: startup reconciliation runs once before admission, live scans and
 observations have fixed page/concurrency/timeout limits, and no speculative cache or
 duplicate authority is introduced merely to improve a synthetic metric.
+Every material optimization records its prior cost or symptom, intent and owning
+boundary, preserved product/security invariants, accepted trade-off, and measurement or
+verification evidence in the active design or verification record. That rationale is part
+of reviewability rather than an optional code comment.
 
 `make verify` and packaged Computer Use are required. Computer Use verifies
 identity/bootstrap, zero-room directory/create/join, chat/roster/panels/profile and
