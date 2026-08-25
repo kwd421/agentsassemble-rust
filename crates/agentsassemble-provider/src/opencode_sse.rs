@@ -33,16 +33,23 @@ pub(crate) struct OpenCodeTurnEvents {
 #[derive(Default)]
 struct EventState {
     session_id: String,
-    require_request_message: bool,
+    mode: WaitMode,
     turn: OpenCodeTurnEvents,
     provider_error: bool,
 }
 
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum WaitMode {
+    #[default]
+    Turn,
+    Quiescence,
+}
+
 impl EventState {
-    fn new(session_id: &str, require_request_message: bool) -> Self {
+    fn new(session_id: &str, mode: WaitMode) -> Self {
         Self {
             session_id: session_id.to_owned(),
-            require_request_message,
+            mode,
             ..Self::default()
         }
     }
@@ -64,7 +71,7 @@ impl EventState {
             return Ok(false);
         }
         match event_type {
-            "permission.asked" | "question.asked" => {
+            "permission.asked" | "question.asked" if self.mode == WaitMode::Turn => {
                 return Err(OpenCodeEventError::InteractiveRequest);
             }
             "session.error" => self.provider_error = true,
@@ -97,10 +104,12 @@ impl EventState {
                     }
                 }
             }
-            "session.idle"
-                if !self.require_request_message || !self.turn.request_message.is_empty() =>
+            "session.status"
+                if terminal_idle(event_type, properties)
+                    && (self.mode == WaitMode::Quiescence
+                        || !self.turn.request_message.is_empty()) =>
             {
-                if self.provider_error {
+                if self.mode == WaitMode::Turn && self.provider_error {
                     return Err(OpenCodeEventError::Provider);
                 }
                 return Ok(true);
@@ -116,7 +125,7 @@ pub(crate) async fn collect_turn_events(
     session_id: &str,
     timeout: Duration,
 ) -> Result<OpenCodeTurnEvents, OpenCodeEventError> {
-    collect_until_idle(response, session_id, timeout, true).await
+    collect_until_idle(response, session_id, timeout, WaitMode::Turn).await
 }
 
 pub(crate) async fn wait_session_idle(
@@ -124,7 +133,7 @@ pub(crate) async fn wait_session_idle(
     session_id: &str,
     timeout: Duration,
 ) -> Result<(), OpenCodeEventError> {
-    collect_until_idle(response, session_id, timeout, false)
+    collect_until_idle(response, session_id, timeout, WaitMode::Quiescence)
         .await
         .map(|_| ())
 }
@@ -133,10 +142,10 @@ async fn collect_until_idle(
     mut response: LoopbackStream,
     session_id: &str,
     timeout: Duration,
-    require_request_message: bool,
+    mode: WaitMode,
 ) -> Result<OpenCodeTurnEvents, OpenCodeEventError> {
     tokio::time::timeout(timeout, async move {
-        let mut state = EventState::new(session_id, require_request_message);
+        let mut state = EventState::new(session_id, mode);
         let mut pending = Vec::new();
         let mut total = 0_usize;
         let mut events = 0_usize;
@@ -187,6 +196,15 @@ async fn collect_until_idle(
     .map_err(|_| OpenCodeEventError::Transport)?
 }
 
+fn terminal_idle(event_type: &str, properties: &serde_json::Map<String, Value>) -> bool {
+    event_type == "session.status"
+        && properties
+            .get("status")
+            .and_then(|status| status.get("type"))
+            .and_then(Value::as_str)
+            == Some("idle")
+}
+
 fn clean_id(value: &str) -> String {
     let value = value.trim();
     if value.is_empty() || value.len() > 128 || value.chars().any(char::is_control) {
@@ -210,11 +228,11 @@ fn trim_ascii(mut value: &[u8]) -> &[u8] {
 mod tests {
     use serde_json::json;
 
-    use super::{EventState, OpenCodeEventError};
+    use super::{EventState, OpenCodeEventError, WaitMode};
 
     #[test]
     fn turn_identity_ignores_other_sessions_and_pairs_parent_message() {
-        let mut state = EventState::new("session-1", true);
+        let mut state = EventState::new("session-1", WaitMode::Turn);
         assert!(
             !state
                 .accept(&json!({
@@ -240,7 +258,10 @@ mod tests {
             .unwrap_or_else(|error| panic!("accept assistant event: {error}"));
         assert!(
             state
-                .accept(&json!({"type": "session.idle", "properties": {"sessionID": "session-1"}}))
+                .accept(&json!({
+                    "type": "session.status",
+                    "properties": {"sessionID": "session-1", "status": {"type": "idle"}}
+                }))
                 .unwrap_or_else(|error| panic!("accept idle event: {error}"))
         );
         assert_eq!(state.turn.request_message, "user-1");
@@ -250,7 +271,7 @@ mod tests {
 
     #[test]
     fn interactive_provider_requests_fail_closed() {
-        let mut state = EventState::new("session-1", true);
+        let mut state = EventState::new("session-1", WaitMode::Turn);
         assert_eq!(
             state.accept(&json!({
                 "type": "permission.asked",
@@ -262,7 +283,7 @@ mod tests {
 
     #[test]
     fn model_may_arrive_late_but_cannot_change_or_remain_missing_at_completion() {
-        let mut state = EventState::new("session-1", true);
+        let mut state = EventState::new("session-1", WaitMode::Turn);
         state
             .accept(&json!({
                 "type": "message.updated",
