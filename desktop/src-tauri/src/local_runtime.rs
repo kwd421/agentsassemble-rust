@@ -23,7 +23,7 @@ mod control;
 
 use control::{
     TicketFailure, request_bootstrap_initialize, request_bootstrap_status,
-    request_operator_http_ticket, request_ticket,
+    request_central_registration_ticket, request_operator_http_ticket, request_ticket,
 };
 
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(20);
@@ -135,6 +135,30 @@ impl LocalRuntime {
             .map_err(|_| "local runtime state lock is poisoned".to_owned())?;
         let runtime = ensure_runtime(&mut process, app)?;
         let result = request_operator_http_ticket(runtime);
+        match result {
+            Ok(grant) => Ok(grant),
+            Err(TicketFailure::Rejected(message)) => Err(message),
+            Err(TicketFailure::Broken(message)) => {
+                if let Some(mut broken) = process.take() {
+                    terminate_owned_runtime(&mut broken);
+                }
+                Err(format!(
+                    "{message}; the owned runtime was stopped and will restart on the next attempt"
+                ))
+            }
+        }
+    }
+
+    pub fn issue_central_registration_ticket(
+        &self,
+        app: &AppHandle,
+    ) -> Result<OperatorHttpTicketGrant, String> {
+        let mut process = self
+            .process
+            .lock()
+            .map_err(|_| "local runtime state lock is poisoned".to_owned())?;
+        let runtime = ensure_runtime(&mut process, app)?;
+        let result = request_central_registration_ticket(runtime);
         match result {
             Ok(grant) => Ok(grant),
             Err(TicketFailure::Rejected(message)) => Err(message),

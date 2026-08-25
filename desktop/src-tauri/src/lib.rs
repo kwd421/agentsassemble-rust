@@ -125,6 +125,22 @@ async fn runtime_operator_ticket(
 }
 
 #[tauri::command]
+async fn runtime_central_registration_ticket(
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+) -> Result<OperatorHttpTicketGrant, String> {
+    caller_is_bundled_ui(&window)?;
+    let runtime_app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        runtime_app
+            .state::<LocalRuntime>()
+            .issue_central_registration_ticket(&runtime_app)
+    })
+    .await
+    .map_err(|error| format!("runtime central registration ticket worker failed: {error}"))?
+}
+
+#[tauri::command]
 async fn cache_selected_room_directory(
     window: WebviewWindow,
     app: tauri::AppHandle,
@@ -249,7 +265,7 @@ mod tests {
     #[test]
     fn host_surface_is_the_registered_permission_intersection() {
         let surface = registered_host_product_surface();
-        assert_eq!(surface.commands.len(), 7);
+        assert_eq!(surface.commands.len(), 8);
         assert!(
             surface
                 .commands

@@ -164,6 +164,53 @@ pub(super) fn request_operator_http_ticket(
     })
 }
 
+pub(super) fn request_central_registration_ticket(
+    runtime: &mut RuntimeProcess,
+) -> Result<OperatorHttpTicketGrant, TicketFailure> {
+    let request_id = Uuid::new_v4().to_string();
+    let request = LocalControlRequest::IssueCentralRegistrationTicket {
+        request_id: request_id.clone(),
+    };
+    let response = request_control(runtime, &request)?;
+    let (ticket, ttl_seconds) = match response {
+        LocalControlResponse::CentralRegistrationOk {
+            request_id: response_id,
+            ticket,
+            ttl_seconds,
+        } if response_id == request_id => (ticket, ttl_seconds),
+        LocalControlResponse::Error {
+            request_id: response_id,
+            code,
+            message,
+        } if response_id == request_id => {
+            return if is_application_rejection(&code) {
+                Err(TicketFailure::Rejected(message))
+            } else {
+                Err(TicketFailure::Broken(message))
+            };
+        }
+        _ => {
+            return Err(TicketFailure::Broken(
+                "local runtime central registration ticket response did not match the request"
+                    .to_owned(),
+            ));
+        }
+    };
+    if ticket.len() != 64
+        || !ticket.bytes().all(|byte| byte.is_ascii_hexdigit())
+        || ttl_seconds == 0
+    {
+        return Err(TicketFailure::Broken(
+            "local runtime returned an invalid central registration ticket grant".to_owned(),
+        ));
+    }
+    Ok(OperatorHttpTicketGrant {
+        ticket,
+        ttl_seconds,
+        http_base_url: runtime.address.to_string().trim_end_matches('/').to_owned(),
+    })
+}
+
 fn request_control(
     runtime: &mut RuntimeProcess,
     request: &LocalControlRequest,
