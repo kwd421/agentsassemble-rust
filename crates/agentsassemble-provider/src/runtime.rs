@@ -401,7 +401,7 @@ struct OwnedRuntime {
     driver: Arc<runtime_driver::DriverCell>,
     turn_cancellation: CancellationToken,
     runtime_lease: Option<HeldRuntimeLease>,
-    active_turn: Option<runtime_exact_turn::ActiveProviderTurnSlot>,
+    active_turn: Option<Box<runtime_exact_turn::ActiveProviderTurnSlot>>,
 }
 
 impl ProviderAdapter {

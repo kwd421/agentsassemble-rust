@@ -155,82 +155,80 @@ impl ProviderAdapter {
         request: &ProviderTurnRequest,
     ) -> Result<ProviderPreparedTurn, ProviderAdapterError> {
         super::turn::validate_request(session, request).map_err(ProviderAdapterError::safe)?;
-        loop {
-            let slot = self
-                .existing_slot(&session.public.room_id, &session.public.session_id)
-                .await
-                .ok_or_else(|| owner_mismatch(session))?;
-            let mut slot = slot.lock().await;
-            let RuntimeState::Running(runtime) = &mut slot.state else {
-                return Err(owner_mismatch(session));
-            };
-            validate_owned_runtime(session, runtime)?;
-            if let Some(active) = &runtime.active_turn {
-                if !same_execution(active, request) {
-                    return Err(ProviderAdapterError::safe(operation_in_progress()));
-                }
-                match active.phase {
-                    ActiveProviderTurnPhase::Preparing => {
-                        return Ok(prepared_from_active(session, runtime, active));
-                    }
-                    ActiveProviderTurnPhase::NotStartedRetained
-                    | ActiveProviderTurnPhase::ResultReadyRetained
-                    | ActiveProviderTurnPhase::ResultReadyUncertain
-                    | ActiveProviderTurnPhase::RuntimeGone => {
-                        return Err(ProviderAdapterError::safe(operation_in_progress()));
-                    }
-                    ActiveProviderTurnPhase::Entered => {}
-                }
-                let mut completion = active.completion.subscribe();
-                drop(slot);
-                loop {
-                    if matches!(
-                        *completion.borrow_and_update(),
-                        ActiveProviderTurnPhase::NotStartedRetained
-                            | ActiveProviderTurnPhase::ResultReadyRetained
-                            | ActiveProviderTurnPhase::ResultReadyUncertain
-                            | ActiveProviderTurnPhase::RuntimeGone
-                    ) {
-                        break;
-                    }
-                    completion.changed().await.map_err(|_| {
-                        ProviderAdapterError::safe(DriverError::new(
-                            "provider_turn_quiescence_unconfirmed",
-                            "The exact provider turn owner ended without quiescence proof.",
-                        ))
-                    })?;
-                }
+        let slot = self
+            .existing_slot(&session.public.room_id, &session.public.session_id)
+            .await
+            .ok_or_else(|| owner_mismatch(session))?;
+        let mut slot = slot.lock().await;
+        let RuntimeState::Running(runtime) = &mut slot.state else {
+            return Err(owner_mismatch(session));
+        };
+        validate_owned_runtime(session, runtime)?;
+        if let Some(active) = &runtime.active_turn {
+            if !same_execution(active, request) {
                 return Err(ProviderAdapterError::safe(operation_in_progress()));
             }
-            let driver = runtime
-                .driver
-                .try_take()
-                .map_err(ProviderAdapterError::safe)?;
-            runtime.driver.put(driver).await;
-            let preparation_id = Uuid::new_v4();
-            let (completion, _) = watch::channel(ActiveProviderTurnPhase::Preparing);
-            runtime.active_turn = Some(ActiveProviderTurnSlot {
-                preparation_id,
-                execution_id: request.execution_id.clone(),
-                turn_id: request.turn_id.clone(),
-                turn_generation: request.turn_generation,
-                interruption: CancellationToken::new(),
-                phase: ActiveProviderTurnPhase::Preparing,
-                result: None,
-                completion,
-            });
-            return Ok(ProviderPreparedTurn {
-                room_id: session.public.room_id.clone(),
-                session_id: session.public.session_id.clone(),
-                execution_id: request.execution_id.clone(),
-                turn_id: request.turn_id.clone(),
-                turn_generation: request.turn_generation,
-                runtime_handle_id: runtime.handle_id.clone(),
-                runtime_owner_id: runtime.owner_id.clone(),
-                runtime_lease_token: runtime.lease_token.clone(),
-                preparation_id,
-            });
+            match active.phase {
+                ActiveProviderTurnPhase::Preparing => {
+                    return Ok(prepared_from_active(session, runtime, active));
+                }
+                ActiveProviderTurnPhase::NotStartedRetained
+                | ActiveProviderTurnPhase::ResultReadyRetained
+                | ActiveProviderTurnPhase::ResultReadyUncertain
+                | ActiveProviderTurnPhase::RuntimeGone => {
+                    return Err(ProviderAdapterError::safe(operation_in_progress()));
+                }
+                ActiveProviderTurnPhase::Entered => {}
+            }
+            let mut completion = active.completion.subscribe();
+            drop(slot);
+            loop {
+                if matches!(
+                    *completion.borrow_and_update(),
+                    ActiveProviderTurnPhase::NotStartedRetained
+                        | ActiveProviderTurnPhase::ResultReadyRetained
+                        | ActiveProviderTurnPhase::ResultReadyUncertain
+                        | ActiveProviderTurnPhase::RuntimeGone
+                ) {
+                    break;
+                }
+                completion.changed().await.map_err(|_| {
+                    ProviderAdapterError::safe(DriverError::new(
+                        "provider_turn_quiescence_unconfirmed",
+                        "The exact provider turn owner ended without quiescence proof.",
+                    ))
+                })?;
+            }
+            return Err(ProviderAdapterError::safe(operation_in_progress()));
         }
+        let driver = runtime
+            .driver
+            .try_take()
+            .map_err(ProviderAdapterError::safe)?;
+        runtime.driver.put(driver).await;
+        let preparation_id = Uuid::new_v4();
+        let (completion, _) = watch::channel(ActiveProviderTurnPhase::Preparing);
+        runtime.active_turn = Some(Box::new(ActiveProviderTurnSlot {
+            preparation_id,
+            execution_id: request.execution_id.clone(),
+            turn_id: request.turn_id.clone(),
+            turn_generation: request.turn_generation,
+            interruption: CancellationToken::new(),
+            phase: ActiveProviderTurnPhase::Preparing,
+            result: None,
+            completion,
+        }));
+        Ok(ProviderPreparedTurn {
+            room_id: session.public.room_id.clone(),
+            session_id: session.public.session_id.clone(),
+            execution_id: request.execution_id.clone(),
+            turn_id: request.turn_id.clone(),
+            turn_generation: request.turn_generation,
+            runtime_handle_id: runtime.handle_id.clone(),
+            runtime_owner_id: runtime.owner_id.clone(),
+            runtime_lease_token: runtime.lease_token.clone(),
+            preparation_id,
+        })
     }
 
     pub(super) async fn enter_prepared_turn(
