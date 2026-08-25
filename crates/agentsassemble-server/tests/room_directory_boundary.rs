@@ -7,9 +7,12 @@ use agentsassemble_domain::{
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_provider::ProviderCatalogService;
 use agentsassemble_server::{AppState, HostSecret, TicketStore, serve};
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use futures_util::{SinkExt, StreamExt};
 use reqwest::Client;
+use ring::signature::{ED25519, UnparsedPublicKey};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use tokio_util::sync::CancellationToken;
@@ -43,6 +46,174 @@ async fn operator_directory_ticket_is_scope_separated_and_room_creation_is_canon
     let room_uid = create_and_retry_room(&client, &server, &tickets, &server_id).await;
     verify_created_room_socket(&server, &tickets, &room_uid).await;
     server.stop().await;
+}
+
+#[tokio::test]
+async fn central_registration_is_one_use_signed_and_keeps_a_zero_room_authority() {
+    let store = zero_room_fixture().await;
+    let tickets = TicketStore::new(Duration::from_secs(30), 32);
+    let server = start(store, tickets.clone()).await;
+    let client = Client::new();
+    let route = format!(
+        "{}/api/central-directory/registration-proof",
+        server.base_url
+    );
+    verify_registration_admission(&client, &route, &tickets).await;
+    verify_registration_and_zero_room(&client, &server, &route, &tickets).await;
+    server.stop().await;
+}
+
+async fn verify_registration_admission(client: &Client, route: &str, tickets: &TicketStore) {
+    let unauthenticated = client
+        .post(route)
+        .body("[".repeat(16 * 1024))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("request unauthenticated registration: {error}"));
+    assert_eq!(unauthenticated.status(), reqwest::StatusCode::FORBIDDEN);
+
+    let preflight = client
+        .request(reqwest::Method::OPTIONS, route)
+        .header("origin", "tauri://localhost")
+        .header("access-control-request-method", "POST")
+        .header(
+            "access-control-request-headers",
+            "authorization,content-type",
+        )
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("request registration preflight: {error}"));
+    assert!(preflight.status().is_success());
+    assert_eq!(
+        preflight.headers()["access-control-allow-origin"],
+        "tauri://localhost"
+    );
+    let allowed_headers = preflight.headers()["access-control-allow-headers"]
+        .to_str()
+        .unwrap_or_else(|error| panic!("decode allowed registration headers: {error}"));
+    assert!(allowed_headers.contains("authorization"));
+    assert!(allowed_headers.contains("content-type"));
+    assert!(!allowed_headers.contains("x-device-token"));
+
+    let invalid_ticket = issue_operator_ticket(tickets).await;
+    let invalid = client
+        .post(route)
+        .header("authorization", format!("Bearer {invalid_ticket}"))
+        .json(&json!({"owner_person_id": "short"}))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("request invalid registration: {error}"));
+    assert_eq!(invalid.status(), reqwest::StatusCode::BAD_REQUEST);
+    let consumed_invalid = client
+        .post(route)
+        .header("authorization", format!("Bearer {invalid_ticket}"))
+        .json(&json!({"owner_person_id": "per_owner_12345678"}))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("replay invalid registration ticket: {error}"));
+    assert_eq!(consumed_invalid.status(), reqwest::StatusCode::FORBIDDEN);
+}
+
+async fn verify_registration_and_zero_room(
+    client: &Client,
+    server: &RunningServer,
+    route: &str,
+    tickets: &TicketStore,
+) {
+    let owner_person_id = "per_owner_12345678";
+    let ticket = issue_operator_ticket(tickets).await;
+    let registered = client
+        .post(route)
+        .header("authorization", format!("Bearer {ticket}"))
+        .json(&json!({"owner_person_id": owner_person_id}))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("request central registration: {error}"));
+    assert_eq!(registered.status(), reqwest::StatusCode::OK);
+    let registered: Value = registered
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("decode central registration: {error}"));
+    verify_registration_signature(&registered, owner_person_id);
+
+    let replay = client
+        .post(route)
+        .header("authorization", format!("Bearer {ticket}"))
+        .json(&json!({"owner_person_id": owner_person_id}))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("replay central registration ticket: {error}"));
+    assert_eq!(replay.status(), reqwest::StatusCode::FORBIDDEN);
+
+    let directory_ticket = issue_operator_ticket(tickets).await;
+    let directory: Value = client
+        .get(format!("{}/api/rooms", server.base_url))
+        .header("authorization", format!("Bearer {directory_ticket}"))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("request zero-room directory: {error}"))
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("decode zero-room directory: {error}"));
+    assert_eq!(directory["server_id"], registered["server_id"]);
+    assert_eq!(directory["rooms"], json!([]));
+    let routes = directory["server_product_surface"]["http_routes"]
+        .as_array()
+        .unwrap_or_else(|| panic!("server product surface has no routes"));
+    assert!(routes.iter().any(|surface| {
+        surface["method"] == "POST"
+            && surface["path"] == "/api/central-directory/registration-proof"
+    }));
+    assert!(!routes.iter().any(|surface| {
+        matches!(
+            surface["path"].as_str(),
+            Some("/api/server-info" | "/api/server-info/challenge")
+        )
+    }));
+}
+
+fn verify_registration_signature(registration: &Value, owner_person_id: &str) {
+    let public_jwk = &registration["host_public_key_jwk"];
+    let proof = &registration["host_registration_proof"];
+    assert_eq!(public_jwk["crv"], "Ed25519");
+    assert_eq!(public_jwk["kty"], "OKP");
+    assert_eq!(proof["owner_person_id"], owner_person_id);
+    let canonical_jwk = serde_json::to_vec(public_jwk)
+        .unwrap_or_else(|error| panic!("encode canonical host JWK: {error}"));
+    assert_eq!(
+        registration["host_key_fingerprint"],
+        URL_SAFE_NO_PAD.encode(Sha256::digest(canonical_jwk))
+    );
+    let transcript = format!(
+        "AA-HOST-REGISTER-1\n{}\n{}\n{}\n{}",
+        registration["server_id"]
+            .as_str()
+            .unwrap_or_else(|| panic!("registration has no server id")),
+        owner_person_id,
+        proof["issued_at"]
+            .as_i64()
+            .unwrap_or_else(|| panic!("registration has no issued-at timestamp")),
+        proof["nonce"]
+            .as_str()
+            .unwrap_or_else(|| panic!("registration has no nonce"))
+    );
+    let public_key = URL_SAFE_NO_PAD
+        .decode(
+            public_jwk["x"]
+                .as_str()
+                .unwrap_or_else(|| panic!("registration has no public key")),
+        )
+        .unwrap_or_else(|error| panic!("decode registration public key: {error}"));
+    let signature = URL_SAFE_NO_PAD
+        .decode(
+            proof["signature"]
+                .as_str()
+                .unwrap_or_else(|| panic!("registration has no signature")),
+        )
+        .unwrap_or_else(|error| panic!("decode registration signature: {error}"));
+    UnparsedPublicKey::new(&ED25519, public_key)
+        .verify(transcript.as_bytes(), &signature)
+        .unwrap_or_else(|_| panic!("central registration signature did not verify"));
 }
 
 async fn verify_auth_boundaries(client: &Client, server: &RunningServer, tickets: &TicketStore) {
@@ -326,6 +497,21 @@ async fn fixture() -> SqliteStore {
         )
         .await
         .unwrap_or_else(|error| panic!("create room directory fixture: {error}"));
+    store
+}
+
+async fn zero_room_fixture() -> SqliteStore {
+    let url = format!(
+        "sqlite:file:{}?mode=memory&cache=shared",
+        uuid::Uuid::new_v4()
+    );
+    let store = SqliteStore::open(&url)
+        .await
+        .unwrap_or_else(|error| panic!("open zero-room fixture: {error}"));
+    store
+        .bootstrap_local_authority("249ce88d-61cd-471f-82a1-e03242ff210f", "SeiNel")
+        .await
+        .unwrap_or_else(|error| panic!("bootstrap zero-room identity: {error}"));
     store
 }
 
