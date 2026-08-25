@@ -147,8 +147,16 @@ async fn execute_agent_create_start(
             .await
         }
         Err(error) => {
-            fail_created_agent_start(store, principal, request_id, payload, &authorized, error)
-                .await
+            fail_created_agent_start(
+                store,
+                provider_adapter,
+                principal,
+                request_id,
+                payload,
+                &authorized,
+                error,
+            )
+            .await
         }
     }
 }
@@ -276,6 +284,7 @@ async fn complete_created_agent_start(
 
 async fn fail_created_agent_start(
     store: &SqliteStore,
+    provider_adapter: &ProviderAdapter,
     principal: &AuthenticatedPrincipal,
     request_id: &str,
     payload: &Value,
@@ -311,6 +320,9 @@ async fn fail_created_agent_start(
             )
             .await
             .map_err(CommandFailure::unresolved)?;
+        provider_adapter
+            .release_terminal_start_failure(&effect.session)
+            .await;
         (
             commit.events,
             CommandFailure::rejected(PersistenceError::StoredCommandRejected {

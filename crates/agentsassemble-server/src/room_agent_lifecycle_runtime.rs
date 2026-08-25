@@ -100,7 +100,9 @@ pub(crate) async fn execute_agent_start(
     };
     match provider_adapter.start_reserved(&authorized.session).await {
         Ok(started) => complete_agent_start(store, command, &authorized, started).await,
-        Err(error) => record_agent_start_failure(store, command, &authorized, error).await,
+        Err(error) => {
+            record_agent_start_failure(store, provider_adapter, command, &authorized, error).await
+        }
     }
 }
 
@@ -175,6 +177,7 @@ async fn complete_agent_start(
 
 async fn record_agent_start_failure(
     store: &SqliteStore,
+    provider_adapter: &ProviderAdapter,
     command: &RoomCommand,
     effect: &AgentStartEffect,
     error: ProviderAdapterError,
@@ -229,6 +232,9 @@ async fn record_agent_start_failure(
         Ok(commit) => commit,
         Err(recording_error) => return CommandExecution::unresolved_failure(recording_error),
     };
+    provider_adapter
+        .release_terminal_start_failure(&effect.session)
+        .await;
     CommandExecution::committed_failure(
         PersistenceError::StoredCommandRejected {
             code: commit.code,

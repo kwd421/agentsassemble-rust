@@ -8,8 +8,8 @@ use std::{
 };
 
 use super::{
-    DriverFactory, DriverFuture, ProductionDriverFactory, ProviderAdapter, ProviderDriver,
-    ProviderRuntimeObservation,
+    DriverError, DriverFactory, DriverFuture, ProductionDriverFactory, ProviderAdapter,
+    ProviderDriver, ProviderRuntimeObservation,
 };
 use crate::{
     guardian::GuardianLaunch, launch_error::DriverLaunchError, runtime_lease::HeldRuntimeLease,
@@ -25,6 +25,23 @@ use std::process::{Command, Stdio};
 struct NeverFactory {
     launches: Arc<AtomicUsize>,
     entered: Arc<tokio::sync::Notify>,
+}
+
+struct SafeFailureFactory;
+
+impl DriverFactory for SafeFailureFactory {
+    fn launch<'a>(
+        &'a self,
+        _session: &'a agentsassemble_domain::DurableAgentSession,
+        _runtime_lease: &'a HeldRuntimeLease,
+    ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
+        Box::pin(async {
+            Err(DriverLaunchError::safe(DriverError::new(
+                "provider_launch_failed",
+                "The provider launch failed before a runtime remained alive.",
+            )))
+        })
+    }
 }
 
 impl DriverFactory for NeverFactory {
@@ -96,6 +113,122 @@ async fn cancelled_pre_ready_launch_retains_slot_custody() {
         &session.public.room_id,
         &session.public.session_id,
     );
+}
+
+#[tokio::test]
+async fn safe_launch_failure_retains_exact_gone_proof_until_terminal_commit() {
+    let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
+    let directory = tempfile::tempdir()
+        .unwrap_or_else(|error| panic!("create safe launch failure fixture: {error}"));
+    let session = super::tests::fixture_session(directory.path(), "#!/bin/sh\nexit 0\n").await;
+    let adapter = ProviderAdapter::with_factory(Arc::new(SafeFailureFactory));
+    let reservation = adapter
+        .reserve_start(&session)
+        .await
+        .unwrap_or_else(|error| panic!("reserve safe launch failure: {error}"));
+    let mut authorized = session.clone();
+    authorized
+        .runtime_handle_id
+        .clone_from(&reservation.runtime_handle_id);
+    authorized
+        .runtime_owner_id
+        .clone_from(&reservation.runtime_owner_id);
+    authorized
+        .runtime_lease_token
+        .clone_from(&reservation.runtime_lease_token);
+
+    let Err(error) = adapter.start_reserved(&authorized).await else {
+        panic!("safe launch failure must remain a terminal error");
+    };
+    assert!(error.runtime_stopped);
+    assert_eq!(error.runtime_lease_token, reservation.runtime_lease_token);
+    assert_eq!(
+        adapter.observe(&authorized).await,
+        ProviderRuntimeObservation::Gone
+    );
+
+    drop(adapter);
+    assert_eq!(
+        crate::runtime_lease::observe_runtime_lease(
+            &authorized.public.room_id,
+            &authorized.public.session_id,
+        ),
+        crate::runtime_lease::LeaseObservation::GenerationGone {
+            launch_token: reservation.runtime_lease_token,
+        }
+    );
+    crate::runtime_lease::cleanup_stale_runtime_lease(
+        &authorized.public.room_id,
+        &authorized.public.session_id,
+    );
+}
+
+#[tokio::test]
+async fn terminal_start_failure_release_permits_one_fresh_generation() {
+    let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
+    let directory = tempfile::tempdir()
+        .unwrap_or_else(|error| panic!("create terminal release fixture: {error}"));
+    let session = super::tests::fixture_session(directory.path(), "#!/bin/sh\nexit 0\n").await;
+    let adapter = ProviderAdapter::with_factory(Arc::new(SafeFailureFactory));
+    let reservation = adapter
+        .reserve_start(&session)
+        .await
+        .unwrap_or_else(|error| panic!("reserve failed generation: {error}"));
+    let mut authorized = session.clone();
+    authorized.runtime_handle_id = reservation.runtime_handle_id;
+    authorized.runtime_owner_id = reservation.runtime_owner_id;
+    authorized.runtime_lease_token = reservation.runtime_lease_token.clone();
+    let Err(error) = adapter.start_reserved(&authorized).await else {
+        panic!("fixture launch must fail safely");
+    };
+    assert!(error.runtime_stopped);
+
+    adapter.release_terminal_start_failure(&authorized).await;
+    let next = adapter
+        .reserve_start(&session)
+        .await
+        .unwrap_or_else(|error| panic!("reserve fresh generation: {error}"));
+    assert_ne!(next.runtime_lease_token, reservation.runtime_lease_token);
+    adapter
+        .cancel_start_reservation(&session.public.room_id, &session.public.session_id, &next)
+        .await;
+}
+
+#[tokio::test]
+async fn reservation_cleanup_rejects_a_substituted_lease_generation() {
+    let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
+    let directory = tempfile::tempdir()
+        .unwrap_or_else(|error| panic!("create reservation cleanup fixture: {error}"));
+    let session = super::tests::fixture_session(directory.path(), "#!/bin/sh\nexit 0\n").await;
+    let adapter = ProviderAdapter::with_factory(Arc::new(SafeFailureFactory));
+    let reservation = adapter
+        .reserve_start(&session)
+        .await
+        .unwrap_or_else(|error| panic!("reserve exact generation: {error}"));
+    let mut substituted = reservation.clone();
+    substituted.runtime_lease_token = uuid::Uuid::new_v4().to_string();
+
+    adapter
+        .cancel_start_reservation(
+            &session.public.room_id,
+            &session.public.session_id,
+            &substituted,
+        )
+        .await;
+    assert_eq!(
+        adapter
+            .reserve_start(&session)
+            .await
+            .unwrap_or_else(|error| panic!("reload retained generation: {error}")),
+        reservation
+    );
+    adapter
+        .cancel_start_reservation(
+            &session.public.room_id,
+            &session.public.session_id,
+            &reservation,
+        )
+        .await;
 }
 
 #[tokio::test]
@@ -196,7 +329,9 @@ async fn post_ready_failure_is_safe_only_after_exact_guardian_receipt() {
     );
     assert_eq!(
         observe_runtime_lease(&room_id, &session_id),
-        LeaseObservation::Gone
+        LeaseObservation::GenerationGone {
+            launch_token: lease.token().to_owned(),
+        }
     );
     let escaped_pid = std::fs::read_to_string(&pid_path)
         .unwrap_or_else(|error| panic!("read escaped provider pid: {error}"))

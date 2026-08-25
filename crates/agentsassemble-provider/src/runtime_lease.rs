@@ -84,7 +84,7 @@ impl HeldRuntimeLease {
 
     pub(crate) fn new_runtime_handle_id(&self) -> String {
         #[cfg(unix)]
-        return crate::runtime_boot::new_handle_id(&self.boot_identity, &self.token);
+        return crate::runtime_handle::new_unix_handle_id(&self.boot_identity, &self.token);
         #[cfg(not(unix))]
         format!("runtime-v5-windows-{}-{}", self.token, Uuid::new_v4())
     }
@@ -321,7 +321,7 @@ fn classify_unlocked_marker(path: &Path, marker: io::Result<String>) -> LeaseObs
 
 #[cfg(unix)]
 fn is_valid_runtime_boot_identity(identity: &str) -> bool {
-    crate::runtime_boot::is_valid_identity(identity)
+    crate::runtime_handle::is_valid_boot_identity(identity)
 }
 
 #[cfg(not(unix))]
@@ -580,7 +580,7 @@ fn runtime_lease_root() -> io::Result<PathBuf> {
     Ok(root)
 }
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 pub(crate) fn cleanup_stale_runtime_lease(room_id: &str, session_id: &str) {
     if let Ok(lease) = HeldRuntimeLease::prepare(room_id, session_id) {
         lease.cleanup_pre_effect();
@@ -724,9 +724,10 @@ mod tests {
         lease.release_launch_lifetime();
         let current_handle = lease.new_runtime_handle_id();
         let old_handle = previous_boot_handle(&current_handle);
-        let old_boot = crate::runtime_boot::parse_handle_id(&old_handle)
+        let old_boot = crate::runtime_handle::parse_handle_id(&old_handle)
             .unwrap_or_else(|error| panic!("decode old-boot runtime handle: {error}"))
-            .boot_identity;
+            .boot_identity
+            .unwrap_or_else(|| panic!("Unix runtime handle must bind boot identity"));
         let mut file = std::fs::OpenOptions::new()
             .read(true)
             .write(true)

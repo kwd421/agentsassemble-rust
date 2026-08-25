@@ -1544,6 +1544,59 @@ An initial attempt with the Homebrew compiler correctly failed before checking p
 code because it did not own the rustup target libraries; it is not counted as evidence.
 Both attempts used isolated temporary Cargo target directories that were cleaned on exit.
 
+The first pushed exact-diff reviews found two independent correctness gaps. Daybreaker
+identified that cold and live absence decisions had diverged: a live slot accepted a
+`PreviousBoot` marker by token alone, while Windows cold recovery accepted a
+generation-gone marker without decoding and cross-binding the runtime handle. The web
+review identified a crash window after a safe provider launch failure: the adapter removed
+its lease evidence before persistence committed the terminal rejection, so a crash in that
+interval could restart as same-boot `Missing` and remain permanently `Ambiguous`. The same
+web pass also found a Linux-only test that still constructed the removed unbound `Gone`
+variant; that was a test compilation defect rather than a production use of the old proof.
+
+The correction gives strict runtime-v5 decoding to `runtime_handle.rs` and every `Gone`
+decision to `runtime_absence.rs`. One fixed-offset decoder rejects malformed, trailing,
+cross-version, and cross-platform handles. One proof function requires the same launch
+token in the handle, durable session, and generation marker; Unix old-boot proofs also
+require the same non-current boot identity. Cold and live scopes are explicit, and a live
+slot always rejects `PreviousBoot`. The former platform-specific proof functions were
+removed rather than retained as compatibility paths. Focused Unix tests cover strict
+marker/handle/token agreement and the live-slot contradiction; the Windows-only test
+compiles the exact handle/durable/marker triple and rejects substituted and malformed
+handles. The stale Linux-only test now supplies its required generation token.
+
+Safe provider launch failures now retain the exact pre-effect `Launching` authority or a
+`StopConfirmed` tombstone through the persistence terminal checkpoint. Only after that
+checkpoint succeeds does the server ask the adapter to release the exact
+handle/owner/lease-token triple. A failed checkpoint deliberately retains the evidence for
+restart reconciliation. Focused tests prove both sides of the boundary: dropping the
+adapter before the terminal checkpoint leaves a disk-observable exact `GenerationGone`,
+and the explicit post-checkpoint release permits one fresh generation.
+
+The function/optimization intent is to eliminate divergent parsers and proof branches at
+the authority boundary, not to claim synthetic throughput. Previously, Unix and Windows
+cold recovery plus live observation and shutdown could evolve different token and handle
+rules; each accepted branch had to be audited separately. The common decoder performs one
+bounded fixed-offset parse only for a candidate that might prove `Gone`, adds no process
+scan, disk I/O, cache, or public state, and removes the duplicate platform proof helpers.
+Preserved invariants are fail-closed uncertainty, exact platform/boot/generation binding,
+and no public runtime authority. The accepted safe-failure cost is one already-bounded
+lease file and one existing runtime slot retained only until the terminal database commit;
+that short resource lifetime is intentional crash-consistency evidence, followed by exact
+release. Focused failure-injection tests and the mandatory host/Windows checks are the
+evidence; no latency or allocation reduction is claimed without workload measurement.
+
+After these review corrections, `make verify` again passed every architecture,
+source-growth, logical-line, and 800-line gate; generated bindings; the production
+frontend build and original-CSS verification; 72 frontend files with 356 tests; 15 Tauri
+tests; 18 domain, 94 persistence, four protocol, 112 provider, and 21 server unit tests;
+23 Rust integration tests; documentation tests; warning-denied workspace/desktop Clippy;
+and final diff validation. The installed rustup `x86_64-pc-windows-gnu` target also passed
+the workspace all-target/all-feature check, compiling the Windows-only exact triple test.
+That non-warning-denied cross-check retained the already-recorded unrelated Windows-only
+test/helper warnings and introduced no new project error. Its isolated temporary target
+was removed with Cargo's own target cleanup immediately after the check.
+
 Packaged Computer Use and both pushed exact-diff re-reviews remain required before this
 correction is closed.
 

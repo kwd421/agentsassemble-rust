@@ -133,6 +133,7 @@ impl ProviderAdapter {
                 if !runtime.effect_started
                     && runtime.handle_id == reservation.runtime_handle_id
                     && runtime.owner_id == reservation.runtime_owner_id
+                    && runtime.runtime_lease.token() == reservation.runtime_lease_token
         ) {
             return;
         }
@@ -142,6 +143,45 @@ impl ProviderAdapter {
             unreachable!("matched launch reservation must remain owned");
         };
         runtime.runtime_lease.cleanup_pre_effect();
+    }
+
+    /// Releases an exact failed-start tombstone only after its terminal DB result commits.
+    pub async fn release_terminal_start_failure(&self, session: &DurableAgentSession) {
+        let Some(slot) = self
+            .existing_slot(&session.public.room_id, &session.public.session_id)
+            .await
+        else {
+            return;
+        };
+        let mut slot = slot.lock().await;
+        let exact_launching = matches!(
+            &slot.state,
+            RuntimeState::Launching(runtime)
+                if !runtime.effect_started
+                    && runtime.handle_id == session.runtime_handle_id
+                    && runtime.owner_id == session.runtime_owner_id
+                    && runtime.runtime_lease.token() == session.runtime_lease_token
+        );
+        let exact_stopped = matches!(
+            &slot.state,
+            RuntimeState::StopConfirmed {
+                handle_id,
+                owner_id,
+                runtime_lease,
+            } if handle_id == &session.runtime_handle_id
+                && owner_id == &session.runtime_owner_id
+                && runtime_lease.token() == session.runtime_lease_token
+        );
+        if !exact_launching && !exact_stopped {
+            return;
+        }
+        match std::mem::replace(&mut slot.state, RuntimeState::Vacant) {
+            RuntimeState::Launching(runtime) => runtime.runtime_lease.cleanup_pre_effect(),
+            RuntimeState::StopConfirmed {
+                mut runtime_lease, ..
+            } => runtime_lease.release_and_remove(),
+            _ => unreachable!("matched failed start must retain exact runtime authority"),
+        }
     }
 
     /// Starts or proves one exact durably authorized session runtime.
@@ -204,8 +244,18 @@ impl ProviderAdapter {
                         else {
                             unreachable!("safe provider launch failure must remain owned");
                         };
-                        runtime.runtime_lease.cleanup_pre_effect();
-                        return Err(ProviderAdapterError::safe(failure.error));
+                        let error = ProviderAdapterError::confirmed_stopped(
+                            failure.error,
+                            &runtime.handle_id,
+                            &runtime.owner_id,
+                            runtime.runtime_lease.token(),
+                        );
+                        slot.state = RuntimeState::StopConfirmed {
+                            handle_id: runtime.handle_id,
+                            owner_id: runtime.owner_id,
+                            runtime_lease: runtime.runtime_lease,
+                        };
+                        return Err(error);
                     }
                 };
                 let RuntimeState::Launching(runtime) =

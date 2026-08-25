@@ -36,9 +36,11 @@ mod room_portal_mcp;
 mod room_portal_terminal;
 mod room_portal_tool_contract;
 mod runtime;
+mod runtime_absence;
 mod runtime_authority;
 #[cfg(unix)]
 mod runtime_boot;
+mod runtime_handle;
 mod runtime_lease;
 mod runtime_recovery;
 mod selection;

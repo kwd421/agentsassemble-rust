@@ -2,10 +2,9 @@ use std::time::Duration;
 
 use agentsassemble_domain::{CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession};
 
-#[cfg(unix)]
-use crate::runtime_boot::{current_identity, parse_handle_id};
 use crate::{
     runtime::ProviderRuntimeObservation,
+    runtime_absence::{ObservationScope, observation_proves_gone},
     runtime_lease::{LeaseObservation, observe_runtime_lease},
 };
 
@@ -24,13 +23,33 @@ pub(crate) async fn observe_previous_runtime(
             }
         }
     }
-    classify_previous_runtime(session, observation)
+    classify_previous_runtime(session, &observation)
 }
 
 fn classify_previous_runtime(
     session: &DurableAgentSession,
-    observation: LeaseObservation,
+    observation: &LeaseObservation,
 ) -> ProviderRuntimeObservation {
+    if durable_runtime_identity_is_complete(session)
+        && observation_proves_gone(
+            &session.runtime_handle_id,
+            &session.runtime_lease_token,
+            observation,
+            ObservationScope::ColdRestart,
+        )
+    {
+        return ProviderRuntimeObservation::Gone;
+    }
+    if empty_pre_effect_authority(session)
+        && matches!(
+            observation,
+            LeaseObservation::GenerationGone { .. }
+                | LeaseObservation::PreviousBoot { .. }
+                | LeaseObservation::Missing
+        )
+    {
+        return ProviderRuntimeObservation::Gone;
+    }
     match observation {
         LeaseObservation::Active => {
             if durable_runtime_identity_is_complete(session) {
@@ -44,32 +63,12 @@ fn classify_previous_runtime(
                 reason_code: "previous_runtime_guardian_active".to_owned(),
             }
         }
-        LeaseObservation::GenerationGone { launch_token }
-            if generation_proves_absence(session, &launch_token)
-                || empty_pre_effect_authority(session) =>
-        {
-            ProviderRuntimeObservation::Gone
-        }
         LeaseObservation::GenerationGone { .. } => ProviderRuntimeObservation::Ambiguous {
             reason_code: "runtime_lease_generation_mismatch".to_owned(),
         },
-        LeaseObservation::PreviousBoot {
-            boot_identity,
-            launch_token,
-        } if previous_boot_marker_proves_absence(session, &boot_identity, &launch_token)
-            || empty_pre_effect_authority(session) =>
-        {
-            ProviderRuntimeObservation::Gone
-        }
         LeaseObservation::PreviousBoot { .. } => ProviderRuntimeObservation::Ambiguous {
             reason_code: "runtime_boot_generation_mismatch".to_owned(),
         },
-        LeaseObservation::Missing if missing_previous_boot_proves_absence(session) => {
-            ProviderRuntimeObservation::Gone
-        }
-        LeaseObservation::Missing if empty_pre_effect_authority(session) => {
-            ProviderRuntimeObservation::Gone
-        }
         LeaseObservation::Missing => ProviderRuntimeObservation::Ambiguous {
             reason_code: "runtime_lease_missing".to_owned(),
         },
@@ -77,58 +76,6 @@ fn classify_previous_runtime(
             reason_code: "runtime_lease_observation_failed".to_owned(),
         },
     }
-}
-
-#[cfg(unix)]
-fn generation_proves_absence(session: &DurableAgentSession, launch_token: &str) -> bool {
-    durable_runtime_identity_is_complete(session)
-        && session.runtime_lease_token == launch_token
-        && parse_handle_id(&session.runtime_handle_id)
-            .is_ok_and(|identity| identity.launch_token == launch_token)
-}
-
-#[cfg(not(unix))]
-fn generation_proves_absence(session: &DurableAgentSession, launch_token: &str) -> bool {
-    durable_runtime_identity_is_complete(session) && session.runtime_lease_token == launch_token
-}
-
-#[cfg(unix)]
-fn previous_boot_marker_proves_absence(
-    session: &DurableAgentSession,
-    boot_identity: &str,
-    launch_token: &str,
-) -> bool {
-    durable_runtime_identity_is_complete(session)
-        && session.runtime_lease_token == launch_token
-        && parse_handle_id(&session.runtime_handle_id).is_ok_and(|identity| {
-            identity.boot_identity == boot_identity
-                && identity.launch_token == launch_token
-                && current_identity().is_ok_and(|current| boot_identity != current)
-        })
-}
-
-#[cfg(not(unix))]
-const fn previous_boot_marker_proves_absence(
-    _session: &DurableAgentSession,
-    _boot_identity: &str,
-    _launch_token: &str,
-) -> bool {
-    false
-}
-
-#[cfg(unix)]
-fn missing_previous_boot_proves_absence(session: &DurableAgentSession) -> bool {
-    durable_runtime_identity_is_complete(session)
-        && parse_handle_id(&session.runtime_handle_id).is_ok_and(|identity| {
-            identity.launch_token == session.runtime_lease_token
-                && current_identity()
-                    .is_ok_and(|current| identity.boot_identity.as_str() != current)
-        })
-}
-
-#[cfg(not(unix))]
-const fn missing_previous_boot_proves_absence(_session: &DurableAgentSession) -> bool {
-    false
 }
 
 fn durable_runtime_identity_is_complete(session: &DurableAgentSession) -> bool {
@@ -220,9 +167,10 @@ mod tests {
         };
         let previous_handle = String::from_utf8(previous_handle)
             .unwrap_or_else(|error| panic!("encode previous boot handle: {error}"));
-        let previous_boot = crate::runtime_boot::parse_handle_id(&previous_handle)
+        let previous_boot = crate::runtime_handle::parse_handle_id(&previous_handle)
             .unwrap_or_else(|error| panic!("parse previous boot handle: {error}"))
-            .boot_identity;
+            .boot_identity
+            .unwrap_or_else(|| panic!("Unix runtime handle must bind boot identity"));
         let mut session = durable_session(
             "marker-boot-room",
             "marker-boot-session",
@@ -237,7 +185,7 @@ mod tests {
         assert_eq!(
             classify_previous_runtime(
                 &session,
-                crate::runtime_lease::LeaseObservation::PreviousBoot {
+                &crate::runtime_lease::LeaseObservation::PreviousBoot {
                     boot_identity: previous_boot.clone(),
                     launch_token: launch_token.clone(),
                 },
@@ -249,7 +197,7 @@ mod tests {
         assert!(matches!(
             classify_previous_runtime(
                 &session,
-                crate::runtime_lease::LeaseObservation::PreviousBoot {
+                &crate::runtime_lease::LeaseObservation::PreviousBoot {
                     boot_identity: previous_boot.clone(),
                     launch_token: launch_token.clone(),
                 },
@@ -259,13 +207,13 @@ mod tests {
 
         session.runtime_handle_id = previous_handle;
         assert!(matches!(
-            classify_previous_runtime(&session, crate::runtime_lease::LeaseObservation::Unknown,),
+            classify_previous_runtime(&session, &crate::runtime_lease::LeaseObservation::Unknown,),
             ProviderRuntimeObservation::Ambiguous { .. }
         ));
         assert!(matches!(
             classify_previous_runtime(
                 &session,
-                crate::runtime_lease::LeaseObservation::GenerationGone {
+                &crate::runtime_lease::LeaseObservation::GenerationGone {
                     launch_token: uuid::Uuid::new_v4().to_string(),
                 },
             ),
@@ -280,7 +228,7 @@ mod tests {
         assert_eq!(
             classify_previous_runtime(
                 &session,
-                crate::runtime_lease::LeaseObservation::PreviousBoot {
+                &crate::runtime_lease::LeaseObservation::PreviousBoot {
                     boot_identity: previous_boot,
                     launch_token,
                 },

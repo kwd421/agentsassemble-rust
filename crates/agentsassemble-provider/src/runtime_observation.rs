@@ -5,6 +5,7 @@ use super::{
     ProviderRuntimeObservation, RuntimeKey, RuntimeSlot, RuntimeState,
 };
 use crate::{
+    runtime_absence::{ObservationScope, observation_proves_gone},
     runtime_authority::revalidate_runtime_authority,
     runtime_lease::{LeaseObservation, observe_runtime_lease},
     runtime_recovery::observe_previous_runtime,
@@ -103,13 +104,13 @@ fn observe_launching_runtime(
                 owner_id: runtime.owner_id.clone(),
                 reason_code: "provider_launch_cleanup_active".to_owned(),
             },
-            LeaseObservation::GenerationGone { launch_token }
-                if launch_token == runtime.runtime_lease.token() =>
-            {
-                release_gone_launching_runtime(slot)
-            }
-            LeaseObservation::PreviousBoot { launch_token, .. }
-                if launch_token == runtime.runtime_lease.token() =>
+            observation
+                if observation_proves_gone(
+                    &runtime.handle_id,
+                    runtime.runtime_lease.token(),
+                    &observation,
+                    ObservationScope::LiveSlot,
+                ) =>
             {
                 release_gone_launching_runtime(slot)
             }
@@ -179,12 +180,13 @@ pub(super) fn shutdown_launching_runtime(
         runtime.runtime_lease.cleanup_pre_effect();
         return Some(Ok(stopped));
     }
+    let observation = observe_runtime_lease(&key.room_id, &key.session_id);
     if !runtime.runtime_lease.cleanup_receipt_is_present()
-        && !matches!(
-            observe_runtime_lease(&key.room_id, &key.session_id),
-            LeaseObservation::GenerationGone { launch_token }
-                | LeaseObservation::PreviousBoot { launch_token, .. }
-                if launch_token == runtime.runtime_lease.token()
+        && !observation_proves_gone(
+            &runtime.handle_id,
+            runtime.runtime_lease.token(),
+            &observation,
+            ObservationScope::LiveSlot,
         )
     {
         return Some(Err(ProviderAdapterError::uncertain(
