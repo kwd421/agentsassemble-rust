@@ -2136,6 +2136,72 @@ at verified `매우 높음` both manually reviewed the final nonce-bound correct
 returned `APPROVE` with no remaining Critical, High, or Medium blocker. Neither review
 used Deep Scan, another automated scanner, or a real provider.
 
+## Participant-mute provider-matrix completion: 2026-08-26
+
+The packaged provider matrix used the copied production frontend and the installed
+provider runtimes without mocks, provider substitution, print mode, internal state
+injection, or client-owned orchestration. The first isolated local-only package was
+`AgentsAssemble Provider Verify`, identifier
+`app.agentsassemble.rust.providermatrixverify0826`. The grouped provider menu initially
+made the catalog's Terra option unreachable through macOS accessibility because opening
+the menu did not transfer focus to its search owner. Production commit `09b79b8` adds
+only that focus transfer; test commit `0d6d3a5` fixes the search and grouped-option focus
+contracts. The catalog, selection value, provider authority, and option click path did
+not change.
+
+Codex used the exact installed `gpt-5.6-terra` model. A real room turn returned
+`TERRA_OK`, and a later repository-review turn was visibly `응답 중` when the room
+member menu muted the Agent Session. The UI projected `뮤트됨` and returned to `대기`.
+Read-only persistence inspection recorded the exact execution as `interrupted`, its
+interrupt effect as `finalized`, and no late final after the mute observation window.
+
+Antigravity used the retained native PTY adapter with exact model
+`gemini-3.6-flash` and medium reasoning. A real turn returned `AGY_OK`. Muting a later
+busy repository-review turn projected `뮤트됨` and `중지됨`; persistence recorded the
+execution as `interrupted` and its interrupt effect as `finalized`. No late final was
+published. This run used neither print mode nor OAuth substitution.
+
+OpenCode used the exact installed free model `opencode/hy3-free`. A real turn returned
+`HY3_OK`, closing the earlier provider-declined observation without substituting another
+model. The first busy-mute attempt then found a real defect: UI mute authority committed,
+but the execution and effect became `recovery_required` and the session remained
+`응답 중`. OpenCode abort side events were being judged as ordinary turn success, while
+the quiescence reader depended on deprecated `session.idle` instead of the current
+same-session `session.status { type: "idle" }` terminal signal.
+
+Production commit `1fcca2a` separates ordinary turn completion from interrupt
+quiescence. Ordinary turns still fail closed on provider errors and interactive requests;
+quiescence ignores those nonterminal abort side events and accepts only the current
+session's bounded `session.status` idle signal. It keeps the existing session filter,
+10-second deadline, 8 MiB stream, 512 KiB line, and 8,192-event bounds. Test commit
+`035416c` proves that permission, error, and busy events cannot terminalize the wait.
+The correction deliberately removes dependence on the deprecated idle event rather than
+adding a compatibility fallback.
+
+Computer Use repeated the OpenCode flow from a fresh release package,
+`AgentsAssemble Provider Fix Verify`, identifier
+`app.agentsassemble.rust.providerfixverify0826`. The same free model returned
+`HY3_FIX_OK`; a later long turn was visibly busy before mute, then projected
+`뮤트됨` and `대기`. Ten seconds later there was no late final. Persistence recorded
+generation one as `completed`, generation two as `interrupted`, and its single interrupt
+effect as `finalized`, with no recovery-required row.
+
+Current commit `035416c` passed complete `make verify`: architecture, source-growth,
+and policy gates; Rust format/check; generated bindings; production frontend build and
+original-CSS verification; 74 frontend files with 371 tests; 15 desktop tests; all 330
+workspace Rust unit/integration tests; documentation tests; warning-denied workspace and
+desktop Clippy; and final diff validation. Daybreaker Blue High manually approved exact
+public range `0d6d3a5..035416c`. The independent web reviewer at verified `매우 높음`
+approved the focus range and then the complete OpenCode correction, with no remaining
+Critical, High, or Medium blocker. Neither review used Deep Scan or another automated
+scanner.
+
+Both isolated packages were quit normally. No exact application, server, sidecar, or
+verification-owned provider child remained. Their Application Support, WebKit, cache,
+`.app`, and `.dmg` artifacts, including the unused default-name bundle produced during
+packaging, were permanently removed. This completes the fresh packaged provider-matrix,
+exact-mute, review, and cleanup evidence for the Phase 4 moderation boundary.
+
 ## API verification scope
 
 When a reachable flow specifically needs an API-backed provider, the allowed paid/provider-specific candidates are the official DeepSeek API and the designated Flash provider path. Every other API-backed verification uses only an explicitly free API or free model. Missing credentials, exhausted free quota, or unavailable models fail visibly; they do not trigger a paid substitution or a fallback provider.
