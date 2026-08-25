@@ -309,4 +309,38 @@ mod tests {
         );
         assert_eq!(store.consume(&room.ticket).await, Err(TicketError::Invalid));
     }
+
+    #[tokio::test]
+    async fn central_registration_ticket_is_not_generic_operator_or_profile_authority() {
+        let store = TicketStore::new(Duration::from_secs(30), 8);
+        let registration = store
+            .issue_central_registration("operator-local-user".to_owned())
+            .await
+            .unwrap_or_else(|error| panic!("issue registration ticket: {error}"));
+        assert_eq!(
+            store.consume_server_operator(&registration.ticket).await,
+            Err(TicketError::Invalid)
+        );
+        assert_eq!(
+            store
+                .consume_central_registration(&registration.ticket)
+                .await,
+            Err(TicketError::Invalid)
+        );
+
+        let profile_rejected = store
+            .issue_central_registration("operator-local-user".to_owned())
+            .await
+            .unwrap_or_else(|error| panic!("issue profile-rejected ticket: {error}"));
+        assert_eq!(
+            store.consume_profile(&profile_rejected.ticket).await,
+            Err(TicketError::Invalid)
+        );
+        assert_eq!(
+            store
+                .consume_central_registration(&profile_rejected.ticket)
+                .await,
+            Err(TicketError::Invalid)
+        );
+    }
 }
