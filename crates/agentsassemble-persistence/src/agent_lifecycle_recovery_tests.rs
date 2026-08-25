@@ -240,8 +240,10 @@ async fn reconciliation_rejects_competing_pending_lifecycle_authority() {
         panic!("stopped session must require an effect");
     };
     sqlx::query(
-        "INSERT INTO lifecycle_command_reservations(room_id, principal_id, request_id, action, payload_hash, session_id, operation_id, status) VALUES ('general', 'operator', 'competing-start', 'agent.start', 'competing-hash', ?, 'competing-operation', 'pending')",
+        "INSERT INTO lifecycle_command_reservations(room_id, principal_id, request_id, action, payload_hash, principal_json, payload_json, session_id, operation_id, status) VALUES ('general', 'operator', 'competing-start', 'agent.start', 'competing-hash', ?, ?, ?, 'competing-operation', 'pending')",
     )
+    .bind(serde_json::to_string(&principal).unwrap_or_else(|error| panic!("encode principal: {error}")))
+    .bind(serde_json::to_string(&payload).unwrap_or_else(|error| panic!("encode payload: {error}")))
     .bind(AGENT_ID)
     .execute(&store.pool)
     .await
@@ -312,17 +314,13 @@ async fn runtime_reconciliation_uses_exact_cas_and_gone_stop_finalizes_without_r
         .apply_runtime_reconciliation(&current, &RuntimeReconciliationObservation::Gone)
         .await
         .unwrap_or_else(|error| panic!("apply gone observation: {error}"));
-    assert!(matches!(
-        store
-            .prepare_agent_stop(&principal, "stop-after-observation", &payload)
-            .await
-            .unwrap_or_else(|error| panic!("recover observed stop: {error}")),
-        AgentStopPlan::Finalize
-    ));
-    let outcome = store
-        .finalize_agent_stop(&principal, "stop-after-observation", &payload)
+    let AgentStopPlan::Outcome(outcome) = store
+        .prepare_agent_stop(&principal, "stop-after-observation", &payload)
         .await
-        .unwrap_or_else(|error| panic!("finalize observed stop: {error}"));
+        .unwrap_or_else(|error| panic!("replay observed stop: {error}"))
+    else {
+        panic!("startup recovery must own the complete stop result");
+    };
     assert_eq!(outcome.result["agent_session"]["runtime_status"], "stopped");
     assert_eq!(stop.runtime_handle_id, "runtime-before-observation");
 }
@@ -640,22 +638,18 @@ async fn confirmed_stop_checkpoint_survives_restart_and_finalizes_without_an_eff
     .unwrap_or_else(|error| panic!("read reconciled stop: {error}"));
     let durable = serde_json::from_str::<DurableAgentSession>(&encoded)
         .unwrap_or_else(|error| panic!("decode reconciled stop: {error}"));
-    assert_eq!(durable.lifecycle_intent_action, "stop");
-    assert_eq!(durable.lifecycle_intent_status, "effect_applied");
+    assert!(durable.lifecycle_intent_action.is_empty());
+    assert!(durable.lifecycle_intent_status.is_empty());
     assert!(durable.runtime_handle_id.is_empty());
     assert!(durable.runtime_owner_id.is_empty());
     assert!(!durable.public.provider_session_active);
-    assert!(matches!(
-        store
-            .prepare_agent_stop(&principal, "confirmed-stop", &payload)
-            .await
-            .unwrap_or_else(|error| panic!("recover confirmed stop: {error}")),
-        AgentStopPlan::Finalize
-    ));
-    let outcome = store
-        .finalize_agent_stop(&principal, "confirmed-stop", &payload)
+    let AgentStopPlan::Outcome(outcome) = store
+        .prepare_agent_stop(&principal, "confirmed-stop", &payload)
         .await
-        .unwrap_or_else(|error| panic!("finalize confirmed stop: {error}"));
+        .unwrap_or_else(|error| panic!("replay confirmed stop: {error}"))
+    else {
+        panic!("startup recovery must persist the confirmed stop result");
+    };
     assert_eq!(outcome.result["agent_session"]["runtime_status"], "stopped");
 }
 

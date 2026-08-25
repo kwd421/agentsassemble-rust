@@ -40,6 +40,7 @@ use crate::{
     room_socket::{
         EstablishedSubscription, establish, persistence_error, persistence_error_is_internal,
     },
+    runtime_reconciliation::{startup_recovery_keys, watch_startup_recovery},
 };
 
 const HTTP_BODY_DEADLINE: Duration = Duration::from_secs(10);
@@ -102,12 +103,20 @@ pub async fn serve(
     cancellation: CancellationToken,
 ) -> Result<(), ServeError> {
     reconcile_runtime_ownership(&state.store, &state.provider_adapter).await?;
+    let startup_recovery = startup_recovery_keys(&state.store).await?;
     let rooms = state.rooms.clone();
     let provider_catalog = state.provider_catalog.clone();
     let connections = state.connections.clone();
     let connection_shutdown = state.shutdown.clone();
     let http_admission = Arc::new(Semaphore::new(MAX_HTTP_CONNECTIONS));
     let rejected_connections = RejectionCounter::default();
+    connections.spawn(watch_startup_recovery(
+        state.store.clone(),
+        state.provider_adapter.clone(),
+        rooms.clone(),
+        connection_shutdown.clone(),
+        startup_recovery,
+    ));
     let app = router(state);
     let result = loop {
         let accepted = tokio::select! {

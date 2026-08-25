@@ -786,6 +786,10 @@ mod start_failure_tests;
 mod recovery_tests;
 
 #[cfg(test)]
+#[path = "agent_lifecycle_live_recovery_tests.rs"]
+mod live_recovery_tests;
+
+#[cfg(test)]
 #[path = "agent_resume_tests.rs"]
 mod resume_tests;
 

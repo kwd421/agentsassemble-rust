@@ -8,7 +8,10 @@ use agentsassemble_domain::{
 use same_file::Handle;
 use serde_json::json;
 
-use crate::{AgentCreateStartPlan, AgentRuntimeStarted, SqliteStore};
+use crate::{
+    AgentCreateStartPlan, AgentRuntimeStarted, AgentStartPlan, PersistenceError,
+    RuntimeReconciliationObservation, SqliteStore,
+};
 
 async fn fixture() -> (SqliteStore, AuthenticatedPrincipal, tempfile::TempDir) {
     let directory =
@@ -365,4 +368,61 @@ async fn restart_uncertain_create_start_keeps_one_unresolved_request() {
     let session = serde_json::from_str::<agentsassemble_domain::DurableAgentSession>(&encoded)
         .unwrap_or_else(|error| panic!("decode retained session: {error}"));
     assert_eq!(session.lifecycle_intent_status, "unconfirmed");
+}
+
+#[tokio::test]
+async fn startup_gone_keeps_created_identity_and_terminalizes_its_old_start() {
+    let (store, principal, directory) = fixture().await;
+    let payload = json!({"start": true, "provider_id": "codex"});
+    let AgentCreateStartPlan::Start(effect) = store
+        .prepare_agent_create_start(
+            &principal,
+            "create-start-abandoned",
+            &payload,
+            &draft(directory.path()),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("prepare create/start: {error}"))
+    else {
+        panic!("new create/start must own a start effect");
+    };
+    store
+        .mark_agent_start_unconfirmed(
+            &principal,
+            &effect.session.public.session_id,
+            &effect.operation_id,
+            "create-runtime-abandoned",
+            "supervisor-dead",
+            "runtime_start_unconfirmed",
+            "launch outcome was uncertain",
+        )
+        .await
+        .unwrap_or_else(|error| panic!("mark create/start unconfirmed: {error}"));
+    let candidate = store
+        .load_runtime_reconciliation_candidates()
+        .await
+        .unwrap_or_else(|error| panic!("load create/start candidate: {error}"))
+        .pop()
+        .unwrap_or_else(|| panic!("unconfirmed create/start must be a candidate"));
+    store
+        .apply_runtime_reconciliation(&candidate, &RuntimeReconciliationObservation::Gone)
+        .await
+        .unwrap_or_else(|error| panic!("terminalize create/start: {error}"));
+    assert!(matches!(
+        store
+            .inspect_agent_create_start(&principal, "create-start-abandoned", &payload)
+            .await,
+        Err(PersistenceError::StoredCommandRejected {
+            code,
+            ..
+        }) if code == "runtime_start_recovered_gone"
+    ));
+    let retry_payload = json!({"agent_id": effect.session.public.session_id});
+    assert!(matches!(
+        store
+            .prepare_agent_start(&principal, "start-created-after-recovery", &retry_payload)
+            .await
+            .unwrap_or_else(|error| panic!("start retained created session: {error}")),
+        AgentStartPlan::Start(_)
+    ));
 }

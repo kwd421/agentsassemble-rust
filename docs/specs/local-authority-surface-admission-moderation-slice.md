@@ -162,9 +162,15 @@ applied provider effect, or a post-commit publication/completion boundary, a
 nonterminal failure is unresolved regardless of its generic error variant. Only
 an explicitly committed terminal provider failure may be rejected. Its exact
 public rejection remains durable and replayable without another effect, event,
-or write-budget debit. An unconfirmed lifecycle effect stays unresolved and is
-not executed again until authoritative runtime reconciliation changes its state. A response
-for a request ID the browser does not currently own is also a protocol failure;
+or write-budget debit. An unconfirmed lifecycle effect stays unresolved and is not
+executed again until authoritative runtime reconciliation changes its state. Exact live
+replay may perform one bounded provider observation: only proven absence or exact
+owned-runtime adoption can reopen the original request's effect path, while uncertainty
+remains unresolved and every replacement request stays blocked. After a server restart,
+proven absence terminally rejects an old start/create-start request while retaining its
+Agent Session for a new lifecycle request; a proven or previously confirmed stop commits
+the old stop result. A response for a request ID the browser does not currently own is
+also a protocol failure;
 it closes the channel rather than being ignored.
 
 ## Proof-bound finite subscription
@@ -267,6 +273,13 @@ Before network admission, startup reconciliation claims every nonterminal provid
 execution, including executions without an interrupt effect. Runtime custody binds
 handle, owner, owner epoch, custody lease, provider runtime instance nonce, and
 observation ID.
+
+Lifecycle reservations retain the exact private principal and payload required to finish
+an already-authorized recovery transition. They are candidate-CAS input, never public
+snapshot data. A cancellation-owned watcher observes only the finite candidate set that
+remained uncertain at startup. It may commit a later exact `Gone` terminal result and wake
+durable room publication, but it never spawns, stops, or otherwise substitutes a provider
+effect. Ambiguous or timed-out observation remains fail-closed.
 
 Exact runtime-gone observation finalizes runtime checkpoint, interrupted turn,
 session state, pending progression, execution, and effect in one UOW. Confirmed

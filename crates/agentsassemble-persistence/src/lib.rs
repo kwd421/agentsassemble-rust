@@ -7,6 +7,7 @@ mod agent_lifecycle_authority;
 mod agent_lifecycle_events;
 mod agent_lifecycle_reservations;
 mod agent_reconciliation;
+mod agent_reconciliation_recovery;
 mod agent_sessions;
 mod agent_start_failure;
 mod authority;
@@ -40,7 +41,10 @@ pub use agent_create_start::{
 pub use agent_lifecycle::{
     AgentRuntimeStarted, AgentStartEffect, AgentStartPlan, AgentStopEffect, AgentStopPlan,
 };
-pub use agent_reconciliation::{RuntimeReconciliationCandidate, RuntimeReconciliationObservation};
+pub use agent_reconciliation::{
+    LiveRuntimeReconciliation, RuntimeReconciliationCandidate, RuntimeReconciliationObservation,
+    RuntimeReconciliationReservation,
+};
 pub use bootstrap::{LocalBootstrapCommit, LocalBootstrapPhase, LocalBootstrapStatus};
 pub use private_fs::secure_private_directory;
 pub use profile_attachments::{ProfileAttachment, ProfileAttachmentMetadata};

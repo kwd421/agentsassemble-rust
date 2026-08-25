@@ -433,8 +433,30 @@ async fn start(store: SqliteStore, catalog: ProviderCatalog) -> RunningServer {
             .await
             .map_err(|error| error.to_string())
     });
+    let base_url = format!("http://{address}");
+    let client = Client::new();
+    let mut ready = false;
+    for _ in 0..200 {
+        if client
+            .get(format!("{base_url}/healthz"))
+            .send()
+            .await
+            .is_ok_and(|response| response.status().is_success())
+        {
+            ready = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    if !ready {
+        cancellation.cancel();
+        let result = task
+            .await
+            .unwrap_or_else(|error| panic!("failed startup task join: {error}"));
+        panic!("server did not admit HTTP after startup recovery: {result:?}");
+    }
     RunningServer {
-        base_url: format!("http://{address}"),
+        base_url,
         cancellation,
         task,
     }

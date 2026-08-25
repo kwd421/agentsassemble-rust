@@ -1248,6 +1248,60 @@ Dependency installations, original app data, and unrelated legacy/provider
 processes were untouched. Commit/push and both post-push reviews remain required
 before this correction is closed.
 
+The subsequent same-session critical web review rejected the startup-only recovery
+boundary with one Medium reachable loop. An unconfirmed request could remain locked
+forever while its WebSocket reconnect kept the same sidecar alive, and a full restart
+lost the browser's private request identity even if a later observation proved the old
+runtime gone. Daybreaker Blue High had approved the narrower diff; the stronger web
+finding is retained as the active correction requirement.
+
+Schema 18 stores the exact private principal and payload beside each incomplete lifecycle
+reservation. Exact live replay now asks the common provider adapter for one bounded
+observation and applies it under a complete candidate CAS. `Gone` reopens only the same
+request, exact adoption continues through the owned runtime, and uncertain or ambiguous
+results remain unresolved without state mutation or another provider effect. Startup
+reconciliation terminally rejects a proven-gone start/create-start while retaining the
+same Agent Session, and it commits a proven-gone or already-confirmed stop result. One
+cancellation-owned watcher observes only the finite reservations present at startup and
+can publish a later proven-gone terminal transition; it never reissues an effect. Stored
+terminal rejection messages must also equal the canonical bounded redacted form.
+
+Focused persistence tests prove exact-request-only recovery, exact adopted-runtime
+continuation, restart-safe start and create/start terminalization, same-session reuse by
+a new request, and stop result completion. The production server helper is exercised with
+the real common provider adapter, and the server boundary test interrupts a real
+create/start initialization, shuts down, restarts from the same SQLite authority, observes
+the old durable rejection, and starts that same Agent Session with a new request. The
+complete `make verify` passed every mandatory architecture, source-growth, logical-line,
+and 800-line gate, generated bindings, production frontend and original-CSS verification,
+72 frontend files with 356 tests, 15 Tauri tests, 18 domain, 90 persistence, four protocol,
+100 provider, and 18 server unit tests, 21 Rust integration tests, documentation tests,
+warning-denied workspace/desktop Clippy, and final diff validation. The first full run
+stopped on a 106-line stop executor and two noncanonical timeout branches; the executor's
+recovery preparation became one owned helper and the branches became `let-else`. The
+targeted follow-up then found the expanded restart boundary test at 111 lines, so its
+post-restart verification was split by responsibility. No allow, exception, or gate change
+was introduced before the clean full run.
+
+Computer Use drove a fresh debug package under isolated identifier
+`app.agentsassemble.rust.liverecoveryverify`, with the central URL explicitly empty and
+absent from production assets. Fresh local identity `Lifecycle Live Recovery Verify`
+created a real schema-18 room and visibly published `LIFECYCLE_LIVE_RECOVERY_UI_OK`.
+Normal quit left no exact app or server process. Relaunch restored the same identity, room,
+and message over a fresh authenticated socket and visibly published
+`LIFECYCLE_LIVE_RECOVERY_RECONNECT_OK`; read-only SQLite inspection found those exact
+`message_final` values at sequences 2 and 3. The packaged Agent Add flow also closed an
+open left-bottom profile card beneath its modal, exposed no display-name input before
+provider selection, and introduced the catalog-derived field after selecting Codex. No
+Agent Session was created and no provider was started.
+
+Final normal quit again left no exact app or sidecar. The isolated Application Support,
+cache, WebKit and temporary WebKit data, app bundle, frontend distribution, generated
+Tauri schemas, copied sidecar, and both Cargo target trees were permanently removed; the
+two target trees accounted for 12.6 GiB of regenerable output. Dependency installations,
+source files, original application data, and unrelated processes were untouched.
+Commit/push and both exact-diff reviews remain required.
+
 ## API verification scope
 
 When a reachable flow specifically needs an API-backed provider, the allowed paid/provider-specific candidates are the official DeepSeek API and the designated Flash provider path. Every other API-backed verification uses only an explicitly free API or free model. Missing credentials, exhausted free quota, or unavailable models fail visibly; they do not trigger a paid substitution or a fallback provider.

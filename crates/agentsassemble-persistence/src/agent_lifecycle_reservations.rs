@@ -1,4 +1,4 @@
-use agentsassemble_domain::AuthenticatedPrincipal;
+use agentsassemble_domain::{AuthenticatedPrincipal, redact_persisted_diagnostic_text};
 use serde_json::Value;
 use sqlx::{Row, Sqlite, Transaction};
 
@@ -22,6 +22,8 @@ pub(crate) struct LifecycleReservation<'a> {
 pub(crate) struct StoredLifecycleReservation {
     pub action: String,
     pub payload_hash: String,
+    pub principal_json: String,
+    pub payload_json: String,
     pub session_id: String,
     pub operation_id: String,
     pub status: String,
@@ -80,7 +82,7 @@ pub(crate) async fn load_lifecycle_reservation(
     request_id: &str,
 ) -> Result<Option<StoredLifecycleReservation>, PersistenceError> {
     let row = sqlx::query(
-        "SELECT action, payload_hash, session_id, operation_id, status, phase, prepared_result_json, failure_code, failure_message FROM lifecycle_command_reservations WHERE room_id = ? AND principal_id = ? AND request_id = ?",
+        "SELECT action, payload_hash, principal_json, payload_json, session_id, operation_id, status, phase, prepared_result_json, failure_code, failure_message FROM lifecycle_command_reservations WHERE room_id = ? AND principal_id = ? AND request_id = ?",
     )
     .bind(room_id)
     .bind(principal_id)
@@ -90,6 +92,8 @@ pub(crate) async fn load_lifecycle_reservation(
     Ok(row.map(|row| StoredLifecycleReservation {
         action: row.get("action"),
         payload_hash: row.get("payload_hash"),
+        principal_json: row.get("principal_json"),
+        payload_json: row.get("payload_json"),
         session_id: row.get("session_id"),
         operation_id: row.get("operation_id"),
         status: row.get("status"),
@@ -107,7 +111,7 @@ pub(crate) async fn claim_lifecycle_command(
     reserve_budget: bool,
 ) -> Result<(), PersistenceError> {
     let existing = sqlx::query(
-        "SELECT action, payload_hash, session_id, operation_id, status, phase, prepared_result_json, failure_code, failure_message FROM lifecycle_command_reservations WHERE room_id = ? AND principal_id = ? AND request_id = ?",
+        "SELECT action, payload_hash, principal_json, payload_json, session_id, operation_id, status, phase, prepared_result_json, failure_code, failure_message FROM lifecycle_command_reservations WHERE room_id = ? AND principal_id = ? AND request_id = ?",
     )
     .bind(&reservation.principal.room_id)
     .bind(&reservation.principal.principal_id)
@@ -146,13 +150,15 @@ pub(crate) async fn claim_lifecycle_command(
         .await?;
     }
     sqlx::query(
-        "INSERT INTO lifecycle_command_reservations(room_id, principal_id, request_id, action, payload_hash, session_id, operation_id, status, phase, prepared_result_json) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)",
+        "INSERT INTO lifecycle_command_reservations(room_id, principal_id, request_id, action, payload_hash, principal_json, payload_json, session_id, operation_id, status, phase, prepared_result_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)",
     )
     .bind(&reservation.principal.room_id)
     .bind(&reservation.principal.principal_id)
     .bind(reservation.request_id)
     .bind(reservation.action)
     .bind(reservation.payload_hash)
+    .bind(serde_json::to_string(reservation.principal)?)
+    .bind(serde_json::to_string(payload)?)
     .bind(reservation.session_id)
     .bind(reservation.operation_id)
     .bind(reservation.phase)
@@ -279,7 +285,12 @@ fn validate_stored_rejection(
         && failure_code
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'));
-    if !code_valid || failure_message.is_empty() || failure_message.chars().count() > 512 {
+    let canonical_message = redact_persisted_diagnostic_text(failure_message, 512);
+    if !code_valid
+        || failure_message.is_empty()
+        || failure_message.chars().count() > 512
+        || canonical_message != failure_message
+    {
         return Err(PersistenceError::CommandUnresolved {
             code: "stored_command_rejection_invalid",
             message: "Stored terminal command rejection is invalid.".to_owned(),

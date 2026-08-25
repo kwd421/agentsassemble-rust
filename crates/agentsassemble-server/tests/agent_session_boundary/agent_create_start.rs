@@ -103,6 +103,10 @@ async fn shutdown_checkpoints_gone_after_aborting_initialization() {
     let created_sequence = created["events"][0]["seq"]
         .as_i64()
         .unwrap_or_else(|| panic!("creation event has no durable sequence"));
+    let created_session_id = created["events"][0]["participant_id"]
+        .as_str()
+        .unwrap_or_else(|| panic!("creation event has no Agent Session identity"))
+        .to_owned();
 
     let mut snapshot_viewer = connect(&server.base_url).await;
     subscribe(&mut snapshot_viewer).await;
@@ -134,28 +138,54 @@ async fn shutdown_checkpoints_gone_after_aborting_initialization() {
     std::fs::write(&release_path, b"release")
         .unwrap_or_else(|error| panic!("release initialization fixture: {error}"));
 
-    let reopened = SqliteStore::open(&database_url)
+    verify_restarted_create_start_recovery(
+        &database_url,
+        catalog,
+        &create_payload,
+        &created_session_id,
+    )
+    .await;
+}
+
+async fn verify_restarted_create_start_recovery(
+    database_url: &str,
+    catalog: ProviderCatalog,
+    create_payload: &Value,
+    created_session_id: &str,
+) {
+    let reopened = SqliteStore::open(database_url)
         .await
         .unwrap_or_else(|error| panic!("reopen cancellation store: {error}"));
     let restarted = start(reopened, catalog).await;
     let mut recovered_socket = connect(&restarted.base_url).await;
     subscribe(&mut recovered_socket).await;
     let recovered = receive_json(&mut recovered_socket).await;
-    assert_eq!(recovered["agent_sessions"][0]["runtime_status"], "starting");
+    assert_eq!(
+        recovered["agent_sessions"][0]["session_id"],
+        created_session_id
+    );
+    assert_eq!(recovered["agent_sessions"][0]["runtime_status"], "error");
+    assert_eq!(recovered["agent_sessions"][0]["enabled"], false);
+    assert_eq!(
+        recovered["agent_sessions"][0]["last_error_code"],
+        "runtime_start_recovered_gone"
+    );
     send_create(
         &mut recovered_socket,
         "create-cancelled-start",
-        &create_payload,
+        create_payload,
     )
     .await;
-    let resumed = receive_command_ack(&mut recovered_socket).await;
-    assert_eq!(
-        resumed["result"]["agent_session"]["runtime_status"],
-        "stopped"
-    );
-    assert_eq!(
-        resumed["result"]["start"]["agent_session"]["runtime_status"],
-        "idle"
-    );
+    let old_request = receive_json(&mut recovered_socket).await;
+    assert_eq!(old_request["error"]["code"], "runtime_start_recovered_gone");
+    send_command(
+        &mut recovered_socket,
+        "start-after-recovered-create",
+        "agent.start",
+        &json!({"agent_id": created_session_id}),
+    )
+    .await;
+    let resumed = receive_until_ack(&mut recovered_socket, 4).await;
+    assert_eq!(resumed["result"]["agent_session"]["runtime_status"], "idle");
     restarted.stop().await;
 }

@@ -176,6 +176,11 @@ impl RoomRuntime {
         }
     }
 
+    pub(crate) async fn notify_room_publication(&self, room_id: &str) {
+        let handle = self.handle(room_id).await;
+        let _ = handle.publication_wake.try_send(());
+    }
+
     /// Cancels all room mutation owners and bounds their cooperative shutdown.
     ///
     /// # Errors

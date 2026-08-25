@@ -1,7 +1,7 @@
 use agentsassemble_domain::{AuthenticatedPrincipal, RoomEvent};
 use agentsassemble_persistence::{
     AgentCreateStartEffect, AgentCreateStartPlan, AgentRuntimeStarted, CommandOutcome,
-    PersistenceError, SqliteStore,
+    LiveRuntimeReconciliation, PersistenceError, SqliteStore,
 };
 use agentsassemble_provider::{
     ProviderAdapter, ProviderAdapterError, ProviderCatalogService, ProviderRuntimeStarted,
@@ -10,7 +10,9 @@ use agentsassemble_provider::{
 use serde_json::Value;
 use tokio::sync::broadcast;
 
-use crate::room_command_result::CommandFailure;
+use crate::{
+    room_command_result::CommandFailure, runtime_reconciliation::recover_exact_lifecycle_command,
+};
 
 pub(crate) struct AgentCreateExecution {
     pub reply: Result<CommandOutcome, CommandFailure>,
@@ -73,11 +75,38 @@ async fn execute_agent_create_start(
     request_id: &str,
     payload: &Value,
 ) -> Result<AgentCreateExecution, CommandFailure> {
-    let plan = match store
+    let mut inspected = store
         .inspect_agent_create_start(principal, request_id, payload)
+        .await;
+    if inspected.as_ref().is_err_and(|error| {
+        matches!(
+            error,
+            PersistenceError::CommandUnresolved {
+                code: "runtime_effect_unconfirmed",
+                ..
+            }
+        )
+    }) {
+        inspected = match recover_exact_lifecycle_command(
+            store,
+            provider_adapter,
+            principal,
+            request_id,
+            "agent.create",
+            payload,
+        )
         .await
-        .map_err(CommandFailure::transactional)?
-    {
+        {
+            Ok(LiveRuntimeReconciliation::RetryOriginalEffect) => {
+                store
+                    .inspect_agent_create_start(principal, request_id, payload)
+                    .await
+            }
+            Ok(LiveRuntimeReconciliation::StillUnresolved) => inspected,
+            Err(error) => Err(error),
+        };
+    }
+    let plan = match inspected.map_err(CommandFailure::transactional)? {
         AgentCreateStartPlan::Select => {
             let selection = provider_catalog
                 .validate_creation(

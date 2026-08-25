@@ -1,17 +1,20 @@
 use agentsassemble_persistence::{
-    AgentRuntimeStarted, AgentStartEffect, AgentStartPlan, AgentStopPlan, PersistenceError,
-    SqliteStore,
+    AgentRuntimeStarted, AgentStartEffect, AgentStartPlan, AgentStopPlan,
+    LiveRuntimeReconciliation, PersistenceError, SqliteStore,
 };
 use agentsassemble_provider::{ProviderAdapter, ProviderAdapterError, ProviderRuntimeStarted};
 
-use crate::room_runtime::{CommandExecution, RoomCommand, progressed_execution};
+use crate::{
+    room_runtime::{CommandExecution, RoomCommand, progressed_execution},
+    runtime_reconciliation::recover_exact_lifecycle_command,
+};
 
 pub(crate) async fn execute_agent_start(
     store: &SqliteStore,
     provider_adapter: &ProviderAdapter,
     command: &RoomCommand,
 ) -> CommandExecution {
-    let plan = if command.action == "agent.resume" {
+    let mut plan = if command.action == "agent.resume" {
         store
             .prepare_agent_resume(&command.principal, &command.request_id, &command.payload)
             .await
@@ -20,6 +23,40 @@ pub(crate) async fn execute_agent_start(
             .prepare_agent_start(&command.principal, &command.request_id, &command.payload)
             .await
     };
+    if plan.as_ref().is_err_and(unconfirmed_effect) {
+        plan = match recover_exact_lifecycle_command(
+            store,
+            provider_adapter,
+            &command.principal,
+            &command.request_id,
+            &command.action,
+            &command.payload,
+        )
+        .await
+        {
+            Ok(LiveRuntimeReconciliation::RetryOriginalEffect) => {
+                if command.action == "agent.resume" {
+                    store
+                        .prepare_agent_resume(
+                            &command.principal,
+                            &command.request_id,
+                            &command.payload,
+                        )
+                        .await
+                } else {
+                    store
+                        .prepare_agent_start(
+                            &command.principal,
+                            &command.request_id,
+                            &command.payload,
+                        )
+                        .await
+                }
+            }
+            Ok(LiveRuntimeReconciliation::StillUnresolved) => plan,
+            Err(error) => Err(error),
+        };
+    }
     let plan = match plan {
         Ok(plan) => plan,
         Err(error) => return CommandExecution::transactional_failure(error),
@@ -140,10 +177,7 @@ pub(crate) async fn execute_agent_stop(
     provider_adapter: &ProviderAdapter,
     command: &RoomCommand,
 ) -> CommandExecution {
-    let plan = match store
-        .prepare_agent_stop(&command.principal, &command.request_id, &command.payload)
-        .await
-    {
+    let plan = match prepare_agent_stop_with_recovery(store, provider_adapter, command).await {
         Ok(plan) => plan,
         Err(error) => return CommandExecution::transactional_failure(error),
     };
@@ -224,6 +258,47 @@ pub(crate) async fn execute_agent_stop(
             }
         }
     }
+}
+
+async fn prepare_agent_stop_with_recovery(
+    store: &SqliteStore,
+    provider_adapter: &ProviderAdapter,
+    command: &RoomCommand,
+) -> Result<AgentStopPlan, PersistenceError> {
+    let plan = store
+        .prepare_agent_stop(&command.principal, &command.request_id, &command.payload)
+        .await;
+    if !plan.as_ref().is_err_and(unconfirmed_effect) {
+        return plan;
+    }
+    match recover_exact_lifecycle_command(
+        store,
+        provider_adapter,
+        &command.principal,
+        &command.request_id,
+        &command.action,
+        &command.payload,
+    )
+    .await
+    {
+        Ok(LiveRuntimeReconciliation::RetryOriginalEffect) => {
+            store
+                .prepare_agent_stop(&command.principal, &command.request_id, &command.payload)
+                .await
+        }
+        Ok(LiveRuntimeReconciliation::StillUnresolved) => plan,
+        Err(error) => Err(error),
+    }
+}
+
+fn unconfirmed_effect(error: &PersistenceError) -> bool {
+    matches!(
+        error,
+        PersistenceError::CommandUnresolved {
+            code: "runtime_effect_unconfirmed",
+            ..
+        }
+    )
 }
 
 fn rejected(code: &'static str, message: &str) -> PersistenceError {
