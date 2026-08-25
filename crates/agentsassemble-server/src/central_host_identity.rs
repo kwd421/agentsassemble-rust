@@ -128,3 +128,95 @@ fn canonical_jwk(jwk: &HostPublicJwk) -> Result<Vec<u8>, HostIdentityError> {
     ]);
     serde_json::to_vec(&fields).map_err(HostIdentityError::Json)
 }
+
+#[cfg(test)]
+mod tests {
+    use agentsassemble_persistence::SqliteStore;
+    use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+    use ring::signature::{ED25519, UnparsedPublicKey};
+    use serde_json::Value;
+
+    use super::{CentralHostIdentity, REGISTRATION_CONTEXT};
+
+    #[tokio::test]
+    async fn registration_envelope_matches_the_central_worker_transcript() {
+        let store = SqliteStore::open("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("open authority: {error}"));
+        let persistent = store
+            .host_identity()
+            .await
+            .unwrap_or_else(|error| panic!("load host identity: {error}"));
+        let identity = CentralHostIdentity::from_persistent(&persistent)
+            .unwrap_or_else(|error| panic!("derive host identity: {error}"));
+        let owner = "per_central-owner_123456";
+        let envelope = identity
+            .registration_envelope(owner)
+            .unwrap_or_else(|error| panic!("create registration proof: {error}"));
+
+        let public_key = URL_SAFE_NO_PAD
+            .decode(&envelope.host_public_key_jwk.x)
+            .unwrap_or_else(|error| panic!("decode public key: {error}"));
+        let signature = URL_SAFE_NO_PAD
+            .decode(&envelope.host_registration_proof.signature)
+            .unwrap_or_else(|error| panic!("decode signature: {error}"));
+        let transcript = format!(
+            "{REGISTRATION_CONTEXT}\n{}\n{}\n{}\n{}",
+            envelope.server_id,
+            envelope.host_registration_proof.owner_person_id,
+            envelope.host_registration_proof.issued_at,
+            envelope.host_registration_proof.nonce
+        );
+        UnparsedPublicKey::new(&ED25519, &public_key)
+            .verify(transcript.as_bytes(), &signature)
+            .unwrap_or_else(|_| panic!("registration signature did not verify"));
+        let substituted = transcript.replace(owner, "per_substituted_123456");
+        assert!(
+            UnparsedPublicKey::new(&ED25519, &public_key)
+                .verify(substituted.as_bytes(), &signature)
+                .is_err()
+        );
+
+        let payload = serde_json::to_value(&envelope)
+            .unwrap_or_else(|error| panic!("serialize envelope: {error}"));
+        let Value::Object(payload) = payload else {
+            panic!("registration envelope is not an object");
+        };
+        assert_eq!(
+            payload.keys().map(String::as_str).collect::<Vec<_>>(),
+            [
+                "host_key_fingerprint",
+                "host_public_key_jwk",
+                "host_registration_proof",
+                "server_id",
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn stable_host_identity_uses_fresh_registration_nonces() {
+        let store = SqliteStore::open("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("open authority: {error}"));
+        let persistent = store
+            .host_identity()
+            .await
+            .unwrap_or_else(|error| panic!("load host identity: {error}"));
+        let identity = CentralHostIdentity::from_persistent(&persistent)
+            .unwrap_or_else(|error| panic!("derive host identity: {error}"));
+        let first = identity
+            .registration_envelope("per_owner_12345678")
+            .unwrap_or_else(|error| panic!("first proof: {error}"));
+        let second = identity
+            .registration_envelope("per_owner_12345678")
+            .unwrap_or_else(|error| panic!("second proof: {error}"));
+
+        assert_eq!(first.server_id, second.server_id);
+        assert_eq!(first.host_public_key_jwk.x, second.host_public_key_jwk.x);
+        assert_eq!(first.host_key_fingerprint, second.host_key_fingerprint);
+        assert_ne!(
+            first.host_registration_proof.nonce,
+            second.host_registration_proof.nonce
+        );
+    }
+}
