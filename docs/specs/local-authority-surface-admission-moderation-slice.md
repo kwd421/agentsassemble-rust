@@ -1,10 +1,10 @@
 # Local Authority, Product Surface, Admission, and Moderation Slice
 
-Status: active implementation design; Pro critical review approved 2026-08-25
+Status: active implementation design; Pro correction review pending 2026-08-26
 
 Comparison baseline: original
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; Rust
-`8554bb9`.
+`938a088`.
 
 Implementation checkpoint, 2026-08-25: immutable local authority/zero-room
 bootstrap, server-wide human profile, canonical directory/create-room flow, and
@@ -97,30 +97,38 @@ mute, permission, or Agent Session profile state.
 ### Central server registration custody
 
 The currently composed desktop startup flow registers the exact local server after
-central person authentication. Schema installation creates one 32-byte Ed25519 host
-seed in the same SQLite transaction as `server_id`; both are infrastructure state.
-The existing owner-only database file is their single durable custody boundary, so a
-crash cannot persist a server ID without its signing identity and no second key file,
-cache, or compatibility reader can disagree. A current-schema database with a missing,
-malformed, or differently bound host identity is corrupt and fails closed. Older schema
-versions remain rejected rather than migrated.
+central person authentication. First creation writes one Ed25519 PKCS#8 private key
+exactly once to the owner-only `central-directory/host-ed25519.pk8` file beside the
+database authority. The same fresh initialization transaction stores `server_id` and
+the matching raw 32-byte public key in SQLite. The private key is never stored in the
+database. An interrupted empty-database initialization reuses the already-created key;
+an initialized database never creates a missing replacement. A database-only backup
+therefore cannot clone signing authority, while a missing, malformed, over-permissive,
+hard-linked, symlinked, or public-key-mismatched key fails closed. Older schema versions
+remain rejected rather than migrated or read through a compatibility path.
 
-The server derives one public OKP/Ed25519 JWK from that seed through a maintained
-cryptography library. Its fingerprint is base64url-without-padding SHA-256 over the
-same sorted compact JWK JSON accepted by the central directory. Registration signs the
-exact UTF-8 transcript `AA-HOST-REGISTER-1\n{server_id}\n{owner_person_id}\n{issued_at}\n{nonce}`.
-The nonce is fresh OS-backed random data encoded as base64url without padding;
-`issued_at` is whole Unix seconds. Private seed material is never serialized into an
-HTTP response, log, error, test fixture, or frontend state.
+The public projection is exactly
+`{"crv":"Ed25519","ext":true,"key_ops":["verify"],"kty":"OKP","x":"..."}`.
+Those keys are encoded in lexical order as compact UTF-8 JSON with no trailing newline;
+`x` is the raw 32-byte Ed25519 public key encoded base64url without padding. The
+fingerprint is base64url-without-padding SHA-256 over those exact JSON bytes.
+Registration signs the exact UTF-8 transcript
+`AA-HOST-REGISTER-1\n{server_id}\n{owner_person_id}\n{issued_at}\n{nonce}` with no
+trailing newline. `nonce` is exactly 18 OS-random bytes encoded base64url without
+padding, `issued_at` is whole Unix seconds, and `signature` is the raw 64-byte Ed25519
+signature encoded base64url without padding. Private PKCS#8 material is never serialized
+into an HTTP response, log, error, test fixture, or frontend state.
 
-`POST /api/central-directory/registration-proof` is admitted only by a fresh one-use
-server-operator bearer obtained through the private desktop control pipe. The route
-consumes that credential before parsing a bounded exact JSON object containing only
+`POST /api/central-directory/registration-proof` is mounted and advertised only by the
+desktop-native server composition. It is admitted only by a fresh one-use
+central-registration bearer obtained through the private desktop control pipe; generic
+server-operator, profile, and room tickets cannot authenticate it. The route consumes
+that credential before parsing a bounded exact JSON object containing only
 `owner_person_id`, validates the central directory's ASCII identifier grammar and
 length, and returns the public JWK, its fingerprint, and one signed proof. The Tauri
-client omits the original browser-only device-token header because native control-pipe
-custody is the actual local-operator authority; broad CORS headers and parallel browser
-authentication are not introduced.
+bridge binds issuance to this exact POST path and omits the original browser-only
+device-token header because native control-pipe custody is the actual local-operator
+authority; broad CORS headers and parallel browser authentication are not introduced.
 
 This increment does not advertise the original public `GET /api/server-info` or remote
 `POST /api/server-info/challenge` until their public-invite/admission owner is complete.

@@ -301,6 +301,11 @@ with the validated loopback WebSocket origin or a purpose-separated server-opera
 HTTP ticket with the validated loopback HTTP origin. React receives neither the
 host secret nor a reusable credential. A ticket presented to the wrong transport
 or scope is consumed and rejected rather than interpreted as another authority.
+Central server registration is a third, exact-purpose one-use ticket issued only
+through the private desktop control pipe and consumed only by the desktop-mounted
+registration-proof POST. Its Ed25519 private key is a separate owner-only write-once
+file; SQLite stores only the bound public key, so a database-only backup cannot clone
+the signing authority and missing or substituted key material fails closed.
 
 The local HTTP/WebSocket adapter has explicit resource budgets: admission is bounded immediately after TCP accept, incomplete HTTP headers and request bodies have real deadlines, and a consumed one-use ticket must atomically acquire a process-wide WebSocket lease before HTTP 101. The active-only lease owner admits at most 128 connections globally, eight for one principal, and 64 for one room; rejected acquisition increments no scope, and checked process-local `u64` generation IDs prevent stale release from freeing a replacement. Inner product frames stop at 256 KiB and their authenticated wire envelopes at 384 KiB, the first subscription has a ten-second deadline, and the process-wide raw governor above owns message, byte, and control-frame windows. When a bounded principal or room map cannot admit a new key, the rejected frame still charges the global scope and any already-tracked applicable scope without retaining another key. The one-use ticket proof establishes a connection key; after the receipt-bound plain Snapshot, every frame in both directions is authenticated over connection nonce, direction, a strict contiguous counter, and exact inner bytes before projection or command execution. Binary frames are rejected. Room queue admission never waits and returns `room_busy` when saturated.
 
