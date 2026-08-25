@@ -31,7 +31,9 @@ describe("ProviderControlSelect", () => {
 
     expect(screen.queryByRole("menu", { name: "모델 분류" })).toBeNull();
     expect(screen.getAllByRole("listbox")).toHaveLength(1);
-    expect(screen.getByRole("option", { name: "Gemini Flash" })).toBeTruthy();
+    const firstModel = screen.getByRole("option", { name: "Gemini Flash" });
+    expect(firstModel).toBeTruthy();
+    expect(document.activeElement).toBe(firstModel);
     expect(screen.queryByRole("option", { name: "Claude Sonnet" })).toBeNull();
 
     await userEvent.click(screen.getByRole("button", { name: "모델 목록으로 돌아가기" }));
@@ -58,7 +60,9 @@ describe("ProviderControlSelect", () => {
     );
 
     await userEvent.click(screen.getByRole("combobox", { name: "모델" }));
-    await userEvent.type(screen.getByRole("searchbox", { name: "모델 검색" }), "Model 99");
+    const search = screen.getByRole("searchbox", { name: "모델 검색" });
+    expect(document.activeElement).toBe(search);
+    await userEvent.type(search, "Model 99");
     const results = screen.getByRole("listbox", { name: "모델" });
     expect(within(results).queryByRole("option", { name: "Model 0 Free" })).toBeNull();
     await userEvent.click(within(results).getByRole("option", { name: "Model 99" }));
