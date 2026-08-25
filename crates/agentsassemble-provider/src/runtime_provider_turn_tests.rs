@@ -312,23 +312,31 @@ async fn owned_stop_cancels_a_blocked_turn_without_waiting_for_inactivity() {
         .await
         .unwrap_or_else(|error| panic!("start blocked provider-turn fixture: {error}"));
     let active = active_session(&session, &started, "room-turn-1");
+    let request = ProviderTurnRequest {
+        turn_id: "room-turn-1".to_owned(),
+        turn_generation: 1,
+        execution_id: "11111111-1111-4111-8111-111111111111".to_owned(),
+        input: "Wait for shutdown.".to_owned(),
+        room_observation: None,
+    };
+    let prepared = adapter
+        .prepare_turn(&active, &request)
+        .await
+        .unwrap_or_else(|error| panic!("prepare blocked provider turn: {error}"));
+    let authority = prepared.exact_authority();
     let pending_adapter = adapter.clone();
     let pending_session = active.clone();
+    let pending_request = request.clone();
     let pending = tokio::spawn(async move {
         pending_adapter
-            .send_turn(
-                &pending_session,
-                &ProviderTurnRequest {
-                    turn_id: "room-turn-1".to_owned(),
-                    turn_generation: 1,
-                    execution_id: "11111111-1111-4111-8111-111111111111".to_owned(),
-                    input: "Wait for shutdown.".to_owned(),
-                    room_observation: None,
-                },
-            )
+            .send_prepared_turn(prepared, &pending_session, &pending_request)
             .await
     });
     wait_for_file(&seen).await;
+    let mut control = adapter
+        .begin_exact_turn(&authority)
+        .await
+        .unwrap_or_else(|error| panic!("capture blocked provider turn: {error}"));
     tokio::time::timeout(
         Duration::from_secs(5),
         adapter.stop(
@@ -342,6 +350,13 @@ async fn owned_stop_cancels_a_blocked_turn_without_waiting_for_inactivity() {
     .await
     .unwrap_or_else(|_| panic!("owned stop waited on the provider inactivity deadline"))
     .unwrap_or_else(|error| panic!("stop blocked provider turn: {error}"));
+    assert_eq!(
+        control
+            .wait_quiesced(Duration::from_secs(1))
+            .await
+            .unwrap_or_else(|error| panic!("prove exact stopped runtime: {error}")),
+        super::ProviderTurnQuiescence::RuntimeGone
+    );
     let turn_result = pending
         .await
         .unwrap_or_else(|error| panic!("join cancelled provider turn: {error}"));

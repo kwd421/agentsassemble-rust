@@ -17,6 +17,7 @@ enum ActiveProviderTurnPhase {
     NotStartedRetained,
     ResultReadyRetained,
     ResultReadyUncertain,
+    RuntimeGone,
 }
 
 pub(super) struct ActiveProviderTurnSlot {
@@ -81,6 +82,7 @@ pub enum ProviderTurnInterruptDisposition {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProviderTurnQuiescence {
     RuntimeRetained,
+    RuntimeGone,
 }
 
 #[derive(Debug, Clone)]
@@ -117,6 +119,9 @@ impl ProviderTurnControl {
                             "provider_turn_interrupt_unconfirmed",
                             "The exact provider turn quiesced without retained-runtime evidence.",
                         )));
+                    }
+                    ActiveProviderTurnPhase::RuntimeGone => {
+                        return Ok(ProviderTurnQuiescence::RuntimeGone);
                     }
                     ActiveProviderTurnPhase::Preparing | ActiveProviderTurnPhase::Entered => {}
                 }
@@ -170,7 +175,8 @@ impl ProviderAdapter {
                     }
                     ActiveProviderTurnPhase::NotStartedRetained
                     | ActiveProviderTurnPhase::ResultReadyRetained
-                    | ActiveProviderTurnPhase::ResultReadyUncertain => {
+                    | ActiveProviderTurnPhase::ResultReadyUncertain
+                    | ActiveProviderTurnPhase::RuntimeGone => {
                         return Err(ProviderAdapterError::safe(operation_in_progress()));
                     }
                     ActiveProviderTurnPhase::Entered => {}
@@ -183,6 +189,7 @@ impl ProviderAdapter {
                         ActiveProviderTurnPhase::NotStartedRetained
                             | ActiveProviderTurnPhase::ResultReadyRetained
                             | ActiveProviderTurnPhase::ResultReadyUncertain
+                            | ActiveProviderTurnPhase::RuntimeGone
                     ) {
                         break;
                     }
@@ -253,7 +260,7 @@ impl ProviderAdapter {
     }
 
     /// Retains proof that durable start authorization was not consumed.
-    pub async fn discard_prepared_turn(&self, prepared: &ProviderPreparedTurn) {
+    pub async fn retain_unstarted_turn(&self, prepared: &ProviderPreparedTurn) {
         let Some(slot) = self
             .existing_slot(&prepared.room_id, &prepared.session_id)
             .await
@@ -386,6 +393,7 @@ impl ProviderAdapter {
                     ActiveProviderTurnPhase::NotStartedRetained
                         | ActiveProviderTurnPhase::ResultReadyRetained
                         | ActiveProviderTurnPhase::ResultReadyUncertain
+                        | ActiveProviderTurnPhase::RuntimeGone
                 )
         }) {
             runtime.active_turn.take();
@@ -426,9 +434,8 @@ impl ProviderAdapter {
             ActiveProviderTurnPhase::Entered => ProviderTurnInterruptDisposition::Started,
             ActiveProviderTurnPhase::NotStartedRetained
             | ActiveProviderTurnPhase::ResultReadyRetained
-            | ActiveProviderTurnPhase::ResultReadyUncertain => {
-                ProviderTurnInterruptDisposition::Quiesced
-            }
+            | ActiveProviderTurnPhase::ResultReadyUncertain
+            | ActiveProviderTurnPhase::RuntimeGone => ProviderTurnInterruptDisposition::Quiesced,
         };
         let completion = active.completion.subscribe();
         Ok(ProviderTurnControl {
@@ -436,6 +443,17 @@ impl ProviderAdapter {
             interruption: active.interruption.clone(),
             completion,
         })
+    }
+}
+
+impl super::OwnedRuntime {
+    pub(super) fn signal_runtime_gone(&mut self) {
+        if let Some(active) = self.active_turn.as_mut() {
+            active.phase = ActiveProviderTurnPhase::RuntimeGone;
+            active
+                .completion
+                .send_replace(ActiveProviderTurnPhase::RuntimeGone);
+        }
     }
 }
 

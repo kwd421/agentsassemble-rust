@@ -5,6 +5,7 @@ use agentsassemble_persistence::{
 };
 use agentsassemble_provider::{
     ProviderAdapter, ProviderExactTurnAuthority, ProviderTurnInterruptDisposition,
+    ProviderTurnQuiescence,
 };
 use uuid::Uuid;
 
@@ -49,15 +50,16 @@ pub(crate) async fn apply_exact_interrupt(
             store.mark_unstarted_interrupt_waiting(&claim).await?
         }
     };
-    if let Err(error) = control.wait_quiesced(QUIESCENCE_TIMEOUT).await {
-        store
-            .mark_provider_interrupt_recovery_required(&waiting)
-            .await?;
-        return Err(unresolved(error.code, error.message));
-    }
-    let commit = store.finalize_interrupted_turn_retained(&waiting).await?;
-    provider_adapter.release_terminal_turn(&authority).await;
-    Ok(commit)
+    let quiescence = match control.wait_quiesced(QUIESCENCE_TIMEOUT).await {
+        Ok(quiescence) => quiescence,
+        Err(error) => {
+            store
+                .mark_provider_interrupt_recovery_required(&waiting)
+                .await?;
+            return Err(unresolved(error.code, error.message));
+        }
+    };
+    finalize_exact_quiescence(store, provider_adapter, &authority, &waiting, quiescence).await
 }
 
 pub(crate) async fn resume_exact_interrupt(
@@ -75,15 +77,62 @@ pub(crate) async fn resume_exact_interrupt(
     if control.disposition != ProviderTurnInterruptDisposition::Quiesced {
         control.request_interrupt();
     }
-    if let Err(error) = control.wait_quiesced(QUIESCENCE_TIMEOUT).await {
-        store
-            .mark_provider_interrupt_recovery_required(&waiting)
-            .await?;
-        return Err(unresolved(error.code, error.message));
+    let quiescence = match control.wait_quiesced(QUIESCENCE_TIMEOUT).await {
+        Ok(quiescence) => quiescence,
+        Err(error) => {
+            store
+                .mark_provider_interrupt_recovery_required(&waiting)
+                .await?;
+            return Err(unresolved(error.code, error.message));
+        }
+    };
+    finalize_exact_quiescence(store, provider_adapter, &authority, &waiting, quiescence)
+        .await
+        .map(Some)
+}
+
+async fn finalize_exact_quiescence(
+    store: &SqliteStore,
+    provider_adapter: &ProviderAdapter,
+    authority: &ProviderExactTurnAuthority,
+    effect: &ProviderTurnInterruptEffect,
+    quiescence: ProviderTurnQuiescence,
+) -> Result<AgentTurnCommit, PersistenceError> {
+    match quiescence {
+        ProviderTurnQuiescence::RuntimeRetained => {
+            let commit = store.finalize_interrupted_turn_retained(effect).await?;
+            provider_adapter.release_terminal_turn(authority).await;
+            Ok(commit)
+        }
+        ProviderTurnQuiescence::RuntimeGone => {
+            let candidate = store
+                .load_provider_turn_reconciliation_candidate(
+                    &effect.room_id,
+                    &effect.session_id,
+                    effect.turn_generation,
+                )
+                .await?;
+            if candidate.effect.as_ref() != Some(effect) {
+                return Err(unresolved(
+                    "provider_turn_interrupt_changed",
+                    "The exact provider interrupt changed before runtime-gone finalization.",
+                ));
+            }
+            let commit = store
+                .finalize_provider_turn_runtime_gone(&candidate)
+                .await?;
+            provider_adapter
+                .release_confirmed_stop(
+                    &effect.room_id,
+                    &effect.session_id,
+                    &effect.runtime_handle_id,
+                    &effect.runtime_owner_id,
+                    &effect.runtime_lease_token,
+                )
+                .await;
+            Ok(commit)
+        }
     }
-    let commit = store.finalize_interrupted_turn_retained(&waiting).await?;
-    provider_adapter.release_terminal_turn(&authority).await;
-    Ok(Some(commit))
 }
 
 fn exact_authority(effect: &ProviderTurnInterruptEffect) -> ProviderExactTurnAuthority {

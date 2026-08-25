@@ -31,8 +31,6 @@ const STARTUP_QUIET: Duration = Duration::from_secs(5);
 const TURN_INACTIVITY_TIMEOUT: Duration = Duration::from_mins(3);
 const POLL_INTERVAL: Duration = Duration::from_millis(100);
 const SUBMIT_DELAY: Duration = Duration::from_millis(100);
-const INTERRUPT_QUIET: Duration = Duration::from_millis(300);
-const INTERRUPT_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_TERMINAL_TAIL_BYTES: usize = 64 * 1024;
 const PENDING_SESSION_PREFIX: &str = "pending-antigravity-";
 
@@ -448,34 +446,7 @@ impl AntigravityDriver {
             return Err(turn_conflict());
         }
         self.write_terminal(b"\x03").await?;
-        let deadline = Instant::now() + INTERRUPT_TIMEOUT;
-        let mut last_output = Instant::now();
-        loop {
-            if Instant::now() >= deadline {
-                return self.poison(turn_interrupt_timeout());
-            }
-            if !self.terminal.is_alive().await? {
-                return Err(runtime_exited());
-            }
-            match tokio::time::timeout(POLL_INTERVAL, self.read_terminal()).await {
-                Ok(Ok(chunk)) if !chunk.is_empty() => {
-                    self.record_terminal(&chunk);
-                    self.answer_terminal_queries(&chunk).await?;
-                    last_output = Instant::now();
-                }
-                Ok(Ok(_)) | Err(_)
-                    if Instant::now().duration_since(last_output) >= INTERRUPT_QUIET =>
-                {
-                    self.active_turn = None;
-                    self.completed_turn = None;
-                    self.transcript.cancel_turn();
-                    self.terminal_tail.clear();
-                    return Ok(());
-                }
-                Ok(Ok(_)) | Err(_) => {}
-                Ok(Err(error)) => return Err(error),
-            }
-        }
+        self.poison(turn_interrupt_requires_stop())
     }
 
     async fn drain_terminal_available(&mut self) -> Result<(), DriverError> {
@@ -722,10 +693,10 @@ const fn turn_timeout() -> DriverError {
     )
 }
 
-const fn turn_interrupt_timeout() -> DriverError {
+const fn turn_interrupt_requires_stop() -> DriverError {
     DriverError::new(
-        "provider_turn_interrupt_timeout",
-        "The Antigravity turn did not quiesce after exact Ctrl-C delivery.",
+        "provider_turn_interrupt_requires_stop",
+        "Antigravity provides no correlated retained-runtime interrupt proof.",
     )
 }
 

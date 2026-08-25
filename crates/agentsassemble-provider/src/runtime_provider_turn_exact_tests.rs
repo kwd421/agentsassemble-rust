@@ -108,7 +108,7 @@ async fn unstarted_turn_remains_exactly_owned_until_durable_interrupt_release() 
         super::ProviderTurnInterruptDisposition::NotStarted
     );
 
-    adapter.discard_prepared_turn(&prepared).await;
+    adapter.retain_unstarted_turn(&prepared).await;
     assert_eq!(
         control
             .wait_quiesced(Duration::from_secs(1))

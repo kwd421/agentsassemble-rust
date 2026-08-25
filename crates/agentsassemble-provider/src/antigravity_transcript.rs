@@ -86,13 +86,6 @@ impl AntigravityTranscript {
         Ok(())
     }
 
-    pub(super) fn cancel_turn(&mut self) {
-        self.offsets.clear();
-        self.turn_input_seen_paths.clear();
-        self.expected_turn_input.clear();
-        self.active_paths.clear();
-    }
-
     pub(super) fn poll(&mut self) -> Result<Option<TranscriptSnapshot>, DriverError> {
         let mut latest = None;
         for path in self.visible_candidate_paths()? {

@@ -481,6 +481,7 @@ impl ProviderAdapter {
                         owner_id,
                     ));
                 };
+                runtime.signal_runtime_gone();
                 slot.state = RuntimeState::StopConfirmed {
                     handle_id: handle_id.to_owned(),
                     owner_id: owner_id.to_owned(),

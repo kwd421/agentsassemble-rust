@@ -99,18 +99,21 @@ impl ProviderAdapter {
         let owner_prepared = prepared.clone();
         let owner_session = session.clone();
         let owner_request = request.clone();
+        let owner_room_id = session.public.room_id.clone();
+        let owner_session_id = session.public.session_id.clone();
         let owner_handle_id = handle_id.clone();
         let owner_id_for_task = owner_id.clone();
+        let owner_lease_token = lease_token;
         let panic_handle_id = handle_id.clone();
         let panic_owner_id = owner_id.clone();
         let owner_task = tokio::spawn(async move {
-            let outcome = AssertUnwindSafe(run_turn_owner(TurnOwnerInput {
+            let mut outcome = AssertUnwindSafe(run_turn_owner(TurnOwnerInput {
                 driver_cell,
                 cancellation,
                 session: owner_session,
                 request: owner_request,
-                handle_id: owner_handle_id,
-                owner_id: owner_id_for_task,
+                handle_id: owner_handle_id.clone(),
+                owner_id: owner_id_for_task.clone(),
                 exact_interruption,
             }))
             .catch_unwind()
@@ -126,6 +129,29 @@ impl ProviderAdapter {
                 )),
                 requires_restart: false,
             });
+            if let Err(error) = &outcome.result
+                && outcome.requires_restart
+            {
+                let driver_error = DriverError::new(error.code, error.message);
+                outcome.result = match owner_adapter
+                    .stop(
+                        &owner_room_id,
+                        &owner_session_id,
+                        &owner_handle_id,
+                        &owner_id_for_task,
+                        &owner_lease_token,
+                    )
+                    .await
+                {
+                    Ok(()) => Err(ProviderAdapterError::confirmed_stopped(
+                        driver_error,
+                        &owner_handle_id,
+                        &owner_id_for_task,
+                        &owner_lease_token,
+                    )),
+                    Err(stop_error) => Err(stop_error),
+                };
+            }
             let runtime_retained = !outcome.requires_restart
                 && match &outcome.result {
                     Ok(_) => true,
@@ -147,30 +173,6 @@ impl ProviderAdapter {
             )),
             requires_restart: false,
         });
-        if let Err(error) = &turn_outcome.result {
-            if turn_outcome.requires_restart {
-                let driver_error = DriverError::new(error.code, error.message);
-                return match self
-                    .stop(
-                        &session.public.room_id,
-                        &session.public.session_id,
-                        &handle_id,
-                        &owner_id,
-                        &lease_token,
-                    )
-                    .await
-                {
-                    Ok(()) => Err(ProviderAdapterError::confirmed_stopped(
-                        driver_error,
-                        &handle_id,
-                        &owner_id,
-                        &lease_token,
-                    )),
-                    Err(stop_error) => Err(stop_error),
-                };
-            }
-            return turn_outcome.result;
-        }
         turn_outcome.result
     }
 

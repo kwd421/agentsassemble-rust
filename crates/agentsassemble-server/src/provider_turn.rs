@@ -71,7 +71,7 @@ pub(crate) fn spawn_provider_turn(
                 )
                 .await;
             let Ok(_) = &start_authority else {
-                provider_adapter.discard_prepared_turn(&prepared).await;
+                provider_adapter.retain_unstarted_turn(&prepared).await;
                 return ProviderTurnTaskResult {
                     assignment,
                     task_panicked: false,
