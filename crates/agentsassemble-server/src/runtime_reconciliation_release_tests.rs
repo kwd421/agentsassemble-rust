@@ -99,12 +99,11 @@ async fn startup_gone_accepts_an_active_runtime_without_a_lifecycle_action() {
     let fixture = confirmed_absence_fixture("000000000206").await;
     drop(fixture.provider_adapter);
     let fresh_adapter = ProviderAdapter::new();
-    assert_eq!(
-        reconcile_runtime_ownership(&fixture.store, &fresh_adapter)
-            .await
-            .unwrap_or_else(|error| panic!("reconcile cold runtime absence: {error}")),
-        1
-    );
+    let reconciled = reconcile_runtime_ownership(&fixture.store, &fresh_adapter)
+        .await
+        .unwrap_or_else(|error| panic!("reconcile cold runtime absence: {error}"));
+    assert_eq!(reconciled.reconciled_sessions, 1);
+    assert!(reconciled.assignments.is_empty());
     assert!(
         fixture
             .store

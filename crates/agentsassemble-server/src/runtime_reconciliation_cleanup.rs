@@ -1,5 +1,6 @@
 use agentsassemble_persistence::{
-    PersistenceError, RuntimeReconciliationCandidate, RuntimeReconciliationObservation, SqliteStore,
+    AgentTurnAssignment, PersistenceError, RuntimeReconciliationCandidate,
+    RuntimeReconciliationObservation, SqliteStore,
 };
 use agentsassemble_provider::{ProviderAdapter, ProviderRuntimeObservation};
 
@@ -10,17 +11,21 @@ pub(super) async fn recover_startup_observed_runtime(
     provider_adapter: &ProviderAdapter,
     candidate: &RuntimeReconciliationCandidate,
     observation: ProviderRuntimeObservation,
-) -> Result<(), PersistenceError> {
-    store
+) -> Result<Vec<AgentTurnAssignment>, PersistenceError> {
+    let assignments = store
         .apply_runtime_reconciliation(candidate, &persistence_observation(observation))
         .await?;
+    if !assignments.is_empty() {
+        release_checkpointed_absence(provider_adapter, candidate).await;
+        return Ok(assignments);
+    }
     let room_id = &candidate.session.public.room_id;
     let session_id = &candidate.session.public.session_id;
     let Some(current) = store
         .load_runtime_reconciliation_candidate(room_id, session_id)
         .await?
     else {
-        return Ok(());
+        return Ok(Vec::new());
     };
     let handle_id = &current.session.runtime_handle_id;
     let owner_id = &current.session.runtime_owner_id;
@@ -30,7 +35,7 @@ pub(super) async fn recover_startup_observed_runtime(
         .await
         .is_err()
     {
-        return Ok(());
+        return Ok(Vec::new());
     }
     commit_startup_gone(store, provider_adapter, &current).await
 }
@@ -39,12 +44,12 @@ pub(super) async fn commit_startup_gone(
     store: &SqliteStore,
     provider_adapter: &ProviderAdapter,
     candidate: &RuntimeReconciliationCandidate,
-) -> Result<(), PersistenceError> {
-    store
+) -> Result<Vec<AgentTurnAssignment>, PersistenceError> {
+    let assignments = store
         .apply_runtime_reconciliation(candidate, &RuntimeReconciliationObservation::Gone)
         .await?;
     release_checkpointed_absence(provider_adapter, candidate).await;
-    Ok(())
+    Ok(assignments)
 }
 
 pub(super) async fn recover_dynamic_observed_runtime(
@@ -60,7 +65,13 @@ pub(super) async fn recover_dynamic_observed_runtime(
         .apply_runtime_reconciliation(candidate, &persistence_observation(observation))
         .await
     {
-        Ok(()) => {}
+        Ok(assignments) if !assignments.is_empty() => {
+            rooms.notify_room_publication(room_id).await;
+            release_checkpointed_absence(provider_adapter, candidate).await;
+            resume_recovered_assignments(rooms, room_id, assignments).await;
+            return;
+        }
+        Ok(_) => {}
         Err(error) if stale_candidate(&error) => return,
         Err(error) => {
             tracing::warn!(
@@ -115,12 +126,13 @@ pub(super) async fn commit_and_publish_gone(
     let room_id = candidate.session.public.room_id.clone();
     let session_id = candidate.session.public.session_id.clone();
     match commit_dynamic_gone(store, candidate).await {
-        Ok(true) => {
+        Ok(Some(assignments)) => {
             rooms.notify_room_publication(&room_id).await;
             release_checkpointed_absence(provider_adapter, candidate).await;
+            resume_recovered_assignments(rooms, &room_id, assignments).await;
             true
         }
-        Ok(false) => false,
+        Ok(None) => false,
         Err(error) => {
             tracing::warn!(
                 %error,
@@ -129,6 +141,22 @@ pub(super) async fn commit_and_publish_gone(
                 "server-owned lifecycle recovery observation could not commit"
             );
             false
+        }
+    }
+}
+
+async fn resume_recovered_assignments(
+    rooms: &RoomRuntime,
+    room_id: &str,
+    assignments: Vec<AgentTurnAssignment>,
+) {
+    for assignment in assignments {
+        if let Err(error) = rooms.resume_assigned_provider_turn(assignment).await {
+            tracing::warn!(
+                %error,
+                %room_id,
+                "recovered ordered-floor assignment remains durable for retry"
+            );
         }
     }
 }
@@ -161,13 +189,13 @@ pub(super) async fn release_checkpointed_absence(
 pub(super) async fn commit_dynamic_gone(
     store: &SqliteStore,
     candidate: &RuntimeReconciliationCandidate,
-) -> Result<bool, PersistenceError> {
+) -> Result<Option<Vec<AgentTurnAssignment>>, PersistenceError> {
     match store
         .apply_runtime_reconciliation(candidate, &RuntimeReconciliationObservation::Gone)
         .await
     {
-        Ok(()) => Ok(true),
-        Err(error) if stale_candidate(&error) => Ok(false),
+        Ok(assignments) => Ok(Some(assignments)),
+        Err(error) if stale_candidate(&error) => Ok(None),
         Err(error) => Err(error),
     }
 }

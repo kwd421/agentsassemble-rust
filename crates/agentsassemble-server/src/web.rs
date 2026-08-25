@@ -113,13 +113,18 @@ pub async fn serve(
             "reconciled provider turn authority before network admission"
         );
     }
-    let reconciled_sessions =
-        reconcile_runtime_ownership(&state.store, &state.provider_adapter).await?;
-    if reconciled_sessions > 0 {
+    let reconciliation = reconcile_runtime_ownership(&state.store, &state.provider_adapter).await?;
+    if reconciliation.reconciled_sessions > 0 {
         tracing::warn!(
-            reconciled_sessions,
+            reconciled_sessions = reconciliation.reconciled_sessions,
             "reconciled provider runtime authority before network admission"
         );
+    }
+    for assignment in reconciliation.assignments {
+        state
+            .rooms
+            .resume_assigned_provider_turn(assignment)
+            .await?;
     }
     let rooms = state.rooms.clone();
     let provider_catalog = state.provider_catalog.clone();

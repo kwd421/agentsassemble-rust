@@ -1,14 +1,15 @@
 use std::collections::BTreeMap;
 
 use agentsassemble_domain::{
-    AuthenticatedPrincipal, ParticipantStatus, RoomEvent, canonical_payload_hash,
-    redact_persisted_diagnostic_text,
+    AuthenticatedPrincipal, DurableAgentSession, ParticipantStatus, RoomEvent,
+    canonical_payload_hash, redact_persisted_diagnostic_text,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
+use sqlx::{Sqlite, Transaction};
 
 use crate::{
-    CommandOutcome, PersistenceError, SqliteStore,
+    PersistenceError, RoomCommandMutation, SqliteStore,
     agent_lifecycle::{
         AgentStopPlan, invalid_turn_queue, load_participant, load_session, merged_turn_queue,
         require_valid_turn_authority, save_participant, save_session, unresolved_effect,
@@ -25,6 +26,7 @@ use crate::{
     agent_lifecycle_reservations::{LifecycleReservation, finish_lifecycle_command},
     authority::active_room_for_principal,
     command_admission::existing_command,
+    room_turns::{assign_pending_in, support::load_active_room},
     turn_authority::active_turn_authority,
 };
 
@@ -225,7 +227,7 @@ impl SqliteStore {
         principal: &AuthenticatedPrincipal,
         request_id: &str,
         payload: &Value,
-    ) -> Result<CommandOutcome, PersistenceError> {
+    ) -> Result<RoomCommandMutation, PersistenceError> {
         let agent_id = payload_agent_id(payload)?;
         let payload_hash = canonical_payload_hash(payload);
         let mut transaction = self.pool.begin().await?;
@@ -241,8 +243,12 @@ impl SqliteStore {
         .await?
         {
             transaction.commit().await?;
-            return Ok(outcome);
+            return Ok(RoomCommandMutation {
+                outcome,
+                assignments: Vec::new(),
+            });
         }
+        let (room, settings) = load_active_room(&mut transaction, &principal.room_id).await?;
         let mut session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
         let operation_id = lifecycle_operation_id(principal, request_id, STOP);
         require_intent(
@@ -261,41 +267,8 @@ impl SqliteStore {
             &operation_id,
         );
         finish_lifecycle_command(&mut transaction, &reservation).await?;
-        session.pending_inputs = merged_turn_queue(&session)?;
-        session.inflight_inputs.clear();
-        "detached".clone_into(&mut session.public.status);
-        session.public.enabled = false;
-        "stopped".clone_into(&mut session.public.runtime_status);
-        session.public.provider_session_active = false;
-        session.public.active_turn_id.clear();
-        session.public.turn_phase.clear();
-        session.active_source_event_id.clear();
-        session.input_up_to_event_id.clear();
-        session.input_up_to_seq = 0;
-        session.public.last_error.clear();
-        session.public.last_error_code.clear();
-        session.public.recovery_required = false;
-        session.runtime_handle_id.clear();
-        session.runtime_owner_id.clear();
-        session.runtime_lease_token.clear();
-        crate::agent_lifecycle::clear_intent(&mut session);
-        session.public.updated_at = Utc::now();
-        save_session(&mut transaction, &session).await?;
-        let mut participant =
-            load_participant(&mut transaction, &principal.room_id, &agent_id).await?;
-        participant.status = ParticipantStatus::Detached;
-        participant.updated_at = Utc::now();
-        save_participant(&mut transaction, &participant).await?;
-        let detached = append_session_event(
-            &mut transaction,
-            principal,
-            &session.public,
-            "session_detached",
-            BTreeMap::from([("reason".to_owned(), json!("operator stop"))]),
-        )
-        .await?;
-        let state = append_state_event(&mut transaction, principal, &session.public).await?;
-        let events = vec![detached, state];
+        let events =
+            detach_confirmed_session(&mut transaction, principal, &agent_id, &mut session).await?;
         let result = json!({
             "agent_session": session.public,
             "process": {
@@ -308,7 +281,7 @@ impl SqliteStore {
             "events": events,
             "event": events.last(),
         });
-        let outcome = store_result(
+        let mut outcome = store_result(
             &mut transaction,
             principal,
             request_id,
@@ -318,9 +291,56 @@ impl SqliteStore {
             events,
         )
         .await?;
+        let scheduled = assign_pending_in(&mut transaction, &room, &settings).await?;
+        outcome.events.extend(scheduled.events);
         transaction.commit().await?;
-        Ok(outcome)
+        Ok(RoomCommandMutation {
+            outcome,
+            assignments: scheduled.next_assignments,
+        })
     }
+}
+
+async fn detach_confirmed_session(
+    transaction: &mut Transaction<'_, Sqlite>,
+    principal: &AuthenticatedPrincipal,
+    agent_id: &str,
+    session: &mut DurableAgentSession,
+) -> Result<Vec<RoomEvent>, PersistenceError> {
+    session.pending_inputs = merged_turn_queue(session)?;
+    session.inflight_inputs.clear();
+    "detached".clone_into(&mut session.public.status);
+    session.public.enabled = false;
+    "stopped".clone_into(&mut session.public.runtime_status);
+    session.public.provider_session_active = false;
+    session.public.active_turn_id.clear();
+    session.public.turn_phase.clear();
+    session.active_source_event_id.clear();
+    session.input_up_to_event_id.clear();
+    session.input_up_to_seq = 0;
+    session.public.last_error.clear();
+    session.public.last_error_code.clear();
+    session.public.recovery_required = false;
+    session.runtime_handle_id.clear();
+    session.runtime_owner_id.clear();
+    session.runtime_lease_token.clear();
+    crate::agent_lifecycle::clear_intent(session);
+    session.public.updated_at = Utc::now();
+    save_session(transaction, session).await?;
+    let mut participant = load_participant(transaction, &principal.room_id, agent_id).await?;
+    participant.status = ParticipantStatus::Detached;
+    participant.updated_at = Utc::now();
+    save_participant(transaction, &participant).await?;
+    let detached = append_session_event(
+        transaction,
+        principal,
+        &session.public,
+        "session_detached",
+        BTreeMap::from([("reason".to_owned(), json!("operator stop"))]),
+    )
+    .await?;
+    let state = append_state_event(transaction, principal, &session.public).await?;
+    Ok(vec![detached, state])
 }
 
 fn rejected(code: &'static str, message: impl Into<String>) -> PersistenceError {

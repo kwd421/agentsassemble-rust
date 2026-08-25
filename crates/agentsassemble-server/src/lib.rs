@@ -76,7 +76,7 @@ pub use app_state::AppState;
 pub use host_ticket::{HostSecret, InvalidHostSecret};
 pub use room_runtime::RoomRuntime;
 pub use room_shutdown::RoomShutdownError;
-pub use runtime_reconciliation::reconcile_runtime_ownership;
+pub use runtime_reconciliation::{RuntimeReconciliationSummary, reconcile_runtime_ownership};
 pub use ticket::{
     ConsumedProfileTicket, ConsumedServerOperatorTicket, ConsumedTicket, IssuedTicket, TicketError,
     TicketStore,

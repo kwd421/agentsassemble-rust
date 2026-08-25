@@ -2,12 +2,12 @@ use std::time::Duration;
 
 use agentsassemble_domain::AuthenticatedPrincipal;
 use agentsassemble_persistence::{
-    LiveRuntimeReconciliation, PersistenceError, ProviderTurnReconciliationCursor,
-    RuntimeReconciliationCandidate, RuntimeReconciliationCursor, RuntimeReconciliationObservation,
-    SqliteStore,
+    AgentTurnAssignment, LiveRuntimeReconciliation, PersistenceError,
+    ProviderTurnReconciliationCursor, RuntimeReconciliationCandidate, RuntimeReconciliationCursor,
+    RuntimeReconciliationObservation, SqliteStore,
 };
 use agentsassemble_provider::{ProviderAdapter, ProviderRuntimeGone, ProviderRuntimeObservation};
-use futures_util::{StreamExt, stream};
+use futures_util::{StreamExt, future::BoxFuture, stream};
 use serde_json::Value;
 use tokio::time::{Instant, MissedTickBehavior};
 use tokio_util::sync::CancellationToken;
@@ -29,57 +29,80 @@ const RECOVERY_OBSERVATION_CONCURRENCY: usize = 8;
 pub(crate) static RUNTIME_RECONCILIATION_TEST_LOCK: tokio::sync::Mutex<()> =
     tokio::sync::Mutex::const_new(());
 
+#[derive(Debug)]
+pub struct RuntimeReconciliationSummary {
+    pub reconciled_sessions: usize,
+    pub assignments: Vec<AgentTurnAssignment>,
+}
+
 /// Reconciles every durable runtime candidate before network admission.
 ///
 /// # Errors
 ///
 /// Returns a persistence error if an exact observed transition cannot commit.
-pub async fn reconcile_runtime_ownership(
-    store: &SqliteStore,
-    provider_adapter: &ProviderAdapter,
-) -> Result<usize, PersistenceError> {
-    let candidates = store.load_runtime_reconciliation_candidates().await?;
-    let candidate_count = candidates.len();
-    let mut observed_candidates = Vec::new();
-    for candidate in candidates {
-        match candidate.session.lifecycle_intent_status.as_str() {
-            "prepared" => {
-                store
-                    .reject_abandoned_lifecycle_before_effect(&candidate)
-                    .await?;
+#[must_use = "runtime reconciliation must complete before network admission"]
+pub fn reconcile_runtime_ownership<'a>(
+    store: &'a SqliteStore,
+    provider_adapter: &'a ProviderAdapter,
+) -> BoxFuture<'a, Result<RuntimeReconciliationSummary, PersistenceError>> {
+    Box::pin(async move {
+        let candidates = store.load_runtime_reconciliation_candidates().await?;
+        let candidate_count = candidates.len();
+        let mut observed_candidates = Vec::new();
+        let mut assignments = Vec::new();
+        for candidate in candidates {
+            match candidate.session.lifecycle_intent_status.as_str() {
+                "prepared" => {
+                    store
+                        .reject_abandoned_lifecycle_before_effect(&candidate)
+                        .await?;
+                }
+                "effect_applied" => assignments
+                    .extend(commit_startup_gone(store, provider_adapter, &candidate).await?),
+                _ => observed_candidates.push(candidate),
             }
-            "effect_applied" => {
-                commit_startup_gone(store, provider_adapter, &candidate).await?;
-            }
-            _ => observed_candidates.push(candidate),
         }
-    }
-    let observations = stream::iter(observed_candidates)
-        .map(|candidate| async move {
-            let observation = provider_adapter.observe(&candidate.session).await;
-            (candidate, observation)
+        let observations = stream::iter(observed_candidates)
+            .map(|candidate| async move {
+                let observation = provider_adapter.observe(&candidate.session).await;
+                (candidate, observation)
+            })
+            .buffer_unordered(RECOVERY_OBSERVATION_CONCURRENCY)
+            .collect::<Vec<_>>()
+            .await;
+        for (candidate, observation) in observations {
+            match observation {
+                observation @ (ProviderRuntimeObservation::Adopted { .. }
+                | ProviderRuntimeObservation::LeaseUncertain { .. }) => {
+                    assignments.extend(
+                        recover_startup_observed_runtime(
+                            store,
+                            provider_adapter,
+                            &candidate,
+                            observation,
+                        )
+                        .await?,
+                    );
+                }
+                ProviderRuntimeObservation::Gone => assignments
+                    .extend(commit_startup_gone(store, provider_adapter, &candidate).await?),
+                observation @ ProviderRuntimeObservation::Ambiguous { .. } => {
+                    assignments.extend(
+                        store
+                            .apply_runtime_reconciliation(
+                                &candidate,
+                                &persistence_observation(observation),
+                            )
+                            .await?,
+                    );
+                }
+            }
+        }
+        Ok(RuntimeReconciliationSummary {
+            reconciled_sessions: candidate_count,
+            assignments,
         })
-        .buffer_unordered(RECOVERY_OBSERVATION_CONCURRENCY)
-        .collect::<Vec<_>>()
-        .await;
-    for (candidate, observation) in observations {
-        match observation {
-            observation @ (ProviderRuntimeObservation::Adopted { .. }
-            | ProviderRuntimeObservation::LeaseUncertain { .. }) => {
-                recover_startup_observed_runtime(store, provider_adapter, &candidate, observation)
-                    .await?;
-            }
-            ProviderRuntimeObservation::Gone => {
-                commit_startup_gone(store, provider_adapter, &candidate).await?;
-            }
-            observation @ ProviderRuntimeObservation::Ambiguous { .. } => {
-                store
-                    .apply_runtime_reconciliation(&candidate, &persistence_observation(observation))
-                    .await?;
-            }
-        }
-    }
-    Ok(candidate_count)
+    })
 }
 
 pub(crate) async fn recover_exact_lifecycle_command(
@@ -175,71 +198,73 @@ pub(crate) async fn watch_runtime_reconciliation(
     }
 }
 
-async fn reconcile_dynamic_candidates(
-    store: &SqliteStore,
-    provider_adapter: &ProviderAdapter,
-    rooms: &RoomRuntime,
+fn reconcile_dynamic_candidates<'a>(
+    store: &'a SqliteStore,
+    provider_adapter: &'a ProviderAdapter,
+    rooms: &'a RoomRuntime,
     candidates: Vec<RuntimeReconciliationCandidate>,
-    cancellation: &CancellationToken,
-) {
-    let mut needs_observation = Vec::new();
-    for candidate in candidates {
-        if cancellation.is_cancelled() {
-            return;
+    cancellation: &'a CancellationToken,
+) -> BoxFuture<'a, ()> {
+    Box::pin(async move {
+        let mut needs_observation = Vec::new();
+        for candidate in candidates {
+            if cancellation.is_cancelled() {
+                return;
+            }
+            let Some(command_owner) = claim_candidate(rooms, &candidate) else {
+                continue;
+            };
+            match candidate.session.lifecycle_intent_status.as_str() {
+                "prepared" => {
+                    commit_abandoned_pre_effect(store, rooms, &candidate).await;
+                }
+                "effect_applied" => {
+                    commit_and_publish_gone(store, provider_adapter, rooms, &candidate).await;
+                }
+                "effect_inflight" | "unconfirmed" => {
+                    needs_observation.push((candidate, command_owner));
+                }
+                _ => {}
+            }
         }
-        let Some(command_owner) = claim_candidate(rooms, &candidate) else {
-            continue;
-        };
-        match candidate.session.lifecycle_intent_status.as_str() {
-            "prepared" => {
-                commit_abandoned_pre_effect(store, rooms, &candidate).await;
-            }
-            "effect_applied" => {
-                commit_and_publish_gone(store, provider_adapter, rooms, &candidate).await;
-            }
-            "effect_inflight" | "unconfirmed" => {
-                needs_observation.push((candidate, command_owner));
-            }
-            _ => {}
-        }
-    }
-    let observed = stream::iter(needs_observation)
-        .map(|(candidate, command_owner)| async move {
-            let observation = tokio::time::timeout(
-                LIVE_OBSERVATION_TIMEOUT,
-                provider_adapter.observe(&candidate.session),
-            )
-            .await
-            .ok();
-            (candidate, command_owner, observation)
-        })
-        .buffer_unordered(RECOVERY_OBSERVATION_CONCURRENCY)
-        .collect::<Vec<_>>()
-        .await;
-    for (candidate, _command_owner, observation) in observed {
-        if cancellation.is_cancelled() {
-            continue;
-        }
-        match observation {
-            Some(ProviderRuntimeObservation::Gone) => {
-                commit_and_publish_gone(store, provider_adapter, rooms, &candidate).await;
-            }
-            Some(
-                observation @ (ProviderRuntimeObservation::Adopted { .. }
-                | ProviderRuntimeObservation::LeaseUncertain { .. }),
-            ) => {
-                recover_dynamic_observed_runtime(
-                    store,
-                    provider_adapter,
-                    rooms,
-                    &candidate,
-                    observation,
+        let observed = stream::iter(needs_observation)
+            .map(|(candidate, command_owner)| async move {
+                let observation = tokio::time::timeout(
+                    LIVE_OBSERVATION_TIMEOUT,
+                    provider_adapter.observe(&candidate.session),
                 )
-                .await;
+                .await
+                .ok();
+                (candidate, command_owner, observation)
+            })
+            .buffer_unordered(RECOVERY_OBSERVATION_CONCURRENCY)
+            .collect::<Vec<_>>()
+            .await;
+        for (candidate, _command_owner, observation) in observed {
+            if cancellation.is_cancelled() {
+                continue;
             }
-            Some(ProviderRuntimeObservation::Ambiguous { .. }) | None => {}
+            match observation {
+                Some(ProviderRuntimeObservation::Gone) => {
+                    commit_and_publish_gone(store, provider_adapter, rooms, &candidate).await;
+                }
+                Some(
+                    observation @ (ProviderRuntimeObservation::Adopted { .. }
+                    | ProviderRuntimeObservation::LeaseUncertain { .. }),
+                ) => {
+                    recover_dynamic_observed_runtime(
+                        store,
+                        provider_adapter,
+                        rooms,
+                        &candidate,
+                        observation,
+                    )
+                    .await;
+                }
+                Some(ProviderRuntimeObservation::Ambiguous { .. }) | None => {}
+            }
         }
-    }
+    })
 }
 
 fn claim_candidate(
@@ -308,7 +333,7 @@ pub(crate) async fn checkpoint_confirmed_shutdown(
     {
         return Err(stale_shutdown_observation());
     }
-    store
+    let _deferred_assignments = store
         .apply_runtime_reconciliation(&candidate, &RuntimeReconciliationObservation::Gone)
         .await?;
     Ok(())
@@ -517,9 +542,10 @@ pub(crate) mod tests {
             .cancel_start_reservation("general", session_id, &reservation)
             .await;
         assert!(
-            !commit_dynamic_gone(&store, &candidate)
+            commit_dynamic_gone(&store, &candidate)
                 .await
                 .unwrap_or_else(|error| panic!("drop stale watcher candidate: {error}"))
+                .is_none()
         );
         assert!(matches!(
             store

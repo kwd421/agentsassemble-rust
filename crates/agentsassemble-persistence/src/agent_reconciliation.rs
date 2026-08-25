@@ -139,7 +139,7 @@ impl SqliteStore {
         &self,
         candidate: &RuntimeReconciliationCandidate,
         observation: &RuntimeReconciliationObservation,
-    ) -> Result<(), PersistenceError> {
+    ) -> Result<Vec<crate::AgentTurnAssignment>, PersistenceError> {
         crate::agent_reconciliation_recovery::apply_startup_reconciliation(
             self,
             candidate,
@@ -192,13 +192,15 @@ impl SqliteStore {
     pub async fn reconcile_agent_sessions_after_restart(&self) -> Result<usize, PersistenceError> {
         let candidates = self.load_runtime_reconciliation_candidates().await?;
         for candidate in &candidates {
-            self.apply_runtime_reconciliation(
-                candidate,
-                &RuntimeReconciliationObservation::Ambiguous {
-                    reason_code: "test_owner_unavailable".to_owned(),
-                },
-            )
-            .await?;
+            let assignments = self
+                .apply_runtime_reconciliation(
+                    candidate,
+                    &RuntimeReconciliationObservation::Ambiguous {
+                        reason_code: "test_owner_unavailable".to_owned(),
+                    },
+                )
+                .await?;
+            debug_assert!(assignments.is_empty());
         }
         Ok(candidates.len())
     }

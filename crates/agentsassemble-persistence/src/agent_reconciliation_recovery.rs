@@ -5,8 +5,8 @@ use chrono::Utc;
 use serde_json::json;
 
 use crate::{
-    LiveRuntimeReconciliation, PersistenceError, RuntimeReconciliationCandidate,
-    RuntimeReconciliationObservation, SqliteStore,
+    AgentTurnAssignment, LiveRuntimeReconciliation, PersistenceError,
+    RuntimeReconciliationCandidate, RuntimeReconciliationObservation, SqliteStore,
     agent_lifecycle::clear_intent,
     agent_lifecycle_events::{
         append_error_event, append_session_event, append_state_event, store_result,
@@ -19,6 +19,7 @@ use crate::{
         reconcile_gone, reconcile_observation, save_reconciled_session, stale_candidate,
         validate_adoption, validate_uncertain_lease,
     },
+    room_turns::{assign_pending_in, support::load_active_room},
 };
 
 const RECOVERED_START_CODE: &str = "runtime_start_recovered_gone";
@@ -90,19 +91,19 @@ pub(crate) async fn apply_startup_reconciliation(
     store: &SqliteStore,
     candidate: &RuntimeReconciliationCandidate,
     observation: &RuntimeReconciliationObservation,
-) -> Result<(), PersistenceError> {
+) -> Result<Vec<AgentTurnAssignment>, PersistenceError> {
     let mut transaction = store.pool.begin().await?;
     let current = current_candidate(&mut transaction, candidate).await?;
     if current.session.lifecycle_intent_status == "prepared" {
         reject_abandoned_in_transaction(&mut transaction, current).await?;
         transaction.commit().await?;
-        return Ok(());
+        return Ok(Vec::new());
     }
     let mut session = current.session.clone();
     if recovered_stop_is_terminal(&session, observation) {
-        finalize_recovered_stop(&mut transaction, &mut session, &current).await?;
+        let assignments = finalize_recovered_stop(&mut transaction, &mut session, &current).await?;
         transaction.commit().await?;
-        return Ok(());
+        return Ok(assignments);
     }
     if observation == &RuntimeReconciliationObservation::Gone
         && session.lifecycle_intent_action == "start"
@@ -113,7 +114,7 @@ pub(crate) async fn apply_startup_reconciliation(
     {
         reject_recovered_start(&mut transaction, &mut session, &current).await?;
         transaction.commit().await?;
-        return Ok(());
+        return Ok(Vec::new());
     }
     let detach = reconcile_observation(&mut session, observation)?;
     save_reconciled_session(&mut transaction, &session).await?;
@@ -126,7 +127,7 @@ pub(crate) async fn apply_startup_reconciliation(
         .await?;
     }
     transaction.commit().await?;
-    Ok(())
+    Ok(Vec::new())
 }
 
 pub(crate) async fn apply_live_reconciliation(
@@ -308,11 +309,12 @@ async fn finalize_recovered_stop(
     transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     session: &mut DurableAgentSession,
     candidate: &RuntimeReconciliationCandidate,
-) -> Result<(), PersistenceError> {
+) -> Result<Vec<AgentTurnAssignment>, PersistenceError> {
     let reservation = candidate
         .reservation
         .as_ref()
         .ok_or_else(invalid_stored_authority)?;
+    let (room, settings) = load_active_room(transaction, &session.public.room_id).await?;
     finish_lifecycle_command(transaction, &reservation_ref(reservation)).await?;
     session.pending_inputs = crate::turn_queue::merge_room_inputs(
         session
@@ -379,7 +381,8 @@ async fn finalize_recovered_stop(
         events,
     )
     .await?;
-    Ok(())
+    let scheduled = assign_pending_in(transaction, &room, &settings).await?;
+    Ok(scheduled.next_assignments)
 }
 
 fn reservation_ref(

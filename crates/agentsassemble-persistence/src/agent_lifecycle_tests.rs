@@ -259,7 +259,10 @@ async fn lifecycle_preserves_provider_identity_and_finalizes_stop_once() {
         .finalize_agent_stop(&principal, "stop-lifecycle", &payload)
         .await
         .unwrap_or_else(|error| panic!("finalize stop: {error}"));
-    assert_eq!(stopped.result["agent_session"]["runtime_status"], "stopped");
+    assert_eq!(
+        stopped.outcome.result["agent_session"]["runtime_status"],
+        "stopped"
+    );
     let durable = sqlx::query_scalar::<_, String>(
         "SELECT session_json FROM agent_sessions WHERE room_id = 'general' AND session_id = ?",
     )

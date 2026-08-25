@@ -263,9 +263,7 @@ pub(crate) async fn execute_agent_stop(
                 .finalize_agent_stop(&command.principal, &command.request_id, &command.payload)
                 .await
             {
-                Ok(outcome) => {
-                    progressed_execution(store, &command.principal.room_id, outcome).await
-                }
+                Ok(mutation) => CommandExecution::mutation(mutation),
                 Err(error) => CommandExecution::unresolved_failure(error),
             }
         }
@@ -338,9 +336,7 @@ pub(crate) async fn execute_agent_stop(
                 .finalize_agent_stop(&command.principal, &command.request_id, &command.payload)
                 .await
             {
-                Ok(outcome) => {
-                    progressed_execution(store, &command.principal.room_id, outcome).await
-                }
+                Ok(mutation) => CommandExecution::mutation(mutation),
                 Err(error) => CommandExecution::unresolved_failure(error),
             }
         }

@@ -4,13 +4,13 @@ use serde::{Deserialize, Serialize};
 use sqlx::{Row, Sqlite, Transaction};
 use uuid::Uuid;
 
-use crate::room_turns::ProviderTurnAuthority;
+use crate::room_turns::{ProviderTurnAuthority, assign_pending_in};
 use crate::{
     AgentTurnCommit, PersistenceError, SqliteStore,
     agent_lifecycle::{load_session, save_session},
     room_turns::support::{
-        clear_active_turn_fields, error_event, load_participant, session_state_event,
-        turn_finished_event,
+        clear_active_turn_fields, error_event, load_active_room, load_participant,
+        session_state_event, turn_finished_event,
     },
     turn_authority::active_turn_authority,
     turn_queue::merge_room_inputs,
@@ -412,6 +412,7 @@ pub(crate) async fn finalize_proven_no_effect_task_death(
     mut session: DurableAgentSession,
     execution: &ProviderTurnExecution,
 ) -> Result<AgentTurnCommit, PersistenceError> {
+    let (room, settings) = load_active_room(&mut transaction, &execution.room_id).await?;
     let changed = sqlx::query(
         "UPDATE provider_turn_executions SET phase = 'failed', requeue_finalized = 1, \
          updated_at = ? WHERE room_id = ? AND session_id = ? AND turn_generation = ? \
@@ -470,10 +471,13 @@ pub(crate) async fn finalize_proven_no_effect_task_death(
     session.public.updated_at = Utc::now();
     save_session(&mut transaction, &session).await?;
     let state = session_state_event(&mut transaction, &session).await?;
+    let scheduled = assign_pending_in(&mut transaction, &room, &settings).await?;
     transaction.commit().await?;
+    let mut events = vec![error, finished, state];
+    events.extend(scheduled.events);
     Ok(AgentTurnCommit {
-        events: vec![error, finished, state],
-        next_assignments: Vec::new(),
+        events,
+        next_assignments: scheduled.next_assignments,
     })
 }
 
