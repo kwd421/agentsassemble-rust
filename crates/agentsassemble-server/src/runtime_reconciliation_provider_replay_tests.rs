@@ -1,10 +1,10 @@
-use agentsassemble_domain::ProviderCatalog;
+use agentsassemble_domain::{AuthenticatedPrincipal, ProviderCatalog};
 use agentsassemble_persistence::{
     AgentRuntimeStarted, AgentStartPlan, LiveRuntimeReconciliation, ProviderTurnExecutionPhase,
-    SqliteStore,
+    ProviderTurnReconciliationCandidate, SqliteStore,
 };
 use agentsassemble_provider::{
-    ProviderAdapter, ProviderCatalogService, ProviderRuntimeObservation,
+    ProviderAdapter, ProviderCatalogService, ProviderRuntimeObservation, ProviderStartReservation,
 };
 use serde_json::json;
 
@@ -118,9 +118,12 @@ async fn production_replay_helper_observes_gone_before_reenabling_start() {
         .await;
 }
 
-#[tokio::test]
-async fn live_provider_scan_revisits_a_transient_lease_until_exact_gone() {
-    let _serial = RUNTIME_RECONCILIATION_TEST_LOCK.lock().await;
+async fn create_live_scan_agent() -> (
+    tempfile::TempDir,
+    SqliteStore,
+    AuthenticatedPrincipal,
+    String,
+) {
     let directory = tempfile::tempdir().unwrap_or_else(|error| panic!("create fixture: {error}"));
     let store = SqliteStore::open_path(&directory.path().join("runtime.sqlite3"))
         .await
@@ -152,7 +155,25 @@ async fn live_provider_scan_revisits_a_transient_lease_until_exact_gone() {
         .unwrap_or_else(|error| panic!("create agent: {error}"));
     let session_id = created.result["agent_session"]["session_id"]
         .as_str()
-        .unwrap_or_else(|| panic!("created session has no id"));
+        .unwrap_or_else(|| panic!("created session has no id"))
+        .to_owned();
+    (directory, store, principal, session_id)
+}
+
+struct LiveScanFixture {
+    _directory: tempfile::TempDir,
+    store: SqliteStore,
+    session_id: String,
+    turn_generation: u64,
+    candidate: ProviderTurnReconciliationCandidate,
+    lease_owner: ProviderAdapter,
+    reservation: ProviderStartReservation,
+    fresh_adapter: ProviderAdapter,
+    rooms: RoomRuntime,
+}
+
+async fn stage_live_scan_fixture() -> LiveScanFixture {
+    let (directory, store, principal, session_id) = create_live_scan_agent().await;
     let payload = json!({"agent_id": session_id});
     let AgentStartPlan::Start(effect) = store
         .prepare_agent_start(&principal, "stage-live-provider", &payload)
@@ -213,7 +234,7 @@ async fn live_provider_scan_revisits_a_transient_lease_until_exact_gone() {
     store
         .authorize_provider_turn_start(
             "general",
-            session_id,
+            &session_id,
             assignment.turn_generation,
             &assignment.turn_id,
         )
@@ -227,6 +248,7 @@ async fn live_provider_scan_revisits_a_transient_lease_until_exact_gone() {
         .candidates
         .pop()
         .unwrap_or_else(|| panic!("missing live provider candidate"));
+    let turn_generation = assignment.turn_generation;
     let fresh_adapter = ProviderAdapter::new();
     let rooms = RoomRuntime::with_provider_adapter(
         store.clone(),
@@ -234,49 +256,71 @@ async fn live_provider_scan_revisits_a_transient_lease_until_exact_gone() {
         fresh_adapter.clone(),
     );
 
+    LiveScanFixture {
+        _directory: directory,
+        store,
+        session_id,
+        turn_generation,
+        candidate,
+        lease_owner,
+        reservation,
+        fresh_adapter,
+        rooms,
+    }
+}
+
+#[tokio::test]
+async fn live_provider_scan_revisits_a_transient_lease_until_exact_gone() {
+    let _serial = RUNTIME_RECONCILIATION_TEST_LOCK.lock().await;
+    let fixture = stage_live_scan_fixture().await;
+
     reconcile_unowned_observation(
-        &store,
-        &fresh_adapter,
-        &rooms,
-        &candidate,
+        &fixture.store,
+        &fixture.fresh_adapter,
+        &fixture.rooms,
+        &fixture.candidate,
         Some(ProviderRuntimeObservation::LeaseUncertain {
-            handle_id: reservation.runtime_handle_id.clone(),
-            owner_id: reservation.runtime_owner_id.clone(),
+            handle_id: fixture.reservation.runtime_handle_id.clone(),
+            owner_id: fixture.reservation.runtime_owner_id.clone(),
             reason_code: "runtime_lease_active".to_owned(),
         }),
     )
     .await
     .unwrap_or_else(|error| panic!("retain transient lease candidate: {error}"));
     assert_eq!(
-        store
-            .provider_turn_execution("general", session_id, assignment.turn_generation)
+        fixture
+            .store
+            .provider_turn_execution("general", &fixture.session_id, fixture.turn_generation)
             .await
             .unwrap_or_else(|error| panic!("read lease-uncertain execution: {error}"))
             .phase,
         ProviderTurnExecutionPhase::StartDispatching
     );
 
-    lease_owner
-        .cancel_start_reservation("general", session_id, &reservation)
+    fixture
+        .lease_owner
+        .cancel_start_reservation("general", &fixture.session_id, &fixture.reservation)
         .await;
     reconcile_unowned_observation(
-        &store,
-        &fresh_adapter,
-        &rooms,
-        &candidate,
+        &fixture.store,
+        &fixture.fresh_adapter,
+        &fixture.rooms,
+        &fixture.candidate,
         Some(ProviderRuntimeObservation::Gone),
     )
     .await
     .unwrap_or_else(|error| panic!("finalize later exact Gone: {error}"));
     assert_eq!(
-        store
-            .provider_turn_execution("general", session_id, assignment.turn_generation)
+        fixture
+            .store
+            .provider_turn_execution("general", &fixture.session_id, fixture.turn_generation)
             .await
             .unwrap_or_else(|error| panic!("read Gone-finalized execution: {error}"))
             .phase,
         ProviderTurnExecutionPhase::Failed
     );
-    rooms
+    fixture
+        .rooms
         .shutdown()
         .await
         .unwrap_or_else(|error| panic!("shutdown room runtime: {error}"));
