@@ -60,6 +60,7 @@ async fn reject_abandoned_in_transaction(
     if session.lifecycle_intent_action == "start"
         && session.runtime_handle_id.is_empty()
         && session.runtime_owner_id.is_empty()
+        && session.runtime_lease_token.is_empty()
     {
         "unavailable".clone_into(&mut session.public.status);
         session.public.enabled = false;
@@ -287,6 +288,7 @@ async fn reject_recovered_start(
     session.public.recovery_required = false;
     session.runtime_handle_id.clear();
     session.runtime_owner_id.clear();
+    session.runtime_lease_token.clear();
     clear_intent(session);
     session.public.updated_at = Utc::now();
     save_reconciled_session(transaction, session).await?;
@@ -335,6 +337,7 @@ async fn finalize_recovered_stop(
     session.public.recovery_required = false;
     session.runtime_handle_id.clear();
     session.runtime_owner_id.clear();
+    session.runtime_lease_token.clear();
     clear_intent(session);
     session.public.updated_at = Utc::now();
     save_reconciled_session(transaction, session).await?;

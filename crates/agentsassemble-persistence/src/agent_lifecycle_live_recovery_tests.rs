@@ -308,6 +308,7 @@ async fn authorize_start(
             "agent.start",
             handle_id,
             owner_id,
+            "lease-generation-1",
         )
         .await
         .unwrap_or_else(|error| panic!("authorize start effect: {error}"));

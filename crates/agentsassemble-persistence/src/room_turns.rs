@@ -370,17 +370,19 @@ impl SqliteStore {
         turn_id: &str,
         error_code: &str,
         message: &str,
-        confirmed_runtime_stop: Option<(&str, &str)>,
+        confirmed_runtime_stop: Option<(&str, &str, &str)>,
     ) -> Result<AgentTurnCommit, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
         let (room, settings) = load_active_room(&mut transaction, room_id).await?;
         let mut session = load_session(&mut transaction, room_id, session_id).await?;
         require_active_turn(&session, turn_id)?;
-        if let Some((handle_id, owner_id)) = confirmed_runtime_stop {
+        if let Some((handle_id, owner_id, lease_token)) = confirmed_runtime_stop {
             if handle_id.is_empty()
                 || owner_id.is_empty()
+                || lease_token.is_empty()
                 || session.runtime_handle_id != handle_id
                 || session.runtime_owner_id != owner_id
+                || session.runtime_lease_token != lease_token
             {
                 return Err(rejected(
                     "stale_provider_turn",
@@ -389,6 +391,7 @@ impl SqliteStore {
             }
             session.runtime_handle_id.clear();
             session.runtime_owner_id.clear();
+            session.runtime_lease_token.clear();
             session.public.provider_session_active = false;
             session.public.provider_session_reused = false;
         }

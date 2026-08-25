@@ -45,6 +45,7 @@ pub struct AgentStopEffect {
     pub session_id: String,
     pub runtime_handle_id: String,
     pub runtime_owner_id: String,
+    pub runtime_lease_token: String,
 }
 
 #[derive(Debug, Clone)]
@@ -64,6 +65,7 @@ pub enum AgentStopPlan {
 pub struct AgentRuntimeStarted {
     pub runtime_handle_id: String,
     pub runtime_owner_id: String,
+    pub runtime_lease_token: String,
     pub provider_session_id: String,
     pub runtime_reused: bool,
     pub provider_session_reused: bool,
@@ -541,6 +543,7 @@ impl SqliteStore {
         session.public.recovery_required = false;
         session.runtime_handle_id.clear();
         session.runtime_owner_id.clear();
+        session.runtime_lease_token.clear();
         clear_intent(&mut session);
         session.public.updated_at = Utc::now();
         save_session(&mut transaction, &session).await?;
@@ -740,6 +743,9 @@ pub(crate) fn apply_runtime_started(
     session
         .runtime_owner_id
         .clone_from(&started.runtime_owner_id);
+    session
+        .runtime_lease_token
+        .clone_from(&started.runtime_lease_token);
     if !started.provider_session_id.is_empty() {
         session
             .provider_session_id

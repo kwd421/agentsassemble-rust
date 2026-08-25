@@ -27,6 +27,7 @@ async fn stale_completion_fails_closed_and_safe_failure_replays() {
             &AgentRuntimeStarted {
                 runtime_handle_id: "owned-runtime".to_owned(),
                 runtime_owner_id: "supervisor-instance-1".to_owned(),
+                runtime_lease_token: "lease-generation-1".to_owned(),
                 provider_session_id: "provider-thread".to_owned(),
                 runtime_reused: false,
                 provider_session_reused: false,
@@ -50,6 +51,7 @@ async fn stale_completion_fails_closed_and_safe_failure_replays() {
             "agent.start",
             "owned-runtime",
             "supervisor-instance-1",
+            "lease-generation-1",
         )
         .await
         .unwrap_or_else(|error| panic!("authorize failed start effect: {error}"));

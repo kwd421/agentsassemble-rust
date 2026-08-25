@@ -26,13 +26,14 @@ impl ProviderAdapter {
         match &slot.state {
             RuntimeState::Launching(runtime) => {
                 if runtime.effect_started {
-                    return Err(ProviderAdapterError::uncertain(
+                    return Err(ProviderAdapterError::uncertain_with_lease(
                         DriverError::new(
                             "provider_launch_unconfirmed",
                             "A provider launch is still awaiting a confirmed cleanup.",
                         ),
                         &runtime.handle_id,
                         &runtime.owner_id,
+                        runtime.runtime_lease.token(),
                     ));
                 }
                 if runtime.profile_key != session.runtime_profile_key
@@ -40,6 +41,8 @@ impl ProviderAdapter {
                         && session.runtime_handle_id != runtime.handle_id)
                     || (!session.runtime_owner_id.is_empty()
                         && session.runtime_owner_id != runtime.owner_id)
+                    || (!session.runtime_lease_token.is_empty()
+                        && session.runtime_lease_token != runtime.runtime_lease.token())
                 {
                     return Err(ProviderAdapterError::uncertain(
                         DriverError::new(
@@ -53,6 +56,7 @@ impl ProviderAdapter {
                 Ok(ProviderStartReservation {
                     runtime_handle_id: runtime.handle_id.clone(),
                     runtime_owner_id: runtime.owner_id.clone(),
+                    runtime_lease_token: runtime.runtime_lease.token().to_owned(),
                 })
             }
             RuntimeState::Running(runtime) => {
@@ -60,6 +64,7 @@ impl ProviderAdapter {
                 Ok(ProviderStartReservation {
                     runtime_handle_id: runtime.handle_id.clone(),
                     runtime_owner_id: runtime.owner_id.clone(),
+                    runtime_lease_token: runtime.lease_token.clone(),
                 })
             }
             RuntimeState::StopConfirmed { .. } => {
@@ -69,13 +74,17 @@ impl ProviderAdapter {
                 )))
             }
             RuntimeState::Vacant => {
-                if !session.runtime_handle_id.is_empty() || !session.runtime_owner_id.is_empty() {
+                if !session.runtime_handle_id.is_empty()
+                    || !session.runtime_owner_id.is_empty()
+                    || !session.runtime_lease_token.is_empty()
+                {
                     return Err(ProviderAdapterError {
                         code: "runtime_owner_mismatch",
                         message: "The durable provider handle is not owned by this supervisor.",
                         effect_uncertain: true,
                         runtime_handle_id: session.runtime_handle_id.clone(),
                         runtime_owner_id: session.runtime_owner_id.clone(),
+                        runtime_lease_token: session.runtime_lease_token.clone(),
                         runtime_stopped: false,
                     });
                 }
@@ -93,6 +102,7 @@ impl ProviderAdapter {
                 let reservation = ProviderStartReservation {
                     runtime_handle_id: runtime_lease.new_runtime_handle_id(),
                     runtime_owner_id: self.owner.supervisor_id.clone(),
+                    runtime_lease_token: runtime_lease.token().to_owned(),
                 };
                 slot.state = RuntimeState::Launching(LaunchingRuntime {
                     handle_id: reservation.runtime_handle_id.clone(),
@@ -149,6 +159,7 @@ impl ProviderAdapter {
             RuntimeState::Launching(runtime)
                 if runtime.handle_id != session.runtime_handle_id
                     || runtime.owner_id != session.runtime_owner_id
+                    || runtime.runtime_lease.token() != session.runtime_lease_token
                     || runtime.profile_key != session.runtime_profile_key =>
             {
                 Err(ProviderAdapterError::uncertain(
@@ -205,6 +216,7 @@ impl ProviderAdapter {
                 slot.state = RuntimeState::Running(OwnedRuntime {
                     handle_id: runtime.handle_id,
                     owner_id: runtime.owner_id,
+                    lease_token: runtime.runtime_lease.token().to_owned(),
                     profile_key: session.runtime_profile_key.clone(),
                     driver: Arc::new(Mutex::new(driver)),
                     turn_cancellation: CancellationToken::new(),
@@ -243,6 +255,7 @@ impl ProviderAdapter {
         let mut authorized = session.clone();
         authorized.runtime_handle_id = reservation.runtime_handle_id;
         authorized.runtime_owner_id = reservation.runtime_owner_id;
+        authorized.runtime_lease_token = reservation.runtime_lease_token;
         self.start_reserved(&authorized).await
     }
 }

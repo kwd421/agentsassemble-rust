@@ -182,9 +182,9 @@ impl SqliteStore {
         request_id: &str,
         payload: &Value,
         operation_id: &str,
-        runtime_handle_id: &str,
-        runtime_owner_id: &str,
+        runtime_authority: (&str, &str, &str),
     ) -> Result<AgentCreateStartEffect, PersistenceError> {
+        let (runtime_handle_id, runtime_owner_id, runtime_lease_token) = runtime_authority;
         let payload_hash = canonical_payload_hash(payload);
         let expected_operation_id = lifecycle_operation_id(principal, request_id, CREATE);
         if operation_id != expected_operation_id {
@@ -215,6 +215,7 @@ impl SqliteStore {
             operation_id,
             runtime_handle_id,
             runtime_owner_id,
+            runtime_lease_token,
         )?;
         save_session(&mut transaction, &session).await?;
         transaction.commit().await?;

@@ -105,6 +105,7 @@ async fn seed_agent(store: &SqliteStore, now: chrono::DateTime<Utc>) {
         provider_session_id: String::new(),
         runtime_handle_id: String::new(),
         runtime_owner_id: String::new(),
+        runtime_lease_token: String::new(),
         pending_inputs: vec![QueuedRoomInput {
             event_id: "pending-1".to_owned(),
             delivery_kind: RoomInputDeliveryKind::OrderedObservation,
@@ -159,6 +160,7 @@ async fn lifecycle_preserves_provider_identity_and_finalizes_stop_once() {
     let started = AgentRuntimeStarted {
         runtime_handle_id: "owned-runtime-1".to_owned(),
         runtime_owner_id: "supervisor-instance-1".to_owned(),
+        runtime_lease_token: "lease-generation-1".to_owned(),
         provider_session_id: "provider-thread-1".to_owned(),
         runtime_reused: false,
         provider_session_reused: false,
@@ -173,6 +175,7 @@ async fn lifecycle_preserves_provider_identity_and_finalizes_stop_once() {
             "agent.start",
             &started.runtime_handle_id,
             &started.runtime_owner_id,
+            &started.runtime_lease_token,
         )
         .await
         .unwrap_or_else(|error| panic!("authorize start effect: {error}"));
@@ -296,6 +299,7 @@ async fn provider_process_presence_does_not_imply_a_provider_conversation() {
             &AgentRuntimeStarted {
                 runtime_handle_id: "owned-app-server".to_owned(),
                 runtime_owner_id: String::new(),
+                runtime_lease_token: "lease-generation-1".to_owned(),
                 provider_session_id: String::new(),
                 runtime_reused: false,
                 provider_session_reused: false,
@@ -319,6 +323,7 @@ async fn provider_process_presence_does_not_imply_a_provider_conversation() {
             "agent.start",
             "owned-app-server",
             "supervisor-instance-1",
+            "lease-generation-1",
         )
         .await
         .unwrap_or_else(|error| panic!("authorize process-only start: {error}"));
@@ -331,6 +336,7 @@ async fn provider_process_presence_does_not_imply_a_provider_conversation() {
             &AgentRuntimeStarted {
                 runtime_handle_id: "owned-app-server".to_owned(),
                 runtime_owner_id: "supervisor-instance-1".to_owned(),
+                runtime_lease_token: "lease-generation-1".to_owned(),
                 provider_session_id: String::new(),
                 runtime_reused: false,
                 provider_session_reused: false,
@@ -354,6 +360,7 @@ async fn provider_process_presence_does_not_imply_a_provider_conversation() {
             &AgentRuntimeStarted {
                 runtime_handle_id: "owned-app-server".to_owned(),
                 runtime_owner_id: "supervisor-instance-1".to_owned(),
+                runtime_lease_token: "lease-generation-1".to_owned(),
                 provider_session_id: String::new(),
                 runtime_reused: false,
                 provider_session_reused: false,
@@ -591,6 +598,7 @@ async fn mark_ambiguous_stop(
             "agent.start",
             "runtime-before-ambiguous-stop",
             "supervisor-instance-1",
+            "lease-generation-1",
         )
         .await
         .unwrap_or_else(|error| panic!("authorize start: {error}"));
@@ -603,6 +611,7 @@ async fn mark_ambiguous_stop(
             &AgentRuntimeStarted {
                 runtime_handle_id: "runtime-before-ambiguous-stop".to_owned(),
                 runtime_owner_id: "supervisor-instance-1".to_owned(),
+                runtime_lease_token: "lease-generation-1".to_owned(),
                 provider_session_id: "provider-thread-preserved".to_owned(),
                 runtime_reused: false,
                 provider_session_reused: false,
@@ -654,6 +663,7 @@ async fn startup_reconciliation_retains_ambiguous_runtime_authority() {
             "agent.start",
             "lost-owned-runtime",
             "supervisor-instance-1",
+            "lease-generation-1",
         )
         .await
         .unwrap_or_else(|error| panic!("authorize start: {error}"));
@@ -666,6 +676,7 @@ async fn startup_reconciliation_retains_ambiguous_runtime_authority() {
             &AgentRuntimeStarted {
                 runtime_handle_id: "lost-owned-runtime".to_owned(),
                 runtime_owner_id: "supervisor-instance-1".to_owned(),
+                runtime_lease_token: "lease-generation-1".to_owned(),
                 provider_session_id: "provider-thread-survives".to_owned(),
                 runtime_reused: false,
                 provider_session_reused: false,

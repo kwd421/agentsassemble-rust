@@ -24,8 +24,9 @@ pub(super) async fn recover_startup_observed_runtime(
     };
     let handle_id = &current.session.runtime_handle_id;
     let owner_id = &current.session.runtime_owner_id;
+    let lease_token = &current.session.runtime_lease_token;
     if provider_adapter
-        .stop(room_id, session_id, handle_id, owner_id)
+        .stop(room_id, session_id, handle_id, owner_id, lease_token)
         .await
         .is_err()
     {
@@ -48,6 +49,7 @@ pub(super) async fn commit_startup_gone(
             &candidate.session.public.session_id,
             &candidate.session.runtime_handle_id,
             &candidate.session.runtime_owner_id,
+            &candidate.session.runtime_lease_token,
         )
         .await;
     Ok(())
@@ -96,8 +98,9 @@ pub(super) async fn recover_dynamic_observed_runtime(
     };
     let handle_id = &current.session.runtime_handle_id;
     let owner_id = &current.session.runtime_owner_id;
+    let lease_token = &current.session.runtime_lease_token;
     if let Err(error) = provider_adapter
-        .stop(room_id, session_id, handle_id, owner_id)
+        .stop(room_id, session_id, handle_id, owner_id, lease_token)
         .await
     {
         tracing::warn!(
@@ -121,11 +124,12 @@ pub(super) async fn commit_and_publish_gone(
     let session_id = candidate.session.public.session_id.clone();
     let handle_id = candidate.session.runtime_handle_id.clone();
     let owner_id = candidate.session.runtime_owner_id.clone();
+    let lease_token = candidate.session.runtime_lease_token.clone();
     match commit_dynamic_gone(store, candidate).await {
         Ok(true) => {
             rooms.notify_room_publication(&room_id).await;
             provider_adapter
-                .release_confirmed_stop(&room_id, &session_id, &handle_id, &owner_id)
+                .release_confirmed_stop(&room_id, &session_id, &handle_id, &owner_id, &lease_token)
                 .await;
             true
         }

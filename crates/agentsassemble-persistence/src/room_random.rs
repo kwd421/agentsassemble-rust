@@ -257,6 +257,7 @@ fn require_provider_authority(
         || session.public.process_ownership != "server"
         || session.runtime_handle_id.is_empty()
         || session.runtime_owner_id.is_empty()
+        || session.runtime_lease_token.is_empty()
     {
         return Err(rejected(
             "stale_provider_turn",

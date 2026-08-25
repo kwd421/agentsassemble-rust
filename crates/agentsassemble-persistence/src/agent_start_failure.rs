@@ -231,7 +231,9 @@ impl SqliteStore {
             prepared_result_json,
         };
         if clear_runtime_identity
-            || (session.runtime_handle_id.is_empty() && session.runtime_owner_id.is_empty())
+            || (session.runtime_handle_id.is_empty()
+                && session.runtime_owner_id.is_empty()
+                && session.runtime_lease_token.is_empty())
         {
             "unavailable".clone_into(&mut session.public.status);
             session.public.enabled = false;
@@ -254,6 +256,7 @@ impl SqliteStore {
         if clear_runtime_identity {
             session.runtime_handle_id.clear();
             session.runtime_owner_id.clear();
+            session.runtime_lease_token.clear();
         }
         clear_intent(&mut session);
         session.public.updated_at = Utc::now();

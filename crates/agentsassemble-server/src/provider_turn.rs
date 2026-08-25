@@ -90,6 +90,7 @@ pub(crate) async fn commit_provider_result(
             let confirmed_stop = error.runtime_stopped.then_some((
                 error.runtime_handle_id.as_str(),
                 error.runtime_owner_id.as_str(),
+                error.runtime_lease_token.as_str(),
             ));
             let commit = store
                 .fail_agent_turn(
@@ -108,6 +109,7 @@ pub(crate) async fn commit_provider_result(
                         session_id,
                         &error.runtime_handle_id,
                         &error.runtime_owner_id,
+                        &error.runtime_lease_token,
                     )
                     .await;
             }

@@ -330,14 +330,14 @@ fn spawn_room_task(
                     .await;
                 }
                 RoomInput::Provider(result) => {
-                    handle_provider_result(
+                    Box::pin(handle_provider_result(
                         &store,
                         &provider_adapter,
                         &event_tx,
                         &mut turn_tasks,
                         *result,
                         &room_tool_ingress,
-                    )
+                    ))
                     .await;
                 }
                 RoomInput::Tool(command) => {

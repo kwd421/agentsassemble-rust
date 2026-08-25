@@ -15,10 +15,16 @@ const MAX_LEASE_MARKER_BYTES: u64 = 256;
 #[cfg(unix)]
 const CLEANUP_RECEIPT_LOCK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum LeaseObservation {
     Active,
-    Gone,
+    GenerationGone {
+        launch_token: String,
+    },
+    PreviousBoot {
+        boot_identity: String,
+        launch_token: String,
+    },
     Missing,
     Unknown,
 }
@@ -78,9 +84,9 @@ impl HeldRuntimeLease {
 
     pub(crate) fn new_runtime_handle_id(&self) -> String {
         #[cfg(unix)]
-        return crate::runtime_boot::new_handle_id(&self.boot_identity);
+        return crate::runtime_boot::new_handle_id(&self.boot_identity, &self.token);
         #[cfg(not(unix))]
-        format!("runtime-v4-{}", Uuid::new_v4())
+        format!("runtime-v5-windows-{}-{}", self.token, Uuid::new_v4())
     }
 
     #[cfg(unix)]
@@ -297,16 +303,17 @@ fn classify_unlocked_marker(path: &Path, marker: io::Result<String>) -> LeaseObs
         {
             classify_unlocked_launch_marker(path, token)
         }
-        (Some("windows"), Some(token), None, None, None) if validate_token(token).is_ok() => {
-            LeaseObservation::Gone
+        (Some("windows" | "gone"), Some(token), None, None, None)
+            if validate_token(token).is_ok() =>
+        {
+            LeaseObservation::GenerationGone {
+                launch_token: token.to_owned(),
+            }
         }
         (Some("unix"), Some(token), Some(raw_pid), Some(boot_identity), None)
             if validate_token(token).is_ok() && is_valid_runtime_boot_identity(boot_identity) =>
         {
             classify_unlocked_unix_marker(path, token, raw_pid, boot_identity)
-        }
-        (Some("gone"), Some(token), None, None, None) if validate_token(token).is_ok() => {
-            LeaseObservation::Gone
         }
         _ => LeaseObservation::Unknown,
     }
@@ -333,7 +340,9 @@ fn classify_unlocked_launch_marker(path: &Path, token: &str) -> LeaseObservation
         crate::unix_process_tree::tagged_runtime_exists(token),
     ) {
         (_, Ok(true)) => LeaseObservation::Active,
-        (Ok(false), Ok(false)) => LeaseObservation::Gone,
+        (Ok(false), Ok(false)) => LeaseObservation::GenerationGone {
+            launch_token: token.to_owned(),
+        },
         _ => LeaseObservation::Unknown,
     }
 }
@@ -354,7 +363,10 @@ fn classify_unlocked_unix_marker(
         return LeaseObservation::Unknown;
     };
     if boot_identity != current_boot_identity {
-        return LeaseObservation::Gone;
+        return LeaseObservation::PreviousBoot {
+            boot_identity: boot_identity.to_owned(),
+            launch_token: token.to_owned(),
+        };
     }
     let Some(pid) = raw_pid
         .parse::<i32>()
@@ -507,9 +519,12 @@ fn write_marker(file: &mut File, marker: &str) -> io::Result<()> {
 }
 
 fn validate_token(token: &str) -> io::Result<()> {
-    Uuid::parse_str(token)
-        .map(|_| ())
-        .map_err(|_| io::Error::other("provider runtime lease token is invalid"))
+    let parsed = Uuid::parse_str(token)
+        .map_err(|_| io::Error::other("provider runtime lease token is invalid"))?;
+    if parsed.to_string() != token {
+        return Err(io::Error::other("provider runtime lease token is invalid"));
+    }
+    Ok(())
 }
 
 fn runtime_lease_path(room_id: &str, session_id: &str) -> io::Result<PathBuf> {
@@ -578,7 +593,7 @@ mod tests {
 
     fn previous_boot_handle(current: &str) -> String {
         let mut bytes = current.as_bytes().to_vec();
-        let first_boot_digit = "runtime-v4-".len();
+        let first_boot_digit = "runtime-v5-".len();
         bytes[first_boot_digit] = if bytes[first_boot_digit] == b'0' {
             b'1'
         } else {
@@ -593,7 +608,9 @@ mod tests {
             .unwrap_or_else(|error| panic!("prepare runtime lease: {error}"));
         assert_eq!(
             observe_runtime_lease("lease-test-room", "lease-test-session"),
-            LeaseObservation::Gone
+            LeaseObservation::GenerationGone {
+                launch_token: lease.token().to_owned()
+            }
         );
         let mut lease = lease;
         lease.release_and_remove();
@@ -628,7 +645,9 @@ mod tests {
         lease.release_launch_lifetime();
         assert_eq!(
             observe_runtime_lease("lease-launch-room", "lease-launch-session"),
-            LeaseObservation::Gone
+            LeaseObservation::GenerationGone {
+                launch_token: lease.token().to_owned()
+            }
         );
         lease.cleanup_pre_effect();
     }
@@ -686,7 +705,9 @@ mod tests {
             .unwrap_or_else(|error| panic!("record guardian cleanup receipt: {error}"));
         assert_eq!(
             observe_runtime_lease("lease-lifetime-room", "lease-lifetime-session"),
-            LeaseObservation::Gone
+            LeaseObservation::GenerationGone {
+                launch_token: lease.token().to_owned()
+            }
         );
         lease.cleanup_pre_effect();
     }
@@ -703,13 +724,9 @@ mod tests {
         lease.release_launch_lifetime();
         let current_handle = lease.new_runtime_handle_id();
         let old_handle = previous_boot_handle(&current_handle);
-        let old_boot = old_handle
-            .strip_prefix("runtime-v4-")
-            .and_then(|value| value.split_once('-'))
-            .map_or_else(
-                || panic!("decode old-boot runtime handle"),
-                |(boot, _)| boot,
-            );
+        let old_boot = crate::runtime_boot::parse_handle_id(&old_handle)
+            .unwrap_or_else(|error| panic!("decode old-boot runtime handle: {error}"))
+            .boot_identity;
         let mut file = std::fs::OpenOptions::new()
             .read(true)
             .write(true)
@@ -726,7 +743,10 @@ mod tests {
             .unwrap_or_else(|error| panic!("unlock old-boot runtime lease: {error}"));
         assert_eq!(
             observe_runtime_lease("lease-old-boot-room", "lease-old-boot-session"),
-            LeaseObservation::Gone
+            LeaseObservation::PreviousBoot {
+                boot_identity: old_boot,
+                launch_token: lease.token().to_owned()
+            }
         );
         lease.cleanup_pre_effect();
     }

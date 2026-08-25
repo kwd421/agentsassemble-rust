@@ -82,6 +82,7 @@ pub(crate) async fn execute_agent_start(
             &command.action,
             &reservation.runtime_handle_id,
             &reservation.runtime_owner_id,
+            &reservation.runtime_lease_token,
         )
         .await;
     let authorized = match authorized {
@@ -280,6 +281,7 @@ pub(crate) async fn execute_agent_stop(
                     &effect.session_id,
                     &effect.runtime_handle_id,
                     &effect.runtime_owner_id,
+                    &effect.runtime_lease_token,
                 )
                 .await;
             if let Err(error) = stop {
@@ -322,6 +324,7 @@ pub(crate) async fn execute_agent_stop(
                     &effect.session_id,
                     &effect.runtime_handle_id,
                     &effect.runtime_owner_id,
+                    &effect.runtime_lease_token,
                 )
                 .await;
             match store
@@ -389,6 +392,7 @@ fn persisted_start(started: ProviderRuntimeStarted) -> AgentRuntimeStarted {
     AgentRuntimeStarted {
         runtime_handle_id: started.runtime_handle_id,
         runtime_owner_id: started.runtime_owner_id,
+        runtime_lease_token: started.runtime_lease_token,
         provider_session_id: started.provider_session_id,
         runtime_reused: started.runtime_reused,
         provider_session_reused: started.provider_session_reused,

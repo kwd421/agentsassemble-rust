@@ -252,7 +252,15 @@ fn validate_candidate_authority(
     if active_turn_authority(session).is_err() {
         return Err(invalid_stored_authority());
     }
-    if session.runtime_handle_id.is_empty() != session.runtime_owner_id.is_empty() {
+    let runtime_identity_empty = [
+        session.runtime_handle_id.as_str(),
+        session.runtime_owner_id.as_str(),
+        session.runtime_lease_token.as_str(),
+    ]
+    .map(str::is_empty);
+    if !runtime_identity_empty.iter().all(|empty| *empty)
+        && !runtime_identity_empty.iter().all(|empty| !*empty)
+    {
         return Err(invalid_stored_authority());
     }
     let lifecycle_fields = [
@@ -492,6 +500,7 @@ pub(crate) fn reconcile_gone(session: &mut DurableAgentSession) -> Result<bool, 
     {
         session.runtime_handle_id.clear();
         session.runtime_owner_id.clear();
+        session.runtime_lease_token.clear();
         "prepared".clone_into(&mut session.lifecycle_intent_status);
         "starting".clone_into(&mut session.public.runtime_status);
         session.public.provider_session_active = false;
@@ -550,6 +559,7 @@ fn needs_reconciliation(session: &DurableAgentSession) -> bool {
     ACTIVE_RUNTIME_STATES.contains(&session.public.runtime_status.as_str())
         || !session.runtime_handle_id.is_empty()
         || !session.runtime_owner_id.is_empty()
+        || !session.runtime_lease_token.is_empty()
         || !session.lifecycle_intent_action.is_empty()
         || !session.lifecycle_intent_id.is_empty()
         || !session.lifecycle_intent_status.is_empty()
@@ -560,6 +570,7 @@ fn confirmed_stop_needs_reconciliation(session: &DurableAgentSession) -> bool {
         && session.lifecycle_intent_status == "effect_applied"
         && (!session.runtime_handle_id.is_empty()
             || !session.runtime_owner_id.is_empty()
+            || !session.runtime_lease_token.is_empty()
             || session.public.provider_session_active
             || session.public.provider_session_reused
             || !session.public.active_turn_id.is_empty()
@@ -579,6 +590,7 @@ fn reconcile_confirmed_stop(session: &mut DurableAgentSession) -> Result<(), Per
     session.public.turn_phase.clear();
     session.runtime_handle_id.clear();
     session.runtime_owner_id.clear();
+    session.runtime_lease_token.clear();
     session.public.updated_at = Utc::now();
     Ok(())
 }
@@ -630,16 +642,21 @@ fn disconnect_common(session: &mut DurableAgentSession) -> Result<(), Persistenc
     session.public.recovery_required = true;
     session.runtime_handle_id.clear();
     session.runtime_owner_id.clear();
+    session.runtime_lease_token.clear();
     session.public.updated_at = Utc::now();
     Ok(())
 }
 
 fn invalidate_previous_runtime_owner(session: &mut DurableAgentSession) -> bool {
-    if session.runtime_handle_id.is_empty() && session.runtime_owner_id.is_empty() {
+    if session.runtime_handle_id.is_empty()
+        && session.runtime_owner_id.is_empty()
+        && session.runtime_lease_token.is_empty()
+    {
         return false;
     }
     session.runtime_handle_id.clear();
     session.runtime_owner_id.clear();
+    session.runtime_lease_token.clear();
     session.public.updated_at = Utc::now();
     true
 }

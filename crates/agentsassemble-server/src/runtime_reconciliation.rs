@@ -259,10 +259,12 @@ pub(crate) async fn checkpoint_confirmed_shutdowns(
             continue;
         };
         let durable_identity_is_empty = candidate.session.runtime_handle_id.is_empty()
-            && candidate.session.runtime_owner_id.is_empty();
+            && candidate.session.runtime_owner_id.is_empty()
+            && candidate.session.runtime_lease_token.is_empty();
         let durable_identity_matches = candidate.session.runtime_handle_id
             == stopped.runtime_handle_id
-            && candidate.session.runtime_owner_id == stopped.runtime_owner_id;
+            && candidate.session.runtime_owner_id == stopped.runtime_owner_id
+            && candidate.session.runtime_lease_token == stopped.runtime_lease_token;
         if !durable_identity_is_empty && !durable_identity_matches {
             return Err(PersistenceError::CommandRejected {
                 code: "stale_reconciliation_candidate",
@@ -353,6 +355,7 @@ mod tests {
                 "agent.start",
                 &reservation.runtime_handle_id,
                 &reservation.runtime_owner_id,
+                &reservation.runtime_lease_token,
             )
             .await
             .unwrap_or_else(|error| panic!("authorize provider start: {error}"));
@@ -443,6 +446,7 @@ mod tests {
                 "agent.start",
                 &reservation.runtime_handle_id,
                 &reservation.runtime_owner_id,
+                &reservation.runtime_lease_token,
             )
             .await
             .unwrap_or_else(|error| panic!("authorize provider start: {error}"));

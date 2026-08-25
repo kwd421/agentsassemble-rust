@@ -46,6 +46,7 @@ async fn adopted_runtime_requeues_an_active_turn_instead_of_leaving_it_stuck() {
             "agent.start",
             "adopted-runtime",
             "previous-supervisor",
+            "lease-generation-1",
         )
         .await
         .unwrap_or_else(|error| panic!("authorize recovery start: {error}"));
@@ -58,6 +59,7 @@ async fn adopted_runtime_requeues_an_active_turn_instead_of_leaving_it_stuck() {
             &AgentRuntimeStarted {
                 runtime_handle_id: "adopted-runtime".to_owned(),
                 runtime_owner_id: "previous-supervisor".to_owned(),
+                runtime_lease_token: "lease-generation-1".to_owned(),
                 provider_session_id: "provider-thread".to_owned(),
                 runtime_reused: false,
                 provider_session_reused: false,

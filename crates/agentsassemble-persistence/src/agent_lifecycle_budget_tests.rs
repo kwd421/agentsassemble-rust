@@ -50,6 +50,7 @@ async fn only_a_stop_that_owns_runtime_cleanup_bypasses_write_budgets() {
     session.public.enabled = true;
     session.runtime_handle_id = "owned-runtime".to_owned();
     session.runtime_owner_id = "owned-supervisor".to_owned();
+    session.runtime_lease_token = "lease-generation-1".to_owned();
     save_session(&mut transaction, &session)
         .await
         .unwrap_or_else(|error| panic!("save running session: {error}"));

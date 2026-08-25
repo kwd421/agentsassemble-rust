@@ -252,6 +252,7 @@ async fn owned_stop_cancels_a_blocked_turn_without_waiting_for_inactivity() {
             &active.public.session_id,
             &started.runtime_handle_id,
             &started.runtime_owner_id,
+            &started.runtime_lease_token,
         ),
     )
     .await
@@ -270,6 +271,7 @@ async fn owned_stop_cancels_a_blocked_turn_without_waiting_for_inactivity() {
             &active.public.session_id,
             &started.runtime_handle_id,
             &started.runtime_owner_id,
+            &started.runtime_lease_token,
         )
         .await;
 }
@@ -391,6 +393,7 @@ async fn reused_codex_provider_turn_identity_is_poisoned() {
             &second.public.session_id,
             &started.runtime_handle_id,
             &started.runtime_owner_id,
+            &started.runtime_lease_token,
         )
         .await;
     let Err(replay_error) = adapter.send_turn(&second, &request).await else {
@@ -442,6 +445,7 @@ async fn assert_turn_error(
             &active.public.session_id,
             &started.runtime_handle_id,
             &started.runtime_owner_id,
+            &started.runtime_lease_token,
         )
         .await;
     let Err(replay_error) = adapter.send_turn(&active, &request).await else {
@@ -493,6 +497,9 @@ fn active_session(
         .runtime_owner_id
         .clone_from(&started.runtime_owner_id);
     active
+        .runtime_lease_token
+        .clone_from(&started.runtime_lease_token);
+    active
 }
 
 fn requests(path: &Path) -> Vec<Value> {
@@ -528,6 +535,7 @@ async fn stop_and_release(
             &session.public.session_id,
             &started.runtime_handle_id,
             &started.runtime_owner_id,
+            &started.runtime_lease_token,
         )
         .await
         .unwrap_or_else(|error| panic!("stop provider-turn fixture: {error}"));
@@ -537,6 +545,7 @@ async fn stop_and_release(
             &session.public.session_id,
             &started.runtime_handle_id,
             &started.runtime_owner_id,
+            &started.runtime_lease_token,
         )
         .await;
 }

@@ -253,6 +253,7 @@ mod tests {
             "runtime_profile_version",
             "provider_session_id",
             "runtime_handle_id",
+            "runtime_lease_token",
             "runtime_owner_id",
             "lifecycle_intent_action",
             "lifecycle_intent_id",
@@ -308,6 +309,7 @@ mod tests {
             "runtime_profile_key",
             "provider_session_id",
             "runtime_handle_id",
+            "runtime_lease_token",
             "runtime_owner_id",
             "lifecycle_intent_action",
         ] {

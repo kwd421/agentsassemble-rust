@@ -130,6 +130,7 @@ async fn post_spawn_pre_anchor_cancellation_requires_the_guardian_receipt() {
     assert!(retry.effect_uncertain);
     session.runtime_handle_id = retry.runtime_handle_id;
     session.runtime_owner_id = retry.runtime_owner_id;
+    session.runtime_lease_token = retry.runtime_lease_token;
     let mut observation = adapter.observe(&session).await;
     for _ in 0..1_000 {
         if observation == ProviderRuntimeObservation::Gone {

@@ -45,6 +45,7 @@ async fn lost_command_owner_recovers_effect_inflight_without_browser_request_ide
             "agent.start",
             &reservation.runtime_handle_id,
             &reservation.runtime_owner_id,
+            &reservation.runtime_lease_token,
         )
         .await
         .unwrap_or_else(|error| panic!("authorize start: {error}"));

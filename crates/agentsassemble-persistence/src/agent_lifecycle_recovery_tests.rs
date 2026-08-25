@@ -15,6 +15,7 @@ fn started(handle: &str, provider_session_id: &str) -> AgentRuntimeStarted {
     AgentRuntimeStarted {
         runtime_handle_id: handle.to_owned(),
         runtime_owner_id: "supervisor-instance-1".to_owned(),
+        runtime_lease_token: "lease-generation-1".to_owned(),
         provider_session_id: provider_session_id.to_owned(),
         runtime_reused: false,
         provider_session_reused: false,
@@ -703,6 +704,7 @@ async fn authorize_start(
             "agent.start",
             runtime_handle_id,
             "supervisor-instance-1",
+            "lease-generation-1",
         )
         .await
         .unwrap_or_else(|error| panic!("authorize start effect: {error}"));

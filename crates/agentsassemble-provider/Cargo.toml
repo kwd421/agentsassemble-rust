@@ -40,6 +40,7 @@ rustix.workspace = true
 [target.'cfg(target_os = "macos")'.dependencies]
 nix = { version = "0.31.3", default-features = false, features = ["event", "term"] }
 sysinfo.workspace = true
+sysctl.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 conpty-oxide = { version = "0.1.2", default-features = false, features = ["tokio"] }

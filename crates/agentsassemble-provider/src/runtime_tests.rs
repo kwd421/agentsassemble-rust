@@ -325,6 +325,9 @@ async fn codex_runtime_is_initialized_reused_and_stopped_by_exact_owner() {
     durable_session
         .runtime_owner_id
         .clone_from(&first.runtime_owner_id);
+    durable_session
+        .runtime_lease_token
+        .clone_from(&first.runtime_lease_token);
     assert_adopted(&adapter, &durable_session, &first).await;
     std::fs::write(
         &session.executable,
@@ -344,6 +347,7 @@ async fn codex_runtime_is_initialized_reused_and_stopped_by_exact_owner() {
             &session.public.session_id,
             &first.runtime_handle_id,
             &first.runtime_owner_id,
+            &first.runtime_lease_token,
         )
         .await
         .unwrap_or_else(|error| panic!("stop Codex fixture: {error}"));
@@ -353,6 +357,7 @@ async fn codex_runtime_is_initialized_reused_and_stopped_by_exact_owner() {
             &session.public.session_id,
             &first.runtime_handle_id,
             &first.runtime_owner_id,
+            &first.runtime_lease_token,
         )
         .await;
     adapter
@@ -424,6 +429,7 @@ async fn stop_kills_descendants_after_the_codex_leader_exits() {
             &session.public.session_id,
             &started.runtime_handle_id,
             &started.runtime_owner_id,
+            &started.runtime_lease_token,
         )
         .await;
     #[cfg(not(target_os = "macos"))]
@@ -442,6 +448,7 @@ async fn stop_kills_descendants_after_the_codex_leader_exits() {
             &session.public.session_id,
             &started.runtime_handle_id,
             &started.runtime_owner_id,
+            &started.runtime_lease_token,
         )
         .await;
     #[cfg(target_os = "macos")]
@@ -486,6 +493,7 @@ async fn stop_captures_a_reparented_descendant_from_a_new_session() {
             &session.public.session_id,
             &started.runtime_handle_id,
             &started.runtime_owner_id,
+            &started.runtime_lease_token,
         )
         .await;
     #[cfg(target_os = "linux")]
@@ -500,6 +508,7 @@ async fn stop_captures_a_reparented_descendant_from_a_new_session() {
         let mut durable_session = session.clone();
         durable_session.runtime_handle_id = started.runtime_handle_id.clone();
         durable_session.runtime_owner_id = started.runtime_owner_id.clone();
+        durable_session.runtime_lease_token = started.runtime_lease_token.clone();
         let fresh = ProviderAdapter::new();
         assert!(matches!(
             fresh.observe(&durable_session).await,
@@ -524,6 +533,7 @@ async fn stop_captures_a_reparented_descendant_from_a_new_session() {
                 &session.public.session_id,
                 &started.runtime_handle_id,
                 &started.runtime_owner_id,
+                &started.runtime_lease_token,
             )
             .await;
         wait_until(Duration::from_secs(2), || !process_exists(pid)).await;
@@ -545,6 +555,7 @@ async fn fresh_supervisor_uses_the_guardian_lease_before_reporting_gone() {
         .unwrap_or_else(|error| panic!("start guarded fixture: {error}"));
     session.runtime_handle_id = started.runtime_handle_id;
     session.runtime_owner_id = started.runtime_owner_id;
+    session.runtime_lease_token = started.runtime_lease_token;
     let fresh = ProviderAdapter::new();
     assert!(matches!(
         fresh.observe(&session).await,

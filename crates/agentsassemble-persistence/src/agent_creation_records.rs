@@ -137,26 +137,7 @@ async fn create_agent_records(
         created_at: now,
         updated_at: now,
     };
-    let mut session = DurableAgentSession {
-        public: public_session.clone(),
-        executable: draft.executable.clone(),
-        executable_identity: draft.executable_identity.clone(),
-        workspace: draft.workspace.clone(),
-        workspace_identity: draft.workspace_identity.clone(),
-        runtime_profile_key: draft.runtime_profile_key.clone(),
-        runtime_profile_version: CURRENT_RUNTIME_PROFILE_VERSION,
-        provider_session_id: String::new(),
-        runtime_handle_id: String::new(),
-        runtime_owner_id: String::new(),
-        pending_inputs: Vec::new(),
-        inflight_inputs: Vec::new(),
-        active_source_event_id: String::new(),
-        input_up_to_event_id: String::new(),
-        input_up_to_seq: 0,
-        lifecycle_intent_action: String::new(),
-        lifecycle_intent_id: String::new(),
-        lifecycle_intent_status: String::new(),
-    };
+    let mut session = new_durable_session(public_session.clone(), draft);
     if let Some(operation_id) = start_operation_id {
         prepare_start(&mut session, operation_id);
     }
@@ -170,6 +151,30 @@ async fn create_agent_records(
         result,
         committed_events,
     })
+}
+
+fn new_durable_session(public: AgentSession, draft: &AgentSessionDraft) -> DurableAgentSession {
+    DurableAgentSession {
+        public,
+        executable: draft.executable.clone(),
+        executable_identity: draft.executable_identity.clone(),
+        workspace: draft.workspace.clone(),
+        workspace_identity: draft.workspace_identity.clone(),
+        runtime_profile_key: draft.runtime_profile_key.clone(),
+        runtime_profile_version: CURRENT_RUNTIME_PROFILE_VERSION,
+        provider_session_id: String::new(),
+        runtime_handle_id: String::new(),
+        runtime_owner_id: String::new(),
+        runtime_lease_token: String::new(),
+        pending_inputs: Vec::new(),
+        inflight_inputs: Vec::new(),
+        active_source_event_id: String::new(),
+        input_up_to_event_id: String::new(),
+        input_up_to_seq: 0,
+        lifecycle_intent_action: String::new(),
+        lifecycle_intent_id: String::new(),
+        lifecycle_intent_status: String::new(),
+    }
 }
 
 async fn insert_agent_authority(

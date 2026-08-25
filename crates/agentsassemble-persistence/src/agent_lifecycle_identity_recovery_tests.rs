@@ -151,10 +151,61 @@ async fn unconfirmed_start_rejects_a_substituted_runtime_identity() {
     assert_eq!(current.session.lifecycle_intent_status, "effect_inflight");
 }
 
+#[tokio::test]
+async fn durable_runtime_identity_rejects_a_missing_lease_generation() {
+    let (store, principal, _directory) = fixture().await;
+    let payload = json!({"agent_id": AGENT_ID});
+    let AgentStartPlan::Start(start) = store
+        .prepare_agent_start(&principal, "missing-lease-generation", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare identity-bound start: {error}"))
+    else {
+        panic!("stopped session must require an effect");
+    };
+    authorize_start(
+        &store,
+        &principal,
+        "missing-lease-generation",
+        &payload,
+        &start,
+        "authorized-runtime",
+    )
+    .await;
+    let encoded = sqlx::query_scalar::<_, String>(
+        "SELECT session_json FROM agent_sessions WHERE room_id = 'general' AND session_id = ?",
+    )
+    .bind(AGENT_ID)
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("read durable Agent Session: {error}"));
+    let mut value: Value = serde_json::from_str(&encoded)
+        .unwrap_or_else(|error| panic!("decode durable Agent Session: {error}"));
+    value
+        .as_object_mut()
+        .unwrap_or_else(|| panic!("durable Agent Session must be an object"))
+        .remove("runtime_lease_token");
+    sqlx::query(
+        "UPDATE agent_sessions SET session_json = ? WHERE room_id = 'general' AND session_id = ?",
+    )
+    .bind(value.to_string())
+    .bind(AGENT_ID)
+    .execute(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("inject missing lease generation: {error}"));
+
+    assert!(
+        store
+            .load_runtime_reconciliation_candidates()
+            .await
+            .is_err()
+    );
+}
+
 fn started(handle: &str, provider_session_id: &str) -> AgentRuntimeStarted {
     AgentRuntimeStarted {
         runtime_handle_id: handle.to_owned(),
         runtime_owner_id: "supervisor-instance-1".to_owned(),
+        runtime_lease_token: "lease-generation-1".to_owned(),
         provider_session_id: provider_session_id.to_owned(),
         runtime_reused: false,
         provider_session_reused: false,
@@ -166,6 +217,7 @@ fn reused_started(provider_session_id: &str) -> AgentRuntimeStarted {
     AgentRuntimeStarted {
         runtime_handle_id: "second-runtime".to_owned(),
         runtime_owner_id: "supervisor-instance-1".to_owned(),
+        runtime_lease_token: "lease-generation-1".to_owned(),
         provider_session_id: provider_session_id.to_owned(),
         runtime_reused: false,
         provider_session_reused: true,
@@ -190,6 +242,7 @@ async fn authorize_start(
             "agent.start",
             runtime_handle_id,
             "supervisor-instance-1",
+            "lease-generation-1",
         )
         .await
         .unwrap_or_else(|error| panic!("authorize start effect: {error}"));

@@ -347,6 +347,7 @@ async fn stop_and_release(
             &session.public.session_id,
             &started.runtime_handle_id,
             &started.runtime_owner_id,
+            &started.runtime_lease_token,
         )
         .await
         .unwrap_or_else(|error| panic!("stop provider-session fixture: {error}"));
@@ -356,6 +357,7 @@ async fn stop_and_release(
             &session.public.session_id,
             &started.runtime_handle_id,
             &started.runtime_owner_id,
+            &started.runtime_lease_token,
         )
         .await;
 }

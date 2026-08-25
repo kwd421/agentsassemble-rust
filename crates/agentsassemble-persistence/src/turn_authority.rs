@@ -98,6 +98,7 @@ mod tests {
             provider_session_id: "test-session".to_owned(),
             runtime_handle_id: "test-handle".to_owned(),
             runtime_owner_id: "test-owner".to_owned(),
+            runtime_lease_token: "test-lease-generation".to_owned(),
             pending_inputs: Vec::new(),
             inflight_inputs: Vec::new(),
             active_source_event_id: String::new(),

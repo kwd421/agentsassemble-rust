@@ -80,8 +80,15 @@ pub(crate) fn validate_runtime_started(
             "Provider start did not return its supervisor ownership identity.",
         ));
     }
+    if started.runtime_lease_token.is_empty() {
+        return Err(rejected_code(
+            "runtime_start_unconfirmed",
+            "Provider start did not return its runtime lease generation.",
+        ));
+    }
     if session.runtime_handle_id != started.runtime_handle_id
         || session.runtime_owner_id != started.runtime_owner_id
+        || session.runtime_lease_token != started.runtime_lease_token
     {
         return Err(rejected_code(
             "runtime_owner_mismatch",
@@ -138,6 +145,7 @@ pub(crate) fn agent_stop_requires_cleanup(session: &DurableAgentSession) -> bool
         "stopped" | "available"
     ) || !session.runtime_handle_id.is_empty()
         || !session.runtime_owner_id.is_empty()
+        || !session.runtime_lease_token.is_empty()
         || !lifecycle_intent_is_empty(session)
 }
 

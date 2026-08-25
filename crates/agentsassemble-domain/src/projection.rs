@@ -38,6 +38,7 @@ const PRIVATE_PUBLIC_KEYS: &[&str] = &[
     "room_publication_proof",
     "room_publication_turn_id",
     "runtime_handle_id",
+    "runtime_lease_token",
     "runtime_owner_id",
     "runtime_profile_key",
     "runtime_profile_version",

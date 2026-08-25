@@ -24,6 +24,7 @@ fn started(
     Ok(ProviderRuntimeStarted {
         runtime_handle_id: runtime.handle_id.clone(),
         runtime_owner_id: runtime.owner_id.clone(),
+        runtime_lease_token: runtime.lease_token.clone(),
         provider_session_id: attachment.provider_session_id,
         runtime_reused,
         provider_session_reused: attachment.reused,
@@ -111,9 +112,12 @@ pub(super) fn validate_owned_runtime(
         session.runtime_handle_id.is_empty() || session.runtime_handle_id == runtime.handle_id;
     let durable_owner_matches =
         session.runtime_owner_id.is_empty() || session.runtime_owner_id == runtime.owner_id;
+    let durable_lease_matches = session.runtime_lease_token.is_empty()
+        || session.runtime_lease_token == runtime.lease_token;
     if runtime.profile_key != session.runtime_profile_key
         || !durable_handle_matches
         || !durable_owner_matches
+        || !durable_lease_matches
     {
         return Err(ProviderAdapterError::uncertain(
             DriverError::new(

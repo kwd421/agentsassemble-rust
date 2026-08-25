@@ -88,6 +88,7 @@ fn started() -> AgentRuntimeStarted {
     AgentRuntimeStarted {
         runtime_handle_id: "runtime-1".to_owned(),
         runtime_owner_id: "supervisor-1".to_owned(),
+        runtime_lease_token: "lease-generation-1".to_owned(),
         provider_session_id: "provider-session-1".to_owned(),
         runtime_reused: false,
         provider_session_reused: false,
@@ -133,8 +134,7 @@ async fn authorize_create_start(
             request_id,
             payload,
             &effect.operation_id,
-            runtime_handle_id,
-            runtime_owner_id,
+            (runtime_handle_id, runtime_owner_id, "lease-generation-1"),
         )
         .await
         .unwrap_or_else(|error| panic!("authorize create/start: {error}"));
@@ -276,8 +276,7 @@ async fn safe_start_failure_replays_the_same_terminal_rejection() {
             "create-start-safe-failure",
             &payload,
             &effect.operation_id,
-            "runtime-1",
-            "supervisor-1",
+            ("runtime-1", "supervisor-1", "lease-generation-1"),
         )
         .await
         .unwrap_or_else(|error| panic!("authorize create/start: {error}"));
@@ -365,8 +364,11 @@ async fn restart_uncertain_create_start_keeps_one_unresolved_request() {
             "create-start-uncertain",
             &payload,
             &effect.operation_id,
-            "uncertain-runtime",
-            "supervisor-instance-1",
+            (
+                "uncertain-runtime",
+                "supervisor-instance-1",
+                "lease-generation-1",
+            ),
         )
         .await
         .unwrap_or_else(|error| panic!("authorize create/start: {error}"));
@@ -452,8 +454,11 @@ async fn startup_gone_keeps_created_identity_and_terminalizes_its_old_start() {
             "create-start-abandoned",
             &payload,
             &effect.operation_id,
-            "create-runtime-abandoned",
-            "supervisor-dead",
+            (
+                "create-runtime-abandoned",
+                "supervisor-dead",
+                "lease-generation-1",
+            ),
         )
         .await
         .unwrap_or_else(|error| panic!("authorize create/start: {error}"));

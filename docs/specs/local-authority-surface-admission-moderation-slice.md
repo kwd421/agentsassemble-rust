@@ -317,6 +317,14 @@ ends in runtime-gone. If neither can be proved, the effect remains fail-closed a
 the provider mute capability is absent. Reachable parity providers implement the
 verified control contract before advertising mute.
 
+Before process-wide admission proceeds, lifecycle recovery uses clean schema 22. Its
+private runtime identity is one indivisible handle/owner/lease-token tuple. Runtime-v5
+cross-binds the launch token with the hashed OS boot identity; an old-boot absence proof
+is accepted only when every available durable and lease witness names that same boot and
+launch generation. macOS uses immutable `kern.bootsessionuuid` through the maintained
+safe `sysctl` boundary. Missing, malformed, substituted, or unknown evidence remains
+`Ambiguous`; schema 21 is rejected without conversion or compatibility behavior.
+
 `InterruptIssuedWaitingTerminal` is never finalized from issue state alone. Exact
 request quiescence, exact runtime gone, or exact-generation provider terminal
 observation is required. Unmute commits canonical `muted=false` plus pending

@@ -1365,13 +1365,13 @@ re-reviews remain required before this correction is complete.
 
 ### Durable effect-authorization and exact-cleanup correction candidate: 2026-08-25
 
-Clean schema 21 makes the external-effect boundary explicit. A start is first `prepared`
+Clean schema 22 makes the external-effect boundary explicit. A start is first `prepared`
 without provider authority, then the common adapter reserves the exact runtime
-handle/owner/custody identity and persistence atomically authorizes `effect_inflight`
+handle/owner/custody generation and persistence atomically authorizes `effect_inflight`
 before provider I/O. An uncertain return becomes `unconfirmed`; a confirmed stop awaiting
 its result checkpoint becomes `effect_applied`. The production adapter has no start entry
 point that bypasses that durable authorization, and persistence rejects empty or
-substituted runtime identity. Schema 20 is rejected without migration, compatibility, or
+substituted runtime identity. Schema 21 is rejected without migration, compatibility, or
 fallback behavior.
 
 The browser command owner and server-lifetime reconciler now acquire the same exact RAII
@@ -1422,19 +1422,72 @@ retain its request, operation, handle, owner, and recovery-required state. Only 
 `Gone` transition may release it.
 
 New Unix runtime handles and activated markers bind a platform-domain-separated hash of
-the exact OS boot identity. Linux/Android use the kernel boot UUID and macOS uses the
-kernel boot epoch returned by the maintained `sysinfo` boundary. The value is read and
-hashed once per server process; errors are cached fail-closed. A matching boot keeps all
-existing lifetime/tag/receipt rules. A different exact boot proves the earlier OS process
-cannot exist, including when the lease file was cleared, and enters the existing `Gone`
-recovery UOW. Invalid or earlier handle formats are not treated as proof. Clean schema 21
-removes the now-unreachable `owner_lost` reservation state, and schema 20 is rejected
-without migration, compatibility, or fallback code.
+the exact OS boot identity. Linux/Android use the kernel boot UUID. The first pushed
+correction used macOS `sysinfo::System::boot_time`; manual Daybreaker and independent web
+review both rejected that source because XNU may adjust the wall-clock-derived boot epoch
+during one OS boot. The replacement reads immutable `kern.bootsessionuuid` through the
+maintained safe `sysctl` crate, parses and canonicalizes its UUID representation, and
+never derives authority from wall-clock time. The value is read and hashed once per
+server process; errors are cached fail-closed.
 
-After the final review corrections, `make verify` passed every mandatory
+The same review found that an old-boot marker or a syntactically old handle could prove
+absence without proving that it belonged to the same launch generation as the durable
+Agent Session. Runtime-v5 now carries both the boot hash and exact launch token, while
+schema 22 requires the same token beside the durable handle and owner. A different boot
+enters the existing `Gone` recovery UOW only when marker, handle, and durable token agree;
+when the lease file is missing, the strict old-boot handle and required durable token must
+still agree. `Unknown` is never upgraded from a handle alone. A current handle with an old
+marker, substituted token, missing token, malformed identity, or source/observation error
+remains `Ambiguous`. Schema 21 and earlier handles are rejected without migration,
+compatibility, or fallback code.
+
+Focused regressions exercise the corrected proof lattice: a matching old marker/handle/token
+is `Gone`; an old marker with a current durable handle, a substituted launch token, and an
+old handle under `Unknown` are all `Ambiguous`; a missing lease is `Gone` only for a strict
+old-boot handle whose token matches the required durable token. A persistence corruption
+test removes `runtime_lease_token` from a schema-22 Agent Session and proves that candidate
+loading rejects it rather than supplying a default. The macOS source-boundary test accepts
+the uppercase UUID form returned by the kernel, canonicalizes it, and proves stable hashing
+of the boot-session identity. Full gate results are recorded below after the correction is
+verified.
+
+The function-structure intent is reviewable separately from the security change. Boot
+identity still performs one kernel read and one SHA-256 operation per process because the
+existing `OnceLock` remains the owner; recovery does not add a kernel call or process scan
+per candidate. Runtime-v5 parsing is a bounded fixed-offset pass over an opaque private
+identifier, avoiding delimiter ambiguity without an allocation-heavy generic parser. The
+preserved invariants are strict format rejection, no public boot/token disclosure, and
+fail-closed cached source errors. The accepted costs are one required lease-token string
+per durable live-runtime identity and carrying that same bounded string through start/stop
+effects. This correction makes no workload-calibrated latency claim; focused tests,
+warning-denied checks, and the mandatory suite are the verification evidence.
+
+The schema-22 field propagation made the room event loop's provider-result future
+16,624 bytes and crossed the warning-denied `large_futures` limit. The owning
+`room_runtime` branch now boxes only that completed-provider-result future. The intent is
+to keep the long-lived room-loop future bounded instead of embedding the complete result
+handler state in every room task. Ordering, cancellation, join-set ownership, room-tool
+ingress, and durable publication remain in the same branch and await point. The accepted
+trade-off is one heap allocation per completed provider result; no allocation is added to
+ordinary room commands, publications, or tool inputs. Warning-denied Clippy and the eight
+real WebSocket Agent Session boundary tests verify the changed async boundary; no latency
+or throughput improvement is claimed without workload measurement.
+
+The gate-driven function splits also preserve their old owners instead of adding lint
+exceptions. Durable Agent Session construction moved into one pure constructor while the
+creation transaction still owns capacity, cursor, insert, event, and result ordering; the
+pre-start result deliberately retains the stopped public projection. Provider turn health
+checks moved into one helper without changing lock lifetime, cancellation priority, health
+call count, or error classification. Create/start authorization groups the inseparable
+handle/owner/lease-token triple at its call boundary and immediately destructures it at the
+existing persistence owner. These are maintainability changes, not performance claims;
+the complete lifecycle/provider regressions and unchanged structure gates are their
+verification evidence.
+
+After this schema-22 correction, `make verify` passed every mandatory
 architecture, source-growth, logical-line, and 800-line gate; generated bindings;
 production frontend and original-CSS verification; 72 frontend files with 356 tests; 15
-Tauri tests; 18 domain, 93 persistence, four protocol, 104 provider, and 21 server unit
+Tauri tests; 18 domain, 94 persistence, four protocol, 106 provider, and 21 server unit
 tests; 23 Rust integration tests; documentation tests; warning-denied workspace/desktop
 Clippy; and final diff validation. The lifetime handshake was split at its owning boundary
 into `guardian_lifetime.rs`; `guardian.rs` is 796 lines and `unix_process_tree.rs` remains
@@ -1455,7 +1508,7 @@ terminal-history allocation at their existing owners. The preserved invariants a
 reconciliation-before-admission, dynamic discovery and corruption detection across every
 Agent Session, exact candidate CAS, bounded paging/concurrency/timeout, and fail-closed
 uncertainty. A pending-reservation-first alternative was measured with SQLite `EXPLAIN
-QUERY PLAN` and rejected: without a schema-21 status/session index it scans the complete
+QUERY PLAN` and rejected: without a current-schema status/session index it scans the complete
 reservation history and builds a DISTINCT temporary B-tree each second. Adding that index
 would be an explicit future schema, not a hidden migration here. The accepted trade-off is
 the existing bounded per-session candidate read until that schema is designed and
@@ -1483,6 +1536,13 @@ without compiling or inventing Windows boot authority. A warning-denied full Win
 Clippy result is not claimed: the existing Windows-only provider tests and helpers still
 contain unrelated warning-denied lint debt. The mandatory host workspace and desktop
 Clippy gates above remain clean.
+
+The schema-22 correction reran that installed rustup toolchain/target pair explicitly and
+passed the workspace all-target/all-feature Windows check, including the required lease
+token through the common persistence/server path and the token-bound Windows handle.
+An initial attempt with the Homebrew compiler correctly failed before checking project
+code because it did not own the rustup target libraries; it is not counted as evidence.
+Both attempts used isolated temporary Cargo target directories that were cleaned on exit.
 
 Packaged Computer Use and both pushed exact-diff re-reviews remain required before this
 correction is closed.

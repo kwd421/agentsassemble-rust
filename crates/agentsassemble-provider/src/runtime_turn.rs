@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use agentsassemble_domain::{DurableAgentSession, has_visible_text};
+use tokio_util::sync::CancellationToken;
 
 use super::{
     DriverError, ProviderAdapter, ProviderAdapterError, ProviderDriver, RuntimeState,
@@ -54,7 +55,7 @@ impl ProviderAdapter {
             .existing_slot(&session.public.room_id, &session.public.session_id)
             .await
             .ok_or_else(|| owner_mismatch(session))?;
-        let (driver, cancellation, handle_id, owner_id) = {
+        let (driver, cancellation, handle_id, owner_id, lease_token) = {
             let slot = slot.lock().await;
             let RuntimeState::Running(runtime) = &slot.state else {
                 return Err(owner_mismatch(session));
@@ -71,34 +72,11 @@ impl ProviderAdapter {
                 runtime.turn_cancellation.clone(),
                 runtime.handle_id.clone(),
                 runtime.owner_id.clone(),
+                runtime.lease_token.clone(),
             )
         };
         let mut driver = driver.lock().await;
-        if cancellation.is_cancelled() {
-            return Err(ProviderAdapterError::uncertain(
-                turn_cancelled(),
-                &handle_id,
-                &owner_id,
-            ));
-        }
-        match driver.is_alive().await {
-            Ok(true) => {}
-            Ok(false) => {
-                return Err(ProviderAdapterError::uncertain(
-                    DriverError::new(
-                        "provider_runtime_exited",
-                        "The owned provider runtime exited before its assigned turn.",
-                    ),
-                    &handle_id,
-                    &owner_id,
-                ));
-            }
-            Err(error) => {
-                return Err(ProviderAdapterError::uncertain(
-                    error, &handle_id, &owner_id,
-                ));
-            }
-        }
+        require_live_driver(driver.as_mut(), &cancellation, &handle_id, &owner_id).await?;
         if request.room_observation.is_some() {
             driver
                 .begin_room_observation(request)
@@ -129,11 +107,15 @@ impl ProviderAdapter {
                             &session.public.session_id,
                             &handle_id,
                             &owner_id,
+                            &lease_token,
                         )
                         .await
                     {
                         Ok(()) => Err(ProviderAdapterError::confirmed_stopped(
-                            error, &handle_id, &owner_id,
+                            error,
+                            &handle_id,
+                            &owner_id,
+                            &lease_token,
                         )),
                         Err(stop_error) => Err(stop_error),
                     };
@@ -143,6 +125,33 @@ impl ProviderAdapter {
                 ))
             }
         }
+    }
+}
+
+async fn require_live_driver(
+    driver: &mut dyn ProviderDriver,
+    cancellation: &CancellationToken,
+    handle_id: &str,
+    owner_id: &str,
+) -> Result<(), ProviderAdapterError> {
+    if cancellation.is_cancelled() {
+        return Err(ProviderAdapterError::uncertain(
+            turn_cancelled(),
+            handle_id,
+            owner_id,
+        ));
+    }
+    match driver.is_alive().await {
+        Ok(true) => Ok(()),
+        Ok(false) => Err(ProviderAdapterError::uncertain(
+            DriverError::new(
+                "provider_runtime_exited",
+                "The owned provider runtime exited before its assigned turn.",
+            ),
+            handle_id,
+            owner_id,
+        )),
+        Err(error) => Err(ProviderAdapterError::uncertain(error, handle_id, owner_id)),
     }
 }
 
@@ -267,6 +276,7 @@ fn validate_exact_owner(
 ) -> Result<(), ProviderAdapterError> {
     if session.runtime_handle_id != runtime.handle_id
         || session.runtime_owner_id != runtime.owner_id
+        || session.runtime_lease_token != runtime.lease_token
         || session.provider_session_id.is_empty()
         || !session.public.provider_session_active
         || !session.public.enabled

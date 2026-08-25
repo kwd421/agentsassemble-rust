@@ -50,6 +50,7 @@ pub(super) fn attached_session(now: DateTime<Utc>) -> DurableAgentSession {
         provider_session_id: "provider-thread-1".to_owned(),
         runtime_handle_id: "owned-runtime-1".to_owned(),
         runtime_owner_id: "supervisor-instance-1".to_owned(),
+        runtime_lease_token: "lease-generation-1".to_owned(),
         pending_inputs: Vec::new(),
         inflight_inputs: Vec::new(),
         active_source_event_id: String::new(),

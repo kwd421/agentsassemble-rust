@@ -203,6 +203,7 @@ async fn same_sidecar_recovers_unconfirmed_start_after_browser_identity_is_lost(
             "agent.start",
             &reservation.runtime_handle_id,
             &reservation.runtime_owner_id,
+            &reservation.runtime_lease_token,
         )
         .await
         .unwrap_or_else(|error| panic!("authorize interrupted start: {error}"));
@@ -356,6 +357,7 @@ async fn stage_unconfirmed_running_reuse(
             "agent.start",
             &reservation.runtime_handle_id,
             &reservation.runtime_owner_id,
+            &reservation.runtime_lease_token,
         )
         .await
         .unwrap_or_else(|error| panic!("authorize running reuse: {error}"));

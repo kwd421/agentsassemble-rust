@@ -25,11 +25,12 @@ impl ProviderAdapter {
         if let RuntimeState::StopConfirmed {
             handle_id,
             owner_id,
-            ..
+            runtime_lease,
         } = &slot.state
         {
             return if handle_id == &session.runtime_handle_id
                 && owner_id == &session.runtime_owner_id
+                && runtime_lease.token() == session.runtime_lease_token
             {
                 ProviderRuntimeObservation::Gone
             } else {
@@ -42,6 +43,7 @@ impl ProviderAdapter {
             return ProviderRuntimeObservation::Gone;
         };
         if runtime.handle_id != session.runtime_handle_id
+            || runtime.lease_token != session.runtime_lease_token
             || runtime.profile_key != session.runtime_profile_key
         {
             return ProviderRuntimeObservation::Ambiguous {
@@ -76,6 +78,7 @@ fn observe_launching_runtime(
     };
     if runtime.handle_id != session.runtime_handle_id
         || runtime.owner_id != session.runtime_owner_id
+        || runtime.runtime_lease.token() != session.runtime_lease_token
     {
         return Some(ProviderRuntimeObservation::Ambiguous {
             reason_code: "runtime_identity_mismatch".to_owned(),
@@ -100,14 +103,24 @@ fn observe_launching_runtime(
                 owner_id: runtime.owner_id.clone(),
                 reason_code: "provider_launch_cleanup_active".to_owned(),
             },
-            LeaseObservation::Gone => release_gone_launching_runtime(slot),
-            LeaseObservation::Missing | LeaseObservation::Unknown => {
-                ProviderRuntimeObservation::LeaseUncertain {
-                    handle_id: runtime.handle_id.clone(),
-                    owner_id: runtime.owner_id.clone(),
-                    reason_code: "provider_launch_cleanup_unconfirmed".to_owned(),
-                }
+            LeaseObservation::GenerationGone { launch_token }
+                if launch_token == runtime.runtime_lease.token() =>
+            {
+                release_gone_launching_runtime(slot)
             }
+            LeaseObservation::PreviousBoot { launch_token, .. }
+                if launch_token == runtime.runtime_lease.token() =>
+            {
+                release_gone_launching_runtime(slot)
+            }
+            LeaseObservation::GenerationGone { .. }
+            | LeaseObservation::PreviousBoot { .. }
+            | LeaseObservation::Missing
+            | LeaseObservation::Unknown => ProviderRuntimeObservation::LeaseUncertain {
+                handle_id: runtime.handle_id.clone(),
+                owner_id: runtime.owner_id.clone(),
+                reason_code: "provider_launch_cleanup_unconfirmed".to_owned(),
+            },
         },
     )
 }
@@ -167,7 +180,12 @@ pub(super) fn shutdown_launching_runtime(
         return Some(Ok(stopped));
     }
     if !runtime.runtime_lease.cleanup_receipt_is_present()
-        && observe_runtime_lease(&key.room_id, &key.session_id) != LeaseObservation::Gone
+        && !matches!(
+            observe_runtime_lease(&key.room_id, &key.session_id),
+            LeaseObservation::GenerationGone { launch_token }
+                | LeaseObservation::PreviousBoot { launch_token, .. }
+                if launch_token == runtime.runtime_lease.token()
+        )
     {
         return Some(Err(ProviderAdapterError::uncertain(
             DriverError::new(

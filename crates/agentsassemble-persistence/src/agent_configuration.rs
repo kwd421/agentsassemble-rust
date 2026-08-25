@@ -201,6 +201,7 @@ fn require_stopped_profile(session: &DurableAgentSession) -> Result<(), Persiste
         && session.public.active_turn_id.is_empty()
         && session.runtime_handle_id.is_empty()
         && session.runtime_owner_id.is_empty()
+        && session.runtime_lease_token.is_empty()
         && session.lifecycle_intent_action.is_empty()
         && session.lifecycle_intent_id.is_empty()
         && session.lifecycle_intent_status.is_empty();

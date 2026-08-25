@@ -227,6 +227,7 @@ impl DriverFactory for ProductionDriverFactory {
 pub struct ProviderRuntimeStarted {
     pub runtime_handle_id: String,
     pub runtime_owner_id: String,
+    pub runtime_lease_token: String,
     pub provider_session_id: String,
     pub runtime_reused: bool,
     pub provider_session_reused: bool,
@@ -237,6 +238,7 @@ pub struct ProviderRuntimeStarted {
 pub struct ProviderStartReservation {
     pub runtime_handle_id: String,
     pub runtime_owner_id: String,
+    pub runtime_lease_token: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -281,6 +283,7 @@ pub struct ProviderAdapterError {
     pub effect_uncertain: bool,
     pub runtime_handle_id: String,
     pub runtime_owner_id: String,
+    pub runtime_lease_token: String,
     pub runtime_stopped: bool,
 }
 
@@ -292,6 +295,7 @@ impl ProviderAdapterError {
             effect_uncertain: false,
             runtime_handle_id: String::new(),
             runtime_owner_id: String::new(),
+            runtime_lease_token: String::new(),
             runtime_stopped: false,
         }
     }
@@ -303,17 +307,35 @@ impl ProviderAdapterError {
             effect_uncertain: true,
             runtime_handle_id: handle_id.to_owned(),
             runtime_owner_id: owner_id.to_owned(),
+            runtime_lease_token: String::new(),
             runtime_stopped: false,
         }
     }
 
-    fn confirmed_stopped(error: DriverError, handle_id: &str, owner_id: &str) -> Self {
+    fn uncertain_with_lease(
+        error: DriverError,
+        handle_id: &str,
+        owner_id: &str,
+        lease_token: &str,
+    ) -> Self {
+        let mut uncertain = Self::uncertain(error, handle_id, owner_id);
+        lease_token.clone_into(&mut uncertain.runtime_lease_token);
+        uncertain
+    }
+
+    fn confirmed_stopped(
+        error: DriverError,
+        handle_id: &str,
+        owner_id: &str,
+        lease_token: &str,
+    ) -> Self {
         Self {
             code: error.code,
             message: error.message,
             effect_uncertain: false,
             runtime_handle_id: handle_id.to_owned(),
             runtime_owner_id: owner_id.to_owned(),
+            runtime_lease_token: lease_token.to_owned(),
             runtime_stopped: true,
         }
     }
@@ -362,6 +384,7 @@ struct RuntimeSlot {
 struct OwnedRuntime {
     handle_id: String,
     owner_id: String,
+    lease_token: String,
     profile_key: String,
     driver: Arc<Mutex<Box<dyn ProviderDriver>>>,
     turn_cancellation: CancellationToken,
@@ -403,6 +426,7 @@ impl ProviderAdapter {
         session_id: &str,
         handle_id: &str,
         owner_id: &str,
+        lease_token: &str,
     ) -> Result<(), ProviderAdapterError> {
         let slot = self
             .existing_slot(room_id, session_id)
@@ -420,7 +444,9 @@ impl ProviderAdapter {
         let mut slot = slot.lock().await;
         match &mut slot.state {
             RuntimeState::Running(runtime)
-                if runtime.handle_id == handle_id && runtime.owner_id == owner_id =>
+                if runtime.handle_id == handle_id
+                    && runtime.owner_id == owner_id
+                    && runtime.lease_token == lease_token =>
             {
                 runtime.turn_cancellation.cancel();
                 let mut driver = runtime.driver.lock().await;
@@ -448,8 +474,13 @@ impl ProviderAdapter {
             RuntimeState::StopConfirmed {
                 handle_id: confirmed_handle,
                 owner_id: confirmed_owner,
-                ..
-            } if confirmed_handle == handle_id && confirmed_owner == owner_id => Ok(()),
+                runtime_lease,
+            } if confirmed_handle == handle_id
+                && confirmed_owner == owner_id
+                && runtime_lease.token() == lease_token =>
+            {
+                Ok(())
+            }
             _ => Err(ProviderAdapterError::uncertain(
                 DriverError::new(
                     "runtime_owner_mismatch",
@@ -467,6 +498,7 @@ impl ProviderAdapter {
         session_id: &str,
         handle_id: &str,
         owner_id: &str,
+        lease_token: &str,
     ) {
         let Some(slot) = self.existing_slot(room_id, session_id).await else {
             return;
@@ -478,7 +510,9 @@ impl ProviderAdapter {
                 handle_id: confirmed_handle,
                 owner_id: confirmed_owner,
                 runtime_lease,
-            } if confirmed_handle == handle_id && confirmed_owner == owner_id
+            } if confirmed_handle == handle_id
+                && confirmed_owner == owner_id
+                && runtime_lease.token() == lease_token
         ) {
             let RuntimeState::StopConfirmed { runtime_lease, .. } = &mut slot.state else {
                 unreachable!("confirmed provider stop changed while locked");

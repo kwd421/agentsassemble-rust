@@ -19,6 +19,7 @@ pub(crate) fn authorize_start_effect(
     operation_id: &str,
     runtime_handle_id: &str,
     runtime_owner_id: &str,
+    runtime_lease_token: &str,
 ) -> Result<(), PersistenceError> {
     require_intent(
         session,
@@ -29,8 +30,11 @@ pub(crate) fn authorize_start_effect(
     )?;
     if runtime_handle_id.is_empty()
         || runtime_owner_id.is_empty()
+        || runtime_lease_token.is_empty()
         || (!session.runtime_handle_id.is_empty() && session.runtime_handle_id != runtime_handle_id)
         || (!session.runtime_owner_id.is_empty() && session.runtime_owner_id != runtime_owner_id)
+        || (!session.runtime_lease_token.is_empty()
+            && session.runtime_lease_token != runtime_lease_token)
     {
         return Err(rejected(
             "runtime_owner_mismatch",
@@ -39,6 +43,7 @@ pub(crate) fn authorize_start_effect(
     }
     runtime_handle_id.clone_into(&mut session.runtime_handle_id);
     runtime_owner_id.clone_into(&mut session.runtime_owner_id);
+    runtime_lease_token.clone_into(&mut session.runtime_lease_token);
     "available".clone_into(&mut session.public.status);
     session.public.enabled = true;
     if !matches!(
@@ -70,6 +75,7 @@ impl SqliteStore {
         command_action: &str,
         runtime_handle_id: &str,
         runtime_owner_id: &str,
+        runtime_lease_token: &str,
     ) -> Result<AgentStartEffect, PersistenceError> {
         if !matches!(command_action, START | RESUME) {
             return Err(rejected(
@@ -121,6 +127,7 @@ impl SqliteStore {
             operation_id,
             runtime_handle_id,
             runtime_owner_id,
+            runtime_lease_token,
         )?;
         save_session(&mut transaction, &session).await?;
         transaction.commit().await?;
@@ -202,7 +209,10 @@ impl SqliteStore {
 pub(crate) fn stop_effect(
     session: &DurableAgentSession,
 ) -> Result<AgentStopEffect, PersistenceError> {
-    if session.runtime_handle_id.is_empty() || session.runtime_owner_id.is_empty() {
+    if session.runtime_handle_id.is_empty()
+        || session.runtime_owner_id.is_empty()
+        || session.runtime_lease_token.is_empty()
+    {
         return Err(rejected(
             "runtime_handle_unavailable",
             "Provider shutdown requires an exact handle owned by the current supervisor.",
@@ -213,6 +223,7 @@ pub(crate) fn stop_effect(
         session_id: session.public.session_id.clone(),
         runtime_handle_id: session.runtime_handle_id.clone(),
         runtime_owner_id: session.runtime_owner_id.clone(),
+        runtime_lease_token: session.runtime_lease_token.clone(),
     })
 }
 
