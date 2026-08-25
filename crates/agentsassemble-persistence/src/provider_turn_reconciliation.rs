@@ -8,6 +8,7 @@ use crate::{
     AgentTurnAssignment, AgentTurnCommit, PersistenceError, ProviderTurnExecution,
     ProviderTurnExecutionPhase, ProviderTurnInterruptEffect, SqliteStore,
     agent_lifecycle::{load_session, save_session},
+    agent_reconciliation::load_candidate as load_lifecycle_candidate,
     provider_turn_effect::{load_optional_effect_in, require_exact_effect},
     provider_turn_execution::load_execution_in,
     room_turns::assign_pending_in,
@@ -389,7 +390,7 @@ impl SqliteStore {
             (None, None) => {}
             _ => return Err(stale_reconciliation()),
         }
-        if stop_effect_is_confirmed_by_runtime_gone(&session) {
+        if stop_effect_is_confirmed_by_runtime_gone(&mut transaction, &session).await? {
             crate::provider_turn_stop::terminalize_confirmed_stop_turn(&mut transaction, &session)
                 .await?;
             let mut session = session;
@@ -427,13 +428,36 @@ impl SqliteStore {
     }
 }
 
-fn stop_effect_is_confirmed_by_runtime_gone(session: &DurableAgentSession) -> bool {
-    session.lifecycle_intent_action == "stop"
-        && !session.lifecycle_intent_id.is_empty()
-        && matches!(
+async fn stop_effect_is_confirmed_by_runtime_gone(
+    transaction: &mut Transaction<'_, Sqlite>,
+    session: &DurableAgentSession,
+) -> Result<bool, PersistenceError> {
+    if session.lifecycle_intent_action != "stop"
+        || !matches!(
             session.lifecycle_intent_status.as_str(),
             "effect_inflight" | "unconfirmed" | "effect_applied"
         )
+    {
+        return Ok(false);
+    }
+    let lifecycle = load_lifecycle_candidate(
+        transaction,
+        &session.public.room_id,
+        &session.public.session_id,
+    )
+    .await?
+    .ok_or_else(invalid_reconciliation)?;
+    let reservation = lifecycle
+        .reservation
+        .as_ref()
+        .ok_or_else(invalid_reconciliation)?;
+    if lifecycle.session != *session
+        || reservation.action != "agent.stop"
+        || reservation.operation_id != session.lifecycle_intent_id
+    {
+        return Err(invalid_reconciliation());
+    }
+    Ok(true)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
