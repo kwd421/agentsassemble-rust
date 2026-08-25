@@ -282,6 +282,34 @@ mod tests {
     }
 
     #[test]
+    fn quiescence_ignores_abort_side_events_until_current_idle() {
+        let mut state = EventState::new("session-1", WaitMode::Quiescence);
+        for event in [
+            json!({
+                "type": "permission.asked",
+                "properties": {"sessionID": "session-1", "id": "permission-1"}
+            }),
+            json!({"type": "session.error", "properties": {"sessionID": "session-1"}}),
+            json!({
+                "type": "session.status",
+                "properties": {"sessionID": "session-1", "status": {"type": "busy"}}
+            }),
+        ] {
+            assert!(!state.accept(&event).unwrap_or_else(|error| {
+                panic!("accept non-terminal abort side event: {error}")
+            }));
+        }
+        assert!(
+            state
+                .accept(&json!({
+                    "type": "session.status",
+                    "properties": {"sessionID": "session-1", "status": {"type": "idle"}}
+                }))
+                .unwrap_or_else(|error| panic!("accept terminal idle event: {error}"))
+        );
+    }
+
+    #[test]
     fn model_may_arrive_late_but_cannot_change_or_remain_missing_at_completion() {
         let mut state = EventState::new("session-1", WaitMode::Turn);
         state
