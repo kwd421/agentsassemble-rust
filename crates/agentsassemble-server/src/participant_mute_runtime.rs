@@ -63,12 +63,23 @@ pub(crate) async fn resume_exact_interrupt(
     provider_adapter: &ProviderAdapter,
     effect: &ProviderTurnInterruptEffect,
 ) -> Result<Option<AgentTurnCommit>, PersistenceError> {
-    let authority = exact_authority(effect);
+    let claim = match store
+        .claim_provider_turn_interrupt_recovery(effect, &Uuid::new_v4().to_string())
+        .await
+    {
+        Ok(claim) => claim,
+        Err(PersistenceError::CommandUnresolved {
+            code: "provider_turn_effect_unresolved",
+            ..
+        }) => return Ok(None),
+        Err(error) => return Err(error),
+    };
+    let authority = exact_authority(&claim.effect);
     let Ok(mut control) = provider_adapter.begin_exact_turn(&authority).await else {
         return Ok(None);
     };
     let waiting = store
-        .authorize_provider_interrupt_recovery_wait(effect)
+        .authorize_provider_interrupt_recovery_wait(&claim)
         .await?;
     if control.disposition != ProviderTurnInterruptDisposition::Quiesced {
         control.request_interrupt();

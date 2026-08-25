@@ -285,8 +285,28 @@ async fn exact_live_control_can_resume_a_quarantined_interrupt_without_reissuing
         .provider_turn_interrupt_effect("general", AGENT_ID, assignment.turn_generation)
         .await
         .unwrap_or_else(|error| panic!("load quarantined interrupt: {error}"));
+    let competing_claim = store
+        .claim_provider_turn_interrupt_recovery(
+            &quarantined,
+            "10000000-0000-4000-8000-000000000201",
+        )
+        .await;
+    assert!(matches!(
+        competing_claim,
+        Err(crate::PersistenceError::CommandUnresolved {
+            code: "provider_turn_effect_unresolved",
+            ..
+        })
+    ));
+    let recovery_claim = store
+        .claim_provider_turn_interrupt_recovery(
+            &quarantined,
+            "10000000-0000-4000-8000-000000000101",
+        )
+        .await
+        .unwrap_or_else(|error| panic!("renew recovery interrupt claim: {error}"));
     let waiting = store
-        .authorize_provider_interrupt_recovery_wait(&quarantined)
+        .authorize_provider_interrupt_recovery_wait(&recovery_claim)
         .await
         .unwrap_or_else(|error| panic!("authorize exact recovery wait: {error}"));
     assert_eq!(

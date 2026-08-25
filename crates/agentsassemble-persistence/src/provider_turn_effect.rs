@@ -185,6 +185,78 @@ impl SqliteStore {
         })
     }
 
+    /// Leases one unresolved exact-turn interrupt before touching live provider control.
+    ///
+    /// # Errors
+    ///
+    /// Rejects stale custody, a terminal pair, or another unexpired recovery claimant.
+    pub async fn claim_provider_turn_interrupt_recovery(
+        &self,
+        expected: &ProviderTurnInterruptEffect,
+        claim_owner: &str,
+    ) -> Result<ProviderTurnEffectClaim, PersistenceError> {
+        validate_claim_owner(claim_owner)?;
+        let mut transaction = self.pool.begin().await?;
+        let current = load_effect_in(
+            &mut transaction,
+            &expected.room_id,
+            &expected.session_id,
+            expected.turn_generation,
+        )
+        .await?;
+        require_exact_effect(expected, &current)?;
+        let execution = load_execution_in(
+            &mut transaction,
+            &expected.room_id,
+            &expected.session_id,
+            expected.turn_generation,
+        )
+        .await?;
+        if !recoverable_interrupt_pair(current.phase, execution.phase)
+            || execution.execution_id != current.execution_id
+            || execution.runtime_handle_id != current.runtime_handle_id
+            || execution.runtime_owner_id != current.runtime_owner_id
+            || execution.runtime_lease_token != current.runtime_lease_token
+            || execution.requeue_finalized
+        {
+            return Err(stale_effect());
+        }
+        let now_millis = Utc::now().timestamp_millis();
+        let expires_at = now_millis.saturating_add(CLAIM_TTL_MILLIS);
+        let changed = sqlx::query(
+            "UPDATE provider_turn_effects SET claim_owner = ?, claim_expires_at = ?, \
+             updated_at = ? WHERE room_id = ? AND effect_id = ? AND phase = ? \
+             AND dispatch_nonce = ? AND (claim_owner = '' OR claim_owner = ? \
+               OR claim_expires_at IS NULL OR claim_expires_at < ?)",
+        )
+        .bind(claim_owner)
+        .bind(expires_at)
+        .bind(canonical_now())
+        .bind(&current.room_id)
+        .bind(&current.effect_id)
+        .bind(current.phase.as_str())
+        .bind(&current.dispatch_nonce)
+        .bind(claim_owner)
+        .bind(now_millis)
+        .execute(&mut *transaction)
+        .await?;
+        if changed.rows_affected() != 1 {
+            return Err(unresolved_effect());
+        }
+        let effect = load_effect_in(
+            &mut transaction,
+            &current.room_id,
+            &current.session_id,
+            current.turn_generation,
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(ProviderTurnEffectClaim {
+            effect,
+            claim_owner: claim_owner.to_owned(),
+        })
+    }
+
     /// Records quiescence waiting for a turn proved not to have started externally.
     ///
     /// # Errors
@@ -207,16 +279,18 @@ impl SqliteStore {
         claim: &ProviderTurnEffectClaim,
     ) -> Result<ProviderTurnInterruptEffect, PersistenceError> {
         let dispatch_nonce = Uuid::new_v4().to_string();
+        let now_millis = Utc::now().timestamp_millis();
         let changed = sqlx::query(
             "UPDATE provider_turn_effects SET phase = 'dispatching', dispatch_nonce = ?, \
              updated_at = ? WHERE room_id = ? AND effect_id = ? AND phase = 'claimed' \
-             AND claim_owner = ?",
+             AND claim_owner = ? AND claim_expires_at >= ?",
         )
         .bind(&dispatch_nonce)
         .bind(canonical_now())
         .bind(&claim.effect.room_id)
         .bind(&claim.effect.effect_id)
         .bind(&claim.claim_owner)
+        .bind(now_millis)
         .execute(&self.pool)
         .await?;
         if changed.rows_affected() != 1 {
@@ -239,7 +313,7 @@ impl SqliteStore {
         &self,
         dispatched: &ProviderTurnInterruptEffect,
     ) -> Result<ProviderTurnInterruptEffect, PersistenceError> {
-        transition_to_waiting_effect(self, dispatched, true).await
+        transition_to_waiting_effect(self, dispatched, None).await
     }
 
     /// Quarantines a provider interrupt whose dispatch result is uncertain.
@@ -364,8 +438,9 @@ impl SqliteStore {
     /// Rejects a stale, terminal, malformed, or no-longer-blocking effect/execution pair.
     pub async fn authorize_provider_interrupt_recovery_wait(
         &self,
-        expected: &ProviderTurnInterruptEffect,
+        claim: &ProviderTurnEffectClaim,
     ) -> Result<ProviderTurnInterruptEffect, PersistenceError> {
+        let expected = &claim.effect;
         let mut transaction = self.pool.begin().await?;
         let mut current = load_effect_in(
             &mut transaction,
@@ -392,16 +467,19 @@ impl SqliteStore {
             return Err(stale_effect());
         }
         let now = canonical_now();
+        let now_millis = Utc::now().timestamp_millis();
         let effect_changed = sqlx::query(
-            "UPDATE provider_turn_effects SET phase = 'issued_waiting_quiescence', \
-             claim_expires_at = NULL, updated_at = ? WHERE room_id = ? AND effect_id = ? \
-             AND phase = ? AND dispatch_nonce = ?",
+            "UPDATE provider_turn_effects SET phase = 'issued_waiting_quiescence', updated_at = ? \
+             WHERE room_id = ? AND effect_id = ? AND phase = ? AND dispatch_nonce = ? \
+             AND claim_owner = ? AND claim_expires_at >= ?",
         )
         .bind(&now)
         .bind(&current.room_id)
         .bind(&current.effect_id)
         .bind(current.phase.as_str())
         .bind(&current.dispatch_nonce)
+        .bind(&claim.claim_owner)
+        .bind(now_millis)
         .execute(&mut *transaction)
         .await?;
         let execution_changed = sqlx::query(
@@ -462,16 +540,30 @@ async fn transition_to_waiting(
     claim: &ProviderTurnEffectClaim,
     dispatched: bool,
 ) -> Result<ProviderTurnInterruptEffect, PersistenceError> {
-    transition_to_waiting_effect(store, &claim.effect, dispatched).await
+    let claim_owner = (!dispatched).then_some(claim.claim_owner.as_str());
+    transition_to_waiting_effect(store, &claim.effect, claim_owner).await
 }
 
 async fn transition_to_waiting_effect(
     store: &SqliteStore,
     expected: &ProviderTurnInterruptEffect,
-    dispatched: bool,
+    claim_owner: Option<&str>,
 ) -> Result<ProviderTurnInterruptEffect, PersistenceError> {
     let mut transaction = store.pool.begin().await?;
-    let effect_changed = if dispatched {
+    let effect_changed = if let Some(claim_owner) = claim_owner {
+        sqlx::query(
+            "UPDATE provider_turn_effects SET phase = 'issued_waiting_quiescence', \
+             updated_at = ? WHERE room_id = ? AND effect_id = ? AND phase = 'claimed' \
+             AND claim_owner = ? AND claim_expires_at >= ?",
+        )
+        .bind(canonical_now())
+        .bind(&expected.room_id)
+        .bind(&expected.effect_id)
+        .bind(claim_owner)
+        .bind(Utc::now().timestamp_millis())
+        .execute(&mut *transaction)
+        .await?
+    } else {
         sqlx::query(
             "UPDATE provider_turn_effects SET phase = 'issued_waiting_quiescence', \
              updated_at = ? WHERE room_id = ? AND effect_id = ? AND phase = 'dispatching' \
@@ -481,17 +573,6 @@ async fn transition_to_waiting_effect(
         .bind(&expected.room_id)
         .bind(&expected.effect_id)
         .bind(&expected.dispatch_nonce)
-        .execute(&mut *transaction)
-        .await?
-    } else {
-        sqlx::query(
-            "UPDATE provider_turn_effects SET phase = 'issued_waiting_quiescence', \
-             updated_at = ? WHERE room_id = ? AND effect_id = ? AND phase = 'claimed' \
-             AND claim_owner != ''",
-        )
-        .bind(canonical_now())
-        .bind(&expected.room_id)
-        .bind(&expected.effect_id)
         .execute(&mut *transaction)
         .await?
     };
