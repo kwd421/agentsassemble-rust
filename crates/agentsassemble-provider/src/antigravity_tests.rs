@@ -3,8 +3,18 @@ use std::{fs, io::Write};
 use agentsassemble_domain::DurableAgentSession;
 use serde_json::json;
 
-use super::{AntigravityTranscript, command_arguments};
-use crate::test_support::durable_session;
+use super::{
+    ActiveTurn, AntigravityDriver, AntigravityRoomPermissionPolicy, AntigravityTranscript,
+    command_arguments,
+};
+use crate::{
+    antigravity_transport::AntigravityTerminal,
+    room_portal::RoomPortal,
+    runtime::{DriverError, DriverFuture, ProviderDriver, ProviderTurnRequest},
+    test_support::durable_session,
+};
+use tokio::time::Instant;
+use uuid::Uuid;
 
 fn session() -> DurableAgentSession {
     let mut session = durable_session(
@@ -55,6 +65,44 @@ fn command_is_persistent_and_resume_is_exact() {
     )));
     "../another-conversation".clone_into(&mut session.provider_session_id);
     assert!(command_arguments(&session).is_err());
+}
+
+#[tokio::test]
+async fn first_prompt_write_installs_exact_restart_custody() {
+    let (_home, mut driver) = failing_write_driver().await;
+    let request = turn_request();
+
+    let result = driver.submit_turn_prompt(&request, "bounded prompt").await;
+
+    let Err(error) = result else {
+        panic!("failing first prompt write must return an error");
+    };
+    assert_eq!(error.code, "provider_transport_failed");
+    assert_eq!(
+        driver.active_turn.as_ref().map(|turn| &turn.request),
+        Some(&request)
+    );
+    assert!(driver.requires_restart());
+}
+
+#[tokio::test]
+async fn failed_control_c_write_cannot_leave_a_reusable_runtime() {
+    let (_home, mut driver) = failing_write_driver().await;
+    let request = turn_request();
+    driver.active_turn = Some(ActiveTurn {
+        request: request.clone(),
+        provider_turn_id: "provider-turn-interrupt".to_owned(),
+        last_progress: Instant::now(),
+    });
+
+    let result = driver.interrupt_turn_exact(&request).await;
+
+    let Err(error) = result else {
+        panic!("failing control-C write must return an error");
+    };
+    assert_eq!(error.code, "provider_transport_failed");
+    assert!(driver.poisoned);
+    assert!(driver.requires_restart());
 }
 
 #[test]
@@ -207,4 +255,70 @@ fn user_row(content: &str) -> serde_json::Value {
 
 fn final_row(content: &str) -> serde_json::Value {
     json!({"source":"MODEL","type":"PLANNER_RESPONSE","status":"DONE","content":content})
+}
+
+async fn failing_write_driver() -> (tempfile::TempDir, AntigravityDriver) {
+    let home = tempfile::tempdir()
+        .unwrap_or_else(|error| panic!("create Antigravity driver fixture: {error}"));
+    let workspace = home.path().join("workspace");
+    fs::create_dir(&workspace)
+        .unwrap_or_else(|error| panic!("create Antigravity driver workspace: {error}"));
+    let room_portal = RoomPortal::create()
+        .await
+        .unwrap_or_else(|error| panic!("create Antigravity room portal: {error}"));
+    let driver = AntigravityDriver {
+        terminal: Box::new(FailingWriteTerminal),
+        transcript: AntigravityTranscript::new(home.path().to_path_buf(), workspace),
+        room_portal,
+        terminal_helper: None,
+        hook: None,
+        attached_session_id: Some("conversation-1".to_owned()),
+        attached_reused: false,
+        startup_drained: true,
+        terminal_query_tail: Vec::new(),
+        permission_policy: AntigravityRoomPermissionPolicy::new("test-prefix".to_owned()),
+        transcript_nonce: Uuid::new_v4(),
+        active_turn: None,
+        completed_turn: None,
+        terminal_tail: Vec::new(),
+        poisoned: false,
+    };
+    (home, driver)
+}
+
+fn turn_request() -> ProviderTurnRequest {
+    ProviderTurnRequest {
+        turn_id: "turn-1".to_owned(),
+        turn_generation: 1,
+        execution_id: "execution-1".to_owned(),
+        input: "test input".to_owned(),
+        room_observation: None,
+    }
+}
+
+struct FailingWriteTerminal;
+
+impl AntigravityTerminal for FailingWriteTerminal {
+    fn read(&mut self) -> DriverFuture<'_, Result<Vec<u8>, DriverError>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn write<'a>(&'a mut self, _data: &'a [u8]) -> DriverFuture<'a, Result<(), DriverError>> {
+        Box::pin(async {
+            Err(DriverError::new(
+                "provider_transport_failed",
+                "simulated terminal write failure",
+            ))
+        })
+    }
+
+    fn is_alive(&mut self) -> DriverFuture<'_, Result<bool, DriverError>> {
+        Box::pin(async { Ok(true) })
+    }
+
+    fn stop(&mut self) -> DriverFuture<'_, Result<(), DriverError>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn request_stop(&mut self) {}
 }
