@@ -4,8 +4,7 @@ use agentsassemble_protocol::{LocalBootstrapGrant, LocalControlRequest, LocalCon
 use uuid::Uuid;
 
 use super::{
-    CentralRegistrationTicketGrant, OperatorHttpTicketGrant, RuntimeOutput, RuntimeProcess,
-    TicketGrant,
+    CentralRegistrationTicketGrant, HttpTicketGrant, RuntimeOutput, RuntimeProcess, TicketGrant,
 };
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
@@ -123,35 +122,67 @@ pub(super) fn request_ticket(
 
 pub(super) fn request_operator_http_ticket(
     runtime: &mut RuntimeProcess,
-) -> Result<OperatorHttpTicketGrant, TicketFailure> {
+) -> Result<HttpTicketGrant, TicketFailure> {
+    request_http_ticket(runtime, HttpTicketKind::Operator)
+}
+
+pub(super) fn request_preferences_read_ticket(
+    runtime: &mut RuntimeProcess,
+    room_id: &str,
+) -> Result<HttpTicketGrant, TicketFailure> {
+    request_http_ticket(runtime, HttpTicketKind::PreferencesRead(room_id))
+}
+
+pub(super) fn request_preferences_write_ticket(
+    runtime: &mut RuntimeProcess,
+    room_id: &str,
+) -> Result<HttpTicketGrant, TicketFailure> {
+    request_http_ticket(runtime, HttpTicketKind::PreferencesWrite(room_id))
+}
+
+pub(super) fn request_settings_directory_read_ticket(
+    runtime: &mut RuntimeProcess,
+) -> Result<HttpTicketGrant, TicketFailure> {
+    request_http_ticket(runtime, HttpTicketKind::SettingsDirectoryRead)
+}
+
+#[derive(Clone, Copy)]
+enum HttpTicketKind<'a> {
+    Operator,
+    PreferencesRead(&'a str),
+    PreferencesWrite(&'a str),
+    SettingsDirectoryRead,
+}
+
+fn request_http_ticket(
+    runtime: &mut RuntimeProcess,
+    kind: HttpTicketKind<'_>,
+) -> Result<HttpTicketGrant, TicketFailure> {
     let request_id = Uuid::new_v4().to_string();
-    let request = LocalControlRequest::IssueOperatorHttpTicket {
-        request_id: request_id.clone(),
+    let request = match kind {
+        HttpTicketKind::Operator => LocalControlRequest::IssueOperatorHttpTicket {
+            request_id: request_id.clone(),
+        },
+        HttpTicketKind::PreferencesRead(room_id) => {
+            LocalControlRequest::IssuePreferencesReadTicket {
+                request_id: request_id.clone(),
+                meeting_id: room_id.to_owned(),
+            }
+        }
+        HttpTicketKind::PreferencesWrite(room_id) => {
+            LocalControlRequest::IssuePreferencesWriteTicket {
+                request_id: request_id.clone(),
+                meeting_id: room_id.to_owned(),
+            }
+        }
+        HttpTicketKind::SettingsDirectoryRead => {
+            LocalControlRequest::IssueSettingsDirectoryReadTicket {
+                request_id: request_id.clone(),
+            }
+        }
     };
     let response = request_control(runtime, &request)?;
-    let (ticket, ttl_seconds) = match response {
-        LocalControlResponse::OperatorHttpOk {
-            request_id: response_id,
-            ticket,
-            ttl_seconds,
-        } if response_id == request_id => (ticket, ttl_seconds),
-        LocalControlResponse::Error {
-            request_id: response_id,
-            code,
-            message,
-        } if response_id == request_id => {
-            return if is_application_rejection(&code) {
-                Err(TicketFailure::Rejected(message))
-            } else {
-                Err(TicketFailure::Broken(message))
-            };
-        }
-        _ => {
-            return Err(TicketFailure::Broken(
-                "local runtime operator ticket response did not match the request".to_owned(),
-            ));
-        }
-    };
+    let (ticket, ttl_seconds) = decode_http_ticket_response(kind, &request_id, response)?;
     if ticket.len() != 64
         || !ticket.bytes().all(|byte| byte.is_ascii_hexdigit())
         || ttl_seconds == 0
@@ -160,11 +191,69 @@ pub(super) fn request_operator_http_ticket(
             "local runtime returned an invalid operator ticket grant".to_owned(),
         ));
     }
-    Ok(OperatorHttpTicketGrant {
+    Ok(HttpTicketGrant {
         ticket,
         ttl_seconds,
         http_base_url: runtime.address.to_string().trim_end_matches('/').to_owned(),
     })
+}
+
+fn decode_http_ticket_response(
+    kind: HttpTicketKind<'_>,
+    request_id: &str,
+    response: LocalControlResponse,
+) -> Result<(String, u64), TicketFailure> {
+    match (kind, response) {
+        (
+            HttpTicketKind::Operator,
+            LocalControlResponse::OperatorHttpOk {
+                request_id: response_id,
+                ticket,
+                ttl_seconds,
+            },
+        ) if response_id == request_id => Ok((ticket, ttl_seconds)),
+        (
+            HttpTicketKind::PreferencesRead(_),
+            LocalControlResponse::PreferencesReadOk {
+                request_id: response_id,
+                ticket,
+                ttl_seconds,
+            },
+        ) if response_id == request_id => Ok((ticket, ttl_seconds)),
+        (
+            HttpTicketKind::PreferencesWrite(_),
+            LocalControlResponse::PreferencesWriteOk {
+                request_id: response_id,
+                ticket,
+                ttl_seconds,
+            },
+        ) if response_id == request_id => Ok((ticket, ttl_seconds)),
+        (
+            HttpTicketKind::SettingsDirectoryRead,
+            LocalControlResponse::SettingsDirectoryReadOk {
+                request_id: response_id,
+                ticket,
+                ttl_seconds,
+            },
+        ) if response_id == request_id => Ok((ticket, ttl_seconds)),
+        (
+            _,
+            LocalControlResponse::Error {
+                request_id: response_id,
+                code,
+                message,
+            },
+        ) if response_id == request_id => {
+            if is_application_rejection(&code) {
+                Err(TicketFailure::Rejected(message))
+            } else {
+                Err(TicketFailure::Broken(message))
+            }
+        }
+        _ => Err(TicketFailure::Broken(
+            "local runtime HTTP ticket response did not match the request".to_owned(),
+        )),
+    }
 }
 
 pub(super) fn request_central_registration_ticket(
@@ -295,4 +384,28 @@ fn is_bootstrap_rejection(code: &str) -> bool {
             | "bootstrap_request_conflict"
             | "bootstrap_repair_required"
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use agentsassemble_protocol::LocalControlResponse;
+
+    use super::{HttpTicketKind, TicketFailure, decode_http_ticket_response};
+
+    #[test]
+    fn http_ticket_response_variant_must_match_the_exact_request_purpose() {
+        let response = LocalControlResponse::PreferencesWriteOk {
+            request_id: "request-1".to_owned(),
+            ticket: "a".repeat(64),
+            ttl_seconds: 30,
+        };
+        assert!(matches!(
+            decode_http_ticket_response(
+                HttpTicketKind::PreferencesRead("general"),
+                "request-1",
+                response,
+            ),
+            Err(TicketFailure::Broken(_))
+        ));
+    }
 }

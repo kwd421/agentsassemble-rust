@@ -23,7 +23,9 @@ mod control;
 
 use control::{
     TicketFailure, request_bootstrap_initialize, request_bootstrap_status,
-    request_central_registration_ticket, request_operator_http_ticket, request_ticket,
+    request_central_registration_ticket, request_operator_http_ticket,
+    request_preferences_read_ticket, request_preferences_write_ticket,
+    request_settings_directory_read_ticket, request_ticket,
 };
 
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(20);
@@ -39,7 +41,7 @@ pub struct TicketGrant {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct OperatorHttpTicketGrant {
+pub struct HttpTicketGrant {
     ticket: String,
     ttl_seconds: u64,
     http_base_url: String,
@@ -81,6 +83,12 @@ enum RuntimeOutput {
 }
 
 impl LocalRuntime {
+    /// Reads the owned runtime's durable bootstrap status over the private control pipe.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the runtime cannot start, the control exchange fails, or the
+    /// bootstrap authority rejects the request.
     pub fn bootstrap_status(&self, app: &AppHandle) -> Result<LocalBootstrapGrant, String> {
         let mut process = self
             .process
@@ -90,6 +98,12 @@ impl LocalRuntime {
         handle_bootstrap_result(&mut process, result)
     }
 
+    /// Initializes durable local authority over the private control pipe.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the runtime cannot start, the request is rejected, or the control
+    /// exchange is invalid.
     pub fn initialize_bootstrap(
         &self,
         app: &AppHandle,
@@ -108,6 +122,11 @@ impl LocalRuntime {
         handle_bootstrap_result(&mut process, result)
     }
 
+    /// Issues the proof-bound WebSocket ticket for one validated room.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for an invalid room, rejected authority, or broken owned runtime.
     pub fn issue_ticket(
         &self,
         app: &AppHandle,
@@ -121,44 +140,90 @@ impl LocalRuntime {
             .map_err(|_| "local runtime state lock is poisoned".to_owned())?;
         let runtime = ensure_runtime(&mut process, app)?;
         let result = request_ticket(runtime, &room_id);
-        match result {
-            Ok(grant) => Ok(grant),
-            Err(TicketFailure::Rejected(message)) => Err(message),
-            Err(TicketFailure::Broken(message)) => {
-                if let Some(mut broken) = process.take() {
-                    terminate_owned_runtime(&mut broken);
-                }
-                Err(format!(
-                    "{message}; the owned runtime was stopped and will restart on the next attempt"
-                ))
-            }
-        }
+        handle_ticket_result(&mut process, result)
     }
 
+    /// Issues the existing server-operator HTTP ticket over the private control pipe.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when authority is rejected or the owned runtime is broken.
     pub fn issue_operator_http_ticket(
         &self,
         app: &AppHandle,
-    ) -> Result<OperatorHttpTicketGrant, String> {
+    ) -> Result<HttpTicketGrant, String> {
         let mut process = self
             .process
             .lock()
             .map_err(|_| "local runtime state lock is poisoned".to_owned())?;
         let runtime = ensure_runtime(&mut process, app)?;
         let result = request_operator_http_ticket(runtime);
-        match result {
-            Ok(grant) => Ok(grant),
-            Err(TicketFailure::Rejected(message)) => Err(message),
-            Err(TicketFailure::Broken(message)) => {
-                if let Some(mut broken) = process.take() {
-                    terminate_owned_runtime(&mut broken);
-                }
-                Err(format!(
-                    "{message}; the owned runtime was stopped and will restart on the next attempt"
-                ))
-            }
-        }
+        handle_ticket_result(&mut process, result)
     }
 
+    /// Issues a preference-read-only HTTP ticket for one validated room.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for an invalid room, rejected identity, or broken owned runtime.
+    pub fn issue_preferences_read_ticket(
+        &self,
+        app: &AppHandle,
+        requested_room_id: &str,
+    ) -> Result<HttpTicketGrant, String> {
+        let room_id = validate_room_id(requested_room_id)
+            .map_err(|error| format!("invalid room id: {}", error.message))?;
+        let mut process = self
+            .process
+            .lock()
+            .map_err(|_| "local runtime state lock is poisoned".to_owned())?;
+        let result = request_preferences_read_ticket(ensure_runtime(&mut process, app)?, &room_id);
+        handle_ticket_result(&mut process, result)
+    }
+
+    /// Issues a preference-write-only HTTP ticket for one validated room.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for an invalid room, rejected identity, or broken owned runtime.
+    pub fn issue_preferences_write_ticket(
+        &self,
+        app: &AppHandle,
+        requested_room_id: &str,
+    ) -> Result<HttpTicketGrant, String> {
+        let room_id = validate_room_id(requested_room_id)
+            .map_err(|error| format!("invalid room id: {}", error.message))?;
+        let mut process = self
+            .process
+            .lock()
+            .map_err(|_| "local runtime state lock is poisoned".to_owned())?;
+        let result =
+            request_preferences_write_ticket(ensure_runtime(&mut process, app)?, &room_id);
+        handle_ticket_result(&mut process, result)
+    }
+
+    /// Issues the server-wide settings-directory read ticket over the private control pipe.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when bootstrap authority is rejected or the owned runtime is broken.
+    pub fn issue_settings_directory_read_ticket(
+        &self,
+        app: &AppHandle,
+    ) -> Result<HttpTicketGrant, String> {
+        let mut process = self
+            .process
+            .lock()
+            .map_err(|_| "local runtime state lock is poisoned".to_owned())?;
+        let result = request_settings_directory_read_ticket(ensure_runtime(&mut process, app)?);
+        handle_ticket_result(&mut process, result)
+    }
+
+    /// Issues the central-registration-only HTTP ticket over the private control pipe.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when authority is rejected or the owned runtime is broken.
     pub fn issue_central_registration_ticket(
         &self,
         app: &AppHandle,
@@ -169,18 +234,7 @@ impl LocalRuntime {
             .map_err(|_| "local runtime state lock is poisoned".to_owned())?;
         let runtime = ensure_runtime(&mut process, app)?;
         let result = request_central_registration_ticket(runtime);
-        match result {
-            Ok(grant) => Ok(grant),
-            Err(TicketFailure::Rejected(message)) => Err(message),
-            Err(TicketFailure::Broken(message)) => {
-                if let Some(mut broken) = process.take() {
-                    terminate_owned_runtime(&mut broken);
-                }
-                Err(format!(
-                    "{message}; the owned runtime was stopped and will restart on the next attempt"
-                ))
-            }
-        }
+        handle_ticket_result(&mut process, result)
     }
 
     pub fn stop(&self) {
@@ -300,6 +354,24 @@ fn handle_bootstrap_result(
     process: &mut Option<RuntimeProcess>,
     result: Result<LocalBootstrapGrant, TicketFailure>,
 ) -> Result<LocalBootstrapGrant, String> {
+    match result {
+        Ok(grant) => Ok(grant),
+        Err(TicketFailure::Rejected(message)) => Err(message),
+        Err(TicketFailure::Broken(message)) => {
+            if let Some(mut broken) = process.take() {
+                terminate_owned_runtime(&mut broken);
+            }
+            Err(format!(
+                "{message}; the owned runtime was stopped and will restart on the next attempt"
+            ))
+        }
+    }
+}
+
+fn handle_ticket_result<T>(
+    process: &mut Option<RuntimeProcess>,
+    result: Result<T, TicketFailure>,
+) -> Result<T, String> {
     match result {
         Ok(grant) => Ok(grant),
         Err(TicketFailure::Rejected(message)) => Err(message),
