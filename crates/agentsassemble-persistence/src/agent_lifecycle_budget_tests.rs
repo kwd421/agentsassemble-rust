@@ -1,6 +1,6 @@
 use serde_json::json;
 
-use crate::AgentStopPlan;
+use crate::{AgentStartPlan, AgentStopPlan};
 
 use super::{
     load_session, save_session,
@@ -105,4 +105,52 @@ async fn every_fresh_stop_requires_principal_budget_and_exact_replay_does_not() 
     .await
     .unwrap_or_else(|error| panic!("read cleanup budget: {error}"));
     assert_eq!(running_budget, 0);
+}
+
+#[tokio::test]
+async fn terminal_lifecycle_rejection_requires_a_new_principal_budget_debit() {
+    let (store, principal, _directory) = fixture().await;
+    let payload = json!({"agent_id": AGENT_ID});
+    assert!(
+        store
+            .command_requires_principal_budget(
+                &principal,
+                "terminal-rejection",
+                "agent.start",
+                &payload,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("classify fresh start: {error}"))
+    );
+    let AgentStartPlan::Start(effect) = store
+        .prepare_agent_start(&principal, "terminal-rejection", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare failed start: {error}"))
+    else {
+        panic!("stopped session must prepare a start effect");
+    };
+    store
+        .fail_agent_start_before_effect(
+            &principal,
+            "terminal-rejection",
+            &payload,
+            &effect.operation_id,
+            "runtime_start_failed",
+            "Provider runtime could not start.",
+            "agent.start",
+        )
+        .await
+        .unwrap_or_else(|error| panic!("record terminal rejection: {error}"));
+
+    assert!(
+        store
+            .command_requires_principal_budget(
+                &principal,
+                "terminal-rejection",
+                "agent.start",
+                &payload,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("classify terminal rejection replay: {error}"))
+    );
 }

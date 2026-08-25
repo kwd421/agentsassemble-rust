@@ -140,8 +140,11 @@ prepared-resume detection, a fresh human mutation receives a permanent
 process-wide principal debit. Permission denial, validation failure, missing
 targets, conflict, room busy, timeout, disconnect, cancellation, SQLite rollback,
 and provider failure do not refund it. Every fresh action, including a stop that
-owns runtime cleanup, receives this process debit; only an exact durable replay or
-prepared resume avoids a second debit. The retry ledger stores a fixed-size,
+owns runtime cleanup, receives this process debit; only an exact committed result
+or nonterminal lifecycle resume avoids a second debit. A terminal rejected
+lifecycle reservation remains the exact durable rejection owner but receives a
+new process debit on every replay because the preceding outcome was definitive.
+The retry ledger stores a fixed-size,
 domain-separated identity digest instead of request strings and has both
 principal-count and total-mutation memory ceilings. Only a separate in-flight
 permit is RAII-released, and that permit moves
@@ -152,6 +155,8 @@ mutation governors remain separate. The RoomPortal budget key is the server-owne
 Agent Session ID, never a provider-selected conversation identity. A committed or
 definitively rejected actor outcome closes its in-memory retry exemption without
 refunding the original debit; only an unresolved exact intent can reuse that debit.
+Durable room admission still recognizes the stored terminal rejection before
+reserving another room-budget slot.
 
 Once a client command has crossed the WebSocket send boundary, loss of its ACK is
 an unknown outcome, never an ordinary timeout that frees its request ID. The

@@ -1205,8 +1205,10 @@ as independent evidence rather than silently replaced.
 The correction makes safe launch failure one atomic durable terminal outcome.
 The lifecycle reservation enters `rejected` with only the same bounded redacted
 public code/message returned by the initial NACK. Exact replay returns that stored
-rejection without another budget debit, event, provider selection, or provider
-effect. Corrupt stored rejection data fails unresolved. `unconfirmed` start,
+rejection without another durable room-budget reservation, event, provider
+selection, or provider effect. Corrupt stored rejection data fails unresolved.
+The later process-wide admission contract additionally requires a new principal
+debit for each replay after that definitive rejection. `unconfirmed` start,
 resume, create/start, and stop replay now returns a typed unresolved outcome
 without changing the intent or calling a provider; only a later authoritative
 reconciliation observation may change the state. The browser retains the exact
@@ -1803,6 +1805,15 @@ instead of folding as many as 3,600 retained results for every call. A room can 
 The accepted fixed-window trade-off is a bounded edge burst at a ten-second raw-window
 turnover; hard frame, global, principal, room, connection, and mutation ceilings remain
 fail-closed.
+
+The durable request classifier distinguishes a committed result, a pending
+lifecycle owner, and a terminal rejected lifecycle owner. The first two avoid a
+second process debit; the rejected owner preserves exact replay authority but
+requires a fresh process debit because the earlier debit's retry exemption closed
+at definitive resolution. A server-boundary regression creates a real terminal
+start rejection, resolves the initial `MutationDebit`, and proves that a second
+`admit_human_command` returns a new debit rather than entering the room queue for
+free.
 
 Focused deterministic checks prove atomic no-charge connection rejection, stale-lease
 ABA resistance, one-principal connection enforcement through the actual HTTP upgrade,

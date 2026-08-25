@@ -184,8 +184,11 @@ an error enum. A deterministic failure inside a transaction that cannot have
 committed is `rejected`. A safely failed provider launch is rejected only after
 its terminal failure state and exact public rejection are committed together.
 That request remains reserved and replays the same rejection without another
-budget debit, event, or provider call. Once creation/lifecycle preparation has
-committed, a provider effect is uncertain or applied, or completion/publication
+durable room-budget reservation, event, or provider call. Because the rejection
+is definitive, each later exact replay receives a new process principal debit;
+only an unresolved attempt may reuse its prior in-memory debit. Once
+creation/lifecycle preparation has committed, a provider effect is uncertain or
+applied, or completion/publication
 may have failed after commit, every nonterminal failure is `unresolved` even when
 its diagnostic uses a command-rejection-shaped error. An uncertain failure may
 publish its committed recovery events without releasing the request identity.

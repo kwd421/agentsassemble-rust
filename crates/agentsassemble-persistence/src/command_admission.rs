@@ -126,10 +126,20 @@ impl SqliteStore {
             &payload_hash,
         )
         .await?;
-        let required = existing.is_none();
+        let required = matches!(
+            existing,
+            None | Some(ExistingRequestIdentity::RejectedLifecycle)
+        );
         transaction.commit().await?;
         Ok(required)
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ExistingRequestIdentity {
+    CommittedResult,
+    PendingLifecycle,
+    RejectedLifecycle,
 }
 
 pub(crate) async fn existing_request_identity(
@@ -139,7 +149,7 @@ pub(crate) async fn existing_request_identity(
     request_id: &str,
     action: &str,
     payload_hash: &str,
-) -> Result<Option<()>, PersistenceError> {
+) -> Result<Option<ExistingRequestIdentity>, PersistenceError> {
     let command = sqlx::query(
         "SELECT action, payload_hash FROM command_results WHERE room_id = ? AND principal_id = ? AND request_id = ?",
     )
@@ -149,7 +159,7 @@ pub(crate) async fn existing_request_identity(
     .fetch_optional(&mut **transaction)
     .await?;
     let reservation = sqlx::query(
-        "SELECT action, payload_hash FROM lifecycle_command_reservations WHERE room_id = ? AND principal_id = ? AND request_id = ?",
+        "SELECT action, payload_hash, status FROM lifecycle_command_reservations WHERE room_id = ? AND principal_id = ? AND request_id = ?",
     )
     .bind(room_id)
     .bind(principal_id)
@@ -162,13 +172,33 @@ pub(crate) async fn existing_request_identity(
             message: "A room request has conflicting durable owners.".to_owned(),
         });
     }
-    let Some(row) = command.or(reservation) else {
+    if let Some(row) = command {
+        validate_request_identity(&row, action, payload_hash)?;
+        return Ok(Some(ExistingRequestIdentity::CommittedResult));
+    }
+    let Some(row) = reservation else {
         return Ok(None);
     };
+    validate_request_identity(&row, action, payload_hash)?;
+    match row.try_get::<String, _>("status")?.as_str() {
+        "pending" => Ok(Some(ExistingRequestIdentity::PendingLifecycle)),
+        "rejected" => Ok(Some(ExistingRequestIdentity::RejectedLifecycle)),
+        _ => Err(PersistenceError::CommandRejected {
+            code: "invalid_state",
+            message: "A lifecycle request has an invalid durable status.".to_owned(),
+        }),
+    }
+}
+
+fn validate_request_identity(
+    row: &sqlx::sqlite::SqliteRow,
+    action: &str,
+    payload_hash: &str,
+) -> Result<(), PersistenceError> {
     if row.try_get::<String, _>("action")? != action
         || row.try_get::<String, _>("payload_hash")? != payload_hash
     {
         return Err(PersistenceError::CommandConflict);
     }
-    Ok(Some(()))
+    Ok(())
 }
