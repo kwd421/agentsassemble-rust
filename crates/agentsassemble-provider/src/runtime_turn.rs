@@ -58,9 +58,6 @@ impl ProviderAdapter {
         request: &ProviderTurnRequest,
     ) -> Result<ProviderTurnCompleted, ProviderAdapterError> {
         validate_request(session, request).map_err(ProviderAdapterError::safe)?;
-        let exact_interruption = self
-            .enter_prepared_turn(&prepared, session, request)
-            .await?;
         let owner_authority = match resolve_turn_owner_authority(self, session).await {
             Ok(authority) => authority,
             Err(error) => {
@@ -70,6 +67,9 @@ impl ProviderAdapter {
                 return result;
             }
         };
+        let exact_interruption = self
+            .enter_prepared_turn(&prepared, session, request)
+            .await?;
         let handle_id = owner_authority.handle_id.clone();
         let owner_id = owner_authority.owner_id.clone();
         let owner_task = tokio::spawn(run_owned_turn_task(

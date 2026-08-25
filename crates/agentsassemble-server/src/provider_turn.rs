@@ -25,83 +25,127 @@ pub(crate) fn spawn_provider_turn(
     assignment: AgentTurnAssignment,
     room_tool_ingress: ProviderRoomToolIngress,
 ) {
-    tasks.spawn(async move {
-        let failed_assignment = assignment.clone();
-        let task = async move {
-            let room_observation = matches!(
-                assignment.delivery_kind,
-                RoomInputDeliveryKind::OrderedObservation
-                    | RoomInputDeliveryKind::AmbientObservation
-            )
-            .then(|| ProviderRoomObservation {
-                session_id: assignment.session.public.session_id.clone(),
-                input_up_to_seq: assignment.session.input_up_to_seq,
-                view: assignment.room_view.clone(),
-                allowed_agent_ids: assignment.room_agent_ids.clone(),
-                room_tool_ingress: assignment.tabletop_tools.then_some(room_tool_ingress),
-            });
-            let request = ProviderTurnRequest {
-                turn_id: assignment.turn_id.clone(),
-                turn_generation: assignment.turn_generation,
-                execution_id: assignment.execution_id.clone(),
-                input: assignment.provider_input.clone(),
-                room_observation,
-            };
-            let Ok(prepared) = provider_adapter
-                .prepare_turn(&assignment.session, &request)
-                .await
-            else {
-                return ProviderTurnTaskResult {
-                    assignment,
-                    task_panicked: false,
-                    start_authority: Err(PersistenceError::CommandUnresolved {
-                        code: "provider_turn_prepare_unresolved",
-                        message: "The exact provider turn could not acquire runtime ownership."
-                            .to_owned(),
-                    }),
-                    result: None,
-                };
-            };
-            let start_authority = store
-                .authorize_provider_turn_start(
-                    &assignment.session.public.room_id,
-                    &assignment.session.public.session_id,
-                    assignment.turn_generation,
-                    &assignment.turn_id,
-                )
+    tasks.spawn(run_provider_turn_task(
+        store,
+        provider_adapter,
+        assignment,
+        room_tool_ingress,
+    ));
+}
+
+async fn run_provider_turn_task(
+    store: SqliteStore,
+    provider_adapter: ProviderAdapter,
+    assignment: AgentTurnAssignment,
+    room_tool_ingress: ProviderRoomToolIngress,
+) -> ProviderTurnTaskResult {
+    let request = provider_request(&assignment, room_tool_ingress);
+    let Ok(prepared) = provider_adapter
+        .prepare_turn(&assignment.session, &request)
+        .await
+    else {
+        return unresolved_turn_task(assignment, "provider_turn_prepare_unresolved");
+    };
+    let recovery_prepared = prepared.clone();
+    let recovery_adapter = provider_adapter.clone();
+    let failed_assignment = assignment.clone();
+    let join_failed_assignment = assignment.clone();
+    let owner = tokio::spawn(async move {
+        let cleanup_prepared = prepared.clone();
+        let cleanup_adapter = provider_adapter.clone();
+        let task =
+            run_prepared_provider_turn(store, provider_adapter, assignment, request, prepared);
+        if let Ok(result) = AssertUnwindSafe(task).catch_unwind().await {
+            result
+        } else {
+            cleanup_adapter
+                .retain_unstarted_turn(&cleanup_prepared)
                 .await;
-            let Ok(_) = &start_authority else {
-                provider_adapter.retain_unstarted_turn(&prepared).await;
-                return ProviderTurnTaskResult {
-                    assignment,
-                    task_panicked: false,
-                    start_authority,
-                    result: None,
-                };
-            };
-            let result = provider_adapter
-                .send_prepared_turn(prepared, &assignment.session, &request)
-                .await;
-            ProviderTurnTaskResult {
-                assignment,
-                task_panicked: false,
-                start_authority,
-                result: Some(result),
-            }
-        };
-        match AssertUnwindSafe(task).catch_unwind().await {
-            Ok(result) => result,
-            Err(_) => ProviderTurnTaskResult {
-                assignment: failed_assignment,
-                task_panicked: true,
-                start_authority: Err(PersistenceError::CommandUnresolved {
-                    code: "provider_turn_task_failed",
-                    message: "The provider turn task ended without a typed result.".to_owned(),
-                }),
-                result: None,
-            },
+            unresolved_turn_task(failed_assignment, "provider_turn_task_failed")
         }
     });
+    if let Ok(result) = owner.await {
+        result
+    } else {
+        recovery_adapter
+            .retain_unstarted_turn(&recovery_prepared)
+            .await;
+        unresolved_turn_task(join_failed_assignment, "provider_turn_task_failed")
+    }
+}
+
+async fn run_prepared_provider_turn(
+    store: SqliteStore,
+    provider_adapter: ProviderAdapter,
+    assignment: AgentTurnAssignment,
+    request: ProviderTurnRequest,
+    prepared: agentsassemble_provider::ProviderPreparedTurn,
+) -> ProviderTurnTaskResult {
+    let start_authority = store
+        .authorize_provider_turn_start(
+            &assignment.session.public.room_id,
+            &assignment.session.public.session_id,
+            assignment.turn_generation,
+            &assignment.turn_id,
+        )
+        .await;
+    let Ok(_) = &start_authority else {
+        provider_adapter.retain_unstarted_turn(&prepared).await;
+        return ProviderTurnTaskResult {
+            assignment,
+            task_panicked: false,
+            start_authority,
+            result: None,
+        };
+    };
+    let result = provider_adapter
+        .send_prepared_turn(prepared, &assignment.session, &request)
+        .await;
+    ProviderTurnTaskResult {
+        assignment,
+        task_panicked: false,
+        start_authority,
+        result: Some(result),
+    }
+}
+
+fn provider_request(
+    assignment: &AgentTurnAssignment,
+    room_tool_ingress: ProviderRoomToolIngress,
+) -> ProviderTurnRequest {
+    let room_observation = matches!(
+        assignment.delivery_kind,
+        RoomInputDeliveryKind::OrderedObservation | RoomInputDeliveryKind::AmbientObservation
+    )
+    .then(|| ProviderRoomObservation {
+        session_id: assignment.session.public.session_id.clone(),
+        input_up_to_seq: assignment.session.input_up_to_seq,
+        view: assignment.room_view.clone(),
+        allowed_agent_ids: assignment.room_agent_ids.clone(),
+        room_tool_ingress: assignment.tabletop_tools.then_some(room_tool_ingress),
+    });
+    ProviderTurnRequest {
+        turn_id: assignment.turn_id.clone(),
+        turn_generation: assignment.turn_generation,
+        execution_id: assignment.execution_id.clone(),
+        input: assignment.provider_input.clone(),
+        room_observation,
+    }
+}
+
+fn unresolved_turn_task(
+    assignment: AgentTurnAssignment,
+    code: &'static str,
+) -> ProviderTurnTaskResult {
+    ProviderTurnTaskResult {
+        assignment,
+        task_panicked: code == "provider_turn_task_failed",
+        start_authority: Err(PersistenceError::CommandUnresolved {
+            code,
+            message: "The exact provider turn owner ended without a typed result.".to_owned(),
+        }),
+        result: None,
+    }
 }
 
 pub(crate) async fn commit_provider_result(

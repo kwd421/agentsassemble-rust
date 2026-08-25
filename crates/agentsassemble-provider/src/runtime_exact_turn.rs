@@ -263,6 +263,16 @@ impl ProviderAdapter {
             .active_turn
             .as_mut()
             .ok_or_else(|| ProviderAdapterError::safe(stale_turn()))?;
+        if active.interruption.is_cancelled() {
+            active.phase = ActiveProviderTurnPhase::NotStartedRetained;
+            active
+                .completion
+                .send_replace(ActiveProviderTurnPhase::NotStartedRetained);
+            return Err(ProviderAdapterError::safe(DriverError::new(
+                "provider_turn_interrupted",
+                "The exact provider turn was interrupted before provider I/O.",
+            )));
+        }
         active.phase = ActiveProviderTurnPhase::Entered;
         active
             .completion

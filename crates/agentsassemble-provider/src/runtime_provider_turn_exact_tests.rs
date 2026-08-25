@@ -108,7 +108,14 @@ async fn unstarted_turn_remains_exactly_owned_until_durable_interrupt_release() 
         super::ProviderTurnInterruptDisposition::NotStarted
     );
 
-    adapter.retain_unstarted_turn(&prepared).await;
+    control.request_interrupt();
+    let Err(error) = adapter
+        .send_prepared_turn(prepared, &active, &request)
+        .await
+    else {
+        panic!("pre-entry interrupt must not run provider I/O");
+    };
+    assert_eq!(error.code, "provider_turn_interrupted");
     assert_eq!(
         control
             .wait_quiesced(Duration::from_secs(1))

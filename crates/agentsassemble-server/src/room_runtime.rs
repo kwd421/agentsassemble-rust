@@ -511,33 +511,13 @@ async fn handle_provider_result(
     let room_id = result.assignment.session.public.room_id.clone();
     let session_id = result.assignment.session.public.session_id.clone();
     if result.task_panicked {
-        match store
-            .record_provider_turn_task_death(
-                &room_id,
-                &session_id,
-                result.assignment.turn_generation,
-                &result.assignment.execution_id,
-            )
-            .await
-        {
-            Ok(commit) => {
-                publish_turn_commit(
-                    store,
-                    event_tx,
-                    turn_tasks,
-                    provider_adapter.clone(),
-                    room_tool_ingress.clone(),
-                    commit,
-                )
-                .await;
-            }
-            Err(error) => tracing::error!(
-                code = persistence_error_code(&error),
-                room_id,
-                session_id,
-                "provider turn task death could not be checkpointed"
-            ),
-        }
+        tracing::error!(
+            room_id,
+            session_id,
+            turn_generation = result.assignment.turn_generation,
+            execution_id = result.assignment.execution_id,
+            "exact provider owner failed; retained proof remains for the live reconciler"
+        );
         return;
     }
     match commit_provider_result(store, provider_adapter, result).await {
