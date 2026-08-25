@@ -102,10 +102,13 @@ exactly once to the owner-only `central-directory/host-ed25519.pk8` file beside 
 database authority. The same fresh initialization transaction stores `server_id` and
 the matching raw 32-byte public key in SQLite. The private key is never stored in the
 database. An interrupted empty-database initialization reuses the already-created key;
-an initialized database never creates a missing replacement. A database-only backup
-therefore cannot clone signing authority, while a missing, malformed, over-permissive,
-hard-linked, symlinked, or public-key-mismatched key fails closed. Older schema versions
-remain rejected rather than migrated or read through a compatibility path.
+an initialized database never creates a missing replacement. A brand-new database path
+also refuses any pre-existing orphaned key before creating the database, so stale key
+material cannot bind itself to a new server ID or turn the next open into an apparent
+interrupted initialization. A database-only backup therefore cannot clone signing
+authority, while a missing, orphaned, malformed, over-permissive, hard-linked, symlinked,
+or public-key-mismatched key fails closed. Older schema versions remain rejected rather
+than migrated or read through a compatibility path.
 
 The public projection is exactly
 `{"crv":"Ed25519","ext":true,"key_ops":["verify"],"kty":"OKP","x":"..."}`.

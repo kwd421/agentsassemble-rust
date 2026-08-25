@@ -305,13 +305,16 @@ Central server registration is a third, exact-purpose one-use ticket issued only
 through the private desktop control pipe and consumed only by the desktop-mounted
 registration-proof POST. Its Ed25519 private key is a separate owner-only write-once
 file; SQLite stores only the bound public key, so a database-only backup cannot clone
-the signing authority and missing or substituted key material fails closed. The same
+the signing authority and missing or substituted key material fails closed. Key opening
+distinguishes new, interrupted-empty, and initialized database custody: only the
+interrupted-empty state may reuse an existing unbound key, while a database path that
+does not yet exist rejects an orphaned key before creating any new authority. The same
 private control response pins the expected server ID, raw public-key projection, and
-fingerprint. React accepts the loopback HTTP proof only when its exact schema and
-binding match those native values, its canonical JWK hashes to the pinned fingerprint,
-and its exact registration transcript verifies under the pinned Ed25519 key. A
-self-consistent response signed by a substituted loopback key therefore fails before
-any registration request reaches the central directory.
+fingerprint. React accepts the loopback HTTP proof only when its exact schema and binding
+match those native values, its canonical JWK hashes to the pinned fingerprint, and its
+exact registration transcript verifies under the pinned Ed25519 key. A self-consistent
+response signed by a substituted loopback key therefore fails before any registration
+request reaches the central directory.
 
 The local HTTP/WebSocket adapter has explicit resource budgets: admission is bounded immediately after TCP accept, incomplete HTTP headers and request bodies have real deadlines, and a consumed one-use ticket must atomically acquire a process-wide WebSocket lease before HTTP 101. The active-only lease owner admits at most 128 connections globally, eight for one principal, and 64 for one room; rejected acquisition increments no scope, and checked process-local `u64` generation IDs prevent stale release from freeing a replacement. Inner product frames stop at 256 KiB and their authenticated wire envelopes at 384 KiB, the first subscription has a ten-second deadline, and the process-wide raw governor above owns message, byte, and control-frame windows. When a bounded principal or room map cannot admit a new key, the rejected frame still charges the global scope and any already-tracked applicable scope without retaining another key. The one-use ticket proof establishes a connection key; after the receipt-bound plain Snapshot, every frame in both directions is authenticated over connection nonce, direction, a strict contiguous counter, and exact inner bytes before projection or command execution. Binary frames are rejected. Room queue admission never waits and returns `room_busy` when saturated.
 
