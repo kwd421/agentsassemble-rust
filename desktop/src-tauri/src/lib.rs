@@ -125,6 +125,56 @@ async fn runtime_operator_ticket(
     .map_err(|error| format!("runtime operator ticket worker failed: {error}"))?
 }
 
+#[tauri::command(rename_all = "camelCase")]
+async fn runtime_preferences_read_ticket(
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+    room_id: String,
+) -> Result<HttpTicketGrant, String> {
+    caller_is_bundled_ui(&window)?;
+    let runtime_app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        runtime_app
+            .state::<LocalRuntime>()
+            .issue_preferences_read_ticket(&runtime_app, &room_id)
+    })
+    .await
+    .map_err(|error| format!("runtime preferences read ticket worker failed: {error}"))?
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn runtime_preferences_write_ticket(
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+    room_id: String,
+) -> Result<HttpTicketGrant, String> {
+    caller_is_bundled_ui(&window)?;
+    let runtime_app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        runtime_app
+            .state::<LocalRuntime>()
+            .issue_preferences_write_ticket(&runtime_app, &room_id)
+    })
+    .await
+    .map_err(|error| format!("runtime preferences write ticket worker failed: {error}"))?
+}
+
+#[tauri::command]
+async fn runtime_settings_directory_read_ticket(
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+) -> Result<HttpTicketGrant, String> {
+    caller_is_bundled_ui(&window)?;
+    let runtime_app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        runtime_app
+            .state::<LocalRuntime>()
+            .issue_settings_directory_read_ticket(&runtime_app)
+    })
+    .await
+    .map_err(|error| format!("runtime settings directory ticket worker failed: {error}"))?
+}
+
 #[tauri::command]
 async fn runtime_central_registration_ticket(
     window: WebviewWindow,
@@ -266,7 +316,7 @@ mod tests {
     #[test]
     fn host_surface_is_the_registered_permission_intersection() {
         let surface = registered_host_product_surface();
-        assert_eq!(surface.commands.len(), 8);
+        assert_eq!(surface.commands.len(), 11);
         assert!(
             surface
                 .commands

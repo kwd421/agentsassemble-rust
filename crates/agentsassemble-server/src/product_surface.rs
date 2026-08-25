@@ -17,6 +17,7 @@ pub(crate) fn server_product_surface(
     let mut routes = Vec::new();
     extend_registered(&mut routes, crate::web::HTTP_ROUTES);
     extend_registered(&mut routes, crate::room_directory_web::HTTP_ROUTES);
+    extend_registered(&mut routes, crate::room_preferences_web::HTTP_ROUTES);
     extend_registered(&mut routes, crate::profile_web::HTTP_ROUTES);
     if central_registration_enabled {
         extend_registered(&mut routes, crate::central_registration_web::HTTP_ROUTES);

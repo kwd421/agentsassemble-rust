@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-runtime-settings-directory-read-ticket"
+description = "Enables the runtime_settings_directory_read_ticket command without any pre-configured scope."
+commands.allow = ["runtime_settings_directory_read_ticket"]
+
+[[permission]]
+identifier = "deny-runtime-settings-directory-read-ticket"
+description = "Denies the runtime_settings_directory_read_ticket command without any pre-configured scope."
+commands.deny = ["runtime_settings_directory_read_ticket"]

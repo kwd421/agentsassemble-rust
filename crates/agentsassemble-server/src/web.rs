@@ -69,6 +69,7 @@ pub fn router(state: AppState) -> Router {
     let frontend_root = state.frontend_root.clone();
     let mut app = core_routes()
         .merge(crate::room_directory_web::routes())
+        .merge(crate::room_preferences_web::routes())
         .merge(crate::profile_web::routes());
     if state.central_registration_enabled {
         app = app.merge(crate::central_registration_web::routes());
