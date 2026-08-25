@@ -114,7 +114,7 @@ pub(crate) async fn apply_startup_reconciliation(
         transaction.commit().await?;
         return Ok(());
     }
-    let detach = reconcile_observation(&mut transaction, &mut session, observation).await?;
+    let detach = reconcile_observation(&mut session, observation)?;
     save_reconciled_session(&mut transaction, &session).await?;
     if detach {
         detach_participant(

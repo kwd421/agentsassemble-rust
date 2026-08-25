@@ -6,10 +6,7 @@ use agentsassemble_domain::{
 use chrono::Utc;
 use serde_json::{Value, json};
 
-use crate::{
-    AgentRuntimeStarted, AgentStartEffect, AgentStartPlan, AgentStopPlan, PersistenceError,
-    SqliteStore,
-};
+use crate::{AgentRuntimeStarted, AgentStartPlan, AgentStopPlan, PersistenceError, SqliteStore};
 
 pub(super) const AGENT_ID: &str = "codex-00000000-0000-5000-8000-000000000001";
 
@@ -504,7 +501,7 @@ async fn ambiguous_stop_becomes_a_redacted_recoverable_disconnect() {
 }
 
 #[tokio::test]
-async fn restart_invalidates_ambiguous_handle_before_any_stop_effect() {
+async fn restart_retains_ambiguous_stop_authority_until_gone_is_proven() {
     let (store, principal, _directory) = fixture().await;
     let payload = json!({"agent_id": AGENT_ID});
     mark_ambiguous_stop(&store, &principal, &payload).await;
@@ -521,96 +518,56 @@ async fn restart_invalidates_ambiguous_handle_before_any_stop_effect() {
         store
             .reconcile_agent_sessions_after_restart()
             .await
-            .unwrap_or_else(|error| panic!("invalidate ambiguous owner: {error}")),
+            .unwrap_or_else(|error| panic!("retain ambiguous owner: {error}")),
         1
     );
     assert!(matches!(
         store
             .prepare_agent_stop(&principal, "ambiguous-stop", &payload)
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "runtime_owner_lost",
+        Err(PersistenceError::CommandUnresolved {
+            code: "runtime_effect_unconfirmed",
             ..
         })
     ));
-    assert_ambiguous_owner_was_invalidated(&store).await;
-    let AgentStartPlan::Start(replacement) = store
-        .prepare_agent_start(&principal, "replacement-after-restart", &payload)
-        .await
-        .unwrap_or_else(|error| panic!("prepare replacement start: {error}"))
-    else {
-        panic!("owner-lost stop must release the session for a new request");
-    };
-    authorize_start(
-        &store,
-        &principal,
-        "replacement-after-restart",
-        &payload,
-        &replacement,
-        "replacement-runtime",
-        "supervisor-instance-2",
-    )
-    .await;
-    store
-        .complete_agent_start(
-            &principal,
-            "replacement-after-restart",
-            &payload,
-            &replacement.operation_id,
-            &AgentRuntimeStarted {
-                runtime_handle_id: "replacement-runtime".to_owned(),
-                runtime_owner_id: "supervisor-instance-2".to_owned(),
-                provider_session_id: "provider-thread-preserved".to_owned(),
-                runtime_reused: false,
-                provider_session_reused: true,
-                provider_session_active: true,
-            },
-        )
-        .await
-        .unwrap_or_else(|error| panic!("complete replacement start: {error}"));
+    assert_ambiguous_owner_was_retained(&store).await;
     assert!(matches!(
         store
-            .prepare_agent_stop(&principal, "ambiguous-stop", &payload)
+            .prepare_agent_start(&principal, "replacement-after-restart", &payload)
             .await,
         Err(PersistenceError::CommandRejected {
-            code: "runtime_owner_lost",
+            code: "operation_in_progress",
             ..
         })
     ));
-    let replaced = sqlx::query_scalar::<_, String>(
-        "SELECT session_json FROM agent_sessions WHERE room_id = 'general' AND session_id = ?",
-    )
-    .bind(AGENT_ID)
-    .fetch_one(&store.pool)
-    .await
-    .unwrap_or_else(|error| panic!("read replacement session: {error}"));
-    let replaced = serde_json::from_str::<DurableAgentSession>(&replaced)
-        .unwrap_or_else(|error| panic!("decode replacement session: {error}"));
-    assert_eq!(replaced.runtime_handle_id, "replacement-runtime");
 }
 
-async fn assert_ambiguous_owner_was_invalidated(store: &SqliteStore) {
+async fn assert_ambiguous_owner_was_retained(store: &SqliteStore) {
     let encoded = sqlx::query_scalar::<_, String>(
         "SELECT session_json FROM agent_sessions WHERE room_id = 'general' AND session_id = ?",
     )
     .bind(AGENT_ID)
     .fetch_one(&store.pool)
     .await
-    .unwrap_or_else(|error| panic!("read invalidated ambiguous session: {error}"));
-    let invalidated = serde_json::from_str::<DurableAgentSession>(&encoded)
-        .unwrap_or_else(|error| panic!("decode invalidated ambiguous session: {error}"));
-    assert!(invalidated.runtime_handle_id.is_empty());
-    assert!(invalidated.runtime_owner_id.is_empty());
-    assert!(invalidated.lifecycle_intent_action.is_empty());
-    assert!(invalidated.lifecycle_intent_status.is_empty());
-    assert_eq!(invalidated.public.last_error_code, "runtime_owner_lost");
+    .unwrap_or_else(|error| panic!("read retained ambiguous session: {error}"));
+    let retained = serde_json::from_str::<DurableAgentSession>(&encoded)
+        .unwrap_or_else(|error| panic!("decode retained ambiguous session: {error}"));
+    assert_eq!(retained.runtime_handle_id, "runtime-before-ambiguous-stop");
+    assert_eq!(retained.runtime_owner_id, "supervisor-instance-1");
+    assert_eq!(retained.lifecycle_intent_action, "stop");
+    assert_eq!(retained.lifecycle_intent_status, "unconfirmed");
+    assert_eq!(
+        retained.public.last_error_code,
+        "runtime_authority_uncertain"
+    );
+    assert!(retained.public.recovery_required);
     let reservation_status = sqlx::query_scalar::<_, String>(
         "SELECT status FROM lifecycle_command_reservations WHERE request_id = 'ambiguous-stop'",
     )
     .fetch_one(&store.pool)
     .await
-    .unwrap_or_else(|error| panic!("read terminal reservation: {error}"));
-    assert_eq!(reservation_status, "owner_lost");
+    .unwrap_or_else(|error| panic!("read retained reservation: {error}"));
+    assert_eq!(reservation_status, "pending");
 }
 
 async fn mark_ambiguous_stop(
@@ -677,32 +634,8 @@ async fn mark_ambiguous_stop(
         .unwrap_or_else(|error| panic!("mark ambiguous stop: {error}"))
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn authorize_start(
-    store: &SqliteStore,
-    principal: &AuthenticatedPrincipal,
-    request_id: &str,
-    payload: &Value,
-    effect: &AgentStartEffect,
-    runtime_handle_id: &str,
-    runtime_owner_id: &str,
-) {
-    store
-        .authorize_agent_start_effect(
-            principal,
-            request_id,
-            payload,
-            &effect.operation_id,
-            "agent.start",
-            runtime_handle_id,
-            runtime_owner_id,
-        )
-        .await
-        .unwrap_or_else(|error| panic!("authorize start: {error}"));
-}
-
 #[tokio::test]
-async fn startup_reconciliation_disconnects_only_live_looking_sessions() {
+async fn startup_reconciliation_retains_ambiguous_runtime_authority() {
     let (store, principal, _directory) = fixture().await;
     let payload = json!({"agent_id": AGENT_ID});
     let AgentStartPlan::Start(start) = store
@@ -754,7 +687,7 @@ async fn startup_reconciliation_disconnects_only_live_looking_sessions() {
             .reconcile_agent_sessions_after_restart()
             .await
             .unwrap_or_else(|error| panic!("repeat reconciliation: {error}")),
-        0
+        1
     );
     let snapshot = store
         .snapshot("general", 0, 200)
@@ -762,7 +695,7 @@ async fn startup_reconciliation_disconnects_only_live_looking_sessions() {
         .unwrap_or_else(|error| panic!("snapshot restart: {error}"));
     let session = &snapshot.agent_sessions[0];
     assert_eq!(session.runtime_status, "disconnected");
-    assert_eq!(session.last_error_code, "server_restarted");
+    assert_eq!(session.last_error_code, "runtime_authority_uncertain");
     assert!(session.recovery_required);
     let encoded = sqlx::query_scalar::<_, String>(
         "SELECT session_json FROM agent_sessions WHERE room_id = 'general' AND session_id = ?",
@@ -774,6 +707,6 @@ async fn startup_reconciliation_disconnects_only_live_looking_sessions() {
     let durable = serde_json::from_str::<DurableAgentSession>(&encoded)
         .unwrap_or_else(|error| panic!("decode reconciled durable session: {error}"));
     assert_eq!(durable.provider_session_id, "provider-thread-survives");
-    assert!(durable.runtime_handle_id.is_empty());
-    assert!(durable.runtime_owner_id.is_empty());
+    assert_eq!(durable.runtime_handle_id, "lost-owned-runtime");
+    assert_eq!(durable.runtime_owner_id, "supervisor-instance-1");
 }

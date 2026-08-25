@@ -3,7 +3,6 @@ use std::sync::Arc;
 use agentsassemble_domain::DurableAgentSession;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
-use uuid::Uuid;
 
 use super::{
     DriverError, LaunchingRuntime, OwnedRuntime, ProviderAdapter, ProviderAdapterError,
@@ -92,7 +91,7 @@ impl ProviderAdapter {
                             ))
                         })?;
                 let reservation = ProviderStartReservation {
-                    runtime_handle_id: format!("runtime-v3-{}", Uuid::new_v4()),
+                    runtime_handle_id: runtime_lease.new_runtime_handle_id(),
                     runtime_owner_id: self.owner.supervisor_id.clone(),
                 };
                 slot.state = RuntimeState::Launching(LaunchingRuntime {

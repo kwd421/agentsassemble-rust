@@ -146,17 +146,13 @@ impl SqliteStore {
                 });
             }
             return match row.get::<String, _>("status").as_str() {
-            "pending" => Ok(()),
-            "owner_lost" => Err(PersistenceError::CommandRejected {
-                code: "runtime_owner_lost",
-                message: "The original provider runtime owner was lost during restart. Use a new lifecycle request.".to_owned(),
-            }),
-            "rejected" => Err(stored_rejection(
-                row.get::<String, _>("failure_code"),
-                row.get::<String, _>("failure_message"),
-            )),
-            _ => Err(invalid_reservation()),
-        };
+                "pending" => Ok(()),
+                "rejected" => Err(stored_rejection(
+                    row.get::<String, _>("failure_code"),
+                    row.get::<String, _>("failure_message"),
+                )),
+                _ => Err(invalid_reservation()),
+            };
         }
         if reserve_budget {
             reserve_room_write_budget(
@@ -185,29 +181,6 @@ impl SqliteStore {
     .await?;
         Ok(())
     }
-}
-
-pub(crate) async fn mark_lifecycle_owner_lost(
-    transaction: &mut Transaction<'_, Sqlite>,
-    room_id: &str,
-    session_id: &str,
-    action: &str,
-    operation_id: &str,
-) -> Result<(), PersistenceError> {
-    let updated = sqlx::query(
-        "UPDATE lifecycle_command_reservations SET status = 'owner_lost' WHERE room_id = ? AND session_id = ? AND operation_id = ? AND action = ? AND status = 'pending'",
-    )
-    .bind(room_id)
-    .bind(session_id)
-    .bind(operation_id)
-    .bind(action)
-    .execute(&mut **transaction)
-    .await?
-    .rows_affected();
-    if updated != 1 {
-        return Err(invalid_reservation());
-    }
-    Ok(())
 }
 
 pub(crate) async fn reject_reserved_request_id(

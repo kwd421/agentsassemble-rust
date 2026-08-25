@@ -1,9 +1,10 @@
+#[cfg(unix)]
+use std::sync::{Mutex, MutexGuard};
 use std::{
     env,
     fs::{File, OpenOptions},
     io::{self, Read, Seek, Write},
     path::{Path, PathBuf},
-    sync::{Mutex, MutexGuard},
 };
 
 use fs2::FileExt;
@@ -28,12 +29,16 @@ pub(crate) struct HeldRuntimeLease {
     lifetime_path: PathBuf,
     #[cfg(unix)]
     launch_lifetime: Mutex<Option<File>>,
+    #[cfg(unix)]
+    boot_identity: String,
     token: String,
     file: Option<File>,
 }
 
 impl HeldRuntimeLease {
     pub(crate) fn prepare(room_id: &str, session_id: &str) -> io::Result<Self> {
+        #[cfg(unix)]
+        let boot_identity = crate::runtime_boot::current_identity()?.to_owned();
         let path = runtime_lease_path(room_id, session_id)?;
         let mut file = open_runtime_lease(&path)?;
         file.try_lock_exclusive()?;
@@ -64,10 +69,18 @@ impl HeldRuntimeLease {
                 path,
                 lifetime_path,
                 launch_lifetime: Mutex::new(None),
+                boot_identity,
                 token,
                 file: None,
             })
         }
+    }
+
+    pub(crate) fn new_runtime_handle_id(&self) -> String {
+        #[cfg(unix)]
+        return crate::runtime_boot::new_handle_id(&self.boot_identity);
+        #[cfg(not(unix))]
+        format!("runtime-v4-{}", Uuid::new_v4())
     }
 
     #[cfg(unix)]
@@ -240,7 +253,11 @@ pub(crate) fn activate_unix_runtime_lease(
     }
     write_marker(
         &mut file,
-        &format!("unix:{token}:{}", process_group.as_raw_pid()),
+        &format!(
+            "unix:{token}:{}:{}",
+            process_group.as_raw_pid(),
+            crate::runtime_boot::current_identity()?
+        ),
     )?;
     Ok(file)
 }
@@ -268,19 +285,27 @@ fn classify_unlocked_marker(path: &Path, marker: io::Result<String>) -> LeaseObs
         return LeaseObservation::Unknown;
     };
     let mut parts = marker.split(':');
-    match (parts.next(), parts.next(), parts.next(), parts.next()) {
-        (Some("pending" | "launching"), Some(token), None, None)
+    match (
+        parts.next(),
+        parts.next(),
+        parts.next(),
+        parts.next(),
+        parts.next(),
+    ) {
+        (Some("pending" | "launching"), Some(token), None, None, None)
             if validate_token(token).is_ok() =>
         {
             classify_unlocked_launch_marker(path, token)
         }
-        (Some("windows"), Some(token), None, None) if validate_token(token).is_ok() => {
+        (Some("windows"), Some(token), None, None, None) if validate_token(token).is_ok() => {
             LeaseObservation::Gone
         }
-        (Some("unix"), Some(token), Some(raw_pid), None) if validate_token(token).is_ok() => {
-            classify_unlocked_unix_marker(path, token, raw_pid)
+        (Some("unix"), Some(token), Some(raw_pid), Some(boot_identity), None)
+            if validate_token(token).is_ok() && is_valid_runtime_boot_identity(boot_identity) =>
+        {
+            classify_unlocked_unix_marker(path, token, raw_pid, boot_identity)
         }
-        (Some("gone"), Some(token), None, None) if validate_token(token).is_ok() => {
+        (Some("gone"), Some(token), None, None, None) if validate_token(token).is_ok() => {
             LeaseObservation::Gone
         }
         _ => LeaseObservation::Unknown,
@@ -288,12 +313,26 @@ fn classify_unlocked_marker(path: &Path, marker: io::Result<String>) -> LeaseObs
 }
 
 #[cfg(unix)]
+fn is_valid_runtime_boot_identity(identity: &str) -> bool {
+    crate::runtime_boot::is_valid_identity(identity)
+}
+
+#[cfg(not(unix))]
+const fn is_valid_runtime_boot_identity(_identity: &str) -> bool {
+    false
+}
+
+#[cfg(unix)]
 fn classify_unlocked_launch_marker(path: &Path, token: &str) -> LeaseObservation {
+    let lifetime = provider_lifetime_is_active(path, token);
+    if matches!(lifetime, Ok(true)) {
+        return LeaseObservation::Active;
+    }
     match (
-        provider_lifetime_is_active(path, token),
+        lifetime,
         crate::unix_process_tree::tagged_runtime_exists(token),
     ) {
-        (Ok(true), _) | (_, Ok(true)) => LeaseObservation::Active,
+        (_, Ok(true)) => LeaseObservation::Active,
         (Ok(false), Ok(false)) => LeaseObservation::Gone,
         _ => LeaseObservation::Unknown,
     }
@@ -305,7 +344,18 @@ fn classify_unlocked_launch_marker(_path: &Path, _token: &str) -> LeaseObservati
 }
 
 #[cfg(unix)]
-fn classify_unlocked_unix_marker(path: &Path, token: &str, raw_pid: &str) -> LeaseObservation {
+fn classify_unlocked_unix_marker(
+    path: &Path,
+    token: &str,
+    raw_pid: &str,
+    boot_identity: &str,
+) -> LeaseObservation {
+    let Ok(current_boot_identity) = crate::runtime_boot::current_identity() else {
+        return LeaseObservation::Unknown;
+    };
+    if boot_identity != current_boot_identity {
+        return LeaseObservation::Gone;
+    }
     let Some(pid) = raw_pid
         .parse::<i32>()
         .ok()
@@ -315,17 +365,20 @@ fn classify_unlocked_unix_marker(path: &Path, token: &str, raw_pid: &str) -> Lea
     };
     match rustix::process::test_kill_process_group(pid) {
         Err(rustix::io::Errno::SRCH) => {
-            match (
-                provider_lifetime_is_active(path, token),
-                crate::unix_process_tree::tagged_runtime_exists(token),
-            ) {
-                (Ok(true), _) | (_, Ok(true)) => LeaseObservation::Active,
-                // Absence or uncertainty of the auxiliary signals is not an
-                // absence proof: a normal daemon spawn can close inherited
-                // descriptors and clear its environment. Only the guardian
-                // may write the exact `gone` receipt after bounded cleanup.
-                _ => LeaseObservation::Unknown,
+            if matches!(provider_lifetime_is_active(path, token), Ok(true)) {
+                return LeaseObservation::Active;
             }
+            if matches!(
+                crate::unix_process_tree::tagged_runtime_exists(token),
+                Ok(true)
+            ) {
+                return LeaseObservation::Active;
+            }
+            // Absence or uncertainty of the auxiliary signals is not an
+            // absence proof: a normal daemon spawn can close inherited
+            // descriptors and clear its environment. Only the guardian
+            // may write the exact `gone` receipt after bounded cleanup.
+            LeaseObservation::Unknown
         }
         Ok(()) | Err(rustix::io::Errno::PERM) => LeaseObservation::Active,
         Err(_) => LeaseObservation::Unknown,
@@ -369,7 +422,12 @@ pub(crate) fn unix_cleanup_receipt_is_present(path: &Path, token: &str) -> io::R
 }
 
 #[cfg(not(unix))]
-fn classify_unlocked_unix_marker(_path: &Path, _token: &str, _raw_pid: &str) -> LeaseObservation {
+fn classify_unlocked_unix_marker(
+    _path: &Path,
+    _token: &str,
+    _raw_pid: &str,
+    _boot_identity: &str,
+) -> LeaseObservation {
     LeaseObservation::Unknown
 }
 
@@ -413,6 +471,7 @@ fn open_runtime_lease(path: &Path) -> io::Result<File> {
     options.open(path)
 }
 
+#[cfg(unix)]
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex
         .lock()
@@ -517,6 +576,17 @@ pub(crate) fn cleanup_stale_runtime_lease(room_id: &str, session_id: &str) {
 mod tests {
     use super::{HeldRuntimeLease, LeaseObservation, observe_runtime_lease};
 
+    fn previous_boot_handle(current: &str) -> String {
+        let mut bytes = current.as_bytes().to_vec();
+        let first_boot_digit = "runtime-v4-".len();
+        bytes[first_boot_digit] = if bytes[first_boot_digit] == b'0' {
+            b'1'
+        } else {
+            b'0'
+        };
+        String::from_utf8(bytes).unwrap_or_else(|error| panic!("encode prior boot handle: {error}"))
+    }
+
     #[test]
     fn exact_pending_and_missing_leases_are_distinct_gone_proofs() {
         let lease = HeldRuntimeLease::prepare("lease-test-room", "lease-test-session")
@@ -616,6 +686,46 @@ mod tests {
             .unwrap_or_else(|error| panic!("record guardian cleanup receipt: {error}"));
         assert_eq!(
             observe_runtime_lease("lease-lifetime-room", "lease-lifetime-session"),
+            LeaseObservation::Gone
+        );
+        lease.cleanup_pre_effect();
+    }
+
+    #[test]
+    fn previous_boot_unix_marker_is_a_process_absence_proof() {
+        use fs2::FileExt;
+
+        let lease = HeldRuntimeLease::prepare("lease-old-boot-room", "lease-old-boot-session")
+            .unwrap_or_else(|error| panic!("prepare old-boot runtime lease: {error}"));
+        lease
+            .begin_launch_effect()
+            .unwrap_or_else(|error| panic!("begin old-boot runtime launch: {error}"));
+        lease.release_launch_lifetime();
+        let current_handle = lease.new_runtime_handle_id();
+        let old_handle = previous_boot_handle(&current_handle);
+        let old_boot = old_handle
+            .strip_prefix("runtime-v4-")
+            .and_then(|value| value.split_once('-'))
+            .map_or_else(
+                || panic!("decode old-boot runtime handle"),
+                |(boot, _)| boot,
+            );
+        let mut file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(lease.path())
+            .unwrap_or_else(|error| panic!("open old-boot runtime lease: {error}"));
+        file.try_lock_exclusive()
+            .unwrap_or_else(|error| panic!("lock old-boot runtime lease: {error}"));
+        super::write_marker(
+            &mut file,
+            &format!("unix:{}:{}:{old_boot}", lease.token(), i32::MAX),
+        )
+        .unwrap_or_else(|error| panic!("write old-boot runtime marker: {error}"));
+        FileExt::unlock(&file)
+            .unwrap_or_else(|error| panic!("unlock old-boot runtime lease: {error}"));
+        assert_eq!(
+            observe_runtime_lease("lease-old-boot-room", "lease-old-boot-session"),
             LeaseObservation::Gone
         );
         lease.cleanup_pre_effect();

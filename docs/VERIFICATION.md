@@ -1365,13 +1365,13 @@ re-reviews remain required before this correction is complete.
 
 ### Durable effect-authorization and exact-cleanup correction candidate: 2026-08-25
 
-Clean schema 20 makes the external-effect boundary explicit. A start is first `prepared`
+Clean schema 21 makes the external-effect boundary explicit. A start is first `prepared`
 without provider authority, then the common adapter reserves the exact runtime
 handle/owner/custody identity and persistence atomically authorizes `effect_inflight`
 before provider I/O. An uncertain return becomes `unconfirmed`; a confirmed stop awaiting
 its result checkpoint becomes `effect_applied`. The production adapter has no start entry
 point that bypasses that durable authorization, and persistence rejects empty or
-substituted runtime identity. Schema 19 is rejected without migration, compatibility, or
+substituted runtime identity. Schema 20 is rejected without migration, compatibility, or
 fallback behavior.
 
 The browser command owner and server-lifetime reconciler now acquire the same exact RAII
@@ -1411,13 +1411,33 @@ live recovery authority as `unconfirmed`; a focused persistence regression and t
 owner-loss recovery tests prove that it remains unresolved/recoverable rather than being
 misclassified as a terminal command rejection.
 
-After the review corrections, the unchanged `make verify` passed every mandatory
+The second independent web re-review closed both of those findings, then found the two
+sides of one remaining boot-boundary defect. On the same boot, startup treated generic
+`Ambiguous` stop authority as terminal `owner_lost`, cleared its exact handle/owner and
+intent, and therefore admitted a replacement runtime even though an escaped provider
+could still be alive. Across a real machine reboot, start did the safe opposite and kept
+the authority, but could remain permanently unresolved because the dead guardian could
+never write its cleanup receipt. The correction makes every generic `Ambiguous` candidate
+retain its request, operation, handle, owner, and recovery-required state. Only a proven
+`Gone` transition may release it.
+
+New Unix runtime handles and activated markers bind a platform-domain-separated hash of
+the exact OS boot identity. Linux/Android use the kernel boot UUID and macOS uses the
+kernel boot epoch returned by the maintained `sysinfo` boundary. The value is read and
+hashed once per server process; errors are cached fail-closed. A matching boot keeps all
+existing lifetime/tag/receipt rules. A different exact boot proves the earlier OS process
+cannot exist, including when the lease file was cleared, and enters the existing `Gone`
+recovery UOW. Invalid or earlier handle formats are not treated as proof. Clean schema 21
+removes the now-unreachable `owner_lost` reservation state, and schema 20 is rejected
+without migration, compatibility, or fallback code.
+
+After the final review corrections, `make verify` passed every mandatory
 architecture, source-growth, logical-line, and 800-line gate; generated bindings;
 production frontend and original-CSS verification; 72 frontend files with 356 tests; 15
-Tauri tests; 18 domain, 93 persistence, four protocol, 101 provider, and 21 server unit
+Tauri tests; 18 domain, 93 persistence, four protocol, 104 provider, and 21 server unit
 tests; 23 Rust integration tests; documentation tests; warning-denied workspace/desktop
 Clippy; and final diff validation. The lifetime handshake was split at its owning boundary
-into `guardian_lifetime.rs`; `guardian.rs` is 795 lines and `unix_process_tree.rs` remains
+into `guardian_lifetime.rs`; `guardian.rs` is 796 lines and `unix_process_tree.rs` remains
 exactly 800. No allow, exception, threshold change, placeholder, fallback, compatibility
 path, or hidden schema migration was introduced.
 
@@ -1435,12 +1455,35 @@ terminal-history allocation at their existing owners. The preserved invariants a
 reconciliation-before-admission, dynamic discovery and corruption detection across every
 Agent Session, exact candidate CAS, bounded paging/concurrency/timeout, and fail-closed
 uncertainty. A pending-reservation-first alternative was measured with SQLite `EXPLAIN
-QUERY PLAN` and rejected: without a schema-20 status/session index it scans the complete
+QUERY PLAN` and rejected: without a schema-21 status/session index it scans the complete
 reservation history and builds a DISTINCT temporary B-tree each second. Adding that index
 would be an explicit future schema, not a hidden migration here. The accepted trade-off is
 the existing bounded per-session candidate read until that schema is designed and
 benchmarked. Phase behavior is covered by persistence/server regressions and the
 unchanged mandatory structure gates; no workload-calibrated latency claim is made.
+
+The second review also identified an avoidable process-enumeration cost in the provider
+observer. Previously, tuple construction evaluated `tagged_runtime_exists` even when the
+exact lifetime flock had already proved `Active`, scanning the process table on every such
+observation. Both pre-anchor and activated-group paths now short-circuit on that lock and
+run the tag scan only when the lock is inactive or unreadable. The cached boot identity
+likewise removes repeated kernel reads and hashing. The owning boundary is
+`runtime_boot.rs` plus `runtime_lease.rs`; preserved invariants are identical `Active`,
+`Gone`, and fail-closed `Unknown` classifications, exact token/generation checks, and no
+public boot or runtime authority. The trade-off is one immutable 64-byte hash and one
+`OnceLock` result per process. Focused lease tests cover same-boot uncertainty,
+different-boot absence, malformed markers, and receipt-only cleanup; no
+workload-calibrated latency claim is made.
+
+The installed rustup `x86_64-pc-windows-gnu` target also completed a workspace
+all-target/all-feature `cargo check` with the rustup Cargo, rustc, and target explicitly
+bound. That cross-check caught and corrected one common marker-parser reference to the
+Unix-only boot module; Windows now classifies that impossible Unix marker as unknown
+without compiling or inventing Windows boot authority. A warning-denied full Windows
+Clippy result is not claimed: the existing Windows-only provider tests and helpers still
+contain unrelated warning-denied lint debt. The mandatory host workspace and desktop
+Clippy gates above remain clean.
+
 Packaged Computer Use and both pushed exact-diff re-reviews remain required before this
 correction is closed.
 

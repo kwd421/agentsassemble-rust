@@ -8,8 +8,7 @@ use sqlx::{Row, Sqlite, Transaction};
 
 use crate::{
     PersistenceError, SqliteStore, agent_lifecycle_authority::payload_agent_id,
-    agent_lifecycle_reservations::mark_lifecycle_owner_lost, turn_authority::active_turn_authority,
-    turn_queue::merge_room_inputs,
+    turn_authority::active_turn_authority, turn_queue::merge_room_inputs,
 };
 
 const ACTIVE_RUNTIME_STATES: [&str; 6] = [
@@ -412,8 +411,7 @@ fn reservation_matches_intent(reservation: &Value, intent_action: &str) -> bool 
     )
 }
 
-pub(crate) async fn reconcile_observation(
-    transaction: &mut Transaction<'_, Sqlite>,
+pub(crate) fn reconcile_observation(
     session: &mut DurableAgentSession,
     observation: &RuntimeReconciliationObservation,
 ) -> Result<bool, PersistenceError> {
@@ -469,7 +467,8 @@ pub(crate) async fn reconcile_observation(
             if reason_code.is_empty() {
                 return Err(invalid_observation());
             }
-            reconcile_ambiguous(transaction, session).await
+            retain_uncertain_runtime(session)?;
+            Ok(true)
         }
     }
 }
@@ -504,45 +503,6 @@ pub(crate) fn reconcile_gone(session: &mut DurableAgentSession) -> Result<bool, 
         return Ok(true);
     }
     Ok(invalidate_previous_runtime_owner(session))
-}
-
-async fn reconcile_ambiguous(
-    transaction: &mut Transaction<'_, Sqlite>,
-    session: &mut DurableAgentSession,
-) -> Result<bool, PersistenceError> {
-    if session.lifecycle_intent_action == "start"
-        && matches!(
-            session.lifecycle_intent_status.as_str(),
-            "prepared" | "effect_inflight" | "unconfirmed"
-        )
-    {
-        retain_uncertain_runtime(session)?;
-        return Ok(true);
-    }
-    if session.lifecycle_intent_action == "stop"
-        && matches!(
-            session.lifecycle_intent_status.as_str(),
-            "prepared" | "effect_inflight" | "unconfirmed"
-        )
-    {
-        let action = format!("agent.{}", session.lifecycle_intent_action);
-        mark_lifecycle_owner_lost(
-            transaction,
-            &session.public.room_id,
-            &session.public.session_id,
-            &action,
-            &session.lifecycle_intent_id,
-        )
-        .await?;
-        disconnect_after_owner_loss(session)?;
-        return Ok(true);
-    }
-    if ACTIVE_RUNTIME_STATES.contains(&session.public.runtime_status.as_str()) {
-        disconnect_after_restart(session)?;
-        return Ok(true);
-    }
-    invalidate_previous_runtime_owner(session);
-    Ok(false)
 }
 
 pub(crate) fn validate_uncertain_lease(
@@ -623,20 +583,9 @@ fn reconcile_confirmed_stop(session: &mut DurableAgentSession) -> Result<(), Per
     Ok(())
 }
 
-fn disconnect_after_owner_loss(session: &mut DurableAgentSession) -> Result<(), PersistenceError> {
-    disconnect_common(session)?;
-    "Provider runtime ownership was lost during restart."
-        .clone_into(&mut session.public.last_error);
-    "runtime_owner_lost".clone_into(&mut session.public.last_error_code);
-    session.lifecycle_intent_action.clear();
-    session.lifecycle_intent_id.clear();
-    session.lifecycle_intent_status.clear();
-    Ok(())
-}
-
 fn retain_uncertain_runtime(session: &mut DurableAgentSession) -> Result<(), PersistenceError> {
     merge_inflight_events(session)?;
-    if session.lifecycle_intent_action == "start"
+    if matches!(session.lifecycle_intent_action.as_str(), "start" | "stop")
         && matches!(
             session.lifecycle_intent_status.as_str(),
             "prepared" | "effect_inflight"

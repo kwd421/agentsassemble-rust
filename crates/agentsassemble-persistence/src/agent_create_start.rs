@@ -492,10 +492,6 @@ fn validate_create_reservation(
     }
     match stored.status.as_str() {
         "pending" => Ok(()),
-        "owner_lost" => Err(rejected(
-            "runtime_owner_lost",
-            "The original provider runtime owner was lost during restart. Use a new lifecycle request.",
-        )),
         "rejected" => Err(stored_rejection(
             stored.failure_code.clone(),
             stored.failure_message.clone(),
