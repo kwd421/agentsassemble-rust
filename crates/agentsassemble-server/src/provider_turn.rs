@@ -193,62 +193,31 @@ async fn commit_provider_error(
     error: ProviderAdapterError,
 ) -> Result<AgentTurnCommit, PersistenceError> {
     let authority = exact_turn_authority(start);
-    if error.runtime_stopped {
-        match store
-            .provider_turn_interrupt_effect(
-                &start.room_id,
-                &start.session_id,
-                start.turn_generation,
-            )
-            .await
-        {
-            Ok(effect) if interrupt_effect_owns_result(start, &effect) => {
-                if effect.phase == ProviderTurnEffectPhase::Finalized {
-                    provider_adapter
-                        .release_confirmed_stop(
-                            &start.room_id,
-                            &start.session_id,
-                            &error.runtime_handle_id,
-                            &error.runtime_owner_id,
-                            &error.runtime_lease_token,
-                        )
-                        .await;
-                }
-                return Ok(empty_turn_commit());
-            }
-            Ok(_)
-            | Err(PersistenceError::CommandRejected {
-                code: "stale_provider_turn_effect",
-                ..
-            }) => {}
-            Err(persistence_error) => return Err(persistence_error),
+    if error.runtime_stopped
+        && let Some(phase) = exact_interrupt_phase(store, start).await?
+    {
+        if phase == ProviderTurnEffectPhase::Finalized {
+            provider_adapter
+                .release_confirmed_stop(
+                    &start.room_id,
+                    &start.session_id,
+                    &error.runtime_handle_id,
+                    &error.runtime_owner_id,
+                    &error.runtime_lease_token,
+                )
+                .await;
         }
+        return Ok(empty_turn_commit());
     }
     if error.code == "provider_turn_interrupted"
         && !error.effect_uncertain
         && !error.runtime_stopped
+        && let Some(phase) = exact_interrupt_phase(store, start).await?
     {
-        match store
-            .provider_turn_interrupt_effect(
-                &start.room_id,
-                &start.session_id,
-                start.turn_generation,
-            )
-            .await
-        {
-            Ok(effect) if interrupt_effect_owns_result(start, &effect) => {
-                if effect.phase == ProviderTurnEffectPhase::Finalized {
-                    provider_adapter.release_terminal_turn(&authority).await;
-                }
-                return Ok(empty_turn_commit());
-            }
-            Ok(_)
-            | Err(PersistenceError::CommandRejected {
-                code: "stale_provider_turn_effect",
-                ..
-            }) => {}
-            Err(persistence_error) => return Err(persistence_error),
+        if phase == ProviderTurnEffectPhase::Finalized {
+            provider_adapter.release_terminal_turn(&authority).await;
         }
+        return Ok(empty_turn_commit());
     }
     if error.effect_uncertain && !error.runtime_stopped {
         store.mark_provider_turn_recovery_required(start).await?;

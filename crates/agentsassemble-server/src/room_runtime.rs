@@ -367,7 +367,7 @@ fn spawn_room_task(
             };
             match input {
                 RoomInput::Command(command) => {
-                    handle_room_command(
+                    Box::pin(handle_room_command(
                         RoomCommandOwners {
                             store: &store,
                             provider_catalog: &provider_catalog,
@@ -378,7 +378,7 @@ fn spawn_room_task(
                             lifecycle_commands: &lifecycle_commands,
                         },
                         command,
-                    )
+                    ))
                     .await;
                 }
                 RoomInput::Provider(result) => {
@@ -441,13 +441,13 @@ async fn handle_room_command(owners: RoomCommandOwners<'_>, command: RoomCommand
             message: "The exact lifecycle request is currently owned by server recovery. Retry the same request.".to_owned(),
         }),
         Some(_lifecycle_guard) => {
-            execute_command(
+            Box::pin(execute_command(
                 store,
                 provider_catalog,
                 provider_adapter,
                 event_tx,
                 &command,
-            )
+            ))
             .await
         }
     };

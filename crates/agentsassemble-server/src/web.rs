@@ -101,9 +101,12 @@ pub async fn serve(
     state: AppState,
     cancellation: CancellationToken,
 ) -> Result<(), ServeError> {
-    let reconciled_turns =
-        reconcile_provider_turn_ownership(&state.store, &state.provider_adapter, &state.rooms)
-            .await?;
+    let reconciled_turns = Box::pin(reconcile_provider_turn_ownership(
+        &state.store,
+        &state.provider_adapter,
+        &state.rooms,
+    ))
+    .await?;
     if reconciled_turns > 0 {
         tracing::warn!(
             reconciled_turns,

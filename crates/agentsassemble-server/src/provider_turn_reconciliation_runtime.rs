@@ -134,14 +134,13 @@ async fn reconcile_live_candidate(
     candidate: &ProviderTurnReconciliationCandidate,
 ) -> Result<(), PersistenceError> {
     let authority = exact_authority(candidate);
-    if let Some(effect) = &candidate.effect {
-        if let Some(commit) =
+    if let Some(effect) = &candidate.effect
+        && let Some(commit) =
             crate::participant_mute_runtime::resume_exact_interrupt(store, provider_adapter, effect)
                 .await?
-        {
-            publish_commit(rooms, commit).await?;
-            return Ok(());
-        }
+    {
+        publish_commit(rooms, commit).await?;
+        return Ok(());
     }
     if let Some(result) = provider_adapter.retained_turn_result(&authority).await {
         let start = start_authority(candidate)?;
