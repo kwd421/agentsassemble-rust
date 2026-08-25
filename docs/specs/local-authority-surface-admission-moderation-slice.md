@@ -4,7 +4,7 @@ Status: active implementation design; Pro critical review approved 2026-08-25
 
 Comparison baseline: original
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; Rust
-`4c7b2a0`.
+`8554bb9`.
 
 Implementation checkpoint, 2026-08-25: immutable local authority/zero-room
 bootstrap, server-wide human profile, canonical directory/create-room flow, and
@@ -14,8 +14,9 @@ one-use ticket credentials, exact-byte Snapshot binding, a transactional bounded
 `(C,H]` reader, client high-water readiness, and no string-ticket/non-desktop
 fallback. Process-wide connection leases, pre-parse raw scopes, permanent fresh-human
 mutation debit, a separate in-flight owner, and canonical participant roles are
-published. The participant-role socket-boundary review correction and the
-mute/provider-custody work below remain active and are not implied complete by this
+published. The participant-role socket-boundary correction is published and has passed
+both exact-diff web review and Daybreaker manual security review. The
+mute/provider-custody work below remains active and is not implied complete by this
 checkpoint.
 
 ## Definition

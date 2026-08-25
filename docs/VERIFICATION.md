@@ -1928,8 +1928,11 @@ authority boundary (`B: APPROVE`). The role implementation was committed and pus
 `4c7b2a0`. Daybreaker then found that malformed role-update events were validated only
 inside projection, after socket cursor advancement. The correction moved that check to
 the shared pre-cursor event-schema boundary and added all three delivery-mode regressions
-above; this correction and the still-running web exact-diff review require final
-re-review before the role slice becomes completion evidence.
+above. Daybreaker approved the exact correction. The independent web Pro review then
+traced snapshot, authenticated catch-up, live delivery, reconnect resume cursors, and
+connection-generation fencing against `4c7b2a0..8554bb9` and returned `A: APPROVE`.
+The role slice, including its cursor correction, is therefore completion evidence at
+`8554bb9`.
 
 ## API verification scope
 

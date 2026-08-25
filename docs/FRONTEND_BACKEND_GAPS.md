@@ -4,12 +4,11 @@ Status: source-derived reimplementation exposure inventory, 2026-08-25
 
 Comparison baseline: original
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust
-`4c7b2a0`. The active local-authority,
+`8554bb9`. The active local-authority,
 surface, admission, subscription, and moderation boundary is design-approved but
 not complete as one boundary. Local authority, product-surface, subscription, and
-process-wide admission and canonical participant-role slices are published; the
-participant-role socket-boundary review correction is the current candidate, while
-participant mute remains open.
+process-wide admission and canonical participant-role slices, including the reviewed
+socket-boundary cursor correction, are published; participant mute remains open.
 
 ## Scope and method
 
