@@ -1,4 +1,5 @@
 import {
+  fetchDesktopOperatorRuntime,
   isDesktopWebview,
   openDesktopCentralGoogleLogin,
 } from "./desktopBridge";
@@ -304,7 +305,7 @@ async function localPost<T>(
   body: Record<string, unknown>,
   signal?: AbortSignal
 ): Promise<T> {
-  const response = await fetch(path, {
+  const response = await fetchLocalRuntime(path, {
     method: "POST",
     cache: "no-store",
     credentials: "same-origin",
@@ -315,6 +316,12 @@ async function localPost<T>(
     signal,
   });
   return responsePayload<T>(response);
+}
+
+function fetchLocalRuntime(path: string, init: RequestInit = {}): Promise<Response> {
+  return isDesktopWebview()
+    ? fetchDesktopOperatorRuntime(path, init)
+    : fetch(path, init);
 }
 
 export function parseCentralGoogleHandoff(value: unknown): CentralGoogleHandoff {
@@ -581,22 +588,27 @@ export type LocalServerInfo = {
 };
 
 export async function fetchLocalServerInfo(): Promise<LocalServerInfo> {
-  const response = await fetch("/api/server-info", { cache: "no-store" });
+  const response = await fetchLocalRuntime("/api/server-info", {
+    cache: "no-store",
+  });
   return responsePayload<LocalServerInfo>(response);
 }
 
 export async function registerLocalServer(deviceToken: string): Promise<void> {
   const session = loadCentralSession();
   if (!session) return;
-  const proofResponse = await fetch("/api/central-directory/registration-proof", {
-    method: "POST",
-    cache: "no-store",
-    headers: {
-      "content-type": "application/json",
-      "x-device-token": deviceToken,
-    },
-    body: JSON.stringify({ owner_person_id: session.person.person_id }),
-  });
+  const proofResponse = await fetchLocalRuntime(
+    "/api/central-directory/registration-proof",
+    {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        "content-type": "application/json",
+        ...(isDesktopWebview() ? {} : { "x-device-token": deviceToken }),
+      },
+      body: JSON.stringify({ owner_person_id: session.person.person_id }),
+    }
+  );
   const local = await responsePayload<
     LocalServerInfo & {
       host_registration_proof: {
@@ -619,7 +631,7 @@ export async function waitForLocalDirectory(): Promise<void> {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), 8000);
   try {
-    const response = await fetch("/api/rooms", {
+    const response = await fetchLocalRuntime("/api/rooms", {
       cache: "no-store",
       signal: controller.signal,
     });
