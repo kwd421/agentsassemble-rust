@@ -97,6 +97,12 @@ fn prepare_file(options: SqliteConnectOptions) -> Result<PreparedDatabase, Persi
         ))?;
     let resolved = parent.join(filename);
     reject_symlink(&resolved)?;
+    let host_key_path = parent.join("central-directory").join("host-ed25519.pk8");
+    if !path_entry_exists(&resolved).map_err(PersistenceError::WriterLease)?
+        && path_entry_exists(&host_key_path).map_err(PersistenceError::HostIdentityFile)?
+    {
+        return Err(PersistenceError::InvalidHostIdentity);
+    }
     let (file, created) = open_database_identity(&resolved)?;
     validate_database_file(&file, created)?;
     let canonical = resolved
@@ -112,19 +118,19 @@ fn prepare_file(options: SqliteConnectOptions) -> Result<PreparedDatabase, Persi
         writer_lease: Some(lease),
         created,
         identity: Some(identity),
-        host_key_path: Some(
-            canonical
-                .parent()
-                .ok_or(PersistenceError::UnsafeDatabasePath(
-                    "database path has no parent",
-                ))?
-                .join("central-directory")
-                .join("host-ed25519.pk8"),
-        ),
+        host_key_path: Some(host_key_path),
         canonical_path: Some(canonical),
     };
     prepared.revalidate()?;
     Ok(prepared)
+}
+
+fn path_entry_exists(path: &Path) -> io::Result<bool> {
+    match std::fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error),
+    }
 }
 
 fn open_database_identity(path: &Path) -> Result<(File, bool), PersistenceError> {

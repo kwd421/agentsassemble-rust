@@ -3,8 +3,11 @@ use std::{path::Path, sync::Arc};
 use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
 
 use crate::{
-    PersistenceError, SqliteStore, database_target::PreparedDatabase,
-    host_key_file::HostKeyMaterial, schema_version::validate_schema_version, sqlite::SCHEMA_OWNER,
+    PersistenceError, SqliteStore,
+    database_target::PreparedDatabase,
+    host_key_file::{HostKeyMaterial, HostKeyPolicy},
+    schema_version::validate_schema_version,
+    sqlite::SCHEMA_OWNER,
 };
 
 impl SqliteStore {
@@ -38,12 +41,18 @@ impl SqliteStore {
         }
         prepared.revalidate()?;
         let empty_authority = !prepared.created && database_is_empty(&pool).await?;
-        let fresh_authority = prepared.created || empty_authority;
+        let (fresh_authority, host_key_policy) = if prepared.created {
+            (true, HostKeyPolicy::CreateOnly)
+        } else if empty_authority {
+            (true, HostKeyPolicy::CreateOrReuse)
+        } else {
+            (false, HostKeyPolicy::ReuseOnly)
+        };
         if !fresh_authority {
             verify_existing_authority(&pool).await?;
         }
         let host_key =
-            HostKeyMaterial::load_or_create(prepared.host_key_path.as_deref(), fresh_authority)?;
+            HostKeyMaterial::load_or_create(prepared.host_key_path.as_deref(), host_key_policy)?;
         let store = Self {
             pool,
             _writer_lease: prepared.writer_lease,

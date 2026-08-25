@@ -17,6 +17,13 @@ use crate::{
 
 const MAX_PRIVATE_KEY_BYTES: u64 = 512;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum HostKeyPolicy {
+    CreateOnly,
+    CreateOrReuse,
+    ReuseOnly,
+}
+
 pub(crate) struct HostKeyMaterial {
     private_key_pkcs8: Vec<u8>,
     public_key: [u8; 32],
@@ -25,17 +32,21 @@ pub(crate) struct HostKeyMaterial {
 impl HostKeyMaterial {
     pub(crate) fn load_or_create(
         path: Option<&Path>,
-        allow_create: bool,
+        policy: HostKeyPolicy,
     ) -> Result<Self, PersistenceError> {
         let Some(path) = path else {
             return Self::generate();
         };
         let parent = path.parent().ok_or(PersistenceError::InvalidHostIdentity)?;
+        let allow_create = policy != HostKeyPolicy::ReuseOnly;
         ensure_private_directory(parent, allow_create)?;
         match open_existing(path) {
+            Ok(_) if policy == HostKeyPolicy::CreateOnly => {
+                Err(PersistenceError::InvalidHostIdentity)
+            }
             Ok(file) => Self::read(file),
             Err(error) if error.kind() == io::ErrorKind::NotFound && allow_create => {
-                create_key(path)
+                create_key(path, policy == HostKeyPolicy::CreateOrReuse)
             }
             Err(error) if error.kind() == io::ErrorKind::NotFound => {
                 Err(PersistenceError::HostIdentityMissing)
@@ -85,7 +96,7 @@ impl HostKeyMaterial {
     }
 }
 
-fn create_key(path: &Path) -> Result<HostKeyMaterial, PersistenceError> {
+fn create_key(path: &Path, allow_existing: bool) -> Result<HostKeyMaterial, PersistenceError> {
     let material = HostKeyMaterial::generate()?;
     let mut options = OpenOptions::new();
     options.create_new(true).read(true).write(true);
@@ -103,8 +114,11 @@ fn create_key(path: &Path) -> Result<HostKeyMaterial, PersistenceError> {
             }
             Ok(material)
         }
-        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists && allow_existing => {
             HostKeyMaterial::read(open_existing(path).map_err(PersistenceError::HostIdentityFile)?)
+        }
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+            Err(PersistenceError::InvalidHostIdentity)
         }
         Err(error) => Err(PersistenceError::HostIdentityFile(error)),
     }
