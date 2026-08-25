@@ -53,6 +53,16 @@ const TABLES: &[TableDefinition] = &[
         infrastructure: false,
     },
     TableDefinition {
+        name: "room_user_preferences",
+        ddl: "CREATE TABLE IF NOT EXISTS room_user_preferences (user_id TEXT NOT NULL, room_id TEXT NOT NULL, preferences_json TEXT NOT NULL, PRIMARY KEY(user_id, room_id), FOREIGN KEY(user_id) REFERENCES user_profiles(user_id) ON DELETE CASCADE, FOREIGN KEY(room_id) REFERENCES rooms(room_id) ON DELETE CASCADE)",
+        infrastructure: false,
+    },
+    TableDefinition {
+        name: "room_appearance_assets",
+        ddl: "CREATE TABLE IF NOT EXISTS room_appearance_assets (asset_id TEXT PRIMARY KEY CHECK(length(asset_id) = 35 AND substr(asset_id, 1, 3) = 'ra_'), room_id TEXT NOT NULL, pending_owner_user_id TEXT, created_by_user_id TEXT NOT NULL, filename TEXT NOT NULL, content_type TEXT NOT NULL CHECK(content_type = 'image/png'), content BLOB NOT NULL, size INTEGER NOT NULL CHECK(size > 0 AND size <= 10485760), created_at TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('pending', 'bound')), expires_at INTEGER, CHECK((state = 'pending' AND pending_owner_user_id IS NOT NULL AND expires_at IS NOT NULL) OR (state = 'bound' AND pending_owner_user_id IS NULL AND expires_at IS NULL)), FOREIGN KEY(room_id) REFERENCES rooms(room_id) ON DELETE CASCADE, FOREIGN KEY(pending_owner_user_id) REFERENCES user_profiles(user_id) ON DELETE CASCADE)",
+        infrastructure: false,
+    },
+    TableDefinition {
         name: "agent_sessions",
         ddl: "CREATE TABLE IF NOT EXISTS agent_sessions (room_id TEXT NOT NULL, session_id TEXT NOT NULL, session_json TEXT NOT NULL, PRIMARY KEY(room_id, session_id), FOREIGN KEY(room_id) REFERENCES rooms(room_id) ON DELETE CASCADE)",
         infrastructure: false,
@@ -101,6 +111,9 @@ const TABLES: &[TableDefinition] = &[
 
 const INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS profile_attachments_owner_idx ON profile_attachments(owner_user_id)",
+    "CREATE INDEX IF NOT EXISTS room_appearance_assets_creator_idx ON room_appearance_assets(created_by_user_id)",
+    "CREATE INDEX IF NOT EXISTS room_appearance_assets_pending_idx ON room_appearance_assets(pending_owner_user_id, expires_at) WHERE state = 'pending'",
+    "CREATE INDEX IF NOT EXISTS room_appearance_assets_room_idx ON room_appearance_assets(room_id, state)",
     "CREATE INDEX IF NOT EXISTS room_write_budgets_window_idx ON room_write_budgets(window_started_at)",
     "CREATE UNIQUE INDEX IF NOT EXISTS provider_turn_executions_blocking_session_idx ON provider_turn_executions(room_id, session_id) WHERE phase IN ('assigned', 'start_dispatching', 'running', 'interrupt_pending', 'quiescing', 'start_ambiguous', 'interrupt_ambiguous', 'recovery_required')",
     "CREATE UNIQUE INDEX IF NOT EXISTS provider_turn_executions_blocking_runtime_idx ON provider_turn_executions(runtime_handle_id) WHERE phase IN ('assigned', 'start_dispatching', 'running', 'interrupt_pending', 'quiescing', 'start_ambiguous', 'interrupt_ambiguous', 'recovery_required')",
@@ -167,5 +180,70 @@ mod tests {
                     .unwrap_or_else(|error| panic!("query product table {}: {error}", table.name))
             );
         }
+    }
+
+    #[tokio::test]
+    async fn room_asset_custody_moves_from_uploader_to_room_in_the_schema() {
+        let pool = SqlitePool::connect("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("open in-memory schema database: {error}"));
+        sqlx::query("PRAGMA foreign_keys = ON")
+            .execute(&pool)
+            .await
+            .unwrap_or_else(|error| panic!("enable foreign keys: {error}"));
+        for statement in statements() {
+            sqlx::query(statement)
+                .execute(&pool)
+                .await
+                .unwrap_or_else(|error| panic!("install schema statement: {error}"));
+        }
+        sqlx::query(
+            "INSERT INTO rooms(room_id, room_json, settings_json) VALUES ('general', '{}', '{}')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap_or_else(|error| panic!("insert room: {error}"));
+        sqlx::query(
+            "INSERT INTO user_profiles(user_id, participant_id, profile_json) VALUES ('user-1', 'participant-1', '{}')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap_or_else(|error| panic!("insert profile: {error}"));
+        sqlx::query(
+            "INSERT INTO room_appearance_assets(asset_id, room_id, pending_owner_user_id, created_by_user_id, filename, content_type, content, size, created_at, state, expires_at) VALUES ('ra_00000000000000000000000000000000', 'general', 'user-1', 'user-1', 'pending.png', 'image/png', X'00', 1, '2026-08-26T00:00:00Z', 'pending', 1)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap_or_else(|error| panic!("insert pending asset: {error}"));
+        sqlx::query(
+            "INSERT INTO room_appearance_assets(asset_id, room_id, pending_owner_user_id, created_by_user_id, filename, content_type, content, size, created_at, state, expires_at) VALUES ('ra_11111111111111111111111111111111', 'general', NULL, 'user-1', 'bound.png', 'image/png', X'00', 1, '2026-08-26T00:00:00Z', 'bound', NULL)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap_or_else(|error| panic!("insert bound asset: {error}"));
+
+        assert!(
+            sqlx::query(
+                "INSERT INTO room_appearance_assets(asset_id, room_id, pending_owner_user_id, created_by_user_id, filename, content_type, content, size, created_at, state, expires_at) VALUES ('ra_22222222222222222222222222222222', 'general', NULL, 'user-1', 'invalid.png', 'image/png', X'00', 1, '2026-08-26T00:00:00Z', 'pending', NULL)",
+            )
+            .execute(&pool)
+            .await
+            .is_err()
+        );
+
+        sqlx::query("DELETE FROM user_profiles WHERE user_id = 'user-1'")
+            .execute(&pool)
+            .await
+            .unwrap_or_else(|error| panic!("delete uploader: {error}"));
+        let remaining = sqlx::query_scalar::<_, String>(
+            "SELECT asset_id FROM room_appearance_assets ORDER BY asset_id",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap_or_else(|error| panic!("read remaining assets: {error}"));
+        assert_eq!(
+            remaining,
+            vec!["ra_11111111111111111111111111111111".to_owned()]
+        );
     }
 }
