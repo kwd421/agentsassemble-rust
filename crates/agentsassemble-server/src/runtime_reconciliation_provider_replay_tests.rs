@@ -1,7 +1,7 @@
 use agentsassemble_domain::{AuthenticatedPrincipal, ProviderCatalog};
 use agentsassemble_persistence::{
-    AgentRuntimeStarted, AgentStartPlan, LiveRuntimeReconciliation, ProviderTurnExecutionPhase,
-    ProviderTurnReconciliationCandidate, SqliteStore,
+    AgentRuntimeStarted, AgentStartPlan, AgentTurnAssignment, LiveRuntimeReconciliation,
+    ProviderTurnExecutionPhase, ProviderTurnReconciliationCandidate, SqliteStore,
 };
 use agentsassemble_provider::{
     ProviderAdapter, ProviderCatalogService, ProviderRuntimeObservation, ProviderStartReservation,
@@ -9,11 +9,11 @@ use agentsassemble_provider::{
 use serde_json::json;
 
 use super::reconcile_unowned_observation;
-use crate::RoomRuntime;
 use crate::runtime_reconciliation::{
     RUNTIME_RECONCILIATION_TEST_LOCK, recover_exact_lifecycle_command,
     tests::{draft, local_principal},
 };
+use crate::{RoomRuntime, provider_recovery_tracker::ProviderRecoveryTracker};
 
 #[tokio::test]
 async fn production_replay_helper_observes_gone_before_reenabling_start() {
@@ -165,6 +165,7 @@ struct LiveScanFixture {
     store: SqliteStore,
     session_id: String,
     turn_generation: u64,
+    assignment: AgentTurnAssignment,
     candidate: ProviderTurnReconciliationCandidate,
     lease_owner: ProviderAdapter,
     reservation: ProviderStartReservation,
@@ -261,12 +262,35 @@ async fn stage_live_scan_fixture() -> LiveScanFixture {
         store,
         session_id,
         turn_generation,
+        assignment: assignment.clone(),
         candidate,
         lease_owner,
         reservation,
         fresh_adapter,
         rooms,
     }
+}
+
+#[tokio::test]
+async fn exact_queued_recovery_claim_blocks_duplicate_handoff_until_owner_release() {
+    let _serial = RUNTIME_RECONCILIATION_TEST_LOCK.lock().await;
+    let fixture = stage_live_scan_fixture().await;
+    let tracker = ProviderRecoveryTracker::default();
+    let owner = tracker
+        .try_claim(&fixture.assignment)
+        .unwrap_or_else(|| panic!("first exact recovery owner was not admitted"));
+    assert!(tracker.try_claim(&fixture.assignment).is_none());
+    drop(owner);
+    assert!(tracker.try_claim(&fixture.assignment).is_some());
+    fixture
+        .lease_owner
+        .cancel_start_reservation("general", &fixture.session_id, &fixture.reservation)
+        .await;
+    fixture
+        .rooms
+        .shutdown()
+        .await
+        .unwrap_or_else(|error| panic!("shutdown recovery-claim room: {error}"));
 }
 
 #[tokio::test]

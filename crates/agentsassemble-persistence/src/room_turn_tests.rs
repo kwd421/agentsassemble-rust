@@ -18,6 +18,8 @@ const SPEAKER_AGENT_ID: &str = "codex-00000000-0000-5000-8000-000000000003";
 
 #[path = "provider_turn_mute_tests.rs"]
 mod provider_turn_mute_tests;
+#[path = "shutdown_scheduler_tests.rs"]
+mod shutdown_scheduler_tests;
 
 #[tokio::test]
 async fn ordered_floor_queue_limit_rejects_the_source_message_atomically() {
