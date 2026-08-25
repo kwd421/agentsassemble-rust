@@ -735,6 +735,9 @@ mod observation;
 #[path = "runtime_provider_session_tests.rs"]
 mod provider_session_tests;
 #[cfg(all(test, unix))]
+#[path = "runtime_provider_turn_exact_tests.rs"]
+mod provider_turn_exact_tests;
+#[cfg(all(test, unix))]
 #[path = "runtime_provider_turn_tests.rs"]
 mod provider_turn_tests;
 #[cfg(all(test, unix))]
@@ -761,6 +764,6 @@ mod runtime_exact_turn;
 mod turn;
 pub use runtime_exact_turn::{
     ProviderExactTurnAuthority, ProviderPreparedTurn, ProviderTurnControl,
-    ProviderTurnInterruptDisposition,
+    ProviderTurnInterruptDisposition, ProviderTurnQuiescence,
 };
 pub use turn::{ProviderRoomObservation, ProviderTurnCompleted, ProviderTurnRequest};

@@ -45,6 +45,9 @@ pub(crate) async fn apply_exact_interrupt(
                 }
             }
         }
+        ProviderTurnInterruptDisposition::Quiesced => {
+            store.mark_unstarted_interrupt_waiting(&claim).await?
+        }
     };
     if let Err(error) = control.wait_quiesced(QUIESCENCE_TIMEOUT).await {
         store
@@ -52,7 +55,9 @@ pub(crate) async fn apply_exact_interrupt(
             .await?;
         return Err(unresolved(error.code, error.message));
     }
-    store.finalize_interrupted_turn_retained(&waiting).await
+    let commit = store.finalize_interrupted_turn_retained(&waiting).await?;
+    provider_adapter.release_terminal_turn(&authority).await;
+    Ok(commit)
 }
 
 pub(crate) async fn resume_exact_interrupt(
@@ -60,26 +65,25 @@ pub(crate) async fn resume_exact_interrupt(
     provider_adapter: &ProviderAdapter,
     effect: &ProviderTurnInterruptEffect,
 ) -> Result<Option<AgentTurnCommit>, PersistenceError> {
-    let Ok(mut control) = provider_adapter
-        .begin_exact_turn(&exact_authority(effect))
-        .await
-    else {
+    let authority = exact_authority(effect);
+    let Ok(mut control) = provider_adapter.begin_exact_turn(&authority).await else {
         return Ok(None);
     };
     let waiting = store
         .authorize_provider_interrupt_recovery_wait(effect)
         .await?;
-    control.request_interrupt();
+    if control.disposition != ProviderTurnInterruptDisposition::Quiesced {
+        control.request_interrupt();
+    }
     if let Err(error) = control.wait_quiesced(QUIESCENCE_TIMEOUT).await {
         store
             .mark_provider_interrupt_recovery_required(&waiting)
             .await?;
         return Err(unresolved(error.code, error.message));
     }
-    store
-        .finalize_interrupted_turn_retained(&waiting)
-        .await
-        .map(Some)
+    let commit = store.finalize_interrupted_turn_retained(&waiting).await?;
+    provider_adapter.release_terminal_turn(&authority).await;
+    Ok(Some(commit))
 }
 
 fn exact_authority(effect: &ProviderTurnInterruptEffect) -> ProviderExactTurnAuthority {

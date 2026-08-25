@@ -551,7 +551,7 @@ fn reused_turn_fixture(transcript: &Path) -> String {
     )
 }
 
-fn turn_fixture(
+pub(super) fn turn_fixture(
     transcript: &Path,
     before_turn_response: &str,
     turn_response: &str,
@@ -574,7 +574,7 @@ fn exact_interrupt_fixture(transcript: &Path, seen: &Path) -> String {
     )
 }
 
-fn active_session(
+pub(super) fn active_session(
     session: &agentsassemble_domain::DurableAgentSession,
     started: &ProviderRuntimeStarted,
     turn_id: &str,
@@ -601,7 +601,7 @@ fn active_session(
     active
 }
 
-fn requests(path: &Path) -> Vec<Value> {
+pub(super) fn requests(path: &Path) -> Vec<Value> {
     std::fs::read_to_string(path)
         .unwrap_or_else(|error| panic!("read provider-turn transcript: {error}"))
         .lines()
@@ -623,7 +623,7 @@ fn request_methods(requests: &[Value]) -> Vec<&str> {
         .collect()
 }
 
-async fn stop_and_release(
+pub(super) async fn stop_and_release(
     adapter: &ProviderAdapter,
     session: &agentsassemble_domain::DurableAgentSession,
     started: &ProviderRuntimeStarted,

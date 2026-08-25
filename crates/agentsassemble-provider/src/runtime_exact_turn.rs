@@ -6,16 +6,17 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use super::{
-    DriverError, ProviderAdapter, ProviderAdapterError, ProviderTurnRequest, RuntimeState,
-    validate_owned_runtime,
+    DriverError, ProviderAdapter, ProviderAdapterError, ProviderTurnCompleted, ProviderTurnRequest,
+    RuntimeState, validate_owned_runtime,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ActiveProviderTurnPhase {
     Preparing,
     Entered,
-    QuiescedInterruptedRuntimeRetained,
-    QuiescedOther,
+    NotStartedRetained,
+    ResultReadyRetained,
+    ResultReadyUncertain,
 }
 
 pub(super) struct ActiveProviderTurnSlot {
@@ -25,6 +26,7 @@ pub(super) struct ActiveProviderTurnSlot {
     turn_generation: u64,
     interruption: CancellationToken,
     phase: ActiveProviderTurnPhase,
+    result: Option<Result<ProviderTurnCompleted, ProviderAdapterError>>,
     completion: watch::Sender<ActiveProviderTurnPhase>,
 }
 
@@ -73,6 +75,12 @@ impl ProviderPreparedTurn {
 pub enum ProviderTurnInterruptDisposition {
     NotStarted,
     Started,
+    Quiesced,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProviderTurnQuiescence {
+    RuntimeRetained,
 }
 
 #[derive(Debug, Clone)]
@@ -93,15 +101,21 @@ impl ProviderTurnControl {
     /// # Errors
     ///
     /// Returns a fail-closed error if the owner cannot prove quiescence in time.
-    pub async fn wait_quiesced(&mut self, timeout: Duration) -> Result<(), ProviderAdapterError> {
+    pub async fn wait_quiesced(
+        &mut self,
+        timeout: Duration,
+    ) -> Result<ProviderTurnQuiescence, ProviderAdapterError> {
         tokio::time::timeout(timeout, async {
             loop {
                 match *self.completion.borrow_and_update() {
-                    ActiveProviderTurnPhase::QuiescedInterruptedRuntimeRetained => return Ok(()),
-                    ActiveProviderTurnPhase::QuiescedOther => {
+                    ActiveProviderTurnPhase::NotStartedRetained
+                    | ActiveProviderTurnPhase::ResultReadyRetained => {
+                        return Ok(ProviderTurnQuiescence::RuntimeRetained);
+                    }
+                    ActiveProviderTurnPhase::ResultReadyUncertain => {
                         return Err(ProviderAdapterError::safe(DriverError::new(
                             "provider_turn_interrupt_unconfirmed",
-                            "The exact provider turn quiesced without confirmed retained-runtime interruption.",
+                            "The exact provider turn quiesced without retained-runtime evidence.",
                         )));
                     }
                     ActiveProviderTurnPhase::Preparing | ActiveProviderTurnPhase::Entered => {}
@@ -150,16 +164,25 @@ impl ProviderAdapter {
                 if !same_execution(active, request) {
                     return Err(ProviderAdapterError::safe(operation_in_progress()));
                 }
-                if active.phase == ActiveProviderTurnPhase::Preparing {
-                    return Ok(prepared_from_active(session, runtime, active));
+                match active.phase {
+                    ActiveProviderTurnPhase::Preparing => {
+                        return Ok(prepared_from_active(session, runtime, active));
+                    }
+                    ActiveProviderTurnPhase::NotStartedRetained
+                    | ActiveProviderTurnPhase::ResultReadyRetained
+                    | ActiveProviderTurnPhase::ResultReadyUncertain => {
+                        return Err(ProviderAdapterError::safe(operation_in_progress()));
+                    }
+                    ActiveProviderTurnPhase::Entered => {}
                 }
                 let mut completion = active.completion.subscribe();
                 drop(slot);
                 loop {
                     if matches!(
                         *completion.borrow_and_update(),
-                        ActiveProviderTurnPhase::QuiescedInterruptedRuntimeRetained
-                            | ActiveProviderTurnPhase::QuiescedOther
+                        ActiveProviderTurnPhase::NotStartedRetained
+                            | ActiveProviderTurnPhase::ResultReadyRetained
+                            | ActiveProviderTurnPhase::ResultReadyUncertain
                     ) {
                         break;
                     }
@@ -170,7 +193,7 @@ impl ProviderAdapter {
                         ))
                     })?;
                 }
-                continue;
+                return Err(ProviderAdapterError::safe(operation_in_progress()));
             }
             let driver = runtime
                 .driver
@@ -186,6 +209,7 @@ impl ProviderAdapter {
                 turn_generation: request.turn_generation,
                 interruption: CancellationToken::new(),
                 phase: ActiveProviderTurnPhase::Preparing,
+                result: None,
                 completion,
             });
             return Ok(ProviderPreparedTurn {
@@ -228,7 +252,7 @@ impl ProviderAdapter {
         Ok(active.interruption.clone())
     }
 
-    /// Removes a preparation whose durable start authorization was not consumed.
+    /// Retains proof that durable start authorization was not consumed.
     pub async fn discard_prepared_turn(&self, prepared: &ProviderPreparedTurn) {
         let Some(slot) = self
             .existing_slot(&prepared.room_id, &prepared.session_id)
@@ -243,21 +267,20 @@ impl ProviderAdapter {
         if runtime.active_turn.as_ref().is_some_and(|active| {
             active.preparation_id == prepared.preparation_id
                 && active.phase == ActiveProviderTurnPhase::Preparing
-        }) && let Some(active) = runtime.active_turn.take()
+        }) && let Some(active) = runtime.active_turn.as_mut()
         {
-            let phase = if active.interruption.is_cancelled() {
-                ActiveProviderTurnPhase::QuiescedInterruptedRuntimeRetained
-            } else {
-                ActiveProviderTurnPhase::QuiescedOther
-            };
-            active.completion.send_replace(phase);
+            active.phase = ActiveProviderTurnPhase::NotStartedRetained;
+            active
+                .completion
+                .send_replace(ActiveProviderTurnPhase::NotStartedRetained);
         }
     }
 
-    pub(super) async fn quiesce_prepared_turn(
+    pub(super) async fn retain_prepared_turn_result(
         &self,
         prepared: &ProviderPreparedTurn,
-        interrupted_runtime_retained: bool,
+        result: &Result<ProviderTurnCompleted, ProviderAdapterError>,
+        runtime_retained: bool,
     ) {
         let Some(slot) = self
             .existing_slot(&prepared.room_id, &prepared.session_id)
@@ -269,18 +292,103 @@ impl ProviderAdapter {
         let RuntimeState::Running(runtime) = &mut slot.state else {
             return;
         };
-        if runtime
+        if let Some(active) = runtime
+            .active_turn
+            .as_mut()
+            .filter(|active| active.preparation_id == prepared.preparation_id)
+        {
+            let phase = if runtime_retained {
+                ActiveProviderTurnPhase::ResultReadyRetained
+            } else {
+                ActiveProviderTurnPhase::ResultReadyUncertain
+            };
+            active.result = Some(result.clone());
+            active.phase = phase;
+            active.completion.send_replace(phase);
+        }
+    }
+
+    /// Returns a retained typed result only for the exact quiesced turn.
+    pub async fn retained_turn_result(
+        &self,
+        authority: &ProviderExactTurnAuthority,
+    ) -> Option<Result<ProviderTurnCompleted, ProviderAdapterError>> {
+        let slot = self
+            .existing_slot(&authority.room_id, &authority.session_id)
+            .await?;
+        let slot = slot.lock().await;
+        let RuntimeState::Running(runtime) = &slot.state else {
+            return None;
+        };
+        if runtime.handle_id != authority.runtime_handle_id
+            || runtime.owner_id != authority.runtime_owner_id
+            || runtime.lease_token != authority.runtime_lease_token
+        {
+            return None;
+        }
+        runtime
             .active_turn
             .as_ref()
-            .is_some_and(|active| active.preparation_id == prepared.preparation_id)
-            && let Some(active) = runtime.active_turn.take()
+            .filter(|active| {
+                exact_authority_matches(active, authority)
+                    && matches!(
+                        active.phase,
+                        ActiveProviderTurnPhase::ResultReadyRetained
+                            | ActiveProviderTurnPhase::ResultReadyUncertain
+                    )
+            })
+            .and_then(|active| active.result.clone())
+    }
+
+    /// Reports whether this adapter still owns the exact in-memory turn lifetime.
+    pub async fn owns_exact_turn(&self, authority: &ProviderExactTurnAuthority) -> bool {
+        let Some(slot) = self
+            .existing_slot(&authority.room_id, &authority.session_id)
+            .await
+        else {
+            return false;
+        };
+        let slot = slot.lock().await;
+        let RuntimeState::Running(runtime) = &slot.state else {
+            return false;
+        };
+        runtime.handle_id == authority.runtime_handle_id
+            && runtime.owner_id == authority.runtime_owner_id
+            && runtime.lease_token == authority.runtime_lease_token
+            && runtime
+                .active_turn
+                .as_ref()
+                .is_some_and(|active| exact_authority_matches(active, authority))
+    }
+
+    /// Releases a quiesced exact turn only after its durable terminal commit.
+    pub async fn release_terminal_turn(&self, authority: &ProviderExactTurnAuthority) {
+        let Some(slot) = self
+            .existing_slot(&authority.room_id, &authority.session_id)
+            .await
+        else {
+            return;
+        };
+        let mut slot = slot.lock().await;
+        let RuntimeState::Running(runtime) = &mut slot.state else {
+            return;
+        };
+        if runtime.handle_id != authority.runtime_handle_id
+            || runtime.owner_id != authority.runtime_owner_id
+            || runtime.lease_token != authority.runtime_lease_token
         {
-            let phase = if interrupted_runtime_retained {
-                ActiveProviderTurnPhase::QuiescedInterruptedRuntimeRetained
-            } else {
-                ActiveProviderTurnPhase::QuiescedOther
-            };
-            active.completion.send_replace(phase);
+            return;
+        }
+        if runtime.active_turn.as_ref().is_some_and(|active| {
+            exact_authority_matches(active, authority)
+                && matches!(
+                    active.phase,
+                    ActiveProviderTurnPhase::NotStartedRetained
+                        | ActiveProviderTurnPhase::ResultReadyRetained
+                        | ActiveProviderTurnPhase::ResultReadyUncertain
+                )
+        }) {
+            runtime.active_turn.take();
         }
     }
 
@@ -313,10 +421,14 @@ impl ProviderAdapter {
             .as_mut()
             .filter(|active| exact_authority_matches(active, authority))
             .ok_or_else(|| ProviderAdapterError::safe(stale_turn()))?;
-        let disposition = if active.phase == ActiveProviderTurnPhase::Preparing {
-            ProviderTurnInterruptDisposition::NotStarted
-        } else {
-            ProviderTurnInterruptDisposition::Started
+        let disposition = match active.phase {
+            ActiveProviderTurnPhase::Preparing => ProviderTurnInterruptDisposition::NotStarted,
+            ActiveProviderTurnPhase::Entered => ProviderTurnInterruptDisposition::Started,
+            ActiveProviderTurnPhase::NotStartedRetained
+            | ActiveProviderTurnPhase::ResultReadyRetained
+            | ActiveProviderTurnPhase::ResultReadyUncertain => {
+                ProviderTurnInterruptDisposition::Quiesced
+            }
         };
         let completion = active.completion.subscribe();
         Ok(ProviderTurnControl {

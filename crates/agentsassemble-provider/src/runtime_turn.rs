@@ -1,9 +1,12 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, panic::AssertUnwindSafe};
 
 use agentsassemble_domain::{DurableAgentSession, has_visible_text};
+use futures_util::FutureExt;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
+#[cfg(test)]
+use super::ProviderExactTurnAuthority;
 use super::{
     DriverError, ProviderAdapter, ProviderAdapterError, ProviderDriver, ProviderPreparedTurn,
     RuntimeState, revalidate_runtime_authority, validate_owned_runtime,
@@ -86,31 +89,64 @@ impl ProviderAdapter {
         let (driver_cell, cancellation, handle_id, owner_id, lease_token) = match owner_authority {
             Ok(authority) => authority,
             Err(error) => {
-                self.quiesce_prepared_turn(&prepared, false).await;
-                return Err(error);
+                let result = Err(error);
+                self.retain_prepared_turn_result(&prepared, &result, false)
+                    .await;
+                return result;
             }
         };
-        let owner_task = tokio::spawn(run_turn_owner(TurnOwnerInput {
-            adapter: self.clone(),
-            prepared,
-            driver_cell,
-            cancellation,
-            session: session.clone(),
-            request: request.clone(),
-            handle_id: handle_id.clone(),
-            owner_id: owner_id.clone(),
-            exact_interruption,
-        }));
-        let turn_outcome = owner_task.await.map_err(|_| {
-            ProviderAdapterError::uncertain(
+        let owner_adapter = self.clone();
+        let owner_prepared = prepared.clone();
+        let owner_session = session.clone();
+        let owner_request = request.clone();
+        let owner_handle_id = handle_id.clone();
+        let owner_id_for_task = owner_id.clone();
+        let panic_handle_id = handle_id.clone();
+        let panic_owner_id = owner_id.clone();
+        let owner_task = tokio::spawn(async move {
+            let outcome = AssertUnwindSafe(run_turn_owner(TurnOwnerInput {
+                driver_cell,
+                cancellation,
+                session: owner_session,
+                request: owner_request,
+                handle_id: owner_handle_id,
+                owner_id: owner_id_for_task,
+                exact_interruption,
+            }))
+            .catch_unwind()
+            .await
+            .unwrap_or_else(|_| OwnedTurnResult {
+                result: Err(ProviderAdapterError::uncertain(
+                    DriverError::new(
+                        "provider_turn_owner_failed",
+                        "The exact provider turn owner ended without a result.",
+                    ),
+                    &panic_handle_id,
+                    &panic_owner_id,
+                )),
+                requires_restart: false,
+            });
+            let runtime_retained = !outcome.requires_restart
+                && match &outcome.result {
+                    Ok(_) => true,
+                    Err(error) => !error.effect_uncertain && !error.runtime_stopped,
+                };
+            owner_adapter
+                .retain_prepared_turn_result(&owner_prepared, &outcome.result, runtime_retained)
+                .await;
+            outcome
+        });
+        let turn_outcome = owner_task.await.unwrap_or_else(|_| OwnedTurnResult {
+            result: Err(ProviderAdapterError::uncertain(
                 DriverError::new(
                     "provider_turn_owner_failed",
                     "The exact provider turn owner ended without a result.",
                 ),
                 &handle_id,
                 &owner_id,
-            )
-        })?;
+            )),
+            requires_restart: false,
+        });
         if let Err(error) = &turn_outcome.result {
             if turn_outcome.requires_restart {
                 let driver_error = DriverError::new(error.code, error.message);
@@ -145,8 +181,31 @@ impl ProviderAdapter {
         session: &DurableAgentSession,
         request: &ProviderTurnRequest,
     ) -> Result<ProviderTurnCompleted, ProviderAdapterError> {
-        let prepared = self.prepare_turn(session, request).await?;
-        self.send_prepared_turn(prepared, session, request).await
+        let prepared = match self.prepare_turn(session, request).await {
+            Ok(prepared) => prepared,
+            Err(error) if error.code == "operation_in_progress" => {
+                let authority = ProviderExactTurnAuthority {
+                    room_id: session.public.room_id.clone(),
+                    session_id: session.public.session_id.clone(),
+                    execution_id: request.execution_id.clone(),
+                    turn_id: request.turn_id.clone(),
+                    turn_generation: request.turn_generation,
+                    runtime_handle_id: session.runtime_handle_id.clone(),
+                    runtime_owner_id: session.runtime_owner_id.clone(),
+                    runtime_lease_token: session.runtime_lease_token.clone(),
+                };
+                let Some(result) = self.retained_turn_result(&authority).await else {
+                    return Err(error);
+                };
+                self.release_terminal_turn(&authority).await;
+                return result;
+            }
+            Err(error) => return Err(error),
+        };
+        let authority = prepared.exact_authority();
+        let result = self.send_prepared_turn(prepared, session, request).await;
+        self.release_terminal_turn(&authority).await;
+        result
     }
 }
 
@@ -156,8 +215,6 @@ struct OwnedTurnResult {
 }
 
 struct TurnOwnerInput {
-    adapter: ProviderAdapter,
-    prepared: ProviderPreparedTurn,
     driver_cell: std::sync::Arc<super::runtime_driver::DriverCell>,
     cancellation: CancellationToken,
     session: DurableAgentSession,
@@ -169,8 +226,6 @@ struct TurnOwnerInput {
 
 async fn run_turn_owner(input: TurnOwnerInput) -> OwnedTurnResult {
     let TurnOwnerInput {
-        adapter,
-        prepared,
         driver_cell,
         cancellation,
         session,
@@ -245,13 +300,6 @@ async fn run_turn_owner(input: TurnOwnerInput) -> OwnedTurnResult {
                 requires_restart: false,
             }
         };
-    let interrupted_runtime_retained = !owned.requires_restart
-        && owned.result.as_ref().is_err_and(|error| {
-            error.code == "provider_turn_interrupted" && !error.effect_uncertain
-        });
-    adapter
-        .quiesce_prepared_turn(&prepared, interrupted_runtime_retained)
-        .await;
     owned
 }
 

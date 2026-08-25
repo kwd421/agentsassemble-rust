@@ -68,6 +68,6 @@ pub use runtime::{
     ProviderRoomObservation, ProviderRuntimeGone, ProviderRuntimeObservation,
     ProviderRuntimeStarted, ProviderShutdownOutcome, ProviderStartReservation,
     ProviderTurnCompleted, ProviderTurnControl, ProviderTurnInterruptDisposition,
-    ProviderTurnRequest,
+    ProviderTurnQuiescence, ProviderTurnRequest,
 };
 pub use selection::{ProviderSelection, ProviderSelectionError, creation_start_requested};
