@@ -30,9 +30,8 @@ pub(super) async fn publish_then_resume(
     room_tool_ingress: &ProviderRoomToolIngress,
     recovery: RecoveredAssignments,
 ) {
-    let result = crate::event_publication::drain_room_publications(store, event_tx, room_id).await;
-    if result.is_ok() {
-        for recovered in recovery.assignments {
+    publish_before_recovery_entry(store, event_tx, room_id, recovery, |assignments| {
+        for recovered in assignments {
             spawn_recovered_provider_turn(
                 turn_tasks,
                 store.clone(),
@@ -42,6 +41,20 @@ pub(super) async fn publish_then_resume(
                 recovered.guard,
             );
         }
+    })
+    .await;
+}
+
+async fn publish_before_recovery_entry(
+    store: &SqliteStore,
+    event_tx: &broadcast::Sender<RoomEvent>,
+    room_id: &str,
+    recovery: RecoveredAssignments,
+    enter_recovery: impl FnOnce(Vec<RecoveredAssignment>),
+) {
+    let result = crate::event_publication::drain_room_publications(store, event_tx, room_id).await;
+    if result.is_ok() {
+        enter_recovery(recovery.assignments);
     }
     let _ = recovery.reply.send(result);
 }
@@ -52,13 +65,11 @@ mod tests {
     use agentsassemble_persistence::{
         AgentRuntimeStarted, AgentStartPlan, AgentTurnAssignment, SqliteStore,
     };
-    use agentsassemble_provider::{
-        ProviderAdapter, ProviderRoomToolIngress, ProviderStartReservation,
-    };
+    use agentsassemble_provider::{ProviderAdapter, ProviderStartReservation};
     use serde_json::json;
-    use tokio::{sync::broadcast, task::JoinSet};
+    use tokio::sync::broadcast;
 
-    use super::{RecoveredAssignment, RecoveredAssignments, publish_then_resume};
+    use super::{RecoveredAssignment, RecoveredAssignments, publish_before_recovery_entry};
     use crate::{
         provider_recovery_tracker::ProviderRecoveryTracker,
         runtime_reconciliation::tests::{draft, local_principal},
@@ -87,22 +98,32 @@ mod tests {
             .try_claim(&fixture.assignment)
             .unwrap_or_else(|| panic!("claim exact recovered assignment"));
         let (event_tx, mut event_rx) = broadcast::channel(32);
-        let (room_tool_ingress, _room_tool_rx) = ProviderRoomToolIngress::channel(1);
-        let mut turn_tasks = JoinSet::new();
         let (reply, response) = tokio::sync::oneshot::channel();
-        publish_then_resume(
+        let mut entered_recovery = false;
+        publish_before_recovery_entry(
             &fixture.started.store,
             &event_tx,
             "general",
-            &mut turn_tasks,
-            &ProviderAdapter::new(),
-            &room_tool_ingress,
             RecoveredAssignments {
                 assignments: vec![RecoveredAssignment {
-                    assignment: fixture.assignment,
+                    assignment: fixture.assignment.clone(),
                     guard,
                 }],
                 reply,
+            },
+            |assignments| {
+                let [entered] = assignments.as_slice() else {
+                    panic!("recovery entry did not receive the exact assignment");
+                };
+                assert_eq!(
+                    entered.assignment.session.public.session_id,
+                    fixture.started.session_id
+                );
+                let published = event_rx.try_recv().unwrap_or_else(|error| {
+                    panic!("publication was not visible at entry: {error}")
+                });
+                assert_eq!(published.seq, fixture.expected_event_seq);
+                entered_recovery = true;
             },
         )
         .await;
@@ -111,11 +132,7 @@ mod tests {
             .unwrap_or_else(|error| panic!("receive handoff completion: {error}"))
             .unwrap_or_else(|error| panic!("complete ordered recovery handoff: {error}"));
 
-        let mut published_sequences = Vec::new();
-        while let Ok(event) = event_rx.try_recv() {
-            published_sequences.push(event.seq);
-        }
-        assert!(published_sequences.contains(&fixture.expected_event_seq));
+        assert!(entered_recovery);
         assert!(
             fixture
                 .started
@@ -125,17 +142,7 @@ mod tests {
                 .unwrap_or_else(|error| panic!("read recovery publication cursor: {error}"))
                 .is_empty()
         );
-        assert_eq!(turn_tasks.len(), 1);
-        let entered = turn_tasks
-            .join_next()
-            .await
-            .unwrap_or_else(|| panic!("recovered provider task was not spawned"))
-            .unwrap_or_else(|error| panic!("join recovered provider task: {error}"));
-        assert_eq!(
-            entered.assignment.session.public.session_id,
-            fixture.started.session_id
-        );
-        assert!(tracker.try_claim(&entered.assignment).is_some());
+        assert!(tracker.try_claim(&fixture.assignment).is_some());
 
         fixture
             .started
