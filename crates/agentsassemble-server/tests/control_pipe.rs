@@ -2,6 +2,7 @@ use std::{path::Path, process::Stdio, time::Duration};
 
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_protocol::{LocalControlRequest, LocalControlResponse};
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde_json::Value;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
@@ -227,7 +228,9 @@ async fn owned_control_pipe_issues_a_purpose_bound_central_registration_ticket()
         request_id,
         ticket,
         ttl_seconds,
-        ..
+        server_id,
+        host_public_key_x,
+        host_key_fingerprint,
     } = response
     else {
         panic!("central registration ticket request was rejected");
@@ -235,6 +238,21 @@ async fn owned_control_pipe_issues_a_purpose_bound_central_registration_ticket()
     assert_eq!(request_id, "control-central-registration-ticket-1");
     assert_eq!(ticket.len(), 64);
     assert!(ttl_seconds > 0);
+    assert!(uuid::Uuid::parse_str(&server_id).is_ok());
+    assert_eq!(
+        URL_SAFE_NO_PAD
+            .decode(host_public_key_x)
+            .unwrap_or_else(|error| panic!("decode host public key: {error}"))
+            .len(),
+        32
+    );
+    assert_eq!(
+        URL_SAFE_NO_PAD
+            .decode(host_key_fingerprint)
+            .unwrap_or_else(|error| panic!("decode host fingerprint: {error}"))
+            .len(),
+        32
+    );
     server.close_parent_pipe().await;
 }
 
