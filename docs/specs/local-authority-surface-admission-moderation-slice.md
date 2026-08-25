@@ -129,6 +129,12 @@ length, and returns the public JWK, its fingerprint, and one signed proof. The T
 bridge binds issuance to this exact POST path and omits the original browser-only
 device-token header because native control-pipe custody is the actual local-operator
 authority; broad CORS headers and parallel browser authentication are not introduced.
+The private control grant also carries the expected server ID, raw public-key `x`, and
+canonical fingerprint. Before forwarding anything to the central directory, the
+desktop frontend rejects unknown response fields, non-canonical base64url values,
+binding mismatches, a non-matching JWK fingerprint, the wrong owner, or an Ed25519
+signature that does not verify over the exact registration transcript with that pinned
+native key. Trusting a loopback response merely because it is self-signed is forbidden.
 
 This increment does not advertise the original public `GET /api/server-info` or remote
 `POST /api/server-info/challenge` until their public-invite/admission owner is complete.
