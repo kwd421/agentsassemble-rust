@@ -1,14 +1,14 @@
 # Frontend/backend exposure map
 
-Status: source-derived reimplementation exposure inventory, 2026-08-25
+Status: source-derived reimplementation exposure inventory, 2026-08-26
 
 Comparison baseline: original
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust
-`429127e`. The active local-authority,
-surface, admission, subscription, and moderation boundary is design-approved but
-not complete as one boundary. Local authority, product-surface, subscription, and
-process-wide admission and canonical participant-role slices, including the reviewed
-socket-boundary cursor correction, are published; participant mute remains open.
+`035416c`. The local-authority, surface, admission, subscription, and moderation
+boundary is complete. Central registration, canonical participant roles, participant
+mute, exact provider interruption, and the required packaged provider matrix have
+passed both manual reviews. Room settings, preferences, and appearance are now the
+active cutover boundary.
 
 ## Scope and method
 
@@ -193,11 +193,11 @@ implemented; the frontend must not silently substitute Python or local fake data
 | Startup identity and accounts | Fresh local desktop bootstrap, central guest creation/recovery, secure browser device identity, and proof-bound local-server registration are implemented. `/api/account`, Google account challenge/connect/delete, and the native Google handoff remain incomplete; the absent `open_central_google_login` host command keeps that button failed closed. |
 | Room lifecycle and settings | Canonical archive/delete lifecycle, room-global settings mutation, per-user room preferences, and public server info. |
 | Admission and invites | Host claim, room invite create/join/admission/companion/leave, operator pairing create/redeem, and public-invite status/URL/tunnel controls. |
-| Roster, friends, and channels | The active-room roster and strict participant-role control are cut over to authenticated WebSocket snapshot/events only. The current candidate connects the copied participant-mute control and canonical event projection to the exact Rust interrupt owner; it is not completion evidence until packaged provider verification and cross-review pass. Room friends, room channels, voice presence, and side chat remain incomplete. |
+| Roster, friends, and channels | The active-room roster, strict participant-role control, copied participant-mute control, canonical event projection, and exact Rust provider-interrupt owner are cut over and packaged-verified. Room friends, room channels, voice presence, and side chat remain incomplete. |
 | Attachments, personas, pins, and search | General-message and room-appearance attachment purposes, persona list/import/thumbnail, message pins, room search/context. Profile-avatar upload/read is implemented. |
 | Provider settings and diagnostics | Login, catalog refresh HTTP response, credential CRUD, provider usage, local resources, release health, and runtime version. The original `/api/local/workspace-picker` HTTP route is absent, but packaged desktop creation uses the native Tauri directory picker instead. |
 | Games and plugins | Mafia HTTP operations and generic plugin WebSocket hosting remain unimplemented. The copied RimWorld view is an external plugin consumer; its Python plugin package/runtime is intentionally outside the current Rust core-migration scope and is not a core parity exit condition. |
-| Canonical room commands | History, vote summary, edit/delete, re-add, general pause/interrupt, participant kick/leave, room lifecycle, and provider request resolution remain incomplete. Settings and random operations are implemented at the backend boundary; direct human random controls are intentionally absent because the original React client has none. Strict `participant.role.update`, stopped-session `agent.resume`, `agent.configure`, and the current `participant.mute` candidate are connected to their existing copied controls. |
+| Canonical room commands | History, vote summary, edit/delete, re-add, general pause/interrupt, participant kick/leave, room lifecycle, and provider request resolution remain incomplete. Settings and random operations are implemented at the backend boundary; direct human random controls are intentionally absent because the original React client has none. Strict `participant.role.update`, stopped-session `agent.resume`, `agent.configure`, and verified `participant.mute` are connected to their existing copied controls. |
 | Canonical room events | The React projector recognizes the broader original event vocabulary; only Rust-emitted snapshot/events are currently verified. |
 
 ### Active local-authority exposure delta: 2026-08-25

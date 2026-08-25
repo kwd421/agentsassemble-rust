@@ -1,7 +1,7 @@
 # Local Authority, Product Surface, Admission, and Moderation Slice
 
-Status: active implementation; central registration correction verified 2026-08-26,
-remaining mute/provider exit evidence pending
+Status: completed 2026-08-26; central registration, packaged provider matrix,
+exact participant mute, both manual reviews, and cleanup verified
 
 Comparison baseline: original
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; Rust
@@ -601,3 +601,10 @@ verification run may be stopped or deleted.
 Each complete vertical slice is committed and pushed before same-session critical
 diff and Daybreaker Blue High manual-security review. An incomplete owner remains
 unexposed and is not completion evidence.
+
+Completion evidence is recorded in `docs/VERIFICATION.md` through public code
+checkpoint `035416c` and verification record `3b31a76`. The final package used the
+required Codex Terra, Antigravity Flash, and OpenCode Hy3-free matrix. Exact busy mute
+terminalized without a late final for all three providers; the OpenCode defect found by
+that run was corrected, re-run from a fresh package, and approved by both manual
+reviewers before this boundary closed.
