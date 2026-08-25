@@ -45,6 +45,16 @@ pub struct OperatorHttpTicketGrant {
     http_base_url: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct CentralRegistrationTicketGrant {
+    ticket: String,
+    ttl_seconds: u64,
+    http_base_url: String,
+    server_id: String,
+    host_public_key_x: String,
+    host_key_fingerprint: String,
+}
+
 #[derive(Default)]
 pub struct LocalRuntime {
     process: Mutex<Option<RuntimeProcess>>,
@@ -152,7 +162,7 @@ impl LocalRuntime {
     pub fn issue_central_registration_ticket(
         &self,
         app: &AppHandle,
-    ) -> Result<OperatorHttpTicketGrant, String> {
+    ) -> Result<CentralRegistrationTicketGrant, String> {
         let mut process = self
             .process
             .lock()

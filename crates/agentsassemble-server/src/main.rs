@@ -263,11 +263,18 @@ async fn central_registration_control_response(
     request_id: String,
 ) -> LocalControlResponse {
     match issue_central_registration_ticket(state).await {
-        Ok(ticket) => LocalControlResponse::CentralRegistrationOk {
-            request_id,
-            ticket: ticket.ticket,
-            ttl_seconds: ticket.ttl_seconds,
-        },
+        Ok(ticket) => {
+            let (server_id, host_public_key_x, host_key_fingerprint) =
+                state.central_registration_binding();
+            LocalControlResponse::CentralRegistrationOk {
+                request_id,
+                ticket: ticket.ticket,
+                ttl_seconds: ticket.ttl_seconds,
+                server_id: server_id.to_owned(),
+                host_public_key_x: host_public_key_x.to_owned(),
+                host_key_fingerprint: host_key_fingerprint.to_owned(),
+            }
+        }
         Err(error) => control_error(request_id, error),
     }
 }

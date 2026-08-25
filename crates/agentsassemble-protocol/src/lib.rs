@@ -411,6 +411,9 @@ pub enum LocalControlResponse {
         request_id: String,
         ticket: String,
         ttl_seconds: u64,
+        server_id: String,
+        host_public_key_x: String,
+        host_key_fingerprint: String,
     },
     Error {
         request_id: String,

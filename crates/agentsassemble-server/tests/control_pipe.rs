@@ -227,6 +227,7 @@ async fn owned_control_pipe_issues_a_purpose_bound_central_registration_ticket()
         request_id,
         ticket,
         ttl_seconds,
+        ..
     } = response
     else {
         panic!("central registration ticket request was rejected");

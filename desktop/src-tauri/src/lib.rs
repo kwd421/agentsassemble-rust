@@ -5,7 +5,9 @@ mod room_directory_cache;
 mod runtime_supervisor;
 
 use agentsassemble_protocol::{HostProductSurface, LocalBootstrapGrant};
-use local_runtime::{LocalRuntime, OperatorHttpTicketGrant, TicketGrant};
+use local_runtime::{
+    CentralRegistrationTicketGrant, LocalRuntime, OperatorHttpTicketGrant, TicketGrant,
+};
 use serde::{Deserialize, Serialize};
 use tauri::{Manager, RunEvent, WebviewWindow};
 
@@ -128,7 +130,7 @@ async fn runtime_operator_ticket(
 async fn runtime_central_registration_ticket(
     window: WebviewWindow,
     app: tauri::AppHandle,
-) -> Result<OperatorHttpTicketGrant, String> {
+) -> Result<CentralRegistrationTicketGrant, String> {
     caller_is_bundled_ui(&window)?;
     let runtime_app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {

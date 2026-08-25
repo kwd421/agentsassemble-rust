@@ -112,6 +112,15 @@ impl AppState {
         self
     }
 
+    #[must_use]
+    pub fn central_registration_binding(&self) -> (&str, &str, &str) {
+        (
+            self.central_host_identity.server_id(),
+            self.central_host_identity.public_key_x(),
+            self.central_host_identity.fingerprint(),
+        )
+    }
+
     fn refresh_product_surface(&mut self) {
         self.server_product_surface = Arc::new(crate::product_surface::server_product_surface(
             self.frontend_root.is_some(),

@@ -84,6 +84,18 @@ impl CentralHostIdentity {
         })
     }
 
+    pub(crate) fn server_id(&self) -> &str {
+        &self.server_id
+    }
+
+    pub(crate) fn public_key_x(&self) -> &str {
+        &self.public_jwk.x
+    }
+
+    pub(crate) fn fingerprint(&self) -> &str {
+        &self.fingerprint
+    }
+
     /// Creates one fresh central-directory registration proof.
     ///
     /// # Errors
