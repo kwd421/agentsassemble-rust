@@ -133,24 +133,28 @@ pub(super) async fn commit_and_publish_gone(
     }
 }
 
-async fn release_checkpointed_absence(
+pub(super) async fn release_checkpointed_absence(
     provider_adapter: &ProviderAdapter,
     candidate: &RuntimeReconciliationCandidate,
 ) {
-    if candidate.session.lifecycle_intent_action == "start" {
-        provider_adapter
-            .release_checkpointed_start_absence(&candidate.session)
-            .await;
-    } else {
-        provider_adapter
-            .release_confirmed_stop(
-                &candidate.session.public.room_id,
-                &candidate.session.public.session_id,
-                &candidate.session.runtime_handle_id,
-                &candidate.session.runtime_owner_id,
-                &candidate.session.runtime_lease_token,
-            )
-            .await;
+    match candidate.session.lifecycle_intent_action.as_str() {
+        "start" => {
+            provider_adapter
+                .release_checkpointed_start_absence(&candidate.session)
+                .await;
+        }
+        "stop" => {
+            provider_adapter
+                .release_confirmed_stop(
+                    &candidate.session.public.room_id,
+                    &candidate.session.public.session_id,
+                    &candidate.session.runtime_handle_id,
+                    &candidate.session.runtime_owner_id,
+                    &candidate.session.runtime_lease_token,
+                )
+                .await;
+        }
+        _ => unreachable!("checkpointed lifecycle absence must be start or stop"),
     }
 }
 

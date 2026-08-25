@@ -330,6 +330,100 @@ async fn same_sidecar_quiesces_exact_running_runtime_after_browser_identity_is_l
     server.stop().await;
 }
 
+#[tokio::test]
+async fn exact_stop_replay_releases_its_tombstone_before_a_fresh_start() {
+    let _serial = AGENT_BOUNDARY_LOCK.lock().await;
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create stop replay root: {error}"));
+    let database_url = format!(
+        "sqlite://{}",
+        directory.path().join("runtime.sqlite3").display()
+    );
+    let store = SqliteStore::open(&database_url)
+        .await
+        .unwrap_or_else(|error| panic!("open stop replay store: {error}"));
+    bootstrap(&store).await;
+    let recovery_store = store.clone();
+    let server = start(store, agent_catalog(directory.path())).await;
+    let mut socket = connect(&server.base_url).await;
+    subscribe(&mut socket).await;
+    let _snapshot = receive_json(&mut socket).await;
+    let create_payload = json!({
+        "provider_id": "codex",
+        "catalog_revision": "catalog-boundary-1",
+        "display_name": "Terra",
+        "workspace": directory.path(),
+        "model": "gpt-5.6-terra",
+        "permission_mode": "meeting_read_only",
+        "start_now": true,
+    });
+    send_create(&mut socket, "create-for-stop-replay", &create_payload).await;
+    let created = receive_until_ack(&mut socket, 5).await;
+    let session_id = created["result"]["start"]["agent_session"]["session_id"]
+        .as_str()
+        .unwrap_or_else(|| panic!("started stop-replay session has no id"))
+        .to_owned();
+    let payload = json!({"agent_id": session_id});
+    let principal = local_principal();
+    let agentsassemble_persistence::AgentStopPlan::Stop(effect) = recovery_store
+        .prepare_agent_stop(&principal, "stop-with-lost-checkpoint", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare stop with lost checkpoint: {error}"))
+    else {
+        panic!("running Agent Session must prepare an exact stop effect");
+    };
+    let effect = recovery_store
+        .authorize_agent_stop_effect(
+            &principal,
+            "stop-with-lost-checkpoint",
+            &payload,
+            &effect.operation_id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize stop with lost checkpoint: {error}"));
+    server
+        .provider_adapter
+        .stop(
+            &principal.room_id,
+            &effect.session_id,
+            &effect.runtime_handle_id,
+            &effect.runtime_owner_id,
+            &effect.runtime_lease_token,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("stop provider before lost checkpoint: {error}"));
+
+    // Deliberately omit record_agent_stop_effect to model its database write failing
+    // after the exact provider runtime is already held as StopConfirmed.
+    send_command(
+        &mut socket,
+        "stop-with-lost-checkpoint",
+        "agent.stop",
+        &payload,
+    )
+    .await;
+    let stopped = receive_until_ack(&mut socket, 3).await;
+    assert_eq!(
+        stopped["result"]["agent_session"]["runtime_status"],
+        "stopped"
+    );
+
+    send_command(
+        &mut socket,
+        "start-after-stop-replay",
+        "agent.start",
+        &payload,
+    )
+    .await;
+    let restarted = receive_until_ack(&mut socket, 4).await;
+    assert_eq!(
+        restarted["result"]["agent_session"]["runtime_status"],
+        "idle"
+    );
+    assert_eq!(restarted["result"]["runtime_reused"], false);
+    server.stop().await;
+}
+
 async fn stage_unconfirmed_running_reuse(
     store: &SqliteStore,
     provider_adapter: &ProviderAdapter,

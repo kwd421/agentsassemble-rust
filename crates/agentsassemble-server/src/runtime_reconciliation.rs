@@ -15,7 +15,8 @@ use crate::{
     RoomRuntime,
     runtime_reconciliation_cleanup::{
         commit_and_publish_gone, commit_startup_gone, persistence_observation,
-        recover_dynamic_observed_runtime, recover_startup_observed_runtime, stale_candidate,
+        recover_dynamic_observed_runtime, recover_startup_observed_runtime,
+        release_checkpointed_absence, stale_candidate,
     },
 };
 
@@ -95,15 +96,12 @@ pub(crate) async fn recover_exact_lifecycle_command(
     else {
         return Ok(LiveRuntimeReconciliation::StillUnresolved);
     };
-    let gone_start = matches!(&observation, ProviderRuntimeObservation::Gone)
-        && candidate.session.lifecycle_intent_action == "start";
+    let gone = matches!(&observation, ProviderRuntimeObservation::Gone);
     let reconciled = store
         .apply_live_runtime_reconciliation(&candidate, &persistence_observation(observation))
         .await?;
-    if gone_start && reconciled == LiveRuntimeReconciliation::RetryOriginalEffect {
-        provider_adapter
-            .release_checkpointed_start_absence(&candidate.session)
-            .await;
+    if gone && reconciled == LiveRuntimeReconciliation::RetryOriginalEffect {
+        release_checkpointed_absence(provider_adapter, &candidate).await;
     }
     Ok(reconciled)
 }

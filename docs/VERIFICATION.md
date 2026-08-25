@@ -1653,6 +1653,48 @@ workspace all-target/all-feature check. Its isolated target directory was remove
 the previously recorded unrelated Windows-only dead-code warnings remain outside the
 host's warning-denied gate.
 
+The third web and Daybreaker exact-diff reviews independently found the symmetric stop
+case missing from the live-request release. A successful provider stop followed by a
+failed `record_agent_stop_effect` write correctly retained `StopConfirmed`; exact replay
+then committed `Gone` as durable `effect_applied`, but the start-only post-commit branch
+left that stop tombstone in memory. Provider-free finalization removed the pending
+candidate, so every later start was rejected as `operation_in_progress` until sidecar
+exit. Both reviewers classified that reachable authority stranding as Medium and found no
+other Critical, High, or Medium regression in the correction.
+
+The live-request owner now calls the same action-aware post-commit release used by startup
+and dynamic recovery for every `Gone` that successfully returns
+`RetryOriginalEffect`. The helper explicitly maps start to exact launch-absence release
+and stop to exact confirmed-stop release. It uses the candidate captured before the
+database cleared H/O/T; a database error, stale CAS, unresolved observation, or unknown
+action releases nothing. The implementation intent is to remove the action-specific
+lifetime divergence at the existing owner. It adds no observation, process scan, retry,
+cache, provider effect, or persistence operation; it replaces one start-only branch with
+one bounded action dispatch after the already-required commit. Preserved invariants are
+DB-before-release, exact generation matching, provider-free stop finalization, and no
+replacement generation while evidence is uncheckpointed. No performance improvement is
+claimed; the maintainability gain is one release contract shared by live, dynamic, and
+startup recovery.
+
+The new Unix integration regression uses the real local Codex protocol fixture and
+production supervisor path to start and then stop an exact runtime. It deliberately omits
+only `record_agent_stop_effect`, modeling that database write failing after the provider
+is already held as `StopConfirmed`; the same authenticated WebSocket stop request then
+performs exact live recovery, durable finalization, and a completely fresh non-reused
+start. Its first focused run expected one extra WebSocket frame and timed out after the
+correct three-frame stop result; the assertion was corrected to the actual protocol
+sequence rather than changing product behavior. The focused rerun and complete suite
+passed.
+
+After this stop-symmetry correction, `make verify` passed all mandatory gates, generated
+bindings, the production frontend build and original-CSS verification, 72 frontend files
+with 356 tests, 15 Tauri tests, 18 domain, 94 persistence, four protocol, 113 provider, and
+22 server unit tests, 24 Rust integration tests, documentation tests, warning-denied
+workspace/desktop Clippy, and diff validation. The installed rustup
+`x86_64-pc-windows-gnu` workspace all-target/all-feature check also passed with only the
+already-recorded unrelated Windows-only dead-code warnings. Its isolated target directory
+was removed on exit.
+
 Packaged Computer Use and both pushed exact-diff re-reviews remain required before this
 correction is closed.
 
