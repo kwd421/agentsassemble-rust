@@ -38,6 +38,8 @@ struct Args {
     database: PathBuf,
     #[arg(long)]
     frontend: Option<PathBuf>,
+    #[arg(long)]
+    desktop_native_registration: bool,
 }
 
 #[tokio::main]
@@ -89,6 +91,9 @@ async fn main() -> anyhow::Result<()> {
         provider_adapter,
     )
     .await?;
+    if args.desktop_native_registration {
+        state = state.with_central_registration();
+    }
     let frontend_path = if let Some(frontend) = args.frontend {
         let path = frontend
             .canonicalize()

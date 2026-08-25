@@ -10,12 +10,17 @@ pub(crate) struct RegisteredHttpRoute {
     pub(crate) path: &'static str,
 }
 
-pub(crate) fn server_product_surface(frontend_enabled: bool) -> ServerProductSurface {
+pub(crate) fn server_product_surface(
+    frontend_enabled: bool,
+    central_registration_enabled: bool,
+) -> ServerProductSurface {
     let mut routes = Vec::new();
     extend_registered(&mut routes, crate::web::HTTP_ROUTES);
-    extend_registered(&mut routes, crate::central_registration_web::HTTP_ROUTES);
     extend_registered(&mut routes, crate::room_directory_web::HTTP_ROUTES);
     extend_registered(&mut routes, crate::profile_web::HTTP_ROUTES);
+    if central_registration_enabled {
+        extend_registered(&mut routes, crate::central_registration_web::HTTP_ROUTES);
+    }
     if frontend_enabled {
         routes.extend(
             STATIC_ROUTES
@@ -41,8 +46,8 @@ mod tests {
 
     #[test]
     fn bundled_surface_adds_only_the_static_routes() {
-        let server = server_product_surface(false);
-        let bundled = server_product_surface(true);
+        let server = server_product_surface(false, false);
+        let bundled = server_product_surface(true, false);
         assert_eq!(bundled.http_routes.len(), server.http_routes.len() + 2);
         assert_ne!(bundled.digest, server.digest);
         assert!(

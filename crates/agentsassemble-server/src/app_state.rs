@@ -34,6 +34,7 @@ pub struct AppState {
     pub(crate) raw_ingress: RawIngressGovernor,
     pub server_product_surface: Arc<ServerProductSurface>,
     pub frontend_root: Option<PathBuf>,
+    pub(crate) central_registration_enabled: bool,
 }
 
 impl AppState {
@@ -89,16 +90,32 @@ impl AppState {
             connections: TaskTracker::new(),
             connection_admission: ConnectionAdmission::new(),
             raw_ingress: RawIngressGovernor::new(),
-            server_product_surface: Arc::new(crate::product_surface::server_product_surface(false)),
+            server_product_surface: Arc::new(crate::product_surface::server_product_surface(
+                false, false,
+            )),
             frontend_root: None,
+            central_registration_enabled: false,
         })
     }
 
     #[must_use]
     pub fn with_frontend(mut self, frontend_root: PathBuf) -> Self {
-        self.server_product_surface =
-            Arc::new(crate::product_surface::server_product_surface(true));
         self.frontend_root = Some(frontend_root);
+        self.refresh_product_surface();
         self
+    }
+
+    #[must_use]
+    pub fn with_central_registration(mut self) -> Self {
+        self.central_registration_enabled = true;
+        self.refresh_product_surface();
+        self
+    }
+
+    fn refresh_product_surface(&mut self) {
+        self.server_product_surface = Arc::new(crate::product_surface::server_product_surface(
+            self.frontend_root.is_some(),
+            self.central_registration_enabled,
+        ));
     }
 }

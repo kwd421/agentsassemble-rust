@@ -229,6 +229,7 @@ fn start_runtime(app: &AppHandle) -> Result<RuntimeProcess, String> {
         .arg("127.0.0.1:0")
         .arg("--database")
         .arg(&database)
+        .arg("--desktop-native-registration")
         .env_remove("AGENTSASSEMBLE_HOST_TOKEN")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
