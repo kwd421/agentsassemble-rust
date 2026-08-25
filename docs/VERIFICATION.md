@@ -2081,6 +2081,27 @@ tests plus the production build and original-CSS cascade check, 15 desktop tests
 final diff check. A new packaged Antigravity mute flow, push, and both post-push
 reviews are still required before this correction is completion evidence.
 
+The retained Antigravity prompt/interrupt custody correction was subsequently
+reviewed as the exact public range `0589ce5..a9cfed4`. Daybreaker Blue High and the
+independent `매우 높음` web reviewer both returned `APPROVE` without a Critical,
+High, or Medium blocker. The web reviewer confirmed that active-turn custody is
+installed before the first PTY write await, exact interrupt poisons the driver before
+Ctrl-C, same-request resume cannot duplicate the prompt, and the common owner returns
+the driver before exact H/O/T stop. It also confirmed that production commit
+`97c3eef` and focused-test commit `a9cfed4` are independently reviewable. Neither
+review used Deep Scan, another automated scanner, or a real provider.
+
+The RuntimeGone-versus-`agent.stop` correction was independently re-reviewed as the
+exact public range `a9cfed4..da6d47b`; both reviewers returned `APPROVE` without a
+remaining Critical, High, or Medium blocker. They traced both SQLite writer orders,
+exact pending-reservation binding, stop-owned execution/effect terminalization,
+owner-loss completion, mute-effect interaction, duplicate-event prevention, live
+floor assignment, and shutdown deferral. The range is five purpose-separated commits:
+production fence, race regression, async stack-only boxing, reservation-binding
+correction, and forged/missing-reservation regression. These approvals close the
+manual-review condition for those two correction ranges, but do not replace the still
+required fresh packaged product flow and allowed-provider verification.
+
 ## API verification scope
 
 When a reachable flow specifically needs an API-backed provider, the allowed paid/provider-specific candidates are the official DeepSeek API and the designated Flash provider path. Every other API-backed verification uses only an explicitly free API or free model. Missing credentials, exhausted free quota, or unavailable models fail visibly; they do not trigger a paid substitution or a fallback provider.
