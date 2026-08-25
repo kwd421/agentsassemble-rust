@@ -1,6 +1,6 @@
 # Room Settings, Scheduling, Tabletop, Preferences, and Appearance Slice
 
-Status: corrected implementation design; compatibility paths removed, Stage A implementation under verification
+Status: Stage A code and mandatory gates verified; Stage B design cross-approved, no Stage B surface active
 
 ## Definition
 
@@ -171,31 +171,89 @@ between a reservation's begin-commit and its DB outcome.
 
 ## Stage B: preferences and appearance
 
-A complete canonical preference row is owned by `(user_id, room_id)`. Each request
-uses a fresh one-use, purpose-scoped room HTTP ticket, authenticates before reading
-the body, re-resolves active membership, and accesses only the caller's row. The
-notification values, default record, exact keys, cursor bounds, 54-channel cap,
-and builtin-or-canonical-ID grammar match the original. User preferences never
-create channels or modify room, participant, or Agent Session authority.
+A complete canonical preference row is owned by `(user_id, room_id)`. One
+`RoomUserIdentity` resolver proves, in one transaction, an active room, a joined
+human participant, and the exact `user_profiles.user_id -> participant_id`
+binding. It does not infer manager authority from `owner_id`, participant role, or
+a cached ticket capability. The current HTTP appearance manager is derived by a
+separate full `require_complete_bootstrap_in_transaction` integrity check and the
+exact local user, participant, and active-membership binding.
 
-Room appearance uses a separate room-owned attachment table and `ra_` capability
-namespace. Profile and room images call one extracted safe-raster decoder guarded
-by one shared global admission semaphore. Accepted PNG/JPEG/GIF/WebP is bounded by
-the existing input, dimension, pixel, allocation, and concurrency limits and is
-re-encoded to static PNG.
+Preference reads and writes use separate one-use room HTTP purposes. A write
+consumes its ticket, performs a short identity authorization, releases the
+connection before reading the bounded body, then repeats the same authorization in
+the write transaction. Notification values, defaults, exact fields, the 54-entry
+cap, and builtin-or-`c[0-9a-f]{12}` channel grammar match the original.
+`last_read_at` is not normalized: it is at most 64 Unicode scalar values and only
+CR, LF, and TAB are forbidden. A top-level partial update replaces the complete
+`channel_settings` map when that field is present.
 
-Pending preview is same-room/same-owner, high entropy, short lived, and served with
-`image/png`, `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, and
-`Referrer-Policy: no-referrer`. Stage B implements `AssetReferenceTransition` so a
-settings transaction may atomically promote only a nonexpired pending or already
-bound asset of the same room and owner. Banner and icon references are evaluated
-together; replacement or clearing deletes only an old asset with no remaining
-reference. Unknown, expired, quarantined, corrupt, cross-room, or cross-owner
-assets are not reachable.
+Per-room `GET /api/room-settings` preserves the combined `{room_id, settings}`
+wire response while the frontend projects only the caller preference fields.
+The reachable no-room local-operator branch has a distinct server-wide one-use
+purpose and returns archived rooms too. HTTP global writes conflict; the canonical
+WebSocket command remains the only room-global writer.
+
+Room HTTP grants are a closed set: preference read, preference write, appearance
+upload, exact pending preview read, and exact bound appearance read. A separate
+closed grant owns the no-room settings directory read. Grants bind the exact room,
+principal, participant, purpose, and read asset where applicable. Consumption
+removes a grant before checking its variant so wrong-purpose, wrong-room,
+wrong-asset, and replay attempts are consumed and rejected. Private-control and
+desktop APIs expose typed issuance operations; no path or payload string selects
+authority.
+
+Room appearance uses a separate room-owned table and the exact asset grammar
+`^ra_[0-9a-f]{32}$`, generated from 16 operating-system-random bytes. Its only
+stored URL is `/api/attachments/<ra-id>?view=1`; missing, download, or extra query
+forms are rejected. The `ra_` prefix is reserved and malformed reserved IDs never
+fall through to public profile attachment lookup. Existing attachment POST and GET
+paths have one route owner that dispatches authority or ID namespace once; there
+is no handler fallback or duplicate route.
+
+Pending custody consists of `room_id`, `pending_owner_user_id`, and expiry. The
+schema requires owner and expiry for pending rows and requires both to be null for
+bound rows. Promotion clears both in the settings transaction, transferring
+lifetime ownership to the room. `created_by_user_id` remains immutable audit and
+quota-accounting metadata, not authorization or deletion authority. Deleting an
+uploader may remove pending assets but cannot remove bound room assets.
+
+Profile and room images call one safe-raster decoder guarded by one global
+admission semaphore. Accepted PNG/JPEG/GIF/WebP is bounded by the existing input,
+dimension, pixel, allocation, and concurrency limits and re-encoded to static PNG.
+Both attachment writers use one serialized SQLite write unit and one quota owner.
+After expired pending cleanup it enforces the combined uploader limit of 64 assets
+and 128 MiB, the appearance-room limit of 512 assets and 1 GiB, and the combined
+runtime limit of 4096 assets and 8 GiB across profile and room tables. Bound room
+assets continue to count against their immutable uploader accounting key.
+
+Pending preview requires the exact same room, uploader, unexpired asset, and
+current local manager. Bound read requires the exact same room, a bound and
+integral asset, a current canonical banner or icon reference, and an active human
+member. Both return static PNG with `Cache-Control: private, no-store` and inherit
+the global `nosniff` and `no-referrer` policy. The frontend performs an
+authenticated ticketed fetch, renders only an object URL, revokes it on reference,
+room, authority, or component-lifetime change, and rejects late results by fetch
+generation.
+
+The settings transaction evaluates banner and icon together, deduplicates new
+references, promotes only an unexpired pending asset uploaded by the current local
+manager or retains a bound same-room asset, and deletes an old bound asset only
+when neither next field references it. Promotion, cleanup, settings, event, and
+command replay result commit or roll back together.
 
 Global mutation and realtime projection remain WebSocket-owned. Preferences and
 binary upload/read remain authenticated HTTP request/response controls. Neither
 transport is a fallback for the other.
+
+Stage B internal support remains unreachable until its owner is complete. Ticket,
+private-control, persistence, decoder, and transaction-hook commits may land
+without registering a Tauri command or mounting a route. Preference activation
+adds its exact native commands, permissions, route, and product declaration
+together. Appearance activation occurs only after the existing attachment routes
+have one owner and upload, read, bind, cleanup, exact issuance, and settings-hook
+behavior are complete; it also advances the product-surface revision. The copied
+frontend is connected only after each backend surface is complete.
 
 ## Failure, acceptance, and review gates
 
@@ -217,17 +275,27 @@ transport is a fallback for the other.
   mutation budgets; a fresh already-stopped no-op stop is limited normally. Tests
   also prove that legacy `continuous` values, unknown nested settings fields, and
   older schema records fail instead of being migrated or executed.
-- Stage B tests cover two-user isolation, wrong-room and replayed tickets,
-  auth-before-body, custom preference key grammar, shared raster admission,
-  pending preview/expiry, bind/replacement/clear, restart, and reference cleanup.
+- Stage B tests cover two-user isolation, the no-room operator directory branch,
+  wrong-purpose/room/asset and replayed tickets, auth-before-body, identity and
+  bootstrap races, exact preference merge and cursor semantics, shared raster
+  admission, combined cross-writer quotas, pending preview/expiry, reserved-prefix
+  rejection, bind/replacement/clear, restart, reference cleanup, response caching,
+  and late object-URL revocation.
 - Mandatory architecture/source-growth/800-line gates, `make verify`, native and
   Windows warning-denied checks, generated bindings, and packaged copied-UI flows
   must pass. No gate exception is added.
-- Stage A and Stage B are separate public feature commits. Each is pushed before
-  critical web and same Daybreak Blue manual-security review. Provider-dependent
-  verification uses persistent Codex Terra, Antigravity Flash, and OpenCode Hy3
-  free sessions, never print mode, and removes every verification-owned process,
-  window, server, and temporary resource afterward.
+- Before every commit, `git diff --stat` is inspected. Structure, schema,
+  persistence, credential contracts, activation, frontend, integration tests, and
+  documentation remain independently buildable, verifiable, and rollbackable
+  changes. A change of 1,000 lines or more is split unless one mandatory invariant
+  or structure gate makes that genuinely impossible. Each implementation change
+  carries its focused invariant test; cross-layer, restart, race, packaged-client,
+  and verification-record work remain separate.
+- Every implementation commit is pushed before exact-range critical web and the
+  same Daybreak Blue manual-security review. Provider-dependent verification uses
+  persistent Codex Terra, Antigravity Flash, and OpenCode Hy3 free sessions, never
+  print mode, and removes every verification-owned process, window, server, and
+  temporary resource afterward.
 
 Room close/archive/delete, invite/admission, custom channel registry and streams,
 voice, activity-plugin hosting, general message attachments, PostgreSQL, RimWorld,
