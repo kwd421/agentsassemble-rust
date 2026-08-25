@@ -33,11 +33,13 @@ use crate::{
     connection_admission::ConnectionLease,
     host_ticket::{AuthenticatedTicketResponse, HostChallengeResponse},
     http_transport::{MAX_HTTP_CONNECTIONS, RejectionCounter, serve_connection},
-    issue_local_ticket, reconcile_runtime_ownership,
+    issue_local_ticket,
+    provider_turn_reconciliation_runtime::reconcile_provider_turn_ownership,
+    reconcile_runtime_ownership,
     room_socket::{
         EstablishedSubscription, establish, persistence_error, persistence_error_is_internal,
     },
-    runtime_reconciliation::{reconcile_provider_turn_ownership, watch_runtime_reconciliation},
+    runtime_reconciliation::watch_runtime_reconciliation,
 };
 
 const HTTP_BODY_DEADLINE: Duration = Duration::from_secs(10);

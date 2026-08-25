@@ -52,6 +52,7 @@ mod principal_mutation_admission;
 mod product_surface;
 mod profile_web;
 mod provider_turn;
+mod provider_turn_reconciliation_runtime;
 mod provider_write_budget;
 mod raw_ingress;
 mod room_agent_lifecycle_runtime;

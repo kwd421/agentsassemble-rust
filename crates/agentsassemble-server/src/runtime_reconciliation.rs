@@ -2,8 +2,7 @@ use std::time::Duration;
 
 use agentsassemble_domain::AuthenticatedPrincipal;
 use agentsassemble_persistence::{
-    LiveRuntimeReconciliation, PersistenceError, ProviderTurnExecutionPhase,
-    ProviderTurnReconciliationCandidate, ProviderTurnReconciliationCursor,
+    LiveRuntimeReconciliation, PersistenceError, ProviderTurnReconciliationCursor,
     RuntimeReconciliationCandidate, RuntimeReconciliationCursor, RuntimeReconciliationObservation,
     SqliteStore,
 };
@@ -27,7 +26,7 @@ const RECOVERY_SCAN_INTERVAL: Duration = Duration::from_secs(1);
 const RECOVERY_OBSERVATION_CONCURRENCY: usize = 8;
 
 #[cfg(test)]
-pub(super) static RUNTIME_RECONCILIATION_TEST_LOCK: tokio::sync::Mutex<()> =
+pub(crate) static RUNTIME_RECONCILIATION_TEST_LOCK: tokio::sync::Mutex<()> =
     tokio::sync::Mutex::const_new(());
 
 /// Reconciles every durable runtime candidate before network admission.
@@ -83,120 +82,6 @@ pub async fn reconcile_runtime_ownership(
     Ok(candidate_count)
 }
 
-/// Reconciles every blocking provider turn before lifecycle recovery or network admission.
-///
-/// # Errors
-///
-/// Returns a persistence error if exact task-death or runtime-gone custody cannot commit.
-pub(crate) async fn reconcile_provider_turn_ownership(
-    store: &SqliteStore,
-    provider_adapter: &ProviderAdapter,
-    rooms: &RoomRuntime,
-) -> Result<usize, PersistenceError> {
-    let mut cursor: Option<ProviderTurnReconciliationCursor> = None;
-    let mut reconciled = 0usize;
-    loop {
-        let page = store
-            .load_provider_turn_reconciliation_page(cursor.as_ref())
-            .await?;
-        for candidate in page.candidates {
-            reconcile_provider_turn_candidate(store, provider_adapter, rooms, &candidate).await?;
-            reconciled = reconciled.saturating_add(1);
-        }
-        let Some(next) = page.next_cursor else {
-            break;
-        };
-        cursor = Some(next);
-    }
-    Ok(reconciled)
-}
-
-async fn reconcile_provider_turn_candidate(
-    store: &SqliteStore,
-    provider_adapter: &ProviderAdapter,
-    rooms: &RoomRuntime,
-    candidate: &ProviderTurnReconciliationCandidate,
-) -> Result<(), PersistenceError> {
-    let execution = &candidate.execution;
-    if let Some(effect) = &candidate.effect
-        && let Some(commit) =
-            crate::participant_mute_runtime::resume_exact_interrupt(store, provider_adapter, effect)
-                .await?
-    {
-        rooms.notify_committed_events(&commit.events).await;
-        for assignment in commit.next_assignments {
-            rooms.resume_assigned_provider_turn(assignment).await?;
-        }
-        return Ok(());
-    }
-    if execution.phase == ProviderTurnExecutionPhase::Assigned && candidate.effect.is_none() {
-        match provider_adapter.observe(&candidate.session).await {
-            ProviderRuntimeObservation::Gone => {
-                store.finalize_provider_turn_runtime_gone(candidate).await?;
-                provider_adapter
-                    .release_confirmed_stop(
-                        &execution.room_id,
-                        &execution.session_id,
-                        &execution.runtime_handle_id,
-                        &execution.runtime_owner_id,
-                        &execution.runtime_lease_token,
-                    )
-                    .await;
-            }
-            ProviderRuntimeObservation::Adopted {
-                handle_id,
-                previous_owner_id,
-                new_owner_id,
-                runtime_profile_key,
-            } if handle_id == execution.runtime_handle_id
-                && previous_owner_id == execution.runtime_owner_id
-                && new_owner_id == execution.runtime_owner_id
-                && runtime_profile_key == candidate.session.runtime_profile_key =>
-            {
-                let assignment = store.recover_assigned_provider_turn(candidate).await?;
-                rooms.resume_assigned_provider_turn(assignment).await?;
-            }
-            ProviderRuntimeObservation::Adopted { .. }
-            | ProviderRuntimeObservation::LeaseUncertain { .. }
-            | ProviderRuntimeObservation::Ambiguous { .. } => {}
-        }
-        return Ok(());
-    }
-    if matches!(
-        provider_adapter.observe(&candidate.session).await,
-        ProviderRuntimeObservation::Gone
-    ) {
-        store.finalize_provider_turn_runtime_gone(candidate).await?;
-        provider_adapter
-            .release_confirmed_stop(
-                &execution.room_id,
-                &execution.session_id,
-                &execution.runtime_handle_id,
-                &execution.runtime_owner_id,
-                &execution.runtime_lease_token,
-            )
-            .await;
-        return Ok(());
-    }
-    if matches!(
-        execution.phase,
-        ProviderTurnExecutionPhase::StartDispatching
-            | ProviderTurnExecutionPhase::Running
-            | ProviderTurnExecutionPhase::InterruptPending
-            | ProviderTurnExecutionPhase::Quiescing
-    ) {
-        store
-            .record_provider_turn_task_death(
-                &execution.room_id,
-                &execution.session_id,
-                execution.turn_generation,
-                &execution.execution_id,
-            )
-            .await?;
-    }
-    Ok(())
-}
-
 pub(crate) async fn recover_exact_lifecycle_command(
     store: &SqliteStore,
     provider_adapter: &ProviderAdapter,
@@ -233,6 +118,7 @@ pub(crate) async fn watch_runtime_reconciliation(
     cancellation: CancellationToken,
 ) {
     let mut cursor: Option<RuntimeReconciliationCursor> = None;
+    let mut provider_turn_cursor: Option<ProviderTurnReconciliationCursor> = None;
     let mut interval = tokio::time::interval_at(
         Instant::now() + RECOVERY_SCAN_INTERVAL,
         RECOVERY_SCAN_INTERVAL,
@@ -243,25 +129,46 @@ pub(crate) async fn watch_runtime_reconciliation(
             () = cancellation.cancelled() => return,
             _ = interval.tick() => {}
         }
-        let page = match tokio::select! {
+        let provider_page = tokio::select! {
+            () = cancellation.cancelled() => return,
+            page = store.load_provider_turn_reconciliation_page(provider_turn_cursor.as_ref()) => page,
+        };
+        match provider_page {
+            Ok(page) => {
+                provider_turn_cursor = page.next_cursor;
+                crate::provider_turn_reconciliation_runtime::reconcile_live_page(
+                    &store,
+                    &provider_adapter,
+                    &rooms,
+                    page.candidates,
+                    &cancellation,
+                )
+                .await;
+            }
+            Err(error) => {
+                tracing::warn!(%error, "server-owned provider-turn recovery scan failed");
+            }
+        }
+        let lifecycle_page = tokio::select! {
             () = cancellation.cancelled() => return,
             page = store.load_runtime_reconciliation_page(cursor.as_ref()) => page,
-        } {
-            Ok(page) => page,
+        };
+        match lifecycle_page {
+            Ok(page) => {
+                cursor = page.next_cursor;
+                reconcile_dynamic_candidates(
+                    &store,
+                    &provider_adapter,
+                    &rooms,
+                    page.candidates,
+                    &cancellation,
+                )
+                .await;
+            }
             Err(error) => {
                 tracing::warn!(%error, "server-owned lifecycle recovery scan failed");
-                continue;
             }
-        };
-        cursor = page.next_cursor;
-        reconcile_dynamic_candidates(
-            &store,
-            &provider_adapter,
-            &rooms,
-            page.candidates,
-            &cancellation,
-        )
-        .await;
+        }
         if cancellation.is_cancelled() {
             return;
         }
@@ -406,7 +313,7 @@ pub(crate) async fn checkpoint_confirmed_shutdowns(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use std::{fs::File, path::Path};
 
     use agentsassemble_domain::{
@@ -633,7 +540,7 @@ mod tests {
         store
     }
 
-    pub(super) fn local_principal() -> AuthenticatedPrincipal {
+    pub(crate) fn local_principal() -> AuthenticatedPrincipal {
         AuthenticatedPrincipal {
             principal_id: "operator-local-user".to_owned(),
             participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
@@ -649,7 +556,7 @@ mod tests {
         }
     }
 
-    pub(super) fn draft(workspace: &Path, agent_id: &str) -> AgentSessionDraft {
+    pub(crate) fn draft(workspace: &Path, agent_id: &str) -> AgentSessionDraft {
         let executable = std::env::current_exe()
             .and_then(std::fs::canonicalize)
             .unwrap_or_else(|error| panic!("canonical executable: {error}"));
@@ -749,10 +656,6 @@ mod tests {
         )
     }
 }
-
-#[cfg(test)]
-#[path = "runtime_reconciliation_provider_replay_tests.rs"]
-mod provider_replay_tests;
 
 #[cfg(test)]
 #[path = "runtime_reconciliation_owner_loss_tests.rs"]
