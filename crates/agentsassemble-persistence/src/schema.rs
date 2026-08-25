@@ -4,6 +4,8 @@ pub(crate) struct TableDefinition {
     pub infrastructure: bool,
 }
 
+pub(crate) const HOST_INITIALIZATION_DDL: &str = "CREATE TABLE IF NOT EXISTS runtime_host_initialization (singleton INTEGER PRIMARY KEY CHECK(singleton = 1), nonce TEXT NOT NULL UNIQUE CHECK(length(nonce) = 36))";
+
 const TABLES: &[TableDefinition] = &[
     TableDefinition {
         name: "runtime_metadata",
@@ -12,7 +14,7 @@ const TABLES: &[TableDefinition] = &[
     },
     TableDefinition {
         name: "runtime_host_initialization",
-        ddl: "CREATE TABLE IF NOT EXISTS runtime_host_initialization (singleton INTEGER PRIMARY KEY CHECK(singleton = 1), nonce TEXT NOT NULL UNIQUE CHECK(length(nonce) = 36))",
+        ddl: HOST_INITIALIZATION_DDL,
         infrastructure: true,
     },
     TableDefinition {

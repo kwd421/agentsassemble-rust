@@ -40,19 +40,23 @@ impl SqliteStore {
             acquire_file_authority_lock(&pool).await?;
         }
         prepared.revalidate()?;
-        let empty_authority = !prepared.created && database_is_empty(&pool).await?;
-        let (fresh_authority, host_key_policy) = if prepared.created {
-            (true, HostKeyPolicy::CreateOnly)
-        } else if empty_authority {
-            (true, HostKeyPolicy::CreateOrReuse)
-        } else {
-            (false, HostKeyPolicy::ReuseOnly)
-        };
-        if !fresh_authority {
-            verify_existing_authority(&pool).await?;
-        }
-        let host_key =
-            HostKeyMaterial::load_or_create(prepared.host_key_path.as_deref(), host_key_policy)?;
+        let (fresh_authority, host_key_policy, initialization_nonce) =
+            match inspect_database_authority(&pool).await? {
+                DatabaseAuthority::Empty => {
+                    let nonce = uuid::Uuid::new_v4().to_string();
+                    install_initialization_marker(&pool, &nonce).await?;
+                    (true, HostKeyPolicy::CreateOnly, nonce)
+                }
+                DatabaseAuthority::Initializing(nonce) => {
+                    (true, HostKeyPolicy::CreateOrReuse, nonce)
+                }
+                DatabaseAuthority::Initialized(nonce) => (false, HostKeyPolicy::ReuseOnly, nonce),
+            };
+        let host_key = HostKeyMaterial::load_or_create(
+            prepared.host_key_path.as_deref(),
+            host_key_policy,
+            &initialization_nonce,
+        )?;
         let store = Self {
             pool,
             _writer_lease: prepared.writer_lease,
@@ -68,6 +72,70 @@ impl SqliteStore {
         }
         Ok(store)
     }
+}
+
+enum DatabaseAuthority {
+    Empty,
+    Initializing(String),
+    Initialized(String),
+}
+
+async fn inspect_database_authority(
+    pool: &SqlitePool,
+) -> Result<DatabaseAuthority, PersistenceError> {
+    let object_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'",
+    )
+    .fetch_one(pool)
+    .await?;
+    if object_count == 0 {
+        return Ok(DatabaseAuthority::Empty);
+    }
+    let marker_table = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'runtime_host_initialization'",
+    )
+    .fetch_one(pool)
+    .await?;
+    if object_count == 1 && marker_table == 1 {
+        return load_initialization_nonce(pool)
+            .await
+            .map(DatabaseAuthority::Initializing);
+    }
+    verify_existing_authority(pool).await?;
+    load_initialization_nonce(pool)
+        .await
+        .map(DatabaseAuthority::Initialized)
+}
+
+async fn install_initialization_marker(
+    pool: &SqlitePool,
+    nonce: &str,
+) -> Result<(), PersistenceError> {
+    let mut transaction = pool.begin().await?;
+    sqlx::query(crate::schema::HOST_INITIALIZATION_DDL)
+        .execute(&mut *transaction)
+        .await?;
+    sqlx::query("INSERT INTO runtime_host_initialization(singleton, nonce) VALUES (1, ?)")
+        .bind(nonce)
+        .execute(&mut *transaction)
+        .await?;
+    transaction.commit().await?;
+    Ok(())
+}
+
+async fn load_initialization_nonce(pool: &SqlitePool) -> Result<String, PersistenceError> {
+    let nonce = sqlx::query_scalar::<_, String>(
+        "SELECT nonce FROM runtime_host_initialization WHERE singleton = 1",
+    )
+    .fetch_optional(pool)
+    .await?
+    .ok_or(PersistenceError::InvalidHostIdentity)?;
+    let parsed =
+        uuid::Uuid::parse_str(&nonce).map_err(|_| PersistenceError::InvalidHostIdentity)?;
+    if parsed.to_string() != nonce {
+        return Err(PersistenceError::InvalidHostIdentity);
+    }
+    Ok(nonce)
 }
 
 async fn verify_existing_authority(pool: &SqlitePool) -> Result<(), PersistenceError> {
@@ -89,15 +157,6 @@ async fn verify_existing_authority(pool: &SqlitePool) -> Result<(), PersistenceE
         Some(owner) => Err(PersistenceError::AuthorityConflict(owner)),
         None => Err(PersistenceError::UnownedDatabase),
     }
-}
-
-async fn database_is_empty(pool: &SqlitePool) -> Result<bool, PersistenceError> {
-    let objects = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'",
-    )
-    .fetch_one(pool)
-    .await?;
-    Ok(objects == 0)
 }
 
 async fn acquire_file_authority_lock(pool: &SqlitePool) -> Result<(), PersistenceError> {

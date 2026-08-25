@@ -4,10 +4,12 @@ use std::{
     path::Path,
 };
 
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use ring::{
     rand::SystemRandom,
     signature::{Ed25519KeyPair, KeyPair},
 };
+use serde::{Deserialize, Serialize};
 
 use crate::{
     PersistenceError,
@@ -15,6 +17,7 @@ use crate::{
     private_fs::{secure_file, secure_private_directory, validate_directory, validate_file},
 };
 
+const HOST_KEY_ENVELOPE_VERSION: u32 = 1;
 const MAX_PRIVATE_KEY_BYTES: u64 = 512;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -29,10 +32,19 @@ pub(crate) struct HostKeyMaterial {
     public_key: [u8; 32],
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StoredHostKey {
+    version: u32,
+    initialization_nonce: String,
+    private_key_pkcs8: String,
+}
+
 impl HostKeyMaterial {
     pub(crate) fn load_or_create(
         path: Option<&Path>,
         policy: HostKeyPolicy,
+        initialization_nonce: &str,
     ) -> Result<Self, PersistenceError> {
         let Some(path) = path else {
             return Self::generate();
@@ -44,10 +56,12 @@ impl HostKeyMaterial {
             Ok(_) if policy == HostKeyPolicy::CreateOnly => {
                 Err(PersistenceError::InvalidHostIdentity)
             }
-            Ok(file) => Self::read(file),
-            Err(error) if error.kind() == io::ErrorKind::NotFound && allow_create => {
-                create_key(path, policy == HostKeyPolicy::CreateOrReuse)
-            }
+            Ok(file) => Self::read(file, initialization_nonce),
+            Err(error) if error.kind() == io::ErrorKind::NotFound && allow_create => create_key(
+                path,
+                policy == HostKeyPolicy::CreateOrReuse,
+                initialization_nonce,
+            ),
             Err(error) if error.kind() == io::ErrorKind::NotFound => {
                 Err(PersistenceError::HostIdentityMissing)
             }
@@ -69,7 +83,7 @@ impl HostKeyMaterial {
         Self::parse(document.as_ref().to_vec())
     }
 
-    fn read(mut file: File) -> Result<Self, PersistenceError> {
+    fn read(mut file: File, initialization_nonce: &str) -> Result<Self, PersistenceError> {
         validate_key_file(&file)?;
         let mut payload = Vec::new();
         Read::take(&mut file, MAX_PRIVATE_KEY_BYTES + 1)
@@ -78,7 +92,20 @@ impl HostKeyMaterial {
         if payload.len() as u64 > MAX_PRIVATE_KEY_BYTES {
             return Err(PersistenceError::InvalidHostIdentity);
         }
-        Self::parse(payload)
+        let stored: StoredHostKey =
+            serde_json::from_slice(&payload).map_err(|_| PersistenceError::InvalidHostIdentity)?;
+        if stored.version != HOST_KEY_ENVELOPE_VERSION
+            || stored.initialization_nonce != initialization_nonce
+        {
+            return Err(PersistenceError::InvalidHostIdentity);
+        }
+        let private_key_pkcs8 = URL_SAFE_NO_PAD
+            .decode(stored.private_key_pkcs8.as_bytes())
+            .map_err(|_| PersistenceError::InvalidHostIdentity)?;
+        if URL_SAFE_NO_PAD.encode(&private_key_pkcs8) != stored.private_key_pkcs8 {
+            return Err(PersistenceError::InvalidHostIdentity);
+        }
+        Self::parse(private_key_pkcs8)
     }
 
     fn parse(private_key_pkcs8: Vec<u8>) -> Result<Self, PersistenceError> {
@@ -96,7 +123,11 @@ impl HostKeyMaterial {
     }
 }
 
-fn create_key(path: &Path, allow_existing: bool) -> Result<HostKeyMaterial, PersistenceError> {
+fn create_key(
+    path: &Path,
+    allow_existing: bool,
+    initialization_nonce: &str,
+) -> Result<HostKeyMaterial, PersistenceError> {
     let material = HostKeyMaterial::generate()?;
     let mut options = OpenOptions::new();
     options.create_new(true).read(true).write(true);
@@ -107,7 +138,7 @@ fn create_key(path: &Path, allow_existing: bool) -> Result<HostKeyMaterial, Pers
     }
     match options.open(path) {
         Ok(mut file) => {
-            if let Err(error) = write_key(&mut file, material.private_key_pkcs8()) {
+            if let Err(error) = write_key(&mut file, &material, initialization_nonce) {
                 drop(file);
                 let _ = std::fs::remove_file(path);
                 return Err(PersistenceError::HostIdentityFile(error));
@@ -115,7 +146,10 @@ fn create_key(path: &Path, allow_existing: bool) -> Result<HostKeyMaterial, Pers
             Ok(material)
         }
         Err(error) if error.kind() == io::ErrorKind::AlreadyExists && allow_existing => {
-            HostKeyMaterial::read(open_existing(path).map_err(PersistenceError::HostIdentityFile)?)
+            HostKeyMaterial::read(
+                open_existing(path).map_err(PersistenceError::HostIdentityFile)?,
+                initialization_nonce,
+            )
         }
         Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
             Err(PersistenceError::InvalidHostIdentity)
@@ -124,9 +158,25 @@ fn create_key(path: &Path, allow_existing: bool) -> Result<HostKeyMaterial, Pers
     }
 }
 
-fn write_key(file: &mut File, payload: &[u8]) -> io::Result<()> {
+fn write_key(
+    file: &mut File,
+    material: &HostKeyMaterial,
+    initialization_nonce: &str,
+) -> io::Result<()> {
     secure_file(file)?;
-    file.write_all(payload)?;
+    let payload = serde_json::to_vec(&StoredHostKey {
+        version: HOST_KEY_ENVELOPE_VERSION,
+        initialization_nonce: initialization_nonce.to_owned(),
+        private_key_pkcs8: URL_SAFE_NO_PAD.encode(material.private_key_pkcs8()),
+    })
+    .map_err(io::Error::other)?;
+    if payload.len() as u64 > MAX_PRIVATE_KEY_BYTES {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "host key envelope exceeds its storage limit",
+        ));
+    }
+    file.write_all(&payload)?;
     file.sync_all()
 }
 

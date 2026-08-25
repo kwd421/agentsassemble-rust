@@ -28,6 +28,7 @@ name = "agentsassemble-persistence"
 version = "0.1.0"
 dependencies = [
  "agentsassemble-domain",
+ "base64 0.22.1",
  "chrono",
  "fs2",
  "image",

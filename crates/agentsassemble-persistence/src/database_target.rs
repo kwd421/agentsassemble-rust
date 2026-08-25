@@ -20,7 +20,6 @@ use crate::{
 pub(crate) struct PreparedDatabase {
     pub(crate) options: SqliteConnectOptions,
     pub(crate) writer_lease: Option<Arc<File>>,
-    pub(crate) created: bool,
     pub(crate) identity: Option<Arc<Handle>>,
     pub(crate) host_key_path: Option<PathBuf>,
     canonical_path: Option<PathBuf>,
@@ -33,7 +32,6 @@ impl PreparedDatabase {
             return Ok(Self {
                 options,
                 writer_lease: None,
-                created: true,
                 identity: None,
                 host_key_path: None,
                 canonical_path: None,
@@ -116,7 +114,6 @@ fn prepare_file(options: SqliteConnectOptions) -> Result<PreparedDatabase, Persi
             .locking_mode(SqliteLockingMode::Exclusive)
             .busy_timeout(Duration::from_millis(250)),
         writer_lease: Some(lease),
-        created,
         identity: Some(identity),
         host_key_path: Some(host_key_path),
         canonical_path: Some(canonical),
