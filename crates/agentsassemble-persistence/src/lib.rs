@@ -30,6 +30,7 @@ mod room_random;
 mod room_settings;
 mod room_subscription;
 mod room_turns;
+mod room_user_identity;
 mod room_write_budget;
 mod schema;
 mod schema_version;
@@ -81,6 +82,7 @@ pub use room_subscription::RoomCatchUp;
 pub use room_turns::{
     AgentTurnAssignment, AgentTurnCommit, ProviderTurnAuthority, RoomCommandMutation,
 };
+pub use room_user_identity::RoomUserIdentity;
 pub use room_write_budget::command_size as room_write_command_size;
 pub use sqlite::{
     AgentLaunchFailureCommit, CommandOutcome, PersistenceError, RoomSnapshotData, SqliteStore,

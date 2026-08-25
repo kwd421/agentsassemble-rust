@@ -194,7 +194,7 @@ pub(crate) async fn load_local_operator_profile(
     Ok(profile)
 }
 
-async fn load_profile_for_identity(
+pub(crate) async fn load_profile_for_identity(
     transaction: &mut Transaction<'_, Sqlite>,
     user_id: &str,
     participant_id: &str,
