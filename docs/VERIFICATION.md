@@ -1697,15 +1697,16 @@ was removed on exit.
 
 The fourth web pass approved that pushed stop-symmetry diff. Daybreaker then found a
 different valid caller of the newly shared helper that the web pass had treated as
-lifecycle-only: startup and dynamic recovery accept a normal active runtime whose
-lifecycle action, ID, and status are all empty. Cold `Gone` commits that runtime's durable
-cleanup before calling the helper. Treating every value other than start/stop as
-`unreachable!` could therefore panic the first startup after an unclean shutdown, after
-the database transition had already succeeded. Daybreaker classified the reachable
-pre-admission failure as Medium. The empty action is now an explicit no-lifecycle runtime
-cleanup case and uses exact confirmed-stop release; nonempty values other than start/stop
-remain stored-authority corruption rejected before provider observation rather than a
-fallback.
+lifecycle-only: startup recovery accepts a normal active runtime whose lifecycle action,
+ID, and status are all empty. Cold `Gone` commits that runtime's durable cleanup before
+calling the helper. The dynamic page uses the same post-commit release owner, but admits
+only reservation-bound lifecycle candidates and therefore does not create the empty-action
+case. Treating every value other than start/stop as `unreachable!` could nevertheless
+panic the first startup after an unclean shutdown, after the database transition had
+already succeeded. Daybreaker classified the reachable pre-admission failure as Medium.
+The empty action is now an explicit no-lifecycle runtime cleanup case and uses exact
+confirmed-stop release; nonempty values other than start/stop remain stored-authority
+corruption rejected before provider observation rather than a fallback.
 
 Two deterministic server regressions now isolate the release owners from the one-second
 watcher. One drives exact live stop reconciliation directly through the captured candidate
@@ -1744,8 +1745,32 @@ installed rustup `x86_64-pc-windows-gnu` workspace all-target/all-feature check 
 passed with the already-recorded unrelated Windows-only dead-code warnings, and its
 isolated target directory was removed on exit.
 
-Packaged Computer Use and both pushed exact-diff re-reviews remain required before this
-correction is closed.
+The pushed `12b392946046f526bd80dc18da53a416bb9d7e54..dc4882b923137e3d842630f4bce1e8404528ea77`
+correction then received independent manual line-by-line APPROVE results from both the
+critical web reviewer and Daybreaker Blue High. Neither reviewer used Deep Scan, another
+automated security scanner, or a real provider. The web reviewer independently corrected
+the wording above: empty lifecycle authority is a cold-start candidate, while dynamic
+reconciliation remains reservation-bound.
+
+The isolated packaged app `AgentsAssemble Absence Verify` used bundle identifier
+`app.agentsassemble.rust.absenceverify` with the central URL explicitly empty. Computer
+Use completed the fresh local identity flow as `Lifecycle Absence Verify`, created a real
+zero-state room, and published `LIFECYCLE_ABSENCE_DC4882B_UI_OK`. With the lower-left
+profile card open, opening the Agent-add modal removed the card from the rendered and
+accessible surface, so it did not rise above the modal. Before provider selection the
+modal exposed no display-name field. Selecting Codex made the catalog-derived display
+name, model, effort, permission, and workspace controls visible; the modal was cancelled,
+so no Agent Session or provider process was created.
+
+The app then exited through its normal application Quit menu and was relaunched from the
+same package. The stored local identity, room, and first message returned without seed,
+fallback, or re-entry. The reconnected room published
+`LIFECYCLE_ABSENCE_DC4882B_RECONNECT_OK`. A read-only query of the exact isolated SQLite
+store found one room, the two ordered `message_final` rows, and zero Agent Sessions. The
+second run also exited through the normal Quit menu, and Computer Use reported the exact
+bundle as not running before cleanup. The exact package, Application Support, Caches, and
+WebKit paths for that isolated bundle identifier were then removed; a final process check
+found no owned packaged-app process.
 
 ## API verification scope
 
