@@ -37,37 +37,6 @@ pub(super) async fn reuse_owned_runtime(
     runtime: &mut OwnedRuntime,
 ) -> Result<ProviderRuntimeStarted, ProviderAdapterError> {
     validate_owned_runtime(session, runtime)?;
-    let mut driver = runtime.driver.lock().await;
-    if driver.requires_restart() {
-        return Err(ProviderAdapterError::uncertain(
-            DriverError::new(
-                "provider_runtime_restart_required",
-                "The owned provider runtime must be stopped before it can be reused.",
-            ),
-            &runtime.handle_id,
-            &runtime.owner_id,
-        ));
-    }
-    match driver.is_alive().await {
-        Ok(true) => {}
-        Ok(false) => {
-            return Err(ProviderAdapterError::uncertain(
-                DriverError::new(
-                    "provider_runtime_exited",
-                    "The owned provider runtime exited before it became ready.",
-                ),
-                &runtime.handle_id,
-                &runtime.owner_id,
-            ));
-        }
-        Err(error) => {
-            return Err(ProviderAdapterError::uncertain(
-                error,
-                &runtime.handle_id,
-                &runtime.owner_id,
-            ));
-        }
-    }
     if let Err(error) = revalidate_runtime_authority(session).await {
         return Err(ProviderAdapterError::uncertain(
             error,
@@ -75,33 +44,82 @@ pub(super) async fn reuse_owned_runtime(
             &runtime.owner_id,
         ));
     }
-    match driver.attach_session(session).await {
-        Ok(attachment) => started(session, runtime, true, attachment).map_err(|error| {
-            ProviderAdapterError::uncertain(error, &runtime.handle_id, &runtime.owner_id)
-        }),
-        Err(error) => Err(ProviderAdapterError::uncertain(
-            error,
-            &runtime.handle_id,
-            &runtime.owner_id,
-        )),
-    }
+    let attachment = attach_owned(
+        runtime.driver.clone(),
+        session.clone(),
+        true,
+        &runtime.handle_id,
+        &runtime.owner_id,
+    )
+    .await?;
+    started(session, runtime, true, attachment).map_err(|error| {
+        ProviderAdapterError::uncertain(error, &runtime.handle_id, &runtime.owner_id)
+    })
 }
 
 pub(super) async fn initialize_owned_runtime(
     session: &DurableAgentSession,
     runtime: &mut OwnedRuntime,
 ) -> Result<ProviderRuntimeStarted, ProviderAdapterError> {
-    let mut driver = runtime.driver.lock().await;
-    match driver.attach_session(session).await {
-        Ok(attachment) => started(session, runtime, false, attachment).map_err(|error| {
-            ProviderAdapterError::uncertain(error, &runtime.handle_id, &runtime.owner_id)
-        }),
-        Err(error) => Err(ProviderAdapterError::uncertain(
-            error,
-            &runtime.handle_id,
-            &runtime.owner_id,
-        )),
-    }
+    let attachment = attach_owned(
+        runtime.driver.clone(),
+        session.clone(),
+        false,
+        &runtime.handle_id,
+        &runtime.owner_id,
+    )
+    .await?;
+    started(session, runtime, false, attachment).map_err(|error| {
+        ProviderAdapterError::uncertain(error, &runtime.handle_id, &runtime.owner_id)
+    })
+}
+
+async fn attach_owned(
+    driver_cell: std::sync::Arc<super::runtime_driver::DriverCell>,
+    session: DurableAgentSession,
+    require_health: bool,
+    handle_id: &str,
+    owner_id: &str,
+) -> Result<ProviderSessionAttachment, ProviderAdapterError> {
+    let task = tokio::spawn(async move {
+        let mut driver = driver_cell.take().await?;
+        let result = async {
+            if driver.requires_restart() {
+                return Err(DriverError::new(
+                    "provider_runtime_restart_required",
+                    "The owned provider runtime must be stopped before it can be reused.",
+                ));
+            }
+            if require_health {
+                match driver.is_alive().await {
+                    Ok(true) => {}
+                    Ok(false) => {
+                        return Err(DriverError::new(
+                            "provider_runtime_exited",
+                            "The owned provider runtime exited before it became ready.",
+                        ));
+                    }
+                    Err(error) => return Err(error),
+                }
+            }
+            driver.attach_session(&session).await
+        }
+        .await;
+        driver_cell.put(driver).await;
+        result
+    });
+    task.await
+        .map_err(|_| {
+            ProviderAdapterError::uncertain(
+                DriverError::new(
+                    "provider_driver_owner_failed",
+                    "The provider driver owner ended without returning attachment authority.",
+                ),
+                handle_id,
+                owner_id,
+            )
+        })?
+        .map_err(|error| ProviderAdapterError::uncertain(error, handle_id, owner_id))
 }
 
 pub(super) fn validate_owned_runtime(

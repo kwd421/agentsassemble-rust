@@ -81,6 +81,40 @@ describe("MemberList component wiring", () => {
     expect(within(dialog).queryByRole("button", { name: "세션 삭제" })).toBeNull();
   });
 
+  it("takes an Agent Session moderation scope from its canonical room participant", async () => {
+    const onParticipantMute = vi.fn().mockResolvedValue(undefined);
+    render(
+      <MemberList
+        agents={[{ ...AGENT, meeting_id: "" }]}
+        agentSessions={[SESSION]}
+        members={[
+          {
+            meeting_id: "room-1",
+            participant_id: "agent-1",
+            display_name: "Agent One",
+            role: "agent",
+            participant_type: "local",
+            provider_kind: "codex",
+            connection_kind: "agent_session",
+            status: "joined",
+            source: "agent_session",
+            created_at: "",
+            updated_at: "",
+          },
+        ]}
+        roomId="room-1"
+        roomName="Room One"
+        canModerate
+        onParticipantMute={onParticipantMute}
+      />
+    );
+
+    fireEvent.contextMenu(screen.getByText("Agent One"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "뮤트" }));
+
+    await waitFor(() => expect(onParticipantMute).toHaveBeenCalledWith("agent-1", true));
+  });
+
   it("does not expose moderation actions when the room supplied no callable action", () => {
     render(
       <MemberList

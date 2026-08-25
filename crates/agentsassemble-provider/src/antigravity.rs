@@ -9,12 +9,13 @@ use uuid::Uuid;
 
 use crate::{
     antigravity_hook::AntigravityHookRegistration,
+    antigravity_prompt::{contains_bytes, model_matches, terminal_prompt},
     antigravity_terminal::AntigravityRoomPermissionPolicy,
     antigravity_transcript::AntigravityTranscript,
     antigravity_transport::AntigravityTerminal,
     filesystem::{BoundExecutable, bind_executable},
     launch_error::DriverLaunchError,
-    room_portal::{ProviderTurnOutcome, RoomPortal, RoomPortalError},
+    room_portal::{ProviderTurnOutcome, RoomObservationStart, RoomPortal, RoomPortalError},
     room_portal_terminal::RoomPortalTerminalHelper,
     runtime::{
         DriverError, DriverFuture, ProviderDriver, ProviderSessionAttachment,
@@ -30,6 +31,8 @@ const STARTUP_QUIET: Duration = Duration::from_secs(5);
 const TURN_INACTIVITY_TIMEOUT: Duration = Duration::from_mins(3);
 const POLL_INTERVAL: Duration = Duration::from_millis(100);
 const SUBMIT_DELAY: Duration = Duration::from_millis(100);
+const INTERRUPT_QUIET: Duration = Duration::from_millis(300);
+const INTERRUPT_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_TERMINAL_TAIL_BYTES: usize = 64 * 1024;
 const PENDING_SESSION_PREFIX: &str = "pending-antigravity-";
 
@@ -434,6 +437,47 @@ impl AntigravityDriver {
         }
     }
 
+    async fn interrupt_turn_exact(
+        &mut self,
+        request: &ProviderTurnRequest,
+    ) -> Result<(), DriverError> {
+        let Some(active) = &self.active_turn else {
+            return Ok(());
+        };
+        if active.request != *request {
+            return Err(turn_conflict());
+        }
+        self.write_terminal(b"\x03").await?;
+        let deadline = Instant::now() + INTERRUPT_TIMEOUT;
+        let mut last_output = Instant::now();
+        loop {
+            if Instant::now() >= deadline {
+                return self.poison(turn_interrupt_timeout());
+            }
+            if !self.terminal.is_alive().await? {
+                return Err(runtime_exited());
+            }
+            match tokio::time::timeout(POLL_INTERVAL, self.read_terminal()).await {
+                Ok(Ok(chunk)) if !chunk.is_empty() => {
+                    self.record_terminal(&chunk);
+                    self.answer_terminal_queries(&chunk).await?;
+                    last_output = Instant::now();
+                }
+                Ok(Ok(_)) | Err(_)
+                    if Instant::now().duration_since(last_output) >= INTERRUPT_QUIET =>
+                {
+                    self.active_turn = None;
+                    self.completed_turn = None;
+                    self.transcript.cancel_turn();
+                    self.terminal_tail.clear();
+                    return Ok(());
+                }
+                Ok(Ok(_)) | Err(_) => {}
+                Ok(Err(error)) => return Err(error),
+            }
+        }
+    }
+
     async fn drain_terminal_available(&mut self) -> Result<(), DriverError> {
         loop {
             match tokio::time::timeout(Duration::from_millis(5), self.read_terminal()).await {
@@ -533,6 +577,14 @@ impl ProviderDriver for AntigravityDriver {
         Box::pin(self.send(session, request))
     }
 
+    fn interrupt_turn<'a>(
+        &'a mut self,
+        _session: &'a DurableAgentSession,
+        request: &'a ProviderTurnRequest,
+    ) -> DriverFuture<'a, Result<(), DriverError>> {
+        Box::pin(self.interrupt_turn_exact(request))
+    }
+
     fn is_alive(&mut self) -> DriverFuture<'_, Result<bool, DriverError>> {
         self.terminal.is_alive()
     }
@@ -547,14 +599,16 @@ impl ProviderDriver for AntigravityDriver {
             .as_ref()
             .ok_or_else(portal_missing)?;
         self.room_portal
-            .begin_observation(
-                &observation.session_id,
-                &request.turn_id,
-                observation.input_up_to_seq,
-                &observation.view,
-                &observation.allowed_agent_ids,
-                observation.room_tool_ingress.clone(),
-            )
+            .begin_observation(RoomObservationStart {
+                session_id: &observation.session_id,
+                turn_id: &request.turn_id,
+                input_up_to_seq: observation.input_up_to_seq,
+                durable_turn_generation: request.turn_generation,
+                execution_id: &request.execution_id,
+                room_view: &observation.view,
+                allowed_agent_ids: &observation.allowed_agent_ids,
+                tool_ingress: observation.room_tool_ingress.clone(),
+            })
             .map_err(portal_driver_error)
     }
 
@@ -584,50 +638,6 @@ impl Drop for AntigravityDriver {
     fn drop(&mut self) {
         self.terminal.request_stop();
     }
-}
-
-fn terminal_prompt(request: &ProviderTurnRequest, transcript_nonce: Uuid, helper: &str) -> String {
-    let random_instruction = request
-        .room_observation
-        .as_ref()
-        .and_then(|observation| observation.room_tool_ingress.as_ref())
-        .map_or_else(String::new, |_| {
-            format!(
-                " For official game randomness, run exactly one `{helper} roll '<NdS±M>'` or `{helper} choose '<json-options>'` command and wait for its result."
-            )
-        });
-    format!(
-        "{}\n\n<agentsassemble-transport turn=\"{}\" launch=\"{transcript_nonce}\">Antigravity room transport: first run `{helper} help`, then run `{helper} read`.{random_instruction} Finish with exactly one `{helper} speak 'message'`, `{helper} speak-to agent-id 'message'`, or `{helper} decline reason`. Run one helper command per terminal tool call. Ordinary assistant final text is not a room publication.</agentsassemble-transport>",
-        request.input, request.turn_id,
-    )
-}
-
-fn model_matches(configured: &str, observed: &str) -> bool {
-    let normalized = |value: &str| {
-        value
-            .to_ascii_lowercase()
-            .chars()
-            .map(|character| {
-                if character.is_ascii_alphanumeric() {
-                    character
-                } else {
-                    '-'
-                }
-            })
-            .collect::<String>()
-            .split('-')
-            .filter(|part| !part.is_empty() && !matches!(*part, "low" | "medium" | "high"))
-            .collect::<Vec<_>>()
-            .join("-")
-    };
-    normalized(configured) == normalized(observed)
-}
-
-fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
-    !needle.is_empty()
-        && haystack
-            .windows(needle.len())
-            .any(|window| window == needle)
 }
 
 fn env_home() -> Result<PathBuf, DriverError> {
@@ -709,6 +719,13 @@ const fn turn_timeout() -> DriverError {
     DriverError::new(
         "provider_turn_timeout",
         "The Antigravity turn made no progress before its deadline.",
+    )
+}
+
+const fn turn_interrupt_timeout() -> DriverError {
+    DriverError::new(
+        "provider_turn_interrupt_timeout",
+        "The Antigravity turn did not quiesce after exact Ctrl-C delivery.",
     )
 }
 

@@ -6,6 +6,13 @@ use crate::{
     room_portal::RoomPortalError, runtime::DriverError,
 };
 
+pub(crate) const fn turn_in_progress() -> DriverError {
+    DriverError::new(
+        "provider_turn_in_progress",
+        "A different OpenCode turn still owns this provider session.",
+    )
+}
+
 pub(crate) struct AssistantMessage {
     pub(crate) id: String,
     pub(crate) parent_id: String,

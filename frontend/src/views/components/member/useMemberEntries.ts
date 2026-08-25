@@ -136,7 +136,7 @@ export function useMemberEntries({
         owner: false,
         active: agentSession ? agentSessionIsPresent(runtimeStatus) : isActive(agent),
         muted: mutedById.get(agent.agent_id) ?? false,
-        meetingId: String(agent.meeting_id || ""),
+        meetingId: String(member?.meeting_id || agent.meeting_id || ""),
         canViewQuota: canViewQuotaForAgent,
         ownedByViewer,
         ownerId: ownerId || (ownedByViewer ? viewerEntryId : undefined),

@@ -6,9 +6,9 @@ use std::{
 
 use agentsassemble_domain::{AuthenticatedPrincipal, RoomEvent};
 use agentsassemble_persistence::{
-    AgentTurnAssignment, CommandOutcome, PersistenceError, RoomCommandMutation, SqliteStore,
+    AgentTurnAssignment, CommandOutcome, PersistenceError, SqliteStore,
 };
-use agentsassemble_protocol::{CommandResolution, RoomAction};
+use agentsassemble_protocol::RoomAction;
 use agentsassemble_provider::{
     ProviderAdapter, ProviderCatalogService, ProviderRoomToolCommand, ProviderRoomToolIngress,
 };
@@ -33,6 +33,11 @@ use crate::{
     room_shutdown::{RoomShutdownError, join_room_tasks},
 };
 
+use crate::room_command_execution::persistence_error_code;
+pub(crate) use crate::room_command_execution::{
+    CommandExecution, progress_execution, progressed_execution,
+};
+
 const ROOM_QUEUE_CAPACITY: usize = 128;
 const ROOM_TOOL_QUEUE_CAPACITY: usize = 64;
 const EVENT_RECEIVER_CAPACITY: usize = 256;
@@ -55,6 +60,7 @@ struct RoomHandle {
     commands: mpsc::Sender<RoomCommand>,
     events: broadcast::Sender<RoomEvent>,
     publication_wake: mpsc::Sender<()>,
+    provider_recovery: mpsc::Sender<AgentTurnAssignment>,
 }
 
 struct RoomTaskContext {
@@ -188,6 +194,28 @@ impl RoomRuntime {
         let _ = handle.publication_wake.try_send(());
     }
 
+    pub(crate) async fn resume_assigned_provider_turn(
+        &self,
+        assignment: AgentTurnAssignment,
+    ) -> Result<(), PersistenceError> {
+        let handle = self.handle(&assignment.session.public.room_id).await;
+        handle
+            .provider_recovery
+            .try_send(assignment)
+            .map_err(|error| PersistenceError::CommandUnresolved {
+                code: "provider_turn_recovery_unavailable",
+                message: match error {
+                    mpsc::error::TrySendError::Full(_) => {
+                        "The provider turn recovery queue is full."
+                    }
+                    mpsc::error::TrySendError::Closed(_) => {
+                        "The provider turn recovery owner stopped."
+                    }
+                }
+                .to_owned(),
+            })
+    }
+
     pub(crate) fn try_claim_lifecycle_command(
         &self,
         room_id: &str,
@@ -250,12 +278,14 @@ impl RoomRuntime {
         let (command_tx, command_rx) = mpsc::channel::<RoomCommand>(ROOM_QUEUE_CAPACITY);
         let (event_tx, _) = broadcast::channel(EVENT_RECEIVER_CAPACITY);
         let (publication_tx, publication_rx) = mpsc::channel(PUBLICATION_WAKE_CAPACITY);
+        let (provider_recovery_tx, provider_recovery_rx) = mpsc::channel(ROOM_TOOL_QUEUE_CAPACITY);
         let (room_tool_ingress, room_tool_rx) =
             ProviderRoomToolIngress::channel(ROOM_TOOL_QUEUE_CAPACITY);
         let handle = RoomHandle {
             commands: command_tx,
             events: event_tx.clone(),
             publication_wake: publication_tx,
+            provider_recovery: provider_recovery_tx,
         };
         rooms.insert(room_id.to_owned(), handle.clone());
         let store = self.store.clone();
@@ -276,6 +306,7 @@ impl RoomRuntime {
             command_rx,
             publication_rx,
             room_tool_rx,
+            provider_recovery_rx,
         );
         self.tasks.lock().await.push(task);
         handle
@@ -287,6 +318,7 @@ fn spawn_room_task(
     mut command_rx: mpsc::Receiver<RoomCommand>,
     mut publication_rx: mpsc::Receiver<()>,
     mut room_tool_rx: mpsc::Receiver<ProviderRoomToolCommand>,
+    mut provider_recovery_rx: mpsc::Receiver<AgentTurnAssignment>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
         let RoomTaskContext {
@@ -328,6 +360,10 @@ fn spawn_room_task(
                     let Some(tool) = tool else { break; };
                     RoomInput::Tool(tool)
                 }
+                recovery = provider_recovery_rx.recv() => {
+                    let Some(assignment) = recovery else { break; };
+                    RoomInput::ProviderRecovery(Box::new(assignment))
+                }
             };
             match input {
                 RoomInput::Command(command) => {
@@ -365,6 +401,15 @@ fn spawn_room_task(
                         &mut provider_write_budget,
                     )
                     .await;
+                }
+                RoomInput::ProviderRecovery(assignment) => {
+                    spawn_provider_turn(
+                        &mut turn_tasks,
+                        store.clone(),
+                        provider_adapter.clone(),
+                        *assignment,
+                        room_tool_ingress.clone(),
+                    );
                 }
                 RoomInput::Publication => {
                     publish_durable_room_events(&store, &event_tx, &room_id).await;
@@ -422,6 +467,7 @@ async fn handle_room_command(owners: RoomCommandOwners<'_>, command: RoomCommand
     for assignment in assignments {
         spawn_provider_turn(
             turn_tasks,
+            store.clone(),
             provider_adapter.clone(),
             assignment,
             room_tool_ingress.clone(),
@@ -457,6 +503,36 @@ async fn handle_provider_result(
     };
     let room_id = result.assignment.session.public.room_id.clone();
     let session_id = result.assignment.session.public.session_id.clone();
+    if result.task_panicked {
+        match store
+            .record_provider_turn_task_death(
+                &room_id,
+                &session_id,
+                result.assignment.turn_generation,
+                &result.assignment.execution_id,
+            )
+            .await
+        {
+            Ok(commit) => {
+                publish_turn_commit(
+                    store,
+                    event_tx,
+                    turn_tasks,
+                    provider_adapter.clone(),
+                    room_tool_ingress.clone(),
+                    commit,
+                )
+                .await;
+            }
+            Err(error) => tracing::error!(
+                code = persistence_error_code(&error),
+                room_id,
+                session_id,
+                "provider turn task death could not be checkpointed"
+            ),
+        }
+        return;
+    }
     match commit_provider_result(store, provider_adapter, result).await {
         Ok(commit) => {
             publish_turn_commit(
@@ -506,6 +582,7 @@ enum RoomInput {
     Provider(Box<Result<ProviderTurnTaskResult, tokio::task::JoinError>>),
     Publication,
     Tool(ProviderRoomToolCommand),
+    ProviderRecovery(Box<AgentTurnAssignment>),
 }
 
 async fn execute_command(
@@ -580,6 +657,34 @@ async fn execute_command(
             .await
         {
             Ok(outcome) => CommandExecution::success(outcome),
+            Err(error) => CommandExecution::transactional_failure(error),
+        },
+        RoomAction::ParticipantMute => match store
+            .execute_participant_mute(&command.principal, &command.request_id, &command.payload)
+            .await
+        {
+            Ok(mutation) => {
+                let effect = mutation.interrupt_effect.clone();
+                let mut execution = CommandExecution::participant_mute(mutation);
+                if let Some(effect) = effect {
+                    match crate::participant_mute_runtime::apply_exact_interrupt(
+                        store,
+                        provider_adapter,
+                        &effect,
+                    )
+                    .await
+                    {
+                        Ok(commit) => execution.extend_turn_commit(commit),
+                        Err(error) => tracing::error!(
+                            code = persistence_error_code(&error),
+                            room_id = command.principal.room_id,
+                            session_id = effect.session_id,
+                            "participant mute committed; exact provider interrupt remains quarantined"
+                        ),
+                    }
+                }
+                execution
+            }
             Err(error) => CommandExecution::transactional_failure(error),
         },
     }
@@ -665,129 +770,4 @@ async fn execute_agent_configure(
         )
         .await
         .map(CommandExecution::success)
-}
-
-pub(crate) struct CommandExecution {
-    reply: Result<CommandOutcome, CommandFailure>,
-    committed_events: Vec<RoomEvent>,
-    assignments: Vec<AgentTurnAssignment>,
-}
-
-impl CommandExecution {
-    fn is_definitive(&self) -> bool {
-        match &self.reply {
-            Ok(_) => true,
-            Err(failure) => failure.resolution != CommandResolution::Unresolved,
-        }
-    }
-
-    fn success(outcome: CommandOutcome) -> Self {
-        let committed_events = if outcome.deduplicated {
-            Vec::new()
-        } else {
-            outcome.events.clone()
-        };
-        Self {
-            reply: Ok(outcome),
-            committed_events,
-            assignments: Vec::new(),
-        }
-    }
-
-    fn mutation(mutation: RoomCommandMutation) -> Self {
-        let committed_events = if mutation.outcome.deduplicated {
-            Vec::new()
-        } else {
-            mutation.outcome.events.clone()
-        };
-        Self {
-            reply: Ok(mutation.outcome),
-            committed_events,
-            assignments: mutation.assignments,
-        }
-    }
-
-    fn failure(failure: CommandFailure) -> Self {
-        Self {
-            reply: Err(failure),
-            committed_events: Vec::new(),
-            assignments: Vec::new(),
-        }
-    }
-
-    pub(crate) fn transactional_failure(error: PersistenceError) -> Self {
-        Self::failure(CommandFailure::transactional(error))
-    }
-
-    pub(crate) fn unresolved_failure(error: PersistenceError) -> Self {
-        Self {
-            reply: Err(CommandFailure::unresolved(error)),
-            committed_events: Vec::new(),
-            assignments: Vec::new(),
-        }
-    }
-
-    pub(crate) fn unresolved_failure_with_events(
-        error: PersistenceError,
-        committed_events: Vec<RoomEvent>,
-    ) -> Self {
-        Self {
-            reply: Err(CommandFailure::unresolved(error)),
-            committed_events,
-            assignments: Vec::new(),
-        }
-    }
-
-    pub(crate) fn committed_failure(
-        error: PersistenceError,
-        committed_events: Vec<RoomEvent>,
-    ) -> Self {
-        Self {
-            reply: Err(CommandFailure::rejected(error)),
-            committed_events,
-            assignments: Vec::new(),
-        }
-    }
-}
-
-pub(crate) async fn progressed_execution(
-    store: &SqliteStore,
-    room_id: &str,
-    outcome: CommandOutcome,
-) -> CommandExecution {
-    progress_execution(store, room_id, CommandExecution::success(outcome)).await
-}
-
-async fn progress_execution(
-    store: &SqliteStore,
-    room_id: &str,
-    mut execution: CommandExecution,
-) -> CommandExecution {
-    match store.assign_pending_turn(room_id).await {
-        Ok(Some(commit)) => {
-            execution.committed_events.extend(commit.events);
-            execution.assignments.extend(commit.next_assignments);
-        }
-        Ok(None) => {}
-        Err(error) => {
-            let code = match &error {
-                PersistenceError::CommandRejected { code, .. } => *code,
-                _ => "persistence_error",
-            };
-            tracing::error!(
-                code,
-                room_id,
-                "committed lifecycle command could not advance the ordered floor"
-            );
-            match store.record_floor_progression_failure(room_id, code).await {
-                Ok(events) => execution.committed_events.extend(events),
-                Err(recording_error) => tracing::error!(
-                    error = ?recording_error,
-                    room_id,
-                    "room floor progression failure could not be recorded durably"
-                ),
-            }
-        }
-    }
-    execution
 }

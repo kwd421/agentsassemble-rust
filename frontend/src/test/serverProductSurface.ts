@@ -1,7 +1,8 @@
 import type { ServerProductSurface } from "../types/generated/ServerProductSurface";
+import { PRODUCT_SURFACE_REVISION } from "../types/generated/PRODUCT_SURFACE_REVISION";
 
 export const TEST_SERVER_PRODUCT_SURFACE: ServerProductSurface = {
-  revision: 2,
+  revision: PRODUCT_SURFACE_REVISION,
   digest: "c".repeat(64),
   http_routes: [],
   websocket_streams: ["room_events"],
@@ -12,6 +13,7 @@ export const TEST_SERVER_PRODUCT_SURFACE: ServerProductSurface = {
     "agent.start",
     "agent.stop",
     "message.send",
+    "participant.mute",
     "participant.role.update",
     "room.random.choose",
     "room.random.roll",

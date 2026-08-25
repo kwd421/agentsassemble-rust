@@ -555,7 +555,7 @@ mod tests {
     use super::{
         ConnectionAuthentication, ConnectionRegistry, MAX_MCP_REQUEST_BYTES, MAX_PORTAL_CONNECTIONS,
     };
-    use crate::room_portal::{ProviderTurnOutcome, RoomPortal};
+    use crate::room_portal::{ProviderTurnOutcome, RoomObservationStart, RoomPortal};
 
     #[test]
     fn bearer_authentication_is_atomic_with_unauthenticated_eviction() {
@@ -605,14 +605,16 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("create room portal fixture: {error}"));
         portal
-            .begin_observation(
-                "agent-1",
-                "turn-1",
-                7,
-                "Room: General\n#7 Human: hello",
-                &["agent-2".to_owned()],
-                None,
-            )
+            .begin_observation(RoomObservationStart {
+                session_id: "agent-1",
+                turn_id: "turn-1",
+                input_up_to_seq: 7,
+                durable_turn_generation: 1,
+                execution_id: "00000000-0000-4000-8000-000000000001",
+                room_view: "Room: General\n#7 Human: hello",
+                allowed_agent_ids: &["agent-2".to_owned()],
+                tool_ingress: None,
+            })
             .unwrap_or_else(|error| panic!("begin room observation: {error}"));
         let client = ()
             .serve(StreamableHttpClientTransport::from_config(

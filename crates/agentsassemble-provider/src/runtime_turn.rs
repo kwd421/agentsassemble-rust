@@ -2,10 +2,11 @@ use std::collections::HashSet;
 
 use agentsassemble_domain::{DurableAgentSession, has_visible_text};
 use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
 
 use super::{
-    DriverError, ProviderAdapter, ProviderAdapterError, ProviderDriver, RuntimeState,
-    revalidate_runtime_authority, validate_owned_runtime,
+    DriverError, ProviderAdapter, ProviderAdapterError, ProviderDriver, ProviderPreparedTurn,
+    RuntimeState, revalidate_runtime_authority, validate_owned_runtime,
 };
 use crate::room_portal::ProviderTurnOutcome;
 
@@ -18,6 +19,8 @@ const MAX_ROOM_AGENT_IDS: usize = 64;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProviderTurnRequest {
     pub turn_id: String,
+    pub turn_generation: u64,
+    pub execution_id: String,
     pub input: String,
     pub room_observation: Option<ProviderRoomObservation>,
 }
@@ -45,17 +48,21 @@ impl ProviderAdapter {
     /// # Errors
     ///
     /// Returns a fail-closed authority, process, protocol, or provider-turn error.
-    pub async fn send_turn(
+    pub async fn send_prepared_turn(
         &self,
+        prepared: ProviderPreparedTurn,
         session: &DurableAgentSession,
         request: &ProviderTurnRequest,
     ) -> Result<ProviderTurnCompleted, ProviderAdapterError> {
         validate_request(session, request).map_err(ProviderAdapterError::safe)?;
-        let slot = self
-            .existing_slot(&session.public.room_id, &session.public.session_id)
-            .await
-            .ok_or_else(|| owner_mismatch(session))?;
-        let (driver, cancellation, handle_id, owner_id, lease_token) = {
+        let exact_interruption = self
+            .enter_prepared_turn(&prepared, session, request)
+            .await?;
+        let owner_authority = async {
+            let slot = self
+                .existing_slot(&session.public.room_id, &session.public.session_id)
+                .await
+                .ok_or_else(|| owner_mismatch(session))?;
             let slot = slot.lock().await;
             let RuntimeState::Running(runtime) = &slot.state else {
                 return Err(owner_mismatch(session));
@@ -67,65 +74,192 @@ impl ProviderAdapter {
                 .map_err(|error| {
                     ProviderAdapterError::uncertain(error, &runtime.handle_id, &runtime.owner_id)
                 })?;
-            (
+            Ok::<_, ProviderAdapterError>((
                 runtime.driver.clone(),
                 runtime.turn_cancellation.clone(),
                 runtime.handle_id.clone(),
                 runtime.owner_id.clone(),
                 runtime.lease_token.clone(),
-            )
-        };
-        let mut driver = driver.lock().await;
-        require_live_driver(driver.as_mut(), &cancellation, &handle_id, &owner_id).await?;
-        if request.room_observation.is_some() {
-            driver
-                .begin_room_observation(request)
-                .map_err(ProviderAdapterError::safe)?;
+            ))
         }
-        let result = tokio::select! {
-            biased;
-            () = cancellation.cancelled() => Err(turn_cancelled()),
-            result = driver.send_turn(session, request) => result,
+        .await;
+        let (driver_cell, cancellation, handle_id, owner_id, lease_token) = match owner_authority {
+            Ok(authority) => authority,
+            Err(error) => {
+                self.quiesce_prepared_turn(&prepared, false).await;
+                return Err(error);
+            }
         };
-        match result {
-            Ok(completed) => finish_completed_turn(
-                driver.as_mut(),
-                session,
-                request,
-                completed,
+        let owner_task = tokio::spawn(run_turn_owner(TurnOwnerInput {
+            adapter: self.clone(),
+            prepared,
+            driver_cell,
+            cancellation,
+            session: session.clone(),
+            request: request.clone(),
+            handle_id: handle_id.clone(),
+            owner_id: owner_id.clone(),
+            exact_interruption,
+        }));
+        let turn_outcome = owner_task.await.map_err(|_| {
+            ProviderAdapterError::uncertain(
+                DriverError::new(
+                    "provider_turn_owner_failed",
+                    "The exact provider turn owner ended without a result.",
+                ),
                 &handle_id,
                 &owner_id,
-            ),
-            Err(error) => {
-                driver.abort_room_observation();
-                let requires_restart = driver.requires_restart();
-                drop(driver);
-                if requires_restart {
-                    return match self
-                        .stop(
-                            &session.public.room_id,
-                            &session.public.session_id,
-                            &handle_id,
-                            &owner_id,
-                            &lease_token,
-                        )
-                        .await
-                    {
-                        Ok(()) => Err(ProviderAdapterError::confirmed_stopped(
-                            error,
-                            &handle_id,
-                            &owner_id,
-                            &lease_token,
-                        )),
-                        Err(stop_error) => Err(stop_error),
-                    };
-                }
-                Err(ProviderAdapterError::uncertain(
-                    error, &handle_id, &owner_id,
-                ))
+            )
+        })?;
+        if let Err(error) = &turn_outcome.result {
+            if turn_outcome.requires_restart {
+                let driver_error = DriverError::new(error.code, error.message);
+                return match self
+                    .stop(
+                        &session.public.room_id,
+                        &session.public.session_id,
+                        &handle_id,
+                        &owner_id,
+                        &lease_token,
+                    )
+                    .await
+                {
+                    Ok(()) => Err(ProviderAdapterError::confirmed_stopped(
+                        driver_error,
+                        &handle_id,
+                        &owner_id,
+                        &lease_token,
+                    )),
+                    Err(stop_error) => Err(stop_error),
+                };
             }
+            return turn_outcome.result;
         }
+        turn_outcome.result
     }
+
+    /// Runs a provider turn without product persistence only in provider-unit tests.
+    #[cfg(test)]
+    pub(crate) async fn send_turn(
+        &self,
+        session: &DurableAgentSession,
+        request: &ProviderTurnRequest,
+    ) -> Result<ProviderTurnCompleted, ProviderAdapterError> {
+        let prepared = self.prepare_turn(session, request).await?;
+        self.send_prepared_turn(prepared, session, request).await
+    }
+}
+
+struct OwnedTurnResult {
+    result: Result<ProviderTurnCompleted, ProviderAdapterError>,
+    requires_restart: bool,
+}
+
+struct TurnOwnerInput {
+    adapter: ProviderAdapter,
+    prepared: ProviderPreparedTurn,
+    driver_cell: std::sync::Arc<super::runtime_driver::DriverCell>,
+    cancellation: CancellationToken,
+    session: DurableAgentSession,
+    request: ProviderTurnRequest,
+    handle_id: String,
+    owner_id: String,
+    exact_interruption: CancellationToken,
+}
+
+async fn run_turn_owner(input: TurnOwnerInput) -> OwnedTurnResult {
+    let TurnOwnerInput {
+        adapter,
+        prepared,
+        driver_cell,
+        cancellation,
+        session,
+        request,
+        handle_id,
+        owner_id,
+        exact_interruption,
+    } = input;
+    let owned =
+        if let Ok(mut driver) = driver_cell.take().await {
+            let result =
+                match require_live_driver(driver.as_mut(), &cancellation, &handle_id, &owner_id)
+                    .await
+                {
+                    Ok(()) => {
+                        if request.room_observation.is_some()
+                            && let Err(error) = driver.begin_room_observation(&request)
+                        {
+                            Err(ProviderAdapterError::safe(error))
+                        } else {
+                            let sent = tokio::select! {
+                                biased;
+                                () = cancellation.cancelled() => Err(turn_cancelled()),
+                                () = exact_interruption.cancelled() => {
+                                    match driver.interrupt_turn(&session, &request).await {
+                                        Ok(()) => Err(turn_interrupted()),
+                                        Err(error) => Err(error),
+                                    }
+                                },
+                                sent = driver.send_turn(&session, &request) => sent,
+                            };
+                            match sent {
+                                Ok(completed) => finish_completed_turn(
+                                    driver.as_mut(),
+                                    &session,
+                                    &request,
+                                    completed,
+                                    &handle_id,
+                                    &owner_id,
+                                ),
+                                Err(error) if error.code == "provider_turn_interrupted" => {
+                                    driver.abort_room_observation();
+                                    Err(ProviderAdapterError::safe(error))
+                                }
+                                Err(error) => {
+                                    driver.abort_room_observation();
+                                    Err(ProviderAdapterError::uncertain(
+                                        error, &handle_id, &owner_id,
+                                    ))
+                                }
+                            }
+                        }
+                    }
+                    Err(error) => Err(error),
+                };
+            let requires_restart = driver.requires_restart();
+            driver_cell.put(driver).await;
+            OwnedTurnResult {
+                result,
+                requires_restart,
+            }
+        } else {
+            OwnedTurnResult {
+                result: Err(ProviderAdapterError::uncertain(
+                    DriverError::new(
+                        "provider_driver_unavailable",
+                        "The provider driver is unavailable.",
+                    ),
+                    &handle_id,
+                    &owner_id,
+                )),
+                requires_restart: false,
+            }
+        };
+    let interrupted_runtime_retained = !owned.requires_restart
+        && owned.result.as_ref().is_err_and(|error| {
+            error.code == "provider_turn_interrupted" && !error.effect_uncertain
+        });
+    adapter
+        .quiesce_prepared_turn(&prepared, interrupted_runtime_retained)
+        .await;
+    owned
+}
+
+const fn turn_interrupted() -> DriverError {
+    DriverError::new(
+        "provider_turn_interrupted",
+        "The exact provider turn was interrupted by room authority.",
+    )
 }
 
 async fn require_live_driver(
@@ -214,7 +348,7 @@ fn valid_provider_session_transition(
                 .starts_with("pending-antigravity-"))
 }
 
-fn validate_request(
+pub(super) fn validate_request(
     session: &DurableAgentSession,
     request: &ProviderTurnRequest,
 ) -> Result<(), DriverError> {
@@ -223,6 +357,9 @@ fn validate_request(
         || request.turn_id.trim() != request.turn_id
         || request.turn_id.chars().any(char::is_control)
         || request.turn_id != session.public.active_turn_id
+        || request.turn_generation == 0
+        || request.turn_generation != session.turn_generation
+        || Uuid::parse_str(&request.execution_id).is_err()
     {
         return Err(DriverError::new(
             "provider_turn_conflict",

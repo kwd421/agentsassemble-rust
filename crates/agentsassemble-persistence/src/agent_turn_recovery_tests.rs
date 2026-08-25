@@ -1,13 +1,9 @@
-use agentsassemble_domain::{DurableAgentSession, Participant, ParticipantStatus};
+use agentsassemble_domain::DurableAgentSession;
 use serde_json::json;
 
-use super::{AgentRuntimeStarted, AgentStartPlan, tests::fixture};
-use crate::RuntimeReconciliationObservation;
+use super::{AgentRuntimeStarted, AgentStartPlan, SqliteStore, tests::fixture};
 
-#[tokio::test]
-#[allow(clippy::too_many_lines)] // One restart scenario spans durable setup, adoption, and both recovered projections.
-async fn adopted_runtime_requeues_an_active_turn_instead_of_leaving_it_stuck() {
-    let (store, principal, _directory) = fixture().await;
+async fn clear_fixture_queue(store: &SqliteStore) {
     let encoded = sqlx::query_scalar::<_, String>(
         "SELECT session_json FROM agent_sessions WHERE room_id = 'general' AND session_id = ?",
     )
@@ -15,20 +11,26 @@ async fn adopted_runtime_requeues_an_active_turn_instead_of_leaving_it_stuck() {
     .fetch_one(&store.pool)
     .await
     .unwrap_or_else(|error| panic!("load recovery fixture session: {error}"));
-    let mut clean_session: DurableAgentSession = serde_json::from_str(&encoded)
+    let mut session: DurableAgentSession = serde_json::from_str(&encoded)
         .unwrap_or_else(|error| panic!("decode recovery fixture session: {error}"));
-    clean_session.pending_inputs.clear();
+    session.pending_inputs.clear();
     sqlx::query(
         "UPDATE agent_sessions SET session_json = ? WHERE room_id = 'general' AND session_id = ?",
     )
     .bind(
-        serde_json::to_string(&clean_session)
+        serde_json::to_string(&session)
             .unwrap_or_else(|error| panic!("encode recovery fixture session: {error}")),
     )
     .bind(super::tests::AGENT_ID)
     .execute(&store.pool)
     .await
     .unwrap_or_else(|error| panic!("clean recovery fixture queue: {error}"));
+}
+
+#[tokio::test]
+async fn blocking_provider_execution_owns_restart_before_lifecycle_reconciliation() {
+    let (store, principal, _directory) = fixture().await;
+    clear_fixture_queue(&store).await;
     let payload = json!({"agent_id": super::tests::AGENT_ID});
     let AgentStartPlan::Start(start) = store
         .prepare_agent_start(&principal, "turn-recovery-start", &payload)
@@ -82,61 +84,31 @@ async fn adopted_runtime_requeues_an_active_turn_instead_of_leaving_it_stuck() {
         .into_iter()
         .next()
         .unwrap_or_else(|| panic!("message must have an active turn before restart"));
-    let candidate = store
-        .load_runtime_reconciliation_candidates()
+    assert!(
+        store
+            .load_runtime_reconciliation_candidates()
+            .await
+            .unwrap_or_else(|error| panic!("load active-turn reconciliation candidate: {error}"))
+            .is_empty(),
+        "lifecycle recovery must not clear authority owned by a blocking provider execution"
+    );
+    let page = store
+        .load_provider_turn_reconciliation_page(None)
         .await
-        .unwrap_or_else(|error| panic!("load active-turn reconciliation candidate: {error}"))
-        .into_iter()
-        .find(|candidate| candidate.session.public.session_id == super::tests::AGENT_ID)
-        .unwrap_or_else(|| panic!("active turn had no reconciliation candidate"));
-    store
-        .apply_runtime_reconciliation(
-            &candidate,
-            &RuntimeReconciliationObservation::Adopted {
-                handle_id: "adopted-runtime".to_owned(),
-                previous_owner_id: "previous-supervisor".to_owned(),
-                new_owner_id: "new-supervisor".to_owned(),
-                runtime_profile_key: candidate.session.runtime_profile_key.clone(),
-            },
-        )
+        .unwrap_or_else(|error| panic!("load provider-turn reconciliation candidate: {error}"));
+    assert_eq!(page.candidates.len(), 1);
+    let recovered = store
+        .recover_assigned_provider_turn(&page.candidates[0])
         .await
-        .unwrap_or_else(|error| panic!("apply active-turn adoption: {error}"));
-
-    let encoded = sqlx::query_scalar::<_, String>(
-        "SELECT session_json FROM agent_sessions WHERE room_id = 'general' AND session_id = ?",
-    )
-    .bind(super::tests::AGENT_ID)
-    .fetch_one(&store.pool)
-    .await
-    .unwrap_or_else(|error| panic!("load reconciled session: {error}"));
-    let reconciled: DurableAgentSession = serde_json::from_str(&encoded)
-        .unwrap_or_else(|error| panic!("decode reconciled session: {error}"));
+        .unwrap_or_else(|error| panic!("recover exact pre-dispatch assignment: {error}"));
+    assert_eq!(recovered.turn_id, assignment.turn_id);
+    assert_eq!(recovered.turn_generation, assignment.turn_generation);
+    assert_eq!(recovered.execution_id, assignment.execution_id);
+    assert_eq!(recovered.provider_input, assignment.provider_input);
+    assert_eq!(recovered.room_view, assignment.room_view);
     assert_eq!(
-        reconciled.pending_inputs,
+        recovered.session.inflight_inputs,
         assignment.session.inflight_inputs
     );
-    assert!(reconciled.inflight_inputs.is_empty());
-    assert!(reconciled.public.active_turn_id.is_empty());
-    assert!(reconciled.active_source_event_id.is_empty());
-    assert_eq!(reconciled.public.runtime_status, "recovering");
-    assert_eq!(reconciled.public.status, "unavailable");
-    assert!(!reconciled.public.enabled);
-    assert!(!reconciled.public.provider_session_active);
-    assert!(reconciled.public.recovery_required);
-    assert_eq!(
-        reconciled.public.last_error_code,
-        "provider_turn_recovery_required"
-    );
-    assert_eq!(reconciled.runtime_owner_id, "new-supervisor");
-
-    let participant = sqlx::query_scalar::<_, String>(
-        "SELECT participant_json FROM participants WHERE room_id = 'general' AND participant_id = ?",
-    )
-    .bind(super::tests::AGENT_ID)
-    .fetch_one(&store.pool)
-    .await
-    .unwrap_or_else(|error| panic!("load reconciled participant: {error}"));
-    let participant: Participant = serde_json::from_str(&participant)
-        .unwrap_or_else(|error| panic!("decode reconciled participant: {error}"));
-    assert_eq!(participant.status, ParticipantStatus::Detached);
+    assert_eq!(recovered.session.runtime_owner_id, "previous-supervisor");
 }

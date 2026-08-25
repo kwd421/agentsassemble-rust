@@ -109,6 +109,8 @@ pub(crate) async fn handle_provider_room_tool(
             session_id: command.session_id(),
             turn_id: command.turn_id(),
             input_up_to_seq: command.input_up_to_seq(),
+            turn_generation: command.turn_generation(),
+            execution_id: command.execution_id(),
             result_id: &result_id,
             request: command.request(),
             result: &result,

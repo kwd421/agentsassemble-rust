@@ -1,5 +1,6 @@
 import type { ServerRoomDockSource } from "./roomDockModel";
 import type { ServerProductSurface } from "../types/generated/ServerProductSurface";
+import { PRODUCT_SURFACE_REVISION } from "../types/generated/PRODUCT_SURFACE_REVISION";
 import { lengthDelimitedTranscript, sha256Hex } from "./lengthDelimitedCrypto";
 
 export type StrictRoomDirectory = {
@@ -216,7 +217,10 @@ function validateServerProductSurface(value: unknown): ServerProductSurface {
     ["revision", "digest", "http_routes", "websocket_streams", "websocket_actions"],
     "서버 제품 표면"
   );
-  if (surface.revision !== 2 || !/^[0-9a-f]{64}$/.test(String(surface.digest))) {
+  if (
+    surface.revision !== PRODUCT_SURFACE_REVISION ||
+    !/^[0-9a-f]{64}$/.test(String(surface.digest))
+  ) {
     throw new Error("서버 제품 표면 revision 또는 digest가 올바르지 않습니다.");
   }
   if (!Array.isArray(surface.http_routes)) {
@@ -245,6 +249,7 @@ function validateServerProductSurface(value: unknown): ServerProductSurface {
         typeof action !== "string" ||
         !new Set([
           "message.send",
+          "participant.mute",
           "participant.role.update",
           "room.settings.update",
           "room.random.roll",

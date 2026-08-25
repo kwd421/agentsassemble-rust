@@ -203,6 +203,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
         [
           "agent_session_created",
           "participant_joined",
+          "participant_muted",
           "participant_updated",
           "participant_left",
           "participant_kicked",

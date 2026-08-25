@@ -10,12 +10,7 @@ use process_wrap::tokio::JobObject;
 #[cfg(not(unix))]
 use process_wrap::tokio::{ChildWrapper, CommandWrap, KillOnDrop};
 use serde_json::{Value, json};
-use tokio::{
-    io::{AsyncRead, AsyncReadExt},
-    sync::oneshot,
-    task::JoinHandle,
-};
-use uuid::Uuid;
+use tokio::{sync::oneshot, task::JoinHandle};
 
 #[path = "opencode/session_creation.rs"]
 mod session_creation;
@@ -34,12 +29,13 @@ use crate::{
         TurnTransportError, assistant_message, clean_session_id, config_error, executable_error,
         http_driver_error, model_id, model_mismatch, portal_driver_error, portal_unavailable,
         profile_error, protocol_error, provider_id, provider_request_error, runtime_exited,
-        session_mismatch, session_missing, session_path, session_unconfirmed, spawn_error,
-        startup_error, turn_empty, turn_mismatch, turn_timeout, turn_transport_error,
+        session_mismatch, session_missing, session_path, session_unconfirmed, startup_error,
+        turn_empty, turn_in_progress, turn_mismatch, turn_timeout, turn_transport_error,
         validate_profile,
     },
     opencode_sse::{OpenCodeTurnEvents, collect_turn_events},
-    room_portal::{ProviderTurnOutcome, RoomPortal},
+    opencode_startup::{drain_output, observe_startup, reserve_loopback_port, server_password},
+    room_portal::{ProviderTurnOutcome, RoomObservationStart, RoomPortal},
     runtime::{
         DriverError, DriverFuture, ProviderDriver, ProviderSessionAttachment,
         ProviderTurnCompleted, ProviderTurnRequest,
@@ -58,7 +54,6 @@ const TURN_TIMEOUT: Duration = Duration::from_mins(3);
 const STOP_TIMEOUT: Duration = Duration::from_secs(5);
 const MCP_NAME: &str = "agentsassemble_room";
 const SERVER_USERNAME: &str = "agentsassemble";
-const MAX_STARTUP_LINE_BYTES: usize = 1024;
 
 pub(crate) struct OpenCodeDriver {
     #[cfg(unix)]
@@ -76,6 +71,7 @@ pub(crate) struct OpenCodeDriver {
     attached_reused: bool,
     session_creation: SessionCreationAuthority,
     mcp_registered: bool,
+    active_turn: Option<ProviderTurnRequest>,
     completed_turn: Option<(ProviderTurnRequest, ProviderTurnCompleted)>,
     poisoned: bool,
 }
@@ -189,6 +185,7 @@ impl OpenCodeDriver {
             attached_reused: false,
             session_creation: SessionCreationAuthority::default(),
             mcp_registered: false,
+            active_turn: None,
             completed_turn: None,
             poisoned: false,
         };
@@ -408,6 +405,13 @@ impl OpenCodeDriver {
         if session.provider_session_id != attached {
             return self.poison(session_mismatch());
         }
+        if let Some(active) = &self.active_turn {
+            if active != request {
+                return Err(turn_in_progress());
+            }
+        } else {
+            self.active_turn = Some(request.clone());
+        }
         let event_response = self
             .connect_owned_peer()
             .await?
@@ -443,7 +447,7 @@ impl OpenCodeDriver {
         let (prompt, events) = match joined {
             Ok(joined) => joined,
             Err(error) => {
-                self.abort_session(&attached).await;
+                let _ = self.abort_session(&attached).await;
                 return Err(turn_transport_error(error));
             }
         };
@@ -452,6 +456,7 @@ impl OpenCodeDriver {
             .await;
         match completed {
             Ok(completed) => {
+                self.active_turn = None;
                 self.completed_turn = Some((request.clone(), completed.clone()));
                 Ok(completed)
             }
@@ -535,20 +540,58 @@ impl OpenCodeDriver {
         Ok(String::new())
     }
 
-    async fn abort_session(&mut self, session_id: &str) {
+    async fn abort_session(&mut self, session_id: &str) -> Result<(), DriverError> {
         let Ok(path) = session_path(session_id).map(|path| format!("{path}/abort")) else {
-            return;
+            return Err(protocol_error());
         };
-        if let Ok(connection) = self.connect_owned_peer().await {
-            let _ = connection
-                .post_json(&path, &json!({}), Duration::from_secs(5))
-                .await;
+        let response = self
+            .connect_owned_peer()
+            .await?
+            .post_json(&path, &json!({}), Duration::from_secs(5))
+            .await
+            .map_err(http_driver_error)?;
+        if !response.status.is_success() {
+            return Err(provider_request_error());
         }
+        Ok(())
+    }
+
+    async fn interrupt(
+        &mut self,
+        session: &DurableAgentSession,
+        request: &ProviderTurnRequest,
+    ) -> Result<(), DriverError> {
+        let attached = self
+            .attached_session_id
+            .clone()
+            .ok_or_else(session_unconfirmed)?;
+        if session.provider_session_id != attached {
+            return Err(session_mismatch());
+        }
+        let Some(active) = &self.active_turn else {
+            return Ok(());
+        };
+        if active != request {
+            return Err(turn_in_progress());
+        }
+        let events = self
+            .connect_owned_peer()
+            .await?
+            .get_stream("/event", Duration::from_secs(10))
+            .await
+            .map_err(http_driver_error)?;
+        self.abort_session(&attached).await?;
+        crate::opencode_sse::wait_session_idle(events, &attached, Duration::from_secs(10))
+            .await
+            .map_err(turn_transport_error)?;
+        self.active_turn = None;
+        self.completed_turn = None;
+        Ok(())
     }
 
     async fn stop_process(&mut self) -> Result<(), DriverError> {
         if let Some(session_id) = self.attached_session_id.clone() {
-            self.abort_session(&session_id).await;
+            let _ = self.abort_session(&session_id).await;
         }
         if self.mcp_registered
             && let Ok(connection) = self.connect_owned_peer().await
@@ -677,6 +720,14 @@ impl ProviderDriver for OpenCodeDriver {
         Box::pin(self.send(session, request))
     }
 
+    fn interrupt_turn<'a>(
+        &'a mut self,
+        session: &'a DurableAgentSession,
+        request: &'a ProviderTurnRequest,
+    ) -> DriverFuture<'a, Result<(), DriverError>> {
+        Box::pin(self.interrupt(session, request))
+    }
+
     fn is_alive(&mut self) -> DriverFuture<'_, Result<bool, DriverError>> {
         Box::pin(async move {
             #[cfg(unix)]
@@ -699,14 +750,16 @@ impl ProviderDriver for OpenCodeDriver {
             .as_ref()
             .ok_or_else(portal_unavailable)?;
         self.room_portal
-            .begin_observation(
-                &observation.session_id,
-                &request.turn_id,
-                observation.input_up_to_seq,
-                &observation.view,
-                &observation.allowed_agent_ids,
-                observation.room_tool_ingress.clone(),
-            )
+            .begin_observation(RoomObservationStart {
+                session_id: &observation.session_id,
+                turn_id: &request.turn_id,
+                input_up_to_seq: observation.input_up_to_seq,
+                durable_turn_generation: request.turn_generation,
+                execution_id: &request.execution_id,
+                room_view: &observation.view,
+                allowed_agent_ids: &observation.allowed_agent_ids,
+                tool_ingress: observation.room_tool_ingress.clone(),
+            })
             .map_err(portal_driver_error)
     }
 
@@ -737,62 +790,6 @@ impl Drop for OpenCodeDriver {
         #[cfg(unix)]
         self.process_group.request_stop();
     }
-}
-
-async fn reserve_loopback_port() -> Result<u16, DriverError> {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-        .await
-        .map_err(|_| spawn_error())?;
-    let port = listener.local_addr().map_err(|_| spawn_error())?.port();
-    drop(listener);
-    Ok(port)
-}
-
-fn server_password() -> String {
-    format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple())
-}
-
-fn observe_startup<R>(
-    mut output: R,
-    expected_line: String,
-) -> (JoinHandle<()>, oneshot::Receiver<bool>)
-where
-    R: AsyncRead + Unpin + Send + 'static,
-{
-    let (ready_sender, ready_receiver) = oneshot::channel();
-    let task = tokio::spawn(async move {
-        let ready = read_startup_line(&mut output)
-            .await
-            .is_some_and(|line| line == expected_line.as_bytes());
-        let _ = ready_sender.send(ready);
-        drain_output(output).await;
-    });
-    (task, ready_receiver)
-}
-
-async fn read_startup_line<R: AsyncRead + Unpin>(output: &mut R) -> Option<Vec<u8>> {
-    let mut line = Vec::with_capacity(128);
-    let mut byte = [0_u8; 1];
-    loop {
-        if line.len() >= MAX_STARTUP_LINE_BYTES {
-            return None;
-        }
-        match output.read(&mut byte).await {
-            Ok(0) | Err(_) => return None,
-            Ok(_) if byte[0] == b'\n' => {
-                if line.last() == Some(&b'\r') {
-                    line.pop();
-                }
-                return Some(line);
-            }
-            Ok(_) => line.push(byte[0]),
-        }
-    }
-}
-
-async fn drain_output<R: AsyncRead + Unpin>(mut output: R) {
-    let mut buffer = [0_u8; 8 * 1024];
-    while output.read(&mut buffer).await.is_ok_and(|count| count != 0) {}
 }
 
 #[cfg(test)]

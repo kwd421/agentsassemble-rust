@@ -7,9 +7,10 @@ import {
   postJsonWithIdentity,
 } from "./http";
 import { requestDesktopHostProductSurface } from "../lib/desktopBridge";
+import { PRODUCT_SURFACE_REVISION } from "../types/generated/PRODUCT_SURFACE_REVISION";
 
 const HOST_SURFACE = {
-  revision: 2,
+  revision: PRODUCT_SURFACE_REVISION,
   digest: "1".repeat(64),
   commands: ["host_product_surface", "runtime_operator_ticket"],
 };

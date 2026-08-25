@@ -9,6 +9,7 @@ import {
   rememberStartupIdentitySelection,
 } from "../../lib/deviceIdentity";
 import { DEFAULT_USER_PROFILE } from "../../lib/userProfileModel";
+import { PRODUCT_SURFACE_REVISION } from "../../types/generated/PRODUCT_SURFACE_REVISION";
 import StartupIdentityGate from "./StartupIdentityGate";
 
 const centralMocks = vi.hoisted(() => ({
@@ -25,8 +26,8 @@ const desktopMocks = vi.hoisted(() => ({
 const SERVER_ID = "30000000-0000-4000-8000-000000000001";
 const LINEAGE_ID = "30000000-0000-4000-8000-000000000002";
 const SERVER_SURFACE = {
-  revision: 2,
-  digest: "c9e9959a9a4269107ec4bcde1bcb515dd1730f979c80a2f338aef5899136e35d",
+  revision: PRODUCT_SURFACE_REVISION,
+  digest: "b222eb2b710d635bd0b226942619f1e81b5f420b9cf4afa7b3d0a4e0e5150c0a",
   http_routes: [],
   websocket_streams: ["room_events"],
   websocket_actions: [
@@ -36,6 +37,7 @@ const SERVER_SURFACE = {
     "agent.start",
     "agent.stop",
     "message.send",
+    "participant.mute",
     "participant.role.update",
     "room.random.choose",
     "room.random.roll",
@@ -100,7 +102,7 @@ afterEach(() => {
   desktopMocks.desktop = false;
   vi.clearAllMocks();
   desktopMocks.requestHostProductSurface.mockResolvedValue({
-    revision: 2,
+    revision: PRODUCT_SURFACE_REVISION,
     digest: "1".repeat(64),
     commands: ["host_product_surface"],
   });

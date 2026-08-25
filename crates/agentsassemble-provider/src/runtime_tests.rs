@@ -681,10 +681,12 @@ async fn leader_is_alive(adapter: &ProviderAdapter, session: &DurableAgentSessio
     let super::RuntimeState::Running(runtime) = &mut slot.state else {
         return false;
     };
-    let Ok(mut driver) = runtime.driver.try_lock() else {
+    let Ok(mut driver) = runtime.driver.try_take() else {
         return true;
     };
-    driver.is_alive().await.unwrap_or(true)
+    let alive = driver.is_alive().await.unwrap_or(true);
+    runtime.driver.put(driver).await;
+    alive
 }
 
 fn process_exists(raw_pid: u32) -> bool {

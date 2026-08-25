@@ -30,6 +30,18 @@ pub(crate) trait ProviderDriver: Send {
         session: &'a DurableAgentSession,
         request: &'a ProviderTurnRequest,
     ) -> DriverFuture<'a, Result<ProviderTurnCompleted, DriverError>>;
+    fn interrupt_turn<'a>(
+        &'a mut self,
+        _session: &'a DurableAgentSession,
+        _request: &'a ProviderTurnRequest,
+    ) -> DriverFuture<'a, Result<(), DriverError>> {
+        Box::pin(async {
+            Err(DriverError::new(
+                "provider_turn_interrupt_unsupported",
+                "The provider does not support exact-turn interruption.",
+            ))
+        })
+    }
     fn is_alive(&mut self) -> DriverFuture<'_, Result<bool, DriverError>>;
     fn stop(&mut self) -> DriverFuture<'_, Result<(), DriverError>>;
     fn begin_room_observation(
@@ -386,9 +398,10 @@ struct OwnedRuntime {
     owner_id: String,
     lease_token: String,
     profile_key: String,
-    driver: Arc<Mutex<Box<dyn ProviderDriver>>>,
+    driver: Arc<runtime_driver::DriverCell>,
     turn_cancellation: CancellationToken,
     runtime_lease: Option<HeldRuntimeLease>,
+    active_turn: Option<runtime_exact_turn::ActiveProviderTurnSlot>,
 }
 
 impl ProviderAdapter {
@@ -449,11 +462,15 @@ impl ProviderAdapter {
                     && runtime.lease_token == lease_token =>
             {
                 runtime.turn_cancellation.cancel();
-                let mut driver = runtime.driver.lock().await;
+                let mut driver = runtime
+                    .driver
+                    .wait_take(DRIVER_STOP_TIMEOUT)
+                    .await
+                    .map_err(|error| ProviderAdapterError::uncertain(error, handle_id, owner_id))?;
                 if let Err(error) = driver.stop().await {
+                    runtime.driver.put(driver).await;
                     return Err(ProviderAdapterError::uncertain(error, handle_id, owner_id));
                 }
-                drop(driver);
                 let Some(runtime_lease) = runtime.runtime_lease.take() else {
                     return Err(ProviderAdapterError::uncertain(
                         DriverError::new(
@@ -538,14 +555,7 @@ impl ProviderAdapter {
     /// A best-effort failure is returned beside every successful stop observation so the
     /// caller can checkpoint proven absence even when another runtime remains uncertain.
     pub async fn shutdown_with_observations(&self) -> ProviderShutdownOutcome {
-        let slots = self
-            .owner
-            .runtimes
-            .lock()
-            .await
-            .iter()
-            .map(|(key, slot)| (key.clone(), Arc::clone(slot)))
-            .collect::<Vec<_>>();
+        let slots = self.owned_runtime_slots().await;
         let mut failure = None;
         let mut gone = Vec::new();
         for (key, slot) in slots {
@@ -561,11 +571,16 @@ impl ProviderAdapter {
             }
             if let RuntimeState::Running(runtime) = &mut slot.state {
                 runtime.turn_cancellation.cancel();
-                let driver = Arc::clone(&runtime.driver);
-                let stopped = tokio::time::timeout(DRIVER_STOP_TIMEOUT, async move {
-                    driver.lock().await.stop().await
-                })
-                .await;
+                let stopped = match runtime.driver.wait_take(DRIVER_STOP_TIMEOUT).await {
+                    Ok(mut driver) => match driver.stop().await {
+                        Ok(()) => Ok(Ok(())),
+                        Err(error) => {
+                            runtime.driver.put(driver).await;
+                            Ok(Err(error))
+                        }
+                    },
+                    Err(error) => Err(error),
+                };
                 match stopped {
                     Ok(Ok(())) => {
                         let Some(runtime_lease) = runtime.runtime_lease.take() else {
@@ -607,8 +622,8 @@ impl ProviderAdapter {
                         failure.get_or_insert_with(|| {
                             ProviderAdapterError::uncertain(
                                 DriverError::new(
-                                    "provider_shutdown_timeout",
-                                    "An owned provider runtime exceeded the shutdown deadline.",
+                                    "provider_stop_unconfirmed",
+                                    "The owned provider runtime could not be confirmed stopped.",
                                 ),
                                 &runtime.handle_id,
                                 &runtime.owner_id,
@@ -632,6 +647,16 @@ impl ProviderAdapter {
             }
         }
         ProviderShutdownOutcome { gone, failure }
+    }
+
+    async fn owned_runtime_slots(&self) -> Vec<(RuntimeKey, Arc<Mutex<RuntimeSlot>>)> {
+        self.owner
+            .runtimes
+            .lock()
+            .await
+            .iter()
+            .map(|(key, slot)| (key.clone(), Arc::clone(slot)))
+            .collect()
     }
 
     pub async fn release_shutdown_observations(&self, gone: &[ProviderRuntimeGone]) {
@@ -728,6 +753,14 @@ mod start_authority;
 use start::validate_owned_runtime;
 use start::{initialize_owned_runtime, reuse_owned_runtime};
 
+#[path = "runtime_driver.rs"]
+mod runtime_driver;
+#[path = "runtime_exact_turn.rs"]
+mod runtime_exact_turn;
 #[path = "runtime_turn.rs"]
 mod turn;
+pub use runtime_exact_turn::{
+    ProviderExactTurnAuthority, ProviderPreparedTurn, ProviderTurnControl,
+    ProviderTurnInterruptDisposition,
+};
 pub use turn::{ProviderRoomObservation, ProviderTurnCompleted, ProviderTurnRequest};

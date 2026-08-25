@@ -16,8 +16,12 @@ fallback. Process-wide connection leases, pre-parse raw scopes, permanent fresh-
 mutation debit, a separate in-flight owner, and canonical participant roles are
 published. The participant-role socket-boundary correction is published and has passed
 both exact-diff web review and Daybreaker manual security review. The
-mute/provider-custody work below remains active and is not implied complete by this
-checkpoint.
+mute/provider-custody implementation is now present in the local candidate,
+including exact execution/effect persistence, provider-neutral turn control,
+provider-specific interruption, restart reconciliation, and the copied frontend
+command/event path. It remains active rather than completion evidence until the
+candidate is pushed, packaged real-client/provider verification is cleaned up,
+and both post-implementation reviews approve the exact public diff.
 
 ## Definition
 
@@ -448,6 +452,38 @@ the only owner allowed to requeue inflight input and sets `requeue_finalized=tru
 in the same UOW. Stop cleanup suppresses only exact benign already-stopped or
 not-running outcomes.
 
+### Implementation and optimization record
+
+The candidate stores the immutable provider input, room view, delivery kind,
+Agent IDs, and tabletop availability in the assignment transaction. Restart
+recovery reads that envelope only for a proved pre-dispatch generation; it does
+not rebuild authority from newer room settings or re-render history. The extra
+bounded write avoids an unbounded restart query/reconstruction path and preserves
+the exact originally assigned user flow.
+
+One detached turn owner holds the provider driver while small runtime-slot locks
+only copy or transition authority. Interruption uses a `watch` completion latch
+and a cancellation token, so it has no polling loop, long-held global mutex, or
+second provider call owner. The driver cell waits on `Notify` only while ownership
+is absent. These choices reduce lock residency and idle CPU without creating a
+cache or weakening exact H/O/T and generation checks.
+
+SQLite partial unique indexes enforce one blocking execution per room-scoped
+Agent Session and immutable runtime handle. Ordinary publication, RoomPortal
+tools, mute, effect phase changes, terminalization, requeue, and scheduling use
+exact CAS inside their existing room transaction rather than check-then-write
+round trips. Startup scans fixed pages of 64 and provider observations retain the
+existing bounded concurrency. Assignment envelopes are decoded only during
+restart recovery; the normal provider path reuses the already materialized value.
+
+An exact live recovery may move a prepared, claimed, dispatching, issued,
+ambiguous, or recovery-required interrupt to quiescence only after the same
+in-memory H/O/T, execution, turn, and generation token is found. Signalling that
+token is idempotent and does not resend provider start. Without that token, or
+without positive runtime-gone proof, the candidate retains blocking quarantine
+and requeues zero inputs. A dispatch-time task death records the effect and
+execution as one `InterruptAmbiguous` pair rather than leaving mismatched phases.
+
 ## Frontend and verification
 
 The latest original frontend remains provenance. Shared resolvers/components own
@@ -462,6 +498,10 @@ runtime nonce mismatch, typed quiescence, terminal suppression, runtime reuse,
 idle unmute, early-unmute/remute, ordered-floor wake preservation, quarantine
 requeue zero, later exact-proof requeue one, cross-room session identity,
 immutable-launch uniqueness, cross-room finalizer rejection, and unmute progression.
+The implemented candidate additionally covers immutable assignment-envelope
+rehydration, pre-dispatch task death, post-dispatch ambiguous task death, exact
+live-control recovery from quarantine, late provider-result suppression by the
+effect owner, and stale/muted RoomPortal tool fencing.
 
 Each completed owner is also inspected for avoidable CPU, memory, latency,
 task/process, serialization, and disk-write cost. Optimizations remain bounded and

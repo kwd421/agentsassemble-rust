@@ -10,9 +10,10 @@ use rmcp::{
 };
 use serde_json::{Map, json};
 
-use super::{ProviderRoomToolIngress, ProviderTurnOutcome, RoomPortal};
+use super::{ProviderRoomToolIngress, ProviderTurnOutcome, RoomObservationStart, RoomPortal};
 
 type RoomClient = rmcp::service::RunningService<rmcp::RoleClient, ()>;
+const EXECUTION_ID: &str = "00000000-0000-4000-8000-000000000001";
 
 #[tokio::test]
 async fn reservation_first_orders_random_tool_before_terminal_action() {
@@ -21,14 +22,16 @@ async fn reservation_first_orders_random_tool_before_terminal_action() {
         .unwrap_or_else(|error| panic!("create tabletop portal: {error}"));
     let (ingress, mut commands) = ProviderRoomToolIngress::channel(4);
     portal
-        .begin_observation(
-            "agent-1",
-            "turn-tabletop",
-            9,
-            "Room: General\n#9 Human: roll",
-            &[],
-            Some(ingress),
-        )
+        .begin_observation(RoomObservationStart {
+            session_id: "agent-1",
+            turn_id: "turn-tabletop",
+            input_up_to_seq: 9,
+            durable_turn_generation: 1,
+            execution_id: EXECUTION_ID,
+            room_view: "Room: General\n#9 Human: roll",
+            allowed_agent_ids: &[],
+            tool_ingress: Some(ingress),
+        })
         .unwrap_or_else(|error| panic!("begin tabletop observation: {error}"));
     let client = Arc::new(connect(&portal).await);
     let control_client = connect(&portal).await;
@@ -65,6 +68,8 @@ async fn reservation_first_orders_random_tool_before_terminal_action() {
         .recv()
         .await
         .unwrap_or_else(|| panic!("room actor must receive the reserved tool command"));
+    assert_eq!(command.turn_generation(), 1);
+    assert_eq!(command.execution_id(), EXECUTION_ID);
     let blocked_terminal = call_tool(
         &control_client,
         "publish_message",
@@ -116,14 +121,16 @@ async fn terminal_first_rejects_late_random_tool() {
         .unwrap_or_else(|error| panic!("create terminal-first portal: {error}"));
     let (ingress, mut commands) = ProviderRoomToolIngress::channel(1);
     portal
-        .begin_observation(
-            "agent-1",
-            "turn-terminal-first",
-            10,
-            "Room: General\n#10 Human: decide",
-            &[],
-            Some(ingress),
-        )
+        .begin_observation(RoomObservationStart {
+            session_id: "agent-1",
+            turn_id: "turn-terminal-first",
+            input_up_to_seq: 10,
+            durable_turn_generation: 1,
+            execution_id: EXECUTION_ID,
+            room_view: "Room: General\n#10 Human: decide",
+            allowed_agent_ids: &[],
+            tool_ingress: Some(ingress),
+        })
         .unwrap_or_else(|error| panic!("begin terminal-first observation: {error}"));
     let client = connect(&portal).await;
     let _ = call_tool(&client, "read_discussion", json!({})).await;
@@ -152,14 +159,16 @@ async fn closing_observation_retains_a_committing_tool_until_resolution() {
         .unwrap_or_else(|error| panic!("create closing portal: {error}"));
     let (ingress, mut commands) = ProviderRoomToolIngress::channel(1);
     portal
-        .begin_observation(
-            "agent-1",
-            "turn-closing",
-            11,
-            "Room: General\n#11 Human: roll",
-            &[],
-            Some(ingress.clone()),
-        )
+        .begin_observation(RoomObservationStart {
+            session_id: "agent-1",
+            turn_id: "turn-closing",
+            input_up_to_seq: 11,
+            durable_turn_generation: 1,
+            execution_id: EXECUTION_ID,
+            room_view: "Room: General\n#11 Human: roll",
+            allowed_agent_ids: &[],
+            tool_ingress: Some(ingress.clone()),
+        })
         .unwrap_or_else(|error| panic!("begin closing observation: {error}"));
     let client = Arc::new(connect(&portal).await);
     let _ = call_tool(client.as_ref(), "read_discussion", json!({})).await;
@@ -184,14 +193,16 @@ async fn closing_observation_retains_a_committing_tool_until_resolution() {
         .unwrap_or_else(|error| panic!("close observation: {error}"));
     assert!(
         portal
-            .begin_observation(
-                "agent-1",
-                "turn-too-early",
-                12,
-                "Room: General\n#12 Human: wait",
-                &[],
-                Some(ingress.clone()),
-            )
+            .begin_observation(RoomObservationStart {
+                session_id: "agent-1",
+                turn_id: "turn-too-early",
+                input_up_to_seq: 12,
+                durable_turn_generation: 2,
+                execution_id: "00000000-0000-4000-8000-000000000002",
+                room_view: "Room: General\n#12 Human: wait",
+                allowed_agent_ids: &[],
+                tool_ingress: Some(ingress.clone()),
+            })
             .is_err()
     );
     command.complete(Ok(RoomRandomResult::ChooseRandom {
@@ -205,14 +216,16 @@ async fn closing_observation_retains_a_committing_tool_until_resolution() {
         .unwrap_or_else(|error| panic!("join committing room tool: {error}"));
     assert_ne!(result.is_error, Some(true));
     portal
-        .begin_observation(
-            "agent-1",
-            "turn-after-close",
-            12,
-            "Room: General\n#12 Human: continue",
-            &[],
-            Some(ingress),
-        )
+        .begin_observation(RoomObservationStart {
+            session_id: "agent-1",
+            turn_id: "turn-after-close",
+            input_up_to_seq: 12,
+            durable_turn_generation: 2,
+            execution_id: "00000000-0000-4000-8000-000000000002",
+            room_view: "Room: General\n#12 Human: continue",
+            allowed_agent_ids: &[],
+            tool_ingress: Some(ingress),
+        })
         .unwrap_or_else(|error| panic!("begin after committing tool resolution: {error}"));
     let client = Arc::try_unwrap(client)
         .unwrap_or_else(|_| panic!("closing client references must be released"));

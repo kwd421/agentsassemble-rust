@@ -190,6 +190,20 @@ export function applyParticipantEvents(
       changed = byId.delete(participantId) || changed;
       continue;
     }
+    if (event.type === "participant_muted") {
+      const participant = byId.get(participantId);
+      if (!participant) continue;
+      if (typeof event.muted !== "boolean") {
+        throw new Error("participant_muted event has no canonical mute state.");
+      }
+      byId.set(participantId, {
+        ...participant,
+        muted: event.muted,
+        updated_at: event.created_at || participant.updated_at,
+      });
+      changed = true;
+      continue;
+    }
     if (event.type !== "participant_updated") continue;
     const participant = byId.get(participantId);
     if (!participant) continue;

@@ -46,6 +46,16 @@ const TABLES: &[TableDefinition] = &[
         infrastructure: false,
     },
     TableDefinition {
+        name: "provider_turn_executions",
+        ddl: "CREATE TABLE IF NOT EXISTS provider_turn_executions (room_id TEXT NOT NULL, session_id TEXT NOT NULL, turn_generation INTEGER NOT NULL CHECK(turn_generation > 0), execution_id TEXT NOT NULL, participant_id TEXT NOT NULL, turn_id TEXT NOT NULL, assignment_json TEXT NOT NULL, phase TEXT NOT NULL CHECK(phase IN ('assigned', 'start_dispatching', 'running', 'interrupt_pending', 'quiescing', 'start_ambiguous', 'interrupt_ambiguous', 'recovery_required', 'completed', 'declined', 'failed', 'interrupted')), runtime_handle_id TEXT NOT NULL CHECK(length(runtime_handle_id) > 0), runtime_owner_id TEXT NOT NULL CHECK(length(runtime_owner_id) > 0), runtime_lease_token TEXT NOT NULL CHECK(length(runtime_lease_token) > 0), start_dispatch_nonce TEXT NOT NULL DEFAULT '', provider_turn_id TEXT NOT NULL DEFAULT '', requeue_finalized INTEGER NOT NULL DEFAULT 0 CHECK(requeue_finalized IN (0, 1)), created_at TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY(room_id, session_id, turn_generation), UNIQUE(room_id, execution_id), UNIQUE(room_id, session_id, turn_id), FOREIGN KEY(room_id, session_id) REFERENCES agent_sessions(room_id, session_id) ON DELETE CASCADE, FOREIGN KEY(room_id, participant_id) REFERENCES participants(room_id, participant_id) ON DELETE CASCADE)",
+        infrastructure: false,
+    },
+    TableDefinition {
+        name: "provider_turn_effects",
+        ddl: "CREATE TABLE IF NOT EXISTS provider_turn_effects (room_id TEXT NOT NULL, session_id TEXT NOT NULL, turn_generation INTEGER NOT NULL CHECK(turn_generation > 0), effect_id TEXT NOT NULL, effect_kind TEXT NOT NULL CHECK(effect_kind = 'interrupt'), phase TEXT NOT NULL CHECK(phase IN ('prepared', 'claimed', 'dispatching', 'issued_waiting_quiescence', 'interrupt_ambiguous', 'recovery_required', 'finalized')), claim_owner TEXT NOT NULL DEFAULT '', claim_expires_at INTEGER, dispatch_nonce TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY(room_id, effect_id), UNIQUE(room_id, session_id, turn_generation, effect_kind), FOREIGN KEY(room_id, session_id, turn_generation) REFERENCES provider_turn_executions(room_id, session_id, turn_generation) ON DELETE CASCADE)",
+        infrastructure: false,
+    },
+    TableDefinition {
         name: "lifecycle_command_reservations",
         ddl: "CREATE TABLE IF NOT EXISTS lifecycle_command_reservations (room_id TEXT NOT NULL, principal_id TEXT NOT NULL, request_id TEXT NOT NULL, action TEXT NOT NULL, payload_hash TEXT NOT NULL, principal_json TEXT NOT NULL, payload_json TEXT NOT NULL, supervisor_generation TEXT NOT NULL, session_id TEXT NOT NULL, operation_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'rejected')), phase TEXT NOT NULL DEFAULT 'lifecycle_prepared', prepared_result_json TEXT NOT NULL DEFAULT '{}', failure_code TEXT NOT NULL DEFAULT '', failure_message TEXT NOT NULL DEFAULT '', PRIMARY KEY(room_id, principal_id, request_id), FOREIGN KEY(room_id) REFERENCES rooms(room_id) ON DELETE CASCADE)",
         infrastructure: false,
@@ -80,6 +90,8 @@ const TABLES: &[TableDefinition] = &[
 const INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS profile_attachments_owner_idx ON profile_attachments(owner_user_id)",
     "CREATE INDEX IF NOT EXISTS room_write_budgets_window_idx ON room_write_budgets(window_started_at)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS provider_turn_executions_blocking_session_idx ON provider_turn_executions(room_id, session_id) WHERE phase IN ('assigned', 'start_dispatching', 'running', 'interrupt_pending', 'quiescing', 'start_ambiguous', 'interrupt_ambiguous', 'recovery_required')",
+    "CREATE UNIQUE INDEX IF NOT EXISTS provider_turn_executions_blocking_runtime_idx ON provider_turn_executions(runtime_handle_id) WHERE phase IN ('assigned', 'start_dispatching', 'running', 'interrupt_pending', 'quiescing', 'start_ambiguous', 'interrupt_ambiguous', 'recovery_required')",
 ];
 
 pub(crate) fn statements() -> impl Iterator<Item = &'static str> {

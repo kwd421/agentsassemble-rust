@@ -26,7 +26,7 @@ use crate::{
     },
     filesystem::bind_codex_executable,
     launch_error::DriverLaunchError,
-    room_portal::{ProviderTurnOutcome, RoomPortal, RoomPortalError},
+    room_portal::{ProviderTurnOutcome, RoomObservationStart, RoomPortal, RoomPortalError},
     runtime::{
         DriverError, DriverFuture, ProviderDriver, ProviderSessionAttachment,
         ProviderTurnCompleted, ProviderTurnRequest,
@@ -498,6 +498,14 @@ impl ProviderDriver for CodexDriver {
         Box::pin(turn::send_turn(self, session, request))
     }
 
+    fn interrupt_turn<'a>(
+        &'a mut self,
+        session: &'a DurableAgentSession,
+        request: &'a ProviderTurnRequest,
+    ) -> DriverFuture<'a, Result<(), DriverError>> {
+        Box::pin(turn::interrupt_turn(self, session, request))
+    }
+
     fn is_alive(&mut self) -> DriverFuture<'_, Result<bool, DriverError>> {
         Box::pin(async move {
             #[cfg(unix)]
@@ -525,14 +533,16 @@ impl ProviderDriver for CodexDriver {
             .as_ref()
             .ok_or_else(room_portal_unavailable)?;
         self.room_portal
-            .begin_observation(
-                &observation.session_id,
-                &request.turn_id,
-                observation.input_up_to_seq,
-                &observation.view,
-                &observation.allowed_agent_ids,
-                observation.room_tool_ingress.clone(),
-            )
+            .begin_observation(RoomObservationStart {
+                session_id: &observation.session_id,
+                turn_id: &request.turn_id,
+                input_up_to_seq: observation.input_up_to_seq,
+                durable_turn_generation: request.turn_generation,
+                execution_id: &request.execution_id,
+                room_view: &observation.view,
+                allowed_agent_ids: &observation.allowed_agent_ids,
+                tool_ingress: observation.room_tool_ingress.clone(),
+            })
             .map_err(portal_driver_error)
     }
 

@@ -61,6 +61,8 @@ pub(crate) fn durable_session(
         runtime_handle_id: String::new(),
         runtime_owner_id: String::new(),
         runtime_lease_token: String::new(),
+        turn_generation: 0,
+        schedule_requested: false,
         pending_inputs: Vec::new(),
         inflight_inputs: Vec::new(),
         active_source_event_id: String::new(),

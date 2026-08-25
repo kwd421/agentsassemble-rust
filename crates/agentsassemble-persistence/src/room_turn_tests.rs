@@ -1,7 +1,7 @@
 use agentsassemble_domain::{
     AuthenticatedPrincipal, CapabilitySet, ClientKind, DurableAgentSession, InviteScope,
-    LOCAL_OPERATOR_PARTICIPANT_ID, Participant, ParticipantRole, ParticipantStatus,
-    QueuedRoomInput, RoomInputDeliveryKind,
+    LOCAL_OPERATOR_PARTICIPANT_ID, Participant, ParticipantRole, QueuedRoomInput,
+    RoomInputDeliveryKind,
 };
 use chrono::Utc;
 use serde_json::json;
@@ -10,11 +10,14 @@ use crate::{PersistenceError, SqliteStore};
 
 #[path = "room_turn_test_fixture.rs"]
 mod room_turn_test_fixture;
-use room_turn_test_fixture::attached_session;
+use room_turn_test_fixture::{attached_session, participant};
 
 const AGENT_ID: &str = "codex-00000000-0000-5000-8000-000000000001";
 const SECOND_AGENT_ID: &str = "codex-00000000-0000-5000-8000-000000000002";
 const SPEAKER_AGENT_ID: &str = "codex-00000000-0000-5000-8000-000000000003";
+
+#[path = "provider_turn_mute_tests.rs"]
+mod provider_turn_mute_tests;
 
 #[tokio::test]
 async fn ordered_floor_queue_limit_rejects_the_source_message_atomically() {
@@ -102,20 +105,14 @@ async fn ordered_assignment_and_finalization_are_durable_and_exact() {
         .first()
         .unwrap_or_else(|| panic!("first message must assign Terra"));
     assert_eq!(first_assignment.session.public.session_id, AGENT_ID);
-    assert!(
-        first_assignment
-            .room_view
-            .contains("@Terra take the first turn")
-    );
+    assert!(first_assignment.room_view.contains("take the first turn"));
     assert!(first_assignment.provider_input.contains("read_discussion"));
-
     let replay = store
         .execute_message_with_turn(&principal, "message-1", "message.send", &first_payload)
         .await
         .unwrap_or_else(|error| panic!("replay first message: {error}"));
     assert!(replay.outcome.deduplicated);
     assert!(replay.assignments.is_empty());
-
     let second = store
         .execute_message_with_turn(
             &principal,
@@ -129,11 +126,12 @@ async fn ordered_assignment_and_finalization_are_durable_and_exact() {
     assert!(second.assignments.is_empty());
 
     let first_turn_id = first_assignment.turn_id.clone();
+    let first_start = running_authority(&store, first_assignment, "provider-turn-1").await;
     let committed = store
         .complete_agent_turn(
             "general",
             AGENT_ID,
-            authority(&first_turn_id, "provider-turn-1", None),
+            authority(&first_start, "provider-turn-1", None),
             "First provider final",
             "",
         )
@@ -178,7 +176,7 @@ async fn ordered_assignment_and_finalization_are_durable_and_exact() {
         .complete_agent_turn(
             "general",
             AGENT_ID,
-            authority(&first_turn_id, "provider-turn-stale", None),
+            authority(&first_start, "provider-turn-stale", None),
             "must not publish",
             "",
         )
@@ -212,12 +210,13 @@ async fn first_antigravity_final_promotes_the_native_session_id_atomically() {
         .into_iter()
         .next()
         .unwrap_or_else(|| panic!("first Antigravity turn must be assigned"));
+    let first_start = running_authority(&store, &assignment, "provider-turn-antigravity-1").await;
     store
         .complete_agent_turn(
             "general",
             AGENT_ID,
             authority(
-                &assignment.turn_id,
+                &first_start,
                 "provider-turn-antigravity-1",
                 Some("conversation-1"),
             ),
@@ -244,12 +243,13 @@ async fn first_antigravity_final_promotes_the_native_session_id_atomically() {
         .into_iter()
         .next()
         .unwrap_or_else(|| panic!("second Antigravity turn must be assigned"));
+    let second_start = running_authority(&store, &second, "provider-turn-antigravity-2").await;
     let Err(error) = store
         .complete_agent_turn(
             "general",
             AGENT_ID,
             authority(
-                &second.turn_id,
+                &second_start,
                 "provider-turn-antigravity-2",
                 Some("conversation-2"),
             ),
@@ -284,11 +284,20 @@ async fn provider_failure_restores_input_and_clears_active_authority() {
         .into_iter()
         .next()
         .unwrap_or_else(|| panic!("source message must assign Terra"));
+    let start = store
+        .authorize_provider_turn_start(
+            "general",
+            AGENT_ID,
+            assignment.turn_generation,
+            &assignment.turn_id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize failed provider turn: {error}"));
     let committed = store
         .fail_agent_turn(
             "general",
             AGENT_ID,
-            &assignment.turn_id,
+            authority(&start, "", None),
             "unknown_internal_failure",
             "/Users/alice/private/bin/codex --api-key=sk-live-example123456",
             None,
@@ -621,15 +630,44 @@ fn assert_rejection_code(error: &PersistenceError, expected: &str) {
 }
 
 fn authority<'a>(
-    turn_id: &'a str,
+    start: &'a crate::ProviderTurnStartAuthority,
     provider_turn_id: &'a str,
     provider_session_id: Option<&'a str>,
 ) -> super::ProviderTurnAuthority<'a> {
     super::ProviderTurnAuthority {
-        turn_id,
+        room_id: &start.room_id,
+        session_id: &start.session_id,
+        turn_id: &start.turn_id,
+        turn_generation: start.turn_generation,
+        execution_id: &start.execution_id,
+        start_dispatch_nonce: &start.start_dispatch_nonce,
+        runtime_handle_id: &start.runtime_handle_id,
+        runtime_owner_id: &start.runtime_owner_id,
+        runtime_lease_token: &start.runtime_lease_token,
         provider_turn_id,
         provider_session_id,
     }
+}
+
+async fn running_authority(
+    store: &SqliteStore,
+    assignment: &super::AgentTurnAssignment,
+    provider_turn_id: &str,
+) -> crate::ProviderTurnStartAuthority {
+    let start = store
+        .authorize_provider_turn_start(
+            &assignment.session.public.room_id,
+            &assignment.session.public.session_id,
+            assignment.turn_generation,
+            &assignment.turn_id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize provider turn: {error}"));
+    store
+        .mark_provider_turn_running(&start, provider_turn_id)
+        .await
+        .unwrap_or_else(|error| panic!("mark provider turn running: {error}"));
+    start
 }
 
 async fn stored_session(store: &SqliteStore) -> DurableAgentSession {
@@ -736,26 +774,4 @@ async fn fixture() -> (SqliteStore, AuthenticatedPrincipal, tempfile::TempDir) {
         capabilities: CapabilitySet::local_operator(ClientKind::Browser, InviteScope::ReadWrite),
     };
     (store, principal, directory)
-}
-
-fn participant(
-    id: &str,
-    name: &str,
-    participant_type: &str,
-    role: ParticipantRole,
-    now: chrono::DateTime<Utc>,
-) -> Participant {
-    Participant {
-        room_id: "general".to_owned(),
-        participant_id: id.to_owned(),
-        display_name: name.to_owned(),
-        avatar_image_url: String::new(),
-        participant_type: participant_type.to_owned(),
-        status: ParticipantStatus::Joined,
-        role,
-        owner_id: "operator-local-user".to_owned(),
-        muted: false,
-        created_at: now,
-        updated_at: now,
-    }
 }

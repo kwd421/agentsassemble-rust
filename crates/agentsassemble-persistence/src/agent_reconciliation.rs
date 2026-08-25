@@ -85,6 +85,15 @@ impl SqliteStore {
         for key in keys {
             let room_id = key.get::<String, _>("room_id");
             let session_id = key.get::<String, _>("session_id");
+            if crate::provider_turn_execution::blocking_execution_exists(
+                &mut transaction,
+                &room_id,
+                &session_id,
+            )
+            .await?
+            {
+                continue;
+            }
             if let Some(candidate) = load_candidate(&mut transaction, &room_id, &session_id).await?
                 && needs_reconciliation(&candidate.session)
             {
@@ -106,6 +115,16 @@ impl SqliteStore {
         session_id: &str,
     ) -> Result<Option<RuntimeReconciliationCandidate>, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
+        if crate::provider_turn_execution::blocking_execution_exists(
+            &mut transaction,
+            room_id,
+            session_id,
+        )
+        .await?
+        {
+            transaction.commit().await?;
+            return Ok(None);
+        }
         let candidate = load_candidate(&mut transaction, room_id, session_id).await?;
         transaction.commit().await?;
         Ok(candidate.filter(|candidate| needs_reconciliation(&candidate.session)))

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PRODUCT_SURFACE_REVISION } from "../types/generated/PRODUCT_SURFACE_REVISION";
 
 import {
   bindRoomDirectoryAuthority,
@@ -17,14 +18,15 @@ const actions = [
   "agent.start",
   "agent.stop",
   "message.send",
+  "participant.mute",
   "participant.role.update",
   "room.random.choose",
   "room.random.roll",
   "room.settings.update",
 ] as const;
 const surface = {
-  revision: 2,
-  digest: "c9e9959a9a4269107ec4bcde1bcb515dd1730f979c80a2f338aef5899136e35d",
+  revision: PRODUCT_SURFACE_REVISION,
+  digest: "b222eb2b710d635bd0b226942619f1e81b5f420b9cf4afa7b3d0a4e0e5150c0a",
   http_routes: [],
   websocket_streams: ["room_events"],
   websocket_actions: [...actions],
@@ -107,7 +109,7 @@ describe("room directory contracts", () => {
           ...authority,
           server_product_surface: {
             ...surface,
-            digest: "dfbd65a4abce01f1d9975a449a8523de30f1e2713fb850af80070d68781e267b",
+            digest: "b450fcb4474817b305910d9067a22b35e72d79b81da2ddd0b3a512e8972df7e7",
             websocket_streams: [],
           },
         }),

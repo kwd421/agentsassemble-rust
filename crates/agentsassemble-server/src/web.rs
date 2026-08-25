@@ -37,7 +37,7 @@ use crate::{
     room_socket::{
         EstablishedSubscription, establish, persistence_error, persistence_error_is_internal,
     },
-    runtime_reconciliation::watch_runtime_reconciliation,
+    runtime_reconciliation::{reconcile_provider_turn_ownership, watch_runtime_reconciliation},
 };
 
 const HTTP_BODY_DEADLINE: Duration = Duration::from_secs(10);
@@ -99,6 +99,15 @@ pub async fn serve(
     state: AppState,
     cancellation: CancellationToken,
 ) -> Result<(), ServeError> {
+    let reconciled_turns =
+        reconcile_provider_turn_ownership(&state.store, &state.provider_adapter, &state.rooms)
+            .await?;
+    if reconciled_turns > 0 {
+        tracing::warn!(
+            reconciled_turns,
+            "reconciled provider turn authority before network admission"
+        );
+    }
     let reconciled_sessions =
         reconcile_runtime_ownership(&state.store, &state.provider_adapter).await?;
     if reconciled_sessions > 0 {

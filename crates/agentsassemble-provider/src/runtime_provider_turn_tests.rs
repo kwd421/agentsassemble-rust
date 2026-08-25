@@ -40,6 +40,8 @@ async fn codex_turn_uses_original_settings_and_returns_one_canonical_final() {
     let active = active_session(&session, &started, "room-turn-1");
     let request = ProviderTurnRequest {
         turn_id: "room-turn-1".to_owned(),
+        turn_generation: 1,
+        execution_id: "11111111-1111-4111-8111-111111111111".to_owned(),
         input: "Read the canonical room context and answer.".to_owned(),
         room_observation: None,
     };
@@ -102,6 +104,8 @@ async fn codex_turn_infers_completion_after_final_message_and_thread_idle() {
             &active,
             &ProviderTurnRequest {
                 turn_id: "room-turn-1".to_owned(),
+                turn_generation: 1,
+                execution_id: "11111111-1111-4111-8111-111111111111".to_owned(),
                 input: "Finish when the thread becomes idle.".to_owned(),
                 room_observation: None,
             },
@@ -139,6 +143,8 @@ async fn nullable_hook_turn_identity_does_not_poison_an_active_turn() {
             &active,
             &ProviderTurnRequest {
                 turn_id: "room-turn-1".to_owned(),
+                turn_generation: 1,
+                execution_id: "11111111-1111-4111-8111-111111111111".to_owned(),
                 input: "Continue after the thread hook.".to_owned(),
                 room_observation: None,
             },
@@ -180,6 +186,8 @@ async fn cancelled_codex_turn_start_continues_without_retransmission() {
     let active = active_session(&session, &started, "room-turn-1");
     let request = ProviderTurnRequest {
         turn_id: "room-turn-1".to_owned(),
+        turn_generation: 1,
+        execution_id: "11111111-1111-4111-8111-111111111111".to_owned(),
         input: "Continue exactly once.".to_owned(),
         room_observation: None,
     };
@@ -211,6 +219,80 @@ async fn cancelled_codex_turn_start_continues_without_retransmission() {
 }
 
 #[tokio::test]
+async fn exact_codex_turn_interrupt_uses_official_identity_and_retains_runtime() {
+    let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
+    let directory = tempfile::tempdir()
+        .unwrap_or_else(|error| panic!("create exact interrupt fixture: {error}"));
+    let transcript = directory.path().join("requests.jsonl");
+    let seen = directory.path().join("turn-started");
+    let script = exact_interrupt_fixture(&transcript, &seen);
+    let session = fixture_session(directory.path(), &script).await;
+    let adapter = ProviderAdapter::new();
+    let started = adapter
+        .start(&session)
+        .await
+        .unwrap_or_else(|error| panic!("start exact interrupt fixture: {error}"));
+    let active = active_session(&session, &started, "room-turn-1");
+    let request = ProviderTurnRequest {
+        turn_id: "room-turn-1".to_owned(),
+        turn_generation: 1,
+        execution_id: "11111111-1111-4111-8111-111111111111".to_owned(),
+        input: "Remain active until interrupted.".to_owned(),
+        room_observation: None,
+    };
+    let prepared = adapter
+        .prepare_turn(&active, &request)
+        .await
+        .unwrap_or_else(|error| panic!("prepare exact interrupt turn: {error}"));
+    let authority = prepared.exact_authority();
+    let turn_adapter = adapter.clone();
+    let turn_session = active.clone();
+    let turn_request = request.clone();
+    let turn = tokio::spawn(async move {
+        turn_adapter
+            .send_prepared_turn(prepared, &turn_session, &turn_request)
+            .await
+    });
+    wait_for_file(&seen).await;
+    let mut control = adapter
+        .begin_exact_turn(&authority)
+        .await
+        .unwrap_or_else(|error| panic!("resolve exact interrupt control: {error}"));
+    assert_eq!(
+        control.disposition,
+        super::ProviderTurnInterruptDisposition::Started
+    );
+    control.request_interrupt();
+    control
+        .wait_quiesced(Duration::from_secs(5))
+        .await
+        .unwrap_or_else(|error| panic!("prove retained-runtime interruption: {error}"));
+    let completed = turn
+        .await
+        .unwrap_or_else(|error| panic!("join exact interrupt owner: {error}"));
+    let Err(error) = completed else {
+        panic!("interrupted provider turn must not publish a completion");
+    };
+    assert_eq!(error.code, "provider_turn_interrupted");
+    assert!(!error.effect_uncertain);
+    assert!(!error.runtime_stopped);
+    let recorded = requests(&transcript);
+    assert_eq!(
+        request_methods(&recorded),
+        [
+            "initialize",
+            "initialized",
+            "thread/start",
+            "turn/start",
+            "turn/interrupt",
+        ]
+    );
+    assert_eq!(recorded[4]["params"]["threadId"], "thread-1");
+    assert_eq!(recorded[4]["params"]["turnId"], "provider-turn-1");
+    stop_and_release(&adapter, &active, &started).await;
+}
+
+#[tokio::test]
 async fn owned_stop_cancels_a_blocked_turn_without_waiting_for_inactivity() {
     let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
     let directory = tempfile::tempdir()
@@ -238,6 +320,8 @@ async fn owned_stop_cancels_a_blocked_turn_without_waiting_for_inactivity() {
                 &pending_session,
                 &ProviderTurnRequest {
                     turn_id: "room-turn-1".to_owned(),
+                    turn_generation: 1,
+                    execution_id: "11111111-1111-4111-8111-111111111111".to_owned(),
                     input: "Wait for shutdown.".to_owned(),
                     room_observation: None,
                 },
@@ -358,6 +442,8 @@ async fn reused_codex_provider_turn_identity_is_poisoned() {
             &first,
             &ProviderTurnRequest {
                 turn_id: "room-turn-1".to_owned(),
+                turn_generation: 1,
+                execution_id: "11111111-1111-4111-8111-111111111111".to_owned(),
                 input: "First answer.".to_owned(),
                 room_observation: None,
             },
@@ -367,6 +453,8 @@ async fn reused_codex_provider_turn_identity_is_poisoned() {
     let second = active_session(&session, &started, "room-turn-2");
     let request = ProviderTurnRequest {
         turn_id: "room-turn-2".to_owned(),
+        turn_generation: 1,
+        execution_id: "22222222-2222-4222-8222-222222222222".to_owned(),
         input: "Second answer.".to_owned(),
         room_observation: None,
     };
@@ -425,6 +513,8 @@ async fn assert_turn_error(
     let active = active_session(&session, &started, "room-turn-1");
     let request = ProviderTurnRequest {
         turn_id: "room-turn-1".to_owned(),
+        turn_generation: 1,
+        execution_id: "11111111-1111-4111-8111-111111111111".to_owned(),
         input: "This must not be sent twice.".to_owned(),
         room_observation: None,
     };
@@ -476,6 +566,14 @@ fn turn_fixture(
     )
 }
 
+fn exact_interrupt_fixture(transcript: &Path, seen: &Path) -> String {
+    format!(
+        "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' \"$initialize\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nprintf '%s\\n' \"$initialized\" >> {log}\nIFS= read -r thread\nprintf '%s\\n' \"$thread\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{{\"thread\":{{\"id\":\"thread-1\"}}}}}}'\nIFS= read -r turn\nprintf '%s\\n' \"$turn\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{{\"turn\":{{\"id\":\"provider-turn-1\"}}}}}}'\nprintf seen > {seen}\nIFS= read -r interrupt\nprintf '%s\\n' \"$interrupt\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":4,\"result\":{{}}}}'\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"method\":\"turn/completed\",\"params\":{{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\"}}}}'\nIFS= read -r forever\n",
+        log = shell_quote(transcript),
+        seen = shell_quote(seen),
+    )
+}
+
 fn active_session(
     session: &agentsassemble_domain::DurableAgentSession,
     started: &ProviderRuntimeStarted,
@@ -499,6 +597,7 @@ fn active_session(
     active
         .runtime_lease_token
         .clone_from(&started.runtime_lease_token);
+    active.turn_generation = 1;
     active
 }
 

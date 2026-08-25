@@ -31,6 +31,7 @@ import {
   type RoomSocketHandlers,
   type RoomSocketSnapshot,
 } from "./roomSocketTypes";
+import { PRODUCT_SURFACE_REVISION } from "./types/generated/PRODUCT_SURFACE_REVISION";
 
 export type { RoomSocketAuth } from "./api";
 export type { PluginEnvelope } from "./pluginSocketProtocol";
@@ -73,7 +74,7 @@ function validateClientAuthority(
 ) {
   const surface = dependencies.serverSurface;
   if (
-    surface.revision !== 2 ||
+    surface.revision !== PRODUCT_SURFACE_REVISION ||
     !isHex32Bytes(surface.digest) ||
     !dependencies.expectedRoomId ||
     !dependencies.expectedParticipantId ||

@@ -63,6 +63,17 @@ pub struct ProviderRoomToolIngress {
     sender: mpsc::Sender<ProviderRoomToolCommand>,
 }
 
+pub(crate) struct RoomObservationStart<'a> {
+    pub session_id: &'a str,
+    pub turn_id: &'a str,
+    pub input_up_to_seq: i64,
+    pub durable_turn_generation: u64,
+    pub execution_id: &'a str,
+    pub room_view: &'a str,
+    pub allowed_agent_ids: &'a [String],
+    pub tool_ingress: Option<ProviderRoomToolIngress>,
+}
+
 impl PartialEq for ProviderRoomToolIngress {
     fn eq(&self, other: &Self) -> bool {
         self.sender.same_channel(&other.sender)
@@ -140,6 +151,16 @@ impl ProviderRoomToolCommand {
     }
 
     #[must_use]
+    pub const fn turn_generation(&self) -> u64 {
+        self.authority.durable_turn_generation
+    }
+
+    #[must_use]
+    pub fn execution_id(&self) -> &str {
+        &self.authority.execution_id
+    }
+
+    #[must_use]
     pub fn request(&self) -> &RoomRandomRequest {
         &self.request
     }
@@ -182,6 +203,8 @@ pub(super) struct TurnAuthority {
     pub(super) session_id: String,
     pub(super) turn_id: String,
     pub(super) input_up_to_seq: i64,
+    pub(super) durable_turn_generation: u64,
+    pub(super) execution_id: String,
     pub(super) allowed_agent_ids: Vec<String>,
 }
 
@@ -385,18 +408,26 @@ impl RoomPortal {
 
     pub(crate) fn begin_observation(
         &self,
-        session_id: &str,
-        turn_id: &str,
-        input_up_to_seq: i64,
-        room_view: &str,
-        allowed_agent_ids: &[String],
-        tool_ingress: Option<ProviderRoomToolIngress>,
+        observation: RoomObservationStart<'_>,
     ) -> Result<(), RoomPortalError> {
+        let RoomObservationStart {
+            session_id,
+            turn_id,
+            input_up_to_seq,
+            durable_turn_generation,
+            execution_id,
+            room_view,
+            allowed_agent_ids,
+            tool_ingress,
+        } = observation;
         self.require_server()?;
         validate_turn_id(session_id)?;
         validate_turn_id(turn_id)?;
+        validate_turn_id(execution_id)?;
         let unique_agent_ids = allowed_agent_ids.iter().collect::<HashSet<_>>();
         if input_up_to_seq <= 0
+            || durable_turn_generation == 0
+            || Uuid::parse_str(execution_id).is_err()
             || room_view.is_empty()
             || room_view.len() > MAX_ROOM_VIEW_BYTES
             || allowed_agent_ids.len() > MAX_AGENT_IDS
@@ -409,6 +440,8 @@ impl RoomPortal {
             session_id: session_id.to_owned(),
             turn_id: turn_id.to_owned(),
             input_up_to_seq,
+            durable_turn_generation,
+            execution_id: execution_id.to_owned(),
             allowed_agent_ids: allowed_agent_ids.to_vec(),
         };
         let mut state = self.lock_state()?;
@@ -574,6 +607,8 @@ pub(super) fn reserve_room_tool(
         session_id: active.authority.session_id.clone(),
         turn_id: active.authority.turn_id.clone(),
         input_up_to_seq: active.authority.input_up_to_seq,
+        durable_turn_generation: active.authority.durable_turn_generation,
+        execution_id: active.authority.execution_id.clone(),
     };
     Ok((
         authority,
@@ -592,6 +627,8 @@ pub(super) struct RoomToolAuthority {
     session_id: String,
     turn_id: String,
     input_up_to_seq: i64,
+    durable_turn_generation: u64,
+    execution_id: String,
 }
 
 fn tool_error(code: &'static str, message: impl Into<String>) -> ProviderRoomToolError {

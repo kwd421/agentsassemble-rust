@@ -84,4 +84,31 @@ describe("canonical participant event projection", () => {
       }),
     ]);
   });
+
+  it("projects canonical mute events without changing Agent profile fields", () => {
+    const joined = applyParticipantEvents([], [joinedEvent()]);
+    const muted = applyParticipantEvents(joined, [
+      {
+        v: 1,
+        id: "event-2",
+        seq: 2,
+        created_at: "2026-08-25T00:00:01Z",
+        room_id: "general",
+        type: "participant_muted",
+        actor: { participant_id: "operator-local", participant_type: "human" },
+        participant_id: "agent-one",
+        participant_type: "agent",
+        muted: true,
+      } as RoomEvent,
+    ]);
+
+    expect(muted).toEqual([
+      expect.objectContaining({
+        participant_id: "agent-one",
+        display_name: "Codex",
+        role: "agent",
+        muted: true,
+      }),
+    ]);
+  });
 });

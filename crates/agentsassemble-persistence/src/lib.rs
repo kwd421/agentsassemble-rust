@@ -35,9 +35,13 @@ mod store_open;
 mod turn_authority;
 mod turn_queue;
 
+mod participant_mute;
 mod participant_roles;
 #[cfg(test)]
 mod persistence_security_tests;
+mod provider_turn_effect;
+mod provider_turn_execution;
+mod provider_turn_reconciliation;
 
 pub use agent_create_start::{
     AgentCreateStartCommit, AgentCreateStartEffect, AgentCreateStartPlan,
@@ -51,9 +55,20 @@ pub use agent_reconciliation::{
 };
 pub use agent_reconciliation_scan::{RuntimeReconciliationCursor, RuntimeReconciliationPage};
 pub use bootstrap::{LocalBootstrapCommit, LocalBootstrapPhase, LocalBootstrapStatus};
+pub use participant_mute::ParticipantMuteMutation;
 pub use private_fs::secure_private_directory;
 pub use profile_attachments::{ProfileAttachment, ProfileAttachmentMetadata};
 pub use profile_store::ProfileUpdateOutcome;
+pub use provider_turn_effect::{
+    ProviderTurnEffectClaim, ProviderTurnEffectPhase, ProviderTurnInterruptEffect,
+};
+pub use provider_turn_execution::{
+    ProviderTurnExecution, ProviderTurnExecutionPhase, ProviderTurnStartAuthority,
+};
+pub use provider_turn_reconciliation::{
+    ProviderTurnReconciliationCandidate, ProviderTurnReconciliationCursor,
+    ProviderTurnReconciliationPage,
+};
 pub use room_directory::{RoomCreateCommit, StoredRoomSummary};
 pub use room_random::{ProviderRoomRandomCommit, RoomRandomCommit};
 pub use room_subscription::RoomCatchUp;

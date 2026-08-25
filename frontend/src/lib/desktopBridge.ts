@@ -1,4 +1,5 @@
 import type { HostProductSurface } from "../types/generated/HostProductSurface";
+import { PRODUCT_SURFACE_REVISION } from "../types/generated/PRODUCT_SURFACE_REVISION";
 
 type TauriInternals = {
   invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>;
@@ -96,7 +97,7 @@ function exactObject(
 function validateHostProductSurface(value: unknown): HostProductSurface {
   const surface = exactObject(value, ["revision", "digest", "commands"], "호스트 제품 표면");
   if (
-    surface.revision !== 2 ||
+    surface.revision !== PRODUCT_SURFACE_REVISION ||
     !/^[0-9a-f]{64}$/.test(String(surface.digest)) ||
     !Array.isArray(surface.commands)
   ) {
@@ -153,7 +154,7 @@ function validateDesktopBootstrapGrant(value: unknown): DesktopBootstrapGrant {
     !UUID_PATTERN.test(grant.authority_lineage_id) ||
     typeof grant.server_id !== "string" ||
     !UUID_PATTERN.test(grant.server_id) ||
-    grant.server_product_surface_revision !== 2 ||
+    grant.server_product_surface_revision !== PRODUCT_SURFACE_REVISION ||
     !/^[0-9a-f]{64}$/.test(String(grant.server_product_surface_digest)) ||
     typeof grant.deduplicated !== "boolean"
   ) {

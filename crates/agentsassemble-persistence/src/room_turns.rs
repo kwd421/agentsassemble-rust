@@ -20,6 +20,8 @@ use crate::{
 pub struct AgentTurnAssignment {
     pub session: DurableAgentSession,
     pub turn_id: String,
+    pub turn_generation: u64,
+    pub execution_id: String,
     pub delivery_kind: RoomInputDeliveryKind,
     pub provider_input: String,
     pub room_view: String,
@@ -41,7 +43,15 @@ pub struct AgentTurnCommit {
 
 #[derive(Debug, Clone, Copy)]
 pub struct ProviderTurnAuthority<'a> {
+    pub room_id: &'a str,
+    pub session_id: &'a str,
     pub turn_id: &'a str,
+    pub turn_generation: u64,
+    pub execution_id: &'a str,
+    pub start_dispatch_nonce: &'a str,
+    pub runtime_handle_id: &'a str,
+    pub runtime_owner_id: &'a str,
+    pub runtime_lease_token: &'a str,
     pub provider_turn_id: &'a str,
     pub provider_session_id: Option<&'a str>,
 }
@@ -49,6 +59,24 @@ pub struct ProviderTurnAuthority<'a> {
 pub(super) struct PreparedAssignment {
     assignment: AgentTurnAssignment,
     events: Vec<RoomEvent>,
+}
+
+pub(crate) async fn assign_pending_in(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    room: &agentsassemble_domain::Room,
+    settings: &agentsassemble_domain::RoomSettings,
+) -> Result<AgentTurnCommit, PersistenceError> {
+    let prepared = assign_available_pending(transaction, room, settings).await?;
+    let mut events = Vec::new();
+    let mut next_assignments = Vec::with_capacity(prepared.len());
+    for item in prepared {
+        events.extend(item.events);
+        next_assignments.push(item.assignment);
+    }
+    Ok(AgentTurnCommit {
+        events,
+        next_assignments,
+    })
 }
 
 impl SqliteStore {
@@ -63,22 +91,13 @@ impl SqliteStore {
     ) -> Result<Option<AgentTurnCommit>, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
         let (room, settings) = load_active_room(&mut transaction, room_id).await?;
-        let prepared = assign_available_pending(&mut transaction, &room, &settings).await?;
-        if prepared.is_empty() {
+        let commit = assign_pending_in(&mut transaction, &room, &settings).await?;
+        if commit.next_assignments.is_empty() {
             transaction.commit().await?;
             return Ok(None);
         }
-        let mut events = Vec::new();
-        let mut assignments = Vec::with_capacity(prepared.len());
-        for item in prepared {
-            events.extend(item.events);
-            assignments.push(item.assignment);
-        }
         transaction.commit().await?;
-        Ok(Some(AgentTurnCommit {
-            events,
-            next_assignments: assignments,
-        }))
+        Ok(Some(commit))
     }
 
     /// Records a post-commit room-floor progression failure without changing the
@@ -241,6 +260,7 @@ impl SqliteStore {
             turn_id,
             provider_turn_id,
             provider_session_id,
+            ..
         } = authority;
         validate_identifier(provider_turn_id, "provider_turn_invalid")?;
         let content = clean_message(content, 12_000);
@@ -254,6 +274,13 @@ impl SqliteStore {
         let (room, settings) = load_active_room(&mut transaction, room_id).await?;
         let mut session = load_session(&mut transaction, room_id, session_id).await?;
         require_active_turn(&session, turn_id)?;
+        crate::provider_turn_execution::terminalize_ordinary_execution(
+            &mut transaction,
+            &session,
+            authority,
+            crate::ProviderTurnExecutionPhase::Completed,
+        )
+        .await?;
         validate_input_cursor(&mut transaction, &session).await?;
         validate_publication_target(&mut transaction, &session, target_agent_id).await?;
         apply_provider_session_transition(&mut session, provider_session_id)?;
@@ -313,6 +340,7 @@ impl SqliteStore {
             turn_id,
             provider_turn_id,
             provider_session_id,
+            ..
         } = authority;
         validate_identifier(provider_turn_id, "provider_turn_invalid")?;
         if !matches!(
@@ -328,6 +356,13 @@ impl SqliteStore {
         let (room, settings) = load_active_room(&mut transaction, room_id).await?;
         let mut session = load_session(&mut transaction, room_id, session_id).await?;
         require_active_turn(&session, turn_id)?;
+        crate::provider_turn_execution::terminalize_ordinary_execution(
+            &mut transaction,
+            &session,
+            authority,
+            crate::ProviderTurnExecutionPhase::Declined,
+        )
+        .await?;
         validate_input_cursor(&mut transaction, &session).await?;
         apply_provider_session_transition(&mut session, provider_session_id)?;
         let input_event_id = session.input_up_to_event_id.clone();
@@ -367,15 +402,23 @@ impl SqliteStore {
         &self,
         room_id: &str,
         session_id: &str,
-        turn_id: &str,
+        authority: ProviderTurnAuthority<'_>,
         error_code: &str,
         message: &str,
         confirmed_runtime_stop: Option<(&str, &str, &str)>,
     ) -> Result<AgentTurnCommit, PersistenceError> {
+        let turn_id = authority.turn_id;
         let mut transaction = self.pool.begin().await?;
         let (room, settings) = load_active_room(&mut transaction, room_id).await?;
         let mut session = load_session(&mut transaction, room_id, session_id).await?;
         require_active_turn(&session, turn_id)?;
+        crate::provider_turn_execution::terminalize_ordinary_execution(
+            &mut transaction,
+            &session,
+            authority,
+            crate::ProviderTurnExecutionPhase::Failed,
+        )
+        .await?;
         if let Some((handle_id, owner_id, lease_token)) = confirmed_runtime_stop {
             if handle_id.is_empty()
                 || owner_id.is_empty()

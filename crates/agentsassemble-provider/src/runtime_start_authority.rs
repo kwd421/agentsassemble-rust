@@ -1,7 +1,4 @@
-use std::sync::Arc;
-
 use agentsassemble_domain::DurableAgentSession;
-use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
 use super::{
@@ -267,9 +264,10 @@ impl ProviderAdapter {
                     owner_id: runtime.owner_id,
                     lease_token: runtime.runtime_lease.token().to_owned(),
                     profile_key: session.runtime_profile_key.clone(),
-                    driver: Arc::new(Mutex::new(driver)),
+                    driver: super::runtime_driver::DriverCell::new(driver),
                     turn_cancellation: CancellationToken::new(),
                     runtime_lease: Some(runtime.runtime_lease),
+                    active_turn: None,
                 });
                 let RuntimeState::Running(runtime) = &mut slot.state else {
                     unreachable!("new provider runtime slot must be running");

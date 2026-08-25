@@ -106,6 +106,8 @@ async fn seed_agent(store: &SqliteStore, now: chrono::DateTime<Utc>) {
         runtime_handle_id: String::new(),
         runtime_owner_id: String::new(),
         runtime_lease_token: String::new(),
+        turn_generation: 0,
+        schedule_requested: false,
         pending_inputs: vec![QueuedRoomInput {
             event_id: "pending-1".to_owned(),
             delivery_kind: RoomInputDeliveryKind::OrderedObservation,

@@ -3,6 +3,8 @@ mod antigravity;
 #[cfg(any(unix, windows))]
 mod antigravity_hook;
 #[cfg(any(unix, windows))]
+mod antigravity_prompt;
+#[cfg(any(unix, windows))]
 mod antigravity_terminal;
 #[cfg(any(unix, windows))]
 mod antigravity_transcript;
@@ -28,6 +30,7 @@ mod loopback_http;
 mod opencode;
 mod opencode_protocol;
 mod opencode_sse;
+mod opencode_startup;
 mod process;
 mod profile;
 mod room_portal;
@@ -61,8 +64,10 @@ pub use room_portal::{
 #[cfg(any(unix, windows))]
 pub use room_portal_terminal::run_room_helper_if_requested;
 pub use runtime::{
-    ProviderAdapter, ProviderAdapterError, ProviderRoomObservation, ProviderRuntimeGone,
-    ProviderRuntimeObservation, ProviderRuntimeStarted, ProviderShutdownOutcome,
-    ProviderStartReservation, ProviderTurnCompleted, ProviderTurnRequest,
+    ProviderAdapter, ProviderAdapterError, ProviderExactTurnAuthority, ProviderPreparedTurn,
+    ProviderRoomObservation, ProviderRuntimeGone, ProviderRuntimeObservation,
+    ProviderRuntimeStarted, ProviderShutdownOutcome, ProviderStartReservation,
+    ProviderTurnCompleted, ProviderTurnControl, ProviderTurnInterruptDisposition,
+    ProviderTurnRequest,
 };
 pub use selection::{ProviderSelection, ProviderSelectionError, creation_start_requested};

@@ -25,6 +25,9 @@ export function participantProjectionIsValid(event: RoomEvent): boolean {
     ) {
       return false;
     }
+    if (event.type === "participant_muted" && typeof event.muted !== "boolean") {
+      return false;
+    }
     return true;
   } catch {
     return false;

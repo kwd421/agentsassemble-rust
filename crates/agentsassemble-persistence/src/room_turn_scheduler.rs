@@ -69,6 +69,7 @@ pub(super) async fn assign_available_pending(
     }
     let mut any_active = false;
     let mut candidates = Vec::new();
+    let mut empty_schedule_requests = Vec::new();
     for row in rows {
         let session: DurableAgentSession =
             serde_json::from_str(row.get::<String, _>("session_json").as_str())?;
@@ -83,6 +84,9 @@ pub(super) async fn assign_available_pending(
         }
         let valid = valid_pending_inputs(transaction, &session).await?;
         let Some(first) = valid.first() else {
+            if session.schedule_requested {
+                empty_schedule_requests.push(session);
+            }
             continue;
         };
         let sequence = event_sequence(transaction, &room.room_id, &first.event_id).await?;
@@ -90,6 +94,11 @@ pub(super) async fn assign_available_pending(
     }
     if settings.conversation_mode == "ordered" && any_active {
         return Ok(Vec::new());
+    }
+    for mut session in empty_schedule_requests {
+        session.schedule_requested = false;
+        session.public.updated_at = Utc::now();
+        save_session(transaction, &session).await?;
     }
     candidates.sort_by(|left, right| {
         (left.0, left.1.public.session_id.as_str())
@@ -401,6 +410,13 @@ async fn prepare_assignment(
     let source_event_id = prepared_input.source_event_id;
     let input_up_to_seq = prepared_input.input_up_to_seq;
     let turn_id = format!("turn-{}", &Uuid::new_v4().simple().to_string()[..12]);
+    session.turn_generation = session.turn_generation.checked_add(1).ok_or_else(|| {
+        rejected(
+            "stored_turn_execution_invalid",
+            "Agent Session turn generation is exhausted.",
+        )
+    })?;
+    session.schedule_requested = false;
     "busy".clone_into(&mut session.public.runtime_status);
     "thinking".clone_into(&mut session.public.turn_phase);
     session.public.active_turn_id.clone_from(&turn_id);
@@ -411,6 +427,20 @@ async fn prepare_assignment(
     session.input_up_to_seq = input_up_to_seq;
     session.public.updated_at = Utc::now();
     save_session(transaction, &session).await?;
+    let assignment_envelope = crate::provider_turn_execution::ProviderTurnAssignmentEnvelope {
+        delivery_kind,
+        provider_input: prepared_input.provider_input,
+        room_view: prepared_input.room_view,
+        room_agent_ids: prepared_input.room_agent_ids,
+        tabletop_tools: settings.tool_mode == "tabletop",
+    };
+    let execution = crate::provider_turn_execution::insert_assigned_execution(
+        transaction,
+        &session,
+        &turn_id,
+        &assignment_envelope,
+    )
+    .await?;
     let started = turn_started_event(transaction, &session).await?;
     let state = turn_state_event(transaction, &session).await?;
     let session_event = session_state_event(transaction, &session).await?;
@@ -418,11 +448,13 @@ async fn prepare_assignment(
         assignment: AgentTurnAssignment {
             session,
             turn_id,
+            turn_generation: execution.turn_generation,
+            execution_id: execution.execution_id,
             delivery_kind,
-            provider_input: prepared_input.provider_input,
-            room_view: prepared_input.room_view,
-            room_agent_ids: prepared_input.room_agent_ids,
-            tabletop_tools: settings.tool_mode == "tabletop",
+            provider_input: assignment_envelope.provider_input,
+            room_view: assignment_envelope.room_view,
+            room_agent_ids: assignment_envelope.room_agent_ids,
+            tabletop_tools: assignment_envelope.tabletop_tools,
         },
         events: vec![started, state, session_event],
     })

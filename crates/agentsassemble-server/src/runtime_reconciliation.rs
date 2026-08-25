@@ -2,8 +2,10 @@ use std::time::Duration;
 
 use agentsassemble_domain::AuthenticatedPrincipal;
 use agentsassemble_persistence::{
-    LiveRuntimeReconciliation, PersistenceError, RuntimeReconciliationCandidate,
-    RuntimeReconciliationCursor, RuntimeReconciliationObservation, SqliteStore,
+    LiveRuntimeReconciliation, PersistenceError, ProviderTurnExecutionPhase,
+    ProviderTurnReconciliationCandidate, ProviderTurnReconciliationCursor,
+    RuntimeReconciliationCandidate, RuntimeReconciliationCursor, RuntimeReconciliationObservation,
+    SqliteStore,
 };
 use agentsassemble_provider::{ProviderAdapter, ProviderRuntimeGone, ProviderRuntimeObservation};
 use futures_util::{StreamExt, stream};
@@ -79,6 +81,120 @@ pub async fn reconcile_runtime_ownership(
         }
     }
     Ok(candidate_count)
+}
+
+/// Reconciles every blocking provider turn before lifecycle recovery or network admission.
+///
+/// # Errors
+///
+/// Returns a persistence error if exact task-death or runtime-gone custody cannot commit.
+pub(crate) async fn reconcile_provider_turn_ownership(
+    store: &SqliteStore,
+    provider_adapter: &ProviderAdapter,
+    rooms: &RoomRuntime,
+) -> Result<usize, PersistenceError> {
+    let mut cursor: Option<ProviderTurnReconciliationCursor> = None;
+    let mut reconciled = 0usize;
+    loop {
+        let page = store
+            .load_provider_turn_reconciliation_page(cursor.as_ref())
+            .await?;
+        for candidate in page.candidates {
+            reconcile_provider_turn_candidate(store, provider_adapter, rooms, &candidate).await?;
+            reconciled = reconciled.saturating_add(1);
+        }
+        let Some(next) = page.next_cursor else {
+            break;
+        };
+        cursor = Some(next);
+    }
+    Ok(reconciled)
+}
+
+async fn reconcile_provider_turn_candidate(
+    store: &SqliteStore,
+    provider_adapter: &ProviderAdapter,
+    rooms: &RoomRuntime,
+    candidate: &ProviderTurnReconciliationCandidate,
+) -> Result<(), PersistenceError> {
+    let execution = &candidate.execution;
+    if let Some(effect) = &candidate.effect
+        && let Some(commit) =
+            crate::participant_mute_runtime::resume_exact_interrupt(store, provider_adapter, effect)
+                .await?
+    {
+        rooms.notify_committed_events(&commit.events).await;
+        for assignment in commit.next_assignments {
+            rooms.resume_assigned_provider_turn(assignment).await?;
+        }
+        return Ok(());
+    }
+    if execution.phase == ProviderTurnExecutionPhase::Assigned && candidate.effect.is_none() {
+        match provider_adapter.observe(&candidate.session).await {
+            ProviderRuntimeObservation::Gone => {
+                store.finalize_provider_turn_runtime_gone(candidate).await?;
+                provider_adapter
+                    .release_confirmed_stop(
+                        &execution.room_id,
+                        &execution.session_id,
+                        &execution.runtime_handle_id,
+                        &execution.runtime_owner_id,
+                        &execution.runtime_lease_token,
+                    )
+                    .await;
+            }
+            ProviderRuntimeObservation::Adopted {
+                handle_id,
+                previous_owner_id,
+                new_owner_id,
+                runtime_profile_key,
+            } if handle_id == execution.runtime_handle_id
+                && previous_owner_id == execution.runtime_owner_id
+                && new_owner_id == execution.runtime_owner_id
+                && runtime_profile_key == candidate.session.runtime_profile_key =>
+            {
+                let assignment = store.recover_assigned_provider_turn(candidate).await?;
+                rooms.resume_assigned_provider_turn(assignment).await?;
+            }
+            ProviderRuntimeObservation::Adopted { .. }
+            | ProviderRuntimeObservation::LeaseUncertain { .. }
+            | ProviderRuntimeObservation::Ambiguous { .. } => {}
+        }
+        return Ok(());
+    }
+    if matches!(
+        provider_adapter.observe(&candidate.session).await,
+        ProviderRuntimeObservation::Gone
+    ) {
+        store.finalize_provider_turn_runtime_gone(candidate).await?;
+        provider_adapter
+            .release_confirmed_stop(
+                &execution.room_id,
+                &execution.session_id,
+                &execution.runtime_handle_id,
+                &execution.runtime_owner_id,
+                &execution.runtime_lease_token,
+            )
+            .await;
+        return Ok(());
+    }
+    if matches!(
+        execution.phase,
+        ProviderTurnExecutionPhase::StartDispatching
+            | ProviderTurnExecutionPhase::Running
+            | ProviderTurnExecutionPhase::InterruptPending
+            | ProviderTurnExecutionPhase::Quiescing
+    ) {
+        store
+            .record_provider_turn_task_death(
+                &execution.room_id,
+                &execution.session_id,
+                execution.turn_generation,
+                &execution.execution_id,
+            )
+            .await?;
+    }
+    Ok(())
 }
 
 pub(crate) async fn recover_exact_lifecycle_command(
@@ -307,111 +423,6 @@ mod tests {
 
     use super::{RUNTIME_RECONCILIATION_TEST_LOCK, recover_exact_lifecycle_command};
     use crate::runtime_reconciliation_cleanup::commit_dynamic_gone;
-
-    #[tokio::test]
-    async fn production_replay_helper_observes_gone_before_reenabling_start() {
-        let _serial = RUNTIME_RECONCILIATION_TEST_LOCK.lock().await;
-        let directory =
-            tempfile::tempdir().unwrap_or_else(|error| panic!("create fixture: {error}"));
-        let store = SqliteStore::open_path(&directory.path().join("runtime.sqlite3"))
-            .await
-            .unwrap_or_else(|error| panic!("open store: {error}"));
-        store
-            .bootstrap_local_authority("16193216-8799-4f67-ad17-f05c7da0f433", "Host")
-            .await
-            .unwrap_or_else(|error| panic!("bootstrap identity: {error}"));
-        store
-            .create_room_for_local_operator(
-                "67e86a68-c52b-4ffc-8039-c908a33a9150",
-                "general",
-                "General",
-            )
-            .await
-            .unwrap_or_else(|error| panic!("create room: {error}"));
-        let principal = local_principal();
-        let created = store
-            .execute_agent_create(
-                &principal,
-                "create-recovery-agent",
-                &json!({"provider_id": "codex"}),
-                &draft(
-                    directory.path(),
-                    "codex-00000000-0000-5000-8000-000000000201",
-                ),
-            )
-            .await
-            .unwrap_or_else(|error| panic!("create agent: {error}"));
-        let session_id = created.result["agent_session"]["session_id"]
-            .as_str()
-            .unwrap_or_else(|| panic!("created session has no id"));
-        let payload = json!({"agent_id": session_id});
-        let AgentStartPlan::Start(effect) = store
-            .prepare_agent_start(&principal, "live-helper-start", &payload)
-            .await
-            .unwrap_or_else(|error| panic!("prepare start: {error}"))
-        else {
-            panic!("stopped session must prepare a start effect");
-        };
-        let provider_adapter = ProviderAdapter::new();
-        let reservation = provider_adapter
-            .reserve_start(&effect.session)
-            .await
-            .unwrap_or_else(|error| panic!("reserve provider start: {error}"));
-        store
-            .authorize_agent_start_effect(
-                &principal,
-                "live-helper-start",
-                &payload,
-                &effect.operation_id,
-                "agent.start",
-                &reservation.runtime_handle_id,
-                &reservation.runtime_owner_id,
-                &reservation.runtime_lease_token,
-            )
-            .await
-            .unwrap_or_else(|error| panic!("authorize provider start: {error}"));
-        store
-            .mark_agent_start_unconfirmed(
-                &principal,
-                session_id,
-                &effect.operation_id,
-                &reservation.runtime_handle_id,
-                &reservation.runtime_owner_id,
-                "runtime_start_unconfirmed",
-                "provider effect boundary was uncertain",
-            )
-            .await
-            .unwrap_or_else(|error| panic!("mark start unconfirmed: {error}"));
-
-        assert_eq!(
-            recover_exact_lifecycle_command(
-                &store,
-                &provider_adapter,
-                &principal,
-                "live-helper-start",
-                "agent.start",
-                &payload,
-            )
-            .await
-            .unwrap_or_else(|error| panic!("recover exact start: {error}")),
-            LiveRuntimeReconciliation::RetryOriginalEffect
-        );
-        let AgentStartPlan::Start(retry) = store
-            .prepare_agent_start(&principal, "live-helper-start", &payload)
-            .await
-            .unwrap_or_else(|error| panic!("re-enter start: {error}"))
-        else {
-            panic!("gone pre-effect generation must reopen the original start");
-        };
-        let next = provider_adapter
-            .reserve_start(&retry.session)
-            .await
-            .unwrap_or_else(|error| panic!("reserve post-recovery generation: {error}"));
-        assert_ne!(next.runtime_lease_token, reservation.runtime_lease_token);
-        provider_adapter
-            .cancel_start_reservation("general", session_id, &next)
-            .await;
-    }
 
     #[tokio::test]
     async fn exact_replay_releases_a_safe_failure_tombstone_after_db_recovery() {
@@ -738,6 +749,10 @@ mod tests {
         )
     }
 }
+
+#[cfg(test)]
+#[path = "runtime_reconciliation_provider_replay_tests.rs"]
+mod provider_replay_tests;
 
 #[cfg(test)]
 #[path = "runtime_reconciliation_owner_loss_tests.rs"]

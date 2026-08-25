@@ -57,6 +57,15 @@ impl SqliteStore {
         for row in rows {
             let room_id = row.get::<String, _>("room_id");
             let session_id = row.get::<String, _>("session_id");
+            if crate::provider_turn_execution::blocking_execution_exists(
+                &mut transaction,
+                &room_id,
+                &session_id,
+            )
+            .await?
+            {
+                continue;
+            }
             let Some(candidate) = load_candidate(&mut transaction, &room_id, &session_id).await?
             else {
                 continue;

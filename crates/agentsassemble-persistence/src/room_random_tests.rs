@@ -5,7 +5,9 @@ use agentsassemble_domain::{
 use serde_json::json;
 
 use super::{AGENT_ID, assert_rejection_code, fixture};
-use crate::{ProviderRoomRandomCommit, SqliteStore};
+use crate::{
+    AgentTurnAssignment, ProviderRoomRandomCommit, ProviderTurnStartAuthority, SqliteStore,
+};
 
 #[tokio::test]
 async fn human_room_random_is_tabletop_only_atomic_and_replayable() {
@@ -98,6 +100,15 @@ async fn provider_room_random_revalidates_turn_and_enforces_durable_budget() {
         .assignments
         .first()
         .unwrap_or_else(|| panic!("provider must receive an active tabletop turn"));
+    let start = store
+        .authorize_provider_turn_start(
+            "general",
+            AGENT_ID,
+            assignment.turn_generation,
+            &assignment.turn_id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize provider room turn: {error}"));
     assert!(assignment.tabletop_tools);
     assert!(assignment.provider_input.contains("roll_dice"));
     let request = RoomRandomRequest::Choose {
@@ -110,6 +121,23 @@ async fn provider_room_random_revalidates_turn_and_enforces_durable_budget() {
         option_count: 2,
         options: vec!["north".to_owned(), "south".to_owned()],
     };
+    let Err(stale_execution) = store
+        .commit_provider_room_random(ProviderRoomRandomCommit {
+            room_id: "general",
+            session_id: AGENT_ID,
+            turn_id: &assignment.turn_id,
+            input_up_to_seq: assignment.session.input_up_to_seq,
+            turn_generation: assignment.turn_generation,
+            execution_id: "00000000-0000-4000-8000-000000000099",
+            result_id: "result-00000000000000000000000000000099",
+            request: &request,
+            result: &result,
+        })
+        .await
+    else {
+        panic!("a stale provider execution must not publish a room result");
+    };
+    assert_rejection_code(&stale_execution, "stale_provider_turn");
     for index in 0..32 {
         let result_id = format!("result-{index:032x}");
         store
@@ -118,6 +146,8 @@ async fn provider_room_random_revalidates_turn_and_enforces_durable_budget() {
                 session_id: AGENT_ID,
                 turn_id: &assignment.turn_id,
                 input_up_to_seq: assignment.session.input_up_to_seq,
+                turn_generation: assignment.turn_generation,
+                execution_id: &start.execution_id,
                 result_id: &result_id,
                 request: &request,
                 result: &result,
@@ -131,6 +161,8 @@ async fn provider_room_random_revalidates_turn_and_enforces_durable_budget() {
             session_id: AGENT_ID,
             turn_id: &assignment.turn_id,
             input_up_to_seq: assignment.session.input_up_to_seq,
+            turn_generation: assignment.turn_generation,
+            execution_id: &start.execution_id,
             result_id: "result-00000000000000000000000000000020",
             request: &request,
             result: &result,
@@ -148,6 +180,45 @@ async fn provider_room_random_revalidates_turn_and_enforces_durable_budget() {
     .await
     .unwrap_or_else(|error| panic!("count durable provider room results: {error}"));
     assert_eq!(committed, 32);
+    assert_late_random_rejected_after_mute(
+        &store, &principal, assignment, &start, &request, &result,
+    )
+    .await;
+}
+
+async fn assert_late_random_rejected_after_mute(
+    store: &SqliteStore,
+    principal: &AuthenticatedPrincipal,
+    assignment: &AgentTurnAssignment,
+    start: &ProviderTurnStartAuthority,
+    request: &RoomRandomRequest,
+    result: &RoomRandomResult,
+) {
+    store
+        .execute_participant_mute(
+            principal,
+            "mute-before-late-room-tool",
+            &json!({"participant_id": AGENT_ID, "muted": true}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("mute provider before late room tool: {error}"));
+    let Err(muted) = store
+        .commit_provider_room_random(ProviderRoomRandomCommit {
+            room_id: "general",
+            session_id: AGENT_ID,
+            turn_id: &assignment.turn_id,
+            input_up_to_seq: assignment.session.input_up_to_seq,
+            turn_generation: assignment.turn_generation,
+            execution_id: &start.execution_id,
+            result_id: "result-00000000000000000000000000000100",
+            request,
+            result,
+        })
+        .await
+    else {
+        panic!("a room tool queued before mute must not publish after mute commits");
+    };
+    assert_rejection_code(&muted, "stale_provider_turn");
     let write_count = sqlx::query_scalar::<_, i64>(
         "SELECT command_count FROM room_write_budgets WHERE room_id = 'general'",
     )
@@ -155,8 +226,8 @@ async fn provider_room_random_revalidates_turn_and_enforces_durable_budget() {
     .await
     .unwrap_or_else(|error| panic!("read provider room write budget: {error}"));
     assert_eq!(
-        write_count, 34,
-        "settings, source message, and every provider result share one durable room budget"
+        write_count, 35,
+        "settings, source message, mute, and every provider result share one durable room budget"
     );
 }
 

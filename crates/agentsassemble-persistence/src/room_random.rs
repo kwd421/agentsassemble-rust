@@ -33,6 +33,8 @@ pub struct ProviderRoomRandomCommit<'a> {
     pub session_id: &'a str,
     pub turn_id: &'a str,
     pub input_up_to_seq: i64,
+    pub turn_generation: u64,
+    pub execution_id: &'a str,
     pub result_id: &'a str,
     pub request: &'a RoomRandomRequest,
     pub result: &'a RoomRandomResult,
@@ -132,6 +134,8 @@ impl SqliteStore {
             session_id,
             turn_id,
             input_up_to_seq,
+            turn_generation,
+            execution_id,
             result_id,
             request,
             result,
@@ -152,7 +156,15 @@ impl SqliteStore {
             ));
         }
         let session = load_session(&mut transaction, room_id, session_id).await?;
-        require_provider_authority(&session, turn_id, input_up_to_seq)?;
+        require_provider_authority(
+            &mut transaction,
+            &session,
+            turn_id,
+            input_up_to_seq,
+            turn_generation,
+            execution_id,
+        )
+        .await?;
         let participant =
             load_participant(&mut transaction, room_id, &session.public.participant_id).await?;
         require_participant(participant.status, participant.muted)?;
@@ -242,14 +254,20 @@ fn require_participant(status: ParticipantStatus, muted: bool) -> Result<(), Per
     Ok(())
 }
 
-fn require_provider_authority(
+async fn require_provider_authority(
+    transaction: &mut Transaction<'_, Sqlite>,
     session: &DurableAgentSession,
     turn_id: &str,
     input_up_to_seq: i64,
+    turn_generation: u64,
+    execution_id: &str,
 ) -> Result<(), PersistenceError> {
     if active_turn_authority(session) != Ok(true)
         || session.public.active_turn_id != turn_id
         || session.input_up_to_seq != input_up_to_seq
+        || session.turn_generation != turn_generation
+        || turn_generation == 0
+        || Uuid::parse_str(execution_id).is_err()
         || session.public.status != "attached"
         || session.public.runtime_status != "busy"
         || !session.public.enabled
@@ -259,6 +277,42 @@ fn require_provider_authority(
         || session.runtime_owner_id.is_empty()
         || session.runtime_lease_token.is_empty()
     {
+        return Err(rejected(
+            "stale_provider_turn",
+            "Room tool result no longer matches the active provider turn.",
+        ));
+    }
+    let generation = i64::try_from(turn_generation).map_err(|_| {
+        rejected(
+            "stale_provider_turn",
+            "Room tool result no longer matches the active provider turn.",
+        )
+    })?;
+    let exact_execution = sqlx::query_scalar::<_, i64>(
+        "SELECT EXISTS(SELECT 1 FROM provider_turn_executions execution \
+         WHERE execution.room_id = ? AND execution.session_id = ? \
+         AND execution.turn_generation = ? AND execution.execution_id = ? \
+         AND execution.turn_id = ? AND execution.phase IN ('start_dispatching', 'running') \
+         AND execution.start_dispatch_nonce != '' AND execution.runtime_handle_id = ? \
+         AND execution.runtime_owner_id = ? AND execution.runtime_lease_token = ? \
+         AND NOT EXISTS (SELECT 1 FROM provider_turn_effects effect \
+           WHERE effect.room_id = execution.room_id \
+           AND effect.session_id = execution.session_id \
+           AND effect.turn_generation = execution.turn_generation \
+           AND effect.phase != 'finalized'))",
+    )
+    .bind(&session.public.room_id)
+    .bind(&session.public.session_id)
+    .bind(generation)
+    .bind(execution_id)
+    .bind(turn_id)
+    .bind(&session.runtime_handle_id)
+    .bind(&session.runtime_owner_id)
+    .bind(&session.runtime_lease_token)
+    .fetch_one(&mut **transaction)
+    .await?
+        != 0;
+    if !exact_execution {
         return Err(rejected(
             "stale_provider_turn",
             "Room tool result no longer matches the active provider turn.",

@@ -33,14 +33,16 @@ pub(crate) struct OpenCodeTurnEvents {
 #[derive(Default)]
 struct EventState {
     session_id: String,
+    require_request_message: bool,
     turn: OpenCodeTurnEvents,
     provider_error: bool,
 }
 
 impl EventState {
-    fn new(session_id: &str) -> Self {
+    fn new(session_id: &str, require_request_message: bool) -> Self {
         Self {
             session_id: session_id.to_owned(),
+            require_request_message,
             ..Self::default()
         }
     }
@@ -95,7 +97,9 @@ impl EventState {
                     }
                 }
             }
-            "session.idle" if !self.turn.request_message.is_empty() => {
+            "session.idle"
+                if !self.require_request_message || !self.turn.request_message.is_empty() =>
+            {
                 if self.provider_error {
                     return Err(OpenCodeEventError::Provider);
                 }
@@ -108,12 +112,31 @@ impl EventState {
 }
 
 pub(crate) async fn collect_turn_events(
-    mut response: LoopbackStream,
+    response: LoopbackStream,
     session_id: &str,
     timeout: Duration,
 ) -> Result<OpenCodeTurnEvents, OpenCodeEventError> {
+    collect_until_idle(response, session_id, timeout, true).await
+}
+
+pub(crate) async fn wait_session_idle(
+    response: LoopbackStream,
+    session_id: &str,
+    timeout: Duration,
+) -> Result<(), OpenCodeEventError> {
+    collect_until_idle(response, session_id, timeout, false)
+        .await
+        .map(|_| ())
+}
+
+async fn collect_until_idle(
+    mut response: LoopbackStream,
+    session_id: &str,
+    timeout: Duration,
+    require_request_message: bool,
+) -> Result<OpenCodeTurnEvents, OpenCodeEventError> {
     tokio::time::timeout(timeout, async move {
-        let mut state = EventState::new(session_id);
+        let mut state = EventState::new(session_id, require_request_message);
         let mut pending = Vec::new();
         let mut total = 0_usize;
         let mut events = 0_usize;
@@ -191,7 +214,7 @@ mod tests {
 
     #[test]
     fn turn_identity_ignores_other_sessions_and_pairs_parent_message() {
-        let mut state = EventState::new("session-1");
+        let mut state = EventState::new("session-1", true);
         assert!(
             !state
                 .accept(&json!({
@@ -227,7 +250,7 @@ mod tests {
 
     #[test]
     fn interactive_provider_requests_fail_closed() {
-        let mut state = EventState::new("session-1");
+        let mut state = EventState::new("session-1", true);
         assert_eq!(
             state.accept(&json!({
                 "type": "permission.asked",
@@ -239,7 +262,7 @@ mod tests {
 
     #[test]
     fn model_may_arrive_late_but_cannot_change_or_remain_missing_at_completion() {
-        let mut state = EventState::new("session-1");
+        let mut state = EventState::new("session-1", true);
         state
             .accept(&json!({
                 "type": "message.updated",

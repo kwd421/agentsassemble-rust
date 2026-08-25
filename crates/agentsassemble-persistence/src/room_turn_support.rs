@@ -224,7 +224,7 @@ pub(super) async fn turn_state_event(
     .await
 }
 
-pub(super) async fn session_state_event(
+pub(crate) async fn session_state_event(
     transaction: &mut Transaction<'_, Sqlite>,
     session: &DurableAgentSession,
 ) -> Result<RoomEvent, PersistenceError> {
@@ -292,7 +292,7 @@ pub(super) async fn agent_final_event(
     Ok(event)
 }
 
-pub(super) async fn turn_finished_event(
+pub(crate) async fn turn_finished_event(
     transaction: &mut Transaction<'_, Sqlite>,
     session: &DurableAgentSession,
     turn_id: &str,
@@ -314,7 +314,7 @@ pub(super) async fn turn_finished_event(
     internal_event(transaction, session, "turn_finished", false, None, extra).await
 }
 
-pub(super) async fn error_event(
+pub(crate) async fn error_event(
     transaction: &mut Transaction<'_, Sqlite>,
     session: &DurableAgentSession,
     turn_id: &str,
@@ -361,7 +361,7 @@ fn turn_authority_is_active(session: &DurableAgentSession) -> Result<bool, Persi
     })
 }
 
-pub(super) fn clear_active_turn_fields(session: &mut DurableAgentSession) {
+pub(crate) fn clear_active_turn_fields(session: &mut DurableAgentSession) {
     session.active_source_event_id.clear();
     session.input_up_to_event_id.clear();
     session.input_up_to_seq = 0;

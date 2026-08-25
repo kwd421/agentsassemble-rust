@@ -80,6 +80,63 @@ pub(super) async fn send_turn(
     read_turn(driver, &thread_id, &session.public.model).await
 }
 
+pub(super) async fn interrupt_turn(
+    driver: &mut CodexDriver,
+    session: &DurableAgentSession,
+    request: &ProviderTurnRequest,
+) -> Result<(), DriverError> {
+    if driver
+        .turn_state
+        .completed
+        .as_ref()
+        .is_some_and(|completed| completed.request == *request)
+    {
+        return Ok(());
+    }
+    let thread_id = validate_attached_thread(driver, session)?.to_owned();
+    if driver.turn_state.active.is_none() {
+        let pending_start = driver
+            .pending_request
+            .as_ref()
+            .is_some_and(|pending| pending.method == "turn/start");
+        if !pending_start {
+            return Ok(());
+        }
+        start_turn(driver, session, request, &thread_id).await?;
+    }
+    let provider_turn_id = driver
+        .turn_state
+        .active
+        .as_ref()
+        .filter(|active| active.request == *request)
+        .map(|active| active.provider_turn_id.clone())
+        .ok_or_else(turn_conflict)?;
+    driver
+        .request(
+            "turn/interrupt",
+            serde_json::json!({
+                "threadId": thread_id,
+                "turnId": provider_turn_id,
+            }),
+        )
+        .await?;
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            let message = next_matching_notification(driver, &thread_id, &provider_turn_id).await?;
+            if let Some("turn/completed" | "turn/error" | "error") =
+                message.get("method").and_then(Value::as_str)
+            {
+                return Ok(());
+            }
+        }
+    })
+    .await
+    .map_err(|_| turn_interrupt_timeout())??;
+    driver.turn_state.active = None;
+    driver.turn_state.completed = None;
+    Ok(())
+}
+
 async fn start_turn(
     driver: &mut CodexDriver,
     session: &DurableAgentSession,
@@ -539,6 +596,13 @@ const fn turn_timeout() -> DriverError {
     DriverError::new(
         "provider_turn_timeout",
         "The Codex provider turn exceeded its inactivity deadline.",
+    )
+}
+
+const fn turn_interrupt_timeout() -> DriverError {
+    DriverError::new(
+        "provider_turn_interrupt_timeout",
+        "The Codex turn interrupt did not reach a terminal provider state.",
     )
 }
 

@@ -1,4 +1,7 @@
-use agentsassemble_domain::{AgentSession, CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession};
+use agentsassemble_domain::{
+    AgentSession, CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession, Participant,
+    ParticipantRole, ParticipantStatus,
+};
 use chrono::{DateTime, Utc};
 
 pub(super) fn attached_session(now: DateTime<Utc>) -> DurableAgentSession {
@@ -51,6 +54,8 @@ pub(super) fn attached_session(now: DateTime<Utc>) -> DurableAgentSession {
         runtime_handle_id: "owned-runtime-1".to_owned(),
         runtime_owner_id: "supervisor-instance-1".to_owned(),
         runtime_lease_token: "lease-generation-1".to_owned(),
+        turn_generation: 0,
+        schedule_requested: false,
         pending_inputs: Vec::new(),
         inflight_inputs: Vec::new(),
         active_source_event_id: String::new(),
@@ -59,5 +64,27 @@ pub(super) fn attached_session(now: DateTime<Utc>) -> DurableAgentSession {
         lifecycle_intent_action: String::new(),
         lifecycle_intent_id: String::new(),
         lifecycle_intent_status: String::new(),
+    }
+}
+
+pub(super) fn participant(
+    id: &str,
+    name: &str,
+    participant_type: &str,
+    role: ParticipantRole,
+    now: DateTime<Utc>,
+) -> Participant {
+    Participant {
+        room_id: "general".to_owned(),
+        participant_id: id.to_owned(),
+        display_name: name.to_owned(),
+        avatar_image_url: String::new(),
+        participant_type: participant_type.to_owned(),
+        status: ParticipantStatus::Joined,
+        role,
+        owner_id: "operator-local-user".to_owned(),
+        muted: false,
+        created_at: now,
+        updated_at: now,
     }
 }

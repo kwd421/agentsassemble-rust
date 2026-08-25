@@ -97,6 +97,7 @@ export interface RoomEvent {
   avatar_image_url?: string;
   provider_kind?: string;
   role?: string;
+  muted?: boolean;
   content?: string;
   target_event_id?: string;
   target_seq?: number;
