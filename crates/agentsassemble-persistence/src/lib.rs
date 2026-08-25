@@ -41,6 +41,7 @@ mod participant_roles;
 #[cfg(test)]
 mod persistence_security_tests;
 mod provider_turn_effect;
+mod provider_turn_effect_finalize;
 mod provider_turn_execution;
 mod provider_turn_reconciliation;
 mod provider_turn_stop;
