@@ -39,7 +39,7 @@ impl SqliteStore {
         for statement in crate::schema::statements() {
             sqlx::query(statement).execute(&mut *transaction).await?;
         }
-        install_metadata(&mut transaction).await?;
+        install_metadata(&mut transaction, self.host_key.public_key()).await?;
         transaction.commit().await?;
         Ok(())
     }
@@ -122,6 +122,7 @@ impl SqliteStore {
 
 async fn install_metadata(
     transaction: &mut Transaction<'_, Sqlite>,
+    host_public_key: &[u8; 32],
 ) -> Result<(), PersistenceError> {
     let owner = sqlx::query_scalar::<_, String>(
         "SELECT value FROM runtime_metadata WHERE key = 'schema_owner'",
@@ -141,17 +142,15 @@ async fn install_metadata(
         }
     }
     let server_id = uuid::Uuid::new_v4().to_string();
-    let mut private_key_seed = [0_u8; 32];
-    getrandom::fill(&mut private_key_seed).map_err(PersistenceError::HostIdentityEntropy)?;
     sqlx::query("INSERT INTO runtime_metadata(key, value) VALUES ('server_id', ?)")
         .bind(&server_id)
         .execute(&mut **transaction)
         .await?;
     sqlx::query(
-        "INSERT INTO runtime_host_identity(singleton, server_id, private_key_seed) VALUES (1, ?, ?)",
+        "INSERT INTO runtime_host_identity(singleton, server_id, public_key) VALUES (1, ?, ?)",
     )
     .bind(&server_id)
-    .bind(private_key_seed.as_slice())
+    .bind(host_public_key.as_slice())
     .execute(&mut **transaction)
     .await?;
     sqlx::query(

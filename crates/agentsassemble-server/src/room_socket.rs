@@ -531,7 +531,9 @@ pub(crate) fn persistence_error(error: &PersistenceError) -> (String, String) {
         | PersistenceError::SchemaVersionMismatch { .. }
         | PersistenceError::InvalidServerId
         | PersistenceError::InvalidHostIdentity
-        | PersistenceError::HostIdentityEntropy(_)
+        | PersistenceError::HostIdentityMissing
+        | PersistenceError::HostIdentityFile(_)
+        | PersistenceError::HostIdentityEntropy
         | PersistenceError::SubscriptionCatchUpExceeded { .. }
         | PersistenceError::SubscriptionSequenceGap { .. } => (
             "persistence_failed".to_owned(),
@@ -556,7 +558,9 @@ pub(crate) fn persistence_error_is_internal(error: &PersistenceError) -> bool {
             | PersistenceError::SchemaVersionMismatch { .. }
             | PersistenceError::InvalidServerId
             | PersistenceError::InvalidHostIdentity
-            | PersistenceError::HostIdentityEntropy(_)
+            | PersistenceError::HostIdentityMissing
+            | PersistenceError::HostIdentityFile(_)
+            | PersistenceError::HostIdentityEntropy
             | PersistenceError::SubscriptionSequenceGap { .. }
     )
 }

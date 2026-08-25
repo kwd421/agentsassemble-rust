@@ -2,15 +2,13 @@ use sqlx::Row;
 
 use crate::{PersistenceError, SqliteStore};
 
-const HOST_PRIVATE_KEY_BYTES: usize = 32;
-
 /// Persistent private signing identity bound to one server authority.
 ///
 /// This type deliberately implements neither `Debug` nor serialization so the
-/// private seed cannot enter generic diagnostics or wire projections.
+/// private key cannot enter generic diagnostics or wire projections.
 pub struct PersistentHostIdentity {
     server_id: String,
-    private_key_seed: [u8; HOST_PRIVATE_KEY_BYTES],
+    private_key_pkcs8: Vec<u8>,
 }
 
 impl PersistentHostIdentity {
@@ -20,20 +18,20 @@ impl PersistentHostIdentity {
     }
 
     #[must_use]
-    pub const fn private_key_seed(&self) -> &[u8; HOST_PRIVATE_KEY_BYTES] {
-        &self.private_key_seed
+    pub fn private_key_pkcs8(&self) -> &[u8] {
+        &self.private_key_pkcs8
     }
 }
 
 impl SqliteStore {
-    /// Loads the exact Ed25519 seed bound to this server ID.
+    /// Loads the exact file-backed Ed25519 private key bound to this server ID.
     ///
     /// # Errors
     ///
     /// Rejects missing, malformed, or differently bound host identity state.
     pub async fn host_identity(&self) -> Result<PersistentHostIdentity, PersistenceError> {
         let row = sqlx::query(
-            "SELECT host.server_id, host.private_key_seed, metadata.value AS expected_server_id
+            "SELECT host.server_id, host.public_key, metadata.value AS expected_server_id
              FROM runtime_host_identity AS host
              JOIN runtime_metadata AS metadata ON metadata.key = 'server_id'
              WHERE host.singleton = 1",
@@ -46,13 +44,13 @@ impl SqliteStore {
         if server_id != expected_server_id || uuid::Uuid::parse_str(&server_id).is_err() {
             return Err(PersistenceError::InvalidHostIdentity);
         }
-        let private_key_seed = row
-            .get::<Vec<u8>, _>("private_key_seed")
-            .try_into()
-            .map_err(|_| PersistenceError::InvalidHostIdentity)?;
+        let public_key = row.get::<Vec<u8>, _>("public_key");
+        if public_key.as_slice() != self.host_key.public_key() {
+            return Err(PersistenceError::InvalidHostIdentity);
+        }
         Ok(PersistentHostIdentity {
             server_id,
-            private_key_seed,
+            private_key_pkcs8: self.host_key.private_key_pkcs8().to_vec(),
         })
     }
 }
@@ -73,7 +71,7 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("load first host identity: {error}"));
         let first_server_id = first_identity.server_id().to_owned();
-        let first_seed = *first_identity.private_key_seed();
+        let first_private_key = first_identity.private_key_pkcs8().to_vec();
         drop(first_identity);
         drop(first);
 
@@ -86,12 +84,8 @@ mod tests {
             .unwrap_or_else(|error| panic!("load reopened host identity: {error}"));
         assert_eq!(reopened_identity.server_id(), first_server_id);
         assert!(
-            reopened_identity
-                .private_key_seed()
-                .iter()
-                .zip(first_seed)
-                .all(|(left, right)| *left == right),
-            "host seed changed across reopen"
+            reopened_identity.private_key_pkcs8() == first_private_key,
+            "host private key changed across reopen"
         );
     }
 

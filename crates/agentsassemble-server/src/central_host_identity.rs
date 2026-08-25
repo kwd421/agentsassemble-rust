@@ -17,8 +17,8 @@ const REGISTRATION_NONCE_BYTES: usize = 18;
 
 #[derive(Debug, Error)]
 pub enum HostIdentityError {
-    #[error("persistent Ed25519 host seed is invalid")]
-    InvalidSeed,
+    #[error("persistent Ed25519 host private key is invalid")]
+    InvalidPrivateKey,
     #[error("host identity JSON projection failed")]
     Json(#[source] serde_json::Error),
     #[error("host registration entropy source failed")]
@@ -59,14 +59,14 @@ pub struct CentralHostIdentity {
 }
 
 impl CentralHostIdentity {
-    /// Builds the public signing projection from the database-owned private seed.
+    /// Builds the public signing projection from the file-owned private key.
     ///
     /// # Errors
     ///
     /// Rejects invalid Ed25519 material or an unserializable public projection.
     pub fn from_persistent(identity: &PersistentHostIdentity) -> Result<Self, HostIdentityError> {
-        let key_pair = Ed25519KeyPair::from_seed_unchecked(identity.private_key_seed())
-            .map_err(|_| HostIdentityError::InvalidSeed)?;
+        let key_pair = Ed25519KeyPair::from_pkcs8(identity.private_key_pkcs8())
+            .map_err(|_| HostIdentityError::InvalidPrivateKey)?;
         let public_jwk = HostPublicJwk {
             crv: "Ed25519",
             ext: true,

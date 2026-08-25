@@ -22,6 +22,7 @@ pub(crate) struct PreparedDatabase {
     pub(crate) writer_lease: Option<Arc<File>>,
     pub(crate) created: bool,
     pub(crate) identity: Option<Arc<Handle>>,
+    pub(crate) host_key_path: Option<PathBuf>,
     canonical_path: Option<PathBuf>,
 }
 
@@ -34,6 +35,7 @@ impl PreparedDatabase {
                 writer_lease: None,
                 created: true,
                 identity: None,
+                host_key_path: None,
                 canonical_path: None,
             });
         }
@@ -110,6 +112,15 @@ fn prepare_file(options: SqliteConnectOptions) -> Result<PreparedDatabase, Persi
         writer_lease: Some(lease),
         created,
         identity: Some(identity),
+        host_key_path: Some(
+            canonical
+                .parent()
+                .ok_or(PersistenceError::UnsafeDatabasePath(
+                    "database path has no parent",
+                ))?
+                .join("central-directory")
+                .join("host-ed25519.pk8"),
+        ),
         canonical_path: Some(canonical),
     };
     prepared.revalidate()?;
@@ -197,7 +208,10 @@ fn validate_private_directory(path: &Path) -> Result<(), PersistenceError> {
 }
 
 #[cfg(unix)]
-fn validate_link_count(_file: &File, metadata: &std::fs::Metadata) -> Result<(), PersistenceError> {
+pub(crate) fn validate_link_count(
+    _file: &File,
+    metadata: &std::fs::Metadata,
+) -> Result<(), PersistenceError> {
     use std::os::unix::fs::MetadataExt;
 
     if metadata.nlink() == 1 {
@@ -210,7 +224,10 @@ fn validate_link_count(_file: &File, metadata: &std::fs::Metadata) -> Result<(),
 }
 
 #[cfg(windows)]
-fn validate_link_count(file: &File, _metadata: &std::fs::Metadata) -> Result<(), PersistenceError> {
+pub(crate) fn validate_link_count(
+    file: &File,
+    _metadata: &std::fs::Metadata,
+) -> Result<(), PersistenceError> {
     match winapi_util::file::information(file)
         .map_err(PersistenceError::WriterLease)?
         .number_of_links()
@@ -223,7 +240,7 @@ fn validate_link_count(file: &File, _metadata: &std::fs::Metadata) -> Result<(),
 }
 
 #[cfg(all(not(unix), not(windows)))]
-fn validate_link_count(
+pub(crate) fn validate_link_count(
     _file: &File,
     _metadata: &std::fs::Metadata,
 ) -> Result<(), PersistenceError> {

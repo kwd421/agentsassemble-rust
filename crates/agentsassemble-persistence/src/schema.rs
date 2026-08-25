@@ -17,7 +17,7 @@ const TABLES: &[TableDefinition] = &[
     },
     TableDefinition {
         name: "runtime_host_identity",
-        ddl: "CREATE TABLE IF NOT EXISTS runtime_host_identity (singleton INTEGER PRIMARY KEY CHECK(singleton = 1), server_id TEXT NOT NULL UNIQUE, private_key_seed BLOB NOT NULL CHECK(length(private_key_seed) = 32))",
+        ddl: "CREATE TABLE IF NOT EXISTS runtime_host_identity (singleton INTEGER PRIMARY KEY CHECK(singleton = 1), server_id TEXT NOT NULL UNIQUE, public_key BLOB NOT NULL CHECK(length(public_key) = 32))",
         infrastructure: true,
     },
     TableDefinition {

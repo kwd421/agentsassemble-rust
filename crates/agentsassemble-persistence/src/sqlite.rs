@@ -41,8 +41,12 @@ pub enum PersistenceError {
     InvalidServerId,
     #[error("database host signing identity is missing or invalid")]
     InvalidHostIdentity,
+    #[error("database host signing key file is missing")]
+    HostIdentityMissing,
+    #[error("host signing key file operation failed: {0}")]
+    HostIdentityFile(#[source] io::Error),
     #[error("host signing identity entropy source failed")]
-    HostIdentityEntropy(#[source] getrandom::Error),
+    HostIdentityEntropy,
     #[error("room does not exist")]
     RoomMissing,
     #[error("participant does not exist")]
@@ -97,6 +101,7 @@ pub struct SqliteStore {
     pub(crate) pool: SqlitePool,
     pub(crate) _writer_lease: Option<Arc<File>>,
     pub(crate) _database_identity: Option<Arc<same_file::Handle>>,
+    pub(crate) host_key: Arc<crate::host_key_file::HostKeyMaterial>,
     pub(crate) runtime_generation: Arc<str>,
     pub(crate) created: bool,
 }
@@ -104,27 +109,6 @@ pub struct SqliteStore {
 impl SqliteStore {
     pub(crate) fn runtime_generation(&self) -> &str {
         &self.runtime_generation
-    }
-
-    pub(crate) async fn verify_owner(&self) -> Result<(), PersistenceError> {
-        let metadata_table = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'runtime_metadata'",
-        )
-        .fetch_one(&self.pool)
-        .await?;
-        if metadata_table != 1 {
-            return Err(PersistenceError::UnownedDatabase);
-        }
-        let owner = sqlx::query_scalar::<_, String>(
-            "SELECT value FROM runtime_metadata WHERE key = 'schema_owner'",
-        )
-        .fetch_optional(&self.pool)
-        .await?;
-        match owner {
-            Some(owner) if owner == SCHEMA_OWNER => self.validate_schema_version().await,
-            Some(owner) => Err(PersistenceError::AuthorityConflict(owner)),
-            None => Err(PersistenceError::UnownedDatabase),
-        }
     }
 
     #[must_use]

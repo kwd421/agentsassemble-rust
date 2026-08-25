@@ -20,6 +20,7 @@ mod command_admission;
 mod database_target;
 mod filesystem_authority;
 mod host_identity;
+mod host_key_file;
 mod private_fs;
 mod profile_attachments;
 mod profile_store;

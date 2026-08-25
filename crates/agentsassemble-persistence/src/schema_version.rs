@@ -1,38 +1,35 @@
-use sqlx::Row;
+use sqlx::{Row, SqlitePool};
 
-use crate::{PersistenceError, SqliteStore};
+use crate::PersistenceError;
 
-pub(crate) const CURRENT_SCHEMA_VERSION: i64 = 26;
+pub(crate) const CURRENT_SCHEMA_VERSION: i64 = 27;
 
-impl SqliteStore {
-    pub(crate) async fn validate_schema_version(&self) -> Result<(), PersistenceError> {
-        let stored = sqlx::query("SELECT value FROM runtime_metadata WHERE key = 'schema_version'")
-            .fetch_optional(&self.pool)
-            .await?
-            .map(|row| row.get::<String, _>("value"))
-            .ok_or_else(|| PersistenceError::InvalidSchemaVersion("missing".to_owned()))?;
-        let found = stored
-            .parse::<i64>()
-            .ok()
-            .filter(|version| *version >= 1)
-            .ok_or_else(|| PersistenceError::InvalidSchemaVersion(stored.clone()))?;
-        if found != CURRENT_SCHEMA_VERSION {
-            return Err(PersistenceError::SchemaVersionMismatch {
-                found,
-                required: CURRENT_SCHEMA_VERSION,
-            });
-        }
-        let server_id = sqlx::query_scalar::<_, String>(
-            "SELECT value FROM runtime_metadata WHERE key = 'server_id'",
-        )
-        .fetch_optional(&self.pool)
+pub(crate) async fn validate_schema_version(pool: &SqlitePool) -> Result<(), PersistenceError> {
+    let stored = sqlx::query("SELECT value FROM runtime_metadata WHERE key = 'schema_version'")
+        .fetch_optional(pool)
         .await?
-        .ok_or(PersistenceError::InvalidServerId)?;
-        uuid::Uuid::parse_str(&server_id)
-            .map(|_| ())
-            .map_err(|_| PersistenceError::InvalidServerId)?;
-        self.host_identity().await.map(|_| ())
+        .map(|row| row.get::<String, _>("value"))
+        .ok_or_else(|| PersistenceError::InvalidSchemaVersion("missing".to_owned()))?;
+    let found = stored
+        .parse::<i64>()
+        .ok()
+        .filter(|version| *version >= 1)
+        .ok_or_else(|| PersistenceError::InvalidSchemaVersion(stored.clone()))?;
+    if found != CURRENT_SCHEMA_VERSION {
+        return Err(PersistenceError::SchemaVersionMismatch {
+            found,
+            required: CURRENT_SCHEMA_VERSION,
+        });
     }
+    let server_id = sqlx::query_scalar::<_, String>(
+        "SELECT value FROM runtime_metadata WHERE key = 'server_id'",
+    )
+    .fetch_optional(pool)
+    .await?
+    .ok_or(PersistenceError::InvalidServerId)?;
+    uuid::Uuid::parse_str(&server_id)
+        .map(|_| ())
+        .map_err(|_| PersistenceError::InvalidServerId)
 }
 
 #[cfg(test)]

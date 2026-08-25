@@ -1,8 +1,11 @@
-use std::path::Path;
+use std::{path::Path, sync::Arc};
 
 use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
 
-use crate::{PersistenceError, SqliteStore, database_target::PreparedDatabase};
+use crate::{
+    PersistenceError, SqliteStore, database_target::PreparedDatabase,
+    host_key_file::HostKeyMaterial, schema_version::validate_schema_version, sqlite::SCHEMA_OWNER,
+};
 
 impl SqliteStore {
     /// Opens an explicit `SQLite` URL and verifies its ownership marker.
@@ -35,19 +38,47 @@ impl SqliteStore {
         }
         prepared.revalidate()?;
         let empty_authority = !prepared.created && database_is_empty(&pool).await?;
+        let fresh_authority = prepared.created || empty_authority;
+        if !fresh_authority {
+            verify_existing_authority(&pool).await?;
+        }
+        let host_key =
+            HostKeyMaterial::load_or_create(prepared.host_key_path.as_deref(), fresh_authority)?;
         let store = Self {
             pool,
             _writer_lease: prepared.writer_lease,
             _database_identity: prepared.identity,
+            host_key: Arc::new(host_key),
             runtime_generation: format!("runtime-generation-v1-{}", uuid::Uuid::new_v4()).into(),
-            created: prepared.created || empty_authority,
+            created: fresh_authority,
         };
         if store.created {
             store.initialize().await?;
         } else {
-            store.verify_owner().await?;
+            store.host_identity().await?;
         }
         Ok(store)
+    }
+}
+
+async fn verify_existing_authority(pool: &SqlitePool) -> Result<(), PersistenceError> {
+    let metadata_table = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'runtime_metadata'",
+    )
+    .fetch_one(pool)
+    .await?;
+    if metadata_table != 1 {
+        return Err(PersistenceError::UnownedDatabase);
+    }
+    let owner = sqlx::query_scalar::<_, String>(
+        "SELECT value FROM runtime_metadata WHERE key = 'schema_owner'",
+    )
+    .fetch_optional(pool)
+    .await?;
+    match owner {
+        Some(owner) if owner == SCHEMA_OWNER => validate_schema_version(pool).await,
+        Some(owner) => Err(PersistenceError::AuthorityConflict(owner)),
+        None => Err(PersistenceError::UnownedDatabase),
     }
 }
 
