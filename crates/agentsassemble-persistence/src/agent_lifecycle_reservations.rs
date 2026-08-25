@@ -3,7 +3,7 @@ use serde_json::Value;
 use sqlx::{Row, Sqlite, Transaction};
 
 use crate::{
-    PersistenceError,
+    PersistenceError, SqliteStore,
     room_write_budget::{command_size, reserve_room_write_budget},
 };
 
@@ -24,6 +24,7 @@ pub(crate) struct StoredLifecycleReservation {
     pub payload_hash: String,
     pub principal_json: String,
     pub payload_json: String,
+    pub supervisor_generation: String,
     pub session_id: String,
     pub operation_id: String,
     pub status: String,
@@ -82,7 +83,7 @@ pub(crate) async fn load_lifecycle_reservation(
     request_id: &str,
 ) -> Result<Option<StoredLifecycleReservation>, PersistenceError> {
     let row = sqlx::query(
-        "SELECT action, payload_hash, principal_json, payload_json, session_id, operation_id, status, phase, prepared_result_json, failure_code, failure_message FROM lifecycle_command_reservations WHERE room_id = ? AND principal_id = ? AND request_id = ?",
+        "SELECT action, payload_hash, principal_json, payload_json, supervisor_generation, session_id, operation_id, status, phase, prepared_result_json, failure_code, failure_message FROM lifecycle_command_reservations WHERE room_id = ? AND principal_id = ? AND request_id = ?",
     )
     .bind(room_id)
     .bind(principal_id)
@@ -94,6 +95,7 @@ pub(crate) async fn load_lifecycle_reservation(
         payload_hash: row.get("payload_hash"),
         principal_json: row.get("principal_json"),
         payload_json: row.get("payload_json"),
+        supervisor_generation: row.get("supervisor_generation"),
         session_id: row.get("session_id"),
         operation_id: row.get("operation_id"),
         status: row.get("status"),
@@ -104,31 +106,37 @@ pub(crate) async fn load_lifecycle_reservation(
     }))
 }
 
-pub(crate) async fn claim_lifecycle_command(
-    transaction: &mut Transaction<'_, Sqlite>,
-    reservation: &LifecycleReservation<'_>,
-    payload: &Value,
-    reserve_budget: bool,
-) -> Result<(), PersistenceError> {
-    let existing = sqlx::query(
-        "SELECT action, payload_hash, principal_json, payload_json, session_id, operation_id, status, phase, prepared_result_json, failure_code, failure_message FROM lifecycle_command_reservations WHERE room_id = ? AND principal_id = ? AND request_id = ?",
+impl SqliteStore {
+    pub(crate) async fn claim_lifecycle_command(
+        &self,
+        transaction: &mut Transaction<'_, Sqlite>,
+        reservation: &LifecycleReservation<'_>,
+        payload: &Value,
+        reserve_budget: bool,
+    ) -> Result<(), PersistenceError> {
+        let supervisor_generation = self.runtime_generation();
+        let existing = sqlx::query(
+        "SELECT action, payload_hash, principal_json, payload_json, supervisor_generation, session_id, operation_id, status, phase, prepared_result_json, failure_code, failure_message FROM lifecycle_command_reservations WHERE room_id = ? AND principal_id = ? AND request_id = ?",
     )
     .bind(&reservation.principal.room_id)
     .bind(&reservation.principal.principal_id)
     .bind(reservation.request_id)
     .fetch_optional(&mut **transaction)
     .await?;
-    if let Some(row) = existing {
-        let matches = row.get::<String, _>("action") == reservation.action
-            && row.get::<String, _>("payload_hash") == reservation.payload_hash
-            && row.get::<String, _>("session_id") == reservation.session_id
-            && row.get::<String, _>("operation_id") == reservation.operation_id
-            && row.get::<String, _>("phase") == reservation.phase
-            && row.get::<String, _>("prepared_result_json") == reservation.prepared_result_json;
-        if !matches {
-            return Err(PersistenceError::CommandConflict);
-        }
-        return match row.get::<String, _>("status").as_str() {
+        if let Some(row) = existing {
+            if row.get::<String, _>("supervisor_generation").is_empty() {
+                return Err(invalid_reservation());
+            }
+            let matches = row.get::<String, _>("action") == reservation.action
+                && row.get::<String, _>("payload_hash") == reservation.payload_hash
+                && row.get::<String, _>("session_id") == reservation.session_id
+                && row.get::<String, _>("operation_id") == reservation.operation_id
+                && row.get::<String, _>("phase") == reservation.phase
+                && row.get::<String, _>("prepared_result_json") == reservation.prepared_result_json;
+            if !matches {
+                return Err(PersistenceError::CommandConflict);
+            }
+            return match row.get::<String, _>("status").as_str() {
             "pending" => Ok(()),
             "owner_lost" => Err(PersistenceError::CommandRejected {
                 code: "runtime_owner_lost",
@@ -140,17 +148,17 @@ pub(crate) async fn claim_lifecycle_command(
             )),
             _ => Err(invalid_reservation()),
         };
-    }
-    if reserve_budget {
-        reserve_room_write_budget(
-            transaction,
-            &reservation.principal.room_id,
-            command_size(reservation.request_id, reservation.action, payload)?,
-        )
-        .await?;
-    }
-    sqlx::query(
-        "INSERT INTO lifecycle_command_reservations(room_id, principal_id, request_id, action, payload_hash, principal_json, payload_json, session_id, operation_id, status, phase, prepared_result_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)",
+        }
+        if reserve_budget {
+            reserve_room_write_budget(
+                transaction,
+                &reservation.principal.room_id,
+                command_size(reservation.request_id, reservation.action, payload)?,
+            )
+            .await?;
+        }
+        sqlx::query(
+        "INSERT INTO lifecycle_command_reservations(room_id, principal_id, request_id, action, payload_hash, principal_json, payload_json, supervisor_generation, session_id, operation_id, status, phase, prepared_result_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)",
     )
     .bind(&reservation.principal.room_id)
     .bind(&reservation.principal.principal_id)
@@ -159,13 +167,15 @@ pub(crate) async fn claim_lifecycle_command(
     .bind(reservation.payload_hash)
     .bind(serde_json::to_string(reservation.principal)?)
     .bind(serde_json::to_string(payload)?)
+    .bind(supervisor_generation)
     .bind(reservation.session_id)
     .bind(reservation.operation_id)
     .bind(reservation.phase)
     .bind(reservation.prepared_result_json)
     .execute(&mut **transaction)
     .await?;
-    Ok(())
+        Ok(())
+    }
 }
 
 pub(crate) async fn mark_lifecycle_owner_lost(

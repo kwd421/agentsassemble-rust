@@ -1249,11 +1249,13 @@ processes were untouched. Commit/push and both post-push reviews remain required
 before this correction is closed.
 
 The subsequent same-session critical web review rejected the startup-only recovery
-boundary with one Medium reachable loop. An unconfirmed request could remain locked
-forever while its WebSocket reconnect kept the same sidecar alive, and a full restart
-lost the browser's private request identity even if a later observation proved the old
-runtime gone. Daybreaker Blue High had approved the narrower diff; the stronger web
-finding is retained as the active correction requirement.
+boundary. Daybreaker Blue High independently rejected the same-sidecar room-switch or
+webview-reload path: a reservation created after admission was never enrolled after its
+browser request identity disappeared. The web review additionally found that the key-only
+watcher could reload a newer live-recovered candidate, that an old request lacked a
+server-generation provenance check after restart, and that OpenCode could repeat
+`POST /session` after its response was lost. Those findings are retained as the active
+correction requirement rather than being treated as approval evidence.
 
 Schema 18 stores the exact private principal and payload beside each incomplete lifecycle
 reservation. Exact live replay now asks the common provider adapter for one bounded
@@ -1301,6 +1303,65 @@ Tauri schemas, copied sidecar, and both Cargo target trees were permanently remo
 two target trees accounted for 12.6 GiB of regenerable output. Dependency installations,
 source files, original application data, and unrelated processes were untouched.
 Commit/push and both exact-diff reviews remain required.
+
+The current correction replaces the startup-only key watcher with one server-lifetime
+reconciler. It scans at most 64 durable Agent Session keys per cursor page, observes at
+most eight captured `unconfirmed` candidates concurrently with the existing two-second
+bound, and applies only each captured candidate/CAS. A live recovery that changes
+`unconfirmed -> prepared` therefore makes an already captured watcher candidate stale;
+the watcher drops it and never adopts the new phase. The task continues discovering
+reservations created after network admission, so closing a room socket or reloading the
+webview cannot strand recovery until sidecar restart.
+
+Clean schema 19 adds an immutable random `SqliteStore` runtime generation to every private
+lifecycle reservation; schema 18 is rejected rather than migrated. Exact live replay must
+match that current generation both when loading and when applying its candidate. Reopening
+the same SQLite authority creates a different generation, so an old browser request can
+only remain unresolved while the server-owned reconciler terminalizes a later proven
+`Gone`; it can never revive its provider effect. The private generation joins the complete
+candidate CAS and does not enter snapshots, events, results, or diagnostics.
+
+OpenCode now has an explicit provider-session creation authority. It becomes uncertain
+immediately before the first custody-verified `POST /session` and is cleared only after a
+successful response yields a valid session identity. While uncertain, runtime observation
+reports `LeaseUncertain` and direct reuse rejects before polling a second provider request.
+The stable OpenCode API currently does not expose caller-chosen idempotent session identity,
+so this fail-closed state is retained until runtime absence is proven instead of guessing a
+session or repeating the effect.
+
+Focused tests pass for: post-admission dynamic discovery plus stale-candidate drop after
+live reentry; previous-generation exact replay rejection followed by server-owned
+terminalization; a same-sidecar browser identity loss followed by dynamic recovery,
+reconnect, and a real new lifecycle start; and a deterministic OpenCode guarded request
+proving the second session-creation future is never polled. The complete unchanged
+`make verify` then passed every mandatory architecture, source-growth, logical-line, and
+800-line gate, generated bindings, production frontend and original-CSS verification,
+72 frontend files with 356 tests, 15 Tauri tests, 18 domain, 91 persistence, four protocol,
+101 provider, and 19 server unit tests, 22 Rust integration tests, documentation tests,
+warning-denied workspace/desktop Clippy, and final diff validation. No allow, exception,
+or gate change was introduced.
+
+Computer Use drove a fresh debug package under isolated identifier
+`app.agentsassemble.rust.generationverify`, with the central URL explicitly empty. Fresh
+local identity `Lifecycle Generation Verify` created a real schema-19 room and visibly
+published `LIFECYCLE_GENERATION_SCHEMA19_UI_OK`. Normal quit left no exact app or server
+process. Relaunch restored the same identity, room, and message over a new authenticated
+socket and visibly published `LIFECYCLE_GENERATION_RECONNECT_OK`; read-only SQLite
+inspection found the exact strings at event sequences 2 and 3 and zero Agent Sessions.
+The packaged Agent Add flow also closed an open left-bottom profile card beneath its
+modal, exposed no display-name input before provider selection, and introduced the
+catalog-derived `Codex · GPT-5.6-Luna` field only after selecting Codex. No Agent Session
+was created and no provider was started.
+
+Final normal quit again left no exact app, supervisor, or sidecar. The Computer Use kernel
+was reset immediately. The isolated Application Support, cache, WebKit and temporary
+WebKit data, app bundle, frontend distribution, generated Tauri schemas, copied sidecar,
+and both Cargo target trees were permanently removed. Repository Cargo output accounted
+for 14.6 GiB; 894 terminated AgentsAssemble test/runtime temporary directories accounted
+for another 46.3 GiB. macOS retained only 36 protected empty WebKit container directories
+(0.0 MiB). Dependency installations, source files, original application data, unrelated
+applications, and unrelated processes were untouched. Commit/push and both exact-diff
+re-reviews remain required before this correction is complete.
 
 ## API verification scope
 

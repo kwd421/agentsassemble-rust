@@ -1,8 +1,13 @@
-use tokio::io::AsyncWriteExt;
+use std::time::Duration;
+
+use serde_json::json;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use super::{
-    isolated_config_root, isolated_environment, observe_startup, server_arguments, server_password,
+    SessionCreationAuthority, guarded_session_creation, isolated_config_root, isolated_environment,
+    observe_startup, server_arguments, server_password,
 };
+use crate::{loopback_http::LoopbackHttp, opencode_protocol::http_driver_error};
 
 #[test]
 fn server_launch_disables_external_and_project_configuration() {
@@ -62,4 +67,105 @@ async fn startup_requires_the_exact_bound_child_endpoint() {
     rejected_task
         .await
         .unwrap_or_else(|error| panic!("join rejected output: {error}"));
+}
+
+#[tokio::test]
+async fn unconfirmed_session_creation_never_polls_a_second_provider_effect() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .unwrap_or_else(|error| panic!("bind OpenCode fixture: {error}"));
+    let endpoint = format!(
+        "http://127.0.0.1:{}/",
+        listener
+            .local_addr()
+            .unwrap_or_else(|error| panic!("read fixture address: {error}"))
+            .port()
+    );
+    let observed = tokio::spawn(async move {
+        let (mut first, _) = listener
+            .accept()
+            .await
+            .unwrap_or_else(|error| panic!("accept first session request: {error}"));
+        let mut first_bytes = vec![0_u8; 16 * 1024];
+        let first_length = first
+            .read(&mut first_bytes)
+            .await
+            .unwrap_or_else(|error| panic!("read first session request: {error}"));
+        first_bytes.truncate(first_length);
+        drop(first);
+        let (mut second, _) = listener
+            .accept()
+            .await
+            .unwrap_or_else(|error| panic!("accept guarded retry connection: {error}"));
+        let mut second_bytes = Vec::new();
+        second
+            .read_to_end(&mut second_bytes)
+            .await
+            .unwrap_or_else(|error| panic!("read guarded retry connection: {error}"));
+        (first_bytes, second_bytes)
+    });
+    let directory = tempfile::tempdir()
+        .unwrap_or_else(|error| panic!("create OpenCode request fixture: {error}"));
+    let http = LoopbackHttp::new(
+        &endpoint,
+        directory.path(),
+        "agentsassemble",
+        &"x".repeat(64),
+    )
+    .unwrap_or_else(|error| panic!("create OpenCode loopback client: {error}"));
+    let mut authority = SessionCreationAuthority::default();
+    let first_connection = http
+        .verify_peer(
+            http.connect()
+                .await
+                .unwrap_or_else(|error| panic!("connect first request: {error}")),
+            true,
+        )
+        .unwrap_or_else(|error| panic!("verify first request: {error}"));
+    let first = guarded_session_creation(&mut authority, async move {
+        first_connection
+            .post_json(
+                "/session",
+                &json!({"title": "exact"}),
+                Duration::from_secs(1),
+            )
+            .await
+            .map(|_| ())
+            .map_err(http_driver_error)
+    })
+    .await;
+    let Err(first_error) = first else {
+        panic!("unconfirmed provider request must fail");
+    };
+    assert_eq!(first_error.code, "provider_transport_failed");
+
+    let second_connection = http
+        .verify_peer(
+            http.connect()
+                .await
+                .unwrap_or_else(|error| panic!("connect guarded retry: {error}")),
+            true,
+        )
+        .unwrap_or_else(|error| panic!("verify guarded retry: {error}"));
+    let second = guarded_session_creation(&mut authority, async move {
+        second_connection
+            .post_json(
+                "/session",
+                &json!({"title": "duplicate"}),
+                Duration::from_secs(1),
+            )
+            .await
+            .map(|_| ())
+            .map_err(http_driver_error)
+    })
+    .await;
+    let Err(second_error) = second else {
+        panic!("unconfirmed provider request must block retry");
+    };
+    assert_eq!(second_error.code, "provider_session_unconfirmed");
+    let (first_bytes, second_bytes) = observed
+        .await
+        .unwrap_or_else(|error| panic!("join OpenCode request fixture: {error}"));
+    assert!(String::from_utf8_lossy(&first_bytes).starts_with("POST /session?"));
+    assert!(second_bytes.is_empty(), "guarded retry sent provider bytes");
 }

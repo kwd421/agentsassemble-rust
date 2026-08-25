@@ -1,5 +1,10 @@
 use std::{collections::BTreeMap, fmt::Write, path::Path, time::Duration};
 
+#[cfg(unix)]
+use agentsassemble_domain::{
+    AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID,
+    LOCAL_OPERATOR_USER_ID,
+};
 use agentsassemble_domain::{
     ProviderAvailability, ProviderCatalog, ProviderControl, ProviderControlOption,
 };
@@ -624,6 +629,20 @@ async fn bootstrap(store: &SqliteStore) {
         )
         .await
         .unwrap_or_else(|error| panic!("create boundary room: {error}"));
+}
+
+#[cfg(unix)]
+fn local_principal() -> AuthenticatedPrincipal {
+    AuthenticatedPrincipal {
+        principal_id: LOCAL_OPERATOR_USER_ID.to_owned(),
+        participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
+        display_name: "Host".to_owned(),
+        room_id: "general".to_owned(),
+        client_kind: ClientKind::Browser,
+        invite_scope: InviteScope::ReadWrite,
+        is_operator: true,
+        capabilities: CapabilitySet::local_operator(ClientKind::Browser, InviteScope::ReadWrite),
+    }
 }
 
 fn agent_catalog(root: &Path) -> ProviderCatalog {

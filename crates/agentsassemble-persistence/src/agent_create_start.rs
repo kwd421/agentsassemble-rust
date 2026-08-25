@@ -16,8 +16,8 @@ use crate::{
     },
     agent_lifecycle_events::store_result,
     agent_lifecycle_reservations::{
-        LifecycleReservation, StoredLifecycleReservation, claim_lifecycle_command,
-        finish_lifecycle_command, load_lifecycle_reservation, stored_rejection,
+        LifecycleReservation, StoredLifecycleReservation, finish_lifecycle_command,
+        load_lifecycle_reservation, stored_rejection,
     },
     authority::active_room_for_principal,
     command_admission::existing_command,
@@ -132,7 +132,7 @@ impl SqliteStore {
         )
         .await?;
         let prepared_result_json = serde_json::to_string(&records.result)?;
-        claim_lifecycle_command(
+        self.claim_lifecycle_command(
             &mut transaction,
             &LifecycleReservation::creation(
                 principal,

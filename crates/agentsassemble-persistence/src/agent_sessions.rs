@@ -351,7 +351,7 @@ mod tests {
     async fn pending_lifecycle_request_blocks_agent_create() {
         let (store, principal, directory) = fixture().await;
         sqlx::query(
-            "INSERT INTO lifecycle_command_reservations(room_id, principal_id, request_id, action, payload_hash, principal_json, payload_json, session_id, operation_id) VALUES ('general', ?, 'reserved-create', 'agent.start', 'reserved-hash', ?, ?, 'existing-agent', 'reserved-operation')",
+            "INSERT INTO lifecycle_command_reservations(room_id, principal_id, request_id, action, payload_hash, principal_json, payload_json, supervisor_generation, session_id, operation_id) VALUES ('general', ?, 'reserved-create', 'agent.start', 'reserved-hash', ?, ?, 'fixture-generation', 'existing-agent', 'reserved-operation')",
         )
         .bind(&principal.principal_id)
         .bind(serde_json::to_string(&principal).unwrap_or_else(|error| panic!("encode principal: {error}")))

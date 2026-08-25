@@ -39,6 +39,7 @@ impl SqliteStore {
             pool,
             _writer_lease: prepared.writer_lease,
             _database_identity: prepared.identity,
+            runtime_generation: format!("runtime-generation-v1-{}", uuid::Uuid::new_v4()).into(),
             created: prepared.created || empty_authority,
         };
         if store.created {

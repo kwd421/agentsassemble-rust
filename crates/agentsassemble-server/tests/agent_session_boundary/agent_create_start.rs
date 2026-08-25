@@ -147,6 +147,108 @@ async fn shutdown_checkpoints_gone_after_aborting_initialization() {
     .await;
 }
 
+#[tokio::test]
+async fn same_sidecar_recovers_unconfirmed_start_after_browser_identity_is_lost() {
+    let _serial = AGENT_BOUNDARY_LOCK.lock().await;
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create reconnect root: {error}"));
+    let database_url = format!(
+        "sqlite://{}",
+        directory.path().join("runtime.sqlite3").display()
+    );
+    let store = SqliteStore::open(&database_url)
+        .await
+        .unwrap_or_else(|error| panic!("open reconnect store: {error}"));
+    bootstrap(&store).await;
+    let recovery_store = store.clone();
+    let server = start(store, agent_catalog(directory.path())).await;
+    let mut first_socket = connect(&server.base_url).await;
+    subscribe(&mut first_socket).await;
+    let _snapshot = receive_json(&mut first_socket).await;
+    let create_payload = json!({
+        "provider_id": "codex",
+        "catalog_revision": "catalog-boundary-1",
+        "display_name": "Terra",
+        "workspace": directory.path(),
+        "model": "gpt-5.6-terra",
+        "permission_mode": "meeting_read_only",
+        "start_now": false,
+    });
+    send_create(&mut first_socket, "create-for-reconnect", &create_payload).await;
+    let created = receive_command_ack(&mut first_socket).await;
+    let session_id = created["result"]["agent_session"]["session_id"]
+        .as_str()
+        .unwrap_or_else(|| panic!("created session has no id"))
+        .to_owned();
+    let payload = json!({"agent_id": session_id});
+    let principal = local_principal();
+    let agentsassemble_persistence::AgentStartPlan::Start(effect) = recovery_store
+        .prepare_agent_start(&principal, "lost-browser-start", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare interrupted start: {error}"))
+    else {
+        panic!("stopped Agent Session must prepare a start effect");
+    };
+    recovery_store
+        .mark_agent_start_unconfirmed(
+            &principal,
+            &session_id,
+            &effect.operation_id,
+            "",
+            "",
+            "runtime_start_unconfirmed",
+            "provider effect boundary was uncertain",
+        )
+        .await
+        .unwrap_or_else(|error| panic!("mark interrupted start unconfirmed: {error}"));
+    first_socket.close().await;
+
+    wait_for_recovered_rejection(&recovery_store, &principal, &payload).await;
+    let mut returning_socket = connect(&server.base_url).await;
+    subscribe(&mut returning_socket).await;
+    let recovered = receive_json(&mut returning_socket).await;
+    assert_eq!(
+        recovered["agent_sessions"][0]["last_error_code"],
+        "runtime_start_recovered_gone"
+    );
+    send_command(
+        &mut returning_socket,
+        "new-start-after-browser-return",
+        "agent.start",
+        &payload,
+    )
+    .await;
+    let started = receive_command_ack(&mut returning_socket).await;
+    assert_eq!(started["result"]["agent_session"]["runtime_status"], "idle");
+    server.stop().await;
+}
+
+async fn wait_for_recovered_rejection(
+    store: &SqliteStore,
+    principal: &AuthenticatedPrincipal,
+    payload: &Value,
+) {
+    let recovered = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            match store
+                .prepare_agent_start(principal, "lost-browser-start", payload)
+                .await
+            {
+                Err(agentsassemble_persistence::PersistenceError::StoredCommandRejected {
+                    code,
+                    ..
+                }) if code == "runtime_start_recovered_gone" => return,
+                Err(agentsassemble_persistence::PersistenceError::CommandUnresolved { .. }) => {
+                    tokio::time::sleep(Duration::from_millis(25)).await;
+                }
+                outcome => panic!("unexpected recovery outcome: {outcome:?}"),
+            }
+        }
+    })
+    .await;
+    assert!(recovered.is_ok(), "dynamic lifecycle recovery timed out");
+}
+
 async fn verify_restarted_create_start_recovery(
     database_url: &str,
     catalog: ProviderCatalog,

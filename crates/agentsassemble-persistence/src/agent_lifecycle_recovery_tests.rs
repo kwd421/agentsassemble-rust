@@ -240,7 +240,7 @@ async fn reconciliation_rejects_competing_pending_lifecycle_authority() {
         panic!("stopped session must require an effect");
     };
     sqlx::query(
-        "INSERT INTO lifecycle_command_reservations(room_id, principal_id, request_id, action, payload_hash, principal_json, payload_json, session_id, operation_id, status) VALUES ('general', 'operator', 'competing-start', 'agent.start', 'competing-hash', ?, ?, ?, 'competing-operation', 'pending')",
+        "INSERT INTO lifecycle_command_reservations(room_id, principal_id, request_id, action, payload_hash, principal_json, payload_json, supervisor_generation, session_id, operation_id, status) VALUES ('general', 'operator', 'competing-start', 'agent.start', 'competing-hash', ?, ?, 'fixture-generation', ?, 'competing-operation', 'pending')",
     )
     .bind(serde_json::to_string(&principal).unwrap_or_else(|error| panic!("encode principal: {error}")))
     .bind(serde_json::to_string(&payload).unwrap_or_else(|error| panic!("encode payload: {error}")))

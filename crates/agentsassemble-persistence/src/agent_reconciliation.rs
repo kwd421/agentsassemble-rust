@@ -35,6 +35,7 @@ pub struct RuntimeReconciliationReservation {
     pub action: String,
     pub payload_hash: String,
     pub payload: Value,
+    pub supervisor_generation: String,
     pub session_id: String,
     pub operation_id: String,
     pub phase: String,
@@ -93,49 +94,6 @@ impl SqliteStore {
         }
         transaction.commit().await?;
         Ok(candidates)
-    }
-
-    /// Loads one exact current candidate for a lifecycle command replay.
-    ///
-    /// # Errors
-    ///
-    /// Returns a command conflict or stored-authority failure when the command does not own the
-    /// durable unconfirmed operation.
-    pub async fn load_lifecycle_reconciliation_candidate(
-        &self,
-        principal: &AuthenticatedPrincipal,
-        request_id: &str,
-        action: &str,
-        payload: &Value,
-    ) -> Result<RuntimeReconciliationCandidate, PersistenceError> {
-        let mut transaction = self.pool.begin().await?;
-        let session_id = sqlx::query_scalar::<_, String>(
-            "SELECT session_id FROM lifecycle_command_reservations WHERE room_id = ? AND principal_id = ? AND request_id = ? AND action = ? AND payload_hash = ? AND status = 'pending'",
-        )
-        .bind(&principal.room_id)
-        .bind(&principal.principal_id)
-        .bind(request_id)
-        .bind(action)
-        .bind(canonical_payload_hash(payload))
-        .fetch_optional(&mut *transaction)
-        .await?
-        .ok_or(PersistenceError::CommandConflict)?;
-        let candidate = load_candidate(&mut transaction, &principal.room_id, &session_id)
-            .await?
-            .ok_or_else(stale_candidate)?;
-        let Some(reservation) = &candidate.reservation else {
-            return Err(invalid_stored_authority());
-        };
-        if !same_principal_identity(&reservation.principal, principal)
-            || reservation.request_id != request_id
-            || reservation.action != action
-            || reservation.payload != *payload
-            || candidate.session.lifecycle_intent_status != "unconfirmed"
-        {
-            return Err(PersistenceError::CommandConflict);
-        }
-        transaction.commit().await?;
-        Ok(candidate)
     }
 
     /// Reloads one private runtime candidate for a server-owned recovery watcher.
@@ -213,18 +171,6 @@ impl SqliteStore {
     }
 }
 
-fn same_principal_identity(
-    stored: &AuthenticatedPrincipal,
-    current: &AuthenticatedPrincipal,
-) -> bool {
-    stored.principal_id == current.principal_id
-        && stored.participant_id == current.participant_id
-        && stored.room_id == current.room_id
-        && stored.client_kind == current.client_kind
-        && stored.invite_scope == current.invite_scope
-        && stored.is_operator == current.is_operator
-}
-
 pub(crate) async fn load_candidate(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
@@ -247,7 +193,7 @@ pub(crate) async fn load_candidate(
     let encoded_session = row.get::<String, _>("session_json");
     let session = serde_json::from_str::<DurableAgentSession>(&encoded_session)?;
     let reservation_rows = sqlx::query(
-        "SELECT principal_id, request_id, action, payload_hash, principal_json, payload_json, operation_id, status, phase, prepared_result_json, failure_code, failure_message FROM lifecycle_command_reservations WHERE room_id = ? AND session_id = ? ORDER BY principal_id, request_id",
+        "SELECT principal_id, request_id, action, payload_hash, principal_json, payload_json, supervisor_generation, operation_id, status, phase, prepared_result_json, failure_code, failure_message FROM lifecycle_command_reservations WHERE room_id = ? AND session_id = ? ORDER BY principal_id, request_id",
     )
     .bind(room_id)
     .bind(session_id)
@@ -263,6 +209,7 @@ pub(crate) async fn load_candidate(
                 "payload_hash": row.get::<String, _>("payload_hash"),
                 "principal_json": row.get::<String, _>("principal_json"),
                 "payload_json": row.get::<String, _>("payload_json"),
+                "supervisor_generation": row.get::<String, _>("supervisor_generation"),
                 "operation_id": row.get::<String, _>("operation_id"),
                 "status": row.get::<String, _>("status"),
                 "phase": row.get::<String, _>("phase"),
@@ -334,6 +281,13 @@ fn validate_candidate_authority(
     if pending_reservations != 1 || matching_reservations.next().is_some() {
         return Err(invalid_stored_authority());
     }
+    Ok(Some(decode_reservation(session, matching)?))
+}
+
+fn decode_reservation(
+    session: &DurableAgentSession,
+    matching: &Value,
+) -> Result<RuntimeReconciliationReservation, PersistenceError> {
     let principal = serde_json::from_str::<AuthenticatedPrincipal>(
         matching["principal_json"]
             .as_str()
@@ -359,6 +313,10 @@ fn validate_candidate_authority(
     let operation_id = matching["operation_id"]
         .as_str()
         .ok_or_else(invalid_stored_authority)?;
+    let supervisor_generation = matching["supervisor_generation"]
+        .as_str()
+        .filter(|generation| !generation.is_empty())
+        .ok_or_else(invalid_stored_authority)?;
     let phase = matching["phase"]
         .as_str()
         .ok_or_else(invalid_stored_authority)?;
@@ -377,17 +335,18 @@ fn validate_candidate_authority(
     {
         return Err(invalid_stored_authority());
     }
-    Ok(Some(RuntimeReconciliationReservation {
+    Ok(RuntimeReconciliationReservation {
         principal,
         request_id: request_id.to_owned(),
         action: action.to_owned(),
         payload_hash: payload_hash.to_owned(),
         payload,
+        supervisor_generation: supervisor_generation.to_owned(),
         session_id: session.public.session_id.clone(),
         operation_id: operation_id.to_owned(),
         phase: phase.to_owned(),
         prepared_result_json: prepared_result_json.to_owned(),
-    }))
+    })
 }
 
 fn payload_session_id<'a>(

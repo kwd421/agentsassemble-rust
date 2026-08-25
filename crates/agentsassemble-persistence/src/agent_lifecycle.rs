@@ -20,9 +20,7 @@ use crate::{
         append_error_event, append_session_event, append_state_event, commit_already_stopped,
         store_result,
     },
-    agent_lifecycle_reservations::{
-        LifecycleReservation, claim_lifecycle_command, finish_lifecycle_command,
-    },
+    agent_lifecycle_reservations::{LifecycleReservation, finish_lifecycle_command},
     authority::active_room_for_principal,
     command_admission::existing_command,
     turn_authority::active_turn_authority,
@@ -139,7 +137,8 @@ impl SqliteStore {
             &agent_id,
             &operation_id,
         );
-        claim_lifecycle_command(&mut transaction, &reservation, payload, true).await?;
+        self.claim_lifecycle_command(&mut transaction, &reservation, payload, true)
+            .await?;
         let mut session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
         require_valid_turn_authority(&session)?;
         let participant = load_participant(&mut transaction, &principal.room_id, &agent_id).await?;
@@ -342,7 +341,8 @@ impl SqliteStore {
         let mut session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
         require_valid_turn_authority(&session)?;
         let cleanup_required = agent_stop_requires_cleanup(&session);
-        claim_lifecycle_command(&mut transaction, &reservation, payload, !cleanup_required).await?;
+        self.claim_lifecycle_command(&mut transaction, &reservation, payload, !cleanup_required)
+            .await?;
         if !cleanup_required {
             finish_lifecycle_command(&mut transaction, &reservation).await?;
             let outcome = commit_already_stopped(

@@ -93,10 +93,15 @@ pub struct SqliteStore {
     pub(crate) pool: SqlitePool,
     pub(crate) _writer_lease: Option<Arc<File>>,
     pub(crate) _database_identity: Option<Arc<same_file::Handle>>,
+    pub(crate) runtime_generation: Arc<str>,
     pub(crate) created: bool,
 }
 
 impl SqliteStore {
+    pub(crate) fn runtime_generation(&self) -> &str {
+        &self.runtime_generation
+    }
+
     pub(crate) async fn verify_owner(&self) -> Result<(), PersistenceError> {
         let metadata_table = sqlx::query_scalar::<_, i64>(
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'runtime_metadata'",

@@ -17,6 +17,9 @@ use tokio::{
 };
 use uuid::Uuid;
 
+#[path = "opencode/session_creation.rs"]
+mod session_creation;
+
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 use crate::filesystem::BoundExecutable;
 #[cfg(not(unix))]
@@ -46,6 +49,7 @@ use crate::{
 use crate::{
     guardian::GuardianLaunch, runtime_lease::HeldRuntimeLease, unix_custody::UnixProcessCustody,
 };
+use session_creation::{SessionCreationAuthority, guarded_session_creation};
 
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(15);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
@@ -70,6 +74,7 @@ pub(crate) struct OpenCodeDriver {
     _config_root: tempfile::TempDir,
     attached_session_id: Option<String>,
     attached_reused: bool,
+    session_creation: SessionCreationAuthority,
     mcp_registered: bool,
     completed_turn: Option<(ProviderTurnRequest, ProviderTurnCompleted)>,
     poisoned: bool,
@@ -182,6 +187,7 @@ impl OpenCodeDriver {
             _config_root: config_root,
             attached_session_id: None,
             attached_reused: false,
+            session_creation: SessionCreationAuthority::default(),
             mcp_registered: false,
             completed_turn: None,
             poisoned: false,
@@ -333,10 +339,10 @@ impl OpenCodeDriver {
         if !session.public.variant.is_empty() {
             model["variant"] = json!(session.public.variant);
         }
-        let response = self
-            .connect_owned_peer()
-            .await?
-            .post_json(
+        let connection = self.connect_owned_peer().await?;
+        guarded_session_creation(&mut self.session_creation, async move {
+            let response = connection
+                .post_json(
                 "/session",
                 &json!({
                     "title": format!("AgentsAssemble {}", session.public.session_id),
@@ -355,15 +361,17 @@ impl OpenCodeDriver {
             )
             .await
             .map_err(http_driver_error)?;
-        if !response.status.is_success() {
-            return Err(provider_request_error());
-        }
-        response
-            .value
-            .get("id")
-            .and_then(Value::as_str)
-            .and_then(clean_session_id)
-            .ok_or_else(session_unconfirmed)
+            if !response.status.is_success() {
+                return Err(provider_request_error());
+            }
+            response
+                .value
+                .get("id")
+                .and_then(Value::as_str)
+                .and_then(clean_session_id)
+                .ok_or_else(session_unconfirmed)
+        })
+        .await
     }
 
     async fn require_session(&mut self, provider_session_id: &str) -> Result<(), DriverError> {
@@ -655,6 +663,10 @@ impl ProviderDriver for OpenCodeDriver {
         session: &'a DurableAgentSession,
     ) -> DriverFuture<'a, Result<ProviderSessionAttachment, DriverError>> {
         Box::pin(self.attach(session))
+    }
+
+    fn attachment_replay_is_safe(&self) -> bool {
+        self.session_creation.replay_is_safe()
     }
 
     fn send_turn<'a>(

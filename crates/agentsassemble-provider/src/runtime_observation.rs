@@ -106,7 +106,8 @@ async fn unavailable_running_health(runtime: &OwnedRuntime) -> Option<ProviderRu
         });
     };
     let reason_code = match driver.is_alive().await {
-        Ok(true) => return None,
+        Ok(true) if driver.attachment_replay_is_safe() => return None,
+        Ok(true) => "provider_session_creation_unconfirmed",
         Ok(false) => "provider_leader_exited",
         Err(_) => "runtime_health_unknown",
     };

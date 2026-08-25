@@ -54,6 +54,9 @@ pub(crate) trait ProviderDriver: Send {
     fn requires_restart(&self) -> bool {
         false
     }
+    fn attachment_replay_is_safe(&self) -> bool {
+        true
+    }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ProviderSessionAttachment {

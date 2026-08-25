@@ -2,10 +2,11 @@ use std::time::Duration;
 
 use agentsassemble_domain::AuthenticatedPrincipal;
 use agentsassemble_persistence::{
-    LiveRuntimeReconciliation, PersistenceError, RuntimeReconciliationObservation, SqliteStore,
+    LiveRuntimeReconciliation, PersistenceError, RuntimeReconciliationCandidate,
+    RuntimeReconciliationCursor, RuntimeReconciliationObservation, SqliteStore,
 };
 use agentsassemble_provider::{ProviderAdapter, ProviderRuntimeGone, ProviderRuntimeObservation};
-use futures_util::future::join_all;
+use futures_util::{StreamExt, stream};
 use serde_json::Value;
 use tokio::time::MissedTickBehavior;
 use tokio_util::sync::CancellationToken;
@@ -13,13 +14,8 @@ use tokio_util::sync::CancellationToken;
 use crate::RoomRuntime;
 
 const LIVE_OBSERVATION_TIMEOUT: Duration = Duration::from_secs(2);
-const STARTUP_RECOVERY_INTERVAL: Duration = Duration::from_secs(1);
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct StartupRecoveryKey {
-    room_id: String,
-    session_id: String,
-}
+const RECOVERY_SCAN_INTERVAL: Duration = Duration::from_secs(1);
+const RECOVERY_OBSERVATION_CONCURRENCY: usize = 8;
 
 /// Reconciles every durable runtime candidate before network admission.
 ///
@@ -31,19 +27,21 @@ pub async fn reconcile_runtime_ownership(
     provider_adapter: &ProviderAdapter,
 ) -> Result<usize, PersistenceError> {
     let candidates = store.load_runtime_reconciliation_candidates().await?;
-    let observations = join_all(
-        candidates
-            .iter()
-            .map(|candidate| provider_adapter.observe(&candidate.session)),
-    )
-    .await;
-    for (candidate, observation) in candidates.iter().zip(observations) {
-        let observation = persistence_observation(observation);
+    let candidate_count = candidates.len();
+    let observations = stream::iter(candidates)
+        .map(|candidate| async move {
+            let observation = provider_adapter.observe(&candidate.session).await;
+            (candidate, observation)
+        })
+        .buffer_unordered(RECOVERY_OBSERVATION_CONCURRENCY)
+        .collect::<Vec<_>>()
+        .await;
+    for (candidate, observation) in observations {
         store
-            .apply_runtime_reconciliation(candidate, &observation)
+            .apply_runtime_reconciliation(&candidate, &persistence_observation(observation))
             .await?;
     }
-    Ok(candidates.len())
+    Ok(candidate_count)
 }
 
 pub(crate) async fn recover_exact_lifecycle_command(
@@ -70,97 +68,94 @@ pub(crate) async fn recover_exact_lifecycle_command(
         .await
 }
 
-pub(crate) async fn startup_recovery_keys(
-    store: &SqliteStore,
-) -> Result<Vec<StartupRecoveryKey>, PersistenceError> {
-    Ok(store
-        .load_runtime_reconciliation_candidates()
-        .await?
-        .into_iter()
-        .filter(|candidate| candidate.reservation.is_some())
-        .map(|candidate| StartupRecoveryKey {
-            room_id: candidate.session.public.room_id,
-            session_id: candidate.session.public.session_id,
-        })
-        .collect())
-}
-
-pub(crate) async fn watch_startup_recovery(
+pub(crate) async fn watch_runtime_reconciliation(
     store: SqliteStore,
     provider_adapter: ProviderAdapter,
     rooms: RoomRuntime,
     cancellation: CancellationToken,
-    mut pending: Vec<StartupRecoveryKey>,
 ) {
-    if pending.is_empty() {
-        return;
-    }
-    let mut interval = tokio::time::interval(STARTUP_RECOVERY_INTERVAL);
+    let mut cursor: Option<RuntimeReconciliationCursor> = None;
+    let mut interval = tokio::time::interval(RECOVERY_SCAN_INTERVAL);
     interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
     loop {
         tokio::select! {
             () = cancellation.cancelled() => return,
             _ = interval.tick() => {}
         }
-        let results = join_all(
-            pending
-                .iter()
-                .map(|key| reconcile_startup_key(&store, &provider_adapter, &rooms, key)),
-        )
-        .await;
-        let mut retained = Vec::new();
-        for (key, result) in pending.into_iter().zip(results) {
-            match result {
-                Ok(true) => retained.push(key),
-                Ok(false) => {}
-                Err(_) => {
-                    tracing::warn!(
-                        room_id = %key.room_id,
-                        session_id = %key.session_id,
-                        "server-owned lifecycle recovery observation could not commit"
-                    );
-                    retained.push(key);
-                }
+        let page = match store
+            .load_unconfirmed_runtime_reconciliation_page(cursor.as_ref())
+            .await
+        {
+            Ok(page) => page,
+            Err(error) => {
+                tracing::warn!(%error, "server-owned lifecycle recovery scan failed");
+                continue;
             }
-        }
-        if retained.is_empty() {
-            return;
-        }
-        pending = retained;
+        };
+        cursor = page.next_cursor;
+        reconcile_dynamic_candidates(&store, &provider_adapter, &rooms, page.candidates).await;
     }
 }
 
-async fn reconcile_startup_key(
+async fn reconcile_dynamic_candidates(
     store: &SqliteStore,
     provider_adapter: &ProviderAdapter,
     rooms: &RoomRuntime,
-    key: &StartupRecoveryKey,
+    candidates: Vec<RuntimeReconciliationCandidate>,
+) {
+    let observed = stream::iter(candidates)
+        .map(|candidate| async move {
+            let observation = tokio::time::timeout(
+                LIVE_OBSERVATION_TIMEOUT,
+                provider_adapter.observe(&candidate.session),
+            )
+            .await
+            .ok();
+            (candidate, observation)
+        })
+        .buffer_unordered(RECOVERY_OBSERVATION_CONCURRENCY)
+        .collect::<Vec<_>>()
+        .await;
+    for (candidate, observation) in observed {
+        if observation != Some(ProviderRuntimeObservation::Gone) {
+            continue;
+        }
+        let room_id = candidate.session.public.room_id.clone();
+        match commit_dynamic_gone(store, &candidate).await {
+            Ok(true) => rooms.notify_room_publication(&room_id).await,
+            Ok(false) => {}
+            Err(error) => tracing::warn!(
+                %error,
+                %room_id,
+                session_id = %candidate.session.public.session_id,
+                "server-owned lifecycle recovery observation could not commit"
+            ),
+        }
+    }
+}
+
+async fn commit_dynamic_gone(
+    store: &SqliteStore,
+    candidate: &RuntimeReconciliationCandidate,
 ) -> Result<bool, PersistenceError> {
-    let Some(candidate) = store
-        .load_runtime_reconciliation_candidate(&key.room_id, &key.session_id)
-        .await?
-    else {
-        return Ok(false);
-    };
-    if candidate.reservation.is_none() {
-        return Ok(false);
+    match store
+        .apply_runtime_reconciliation(candidate, &RuntimeReconciliationObservation::Gone)
+        .await
+    {
+        Ok(()) => Ok(true),
+        Err(error) if stale_candidate(&error) => Ok(false),
+        Err(error) => Err(error),
     }
-    let Ok(observation) = tokio::time::timeout(
-        LIVE_OBSERVATION_TIMEOUT,
-        provider_adapter.observe(&candidate.session),
+}
+
+fn stale_candidate(error: &PersistenceError) -> bool {
+    matches!(
+        error,
+        PersistenceError::CommandRejected {
+            code: "stale_reconciliation_candidate",
+            ..
+        }
     )
-    .await
-    else {
-        return Ok(true);
-    };
-    if observation != ProviderRuntimeObservation::Gone {
-        return Ok(true);
-    }
-    store
-        .apply_runtime_reconciliation(&candidate, &RuntimeReconciliationObservation::Gone)
-        .await?;
-    rooms.notify_room_publication(&key.room_id).await;
-    Ok(false)
 }
 
 pub(crate) fn persistence_observation(
@@ -236,12 +231,14 @@ mod tests {
         AgentSessionDraft, AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope,
         LOCAL_OPERATOR_PARTICIPANT_ID, stable_content_identity, stable_identity_hash,
     };
-    use agentsassemble_persistence::{AgentStartPlan, LiveRuntimeReconciliation, SqliteStore};
+    use agentsassemble_persistence::{
+        AgentStartPlan, LiveRuntimeReconciliation, RuntimeReconciliationObservation, SqliteStore,
+    };
     use agentsassemble_provider::ProviderAdapter;
     use same_file::Handle;
     use serde_json::json;
 
-    use super::recover_exact_lifecycle_command;
+    use super::{commit_dynamic_gone, recover_exact_lifecycle_command};
 
     #[tokio::test]
     async fn production_replay_helper_observes_gone_before_reenabling_start() {
@@ -314,6 +311,98 @@ mod tests {
                 .prepare_agent_start(&principal, "live-helper-start", &payload)
                 .await
                 .unwrap_or_else(|error| panic!("re-enter start: {error}")),
+            AgentStartPlan::Start(_)
+        ));
+    }
+
+    #[tokio::test]
+    async fn dynamic_scan_discovers_later_intent_and_drops_stale_live_recovery_candidate() {
+        let directory =
+            tempfile::tempdir().unwrap_or_else(|error| panic!("create fixture: {error}"));
+        let store = SqliteStore::open_path(&directory.path().join("runtime.sqlite3"))
+            .await
+            .unwrap_or_else(|error| panic!("open store: {error}"));
+        store
+            .bootstrap_local_authority("26193216-8799-4f67-ad17-f05c7da0f433", "Host")
+            .await
+            .unwrap_or_else(|error| panic!("bootstrap identity: {error}"));
+        store
+            .create_room_for_local_operator(
+                "77e86a68-c52b-4ffc-8039-c908a33a9150",
+                "general",
+                "General",
+            )
+            .await
+            .unwrap_or_else(|error| panic!("create room: {error}"));
+        assert!(
+            store
+                .load_unconfirmed_runtime_reconciliation_page(None)
+                .await
+                .unwrap_or_else(|error| panic!("scan empty store: {error}"))
+                .candidates
+                .is_empty()
+        );
+
+        let principal = local_principal();
+        let created = store
+            .execute_agent_create(
+                &principal,
+                "create-dynamic-agent",
+                &json!({"provider_id": "codex"}),
+                &draft(directory.path()),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("create agent: {error}"));
+        let session_id = created.result["agent_session"]["session_id"]
+            .as_str()
+            .unwrap_or_else(|| panic!("created session has no id"));
+        let payload = json!({"agent_id": session_id});
+        let AgentStartPlan::Start(effect) = store
+            .prepare_agent_start(&principal, "dynamic-start", &payload)
+            .await
+            .unwrap_or_else(|error| panic!("prepare start: {error}"))
+        else {
+            panic!("stopped session must prepare a start effect");
+        };
+        store
+            .mark_agent_start_unconfirmed(
+                &principal,
+                session_id,
+                &effect.operation_id,
+                "",
+                "",
+                "runtime_start_unconfirmed",
+                "provider effect boundary was uncertain",
+            )
+            .await
+            .unwrap_or_else(|error| panic!("mark start unconfirmed: {error}"));
+        let mut page = store
+            .load_unconfirmed_runtime_reconciliation_page(None)
+            .await
+            .unwrap_or_else(|error| panic!("scan later intent: {error}"));
+        assert_eq!(page.candidates.len(), 1);
+        let candidate = page.candidates.pop().unwrap_or_else(|| panic!("candidate"));
+
+        assert_eq!(
+            store
+                .apply_live_runtime_reconciliation(
+                    &candidate,
+                    &RuntimeReconciliationObservation::Gone,
+                )
+                .await
+                .unwrap_or_else(|error| panic!("apply live recovery: {error}")),
+            LiveRuntimeReconciliation::RetryOriginalEffect
+        );
+        assert!(
+            !commit_dynamic_gone(&store, &candidate)
+                .await
+                .unwrap_or_else(|error| panic!("drop stale watcher candidate: {error}"))
+        );
+        assert!(matches!(
+            store
+                .prepare_agent_start(&principal, "dynamic-start", &payload)
+                .await
+                .unwrap_or_else(|error| panic!("re-enter recovered start: {error}")),
             AgentStartPlan::Start(_)
         ));
     }

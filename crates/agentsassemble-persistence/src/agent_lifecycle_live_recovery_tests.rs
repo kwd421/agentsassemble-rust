@@ -173,3 +173,64 @@ async fn startup_gone_terminalizes_old_start_and_unblocks_a_new_request() {
         AgentStartPlan::Start(_)
     ));
 }
+
+#[tokio::test]
+async fn previous_supervisor_request_cannot_use_live_effect_reentry_after_reopen() {
+    let (store, principal, directory) = fixture().await;
+    let payload = json!({"agent_id": AGENT_ID});
+    let AgentStartPlan::Start(effect) = store
+        .prepare_agent_start(&principal, "previous-supervisor-start", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare start: {error}"))
+    else {
+        panic!("stopped session must prepare a start effect");
+    };
+    store
+        .mark_agent_start_unconfirmed(
+            &principal,
+            AGENT_ID,
+            &effect.operation_id,
+            "runtime-previous-supervisor",
+            "supervisor-previous",
+            "runtime_start_unconfirmed",
+            "launch outcome was uncertain",
+        )
+        .await
+        .unwrap_or_else(|error| panic!("mark start unconfirmed: {error}"));
+    drop(store);
+
+    let reopened = super::SqliteStore::open_path(&directory.path().join("runtime.sqlite3"))
+        .await
+        .unwrap_or_else(|error| panic!("reopen store: {error}"));
+    assert!(matches!(
+        reopened
+            .load_lifecycle_reconciliation_candidate(
+                &principal,
+                "previous-supervisor-start",
+                "agent.start",
+                &payload,
+            )
+            .await,
+        Err(PersistenceError::CommandUnresolved {
+            code: "runtime_effect_unconfirmed",
+            ..
+        })
+    ));
+    let candidate = reopened
+        .load_runtime_reconciliation_candidates()
+        .await
+        .unwrap_or_else(|error| panic!("load server-owned candidate: {error}"))
+        .pop()
+        .unwrap_or_else(|| panic!("old request must remain server-recoverable"));
+    reopened
+        .apply_runtime_reconciliation(&candidate, &RuntimeReconciliationObservation::Gone)
+        .await
+        .unwrap_or_else(|error| panic!("terminalize old request: {error}"));
+    assert!(matches!(
+        reopened
+            .prepare_agent_start(&principal, "previous-supervisor-start", &payload)
+            .await,
+        Err(PersistenceError::StoredCommandRejected { code, .. })
+            if code == "runtime_start_recovered_gone"
+    ));
+}
