@@ -17,6 +17,7 @@ async fn exact_live_replay_reenters_start_only_after_gone_proof() {
     else {
         panic!("stopped session must prepare a start effect");
     };
+    authorize_start(&store, &principal, "live-gone-start", &payload, &effect).await;
     store
         .mark_agent_start_unconfirmed(
             &principal,
@@ -75,6 +76,7 @@ async fn exact_live_replay_resumes_only_the_adopted_owned_runtime() {
     else {
         panic!("stopped session must prepare a start effect");
     };
+    authorize_start(&store, &principal, "live-adopted-start", &payload, &effect).await;
     store
         .mark_agent_start_unconfirmed(
             &principal,
@@ -134,6 +136,7 @@ async fn startup_gone_terminalizes_old_start_and_unblocks_a_new_request() {
     else {
         panic!("stopped session must prepare a start effect");
     };
+    authorize_start(&store, &principal, "abandoned-start", &payload, &effect).await;
     store
         .mark_agent_start_unconfirmed(
             &principal,
@@ -185,6 +188,14 @@ async fn previous_supervisor_request_cannot_use_live_effect_reentry_after_reopen
     else {
         panic!("stopped session must prepare a start effect");
     };
+    authorize_start(
+        &store,
+        &principal,
+        "previous-supervisor-start",
+        &payload,
+        &effect,
+    )
+    .await;
     store
         .mark_agent_start_unconfirmed(
             &principal,
@@ -233,4 +244,32 @@ async fn previous_supervisor_request_cannot_use_live_effect_reentry_after_reopen
         Err(PersistenceError::StoredCommandRejected { code, .. })
             if code == "runtime_start_recovered_gone"
     ));
+}
+
+async fn authorize_start(
+    store: &super::SqliteStore,
+    principal: &agentsassemble_domain::AuthenticatedPrincipal,
+    request_id: &str,
+    payload: &serde_json::Value,
+    effect: &super::AgentStartEffect,
+) {
+    let (handle_id, owner_id) = match request_id {
+        "live-gone-start" => ("runtime-live-gone", "supervisor-live"),
+        "live-adopted-start" => ("runtime-live-adopted", "supervisor-live"),
+        "abandoned-start" => ("runtime-abandoned", "supervisor-dead"),
+        "previous-supervisor-start" => ("runtime-previous-supervisor", "supervisor-previous"),
+        _ => panic!("unexpected test request"),
+    };
+    store
+        .authorize_agent_start_effect(
+            principal,
+            request_id,
+            payload,
+            &effect.operation_id,
+            "agent.start",
+            handle_id,
+            owner_id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize start effect: {error}"));
 }

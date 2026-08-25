@@ -6,7 +6,10 @@ use agentsassemble_domain::{
 use chrono::Utc;
 use serde_json::{Value, json};
 
-use crate::{AgentRuntimeStarted, AgentStartPlan, AgentStopPlan, PersistenceError, SqliteStore};
+use crate::{
+    AgentRuntimeStarted, AgentStartEffect, AgentStartPlan, AgentStopPlan, PersistenceError,
+    SqliteStore,
+};
 
 pub(super) const AGENT_ID: &str = "codex-00000000-0000-5000-8000-000000000001";
 
@@ -164,6 +167,18 @@ async fn lifecycle_preserves_provider_identity_and_finalizes_stop_once() {
         provider_session_reused: false,
         provider_session_active: true,
     };
+    let effect = store
+        .authorize_agent_start_effect(
+            &principal,
+            "start-lifecycle",
+            &payload,
+            &effect.operation_id,
+            "agent.start",
+            &started.runtime_handle_id,
+            &started.runtime_owner_id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize start effect: {error}"));
     let outcome = store
         .complete_agent_start(
             &principal,
@@ -223,6 +238,10 @@ async fn lifecycle_preserves_provider_identity_and_finalizes_stop_once() {
     };
     assert_eq!(effect.runtime_handle_id, "owned-runtime-1");
     assert_eq!(effect.runtime_owner_id, "supervisor-instance-1");
+    let effect = store
+        .authorize_agent_stop_effect(&principal, "stop-lifecycle", &payload, &effect.operation_id)
+        .await
+        .unwrap_or_else(|error| panic!("authorize stop effect: {error}"));
     store
         .record_agent_stop_effect("general", &effect.session_id, &effect.operation_id)
         .await
@@ -294,6 +313,18 @@ async fn provider_process_presence_does_not_imply_a_provider_conversation() {
             ..
         })
     ));
+    store
+        .authorize_agent_start_effect(
+            &principal,
+            "start-without-thread",
+            &payload,
+            &start.operation_id,
+            "agent.start",
+            "owned-app-server",
+            "supervisor-instance-1",
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize process-only start: {error}"));
     let invalid = store
         .complete_agent_start(
             &principal,
@@ -502,27 +533,7 @@ async fn restart_invalidates_ambiguous_handle_before_any_stop_effect() {
             ..
         })
     ));
-    let encoded = sqlx::query_scalar::<_, String>(
-        "SELECT session_json FROM agent_sessions WHERE room_id = 'general' AND session_id = ?",
-    )
-    .bind(AGENT_ID)
-    .fetch_one(&store.pool)
-    .await
-    .unwrap_or_else(|error| panic!("read invalidated ambiguous session: {error}"));
-    let invalidated = serde_json::from_str::<DurableAgentSession>(&encoded)
-        .unwrap_or_else(|error| panic!("decode invalidated ambiguous session: {error}"));
-    assert!(invalidated.runtime_handle_id.is_empty());
-    assert!(invalidated.runtime_owner_id.is_empty());
-    assert!(invalidated.lifecycle_intent_action.is_empty());
-    assert!(invalidated.lifecycle_intent_status.is_empty());
-    assert_eq!(invalidated.public.last_error_code, "runtime_owner_lost");
-    let reservation_status = sqlx::query_scalar::<_, String>(
-        "SELECT status FROM lifecycle_command_reservations WHERE request_id = 'ambiguous-stop'",
-    )
-    .fetch_one(&store.pool)
-    .await
-    .unwrap_or_else(|error| panic!("read terminal reservation: {error}"));
-    assert_eq!(reservation_status, "owner_lost");
+    assert_ambiguous_owner_was_invalidated(&store).await;
     let AgentStartPlan::Start(replacement) = store
         .prepare_agent_start(&principal, "replacement-after-restart", &payload)
         .await
@@ -530,6 +541,16 @@ async fn restart_invalidates_ambiguous_handle_before_any_stop_effect() {
     else {
         panic!("owner-lost stop must release the session for a new request");
     };
+    authorize_start(
+        &store,
+        &principal,
+        "replacement-after-restart",
+        &payload,
+        &replacement,
+        "replacement-runtime",
+        "supervisor-instance-2",
+    )
+    .await;
     store
         .complete_agent_start(
             &principal,
@@ -568,6 +589,30 @@ async fn restart_invalidates_ambiguous_handle_before_any_stop_effect() {
     assert_eq!(replaced.runtime_handle_id, "replacement-runtime");
 }
 
+async fn assert_ambiguous_owner_was_invalidated(store: &SqliteStore) {
+    let encoded = sqlx::query_scalar::<_, String>(
+        "SELECT session_json FROM agent_sessions WHERE room_id = 'general' AND session_id = ?",
+    )
+    .bind(AGENT_ID)
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("read invalidated ambiguous session: {error}"));
+    let invalidated = serde_json::from_str::<DurableAgentSession>(&encoded)
+        .unwrap_or_else(|error| panic!("decode invalidated ambiguous session: {error}"));
+    assert!(invalidated.runtime_handle_id.is_empty());
+    assert!(invalidated.runtime_owner_id.is_empty());
+    assert!(invalidated.lifecycle_intent_action.is_empty());
+    assert!(invalidated.lifecycle_intent_status.is_empty());
+    assert_eq!(invalidated.public.last_error_code, "runtime_owner_lost");
+    let reservation_status = sqlx::query_scalar::<_, String>(
+        "SELECT status FROM lifecycle_command_reservations WHERE request_id = 'ambiguous-stop'",
+    )
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("read terminal reservation: {error}"));
+    assert_eq!(reservation_status, "owner_lost");
+}
+
 async fn mark_ambiguous_stop(
     store: &SqliteStore,
     principal: &AuthenticatedPrincipal,
@@ -580,6 +625,18 @@ async fn mark_ambiguous_stop(
     else {
         panic!("stopped session must require start");
     };
+    store
+        .authorize_agent_start_effect(
+            principal,
+            "start-before-ambiguous-stop",
+            payload,
+            &start.operation_id,
+            "agent.start",
+            "runtime-before-ambiguous-stop",
+            "supervisor-instance-1",
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize start: {error}"));
     store
         .complete_agent_start(
             principal,
@@ -605,6 +662,10 @@ async fn mark_ambiguous_stop(
         panic!("running session must require stop");
     };
     store
+        .authorize_agent_stop_effect(principal, "ambiguous-stop", payload, &stop.operation_id)
+        .await
+        .unwrap_or_else(|error| panic!("authorize ambiguous stop: {error}"));
+    store
         .mark_agent_stop_unconfirmed(
             principal,
             AGENT_ID,
@@ -614,6 +675,30 @@ async fn mark_ambiguous_stop(
         )
         .await
         .unwrap_or_else(|error| panic!("mark ambiguous stop: {error}"))
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn authorize_start(
+    store: &SqliteStore,
+    principal: &AuthenticatedPrincipal,
+    request_id: &str,
+    payload: &Value,
+    effect: &AgentStartEffect,
+    runtime_handle_id: &str,
+    runtime_owner_id: &str,
+) {
+    store
+        .authorize_agent_start_effect(
+            principal,
+            request_id,
+            payload,
+            &effect.operation_id,
+            "agent.start",
+            runtime_handle_id,
+            runtime_owner_id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize start: {error}"));
 }
 
 #[tokio::test]
@@ -627,6 +712,18 @@ async fn startup_reconciliation_disconnects_only_live_looking_sessions() {
     else {
         panic!("stopped session must require start");
     };
+    store
+        .authorize_agent_start_effect(
+            &principal,
+            "start-before-restart",
+            &payload,
+            &start.operation_id,
+            "agent.start",
+            "lost-owned-runtime",
+            "supervisor-instance-1",
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize start: {error}"));
     store
         .complete_agent_start(
             &principal,

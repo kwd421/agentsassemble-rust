@@ -1,4 +1,7 @@
-use agentsassemble_persistence::PersistenceError;
+use agentsassemble_domain::{
+    AuthenticatedPrincipal, public_event_for_principal, public_value_for_principal,
+};
+use agentsassemble_persistence::{CommandOutcome, PersistenceError};
 use agentsassemble_protocol::CommandResolution;
 
 #[derive(Debug)]
@@ -50,4 +53,34 @@ impl CommandFailure {
             Self::unresolved(error)
         }
     }
+}
+
+pub(crate) fn validate_command_envelope(
+    command: &crate::room_runtime::RoomCommand,
+) -> Result<(), PersistenceError> {
+    if command.request_id.is_empty()
+        || command.request_id.chars().count() > 128
+        || command.action.is_empty()
+        || command.action.chars().count() > 64
+    {
+        return Err(PersistenceError::CommandRejected {
+            code: "command_envelope_invalid",
+            message: "request_id or action is invalid.".to_owned(),
+        });
+    }
+    Ok(())
+}
+
+pub(crate) fn public_command_outcome(
+    principal: &AuthenticatedPrincipal,
+    mut outcome: CommandOutcome,
+) -> Result<CommandOutcome, PersistenceError> {
+    outcome.result = public_value_for_principal(&outcome.result, principal)?;
+    outcome.event = public_event_for_principal(&outcome.event, principal);
+    outcome.events = outcome
+        .events
+        .iter()
+        .map(|event| public_event_for_principal(event, principal))
+        .collect();
+    Ok(outcome)
 }

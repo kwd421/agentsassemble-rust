@@ -4,9 +4,7 @@ use std::{
     time::Duration,
 };
 
-use agentsassemble_domain::{
-    AuthenticatedPrincipal, RoomEvent, public_event_for_principal, public_value_for_principal,
-};
+use agentsassemble_domain::{AuthenticatedPrincipal, RoomEvent};
 use agentsassemble_persistence::{
     AgentTurnAssignment, CommandOutcome, PersistenceError, RoomCommandMutation, SqliteStore,
 };
@@ -14,7 +12,6 @@ use agentsassemble_provider::{
     ProviderAdapter, ProviderCatalogService, ProviderRoomToolCommand, ProviderRoomToolIngress,
 };
 use serde_json::Value;
-use thiserror::Error;
 use tokio::{
     sync::{Mutex, broadcast, mpsc, oneshot},
     task::{JoinHandle, JoinSet},
@@ -24,12 +21,13 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     agent_create_runtime::AgentCreateExecution,
+    lifecycle_command_tracker::LifecycleCommandTracker,
     principal_write_budget::PrincipalWriteBudget,
     provider_turn::{
         ProviderTurnTaskResult, commit_provider_result, publish_turn_commit, spawn_provider_turn,
     },
-    room_command_result::CommandFailure,
-    room_shutdown::join_room_tasks,
+    room_command_result::{CommandFailure, public_command_outcome, validate_command_envelope},
+    room_shutdown::{RoomShutdownError, join_room_tasks},
 };
 
 const ROOM_QUEUE_CAPACITY: usize = 128;
@@ -38,18 +36,6 @@ const EVENT_RECEIVER_CAPACITY: usize = 256;
 const PUBLICATION_WAKE_CAPACITY: usize = 128;
 const PUBLICATION_RETRY_INTERVAL: Duration = Duration::from_millis(250);
 const ROOM_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(3);
-
-#[derive(Debug, Clone, PartialEq, Eq, Error)]
-pub enum RoomShutdownError {
-    #[error("room mutation tasks exceeded the shutdown deadline")]
-    TimedOut,
-    #[error("room mutation task failed: {0}")]
-    TaskFailed(String),
-    #[error("provider runtime shutdown failed: {0}")]
-    Provider(String),
-    #[error("confirmed provider shutdown checkpoint failed: {0}")]
-    Persistence(String),
-}
 
 pub(crate) struct RoomCommand {
     pub(crate) principal: AuthenticatedPrincipal,
@@ -75,6 +61,7 @@ struct RoomTaskContext {
     cancellation: CancellationToken,
     event_tx: broadcast::Sender<RoomEvent>,
     room_tool_ingress: ProviderRoomToolIngress,
+    lifecycle_commands: LifecycleCommandTracker,
 }
 
 struct RoomCommandOwners<'a> {
@@ -85,6 +72,7 @@ struct RoomCommandOwners<'a> {
     turn_tasks: &'a mut JoinSet<ProviderTurnTaskResult>,
     room_tool_ingress: &'a ProviderRoomToolIngress,
     write_budget: &'a mut PrincipalWriteBudget,
+    lifecycle_commands: &'a LifecycleCommandTracker,
 }
 
 #[derive(Clone)]
@@ -95,6 +83,7 @@ pub struct RoomRuntime {
     rooms: Arc<Mutex<HashMap<String, RoomHandle>>>,
     cancellation: CancellationToken,
     tasks: Arc<Mutex<Vec<JoinHandle<()>>>>,
+    lifecycle_commands: LifecycleCommandTracker,
 }
 
 impl RoomRuntime {
@@ -116,6 +105,7 @@ impl RoomRuntime {
             rooms: Arc::new(Mutex::new(HashMap::new())),
             cancellation: CancellationToken::new(),
             tasks: Arc::new(Mutex::new(Vec::new())),
+            lifecycle_commands: LifecycleCommandTracker::default(),
         }
     }
 
@@ -181,6 +171,30 @@ impl RoomRuntime {
         let _ = handle.publication_wake.try_send(());
     }
 
+    pub(crate) fn try_claim_lifecycle_command(
+        &self,
+        room_id: &str,
+        principal_id: &str,
+        request_id: &str,
+        action: &str,
+    ) -> Option<crate::lifecycle_command_tracker::LifecycleCommandGuard> {
+        self.lifecycle_commands
+            .try_claim(room_id, principal_id, request_id, action)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn claim_lifecycle_command(
+        &self,
+        room_id: &str,
+        principal_id: &str,
+        request_id: &str,
+        action: &str,
+    ) -> crate::lifecycle_command_tracker::LifecycleCommandGuard {
+        self.lifecycle_commands
+            .try_claim(room_id, principal_id, request_id, action)
+            .unwrap_or_else(|| panic!("test lifecycle command already has an owner"))
+    }
+
     /// Cancels all room mutation owners and bounds their cooperative shutdown.
     ///
     /// # Errors
@@ -240,6 +254,7 @@ impl RoomRuntime {
                 cancellation,
                 event_tx,
                 room_tool_ingress,
+                lifecycle_commands: self.lifecycle_commands.clone(),
             },
             command_rx,
             publication_rx,
@@ -265,6 +280,7 @@ fn spawn_room_task(
             cancellation,
             event_tx,
             room_tool_ingress,
+            lifecycle_commands,
         } = context;
         let mut turn_tasks = JoinSet::new();
         let mut publication_retry = tokio::time::interval(PUBLICATION_RETRY_INTERVAL);
@@ -307,6 +323,7 @@ fn spawn_room_task(
                             turn_tasks: &mut turn_tasks,
                             room_tool_ingress: &room_tool_ingress,
                             write_budget: &mut write_budget,
+                            lifecycle_commands: &lifecycle_commands,
                         },
                         command,
                     )
@@ -350,6 +367,7 @@ async fn handle_room_command(owners: RoomCommandOwners<'_>, mut command: RoomCom
         turn_tasks,
         room_tool_ingress,
         write_budget,
+        lifecycle_commands,
     } = owners;
     let execution = match write_budget
         .admit_transport(&command.principal.principal_id, command.transport_bytes)
@@ -358,27 +376,41 @@ async fn handle_room_command(owners: RoomCommandOwners<'_>, mut command: RoomCom
             Ok(()) => match store.resolve_principal(&command.principal).await {
                 Ok(principal) => {
                     command.principal = principal;
-                    match write_budget
-                        .admit_command(
-                            store,
-                            &command.principal,
-                            &command.request_id,
-                            &command.action,
-                            &command.payload,
-                        )
-                        .await
-                    {
-                        Ok(()) => {
-                            execute_command(
+                    let lifecycle_guard = lifecycle_commands.try_claim(
+                        &command.principal.room_id,
+                        &command.principal.principal_id,
+                        &command.request_id,
+                        &command.action,
+                    );
+                    match lifecycle_guard {
+                        None => CommandExecution::unresolved_failure(
+                            PersistenceError::CommandUnresolved {
+                                code: "runtime_recovery_in_progress",
+                                message: "The exact lifecycle request is currently owned by server recovery. Retry the same request.".to_owned(),
+                            },
+                        ),
+                        Some(_lifecycle_guard) => match write_budget
+                            .admit_command(
                                 store,
-                                provider_catalog,
-                                provider_adapter,
-                                event_tx,
-                                &command,
+                                &command.principal,
+                                &command.request_id,
+                                &command.action,
+                                &command.payload,
                             )
                             .await
-                        }
-                        Err(error) => CommandExecution::admission_failure(error),
+                        {
+                            Ok(()) => {
+                                execute_command(
+                                    store,
+                                    provider_catalog,
+                                    provider_adapter,
+                                    event_tx,
+                                    &command,
+                                )
+                                .await
+                            }
+                            Err(error) => CommandExecution::admission_failure(error),
+                        },
                     }
                 }
                 Err(error) => CommandExecution::unresolved_failure(error),
@@ -410,20 +442,6 @@ async fn handle_room_command(owners: RoomCommandOwners<'_>, mut command: RoomCom
         Err(failure) => Err(failure),
     };
     let _ = command.reply.send(reply);
-}
-
-fn validate_command_envelope(command: &RoomCommand) -> Result<(), PersistenceError> {
-    if command.request_id.is_empty()
-        || command.request_id.chars().count() > 128
-        || command.action.is_empty()
-        || command.action.chars().count() > 64
-    {
-        return Err(PersistenceError::CommandRejected {
-            code: "command_envelope_invalid",
-            message: "request_id or action is invalid.".to_owned(),
-        });
-    }
-    Ok(())
 }
 
 async fn handle_provider_result(
@@ -489,20 +507,6 @@ async fn publish_durable_room_events(
             "durable room-event publication failed; the room owner will retry"
         );
     }
-}
-
-fn public_command_outcome(
-    principal: &AuthenticatedPrincipal,
-    mut outcome: CommandOutcome,
-) -> Result<CommandOutcome, PersistenceError> {
-    outcome.result = public_value_for_principal(&outcome.result, principal)?;
-    outcome.event = public_event_for_principal(&outcome.event, principal);
-    outcome.events = outcome
-        .events
-        .iter()
-        .map(|event| public_event_for_principal(event, principal))
-        .collect();
-    Ok(outcome)
 }
 
 enum RoomInput {

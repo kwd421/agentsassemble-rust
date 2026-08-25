@@ -80,6 +80,14 @@ pub(crate) fn validate_runtime_started(
             "Provider start did not return its supervisor ownership identity.",
         ));
     }
+    if session.runtime_handle_id != started.runtime_handle_id
+        || session.runtime_owner_id != started.runtime_owner_id
+    {
+        return Err(rejected_code(
+            "runtime_owner_mismatch",
+            "Provider start confirmation does not match its durable pre-effect authority.",
+        ));
+    }
     if started.provider_session_active && started.provider_session_id.is_empty() {
         return Err(rejected_code(
             "provider_session_unconfirmed",

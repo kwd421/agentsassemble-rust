@@ -118,6 +118,53 @@ async fn assert_principal_budget(
     assert_eq!(actual, expected);
 }
 
+async fn authorize_create_start(
+    store: &SqliteStore,
+    principal: &AuthenticatedPrincipal,
+    request_id: &str,
+    payload: &serde_json::Value,
+    effect: &crate::AgentCreateStartEffect,
+    runtime_handle_id: &str,
+    runtime_owner_id: &str,
+) {
+    store
+        .authorize_agent_create_start_effect(
+            principal,
+            request_id,
+            payload,
+            &effect.operation_id,
+            runtime_handle_id,
+            runtime_owner_id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize create/start: {error}"));
+}
+
+fn assert_completed_create_start(commit: &crate::AgentCreateStartCommit) {
+    assert_eq!(commit.outcome.result["status"], "created");
+    assert_eq!(
+        commit.outcome.result["agent_session"]["runtime_status"],
+        "stopped"
+    );
+    assert_eq!(commit.outcome.result["participant"]["status"], "detached");
+    assert_eq!(
+        commit.outcome.result["start"]["agent_session"]["runtime_status"],
+        "idle"
+    );
+    assert_eq!(
+        commit.committed_events[0].event_type,
+        "agent_session_created"
+    );
+    assert_eq!(commit.outcome.events, commit.committed_events);
+    assert_eq!(commit.newly_committed_events, commit.committed_events[1..]);
+    assert!(
+        commit
+            .newly_committed_events
+            .iter()
+            .all(|event| event.event_type != "agent_session_created")
+    );
+}
+
 #[tokio::test]
 async fn create_start_first_commit_replays_one_intent_and_preserves_result_shape() {
     let (store, principal, directory) = fixture().await;
@@ -161,38 +208,29 @@ async fn create_start_first_commit_replays_one_intent_and_preserves_result_shape
     assert!(replay.newly_committed_events.is_empty());
     assert_starting_creation_projection(&first.committed_events[0], &first.session.public);
 
+    let started = started();
+    authorize_create_start(
+        &store,
+        &principal,
+        "create-start-1",
+        &payload,
+        &first,
+        &started.runtime_handle_id,
+        &started.runtime_owner_id,
+    )
+    .await;
+
     let commit = store
         .complete_agent_create_start(
             &principal,
             "create-start-1",
             &payload,
             &first.operation_id,
-            &started(),
+            &started,
         )
         .await
         .unwrap_or_else(|error| panic!("complete create/start: {error}"));
-    assert_eq!(commit.outcome.result["status"], "created");
-    assert_eq!(
-        commit.outcome.result["agent_session"]["runtime_status"],
-        "stopped"
-    );
-    assert_eq!(commit.outcome.result["participant"]["status"], "detached");
-    assert_eq!(
-        commit.outcome.result["start"]["agent_session"]["runtime_status"],
-        "idle"
-    );
-    assert_eq!(
-        commit.committed_events[0].event_type,
-        "agent_session_created"
-    );
-    assert_eq!(commit.outcome.events, commit.committed_events);
-    assert_eq!(commit.newly_committed_events, commit.committed_events[1..]);
-    assert!(
-        commit
-            .newly_committed_events
-            .iter()
-            .all(|event| event.event_type != "agent_session_created")
-    );
+    assert_completed_create_start(&commit);
 
     let replay = store
         .inspect_agent_create_start(&principal, "create-start-1", &payload)
@@ -232,6 +270,17 @@ async fn safe_start_failure_replays_the_same_terminal_rejection() {
     let AgentCreateStartPlan::Start(effect) = plan else {
         panic!("new create/start must own a start effect");
     };
+    store
+        .authorize_agent_create_start_effect(
+            &principal,
+            "create-start-safe-failure",
+            &payload,
+            &effect.operation_id,
+            "runtime-1",
+            "supervisor-1",
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize create/start: {error}"));
     let failure = store
         .fail_agent_create_start(
             &principal,
@@ -311,6 +360,17 @@ async fn restart_uncertain_create_start_keeps_one_unresolved_request() {
         panic!("new create/start must own a start effect");
     };
     store
+        .authorize_agent_create_start_effect(
+            &principal,
+            "create-start-uncertain",
+            &payload,
+            &effect.operation_id,
+            "uncertain-runtime",
+            "supervisor-instance-1",
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize create/start: {error}"));
+    store
         .mark_agent_start_unconfirmed(
             &principal,
             &effect.session.public.session_id,
@@ -386,6 +446,17 @@ async fn startup_gone_keeps_created_identity_and_terminalizes_its_old_start() {
     else {
         panic!("new create/start must own a start effect");
     };
+    store
+        .authorize_agent_create_start_effect(
+            &principal,
+            "create-start-abandoned",
+            &payload,
+            &effect.operation_id,
+            "create-runtime-abandoned",
+            "supervisor-dead",
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize create/start: {error}"));
     store
         .mark_agent_start_unconfirmed(
             &principal,

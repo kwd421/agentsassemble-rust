@@ -234,6 +234,12 @@ pub struct ProviderRuntimeStarted {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProviderStartReservation {
+    pub runtime_handle_id: String,
+    pub runtime_owner_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProviderRuntimeGone {
     pub room_id: String,
     pub session_id: String,
@@ -344,6 +350,8 @@ enum RuntimeState {
 struct LaunchingRuntime {
     handle_id: String,
     owner_id: String,
+    profile_key: String,
+    effect_started: bool,
     runtime_lease: HeldRuntimeLease,
 }
 
@@ -381,115 +389,6 @@ impl ProviderAdapter {
                 runtimes: Mutex::new(HashMap::new()),
                 factory,
             }),
-        }
-    }
-
-    /// Starts or proves one exact session runtime through its transport driver.
-    ///
-    /// # Errors
-    ///
-    /// Returns a redacted fail-closed runtime error.
-    pub async fn start(
-        &self,
-        session: &DurableAgentSession,
-    ) -> Result<ProviderRuntimeStarted, ProviderAdapterError> {
-        let slot = self.slot(session).await;
-        let mut slot = slot.lock().await;
-        match &mut slot.state {
-            RuntimeState::Launching(runtime) => Err(ProviderAdapterError::uncertain(
-                DriverError::new(
-                    "provider_launch_unconfirmed",
-                    "A provider launch is still awaiting a confirmed cleanup.",
-                ),
-                &runtime.handle_id,
-                &runtime.owner_id,
-            )),
-            RuntimeState::Running(runtime) => reuse_owned_runtime(session, runtime).await,
-            RuntimeState::StopConfirmed { .. } => {
-                Err(ProviderAdapterError::safe(DriverError::new(
-                    "operation_in_progress",
-                    "A confirmed provider stop is awaiting its durable checkpoint.",
-                )))
-            }
-            RuntimeState::Vacant => {
-                if !session.runtime_handle_id.is_empty() || !session.runtime_owner_id.is_empty() {
-                    return Err(ProviderAdapterError {
-                        code: "runtime_owner_mismatch",
-                        message: "The durable provider handle is not owned by this supervisor.",
-                        effect_uncertain: true,
-                        runtime_handle_id: session.runtime_handle_id.clone(),
-                        runtime_owner_id: session.runtime_owner_id.clone(),
-                        runtime_stopped: false,
-                    });
-                }
-                revalidate_runtime_authority(session)
-                    .await
-                    .map_err(ProviderAdapterError::safe)?;
-                let runtime_lease =
-                    HeldRuntimeLease::prepare(&session.public.room_id, &session.public.session_id)
-                        .map_err(|_| {
-                            ProviderAdapterError::safe(DriverError::new(
-                                "provider_custody_unavailable",
-                                "The provider runtime lease could not be established.",
-                            ))
-                        })?;
-                let handle_id = format!("runtime-v3-{}", Uuid::new_v4());
-                let owner_id = self.owner.supervisor_id.clone();
-                slot.state = RuntimeState::Launching(LaunchingRuntime {
-                    handle_id,
-                    owner_id,
-                    runtime_lease,
-                });
-                launch_state::begin_launch_effect(&mut slot)?;
-                let launch = {
-                    let RuntimeState::Launching(runtime) = &slot.state else {
-                        unreachable!("new provider runtime slot must be launching");
-                    };
-                    self.owner
-                        .factory
-                        .launch(session, &runtime.runtime_lease)
-                        .await
-                };
-                let driver = match launch {
-                    Ok(driver) => driver,
-                    Err(failure) if failure.effect_uncertain => {
-                        let RuntimeState::Launching(runtime) = &slot.state else {
-                            unreachable!("uncertain provider launch must remain owned");
-                        };
-                        return Err(ProviderAdapterError::uncertain(
-                            failure.error,
-                            &runtime.handle_id,
-                            &runtime.owner_id,
-                        ));
-                    }
-                    Err(failure) => {
-                        let RuntimeState::Launching(runtime) =
-                            std::mem::replace(&mut slot.state, RuntimeState::Vacant)
-                        else {
-                            unreachable!("safe provider launch failure must remain owned");
-                        };
-                        runtime.runtime_lease.cleanup_pre_effect();
-                        return Err(ProviderAdapterError::safe(failure.error));
-                    }
-                };
-                let RuntimeState::Launching(runtime) =
-                    std::mem::replace(&mut slot.state, RuntimeState::Vacant)
-                else {
-                    unreachable!("completed provider launch must remain owned");
-                };
-                slot.state = RuntimeState::Running(OwnedRuntime {
-                    handle_id: runtime.handle_id,
-                    owner_id: runtime.owner_id,
-                    profile_key: session.runtime_profile_key.clone(),
-                    driver: Arc::new(Mutex::new(driver)),
-                    turn_cancellation: CancellationToken::new(),
-                    runtime_lease: Some(runtime.runtime_lease),
-                });
-                let RuntimeState::Running(runtime) = &mut slot.state else {
-                    unreachable!("new provider runtime slot must be running");
-                };
-                initialize_owned_runtime(session, runtime).await
-            }
         }
     }
 
@@ -790,6 +689,8 @@ mod tests;
 mod launch_state;
 #[path = "runtime_start.rs"]
 mod start;
+#[path = "runtime_start_authority.rs"]
+mod start_authority;
 use start::validate_owned_runtime;
 use start::{initialize_owned_runtime, reuse_owned_runtime};
 

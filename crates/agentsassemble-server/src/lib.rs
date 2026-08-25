@@ -46,6 +46,7 @@ mod host_ticket;
 mod http_api;
 mod http_transport;
 mod ingress_budget;
+mod lifecycle_command_tracker;
 mod principal_write_budget;
 mod product_surface;
 mod profile_web;
@@ -58,6 +59,7 @@ mod room_runtime;
 mod room_shutdown;
 mod room_socket;
 mod runtime_reconciliation;
+mod runtime_reconciliation_cleanup;
 mod security_headers;
 mod server_proof;
 mod ticket;
@@ -66,7 +68,8 @@ mod web;
 
 pub use app_state::AppState;
 pub use host_ticket::{HostSecret, InvalidHostSecret};
-pub use room_runtime::{RoomRuntime, RoomShutdownError};
+pub use room_runtime::RoomRuntime;
+pub use room_shutdown::RoomShutdownError;
 pub use runtime_reconciliation::reconcile_runtime_ownership;
 pub use ticket::{
     ConsumedProfileTicket, ConsumedServerOperatorTicket, ConsumedTicket, IssuedTicket, TicketError,

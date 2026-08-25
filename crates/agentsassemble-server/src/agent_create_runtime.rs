@@ -75,6 +75,89 @@ async fn execute_agent_create_start(
     request_id: &str,
     payload: &Value,
 ) -> Result<AgentCreateExecution, CommandFailure> {
+    let plan = resolve_create_start_plan(
+        store,
+        provider_catalog,
+        provider_adapter,
+        principal,
+        request_id,
+        payload,
+    )
+    .await?;
+    let effect = match plan {
+        AgentCreateStartPlan::Outcome(outcome) => return Ok(success(*outcome, false)),
+        AgentCreateStartPlan::Start(effect) => effect,
+        AgentCreateStartPlan::Select => {
+            return Err(CommandFailure::unresolved(rejected(
+                "invalid_state",
+                "Create/start selection did not produce a durable intent.",
+            )));
+        }
+    };
+    if !effect.newly_committed_events.is_empty() {
+        crate::event_publication::drain_room_publications(store, event_tx, &principal.room_id)
+            .await
+            .map_err(CommandFailure::unresolved)?;
+    }
+    let reservation = match provider_adapter.reserve_start(&effect.session).await {
+        Ok(reservation) => reservation,
+        Err(error) => {
+            return fail_created_agent_start_before_effect(
+                store, principal, request_id, payload, &effect, error,
+            )
+            .await;
+        }
+    };
+    let authorized = store
+        .authorize_agent_create_start_effect(
+            principal,
+            request_id,
+            payload,
+            &effect.operation_id,
+            &reservation.runtime_handle_id,
+            &reservation.runtime_owner_id,
+        )
+        .await;
+    let authorized = match authorized {
+        Ok(effect) => effect,
+        Err(error) => {
+            provider_adapter
+                .cancel_start_reservation(
+                    &effect.session.public.room_id,
+                    &effect.session.public.session_id,
+                    &reservation,
+                )
+                .await;
+            return Err(CommandFailure::unresolved(error));
+        }
+    };
+    match provider_adapter.start_reserved(&authorized.session).await {
+        Ok(started) => {
+            complete_created_agent_start(
+                store,
+                principal,
+                request_id,
+                payload,
+                &authorized,
+                started,
+            )
+            .await
+        }
+        Err(error) => {
+            fail_created_agent_start(store, principal, request_id, payload, &authorized, error)
+                .await
+        }
+    }
+}
+
+async fn resolve_create_start_plan(
+    store: &SqliteStore,
+    provider_catalog: &ProviderCatalogService,
+    provider_adapter: &ProviderAdapter,
+    principal: &AuthenticatedPrincipal,
+    request_id: &str,
+    payload: &Value,
+) -> Result<AgentCreateStartPlan, CommandFailure> {
     let mut inspected = store
         .inspect_agent_create_start(principal, request_id, payload)
         .await;
@@ -106,7 +189,7 @@ async fn execute_agent_create_start(
             Err(error) => Err(error),
         };
     }
-    let plan = match inspected.map_err(CommandFailure::transactional)? {
+    Ok(match inspected.map_err(CommandFailure::transactional)? {
         AgentCreateStartPlan::Select => {
             let selection = provider_catalog
                 .validate_creation(
@@ -129,31 +212,38 @@ async fn execute_agent_create_start(
                 .map_err(CommandFailure::transactional)?
         }
         plan => plan,
-    };
-    let effect = match plan {
-        AgentCreateStartPlan::Outcome(outcome) => return Ok(success(*outcome, false)),
-        AgentCreateStartPlan::Start(effect) => effect,
-        AgentCreateStartPlan::Select => {
-            return Err(CommandFailure::unresolved(rejected(
-                "invalid_state",
-                "Create/start selection did not produce a durable intent.",
-            )));
-        }
-    };
-    if !effect.newly_committed_events.is_empty() {
-        crate::event_publication::drain_room_publications(store, event_tx, &principal.room_id)
-            .await
-            .map_err(CommandFailure::unresolved)?;
-    }
-    match provider_adapter.start(&effect.session).await {
-        Ok(started) => {
-            complete_created_agent_start(store, principal, request_id, payload, &effect, started)
-                .await
-        }
-        Err(error) => {
-            fail_created_agent_start(store, principal, request_id, payload, &effect, error).await
-        }
-    }
+    })
+}
+
+async fn fail_created_agent_start_before_effect(
+    store: &SqliteStore,
+    principal: &AuthenticatedPrincipal,
+    request_id: &str,
+    payload: &Value,
+    effect: &AgentCreateStartEffect,
+    error: ProviderAdapterError,
+) -> Result<AgentCreateExecution, CommandFailure> {
+    let commit = store
+        .fail_agent_create_start_before_effect(
+            principal,
+            request_id,
+            payload,
+            effect,
+            error.code,
+            error.message,
+        )
+        .await
+        .map_err(CommandFailure::unresolved)?;
+    Ok(AgentCreateExecution {
+        reply: Err(CommandFailure::rejected(
+            PersistenceError::StoredCommandRejected {
+                code: commit.code,
+                message: commit.message,
+            },
+        )),
+        committed_events: commit.events,
+        advance_ordered_floor: false,
+    })
 }
 
 async fn complete_created_agent_start(

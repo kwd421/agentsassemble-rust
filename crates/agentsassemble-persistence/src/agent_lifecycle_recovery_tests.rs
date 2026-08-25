@@ -1,7 +1,7 @@
 use agentsassemble_domain::{
     DurableAgentSession, Participant, QueuedRoomInput, RoomInputDeliveryKind,
 };
-use serde_json::json;
+use serde_json::{Value, json};
 
 use super::{AgentRuntimeStarted, AgentStartPlan, AgentStopPlan};
 use crate::{
@@ -88,6 +88,15 @@ async fn live_looking_start_requires_supervisor_confirmation_before_success() {
     else {
         panic!("stopped session must require an effect");
     };
+    authorize_start(
+        &store,
+        &principal,
+        "first-observed-start",
+        &payload,
+        &first,
+        "owned-runtime",
+    )
+    .await;
     store
         .complete_agent_start(
             &principal,
@@ -121,6 +130,15 @@ async fn ambiguous_start_retains_its_exact_runtime_lease_and_blocks_replacement(
     else {
         panic!("stopped session must require an effect");
     };
+    authorize_start(
+        &store,
+        &principal,
+        "ambiguous-start",
+        &payload,
+        &start,
+        "uncertain-runtime",
+    )
+    .await;
     store
         .mark_agent_start_unconfirmed(
             &principal,
@@ -191,44 +209,6 @@ async fn ambiguous_start_retains_its_exact_runtime_lease_and_blocks_replacement(
 }
 
 #[tokio::test]
-async fn ambiguous_pre_effect_start_cannot_spawn_again_without_a_gone_observation() {
-    let (store, principal, _directory) = fixture().await;
-    let payload = json!({"agent_id": AGENT_ID});
-    let AgentStartPlan::Start(_) = store
-        .prepare_agent_start(&principal, "unobserved-start", &payload)
-        .await
-        .unwrap_or_else(|error| panic!("prepare unobserved start: {error}"))
-    else {
-        panic!("stopped session must require an effect");
-    };
-    assert_eq!(
-        store
-            .reconcile_agent_sessions_after_restart()
-            .await
-            .unwrap_or_else(|error| panic!("reconcile unobserved start: {error}")),
-        1
-    );
-    assert!(matches!(
-        store
-            .prepare_agent_start(&principal, "unobserved-start", &payload)
-            .await,
-        Err(PersistenceError::CommandUnresolved {
-            code: "runtime_effect_unconfirmed",
-            ..
-        })
-    ));
-    assert!(matches!(
-        store
-            .prepare_agent_start(&principal, "replacement-after-unobserved", &payload)
-            .await,
-        Err(PersistenceError::CommandRejected {
-            code: "operation_in_progress",
-            ..
-        })
-    ));
-}
-
-#[tokio::test]
 async fn reconciliation_rejects_competing_pending_lifecycle_authority() {
     let (store, principal, _directory) = fixture().await;
     let payload = json!({"agent_id": AGENT_ID});
@@ -269,6 +249,15 @@ async fn runtime_reconciliation_uses_exact_cas_and_gone_stop_finalizes_without_r
     else {
         panic!("stopped session must require an effect");
     };
+    authorize_start(
+        &store,
+        &principal,
+        "start-before-observation",
+        &payload,
+        &start,
+        "runtime-before-observation",
+    )
+    .await;
     store
         .complete_agent_start(
             &principal,
@@ -292,6 +281,15 @@ async fn runtime_reconciliation_uses_exact_cas_and_gone_stop_finalizes_without_r
     else {
         panic!("running session must require a stop effect");
     };
+    store
+        .authorize_agent_stop_effect(
+            &principal,
+            "stop-after-observation",
+            &payload,
+            &stop.operation_id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize observed stop: {error}"));
     assert!(matches!(
         store
             .apply_runtime_reconciliation(
@@ -483,6 +481,15 @@ async fn start_completion_derives_its_request_operation_binding() {
             ..
         })
     ));
+    authorize_start(
+        &store,
+        &principal,
+        "owned-request",
+        &payload,
+        &start,
+        "owned-runtime",
+    )
+    .await;
     store
         .complete_agent_start(
             &principal,
@@ -524,6 +531,15 @@ async fn only_the_originating_operation_can_resume_or_replace_an_intent() {
             })
         ));
     }
+    authorize_start(
+        &store,
+        &principal,
+        "owned-start",
+        &payload,
+        &start,
+        "owned-runtime",
+    )
+    .await;
     store
         .complete_agent_start(
             &principal,
@@ -561,6 +577,10 @@ async fn only_the_originating_operation_can_resume_or_replace_an_intent() {
         ));
     }
     store
+        .authorize_agent_stop_effect(&principal, "owned-stop", &payload, &stop.operation_id)
+        .await
+        .unwrap_or_else(|error| panic!("authorize owned stop: {error}"));
+    store
         .record_agent_stop_effect("general", AGENT_ID, &stop.operation_id)
         .await
         .unwrap_or_else(|error| panic!("record owned stop: {error}"));
@@ -593,6 +613,15 @@ async fn confirmed_stop_checkpoint_survives_restart_and_finalizes_without_an_eff
     else {
         panic!("stopped session must require start");
     };
+    authorize_start(
+        &store,
+        &principal,
+        "start-before-stop",
+        &payload,
+        &start,
+        "runtime-before-restart",
+    )
+    .await;
     store
         .complete_agent_start(
             &principal,
@@ -610,6 +639,10 @@ async fn confirmed_stop_checkpoint_survives_restart_and_finalizes_without_an_eff
     else {
         panic!("running session must require stop");
     };
+    store
+        .authorize_agent_stop_effect(&principal, "confirmed-stop", &payload, &stop.operation_id)
+        .await
+        .unwrap_or_else(|error| panic!("authorize confirmed stop: {error}"));
     store
         .record_agent_stop_effect("general", AGENT_ID, &stop.operation_id)
         .await
@@ -653,141 +686,24 @@ async fn confirmed_stop_checkpoint_survives_restart_and_finalizes_without_an_eff
     assert_eq!(outcome.result["agent_session"]["runtime_status"], "stopped");
 }
 
-#[tokio::test]
-async fn restart_terminalizes_a_prepared_stop_before_releasing_its_session() {
-    let (store, principal, _directory) = fixture().await;
-    let payload = json!({"agent_id": AGENT_ID});
-    let AgentStartPlan::Start(start) = store
-        .prepare_agent_start(&principal, "start-before-prepared-stop", &payload)
-        .await
-        .unwrap_or_else(|error| panic!("prepare start: {error}"))
-    else {
-        panic!("stopped session must require start");
-    };
+async fn authorize_start(
+    store: &SqliteStore,
+    principal: &agentsassemble_domain::AuthenticatedPrincipal,
+    request_id: &str,
+    payload: &Value,
+    effect: &super::AgentStartEffect,
+    runtime_handle_id: &str,
+) {
     store
-        .complete_agent_start(
-            &principal,
-            "start-before-prepared-stop",
-            &payload,
-            &start.operation_id,
-            &started("runtime-before-prepared-stop", "provider-thread"),
+        .authorize_agent_start_effect(
+            principal,
+            request_id,
+            payload,
+            &effect.operation_id,
+            "agent.start",
+            runtime_handle_id,
+            "supervisor-instance-1",
         )
         .await
-        .unwrap_or_else(|error| panic!("complete start: {error}"));
-    let AgentStopPlan::Stop(_) = store
-        .prepare_agent_stop(&principal, "prepared-stop-owner-lost", &payload)
-        .await
-        .unwrap_or_else(|error| panic!("prepare stop: {error}"))
-    else {
-        panic!("running session must require stop");
-    };
-
-    assert_eq!(
-        store
-            .reconcile_agent_sessions_after_restart()
-            .await
-            .unwrap_or_else(|error| panic!("reconcile prepared stop: {error}")),
-        1
-    );
-    assert!(matches!(
-        store
-            .prepare_agent_stop(&principal, "prepared-stop-owner-lost", &payload)
-            .await,
-        Err(PersistenceError::CommandRejected {
-            code: "runtime_owner_lost",
-            ..
-        })
-    ));
-    assert!(matches!(
-        store
-            .prepare_agent_start(&principal, "new-start-after-owner-loss", &payload)
-            .await
-            .unwrap_or_else(|error| panic!("prepare new start: {error}")),
-        AgentStartPlan::Start(_)
-    ));
-}
-
-#[tokio::test]
-async fn provider_session_reuse_requires_exact_durable_identity() {
-    let (store, principal, _directory) = fixture().await;
-    let payload = json!({"agent_id": AGENT_ID});
-    let AgentStartPlan::Start(first_start) = store
-        .prepare_agent_start(&principal, "first-start", &payload)
-        .await
-        .unwrap_or_else(|error| panic!("prepare first start: {error}"))
-    else {
-        panic!("stopped session must require start");
-    };
-    store
-        .complete_agent_start(
-            &principal,
-            "first-start",
-            &payload,
-            &first_start.operation_id,
-            &started("first-runtime", "durable-thread"),
-        )
-        .await
-        .unwrap_or_else(|error| panic!("complete first start: {error}"));
-    let AgentStopPlan::Stop(stop) = store
-        .prepare_agent_stop(&principal, "stop-between-starts", &payload)
-        .await
-        .unwrap_or_else(|error| panic!("prepare stop: {error}"))
-    else {
-        panic!("running session must require stop");
-    };
-    store
-        .record_agent_stop_effect("general", AGENT_ID, &stop.operation_id)
-        .await
-        .unwrap_or_else(|error| panic!("record stop: {error}"));
-    store
-        .finalize_agent_stop(&principal, "stop-between-starts", &payload)
-        .await
-        .unwrap_or_else(|error| panic!("finalize stop: {error}"));
-    let AgentStartPlan::Start(restart) = store
-        .prepare_agent_start(&principal, "restart", &payload)
-        .await
-        .unwrap_or_else(|error| panic!("prepare restart: {error}"))
-    else {
-        panic!("stopped session must require restart");
-    };
-    let mismatch = store
-        .complete_agent_start(
-            &principal,
-            "restart",
-            &payload,
-            &restart.operation_id,
-            &AgentRuntimeStarted {
-                runtime_handle_id: "second-runtime".to_owned(),
-                runtime_owner_id: "supervisor-instance-1".to_owned(),
-                provider_session_id: "substituted-thread".to_owned(),
-                runtime_reused: false,
-                provider_session_reused: true,
-                provider_session_active: true,
-            },
-        )
-        .await;
-    assert!(matches!(
-        mismatch,
-        Err(PersistenceError::CommandRejected {
-            code: "provider_session_mismatch",
-            ..
-        })
-    ));
-    store
-        .complete_agent_start(
-            &principal,
-            "restart",
-            &payload,
-            &restart.operation_id,
-            &AgentRuntimeStarted {
-                runtime_handle_id: "second-runtime".to_owned(),
-                runtime_owner_id: "supervisor-instance-1".to_owned(),
-                provider_session_id: "durable-thread".to_owned(),
-                runtime_reused: false,
-                provider_session_reused: true,
-                provider_session_active: true,
-            },
-        )
-        .await
-        .unwrap_or_else(|error| panic!("complete exact reuse: {error}"));
+        .unwrap_or_else(|error| panic!("authorize start effect: {error}"));
 }

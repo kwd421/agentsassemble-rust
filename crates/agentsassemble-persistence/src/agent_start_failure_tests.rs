@@ -41,6 +41,18 @@ async fn stale_completion_fails_closed_and_safe_failure_replays() {
             ..
         })
     ));
+    store
+        .authorize_agent_start_effect(
+            &principal,
+            "start-failed",
+            &payload,
+            &effect.operation_id,
+            "agent.start",
+            "owned-runtime",
+            "supervisor-instance-1",
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize failed start effect: {error}"));
     let failure = store
         .fail_agent_start(
             &principal,

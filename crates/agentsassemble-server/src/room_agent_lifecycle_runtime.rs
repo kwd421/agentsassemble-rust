@@ -67,10 +67,75 @@ pub(crate) async fn execute_agent_start(
         }
         AgentStartPlan::Start(effect) => effect,
     };
-    match provider_adapter.start(&effect.session).await {
-        Ok(started) => complete_agent_start(store, command, &effect, started).await,
-        Err(error) => record_agent_start_failure(store, command, &effect, error).await,
+    let reservation = match provider_adapter.reserve_start(&effect.session).await {
+        Ok(reservation) => reservation,
+        Err(error) => {
+            return record_agent_start_pre_effect_failure(store, command, &effect, error).await;
+        }
+    };
+    let authorized = store
+        .authorize_agent_start_effect(
+            &command.principal,
+            &command.request_id,
+            &command.payload,
+            &effect.operation_id,
+            &command.action,
+            &reservation.runtime_handle_id,
+            &reservation.runtime_owner_id,
+        )
+        .await;
+    let authorized = match authorized {
+        Ok(effect) => effect,
+        Err(error) => {
+            provider_adapter
+                .cancel_start_reservation(
+                    &effect.session.public.room_id,
+                    &effect.session.public.session_id,
+                    &reservation,
+                )
+                .await;
+            return CommandExecution::unresolved_failure(error);
+        }
+    };
+    match provider_adapter.start_reserved(&authorized.session).await {
+        Ok(started) => complete_agent_start(store, command, &authorized, started).await,
+        Err(error) => record_agent_start_failure(store, command, &authorized, error).await,
     }
+}
+
+async fn record_agent_start_pre_effect_failure(
+    store: &SqliteStore,
+    command: &RoomCommand,
+    effect: &AgentStartEffect,
+    error: ProviderAdapterError,
+) -> CommandExecution {
+    let command_action = if command.action == "agent.resume" {
+        "agent.resume"
+    } else {
+        "agent.start"
+    };
+    let commit = store
+        .fail_agent_start_before_effect(
+            &command.principal,
+            &command.request_id,
+            &command.payload,
+            &effect.operation_id,
+            error.code,
+            error.message,
+            command_action,
+        )
+        .await;
+    let commit = match commit {
+        Ok(commit) => commit,
+        Err(recording_error) => return CommandExecution::unresolved_failure(recording_error),
+    };
+    CommandExecution::committed_failure(
+        PersistenceError::StoredCommandRejected {
+            code: commit.code,
+            message: commit.message,
+        },
+        commit.events,
+    )
 }
 
 async fn complete_agent_start(
@@ -197,6 +262,18 @@ pub(crate) async fn execute_agent_stop(
             }
         }
         AgentStopPlan::Stop(effect) => {
+            let effect = match store
+                .authorize_agent_stop_effect(
+                    &command.principal,
+                    &command.request_id,
+                    &command.payload,
+                    &effect.operation_id,
+                )
+                .await
+            {
+                Ok(effect) => effect,
+                Err(error) => return CommandExecution::unresolved_failure(error),
+            };
             let stop = provider_adapter
                 .stop(
                     &command.principal.room_id,

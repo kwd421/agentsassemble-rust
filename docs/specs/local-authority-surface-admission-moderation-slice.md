@@ -279,13 +279,30 @@ observation ID.
 
 Lifecycle reservations retain the exact private principal, payload, and creating
 server-runtime generation required to finish an already-authorized recovery transition.
-They are candidate-CAS input, never public snapshot data. One cancellation-owned
-reconciler scans the durable Agent Session keyspace in fixed-size cursor pages throughout
-the server lifetime, observes at most a fixed number of exact `unconfirmed` candidates in
-parallel, and applies only the candidate/CAS it actually captured. It may commit a later
-exact `Gone` terminal result and wake durable room publication, but it never reloads and
-adopts a changed candidate, spawns, stops, or otherwise substitutes a provider effect.
-Ambiguous or timed-out observation remains fail-closed.
+They are candidate-CAS input, never public snapshot data. Lifecycle phases distinguish
+`prepared`, where no provider effect is authorized, from `effect_inflight`, where an exact
+handle/owner and custody lease have been durably authorized before provider I/O;
+`unconfirmed` records an uncertain return, and `effect_applied` records a confirmed stop
+awaiting its durable result. A provider start API that bypasses this authorization boundary
+does not exist in production.
+
+One cancellation-owned reconciler scans the durable Agent Session keyspace in fixed-size
+cursor pages throughout the server lifetime, covers every nonterminal lifecycle phase,
+and observes at most a fixed number of captured candidates in parallel. The browser command
+owner and reconciler must first acquire the same exact in-memory request claim. The winner
+retains that claim across observation, candidate CAS, exact cleanup, and terminal commit;
+the loser returns unresolved, so a check-then-act race cannot run browser reentry beside
+server recovery. A changed CAS is discarded rather than reloaded as authority.
+
+An abandoned `prepared` command is terminally rejected without provider I/O, and an
+`effect_applied` stop is finalized without issuing stop again. `Gone` terminalizes the
+captured request. For an exact same-sidecar `Adopted` or `LeaseUncertain` runtime whose
+effect cannot safely be replayed, recovery first commits the observation under candidate
+CAS, reloads only that newly owned candidate, stops its exact handle/owner, commits `Gone`,
+then releases the confirmed-stop tombstone. If stop or proof fails, authority remains
+fail-closed. `Ambiguous` and timed-out observations never authorize cleanup. Cancellation
+may stop before observation or application, but it cannot interrupt an exact stop after
+that external effect begins and leave its checkpoint owner unjoined.
 
 Exact runtime-gone observation finalizes runtime checkpoint, interrupted turn,
 session state, pending progression, execution, and effect in one UOW. Confirmed
@@ -318,6 +335,12 @@ mute-before-authorize, authorize-before-mute, Preparing-slot mute, duplicate mut
 pre-registration, every execution crash phase, claim expiry, owner-adoption ABA,
 runtime nonce mismatch, typed quiescence, terminal suppression, runtime reuse, and
 unmute progression.
+
+Each completed owner is also inspected for avoidable CPU, memory, latency,
+task/process, serialization, and disk-write cost. Optimizations remain bounded and
+evidence-driven: startup reconciliation runs once before admission, live scans and
+observations have fixed page/concurrency/timeout limits, and no speculative cache or
+duplicate authority is introduced merely to improve a synthetic metric.
 
 `make verify` and packaged Computer Use are required. Computer Use verifies
 identity/bootstrap, zero-room directory/create/join, chat/roster/panels/profile and

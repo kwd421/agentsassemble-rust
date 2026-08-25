@@ -18,6 +18,70 @@ const RESUME: &str = "agent.resume";
 const PUBLIC_LIFECYCLE_ERROR_LIMIT: usize = 512;
 
 impl SqliteStore {
+    /// Commits a provider start rejection when no external effect was authorized.
+    ///
+    /// # Errors
+    ///
+    /// Returns a stale-intent, authority, or persistence failure.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn fail_agent_start_before_effect(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request_id: &str,
+        payload: &Value,
+        operation_id: &str,
+        error_code: &'static str,
+        message: &str,
+        command_action: &'static str,
+    ) -> Result<AgentLaunchFailureCommit, PersistenceError> {
+        let agent_id = payload_agent_id(payload)?;
+        let payload_hash = canonical_payload_hash(payload);
+        self.fail_agent_launch_before_effect_command(
+            principal,
+            request_id,
+            &payload_hash,
+            &agent_id,
+            operation_id,
+            error_code,
+            message,
+            command_action,
+            "lifecycle_prepared",
+            "{}",
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn fail_agent_launch_before_effect_command(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request_id: &str,
+        payload_hash: &str,
+        agent_id: &str,
+        operation_id: &str,
+        error_code: &'static str,
+        message: &str,
+        command_action: &'static str,
+        reservation_phase: &str,
+        prepared_result_json: &str,
+    ) -> Result<AgentLaunchFailureCommit, PersistenceError> {
+        self.commit_agent_launch_failure(
+            principal,
+            request_id,
+            payload_hash,
+            agent_id,
+            operation_id,
+            error_code,
+            message,
+            command_action,
+            reservation_phase,
+            prepared_result_json,
+            "prepared",
+            false,
+        )
+        .await
+    }
+
     /// Moves a failed start out of its prepared intent without hiding the error.
     ///
     /// # Errors
@@ -113,6 +177,39 @@ impl SqliteStore {
         reservation_phase: &str,
         prepared_result_json: &str,
     ) -> Result<AgentLaunchFailureCommit, PersistenceError> {
+        self.commit_agent_launch_failure(
+            principal,
+            request_id,
+            payload_hash,
+            agent_id,
+            operation_id,
+            error_code,
+            message,
+            command_action,
+            reservation_phase,
+            prepared_result_json,
+            "effect_inflight",
+            true,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn commit_agent_launch_failure(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request_id: &str,
+        payload_hash: &str,
+        agent_id: &str,
+        operation_id: &str,
+        error_code: &'static str,
+        message: &str,
+        command_action: &'static str,
+        reservation_phase: &str,
+        prepared_result_json: &str,
+        expected_status: &str,
+        clear_runtime_identity: bool,
+    ) -> Result<AgentLaunchFailureCommit, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
         active_room_for_principal(&mut transaction, principal).await?;
         let mut session = load_session(&mut transaction, &principal.room_id, agent_id).await?;
@@ -120,7 +217,7 @@ impl SqliteStore {
             &session,
             START,
             operation_id,
-            "prepared",
+            expected_status,
             "stale_start_confirmation",
         )?;
         let reservation = LifecycleReservation {
@@ -133,10 +230,14 @@ impl SqliteStore {
             phase: reservation_phase,
             prepared_result_json,
         };
-        "unavailable".clone_into(&mut session.public.status);
-        session.public.enabled = false;
-        "error".clone_into(&mut session.public.runtime_status);
-        session.public.provider_session_active = false;
+        if clear_runtime_identity
+            || (session.runtime_handle_id.is_empty() && session.runtime_owner_id.is_empty())
+        {
+            "unavailable".clone_into(&mut session.public.status);
+            session.public.enabled = false;
+            "error".clone_into(&mut session.public.runtime_status);
+            session.public.provider_session_active = false;
+        }
         session.public.last_error =
             redact_persisted_diagnostic_text(message, PUBLIC_LIFECYCLE_ERROR_LIMIT);
         if session.public.last_error.is_empty() {
@@ -150,8 +251,10 @@ impl SqliteStore {
             &session.public.last_error,
         )
         .await?;
-        session.runtime_handle_id.clear();
-        session.runtime_owner_id.clear();
+        if clear_runtime_identity {
+            session.runtime_handle_id.clear();
+            session.runtime_owner_id.clear();
+        }
         clear_intent(&mut session);
         session.public.updated_at = Utc::now();
         save_session(&mut transaction, &session).await?;
@@ -196,9 +299,20 @@ impl SqliteStore {
             &session,
             START,
             operation_id,
-            "prepared",
+            "effect_inflight",
             "stale_start_confirmation",
         )?;
+        if runtime_handle_id.is_empty()
+            || runtime_owner_id.is_empty()
+            || runtime_handle_id != session.runtime_handle_id
+            || runtime_owner_id != session.runtime_owner_id
+        {
+            return Err(PersistenceError::CommandRejected {
+                code: "runtime_owner_mismatch",
+                message: "Unconfirmed provider start does not match its durable runtime authority."
+                    .to_owned(),
+            });
+        }
         "unavailable".clone_into(&mut session.public.status);
         session.public.enabled = false;
         "disconnected".clone_into(&mut session.public.runtime_status);
@@ -211,12 +325,6 @@ impl SqliteStore {
         }
         session.public.last_error_code = error_code.to_owned();
         session.public.recovery_required = true;
-        if !runtime_handle_id.is_empty() {
-            session.runtime_handle_id = runtime_handle_id.to_owned();
-        }
-        if !runtime_owner_id.is_empty() {
-            session.runtime_owner_id = runtime_owner_id.to_owned();
-        }
         "unconfirmed".clone_into(&mut session.lifecycle_intent_status);
         session.public.updated_at = Utc::now();
         save_session(&mut transaction, &session).await?;

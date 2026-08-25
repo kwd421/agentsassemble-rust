@@ -14,6 +14,7 @@ use crate::{
     agent_lifecycle_authority::{
         authorize_control, lifecycle_operation_id, require_intent, validate_runtime_started,
     },
+    agent_lifecycle_effect_authority::authorize_start_effect,
     agent_lifecycle_events::store_result,
     agent_lifecycle_reservations::{
         LifecycleReservation, StoredLifecycleReservation, finish_lifecycle_command,
@@ -78,8 +79,14 @@ impl SqliteStore {
             transaction.commit().await?;
             return Ok(AgentCreateStartPlan::Outcome(Box::new(outcome)));
         }
-        let effect =
-            resume_create_start(&mut transaction, principal, request_id, &payload_hash).await?;
+        let effect = resume_create_start(
+            &mut transaction,
+            principal,
+            request_id,
+            &payload_hash,
+            self.runtime_generation(),
+        )
+        .await?;
         transaction.commit().await?;
         Ok(effect.map_or(AgentCreateStartPlan::Select, |effect| {
             AgentCreateStartPlan::Start(Box::new(effect))
@@ -117,8 +124,14 @@ impl SqliteStore {
             transaction.commit().await?;
             return Ok(AgentCreateStartPlan::Outcome(Box::new(outcome)));
         }
-        if let Some(effect) =
-            resume_create_start(&mut transaction, principal, request_id, &payload_hash).await?
+        if let Some(effect) = resume_create_start(
+            &mut transaction,
+            principal,
+            request_id,
+            &payload_hash,
+            self.runtime_generation(),
+        )
+        .await?
         {
             transaction.commit().await?;
             return Ok(AgentCreateStartPlan::Start(Box::new(effect)));
@@ -156,6 +169,62 @@ impl SqliteStore {
         };
         transaction.commit().await?;
         Ok(AgentCreateStartPlan::Start(Box::new(effect)))
+    }
+
+    /// Persists a create/start runtime identity and effect-inflight phase before provider I/O.
+    ///
+    /// # Errors
+    ///
+    /// Returns an exact reservation, authority, state, or persistence failure.
+    pub async fn authorize_agent_create_start_effect(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request_id: &str,
+        payload: &Value,
+        operation_id: &str,
+        runtime_handle_id: &str,
+        runtime_owner_id: &str,
+    ) -> Result<AgentCreateStartEffect, PersistenceError> {
+        let payload_hash = canonical_payload_hash(payload);
+        let expected_operation_id = lifecycle_operation_id(principal, request_id, CREATE);
+        if operation_id != expected_operation_id {
+            return Err(rejected(
+                "stale_start_authorization",
+                "Provider start authorization does not match its create request.",
+            ));
+        }
+        let mut transaction = self.pool.begin().await?;
+        active_room_for_principal(&mut transaction, principal).await?;
+        let stored =
+            required_create_reservation(&mut transaction, principal, request_id, &payload_hash)
+                .await?;
+        if stored.operation_id != operation_id
+            || stored.supervisor_generation != self.runtime_generation()
+        {
+            return Err(rejected(
+                "stale_lifecycle_reservation",
+                "Create/start reservation is not owned by this runtime.",
+            ));
+        }
+        let prepared_result: Value = serde_json::from_str(&stored.prepared_result_json)?;
+        validate_prepared_result(&prepared_result, &stored.session_id)?;
+        let mut session =
+            load_session(&mut transaction, &principal.room_id, &stored.session_id).await?;
+        authorize_start_effect(
+            &mut session,
+            operation_id,
+            runtime_handle_id,
+            runtime_owner_id,
+        )?;
+        save_session(&mut transaction, &session).await?;
+        transaction.commit().await?;
+        Ok(AgentCreateStartEffect {
+            operation_id: operation_id.to_owned(),
+            session,
+            committed_events: prepared_events(&prepared_result)?,
+            newly_committed_events: Vec::new(),
+            prepared_result_json: stored.prepared_result_json,
+        })
     }
 
     /// Commits the provider launch and the original create result with its nested start result.
@@ -213,7 +282,7 @@ impl SqliteStore {
             &session,
             "start",
             &expected_operation_id,
-            "prepared",
+            "effect_inflight",
             "stale_start_confirmation",
         )?;
         finish_lifecycle_command(
@@ -294,6 +363,36 @@ impl SqliteStore {
         )
         .await
     }
+
+    /// Commits a create/start rejection before any provider effect was authorized.
+    ///
+    /// # Errors
+    ///
+    /// Returns stale-effect, authority, or persistence failures.
+    pub async fn fail_agent_create_start_before_effect(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request_id: &str,
+        payload: &Value,
+        effect: &AgentCreateStartEffect,
+        error_code: &'static str,
+        message: &str,
+    ) -> Result<AgentLaunchFailureCommit, PersistenceError> {
+        let payload_hash = canonical_payload_hash(payload);
+        self.fail_agent_launch_before_effect_command(
+            principal,
+            request_id,
+            &payload_hash,
+            &effect.session.public.session_id,
+            &effect.operation_id,
+            error_code,
+            message,
+            CREATE,
+            "creation_committed",
+            &effect.prepared_result_json,
+        )
+        .await
+    }
 }
 
 async fn resume_create_start(
@@ -301,6 +400,7 @@ async fn resume_create_start(
     principal: &AuthenticatedPrincipal,
     request_id: &str,
     payload_hash: &str,
+    runtime_generation: &str,
 ) -> Result<Option<AgentCreateStartEffect>, PersistenceError> {
     let Some(stored) = load_lifecycle_reservation(
         transaction,
@@ -313,6 +413,12 @@ async fn resume_create_start(
         return Ok(None);
     };
     validate_create_reservation(&stored, payload_hash)?;
+    if stored.status == "pending" && stored.supervisor_generation != runtime_generation {
+        return Err(PersistenceError::CommandUnresolved {
+            code: "runtime_effect_unconfirmed",
+            message: "The original provider effect belongs to a previous server runtime and awaits server-owned reconciliation.".to_owned(),
+        });
+    }
     let prepared_result: Value = serde_json::from_str(&stored.prepared_result_json)?;
     validate_prepared_result(&prepared_result, &stored.session_id)?;
     let session = load_session(transaction, &principal.room_id, &stored.session_id).await?;
@@ -326,7 +432,7 @@ async fn resume_create_start(
     }
     match session.lifecycle_intent_status.as_str() {
         "prepared" => {}
-        "unconfirmed" => {
+        "effect_inflight" | "unconfirmed" => {
             return Err(PersistenceError::CommandUnresolved {
                 code: "runtime_effect_unconfirmed",
                 message: "The original provider start effect remains unresolved. Wait for authoritative runtime observation before retrying it.".to_owned(),

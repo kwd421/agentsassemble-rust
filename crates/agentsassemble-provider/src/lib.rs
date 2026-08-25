@@ -57,6 +57,6 @@ pub use room_portal_terminal::run_room_helper_if_requested;
 pub use runtime::{
     ProviderAdapter, ProviderAdapterError, ProviderRoomObservation, ProviderRuntimeGone,
     ProviderRuntimeObservation, ProviderRuntimeStarted, ProviderShutdownOutcome,
-    ProviderTurnCompleted, ProviderTurnRequest,
+    ProviderStartReservation, ProviderTurnCompleted, ProviderTurnRequest,
 };
 pub use selection::{ProviderSelection, ProviderSelectionError, creation_start_requested};

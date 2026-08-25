@@ -15,7 +15,7 @@ use agentsassemble_protocol::{
 use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService};
 use agentsassemble_server::{
     AppState, HostSecret, TicketIssueError, TicketStore, issue_local_operator_http_ticket,
-    issue_local_ticket, reconcile_runtime_ownership, serve,
+    issue_local_ticket, serve,
 };
 use anyhow::Context;
 use clap::Parser;
@@ -71,13 +71,6 @@ async fn main() -> anyhow::Result<()> {
         .with_context(|| format!("resolve database path {}", args.database.display()))?;
     ensure_parent_alive(&cancellation)?;
     let provider_adapter = ProviderAdapter::new();
-    let reconciled_sessions = reconcile_runtime_ownership(&store, &provider_adapter).await?;
-    if reconciled_sessions > 0 {
-        tracing::warn!(
-            reconciled_sessions,
-            "disconnected stale provider sessions before network admission"
-        );
-    }
     ensure_parent_alive(&cancellation)?;
     let listener = TcpListener::bind(args.bind).await?;
     ensure_parent_alive(&cancellation)?;

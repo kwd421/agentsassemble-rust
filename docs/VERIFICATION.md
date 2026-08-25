@@ -1363,6 +1363,50 @@ for another 46.3 GiB. macOS retained only 36 protected empty WebKit container di
 applications, and unrelated processes were untouched. Commit/push and both exact-diff
 re-reviews remain required before this correction is complete.
 
+### Durable effect-authorization and exact-cleanup correction candidate: 2026-08-25
+
+Clean schema 20 makes the external-effect boundary explicit. A start is first `prepared`
+without provider authority, then the common adapter reserves the exact runtime
+handle/owner/custody identity and persistence atomically authorizes `effect_inflight`
+before provider I/O. An uncertain return becomes `unconfirmed`; a confirmed stop awaiting
+its result checkpoint becomes `effect_applied`. The production adapter has no start entry
+point that bypasses that durable authorization, and persistence rejects empty or
+substituted runtime identity. Schema 19 is rejected without migration, compatibility, or
+fallback behavior.
+
+The browser command owner and server-lifetime reconciler now acquire the same exact RAII
+request claim across observation, candidate CAS, cleanup, and terminal commit. Abandoned
+`prepared` work rejects without provider I/O, and `effect_applied` finalizes without a
+second stop. Exact same-sidecar `Adopted` and `LeaseUncertain` results are persisted under
+candidate CAS, reloaded only as that recovery operation's current authority, stopped by
+the durable handle/owner, committed `Gone`, and released from the confirmed-stop
+tombstone. `Ambiguous`, timeout, substituted identity, generation mismatch, or exact-stop
+failure remains fail-closed. Cancellation can prevent observation or application but
+cannot abandon a provider stop after that external effect starts.
+
+Focused regressions prove exact duplicate-claim exclusion, lost command-owner recovery,
+pre-effect terminalization, substituted unconfirmed-identity rejection, and both
+same-sidecar browser-identity-loss paths: a pre-effect request becomes terminal and a
+custodied running Codex runtime is adopted, exactly stopped, checkpointed, and followed
+by a non-reused new runtime. Existing deterministic OpenCode coverage continues proving
+that an uncertain session-creation response cannot poll a second `POST /session`.
+
+The unchanged `make verify` passed every mandatory architecture, source-growth,
+logical-line, and 800-line gate; generated bindings; production frontend and original-CSS
+verification; 72 frontend files with 356 tests; 15 Tauri tests; 18 domain, 92 persistence,
+four protocol, 101 provider, and 21 server unit tests; 23 Rust integration tests;
+documentation tests; warning-denied workspace/desktop Clippy; and final diff validation.
+No allow, exception, threshold change, placeholder, fallback, or compatibility path was
+introduced.
+
+The performance inspection removed a duplicate startup-wide reconciliation pass. Startup
+now performs that disk/process observation exactly once before network admission, while
+the live watcher retains its bounded 64-key SQLite page, eight-observation concurrency,
+and two-second per-observation timeout. Recovery reuses the captured candidate and exact
+request claim rather than introducing a cache, polling task per reservation, copied
+authority, or repeated provider effect. Packaged Computer Use and both pushed exact-diff
+reviews remain required before this correction is closed.
+
 ## API verification scope
 
 When a reachable flow specifically needs an API-backed provider, the allowed paid/provider-specific candidates are the official DeepSeek API and the designated Flash provider path. Every other API-backed verification uses only an explicitly free API or free model. Missing credentials, exhausted free quota, or unavailable models fail visibly; they do not trigger a paid substitution or a fallback provider.

@@ -4,6 +4,7 @@ mod agent_creation_records;
 mod agent_launch_events;
 mod agent_lifecycle;
 mod agent_lifecycle_authority;
+mod agent_lifecycle_effect_authority;
 mod agent_lifecycle_events;
 mod agent_lifecycle_reservations;
 mod agent_reconciliation;

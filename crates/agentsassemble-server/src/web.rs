@@ -102,7 +102,14 @@ pub async fn serve(
     state: AppState,
     cancellation: CancellationToken,
 ) -> Result<(), ServeError> {
-    reconcile_runtime_ownership(&state.store, &state.provider_adapter).await?;
+    let reconciled_sessions =
+        reconcile_runtime_ownership(&state.store, &state.provider_adapter).await?;
+    if reconciled_sessions > 0 {
+        tracing::warn!(
+            reconciled_sessions,
+            "reconciled provider runtime authority before network admission"
+        );
+    }
     let rooms = state.rooms.clone();
     let provider_catalog = state.provider_catalog.clone();
     let connections = state.connections.clone();

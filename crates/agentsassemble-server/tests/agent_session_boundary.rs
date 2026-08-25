@@ -44,6 +44,7 @@ static AGENT_BOUNDARY_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_n
 
 struct RunningServer {
     base_url: String,
+    provider_adapter: ProviderAdapter,
     cancellation: CancellationToken,
     task: JoinHandle<Result<(), String>>,
 }
@@ -431,7 +432,7 @@ async fn start(store: SqliteStore, catalog: ProviderCatalog) -> RunningServer {
         HostSecret::new(HOST_TOKEN)
             .unwrap_or_else(|error| panic!("validate test host secret: {error}")),
         ProviderCatalogService::fixed(catalog),
-        provider_adapter,
+        provider_adapter.clone(),
     );
     let task = tokio::spawn(async move {
         serve(listener, state, server_cancellation)
@@ -462,6 +463,7 @@ async fn start(store: SqliteStore, catalog: ProviderCatalog) -> RunningServer {
     }
     RunningServer {
         base_url,
+        provider_adapter,
         cancellation,
         task,
     }

@@ -16,6 +16,7 @@ use crate::{
         lifecycle_operation_id, payload_agent_id, require_intent, require_matching_operation,
         validate_runtime_started,
     },
+    agent_lifecycle_effect_authority::stop_effect,
     agent_lifecycle_events::{
         append_error_event, append_session_event, append_state_event, commit_already_stopped,
         store_result,
@@ -264,7 +265,7 @@ impl SqliteStore {
             &session,
             START,
             &expected_operation_id,
-            "prepared",
+            "effect_inflight",
             "stale_start_confirmation",
         )?;
         let reservation = LifecycleReservation::new(
@@ -367,7 +368,10 @@ impl SqliteStore {
                 transaction.commit().await?;
                 return Ok(AgentStopPlan::Stop(effect));
             }
-            if session.lifecycle_intent_status == "unconfirmed" {
+            if matches!(
+                session.lifecycle_intent_status.as_str(),
+                "effect_inflight" | "unconfirmed"
+            ) {
                 return Err(unresolved_effect());
             }
             return Err(rejected(
@@ -375,8 +379,6 @@ impl SqliteStore {
                 "Stored provider stop intent is invalid.",
             ));
         }
-        "stopping".clone_into(&mut session.public.runtime_status);
-        session.public.enabled = false;
         "stop".clone_into(&mut session.lifecycle_intent_action);
         session.lifecycle_intent_id.clone_from(&operation_id);
         "prepared".clone_into(&mut session.lifecycle_intent_status);
@@ -404,7 +406,7 @@ impl SqliteStore {
             &session,
             STOP,
             operation_id,
-            "prepared",
+            "effect_inflight",
             "stale_stop_confirmation",
         )?;
         "effect_applied".clone_into(&mut session.lifecycle_intent_status);
@@ -434,7 +436,7 @@ impl SqliteStore {
             &session,
             STOP,
             operation_id,
-            "prepared",
+            "effect_inflight",
             "stale_stop_confirmation",
         )?;
         session.pending_inputs = merged_turn_queue(&session)?;
@@ -584,21 +586,6 @@ impl SqliteStore {
     }
 }
 
-fn stop_effect(session: &DurableAgentSession) -> Result<AgentStopEffect, PersistenceError> {
-    if session.runtime_handle_id.is_empty() || session.runtime_owner_id.is_empty() {
-        return Err(rejected(
-            "runtime_handle_unavailable",
-            "Provider shutdown requires an exact handle owned by the current supervisor.",
-        ));
-    }
-    Ok(AgentStopEffect {
-        operation_id: session.lifecycle_intent_id.clone(),
-        session_id: session.public.session_id.clone(),
-        runtime_handle_id: session.runtime_handle_id.clone(),
-        runtime_owner_id: session.runtime_owner_id.clone(),
-    })
-}
-
 fn matching_start_intent(
     session: &mut DurableAgentSession,
     operation_id: &str,
@@ -609,7 +596,7 @@ fn matching_start_intent(
     require_matching_operation(session, "start", operation_id)?;
     match session.lifecycle_intent_status.as_str() {
         "prepared" => Ok(true),
-        "unconfirmed" => Err(unresolved_effect()),
+        "effect_inflight" | "unconfirmed" => Err(unresolved_effect()),
         _ => Err(rejected(
             "invalid_state",
             "Stored provider start intent is invalid.",
@@ -784,6 +771,14 @@ mod start_failure_tests;
 #[cfg(test)]
 #[path = "agent_lifecycle_recovery_tests.rs"]
 mod recovery_tests;
+
+#[cfg(test)]
+#[path = "agent_lifecycle_identity_recovery_tests.rs"]
+mod identity_recovery_tests;
+
+#[cfg(test)]
+#[path = "agent_lifecycle_pre_effect_recovery_tests.rs"]
+mod pre_effect_recovery_tests;
 
 #[cfg(test)]
 #[path = "agent_lifecycle_live_recovery_tests.rs"]

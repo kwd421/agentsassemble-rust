@@ -38,6 +38,18 @@ async fn adopted_runtime_requeues_an_active_turn_instead_of_leaving_it_stuck() {
         panic!("stopped recovery fixture must require a start effect");
     };
     store
+        .authorize_agent_start_effect(
+            &principal,
+            "turn-recovery-start",
+            &payload,
+            &start.operation_id,
+            "agent.start",
+            "adopted-runtime",
+            "previous-supervisor",
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize recovery start: {error}"));
+    store
         .complete_agent_start(
             &principal,
             "turn-recovery-start",

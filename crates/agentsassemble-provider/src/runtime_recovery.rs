@@ -43,7 +43,7 @@ pub(crate) async fn observe_previous_runtime(
                 && session.lifecycle_intent_action == "start"
                 && matches!(
                     session.lifecycle_intent_status.as_str(),
-                    "prepared" | "unconfirmed"
+                    "prepared" | "effect_inflight" | "unconfirmed"
                 ) =>
         {
             ProviderRuntimeObservation::Gone

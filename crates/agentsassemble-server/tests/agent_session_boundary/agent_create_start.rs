@@ -189,13 +189,30 @@ async fn same_sidecar_recovers_unconfirmed_start_after_browser_identity_is_lost(
     else {
         panic!("stopped Agent Session must prepare a start effect");
     };
+    let reservation = server
+        .provider_adapter
+        .reserve_start(&effect.session)
+        .await
+        .unwrap_or_else(|error| panic!("reserve interrupted start: {error}"));
+    recovery_store
+        .authorize_agent_start_effect(
+            &principal,
+            "lost-browser-start",
+            &payload,
+            &effect.operation_id,
+            "agent.start",
+            &reservation.runtime_handle_id,
+            &reservation.runtime_owner_id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize interrupted start: {error}"));
     recovery_store
         .mark_agent_start_unconfirmed(
             &principal,
             &session_id,
             &effect.operation_id,
-            "",
-            "",
+            &reservation.runtime_handle_id,
+            &reservation.runtime_owner_id,
             "runtime_start_unconfirmed",
             "provider effect boundary was uncertain",
         )
@@ -203,7 +220,7 @@ async fn same_sidecar_recovers_unconfirmed_start_after_browser_identity_is_lost(
         .unwrap_or_else(|error| panic!("mark interrupted start unconfirmed: {error}"));
     first_socket.close().await;
 
-    wait_for_recovered_rejection(&recovery_store, &principal, &payload).await;
+    wait_for_recovered_rejection(&recovery_store, &principal, "lost-browser-start", &payload).await;
     let mut returning_socket = connect(&server.base_url).await;
     subscribe(&mut returning_socket).await;
     let recovered = receive_json(&mut returning_socket).await;
@@ -223,15 +240,158 @@ async fn same_sidecar_recovers_unconfirmed_start_after_browser_identity_is_lost(
     server.stop().await;
 }
 
+#[tokio::test]
+async fn same_sidecar_quiesces_exact_running_runtime_after_browser_identity_is_lost() {
+    let _serial = AGENT_BOUNDARY_LOCK.lock().await;
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create running recovery root: {error}"));
+    let database_url = format!(
+        "sqlite://{}",
+        directory.path().join("runtime.sqlite3").display()
+    );
+    let store = SqliteStore::open(&database_url)
+        .await
+        .unwrap_or_else(|error| panic!("open running recovery store: {error}"));
+    bootstrap(&store).await;
+    let recovery_store = store.clone();
+    let server = start(store, agent_catalog(directory.path())).await;
+    let mut first_socket = connect(&server.base_url).await;
+    subscribe(&mut first_socket).await;
+    let _snapshot = receive_json(&mut first_socket).await;
+    let create_payload = json!({
+        "provider_id": "codex",
+        "catalog_revision": "catalog-boundary-1",
+        "display_name": "Terra",
+        "workspace": directory.path(),
+        "model": "gpt-5.6-terra",
+        "permission_mode": "meeting_read_only",
+        "start_now": true,
+    });
+    send_create(
+        &mut first_socket,
+        "create-running-for-owner-loss",
+        &create_payload,
+    )
+    .await;
+    let created = receive_until_ack(&mut first_socket, 5).await;
+    let session_id = created["result"]["start"]["agent_session"]["session_id"]
+        .as_str()
+        .unwrap_or_else(|| panic!("started session has no id"))
+        .to_owned();
+    let payload = json!({"agent_id": session_id});
+    let principal = local_principal();
+    stage_unconfirmed_running_reuse(
+        &recovery_store,
+        &server.provider_adapter,
+        &principal,
+        &session_id,
+        &payload,
+    )
+    .await;
+    first_socket.close().await;
+
+    wait_for_recovered_rejection(
+        &recovery_store,
+        &principal,
+        "lost-browser-running-start",
+        &payload,
+    )
+    .await;
+    let recovered = recovery_store
+        .load_runtime_reconciliation_candidate("general", &session_id)
+        .await
+        .unwrap_or_else(|error| panic!("reload recovered running session: {error}"));
+    assert!(
+        recovered.is_none(),
+        "recovered running runtime retained private lifecycle authority"
+    );
+
+    let mut returning_socket = connect(&server.base_url).await;
+    subscribe(&mut returning_socket).await;
+    let snapshot = receive_json(&mut returning_socket).await;
+    assert_eq!(
+        snapshot["agent_sessions"][0]["last_error_code"],
+        "runtime_start_recovered_gone"
+    );
+    send_command(
+        &mut returning_socket,
+        "new-start-after-running-owner-loss",
+        "agent.start",
+        &payload,
+    )
+    .await;
+    let restarted = receive_command_ack(&mut returning_socket).await;
+    assert_eq!(
+        restarted["result"]["agent_session"]["runtime_status"],
+        "idle"
+    );
+    assert_eq!(restarted["result"]["runtime_reused"], false);
+    server.stop().await;
+}
+
+async fn stage_unconfirmed_running_reuse(
+    store: &SqliteStore,
+    provider_adapter: &ProviderAdapter,
+    principal: &AuthenticatedPrincipal,
+    session_id: &str,
+    payload: &Value,
+) {
+    let agentsassemble_persistence::AgentStartPlan::Start(effect) = store
+        .prepare_agent_start(principal, "lost-browser-running-start", payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare running reuse: {error}"))
+    else {
+        panic!("running Agent Session must prepare an exact reuse effect");
+    };
+    let reservation = provider_adapter
+        .reserve_start(&effect.session)
+        .await
+        .unwrap_or_else(|error| panic!("reserve running reuse: {error}"));
+    store
+        .authorize_agent_start_effect(
+            principal,
+            "lost-browser-running-start",
+            payload,
+            &effect.operation_id,
+            "agent.start",
+            &reservation.runtime_handle_id,
+            &reservation.runtime_owner_id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize running reuse: {error}"));
+    let authorized = store
+        .load_runtime_reconciliation_candidate("general", session_id)
+        .await
+        .unwrap_or_else(|error| panic!("load authorized running reuse: {error}"))
+        .unwrap_or_else(|| panic!("authorized running reuse had no recovery candidate"));
+    let started = provider_adapter
+        .start_reserved(&authorized.session)
+        .await
+        .unwrap_or_else(|error| panic!("execute running reuse: {error}"));
+    store
+        .mark_agent_start_unconfirmed(
+            principal,
+            session_id,
+            &effect.operation_id,
+            &started.runtime_handle_id,
+            &started.runtime_owner_id,
+            "runtime_start_unconfirmed",
+            "provider effect boundary was uncertain",
+        )
+        .await
+        .unwrap_or_else(|error| panic!("mark running reuse unconfirmed: {error}"));
+}
+
 async fn wait_for_recovered_rejection(
     store: &SqliteStore,
     principal: &AuthenticatedPrincipal,
+    request_id: &str,
     payload: &Value,
 ) {
     let recovered = tokio::time::timeout(Duration::from_secs(5), async {
         loop {
             match store
-                .prepare_agent_start(principal, "lost-browser-start", payload)
+                .prepare_agent_start(principal, request_id, payload)
                 .await
             {
                 Err(agentsassemble_persistence::PersistenceError::StoredCommandRejected {

@@ -23,6 +23,67 @@ use crate::{
 
 const RECOVERED_START_CODE: &str = "runtime_start_recovered_gone";
 const RECOVERED_START_MESSAGE: &str = "The original provider start did not complete before server recovery. Retry with a new request.";
+const ABANDONED_START_CODE: &str = "runtime_start_abandoned_before_effect";
+const ABANDONED_START_MESSAGE: &str = "The provider start owner ended before authorizing an external effect. Retry with a new request.";
+const ABANDONED_STOP_CODE: &str = "runtime_stop_abandoned_before_effect";
+const ABANDONED_STOP_MESSAGE: &str = "The provider stop owner ended before authorizing an external effect. Retry with a new request.";
+
+pub(crate) async fn reject_abandoned_lifecycle_before_effect(
+    store: &SqliteStore,
+    candidate: &RuntimeReconciliationCandidate,
+) -> Result<(), PersistenceError> {
+    let mut transaction = store.pool.begin().await?;
+    let current = current_candidate(&mut transaction, candidate).await?;
+    reject_abandoned_in_transaction(&mut transaction, current).await?;
+    transaction.commit().await?;
+    Ok(())
+}
+
+async fn reject_abandoned_in_transaction(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    current: RuntimeReconciliationCandidate,
+) -> Result<(), PersistenceError> {
+    if current.session.lifecycle_intent_status != "prepared" {
+        return Err(stale_candidate());
+    }
+    let reservation = current
+        .reservation
+        .as_ref()
+        .ok_or_else(invalid_stored_authority)?;
+    let (code, message) = match current.session.lifecycle_intent_action.as_str() {
+        "start" => (ABANDONED_START_CODE, ABANDONED_START_MESSAGE),
+        "stop" => (ABANDONED_STOP_CODE, ABANDONED_STOP_MESSAGE),
+        _ => return Err(invalid_stored_authority()),
+    };
+    reject_lifecycle_command(transaction, &reservation_ref(reservation), code, message).await?;
+    let mut session = current.session;
+    if session.lifecycle_intent_action == "start"
+        && session.runtime_handle_id.is_empty()
+        && session.runtime_owner_id.is_empty()
+    {
+        "unavailable".clone_into(&mut session.public.status);
+        session.public.enabled = false;
+        "error".clone_into(&mut session.public.runtime_status);
+        session.public.provider_session_active = false;
+        session.public.provider_session_reused = false;
+    }
+    message.clone_into(&mut session.public.last_error);
+    code.clone_into(&mut session.public.last_error_code);
+    session.public.recovery_required = false;
+    clear_intent(&mut session);
+    session.public.updated_at = Utc::now();
+    save_reconciled_session(transaction, &session).await?;
+    append_error_event(
+        transaction,
+        &reservation.principal,
+        &session.public,
+        code,
+        message,
+    )
+    .await?;
+    append_state_event(transaction, &reservation.principal, &session.public).await?;
+    Ok(())
+}
 
 pub(crate) async fn apply_startup_reconciliation(
     store: &SqliteStore,
@@ -31,6 +92,11 @@ pub(crate) async fn apply_startup_reconciliation(
 ) -> Result<(), PersistenceError> {
     let mut transaction = store.pool.begin().await?;
     let current = current_candidate(&mut transaction, candidate).await?;
+    if current.session.lifecycle_intent_status == "prepared" {
+        reject_abandoned_in_transaction(&mut transaction, current).await?;
+        transaction.commit().await?;
+        return Ok(());
+    }
     let mut session = current.session.clone();
     if recovered_stop_is_terminal(&session, observation) {
         finalize_recovered_stop(&mut transaction, &mut session, &current).await?;
@@ -41,7 +107,7 @@ pub(crate) async fn apply_startup_reconciliation(
         && session.lifecycle_intent_action == "start"
         && matches!(
             session.lifecycle_intent_status.as_str(),
-            "prepared" | "unconfirmed"
+            "prepared" | "effect_inflight" | "unconfirmed"
         )
     {
         reject_recovered_start(&mut transaction, &mut session, &current).await?;
@@ -79,8 +145,10 @@ pub(crate) async fn apply_live_reconciliation(
         });
     }
     let mut session = current.session;
-    if session.lifecycle_intent_status != "unconfirmed"
-        || session.lifecycle_intent_id != reservation.operation_id
+    if !matches!(
+        session.lifecycle_intent_status.as_str(),
+        "effect_inflight" | "unconfirmed"
+    ) || session.lifecycle_intent_id != reservation.operation_id
     {
         return Err(stale_candidate());
     }
@@ -189,7 +257,7 @@ fn recovered_stop_is_terminal(
             || (observation == &RuntimeReconciliationObservation::Gone
                 && matches!(
                     session.lifecycle_intent_status.as_str(),
-                    "prepared" | "unconfirmed"
+                    "prepared" | "effect_inflight" | "unconfirmed"
                 )))
 }
 

@@ -1,8 +1,19 @@
 use std::time::Duration;
 
+use thiserror::Error;
 use tokio::{task::JoinHandle, time::Instant};
 
-use crate::RoomShutdownError;
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum RoomShutdownError {
+    #[error("room mutation tasks exceeded the shutdown deadline")]
+    TimedOut,
+    #[error("room mutation task failed: {0}")]
+    TaskFailed(String),
+    #[error("provider runtime shutdown failed: {0}")]
+    Provider(String),
+    #[error("confirmed provider shutdown checkpoint failed: {0}")]
+    Persistence(String),
+}
 
 pub(super) async fn join_room_tasks(
     tasks: Vec<JoinHandle<()>>,

@@ -124,7 +124,8 @@ impl SqliteStore {
     .fetch_optional(&mut **transaction)
     .await?;
         if let Some(row) = existing {
-            if row.get::<String, _>("supervisor_generation").is_empty() {
+            let stored_generation = row.get::<String, _>("supervisor_generation");
+            if stored_generation.is_empty() {
                 return Err(invalid_reservation());
             }
             let matches = row.get::<String, _>("action") == reservation.action
@@ -135,6 +136,14 @@ impl SqliteStore {
                 && row.get::<String, _>("prepared_result_json") == reservation.prepared_result_json;
             if !matches {
                 return Err(PersistenceError::CommandConflict);
+            }
+            if row.get::<String, _>("status") == "pending"
+                && stored_generation != supervisor_generation
+            {
+                return Err(PersistenceError::CommandUnresolved {
+                    code: "runtime_effect_unconfirmed",
+                    message: "The original provider effect belongs to a previous server runtime and awaits server-owned reconciliation.".to_owned(),
+                });
             }
             return match row.get::<String, _>("status").as_str() {
             "pending" => Ok(()),

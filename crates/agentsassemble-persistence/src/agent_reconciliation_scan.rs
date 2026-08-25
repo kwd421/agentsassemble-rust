@@ -20,7 +20,7 @@ pub struct RuntimeReconciliationPage {
 }
 
 impl SqliteStore {
-    /// Scans one bounded page and returns only exact durable unconfirmed lifecycle candidates.
+    /// Scans one bounded page and returns exact durable nonterminal lifecycle candidates.
     ///
     /// The cursor advances over every Agent Session, including sessions that do not currently
     /// need reconciliation, so a large inactive prefix cannot starve later work.
@@ -28,7 +28,7 @@ impl SqliteStore {
     /// # Errors
     ///
     /// Returns a persistence or stored-authority failure.
-    pub async fn load_unconfirmed_runtime_reconciliation_page(
+    pub async fn load_runtime_reconciliation_page(
         &self,
         cursor: Option<&RuntimeReconciliationCursor>,
     ) -> Result<RuntimeReconciliationPage, PersistenceError> {
@@ -61,8 +61,10 @@ impl SqliteStore {
             else {
                 continue;
             };
-            if candidate.session.lifecycle_intent_status == "unconfirmed"
-                && candidate.reservation.is_some()
+            if matches!(
+                candidate.session.lifecycle_intent_status.as_str(),
+                "prepared" | "effect_inflight" | "unconfirmed" | "effect_applied"
+            ) && candidate.reservation.is_some()
             {
                 candidates.push(candidate);
             }

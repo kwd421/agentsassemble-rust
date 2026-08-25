@@ -150,6 +150,21 @@ impl SqliteStore {
         .await
     }
 
+    /// Terminalizes an exact prepared lifecycle whose in-memory command owner is gone.
+    ///
+    /// # Errors
+    ///
+    /// Returns an exact-CAS, stored-authority, or persistence failure.
+    pub async fn reject_abandoned_lifecycle_before_effect(
+        &self,
+        candidate: &RuntimeReconciliationCandidate,
+    ) -> Result<(), PersistenceError> {
+        crate::agent_reconciliation_recovery::reject_abandoned_lifecycle_before_effect(
+            self, candidate,
+        )
+        .await
+    }
+
     #[cfg(test)]
     /// Applies an ambiguous observation to every candidate for recovery tests.
     ///
@@ -264,8 +279,11 @@ fn validate_candidate_authority(
                 session.lifecycle_intent_action.as_str(),
                 session.lifecycle_intent_status.as_str()
             ),
-            ("start", "prepared" | "unconfirmed")
-                | ("stop", "prepared" | "unconfirmed" | "effect_applied")
+            ("start", "prepared" | "effect_inflight" | "unconfirmed")
+                | (
+                    "stop",
+                    "prepared" | "effect_inflight" | "unconfirmed" | "effect_applied"
+                )
         )
     {
         return Err(invalid_stored_authority());
@@ -460,7 +478,7 @@ pub(crate) fn reconcile_gone(session: &mut DurableAgentSession) -> Result<bool, 
     if session.lifecycle_intent_action == "stop"
         && matches!(
             session.lifecycle_intent_status.as_str(),
-            "prepared" | "unconfirmed"
+            "prepared" | "effect_inflight" | "unconfirmed"
         )
     {
         "effect_applied".clone_into(&mut session.lifecycle_intent_status);
@@ -470,7 +488,7 @@ pub(crate) fn reconcile_gone(session: &mut DurableAgentSession) -> Result<bool, 
     if session.lifecycle_intent_action == "start"
         && matches!(
             session.lifecycle_intent_status.as_str(),
-            "prepared" | "unconfirmed"
+            "prepared" | "effect_inflight" | "unconfirmed"
         )
     {
         session.runtime_handle_id.clear();
@@ -495,7 +513,7 @@ async fn reconcile_ambiguous(
     if session.lifecycle_intent_action == "start"
         && matches!(
             session.lifecycle_intent_status.as_str(),
-            "prepared" | "unconfirmed"
+            "prepared" | "effect_inflight" | "unconfirmed"
         )
     {
         retain_uncertain_runtime(session)?;
@@ -504,7 +522,7 @@ async fn reconcile_ambiguous(
     if session.lifecycle_intent_action == "stop"
         && matches!(
             session.lifecycle_intent_status.as_str(),
-            "prepared" | "unconfirmed"
+            "prepared" | "effect_inflight" | "unconfirmed"
         )
     {
         let action = format!("agent.{}", session.lifecycle_intent_action);
@@ -618,7 +636,12 @@ fn disconnect_after_owner_loss(session: &mut DurableAgentSession) -> Result<(), 
 
 fn retain_uncertain_runtime(session: &mut DurableAgentSession) -> Result<(), PersistenceError> {
     merge_inflight_events(session)?;
-    if session.lifecycle_intent_action == "start" && session.lifecycle_intent_status == "prepared" {
+    if session.lifecycle_intent_action == "start"
+        && matches!(
+            session.lifecycle_intent_status.as_str(),
+            "prepared" | "effect_inflight"
+        )
+    {
         "unconfirmed".clone_into(&mut session.lifecycle_intent_status);
     }
     "unavailable".clone_into(&mut session.public.status);

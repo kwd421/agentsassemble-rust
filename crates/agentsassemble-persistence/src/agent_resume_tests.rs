@@ -15,6 +15,18 @@ async fn stopped_resume_reuses_durable_provider_session_and_replays_as_resume() 
         panic!("stopped session must require initial launch");
     };
     store
+        .authorize_agent_start_effect(
+            &principal,
+            "initial-start",
+            &payload,
+            &start.operation_id,
+            "agent.start",
+            "runtime-before-stop",
+            "supervisor-instance-1",
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize initial start: {error}"));
+    store
         .complete_agent_start(
             &principal,
             "initial-start",
@@ -25,19 +37,24 @@ async fn stopped_resume_reuses_durable_provider_session_and_replays_as_resume() 
         .await
         .unwrap_or_else(|error| panic!("complete initial start: {error}"));
 
+    let stop_request_id = "stop-before-resume";
     let AgentStopPlan::Stop(stop) = store
-        .prepare_agent_stop(&principal, "stop-before-resume", &payload)
+        .prepare_agent_stop(&principal, stop_request_id, &payload)
         .await
         .unwrap_or_else(|error| panic!("prepare stop: {error}"))
     else {
         panic!("running session must require exact stop effect");
     };
     store
+        .authorize_agent_stop_effect(&principal, stop_request_id, &payload, &stop.operation_id)
+        .await
+        .unwrap_or_else(|error| panic!("authorize stop: {error}"));
+    store
         .record_agent_stop_effect("general", AGENT_ID, &stop.operation_id)
         .await
         .unwrap_or_else(|error| panic!("record stop: {error}"));
     store
-        .finalize_agent_stop(&principal, "stop-before-resume", &payload)
+        .finalize_agent_stop(&principal, stop_request_id, &payload)
         .await
         .unwrap_or_else(|error| panic!("finalize stop: {error}"));
 
@@ -49,6 +66,18 @@ async fn stopped_resume_reuses_durable_provider_session_and_replays_as_resume() 
         panic!("stopped session must require a resume launch effect");
     };
     assert_eq!(resume.session.provider_session_id, "provider-thread-stable");
+    store
+        .authorize_agent_start_effect(
+            &principal,
+            "resume-stopped",
+            &payload,
+            &resume.operation_id,
+            "agent.resume",
+            "runtime-after-resume",
+            "supervisor-instance-1",
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize resume: {error}"));
     let outcome = store
         .complete_agent_resume(
             &principal,
@@ -59,11 +88,9 @@ async fn stopped_resume_reuses_durable_provider_session_and_replays_as_resume() 
         )
         .await
         .unwrap_or_else(|error| panic!("complete resume: {error}"));
-    assert_eq!(outcome.result["agent_session"]["runtime_status"], "idle");
-    assert_eq!(
-        outcome.result["agent_session"]["provider_session_reused"],
-        true
-    );
+    let resumed = &outcome.result["agent_session"];
+    assert_eq!(resumed["runtime_status"], "idle");
+    assert_eq!(resumed["provider_session_reused"], true);
 
     let AgentStartPlan::Outcome(replayed) = store
         .prepare_agent_resume(&principal, "resume-stopped", &payload)
