@@ -30,10 +30,9 @@ pub(crate) async fn apply_exact_interrupt(
         }
     };
     let waiting = match control.disposition {
-        ProviderTurnInterruptDisposition::NotStarted => {
-            let waiting = store.mark_unstarted_interrupt_waiting(&claim).await?;
-            control.request_interrupt();
-            waiting
+        ProviderTurnInterruptDisposition::NotStarted
+        | ProviderTurnInterruptDisposition::Quiesced => {
+            store.mark_unstarted_interrupt_waiting(&claim).await?
         }
         ProviderTurnInterruptDisposition::Started => {
             let dispatched = store.authorize_provider_interrupt_dispatch(&claim).await?;
@@ -45,9 +44,6 @@ pub(crate) async fn apply_exact_interrupt(
                     return Err(error);
                 }
             }
-        }
-        ProviderTurnInterruptDisposition::Quiesced => {
-            store.mark_unstarted_interrupt_waiting(&claim).await?
         }
     };
     let quiescence = match control.wait_quiesced(QUIESCENCE_TIMEOUT).await {

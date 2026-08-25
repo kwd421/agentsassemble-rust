@@ -450,6 +450,11 @@ impl ProviderAdapter {
 
     /// Resolves one exact prepared or entered turn without issuing provider control.
     ///
+    /// A prepared turn is cancelled while the slot lock is held. Returning
+    /// `NotStarted` therefore freezes provider entry before the caller performs
+    /// any later persistence work. The caller must already own the durable exact
+    /// interrupt claim before invoking this method.
+    ///
     /// # Errors
     ///
     /// Rejects stale generation or runtime custody rather than targeting current work.
@@ -478,7 +483,10 @@ impl ProviderAdapter {
             .filter(|active| exact_authority_matches(active, authority))
             .ok_or_else(|| ProviderAdapterError::safe(stale_turn()))?;
         let disposition = match active.phase {
-            ActiveProviderTurnPhase::Preparing => ProviderTurnInterruptDisposition::NotStarted,
+            ActiveProviderTurnPhase::Preparing => {
+                active.interruption.cancel();
+                ProviderTurnInterruptDisposition::NotStarted
+            }
             ActiveProviderTurnPhase::Entered => ProviderTurnInterruptDisposition::Started,
             ActiveProviderTurnPhase::NotStartedRetained
             | ActiveProviderTurnPhase::ResultReadyRetained

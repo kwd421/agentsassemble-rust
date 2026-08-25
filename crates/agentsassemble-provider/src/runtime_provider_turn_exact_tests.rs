@@ -1,4 +1,6 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
+
+use tokio::sync::Barrier;
 
 use super::{
     ProviderAdapter, ProviderTurnRequest,
@@ -69,7 +71,7 @@ async fn completed_turn_remains_exactly_owned_until_durable_terminal_release() {
 }
 
 #[tokio::test]
-async fn unstarted_turn_remains_exactly_owned_until_durable_interrupt_release() {
+async fn exact_control_freezes_provider_entry_before_durable_interrupt_wait() {
     let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
     let directory = tempfile::tempdir()
         .unwrap_or_else(|error| panic!("create unstarted-turn fixture: {error}"));
@@ -99,6 +101,17 @@ async fn unstarted_turn_remains_exactly_owned_until_durable_interrupt_release() 
         .await
         .unwrap_or_else(|error| panic!("prepare unstarted turn: {error}"));
     let authority = prepared.exact_authority();
+    let turn_gate = Arc::new(Barrier::new(2));
+    let turn_adapter = adapter.clone();
+    let turn_session = active.clone();
+    let turn_request = request.clone();
+    let turn_gate_owner = Arc::clone(&turn_gate);
+    let turn = tokio::spawn(async move {
+        turn_gate_owner.wait().await;
+        turn_adapter
+            .send_prepared_turn(prepared, &turn_session, &turn_request)
+            .await
+    });
     let mut control = adapter
         .begin_exact_turn(&authority)
         .await
@@ -108,12 +121,12 @@ async fn unstarted_turn_remains_exactly_owned_until_durable_interrupt_release() 
         super::ProviderTurnInterruptDisposition::NotStarted
     );
 
-    control.request_interrupt();
-    let Err(error) = adapter
-        .send_prepared_turn(prepared, &active, &request)
+    turn_gate.wait().await;
+    let Err(error) = turn
         .await
+        .unwrap_or_else(|error| panic!("join frozen turn owner: {error}"))
     else {
-        panic!("pre-entry interrupt must not run provider I/O");
+        panic!("exact control must freeze provider entry before persistence resumes");
     };
     assert_eq!(error.code, "provider_turn_interrupted");
     assert_eq!(
