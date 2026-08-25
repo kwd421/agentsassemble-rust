@@ -3,12 +3,12 @@ use std::{path::PathBuf, sync::Arc};
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_protocol::ServerProductSurface;
 use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService};
-use tokio::sync::Semaphore;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
-use crate::{HostSecret, RoomRuntime, TicketStore};
-
-const MAX_WS_CONNECTIONS: usize = 128;
+use crate::{
+    HostSecret, RoomRuntime, TicketStore, connection_admission::ConnectionAdmission,
+    raw_ingress::RawIngressGovernor,
+};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -20,7 +20,8 @@ pub struct AppState {
     pub provider_adapter: ProviderAdapter,
     pub shutdown: CancellationToken,
     pub connections: TaskTracker,
-    pub connection_admission: Arc<Semaphore>,
+    pub(crate) connection_admission: ConnectionAdmission,
+    pub(crate) raw_ingress: RawIngressGovernor,
     pub server_product_surface: Arc<ServerProductSurface>,
     pub frontend_root: Option<PathBuf>,
 }
@@ -63,7 +64,8 @@ impl AppState {
             provider_adapter,
             shutdown: CancellationToken::new(),
             connections: TaskTracker::new(),
-            connection_admission: Arc::new(Semaphore::new(MAX_WS_CONNECTIONS)),
+            connection_admission: ConnectionAdmission::new(),
+            raw_ingress: RawIngressGovernor::new(),
             server_product_surface: Arc::new(crate::product_surface::server_product_surface(false)),
             frontend_root: None,
         }

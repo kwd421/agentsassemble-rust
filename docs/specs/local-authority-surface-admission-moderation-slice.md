@@ -12,8 +12,10 @@ derived server/native product surfaces are published. The proof-bound finite
 subscription section is implemented in the current candidate with strict
 one-use ticket credentials, exact-byte Snapshot binding, a transactional bounded
 `(C,H]` reader, client high-water readiness, and no string-ticket/non-desktop
-fallback. Process-wide admission and participant role/mute/provider-custody work
-below remain active and are not implied complete by this checkpoint.
+fallback. The current admission candidate implements process-wide connection
+leases, pre-parse raw scopes, permanent fresh-human mutation debit, and a separate
+in-flight owner. Participant role/mute/provider-custody work below remains active
+and is not implied complete by this checkpoint.
 
 ## Definition
 
@@ -115,8 +117,9 @@ operator authorization.
 ## Connection, raw ingress, and mutation admission
 
 Before HTTP 101, one process-wide owner computes and acquires global, principal,
-and room connection leases atomically. Rejection charges no scope. Idle/LRU key
-eviction is bounded, and generation-bearing leases prevent an old release from
+and room connection leases atomically. Rejection charges no scope. Only active
+principal and room keys are retained, so their cardinality cannot exceed the
+global connection ceiling; generation-bearing leases prevent an old release from
 freeing a replacement key.
 
 The WebSocket codec owns hard byte bounds for frame, reassembled message, and
@@ -126,17 +129,23 @@ unless a separate codec-owned implementation is added.
 Before JSON parsing or room queueing, one process-wide raw ingress governor
 atomically charges global, principal, and room byte/rate scopes. The debit is
 permanent and includes unknown or unsupported raw frames. The room actor does not
-retain a sharded transport charge.
+retain a sharded transport charge. Keyed windows are bounded and reject new scope
+keys when expired-window pruning cannot free capacity.
 
 After strict decoding, implemented-action classification, and exact replay or
 prepared-resume detection, a fresh human mutation receives a permanent
 process-wide principal debit. Permission denial, validation failure, missing
 targets, conflict, room busy, timeout, disconnect, cancellation, SQLite rollback,
 and provider failure do not refund it. Exact replay and prepared resume do not
-debit twice. Only a separate in-flight permit is RAII-released. Durable room
-budget remains in the command transaction and rolls back with it. Ambiguous
-commit outcome is resolved from request ID and idempotency record. Human-principal
-and provider-session mutation governors remain separate.
+debit twice. The retry ledger stores a fixed-size domain-separated identity digest
+instead of request strings and has both principal-count and total-mutation memory
+ceilings. Only a separate in-flight permit is RAII-released, and that permit moves
+with the queued room command. Durable room budget remains in the command
+transaction and rolls back with it. Ambiguous commit outcome is resolved from
+request ID and idempotency record. Human-principal and provider-session mutation
+governors remain separate. A committed or definitively rejected actor outcome
+closes its in-memory retry exemption without refunding the original debit; only an
+unresolved exact intent can reuse that debit.
 
 Once a client command has crossed the WebSocket send boundary, loss of its ACK is
 an unknown outcome, never an ordinary timeout that frees its request ID. The

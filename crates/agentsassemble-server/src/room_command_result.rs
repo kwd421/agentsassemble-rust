@@ -55,17 +55,11 @@ impl CommandFailure {
     }
 }
 
-pub(crate) fn validate_command_envelope(
-    command: &crate::room_runtime::RoomCommand,
-) -> Result<(), PersistenceError> {
-    if command.request_id.is_empty()
-        || command.request_id.chars().count() > 128
-        || command.action.is_empty()
-        || command.action.chars().count() > 64
-    {
+pub(crate) fn validate_command_envelope(request_id: &str) -> Result<(), PersistenceError> {
+    if request_id.is_empty() || request_id.chars().count() > 128 {
         return Err(PersistenceError::CommandRejected {
             code: "command_envelope_invalid",
-            message: "request_id or action is invalid.".to_owned(),
+            message: "request_id is invalid.".to_owned(),
         });
     }
     Ok(())

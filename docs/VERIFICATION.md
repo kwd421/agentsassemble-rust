@@ -1772,6 +1772,73 @@ bundle as not running before cleanup. The exact package, Application Support, Ca
 WebKit paths for that isolated bundle identifier were then removed; a final process check
 found no owned packaged-app process.
 
+### Process-wide admission and bounded retry-ledger candidate: 2026-08-25
+
+The former WebSocket semaphore, connection-local raw limiter, and room-actor human
+write window could be reset or sharded across connections and rooms. The candidate
+replaces them with three explicit process owners. A consumed room ticket acquires one
+atomic `128 global / 8 principal / 64 room` active lease before HTTP 101. The first
+subscription and every later data or control frame are charged before JSON or
+authenticated-envelope parsing to fixed global, principal, and room windows. A fresh
+typed human mutation is classified against durable replay/lifecycle authority, then
+receives one non-refundable process-wide rolling principal debit before nonblocking room
+queue admission. Its independent 128-permit in-flight lease moves into the room command,
+so caller cancellation cannot free actor-owned work. Provider RoomPortal random results
+retain a separate provider-session budget and durable room reservation.
+
+The implementation intent is bounded cross-room abuse resistance with short critical
+sections, not an unmeasured throughput claim. Normal connection and raw-frame admission
+perform fixed-count hash lookups and counter updates under one non-async mutex. Connection
+maps contain only active scopes and therefore cannot exceed the 128 global leases. Raw
+principal/room maps each retain at most 512 fixed-size windows and prune expired keys only
+when capacity is reached. The rolling human retry ledger replaces four retained request
+strings with one domain-separated 32-byte digest, caps both 512 principal windows and
+32,768 total live mutations, and uses a deque plus hash map for amortized O(1) expiry and
+exact-retry lookup. Provider-session byte admission now carries an O(1) running byte
+total instead of folding as many as 3,600 retained results for every call. The accepted
+fixed-window trade-off is a bounded edge burst at a ten-second raw-window turnover; hard
+frame, global, principal, room, connection, and mutation ceilings remain fail-closed.
+
+Focused deterministic checks prove atomic no-charge connection rejection, stale-lease
+ABA resistance, one-principal connection enforcement through the actual HTTP upgrade,
+cross-room raw-principal aggregation, independent control-frame ceilings, retained
+over-limit raw debit, exact unresolved mutation retry without a second permanent debit,
+and closure of that exemption after a definitive outcome without refunding its charge.
+The complete `make verify` then passed
+every mandatory architecture, source-growth, logical-line, and 800-line gate; generated
+bindings; the production frontend build and original-CSS verification; 72 frontend files
+with 356 tests; 15 Tauri tests; 18 domain, 94 persistence, four protocol, 113 provider,
+and 28 server unit tests; 25 Rust integration tests; documentation tests;
+warning-denied workspace/desktop Clippy; and final diff validation.
+
+The installed `x86_64-pc-windows-gnu` target passed the workspace all-target/all-feature
+check with rustup Cargo and rustc explicitly paired. A first Cargo-only invocation selected
+the unrelated system rustc and failed before project compilation because that compiler
+could not find its `core`; no source was changed, and the isolated temporary target was
+cleaned. The correctly paired run compiled the new direct `parking_lot` use and every
+server target, retaining only the already-recorded unrelated Windows-only dead-code
+warnings. Its isolated target directory was also removed on exit.
+
+Computer Use then drove a fresh debug package named `AgentsAssemble Admission Verify`
+under isolated identifier `app.agentsassemble.rust.admissionverify`, with the central URL
+explicitly empty. Fresh local identity `Admission Scope Verify` reached the real zero-room
+directory, created one canonical room, and visibly published `ADMISSION_SCOPE_UI_OK`
+through the authenticated room socket. Opening the lower-left profile card and then Agent
+Add removed that card from the rendered and accessible modal surface. No display-name
+field existed before provider selection. Selecting the retained Antigravity catalog entry
+showed the catalog-derived `Antigravity · gemini-3.6-flash` name plus workspace, model,
+effort, permission, and start controls; cancellation created no Agent Session and launched
+no provider.
+
+The app exited through its normal application quit shortcut and relaunched from the same
+package. The stored identity, room, roster, and first message returned over a fresh socket,
+which visibly published `ADMISSION_SCOPE_RECONNECT_OK`. A read-only query of the isolated
+SQLite store found one room, those exact `message_final` values at sequences two and three,
+and zero Agent Sessions. Final normal quit left no exact app, supervisor, or sidecar
+process. The exact package, Application Support, Caches, and WebKit paths were then
+permanently removed. Commit/push and both manual exact-diff reviews remain required before
+this candidate becomes completion evidence.
+
 ## API verification scope
 
 When a reachable flow specifically needs an API-backed provider, the allowed paid/provider-specific candidates are the official DeepSeek API and the designated Flash provider path. Every other API-backed verification uses only an explicitly free API or free model. Missing credentials, exhausted free quota, or unavailable models fail visibly; they do not trigger a paid substitution or a fallback provider.

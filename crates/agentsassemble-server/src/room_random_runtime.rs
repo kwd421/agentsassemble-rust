@@ -7,7 +7,7 @@ use agentsassemble_provider::{ProviderRoomToolCommand, ProviderRoomToolError};
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
-use crate::{principal_write_budget::PrincipalWriteBudget, room_runtime::RoomCommand};
+use crate::{provider_write_budget::ProviderWriteBudget, room_runtime::RoomCommand};
 
 pub(crate) async fn execute_room_random(
     store: &SqliteStore,
@@ -17,25 +17,26 @@ pub(crate) async fn execute_room_random(
         .replay_command(
             &command.principal,
             &command.request_id,
-            &command.action,
+            command.action.as_str(),
             &command.payload,
         )
         .await?
     {
         return Ok(outcome);
     }
-    let request = RoomRandomRequest::parse(&command.action, &command.payload).map_err(|error| {
-        PersistenceError::CommandRejected {
-            code: "invalid_room_random_request",
-            message: error.message,
-        }
-    })?;
+    let request =
+        RoomRandomRequest::parse(command.action.as_str(), &command.payload).map_err(|error| {
+            PersistenceError::CommandRejected {
+                code: "invalid_room_random_request",
+                message: error.message,
+            }
+        })?;
     let result = generate_room_random(&request);
     store
         .execute_room_random_command(
             &command.principal,
             &command.request_id,
-            &command.action,
+            command.action.as_str(),
             &command.payload,
             &result,
         )
@@ -81,7 +82,7 @@ pub(crate) async fn handle_provider_room_tool(
     event_tx: &broadcast::Sender<agentsassemble_domain::RoomEvent>,
     room_id: &str,
     mut command: ProviderRoomToolCommand,
-    write_budget: &mut PrincipalWriteBudget,
+    write_budget: &mut ProviderWriteBudget,
 ) {
     if let Err(error) = command.begin_commit() {
         command.complete(Err(error));
@@ -97,10 +98,7 @@ pub(crate) async fn handle_provider_room_tool(
                 return;
             }
         };
-    if let Err(error) = write_budget.admit_mutation(
-        &format!("agent-session:{}", command.session_id()),
-        payload_bytes,
-    ) {
+    if let Err(error) = write_budget.admit(command.session_id(), payload_bytes) {
         command.complete(Err(public_tool_error(error)));
         return;
     }

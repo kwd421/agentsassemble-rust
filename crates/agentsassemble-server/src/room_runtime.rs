@@ -8,12 +8,13 @@ use agentsassemble_domain::{AuthenticatedPrincipal, RoomEvent};
 use agentsassemble_persistence::{
     AgentTurnAssignment, CommandOutcome, PersistenceError, RoomCommandMutation, SqliteStore,
 };
+use agentsassemble_protocol::{CommandResolution, RoomAction};
 use agentsassemble_provider::{
     ProviderAdapter, ProviderCatalogService, ProviderRoomToolCommand, ProviderRoomToolIngress,
 };
 use serde_json::Value;
 use tokio::{
-    sync::{Mutex, broadcast, mpsc, oneshot},
+    sync::{Mutex, OwnedSemaphorePermit, broadcast, mpsc, oneshot},
     task::{JoinHandle, JoinSet},
     time::MissedTickBehavior,
 };
@@ -22,11 +23,13 @@ use tokio_util::sync::CancellationToken;
 use crate::{
     agent_create_runtime::AgentCreateExecution,
     lifecycle_command_tracker::LifecycleCommandTracker,
-    principal_write_budget::PrincipalWriteBudget,
+    principal_mutation_admission::{MutationDebit, PrincipalMutationAdmission},
     provider_turn::{
         ProviderTurnTaskResult, commit_provider_result, publish_turn_commit, spawn_provider_turn,
     },
-    room_command_result::{CommandFailure, public_command_outcome, validate_command_envelope},
+    provider_write_budget::ProviderWriteBudget,
+    room_command_admission::{AdmittedHumanCommand, admit_human_command},
+    room_command_result::{CommandFailure, public_command_outcome},
     room_shutdown::{RoomShutdownError, join_room_tasks},
 };
 
@@ -40,9 +43,10 @@ const ROOM_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(3);
 pub(crate) struct RoomCommand {
     pub(crate) principal: AuthenticatedPrincipal,
     pub(crate) request_id: String,
-    pub(crate) action: String,
+    pub(crate) action: RoomAction,
     pub(crate) payload: Value,
-    transport_bytes: usize,
+    mutation_debit: Option<MutationDebit>,
+    _inflight_permit: OwnedSemaphorePermit,
     reply: oneshot::Sender<Result<CommandOutcome, CommandFailure>>,
 }
 
@@ -71,7 +75,6 @@ struct RoomCommandOwners<'a> {
     event_tx: &'a broadcast::Sender<RoomEvent>,
     turn_tasks: &'a mut JoinSet<ProviderTurnTaskResult>,
     room_tool_ingress: &'a ProviderRoomToolIngress,
-    write_budget: &'a mut PrincipalWriteBudget,
     lifecycle_commands: &'a LifecycleCommandTracker,
 }
 
@@ -84,6 +87,7 @@ pub struct RoomRuntime {
     cancellation: CancellationToken,
     tasks: Arc<Mutex<Vec<JoinHandle<()>>>>,
     lifecycle_commands: LifecycleCommandTracker,
+    principal_mutations: PrincipalMutationAdmission,
 }
 
 impl RoomRuntime {
@@ -106,19 +110,31 @@ impl RoomRuntime {
             cancellation: CancellationToken::new(),
             tasks: Arc::new(Mutex::new(Vec::new())),
             lifecycle_commands: LifecycleCommandTracker::default(),
+            principal_mutations: PrincipalMutationAdmission::new(),
         }
     }
 
-    /// Enqueues one durable command on its room's single mutation task and reports whether a
-    /// failure definitively rejected the command or left its durable outcome unresolved.
+    /// Enqueues one durable command on its room owner and classifies its outcome.
     pub(crate) async fn execute(
         &self,
         principal: AuthenticatedPrincipal,
         request_id: String,
-        action: String,
+        action: RoomAction,
         payload: Value,
-        transport_bytes: usize,
     ) -> Result<CommandOutcome, CommandFailure> {
+        let AdmittedHumanCommand {
+            principal,
+            mutation_debit,
+            inflight_permit,
+        } = admit_human_command(
+            &self.store,
+            &self.principal_mutations,
+            &principal,
+            &request_id,
+            action,
+            &payload,
+        )
+        .await?;
         let handle = self.handle(&principal.room_id).await;
         let (reply, response) = oneshot::channel();
         handle
@@ -128,7 +144,8 @@ impl RoomRuntime {
                 request_id,
                 action,
                 payload,
-                transport_bytes,
+                mutation_debit,
+                _inflight_permit: inflight_permit,
                 reply,
             })
             .map_err(|error| {
@@ -284,7 +301,7 @@ fn spawn_room_task(
         } = context;
         let mut turn_tasks = JoinSet::new();
         let mut publication_retry = tokio::time::interval(PUBLICATION_RETRY_INTERVAL);
-        let mut write_budget = PrincipalWriteBudget::new();
+        let mut provider_write_budget = ProviderWriteBudget::new();
         publication_retry.set_missed_tick_behavior(MissedTickBehavior::Delay);
         publish_durable_room_events(&store, &event_tx, &room_id).await;
         loop {
@@ -322,7 +339,6 @@ fn spawn_room_task(
                             event_tx: &event_tx,
                             turn_tasks: &mut turn_tasks,
                             room_tool_ingress: &room_tool_ingress,
-                            write_budget: &mut write_budget,
                             lifecycle_commands: &lifecycle_commands,
                         },
                         command,
@@ -346,7 +362,7 @@ fn spawn_room_task(
                         &event_tx,
                         &room_id,
                         command,
-                        &mut write_budget,
+                        &mut provider_write_budget,
                     )
                     .await;
                 }
@@ -358,7 +374,7 @@ fn spawn_room_task(
     })
 }
 
-async fn handle_room_command(owners: RoomCommandOwners<'_>, mut command: RoomCommand) {
+async fn handle_room_command(owners: RoomCommandOwners<'_>, command: RoomCommand) {
     let RoomCommandOwners {
         store,
         provider_catalog,
@@ -366,59 +382,35 @@ async fn handle_room_command(owners: RoomCommandOwners<'_>, mut command: RoomCom
         event_tx,
         turn_tasks,
         room_tool_ingress,
-        write_budget,
         lifecycle_commands,
     } = owners;
-    let execution = match write_budget
-        .admit_transport(&command.principal.principal_id, command.transport_bytes)
-    {
-        Ok(()) => match validate_command_envelope(&command) {
-            Ok(()) => match store.resolve_principal(&command.principal).await {
-                Ok(principal) => {
-                    command.principal = principal;
-                    let lifecycle_guard = lifecycle_commands.try_claim(
-                        &command.principal.room_id,
-                        &command.principal.principal_id,
-                        &command.request_id,
-                        &command.action,
-                    );
-                    match lifecycle_guard {
-                        None => CommandExecution::unresolved_failure(
-                            PersistenceError::CommandUnresolved {
-                                code: "runtime_recovery_in_progress",
-                                message: "The exact lifecycle request is currently owned by server recovery. Retry the same request.".to_owned(),
-                            },
-                        ),
-                        Some(_lifecycle_guard) => match write_budget
-                            .admit_command(
-                                store,
-                                &command.principal,
-                                &command.request_id,
-                                &command.action,
-                                &command.payload,
-                            )
-                            .await
-                        {
-                            Ok(()) => {
-                                execute_command(
-                                    store,
-                                    provider_catalog,
-                                    provider_adapter,
-                                    event_tx,
-                                    &command,
-                                )
-                                .await
-                            }
-                            Err(error) => CommandExecution::admission_failure(error),
-                        },
-                    }
-                }
-                Err(error) => CommandExecution::unresolved_failure(error),
-            },
-            Err(error) => CommandExecution::rejected_failure(error),
-        },
-        Err(error) => CommandExecution::unresolved_failure(error),
+    let lifecycle_guard = lifecycle_commands.try_claim(
+        &command.principal.room_id,
+        &command.principal.principal_id,
+        &command.request_id,
+        command.action.as_str(),
+    );
+    let execution = match lifecycle_guard {
+        None => CommandExecution::unresolved_failure(PersistenceError::CommandUnresolved {
+            code: "runtime_recovery_in_progress",
+            message: "The exact lifecycle request is currently owned by server recovery. Retry the same request.".to_owned(),
+        }),
+        Some(_lifecycle_guard) => {
+            execute_command(
+                store,
+                provider_catalog,
+                provider_adapter,
+                event_tx,
+                &command,
+            )
+            .await
+        }
     };
+    if execution.is_definitive()
+        && let Some(debit) = &command.mutation_debit
+    {
+        debit.resolve();
+    }
     let CommandExecution {
         reply,
         committed_events,
@@ -523,8 +515,8 @@ async fn execute_command(
     event_tx: &broadcast::Sender<RoomEvent>,
     command: &RoomCommand,
 ) -> CommandExecution {
-    match command.action.as_str() {
-        "agent.create" => {
+    match command.action {
+        RoomAction::AgentCreate => {
             execute_agent_create_command(
                 store,
                 provider_catalog,
@@ -534,10 +526,10 @@ async fn execute_command(
             )
             .await
         }
-        "agent.configure" => execute_agent_configure(store, provider_catalog, command)
+        RoomAction::AgentConfigure => execute_agent_configure(store, provider_catalog, command)
             .await
             .unwrap_or_else(CommandExecution::transactional_failure),
-        "agent.start" | "agent.resume" => {
+        RoomAction::AgentStart | RoomAction::AgentResume => {
             crate::room_agent_lifecycle_runtime::execute_agent_start(
                 store,
                 provider_adapter,
@@ -545,7 +537,7 @@ async fn execute_command(
             )
             .await
         }
-        "agent.stop" => {
+        RoomAction::AgentStop => {
             crate::room_agent_lifecycle_runtime::execute_agent_stop(
                 store,
                 provider_adapter,
@@ -553,7 +545,7 @@ async fn execute_command(
             )
             .await
         }
-        "room.settings.update" => match store
+        RoomAction::RoomSettingsUpdate => match store
             .execute_room_settings_update(&command.principal, &command.request_id, &command.payload)
             .await
         {
@@ -561,17 +553,17 @@ async fn execute_command(
             Ok(outcome) => progressed_execution(store, &command.principal.room_id, outcome).await,
             Err(error) => CommandExecution::transactional_failure(error),
         },
-        "room.random.roll" | "room.random.choose" => {
+        RoomAction::RoomRandomRoll | RoomAction::RoomRandomChoose => {
             match crate::room_random_runtime::execute_room_random(store, command).await {
                 Ok(outcome) => CommandExecution::success(outcome),
                 Err(error) => CommandExecution::transactional_failure(error),
             }
         }
-        _ => match store
+        RoomAction::MessageSend => match store
             .execute_message_with_turn(
                 &command.principal,
                 &command.request_id,
-                &command.action,
+                command.action.as_str(),
                 &command.payload,
             )
             .await
@@ -628,7 +620,7 @@ async fn execute_agent_configure(
         .replay_command(
             &command.principal,
             &command.request_id,
-            &command.action,
+            command.action.as_str(),
             &command.payload,
         )
         .await?
@@ -671,6 +663,13 @@ pub(crate) struct CommandExecution {
 }
 
 impl CommandExecution {
+    fn is_definitive(&self) -> bool {
+        match &self.reply {
+            Ok(_) => true,
+            Err(failure) => failure.resolution != CommandResolution::Unresolved,
+        }
+    }
+
     fn success(outcome: CommandOutcome) -> Self {
         let committed_events = if outcome.deduplicated {
             Vec::new()
@@ -709,14 +708,6 @@ impl CommandExecution {
         Self::failure(CommandFailure::transactional(error))
     }
 
-    fn rejected_failure(error: PersistenceError) -> Self {
-        Self {
-            reply: Err(CommandFailure::rejected(error)),
-            committed_events: Vec::new(),
-            assignments: Vec::new(),
-        }
-    }
-
     pub(crate) fn unresolved_failure(error: PersistenceError) -> Self {
         Self {
             reply: Err(CommandFailure::unresolved(error)),
@@ -732,14 +723,6 @@ impl CommandExecution {
         Self {
             reply: Err(CommandFailure::unresolved(error)),
             committed_events,
-            assignments: Vec::new(),
-        }
-    }
-
-    fn admission_failure(error: PersistenceError) -> Self {
-        Self {
-            reply: Err(CommandFailure::after_admission(error)),
-            committed_events: Vec::new(),
             assignments: Vec::new(),
         }
     }

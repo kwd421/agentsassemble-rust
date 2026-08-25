@@ -81,7 +81,7 @@ where
         connection_nonce,
     } = grant;
     let principal = resolve_principal(sender, state, &ticket_principal).await?;
-    let request = receive_subscription(sender, receiver, &state.shutdown).await?;
+    let request = receive_subscription(sender, receiver, state, &principal).await?;
     let prepared = prepare_snapshot(sender, state, &principal, request.resume_from_seq).await?;
     let catch_up = load_catch_up(sender, state, &principal, prepared.cursor).await?;
     let receipt = subscription_receipt(
@@ -135,13 +135,47 @@ where
 async fn receive_subscription<S, R>(
     sender: &mut S,
     receiver: &mut R,
-    cancellation: &CancellationToken,
+    state: &AppState,
+    principal: &AuthenticatedPrincipal,
 ) -> Option<ValidatedSubscription>
 where
     S: Sink<Message, Error = axum::Error> + Unpin,
     R: Stream<Item = Result<Message, axum::Error>> + Unpin,
 {
-    let Some(Ok(Message::Text(raw))) = receiver.next().await else {
+    let Some(Ok(message)) = receiver.next().await else {
+        return None;
+    };
+    let (frame_bytes, control_frame) = match &message {
+        Message::Text(raw) => (raw.len(), false),
+        Message::Binary(raw) => (raw.len(), false),
+        Message::Ping(raw) | Message::Pong(raw) => (raw.len(), true),
+        Message::Close(_) => return None,
+    };
+    if !state
+        .raw_ingress
+        .admit(principal, frame_bytes, control_frame)
+    {
+        let _ = send_nack(
+            sender,
+            &state.shutdown,
+            "",
+            "subscribe",
+            "ingress_limited",
+            "WebSocket ingress budget exceeded.",
+        )
+        .await;
+        return None;
+    }
+    let Message::Text(raw) = message else {
+        let _ = send_nack(
+            sender,
+            &state.shutdown,
+            "",
+            "subscribe",
+            "subscribe_required",
+            "The first frame must be a valid subscription.",
+        )
+        .await;
         return None;
     };
     let Ok(ClientFrame::Subscribe {
@@ -152,7 +186,7 @@ where
     else {
         let _ = send_nack(
             sender,
-            cancellation,
+            &state.shutdown,
             "",
             "subscribe",
             "subscribe_required",
@@ -164,7 +198,7 @@ where
     if streams != [RoomStream::RoomEvents] || resume_from_seq < 0 {
         let _ = send_nack(
             sender,
-            cancellation,
+            &state.shutdown,
             "",
             "subscribe",
             "invalid_subscription",
@@ -176,7 +210,7 @@ where
     if !challenge_is_valid(&server_challenge) {
         let _ = send_nack(
             sender,
-            cancellation,
+            &state.shutdown,
             "",
             "subscribe",
             "server_challenge_invalid",

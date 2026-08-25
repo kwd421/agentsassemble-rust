@@ -193,6 +193,46 @@ async fn incomplete_http_headers_expire_and_admission_is_bounded() {
 }
 
 #[tokio::test]
+async fn websocket_connection_limit_is_shared_by_one_principal() {
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
+    let database_url = format!(
+        "sqlite://{}",
+        directory.path().join("runtime.sqlite3").display()
+    );
+    let store = SqliteStore::open(&database_url)
+        .await
+        .unwrap_or_else(|error| panic!("open test store: {error}"));
+    bootstrap(&store).await;
+    let server = start(store).await;
+    let mut sockets = Vec::new();
+    for _ in 0..8 {
+        sockets.push(connect(&server.base_url).await);
+    }
+
+    let grant = request_ticket(&server.base_url).await;
+    let ticket = grant["ticket"]
+        .as_str()
+        .unwrap_or_else(|| panic!("ticket response has no ticket"));
+    let url = format!(
+        "{}/ws?ticket={ticket}",
+        server.base_url.replacen("http://", "ws://", 1)
+    );
+    let Err(error) = connect_async(url).await else {
+        panic!("the ninth connection for one principal was admitted");
+    };
+    let tokio_tungstenite::tungstenite::Error::Http(response) = error else {
+        panic!("unexpected ninth-connection failure: {error}");
+    };
+    assert_eq!(response.status(), reqwest::StatusCode::SERVICE_UNAVAILABLE);
+
+    for socket in &mut sockets {
+        socket.close().await;
+    }
+    server.stop().await;
+}
+
+#[tokio::test]
 async fn ticket_auth_and_route_limit_are_checked_before_request_body() {
     let directory =
         tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));

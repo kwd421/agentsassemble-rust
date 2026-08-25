@@ -2,6 +2,7 @@ use agentsassemble_persistence::{
     AgentRuntimeStarted, AgentStartEffect, AgentStartPlan, AgentStopPlan,
     LiveRuntimeReconciliation, PersistenceError, SqliteStore,
 };
+use agentsassemble_protocol::RoomAction;
 use agentsassemble_provider::{ProviderAdapter, ProviderAdapterError, ProviderRuntimeStarted};
 
 use crate::{
@@ -14,7 +15,7 @@ pub(crate) async fn execute_agent_start(
     provider_adapter: &ProviderAdapter,
     command: &RoomCommand,
 ) -> CommandExecution {
-    let mut plan = if command.action == "agent.resume" {
+    let mut plan = if command.action == RoomAction::AgentResume {
         store
             .prepare_agent_resume(&command.principal, &command.request_id, &command.payload)
             .await
@@ -29,13 +30,13 @@ pub(crate) async fn execute_agent_start(
             provider_adapter,
             &command.principal,
             &command.request_id,
-            &command.action,
+            command.action.as_str(),
             &command.payload,
         )
         .await
         {
             Ok(LiveRuntimeReconciliation::RetryOriginalEffect) => {
-                if command.action == "agent.resume" {
+                if command.action == RoomAction::AgentResume {
                     store
                         .prepare_agent_resume(
                             &command.principal,
@@ -79,7 +80,7 @@ pub(crate) async fn execute_agent_start(
             &command.request_id,
             &command.payload,
             &effect.operation_id,
-            &command.action,
+            command.action.as_str(),
             &reservation.runtime_handle_id,
             &reservation.runtime_owner_id,
             &reservation.runtime_lease_token,
@@ -112,7 +113,7 @@ async fn record_agent_start_pre_effect_failure(
     effect: &AgentStartEffect,
     error: ProviderAdapterError,
 ) -> CommandExecution {
-    let command_action = if command.action == "agent.resume" {
+    let command_action = if command.action == RoomAction::AgentResume {
         "agent.resume"
     } else {
         "agent.start"
@@ -148,7 +149,7 @@ async fn complete_agent_start(
     started: ProviderRuntimeStarted,
 ) -> CommandExecution {
     let persisted = persisted_start(started);
-    let outcome = if command.action == "agent.resume" {
+    let outcome = if command.action == RoomAction::AgentResume {
         store
             .complete_agent_resume(
                 &command.principal,
@@ -205,7 +206,7 @@ async fn record_agent_start_failure(
             events,
         );
     }
-    let commit = if command.action == "agent.resume" {
+    let commit = if command.action == RoomAction::AgentResume {
         store
             .fail_agent_resume(
                 &command.principal,
@@ -362,7 +363,7 @@ async fn prepare_agent_stop_with_recovery(
         provider_adapter,
         &command.principal,
         &command.request_id,
-        &command.action,
+        command.action.as_str(),
         &command.payload,
     )
     .await

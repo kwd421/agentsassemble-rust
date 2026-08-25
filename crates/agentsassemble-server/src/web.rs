@@ -20,10 +20,7 @@ use futures_util::StreamExt;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use thiserror::Error;
-use tokio::{
-    net::TcpListener,
-    sync::{OwnedSemaphorePermit, Semaphore},
-};
+use tokio::{net::TcpListener, sync::Semaphore};
 use tokio_util::sync::CancellationToken;
 use tower_http::{
     services::{ServeDir, ServeFile},
@@ -33,9 +30,9 @@ use tower_http::{
 use crate::{
     AppState, ConsumedTicket, RoomShutdownError, TicketIssueError,
     authenticated_channel::MAX_WS_WIRE_MESSAGE_BYTES,
+    connection_admission::ConnectionLease,
     host_ticket::{AuthenticatedTicketResponse, HostChallengeResponse},
     http_transport::{MAX_HTTP_CONNECTIONS, RejectionCounter, serve_connection},
-    ingress_budget::IngressBudget,
     issue_local_ticket, reconcile_runtime_ownership,
     room_socket::{
         EstablishedSubscription, establish, persistence_error, persistence_error_is_internal,
@@ -222,16 +219,15 @@ async fn upgrade_socket(
     Query(query): Query<TicketQuery>,
     upgrade: WebSocketUpgrade,
 ) -> Result<Response, ApiError> {
-    let permit = state
-        .connection_admission
-        .clone()
-        .try_acquire_owned()
-        .map_err(|_| ApiError::unavailable("WebSocket connection limit reached."))?;
     let grant = state
         .tickets
         .consume(&query.ticket)
         .await
         .map_err(|error| ApiError::unauthorized(error.to_string()))?;
+    let lease = state
+        .connection_admission
+        .acquire(&grant.principal)
+        .map_err(|error| ApiError::unavailable(error.to_string()))?;
     let connections = state.connections.clone();
     Ok(upgrade
         .max_message_size(MAX_WS_WIRE_MESSAGE_BYTES)
@@ -239,7 +235,7 @@ async fn upgrade_socket(
         .write_buffer_size(64 * 1024)
         .max_write_buffer_size(512 * 1024)
         .on_upgrade(move |socket| {
-            connections.track_future(socket_session(socket, state, grant, permit))
+            connections.track_future(socket_session(socket, state, grant, lease))
         })
         .into_response())
 }
@@ -249,7 +245,7 @@ async fn socket_session(
     socket: WebSocket,
     state: AppState,
     grant: ConsumedTicket,
-    _permit: OwnedSemaphorePermit,
+    _lease: ConnectionLease,
 ) {
     let (mut sender, mut receiver) = socket.split();
     let Some(EstablishedSubscription {
@@ -262,7 +258,6 @@ async fn socket_session(
     else {
         return;
     };
-    let mut ingress = IngressBudget::new();
     loop {
         tokio::select! {
             () = state.shutdown.cancelled() => return,
@@ -274,7 +269,7 @@ async fn socket_session(
                     Message::Ping(raw) | Message::Pong(raw) => (raw.len(), true),
                     Message::Close(_) => return,
                 };
-                if !ingress.admit(frame_bytes, control_frame) {
+                if !state.raw_ingress.admit(&principal, frame_bytes, control_frame) {
                     let _ = channel.send_nack(&mut sender, &state.shutdown, "", "frame", CommandResolution::Unresolved, ProtocolError::new("ingress_limited", "WebSocket ingress budget exceeded.")).await;
                     return;
                 }
@@ -285,7 +280,7 @@ async fn socket_session(
                     }
                     continue;
                 };
-                let Ok((client_frame, authenticated_bytes)) =
+                let Ok((client_frame, _authenticated_bytes)) =
                     channel.decode_client(raw.as_str())
                 else {
                     let _ = channel.send_nack(&mut sender, &state.shutdown, "", "frame", CommandResolution::Unresolved, ProtocolError::new("frame_authentication_invalid", "WebSocket frame authentication failed.")).await;
@@ -293,9 +288,9 @@ async fn socket_session(
                 };
                 match client_frame {
                     ClientFrame::Command { request_id, action, payload } => {
-                        let action = action.as_str().to_owned();
+                        let action_name = action.as_str().to_owned();
                         let outcome = state.rooms.execute(
-                            principal.clone(), request_id.clone(), action.clone(), payload, authenticated_bytes,
+                            principal.clone(), request_id.clone(), action, payload,
                         ).await;
                         match outcome {
                             Ok(outcome) => {
@@ -303,7 +298,7 @@ async fn socket_session(
                                     request_id,
                                     accepted: true,
                                     resolution: CommandResolution::Committed,
-                                    action,
+                                    action: action_name,
                                     result: outcome.result,
                                     deduplicated: outcome.deduplicated,
                                 });
@@ -311,10 +306,10 @@ async fn socket_session(
                             }
                             Err(failure) => {
                                 if persistence_error_is_internal(&failure.error) {
-                                    tracing::error!(error = ?failure.error, room_id = %principal.room_id, action = %action, "room command persistence failed");
+                                    tracing::error!(error = ?failure.error, room_id = %principal.room_id, action = %action_name, "room command persistence failed");
                                 }
                                 let (code, message) = persistence_error(&failure.error);
-                                if channel.send_nack(&mut sender, &state.shutdown, &request_id, &action, failure.resolution, ProtocolError::new(code, message)).await.is_err() { return; }
+                                if channel.send_nack(&mut sender, &state.shutdown, &request_id, &action_name, failure.resolution, ProtocolError::new(code, message)).await.is_err() { return; }
                             }
                         }
                     }
@@ -485,8 +480,6 @@ mod tests {
 
     use agentsassemble_persistence::PersistenceError;
 
-    use crate::ingress_budget::{CONTROL_FRAMES_PER_WINDOW, IngressBudget};
-
     use crate::HostSecret;
     use crate::room_socket::persistence_error;
 
@@ -511,14 +504,5 @@ mod tests {
             assert_eq!(message, "Persistence operation failed.");
             assert!(!message.contains("/private"));
         }
-    }
-
-    #[test]
-    fn control_frames_have_an_independent_ingress_budget() {
-        let mut budget = IngressBudget::new();
-        for _ in 0..CONTROL_FRAMES_PER_WINDOW {
-            assert!(budget.admit(0, true));
-        }
-        assert!(!budget.admit(0, true));
     }
 }
