@@ -154,7 +154,7 @@ async fn load_candidate(
     let encoded_session = row.get::<String, _>("session_json");
     let session = serde_json::from_str::<DurableAgentSession>(&encoded_session)?;
     let reservation_rows = sqlx::query(
-        "SELECT principal_id, request_id, action, payload_hash, operation_id, status, phase FROM lifecycle_command_reservations WHERE room_id = ? AND session_id = ? ORDER BY principal_id, request_id",
+        "SELECT principal_id, request_id, action, payload_hash, operation_id, status, phase, failure_code, failure_message FROM lifecycle_command_reservations WHERE room_id = ? AND session_id = ? ORDER BY principal_id, request_id",
     )
     .bind(room_id)
     .bind(session_id)
@@ -171,6 +171,8 @@ async fn load_candidate(
                 "operation_id": row.get::<String, _>("operation_id"),
                 "status": row.get::<String, _>("status"),
                 "phase": row.get::<String, _>("phase"),
+                "failure_code": row.get::<String, _>("failure_code"),
+                "failure_message": row.get::<String, _>("failure_message"),
             })
         })
         .collect::<Vec<Value>>();

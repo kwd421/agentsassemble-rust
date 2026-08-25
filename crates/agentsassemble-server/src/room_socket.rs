@@ -126,7 +126,7 @@ where
         Err(error) => {
             log_internal_persistence_error(&error, "principal resolution failed");
             let (code, message) = persistence_error(&error);
-            let _ = send_nack(sender, &state.shutdown, "", "subscribe", code, &message).await;
+            let _ = send_nack(sender, &state.shutdown, "", "subscribe", &code, &message).await;
             None
         }
     }
@@ -468,15 +468,22 @@ fn fit_snapshot_frame(mut snapshot: RoomSnapshot) -> Option<String> {
     }
 }
 
-pub(crate) fn persistence_error(error: &PersistenceError) -> (&'static str, String) {
+pub(crate) fn persistence_error(error: &PersistenceError) -> (String, String) {
     match error {
-        PersistenceError::CommandConflict => ("command_conflict", error.to_string()),
-        PersistenceError::CommandRejected { code, message } => (code, message.clone()),
-        PersistenceError::ParticipantMissing => ("session_revoked", error.to_string()),
-        PersistenceError::RoomMissing => ("room_not_found", error.to_string()),
-        PersistenceError::InvalidCursor { .. } => {
-            ("invalid_cursor", "Room cursor is invalid.".to_owned())
+        PersistenceError::CommandConflict => ("command_conflict".to_owned(), error.to_string()),
+        PersistenceError::CommandRejected { code, message }
+        | PersistenceError::CommandUnresolved { code, message } => {
+            ((*code).to_owned(), message.clone())
         }
+        PersistenceError::StoredCommandRejected { code, message } => {
+            (code.clone(), message.clone())
+        }
+        PersistenceError::ParticipantMissing => ("session_revoked".to_owned(), error.to_string()),
+        PersistenceError::RoomMissing => ("room_not_found".to_owned(), error.to_string()),
+        PersistenceError::InvalidCursor { .. } => (
+            "invalid_cursor".to_owned(),
+            "Room cursor is invalid.".to_owned(),
+        ),
         PersistenceError::Database(_)
         | PersistenceError::Json(_)
         | PersistenceError::RuntimeAuthorityTask(_)
@@ -491,7 +498,7 @@ pub(crate) fn persistence_error(error: &PersistenceError) -> (&'static str, Stri
         | PersistenceError::InvalidServerId
         | PersistenceError::SubscriptionCatchUpExceeded { .. }
         | PersistenceError::SubscriptionSequenceGap { .. } => (
-            "persistence_failed",
+            "persistence_failed".to_owned(),
             "Persistence operation failed.".to_owned(),
         ),
     }

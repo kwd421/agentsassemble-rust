@@ -27,6 +27,8 @@ pub(crate) struct StoredLifecycleReservation {
     pub status: String,
     pub phase: String,
     pub prepared_result_json: String,
+    pub failure_code: String,
+    pub failure_message: String,
 }
 
 impl<'a> LifecycleReservation<'a> {
@@ -78,7 +80,7 @@ pub(crate) async fn load_lifecycle_reservation(
     request_id: &str,
 ) -> Result<Option<StoredLifecycleReservation>, PersistenceError> {
     let row = sqlx::query(
-        "SELECT action, payload_hash, session_id, operation_id, status, phase, prepared_result_json FROM lifecycle_command_reservations WHERE room_id = ? AND principal_id = ? AND request_id = ?",
+        "SELECT action, payload_hash, session_id, operation_id, status, phase, prepared_result_json, failure_code, failure_message FROM lifecycle_command_reservations WHERE room_id = ? AND principal_id = ? AND request_id = ?",
     )
     .bind(room_id)
     .bind(principal_id)
@@ -93,6 +95,8 @@ pub(crate) async fn load_lifecycle_reservation(
         status: row.get("status"),
         phase: row.get("phase"),
         prepared_result_json: row.get("prepared_result_json"),
+        failure_code: row.get("failure_code"),
+        failure_message: row.get("failure_message"),
     }))
 }
 
@@ -103,7 +107,7 @@ pub(crate) async fn claim_lifecycle_command(
     reserve_budget: bool,
 ) -> Result<(), PersistenceError> {
     let existing = sqlx::query(
-        "SELECT action, payload_hash, session_id, operation_id, status, phase, prepared_result_json FROM lifecycle_command_reservations WHERE room_id = ? AND principal_id = ? AND request_id = ?",
+        "SELECT action, payload_hash, session_id, operation_id, status, phase, prepared_result_json, failure_code, failure_message FROM lifecycle_command_reservations WHERE room_id = ? AND principal_id = ? AND request_id = ?",
     )
     .bind(&reservation.principal.room_id)
     .bind(&reservation.principal.principal_id)
@@ -126,6 +130,10 @@ pub(crate) async fn claim_lifecycle_command(
                 code: "runtime_owner_lost",
                 message: "The original provider runtime owner was lost during restart. Use a new lifecycle request.".to_owned(),
             }),
+            "rejected" => Err(stored_rejection(
+                row.get::<String, _>("failure_code"),
+                row.get::<String, _>("failure_message"),
+            )),
             _ => Err(invalid_reservation()),
         };
     }
@@ -218,6 +226,64 @@ pub(crate) async fn finish_lifecycle_command(
     .rows_affected();
     if removed != 1 {
         return Err(invalid_reservation());
+    }
+    Ok(())
+}
+
+pub(crate) async fn reject_lifecycle_command(
+    transaction: &mut Transaction<'_, Sqlite>,
+    reservation: &LifecycleReservation<'_>,
+    failure_code: &str,
+    failure_message: &str,
+) -> Result<(), PersistenceError> {
+    validate_stored_rejection(failure_code, failure_message)?;
+    let updated = sqlx::query(
+        "UPDATE lifecycle_command_reservations SET status = 'rejected', failure_code = ?, failure_message = ? WHERE room_id = ? AND principal_id = ? AND request_id = ? AND action = ? AND payload_hash = ? AND session_id = ? AND operation_id = ? AND status = 'pending' AND phase = ? AND prepared_result_json = ?",
+    )
+    .bind(failure_code)
+    .bind(failure_message)
+    .bind(&reservation.principal.room_id)
+    .bind(&reservation.principal.principal_id)
+    .bind(reservation.request_id)
+    .bind(reservation.action)
+    .bind(reservation.payload_hash)
+    .bind(reservation.session_id)
+    .bind(reservation.operation_id)
+    .bind(reservation.phase)
+    .bind(reservation.prepared_result_json)
+    .execute(&mut **transaction)
+    .await?
+    .rows_affected();
+    if updated != 1 {
+        return Err(invalid_reservation());
+    }
+    Ok(())
+}
+
+pub(crate) fn stored_rejection(failure_code: String, failure_message: String) -> PersistenceError {
+    validate_stored_rejection(&failure_code, &failure_message).map_or_else(
+        |error| error,
+        |()| PersistenceError::StoredCommandRejected {
+            code: failure_code,
+            message: failure_message,
+        },
+    )
+}
+
+fn validate_stored_rejection(
+    failure_code: &str,
+    failure_message: &str,
+) -> Result<(), PersistenceError> {
+    let code_valid = !failure_code.is_empty()
+        && failure_code.len() <= 128
+        && failure_code
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'));
+    if !code_valid || failure_message.is_empty() || failure_message.chars().count() > 512 {
+        return Err(PersistenceError::CommandUnresolved {
+            code: "stored_command_rejection_invalid",
+            message: "Stored terminal command rejection is invalid.".to_owned(),
+        });
     }
     Ok(())
 }

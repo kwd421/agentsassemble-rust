@@ -1189,6 +1189,65 @@ source files, original application data, and unrelated processes were untouched.
 The corrected public diff still requires both reviewers to re-review after commit
 and push.
 
+The same critical web session then reviewed public range `90448b3..b2de648` and
+returned `APPROVE` with no Critical, High, or Medium blocker. It recorded durable
+safe-failure replay as a Lower hardening observation. Daybreaker Blue High
+independently returned `REVISE` with three Medium paths after tracing reconnect
+through persistence and provider ownership: an `unconfirmed` start/stop replay
+reset the intent to `prepared` and could call the provider again; a safe terminal
+launch failure deleted its reservation, so suppression of the rejected NACK could
+re-admit the same request; and an exact recovery-locked replay was classified as
+rejected, causing the browser to discard the only owning request ID. The stronger
+Daybreaker result is accepted because each path is reachable directly from the
+current reconnect contract; the web approval and its narrower severity are kept
+as independent evidence rather than silently replaced.
+
+The correction makes safe launch failure one atomic durable terminal outcome.
+The lifecycle reservation enters `rejected` with only the same bounded redacted
+public code/message returned by the initial NACK. Exact replay returns that stored
+rejection without another budget debit, event, provider selection, or provider
+effect. Corrupt stored rejection data fails unresolved. `unconfirmed` start,
+resume, create/start, and stop replay now returns a typed unresolved outcome
+without changing the intent or calling a provider; only a later authoritative
+reconciliation observation may change the state. The browser retains the exact
+serialized command and adds a per-request exponential retry delay capped at 30
+seconds, which a successful socket handshake cannot reset. The clean schema
+advances to 17; schema 16 is rejected without migration or compatibility code.
+
+Focused persistence regressions prove identical durable rejection replay with no
+new events, retained request reservation, no repeated ambiguous provider plan,
+and restart-uncertain create/start ownership. The browser regression proves
+byte-identical replay across repeated unresolved NACKs and observes the growing
+per-request delay on an already authenticated replacement connection. The final
+unchanged `make verify` passed every mandatory architecture, source-growth,
+logical-line, and 800-line gate, generated bindings, production frontend/CSS
+verification, 72 frontend files with 356 tests, 15 Tauri tests, 18 domain, 86
+persistence, four protocol, 100 provider, 17 server unit tests, 21 Rust
+integration tests, documentation tests, warning-denied workspace/desktop Clippy,
+and final diff validation. An earlier run stopped at the 800-line gate after the
+new contract pushed a mixed lifecycle test file to 803 lines; the start-failure
+tests were split at their owning responsibility without an exception. A later
+frontend run exposed a real asynchronous test race between socket readiness and
+authenticated command encoding; the regression now waits for the causal second
+wire frame rather than assuming queue timing.
+
+Computer Use drove a fresh debug package under isolated identifier
+`app.agentsassemble.rust.lifecyclerecoveryverify`. Static inspection proved the
+production central origin was absent from the built assets, and the startup UI
+visibly selected local identity because no central directory was configured.
+Fresh identity `Lifecycle Recovery Verify` created a real schema-17 room and
+published `LIFECYCLE_RECOVERY_UI_OK`. Normal quit removed the exact app,
+supervisor, and server processes. Relaunch restored the same room/message over a
+new authenticated socket and published `LIFECYCLE_RECOVERY_RECONNECT_OK`.
+Read-only SQLite inspection found the two strings as `message_final` sequences 2
+and 3. Final normal quit again removed the exact process tree. The isolated
+Application Support, cache, WebKit data, temporary server copies, copied sidecar,
+generated Tauri schemas, frontend distribution, app bundle, and both Cargo target
+trees were removed; the Cargo trees accounted for 12.0 GiB of regenerable output.
+Dependency installations, original app data, and unrelated legacy/provider
+processes were untouched. Commit/push and both post-push reviews remain required
+before this correction is closed.
+
 ## API verification scope
 
 When a reachable flow specifically needs an API-backed provider, the allowed paid/provider-specific candidates are the official DeepSeek API and the designated Flash provider path. Every other API-backed verification uses only an explicitly free API or free model. Missing credentials, exhausted free quota, or unavailable models fail visibly; they do not trigger a paid substitution or a fallback provider.

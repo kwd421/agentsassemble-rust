@@ -214,7 +214,7 @@ async fn create_start_first_commit_replays_one_intent_and_preserves_result_shape
 }
 
 #[tokio::test]
-async fn safe_start_failure_reuses_exact_creation_without_a_second_created_event() {
+async fn safe_start_failure_replays_the_same_terminal_rejection() {
     let (store, principal, directory) = fixture().await;
     let payload = json!({"start": true, "provider_id": "codex"});
     let plan = store
@@ -229,7 +229,7 @@ async fn safe_start_failure_reuses_exact_creation_without_a_second_created_event
     let AgentCreateStartPlan::Start(effect) = plan else {
         panic!("new create/start must own a start effect");
     };
-    let events = store
+    let failure = store
         .fail_agent_create_start(
             &principal,
             "create-start-safe-failure",
@@ -240,30 +240,48 @@ async fn safe_start_failure_reuses_exact_creation_without_a_second_created_event
         )
         .await
         .unwrap_or_else(|error| panic!("record safe failure: {error}"));
-    assert_eq!(events.len(), 2);
+    assert_eq!(failure.events.len(), 2);
     assert!(
-        events
+        failure
+            .events
             .iter()
             .all(|event| event.event_type != "agent_session_created")
     );
-
-    let retry = store
-        .prepare_agent_create_start(
-            &principal,
-            "create-start-safe-failure",
-            &payload,
-            &draft(directory.path()),
-        )
+    let event_count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM room_events")
+        .fetch_one(&store.pool)
         .await
-        .unwrap_or_else(|error| panic!("retry exact create/start: {error}"));
-    let AgentCreateStartPlan::Start(retry) = retry else {
-        panic!("safe failure must retry the exact created session");
-    };
+        .unwrap_or_else(|error| panic!("count terminal failure events: {error}"));
+
+    assert!(matches!(
+        store
+            .inspect_agent_create_start(&principal, "create-start-safe-failure", &payload)
+            .await,
+        Err(crate::PersistenceError::StoredCommandRejected { code, message })
+            if code == failure.code && message == failure.message
+    ));
     assert_eq!(
-        effect.session.public.session_id,
-        retry.session.public.session_id
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM room_events")
+            .fetch_one(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("recount terminal failure events: {error}")),
+        event_count
     );
-    assert!(retry.committed_events.is_empty());
+    let reservation = sqlx::query_as::<_, (String, String, String)>(
+        "SELECT status, failure_code, failure_message FROM lifecycle_command_reservations WHERE request_id = 'create-start-safe-failure'",
+    )
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("read durable rejection: {error}"));
+    assert_eq!(reservation.0, "rejected");
+    assert_eq!(reservation.1, failure.code);
+    assert_eq!(reservation.2, failure.message);
+    let write_count = sqlx::query_scalar::<_, i64>(
+        "SELECT command_count FROM room_write_budgets WHERE room_id = 'general'",
+    )
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("read terminal failure budget: {error}"));
+    assert_eq!(write_count, 1);
     let created_count = sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*) FROM room_events WHERE json_extract(event_json, '$.type') = 'agent_session_created'",
     )
@@ -274,7 +292,7 @@ async fn safe_start_failure_reuses_exact_creation_without_a_second_created_event
 }
 
 #[tokio::test]
-async fn uncertain_create_start_keeps_reservation_and_blocks_blind_retransmission() {
+async fn restart_uncertain_create_start_keeps_one_unresolved_request() {
     let (store, principal, directory) = fixture().await;
     let payload = json!({"start": true, "provider_id": "codex"});
     let plan = store
@@ -294,25 +312,42 @@ async fn uncertain_create_start_keeps_reservation_and_blocks_blind_retransmissio
             &principal,
             &effect.session.public.session_id,
             &effect.operation_id,
-            "",
-            "",
+            "uncertain-runtime",
+            "supervisor-instance-1",
             "runtime_start_unconfirmed",
             "launch effect is ambiguous",
         )
         .await
         .unwrap_or_else(|error| panic!("mark uncertain start: {error}"));
-    let error = store
-        .inspect_agent_create_start(&principal, "create-start-uncertain", &payload)
+    assert_eq!(
+        store
+            .reconcile_agent_sessions_after_restart()
+            .await
+            .unwrap_or_else(|error| panic!("reconcile uncertain start: {error}")),
+        1
+    );
+    let event_count = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM room_events")
+        .fetch_one(&store.pool)
         .await
-        .err()
-        .unwrap_or_else(|| panic!("uncertain effect without a handle must not retransmit"));
-    assert!(matches!(
-        error,
-        crate::PersistenceError::CommandRejected {
-            code: "runtime_effect_unconfirmed",
-            ..
-        }
-    ));
+        .unwrap_or_else(|error| panic!("count recovery events: {error}"));
+    for _ in 0..2 {
+        assert!(matches!(
+            store
+                .inspect_agent_create_start(&principal, "create-start-uncertain", &payload)
+                .await,
+            Err(crate::PersistenceError::CommandUnresolved {
+                code: "runtime_effect_unconfirmed",
+                ..
+            })
+        ));
+    }
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM room_events")
+            .fetch_one(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("recount recovery events: {error}")),
+        event_count
+    );
     let reservations = sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*) FROM lifecycle_command_reservations WHERE request_id = 'create-start-uncertain' AND phase = 'creation_committed'",
     )
@@ -320,4 +355,14 @@ async fn uncertain_create_start_keeps_reservation_and_blocks_blind_retransmissio
     .await
     .unwrap_or_else(|error| panic!("count retained reservation: {error}"));
     assert_eq!(reservations, 1);
+    let encoded = sqlx::query_scalar::<_, String>(
+        "SELECT session_json FROM agent_sessions WHERE room_id = 'general' AND session_id = ?",
+    )
+    .bind(&effect.session.public.session_id)
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("read retained session: {error}"));
+    let session = serde_json::from_str::<agentsassemble_domain::DurableAgentSession>(&encoded)
+        .unwrap_or_else(|error| panic!("decode retained session: {error}"));
+    assert_eq!(session.lifecycle_intent_status, "unconfirmed");
 }

@@ -5,7 +5,7 @@ use chrono::Utc;
 use serde_json::Value;
 
 use crate::{
-    AgentRuntimeStarted, CommandOutcome, PersistenceError, SqliteStore,
+    AgentLaunchFailureCommit, AgentRuntimeStarted, CommandOutcome, PersistenceError, SqliteStore,
     agent_creation_records::create_or_reuse_agent_records,
     agent_launch_events::{append_launch_events, launch_result},
     agent_lifecycle::{
@@ -17,7 +17,7 @@ use crate::{
     agent_lifecycle_events::store_result,
     agent_lifecycle_reservations::{
         LifecycleReservation, StoredLifecycleReservation, claim_lifecycle_command,
-        finish_lifecycle_command, load_lifecycle_reservation,
+        finish_lifecycle_command, load_lifecycle_reservation, stored_rejection,
     },
     authority::active_room_for_principal,
     command_admission::existing_command,
@@ -278,7 +278,7 @@ impl SqliteStore {
         effect: &AgentCreateStartEffect,
         error_code: &'static str,
         message: &str,
-    ) -> Result<Vec<RoomEvent>, PersistenceError> {
+    ) -> Result<AgentLaunchFailureCommit, PersistenceError> {
         let payload_hash = canonical_payload_hash(payload);
         self.fail_agent_launch_command(
             principal,
@@ -315,7 +315,7 @@ async fn resume_create_start(
     validate_create_reservation(&stored, payload_hash)?;
     let prepared_result: Value = serde_json::from_str(&stored.prepared_result_json)?;
     validate_prepared_result(&prepared_result, &stored.session_id)?;
-    let mut session = load_session(transaction, &principal.room_id, &stored.session_id).await?;
+    let session = load_session(transaction, &principal.room_id, &stored.session_id).await?;
     if session.lifecycle_intent_action != "start"
         || session.lifecycle_intent_id != stored.operation_id
     {
@@ -326,18 +326,11 @@ async fn resume_create_start(
     }
     match session.lifecycle_intent_status.as_str() {
         "prepared" => {}
-        "unconfirmed"
-            if session.public.recovery_required && session.runtime_handle_id.is_empty() =>
-        {
-            return Err(rejected(
-                "runtime_effect_unconfirmed",
-                "The original provider start effect could not be observed. Recovery is required before retrying it.",
-            ));
-        }
         "unconfirmed" => {
-            "prepared".clone_into(&mut session.lifecycle_intent_status);
-            session.public.updated_at = Utc::now();
-            save_session(transaction, &session).await?;
+            return Err(PersistenceError::CommandUnresolved {
+                code: "runtime_effect_unconfirmed",
+                message: "The original provider start effect remains unresolved. Wait for authoritative runtime observation before retrying it.".to_owned(),
+            });
         }
         _ => {
             return Err(rejected(
@@ -396,6 +389,10 @@ fn validate_create_reservation(
         "owner_lost" => Err(rejected(
             "runtime_owner_lost",
             "The original provider runtime owner was lost during restart. Use a new lifecycle request.",
+        )),
+        "rejected" => Err(stored_rejection(
+            stored.failure_code.clone(),
+            stored.failure_message.clone(),
         )),
         _ => Err(rejected(
             "stale_lifecycle_reservation",

@@ -99,7 +99,7 @@ async fn record_agent_start_failure(
             events,
         );
     }
-    let events = if command.action == "agent.resume" {
+    let commit = if command.action == "agent.resume" {
         store
             .fail_agent_resume(
                 &command.principal,
@@ -122,11 +122,17 @@ async fn record_agent_start_failure(
             )
             .await
     };
-    let events = match events {
-        Ok(events) => events,
+    let commit = match commit {
+        Ok(commit) => commit,
         Err(recording_error) => return CommandExecution::unresolved_failure(recording_error),
     };
-    CommandExecution::committed_failure(rejected(error.code, error.message), events)
+    CommandExecution::committed_failure(
+        PersistenceError::StoredCommandRejected {
+            code: commit.code,
+            message: commit.message,
+        },
+        commit.events,
+    )
 }
 
 pub(crate) async fn execute_agent_stop(

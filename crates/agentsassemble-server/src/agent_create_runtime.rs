@@ -178,7 +178,7 @@ async fn fail_created_agent_start(
             CommandFailure::unresolved(rejected(error.code, error.message)),
         )
     } else {
-        let events = store
+        let commit = store
             .fail_agent_create_start(
                 principal,
                 request_id,
@@ -190,8 +190,11 @@ async fn fail_created_agent_start(
             .await
             .map_err(CommandFailure::unresolved)?;
         (
-            events,
-            CommandFailure::rejected(rejected(error.code, error.message)),
+            commit.events,
+            CommandFailure::rejected(PersistenceError::StoredCommandRejected {
+                code: commit.code,
+                message: commit.message,
+            }),
         )
     };
     Ok(AgentCreateExecution {

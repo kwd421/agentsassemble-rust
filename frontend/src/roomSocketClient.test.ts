@@ -262,6 +262,7 @@ describe("proof-bound canonical room socket", () => {
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     expect(onOpen).toHaveBeenCalledOnce();
     expect(onEvents).toHaveBeenCalledWith([event(2)]);
+    await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
     const command = await sentAuthenticatedCommand(sockets[0], frames);
     expect(command).toMatchObject({
       op: "command",
@@ -552,10 +553,38 @@ describe("proof-bound canonical room socket", () => {
     expect(replayedAfterUnresolved).toEqual(firstCommand);
 
     await receiveAuthenticated(sockets[2], thirdFrames, {
+      op: "nack",
+      accepted: false,
+      resolution: "unresolved",
+      request_id: replayedAfterUnresolved.request_id,
+      action: "message.send",
+      error: {
+        code: "runtime_effect_unconfirmed",
+        message: "Provider effect remains unresolved.",
+      },
+    });
+    await vi.waitFor(() => expect(sockets[2].readyState).toBe(WebSocket.CLOSED));
+
+    await vi.advanceTimersByTimeAsync(500);
+    expect(sockets).toHaveLength(4);
+    sockets[3].open();
+    const fourthFrames = await handshakeFrames(sockets[3], tickets[3], 0, 0);
+    sockets[3].receive(fourthFrames.receipt);
+    sockets[3].receiveRaw(fourthFrames.rawSnapshot);
+    await vi.waitFor(() => expect(handle.ready()).toBe(true));
+    expect(sockets[3].sent).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(499);
+    expect(sockets[3].sent).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await vi.waitFor(() => expect(sockets[3].sent).toHaveLength(2));
+    const backedOffReplay = await sentAuthenticatedCommand(sockets[3], fourthFrames);
+    expect(backedOffReplay).toEqual(firstCommand);
+
+    await receiveAuthenticated(sockets[3], fourthFrames, {
       op: "ack",
       accepted: true,
       resolution: "committed",
-      request_id: replayedAfterUnresolved.request_id,
+      request_id: backedOffReplay.request_id,
       action: "message.send",
       result: { event: event(1), event_seq: 1 },
       deduplicated: true,

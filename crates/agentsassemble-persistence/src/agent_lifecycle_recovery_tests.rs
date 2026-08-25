@@ -170,16 +170,24 @@ async fn ambiguous_start_retains_its_exact_runtime_lease_and_blocks_replacement(
             ..
         })
     ));
-    let AgentStartPlan::Start(retry) = store
-        .prepare_agent_start(&principal, "ambiguous-start", &payload)
+    assert!(matches!(
+        store
+            .prepare_agent_start(&principal, "ambiguous-start", &payload)
+            .await,
+        Err(PersistenceError::CommandUnresolved {
+            code: "runtime_effect_unconfirmed",
+            ..
+        })
+    ));
+    let unchanged = store
+        .load_runtime_reconciliation_candidates()
         .await
-        .unwrap_or_else(|error| panic!("retry ambiguous start: {error}"))
-    else {
-        panic!("same start must retain its external-effect lease");
-    };
-    assert_eq!(retry.session.runtime_handle_id, "uncertain-runtime");
-    assert_eq!(retry.session.runtime_owner_id, "supervisor-instance-1");
-    assert_eq!(retry.session.lifecycle_intent_status, "prepared");
+        .unwrap_or_else(|error| panic!("reload retained start lease: {error}"))
+        .pop()
+        .unwrap_or_else(|| panic!("unresolved replay released the runtime lease"));
+    assert_eq!(unchanged.session.runtime_handle_id, "uncertain-runtime");
+    assert_eq!(unchanged.session.runtime_owner_id, "supervisor-instance-1");
+    assert_eq!(unchanged.session.lifecycle_intent_status, "unconfirmed");
 }
 
 #[tokio::test]
@@ -204,7 +212,7 @@ async fn ambiguous_pre_effect_start_cannot_spawn_again_without_a_gone_observatio
         store
             .prepare_agent_start(&principal, "unobserved-start", &payload)
             .await,
-        Err(PersistenceError::CommandRejected {
+        Err(PersistenceError::CommandUnresolved {
             code: "runtime_effect_unconfirmed",
             ..
         })

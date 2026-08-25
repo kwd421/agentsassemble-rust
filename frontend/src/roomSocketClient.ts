@@ -50,6 +50,8 @@ export type {
 } from "./roomSocketTypes";
 
 const ROOM_SOCKET_COMMAND_TIMEOUT_MS = 20_000;
+const ROOM_SOCKET_UNRESOLVED_RETRY_BASE_MS = 500;
+const ROOM_SOCKET_UNRESOLVED_RETRY_MAX_MS = 30_000;
 const MAX_ROOM_SOCKET_WIRE_CHARS = 384 * 1024;
 
 interface PendingRoomCommand {
@@ -59,6 +61,9 @@ interface PendingRoomCommand {
   resolve: (value: RoomCommandAck) => void;
   reject: (reason: Error) => void;
   timerId: number | null;
+  retryTimerId: number | null;
+  retryAttempt: number;
+  retryNotBefore: number;
   everSent: boolean;
 }
 
@@ -135,6 +140,7 @@ export function openRoomSocket(
   function rejectAll(error: Error) {
     pending.forEach((command) => {
       if (command.timerId !== null) window.clearTimeout(command.timerId);
+      if (command.retryTimerId !== null) window.clearTimeout(command.retryTimerId);
       command.reject(command.everSent
         ? new RoomSocketSayError(
             "The room command outcome could not be confirmed before the socket closed.",
@@ -301,6 +307,19 @@ export function openRoomSocket(
         ) return;
         pending.forEach((command, requestId) => {
           if (sentRequestIds.has(requestId)) return;
+          const retryDelay = command.retryNotBefore - Date.now();
+          if (retryDelay > 0) {
+            if (command.retryTimerId !== null) window.clearTimeout(command.retryTimerId);
+            command.retryTimerId = window.setTimeout(() => {
+              command.retryTimerId = null;
+              sendPending();
+            }, retryDelay);
+            return;
+          }
+          if (command.retryTimerId !== null) {
+            window.clearTimeout(command.retryTimerId);
+            command.retryTimerId = null;
+          }
           sentRequestIds.add(requestId);
           outboundQueue = outboundQueue
             .then(async () => {
@@ -461,11 +480,19 @@ export function openRoomSocket(
             if (msg.resolution === "unresolved") {
               if (command.timerId !== null) window.clearTimeout(command.timerId);
               command.timerId = null;
+              command.retryAttempt += 1;
+              const retryDelay = Math.min(
+                ROOM_SOCKET_UNRESOLVED_RETRY_MAX_MS,
+                ROOM_SOCKET_UNRESOLVED_RETRY_BASE_MS *
+                  2 ** Math.min(command.retryAttempt - 1, 6)
+              );
+              command.retryNotBefore = Date.now() + retryDelay;
               currentSocket.close();
               return;
             }
             pending.delete(msg.request_id);
             if (command.timerId !== null) window.clearTimeout(command.timerId);
+            if (command.retryTimerId !== null) window.clearTimeout(command.retryTimerId);
             command.reject(new RoomSocketSayError(
               msg.error.message,
               msg.error.code
@@ -486,6 +513,7 @@ export function openRoomSocket(
           }
           pending.delete(msg.request_id);
           if (command.timerId !== null) window.clearTimeout(command.timerId);
+          if (command.retryTimerId !== null) window.clearTimeout(command.retryTimerId);
           command.resolve(msg as unknown as RoomCommandAck);
           return;
         }
@@ -576,6 +604,9 @@ export function openRoomSocket(
         resolve,
         reject,
         timerId: null,
+        retryTimerId: null,
+        retryAttempt: 0,
+        retryNotBefore: 0,
         everSent: false,
       };
       pending.set(requestId, waiting);

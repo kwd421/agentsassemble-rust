@@ -25,7 +25,9 @@ impl CommandFailure {
     pub(crate) fn transactional(error: PersistenceError) -> Self {
         if matches!(
             error,
-            PersistenceError::CommandConflict | PersistenceError::CommandRejected { .. }
+            PersistenceError::CommandConflict
+                | PersistenceError::CommandRejected { .. }
+                | PersistenceError::StoredCommandRejected { .. }
         ) {
             Self::rejected(error)
         } else {

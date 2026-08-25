@@ -368,12 +368,7 @@ impl SqliteStore {
                 return Ok(AgentStopPlan::Stop(effect));
             }
             if session.lifecycle_intent_status == "unconfirmed" {
-                let effect = stop_effect(&session)?;
-                "prepared".clone_into(&mut session.lifecycle_intent_status);
-                session.public.updated_at = Utc::now();
-                save_session(&mut transaction, &session).await?;
-                transaction.commit().await?;
-                return Ok(AgentStopPlan::Stop(effect));
+                return Err(unresolved_effect());
             }
             return Err(rejected(
                 "invalid_state",
@@ -614,19 +609,7 @@ fn matching_start_intent(
     require_matching_operation(session, "start", operation_id)?;
     match session.lifecycle_intent_status.as_str() {
         "prepared" => Ok(true),
-        "unconfirmed"
-            if session.public.recovery_required && session.runtime_handle_id.is_empty() =>
-        {
-            Err(rejected(
-                "runtime_effect_unconfirmed",
-                "The original provider start effect could not be observed. Recovery is required before retrying it.",
-            ))
-        }
-        "unconfirmed" => {
-            "prepared".clone_into(&mut session.lifecycle_intent_status);
-            session.public.updated_at = Utc::now();
-            Ok(true)
-        }
+        "unconfirmed" => Err(unresolved_effect()),
         _ => Err(rejected(
             "invalid_state",
             "Stored provider start intent is invalid.",
@@ -665,6 +648,13 @@ fn invalid_turn_queue() -> PersistenceError {
         "stored_turn_authority_invalid",
         "Stored Agent Session turn authority is inconsistent or oversized.",
     )
+}
+
+fn unresolved_effect() -> PersistenceError {
+    PersistenceError::CommandUnresolved {
+        code: "runtime_effect_unconfirmed",
+        message: "The original provider lifecycle effect remains unresolved. Wait for authoritative runtime observation before retrying it.".to_owned(),
+    }
 }
 
 pub(crate) async fn load_session(
@@ -786,6 +776,10 @@ mod tests;
 #[cfg(test)]
 #[path = "agent_lifecycle_budget_tests.rs"]
 mod budget_tests;
+
+#[cfg(test)]
+#[path = "agent_start_failure_tests.rs"]
+mod start_failure_tests;
 
 #[cfg(test)]
 #[path = "agent_lifecycle_recovery_tests.rs"]

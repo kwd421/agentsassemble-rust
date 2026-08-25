@@ -5,11 +5,11 @@ use chrono::Utc;
 use serde_json::Value;
 
 use crate::{
-    PersistenceError, SqliteStore,
+    AgentLaunchFailureCommit, PersistenceError, SqliteStore,
     agent_lifecycle::{clear_intent, load_session, save_session},
     agent_lifecycle_authority::{payload_agent_id, require_intent},
     agent_lifecycle_events::{append_error_event, append_state_event},
-    agent_lifecycle_reservations::{LifecycleReservation, finish_lifecycle_command},
+    agent_lifecycle_reservations::{LifecycleReservation, reject_lifecycle_command},
     authority::active_room_for_principal,
 };
 
@@ -31,7 +31,7 @@ impl SqliteStore {
         operation_id: &str,
         error_code: &'static str,
         message: &str,
-    ) -> Result<Vec<RoomEvent>, PersistenceError> {
+    ) -> Result<AgentLaunchFailureCommit, PersistenceError> {
         self.fail_agent_launch(
             principal,
             request_id,
@@ -58,7 +58,7 @@ impl SqliteStore {
         operation_id: &str,
         error_code: &'static str,
         message: &str,
-    ) -> Result<Vec<RoomEvent>, PersistenceError> {
+    ) -> Result<AgentLaunchFailureCommit, PersistenceError> {
         self.fail_agent_launch(
             principal,
             request_id,
@@ -81,7 +81,7 @@ impl SqliteStore {
         error_code: &'static str,
         message: &str,
         command_action: &'static str,
-    ) -> Result<Vec<RoomEvent>, PersistenceError> {
+    ) -> Result<AgentLaunchFailureCommit, PersistenceError> {
         let agent_id = payload_agent_id(payload)?;
         let payload_hash = canonical_payload_hash(payload);
         self.fail_agent_launch_command(
@@ -112,7 +112,7 @@ impl SqliteStore {
         command_action: &'static str,
         reservation_phase: &str,
         prepared_result_json: &str,
-    ) -> Result<Vec<RoomEvent>, PersistenceError> {
+    ) -> Result<AgentLaunchFailureCommit, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
         active_room_for_principal(&mut transaction, principal).await?;
         let mut session = load_session(&mut transaction, &principal.room_id, agent_id).await?;
@@ -133,7 +133,6 @@ impl SqliteStore {
             phase: reservation_phase,
             prepared_result_json,
         };
-        finish_lifecycle_command(&mut transaction, &reservation).await?;
         "unavailable".clone_into(&mut session.public.status);
         session.public.enabled = false;
         "error".clone_into(&mut session.public.runtime_status);
@@ -144,6 +143,13 @@ impl SqliteStore {
             "Provider launch failed.".clone_into(&mut session.public.last_error);
         }
         session.public.last_error_code = error_code.to_owned();
+        reject_lifecycle_command(
+            &mut transaction,
+            &reservation,
+            &session.public.last_error_code,
+            &session.public.last_error,
+        )
+        .await?;
         session.runtime_handle_id.clear();
         session.runtime_owner_id.clear();
         clear_intent(&mut session);
@@ -158,8 +164,13 @@ impl SqliteStore {
         )
         .await?;
         let state = append_state_event(&mut transaction, principal, &session.public).await?;
+        let commit = AgentLaunchFailureCommit {
+            events: vec![error, state],
+            code: session.public.last_error_code,
+            message: session.public.last_error,
+        };
         transaction.commit().await?;
-        Ok(vec![error, state])
+        Ok(commit)
     }
 
     /// Retains an exact start operation when process creation may have taken effect.

@@ -53,6 +53,10 @@ pub enum PersistenceError {
     SubscriptionSequenceGap { expected: i64, found: i64 },
     #[error("command rejected: {code}: {message}")]
     CommandRejected { code: &'static str, message: String },
+    #[error("durable command rejected: {code}: {message}")]
+    StoredCommandRejected { code: String, message: String },
+    #[error("command outcome remains unresolved: {code}: {message}")]
+    CommandUnresolved { code: &'static str, message: String },
 }
 
 #[derive(Debug, Clone)]
@@ -75,6 +79,13 @@ pub struct CommandOutcome {
     pub event: RoomEvent,
     pub events: Vec<RoomEvent>,
     pub deduplicated: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct AgentLaunchFailureCommit {
+    pub events: Vec<RoomEvent>,
+    pub code: String,
+    pub message: String,
 }
 
 #[derive(Clone)]

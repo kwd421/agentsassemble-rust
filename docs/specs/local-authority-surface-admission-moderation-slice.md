@@ -151,14 +151,19 @@ rejected NACK may retire the private request identity. Queue saturation, lost
 room-owner reply, principal/persistence failure before authoritative replay, and
 any unclassified server failure are unresolved; the browser closes and replays
 the same authenticated inner bytes. Missing or invalid resolution fails closed
-the same way rather than falling back to error-code inference.
+the same way rather than falling back to error-code inference. Repeated
+unresolved replies use a bounded per-request exponential delay that a successful
+reconnect cannot reset.
 
 Each action owner classifies resolution from its execution phase. Transactional
 validation/authorization/state failure is definitive only when that transaction
 cannot have committed. After a durable create/lifecycle prepare, an uncertain or
 applied provider effect, or a post-commit publication/completion boundary, a
 nonterminal failure is unresolved regardless of its generic error variant. Only
-an explicitly committed terminal provider failure may be rejected. A response
+an explicitly committed terminal provider failure may be rejected. Its exact
+public rejection remains durable and replayable without another effect, event,
+or write-budget debit. An unconfirmed lifecycle effect stays unresolved and is
+not executed again until authoritative runtime reconciliation changes its state. A response
 for a request ID the browser does not currently own is also a protocol failure;
 it closes the channel rather than being ignored.
 

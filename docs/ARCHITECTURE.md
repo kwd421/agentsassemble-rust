@@ -160,16 +160,22 @@ a definitive rejection, and queue, transport, principal-resolution, persistence,
 or public-projection ambiguity is `unresolved`. The client settles only the first
 two. An `unresolved`, missing, malformed, or mismatched resolution closes the
 socket while preserving the exact private request ID and serialized bytes for a
-fresh authenticated replay.
+fresh authenticated replay. Repeated unresolved replies increase a bounded,
+per-request retry delay; successful socket authentication cannot reset that
+command-owned backoff.
 
 Resolution is owned at each action's effect boundary, not inferred globally from
 an error enum. A deterministic failure inside a transaction that cannot have
 committed is `rejected`. A safely failed provider launch is rejected only after
-its terminal failure state is committed. Once creation/lifecycle preparation has
+its terminal failure state and exact public rejection are committed together.
+That request remains reserved and replays the same rejection without another
+budget debit, event, or provider call. Once creation/lifecycle preparation has
 committed, a provider effect is uncertain or applied, or completion/publication
 may have failed after commit, every nonterminal failure is `unresolved` even when
 its diagnostic uses a command-rejection-shaped error. An uncertain failure may
 publish its committed recovery events without releasing the request identity.
+Replaying an `unconfirmed` lifecycle intent performs no provider effect and no
+durable mutation until reconciliation records a new authoritative observation.
 
 ### Room event cursor
 
@@ -361,7 +367,7 @@ An Agent Session's configured and desired state is durable room state. Its publi
 
 Provider diagnostics are untrusted process output. Before an error enters a durable Agent Session, room event, command result, snapshot, or public projection, the shared domain boundary removes local paths, credentials, authorization headers, secret-shaped options and assignments, URL user information, JWTs, and private keys, then applies the field's size limit. The common provider adapter exposes only stable public error codes and messages; protocol payloads and stderr never cross directly into room authority.
 
-Lifecycle command payloads carry exactly one unchanged Agent Session identifier alias and no unknown keys. The external-effect operation identity binds the exact room, principal, request ID, and action; only that operation may resume or finalize its prepared work, and an opposite lifecycle command cannot replace it. Before an incomplete lifecycle command leaves its write transaction, a room/principal/request reservation also binds its action, payload hash, Agent Session, operation ID, and phase. Every non-lifecycle command admission checks that same request namespace, so the reservation is the in-flight or terminal-failure phase of one global command authority rather than a second authority beside completed results. It survives recoverable failures and restart, and a completed command replaces it with the durable command result in the same transaction. A schema without that reservation contract is rejected before lifecycle state is loaded. Process reuse and provider-conversation reuse are independent observations; an app-server process is not proof that a Codex thread is active, and a reused conversation must retain its exact durable identity. Every runtime handle is paired with its private supervisor-instance owner. Ambiguous start or shutdown retains its exact operation and any observed handle rather than turning uncertainty into success or a new generation. A confirmed stop is held as an in-memory tombstone until persistence checkpoints `effect_applied`, so a checkpoint retry cannot repeat the external stop. Persistence never emits a stop effect with a missing handle or owner and never accepts a DB-only reused start.
+Lifecycle command payloads carry exactly one unchanged Agent Session identifier alias and no unknown keys. The external-effect operation identity binds the exact room, principal, request ID, and action; only that operation may finalize its prepared work, and an opposite lifecycle command cannot replace it. Before an incomplete lifecycle command leaves its write transaction, a room/principal/request reservation also binds its action, payload hash, Agent Session, operation ID, and phase. Every non-lifecycle command admission checks that same request namespace, so the reservation is the in-flight or terminal-failure phase of one global command authority rather than a second authority beside completed results. It survives recoverable failures and restart; a completed command replaces it with the durable command result, while a safe terminal launch failure retains a bounded public rejected outcome for exact replay. A schema without that reservation contract is rejected before lifecycle state is loaded. Process reuse and provider-conversation reuse are independent observations; an app-server process is not proof that a Codex thread is active, and a reused conversation must retain its exact durable identity. Every runtime handle is paired with its private supervisor-instance owner. Ambiguous start or shutdown retains its exact operation and any observed handle rather than turning uncertainty into success or a new generation; exact replay remains unresolved and cannot repeat the provider effect until authoritative reconciliation changes the intent. A confirmed stop is held as an in-memory tombstone until persistence checkpoints `effect_applied`, so a checkpoint retry cannot repeat the external stop. Persistence never emits a stop effect with a missing handle or owner and never accepts a DB-only reused start.
 
 Startup reconciliation is a three-owner protocol: persistence loads a complete private candidate outside process I/O, the common provider supervisor reports `Adopted`, `Gone`, `LeaseUncertain`, or `Ambiguous`, and persistence validates and commits the lifecycle-specific transition with an exact candidate CAS. Drivers report facts and never choose `owner_lost`. A gone pending stop becomes `effect_applied`; a confirmed checkpoint never repeats an effect; an adoptable runtime is rebound to the current supervisor only after filesystem authority revalidation; an exact uncertain lease stays recovery-locked with its handle/owner; ambiguous start intent remains locked against duplicate spawn; and ambiguous or foreign stop ownership becomes terminal `owner_lost`. Runtime adoption never asserts provider-conversation activity. Network admission occurs only after every loaded candidate has committed a current observation.
 
