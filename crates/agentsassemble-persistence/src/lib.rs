@@ -78,7 +78,7 @@ pub use provider_turn_reconciliation::{
     ProviderTurnReconciliationPage,
 };
 pub use room_directory::{RoomCreateCommit, StoredRoomSummary};
-pub use room_preferences::RoomPreferencesSnapshot;
+pub use room_preferences::{LocalRoomPreferencesDirectoryEntry, RoomPreferencesSnapshot};
 pub use room_random::{ProviderRoomRandomCommit, RoomRandomCommit};
 pub use room_subscription::RoomCatchUp;
 pub use room_turns::{

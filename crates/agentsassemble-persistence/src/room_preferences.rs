@@ -1,7 +1,12 @@
-use agentsassemble_domain::{RoomSettings, RoomUserPreferences, RoomUserPreferencesPatch};
-use sqlx::{Sqlite, Transaction};
+use agentsassemble_domain::{
+    LOCAL_OPERATOR_USER_ID, Room, RoomSettings, RoomUserPreferences, RoomUserPreferencesPatch,
+};
+use sqlx::{Row, Sqlite, Transaction};
 
-use crate::{PersistenceError, SqliteStore, room_user_identity::resolve_room_user_identity};
+use crate::{
+    PersistenceError, SqliteStore, bootstrap::require_complete_bootstrap_in_transaction,
+    room_user_identity::resolve_room_user_identity,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RoomPreferencesSnapshot {
@@ -9,7 +14,65 @@ pub struct RoomPreferencesSnapshot {
     pub preferences: RoomUserPreferences,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LocalRoomPreferencesDirectoryEntry {
+    pub room: Room,
+    pub room_settings: RoomSettings,
+    pub preferences: RoomUserPreferences,
+}
+
 impl SqliteStore {
+    /// Reads every room and the local user's preferences under one complete-bootstrap snapshot.
+    ///
+    /// Archived rooms remain present because this is the original server-wide settings branch,
+    /// not the active-room membership projection.
+    ///
+    /// # Errors
+    ///
+    /// Fails when bootstrap integrity, stored room identity, JSON, or persistence is invalid.
+    pub async fn local_room_preferences_directory(
+        &self,
+    ) -> Result<Vec<LocalRoomPreferencesDirectoryEntry>, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        require_complete_bootstrap_in_transaction(&mut transaction).await?;
+        let rows = sqlx::query(
+            "SELECT rooms.room_id, rooms.room_json, rooms.settings_json, room_user_preferences.preferences_json FROM rooms LEFT JOIN room_user_preferences ON room_user_preferences.room_id = rooms.room_id AND room_user_preferences.user_id = ?",
+        )
+        .bind(LOCAL_OPERATOR_USER_ID)
+        .fetch_all(&mut *transaction)
+        .await?;
+        let mut entries = Vec::with_capacity(rows.len());
+        for row in rows {
+            let row_room_id = row.get::<String, _>("room_id");
+            let room: Room = serde_json::from_str(row.get::<String, _>("room_json").as_str())?;
+            if room.room_id != row_room_id {
+                return Err(invalid_stored_room());
+            }
+            let room_settings: RoomSettings =
+                serde_json::from_str(row.get::<String, _>("settings_json").as_str())?;
+            let preferences = row
+                .get::<Option<String>, _>("preferences_json")
+                .map_or_else(
+                    || Ok(RoomUserPreferences::default()),
+                    |encoded| serde_json::from_str(&encoded).map_err(PersistenceError::from),
+                )?;
+            entries.push(LocalRoomPreferencesDirectoryEntry {
+                room,
+                room_settings,
+                preferences,
+            });
+        }
+        entries.sort_by(|left, right| {
+            right
+                .room
+                .updated_at
+                .cmp(&left.room.updated_at)
+                .then_with(|| left.room.room_id.cmp(&right.room.room_id))
+        });
+        transaction.commit().await?;
+        Ok(entries)
+    }
+
     /// Reads one current human's preferences and the canonical room settings in one transaction.
     ///
     /// # Errors
@@ -68,6 +131,13 @@ impl SqliteStore {
     }
 }
 
+fn invalid_stored_room() -> PersistenceError {
+    PersistenceError::CommandRejected {
+        code: "invalid_state",
+        message: "Stored room authority is invalid.".to_owned(),
+    }
+}
+
 pub(crate) async fn load_room_preferences(
     transaction: &mut Transaction<'_, Sqlite>,
     user_id: &str,
@@ -115,7 +185,8 @@ mod tests {
 
     use agentsassemble_domain::{
         ChannelNotificationMode, ChannelPreference, LOCAL_OPERATOR_PARTICIPANT_ID,
-        LOCAL_OPERATOR_USER_ID, Participant, RoomNotificationMode, RoomUserPreferencesPatch,
+        LOCAL_OPERATOR_USER_ID, Participant, RoomNotificationMode, RoomStatus,
+        RoomUserPreferencesPatch,
     };
     use serde_json::json;
 
@@ -234,6 +305,82 @@ mod tests {
         .await
         .unwrap_or_else(|error| panic!("count preference rows: {error}"));
         assert_eq!(stored, 0);
+    }
+
+    #[tokio::test]
+    async fn local_settings_directory_includes_archived_rooms_and_exact_preferences() {
+        let store = fixture().await;
+        store
+            .create_room_for_local_operator(
+                "1c740f9e-e228-4b53-a4e9-a859e901d23c",
+                "archived-room",
+                "Archived",
+            )
+            .await
+            .unwrap_or_else(|error| panic!("create archived room fixture: {error}"));
+        let encoded = sqlx::query_scalar::<_, String>(
+            "SELECT room_json FROM rooms WHERE room_id = 'archived-room'",
+        )
+        .fetch_one(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("read archived room fixture: {error}"));
+        let mut archived: agentsassemble_domain::Room = serde_json::from_str(&encoded)
+            .unwrap_or_else(|error| panic!("decode archived room fixture: {error}"));
+        archived.status = RoomStatus::Archived;
+        sqlx::query("UPDATE rooms SET room_json = ? WHERE room_id = 'archived-room'")
+            .bind(
+                serde_json::to_string(&archived)
+                    .unwrap_or_else(|error| panic!("encode archived room fixture: {error}")),
+            )
+            .execute(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("archive room fixture: {error}"));
+        let patch = serde_json::from_value(json!({"notifications": "mute"}))
+            .unwrap_or_else(|error| panic!("parse directory preference patch: {error}"));
+        store
+            .update_room_preferences(
+                "general",
+                LOCAL_OPERATOR_USER_ID,
+                LOCAL_OPERATOR_PARTICIPANT_ID,
+                patch,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("write directory preferences: {error}"));
+
+        let directory = store
+            .local_room_preferences_directory()
+            .await
+            .unwrap_or_else(|error| panic!("read local settings directory: {error}"));
+        assert_eq!(directory.len(), 2);
+        let general = directory
+            .iter()
+            .find(|entry| entry.room.room_id == "general")
+            .unwrap_or_else(|| panic!("general room missing"));
+        assert_eq!(
+            general.preferences.notifications,
+            RoomNotificationMode::Mute
+        );
+        let archived = directory
+            .iter()
+            .find(|entry| entry.room.room_id == "archived-room")
+            .unwrap_or_else(|| panic!("archived room missing"));
+        assert_eq!(archived.room.status, RoomStatus::Archived);
+        assert_eq!(
+            archived.preferences,
+            agentsassemble_domain::RoomUserPreferences::default()
+        );
+
+        sqlx::query("UPDATE local_bootstrap_authority SET initialization_digest = 'broken'")
+            .execute(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("corrupt directory bootstrap fixture: {error}"));
+        assert!(matches!(
+            store.local_room_preferences_directory().await,
+            Err(PersistenceError::CommandRejected {
+                code: "bootstrap_repair_required",
+                ..
+            })
+        ));
     }
 
     async fn fixture() -> SqliteStore {
