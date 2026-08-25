@@ -15,7 +15,8 @@ use agentsassemble_protocol::{
 use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService};
 use agentsassemble_server::{
     AppState, HostSecret, TicketIssueError, TicketStore, issue_central_registration_ticket,
-    issue_local_operator_http_ticket, issue_local_ticket, serve,
+    issue_local_operator_http_ticket, issue_local_ticket, issue_preferences_read_ticket,
+    issue_preferences_write_ticket, issue_settings_directory_read_ticket, serve,
 };
 use anyhow::Context;
 use clap::Parser;
@@ -168,93 +169,166 @@ async fn run_control_pipe<R, W>(
         let Ok(Some(line)) = line else {
             return;
         };
-        let response = match serde_json::from_slice::<LocalControlRequest>(&line) {
-            Ok(LocalControlRequest::InspectBootstrap { request_id })
-                if valid_control_request_id(&request_id) =>
-            {
-                match state.store.local_bootstrap_status().await {
-                    Ok(status) => LocalControlResponse::BootstrapOk {
-                        request_id,
-                        bootstrap: Box::new(bootstrap_grant(
-                            status,
-                            false,
-                            &state.server_product_surface,
-                        )),
-                    },
-                    Err(error) => bootstrap_control_error(request_id, error),
-                }
-            }
-            Ok(LocalControlRequest::InitializeBootstrap {
-                request_id,
-                display_name,
-            }) if valid_control_request_id(&request_id) => {
-                match state
-                    .store
-                    .bootstrap_local_authority(&request_id, &display_name)
-                    .await
-                {
-                    Ok(commit) => LocalControlResponse::BootstrapOk {
-                        request_id,
-                        bootstrap: Box::new(bootstrap_grant(
-                            commit.status,
-                            commit.deduplicated,
-                            &state.server_product_surface,
-                        )),
-                    },
-                    Err(error) => bootstrap_control_error(request_id, error),
-                }
-            }
-            Ok(LocalControlRequest::IssueTicket {
-                request_id,
-                meeting_id,
-            }) if valid_control_request_id(&request_id) => {
-                match issue_local_ticket(&state, &meeting_id).await {
-                    Ok(ticket) => LocalControlResponse::Ok {
-                        request_id,
-                        ticket: ticket.ticket,
-                        ttl_seconds: ticket.ttl_seconds,
-                        server_proof_key: ticket.server_proof_key,
-                    },
-                    Err(error) => control_error(request_id, error),
-                }
-            }
-            Ok(LocalControlRequest::IssueOperatorHttpTicket { request_id })
-                if valid_control_request_id(&request_id) =>
-            {
-                match issue_local_operator_http_ticket(&state).await {
-                    Ok(ticket) => LocalControlResponse::OperatorHttpOk {
-                        request_id,
-                        ticket: ticket.ticket,
-                        ttl_seconds: ticket.ttl_seconds,
-                    },
-                    Err(error) => control_error(request_id, error),
-                }
-            }
-            Ok(LocalControlRequest::IssueCentralRegistrationTicket { request_id })
-                if valid_control_request_id(&request_id) =>
-            {
-                central_registration_control_response(&state, request_id).await
-            }
-            Ok(
-                LocalControlRequest::InspectBootstrap { request_id }
-                | LocalControlRequest::InitializeBootstrap { request_id, .. }
-                | LocalControlRequest::IssueTicket { request_id, .. }
-                | LocalControlRequest::IssueOperatorHttpTicket { request_id }
-                | LocalControlRequest::IssueCentralRegistrationTicket { request_id },
-            ) => LocalControlResponse::Error {
-                request_id,
-                code: "request_id_invalid".to_owned(),
-                message: "Control request id is invalid.".to_owned(),
-            },
-            Err(_) => LocalControlResponse::Error {
-                request_id: String::new(),
-                code: "control_request_invalid".to_owned(),
-                message: "Control request JSON is invalid.".to_owned(),
-            },
-        };
+        let response = control_response(&state, &line).await;
         if write_json_line(writer, &response).await.is_err() {
             return;
         }
+    }
+}
+
+async fn control_response(state: &AppState, line: &[u8]) -> LocalControlResponse {
+    let Ok(request) = serde_json::from_slice::<LocalControlRequest>(line) else {
+        return LocalControlResponse::Error {
+            request_id: String::new(),
+            code: "control_request_invalid".to_owned(),
+            message: "Control request JSON is invalid.".to_owned(),
+        };
+    };
+    let request_id = control_request_id(&request).to_owned();
+    if !valid_control_request_id(&request_id) {
+        return LocalControlResponse::Error {
+            request_id,
+            code: "request_id_invalid".to_owned(),
+            message: "Control request id is invalid.".to_owned(),
+        };
+    }
+    match request {
+        LocalControlRequest::InspectBootstrap { .. } => {
+            match state.store.local_bootstrap_status().await {
+                Ok(status) => LocalControlResponse::BootstrapOk {
+                    request_id,
+                    bootstrap: Box::new(bootstrap_grant(
+                        status,
+                        false,
+                        &state.server_product_surface,
+                    )),
+                },
+                Err(error) => bootstrap_control_error(request_id, error),
+            }
+        }
+        LocalControlRequest::InitializeBootstrap { display_name, .. } => {
+            match state
+                .store
+                .bootstrap_local_authority(&request_id, &display_name)
+                .await
+            {
+                Ok(commit) => LocalControlResponse::BootstrapOk {
+                    request_id,
+                    bootstrap: Box::new(bootstrap_grant(
+                        commit.status,
+                        commit.deduplicated,
+                        &state.server_product_surface,
+                    )),
+                },
+                Err(error) => bootstrap_control_error(request_id, error),
+            }
+        }
+        LocalControlRequest::IssueTicket { meeting_id, .. } => {
+            match issue_local_ticket(state, &meeting_id).await {
+                Ok(ticket) => LocalControlResponse::Ok {
+                    request_id,
+                    ticket: ticket.ticket,
+                    ttl_seconds: ticket.ttl_seconds,
+                    server_proof_key: ticket.server_proof_key,
+                },
+                Err(error) => control_error(request_id, error),
+            }
+        }
+        LocalControlRequest::IssueOperatorHttpTicket { .. } => {
+            match issue_local_operator_http_ticket(state).await {
+                Ok(ticket) => LocalControlResponse::OperatorHttpOk {
+                    request_id,
+                    ticket: ticket.ticket,
+                    ttl_seconds: ticket.ttl_seconds,
+                },
+                Err(error) => control_error(request_id, error),
+            }
+        }
+        LocalControlRequest::IssuePreferencesReadTicket { meeting_id, .. } => {
+            settings_ticket_control_response(
+                state,
+                request_id,
+                SettingsTicketRequest::PreferencesRead(meeting_id),
+            )
+            .await
+        }
+        LocalControlRequest::IssuePreferencesWriteTicket { meeting_id, .. } => {
+            settings_ticket_control_response(
+                state,
+                request_id,
+                SettingsTicketRequest::PreferencesWrite(meeting_id),
+            )
+            .await
+        }
+        LocalControlRequest::IssueSettingsDirectoryReadTicket { .. } => {
+            settings_ticket_control_response(
+                state,
+                request_id,
+                SettingsTicketRequest::DirectoryRead,
+            )
+            .await
+        }
+        LocalControlRequest::IssueCentralRegistrationTicket { .. } => {
+            central_registration_control_response(state, request_id).await
+        }
+    }
+}
+
+enum SettingsTicketRequest {
+    PreferencesRead(String),
+    PreferencesWrite(String),
+    DirectoryRead,
+}
+
+async fn settings_ticket_control_response(
+    state: &AppState,
+    request_id: String,
+    request: SettingsTicketRequest,
+) -> LocalControlResponse {
+    match request {
+        SettingsTicketRequest::PreferencesRead(room_id) => {
+            match issue_preferences_read_ticket(state, &room_id).await {
+                Ok(ticket) => LocalControlResponse::PreferencesReadOk {
+                    request_id,
+                    ticket: ticket.ticket,
+                    ttl_seconds: ticket.ttl_seconds,
+                },
+                Err(error) => control_error(request_id, error),
+            }
+        }
+        SettingsTicketRequest::PreferencesWrite(room_id) => {
+            match issue_preferences_write_ticket(state, &room_id).await {
+                Ok(ticket) => LocalControlResponse::PreferencesWriteOk {
+                    request_id,
+                    ticket: ticket.ticket,
+                    ttl_seconds: ticket.ttl_seconds,
+                },
+                Err(error) => control_error(request_id, error),
+            }
+        }
+        SettingsTicketRequest::DirectoryRead => {
+            match issue_settings_directory_read_ticket(state).await {
+                Ok(ticket) => LocalControlResponse::SettingsDirectoryReadOk {
+                    request_id,
+                    ticket: ticket.ticket,
+                    ttl_seconds: ticket.ttl_seconds,
+                },
+                Err(error) => control_error(request_id, error),
+            }
+        }
+    }
+}
+
+fn control_request_id(request: &LocalControlRequest) -> &str {
+    match request {
+        LocalControlRequest::InspectBootstrap { request_id }
+        | LocalControlRequest::InitializeBootstrap { request_id, .. }
+        | LocalControlRequest::IssueTicket { request_id, .. }
+        | LocalControlRequest::IssueOperatorHttpTicket { request_id }
+        | LocalControlRequest::IssuePreferencesReadTicket { request_id, .. }
+        | LocalControlRequest::IssuePreferencesWriteTicket { request_id, .. }
+        | LocalControlRequest::IssueSettingsDirectoryReadTicket { request_id }
+        | LocalControlRequest::IssueCentralRegistrationTicket { request_id } => request_id,
     }
 }
 

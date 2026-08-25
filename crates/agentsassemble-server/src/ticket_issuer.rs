@@ -100,6 +100,63 @@ pub async fn issue_local_operator_http_ticket(
     })
 }
 
+/// Issues an exact preference-read credential for the canonical local room human.
+///
+/// # Errors
+///
+/// Returns a bounded room, identity, persistence, or ticket-capacity error.
+pub async fn issue_preferences_read_ticket(
+    state: &AppState,
+    requested_room_id: &str,
+) -> Result<OperatorHttpTicketResponse, TicketIssueError> {
+    let identity = resolve_local_room_user(state, requested_room_id).await?;
+    let issued = state
+        .tickets
+        .issue_preferences_read(identity.room_id, identity.user_id, identity.participant_id)
+        .await
+        .map_err(|_| TicketIssueError::Unavailable)?;
+    Ok(operator_http_response(state, issued))
+}
+
+/// Issues an exact preference-write credential for the canonical local room human.
+///
+/// # Errors
+///
+/// Returns a bounded room, identity, persistence, or ticket-capacity error.
+pub async fn issue_preferences_write_ticket(
+    state: &AppState,
+    requested_room_id: &str,
+) -> Result<OperatorHttpTicketResponse, TicketIssueError> {
+    let identity = resolve_local_room_user(state, requested_room_id).await?;
+    let issued = state
+        .tickets
+        .issue_preferences_write(identity.room_id, identity.user_id, identity.participant_id)
+        .await
+        .map_err(|_| TicketIssueError::Unavailable)?;
+    Ok(operator_http_response(state, issued))
+}
+
+/// Issues the server-wide settings-directory read credential for the local operator.
+///
+/// # Errors
+///
+/// Returns a bootstrap, persistence, or bounded ticket-capacity error.
+pub async fn issue_settings_directory_read_ticket(
+    state: &AppState,
+) -> Result<OperatorHttpTicketResponse, TicketIssueError> {
+    state
+        .store
+        .require_local_bootstrap_complete()
+        .await
+        .map_err(map_bootstrap_error)?;
+    let issued = state
+        .tickets
+        .issue_settings_directory_read(LOCAL_OPERATOR_USER_ID.to_owned())
+        .await
+        .map_err(|_| TicketIssueError::Unavailable)?;
+    Ok(operator_http_response(state, issued))
+}
+
 /// Issues a private-control-derived credential for the exact central-registration route.
 ///
 /// # Errors
@@ -122,6 +179,49 @@ pub async fn issue_central_registration_ticket(
         ticket: issued.ticket,
         ttl_seconds: state.tickets.ttl_seconds(),
     })
+}
+
+async fn resolve_local_room_user(
+    state: &AppState,
+    requested_room_id: &str,
+) -> Result<agentsassemble_persistence::RoomUserIdentity, TicketIssueError> {
+    let room_id = validate_room_id(requested_room_id)
+        .map_err(|error| TicketIssueError::InvalidRoom(error.message))?;
+    state
+        .store
+        .authorize_room_user(
+            &room_id,
+            LOCAL_OPERATOR_USER_ID,
+            LOCAL_OPERATOR_PARTICIPANT_ID,
+        )
+        .await
+        .map_err(map_room_identity_error)
+}
+
+fn operator_http_response(
+    state: &AppState,
+    issued: crate::IssuedTicket,
+) -> OperatorHttpTicketResponse {
+    OperatorHttpTicketResponse {
+        ticket: issued.ticket,
+        ttl_seconds: state.tickets.ttl_seconds(),
+    }
+}
+
+fn map_room_identity_error(error: PersistenceError) -> TicketIssueError {
+    match error {
+        PersistenceError::RoomMissing => TicketIssueError::RoomMissing,
+        PersistenceError::ParticipantMissing
+        | PersistenceError::CommandRejected {
+            code:
+                "session_revoked"
+                | "room_inactive"
+                | "user_profile_missing"
+                | "profile_authority_mismatch",
+            ..
+        } => TicketIssueError::ParticipantInactive,
+        error => TicketIssueError::Persistence(error),
+    }
 }
 
 fn map_bootstrap_error(error: PersistenceError) -> TicketIssueError {

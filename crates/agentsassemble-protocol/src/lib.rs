@@ -363,6 +363,17 @@ pub enum LocalControlRequest {
     IssueOperatorHttpTicket {
         request_id: String,
     },
+    IssuePreferencesReadTicket {
+        request_id: String,
+        meeting_id: String,
+    },
+    IssuePreferencesWriteTicket {
+        request_id: String,
+        meeting_id: String,
+    },
+    IssueSettingsDirectoryReadTicket {
+        request_id: String,
+    },
     IssueCentralRegistrationTicket {
         request_id: String,
     },
@@ -403,6 +414,21 @@ pub enum LocalControlResponse {
         server_proof_key: String,
     },
     OperatorHttpOk {
+        request_id: String,
+        ticket: String,
+        ttl_seconds: u64,
+    },
+    PreferencesReadOk {
+        request_id: String,
+        ticket: String,
+        ttl_seconds: u64,
+    },
+    PreferencesWriteOk {
+        request_id: String,
+        ticket: String,
+        ttl_seconds: u64,
+    },
+    SettingsDirectoryReadOk {
         request_id: String,
         ticket: String,
         ttl_seconds: u64,

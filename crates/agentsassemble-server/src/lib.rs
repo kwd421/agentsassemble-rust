@@ -89,6 +89,7 @@ pub use ticket::{
 };
 pub use ticket_issuer::{
     TicketIssueError, issue_central_registration_ticket, issue_local_operator_http_ticket,
-    issue_local_ticket,
+    issue_local_ticket, issue_preferences_read_ticket, issue_preferences_write_ticket,
+    issue_settings_directory_read_ticket,
 };
 pub use web::{ServeError, router, serve};

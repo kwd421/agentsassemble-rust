@@ -210,6 +210,96 @@ async fn owned_control_pipe_issues_a_distinct_operator_http_ticket() {
 }
 
 #[tokio::test]
+async fn owned_control_pipe_issues_exact_settings_tickets_after_authority_exists() {
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
+    let database = directory.path().join("runtime.sqlite3");
+    let mut server = start_controlled(&database).await;
+
+    let before_bootstrap = server
+        .send_control(&LocalControlRequest::IssueSettingsDirectoryReadTicket {
+            request_id: "settings-directory-before-bootstrap".to_owned(),
+        })
+        .await;
+    assert!(matches!(
+        before_bootstrap,
+        LocalControlResponse::Error { code, .. } if code == "bootstrap_required"
+    ));
+    assert!(matches!(
+        server.initialize_bootstrap().await,
+        LocalControlResponse::BootstrapOk { .. }
+    ));
+
+    let LocalControlResponse::OperatorHttpOk { ticket, .. } = server.issue_operator_ticket().await
+    else {
+        panic!("operator ticket request was rejected");
+    };
+    let created = reqwest::Client::new()
+        .post(format!("{}/api/rooms", server.address))
+        .bearer_auth(ticket)
+        .json(&serde_json::json!({
+            "request_id": "23000000-0000-4000-8000-000000000023",
+            "room_id": "general",
+            "label": "General"
+        }))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("create settings test room: {error}"));
+    assert!(created.status().is_success());
+
+    let read = server
+        .send_control(&LocalControlRequest::IssuePreferencesReadTicket {
+            request_id: "preferences-read-ticket-1".to_owned(),
+            meeting_id: "general".to_owned(),
+        })
+        .await;
+    assert!(matches!(
+        read,
+        LocalControlResponse::PreferencesReadOk {
+            request_id,
+            ticket,
+            ttl_seconds,
+        } if request_id == "preferences-read-ticket-1"
+            && ticket.len() == 64
+            && ttl_seconds > 0
+    ));
+
+    let write = server
+        .send_control(&LocalControlRequest::IssuePreferencesWriteTicket {
+            request_id: "preferences-write-ticket-1".to_owned(),
+            meeting_id: "general".to_owned(),
+        })
+        .await;
+    assert!(matches!(
+        write,
+        LocalControlResponse::PreferencesWriteOk {
+            request_id,
+            ticket,
+            ttl_seconds,
+        } if request_id == "preferences-write-ticket-1"
+            && ticket.len() == 64
+            && ttl_seconds > 0
+    ));
+
+    let directory = server
+        .send_control(&LocalControlRequest::IssueSettingsDirectoryReadTicket {
+            request_id: "settings-directory-ticket-1".to_owned(),
+        })
+        .await;
+    assert!(matches!(
+        directory,
+        LocalControlResponse::SettingsDirectoryReadOk {
+            request_id,
+            ticket,
+            ttl_seconds,
+        } if request_id == "settings-directory-ticket-1"
+            && ticket.len() == 64
+            && ttl_seconds > 0
+    ));
+    server.close_parent_pipe().await;
+}
+
+#[tokio::test]
 async fn owned_control_pipe_issues_a_purpose_bound_central_registration_ticket() {
     let directory =
         tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
