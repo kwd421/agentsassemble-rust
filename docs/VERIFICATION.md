@@ -8,7 +8,7 @@ Verification claims only the boundary actually observed. Build, lint, unit tests
 
 The active comparison baseline is original
 `d5046473010d1353a81ee38337360e6d98f7bd6f` and public Rust
-`6de2671848b951fb16dc13bb2dd2dfeb25c1e88f`. Local uncommitted behavior
+`7a145d3cb053ef5920e082a99961ecdf735dd14c`. Local uncommitted behavior
 is never described as public completion. Every completed-slice evidence entry must
 name the tested Rust commit, original provenance commit, platform/build, exact
 entry point and command flow, viewer identity, provider/model where applicable,
@@ -1960,6 +1960,85 @@ control reported `매우 높음, 5개 중 4번째`, and the composer button also
 entry freezes only the design. Implementation, deterministic tests, packaged UI and
 allowed-provider real validation, commit/push, and post-implementation cross-review
 remain required before mute becomes completion evidence.
+
+## Participant-mute implementation candidate: `7a145d3`
+
+Rust commit `7a145d3cb053ef5920e082a99961ecdf735dd14c` implements the
+approved participant-mute and exact-provider-turn contract against original commit
+`d5046473010d1353a81ee38337360e6d98f7bd6f`. Room management owns the mute bit.
+Muting an Agent Session fences its exact `(room, session, generation)` execution,
+dispatches at most one provider-specific interrupt through the runtime owner, and
+does not infer success from process presence or UI state. A durable execution ledger
+and durable effect ledger distinguish pre-dispatch, dispatched, ambiguous, finalized,
+terminal, and quarantined states. Restart reconciliation never retransmits an
+ambiguous provider start or interrupt and never requeues a turn until the exact
+effect is resolved. Unmute changes only room authority and schedules eligible queued
+work through the existing server-owned scheduler.
+
+The shared runtime owns selection, lifecycle, task custody, and exact-turn admission;
+provider drivers own only their native start, observation, and interrupt protocols.
+Codex uses its official app-server turn identity, OpenCode uses its bound local server
+message/session identity, and the retained Antigravity adapter uses its current
+conversation/turn binding. Provider-specific details do not leak into room,
+persistence, protocol, or frontend branching. The extracted files separate startup,
+prompt construction, exact-turn control, effect persistence, participant moderation,
+and reconciliation by change reason. No compatibility reader, Python path, fake
+authority, provider fallback, polling loop, or client-owned orchestration was added.
+
+The product-surface revision is now generated from the Rust protocol owner into
+TypeScript. The first packaged run exposed the previous duplicated frontend literal:
+Rust correctly advertised revision 3 while the desktop bridge still required revision
+2. Replacing all production and test literals with the generated constant fixed the
+actual host/server admission boundary. The same run exposed that the copied member
+menu used an empty presentation-model `meeting_id` even though the canonical room
+participant had the room scope. The single member-entry projection now prefers the
+canonical participant scope, and a focused component regression proves that an Agent
+Session with an empty presentation field still invokes `participant.mute` for the
+canonical participant.
+
+Computer Use drove the release package `AgentsAssemble Mute Verify` under isolated
+identifier `app.agentsassemble.rust.muteverify0825` on macOS, with the central URL
+explicitly empty. The normal central default was separately observed to fail visibly
+with `Load failed`; the isolated local-only build is therefore local-runtime evidence,
+not central-authentication or fallback evidence. Fresh identity `Mute Verify` created
+one real room. Opening the lower-left profile card and then Agent Add removed the card
+from the modal surface. No display-name field appeared before a provider was selected;
+the copied Harness/API/Local groups and catalog-derived provider icons, labels, model,
+effort, workspace, permission, and start controls were present after selection.
+
+The retained Antigravity adapter ran the installed exact model identifier
+`gemini-3.6-flash`. One turn returned the provider's short `Test message for room.`;
+a second produced a real long actor-runtime response. A third repository-audit turn
+was visibly `응답 중` when the room member menu sent `뮤트`. Read-only SQLite evidence
+then recorded `turn_started` at sequence 53, `participant_muted(muted=1)` at sequence
+56, and `turn_finished(status=interrupted)` at sequence 57. Its execution row was
+`phase=interrupted` with finalized requeue custody, its one `interrupt` effect was
+`phase=finalized`, and no later `message_final` existed for that turn. The UI returned
+the Agent Session to `대기` and displayed `뮤트됨`; unmute previously cleared the same
+canonical projection.
+
+OpenCode ran the installed free identifier `opencode/hy3-free`. Both its long request
+and a post-unmute reuse request ended with the provider result `declined`, with no
+assistant response; this is recorded as a real provider failure rather than a pass,
+mock, or substituted model. Codex Terra could not be selected reliably through the
+macOS grouped native model selector during this run, so its real-provider row remains
+`unknown`; no Luna, Sol, or Daybreak substitution was created. Deterministic provider
+tests nevertheless cover exact Codex, OpenCode, and Antigravity interruption identities,
+task cancellation, ambiguity, restart, and no-retransmission contracts. This distinction
+prevents the successful Antigravity run from being generalized to an unobserved Codex
+Terra flow.
+
+The exact implementation commit passed `make verify`: mandatory architecture,
+source-growth, logical-line, and 800-line gates; generated bindings; the production
+frontend build and original-CSS verification; 72 frontend files with 365 tests;
+15 Tauri tests; 18 domain, 104 persistence, four protocol, 114 provider, and 31 server
+unit tests; 25 Rust integration tests; documentation tests; warning-denied workspace
+and desktop Clippy; and final diff validation. Both real Agent Sessions were stopped
+through their product controls before normal application quit. Computer Use confirmed
+the exact bundle was no longer running, no verification-owned provider or server child
+remained, and the exact package, Application Support, Caches, WebKit, and temporary
+hook-lock paths were permanently removed. Post-push Daybreaker and web critical reviews
+remain required before this candidate becomes completion evidence.
 
 ## API verification scope
 
