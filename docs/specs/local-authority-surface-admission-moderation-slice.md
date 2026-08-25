@@ -99,16 +99,20 @@ mute, permission, or Agent Session profile state.
 The currently composed desktop startup flow registers the exact local server after
 central person authentication. First creation writes one Ed25519 PKCS#8 private key
 exactly once to the owner-only `central-directory/host-ed25519.pk8` file beside the
-database authority. The same fresh initialization transaction stores `server_id` and
-the matching raw 32-byte public key in SQLite. The private key is never stored in the
-database. An interrupted empty-database initialization reuses the already-created key;
-an initialized database never creates a missing replacement. A brand-new database path
-also refuses any pre-existing orphaned key before creating the database, so stale key
-material cannot bind itself to a new server ID or turn the next open into an apparent
-interrupted initialization. A database-only backup therefore cannot clone signing
-authority, while a missing, orphaned, malformed, over-permissive, hard-linked, symlinked,
-or public-key-mismatched key fails closed. Older schema versions remain rejected rather
-than migrated or read through a compatibility path.
+database authority. Before key creation, SQLite commits one fresh UUID initialization
+nonce to its singleton host-initialization marker. The key file is an exact versioned
+envelope containing that same nonce and the base64url PKCS#8 bytes. The subsequent fresh
+initialization transaction stores `server_id` and the matching raw 32-byte public key in
+SQLite; it never stores the private key. Only a marker-only database and a key envelope
+with the exact same nonce can resume an interrupted initialization. An initialized
+database never creates a missing replacement, and a brand-new database path refuses any
+pre-existing orphaned key before creating the database. A stale key restored after that
+check still has a different durable nonce and remains rejected on every later open
+rather than turning the marker-only database into a retry authority. A database-only
+backup therefore cannot clone signing authority, while a missing, orphaned, malformed,
+over-permissive, hard-linked, symlinked, nonce-mismatched, or public-key-mismatched key
+fails closed. Older schema and raw-key formats remain rejected rather than migrated or
+read through a compatibility path.
 
 The public projection is exactly
 `{"crv":"Ed25519","ext":true,"key_ops":["verify"],"kty":"OKP","x":"..."}`.
