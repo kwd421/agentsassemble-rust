@@ -5,6 +5,8 @@ use axum::{
 };
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
+use crate::AppState;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BodyDecodeError {
     PayloadTooLarge,
@@ -31,6 +33,17 @@ pub(crate) fn bearer_ticket(headers: &HeaderMap) -> Option<&str> {
         .ok()?
         .strip_prefix("Bearer ")
         .filter(|value| !value.is_empty() && !value.bytes().any(|byte| byte.is_ascii_whitespace()))
+}
+
+pub(crate) async fn consume_local_operator(state: &AppState, headers: &HeaderMap) -> bool {
+    let Some(ticket) = bearer_ticket(headers) else {
+        return false;
+    };
+    state
+        .tickets
+        .consume_server_operator(ticket)
+        .await
+        .is_ok_and(|grant| grant.principal_id == agentsassemble_domain::LOCAL_OPERATOR_USER_ID)
 }
 
 pub(crate) async fn ensure_empty_body(

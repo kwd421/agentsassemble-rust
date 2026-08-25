@@ -1,6 +1,4 @@
-use agentsassemble_domain::{
-    LOCAL_OPERATOR_USER_ID, RoomStatus, clean_single_line, public_settings, validate_room_id,
-};
+use agentsassemble_domain::{RoomStatus, clean_single_line, public_settings, validate_room_id};
 use agentsassemble_persistence::{LocalBootstrapPhase, PersistenceError, StoredRoomSummary};
 use axum::{
     Json, Router,
@@ -14,7 +12,8 @@ use serde_json::{Value, json};
 use crate::{
     AppState,
     http_api::{
-        BodyDecodeError, bearer_ticket, decode_json_body, ensure_empty_body, exact_tauri_cors,
+        BodyDecodeError, consume_local_operator, decode_json_body, ensure_empty_body,
+        exact_tauri_cors,
     },
 };
 
@@ -111,13 +110,7 @@ async fn consume_operator(
     state: &AppState,
     headers: &axum::http::HeaderMap,
 ) -> Result<(), DirectoryHttpError> {
-    let ticket = bearer_ticket(headers).ok_or_else(DirectoryHttpError::unauthorized)?;
-    let grant = state
-        .tickets
-        .consume_server_operator(ticket)
-        .await
-        .map_err(|_| DirectoryHttpError::unauthorized())?;
-    if grant.principal_id != LOCAL_OPERATOR_USER_ID {
+    if !consume_local_operator(state, headers).await {
         return Err(DirectoryHttpError::unauthorized());
     }
     Ok(())
