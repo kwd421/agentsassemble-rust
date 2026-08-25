@@ -90,6 +90,18 @@ function malformedRoleEvent(seq: number) {
   };
 }
 
+function malformedMuteEvent(seq: number) {
+  return {
+    v: 1,
+    id: `evt-${seq}`,
+    room_id: "general",
+    seq,
+    type: "participant_muted",
+    participant_id: "",
+    muted: true,
+  };
+}
+
 function snapshot(cursor: number) {
   const events: Array<ReturnType<typeof event> | ReturnType<typeof malformedRoleEvent>> =
     Array.from({ length: cursor }, (_, index) => event(index + 1));
@@ -441,6 +453,35 @@ describe("proof-bound canonical room socket", () => {
     handle.close();
   });
 
+  it("rejects a mute event without a canonical target before consuming its cursor", async () => {
+    vi.useFakeTimers();
+    const errors: RoomSocketSayError[] = [];
+    const { handle, sockets, tickets } = openHarness({
+      onError: (error) => {
+        if (error instanceof RoomSocketSayError) errors.push(error);
+      },
+    });
+    await flushPromises();
+    sockets[0].open();
+    const frames = await handshakeFrames(sockets[0], tickets[0], 1, 1);
+    sockets[0].receive(frames.receipt);
+    sockets[0].receiveRaw(frames.rawSnapshot);
+    await vi.waitFor(() => expect(handle.ready()).toBe(true));
+    await receiveAuthenticated(sockets[0], frames, {
+      op: "event",
+      stream: "room_events",
+      events: [malformedMuteEvent(2)],
+      latest_seq: 2,
+    });
+
+    await vi.waitFor(() => expect(errors.at(-1)?.category).toBe("event_schema_invalid"));
+    await vi.advanceTimersByTimeAsync(500);
+    await vi.waitFor(() => expect(sockets).toHaveLength(2));
+    sockets[1].open();
+    expect(sockets[1].sent[0]).toMatchObject({ resume_from_seq: 1 });
+    handle.close();
+  });
+
   it("resumes from the last verified durable sequence after resync", async () => {
     vi.useFakeTimers();
     const onEvents = vi.fn();
@@ -499,6 +540,46 @@ describe("proof-bound canonical room socket", () => {
       request_id: command.request_id,
       action: "room.random.roll",
       result: { event: event(1), event_seq: 1 },
+    });
+    await vi.waitFor(() => expect(errors.at(-1)?.category).toBe("ack_contract_invalid"));
+    handle.close();
+  });
+
+  it("rejects a mute ACK without its exact durable participant event", async () => {
+    const errors: RoomSocketSayError[] = [];
+    const { handle, sockets, tickets } = openHarness({
+      onError: (error) => {
+        if (error instanceof RoomSocketSayError) errors.push(error);
+      },
+    });
+    await flushPromises();
+    sockets[0].open();
+    const frames = await handshakeFrames(sockets[0], tickets[0], 0, 0);
+    sockets[0].receive(frames.receipt);
+    sockets[0].receiveRaw(frames.rawSnapshot);
+    await vi.waitFor(() => expect(handle.ready()).toBe(true));
+    void handle
+      .command("participant.mute", { participant_id: "agent-one", muted: true })
+      .catch(() => {});
+    await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
+    const command = await sentAuthenticatedCommand(sockets[0], frames);
+    await receiveAuthenticated(sockets[0], frames, {
+      op: "ack",
+      accepted: true,
+      resolution: "committed",
+      request_id: command.request_id,
+      action: "participant.mute",
+      result: {
+        participant: { participant_id: "agent-one", muted: true },
+        event: {
+          id: "evt-1",
+          seq: 1,
+          type: "participant_muted",
+          participant_id: "agent-two",
+          muted: true,
+        },
+        event_seq: 1,
+      },
     });
     await vi.waitFor(() => expect(errors.at(-1)?.category).toBe("ack_contract_invalid"));
     handle.close();

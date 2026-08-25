@@ -25,8 +25,14 @@ export function participantProjectionIsValid(event: RoomEvent): boolean {
     ) {
       return false;
     }
-    if (event.type === "participant_muted" && typeof event.muted !== "boolean") {
-      return false;
+    if (event.type === "participant_muted") {
+      if (
+        typeof event.participant_id !== "string" ||
+        !event.participant_id ||
+        typeof event.muted !== "boolean"
+      ) {
+        return false;
+      }
     }
     return true;
   } catch {
@@ -93,9 +99,13 @@ export function commandAckResultIsValid(
   if (action === "participant.mute") {
     const participant = isRecord(result.participant) ? result.participant : null;
     return Boolean(
+      hasDurableEvent &&
       participant &&
+      event?.type === "participant_muted" &&
       participant.participant_id === payload.participant_id &&
-      participant.muted === Boolean(payload.muted)
+      participant.muted === Boolean(payload.muted) &&
+      event.participant_id === payload.participant_id &&
+      event.muted === payload.muted
     );
   }
   if (action === "participant.leave") {
