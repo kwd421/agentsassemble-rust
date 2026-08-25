@@ -530,14 +530,22 @@ fn _socket_address_is_send(_: SocketAddr) {}
 
 #[cfg(test)]
 mod tests {
-    use std::{io, path::PathBuf, time::Duration};
+    use std::{
+        io,
+        path::PathBuf,
+        sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        },
+        time::Duration,
+    };
 
     use agentsassemble_persistence::PersistenceError;
 
     use crate::HostSecret;
     use crate::room_socket::persistence_error;
 
-    use super::drain_reconciliation_owner_after;
+    use super::{drain_reconciliation_owner_after, drain_reconciliation_then};
 
     #[test]
     fn host_secret_invariant_cannot_be_bypassed_by_an_adapter() {
@@ -585,5 +593,25 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("join drain task: {error}"))
             .unwrap_or_else(|error| panic!("join reconciliation owner: {error}"));
+    }
+
+    #[tokio::test]
+    async fn reconciliation_panic_does_not_skip_shutdown_cleanup() {
+        let owner = tokio::spawn(async {
+            panic!("simulated reconciliation owner failure");
+        });
+        let cleaned = Arc::new(AtomicBool::new(false));
+        let cleanup_observation = Arc::clone(&cleaned);
+
+        let (reconciliation, ()) = drain_reconciliation_then(owner, async move {
+            cleanup_observation.store(true, Ordering::SeqCst);
+        })
+        .await;
+
+        let Err(error) = reconciliation else {
+            panic!("panicked reconciliation owner must remain an observable failure");
+        };
+        assert!(error.is_panic());
+        assert!(cleaned.load(Ordering::SeqCst));
     }
 }
