@@ -24,6 +24,10 @@ const LIVE_OBSERVATION_TIMEOUT: Duration = Duration::from_secs(2);
 const RECOVERY_SCAN_INTERVAL: Duration = Duration::from_secs(1);
 const RECOVERY_OBSERVATION_CONCURRENCY: usize = 8;
 
+#[cfg(test)]
+pub(super) static RUNTIME_RECONCILIATION_TEST_LOCK: tokio::sync::Mutex<()> =
+    tokio::sync::Mutex::const_new(());
+
 /// Reconciles every durable runtime candidate before network admission.
 ///
 /// # Errors
@@ -301,11 +305,12 @@ mod tests {
     use serde_json::json;
     use sha2::{Digest, Sha256};
 
-    use super::recover_exact_lifecycle_command;
+    use super::{RUNTIME_RECONCILIATION_TEST_LOCK, recover_exact_lifecycle_command};
     use crate::runtime_reconciliation_cleanup::commit_dynamic_gone;
 
     #[tokio::test]
     async fn production_replay_helper_observes_gone_before_reenabling_start() {
+        let _serial = RUNTIME_RECONCILIATION_TEST_LOCK.lock().await;
         let directory =
             tempfile::tempdir().unwrap_or_else(|error| panic!("create fixture: {error}"));
         let store = SqliteStore::open_path(&directory.path().join("runtime.sqlite3"))
@@ -410,6 +415,7 @@ mod tests {
 
     #[tokio::test]
     async fn exact_replay_releases_a_safe_failure_tombstone_after_db_recovery() {
+        let _serial = RUNTIME_RECONCILIATION_TEST_LOCK.lock().await;
         let directory =
             tempfile::tempdir().unwrap_or_else(|error| panic!("create fixture: {error}"));
         let store = dynamic_recovery_store(directory.path()).await;
@@ -496,6 +502,7 @@ mod tests {
 
     #[tokio::test]
     async fn dynamic_scan_discovers_later_intent_and_drops_stale_live_recovery_candidate() {
+        let _serial = RUNTIME_RECONCILIATION_TEST_LOCK.lock().await;
         let directory =
             tempfile::tempdir().unwrap_or_else(|error| panic!("create fixture: {error}"));
         let store = dynamic_recovery_store(directory.path()).await;
@@ -596,7 +603,7 @@ mod tests {
         ));
     }
 
-    async fn dynamic_recovery_store(root: &Path) -> SqliteStore {
+    pub(super) async fn dynamic_recovery_store(root: &Path) -> SqliteStore {
         let store = SqliteStore::open_path(&root.join("runtime.sqlite3"))
             .await
             .unwrap_or_else(|error| panic!("open store: {error}"));
@@ -706,7 +713,7 @@ mod tests {
         }
     }
 
-    fn draft_profile_key(draft: &AgentSessionDraft) -> String {
+    pub(super) fn draft_profile_key(draft: &AgentSessionDraft) -> String {
         format!(
             "provider-profile-v1-{:x}",
             Sha256::digest(
@@ -735,3 +742,7 @@ mod tests {
 #[cfg(test)]
 #[path = "runtime_reconciliation_owner_loss_tests.rs"]
 mod owner_loss_tests;
+
+#[cfg(test)]
+#[path = "runtime_reconciliation_release_tests.rs"]
+mod release_tests;

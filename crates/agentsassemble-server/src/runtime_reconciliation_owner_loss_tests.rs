@@ -6,11 +6,15 @@ use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService};
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
-use super::{reconcile_dynamic_candidates, tests::draft, tests::local_principal};
+use super::{
+    RUNTIME_RECONCILIATION_TEST_LOCK, reconcile_dynamic_candidates, tests::draft,
+    tests::local_principal,
+};
 use crate::RoomRuntime;
 
 #[tokio::test]
 async fn lost_command_owner_recovers_effect_inflight_without_browser_request_identity() {
+    let _serial = RUNTIME_RECONCILIATION_TEST_LOCK.lock().await;
     let directory = tempfile::tempdir().unwrap_or_else(|error| panic!("create fixture: {error}"));
     let (store, principal, session_id, payload) = owner_loss_fixture(directory.path()).await;
     let provider_adapter = ProviderAdapter::new();

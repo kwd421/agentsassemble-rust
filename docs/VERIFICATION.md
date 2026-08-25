@@ -1666,8 +1666,8 @@ The live-request owner now calls the same action-aware post-commit release used 
 and dynamic recovery for every `Gone` that successfully returns
 `RetryOriginalEffect`. The helper explicitly maps start to exact launch-absence release
 and stop to exact confirmed-stop release. It uses the candidate captured before the
-database cleared H/O/T; a database error, stale CAS, unresolved observation, or unknown
-action releases nothing. The implementation intent is to remove the action-specific
+database cleared H/O/T; a database error, stale CAS, or unresolved observation releases
+nothing. The implementation intent is to remove the action-specific
 lifetime divergence at the existing owner. It adds no observation, process scan, retry,
 cache, provider effect, or persistence operation; it replaces one start-only branch with
 one bounded action dispatch after the already-required commit. Preserved invariants are
@@ -1694,6 +1694,55 @@ workspace/desktop Clippy, and diff validation. The installed rustup
 `x86_64-pc-windows-gnu` workspace all-target/all-feature check also passed with only the
 already-recorded unrelated Windows-only dead-code warnings. Its isolated target directory
 was removed on exit.
+
+The fourth web pass approved that pushed stop-symmetry diff. Daybreaker then found a
+different valid caller of the newly shared helper that the web pass had treated as
+lifecycle-only: startup and dynamic recovery accept a normal active runtime whose
+lifecycle action, ID, and status are all empty. Cold `Gone` commits that runtime's durable
+cleanup before calling the helper. Treating every value other than start/stop as
+`unreachable!` could therefore panic the first startup after an unclean shutdown, after
+the database transition had already succeeded. Daybreaker classified the reachable
+pre-admission failure as Medium. The empty action is now an explicit no-lifecycle runtime
+cleanup case and uses exact confirmed-stop release; nonempty values other than start/stop
+remain stored-authority corruption rejected before provider observation rather than a
+fallback.
+
+Two deterministic server regressions now isolate the release owners from the one-second
+watcher. One drives exact live stop reconciliation directly through the captured candidate
+and proves commit, release, provider-free finalization, and a different fresh lease
+generation. The other stages a durable active runtime with empty lifecycle authority and
+an exact on-disk `GenerationGone`, drops the original adapter to model restart, runs the
+pre-admission reconciler with a fresh adapter, and proves it completes without panic,
+removes the candidate, and admits a fresh start. The real WebSocket/provider integration
+test remains the end-to-end stop-checkpoint-loss proof; the direct unit regression removes
+the reviewer's lower-severity concern that the watcher could otherwise win the test race.
+
+The first complete parallel run of those regressions exposed test-only contention with the
+existing owner-loss fixture: several reconciliation tests concurrently consumed the same
+real process-wide executable/workspace authority-validation budget and two correctly
+failed `runtime_authority_busy`. The production budget was not raised, bypassed, or retried.
+The six reconciliation tests that acquire real OS authority now share one test-only mutex,
+leaving product concurrency unchanged while making each failure boundary deterministic.
+The complete 24-test server suite then passed together. This synchronization intentionally
+trades parallel test speed for faithful use of the production admission limit; it is not a
+runtime optimization or a product performance claim.
+
+This correction does not add a branch guessed from malformed input. Persistence already
+defines the empty triple as the canonical no-lifecycle state and rejects partial or
+unknown nonempty lifecycle authority. The helper now mirrors that existing finite state
+set. Its performance profile remains one bounded match after a successful database
+commit, with no added I/O, scan, allocation, retry, or provider effect and no measured
+performance claim.
+
+After the no-lifecycle correction and deterministic test serialization, the final
+`make verify` passed every mandatory architecture, source-growth, logical-line, and
+800-line gate; generated bindings; the production frontend build and original-CSS
+verification; 72 frontend files with 356 tests; 15 Tauri tests; 18 domain, 94 persistence,
+four protocol, 113 provider, and 24 server unit tests; 24 Rust integration tests;
+documentation tests; warning-denied workspace/desktop Clippy; and diff validation. The
+installed rustup `x86_64-pc-windows-gnu` workspace all-target/all-feature check also
+passed with the already-recorded unrelated Windows-only dead-code warnings, and its
+isolated target directory was removed on exit.
 
 Packaged Computer Use and both pushed exact-diff re-reviews remain required before this
 correction is closed.

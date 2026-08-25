@@ -143,7 +143,7 @@ pub(super) async fn release_checkpointed_absence(
                 .release_checkpointed_start_absence(&candidate.session)
                 .await;
         }
-        "stop" => {
+        "" | "stop" => {
             provider_adapter
                 .release_confirmed_stop(
                     &candidate.session.public.room_id,
