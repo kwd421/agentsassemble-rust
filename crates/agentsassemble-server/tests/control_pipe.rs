@@ -63,6 +63,13 @@ impl ControlledServer {
         self.send_control(&request).await
     }
 
+    async fn issue_central_registration_ticket(&mut self) -> LocalControlResponse {
+        let request = LocalControlRequest::IssueCentralRegistrationTicket {
+            request_id: "control-central-registration-ticket-1".to_owned(),
+        };
+        self.send_control(&request).await
+    }
+
     async fn send_control(&mut self, request: &LocalControlRequest) -> LocalControlResponse {
         let mut encoded = serde_json::to_vec(request)
             .unwrap_or_else(|error| panic!("encode control request: {error}"));
@@ -196,6 +203,35 @@ async fn owned_control_pipe_issues_a_distinct_operator_http_ticket() {
         panic!("operator HTTP ticket request was rejected");
     };
     assert_eq!(request_id, "control-operator-ticket-1");
+    assert_eq!(ticket.len(), 64);
+    assert!(ttl_seconds > 0);
+    server.close_parent_pipe().await;
+}
+
+#[tokio::test]
+async fn owned_control_pipe_issues_a_purpose_bound_central_registration_ticket() {
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
+    let database = directory.path().join("runtime.sqlite3");
+    let mut server = start_controlled(&database).await;
+    assert!(matches!(
+        server.issue_central_registration_ticket().await,
+        LocalControlResponse::Error { code, .. } if code == "bootstrap_required"
+    ));
+    assert!(matches!(
+        server.initialize_bootstrap().await,
+        LocalControlResponse::BootstrapOk { .. }
+    ));
+    let response = server.issue_central_registration_ticket().await;
+    let LocalControlResponse::CentralRegistrationOk {
+        request_id,
+        ticket,
+        ttl_seconds,
+    } = response
+    else {
+        panic!("central registration ticket request was rejected");
+    };
+    assert_eq!(request_id, "control-central-registration-ticket-1");
     assert_eq!(ticket.len(), 64);
     assert!(ttl_seconds > 0);
     server.close_parent_pipe().await;
