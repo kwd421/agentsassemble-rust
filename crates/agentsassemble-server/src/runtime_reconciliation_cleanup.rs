@@ -66,9 +66,17 @@ pub(super) async fn recover_dynamic_observed_runtime(
         .await
     {
         Ok(assignments) if !assignments.is_empty() => {
-            rooms.notify_room_publication(room_id).await;
             release_checkpointed_absence(provider_adapter, candidate).await;
-            resume_recovered_assignments(rooms, room_id, assignments).await;
+            if let Err(error) = rooms
+                .publish_then_resume_assigned_turns(room_id, assignments)
+                .await
+            {
+                tracing::warn!(
+                    %error,
+                    %room_id,
+                    "recovered ordered-floor assignment remains durable for retry"
+                );
+            }
             return;
         }
         Ok(_) => {}
@@ -127,10 +135,21 @@ pub(super) async fn commit_and_publish_gone(
     let session_id = candidate.session.public.session_id.clone();
     match commit_dynamic_gone(store, candidate).await {
         Ok(Some(assignments)) => {
-            rooms.notify_room_publication(&room_id).await;
             release_checkpointed_absence(provider_adapter, candidate).await;
-            resume_recovered_assignments(rooms, &room_id, assignments).await;
-            true
+            match rooms
+                .publish_then_resume_assigned_turns(&room_id, assignments)
+                .await
+            {
+                Ok(()) => true,
+                Err(error) => {
+                    tracing::warn!(
+                        %error,
+                        %room_id,
+                        "recovered ordered-floor assignment remains durable for retry"
+                    );
+                    false
+                }
+            }
         }
         Ok(None) => false,
         Err(error) => {
@@ -141,22 +160,6 @@ pub(super) async fn commit_and_publish_gone(
                 "server-owned lifecycle recovery observation could not commit"
             );
             false
-        }
-    }
-}
-
-async fn resume_recovered_assignments(
-    rooms: &RoomRuntime,
-    room_id: &str,
-    assignments: Vec<AgentTurnAssignment>,
-) {
-    for assignment in assignments {
-        if let Err(error) = rooms.resume_assigned_provider_turn(assignment).await {
-            tracing::warn!(
-                %error,
-                %room_id,
-                "recovered ordered-floor assignment remains durable for retry"
-            );
         }
     }
 }

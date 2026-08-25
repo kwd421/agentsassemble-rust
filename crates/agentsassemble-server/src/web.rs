@@ -121,9 +121,10 @@ pub async fn serve(
         );
     }
     for assignment in reconciliation.assignments {
+        let room_id = assignment.session.public.room_id.clone();
         state
             .rooms
-            .resume_assigned_provider_turn(assignment)
+            .publish_then_resume_assigned_turns(&room_id, vec![assignment])
             .await?;
     }
     let rooms = state.rooms.clone();

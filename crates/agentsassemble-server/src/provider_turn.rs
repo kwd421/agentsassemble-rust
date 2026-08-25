@@ -11,6 +11,8 @@ use futures_util::FutureExt;
 use std::panic::AssertUnwindSafe;
 use tokio::{sync::broadcast, task::JoinSet};
 
+use crate::provider_recovery_tracker::ProviderRecoveryGuard;
+
 pub(crate) struct ProviderTurnTaskResult {
     pub(crate) assignment: AgentTurnAssignment,
     pub(crate) task_panicked: bool,
@@ -30,6 +32,24 @@ pub(crate) fn spawn_provider_turn(
         provider_adapter,
         assignment,
         room_tool_ingress,
+        None,
+    ));
+}
+
+pub(crate) fn spawn_recovered_provider_turn(
+    tasks: &mut JoinSet<ProviderTurnTaskResult>,
+    store: SqliteStore,
+    provider_adapter: ProviderAdapter,
+    assignment: AgentTurnAssignment,
+    room_tool_ingress: ProviderRoomToolIngress,
+    recovery_guard: ProviderRecoveryGuard,
+) {
+    tasks.spawn(run_provider_turn_task(
+        store,
+        provider_adapter,
+        assignment,
+        room_tool_ingress,
+        Some(recovery_guard),
     ));
 }
 
@@ -38,6 +58,7 @@ async fn run_provider_turn_task(
     provider_adapter: ProviderAdapter,
     assignment: AgentTurnAssignment,
     room_tool_ingress: ProviderRoomToolIngress,
+    recovery_guard: Option<ProviderRecoveryGuard>,
 ) -> ProviderTurnTaskResult {
     let request = provider_request(&assignment, room_tool_ingress);
     let Ok(prepared) = provider_adapter
@@ -46,6 +67,7 @@ async fn run_provider_turn_task(
     else {
         return unresolved_turn_task(assignment, "provider_turn_prepare_unresolved");
     };
+    drop(recovery_guard);
     let recovery_prepared = prepared.clone();
     let recovery_adapter = provider_adapter.clone();
     let failed_assignment = assignment.clone();

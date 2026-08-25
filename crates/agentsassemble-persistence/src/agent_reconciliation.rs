@@ -148,6 +148,25 @@ impl SqliteStore {
         .await
     }
 
+    /// Applies exact runtime-gone authority during complete server shutdown without assigning
+    /// new provider work to runtimes that are already being stopped.
+    ///
+    /// # Errors
+    ///
+    /// Returns `stale_reconciliation_candidate` when authority changed after the read.
+    pub async fn apply_runtime_shutdown_reconciliation(
+        &self,
+        candidate: &RuntimeReconciliationCandidate,
+        observation: &RuntimeReconciliationObservation,
+    ) -> Result<(), PersistenceError> {
+        crate::agent_reconciliation_recovery::apply_shutdown_reconciliation(
+            self,
+            candidate,
+            observation,
+        )
+        .await
+    }
+
     /// Applies one bounded observation for the exact command that still owns an unconfirmed
     /// lifecycle effect. Only proven absence or exact owned-runtime adoption can re-enable the
     /// original effect path.

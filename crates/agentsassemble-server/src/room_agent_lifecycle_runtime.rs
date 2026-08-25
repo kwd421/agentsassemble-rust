@@ -255,9 +255,7 @@ pub(crate) async fn execute_agent_stop(
         Err(error) => return CommandExecution::transactional_failure(error),
     };
     match plan {
-        AgentStopPlan::Outcome(outcome) => {
-            progressed_execution(store, &command.principal.room_id, *outcome).await
-        }
+        AgentStopPlan::Outcome(outcome) => CommandExecution::success(*outcome),
         AgentStopPlan::Finalize => {
             match store
                 .finalize_agent_stop(&command.principal, &command.request_id, &command.payload)

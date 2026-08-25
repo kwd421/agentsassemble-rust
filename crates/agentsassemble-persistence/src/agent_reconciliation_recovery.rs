@@ -92,6 +92,25 @@ pub(crate) async fn apply_startup_reconciliation(
     candidate: &RuntimeReconciliationCandidate,
     observation: &RuntimeReconciliationObservation,
 ) -> Result<Vec<AgentTurnAssignment>, PersistenceError> {
+    apply_reconciliation(store, candidate, observation, FloorProgression::Assign).await
+}
+
+pub(crate) async fn apply_shutdown_reconciliation(
+    store: &SqliteStore,
+    candidate: &RuntimeReconciliationCandidate,
+    observation: &RuntimeReconciliationObservation,
+) -> Result<(), PersistenceError> {
+    apply_reconciliation(store, candidate, observation, FloorProgression::Defer)
+        .await
+        .map(|_| ())
+}
+
+async fn apply_reconciliation(
+    store: &SqliteStore,
+    candidate: &RuntimeReconciliationCandidate,
+    observation: &RuntimeReconciliationObservation,
+    floor_progression: FloorProgression,
+) -> Result<Vec<AgentTurnAssignment>, PersistenceError> {
     let mut transaction = store.pool.begin().await?;
     let current = current_candidate(&mut transaction, candidate).await?;
     if current.session.lifecycle_intent_status == "prepared" {
@@ -101,7 +120,9 @@ pub(crate) async fn apply_startup_reconciliation(
     }
     let mut session = current.session.clone();
     if recovered_stop_is_terminal(&session, observation) {
-        let assignments = finalize_recovered_stop(&mut transaction, &mut session, &current).await?;
+        let assignments =
+            finalize_recovered_stop(&mut transaction, &mut session, &current, floor_progression)
+                .await?;
         transaction.commit().await?;
         return Ok(assignments);
     }
@@ -128,6 +149,12 @@ pub(crate) async fn apply_startup_reconciliation(
     }
     transaction.commit().await?;
     Ok(Vec::new())
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FloorProgression {
+    Assign,
+    Defer,
 }
 
 pub(crate) async fn apply_live_reconciliation(
@@ -309,12 +336,12 @@ async fn finalize_recovered_stop(
     transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     session: &mut DurableAgentSession,
     candidate: &RuntimeReconciliationCandidate,
+    floor_progression: FloorProgression,
 ) -> Result<Vec<AgentTurnAssignment>, PersistenceError> {
     let reservation = candidate
         .reservation
         .as_ref()
         .ok_or_else(invalid_stored_authority)?;
-    let (room, settings) = load_active_room(transaction, &session.public.room_id).await?;
     finish_lifecycle_command(transaction, &reservation_ref(reservation)).await?;
     session.pending_inputs = crate::turn_queue::merge_room_inputs(
         session
@@ -381,8 +408,13 @@ async fn finalize_recovered_stop(
         events,
     )
     .await?;
-    let scheduled = assign_pending_in(transaction, &room, &settings).await?;
-    Ok(scheduled.next_assignments)
+    if floor_progression == FloorProgression::Defer {
+        return Ok(Vec::new());
+    }
+    let (room, settings) = load_active_room(transaction, &session.public.room_id).await?;
+    Ok(assign_pending_in(transaction, &room, &settings)
+        .await?
+        .next_assignments)
 }
 
 fn reservation_ref(

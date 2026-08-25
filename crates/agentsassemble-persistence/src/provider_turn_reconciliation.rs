@@ -333,6 +333,30 @@ impl SqliteStore {
         &self,
         candidate: &ProviderTurnReconciliationCandidate,
     ) -> Result<AgentTurnCommit, PersistenceError> {
+        self.finalize_provider_turn_runtime_gone_with(candidate, FloorProgression::Assign)
+            .await
+    }
+
+    /// Finalizes exact runtime-gone authority while the complete runtime is shutting down.
+    /// Pending inputs remain durable, but no stopped provider receives a new assignment.
+    ///
+    /// # Errors
+    ///
+    /// Rejects any changed session, execution, effect, or H/O/T custody value.
+    pub async fn finalize_provider_turn_runtime_gone_for_shutdown(
+        &self,
+        candidate: &ProviderTurnReconciliationCandidate,
+    ) -> Result<(), PersistenceError> {
+        self.finalize_provider_turn_runtime_gone_with(candidate, FloorProgression::Defer)
+            .await
+            .map(|_| ())
+    }
+
+    async fn finalize_provider_turn_runtime_gone_with(
+        &self,
+        candidate: &ProviderTurnReconciliationCandidate,
+        floor_progression: FloorProgression,
+    ) -> Result<AgentTurnCommit, PersistenceError> {
         let expected = &candidate.execution;
         let mut transaction = self.pool.begin().await?;
         let session =
@@ -379,9 +403,21 @@ impl SqliteStore {
             &now,
         )
         .await?;
-        finalize_runtime_gone_session(transaction, session, &execution, candidate.effect.is_some())
-            .await
+        finalize_runtime_gone_session(
+            transaction,
+            session,
+            &execution,
+            candidate.effect.is_some(),
+            floor_progression,
+        )
+        .await
     }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FloorProgression {
+    Assign,
+    Defer,
 }
 
 async fn terminalize_runtime_gone_authority(
@@ -437,8 +473,8 @@ async fn finalize_runtime_gone_session(
     mut session: DurableAgentSession,
     execution: &ProviderTurnExecution,
     interrupted: bool,
+    floor_progression: FloorProgression,
 ) -> Result<AgentTurnCommit, PersistenceError> {
-    let (room, settings) = load_active_room(&mut transaction, &execution.room_id).await?;
     let mut events = Vec::with_capacity(3);
     if !interrupted {
         events.push(
@@ -501,7 +537,15 @@ async fn finalize_runtime_gone_session(
     participant.updated_at = Utc::now();
     save_participant(&mut transaction, &participant).await?;
     events.push(session_state_event(&mut transaction, &session).await?);
-    let scheduled = assign_pending_in(&mut transaction, &room, &settings).await?;
+    let scheduled = if floor_progression == FloorProgression::Assign {
+        let (room, settings) = load_active_room(&mut transaction, &execution.room_id).await?;
+        assign_pending_in(&mut transaction, &room, &settings).await?
+    } else {
+        AgentTurnCommit {
+            events: Vec::new(),
+            next_assignments: Vec::new(),
+        }
+    };
     transaction.commit().await?;
     events.extend(scheduled.events);
     Ok(AgentTurnCommit {

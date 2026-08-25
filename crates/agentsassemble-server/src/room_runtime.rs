@@ -24,12 +24,14 @@ use crate::{
     agent_create_runtime::AgentCreateExecution,
     lifecycle_command_tracker::LifecycleCommandTracker,
     principal_mutation_admission::{MutationDebit, PrincipalMutationAdmission},
+    provider_recovery_tracker::ProviderRecoveryTracker,
     provider_turn::{
         ProviderTurnTaskResult, commit_provider_result, publish_turn_commit, spawn_provider_turn,
     },
     provider_write_budget::ProviderWriteBudget,
     room_command_admission::{AdmittedHumanCommand, admit_human_command},
     room_command_result::{CommandFailure, public_command_outcome},
+    room_recovery_runtime::{RecoveredAssignment, RecoveredAssignments, publish_then_resume},
     room_shutdown::{RoomShutdownError, join_room_tasks},
 };
 
@@ -60,7 +62,7 @@ struct RoomHandle {
     commands: mpsc::Sender<RoomCommand>,
     events: broadcast::Sender<RoomEvent>,
     publication_wake: mpsc::Sender<()>,
-    provider_recovery: mpsc::Sender<AgentTurnAssignment>,
+    provider_recovery: mpsc::Sender<RecoveredAssignments>,
 }
 
 struct RoomTaskContext {
@@ -93,6 +95,7 @@ pub struct RoomRuntime {
     cancellation: CancellationToken,
     tasks: Arc<Mutex<Vec<JoinHandle<()>>>>,
     lifecycle_commands: LifecycleCommandTracker,
+    provider_recoveries: ProviderRecoveryTracker,
     principal_mutations: PrincipalMutationAdmission,
 }
 
@@ -116,6 +119,7 @@ impl RoomRuntime {
             cancellation: CancellationToken::new(),
             tasks: Arc::new(Mutex::new(Vec::new())),
             lifecycle_commands: LifecycleCommandTracker::default(),
+            provider_recoveries: ProviderRecoveryTracker::default(),
             principal_mutations: PrincipalMutationAdmission::new(),
         }
     }
@@ -194,26 +198,49 @@ impl RoomRuntime {
         let _ = handle.publication_wake.try_send(());
     }
 
-    pub(crate) async fn resume_assigned_provider_turn(
+    pub(crate) async fn publish_then_resume_assigned_turns(
         &self,
-        assignment: AgentTurnAssignment,
+        room_id: &str,
+        assignments: Vec<AgentTurnAssignment>,
     ) -> Result<(), PersistenceError> {
-        let handle = self.handle(&assignment.session.public.room_id).await;
+        if assignments
+            .iter()
+            .any(|assignment| assignment.session.public.room_id != room_id)
+        {
+            return Err(PersistenceError::CommandUnresolved {
+                code: "provider_turn_recovery_authority_invalid",
+                message: "Recovered provider assignments do not share one room authority."
+                    .to_owned(),
+            });
+        }
+        let assignments = assignments
+            .into_iter()
+            .filter_map(|assignment| {
+                self.provider_recoveries
+                    .try_claim(&assignment)
+                    .map(|guard| RecoveredAssignment { assignment, guard })
+            })
+            .collect::<Vec<_>>();
+        if assignments.is_empty() {
+            return Ok(());
+        }
+        let handle = self.handle(room_id).await;
+        let (reply, response) = oneshot::channel();
         handle
             .provider_recovery
-            .try_send(assignment)
-            .map_err(|error| PersistenceError::CommandUnresolved {
+            .send(RecoveredAssignments { assignments, reply })
+            .await
+            .map_err(|_| PersistenceError::CommandUnresolved {
                 code: "provider_turn_recovery_unavailable",
-                message: match error {
-                    mpsc::error::TrySendError::Full(_) => {
-                        "The provider turn recovery queue is full."
-                    }
-                    mpsc::error::TrySendError::Closed(_) => {
-                        "The provider turn recovery owner stopped."
-                    }
-                }
-                .to_owned(),
-            })
+                message: "The provider turn recovery owner stopped.".to_owned(),
+            })?;
+        response
+            .await
+            .map_err(|_| PersistenceError::CommandUnresolved {
+                code: "provider_turn_recovery_unavailable",
+                message: "The provider turn recovery owner lost its completion response."
+                    .to_owned(),
+            })?
     }
 
     pub(crate) fn try_claim_lifecycle_command(
@@ -325,7 +352,7 @@ fn spawn_room_task(
     mut command_rx: mpsc::Receiver<RoomCommand>,
     mut publication_rx: mpsc::Receiver<()>,
     mut room_tool_rx: mpsc::Receiver<ProviderRoomToolCommand>,
-    mut provider_recovery_rx: mpsc::Receiver<AgentTurnAssignment>,
+    mut provider_recovery_rx: mpsc::Receiver<RecoveredAssignments>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
         let RoomTaskContext {
@@ -410,13 +437,16 @@ fn spawn_room_task(
                     .await;
                 }
                 RoomInput::ProviderRecovery(assignment) => {
-                    spawn_provider_turn(
+                    publish_then_resume(
+                        &store,
+                        &event_tx,
+                        &room_id,
                         &mut turn_tasks,
-                        store.clone(),
-                        provider_adapter.clone(),
+                        &provider_adapter,
+                        &room_tool_ingress,
                         *assignment,
-                        room_tool_ingress.clone(),
-                    );
+                    )
+                    .await;
                 }
                 RoomInput::Publication => {
                     publish_durable_room_events(&store, &event_tx, &room_id).await;
@@ -569,7 +599,7 @@ enum RoomInput {
     Provider(Box<Result<ProviderTurnTaskResult, tokio::task::JoinError>>),
     Publication,
     Tool(ProviderRoomToolCommand),
-    ProviderRecovery(Box<AgentTurnAssignment>),
+    ProviderRecovery(Box<RecoveredAssignments>),
 }
 
 async fn execute_command(

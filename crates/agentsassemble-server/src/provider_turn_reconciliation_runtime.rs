@@ -71,7 +71,9 @@ async fn reconcile_startup_candidate(
                 && runtime_profile_key == candidate.session.runtime_profile_key =>
             {
                 let assignment = store.recover_assigned_provider_turn(candidate).await?;
-                rooms.resume_assigned_provider_turn(assignment).await?;
+                rooms
+                    .publish_then_resume_assigned_turns(&execution.room_id, vec![assignment])
+                    .await?;
             }
             ProviderRuntimeObservation::Adopted { .. }
             | ProviderRuntimeObservation::LeaseUncertain { .. }
@@ -195,18 +197,27 @@ async fn reconcile_unowned_observation(
         }) if handle_id == candidate.execution.runtime_handle_id
             && previous_owner_id == candidate.execution.runtime_owner_id
             && new_owner_id == candidate.execution.runtime_owner_id
-            && runtime_profile_key == candidate.session.runtime_profile_key
-            && blocking_task_phase(candidate.execution.phase) =>
+            && runtime_profile_key == candidate.session.runtime_profile_key =>
         {
-            let commit = store
-                .record_provider_turn_task_death(
-                    &candidate.execution.room_id,
-                    &candidate.execution.session_id,
-                    candidate.execution.turn_generation,
-                    &candidate.execution.execution_id,
-                )
-                .await?;
-            publish_commit(rooms, commit).await?;
+            if candidate.execution.phase == ProviderTurnExecutionPhase::Assigned {
+                let assignment = store.recover_assigned_provider_turn(candidate).await?;
+                rooms
+                    .publish_then_resume_assigned_turns(
+                        &candidate.execution.room_id,
+                        vec![assignment],
+                    )
+                    .await?;
+            } else if blocking_task_phase(candidate.execution.phase) {
+                let commit = store
+                    .record_provider_turn_task_death(
+                        &candidate.execution.room_id,
+                        &candidate.execution.session_id,
+                        candidate.execution.turn_generation,
+                        &candidate.execution.execution_id,
+                    )
+                    .await?;
+                publish_commit(rooms, commit).await?;
+            }
         }
         Some(
             ProviderRuntimeObservation::Adopted { .. }
@@ -289,11 +300,20 @@ async fn publish_commit(
     rooms: &RoomRuntime,
     commit: AgentTurnCommit,
 ) -> Result<(), PersistenceError> {
-    rooms.notify_committed_events(&commit.events).await;
-    for assignment in commit.next_assignments {
-        rooms.resume_assigned_provider_turn(assignment).await?;
+    let Some(first_assignment) = commit.next_assignments.first() else {
+        rooms.notify_committed_events(&commit.events).await;
+        return Ok(());
+    };
+    let room_id = first_assignment.session.public.room_id.clone();
+    if commit.events.iter().any(|event| event.room_id != room_id) {
+        return Err(PersistenceError::CommandUnresolved {
+            code: "provider_turn_recovery_authority_invalid",
+            message: "Recovered provider events do not share assignment room authority.".to_owned(),
+        });
     }
-    Ok(())
+    rooms
+        .publish_then_resume_assigned_turns(&room_id, commit.next_assignments)
+        .await
 }
 
 #[cfg(test)]

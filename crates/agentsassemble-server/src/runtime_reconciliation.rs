@@ -317,7 +317,7 @@ pub(crate) async fn checkpoint_confirmed_shutdown(
             return Err(stale_shutdown_observation());
         }
         store
-            .finalize_provider_turn_runtime_gone(&candidate)
+            .finalize_provider_turn_runtime_gone_for_shutdown(&candidate)
             .await?;
         return Ok(());
     }
@@ -333,8 +333,8 @@ pub(crate) async fn checkpoint_confirmed_shutdown(
     {
         return Err(stale_shutdown_observation());
     }
-    let _deferred_assignments = store
-        .apply_runtime_reconciliation(&candidate, &RuntimeReconciliationObservation::Gone)
+    store
+        .apply_runtime_shutdown_reconciliation(&candidate, &RuntimeReconciliationObservation::Gone)
         .await?;
     Ok(())
 }
