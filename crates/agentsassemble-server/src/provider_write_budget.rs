@@ -28,14 +28,14 @@ impl ProviderWriteBudget {
 
     pub(crate) fn admit(
         &mut self,
-        provider_session_id: &str,
+        agent_session_id: &str,
         payload_bytes: usize,
     ) -> Result<(), PersistenceError> {
         let now = Instant::now();
         let cutoff = now.checked_sub(MUTATION_WINDOW).unwrap_or(now);
         let window = self
             .windows
-            .entry(provider_session_id.to_owned())
+            .entry(agent_session_id.to_owned())
             .or_insert_with(|| ProviderWindow {
                 recent: VecDeque::new(),
                 bytes: 0,

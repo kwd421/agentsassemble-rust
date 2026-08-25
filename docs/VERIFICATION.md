@@ -1784,31 +1784,42 @@ typed human mutation is classified against durable replay/lifecycle authority, t
 receives one non-refundable process-wide rolling principal debit before nonblocking room
 queue admission. Its independent 128-permit in-flight lease moves into the room command,
 so caller cancellation cannot free actor-owned work. Provider RoomPortal random results
-retain a separate provider-session budget and durable room reservation.
+retain a separate server-owned Agent Session budget and durable room reservation.
 
 The implementation intent is bounded cross-room abuse resistance with short critical
 sections, not an unmeasured throughput claim. Normal connection and raw-frame admission
 perform fixed-count hash lookups and counter updates under one non-async mutex. Connection
 maps contain only active scopes and therefore cannot exceed the 128 global leases. Raw
 principal/room maps each retain at most 512 fixed-size windows and prune expired keys only
-when capacity is reached. The rolling human retry ledger replaces four retained request
+when capacity is reached. A new key that still cannot be retained is rejected after charging
+the global window and any already-tracked principal or room window, without allocating an
+overflow entry. The rolling human retry ledger replaces four retained request
 strings with one domain-separated 32-byte digest, caps both 512 principal windows and
 32,768 total live mutations, and uses a deque plus hash map for amortized O(1) expiry and
-exact-retry lookup. Provider-session byte admission now carries an O(1) running byte
-total instead of folding as many as 3,600 retained results for every call. The accepted
-fixed-window trade-off is a bounded edge burst at a ten-second raw-window turnover; hard
-frame, global, principal, room, connection, and mutation ceilings remain fail-closed.
+exact-retry lookup. RoomPortal byte admission is keyed by the server-owned Agent Session
+ID—not by a provider-selected conversation ID—and now carries an O(1) running byte total
+instead of folding as many as 3,600 retained results for every call. A room can own at most
+64 Agent Sessions, so this actor-local map inherits an existing product cardinality bound.
+The accepted fixed-window trade-off is a bounded edge burst at a ten-second raw-window
+turnover; hard frame, global, principal, room, connection, and mutation ceilings remain
+fail-closed.
 
 Focused deterministic checks prove atomic no-charge connection rejection, stale-lease
 ABA resistance, one-principal connection enforcement through the actual HTTP upgrade,
 cross-room raw-principal aggregation, independent control-frame ceilings, retained
-over-limit raw debit, exact unresolved mutation retry without a second permanent debit,
-and closure of that exemption after a definitive outcome without refunding its charge.
+over-limit raw debit, capacity-rejected frames charging both the global and an existing
+principal scope, every fresh stop receiving a principal debit, exact unresolved mutation
+retry without a second permanent debit, and closure of that exemption after a definitive
+outcome without refunding its charge. The stop classifier now performs only the durable
+request-identity lookup: it no longer reads Agent Session state merely to exempt the most
+expensive fresh stop path. The connection lease implementation uses a checked process-local
+`u64` sequence; an earlier review prompt's description of that sequence as random was a
+wording error, not an implementation or contract change.
 The complete `make verify` then passed
 every mandatory architecture, source-growth, logical-line, and 800-line gate; generated
 bindings; the production frontend build and original-CSS verification; 72 frontend files
 with 356 tests; 15 Tauri tests; 18 domain, 94 persistence, four protocol, 113 provider,
-and 28 server unit tests; 25 Rust integration tests; documentation tests;
+and 30 server unit tests; 25 Rust integration tests; documentation tests;
 warning-denied workspace/desktop Clippy; and final diff validation.
 
 The installed `x86_64-pc-windows-gnu` target passed the workspace all-target/all-feature

@@ -114,9 +114,10 @@ principal scope, and rejected over-limit frames stay charged until the window
 turns over.
 
 After strict protocol and implemented-action classification, exact committed
-replays and matching lifecycle resumes are recognized before a fresh human write
-is charged to one process-wide rolling 60-second principal window (3,600 commands,
-8 MiB of canonical command bytes). The bounded retry ledger stores only a
+replays and matching lifecycle resumes are recognized first. Every fresh human
+write, including a stop that owns runtime cleanup, is then charged to one
+process-wide rolling 60-second principal window (3,600 commands, 8 MiB of
+canonical command bytes). The bounded retry ledger stores only a
 domain-separated 32-byte intent digest and retains at most 32,768 mutations across
 at most 512 principal windows. A separate 128-permit in-flight owner transfers its
 RAII permit into the room command, so disconnect or caller cancellation cannot
@@ -124,12 +125,14 @@ release work the actor still owns. A third room-wide 60-second command and paylo
 window is durable in SQLite and is reserved in the same transaction as the command
 result, lifecycle intent, or provider tool event. Only an `agent.stop` that owns
 actual runtime or lifecycle-intent cleanup, and an already-owned terminal
-completion, remain available at saturation; a fresh already-stopped no-op stop
-consumes the normal mutation and durable budgets. Provider RoomPortal results use
-a separate per-room-actor, per-provider-session rolling budget and never borrow a
-human principal identity. Only an unresolved intent remains eligible to reuse its
-principal debit; a committed or definitively rejected actor outcome closes that
-retry exemption without refunding the original charge.
+completion, remain available at durable room-budget saturation; every fresh stop
+still consumes the process principal budget, and a fresh already-stopped no-op
+stop also consumes the normal durable room budget. Provider RoomPortal results
+use a separate per-room-actor, per-Agent-Session rolling budget keyed by the
+server-owned Agent Session ID, never a provider conversation identity, and never
+borrow a human principal identity. Only an unresolved intent remains eligible to
+reuse its principal debit; a committed or definitively rejected actor outcome
+closes that retry exemption without refunding the original charge.
 
 The mutation transaction orders work as follows:
 
@@ -296,7 +299,7 @@ HTTP ticket with the validated loopback HTTP origin. React receives neither the
 host secret nor a reusable credential. A ticket presented to the wrong transport
 or scope is consumed and rejected rather than interpreted as another authority.
 
-The local HTTP/WebSocket adapter has explicit resource budgets: admission is bounded immediately after TCP accept, incomplete HTTP headers and request bodies have real deadlines, and a consumed one-use ticket must atomically acquire a process-wide WebSocket lease before HTTP 101. The active-only lease owner admits at most 128 connections globally, eight for one principal, and 64 for one room; rejected acquisition increments no scope, and generation-bearing exact lease IDs prevent stale release from freeing a replacement. Inner product frames stop at 256 KiB and their authenticated wire envelopes at 384 KiB, the first subscription has a ten-second deadline, and the process-wide raw governor above owns message, byte, and control-frame windows. The one-use ticket proof establishes a connection key; after the receipt-bound plain Snapshot, every frame in both directions is authenticated over connection nonce, direction, a strict contiguous counter, and exact inner bytes before projection or command execution. Binary frames are rejected. Room queue admission never waits and returns `room_busy` when saturated.
+The local HTTP/WebSocket adapter has explicit resource budgets: admission is bounded immediately after TCP accept, incomplete HTTP headers and request bodies have real deadlines, and a consumed one-use ticket must atomically acquire a process-wide WebSocket lease before HTTP 101. The active-only lease owner admits at most 128 connections globally, eight for one principal, and 64 for one room; rejected acquisition increments no scope, and checked process-local `u64` generation IDs prevent stale release from freeing a replacement. Inner product frames stop at 256 KiB and their authenticated wire envelopes at 384 KiB, the first subscription has a ten-second deadline, and the process-wide raw governor above owns message, byte, and control-frame windows. When a bounded principal or room map cannot admit a new key, the rejected frame still charges the global scope and any already-tracked applicable scope without retaining another key. The one-use ticket proof establishes a connection key; after the receipt-bound plain Snapshot, every frame in both directions is authenticated over connection nonce, direction, a strict contiguous counter, and exact inner bytes before projection or command execution. Binary frames are rejected. Room queue admission never waits and returns `room_busy` when saturated.
 
 Authorization is evaluated from the current principal and durable room state when
 the application command runs, not frozen as a hard-coded local-operator identity at

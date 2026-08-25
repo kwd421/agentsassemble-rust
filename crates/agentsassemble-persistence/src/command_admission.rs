@@ -4,10 +4,7 @@ use sqlx::{Row, Sqlite, Transaction};
 
 use crate::{
     CommandOutcome, PersistenceError, SqliteStore,
-    agent_lifecycle::load_session,
-    agent_lifecycle_authority::{agent_stop_requires_cleanup, payload_agent_id},
-    agent_lifecycle_reservations::reject_reserved_request_id,
-    authority::active_room_for_principal,
+    agent_lifecycle_reservations::reject_reserved_request_id, authority::active_room_for_principal,
     room_write_budget::reserve_room_write_budget,
 };
 
@@ -129,15 +126,7 @@ impl SqliteStore {
             &payload_hash,
         )
         .await?;
-        let required = if existing.is_some() {
-            false
-        } else if action == "agent.stop" {
-            let agent_id = payload_agent_id(payload)?;
-            let session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
-            !agent_stop_requires_cleanup(&session)
-        } else {
-            true
-        };
+        let required = existing.is_none();
         transaction.commit().await?;
         Ok(required)
     }

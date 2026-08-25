@@ -130,22 +130,28 @@ Before JSON parsing or room queueing, one process-wide raw ingress governor
 atomically charges global, principal, and room byte/rate scopes. The debit is
 permanent and includes unknown or unsupported raw frames. The room actor does not
 retain a sharded transport charge. Keyed windows are bounded and reject new scope
-keys when expired-window pruning cannot free capacity.
+keys when expired-window pruning cannot free capacity. Such a capacity rejection
+still charges the global window and every already-tracked applicable keyed window;
+it never inserts an untracked key, so repeated rejected reassemblies cannot bypass
+the bounded process owner.
 
 After strict decoding, implemented-action classification, and exact replay or
 prepared-resume detection, a fresh human mutation receives a permanent
 process-wide principal debit. Permission denial, validation failure, missing
 targets, conflict, room busy, timeout, disconnect, cancellation, SQLite rollback,
-and provider failure do not refund it. Exact replay and prepared resume do not
-debit twice. The retry ledger stores a fixed-size domain-separated identity digest
-instead of request strings and has both principal-count and total-mutation memory
-ceilings. Only a separate in-flight permit is RAII-released, and that permit moves
+and provider failure do not refund it. Every fresh action, including a stop that
+owns runtime cleanup, receives this process debit; only an exact durable replay or
+prepared resume avoids a second debit. The retry ledger stores a fixed-size,
+domain-separated identity digest instead of request strings and has both
+principal-count and total-mutation memory ceilings. Only a separate in-flight
+permit is RAII-released, and that permit moves
 with the queued room command. Durable room budget remains in the command
 transaction and rolls back with it. Ambiguous commit outcome is resolved from
-request ID and idempotency record. Human-principal and provider-session mutation
-governors remain separate. A committed or definitively rejected actor outcome
-closes its in-memory retry exemption without refunding the original debit; only an
-unresolved exact intent can reuse that debit.
+request ID and idempotency record. Human-principal and Agent Session RoomPortal
+mutation governors remain separate. The RoomPortal budget key is the server-owned
+Agent Session ID, never a provider-selected conversation identity. A committed or
+definitively rejected actor outcome closes its in-memory retry exemption without
+refunding the original debit; only an unresolved exact intent can reuse that debit.
 
 Once a client command has crossed the WebSocket send boundary, loss of its ACK is
 an unknown outcome, never an ordinary timeout that frees its request ID. The

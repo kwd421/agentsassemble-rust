@@ -8,7 +8,7 @@ use super::{
 };
 
 #[tokio::test]
-async fn only_a_stop_that_owns_runtime_cleanup_bypasses_write_budgets() {
+async fn every_fresh_stop_requires_principal_budget_and_exact_replay_does_not() {
     let payload = json!({"agent_id": AGENT_ID});
     let (stopped_store, stopped_principal, _stopped_directory) = fixture().await;
     assert!(
@@ -29,6 +29,17 @@ async fn only_a_stop_that_owns_runtime_cleanup_bypasses_write_budgets() {
             .unwrap_or_else(|error| panic!("stop stopped session: {error}")),
         AgentStopPlan::Outcome(_)
     ));
+    assert!(
+        !stopped_store
+            .command_requires_principal_budget(
+                &stopped_principal,
+                "stopped-noop",
+                "agent.stop",
+                &payload,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("classify stopped replay: {error}"))
+    );
     let stopped_budget = sqlx::query_scalar::<_, i64>(
         "SELECT COALESCE(SUM(command_count), 0) FROM room_write_budgets WHERE room_id = 'general'",
     )
@@ -59,7 +70,7 @@ async fn only_a_stop_that_owns_runtime_cleanup_bypasses_write_budgets() {
         .await
         .unwrap_or_else(|error| panic!("commit running session: {error}"));
     assert!(
-        !running_store
+        running_store
             .command_requires_principal_budget(
                 &running_principal,
                 "owned-cleanup",
@@ -76,6 +87,17 @@ async fn only_a_stop_that_owns_runtime_cleanup_bypasses_write_budgets() {
             .unwrap_or_else(|error| panic!("prepare owned cleanup: {error}")),
         AgentStopPlan::Stop(_)
     ));
+    assert!(
+        !running_store
+            .command_requires_principal_budget(
+                &running_principal,
+                "owned-cleanup",
+                "agent.stop",
+                &payload,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("classify owned cleanup replay: {error}"))
+    );
     let running_budget = sqlx::query_scalar::<_, i64>(
         "SELECT COALESCE(SUM(command_count), 0) FROM room_write_budgets WHERE room_id = 'general'",
     )
