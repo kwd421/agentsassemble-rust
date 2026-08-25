@@ -59,6 +59,10 @@ impl SqliteStore {
 mod tests {
     use crate::{PersistenceError, SqliteStore};
 
+    fn key_path(root: &std::path::Path) -> std::path::PathBuf {
+        root.join("central-directory").join("host-ed25519.pk8")
+    }
+
     #[tokio::test]
     async fn host_identity_remains_bound_to_the_server_across_reopen() {
         let directory = tempfile::tempdir().unwrap_or_else(|error| panic!("tempdir: {error}"));
@@ -105,6 +109,64 @@ mod tests {
 
         assert!(matches!(
             SqliteStore::open_path(&path).await,
+            Err(PersistenceError::InvalidHostIdentity)
+        ));
+    }
+
+    #[tokio::test]
+    async fn database_only_backup_cannot_clone_the_host_signing_authority() {
+        let source = tempfile::tempdir().unwrap_or_else(|error| panic!("source tempdir: {error}"));
+        let source_database = source.path().join("runtime.sqlite3");
+        let store = SqliteStore::open_path(&source_database)
+            .await
+            .unwrap_or_else(|error| panic!("create source authority: {error}"));
+        drop(store);
+
+        let private_key = key_path(source.path());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            let mode = private_key
+                .metadata()
+                .unwrap_or_else(|error| panic!("inspect host key permissions: {error}"))
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o077, 0);
+        }
+
+        let clone = tempfile::tempdir().unwrap_or_else(|error| panic!("clone tempdir: {error}"));
+        let cloned_database = clone.path().join("runtime.sqlite3");
+        std::fs::copy(&source_database, &cloned_database)
+            .unwrap_or_else(|error| panic!("copy database backup: {error}"));
+        assert!(matches!(
+            SqliteStore::open_path(&cloned_database).await,
+            Err(PersistenceError::HostIdentityMissing)
+        ));
+        assert!(!clone.path().join("central-directory").exists());
+    }
+
+    #[tokio::test]
+    async fn substituted_private_key_rejects_the_database_public_binding() {
+        let first = tempfile::tempdir().unwrap_or_else(|error| panic!("first tempdir: {error}"));
+        let second = tempfile::tempdir().unwrap_or_else(|error| panic!("second tempdir: {error}"));
+        let first_database = first.path().join("runtime.sqlite3");
+        let second_database = second.path().join("runtime.sqlite3");
+        drop(
+            SqliteStore::open_path(&first_database)
+                .await
+                .unwrap_or_else(|error| panic!("create first authority: {error}")),
+        );
+        drop(
+            SqliteStore::open_path(&second_database)
+                .await
+                .unwrap_or_else(|error| panic!("create second authority: {error}")),
+        );
+
+        std::fs::copy(key_path(second.path()), key_path(first.path()))
+            .unwrap_or_else(|error| panic!("substitute host key: {error}"));
+        assert!(matches!(
+            SqliteStore::open_path(&first_database).await,
             Err(PersistenceError::InvalidHostIdentity)
         ));
     }
