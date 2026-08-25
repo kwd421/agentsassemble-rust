@@ -368,10 +368,10 @@ impl SqliteStore {
             expected.turn_generation,
         )
         .await?;
-        validate_candidate(&session, &execution)?;
         if expected != &execution {
             return Err(stale_reconciliation());
         }
+        validate_candidate(&session, &execution)?;
         let current_effect = load_optional_effect_in(
             &mut transaction,
             &expected.room_id,
@@ -388,6 +388,19 @@ impl SqliteStore {
             }
             (None, None) => {}
             _ => return Err(stale_reconciliation()),
+        }
+        if stop_effect_is_confirmed_by_runtime_gone(&session) {
+            crate::provider_turn_stop::terminalize_confirmed_stop_turn(&mut transaction, &session)
+                .await?;
+            let mut session = session;
+            "effect_applied".clone_into(&mut session.lifecycle_intent_status);
+            session.public.updated_at = Utc::now();
+            save_session(&mut transaction, &session).await?;
+            transaction.commit().await?;
+            return Ok(AgentTurnCommit {
+                events: Vec::new(),
+                next_assignments: Vec::new(),
+            });
         }
         let terminal_phase = if current_effect.is_some() {
             ProviderTurnExecutionPhase::Interrupted
@@ -412,6 +425,15 @@ impl SqliteStore {
         )
         .await
     }
+}
+
+fn stop_effect_is_confirmed_by_runtime_gone(session: &DurableAgentSession) -> bool {
+    session.lifecycle_intent_action == "stop"
+        && !session.lifecycle_intent_id.is_empty()
+        && matches!(
+            session.lifecycle_intent_status.as_str(),
+            "effect_inflight" | "unconfirmed" | "effect_applied"
+        )
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

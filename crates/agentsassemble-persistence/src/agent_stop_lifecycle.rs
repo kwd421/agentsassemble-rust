@@ -135,11 +135,16 @@ impl SqliteStore {
     ) -> Result<(), PersistenceError> {
         let mut transaction = self.pool.begin().await?;
         let mut session = load_session(&mut transaction, room_id, session_id).await?;
+        let expected_status = if session.lifecycle_intent_status == "effect_applied" {
+            "effect_applied"
+        } else {
+            "effect_inflight"
+        };
         require_intent(
             &session,
             STOP,
             operation_id,
-            "effect_inflight",
+            expected_status,
             "stale_stop_confirmation",
         )?;
         crate::provider_turn_stop::terminalize_confirmed_stop_turn(&mut transaction, &session)

@@ -3,9 +3,9 @@ use chrono::{SecondsFormat, Utc};
 use sqlx::{Sqlite, Transaction};
 
 use crate::{
-    PersistenceError, ProviderTurnEffectPhase, provider_turn_effect::load_optional_effect_in,
-    provider_turn_execution::load_execution_in, room_turns::support::turn_finished_event,
-    turn_authority::active_turn_authority,
+    PersistenceError, ProviderTurnEffectPhase, ProviderTurnExecution, ProviderTurnInterruptEffect,
+    provider_turn_effect::load_optional_effect_in, provider_turn_execution::load_execution_in,
+    room_turns::support::turn_finished_event, turn_authority::active_turn_authority,
 };
 
 /// Terminalizes the exact active provider execution after its runtime is proved stopped.
@@ -23,16 +23,6 @@ pub(crate) async fn terminalize_confirmed_stop_turn(
         session.turn_generation,
     )
     .await?;
-    if !execution.phase.is_blocking()
-        || execution.requeue_finalized
-        || execution.participant_id != session.public.participant_id
-        || execution.turn_id != session.public.active_turn_id
-        || execution.runtime_handle_id != session.runtime_handle_id
-        || execution.runtime_owner_id != session.runtime_owner_id
-        || execution.runtime_lease_token != session.runtime_lease_token
-    {
-        return Err(invalid_stop_turn());
-    }
     let effect = load_optional_effect_in(
         transaction,
         &execution.room_id,
@@ -40,17 +30,8 @@ pub(crate) async fn terminalize_confirmed_stop_turn(
         execution.turn_generation,
     )
     .await?;
-    if effect.as_ref().is_some_and(|effect| {
-        effect.phase == ProviderTurnEffectPhase::Finalized
-            || effect.execution_id != execution.execution_id
-            || effect.participant_id != execution.participant_id
-            || effect.turn_id != execution.turn_id
-            || effect.start_dispatch_nonce != execution.start_dispatch_nonce
-            || effect.runtime_handle_id != execution.runtime_handle_id
-            || effect.runtime_owner_id != execution.runtime_owner_id
-            || effect.runtime_lease_token != execution.runtime_lease_token
-    }) {
-        return Err(invalid_stop_turn());
+    if exact_stop_turn_is_terminal(session, &execution, effect.as_ref())? {
+        return Ok(None);
     }
     let now = Utc::now().to_rfc3339_opts(SecondsFormat::Micros, true);
     let execution_changed = sqlx::query(
@@ -100,6 +81,46 @@ pub(crate) async fn terminalize_confirmed_stop_turn(
     )
     .await
     .map(Some)
+}
+
+fn exact_stop_turn_is_terminal(
+    session: &DurableAgentSession,
+    execution: &ProviderTurnExecution,
+    effect: Option<&ProviderTurnInterruptEffect>,
+) -> Result<bool, PersistenceError> {
+    if execution.participant_id != session.public.participant_id
+        || execution.turn_id != session.public.active_turn_id
+        || execution.runtime_handle_id != session.runtime_handle_id
+        || execution.runtime_owner_id != session.runtime_owner_id
+        || execution.runtime_lease_token != session.runtime_lease_token
+        || effect.is_some_and(|effect| {
+            effect.execution_id != execution.execution_id
+                || effect.participant_id != execution.participant_id
+                || effect.turn_id != execution.turn_id
+                || effect.start_dispatch_nonce != execution.start_dispatch_nonce
+                || effect.runtime_handle_id != execution.runtime_handle_id
+                || effect.runtime_owner_id != execution.runtime_owner_id
+                || effect.runtime_lease_token != execution.runtime_lease_token
+        })
+    {
+        return Err(invalid_stop_turn());
+    }
+    if execution.phase == crate::ProviderTurnExecutionPhase::Interrupted
+        && execution.requeue_finalized
+    {
+        return if effect.is_none_or(|effect| effect.phase == ProviderTurnEffectPhase::Finalized) {
+            Ok(true)
+        } else {
+            Err(invalid_stop_turn())
+        };
+    }
+    if !execution.phase.is_blocking()
+        || execution.requeue_finalized
+        || effect.is_some_and(|effect| effect.phase == ProviderTurnEffectPhase::Finalized)
+    {
+        return Err(invalid_stop_turn());
+    }
+    Ok(false)
 }
 
 fn generation_i64(generation: u64) -> Result<i64, PersistenceError> {
