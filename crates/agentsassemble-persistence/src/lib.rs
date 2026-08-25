@@ -26,6 +26,7 @@ mod profile_attachments;
 mod profile_store;
 mod room_directory;
 mod room_event_publication;
+mod room_preferences;
 mod room_random;
 mod room_settings;
 mod room_subscription;
@@ -77,6 +78,7 @@ pub use provider_turn_reconciliation::{
     ProviderTurnReconciliationPage,
 };
 pub use room_directory::{RoomCreateCommit, StoredRoomSummary};
+pub use room_preferences::RoomPreferencesSnapshot;
 pub use room_random::{ProviderRoomRandomCommit, RoomRandomCommit};
 pub use room_subscription::RoomCatchUp;
 pub use room_turns::{
