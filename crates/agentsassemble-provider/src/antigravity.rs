@@ -352,17 +352,25 @@ impl AntigravityDriver {
                     .command_prefix(),
             );
             self.transcript.begin_turn(&prompt)?;
-            self.write_terminal(format!("\x1b[200~{prompt}\x1b[201~").as_bytes())
-                .await?;
-            tokio::time::sleep(SUBMIT_DELAY).await;
-            self.write_terminal(b"\r").await?;
-            self.active_turn = Some(ActiveTurn {
-                request: request.clone(),
-                provider_turn_id: Uuid::new_v4().to_string(),
-                last_progress: Instant::now(),
-            });
+            self.submit_turn_prompt(request, &prompt).await?;
         }
         self.read_turn(session).await
+    }
+
+    async fn submit_turn_prompt(
+        &mut self,
+        request: &ProviderTurnRequest,
+        prompt: &str,
+    ) -> Result<(), DriverError> {
+        self.active_turn = Some(ActiveTurn {
+            request: request.clone(),
+            provider_turn_id: Uuid::new_v4().to_string(),
+            last_progress: Instant::now(),
+        });
+        self.write_terminal(format!("\x1b[200~{prompt}\x1b[201~").as_bytes())
+            .await?;
+        tokio::time::sleep(SUBMIT_DELAY).await;
+        self.write_terminal(b"\r").await
     }
 
     async fn read_turn(
@@ -445,8 +453,9 @@ impl AntigravityDriver {
         if active.request != *request {
             return Err(turn_conflict());
         }
+        self.poisoned = true;
         self.write_terminal(b"\x03").await?;
-        self.poison(turn_interrupt_requires_stop())
+        Err(turn_interrupt_requires_stop())
     }
 
     async fn drain_terminal_available(&mut self) -> Result<(), DriverError> {
@@ -601,7 +610,7 @@ impl ProviderDriver for AntigravityDriver {
     }
 
     fn requires_restart(&self) -> bool {
-        self.poisoned
+        self.poisoned || self.active_turn.is_some()
     }
 }
 
