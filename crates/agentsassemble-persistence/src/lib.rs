@@ -13,6 +13,7 @@ mod agent_reconciliation_recovery;
 mod agent_reconciliation_scan;
 mod agent_sessions;
 mod agent_start_failure;
+mod agent_stop_lifecycle;
 mod authority;
 mod bootstrap;
 mod command_admission;
@@ -42,6 +43,7 @@ mod persistence_security_tests;
 mod provider_turn_effect;
 mod provider_turn_execution;
 mod provider_turn_reconciliation;
+mod provider_turn_stop;
 
 pub use agent_create_start::{
     AgentCreateStartCommit, AgentCreateStartEffect, AgentCreateStartPlan,
