@@ -33,6 +33,8 @@ async fn mute_preempts_unstarted_exact_turn_and_unmute_reschedules_once() {
         .unwrap_or_else(|error| panic!("mute exact Agent turn: {error}"));
     assert_eq!(muted.outcome.event.event_type, "participant_muted");
     assert_eq!(muted.outcome.event.extra["muted"], json!(true));
+    let muted_event_seq = muted.outcome.event.seq;
+    assert_eq!(muted.outcome.result["event_seq"], json!(muted_event_seq));
     let effect = muted
         .interrupt_effect
         .unwrap_or_else(|| panic!("active Agent interrupt effect"));
@@ -67,6 +69,7 @@ async fn mute_preempts_unstarted_exact_turn_and_unmute_reschedules_once() {
         .unwrap_or_else(|error| panic!("replay Agent mute: {error}"));
     assert!(replay.outcome.deduplicated);
     assert!(replay.interrupt_effect.is_none());
+    assert_eq!(replay.outcome.result["event_seq"], json!(muted_event_seq));
     let claim = store
         .claim_provider_turn_interrupt(&effect, "10000000-0000-4000-8000-000000000099")
         .await

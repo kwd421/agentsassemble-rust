@@ -90,7 +90,11 @@ impl SqliteStore {
         }
         let update = parse_update(payload)?;
         let prepared = prepare_participant_mute(&mut transaction, principal, &update).await?;
-        let result = json!({"participant": prepared.participant, "event": prepared.event});
+        let result = json!({
+            "participant": prepared.participant,
+            "event": prepared.event,
+            "event_seq": prepared.event.seq,
+        });
         sqlx::query(
             "INSERT INTO command_results(room_id, principal_id, request_id, action, payload_hash, result_json) \
              VALUES (?, ?, ?, ?, ?, ?)",
