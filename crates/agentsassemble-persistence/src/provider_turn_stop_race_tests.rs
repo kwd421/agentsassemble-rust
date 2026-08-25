@@ -135,3 +135,79 @@ async fn runtime_gone_checkpoint_yields_to_an_inflight_stop_owner() {
         SECOND_AGENT_ID
     );
 }
+
+#[tokio::test]
+async fn runtime_gone_rejects_a_stop_intent_without_its_exact_reservation() {
+    let (store, principal, _directory) = fixture().await;
+    let active = store
+        .execute_message_with_turn(
+            &principal,
+            "forged-stop-active",
+            "message.send",
+            &json!({"content": "@Terra retain authority on invalid stop"}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("assign forged-stop turn: {error}"));
+    let assignment = &active.assignments[0];
+    let start = store
+        .authorize_provider_turn_start(
+            "general",
+            AGENT_ID,
+            assignment.turn_generation,
+            &assignment.turn_id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize forged-stop turn: {error}"));
+    store
+        .mark_provider_turn_running(&start, "provider-turn-forged-stop")
+        .await
+        .unwrap_or_else(|error| panic!("mark forged-stop turn running: {error}"));
+    let candidate = store
+        .load_active_provider_turn_reconciliation_candidate("general", AGENT_ID)
+        .await
+        .unwrap_or_else(|error| panic!("load forged-stop provider candidate: {error}"))
+        .unwrap_or_else(|| panic!("missing forged-stop provider candidate"));
+
+    let payload = json!({"agent_id": AGENT_ID});
+    let crate::AgentStopPlan::Stop(stop) = store
+        .prepare_agent_stop(&principal, "forged-stop-owner", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare forged-stop owner: {error}"))
+    else {
+        panic!("busy runtime must require an exact stop effect");
+    };
+    store
+        .authorize_agent_stop_effect(
+            &principal,
+            "forged-stop-owner",
+            &payload,
+            &stop.operation_id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize forged-stop owner: {error}"));
+    sqlx::query(
+        "DELETE FROM lifecycle_command_reservations WHERE room_id = 'general' AND session_id = ?",
+    )
+    .bind(AGENT_ID)
+    .execute(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("remove forged-stop reservation fixture: {error}"));
+
+    let result = store.finalize_provider_turn_runtime_gone(&candidate).await;
+    assert!(matches!(
+        result,
+        Err(crate::PersistenceError::CommandRejected {
+            code: "invalid_stored_runtime_authority",
+            ..
+        })
+    ));
+    let execution = store
+        .provider_turn_execution("general", AGENT_ID, assignment.turn_generation)
+        .await
+        .unwrap_or_else(|error| panic!("reload forged-stop execution: {error}"));
+    assert_eq!(execution.phase, crate::ProviderTurnExecutionPhase::Running);
+    assert!(!execution.requeue_finalized);
+    let unchanged = stored_session(&store).await;
+    assert_eq!(unchanged.lifecycle_intent_status, "effect_inflight");
+    assert_eq!(count_events_containing(&store, "operator_stop").await, 0);
+}
