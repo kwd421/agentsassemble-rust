@@ -114,8 +114,13 @@ pub(crate) async fn reconcile_live_page(
             if cancellation.is_cancelled() {
                 return;
             }
-            if let Err(error) =
-                reconcile_live_candidate(store, provider_adapter, rooms, &candidate).await
+            if let Err(error) = Box::pin(reconcile_live_candidate(
+                store,
+                provider_adapter,
+                rooms,
+                &candidate,
+            ))
+            .await
             {
                 tracing::warn!(
                     %error,
