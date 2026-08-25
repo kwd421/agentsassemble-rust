@@ -41,6 +41,7 @@ macro_rules! registered_routes {
 mod agent_create_runtime;
 mod app_state;
 mod authenticated_channel;
+mod central_host_identity;
 mod connection_admission;
 mod event_publication;
 mod host_ticket;
@@ -75,6 +76,7 @@ mod ticket_issuer;
 mod web;
 
 pub use app_state::AppState;
+pub use central_host_identity::{CentralHostIdentity, HostIdentityError};
 pub use host_ticket::{HostSecret, InvalidHostSecret};
 pub use room_runtime::RoomRuntime;
 pub use room_shutdown::RoomShutdownError;

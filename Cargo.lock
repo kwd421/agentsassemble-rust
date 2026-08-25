@@ -118,6 +118,7 @@ dependencies = [
  "parking_lot",
  "rand 0.10.2",
  "reqwest",
+ "ring",
  "rmcp",
  "same-file",
  "serde",
