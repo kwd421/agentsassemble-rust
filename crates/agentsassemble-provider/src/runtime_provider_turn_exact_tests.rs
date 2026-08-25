@@ -1,12 +1,86 @@
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+    time::Duration,
+};
 
 use tokio::sync::Barrier;
 
 use super::{
-    ProviderAdapter, ProviderTurnRequest,
+    DriverError, DriverFactory, DriverFuture, ProviderAdapter, ProviderDriver,
+    ProviderRuntimeObservation, ProviderSessionAttachment, ProviderTurnCompleted,
+    ProviderTurnRequest,
     provider_turn_tests::{active_session, requests, stop_and_release, turn_fixture},
     tests::fixture_session,
 };
+use crate::{launch_error::DriverLaunchError, runtime_lease::HeldRuntimeLease};
+
+struct PanicAfterIoFactory {
+    turn_entries: Arc<AtomicUsize>,
+    stops: Arc<AtomicUsize>,
+}
+
+struct PanicAfterIoDriver {
+    turn_entries: Arc<AtomicUsize>,
+    stops: Arc<AtomicUsize>,
+}
+
+impl DriverFactory for PanicAfterIoFactory {
+    fn launch<'a>(
+        &'a self,
+        _session: &'a agentsassemble_domain::DurableAgentSession,
+        _runtime_lease: &'a HeldRuntimeLease,
+    ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
+        let driver = PanicAfterIoDriver {
+            turn_entries: Arc::clone(&self.turn_entries),
+            stops: Arc::clone(&self.stops),
+        };
+        Box::pin(async move { Ok(Box::new(driver) as Box<dyn ProviderDriver>) })
+    }
+}
+
+impl ProviderDriver for PanicAfterIoDriver {
+    fn attach_session<'a>(
+        &'a mut self,
+        session: &'a agentsassemble_domain::DurableAgentSession,
+    ) -> DriverFuture<'a, Result<ProviderSessionAttachment, DriverError>> {
+        let model = session.public.model.clone();
+        Box::pin(async move {
+            Ok(ProviderSessionAttachment {
+                provider_session_id: "panic-after-io-session".to_owned(),
+                reused: false,
+                observed_model_id: Some(model),
+            })
+        })
+    }
+
+    fn send_turn<'a>(
+        &'a mut self,
+        _session: &'a agentsassemble_domain::DurableAgentSession,
+        _request: &'a ProviderTurnRequest,
+    ) -> DriverFuture<'a, Result<ProviderTurnCompleted, DriverError>> {
+        let turn_entries = Arc::clone(&self.turn_entries);
+        Box::pin(async move {
+            turn_entries.fetch_add(1, Ordering::SeqCst);
+            tokio::task::yield_now().await;
+            panic!("synthetic panic after provider I/O entry");
+        })
+    }
+
+    fn is_alive(&mut self) -> DriverFuture<'_, Result<bool, DriverError>> {
+        Box::pin(async { Ok(true) })
+    }
+
+    fn stop(&mut self) -> DriverFuture<'_, Result<(), DriverError>> {
+        let stops = Arc::clone(&self.stops);
+        Box::pin(async move {
+            stops.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        })
+    }
+}
 
 #[tokio::test]
 async fn completed_turn_remains_exactly_owned_until_durable_terminal_release() {
@@ -68,6 +142,59 @@ async fn completed_turn_remains_exactly_owned_until_durable_terminal_release() {
     };
     assert_eq!(error.code, "stale_provider_turn");
     stop_and_release(&adapter, &active, &started).await;
+}
+
+#[tokio::test]
+async fn post_io_panic_returns_driver_before_stopping_the_exact_runtime() {
+    let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create panic-custody fixture: {error}"));
+    let session = fixture_session(directory.path(), "#!/bin/sh\nexit 0\n").await;
+    let turn_entries = Arc::new(AtomicUsize::new(0));
+    let stops = Arc::new(AtomicUsize::new(0));
+    let adapter = ProviderAdapter::with_factory(Arc::new(PanicAfterIoFactory {
+        turn_entries: Arc::clone(&turn_entries),
+        stops: Arc::clone(&stops),
+    }));
+    let started = adapter
+        .start(&session)
+        .await
+        .unwrap_or_else(|error| panic!("start panic-custody fixture: {error}"));
+    let active = active_session(&session, &started, "panic-room-turn");
+    let request = ProviderTurnRequest {
+        turn_id: "panic-room-turn".to_owned(),
+        turn_generation: 1,
+        execution_id: "11111111-1111-4111-8111-111111111111".to_owned(),
+        input: "Enter provider I/O, then panic.".to_owned(),
+        room_observation: None,
+    };
+
+    let Err(error) = adapter.send_turn(&active, &request).await else {
+        panic!("post-I/O panic must fail closed");
+    };
+    assert!(error.runtime_stopped);
+    assert_eq!(error.runtime_lease_token, started.runtime_lease_token);
+    assert_eq!(turn_entries.load(Ordering::SeqCst), 1);
+    assert_eq!(stops.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        adapter.observe(&active).await,
+        ProviderRuntimeObservation::Gone
+    );
+
+    let Err(retry) = adapter.send_turn(&active, &request).await else {
+        panic!("stopped runtime must not accept a duplicate turn");
+    };
+    assert_eq!(retry.code, "runtime_owner_mismatch");
+    assert_eq!(turn_entries.load(Ordering::SeqCst), 1);
+    adapter
+        .release_confirmed_stop(
+            &active.public.room_id,
+            &active.public.session_id,
+            &started.runtime_handle_id,
+            &started.runtime_owner_id,
+            &started.runtime_lease_token,
+        )
+        .await;
 }
 
 #[tokio::test]
