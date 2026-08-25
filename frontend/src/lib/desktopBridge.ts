@@ -54,7 +54,20 @@ export interface DesktopOperatorHttpTicket {
   http_base_url: string;
 }
 
-export type DesktopCentralRegistrationTicket = DesktopOperatorHttpTicket;
+export interface DesktopCentralRegistrationBinding {
+  server_id: string;
+  host_public_key_x: string;
+  host_key_fingerprint: string;
+}
+
+export interface DesktopCentralRegistrationTicket
+  extends DesktopOperatorHttpTicket,
+    DesktopCentralRegistrationBinding {}
+
+export interface DesktopCentralRegistrationResponse {
+  response: Response;
+  binding: DesktopCentralRegistrationBinding;
+}
 
 export interface DesktopWorkspaceSelection {
   selected: boolean;
@@ -242,6 +255,43 @@ function rememberDesktopOperatorRuntime(
   return ticket;
 }
 
+function validateDesktopCentralRegistrationTicket(
+  value: unknown
+): DesktopCentralRegistrationTicket {
+  const grant = exactObject(
+    value,
+    [
+      "ticket",
+      "ttl_seconds",
+      "http_base_url",
+      "server_id",
+      "host_public_key_x",
+      "host_key_fingerprint",
+    ],
+    "중앙 등록 티켓"
+  );
+  if (
+    !/^[0-9a-f]{64}$/.test(String(grant.ticket)) ||
+    !Number.isSafeInteger(grant.ttl_seconds) ||
+    Number(grant.ttl_seconds) < 1 ||
+    typeof grant.http_base_url !== "string" ||
+    typeof grant.server_id !== "string" ||
+    !UUID_PATTERN.test(grant.server_id) ||
+    !/^[A-Za-z0-9_-]{43}$/.test(String(grant.host_public_key_x)) ||
+    !/^[A-Za-z0-9_-]{43}$/.test(String(grant.host_key_fingerprint))
+  ) {
+    throw new Error("중앙 등록 티켓 권위가 올바르지 않습니다.");
+  }
+  return grant as unknown as DesktopCentralRegistrationTicket;
+}
+
+function rememberDesktopCentralRegistration(
+  ticket: DesktopCentralRegistrationTicket
+): DesktopCentralRegistrationTicket {
+  rememberDesktopOperatorRuntime(ticket);
+  return ticket;
+}
+
 export async function requestDesktopRuntimeTicket(
   roomId: string
 ): Promise<DesktopRuntimeTicket> {
@@ -301,8 +351,9 @@ export async function requestDesktopCentralRegistrationTicket(): Promise<Desktop
   }
   requireDesktopHostCommand("runtime_central_registration_ticket");
   return tauri
-    .invoke<DesktopCentralRegistrationTicket>("runtime_central_registration_ticket")
-    .then(rememberDesktopOperatorRuntime);
+    .invoke<unknown>("runtime_central_registration_ticket")
+    .then(validateDesktopCentralRegistrationTicket)
+    .then(rememberDesktopCentralRegistration);
 }
 
 export async function fetchDesktopRuntime(
@@ -334,14 +385,22 @@ export async function fetchDesktopOperatorRuntime(
 
 export async function fetchDesktopCentralRegistration(
   init: RequestInit = {}
-): Promise<Response> {
+): Promise<DesktopCentralRegistrationResponse> {
   const issued = await requestDesktopCentralRegistrationTicket();
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${issued.ticket}`);
-  return fetch(
+  const response = await fetch(
     `${desktopRuntimeHttpBase}/api/central-directory/registration-proof`,
     { ...init, headers }
   );
+  return {
+    response,
+    binding: {
+      server_id: issued.server_id,
+      host_public_key_x: issued.host_public_key_x,
+      host_key_fingerprint: issued.host_key_fingerprint,
+    },
+  };
 }
 
 export function resolveDesktopRuntimeResource(value: string | undefined): string | undefined {

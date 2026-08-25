@@ -4,6 +4,7 @@ import {
   isDesktopWebview,
   openDesktopCentralGoogleLogin,
 } from "./desktopBridge";
+import { verifyCentralRegistrationEnvelope } from "./centralRegistrationProof";
 
 const SESSION_KEY = "agentsassemble.centralSession.v1";
 const SERVERS_KEY = "agentsassemble.centralServers.v1";
@@ -607,22 +608,28 @@ export async function registerLocalServer(deviceToken: string): Promise<void> {
     },
     body: JSON.stringify({ owner_person_id: session.person.person_id }),
   } satisfies RequestInit;
-  const proofResponse = isDesktopWebview()
+  const desktop = isDesktopWebview();
+  const registration = desktop
     ? await fetchDesktopCentralRegistration(registrationRequest)
-    : await fetch(
-        "/api/central-directory/registration-proof",
-        registrationRequest
-      );
-  const local = await responsePayload<
-    LocalServerInfo & {
-      host_registration_proof: {
-        owner_person_id: string;
-        issued_at: number;
-        nonce: string;
-        signature: string;
-      };
-    }
-  >(proofResponse);
+    : null;
+  const proofResponse = registration
+    ? registration.response
+    : await fetch("/api/central-directory/registration-proof", registrationRequest);
+  const payload = await responsePayload<unknown>(proofResponse);
+  const local = registration
+    ? await verifyCentralRegistrationEnvelope(
+        payload,
+        session.person.person_id,
+        registration.binding
+      )
+    : (payload as LocalServerInfo & {
+        host_registration_proof: {
+          owner_person_id: string;
+          issued_at: number;
+          nonce: string;
+          signature: string;
+        };
+      });
   await signedRequest(session, "/v1/servers", "POST", {
     server_id: local.server_id,
     label: "이 기기",

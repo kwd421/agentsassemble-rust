@@ -24,9 +24,12 @@ describe("desktop central registration bridge", () => {
         ],
       })
       .mockResolvedValueOnce({
-        ticket: "central-registration-ticket",
+        ticket: "a".repeat(64),
         ttl_seconds: 30,
         http_base_url: "http://127.0.0.1:49154",
+        server_id: "0198f492-c76a-7000-8000-000000000001",
+        host_public_key_x: "A".repeat(43),
+        host_key_fingerprint: "B".repeat(43),
       });
     Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
@@ -49,7 +52,7 @@ describe("desktop central registration bridge", () => {
       expect.objectContaining({ method: "POST", headers: expect.any(Headers) })
     );
     const headers = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
-    expect(headers.get("Authorization")).toBe("Bearer central-registration-ticket");
+    expect(headers.get("Authorization")).toBe(`Bearer ${"a".repeat(64)}`);
     expect(headers.get("Content-Type")).toBe("application/json");
   });
 });
