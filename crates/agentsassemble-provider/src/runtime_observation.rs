@@ -86,16 +86,10 @@ fn observe_launching_runtime(
         });
     }
     if !runtime.effect_started {
-        let RuntimeState::Launching(runtime) =
-            std::mem::replace(&mut slot.state, RuntimeState::Vacant)
-        else {
-            unreachable!("pre-effect provider reservation must remain owned");
-        };
-        runtime.runtime_lease.cleanup_pre_effect();
         return Some(ProviderRuntimeObservation::Gone);
     }
     if runtime.runtime_lease.cleanup_receipt_is_present() {
-        return Some(release_gone_launching_runtime(slot));
+        return Some(ProviderRuntimeObservation::Gone);
     }
     Some(
         match observe_runtime_lease(&session.public.room_id, &session.public.session_id) {
@@ -112,7 +106,7 @@ fn observe_launching_runtime(
                     ObservationScope::LiveSlot,
                 ) =>
             {
-                release_gone_launching_runtime(slot)
+                ProviderRuntimeObservation::Gone
             }
             LeaseObservation::GenerationGone { .. }
             | LeaseObservation::PreviousBoot { .. }
@@ -124,16 +118,6 @@ fn observe_launching_runtime(
             },
         },
     )
-}
-
-fn release_gone_launching_runtime(slot: &mut RuntimeSlot) -> ProviderRuntimeObservation {
-    let RuntimeState::Launching(mut runtime) =
-        std::mem::replace(&mut slot.state, RuntimeState::Vacant)
-    else {
-        unreachable!("proven-gone provider launch must remain owned");
-    };
-    runtime.runtime_lease.release_and_remove();
-    ProviderRuntimeObservation::Gone
 }
 
 async fn unavailable_running_health(runtime: &OwnedRuntime) -> Option<ProviderRuntimeObservation> {
@@ -165,19 +149,23 @@ pub(super) fn shutdown_launching_runtime(
         return None;
     };
     if !runtime.effect_started {
+        let stopped = ProviderRuntimeGone {
+            room_id: key.room_id.clone(),
+            session_id: key.session_id.clone(),
+            runtime_handle_id: runtime.handle_id.clone(),
+            runtime_owner_id: runtime.owner_id.clone(),
+            runtime_lease_token: runtime.runtime_lease.token().to_owned(),
+        };
         let RuntimeState::Launching(runtime) =
             std::mem::replace(&mut slot.state, RuntimeState::Vacant)
         else {
             unreachable!("pre-effect provider reservation must remain owned");
         };
-        let stopped = ProviderRuntimeGone {
-            room_id: key.room_id.clone(),
-            session_id: key.session_id.clone(),
-            runtime_handle_id: runtime.handle_id,
-            runtime_owner_id: runtime.owner_id,
-            runtime_lease_token: runtime.runtime_lease.token().to_owned(),
+        slot.state = RuntimeState::StopConfirmed {
+            handle_id: runtime.handle_id,
+            owner_id: runtime.owner_id,
+            runtime_lease: runtime.runtime_lease,
         };
-        runtime.runtime_lease.cleanup_pre_effect();
         return Some(Ok(stopped));
     }
     let observation = observe_runtime_lease(&key.room_id, &key.session_id);

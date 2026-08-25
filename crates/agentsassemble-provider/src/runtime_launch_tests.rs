@@ -163,6 +163,60 @@ async fn safe_launch_failure_retains_exact_gone_proof_until_terminal_commit() {
     );
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn begin_failure_observation_retains_exact_proof_until_db_checkpoint() {
+    let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create begin failure fixture: {error}"));
+    let session = super::tests::fixture_session(directory.path(), "#!/bin/sh\nexit 0\n").await;
+    let adapter = ProviderAdapter::with_factory(Arc::new(SafeFailureFactory));
+    let reservation = adapter
+        .reserve_start(&session)
+        .await
+        .unwrap_or_else(|error| panic!("reserve begin failure: {error}"));
+    let mut authorized = session.clone();
+    authorized
+        .runtime_handle_id
+        .clone_from(&reservation.runtime_handle_id);
+    authorized
+        .runtime_owner_id
+        .clone_from(&reservation.runtime_owner_id);
+    authorized
+        .runtime_lease_token
+        .clone_from(&reservation.runtime_lease_token);
+    let launch_blocker = crate::runtime_lease::lock_test_launch_lifetime(
+        &authorized.public.room_id,
+        &authorized.public.session_id,
+    );
+
+    let Err(failure) = adapter.start_reserved(&authorized).await else {
+        panic!("missing launch lifetime must fail before the provider effect");
+    };
+    assert!(!failure.effect_uncertain);
+    assert!(!failure.runtime_stopped);
+    drop(launch_blocker);
+    assert_eq!(
+        adapter.observe(&authorized).await,
+        ProviderRuntimeObservation::Gone
+    );
+
+    drop(adapter);
+    assert_eq!(
+        crate::runtime_lease::observe_runtime_lease(
+            &authorized.public.room_id,
+            &authorized.public.session_id,
+        ),
+        crate::runtime_lease::LeaseObservation::GenerationGone {
+            launch_token: reservation.runtime_lease_token,
+        }
+    );
+    crate::runtime_lease::cleanup_stale_runtime_lease(
+        &authorized.public.room_id,
+        &authorized.public.session_id,
+    );
+}
+
 #[tokio::test]
 async fn terminal_start_failure_release_permits_one_fresh_generation() {
     let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
@@ -183,7 +237,9 @@ async fn terminal_start_failure_release_permits_one_fresh_generation() {
     };
     assert!(error.runtime_stopped);
 
-    adapter.release_terminal_start_failure(&authorized).await;
+    adapter
+        .release_checkpointed_start_absence(&authorized)
+        .await;
     let next = adapter
         .reserve_start(&session)
         .await

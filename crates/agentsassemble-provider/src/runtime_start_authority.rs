@@ -145,8 +145,8 @@ impl ProviderAdapter {
         runtime.runtime_lease.cleanup_pre_effect();
     }
 
-    /// Releases an exact failed-start tombstone only after its terminal DB result commits.
-    pub async fn release_terminal_start_failure(&self, session: &DurableAgentSession) {
+    /// Releases exact proven-absent start authority only after its DB transition commits.
+    pub async fn release_checkpointed_start_absence(&self, session: &DurableAgentSession) {
         let Some(slot) = self
             .existing_slot(&session.public.room_id, &session.public.session_id)
             .await
@@ -157,8 +157,7 @@ impl ProviderAdapter {
         let exact_launching = matches!(
             &slot.state,
             RuntimeState::Launching(runtime)
-                if !runtime.effect_started
-                    && runtime.handle_id == session.runtime_handle_id
+                if runtime.handle_id == session.runtime_handle_id
                     && runtime.owner_id == session.runtime_owner_id
                     && runtime.runtime_lease.token() == session.runtime_lease_token
         );
@@ -176,7 +175,7 @@ impl ProviderAdapter {
             return;
         }
         match std::mem::replace(&mut slot.state, RuntimeState::Vacant) {
-            RuntimeState::Launching(runtime) => runtime.runtime_lease.cleanup_pre_effect(),
+            RuntimeState::Launching(mut runtime) => runtime.runtime_lease.release_and_remove(),
             RuntimeState::StopConfirmed {
                 mut runtime_lease, ..
             } => runtime_lease.release_and_remove(),

@@ -233,7 +233,7 @@ async fn record_agent_start_failure(
         Err(recording_error) => return CommandExecution::unresolved_failure(recording_error),
     };
     provider_adapter
-        .release_terminal_start_failure(&effect.session)
+        .release_checkpointed_start_absence(&effect.session)
         .await;
     CommandExecution::committed_failure(
         PersistenceError::StoredCommandRejected {

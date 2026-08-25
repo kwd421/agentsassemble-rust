@@ -321,7 +321,7 @@ async fn fail_created_agent_start(
             .await
             .map_err(CommandFailure::unresolved)?;
         provider_adapter
-            .release_terminal_start_failure(&effect.session)
+            .release_checkpointed_start_absence(&effect.session)
             .await;
         (
             commit.events,

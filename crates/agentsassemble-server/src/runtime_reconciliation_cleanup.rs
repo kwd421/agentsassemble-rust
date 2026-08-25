@@ -43,15 +43,7 @@ pub(super) async fn commit_startup_gone(
     store
         .apply_runtime_reconciliation(candidate, &RuntimeReconciliationObservation::Gone)
         .await?;
-    provider_adapter
-        .release_confirmed_stop(
-            &candidate.session.public.room_id,
-            &candidate.session.public.session_id,
-            &candidate.session.runtime_handle_id,
-            &candidate.session.runtime_owner_id,
-            &candidate.session.runtime_lease_token,
-        )
-        .await;
+    release_checkpointed_absence(provider_adapter, candidate).await;
     Ok(())
 }
 
@@ -122,15 +114,10 @@ pub(super) async fn commit_and_publish_gone(
 ) -> bool {
     let room_id = candidate.session.public.room_id.clone();
     let session_id = candidate.session.public.session_id.clone();
-    let handle_id = candidate.session.runtime_handle_id.clone();
-    let owner_id = candidate.session.runtime_owner_id.clone();
-    let lease_token = candidate.session.runtime_lease_token.clone();
     match commit_dynamic_gone(store, candidate).await {
         Ok(true) => {
             rooms.notify_room_publication(&room_id).await;
-            provider_adapter
-                .release_confirmed_stop(&room_id, &session_id, &handle_id, &owner_id, &lease_token)
-                .await;
+            release_checkpointed_absence(provider_adapter, candidate).await;
             true
         }
         Ok(false) => false,
@@ -143,6 +130,27 @@ pub(super) async fn commit_and_publish_gone(
             );
             false
         }
+    }
+}
+
+async fn release_checkpointed_absence(
+    provider_adapter: &ProviderAdapter,
+    candidate: &RuntimeReconciliationCandidate,
+) {
+    if candidate.session.lifecycle_intent_action == "start" {
+        provider_adapter
+            .release_checkpointed_start_absence(&candidate.session)
+            .await;
+    } else {
+        provider_adapter
+            .release_confirmed_stop(
+                &candidate.session.public.room_id,
+                &candidate.session.public.session_id,
+                &candidate.session.runtime_handle_id,
+                &candidate.session.runtime_owner_id,
+                &candidate.session.runtime_lease_token,
+            )
+            .await;
     }
 }
 

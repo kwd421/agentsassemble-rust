@@ -1581,9 +1581,10 @@ bounded fixed-offset parse only for a candidate that might prove `Gone`, adds no
 scan, disk I/O, cache, or public state, and removes the duplicate platform proof helpers.
 Preserved invariants are fail-closed uncertainty, exact platform/boot/generation binding,
 and no public runtime authority. The accepted safe-failure cost is one already-bounded
-lease file and one existing runtime slot retained only until the terminal database commit;
-that short resource lifetime is intentional crash-consistency evidence, followed by exact
-release. Focused failure-injection tests and the mandatory host/Windows checks are the
+lease file and one existing runtime slot retained only until the exact terminal, live,
+watcher, startup, or shutdown database transition commits; that short resource lifetime is
+intentional crash-consistency evidence, followed by exact release. Focused
+failure-injection tests and the mandatory host/Windows checks are the
 evidence; no latency or allocation reduction is claimed without workload measurement.
 
 After these review corrections, `make verify` again passed every architecture,
@@ -1596,6 +1597,61 @@ the workspace all-target/all-feature check, compiling the Windows-only exact tri
 That non-warning-denied cross-check retained the already-recorded unrelated Windows-only
 test/helper warnings and introduced no new project error. Its isolated temporary target
 was removed with Cargo's own target cleanup immediately after the check.
+
+The next Daybreaker manual re-review found one same-sidecar retry gap in that correction;
+the web re-review independently found the same tombstone gap plus the corresponding
+provider-observation and shutdown release-before-checkpoint path.
+If the first terminal database write failed after a factory-safe launch failure, exact
+request replay could commit live `Gone` and reset durable authority to `prepared`, but the
+live recovery helper did not release the captured `StopConfirmed` tombstone. A subsequent
+reservation therefore returned `operation_in_progress` and could make the session
+unstartable until the sidecar exited. The common exact-command recovery owner now records
+whether the captured start observation was `Gone`, commits its existing exact-CAS live
+transition first, and only when that commit returns `RetryOriginalEffect` releases the
+captured start-failure handle/owner/lease-token triple. Provider observation now reports
+proven `Gone` without changing `Launching` to `Vacant` or deleting its lease. Dynamic and
+startup recovery choose the start-absence or stop-tombstone release owner only after their
+database commit. Shutdown likewise converts pre-effect `Launching` to `StopConfirmed`, so
+its existing database-checkpoint-then-release sequence covers that generation. Failed or
+stale commits release nothing, and stop recovery retains its separate checkpoint owner.
+
+A deterministic server regression creates an unsupported transport tuple whose production
+factory fails safely after durable `effect_inflight`, deliberately omits the first terminal
+write to model its failure, performs exact same-request live recovery, and proves a fresh
+lease generation can then be reserved. It therefore covers the prior DB-write-failure →
+exact replay → new generation boundary without a provider process, fallback, or fake
+authority. A second deterministic provider regression holds the exact Unix launch-lifetime
+lock to force a real `begin_launch_effect` failure, observes `Gone`, drops the adapter
+before any database checkpoint, and proves the same token remains disk-observable as
+`GenerationGone`. The existing live pre-effect recovery regression now also proves its
+post-commit reservation receives a different generation.
+
+The implementation intent is crash consistency at the single database/OS-authority
+boundary, not a throughput claim. Observation is now read-only with respect to the
+in-memory slot and lease; the persistence owner performs one already-required exact-CAS
+write and then one exact generation release. This removes the former release-before-write
+window and avoids adding polling, a second process scan, copied authority, or a recovery
+fallback. The preserved invariants are one lease generation per start attempt, no
+replacement before durable proof, no release on failed or stale writes, and no repeated
+provider effect. The accepted cost is retaining one bounded slot plus its existing lease
+file until a terminal, live, watcher, startup, or shutdown database transition commits.
+That resource retention is intentional evidence, not a leak; the successful commit owns
+its exact release. No latency, allocation, or throughput improvement is claimed without a
+workload measurement.
+
+The final `make verify` passed every mandatory architecture, source-growth,
+logical-line, and 800-line gate; generated bindings; the production frontend build and
+original-CSS verification; 72 frontend files with 356 tests; 15 Tauri tests; 18 domain,
+94 persistence, four protocol, 113 provider, and 22 server unit tests; 23 Rust integration
+tests; documentation tests; warning-denied workspace/desktop Clippy; and final diff
+validation. One earlier run exposed that the new server regression and an existing
+owner-loss regression had accidentally reused the same fixed test Agent Session identity
+and therefore contended for the real OS lease under parallel execution. The new fixture
+now has its own identity; the complete 22-test server suite and the final mandatory run
+then passed cleanly. The installed rustup `x86_64-pc-windows-gnu` target also passed the
+workspace all-target/all-feature check. Its isolated target directory was removed on exit;
+the previously recorded unrelated Windows-only dead-code warnings remain outside the
+host's warning-denied gate.
 
 Packaged Computer Use and both pushed exact-diff re-reviews remain required before this
 correction is closed.

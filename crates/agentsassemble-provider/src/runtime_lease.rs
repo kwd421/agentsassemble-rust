@@ -588,6 +588,20 @@ pub(crate) fn cleanup_stale_runtime_lease(room_id: &str, session_id: &str) {
 }
 
 #[cfg(all(test, unix))]
+pub(crate) fn lock_test_launch_lifetime(room_id: &str, session_id: &str) -> File {
+    let path = runtime_lease_path(room_id, session_id)
+        .unwrap_or_else(|error| panic!("resolve test runtime lease: {error}"));
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(runtime_lifetime_path(&path))
+        .unwrap_or_else(|error| panic!("open test launch lifetime: {error}"));
+    file.try_lock_exclusive()
+        .unwrap_or_else(|error| panic!("lock test launch lifetime: {error}"));
+    file
+}
+
+#[cfg(all(test, unix))]
 mod tests {
     use super::{HeldRuntimeLease, LeaseObservation, observe_runtime_lease};
 

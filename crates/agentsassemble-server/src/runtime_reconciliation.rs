@@ -95,9 +95,17 @@ pub(crate) async fn recover_exact_lifecycle_command(
     else {
         return Ok(LiveRuntimeReconciliation::StillUnresolved);
     };
-    store
+    let gone_start = matches!(&observation, ProviderRuntimeObservation::Gone)
+        && candidate.session.lifecycle_intent_action == "start";
+    let reconciled = store
         .apply_live_runtime_reconciliation(&candidate, &persistence_observation(observation))
-        .await
+        .await?;
+    if gone_start && reconciled == LiveRuntimeReconciliation::RetryOriginalEffect {
+        provider_adapter
+            .release_checkpointed_start_absence(&candidate.session)
+            .await;
+    }
+    Ok(reconciled)
 }
 
 pub(crate) async fn watch_runtime_reconciliation(
@@ -385,13 +393,107 @@ mod tests {
             .unwrap_or_else(|error| panic!("recover exact start: {error}")),
             LiveRuntimeReconciliation::RetryOriginalEffect
         );
-        assert!(matches!(
-            store
-                .prepare_agent_start(&principal, "live-helper-start", &payload)
-                .await
-                .unwrap_or_else(|error| panic!("re-enter start: {error}")),
-            AgentStartPlan::Start(_)
-        ));
+        let AgentStartPlan::Start(retry) = store
+            .prepare_agent_start(&principal, "live-helper-start", &payload)
+            .await
+            .unwrap_or_else(|error| panic!("re-enter start: {error}"))
+        else {
+            panic!("gone pre-effect generation must reopen the original start");
+        };
+        let next = provider_adapter
+            .reserve_start(&retry.session)
+            .await
+            .unwrap_or_else(|error| panic!("reserve post-recovery generation: {error}"));
+        assert_ne!(next.runtime_lease_token, reservation.runtime_lease_token);
+        provider_adapter
+            .cancel_start_reservation("general", session_id, &next)
+            .await;
+    }
+
+    #[tokio::test]
+    async fn exact_replay_releases_a_safe_failure_tombstone_after_db_recovery() {
+        let directory =
+            tempfile::tempdir().unwrap_or_else(|error| panic!("create fixture: {error}"));
+        let store = dynamic_recovery_store(directory.path()).await;
+        let principal = local_principal();
+        let mut failed_draft = draft(
+            directory.path(),
+            "codex-00000000-0000-5000-8000-000000000204",
+        );
+        failed_draft.provider_kind = "unsupported_test_provider".to_owned();
+        failed_draft.transport = "unsupported_test_transport".to_owned();
+        failed_draft.runtime_profile_key = draft_profile_key(&failed_draft);
+        let created = store
+            .execute_agent_create(
+                &principal,
+                "create-safe-failure-agent",
+                &json!({"provider_id": "unsupported_test_provider"}),
+                &failed_draft,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("create safe failure agent: {error}"));
+        let session_id = created.result["agent_session"]["session_id"]
+            .as_str()
+            .unwrap_or_else(|| panic!("created session has no id"));
+        let payload = json!({"agent_id": session_id});
+        let AgentStartPlan::Start(effect) = store
+            .prepare_agent_start(&principal, "safe-failure-replay", &payload)
+            .await
+            .unwrap_or_else(|error| panic!("prepare safe failure start: {error}"))
+        else {
+            panic!("stopped session must prepare a start effect");
+        };
+        let provider_adapter = ProviderAdapter::new();
+        let reservation = provider_adapter
+            .reserve_start(&effect.session)
+            .await
+            .unwrap_or_else(|error| panic!("reserve failed generation: {error}"));
+        let authorized = store
+            .authorize_agent_start_effect(
+                &principal,
+                "safe-failure-replay",
+                &payload,
+                &effect.operation_id,
+                "agent.start",
+                &reservation.runtime_handle_id,
+                &reservation.runtime_owner_id,
+                &reservation.runtime_lease_token,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("authorize failed generation: {error}"));
+        let Err(failure) = provider_adapter.start_reserved(&authorized.session).await else {
+            panic!("unsupported provider tuple must fail safely");
+        };
+        assert!(failure.runtime_stopped);
+
+        assert_eq!(
+            recover_exact_lifecycle_command(
+                &store,
+                &provider_adapter,
+                &principal,
+                "safe-failure-replay",
+                "agent.start",
+                &payload,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("recover safe failure: {error}")),
+            LiveRuntimeReconciliation::RetryOriginalEffect
+        );
+        let AgentStartPlan::Start(retry) = store
+            .prepare_agent_start(&principal, "safe-failure-replay", &payload)
+            .await
+            .unwrap_or_else(|error| panic!("reload recovered start: {error}"))
+        else {
+            panic!("recovered request must own its original start effect");
+        };
+        let next = provider_adapter
+            .reserve_start(&retry.session)
+            .await
+            .unwrap_or_else(|error| panic!("reserve fresh generation after recovery: {error}"));
+        assert_ne!(next.runtime_lease_token, reservation.runtime_lease_token);
+        provider_adapter
+            .cancel_start_reservation("general", session_id, &next)
+            .await;
     }
 
     #[tokio::test]
@@ -604,6 +706,31 @@ mod tests {
             runtime_profile_key,
             transport: transport.to_owned(),
         }
+    }
+
+    fn draft_profile_key(draft: &AgentSessionDraft) -> String {
+        format!(
+            "provider-profile-v1-{:x}",
+            Sha256::digest(
+                [
+                    draft.provider_kind.as_str(),
+                    draft.runtime_kind.as_str(),
+                    draft.executable.as_str(),
+                    draft.executable_identity.as_str(),
+                    draft.workspace.as_str(),
+                    draft.workspace_identity.as_str(),
+                    draft.model.as_str(),
+                    draft.reasoning_effort.as_str(),
+                    draft.service_tier.as_str(),
+                    draft.variant.as_str(),
+                    draft.execution_harness.as_str(),
+                    draft.permission_mode.as_str(),
+                    draft.transport.as_str(),
+                ]
+                .join("\0")
+                .as_bytes(),
+            )
+        )
     }
 }
 
