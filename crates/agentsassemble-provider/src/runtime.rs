@@ -765,6 +765,6 @@ mod runtime_exact_turn;
 mod turn;
 pub use runtime_exact_turn::{
     ProviderExactTurnAuthority, ProviderPreparedTurn, ProviderTurnControl,
-    ProviderTurnInterruptDisposition, ProviderTurnQuiescence,
+    ProviderTurnInterruptDisposition, ProviderTurnNotStartedProof, ProviderTurnQuiescence,
 };
 pub use turn::{ProviderRoomObservation, ProviderTurnCompleted, ProviderTurnRequest};

@@ -275,6 +275,55 @@ impl SqliteStore {
         })
     }
 
+    /// Terminalizes an exact assigned or start-authorized turn after retained no-I/O proof.
+    ///
+    /// # Errors
+    ///
+    /// Rejects any changed execution, runtime authority, or interrupt effect.
+    pub async fn finalize_provider_turn_not_started(
+        &self,
+        candidate: &ProviderTurnReconciliationCandidate,
+    ) -> Result<AgentTurnCommit, PersistenceError> {
+        let expected = &candidate.execution;
+        if candidate.effect.is_some()
+            || !matches!(
+                expected.phase,
+                ProviderTurnExecutionPhase::Assigned | ProviderTurnExecutionPhase::StartDispatching
+            )
+        {
+            return Err(stale_reconciliation());
+        }
+        let mut transaction = self.pool.begin().await?;
+        let session =
+            load_session(&mut transaction, &expected.room_id, &expected.session_id).await?;
+        let execution = load_execution_in(
+            &mut transaction,
+            &expected.room_id,
+            &expected.session_id,
+            expected.turn_generation,
+        )
+        .await?;
+        validate_candidate(&session, &execution)?;
+        if expected != &execution
+            || load_optional_effect_in(
+                &mut transaction,
+                &expected.room_id,
+                &expected.session_id,
+                expected.turn_generation,
+            )
+            .await?
+            .is_some()
+        {
+            return Err(stale_reconciliation());
+        }
+        crate::provider_turn_execution::finalize_proven_no_effect_task_death(
+            transaction,
+            session,
+            &execution,
+        )
+        .await
+    }
+
     /// Finalizes a blocking provider turn only after positive exact runtime-gone proof.
     ///
     /// # Errors

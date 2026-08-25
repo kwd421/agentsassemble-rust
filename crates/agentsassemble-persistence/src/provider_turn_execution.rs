@@ -392,7 +392,7 @@ impl SqliteStore {
             return Err(stale_execution());
         }
         if execution.phase == ProviderTurnExecutionPhase::Assigned {
-            return finalize_pre_dispatch_task_death(transaction, session, &execution).await;
+            return finalize_proven_no_effect_task_death(transaction, session, &execution).await;
         }
         if matches!(
             execution.phase,
@@ -407,7 +407,7 @@ impl SqliteStore {
     }
 }
 
-async fn finalize_pre_dispatch_task_death(
+pub(crate) async fn finalize_proven_no_effect_task_death(
     mut transaction: Transaction<'_, Sqlite>,
     mut session: DurableAgentSession,
     execution: &ProviderTurnExecution,
@@ -415,7 +415,7 @@ async fn finalize_pre_dispatch_task_death(
     let changed = sqlx::query(
         "UPDATE provider_turn_executions SET phase = 'failed', requeue_finalized = 1, \
          updated_at = ? WHERE room_id = ? AND session_id = ? AND turn_generation = ? \
-         AND execution_id = ? AND phase = 'assigned' AND requeue_finalized = 0 \
+         AND execution_id = ? AND phase = ? AND requeue_finalized = 0 \
          AND NOT EXISTS (SELECT 1 FROM provider_turn_effects effect \
            WHERE effect.room_id = provider_turn_executions.room_id \
            AND effect.session_id = provider_turn_executions.session_id \
@@ -427,6 +427,7 @@ async fn finalize_pre_dispatch_task_death(
     .bind(&execution.session_id)
     .bind(generation_i64(execution.turn_generation)?)
     .bind(&execution.execution_id)
+    .bind(execution.phase.as_str())
     .execute(&mut *transaction)
     .await?;
     if changed.rows_affected() != 1 {

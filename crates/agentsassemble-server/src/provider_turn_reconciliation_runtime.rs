@@ -154,6 +154,16 @@ async fn reconcile_live_candidate(
         publish_commit(rooms, commit).await?;
         return Ok(());
     }
+    if let Some(proof) = provider_adapter
+        .retained_not_started_proof(&authority)
+        .await
+    {
+        debug_assert_eq!(proof.exact_authority(), &authority);
+        let commit = store.finalize_provider_turn_not_started(candidate).await?;
+        provider_adapter.release_terminal_turn(&authority).await;
+        publish_commit(rooms, commit).await?;
+        return Ok(());
+    }
     if provider_adapter.owns_exact_turn(&authority).await {
         return Ok(());
     }

@@ -56,6 +56,19 @@ pub struct ProviderExactTurnAuthority {
     pub runtime_lease_token: String,
 }
 
+/// Exact retained evidence that provider I/O was never entered for one durable execution.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProviderTurnNotStartedProof {
+    authority: ProviderExactTurnAuthority,
+}
+
+impl ProviderTurnNotStartedProof {
+    #[must_use]
+    pub fn exact_authority(&self) -> &ProviderExactTurnAuthority {
+        &self.authority
+    }
+}
+
 impl ProviderPreparedTurn {
     #[must_use]
     pub fn exact_authority(&self) -> ProviderExactTurnAuthority {
@@ -343,6 +356,33 @@ impl ProviderAdapter {
                     )
             })
             .and_then(|active| active.result.clone())
+    }
+
+    /// Returns exact retained proof only after a prepared turn quiesced before provider I/O.
+    pub async fn retained_not_started_proof(
+        &self,
+        authority: &ProviderExactTurnAuthority,
+    ) -> Option<ProviderTurnNotStartedProof> {
+        let slot = self
+            .existing_slot(&authority.room_id, &authority.session_id)
+            .await?;
+        let slot = slot.lock().await;
+        let RuntimeState::Running(runtime) = &slot.state else {
+            return None;
+        };
+        if runtime.handle_id != authority.runtime_handle_id
+            || runtime.owner_id != authority.runtime_owner_id
+            || runtime.lease_token != authority.runtime_lease_token
+            || !runtime.active_turn.as_ref().is_some_and(|active| {
+                exact_authority_matches(active, authority)
+                    && active.phase == ActiveProviderTurnPhase::NotStartedRetained
+            })
+        {
+            return None;
+        }
+        Some(ProviderTurnNotStartedProof {
+            authority: authority.clone(),
+        })
     }
 
     /// Reports whether this adapter still owns the exact in-memory turn lifetime.

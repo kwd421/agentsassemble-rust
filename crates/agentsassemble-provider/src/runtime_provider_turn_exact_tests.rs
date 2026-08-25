@@ -118,6 +118,14 @@ async fn unstarted_turn_remains_exactly_owned_until_durable_interrupt_release() 
     );
     assert!(adapter.owns_exact_turn(&authority).await);
     assert_eq!(adapter.retained_turn_result(&authority).await, None);
+    assert_eq!(
+        adapter
+            .retained_not_started_proof(&authority)
+            .await
+            .as_ref()
+            .map(super::ProviderTurnNotStartedProof::exact_authority),
+        Some(&authority)
+    );
     adapter.release_terminal_turn(&authority).await;
     assert!(!adapter.owns_exact_turn(&authority).await);
     assert!(

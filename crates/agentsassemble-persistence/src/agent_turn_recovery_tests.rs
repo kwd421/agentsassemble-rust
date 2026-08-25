@@ -260,3 +260,66 @@ async fn ambiguous_stop_preserves_blocking_turn_authority_for_provider_reconcili
             .is_empty()
     );
 }
+
+#[tokio::test]
+async fn retained_no_io_proof_terminalizes_an_ambiguous_start_authorization() {
+    let (store, principal, _directory) = fixture().await;
+    clear_fixture_queue(&store).await;
+    start_fixture_runtime(
+        &store,
+        &principal,
+        "no-io-turn-start",
+        "no-io-runtime",
+        "no-io-owner",
+        "no-io-lease",
+        "no-io-provider-session",
+    )
+    .await;
+    let mutation = store
+        .execute_message_with_turn(
+            &principal,
+            "no-io-turn",
+            "message.send",
+            &json!({"content": "@Terra retain pre-dispatch proof"}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("assign no-I/O turn: {error}"));
+    let assignment = &mutation.assignments[0];
+    store
+        .authorize_provider_turn_start(
+            "general",
+            super::tests::AGENT_ID,
+            assignment.turn_generation,
+            &assignment.turn_id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize no-I/O turn: {error}"));
+    let candidate = store
+        .load_active_provider_turn_reconciliation_candidate("general", super::tests::AGENT_ID)
+        .await
+        .unwrap_or_else(|error| panic!("load no-I/O candidate: {error}"))
+        .unwrap_or_else(|| panic!("missing no-I/O candidate"));
+
+    let commit = store
+        .finalize_provider_turn_not_started(&candidate)
+        .await
+        .unwrap_or_else(|error| panic!("terminalize no-I/O turn: {error}"));
+    assert_eq!(commit.events.len(), 3);
+    let execution = store
+        .provider_turn_execution(
+            "general",
+            super::tests::AGENT_ID,
+            assignment.turn_generation,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("read no-I/O execution: {error}"));
+    assert_eq!(execution.phase, ProviderTurnExecutionPhase::Failed);
+    assert!(execution.requeue_finalized);
+    assert!(
+        store
+            .load_active_provider_turn_reconciliation_candidate("general", super::tests::AGENT_ID,)
+            .await
+            .unwrap_or_else(|error| panic!("rescan no-I/O turn: {error}"))
+            .is_none()
+    );
+}
