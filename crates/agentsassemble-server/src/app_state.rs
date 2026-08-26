@@ -8,8 +8,8 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
 use crate::{
     CentralHostIdentity, HostIdentityError, HostSecret, HumanInviteCredentialAuthority,
-    RoomRuntime, TicketStore, connection_admission::ConnectionAdmission,
-    raw_ingress::RawIngressGovernor,
+    HumanSessionBearerAuthority, RoomRuntime, TicketStore,
+    connection_admission::ConnectionAdmission, raw_ingress::RawIngressGovernor,
 };
 
 #[derive(Debug, Error)]
@@ -29,6 +29,7 @@ pub struct AppState {
     pub provider_catalog: ProviderCatalogService,
     pub provider_adapter: ProviderAdapter,
     pub human_invite_credentials: HumanInviteCredentialAuthority,
+    pub human_session_bearers: HumanSessionBearerAuthority,
     pub(crate) central_host_identity: CentralHostIdentity,
     pub shutdown: CancellationToken,
     pub connections: TaskTracker,
@@ -76,6 +77,8 @@ impl AppState {
         let persistent_host_identity = store.host_identity().await?;
         let human_invite_credentials =
             HumanInviteCredentialAuthority::from_persistent(&persistent_host_identity);
+        let human_session_bearers =
+            HumanSessionBearerAuthority::from_persistent(&persistent_host_identity);
         let central_host_identity =
             CentralHostIdentity::from_persistent(&persistent_host_identity)?;
         Ok(Self {
@@ -90,6 +93,7 @@ impl AppState {
             provider_catalog,
             provider_adapter,
             human_invite_credentials,
+            human_session_bearers,
             central_host_identity,
             shutdown: CancellationToken::new(),
             connections: TaskTracker::new(),

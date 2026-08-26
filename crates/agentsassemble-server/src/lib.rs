@@ -50,6 +50,7 @@ mod http_api;
 mod http_transport;
 mod human_invite_credentials;
 mod human_invite_preflight;
+mod human_session_bearer;
 mod lifecycle_command_tracker;
 mod participant_mute_runtime;
 mod principal_mutation_admission;
@@ -87,6 +88,7 @@ pub use human_invite_credentials::{
     IssuedHumanInviteCredentials, VerifiedHumanInviteClaims, VerifiedHumanInviteCredential,
 };
 pub use human_invite_preflight::{HumanInvitePreflightError, preflight_human_invite};
+pub use human_session_bearer::{HumanSessionBearerAuthority, IssuedHumanSessionBearer};
 pub use room_runtime::RoomRuntime;
 pub use room_shutdown::RoomShutdownError;
 pub use runtime_reconciliation::{RuntimeReconciliationSummary, reconcile_runtime_ownership};

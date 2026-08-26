@@ -12,7 +12,6 @@ use crate::{
 };
 
 const BROWSER_CREDENTIAL_PREFIX: &str = "aad1_";
-const SESSION_BEARER_PREFIX: &str = "aas1.";
 const CLIENT_CREDENTIAL_BYTES: usize = 32;
 const CLIENT_CREDENTIAL_BODY_CHARS: usize = 43;
 const CLIENT_CREDENTIAL_CHARS: usize = 48;
@@ -52,7 +51,7 @@ pub async fn preflight_human_invite(
             .ok_or(HumanInvitePreflightError::BrowserCredential)?;
     let session_fingerprint = session_bearer
         .map(|bearer| {
-            fingerprint_client_credential(bearer, SESSION_BEARER_PREFIX)
+            crate::human_session_bearer::fingerprint_presented_bearer(bearer)
                 .ok_or(HumanInvitePreflightError::SessionBearer)
         })
         .transpose()?;
@@ -119,27 +118,30 @@ mod tests {
     use sha2::{Digest, Sha256};
 
     use super::{
-        BROWSER_CREDENTIAL_PREFIX, HumanInvitePreflightError, SESSION_BEARER_PREFIX,
-        fingerprint_client_credential, preflight_human_invite,
+        BROWSER_CREDENTIAL_PREFIX, HumanInvitePreflightError, fingerprint_client_credential,
+        preflight_human_invite,
     };
-    use crate::{HumanInviteCredentialAuthority, HumanInviteCredentialDraft};
+    use crate::{
+        HumanInviteCredentialAuthority, HumanInviteCredentialDraft,
+        human_session_bearer::fingerprint_presented_bearer,
+    };
 
     #[test]
     fn client_credentials_are_canonical_fixed_size_domains() {
         let body = URL_SAFE_NO_PAD.encode([0xA5; 32]);
         let browser = format!("{BROWSER_CREDENTIAL_PREFIX}{body}");
-        let session = format!("{SESSION_BEARER_PREFIX}{body}");
+        let session = format!("aas1.{body}");
         assert_eq!(
             fingerprint_client_credential(&browser, BROWSER_CREDENTIAL_PREFIX),
             Some(Sha256::digest(browser.as_bytes()).into())
         );
         assert_eq!(
-            fingerprint_client_credential(&session, SESSION_BEARER_PREFIX),
+            fingerprint_presented_bearer(&session),
             Some(Sha256::digest(session.as_bytes()).into())
         );
         assert_ne!(
             fingerprint_client_credential(&browser, BROWSER_CREDENTIAL_PREFIX),
-            fingerprint_client_credential(&session, SESSION_BEARER_PREFIX)
+            fingerprint_presented_bearer(&session)
         );
 
         for malformed in [
@@ -147,7 +149,7 @@ mod tests {
             format!("{BROWSER_CREDENTIAL_PREFIX}{}", &body[..42]),
             format!("{BROWSER_CREDENTIAL_PREFIX}{body}="),
             format!(" {browser}"),
-            format!("{SESSION_BEARER_PREFIX}{body}"),
+            session,
         ] {
             assert_eq!(
                 fingerprint_client_credential(&malformed, BROWSER_CREDENTIAL_PREFIX),
