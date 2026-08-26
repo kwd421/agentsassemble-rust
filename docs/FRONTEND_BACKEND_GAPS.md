@@ -9,9 +9,10 @@ boundary is complete. Central registration, canonical participant roles, partici
 mute, exact provider interruption, and the required packaged provider matrix have
 passed both manual reviews. Room-global settings, local-operator preferences, human
 admission, the session-derived person-profile exchange, and the admitted-human
-WebSocket are source-connected and integration-verified. Packaged browser validation
-for the human socket remains open. Remote-session preferences remain visibly
-unavailable until their exact exchange/target transaction is complete.
+WebSocket are source-connected and integration-verified. Real production-browser
+normal posting and read-only denial pass against the canonical Rust authority; the
+remaining invite/reload/revocation matrix remains open. Remote-session preferences
+remain visibly unavailable until their exact exchange/target transaction is complete.
 
 ## Scope and method
 
@@ -195,7 +196,7 @@ implemented; the frontend must not silently substitute Python or local fake data
 | --- | --- |
 | Startup identity and accounts | Fresh local desktop bootstrap, central guest creation/recovery, secure browser device identity, and proof-bound local-server registration are implemented. `/api/account`, Google account challenge/connect/delete, and the native Google handoff remain incomplete; the absent `open_central_google_login` host command keeps that button failed closed. |
 | Room lifecycle and settings | Canonical archive/delete lifecycle and public server info remain incomplete. Room-global settings mutation and local-operator room preferences are connected; remote-session preferences are explicitly unavailable until admission owns their identity. |
-| Admission and invites | Durable human invite/session create, join, verification, expiry, revoke, leave, restart recovery, the session-derived person-profile exchange, and the authenticated human WebSocket are implemented. Packaged browser validation of that socket remains open. Preference exchanges, host claim, companion admission, operator pairing create/redeem, and public-invite status/URL/tunnel controls remain incomplete. |
+| Admission and invites | Durable human invite/session create, join, verification, expiry, revoke, leave, restart recovery, the session-derived person-profile exchange, and the authenticated human WebSocket are implemented. Exact `/join` and `/pair` production entrances are mounted; real isolated browsers pass normal snapshot/posting and read-only snapshot/denial. Avatar, reload, preference, leave/revoke/restart, complete one-use/reusable coverage, trusted public ingress, host claim, companion admission, operator pairing create/redeem, and public-invite status/URL/tunnel controls remain incomplete or not yet browser-verified as applicable. |
 | Roster, friends, and channels | The active-room roster, strict participant-role control, copied participant-mute control, canonical event projection, and exact Rust provider-interrupt owner are cut over and packaged-verified. Room friends, room channels, voice presence, and side chat remain incomplete. |
 | Attachments, personas, pins, and search | General-message and room-appearance attachment purposes, persona list/import/thumbnail, message pins, room search/context. Profile-avatar upload/read is implemented. |
 | Provider settings and diagnostics | Login, catalog refresh HTTP response, credential CRUD, provider usage, local resources, release health, and runtime version. The original `/api/local/workspace-picker` HTTP route is absent, but packaged desktop creation uses the native Tauri directory picker instead. |
@@ -403,3 +404,21 @@ selection/cropping/avatar re-read against a disposable canonical Rust fixture. T
 same run confirmed two adjacent gaps rather than hiding them: the authenticated human
 room socket is not connected, so the room remains unready, and Public Account settings
 still expose the missing `/api/account` route as 404.
+
+### Human-session browser connection delta: 2026-08-27
+
+The original source registers `/join`, `/join/`, `/pair`, and `/pair/`, but the first
+Rust static owner exposed only `/app`. The exact entrances and root asset directory are
+now served from the same production bundle. A successful human admission returns the
+existing server ID, immutable authority lineage, and product surface; the guest session
+must pass the existing strict room-directory shape/digest/lifetime binding before its
+raw session can be exchanged for a socket ticket. There is no directory fetch with
+host authority, client-created surface, compatibility session, or failed-join restore.
+
+Computer Use exercised isolated normal and read-only browsers against disposable
+canonical Axum/SQLite state. Both removed their invite tokens and rendered the
+authenticated snapshot/roster. The normal browser published
+`HUMAN_SOCKET_NORMAL_UI_OK`; the read-only browser rendered disabled composer controls
+and produced no message event. This closes only that browser connection delta. The
+broader avatar/reload/preferences/leave/revoke/restart matrix, controlled socket races,
+and trusted external ingress remain open.

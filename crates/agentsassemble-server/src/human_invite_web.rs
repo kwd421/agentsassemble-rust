@@ -60,6 +60,9 @@ struct JoinResponse {
     #[serde(flatten)]
     result: HumanAdmissionResult,
     session_token: String,
+    server_id: String,
+    authority_lineage_id: String,
+    server_product_surface: agentsassemble_protocol::ServerProductSurface,
 }
 
 pub(crate) fn routes() -> Router<AppState> {
@@ -188,9 +191,13 @@ async fn join(
     match state.rooms.admit_human(prepared).await? {
         HumanAdmissionDecision::Admitted(commit) => {
             let (result, session_token) = commit.into_result_and_bearer();
+            let bootstrap = state.store.local_bootstrap_status().await?;
             Ok(Json(JoinResponse {
                 result,
                 session_token,
+                server_id: bootstrap.server_id,
+                authority_lineage_id: bootstrap.authority_lineage_id,
+                server_product_surface: state.server_product_surface.as_ref().clone(),
             }))
         }
         HumanAdmissionDecision::Rejected(rejection) => Err(rejection.into()),

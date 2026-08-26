@@ -1,4 +1,8 @@
 import type { RoomAppearance } from "./roomAppearance";
+import {
+  parseRoomSessionSurface,
+  type RoomSessionSurface,
+} from "./roomDirectoryContract";
 
 export type RoomGuestSession = {
   inviteToken: string;
@@ -14,8 +18,8 @@ export type RoomGuestSession = {
   roomTopic?: string;
   roomCreatedAt?: string;
   roomUid?: string;
-  serverId?: string;
   clientId?: string;
+  serverSurface: RoomSessionSurface;
   // True when this session belongs to the server operator's account —
   // unlocks host moderation through the public entrance.
   operator?: boolean;
@@ -70,6 +74,11 @@ export function roomGuestSessionFromJoinPayload(
   now = new Date()
 ): RoomGuestSession {
   const record = payload as Record<string, unknown>;
+  const serverSurface = parseRoomSessionSurface({
+    server_id: record.server_id,
+    authority_lineage_id: record.authority_lineage_id,
+    server_product_surface: record.server_product_surface,
+  });
   return {
     inviteToken: cleanText(inviteToken, 4096),
     sessionToken: cleanText(record.session_token, 4096),
@@ -84,8 +93,8 @@ export function roomGuestSessionFromJoinPayload(
     roomTopic: cleanText(record.room_topic || record.roomTopic, 160) || undefined,
     roomCreatedAt: cleanText(record.room_created_at || record.roomCreatedAt, 64) || undefined,
     roomUid: cleanText(record.room_uid || record.roomUid, 64) || undefined,
-    serverId: cleanText(record.server_id || record.serverId, 64) || undefined,
     clientId: cleanText(record.client_id || record.clientId, 128) || undefined,
+    serverSurface,
     operator: record.operator === true,
   };
 }
@@ -93,6 +102,7 @@ export function roomGuestSessionFromJoinPayload(
 export function normalizeRoomGuestSession(value: unknown): RoomGuestSession | null {
   if (!value || typeof value !== "object") return null;
   const record = value as Record<string, unknown>;
+  const storedSurface = record.serverSurface as Record<string, unknown> | undefined;
   const session = roomGuestSessionFromJoinPayload(cleanText(record.inviteToken, 4096), {
     session_token: record.sessionToken,
     meeting_id: record.meetingId,
@@ -106,8 +116,10 @@ export function normalizeRoomGuestSession(value: unknown): RoomGuestSession | nu
     room_topic: record.roomTopic,
     room_created_at: record.roomCreatedAt,
     room_uid: record.roomUid,
-    server_id: record.serverId,
+    server_id: storedSurface?.server_id,
     client_id: record.clientId,
+    authority_lineage_id: storedSurface?.authority_lineage_id,
+    server_product_surface: storedSurface?.server_product_surface,
   });
   session.joinedAt = cleanText(record.joinedAt, 64) || session.joinedAt;
   if (!session.sessionToken || !session.meetingId || !session.agentId) return null;

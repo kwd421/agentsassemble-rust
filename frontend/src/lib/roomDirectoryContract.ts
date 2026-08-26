@@ -20,6 +20,10 @@ export type TrustedServerProductSurface = Pick<
   "revision" | "digest"
 >;
 
+export type RoomSessionSurface = RoomDirectoryAuthority & {
+  server_product_surface: ServerProductSurface;
+};
+
 export type StrictRoomCreateResponse = RoomDirectoryAuthority & {
   status: "ready";
   room: ServerRoomDockSource;
@@ -329,6 +333,19 @@ export function parseStrictRoomDirectory(value: unknown): StrictRoomDirectory {
   };
 }
 
+export function parseRoomSessionSurface(value: unknown): RoomSessionSurface {
+  const payload = record(value, "방 세션 서버 표면");
+  exactKeys(
+    payload,
+    ["server_id", "authority_lineage_id", "server_product_surface"],
+    "방 세션 서버 표면"
+  );
+  return {
+    ...validateAuthority(payload, "방 세션 서버 표면"),
+    server_product_surface: validateServerProductSurface(payload.server_product_surface),
+  };
+}
+
 export function parseStrictRoomCreateResponse(value: unknown): StrictRoomCreateResponse {
   const payload = record(value, "방 생성");
   exactKeys(
@@ -397,6 +414,20 @@ export async function bindRoomDirectoryAuthority(
     },
   };
   boundSurface = { origin, surface: structuredClone(authority.server_product_surface) };
+}
+
+export async function verifyAndBindRoomSessionSurface(
+  authority: RoomSessionSurface,
+  origin = window.location.origin
+) {
+  await bindRoomDirectoryAuthority(
+    {
+      ...authority,
+      rooms: [],
+    },
+    null,
+    origin
+  );
 }
 
 export function currentRoomDirectoryAuthority(

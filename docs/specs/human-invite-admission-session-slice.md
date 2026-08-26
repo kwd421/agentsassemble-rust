@@ -970,6 +970,50 @@ while promoting the same opaque ID through the profile lifecycle.
   and controlled inbound/outbound race tests remain required before this slice's
   packaged verification is complete; no query-count or latency result is claimed.
 
+### Public browser entrance and server-surface binding
+
+- Prior observed defects: the Rust static owner served the copied application only
+  below `/app`, while the reachable original registers exact `/join`, `/join/`,
+  `/pair`, and `/pair/` entrances. A real browser therefore received 404 at the URL
+  copied by the invite UI. After those routes were exposed, admission succeeded but
+  the guest had no server-directory authority because the host-only `/api/rooms`
+  response was its only source. The canonical socket consequently stayed unready.
+  The copied admission hook also restored a stored session after any failed join,
+  allowing an unrelated transport or validation failure to appear successful.
+- Change intent and smallest design: the static router serves the same production
+  index at the four exact original entrances and exposes the existing Vite asset
+  directory at `/assets`; no catch-all or redirect fallback was added. A successful
+  admission response now carries the existing immutable server ID, authority lineage,
+  and `ServerProductSurface`. The existing room-directory validator owns exact shape,
+  digest verification, and lifetime binding for both host directory and guest session
+  sources. The guest session owns one verified surface projection; it does not add a
+  directory cache, authority trait, compatibility reader, or second socket state.
+- Preserved security and product contract: the raw human bearer remains confined to
+  typed ticket exchange. A join, pairing, recovered, or persisted session cannot
+  expose its bearer to the socket until the surface structure and digest bind to the
+  current origin and any existing lifetime pin. Invalid surfaces fail terminally,
+  remain unpersisted, do not update the remembered person profile, and do not clear
+  the invite URL. Stored sessions without the current surface contract are invalid;
+  failed admission is not converted into stored-session success. The later signed
+  WebSocket receipt still pins the exact surface digest and room/participant.
+- CPU, memory, disk, and latency cost: a successful admission response performs one
+  existing bootstrap-status SQLite read so server ID and lineage are not copied into
+  a new process state owner. It serializes one bounded product-surface object and the
+  frontend stores one copy with the room session. Digest verification performs one
+  WebCrypto SHA-256 over the small sorted registry. No table, index, cache, task,
+  timer, retry, fallback, trait, or configuration layer was added, and no performance
+  improvement is claimed without representative measurement.
+- Verification: exact-route integration checks request all four entrances and a real
+  asset from the production bundle. Admission tests reject a malformed surface before
+  persistence/token exposure, including the identity-recovery path. Computer Use ran
+  the production frontend against a disposable canonical Axum/SQLite server in
+  isolated real browsers: a normal guest admitted, removed the URL token, received the
+  canonical snapshot/roster, and published one durable message; a separate read-only
+  guest received the same snapshot and rendered disabled posting controls, and SQLite
+  contained no read-only message. This proves the normal/read-only browser connection
+  boundary only; controlled expiry/lag/final-outbound races and the remaining full
+  invite matrix remain open.
+
 ### Room command dispatch separated from room ownership
 
 - Prior structure and intent: `room_runtime.rs` was 798 lines because it owned both

@@ -13,8 +13,8 @@ import {
   rememberGuestProfile,
 } from "../lib/deviceIdentity";
 import { roomFromGuestSession, type RoomDockItem } from "../lib/roomDockModel";
+import { verifyAndBindRoomSessionSurface } from "../lib/roomDirectoryContract";
 import {
-  loadRoomGuestSession,
   persistRoomGuestSession,
   roomGuestSessionExpired,
   roomGuestSessionFromJoinPayload,
@@ -43,9 +43,16 @@ type AdmissionSource =
   | "invite"
   | "pairing"
   | "existing_session"
-  | "restored"
   | "recovery";
 type AdmissionOperation = "preflight" | "join" | "pairing";
+
+class SessionSurfaceError extends Error {}
+const SERVER_SURFACE_INVALID_CODE = "server_surface_invalid";
+const SERVER_SURFACE_INVALID_MESSAGE = "방 서버의 제품 표면을 검증하지 못했습니다.";
+
+function roomSessionSurfaceKey(session: RoomGuestSession): string {
+  return `${session.serverSurface.server_id}:${session.serverSurface.server_product_surface.digest}`;
+}
 
 export type AdmissionState =
   | { kind: "idle"; session: null; status: "" }
@@ -85,6 +92,7 @@ type AdmissionAction =
       status: string;
     }
   | { type: "expired"; status: string }
+  | { type: "session_surface_failed"; message: string }
   | { type: "session_cleared" };
 
 function initialAdmissionState({
@@ -118,7 +126,7 @@ function admissionReducer(state: AdmissionState, action: AdmissionAction): Admis
         state.kind !== "preflighting" &&
         state.kind !== "profile_required" &&
         state.kind !== "joining" &&
-        !(state.kind === "failed" && state.operation === "join")
+        !(state.kind === "failed" && state.operation === "join" && state.retryable)
       ) {
         return state;
       }
@@ -145,6 +153,16 @@ function admissionReducer(state: AdmissionState, action: AdmissionAction): Admis
       };
     case "expired":
       return { kind: "expired", session: null, status: action.status };
+    case "session_surface_failed":
+      return {
+        kind: "failed",
+        session: null,
+        operation: "join",
+        code: SERVER_SURFACE_INVALID_CODE,
+        message: action.message,
+        retryable: false,
+        status: action.message,
+      };
     case "session_cleared":
       if (state.kind === "idle" || state.kind === "expired") return state;
       if (state.kind === "joined") return { kind: "idle", session: null, status: "" };
@@ -213,6 +231,8 @@ export function useRoomAdmission({
   const [pendingGuestDisplayName, setPendingGuestDisplayName] = useState("Guest");
   const [pendingGuestAvatarImage, setPendingGuestAvatarImage] = useState("");
   const [operatorPairingAttempt, setOperatorPairingAttempt] = useState(0);
+  const [boundSurfaceKey, setBoundSurfaceKey] = useState("");
+  const boundSurfaceKeyRef = useRef("");
   const preflightAttemptedTokenRef = useRef("");
   const pairingAttemptedTokenRef = useRef("");
   const onPairingTokenConsumedRef = useRef(onPairingTokenConsumed);
@@ -226,9 +246,41 @@ export function useRoomAdmission({
     }
   }, [admissionState.kind]);
 
+  const bindSessionSurface = useCallback(async (session: RoomGuestSession) => {
+    await verifyAndBindRoomSessionSurface(session.serverSurface);
+    const key = roomSessionSurfaceKey(session);
+    boundSurfaceKeyRef.current = key;
+    setBoundSurfaceKey(key);
+  }, []);
+
+  useEffect(() => {
+    if (admissionState.kind !== "joined") return undefined;
+    const session = admissionState.session;
+    const key = roomSessionSurfaceKey(session);
+    if (boundSurfaceKeyRef.current === key) return undefined;
+    let cancelled = false;
+    bindSessionSurface(session).catch((error) => {
+      if (cancelled) return;
+      persistRoomGuestSession(null);
+      dispatchAdmission({
+        type: "session_surface_failed",
+        message:
+          error instanceof Error
+            ? error.message
+            : SERVER_SURFACE_INVALID_MESSAGE,
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [admissionState, bindSessionSurface]);
+
   const guestSession = admissionState.session;
+  const sessionSurfaceKey = guestSession ? roomSessionSurfaceKey(guestSession) : "";
   const admittedSessionToken =
-    admissionState.kind === "joined" && !roomGuestSessionExpired(admissionState.session)
+    admissionState.kind === "joined" &&
+    boundSurfaceKey === sessionSurfaceKey &&
+    !roomGuestSessionExpired(admissionState.session)
       ? admissionState.session.sessionToken
       : "";
   const guestExpired = admissionState.kind === "expired";
@@ -343,16 +395,26 @@ export function useRoomAdmission({
   }, []);
 
   const applyJoinedSession = useCallback(
-    (
+    async (
       inviteToken: string,
       payload: RoomInviteJoinResponse,
       avatarImage: string,
       source: AdmissionSource
     ) => {
-      const nextSession = roomGuestSessionFromJoinPayload(inviteToken, {
-        ...payload,
-        avatar_image_url: payload.avatar_image_url || avatarImage,
-      });
+      let nextSession: RoomGuestSession;
+      try {
+        nextSession = roomGuestSessionFromJoinPayload(inviteToken, {
+          ...payload,
+          avatar_image_url: payload.avatar_image_url || avatarImage,
+        });
+        await bindSessionSurface(nextSession);
+      } catch (error) {
+        throw new SessionSurfaceError(
+          error instanceof Error
+            ? error.message
+            : SERVER_SURFACE_INVALID_MESSAGE
+        );
+      }
       persistRoomGuestSession(nextSession);
       rememberGuestProfile({
         displayName: nextSession.displayName || pendingGuestDisplayName,
@@ -362,12 +424,29 @@ export function useRoomAdmission({
       onRoomJoined(roomFromGuestSession(nextSession));
       clearInviteUrl();
     },
-    [clearInviteUrl, onRoomJoined, pendingGuestDisplayName]
+    [bindSessionSurface, clearInviteUrl, onRoomJoined, pendingGuestDisplayName]
   );
 
   const acceptRecoveredSession = useCallback(
-    (payload: RoomInviteJoinResponse) => {
-      applyJoinedSession("", payload, payload.avatar_image_url || "", "recovery");
+    async (payload: RoomInviteJoinResponse) => {
+      try {
+        await applyJoinedSession("", payload, payload.avatar_image_url || "", "recovery");
+        return true;
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : SERVER_SURFACE_INVALID_MESSAGE;
+        dispatchAdmission({
+          type: "failed",
+          operation: "join",
+          code: SERVER_SURFACE_INVALID_CODE,
+          message,
+          retryable: false,
+          status: message,
+        });
+        return false;
+      }
     },
     [applyJoinedSession]
   );
@@ -392,14 +471,15 @@ export function useRoomAdmission({
       pairingToken: operatorPairingToken,
       deviceToken,
     })
-      .then((payload) => {
+      .then(async (payload) => {
         if (cancelled) return;
         onPairingTokenConsumedRef.current();
-        applyJoinedSession("", payload, payload.avatar_image_url || "", "pairing");
+        await applyJoinedSession("", payload, payload.avatar_image_url || "", "pairing");
       })
       .catch((error) => {
         if (cancelled) return;
-        const retryable = pairingFailureIsRetryable(error);
+        const retryable =
+          !(error instanceof SessionSurfaceError) && pairingFailureIsRetryable(error);
         if (!retryable) onPairingTokenConsumedRef.current();
         const message = error instanceof Error ? error.message : "운영자 기기 연결 실패";
         dispatchAdmission({
@@ -450,7 +530,7 @@ export function useRoomAdmission({
       deviceToken,
       sessionToken: guestSession?.sessionToken || "",
     })
-      .then((decision) => {
+      .then(async (decision) => {
         if (cancelled) return;
         if (decision.status === "existing_session" && guestSession) {
           const preservedSession = {
@@ -458,6 +538,7 @@ export function useRoomAdmission({
             roomLabel: decision.room_label || guestSession.roomLabel,
             inviteScope: decision.invite_scope || guestSession.inviteScope,
           };
+          await bindSessionSurface(preservedSession);
           dispatchAdmission({
             type: "joined",
             session: preservedSession,
@@ -519,6 +600,7 @@ export function useRoomAdmission({
     };
   }, [
     admissionState.kind,
+    bindSessionSurface,
     clearInviteUrl,
     guestJoinToken,
     guestSession,
@@ -566,33 +648,31 @@ export function useRoomAdmission({
       clientId: getOrCreateClientId(),
       participantType: "human",
     })
-      .then((payload) => {
+      .then(async (payload) => {
         if (!cancelled) {
+          await applyJoinedSession(
+            guestJoinToken,
+            payload,
+            pendingGuestAvatarImage,
+            "invite"
+          );
           clearAdmissionRequestId();
-          applyJoinedSession(guestJoinToken, payload, pendingGuestAvatarImage, "invite");
         }
       })
       .catch((error) => {
         if (cancelled) return;
-        const restoredSession = loadRoomGuestSession();
-        if (restoredSession?.inviteToken === guestJoinToken) {
-          dispatchAdmission({
-            type: "joined",
-            session: restoredSession,
-            source: "restored",
-          });
-          onRoomJoined(roomFromGuestSession(restoredSession));
-          clearAdmissionRequestId();
-          clearInviteUrl();
-          return;
-        }
+        const surfaceFailure = error instanceof SessionSurfaceError;
         const message = error instanceof Error ? error.message : "초대 링크 입장 실패";
         dispatchAdmission({
           type: "failed",
           operation: "join",
-          code: error instanceof ApiError ? error.message : "join_failed",
+          code: surfaceFailure
+            ? SERVER_SURFACE_INVALID_CODE
+            : error instanceof ApiError
+              ? error.message
+              : "join_failed",
           message,
-          retryable: true,
+          retryable: !surfaceFailure,
           status: message,
         });
       });

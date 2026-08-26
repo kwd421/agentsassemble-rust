@@ -2323,3 +2323,37 @@ After evidence capture the exact Safari tab, preview server, Rust fixture server
 test identity data, temporary fixture state, and uniquely named application bundles
 were closed or moved to the recoverable Trash. Ports 5174 and 64126 had no remaining
 listener and both unique verification applications reported not running.
+
+## Human-session production-browser connection verification: 2026-08-27
+
+Computer Use first exercised the exact production `/join?token=…` URL against a
+disposable canonical Axum/SQLite server. It found that Rust served the copied bundle
+only below `/app`; direct invite and pairing entrances from the original were absent.
+After exact `/join`, `/join/`, `/pair`, `/pair/`, and root asset service were mounted,
+admission succeeded and removed the secret URL token, but the room stayed unready.
+The guest had no host-authorized room-directory response and therefore no trusted
+server product surface to bind before its typed socket-ticket exchange.
+
+The corrected response supplies the existing server ID, authority lineage, and
+product surface. The browser reuses the strict room-directory validator and binds the
+surface digest before storing the session or exposing its bearer to the socket. A
+surface failure is terminal and cannot fall through to the former failed-join stored
+session restore. Focused tests cover fresh join and identity-recovery rejection before
+session/profile persistence, and real Axum tests request every exact static entrance
+plus a production asset.
+
+The final disposable run used the production frontend bundle and no provider. In an
+isolated Chrome guest, normal admission removed the URL token, rendered the canonical
+snapshot and roster, and published `HUMAN_SOCKET_NORMAL_UI_OK`. A distinct Safari
+private guest admitted read-only, rendered the same prior message and roster, and
+showed disabled posting controls with the read-only explanation. SQLite contained
+only room creation, the two participant joins, and the one normal `message_final`;
+there was no read-only write. The fixture server was stopped, port 43197 had no
+listener, both isolated browser resources were closed, and the disposable databases,
+keys, fixture source/build outputs, and production bundle were removed or moved to
+recoverable Trash.
+
+This evidence is limited to normal snapshot/posting and read-only snapshot/denial.
+It does not claim the remaining one-use/reusable avatar, reload, preference,
+leave/revoke/restart matrix, controlled expiry/notification-lag/final-outbound races,
+or trusted public ingress.

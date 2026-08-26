@@ -336,13 +336,13 @@ export function roomFromGuestSession(session: RoomGuestSession): RoomDockItem {
   const label = session.roomLabel || session.meetingId || "초대받은 방";
   return {
     id:
-      session.serverId && session.roomUid
-        ? `server-${session.serverId}-${session.roomUid}`
+      session.roomUid
+        ? `server-${session.serverSurface.server_id}-${session.roomUid}`
         : `guest-session-${session.meetingId || session.agentId}`,
     label,
     meetingId: session.meetingId,
     roomUid: session.roomUid,
-    serverId: session.serverId,
+    serverId: session.serverSurface.server_id,
     roomOrigin: "remote_server",
     serverOrigin: window.location.origin,
     connectionState: "connected",

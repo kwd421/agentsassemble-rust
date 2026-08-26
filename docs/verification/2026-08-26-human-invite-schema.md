@@ -1307,3 +1307,38 @@ message publication, remote preferences, or public-ingress parity.
   Critical 0, High 0, and Medium 0. They found no remaining related duplicate policy
   owner, ownership/lifecycle boundary defect, unsupported optimization,
   overimplementation, removable compatibility state, or structure-gate issue.
+
+## Reachable human-session WebSocket and browser entrance
+
+Public commits `24a2179`, `aadbe99`, and `1ef79f3` separate the human-session ticket
+authority, activate exact-session WebSockets, and connect the copied browser
+transport. The current candidate corrects the exact production entrances and guest
+server-surface bootstrap discovered by the real-browser run.
+
+- Preserved authority: raw `aas1.` bearer input exists only at the typed WebSocket
+  ticket exchange. Subscription begins before consume; exact durable session state is
+  revalidated after consume, for each inbound command, before each outbound product
+  frame, at expiry, and inside the mutation transaction. Read-only sessions cannot
+  post. Replacement, revoke, leave, room close, expiry, or notification lag closes or
+  denies the exact socket without a polling cache or client-owned authority.
+- Browser correction: exact original `/join`, `/join/`, `/pair`, and `/pair/`
+  entrances serve the production bundle and `/assets` serves its root-relative Vite
+  assets. Successful admission carries the already-owned server ID, lineage, and
+  product surface. The existing strict directory contract validates and binds that
+  surface before session persistence/token exposure. Stored pre-contract sessions and
+  failed-join restoration are rejected rather than treated as compatibility paths.
+- Actual cost and structure: successful admission adds one bootstrap-status SQLite
+  read and one bounded surface object in the response/session. Browser binding adds
+  one SHA-256 digest calculation. The server reuses its existing product-surface and
+  bootstrap owners; the frontend reuses its existing directory pin. No table, index,
+  cache, trait, task, timer, fallback, migration, or generic authority framework was
+  added. No CPU, memory, disk, or latency improvement is claimed.
+- Verification result before manual review: real Axum/SQLite/WebSocket tests cover
+  ticket no-store/replay, snapshot, normal post, read-only denial, replacement close,
+  and no mutation after final transactional revalidation fails. Production-browser
+  Computer Use additionally proves exact entrance, token removal, normal
+  snapshot/roster/post, and isolated read-only snapshot/roster/visible denial; SQLite
+  contains no denied write. Focused frontend tests prove invalid join and recovered
+  surfaces remain unpersisted and expose no bearer. Controlled expiry,
+  notification-lag/closure, final-outbound races, and the remaining real-browser
+  invite matrix remain open and are not claimed.

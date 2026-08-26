@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { TEST_SERVER_PRODUCT_SURFACE } from "../test/serverProductSurface";
 import { persistRoomGuestSession, type RoomGuestSession } from "./roomGuestSession";
 import { consumeOperatorPairingTokenFromUrl } from "./roomGuestSession";
 import { createStartupRoute, mergeServerRoomsIntoDock, roomDockIdentity } from "./roomDockModel";
@@ -13,6 +14,11 @@ const SESSION: RoomGuestSession = {
   expiresAt: "2099-01-01T00:00:00Z",
   joinedAt: "2026-07-15T00:00:00Z",
   roomLabel: "Room One",
+  serverSurface: {
+    server_id: "11111111-1111-4111-8111-111111111111",
+    authority_lineage_id: "22222222-2222-4222-8222-222222222222",
+    server_product_surface: TEST_SERVER_PRODUCT_SURFACE,
+  },
 };
 
 describe("createStartupRoute", () => {

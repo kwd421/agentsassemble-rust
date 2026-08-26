@@ -134,7 +134,7 @@ export function useAppController() {
     initialRooms: startupRoute.startupRooms,
     hostEnabled: startupHostEnabled,
   });
-  const serverProductSurface = useMemo(
+  const hostServerProductSurface = useMemo(
     () => currentServerProductSurface(),
     [roomDirectorySyncIssue, startupIdentityResolved]
   );
@@ -226,6 +226,8 @@ export function useAppController() {
     onRoomJoined: onGuestRoomJoined,
     onResetToLobby: onGuestAdmissionReset,
   });
+  const serverProductSurface =
+    guestSession?.serverSurface.server_product_surface || hostServerProductSurface;
   const onRoomCreated = useCallback(
     (room: RoomDockItem) => {
       setActiveRoomId(room.id);

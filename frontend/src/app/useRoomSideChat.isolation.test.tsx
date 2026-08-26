@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SideChatEvent } from "../api";
+import { TEST_SERVER_PRODUCT_SURFACE } from "../test/serverProductSurface";
 import {
   persistRoomGuestSession,
   type RoomGuestSession,
@@ -38,6 +39,11 @@ function session(sessionToken: string, agentId: string): RoomGuestSession {
     inviteScope: "room",
     expiresAt: "2099-01-01T00:00:00Z",
     joinedAt: "2026-08-16T00:00:00Z",
+    serverSurface: {
+      server_id: "11111111-1111-4111-8111-111111111111",
+      authority_lineage_id: "22222222-2222-4222-8222-222222222222",
+      server_product_surface: TEST_SERVER_PRODUCT_SURFACE,
+    },
   };
 }
 

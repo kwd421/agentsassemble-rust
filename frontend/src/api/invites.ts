@@ -1,4 +1,5 @@
 import type { RoomAppearance } from "../lib/roomAppearance";
+import type { RoomSessionSurface } from "../lib/roomDirectoryContract";
 import {
   fetchJson,
   postJson,
@@ -23,7 +24,7 @@ export interface RoomInviteCreateResponse {
   provider_kind?: string;
 }
 
-export interface RoomInviteJoinResponse {
+export interface RoomInviteJoinResponse extends RoomSessionSurface {
   status: string;
   request_id?: string;
   session_token: string;
@@ -39,7 +40,6 @@ export interface RoomInviteJoinResponse {
   room_topic?: string;
   room_created_at?: string;
   room_uid?: string;
-  server_id?: string;
   client_id?: string;
 }
 

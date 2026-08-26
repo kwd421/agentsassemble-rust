@@ -91,6 +91,7 @@ async fn preflight_and_join_preserve_bounded_credentials_and_exact_retry() {
     assert_eq!(first["client_type"], "browser");
     assert_eq!(first["participant_type"], "human");
     assert_eq!(first["avatar_image_url"], avatar);
+    assert_session_server_surface(&first);
     let session_token = canonical_session_token(&first);
     let replacement_avatar =
         assert_profile_exchange_boundary(&client, &server.base_url, &store, session_token, &avatar)
@@ -357,6 +358,21 @@ fn canonical_session_token(admission: &Value) -> &str {
     assert!(token.starts_with("aas1."));
     assert_eq!(token.len(), 48);
     token
+}
+
+fn assert_session_server_surface(admission: &Value) {
+    for field in ["server_id", "authority_lineage_id"] {
+        assert!(
+            admission[field]
+                .as_str()
+                .is_some_and(|value| uuid::Uuid::parse_str(value).is_ok()),
+            "{field} is not a UUID"
+        );
+    }
+    assert_eq!(
+        admission["server_product_surface"]["websocket_streams"],
+        json!(["room_events"])
+    );
 }
 
 async fn prepare_prejoin_avatar_flow(

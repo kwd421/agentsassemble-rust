@@ -193,8 +193,9 @@ export default function AppOverlays({ controller }: { controller: AppController 
           <GuestIdentityRecoveryPanel
             request={guestRecoveryRequest}
             onRecovered={(payload) => {
-              acceptRecoveredSession(payload);
-              setGuestRecoveryRequest(null);
+              void acceptRecoveredSession(payload).then((accepted) => {
+                if (accepted) setGuestRecoveryRequest(null);
+              });
             }}
           />
         )}
