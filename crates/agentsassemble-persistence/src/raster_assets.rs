@@ -8,7 +8,7 @@ use tokio::sync::Semaphore;
 use crate::PersistenceError;
 
 pub const MAX_RASTER_BYTES: usize = 10 * 1024 * 1024;
-const MAX_LIVE_RASTER_ASSETS: i64 = 4096;
+pub(crate) const MAX_LIVE_RASTER_ASSETS: i64 = 4096;
 const MAX_LIVE_RASTER_BYTES: i64 = 8 * 1024 * 1024 * 1024;
 const MAX_IMAGE_DIMENSION: u32 = 4096;
 const MAX_IMAGE_PIXELS: u64 = 16 * 1024 * 1024;
@@ -73,9 +73,8 @@ pub(crate) async fn enforce_storage_replacement(
         return Err(invalid_storage_usage());
     }
     let row = sqlx::query(
-        "SELECT (SELECT COUNT(*) FROM profile_attachments WHERE state = 'bound' OR (state IN ('pending', 'admission_pending') AND expires_at > ?)) + (SELECT COUNT(*) FROM room_appearance_assets WHERE state = 'bound' OR (state = 'pending' AND expires_at > ?)) AS asset_count, (SELECT COALESCE(SUM(size), 0) FROM profile_attachments WHERE state = 'bound' OR (state IN ('pending', 'admission_pending') AND expires_at > ?)) + (SELECT COALESCE(SUM(size), 0) FROM room_appearance_assets WHERE state = 'bound' OR (state = 'pending' AND expires_at > ?)) AS asset_bytes",
+        "SELECT COUNT(*) AS asset_count, COALESCE(SUM(size), 0) AS asset_bytes FROM (SELECT size FROM profile_avatar_assets WHERE state = 'current' OR (state = 'pending' AND expires_at > ?) UNION ALL SELECT size FROM prejoin_avatar_assets WHERE expires_at > ? UNION ALL SELECT size FROM room_appearance_assets WHERE state = 'bound' OR (state = 'pending' AND expires_at > ?))",
     )
-    .bind(now_timestamp)
     .bind(now_timestamp)
     .bind(now_timestamp)
     .bind(now_timestamp)

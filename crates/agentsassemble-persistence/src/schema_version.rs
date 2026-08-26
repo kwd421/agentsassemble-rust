@@ -2,7 +2,7 @@ use sqlx::{Row, SqlitePool};
 
 use crate::PersistenceError;
 
-pub(crate) const CURRENT_SCHEMA_VERSION: i64 = 38;
+pub(crate) const CURRENT_SCHEMA_VERSION: i64 = 39;
 
 pub(crate) async fn validate_schema_version(pool: &SqlitePool) -> Result<(), PersistenceError> {
     let stored = sqlx::query("SELECT value FROM runtime_metadata WHERE key = 'schema_version'")

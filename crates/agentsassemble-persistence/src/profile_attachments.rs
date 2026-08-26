@@ -103,14 +103,18 @@ impl SqliteStore {
         if !valid_attachment_id(attachment_id) {
             return Err(attachment_missing());
         }
-        let row = sqlx::query(
-            "SELECT filename, content_type, content, size, created_at FROM profile_attachments WHERE attachment_id = ? AND (state = 'bound' OR (state = 'admission_pending' AND expires_at > ?))",
+        let rows = sqlx::query(
+            "SELECT filename, content_type, content, size, created_at FROM profile_avatar_assets WHERE attachment_id = ? AND state = 'current' UNION ALL SELECT filename, content_type, content, size, created_at FROM prejoin_avatar_assets WHERE attachment_id = ? AND expires_at > ? LIMIT 2",
         )
         .bind(attachment_id)
+        .bind(attachment_id)
         .bind(Utc::now().timestamp())
-        .fetch_optional(&self.pool)
-        .await?
-        .ok_or_else(attachment_missing)?;
+        .fetch_all(&self.pool)
+        .await?;
+        if rows.len() != 1 {
+            return Err(attachment_missing());
+        }
+        let row = &rows[0];
         let content_type = row.get::<String, _>("content_type");
         let content = row.get::<Vec<u8>, _>("content");
         let size = row.get::<i64, _>("size");
@@ -142,7 +146,7 @@ async fn store_profile_attachment_in_transaction(
     ensure_profile_exists(transaction, identity).await?;
     delete_expired_pending(transaction, now.timestamp()).await?;
     let previous = sqlx::query(
-        "SELECT attachment_id, size FROM profile_attachments WHERE owner_user_id = ? AND state = 'pending' ORDER BY attachment_id LIMIT 2",
+        "SELECT attachment_id, size FROM profile_avatar_assets WHERE owner_user_id = ? AND state = 'pending' ORDER BY attachment_id LIMIT 2",
     )
     .bind(identity.user_id)
     .fetch_all(&mut **transaction)
@@ -157,7 +161,7 @@ async fn store_profile_attachment_in_transaction(
     enforce_storage_replacement(transaction, previous_size, size, now.timestamp()).await?;
     if let Some(previous_id) = previous_id {
         let deleted = sqlx::query(
-            "DELETE FROM profile_attachments WHERE attachment_id = ? AND owner_user_id = ? AND state = 'pending'",
+            "DELETE FROM profile_avatar_assets WHERE attachment_id = ? AND owner_user_id = ? AND state = 'pending'",
         )
         .bind(previous_id)
         .bind(identity.user_id)
@@ -169,7 +173,7 @@ async fn store_profile_attachment_in_transaction(
     }
     let attachment_id = Uuid::new_v4().simple().to_string();
     sqlx::query(
-            "INSERT INTO profile_attachments(attachment_id, owner_user_id, filename, content_type, content, size, created_at, state, expires_at) VALUES (?, ?, ?, 'image/png', ?, ?, ?, 'pending', ?)",
+            "INSERT INTO profile_avatar_assets(attachment_id, owner_user_id, filename, content_type, content, size, created_at, state, expires_at) VALUES (?, ?, ?, 'image/png', ?, ?, ?, 'pending', ?)",
         )
         .bind(&attachment_id)
         .bind(identity.user_id)
@@ -195,7 +199,7 @@ pub(crate) async fn authorize_profile_avatar(
 ) -> Result<(), PersistenceError> {
     delete_expired_pending(transaction, now.timestamp()).await?;
     let row = sqlx::query(
-        "SELECT owner_user_id, state, expires_at FROM profile_attachments WHERE attachment_id = ?",
+        "SELECT owner_user_id, state, expires_at FROM profile_avatar_assets WHERE attachment_id = ?",
     )
     .bind(attachment_id)
     .fetch_optional(&mut **transaction)
@@ -208,7 +212,7 @@ pub(crate) async fn authorize_profile_avatar(
         ));
     }
     let state = row.get::<String, _>("state");
-    let available = state == "bound"
+    let available = state == "current"
         || (state == "pending"
             && row
                 .get::<Option<i64>, _>("expires_at")
@@ -230,9 +234,21 @@ pub(crate) async fn replace_profile_avatar(
     if previous_id == next_id {
         return Ok(());
     }
+    if let Some(previous_id) = previous_id {
+        let deleted = sqlx::query(
+            "DELETE FROM profile_avatar_assets WHERE attachment_id = ? AND owner_user_id = ? AND state = 'current'",
+        )
+        .bind(previous_id)
+        .bind(user_id)
+        .execute(&mut **transaction)
+        .await?;
+        if deleted.rows_affected() != 1 {
+            return Err(attachment_missing());
+        }
+    }
     if let Some(next_id) = next_id {
         let promoted = sqlx::query(
-            "UPDATE profile_attachments SET state = 'bound', expires_at = NULL WHERE attachment_id = ? AND owner_user_id = ? AND state IN ('pending', 'bound')",
+            "UPDATE profile_avatar_assets SET state = 'current', expires_at = NULL WHERE attachment_id = ? AND owner_user_id = ? AND state = 'pending'",
         )
         .bind(next_id)
         .bind(user_id)
@@ -241,15 +257,6 @@ pub(crate) async fn replace_profile_avatar(
         if promoted.rows_affected() != 1 {
             return Err(attachment_missing());
         }
-    }
-    if let Some(previous_id) = previous_id {
-        sqlx::query(
-            "DELETE FROM profile_attachments WHERE attachment_id = ? AND owner_user_id = ? AND state = 'bound'",
-        )
-        .bind(previous_id)
-        .bind(user_id)
-        .execute(&mut **transaction)
-        .await?;
     }
     Ok(())
 }
@@ -284,7 +291,7 @@ async fn delete_expired_pending(
     now_timestamp: i64,
 ) -> Result<(), PersistenceError> {
     sqlx::query(
-        "DELETE FROM profile_attachments WHERE state = 'pending' AND expires_at IS NOT NULL AND expires_at <= ?",
+        "DELETE FROM profile_avatar_assets WHERE state = 'pending' AND expires_at IS NOT NULL AND expires_at <= ?",
     )
     .bind(now_timestamp)
     .execute(&mut **transaction)
@@ -463,7 +470,7 @@ mod tests {
             .store_profile_attachment(&principal, "expired.png", "image/png", valid_png())
             .await
             .unwrap_or_else(|error| panic!("store expiring avatar: {error}"));
-        sqlx::query("UPDATE profile_attachments SET expires_at = 0 WHERE attachment_id = ?")
+        sqlx::query("UPDATE profile_avatar_assets SET expires_at = 0 WHERE attachment_id = ?")
             .bind(&expired.id)
             .execute(&store.pool)
             .await
@@ -477,7 +484,7 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("store after expiry: {error}"));
         let count = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM profile_attachments WHERE attachment_id = ?",
+            "SELECT COUNT(*) FROM profile_avatar_assets WHERE attachment_id = ?",
         )
         .bind(&expired.id)
         .fetch_one(&store.pool)
@@ -508,7 +515,7 @@ mod tests {
         }
 
         let rows = sqlx::query_scalar::<_, String>(
-            "SELECT attachment_id FROM profile_attachments WHERE owner_user_id = ? AND state = 'pending'",
+            "SELECT attachment_id FROM profile_avatar_assets WHERE owner_user_id = ? AND state = 'pending'",
         )
         .bind(&principal.principal_id)
         .fetch_all(&store.pool)
@@ -518,7 +525,7 @@ mod tests {
         assert_ne!(rows[0], first_id);
         assert_eq!(
             sqlx::query_scalar::<_, i64>(
-                "SELECT COUNT(*) FROM profile_attachments WHERE attachment_id = ?",
+                "SELECT COUNT(*) FROM profile_avatar_assets WHERE attachment_id = ?",
             )
             .bind(first_id)
             .fetch_one(&store.pool)

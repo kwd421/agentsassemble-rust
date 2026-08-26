@@ -48,44 +48,39 @@ const TABLES: &[TableDefinition] = &[
         infrastructure: false,
     },
     TableDefinition {
-        name: "profile_attachments",
+        name: "profile_avatar_assets",
         ddl: concat!(
-            "CREATE TABLE IF NOT EXISTS profile_attachments (",
+            "CREATE TABLE IF NOT EXISTS profile_avatar_assets (",
             "attachment_id TEXT PRIMARY KEY, ",
-            "owner_user_id TEXT, ",
-            "admission_room_id TEXT, ",
-            "admission_custody_fingerprint BLOB ",
-            "CHECK(admission_custody_fingerprint IS NULL OR ",
-            "(typeof(admission_custody_fingerprint) = 'blob' ",
-            "AND length(admission_custody_fingerprint) = 32)), ",
-            "invite_quota_fingerprint BLOB ",
-            "CHECK(invite_quota_fingerprint IS NULL OR ",
-            "(typeof(invite_quota_fingerprint) = 'blob' ",
-            "AND length(invite_quota_fingerprint) = 32)), ",
+            "owner_user_id TEXT NOT NULL, ",
             "filename TEXT NOT NULL, ",
             "content_type TEXT NOT NULL CHECK(content_type = 'image/png'), ",
             "content BLOB NOT NULL, ",
-            "size INTEGER NOT NULL CHECK(size >= 0 AND size <= 10485760), ",
+            "size INTEGER NOT NULL CHECK(size > 0 AND size <= 10485760), ",
             "created_at TEXT NOT NULL, ",
-            "state TEXT NOT NULL CHECK(state IN ('pending', 'bound', 'admission_pending')), ",
+            "state TEXT NOT NULL CHECK(state IN ('pending', 'current')), ",
             "expires_at INTEGER, ",
-            "CHECK(",
-            "(state = 'pending' AND owner_user_id IS NOT NULL ",
-            "AND admission_room_id IS NULL AND admission_custody_fingerprint IS NULL ",
-            "AND invite_quota_fingerprint IS NULL AND expires_at IS NOT NULL) OR ",
-            "(state = 'bound' AND owner_user_id IS NOT NULL ",
-            "AND admission_custody_fingerprint IS NULL AND expires_at IS NULL AND ",
-            "((admission_room_id IS NULL AND invite_quota_fingerprint IS NULL) OR ",
-            "(admission_room_id IS NOT NULL AND length(admission_room_id) > 0 ",
-            "AND invite_quota_fingerprint IS NOT NULL ",
-            "AND length(invite_quota_fingerprint) = 32))) OR ",
-            "(state = 'admission_pending' AND owner_user_id IS NULL ",
-            "AND admission_room_id IS NOT NULL AND length(admission_room_id) > 0 ",
-            "AND admission_custody_fingerprint IS NOT NULL ",
-            "AND length(admission_custody_fingerprint) = 32 ",
-            "AND invite_quota_fingerprint IS NOT NULL ",
-            "AND length(invite_quota_fingerprint) = 32 AND expires_at IS NOT NULL)), ",
+            "CHECK((state = 'pending' AND expires_at IS NOT NULL) OR ",
+            "(state = 'current' AND expires_at IS NULL)), ",
             "FOREIGN KEY(owner_user_id) REFERENCES user_profiles(user_id) ON DELETE CASCADE)",
+        ),
+        infrastructure: false,
+    },
+    TableDefinition {
+        name: "prejoin_avatar_assets",
+        ddl: concat!(
+            "CREATE TABLE IF NOT EXISTS prejoin_avatar_assets (",
+            "attachment_id TEXT PRIMARY KEY, ",
+            "room_id TEXT NOT NULL, ",
+            "custody_fingerprint BLOB NOT NULL CHECK(typeof(custody_fingerprint) = 'blob' AND length(custody_fingerprint) = 32), ",
+            "invite_fingerprint BLOB NOT NULL CHECK(typeof(invite_fingerprint) = 'blob' AND length(invite_fingerprint) = 32), ",
+            "filename TEXT NOT NULL, ",
+            "content_type TEXT NOT NULL CHECK(content_type = 'image/png'), ",
+            "content BLOB NOT NULL, ",
+            "size INTEGER NOT NULL CHECK(size > 0 AND size <= 10485760), ",
+            "created_at TEXT NOT NULL, ",
+            "expires_at INTEGER NOT NULL, ",
+            "FOREIGN KEY(room_id) REFERENCES rooms(room_id) ON DELETE CASCADE)",
         ),
         infrastructure: false,
     },
@@ -196,7 +191,7 @@ const TABLES: &[TableDefinition] = &[
     },
     TableDefinition {
         name: "room_appearance_assets",
-        ddl: "CREATE TABLE IF NOT EXISTS room_appearance_assets (asset_id TEXT PRIMARY KEY CHECK(length(asset_id) = 35 AND substr(asset_id, 1, 3) = 'ra_'), room_id TEXT NOT NULL, pending_owner_user_id TEXT, created_by_user_id TEXT NOT NULL, filename TEXT NOT NULL, content_type TEXT NOT NULL CHECK(content_type = 'image/png'), content BLOB NOT NULL, size INTEGER NOT NULL CHECK(size > 0 AND size <= 10485760), created_at TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('pending', 'bound')), expires_at INTEGER, CHECK((state = 'pending' AND pending_owner_user_id IS NOT NULL AND expires_at IS NOT NULL) OR (state = 'bound' AND pending_owner_user_id IS NULL AND expires_at IS NULL)), FOREIGN KEY(room_id) REFERENCES rooms(room_id) ON DELETE CASCADE, FOREIGN KEY(pending_owner_user_id) REFERENCES user_profiles(user_id) ON DELETE CASCADE)",
+        ddl: "CREATE TABLE IF NOT EXISTS room_appearance_assets (asset_id TEXT PRIMARY KEY CHECK(length(asset_id) = 35 AND substr(asset_id, 1, 3) = 'ra_'), room_id TEXT NOT NULL, pending_owner_user_id TEXT, filename TEXT NOT NULL, content_type TEXT NOT NULL CHECK(content_type = 'image/png'), content BLOB NOT NULL, size INTEGER NOT NULL CHECK(size > 0 AND size <= 10485760), created_at TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('pending', 'bound')), expires_at INTEGER, CHECK((state = 'pending' AND pending_owner_user_id IS NOT NULL AND expires_at IS NOT NULL) OR (state = 'bound' AND pending_owner_user_id IS NULL AND expires_at IS NULL)), FOREIGN KEY(room_id) REFERENCES rooms(room_id) ON DELETE CASCADE, FOREIGN KEY(pending_owner_user_id) REFERENCES user_profiles(user_id) ON DELETE CASCADE)",
         infrastructure: false,
     },
     TableDefinition {
@@ -247,16 +242,15 @@ const TABLES: &[TableDefinition] = &[
 ];
 
 const INDEXES: &[&str] = &[
-    "CREATE INDEX IF NOT EXISTS profile_attachments_owner_idx ON profile_attachments(owner_user_id)",
-    "CREATE UNIQUE INDEX IF NOT EXISTS profile_attachments_admission_custody_idx ON profile_attachments(admission_custody_fingerprint) WHERE state = 'admission_pending'",
-    "CREATE INDEX IF NOT EXISTS profile_attachments_invite_quota_idx ON profile_attachments(invite_quota_fingerprint, expires_at) WHERE invite_quota_fingerprint IS NOT NULL",
-    "CREATE INDEX IF NOT EXISTS profile_attachments_admission_room_idx ON profile_attachments(admission_room_id, state, expires_at) WHERE admission_room_id IS NOT NULL",
+    "CREATE UNIQUE INDEX IF NOT EXISTS profile_avatar_assets_owner_state_idx ON profile_avatar_assets(owner_user_id, state)",
+    "CREATE INDEX IF NOT EXISTS profile_avatar_assets_pending_expiry_idx ON profile_avatar_assets(expires_at) WHERE state = 'pending'",
+    "CREATE UNIQUE INDEX IF NOT EXISTS prejoin_avatar_assets_custody_idx ON prejoin_avatar_assets(custody_fingerprint)",
+    "CREATE INDEX IF NOT EXISTS prejoin_avatar_assets_expiry_idx ON prejoin_avatar_assets(expires_at)",
     "CREATE INDEX IF NOT EXISTS room_invites_room_state_idx ON room_invites(room_id, revoked, expires_at)",
     "CREATE UNIQUE INDEX IF NOT EXISTS human_room_sessions_active_participant_idx ON human_room_sessions(room_id, participant_id) WHERE state = 'active'",
     "CREATE INDEX IF NOT EXISTS human_room_sessions_live_idx ON human_room_sessions(state, expires_at)",
     "CREATE INDEX IF NOT EXISTS human_room_sessions_room_live_idx ON human_room_sessions(room_id, state, expires_at)",
     "CREATE INDEX IF NOT EXISTS human_room_sessions_invite_state_idx ON human_room_sessions(invite_id, key_kind, state)",
-    "CREATE INDEX IF NOT EXISTS room_appearance_assets_creator_idx ON room_appearance_assets(created_by_user_id)",
     "CREATE INDEX IF NOT EXISTS room_appearance_assets_pending_idx ON room_appearance_assets(pending_owner_user_id, expires_at) WHERE state = 'pending'",
     "CREATE INDEX IF NOT EXISTS room_appearance_assets_room_idx ON room_appearance_assets(room_id, state)",
     "CREATE INDEX IF NOT EXISTS room_write_budgets_window_idx ON room_write_budgets(window_started_at)",
@@ -354,13 +348,13 @@ mod tests {
         .await
         .unwrap_or_else(|error| panic!("insert profile: {error}"));
         sqlx::query(
-            "INSERT INTO room_appearance_assets(asset_id, room_id, pending_owner_user_id, created_by_user_id, filename, content_type, content, size, created_at, state, expires_at) VALUES ('ra_00000000000000000000000000000000', 'general', 'user-1', 'user-1', 'pending.png', 'image/png', X'00', 1, '2026-08-26T00:00:00Z', 'pending', 1)",
+            "INSERT INTO room_appearance_assets(asset_id, room_id, pending_owner_user_id, filename, content_type, content, size, created_at, state, expires_at) VALUES ('ra_00000000000000000000000000000000', 'general', 'user-1', 'pending.png', 'image/png', X'00', 1, '2026-08-26T00:00:00Z', 'pending', 1)",
         )
         .execute(&pool)
         .await
         .unwrap_or_else(|error| panic!("insert pending asset: {error}"));
         sqlx::query(
-            "INSERT INTO room_appearance_assets(asset_id, room_id, pending_owner_user_id, created_by_user_id, filename, content_type, content, size, created_at, state, expires_at) VALUES ('ra_11111111111111111111111111111111', 'general', NULL, 'user-1', 'bound.png', 'image/png', X'00', 1, '2026-08-26T00:00:00Z', 'bound', NULL)",
+            "INSERT INTO room_appearance_assets(asset_id, room_id, pending_owner_user_id, filename, content_type, content, size, created_at, state, expires_at) VALUES ('ra_11111111111111111111111111111111', 'general', NULL, 'bound.png', 'image/png', X'00', 1, '2026-08-26T00:00:00Z', 'bound', NULL)",
         )
         .execute(&pool)
         .await
@@ -368,7 +362,7 @@ mod tests {
 
         assert!(
             sqlx::query(
-                "INSERT INTO room_appearance_assets(asset_id, room_id, pending_owner_user_id, created_by_user_id, filename, content_type, content, size, created_at, state, expires_at) VALUES ('ra_22222222222222222222222222222222', 'general', NULL, 'user-1', 'invalid.png', 'image/png', X'00', 1, '2026-08-26T00:00:00Z', 'pending', NULL)",
+                "INSERT INTO room_appearance_assets(asset_id, room_id, pending_owner_user_id, filename, content_type, content, size, created_at, state, expires_at) VALUES ('ra_22222222222222222222222222222222', 'general', NULL, 'invalid.png', 'image/png', X'00', 1, '2026-08-26T00:00:00Z', 'pending', NULL)",
             )
             .execute(&pool)
             .await

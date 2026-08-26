@@ -132,6 +132,7 @@ pub(super) async fn persist_identity(
         if let Some(avatar) = avatar {
             transfer_admission_avatar(transaction, avatar, &identity.user_id, request, invite, now)
                 .await?;
+            replace_profile_avatar(transaction, &identity.user_id, "", &avatar.url).await?;
         }
         if invite.is_reusable() {
             sqlx::query(
@@ -188,7 +189,7 @@ pub(super) async fn resolve_admission_avatar(
         return Ok(None);
     };
     let row = sqlx::query(
-        "SELECT state, admission_room_id, admission_custody_fingerprint, invite_quota_fingerprint, expires_at, content_type, size, length(content) AS content_length, created_at FROM profile_attachments WHERE attachment_id = ?",
+        "SELECT room_id, custody_fingerprint, invite_fingerprint, expires_at, content_type, size, length(content) AS content_length, created_at FROM prejoin_avatar_assets WHERE attachment_id = ?",
     )
     .bind(attachment_id)
     .fetch_optional(&mut **transaction)
@@ -197,20 +198,10 @@ pub(super) async fn resolve_admission_avatar(
         return Ok(None);
     };
     let custody = request.avatar_custody_fingerprint();
-    let valid = row.get::<String, _>("state") == "admission_pending"
-        && row.get::<Option<String>, _>("admission_room_id").as_deref()
-            == Some(invite.room_id.as_str())
-        && row
-            .get::<Option<Vec<u8>>, _>("admission_custody_fingerprint")
-            .as_deref()
-            == Some(custody.as_slice())
-        && row
-            .get::<Option<Vec<u8>>, _>("invite_quota_fingerprint")
-            .as_deref()
-            == Some(invite.signed_token_fingerprint.as_slice())
-        && row
-            .get::<Option<i64>, _>("expires_at")
-            .is_some_and(|expires_at| expires_at > now.timestamp());
+    let valid = row.get::<String, _>("room_id") == invite.room_id
+        && row.get::<Vec<u8>, _>("custody_fingerprint") == custody
+        && row.get::<Vec<u8>, _>("invite_fingerprint") == invite.signed_token_fingerprint
+        && row.get::<i64, _>("expires_at") > now.timestamp();
     if !valid {
         return Ok(None);
     }
@@ -251,8 +242,12 @@ async fn transfer_admission_avatar(
     now: DateTime<Utc>,
 ) -> Result<(), PersistenceError> {
     let custody = request.avatar_custody_fingerprint();
-    let updated = sqlx::query(
-        "UPDATE profile_attachments SET owner_user_id = ?, admission_custody_fingerprint = NULL, state = 'bound', expires_at = NULL WHERE attachment_id = ? AND state = 'admission_pending' AND admission_room_id = ? AND admission_custody_fingerprint = ? AND invite_quota_fingerprint = ? AND expires_at > ?",
+    sqlx::query("DELETE FROM profile_avatar_assets WHERE owner_user_id = ? AND state = 'pending'")
+        .bind(user_id)
+        .execute(&mut **transaction)
+        .await?;
+    let inserted = sqlx::query(
+        "INSERT INTO profile_avatar_assets(attachment_id, owner_user_id, filename, content_type, content, size, created_at, state, expires_at) SELECT attachment_id, ?, filename, content_type, content, size, created_at, 'pending', expires_at FROM prejoin_avatar_assets WHERE attachment_id = ? AND room_id = ? AND custody_fingerprint = ? AND invite_fingerprint = ? AND expires_at > ?",
     )
     .bind(user_id)
     .bind(&avatar.attachment_id)
@@ -262,10 +257,25 @@ async fn transfer_admission_avatar(
     .bind(now.timestamp())
     .execute(&mut **transaction)
     .await?;
-    if updated.rows_affected() != 1 {
+    if inserted.rows_affected() != 1 {
         return Err(PersistenceError::CommandRejected {
             code: "invalid_state",
             message: "Admission avatar custody changed inside one transaction.".to_owned(),
+        });
+    }
+    let deleted = sqlx::query(
+        "DELETE FROM prejoin_avatar_assets WHERE attachment_id = ? AND room_id = ? AND custody_fingerprint = ? AND invite_fingerprint = ?",
+    )
+    .bind(&avatar.attachment_id)
+    .bind(&invite.room_id)
+    .bind(custody.as_slice())
+    .bind(invite.signed_token_fingerprint.as_slice())
+    .execute(&mut **transaction)
+    .await?;
+    if deleted.rows_affected() != 1 {
+        return Err(PersistenceError::CommandRejected {
+            code: "invalid_state",
+            message: "Admission avatar transfer was not exclusive.".to_owned(),
         });
     }
     Ok(())

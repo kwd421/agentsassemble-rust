@@ -8,23 +8,15 @@ use crate::{
     human_admission::prejoin_avatar_custody_fingerprint,
     human_invite_preflight::{load_invite_and_room, require_credential_binding},
     profile_attachments::attachment_metadata,
-    raster_assets::prepare_raster,
+    raster_assets::{enforce_storage_replacement, prepare_raster},
 };
 
 const PREJOIN_ATTACHMENT_TTL: Duration = Duration::hours(1);
-const MAX_ATTACHMENTS_PER_INVITE: i64 = 8;
-const MAX_ATTACHMENT_BYTES_PER_INVITE: i64 = 32 * 1024 * 1024;
-const MAX_PENDING_ATTACHMENTS_PER_ROOM: i64 = 64;
-const MAX_PENDING_ATTACHMENT_BYTES_PER_ROOM: i64 = 128 * 1024 * 1024;
-const MAX_ATTACHMENTS_PER_ROOM: i64 = 512;
-const MAX_ATTACHMENT_BYTES_PER_ROOM: i64 = 1024 * 1024 * 1024;
-const MAX_ATTACHMENTS_TOTAL: i64 = 4096;
-const MAX_ATTACHMENT_BYTES_TOTAL: i64 = 8 * 1024 * 1024 * 1024;
 
 struct PrejoinAuthority {
     room_id: String,
     custody_fingerprint: [u8; 32],
-    invite_quota_fingerprint: [u8; 32],
+    invite_fingerprint: [u8; 32],
 }
 
 /// Opaque evidence that the invite and room were current before image decoding.
@@ -34,17 +26,6 @@ struct PrejoinAuthority {
 pub struct HumanPrejoinAvatarAuthorization {
     credential: HumanInviteCredentialEvidence,
     browser_credential_fingerprint: [u8; 32],
-}
-
-struct QuotaUsage {
-    invite_count: i64,
-    invite_bytes: i64,
-    pending_room_count: i64,
-    pending_room_bytes: i64,
-    room_count: i64,
-    room_bytes: i64,
-    total_count: i64,
-    total_bytes: i64,
 }
 
 impl SqliteStore {
@@ -81,7 +62,7 @@ impl SqliteStore {
     ///
     /// # Errors
     ///
-    /// Fails on a non-current invite, malformed image, quota exhaustion, or durable
+    /// Fails on a non-current invite, malformed image, absolute storage exhaustion, or durable
     /// authority/storage errors. Raw invite and browser credentials are never accepted.
     pub async fn store_human_prejoin_avatar(
         &self,
@@ -101,26 +82,40 @@ impl SqliteStore {
         )
         .await?;
         delete_expired_pending(&mut transaction, now.timestamp()).await?;
-        let usage = quota_usage(&mut transaction, &authority, now.timestamp()).await?;
-        enforce_quota(&usage, size)?;
-
-        sqlx::query(
-            "DELETE FROM profile_attachments WHERE state = 'admission_pending' AND admission_custody_fingerprint = ?",
+        let previous = sqlx::query(
+            "SELECT attachment_id, size FROM prejoin_avatar_assets WHERE custody_fingerprint = ?",
         )
         .bind(authority.custody_fingerprint.as_slice())
-        .execute(&mut *transaction)
+        .fetch_optional(&mut *transaction)
         .await?;
+        let previous_id = previous
+            .as_ref()
+            .map(|row| row.get::<String, _>("attachment_id"));
+        let previous_size = previous.as_ref().map(|row| row.get::<i64, _>("size"));
+        enforce_storage_replacement(&mut transaction, previous_size, size, now.timestamp()).await?;
+        if let Some(previous_id) = previous_id {
+            let deleted = sqlx::query(
+                "DELETE FROM prejoin_avatar_assets WHERE attachment_id = ? AND custody_fingerprint = ?",
+            )
+            .bind(previous_id)
+            .bind(authority.custody_fingerprint.as_slice())
+            .execute(&mut *transaction)
+            .await?;
+            if deleted.rows_affected() != 1 {
+                return Err(invalid_prejoin_cardinality());
+            }
+        }
 
         let attachment_id = Uuid::new_v4().simple().to_string();
         let filename = canonical.filename;
         let public_size = usize::try_from(size).map_err(|_| invalid_stored_size())?;
         sqlx::query(
-            "INSERT INTO profile_attachments(attachment_id, owner_user_id, admission_room_id, admission_custody_fingerprint, invite_quota_fingerprint, filename, content_type, content, size, created_at, state, expires_at) VALUES (?, NULL, ?, ?, ?, ?, 'image/png', ?, ?, ?, 'admission_pending', ?)",
+            "INSERT INTO prejoin_avatar_assets(attachment_id, room_id, custody_fingerprint, invite_fingerprint, filename, content_type, content, size, created_at, expires_at) VALUES (?, ?, ?, ?, ?, 'image/png', ?, ?, ?, ?)",
         )
         .bind(&attachment_id)
         .bind(&authority.room_id)
         .bind(authority.custody_fingerprint.as_slice())
-        .bind(authority.invite_quota_fingerprint.as_slice())
+        .bind(authority.invite_fingerprint.as_slice())
         .bind(&filename)
         .bind(canonical.content)
         .bind(size)
@@ -167,7 +162,7 @@ async fn current_prejoin_authority(
             credential,
             browser_credential_fingerprint,
         ),
-        invite_quota_fingerprint: invite.signed_token_fingerprint,
+        invite_fingerprint: invite.signed_token_fingerprint,
     })
 }
 
@@ -175,85 +170,19 @@ async fn delete_expired_pending(
     transaction: &mut Transaction<'_, Sqlite>,
     now_timestamp: i64,
 ) -> Result<(), PersistenceError> {
-    sqlx::query(
-        "DELETE FROM profile_attachments WHERE state = 'admission_pending' AND expires_at IS NOT NULL AND expires_at <= ?",
-    )
-    .bind(now_timestamp)
-    .execute(&mut **transaction)
-    .await?;
+    sqlx::query("DELETE FROM prejoin_avatar_assets WHERE expires_at <= ?")
+        .bind(now_timestamp)
+        .execute(&mut **transaction)
+        .await?;
     Ok(())
-}
-
-async fn quota_usage(
-    transaction: &mut Transaction<'_, Sqlite>,
-    authority: &PrejoinAuthority,
-    now_timestamp: i64,
-) -> Result<QuotaUsage, PersistenceError> {
-    let row = sqlx::query(
-        "SELECT COUNT(*) AS total_count, COALESCE(SUM(size), 0) AS total_bytes, COALESCE(SUM(CASE WHEN admission_room_id = ? THEN 1 ELSE 0 END), 0) AS room_count, COALESCE(SUM(CASE WHEN admission_room_id = ? THEN size ELSE 0 END), 0) AS room_bytes, COALESCE(SUM(CASE WHEN admission_room_id = ? AND state = 'admission_pending' THEN 1 ELSE 0 END), 0) AS pending_room_count, COALESCE(SUM(CASE WHEN admission_room_id = ? AND state = 'admission_pending' THEN size ELSE 0 END), 0) AS pending_room_bytes, COALESCE(SUM(CASE WHEN invite_quota_fingerprint = ? THEN 1 ELSE 0 END), 0) AS invite_count, COALESCE(SUM(CASE WHEN invite_quota_fingerprint = ? THEN size ELSE 0 END), 0) AS invite_bytes FROM profile_attachments WHERE (state = 'bound' OR expires_at > ?) AND (state != 'admission_pending' OR admission_custody_fingerprint != ?)",
-    )
-    .bind(&authority.room_id)
-    .bind(&authority.room_id)
-    .bind(&authority.room_id)
-    .bind(&authority.room_id)
-    .bind(authority.invite_quota_fingerprint.as_slice())
-    .bind(authority.invite_quota_fingerprint.as_slice())
-    .bind(now_timestamp)
-    .bind(authority.custody_fingerprint.as_slice())
-    .fetch_one(&mut **transaction)
-    .await?;
-    Ok(QuotaUsage {
-        invite_count: row.try_get("invite_count")?,
-        invite_bytes: row.try_get("invite_bytes")?,
-        pending_room_count: row.try_get("pending_room_count")?,
-        pending_room_bytes: row.try_get("pending_room_bytes")?,
-        room_count: row.try_get("room_count")?,
-        room_bytes: row.try_get("room_bytes")?,
-        total_count: row.try_get("total_count")?,
-        total_bytes: row.try_get("total_bytes")?,
-    })
-}
-
-fn enforce_quota(usage: &QuotaUsage, size: i64) -> Result<(), PersistenceError> {
-    if quota_reached(
-        usage.invite_count,
-        usage.invite_bytes,
-        size,
-        MAX_ATTACHMENTS_PER_INVITE,
-        MAX_ATTACHMENT_BYTES_PER_INVITE,
-    ) || quota_reached(
-        usage.pending_room_count,
-        usage.pending_room_bytes,
-        size,
-        MAX_PENDING_ATTACHMENTS_PER_ROOM,
-        MAX_PENDING_ATTACHMENT_BYTES_PER_ROOM,
-    ) || quota_reached(
-        usage.room_count,
-        usage.room_bytes,
-        size,
-        MAX_ATTACHMENTS_PER_ROOM,
-        MAX_ATTACHMENT_BYTES_PER_ROOM,
-    ) || quota_reached(
-        usage.total_count,
-        usage.total_bytes,
-        size,
-        MAX_ATTACHMENTS_TOTAL,
-        MAX_ATTACHMENT_BYTES_TOTAL,
-    ) {
-        return Err(rejected(
-            "attachment_quota_reached",
-            "Pre-join profile avatar storage quota reached.",
-        ));
-    }
-    Ok(())
-}
-
-const fn quota_reached(count: i64, bytes: i64, size: i64, max_count: i64, max_bytes: i64) -> bool {
-    count >= max_count || bytes.saturating_add(size) > max_bytes
 }
 
 fn invalid_stored_size() -> PersistenceError {
     rejected("invalid_state", "Canonical profile avatar size is invalid.")
+}
+
+fn invalid_prejoin_cardinality() -> PersistenceError {
+    rejected("invalid_state", "Pre-join avatar custody is inconsistent.")
 }
 
 fn rejected(code: &'static str, message: &str) -> PersistenceError {
@@ -267,10 +196,7 @@ fn rejected(code: &'static str, message: &str) -> PersistenceError {
 mod tests {
     use std::io::Cursor;
 
-    use agentsassemble_domain::{
-        AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope,
-        LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID,
-    };
+    use agentsassemble_domain::LOCAL_OPERATOR_USER_ID;
     use chrono::{DateTime, Duration, TimeZone, Utc};
     use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba};
     use sqlx::Row;
@@ -319,14 +245,14 @@ mod tests {
         assert_eq!(pending_count(&store).await, 1);
         assert!(!attachment_exists(&store, &first.id).await);
         let row = sqlx::query(
-            "SELECT admission_room_id, invite_quota_fingerprint, content_type, size, length(content) AS content_length, created_at, expires_at FROM profile_attachments WHERE attachment_id = ?",
+            "SELECT room_id, invite_fingerprint, content_type, size, length(content) AS content_length, created_at, expires_at FROM prejoin_avatar_assets WHERE attachment_id = ?",
         )
         .bind(&second.id)
         .fetch_one(&store.pool)
         .await
         .unwrap_or_else(|error| panic!("read replacement avatar: {error}"));
-        assert_eq!(row.get::<String, _>("admission_room_id"), "general");
-        assert_eq!(row.get::<Vec<u8>, _>("invite_quota_fingerprint"), SIGNED);
+        assert_eq!(row.get::<String, _>("room_id"), "general");
+        assert_eq!(row.get::<Vec<u8>, _>("invite_fingerprint"), SIGNED);
         assert_eq!(row.get::<String, _>("content_type"), "image/png");
         assert_eq!(
             row.get::<i64, _>("size"),
@@ -372,11 +298,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn invite_quota_is_shared_across_browsers_but_exact_replacement_stays_available() {
+    async fn distinct_custodies_are_not_subject_to_a_generic_invite_quota() {
         let store = fixture().await;
         let credential = join_credential();
         let mut first_id = String::new();
-        for byte in 0..8 {
+        for byte in 0..9 {
             let stored = store_prejoin_avatar(
                 &store,
                 &credential,
@@ -386,24 +312,12 @@ mod tests {
                 valid_image(ImageFormat::Png),
             )
             .await
-            .unwrap_or_else(|error| panic!("store quota avatar {byte}: {error}"));
+            .unwrap_or_else(|error| panic!("store custody avatar {byte}: {error}"));
             if byte == 0 {
                 first_id = stored.id;
             }
         }
-        assert_eq!(pending_count(&store).await, 8);
-        assert_rejected_code(
-            store_prejoin_avatar(
-                &store,
-                &credential,
-                &[0x40; 32],
-                "ninth.png",
-                "image/png",
-                valid_image(ImageFormat::Png),
-            )
-            .await,
-            "attachment_quota_reached",
-        );
+        assert_eq!(pending_count(&store).await, 9);
         let replacement = store_prejoin_avatar(
             &store,
             &credential,
@@ -413,54 +327,59 @@ mod tests {
             valid_image(ImageFormat::Png),
         )
         .await
-        .unwrap_or_else(|error| panic!("replace at quota boundary: {error}"));
+        .unwrap_or_else(|error| panic!("replace exact custody: {error}"));
         assert_ne!(replacement.id, first_id);
         assert!(!attachment_exists(&store, &first_id).await);
-        assert_eq!(pending_count(&store).await, 8);
+        assert_eq!(pending_count(&store).await, 9);
     }
 
     #[tokio::test]
-    async fn admission_assets_share_runtime_limits_without_charging_ordinary_user_quota() {
+    async fn absolute_limit_allows_exact_replacement_but_rejects_net_growth() {
         let store = fixture().await;
         let now = Utc::now();
         sqlx::query(
-            "WITH digits(value) AS (VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9),(10),(11),(12),(13),(14),(15)), sequence(value) AS (SELECT first.value * 16 + second.value FROM digits AS first CROSS JOIN digits AS second LIMIT 64) INSERT INTO profile_attachments(attachment_id, owner_user_id, admission_room_id, admission_custody_fingerprint, invite_quota_fingerprint, filename, content_type, content, size, created_at, state, expires_at) SELECT printf('bound-avatar-%04d', value), ?, 'general', NULL, ?, 'stored.png', 'image/png', X'00', 1, ?, 'bound', NULL FROM sequence",
-        )
-        .bind(LOCAL_OPERATOR_USER_ID)
-        .bind(SIGNED.as_slice())
-        .bind(now.to_rfc3339())
-        .execute(&store.pool)
-        .await
-        .unwrap_or_else(|error| panic!("insert admission-bound avatars: {error}"));
-        store
-            .store_profile_attachment(
-                &local_principal(),
-                "ordinary.png",
-                "image/png",
-                valid_image(ImageFormat::Png),
-            )
-            .await
-            .unwrap_or_else(|error| panic!("store ordinary avatar: {error}"));
-
-        let isolated = fixture().await;
-        sqlx::query(
-            "WITH digits(value) AS (VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9),(10),(11),(12),(13),(14),(15)), sequence(value) AS (SELECT first.value * 256 + second.value * 16 + third.value FROM digits AS first CROSS JOIN digits AS second CROSS JOIN digits AS third) INSERT INTO profile_attachments(attachment_id, owner_user_id, admission_room_id, admission_custody_fingerprint, invite_quota_fingerprint, filename, content_type, content, size, created_at, state, expires_at) SELECT printf('pending-avatar-%018d', value), NULL, 'general', CAST(printf('%032d', value) AS BLOB), ?, 'stored.png', 'image/png', X'00', 1, ?, 'admission_pending', ? FROM sequence",
+            "WITH digits(value) AS (VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9),(10),(11),(12),(13),(14),(15)), sequence(value) AS (SELECT first.value * 256 + second.value * 16 + third.value FROM digits AS first CROSS JOIN digits AS second CROSS JOIN digits AS third) INSERT INTO prejoin_avatar_assets(attachment_id, room_id, custody_fingerprint, invite_fingerprint, filename, content_type, content, size, created_at, expires_at) SELECT printf('seed-avatar-%018d', value), 'general', CAST(printf('%032d', value) AS BLOB), ?, 'stored.png', 'image/png', X'00', 1, ?, ? FROM sequence WHERE value < ?",
         )
         .bind(SIGNED.as_slice())
         .bind(now.to_rfc3339())
         .bind((now + Duration::hours(1)).timestamp())
-        .execute(&isolated.pool)
+        .bind(crate::raster_assets::MAX_LIVE_RASTER_ASSETS - 1)
+        .execute(&store.pool)
         .await
-        .unwrap_or_else(|error| panic!("insert runtime-bound pending avatars: {error}"));
+        .unwrap_or_else(|error| panic!("seed absolute-limit avatars: {error}"));
+        let first = store_prejoin_avatar(
+            &store,
+            &join_credential(),
+            &[0x31; 32],
+            "boundary.png",
+            "image/png",
+            valid_image(ImageFormat::Png),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("fill last absolute-limit slot: {error}"));
+        let replacement = store_prejoin_avatar(
+            &store,
+            &join_credential(),
+            &[0x31; 32],
+            "replacement.png",
+            "image/png",
+            valid_image(ImageFormat::Png),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("replace at absolute limit: {error}"));
+        assert_ne!(replacement.id, first.id);
+        assert!(!attachment_exists(&store, &first.id).await);
+
         assert_rejected_code(
-            isolated
-                .store_profile_attachment(
-                    &local_principal(),
-                    "over-runtime-limit.png",
-                    "image/png",
-                    valid_image(ImageFormat::Png),
-                )
-                .await,
+            store_prejoin_avatar(
+                &store,
+                &join_credential(),
+                &[0x32; 32],
+                "over-limit.png",
+                "image/png",
+                valid_image(ImageFormat::Png),
+            )
+            .await,
             "attachment_quota_reached",
         );
     }
@@ -530,34 +449,16 @@ mod tests {
         encoded.into_inner()
     }
 
-    fn local_principal() -> AuthenticatedPrincipal {
-        AuthenticatedPrincipal {
-            principal_id: LOCAL_OPERATOR_USER_ID.to_owned(),
-            participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
-            display_name: "Host".to_owned(),
-            room_id: "general".to_owned(),
-            client_kind: ClientKind::Browser,
-            invite_scope: InviteScope::ReadWrite,
-            is_operator: true,
-            capabilities: CapabilitySet::local_operator(
-                ClientKind::Browser,
-                InviteScope::ReadWrite,
-            ),
-        }
-    }
-
     async fn pending_count(store: &SqliteStore) -> i64 {
-        sqlx::query_scalar(
-            "SELECT COUNT(*) FROM profile_attachments WHERE state = 'admission_pending'",
-        )
-        .fetch_one(&store.pool)
-        .await
-        .unwrap_or_else(|error| panic!("count pending avatars: {error}"))
+        sqlx::query_scalar("SELECT COUNT(*) FROM prejoin_avatar_assets")
+            .fetch_one(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("count pending avatars: {error}"))
     }
 
     async fn attachment_exists(store: &SqliteStore, attachment_id: &str) -> bool {
         sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM profile_attachments WHERE attachment_id = ?",
+            "SELECT COUNT(*) FROM prejoin_avatar_assets WHERE attachment_id = ?",
         )
         .bind(attachment_id)
         .fetch_one(&store.pool)

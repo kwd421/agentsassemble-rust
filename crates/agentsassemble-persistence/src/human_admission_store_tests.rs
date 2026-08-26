@@ -211,7 +211,7 @@ async fn valid_custody_never_promotes_corrupt_avatar_metadata() {
         "/api/attachments/avatar_corrupt?view=1",
     );
     sqlx::query(
-        "INSERT INTO profile_attachments(attachment_id, owner_user_id, admission_room_id, admission_custody_fingerprint, invite_quota_fingerprint, filename, content_type, content, size, created_at, state, expires_at) VALUES ('avatar_corrupt', NULL, 'general', ?, ?, 'avatar.png', 'image/png', X'00', 0, ?, 'admission_pending', ?)",
+        "INSERT INTO prejoin_avatar_assets(attachment_id, room_id, custody_fingerprint, invite_fingerprint, filename, content_type, content, size, created_at, expires_at) VALUES ('avatar_corrupt', 'general', ?, ?, 'avatar.png', 'image/png', X'0000', 1, ?, ?)",
     )
     .bind(request.avatar_custody_fingerprint().as_slice())
     .bind(SIGNED_ONE.as_slice())
@@ -225,16 +225,16 @@ async fn valid_custody_never_promotes_corrupt_avatar_metadata() {
     assert_eq!(invite_use_count(&store, SIGNED_ONE).await, 0);
     assert_eq!(count(&store, "human_room_sessions").await, 0);
     assert_eq!(
-        sqlx::query_scalar::<_, String>(
-            "SELECT state FROM profile_attachments WHERE attachment_id = 'avatar_corrupt'",
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM prejoin_avatar_assets WHERE attachment_id = 'avatar_corrupt'",
         )
         .fetch_one(&store.pool)
         .await
-        .unwrap_or_else(|error| panic!("read corrupt avatar state: {error}")),
-        "admission_pending"
+        .unwrap_or_else(|error| panic!("read corrupt prejoin avatar: {error}")),
+        1
     );
 
-    sqlx::query("UPDATE profile_attachments SET size = 1 WHERE attachment_id = 'avatar_corrupt'")
+    sqlx::query("UPDATE prejoin_avatar_assets SET size = 2 WHERE attachment_id = 'avatar_corrupt'")
         .execute(&store.pool)
         .await
         .unwrap_or_else(|error| panic!("repair pending avatar metadata: {error}"));
@@ -250,12 +250,12 @@ async fn valid_custody_never_promotes_corrupt_avatar_metadata() {
     );
     assert_eq!(
         sqlx::query_scalar::<_, String>(
-            "SELECT state FROM profile_attachments WHERE attachment_id = 'avatar_corrupt'",
+            "SELECT state FROM profile_avatar_assets WHERE attachment_id = 'avatar_corrupt'",
         )
         .fetch_one(&store.pool)
         .await
         .unwrap_or_else(|error| panic!("read bound avatar state: {error}")),
-        "bound"
+        "current"
     );
 }
 
