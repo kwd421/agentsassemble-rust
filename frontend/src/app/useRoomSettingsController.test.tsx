@@ -241,7 +241,7 @@ describe("useRoomSettingsController", () => {
     );
   });
 
-  it("keeps remote-session preferences unavailable without background requests", async () => {
+  it("keeps tokenless remote contexts unavailable for preference load and writes", async () => {
     const hook = renderHook(() =>
       useRoomSettingsController({
         activeRoom: roomA,
@@ -258,10 +258,22 @@ describe("useRoomSettingsController", () => {
         error: { message: expect.stringContaining("Rust 초대·세션 권한") },
       })
     );
-    act(() => hook.result.current.refresh(roomA));
+    await act(async () => {
+      hook.result.current.refresh(roomA);
+      await expect(
+        hook.result.current.updateAppearance(roomA, { notifications: "mute" })
+      ).rejects.toThrow("Rust 초대·세션 권한");
+      await expect(
+        hook.result.current.updateChannelSetting(roomA, "lobby", {
+          notifications: "mute",
+        })
+      ).rejects.toThrow("Rust 초대·세션 권한");
+    });
 
     expect(apiMocks.fetchRoomSettings).not.toHaveBeenCalled();
     expect(apiMocks.saveRoomSettings).not.toHaveBeenCalled();
+    expect(hook.result.current.appearanceFor(roomA).notifications).toBe("mentions");
+    expect(hook.result.current.channelSettingsFor(roomA)).toEqual({});
   });
 
   it("rolls an optimistic preference back to the last confirmed value on failure", async () => {
