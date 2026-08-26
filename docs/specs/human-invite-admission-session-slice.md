@@ -950,6 +950,20 @@ while promoting the same opaque ID through the profile lifecycle.
   is made. Direct old/new function diff, all 58 server unit tests, warning-denied
   workspace Clippy, and the architecture/source/check gates pass.
 
+### WebSocket lifecycle separated from HTTP admission
+
+- Prior structure and intent: `web.rs` combined listener/HTTP routing with the
+  authenticated socket select loop. Human-session revocation, expiry, and outbound
+  validation belong to the connection lifetime rather than the HTTP adapter, so the
+  unchanged loop now has one 166-line owner and `web.rs` is 463 lines.
+- Preserved contract and cost: the loop body is identical apart from its module-visible
+  name. Upgrade limits, connection lease lifetime, ingress accounting, ordering,
+  command replies, publication, and catalog delivery are unchanged. No allocation,
+  task, branch, timer, trait, fallback, or synchronization owner was added, and no
+  performance improvement is claimed. Direct function diff and the mandatory server
+  tests, warning-denied Clippy, architecture, source, and workspace checks verify the
+  move before session-specific behavior is introduced.
+
 ### One durable human-session resolver instead of repeated partial checks
 
 - Prior cost and threat: the original session service verifies a fingerprinted
