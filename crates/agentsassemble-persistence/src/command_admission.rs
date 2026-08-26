@@ -5,7 +5,7 @@ use sqlx::{Row, Sqlite, Transaction};
 use crate::{
     CommandOutcome, PersistenceError, SqliteStore,
     agent_lifecycle_reservations::reject_reserved_request_id, authority::active_room_for_principal,
-    room_write_budget::reserve_room_write_budget,
+    participant_leave::PARTICIPANT_LEAVE_ACTION, room_write_budget::reserve_room_write_budget,
 };
 
 pub(crate) async fn existing_command(
@@ -126,10 +126,15 @@ impl SqliteStore {
             &payload_hash,
         )
         .await?;
-        let required = matches!(
-            existing,
-            None | Some(ExistingRequestIdentity::RejectedLifecycle)
-        );
+        let self_disabling_leave = action == PARTICIPANT_LEAVE_ACTION
+            && !principal.is_operator
+            && principal.capabilities.participant_leave
+            && payload.as_object().is_some_and(serde_json::Map::is_empty);
+        let required = !self_disabling_leave
+            && matches!(
+                existing,
+                None | Some(ExistingRequestIdentity::RejectedLifecycle)
+            );
         transaction.commit().await?;
         Ok(required)
     }

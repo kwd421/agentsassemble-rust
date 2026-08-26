@@ -17,6 +17,7 @@ use crate::{
     HumanInvite, PersistenceError, PreparedHumanAdmission, SqliteStore,
     human_admission_identity::{persist_identity, resolve_admission_avatar, resolve_identity},
     human_invite_preflight::{load_invite_and_room, require_credential_binding},
+    human_session_authority::fixed_session_fingerprint,
     profile_store::decode_bound_profile,
 };
 
@@ -412,7 +413,7 @@ async fn replace_live_sessions(
     .fetch_all(&mut **transaction)
     .await?;
     rows.into_iter()
-        .map(|row| fixed_digest(row.get::<Vec<u8>, _>("session_fingerprint")))
+        .map(|row| fixed_session_fingerprint(row.get::<Vec<u8>, _>("session_fingerprint")))
         .collect()
 }
 
@@ -621,12 +622,6 @@ fn derive_session_bearer(key: &[u8; 32], admission_key: &[u8; 32]) -> IssuedBear
         bearer,
         fingerprint,
     }
-}
-
-fn fixed_digest(value: Vec<u8>) -> Result<[u8; 32], PersistenceError> {
-    value
-        .try_into()
-        .map_err(|_| invalid_state("Stored session fingerprint has an invalid length."))
 }
 
 fn timestamp(value: i64) -> Result<DateTime<Utc>, PersistenceError> {

@@ -243,3 +243,9 @@ fn invalid_state(message: impl Into<String>) -> PersistenceError {
         message: message.into(),
     }
 }
+
+pub(crate) fn fixed_session_fingerprint(value: Vec<u8>) -> Result<[u8; 32], PersistenceError> {
+    value
+        .try_into()
+        .map_err(|_| invalid_state("Stored session fingerprint has an invalid length."))
+}
