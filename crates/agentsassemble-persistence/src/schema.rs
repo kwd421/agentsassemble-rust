@@ -101,7 +101,8 @@ const TABLES: &[TableDefinition] = &[
             "invite_id TEXT PRIMARY KEY CHECK(",
             "typeof(invite_id) = 'text' AND length(invite_id) = 16 ",
             "AND invite_id = lower(invite_id) ",
-            "AND invite_id NOT GLOB '*[^0-9a-f]*'), ",
+            "AND invite_id NOT GLOB '*[^0-9a-f]*' ",
+            "AND invite_id = lower(substr(hex(signed_token_fingerprint), 1, 16))), ",
             "signed_token_fingerprint BLOB NOT NULL UNIQUE ",
             "CHECK(typeof(signed_token_fingerprint) = 'blob' ",
             "AND length(signed_token_fingerprint) = 32), ",
@@ -674,6 +675,17 @@ mod tests {
         .await
         .unwrap_or_else(|error| panic!("insert profile: {error}"));
 
+        assert!(
+            sqlx::query(
+                "INSERT INTO room_invites(invite_id, signed_token_fingerprint, join_code_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at) VALUES ('aaaaaaaaaaaaaaaa', ?, ?, 'room-a', 'participant-a', 'Guest', 'read_write', 1, 0, 200, 0, 'user-a', 100)",
+            )
+            .bind(vec![0xBB; 32])
+            .bind(vec![0xBC; 32])
+            .execute(&pool)
+            .await
+            .is_err()
+        );
+
         for (index, (configured, effective)) in [
             (0_i64, 128_i64),
             (1, 1),
@@ -686,12 +698,13 @@ mod tests {
         .into_iter()
         .enumerate()
         {
-            let accepted_id = format!("{:016x}", index + 1);
+            let accepted_marker = index as u8 + 1;
+            let accepted_id = format!("{accepted_marker:02x}").repeat(8);
             sqlx::query(
                 "INSERT INTO room_invites(invite_id, signed_token_fingerprint, join_code_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at) VALUES (?, ?, ?, 'room-a', 'participant-a', 'Guest', 'read_write', ?, ?, 200, 0, 'user-a', 100)",
             )
             .bind(&accepted_id)
-            .bind(vec![index as u8 + 1; 32])
+            .bind(vec![accepted_marker; 32])
             .bind(vec![index as u8 + 0x21; 32])
             .bind(configured)
             .bind(effective)
@@ -715,13 +728,14 @@ mod tests {
                 }
             );
 
-            let rejected_id = format!("{:016x}", index + 0x101);
+            let rejected_marker = index as u8 + 0x41;
+            let rejected_id = format!("{rejected_marker:02x}").repeat(8);
             assert!(
                 sqlx::query(
                     "INSERT INTO room_invites(invite_id, signed_token_fingerprint, join_code_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at) VALUES (?, ?, ?, 'room-a', 'participant-a', 'Guest', 'read_write', ?, ?, 200, 0, 'user-a', 100)",
                 )
                 .bind(rejected_id)
-                .bind(vec![index as u8 + 0x41; 32])
+                .bind(vec![rejected_marker; 32])
                 .bind(vec![index as u8 + 0x61; 32])
                 .bind(configured)
                 .bind(effective + 1)
