@@ -79,3 +79,74 @@ async fn websocket_leave_acks_once_then_revokes_every_exact_session_socket() {
     );
     server.stop().await;
 }
+
+#[tokio::test]
+async fn http_leave_rejects_nonempty_contract_then_revokes_the_live_session() {
+    let (store, credentials) = fixture(InviteScope::ReadOnly).await;
+    let server = start(store.clone()).await;
+    let client = Client::new();
+    let admitted = join(
+        &client,
+        &server.base_url,
+        credentials.join_code(),
+        &format!("aad1_{}", URL_SAFE_NO_PAD.encode([0x76; 32])),
+        "923e4567-e89b-12d3-a456-426614174000",
+        "HTTP Leaving Guest",
+        "",
+    )
+    .await;
+    let session_token = canonical_session_token(&admitted);
+    let participant_id = admitted["agent_id"]
+        .as_str()
+        .unwrap_or_else(|| panic!("HTTP admission omitted participant identity"));
+
+    let invalid = client
+        .post(format!("{}/api/room-invite/leave", server.base_url))
+        .bearer_auth(session_token)
+        .json(&json!({"participant_id": participant_id}))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("send invalid HTTP leave: {error}"));
+    assert_eq!(invalid.status(), reqwest::StatusCode::BAD_REQUEST);
+    assert_eq!(
+        invalid
+            .json::<serde_json::Value>()
+            .await
+            .unwrap_or_else(|error| panic!("decode invalid HTTP leave: {error}"))["code"],
+        "invalid_participant_leave"
+    );
+    let mut idle_socket = open_session_socket(&client, &server.base_url, session_token).await;
+
+    let left = client
+        .post(format!("{}/api/room-invite/leave", server.base_url))
+        .bearer_auth(session_token)
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("send HTTP leave: {error}"));
+    assert_eq!(left.status(), reqwest::StatusCode::OK);
+    assert_eq!(left.headers()["cache-control"], "private, no-store");
+    let left = left
+        .json::<serde_json::Value>()
+        .await
+        .unwrap_or_else(|error| panic!("decode HTTP leave: {error}"));
+    assert_eq!(left, json!({"status": "left", "agent_id": participant_id}));
+    assert!(idle_socket.wait_closed().await);
+
+    let rejected = client
+        .post(format!("{}/api/session-tickets/socket", server.base_url))
+        .bearer_auth(session_token)
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("exchange HTTP-ended session: {error}"));
+    assert_eq!(rejected.status(), reqwest::StatusCode::UNAUTHORIZED);
+    let snapshot = store
+        .snapshot("general", 0, 200)
+        .await
+        .unwrap_or_else(|error| panic!("read HTTP post-leave snapshot: {error}"));
+    assert!(snapshot.participants.iter().any(|participant| {
+        participant.participant_id == participant_id
+            && participant.status == ParticipantStatus::Left
+    }));
+    server.stop().await;
+}
