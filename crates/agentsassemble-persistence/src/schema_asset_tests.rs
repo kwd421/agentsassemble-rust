@@ -1,4 +1,5 @@
 use super::tests::installed_schema;
+use crate::raster_assets::MAX_RASTER_BYTES;
 
 async fn seed_asset_authority(pool: &sqlx::SqlitePool) {
     sqlx::query(
@@ -13,6 +14,54 @@ async fn seed_asset_authority(pool: &sqlx::SqlitePool) {
     .execute(pool)
     .await
     .unwrap_or_else(|error| panic!("insert profile: {error}"));
+}
+
+#[tokio::test]
+async fn schema_item_limits_match_the_runtime_raster_owner() {
+    let pool = installed_schema().await;
+    seed_asset_authority(&pool).await;
+    let limit =
+        i64::try_from(MAX_RASTER_BYTES).unwrap_or_else(|error| panic!("raster limit: {error}"));
+
+    sqlx::query(
+        "INSERT INTO profile_avatar_assets(attachment_id, owner_user_id, filename, content_type, content, size, created_at, state, expires_at) VALUES ('profile-limit', 'user-1', 'avatar.png', 'image/png', X'00', ?, '2026-08-26T00:00:00Z', 'pending', 1)",
+    )
+    .bind(limit)
+    .execute(&pool)
+    .await
+    .unwrap_or_else(|error| panic!("insert profile item at limit: {error}"));
+    sqlx::query(
+        "INSERT INTO prejoin_avatar_assets(attachment_id, room_id, custody_fingerprint, invite_fingerprint, filename, content_type, content, size, created_at, expires_at) VALUES ('prejoin-limit', 'general', ?, ?, 'avatar.png', 'image/png', X'00', ?, '2026-08-26T00:00:00Z', 1)",
+    )
+    .bind(vec![1; 32])
+    .bind(vec![2; 32])
+    .bind(limit)
+    .execute(&pool)
+    .await
+    .unwrap_or_else(|error| panic!("insert prejoin item at limit: {error}"));
+    sqlx::query(
+        "INSERT INTO room_appearance_assets(asset_id, room_id, pending_owner_user_id, filename, content_type, content, size, created_at, state, expires_at) VALUES ('ra_ffffffffffffffffffffffffffffffff', 'general', 'user-1', 'avatar.png', 'image/png', X'00', ?, '2026-08-26T00:00:00Z', 'pending', 1)",
+    )
+    .bind(limit)
+    .execute(&pool)
+    .await
+    .unwrap_or_else(|error| panic!("insert room item at limit: {error}"));
+
+    for table in [
+        "profile_avatar_assets",
+        "prejoin_avatar_assets",
+        "room_appearance_assets",
+    ] {
+        let query = format!("UPDATE {table} SET size = ?");
+        assert!(
+            sqlx::query(sqlx::AssertSqlSafe(query))
+                .bind(limit + 1)
+                .execute(&pool)
+                .await
+                .is_err(),
+            "{table} accepted the runtime raster limit plus one"
+        );
+    }
 }
 
 #[tokio::test]
