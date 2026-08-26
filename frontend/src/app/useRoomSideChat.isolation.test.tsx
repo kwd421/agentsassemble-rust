@@ -39,6 +39,7 @@ function session(sessionToken: string, agentId: string): RoomGuestSession {
     inviteScope: "room",
     expiresAt: "2099-01-01T00:00:00Z",
     joinedAt: "2026-08-16T00:00:00Z",
+    operator: false,
     serverSurface: {
       server_id: "11111111-1111-4111-8111-111111111111",
       authority_lineage_id: "22222222-2222-4222-8222-222222222222",

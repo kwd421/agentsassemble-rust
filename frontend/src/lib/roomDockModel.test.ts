@@ -13,6 +13,7 @@ const SESSION: RoomGuestSession = {
   inviteScope: "room",
   expiresAt: "2099-01-01T00:00:00Z",
   joinedAt: "2026-07-15T00:00:00Z",
+  operator: false,
   roomLabel: "Room One",
   serverSurface: {
     server_id: "11111111-1111-4111-8111-111111111111",
