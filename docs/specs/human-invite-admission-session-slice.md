@@ -74,9 +74,12 @@ The existing `SqliteStore` remains the only durable writer and continues to use 
 SQLite connection. The clean current schema adds these records; no previous schema
 is migrated, imported, or interpreted.
 
-- `room_invites` owns invite UUID, token fingerprint, room, base participant and
-  display identity, scope, configured maximum uses, use count, expiry, revocation,
-  creator, and creation time. A generated classification derives `one_use` exactly
+- `room_invites` owns the current public 16-character lowercase-hex invite ID,
+  complete 32-byte fingerprints for both current invite credentials, room, base
+  participant and display identity, scope, configured maximum uses, use count,
+  expiry, revocation, creator, and creation time. The public ID is the first 16 hex
+  characters of the signed-token SHA-256, while the full digest remains the unique
+  lookup authority. A generated classification derives `one_use` exactly
   when configured maximum uses is 1 and `reusable` otherwise; it is not a second
   writable policy value. The effective use ceiling is the deterministic capped
   function above, not a second stored policy value. Raw invite tokens are never
@@ -130,14 +133,24 @@ There is no date, `Math.random`, short-token, or ephemeral-memory fallback. A on
 admission binds this credential for proof/retry custody but never registers it as a
 reusable identity.
 
-Invite tokens use operating-system randomness and the existing `aaj1_` prefix; the
-human response exposes that one value through the current `invite_token` and
-`join_code` aliases rather than retaining a second signed LAN bearer. A small
-non-serializable, non-debuggable session issuer uses a separate operating-system-
-random 32-byte HMAC-SHA256 key stored by the existing permission-checked persistent
-host-key owner. Invite and session fingerprints remain ordinary SHA-256. The issuer
-does not reuse the Ed25519 host key or process-local host-control secret, log key
-material, or put bearer material in events or idempotency JSON.
+Human invite creation preserves both current credentials. `invite_token` is the
+signed `aai1.<claims>.<HMAC-SHA256>` value, while `join_code` is `aaj1_` plus exactly
+24 operating-system-random bytes encoded as unpadded base64url; `join_url` carries
+the latter. Both are accepted by browser admission, resolve the same durable invite,
+and remain distinct opaque values. The signed claims retain the current schema,
+room and display identity, URLs, expiry, nonce, and permission fields; successful
+verification must also find the exact current row and match its canonical authority
+fields before admission. No rowless signed-token or old-token compatibility path is
+introduced.
+
+The existing permission-checked host-key owner supplies the persisted 32-byte HMAC
+key for both current invite signatures and deterministic sessions, matching the
+original single invite-secret owner. The fixed `aai1.` signing input and fixed
+session-bearer context are disjoint HMAC message domains; no second secret, cache, or
+derivation layer is needed. A small non-serializable, non-debuggable session issuer
+uses that key without reusing the Ed25519 host key or process-local host-control
+secret. Raw invite/session credentials and key material never enter logs, events, or
+idempotency JSON; only ordinary SHA-256 fingerprints are durable.
 
 The bearer is exactly `aas1.` plus unpadded base64url of the complete 32-byte
 `HMAC-SHA256(session_key, "agentsassemble-human-session-bearer-v1\0" ||
@@ -227,15 +240,18 @@ the Python coordinator's separate JSON invite
 repository, identity database, room repository, workflow journal, compensation,
 and resume saga are not reimplemented.
 
-For a one-use invite the admission key binds invite fingerprint, browser credential
-fingerprint, and canonical request UUID. This credential binding prevents a second
-invite holder who guesses or obtains only the request UUID from recovering the
-deterministic session bearer. For a reusable invite the key binds only invite and
-browser credential fingerprints: request UUID is deliberately excluded, while the
-first request UUID remains audit/result data. Thus the same reusable invite/device
-and same payload returns the original identity, result, and live bearer even with a
-new request UUID, without consuming another use; a changed payload conflicts and a
-different device is a distinct reusable principal. The payload hash covers every
+For a one-use invite the admission key binds the exact presented invite-credential
+fingerprint, browser credential fingerprint, and canonical request UUID. This
+credential binding prevents a second invite holder who guesses or obtains only the
+request UUID from recovering the deterministic session bearer. For a reusable invite
+the key binds only the exact presented invite-credential and browser-credential
+fingerprints: request UUID is deliberately excluded, while the first request UUID
+remains audit/result data. Thus the same credential/device and same payload returns
+the original identity, result, and live bearer even with a new request UUID, without
+consuming another use; deliberately switching between the separately exposed
+`aai1` and `aaj1_` credentials retains the original distinct admission identity. A
+changed payload conflicts and a different device is a distinct reusable principal.
+The payload hash covers every
 field that can change identity or membership, including display name, client ID,
 participant type, and optional avatar reference. Client input never chooses user ID,
 participant ID, capabilities, role, mute state, or session expiry.
@@ -380,38 +396,43 @@ flag is added meanwhile.
 
 ## Evidence-driven simplifications and costs
 
-### One browser invite credential instead of a dual-token record
+### Dual current credentials without duplicate durable authority
 
-- Prior cost and authority split: original create emits both an
-  `aai1.<claims>.<HMAC>` token and an independent `aaj1_` lookup token, then stores
-  the second token's fingerprint plus copies of the signed claims. The current human
-  browser copies `join_url`, which contains the `aaj1_` value, and admission resolves
-  that value to the durable invite before applying current expiry, revocation, scope,
-  client-kind, and use-limit policy. The self-contained signed token belongs to the
-  separately excluded native remote-client path, not that browser flow.
-- Change intent: create one `aaj1_` credential from exactly 24 operating-system-
-  random bytes and return that same opaque value through the existing `invite_token`
-  and `join_code` response aliases. Persist only its 32-byte SHA-256 fingerprint and
-  the canonical invite row. The join URL carries the same credential. No signing
-  secret, signed-claims parser, second nonce, or compatibility reader is introduced
-  into this human slice.
-- Preserved contract: the reachable human link retains its prefix, 32-character
-  unpadded-base64url body, 37-character total shape, 192-bit random strength,
-  fingerprint-only persistence, room binding, expiry, revocation, configured and
-  effective use limits, and both response field names. Tokens remain opaque; an old
-  token is not imported or reinterpreted. A later native remote-client slice must
-  own its own current contract rather than widening this browser authority.
-- Observed cost: creation performs one 24-byte random fill, one base64url encoding,
-  and one SHA-256 over the 37-byte token. It writes one 32-byte fingerprint and no
-  duplicate claims or nonce. Read/preflight performs one indexed fingerprint lookup
-  and does not verify or decode client-supplied claims. No latency improvement is
-  claimed until measured against the actual route.
-- Verification: fixed-shape tests assert canonical prefix/body length and reject
-  malformed or noncanonical encodings before lookup; database inspection finds no
-  raw token; response aliases and join URL carry the exact same value; revoke,
-  expiry, wrong room, and every configured use-limit boundary are decided by the
-  current row. Human admission rejects the excluded `aai1` shape rather than adding
-  a legacy or fallback path.
+- Prior cost and observed behavior: original browser invite create exposes a signed
+  `aai1.<claims>.<HMAC>` `invite_token` and an independent `aaj1_` `join_code`; the
+  UI copies the latter through `join_url`, but the browser `/join` endpoint also
+  accepts the former. Removing `aai1` would contract a reachable direct-HTTP path,
+  not merely delete an unused native-client implementation. The original separately
+  stores copied claims and another `join_nonce` beside those credentials.
+- Change intent: preserve both raw credential formats and response fields, but let
+  one canonical invite row own current policy. Store the complete signed-token and
+  join-code SHA-256 fingerprints in separate unique BLOB columns. The signed token
+  uses the already persisted HMAC key with its disjoint `aai1.` message domain; the
+  join code retains exactly 24 random bytes. The signed token's own nonce remains in
+  its claims, while the canonical one-use row and terminal admission result replace
+  the redundant stored `join_nonce` replay authority.
+- Preserved contract: `invite_token` remains signed `aai1`, `join_code`/`join_url`
+  remain independent `aaj1_` with a 32-character body and 37-character total shape,
+  both can drive browser admission, and the public invite ID remains the first 16 hex
+  characters of the signed-token digest. Binding idempotency to the exact presented
+  credential preserves the current distinction when a reusable caller switches
+  between them. Current room, expiry, revocation, scope, client kind, and use limits
+  still come from the durable row; no previous token is imported or reinterpreted.
+- Observed cost: creation performs the current signed-claims nonce fill and 24-byte
+  join-code fill, one HMAC-SHA256, two token SHA-256 hashes, and two indexed BLOB
+  inserts. It avoids a third random `join_nonce`, copied durable claims, and another
+  replay set. `aaj1_` preflight performs one indexed lookup. `aai1` additionally
+  performs bounded decode plus one HMAC verification and then the same indexed
+  current-row lookup. No CPU, disk, or latency improvement is claimed until the
+  actual route is measured.
+- Verification: fixed vectors lock signed claim names, `aai1` signature input,
+  constant-time signature comparison, `aaj1_` canonical 24-byte decoding, both
+  fingerprints, public ID derivation, and distinct response values. Database
+  inspection finds neither raw credential nor copied signed claims. Browser tests
+  admit through each create response field and the join URL, while tamper, malformed
+  encoding, row/claim mismatch, revoke, expiry, wrong room, and every configured
+  use-limit boundary fail from their exact current authority. No generic token parser,
+  legacy reader, or fallback branch is added.
 
 ### Single transaction instead of the original admission saga
 
