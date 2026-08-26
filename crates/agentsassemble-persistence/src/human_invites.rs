@@ -37,11 +37,6 @@ pub struct NewHumanInvite {
     pub created_at: DateTime<Utc>,
 }
 
-pub struct HumanInviteRevocation {
-    pub invite_id: String,
-    pub ended_session_fingerprints: Vec<[u8; 32]>,
-}
-
 impl HumanInvite {
     #[must_use]
     pub const fn is_reusable(&self) -> bool {
@@ -104,20 +99,19 @@ impl SqliteStore {
         Ok(stored)
     }
 
-    /// Revokes one room-owned invite and every active session derived from it.
+    /// Revokes one room-owned invite for future admissions.
     ///
-    /// Returned fingerprints let the server notify affected live connections only after commit.
-    /// Existing revoked rows remain successful and return no already-ended sessions.
+    /// Existing revoked rows remain successful. Established sessions are separate authority and
+    /// deliberately remain live; their exact retry and revocation lifecycle does not belong here.
     ///
     /// # Errors
     ///
-    /// Fails on an invalid public ID, stale manager authority, malformed stored session
-    /// fingerprints, or database errors.
+    /// Fails on an invalid public ID, stale manager authority, or database errors.
     pub async fn revoke_human_invite_for_local_manager(
         &self,
         manager: &RoomUserIdentity,
         invite_id: &str,
-    ) -> Result<Option<HumanInviteRevocation>, PersistenceError> {
+    ) -> Result<bool, PersistenceError> {
         if !is_invite_id(invite_id) {
             return Err(rejected(
                 "invalid_human_invite_id",
@@ -140,26 +134,8 @@ impl SqliteStore {
         .bind(&current.room_id)
         .fetch_optional(&mut *transaction)
         .await?;
-        let Some(invite_id) = found else {
-            transaction.commit().await?;
-            return Ok(None);
-        };
-        let session_rows = sqlx::query(
-            "UPDATE human_room_sessions SET state = 'ended' WHERE invite_id = ? AND room_id = ? AND state = 'active' RETURNING session_fingerprint",
-        )
-        .bind(&invite_id)
-        .bind(&current.room_id)
-        .fetch_all(&mut *transaction)
-        .await?;
-        let ended_session_fingerprints = session_rows
-            .iter()
-            .map(|row| fingerprint(row, "session_fingerprint"))
-            .collect::<Result<Vec<_>, _>>()?;
         transaction.commit().await?;
-        Ok(Some(HumanInviteRevocation {
-            invite_id,
-            ended_session_fingerprints,
-        }))
+        Ok(found.is_some())
     }
 
     /// Finds one canonical human invite by the complete signed-token fingerprint.
@@ -355,7 +331,7 @@ mod tests {
     const GUEST_PARTICIPANT_ID: &str = "guest-ab";
 
     #[tokio::test]
-    async fn revoke_ends_exact_active_sessions_and_replays_for_existing_invite() {
+    async fn revoke_blocks_future_admission_without_ending_existing_sessions() {
         let store = fixture().await;
         let manager = store
             .authorize_local_room_manager(
@@ -374,16 +350,13 @@ mod tests {
         add_guest_human(&store).await;
         insert_active_session(&store, &invite.invite_id, [0x33; 32]).await;
 
-        let Some(revoked) = store
-            .revoke_human_invite_for_local_manager(&manager, &invite.invite_id)
-            .await
-            .unwrap_or_else(|error| panic!("revoke invite: {error}"))
-        else {
-            panic!("created invite must exist");
-        };
-        assert_eq!(revoked.invite_id, invite.invite_id);
-        assert_eq!(revoked.ended_session_fingerprints, vec![[0x33; 32]]);
-        assert_eq!(stored_session_state(&store).await, "ended");
+        assert!(
+            store
+                .revoke_human_invite_for_local_manager(&manager, &invite.invite_id)
+                .await
+                .unwrap_or_else(|error| panic!("revoke invite: {error}"))
+        );
+        assert_eq!(stored_session_state(&store).await, "active");
         assert!(
             store
                 .human_invite_by_signed_fingerprint(&invite.signed_token_fingerprint)
@@ -392,18 +365,18 @@ mod tests {
                 .is_some_and(|stored| stored.revoked)
         );
 
-        let replay = store
-            .revoke_human_invite_for_local_manager(&manager, &invite.invite_id)
-            .await
-            .unwrap_or_else(|error| panic!("replay invite revoke: {error}"))
-            .unwrap_or_else(|| panic!("revoked invite must remain addressable"));
-        assert!(replay.ended_session_fingerprints.is_empty());
         assert!(
             store
+                .revoke_human_invite_for_local_manager(&manager, &invite.invite_id)
+                .await
+                .unwrap_or_else(|error| panic!("replay invite revoke: {error}"))
+        );
+        assert_eq!(stored_session_state(&store).await, "active");
+        assert!(
+            !store
                 .revoke_human_invite_for_local_manager(&manager, "ffffffffffffffff")
                 .await
                 .unwrap_or_else(|error| panic!("revoke missing invite: {error}"))
-                .is_none()
         );
     }
 
