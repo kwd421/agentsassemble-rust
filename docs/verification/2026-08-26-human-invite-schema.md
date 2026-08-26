@@ -2,8 +2,8 @@
 
 Status: partial slice evidence; canonical invite management, credential
 authentication, read-only preflight, canonical admission inputs, and the atomic
-SQLite admission owner are implemented. HTTP/RoomRuntime dispatch, post-commit
-notification, and the activated browser flow are not implemented by these commits.
+SQLite plus bounded RoomRuntime admission owners are implemented. HTTP transport and
+the activated browser flow are not implemented by these commits.
 
 ## Provenance and scope
 
@@ -22,7 +22,8 @@ notification, and the activated browser flow are not implemented by these commit
   `ddac71c` only separates their schema tests from the production owner.
 - Admission input and durable owner: `0606257`, `61745fb`, `3bbc8c6`, `dbcf928`,
   `657701a`, `6f91ab7`, `ee747ab`, `5f44cec`, `d76b2e6`, and security correction
-  `c99a031`.
+  `c99a031`; queue routing/runtime ownership is `29d3d66`, `cf29ecd`, and `06587b0`,
+  with exact-recovery/avatar correction `28d5d56`.
 - The schema is fresh-only at version 38. No migration, compatibility reader,
   fallback column, or partially upgraded authority is accepted.
 
@@ -716,13 +717,13 @@ continues to bind the equal fingerprint to its user.
 
 ## Atomic human admission owner
 
-Commits `657701a` through `c99a031` implement the durable boundary without activating
+Commits `657701a` through `28d5d56` implement the durable boundary without activating
 an HTTP route. `SqliteStore::admit_human` owns the exact retry/current-gate ordering,
 identity resolution, capacity decision, invite consumption, profile and participant
 state, canonical room events, session replacement/insertion, public result snapshot,
 and deterministic raw bearer return in one SQLite transaction. The serialized result
 contains no raw bearer or credential. Events and replaced fingerprints are returned
-for the later RoomRuntime post-commit owner; this commit does not publish them early.
+only after commit for the RoomRuntime post-commit owner.
 
 ### Prior cost or threat and change intent
 
@@ -736,16 +737,25 @@ for the later RoomRuntime post-commit owner; this commit does not publish them e
   owner performs one HMAC-SHA256, one unpadded base64url encoding, and one SHA-256 of
   the final 48-byte ASCII bearer only on those two successful branches.
 - Optional admission avatars may contain up to 10 MiB. The custody lookup selects
-  only state, room, two fixed fingerprints, and expiry; it does not select or decode
-  the attachment BLOB. This removes a concrete avoidable copy from the admission
-  transaction. No memory or latency number is inferred without a route benchmark.
+  state, room, two fixed fingerprints, expiry, type, size, SQLite `length(content)`,
+  and timestamp; it does not return or decode the attachment BLOB in Rust. This
+  avoids a concrete Rust heap copy while reusing the public attachment read's stored
+  integrity checks. SQLite still evaluates the BLOB length, so no disk/CPU or latency
+  number is inferred without a route benchmark.
 - Manual Daybreaker review found a concrete corruption path in the first durable
   implementation: invalid participant/profile authority could be interpreted as
   liveness loss, commit `state='ended'`, or let a reusable profile patch silently
   repair revision zero. Commit `c99a031` validates room/participant JSON binding,
   human type, and profile revision before liveness or patching. Corruption now returns
-  `invalid_state` and rolls the whole transaction back; only actual expiry, inactive
-  room, or non-Joined membership materializes an active session as ended.
+  `invalid_state` and rolls the whole transaction back. Commit `28d5d56` narrows
+  exact-row writes further: only actual wall-clock expiry materializes an active row
+  as ended; active+inactive-room or active+non-Joined membership is an impossible
+  atomic lifecycle state and fails without a repair write.
+- Server clocks can carry nanoseconds while SQLite timestamps and the original
+  Python contract are microsecond precision. Before `28d5d56`, result JSON could
+  retain a nanosecond that the session column truncated, breaking the first exact
+  retry. Admission now canonicalizes server-owned `now` once at entry and shares that
+  exact value through every gate, profile/event/result, and session write.
 
 ### Preserved contract and actual verification
 
@@ -761,20 +771,58 @@ for the later RoomRuntime post-commit owner; this commit does not publish them e
   participant, event, and session writes all roll back. Controlled participant-type
   and profile-revision corruption proves exact retry leaves the session active and
   reusable re-admission consumes no invite use instead of repairing authority.
-- The complete persistence suite passed 152/152 after `c99a031`. Warning-denied
+- The complete persistence suite passed 156/156 after `28d5d56`. Warning-denied
   all-target/all-feature Clippy, formatter, workspace check, architecture,
   source-growth, policy, and diff gates passed. The production transaction and
-  identity modules are 633 and 266 lines respectively; no 800-line gate exception
-  or threshold change was added. The implementation correction was 186 insertions
-  and 11 deletions across four files, below the 1,000-line commit review threshold.
+  identity modules are 664 and 276 lines respectively; the shared attachment owner
+  is 731 lines. No 800-line gate exception or threshold change was added. The latest
+  correction was 217 insertions and 25 deletions across four files, below the
+  1,000-line commit review threshold.
 - Daybreaker returned `C=0/H=0/M=1` on the pre-fix implementation, then manually
   approved `c99a031` and the complete admission series with `C=0/H=0/M=0`. It
-  confirmed structural validation precedes liveness, only genuine lifecycle loss
-  terminalizes a session, reusable profiles use the shared validator, and errors
-  escape before commit. The critical web review of the complete atomic series is
-  still pending, so cross-review approval is not yet claimed. No Deep Scan,
-  automated scanner, provider, browser flow, or Computer Use resource ran for this
-  inactive-route persistence increment.
+  confirmed structural validation precedes liveness, reusable profiles use the
+  shared validator, and errors escape before commit. A later critical web review
+  returned `C=0/H=0/M=3`: one finding was already closed by `c99a031`; microsecond
+  clock equality, exact terminalization scope, and avatar integrity are closed by
+  `28d5d56`. Both reviewers are manually rereviewing the latest HEAD, so final
+  cross-review approval is not yet claimed. No Deep Scan, automated scanner,
+  provider, browser flow, or Computer Use resource ran for this inactive-HTTP
+  increment.
+
+## Bounded RoomRuntime admission ownership
+
+Commits `29d3d66`, `cf29ecd`, and `06587b0` connect the durable UOW to the existing
+room mutation owner without exposing an HTTP route. The original `room_runtime.rs`
+was already 790 lines. The structure commit moved existing provider-result handling
+and publication retry setup to their existing owning modules; it added no state or
+behavior and lowered the file before admission integration rather than weakening the
+800-line gate.
+
+- Queue cost and intent: human admission is a second variant in the existing
+  128-slot `RoomMutation` queue, not a second channel. Commands and admissions share
+  the same total pending bound and per-room serialization. Full/closed queues return
+  the existing `room_busy`/`room_unavailable` failures without waiting.
+- Routing cost and authority: authenticated signed evidence already carries its room
+  claim and needs no routing query. A join code performs one indexed, one-column
+  `room_id` lookup because the reachable frontend omits `meeting_id`. This lookup is
+  not authority and deliberately ignores revoke/expiry/use gates so it cannot break
+  one-use exact retry ordering; the queued transaction re-resolves every durable
+  binding and gate.
+- Cancellation and post-commit contract: queue acceptance transfers request custody
+  to the room task. A dropped reply receiver does not cancel the dequeued transaction.
+  After commit, the target room drains its durable publication cursor, exact replaced
+  session fingerprints are broadcast, and only then is the raw bearer sent through
+  the non-debuggable oneshot result. Other-room profile projection events remain in
+  their own durable histories and are drained only by those rooms' existing retry or
+  startup owners; they are never sent through the target room broadcaster.
+- Actual verification: three focused runtime tests prove dropped-reply completion,
+  joined/update publication plus replacement notification, and an ordered cross-room
+  case where another room's profile event precedes the target join without crossing
+  streams. The complete server run passed 52 unit and 31 integration tests. Clippy,
+  `make check`, architecture/source-growth/policy gates passed. The runtime commit is
+  437 insertions/25 deletions; `room_runtime.rs` is 798 lines and the focused
+  admission module is 314 lines, with no threshold exception. These tests establish
+  ordering and bounded state, not HTTP latency or throughput improvement.
 
 These are operation counts, bounded data sizes, and observed contract results, not
 an end-to-end performance claim. CPU time, heap peak, SQLite page growth, and request

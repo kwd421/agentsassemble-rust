@@ -1,7 +1,7 @@
 # Human Invite, Admission, and Room Session Slice
 
-Status: atomic SQLite admission owner implemented and locally verified; no Rust
-HTTP/RoomRuntime/browser admission route is active
+Status: atomic SQLite and bounded RoomRuntime admission owners implemented and
+locally verified; no Rust HTTP/browser admission route is active
 
 ## Definition
 
@@ -567,24 +567,27 @@ flag is added meanwhile.
   session-insert failure leaves invite use, profile, device, participant, event, and
   session state unchanged. Exact one-use retry, reusable replacement, changed input,
   terminal expiry, event count, and raw-bearer exclusion tests inspect committed
-  durable/public results. HTTP dispatch and post-commit publication remain outside
-  this completed boundary and are not claimed.
+  durable/public results. RoomRuntime dispatch and post-commit publication are now
+  implemented separately; HTTP activation remains outside this completed boundary.
 - Security correction: manual review found that malformed durable participant or
   profile JSON could be mistaken for liveness loss and committed as `ended`.
   Commit `c99a031` validates exact room/participant bindings, human type, and profile
   revision before liveness, reuses that validated profile decoder before reusable
   profile patching, and returns `invalid_state` so the transaction rolls back.
-  Controlled corruption tests prove both exact retry and reusable identity repair
-  fail closed without ending the live session or consuming another invite use.
+  Commit `28d5d56` further makes only wall-clock expiry eligible for exact-row
+  `ended` materialization. An active session paired with inactive room/non-Joined
+  membership is impossible under the atomic lifecycle contract and fails closed
+  without repairing state. Controlled corruption tests prove exact retry and
+  reusable identity repair leave the live row and invite count unchanged.
 - Observed implementation cost: the durable owner is split by responsibility into a
-  633-line transaction module and a 266-line identity/avatar module, both below the
+  664-line transaction module and a 276-line identity/avatar module, both below the
   mandatory 800-line source gate without exceptions. Optional avatar resolution
-  selects only five metadata columns and does not fetch or decode the attachment
-  BLOB, avoiding a needless copy of an asset that may be as large as the existing
-  10 MiB per-file bound. Bearer issue/recovery performs exactly one HMAC-SHA256, one
-  unpadded base64url encoding, and one SHA-256 fingerprint. No end-to-end CPU,
-  latency, memory, or disk improvement is claimed before the route is active and
-  measured.
+  selects metadata plus SQLite `length(content)` and does not return or decode the
+  attachment BLOB in Rust, avoiding a Rust heap copy of an asset up to the existing
+  10 MiB bound while still checking stored length equality. Bearer issue/recovery
+  performs exactly one HMAC-SHA256, one unpadded base64url encoding, and one SHA-256
+  fingerprint. No end-to-end CPU, latency, memory, or disk improvement is claimed
+  before the HTTP route is active and measured.
 
 ### Binary digests instead of encoded digest text
 
