@@ -27,6 +27,7 @@ mod human_admission_store;
 mod human_invite_preflight;
 mod human_invites;
 mod human_prejoin_attachments;
+mod human_session_authority;
 mod private_fs;
 mod profile_attachments;
 mod profile_store;
@@ -48,6 +49,8 @@ mod turn_queue;
 
 #[cfg(test)]
 mod human_invite_preflight_tests;
+#[cfg(test)]
+mod human_session_authority_tests;
 mod participant_mute;
 mod participant_roles;
 #[cfg(test)]
@@ -81,6 +84,7 @@ pub use human_invite_preflight::{
 };
 pub use human_invites::{HumanInvite, NewHumanInvite};
 pub use human_prejoin_attachments::HumanPrejoinAvatarAuthorization;
+pub use human_session_authority::HumanSessionAuthorization;
 pub use participant_mute::ParticipantMuteMutation;
 pub use private_fs::secure_private_directory;
 pub use profile_attachments::{ProfileAttachment, ProfileAttachmentMetadata};

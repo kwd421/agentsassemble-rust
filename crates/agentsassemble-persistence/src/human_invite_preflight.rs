@@ -5,7 +5,11 @@ use agentsassemble_domain::{
 use chrono::{DateTime, Utc};
 use sqlx::{Row, Sqlite, Transaction, sqlite::SqliteRow};
 
-use crate::{HumanInvite, PersistenceError, SqliteStore, human_invites::decode_human_invite};
+use crate::{
+    HumanInvite, PersistenceError, SqliteStore,
+    human_invites::decode_human_invite,
+    human_session_authority::{ResolvedHumanSession, resolve_human_session},
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HumanInviteCredentialEvidence {
@@ -235,41 +239,28 @@ async fn load_presented_session(
     fingerprint: &[u8; 32],
     now: DateTime<Utc>,
 ) -> Result<PresentedSession, PersistenceError> {
-    let row = sqlx::query(
-        "SELECT sessions.room_id AS session_room_id, sessions.user_id, sessions.participant_id, sessions.client_kind, sessions.invite_scope AS session_invite_scope, sessions.state AS session_state, sessions.expires_at AS session_expires_at, profiles.profile_json, participants.participant_json FROM human_room_sessions AS sessions LEFT JOIN user_profiles AS profiles ON profiles.user_id = sessions.user_id AND profiles.participant_id = sessions.participant_id LEFT JOIN participants ON participants.room_id = sessions.room_id AND participants.participant_id = sessions.participant_id WHERE sessions.session_fingerprint = ?",
-    )
-    .bind(fingerprint.as_slice())
-    .fetch_optional(&mut **transaction)
-    .await?;
-    let Some(row) = row else {
-        return Ok(PresentedSession::NotApplicable);
-    };
-    if row.try_get::<String, _>("session_room_id")? != room_id {
-        return Ok(PresentedSession::NotApplicable);
+    match resolve_human_session(transaction, fingerprint, Some(room_id), now).await? {
+        ResolvedHumanSession::Missing | ResolvedHumanSession::ForeignRoom => {
+            Ok(PresentedSession::NotApplicable)
+        }
+        ResolvedHumanSession::Unavailable => Ok(PresentedSession::Unavailable),
+        ResolvedHumanSession::Live {
+            authorization,
+            avatar_image_url,
+        } => {
+            let principal = authorization.principal();
+            Ok(PresentedSession::Live {
+                person: HumanInvitePreflightPerson {
+                    operator: principal.principal_id == LOCAL_OPERATOR_USER_ID
+                        && principal.participant_id == LOCAL_OPERATOR_PARTICIPANT_ID,
+                    participant_id: principal.participant_id.clone(),
+                    display_name: principal.display_name.clone(),
+                    avatar_image_url,
+                },
+                invite_scope: principal.invite_scope,
+            })
+        }
     }
-    if row.try_get::<String, _>("client_kind")? != "browser" {
-        return Err(invalid_state("Stored human session client is invalid."));
-    }
-    let invite_scope = match row.try_get::<String, _>("session_invite_scope")?.as_str() {
-        "read_write" => InviteScope::ReadWrite,
-        "read_only" => InviteScope::ReadOnly,
-        _ => return Err(invalid_state("Stored human session scope is invalid.")),
-    };
-    let state = row.try_get::<String, _>("session_state")?;
-    if !matches!(state.as_str(), "active" | "ended") {
-        return Err(invalid_state("Stored human session state is invalid."));
-    }
-    if state != "active" || row.try_get::<i64, _>("session_expires_at")? <= now.timestamp_micros() {
-        return Ok(PresentedSession::Unavailable);
-    }
-    let (person, joined) = decode_person(&row, room_id, Some("participant_json"))?;
-    if !joined {
-        return Ok(PresentedSession::Unavailable);
-    }
-    Ok(PresentedSession::Live {
-        person,
-        invite_scope,
-    })
 }
 
 async fn load_device_person(
