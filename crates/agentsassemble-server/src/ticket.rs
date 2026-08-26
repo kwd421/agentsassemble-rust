@@ -651,17 +651,15 @@ impl TicketStore {
         ticket: &str,
         expected: HumanSessionGrantPurpose,
     ) -> Result<ConsumedHumanSessionGrant, TicketError> {
-        self.consume_human_session_at(ticket, expected, Utc::now())
-            .await
+        let grant = self.consume_grant(ticket).await?;
+        Self::resolve_human_session_at(grant, expected, Utc::now())
     }
 
-    async fn consume_human_session_at(
-        &self,
-        ticket: &str,
+    fn resolve_human_session_at(
+        grant: StoredTicketGrant,
         expected: HumanSessionGrantPurpose,
         now: chrono::DateTime<Utc>,
     ) -> Result<ConsumedHumanSessionGrant, TicketError> {
-        let grant = self.consume_grant(ticket).await?;
         let TicketAuthority::HumanSession(public) = grant.authority else {
             return Err(TicketError::Invalid);
         };
@@ -680,10 +678,11 @@ impl TicketStore {
         ticket: &str,
         now: chrono::DateTime<Utc>,
     ) -> Result<HumanSessionAuthorization, TicketError> {
-        Ok(self
-            .consume_human_session_at(ticket, HumanSessionGrantPurpose::OwnProfile, now)
-            .await?
-            .authorization)
+        let grant = self.consume_grant(ticket).await?;
+        Ok(
+            Self::resolve_human_session_at(grant, HumanSessionGrantPurpose::OwnProfile, now)?
+                .authorization,
+        )
     }
 
     async fn consume_room_http(
