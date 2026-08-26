@@ -1,3 +1,5 @@
+use crate::raster_assets::raster_item_limit;
+
 pub(crate) struct TableDefinition {
     pub name: &'static str,
     pub ddl: &'static str,
@@ -56,7 +58,9 @@ const TABLES: &[TableDefinition] = &[
             "filename TEXT NOT NULL, ",
             "content_type TEXT NOT NULL CHECK(content_type = 'image/png'), ",
             "content BLOB NOT NULL, ",
-            "size INTEGER NOT NULL CHECK(size > 0 AND size <= 10485760), ",
+            "size INTEGER NOT NULL CHECK(size > 0 AND size <= ",
+            raster_item_limit!(sql),
+            "), ",
             "created_at TEXT NOT NULL, ",
             "state TEXT NOT NULL CHECK(state IN ('pending', 'current')), ",
             "expires_at INTEGER, ",
@@ -77,7 +81,9 @@ const TABLES: &[TableDefinition] = &[
             "filename TEXT NOT NULL, ",
             "content_type TEXT NOT NULL CHECK(content_type = 'image/png'), ",
             "content BLOB NOT NULL, ",
-            "size INTEGER NOT NULL CHECK(size > 0 AND size <= 10485760), ",
+            "size INTEGER NOT NULL CHECK(size > 0 AND size <= ",
+            raster_item_limit!(sql),
+            "), ",
             "created_at TEXT NOT NULL, ",
             "expires_at INTEGER NOT NULL, ",
             "FOREIGN KEY(room_id) REFERENCES rooms(room_id) ON DELETE CASCADE)",
@@ -191,7 +197,11 @@ const TABLES: &[TableDefinition] = &[
     },
     TableDefinition {
         name: "room_appearance_assets",
-        ddl: "CREATE TABLE IF NOT EXISTS room_appearance_assets (asset_id TEXT PRIMARY KEY CHECK(length(asset_id) = 35 AND substr(asset_id, 1, 3) = 'ra_'), room_id TEXT NOT NULL, pending_owner_user_id TEXT, filename TEXT NOT NULL, content_type TEXT NOT NULL CHECK(content_type = 'image/png'), content BLOB NOT NULL, size INTEGER NOT NULL CHECK(size > 0 AND size <= 10485760), created_at TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('pending', 'bound')), expires_at INTEGER, CHECK((state = 'pending' AND pending_owner_user_id IS NOT NULL AND expires_at IS NOT NULL) OR (state = 'bound' AND pending_owner_user_id IS NULL AND expires_at IS NULL)), FOREIGN KEY(room_id) REFERENCES rooms(room_id) ON DELETE CASCADE, FOREIGN KEY(pending_owner_user_id) REFERENCES user_profiles(user_id) ON DELETE CASCADE)",
+        ddl: concat!(
+            "CREATE TABLE IF NOT EXISTS room_appearance_assets (asset_id TEXT PRIMARY KEY CHECK(length(asset_id) = 35 AND substr(asset_id, 1, 3) = 'ra_'), room_id TEXT NOT NULL, pending_owner_user_id TEXT, filename TEXT NOT NULL, content_type TEXT NOT NULL CHECK(content_type = 'image/png'), content BLOB NOT NULL, size INTEGER NOT NULL CHECK(size > 0 AND size <= ",
+            raster_item_limit!(sql),
+            "), created_at TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('pending', 'bound')), expires_at INTEGER, CHECK((state = 'pending' AND pending_owner_user_id IS NOT NULL AND expires_at IS NOT NULL) OR (state = 'bound' AND pending_owner_user_id IS NULL AND expires_at IS NULL)), FOREIGN KEY(room_id) REFERENCES rooms(room_id) ON DELETE CASCADE, FOREIGN KEY(pending_owner_user_id) REFERENCES user_profiles(user_id) ON DELETE CASCADE)",
+        ),
         infrastructure: false,
     },
     TableDefinition {

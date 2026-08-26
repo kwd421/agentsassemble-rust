@@ -7,7 +7,17 @@ use tokio::sync::Semaphore;
 
 use crate::PersistenceError;
 
-pub const MAX_RASTER_BYTES: usize = 10 * 1024 * 1024;
+macro_rules! raster_item_limit {
+    (bytes) => {
+        10 * 1024 * 1024
+    };
+    (sql) => {
+        "10485760"
+    };
+}
+pub(crate) use raster_item_limit;
+
+pub const MAX_RASTER_BYTES: usize = raster_item_limit!(bytes);
 pub(crate) const MAX_LIVE_RASTER_ASSETS: i64 = 4096;
 const MAX_LIVE_RASTER_BYTES: i64 = 8 * 1024 * 1024 * 1024;
 const MAX_IMAGE_DIMENSION: u32 = 4096;
