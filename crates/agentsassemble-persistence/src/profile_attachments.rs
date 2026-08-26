@@ -38,9 +38,9 @@ pub struct ProfileAttachment {
     pub content: Vec<u8>,
 }
 
-struct CanonicalAvatar {
-    filename: String,
-    content: Vec<u8>,
+pub(crate) struct CanonicalAvatar {
+    pub(crate) filename: String,
+    pub(crate) content: Vec<u8>,
 }
 
 impl SqliteStore {
@@ -155,7 +155,7 @@ pub(crate) fn validate_stored_avatar_integrity(
     Ok(())
 }
 
-async fn prepare_profile_attachment(
+pub(crate) async fn prepare_profile_attachment(
     filename: &str,
     content_type: &str,
     content: Vec<u8>,
@@ -474,7 +474,11 @@ fn canonical_png_filename(filename: &str) -> String {
     }
 }
 
-fn attachment_metadata(id: String, filename: String, size: usize) -> ProfileAttachmentMetadata {
+pub(crate) fn attachment_metadata(
+    id: String,
+    filename: String,
+    size: usize,
+) -> ProfileAttachmentMetadata {
     ProfileAttachmentMetadata {
         url: format!("/api/attachments/{id}?view=1"),
         download_url: format!("/api/attachments/{id}?download=1"),
