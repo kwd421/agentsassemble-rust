@@ -449,12 +449,86 @@ inactive session row for the current room to downgrade to device authority.
   gate exception. The implementation is 341 lines and the test module 544 lines.
 - Frontend `useRoomAdmission` tests passed 14/14 and the production build completed,
   including the existing-session scope regression.
-- Daybreaker approved final commit `7982161` with C=0/H=0/M=0. The critical web
-  reviewer approved `2520cf0` before the cross-room reachable-flow correction; its
-  final `7982161` re-review is recorded when complete. No Deep Scan, automated
-  security scanner, provider, or Computer Use resource ran for this increment.
+- Daybreaker and the critical web reviewer approved final commit `7982161` with
+  C=0/H=0/M=0. The web review first approved the overcorrection in `2520cf0`, then
+  re-read the original route, session verifier, copied browser flow, and final diff
+  before correcting that conclusion. No Deep Scan, automated security scanner,
+  provider, or Computer Use resource ran for this increment.
 
 The next increment must authenticate raw `aai1`/`aaj1_` input plus canonical browser
 and session credentials at the server boundary and submit only this typed evidence
 to the snapshot. Until that route exists, preflight is not reported as a reachable
 browser feature.
+
+## Raw credential preflight boundary
+
+Commit `0b22bf8` adds the server boundary that accepts the raw invite, browser, and
+optional session credentials and submits only authenticated typed evidence and
+fixed-size fingerprints to the existing row-bound snapshot. It deliberately does
+not register an HTTP route or claim a reachable browser feature.
+
+### Prior cost and threat
+
+The credential authority and persistence snapshot previously existed as separate
+units. Passing raw request strings directly into persistence would make durable code
+another parser and possible logging owner, while hashing arbitrary strings without
+first enforcing the current credential domains would accept old, weak, padded, or
+otherwise ambiguous client identifiers. Repeating invite parsing in the future route
+would also create a second `aai1`/`aaj1_` authority.
+
+The original reachable HTTP flow trims the invite value, verifies a bearer through
+the session owner, and then calls preflight with either a verified session or no
+session. The approved Rust contract keeps the same ordering of authorities while
+strengthening newly issued browser/session formats: the browser credential is
+mandatory and the optional bearer is considered only when present. A malformed
+presented value is not converted to absence or a compatibility path.
+
+### Change intent and preserved contract
+
+- The existing `HumanInviteCredentialAuthority` remains the only raw invite parser.
+  Its authenticated signed claims or join-code fingerprint are converted directly
+  into `HumanInviteCredentialEvidence`; the snapshot still owns exact current-row
+  binding, current invite policy, and session/device/profile decisions.
+- Browser credentials accept exactly `aad1_` plus canonical unpadded Base64url of
+  32 bytes. Session bearers accept exactly the disjoint `aas1.` domain plus the same
+  canonical 32-byte body. Length, ASCII alphabet, decoded length, and re-encoding
+  are all checked before hashing. Whitespace, padding, old identifiers, wrong
+  prefixes, and noncanonical tail bits are rejected rather than normalized.
+- SHA-256 covers each complete ASCII credential including its prefix. Only the
+  resulting `[u8; 32]` crosses into persistence. The error display contains generic
+  categories rather than the credential, and the function neither logs nor stores
+  its raw string arguments.
+- `None` is the only absent-session representation. Any `Some` value must be a
+  canonical `aas1.` bearer. The existing snapshot still distinguishes a current-room
+  unavailable bearer from a missing or other-room bearer after exact fingerprint
+  lookup; this boundary adds no semantic fallback.
+- The caller supplies one fixed `now`, which is forwarded unchanged to the single
+  read snapshot. Credential syntax/authentication completes before SQLite is read.
+  No route, response mapping, durable state, trait, cache, cleanup task, or alternate
+  credential format was added.
+
+### Resource cost and verification
+
+- The `aai1` path retains the authority's bounded HMAC verification and JSON decode;
+  the `aaj1_` path retains its bounded canonical decode and fingerprint. Each client
+  credential adds one 32-byte Base64 decode, one 43-byte canonical re-encoding, and
+  one SHA-256 over the complete 48-byte credential. At most two such client values
+  are processed. Those temporary allocations are fixed and attacker input is
+  rejected by exact length before decode.
+- The durable work remains the preflight snapshot's existing maximum of three
+  indexed reads. This boundary performs no disk write and adds no schema or index.
+  No production CPU, memory, disk, latency, or throughput improvement is claimed;
+  route-level measurement remains unavailable because the HTTP route is not active.
+- One parser contract test covers both domains, complete-prefix hashing, and malformed
+  length/padding/whitespace/wrong-prefix rejection. One integration test issues and
+  persists both current invite credentials, proves each reaches the same
+  `ProfileRequired` snapshot result, and proves old browser/session strings stop at
+  the typed boundary.
+- The server library passed 48/48 tests. Warning-denied server all-target Clippy,
+  mandatory architecture/source-growth gates, workspace all-target build, formatter,
+  and diff checks passed. The implementation is one 274-line owner plus a two-line
+  module/export connection; the commit has 276 additions.
+- Daybreaker manually approved the pushed commit with C=0/H=0/M=0. The critical-web
+  review is still in progress and is recorded before this increment is treated as
+  closed. No Deep Scan, automated security scanner, provider, or Computer Use
+  resource ran.
