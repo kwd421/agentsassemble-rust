@@ -527,35 +527,11 @@ mod tests {
         .map(|_| ())
     }
 
-    #[tokio::test]
-    async fn human_sessions_require_exact_composite_authority() {
-        let pool = installed_schema().await;
-        seed_human_authorities(&pool).await;
-        let one_use = "1111111111111111";
-        let reusable = "2222222222222222";
-
-        assert_eq!(
-            sqlx::query_scalar::<_, String>(
-                "SELECT key_kind FROM room_invites WHERE invite_id = ?",
-            )
-            .bind(one_use)
-            .fetch_one(&pool)
-            .await
-            .unwrap_or_else(|error| panic!("read one-use classification: {error}")),
-            "one_use"
-        );
-        assert_eq!(
-            sqlx::query_scalar::<_, String>(
-                "SELECT key_kind FROM room_invites WHERE invite_id = ?",
-            )
-            .bind(reusable)
-            .fetch_one(&pool)
-            .await
-            .unwrap_or_else(|error| panic!("read reusable classification: {error}")),
-            "reusable"
-        );
-
-        for invalid in [
+    fn invalid_human_session_authorities<'a>(
+        one_use: &'a str,
+        reusable: &'a str,
+    ) -> [SessionAuthority<'a>; 6] {
+        [
             SessionAuthority {
                 marker: 1,
                 invite_id: reusable,
@@ -616,7 +592,38 @@ mod tests {
                 invite_scope: "read_write",
                 reusable_identity: Some(vec![0x72; 32]),
             },
-        ] {
+        ]
+    }
+
+    #[tokio::test]
+    async fn human_sessions_require_exact_composite_authority() {
+        let pool = installed_schema().await;
+        seed_human_authorities(&pool).await;
+        let one_use = "1111111111111111";
+        let reusable = "2222222222222222";
+
+        assert_eq!(
+            sqlx::query_scalar::<_, String>(
+                "SELECT key_kind FROM room_invites WHERE invite_id = ?",
+            )
+            .bind(one_use)
+            .fetch_one(&pool)
+            .await
+            .unwrap_or_else(|error| panic!("read one-use classification: {error}")),
+            "one_use"
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, String>(
+                "SELECT key_kind FROM room_invites WHERE invite_id = ?",
+            )
+            .bind(reusable)
+            .fetch_one(&pool)
+            .await
+            .unwrap_or_else(|error| panic!("read reusable classification: {error}")),
+            "reusable"
+        );
+
+        for invalid in invalid_human_session_authorities(one_use, reusable) {
             assert!(insert_human_session(&pool, invalid).await.is_err());
         }
 
@@ -698,14 +705,16 @@ mod tests {
         .into_iter()
         .enumerate()
         {
-            let accepted_marker = index as u8 + 1;
+            let index = u8::try_from(index)
+                .unwrap_or_else(|_| panic!("invite limit fixture index exceeds u8"));
+            let accepted_marker = index + 1;
             let accepted_id = format!("{accepted_marker:02x}").repeat(8);
             sqlx::query(
                 "INSERT INTO room_invites(invite_id, signed_token_fingerprint, join_code_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at) VALUES (?, ?, ?, 'room-a', 'participant-a', 'Guest', 'read_write', ?, ?, 200, 0, 'user-a', 100)",
             )
             .bind(&accepted_id)
             .bind(vec![accepted_marker; 32])
-            .bind(vec![index as u8 + 0x21; 32])
+            .bind(vec![index + 0x21; 32])
             .bind(configured)
             .bind(effective)
             .execute(&pool)
@@ -728,7 +737,7 @@ mod tests {
                 }
             );
 
-            let rejected_marker = index as u8 + 0x41;
+            let rejected_marker = index + 0x41;
             let rejected_id = format!("{rejected_marker:02x}").repeat(8);
             assert!(
                 sqlx::query(
@@ -736,7 +745,7 @@ mod tests {
                 )
                 .bind(rejected_id)
                 .bind(vec![rejected_marker; 32])
-                .bind(vec![index as u8 + 0x61; 32])
+                .bind(vec![index + 0x61; 32])
                 .bind(configured)
                 .bind(effective + 1)
                 .execute(&pool)
