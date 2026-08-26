@@ -241,7 +241,11 @@ function validatedDesktopHttpBase(value: string): string {
   ) {
     throw new Error("데스크톱 Rust 런타임 주소가 안전하지 않습니다.");
   }
-  return `http://127.0.0.1:${endpoint.port}`;
+  const expected = `http://127.0.0.1:${endpoint.port}`;
+  if (value !== expected) {
+    throw new Error("데스크톱 Rust 런타임 주소가 정규 형식이 아닙니다.");
+  }
+  return expected;
 }
 
 function rememberDesktopRuntime(ticket: DesktopRuntimeTicket): DesktopRuntimeTicket {
@@ -270,7 +274,8 @@ function validateDesktopHttpTicket(
     label
   );
   if (
-    !/^[0-9a-f]{64}$/.test(String(grant.ticket)) ||
+    typeof grant.ticket !== "string" ||
+    !/^[0-9a-f]{64}$/.test(grant.ticket) ||
     !Number.isSafeInteger(grant.ttl_seconds) ||
     Number(grant.ttl_seconds) < 1 ||
     typeof grant.http_base_url !== "string"
@@ -278,7 +283,7 @@ function validateDesktopHttpTicket(
     throw new Error(`${label} 권위가 올바르지 않습니다.`);
   }
   return {
-    ticket: grant.ticket as string,
+    ticket: grant.ticket,
     ttl_seconds: grant.ttl_seconds as number,
     http_base_url: validatedDesktopHttpBase(grant.http_base_url),
   };
