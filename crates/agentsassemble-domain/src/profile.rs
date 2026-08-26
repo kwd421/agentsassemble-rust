@@ -99,6 +99,39 @@ impl UserProfile {
         })
     }
 
+    /// Creates the canonical profile owned by one admitted human identity.
+    #[must_use]
+    pub fn for_admitted_human(
+        display_name: &str,
+        avatar_image_url: &str,
+        now: DateTime<Utc>,
+    ) -> Option<Self> {
+        let display_name = clean_text(display_name, 120);
+        if display_name.is_empty() {
+            return None;
+        }
+        let avatar_label = display_name
+            .chars()
+            .take(2)
+            .collect::<String>()
+            .to_uppercase();
+        Some(Self {
+            revision: 1,
+            handle: display_name.clone(),
+            display_name,
+            status: "online".to_owned(),
+            custom_status: String::new(),
+            avatar_label,
+            avatar_image_url: canonical_avatar_url(avatar_image_url).unwrap_or_default(),
+            banner_preset: "default".to_owned(),
+            accent_color: DEFAULT_ACCENT_COLOR.to_owned(),
+            mic_muted: true,
+            deafened: false,
+            created_at: now,
+            updated_at: now,
+        })
+    }
+
     pub fn apply_patch(&mut self, patch: UserProfilePatch, now: DateTime<Utc>) -> bool {
         let previous = self.clone();
         if let Some(value) = patch.display_name {
@@ -238,6 +271,27 @@ mod tests {
         assert_eq!(profile.handle, "local사용자.");
         assert_eq!(profile.avatar_label, "LO");
         assert!(UserProfile::for_local_identity(" \n\t ", Utc::now()).is_none());
+    }
+
+    #[test]
+    fn admitted_human_profile_owns_the_guest_identity_projection() {
+        let now = Utc::now();
+        let profile = UserProfile::for_admitted_human(
+            "  Guest\n\t사용자  ",
+            "/api/attachments/avatar_1234?view=1",
+            now,
+        )
+        .unwrap_or_else(|| panic!("nonempty admitted identity must create a profile"));
+
+        assert_eq!(profile.display_name, "Guest 사용자");
+        assert_eq!(profile.handle, "Guest 사용자");
+        assert_eq!(profile.avatar_label, "GU");
+        assert_eq!(profile.custom_status, "");
+        assert_eq!(
+            profile.avatar_image_url,
+            "/api/attachments/avatar_1234?view=1"
+        );
+        assert!(UserProfile::for_admitted_human(" \n\t ", "", now).is_none());
     }
 
     #[test]
