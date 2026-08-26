@@ -407,12 +407,16 @@ flag is added meanwhile.
   using process-local randomness would make a committed admission's deterministic
   bearer unrecoverable after restart. Generating a missing key while loading an
   existing envelope would silently create the same failure across every durable
-  session row.
+  session row. Syntax and length checks alone also accept a different canonical
+  32-byte key substituted into an otherwise valid envelope; the unchanged Ed25519
+  public-key binding would not detect that authority change.
 - Change intent: create one independent 32-byte operating-system-random HMAC key only
   with a fresh host identity and store it in the same versioned private envelope.
   Loading an envelope without one exact canonical 32-byte key fails closed. There is
   no derivation from Ed25519 material, migration, compatibility reader, or secondary
-  secret file.
+  secret file. The existing `runtime_host_identity` row stores only SHA-256 of that
+  key beside the Ed25519 public key, and every reopen compares both bindings before
+  admitting the store.
 - Preserved contract: the existing initialization-nonce binding, create/reuse policy,
   canonical-path and symlink checks, single-link regular file, private-directory and
   `0600` requirements, 512-byte envelope bound, and one write plus `fsync` remain the
@@ -420,15 +424,19 @@ flag is added meanwhile.
   serialization, or generic debug output.
 - Observed cost: the live host material grows by exactly 32 secret bytes. Canonical
   unpadded base64url adds 43 payload characters plus one JSON field inside the
-  existing bounded envelope; creation adds one system-random fill but no extra file
-  open, read, write, or disk synchronization. No CPU or latency improvement is
-  claimed.
+  existing bounded envelope; the database singleton grows by one 32-byte non-secret
+  fingerprint. Creation adds one system-random fill and one SHA-256, reopen adds one
+  SHA-256 and reads the fingerprint in the existing identity query, with no extra
+  file open, database query, write, or disk synchronization. No CPU or latency
+  improvement is claimed.
 - Verification: fresh creation and exact reopen return the same private issuer key;
   two fresh hosts differ; a missing, malformed, noncanonical, or wrong-length field
-  and an older envelope version are rejected without rewriting the file. Existing
-  permission, symlink, hard-link, nonce-binding, and interrupted-initialization tests
-  continue to pass. A later issuer test proves the same durable session input yields
-  the same bearer across store reopen.
+  and an older envelope version are rejected without rewriting the file. Replacing
+  only the field with another canonical 32-byte key also fails the database binding
+  without rewriting the envelope. Existing permission, symlink, hard-link,
+  nonce-binding, and interrupted-initialization tests continue to pass. A later
+  issuer test proves the same durable session input yields the same bearer across
+  store reopen.
 
 ### Composite authority bindings instead of repository-only correlation
 
