@@ -12,8 +12,9 @@ admission, the session-derived person-profile exchange, and the admitted-human
 WebSocket are source-connected and integration-verified. Real production-browser
 one-use/reusable normal and read-only admission, avatar, reload, posting/denial, and
 restart recovery pass against the canonical Rust authority. Remote-session
-preferences and `participant.leave` remain visibly unavailable until their exact
-frontend exchange or server transaction is connected.
+preferences now pass their real write, read-only denial, reload, and restart flow.
+`participant.leave` remains visibly unavailable until its exact server transaction
+is connected.
 
 ## Scope and method
 
@@ -196,8 +197,8 @@ implemented; the frontend must not silently substitute Python or local fake data
 | React feature group | Missing Rust surface |
 | --- | --- |
 | Startup identity and accounts | Fresh local desktop bootstrap, central guest creation/recovery, secure browser device identity, and proof-bound local-server registration are implemented. `/api/account`, Google account challenge/connect/delete, and the native Google handoff remain incomplete; the absent `open_central_google_login` host command keeps that button failed closed. |
-| Room lifecycle and settings | Canonical archive/delete lifecycle and public server info remain incomplete. Room-global settings mutation and local-operator room preferences are connected; remote-session preferences are explicitly unavailable until admission owns their identity. |
-| Admission and invites | Durable human invite/session create, join, verification, expiry, revoke, leave, restart recovery, the session-derived person-profile exchange, and the authenticated human WebSocket are implemented at their current persistence/server boundaries. Exact `/join`, `/join/`, `/pair`, and `/pair/` production entrances resolve their actual production assets; exact preflight/join response contracts bind request, room, client, server lineage, and product surface before bearer exposure. Real isolated browsers pass one-use/reusable normal and read-only admission, avatar transfer, profile edit, token removal, reload, posting/denial, consumed-link rejection, same-browser reusable recovery, and server-restart reconnect. Remote preferences are still client-blocked, `participant.leave` is absent from the signed server surface, and manager create/revoke controls, trusted public ingress, host claim, companion admission, operator pairing create/redeem, and public-invite status/URL/tunnel controls remain incomplete. |
+| Room lifecycle and settings | Canonical archive/delete lifecycle and public server info remain incomplete. Room-global settings mutation, local-operator preferences, and admitted remote-human preferences are connected. |
+| Admission and invites | Durable human invite/session create, join, verification, expiry, revoke, leave, restart recovery, the session-derived person-profile exchange, and the authenticated human WebSocket are implemented at their current persistence/server boundaries. Exact `/join`, `/join/`, `/pair`, and `/pair/` production entrances resolve their actual production assets; exact preflight/join response contracts bind request, room, client, server lineage, and product surface before bearer exposure. Real isolated browsers pass one-use/reusable normal and read-only admission, avatar transfer, profile edit, token removal, reload, posting/denial, consumed-link rejection, same-browser reusable recovery, server-restart reconnect, and purpose-exchanged preference read/write or read-only denial. `participant.leave` is absent from the signed server surface, and manager create/revoke controls, trusted public ingress, host claim, companion admission, operator pairing create/redeem, and public-invite status/URL/tunnel controls remain incomplete. |
 | Roster, friends, and channels | The active-room roster, strict participant-role control, copied participant-mute control, canonical event projection, and exact Rust provider-interrupt owner are cut over and packaged-verified. Room friends, room channels, voice presence, and side chat remain incomplete. |
 | Attachments, personas, pins, and search | General-message and room-appearance attachment purposes, persona list/import/thumbnail, message pins, room search/context. Profile-avatar upload/read is implemented. |
 | Provider settings and diagnostics | Login, catalog refresh HTTP response, credential CRUD, provider usage, local resources, release health, and runtime version. The original `/api/local/workspace-picker` HTTP route is absent, but packaged desktop creation uses the native Tauri directory picker instead. |
@@ -280,9 +281,9 @@ Provider roll/choose uses the existing private `RoomPortal` on Codex and the exa
 bound helper on Antigravity/OpenCode; it is not print mode or a client-side result.
 The original React client still has no direct human roll/choose control, so the
 human commands remain a reachable server contract without a fabricated button.
-Local-operator preferences are connected through their complete purpose-ticketed HTTP
-owner. Remote-session preferences, appearance assets, custom channels, invites, and
-plugin hosting stay explicitly incomplete until their complete owners exist.
+Local-operator and admitted remote-human preferences are connected through their
+complete purpose-ticketed HTTP owners. Appearance assets, custom channels, invites,
+and plugin hosting stay explicitly incomplete until their complete owners exist.
 
 ## Stage B local preference exposure delta
 
@@ -299,15 +300,13 @@ membership authorization. The copied settings control and restart flow are packa
 verified. Room appearance upload, authenticated preview/read, binding, replacement, and
 cleanup remain visibly incomplete and are not implied by preference completion.
 
-Manual cross-layer review found that the earlier frontend treated any room session bearer
-as a working preference credential even though the Rust route accepts only separate
-purpose tickets and Rust has no durable invite/session owner yet. That mock-only path
-always returned 401 at the real boundary. Commit `3fb8350` now reports remote-session
-preferences unavailable before native invocation or HTTP fetch, and `3dbeceb` verifies
-the API, controller, and disabled copied-UI controls. It does not substitute local
-operator authority, cached defaults, or a compatibility bearer branch. Human admission,
-live-session-bound purpose exchange, and real guest restart/revocation tests remain the
-exact missing operations.
+The admitted-human owner now exchanges a raw session credential only at the exact
+read or write purpose endpoint. The room-settings target receives only the derived
+one-use grant and no desktop device credential. The write path revalidates the
+durable session inside the mutation transaction; read-only sessions cannot obtain a
+write grant. The copied channel menu uses this path after admission, while a tokenless
+pre-admission remote remains failed closed. No local-operator authority, cached
+default, compatibility bearer branch, or client-owned mutation substitutes for it.
 
 ## Public Rust slice, active gap, and provenance gate
 
@@ -435,9 +434,10 @@ profile asset with no pending row. A live read-only reusable browser reported th
 server interruption and then automatically restored its authenticated snapshot and
 history after an actual process restart.
 
-The same run exposed two current boundaries rather than substituting client behavior.
-Remote room preferences remain deliberately rejected by the frontend before the
-already implemented session-ticket server exchange. Guest leave displays that
-`participant.leave` is absent from the bound signed product surface and performs no
-mutation. Manager invite create/revoke controls were not made reachable through fake
-host authority and remain incomplete.
+The follow-up remote-preference run used the copied channel menu. A writable guest
+stored channel mute, re-read it after reload, and retained it after an actual server
+restart. A distinct read-only guest loaded defaults, received the canonical write
+denial, displayed the stale-state rollback, and created no preference row. Guest
+leave still displays that `participant.leave` is absent from the bound signed product
+surface and performs no mutation. Manager invite create/revoke controls were not made
+reachable through fake host authority and remain incomplete.

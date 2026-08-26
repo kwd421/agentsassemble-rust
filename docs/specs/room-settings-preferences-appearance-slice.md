@@ -1,7 +1,7 @@
 # Room Settings, Scheduling, Tabletop, Preferences, and Appearance Slice
 
-Status: Stage A verified; Stage B local-operator preferences packaged-verified;
-remote-session preferences and appearance assets inactive
+Status: Stage A verified; Stage B local-operator and remote-session preferences
+production-browser verified; appearance assets inactive
 
 ## Definition
 
@@ -10,8 +10,8 @@ storage-only success. Stage A owns canonical room settings, the ordered and ambi
 conversation schedulers that those settings change, typed durable provider input,
 and human/provider tabletop randomness. Stage B owns the authenticated user's room
 preferences and the room appearance asset lifecycle. Human invite/admission and
-its durable room-session owner are a prerequisite for remote-user preferences and
-bound appearance reads. Custom channels, voice/text streams, activity-plugin
+its durable room-session owner now authorize remote-user preferences and remain a
+prerequisite for bound appearance reads. Custom channels, voice/text streams, activity-plugin
 hosting, and the original legacy relay mode remain outside this slice.
 
 The comparison baseline is original commit
@@ -190,22 +190,22 @@ cap, and builtin-or-`c[0-9a-f]{12}` channel grammar match the original.
 CR, LF, and TAB are forbidden. A top-level partial update replaces the complete
 `channel_settings` map when that field is present.
 
-The delivered preference path currently issues those purposes only from the
-desktop private-control owner for the exact local operator. Rust does not yet own
-the durable invite/admission room session needed to authenticate a remote human.
-Until that owner exists, a frontend with a room session reports preferences as
-unavailable before either native invocation or HTTP fetch; it does not send the
-opaque session bearer to a purpose-ticket route or substitute local authority.
-This is an explicitly incomplete parity path, not completed guest support.
+The local operator obtains those purposes only from the desktop private-control
+owner. An admitted remote human sends its raw session credential only to the exact
+`/api/session-tickets/preferences-read` or `preferences-write` exchange. The
+frontend then sends only the derived one-use grant to `/api/room-settings`; it does
+not attach a desktop device credential or retry target rejection as raw-session
+authentication. Read-only sessions may exchange the read purpose but receive the
+canonical `session_read_only` rejection from the write exchange.
 
-Remote activation requires real invite admission to issue a durable session
-stored only by token fingerprint and bound to exact room, user, participant,
-client, scope, expiry, and revocation state. A verified session may exchange for
-one exact preference purpose. The resulting in-memory grant retains immutable
-session provenance, and consumption revalidates the current durable session before
-room-user identity. Thus session-only revocation or expiry after ticket issuance
-invalidates the derived ticket. Read-only sessions cannot obtain a write ticket.
-No purpose-consume failure retries as session authentication.
+The durable invite/admission session stores only the bearer fingerprint and binds
+the exact room, user, participant, client, scope, expiry, and revocation state. A
+consumed preference grant retains immutable session provenance and revalidates the
+current durable session before room-user identity. Writes authorize once before
+the bounded body and again in the mutation transaction, so replacement, leave,
+expiry, or revocation between those points cannot commit. One internal consumed-
+ticket sum type dispatches local and remote authorities after the same one-use
+consume; failure never falls through to another authority.
 
 Per-room `GET /api/room-settings` preserves the combined `{room_id, settings}`
 wire response while the frontend projects only the caller preference fields.
@@ -263,16 +263,25 @@ Global mutation and realtime projection remain WebSocket-owned. Preferences and
 binary upload/read remain authenticated HTTP request/response controls. Neither
 transport is a fallback for the other.
 
-Stage B internal support remains unreachable until its owner is complete. Ticket,
+Inactive Stage B appearance support remains unreachable until its owner is complete. Ticket,
 private-control, persistence, decoder, and transaction-hook commits may land
 without registering a Tauri command or mounting a route. Preference activation
 for the local operator added its exact native commands, permissions, route, and
-product declaration together. Remote preference activation additionally requires
-the complete admission/session owner and provenance-bound exchanges above.
+product declaration together. Remote preference activation uses the complete
+admission/session owner and the provenance-bound exchanges above.
 Appearance activation occurs only after that admission dependency and the existing
 attachment routes have one owner and upload, read, bind, cleanup, exact issuance, and settings-hook
 behavior are complete; it also advances the product-surface revision. The copied
 frontend is connected only after each backend surface is complete.
+
+The remote cutover deliberately pays one additional same-origin exchange request
+per preference read or write plus bounded session revalidation. That cost keeps the
+longer-lived session credential out of the target route and preserves one-use
+purpose separation. It adds no cache, lock, persistent frontend state, trait,
+configuration layer, or background task. Shared ticket decoding, HTTP exchange,
+and transactional preference-update helpers remain the single owners of their
+respective policies; repository-wide duplicate-policy review found no competing
+route, SQL, validation, or state-transition owner.
 
 ## Failure, acceptance, and review gates
 

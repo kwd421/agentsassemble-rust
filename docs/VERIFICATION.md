@@ -2411,9 +2411,44 @@ Read-only SQLite inspection showed one use for each exercised invite, exactly th
 normal `message_final` events, one current normal-profile avatar, no pending pre-join
 avatar, no read-only avatar, and no preference row. The guest leave confirmation
 reported that `participant.leave` is absent from the bound signed product surface and
-wrote nothing. Remote preferences remain deliberately client-blocked, and manager
+wrote nothing. At that matrix cutoff remote preferences remained deliberately
+client-blocked, and manager
 invite create/revoke was not exercised through fake host authority. All isolated
 browser windows and both owned fixture processes were closed; port 43217 had no
 listener. The fixture source was removed, its database/manifests and production bundle
 were moved to recoverable Trash, and its Cargo package artifacts were cleaned. No
 provider or user-owned `.agents/` state was used.
+
+## Remote human preference cutover: 2026-08-27
+
+Public backend commit `8b5d4b1` activates exact admitted-session read/write exchanges
+and transaction-bound authorization. Public frontend commit `80243e8` connects the
+copied preference controller without sending the durable session credential to the
+room-settings target. One additional same-origin exchange POST per operation and the
+bounded durable revalidation are the structural cost of keeping the longer-lived
+credential out of the target route. The change adds no cache, lock, background task,
+persistent frontend state, future-only trait, or configuration layer.
+
+`make verify` at `80243e8` passed the unchanged architecture, source-growth, policy,
+format, build, generated-binding, desktop, workspace-test, warning-denied Clippy, and
+diff gates. The copied production bundle passed 78 frontend files and 395 tests.
+
+Computer Use admitted a writable guest through the production `/join` entrance,
+opened the reachable channel context menu, stored channel mute, and re-read the mute
+after both browser reload and an actual server restart on the same SQLite authority.
+A separate incognito read-only guest loaded the default preference, attempted a write,
+received the canonical server rejection, and rendered the stale-state message after
+rolling back to the last server value. Read-only SQLite inspection found only the
+writable user's mute row; the rejected read-only attempt created no row.
+
+The exact fixture server, normal and incognito browser surfaces, credential manifest,
+SQLite/key state, production bundle, and temporary example source were removed after
+verification. No provider or user-owned `.agents/` state was used.
+
+Manual review findings for backend range `88a9e07..8b5d4b1`: none. Web verdict:
+`APPROVE — Critical 0 / High 0 / Medium 0`. Daybreaker verdict:
+`APPROVE — Critical 0 / High 0 / Medium 0`.
+
+Manual review findings for frontend range `8b5d4b1..80243e8`: none. Web verdict:
+`APPROVE — Critical 0 / High 0 / Medium 0`. Daybreaker verdict:
+`APPROVE — Critical 0 / High 0 / Medium 0`.
