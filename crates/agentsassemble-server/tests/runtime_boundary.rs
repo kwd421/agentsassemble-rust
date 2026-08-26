@@ -318,7 +318,7 @@ async fn snapshot_is_trimmed_to_the_websocket_message_budget() {
 }
 
 #[tokio::test]
-async fn static_frontend_has_browser_security_headers() {
+async fn static_frontend_has_browser_security_and_cache_headers() {
     let directory =
         tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
     let frontend = directory.path().join("frontend");
@@ -346,28 +346,7 @@ async fn static_frontend_has_browser_security_headers() {
         .await
         .unwrap_or_else(|error| panic!("request static frontend: {error}"));
     assert!(response.status().is_success());
-    assert!(response.headers().contains_key("content-security-policy"));
-    assert_eq!(
-        response
-            .headers()
-            .get("x-content-type-options")
-            .and_then(|value| value.to_str().ok()),
-        Some("nosniff")
-    );
-    assert_eq!(
-        response
-            .headers()
-            .get("x-frame-options")
-            .and_then(|value| value.to_str().ok()),
-        Some("DENY")
-    );
-    assert_eq!(
-        response
-            .headers()
-            .get("connection")
-            .and_then(|value| value.to_str().ok()),
-        Some("close")
-    );
+    assert_static_frontend_headers(&response);
     for entrance in ["/join?token=one-use", "/join/", "/pair", "/pair/"] {
         let response = Client::new()
             .get(format!("{}{entrance}", server.base_url))
@@ -378,7 +357,7 @@ async fn static_frontend_has_browser_security_headers() {
             response.status().is_success(),
             "browser entrance {entrance}"
         );
-        assert!(response.headers().contains_key("content-security-policy"));
+        assert_static_frontend_headers(&response);
         let asset_url = response
             .url()
             .join("./assets/app.js")
@@ -394,9 +373,27 @@ async fn static_frontend_has_browser_security_headers() {
             .await
             .unwrap_or_else(|error| panic!("request browser asset from {entrance}: {error}"));
         assert!(asset.status().is_success(), "browser asset from {entrance}");
-        assert!(asset.headers().contains_key("content-security-policy"));
+        assert_static_frontend_headers(&asset);
     }
     server.stop().await;
+}
+
+fn assert_static_frontend_headers(response: &reqwest::Response) {
+    assert!(response.headers().contains_key("content-security-policy"));
+    for (name, expected) in [
+        ("x-content-type-options", "nosniff"),
+        ("x-frame-options", "DENY"),
+        ("connection", "close"),
+        ("cache-control", "no-cache"),
+    ] {
+        assert_eq!(
+            response
+                .headers()
+                .get(name)
+                .and_then(|value| value.to_str().ok()),
+            Some(expected)
+        );
+    }
 }
 
 #[tokio::test]

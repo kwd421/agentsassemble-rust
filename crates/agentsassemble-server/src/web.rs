@@ -4,7 +4,7 @@ use agentsassemble_persistence::PersistenceError;
 use axum::{
     Json, Router,
     extract::{Query, Request, State, WebSocketUpgrade},
-    http::StatusCode,
+    http::{HeaderValue, StatusCode, header},
     middleware,
     response::{IntoResponse, Redirect, Response},
     routing::get,
@@ -16,6 +16,7 @@ use tokio::{net::TcpListener, sync::Semaphore, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 use tower_http::{
     services::{ServeDir, ServeFile},
+    set_header::SetResponseHeaderLayer,
     timeout::RequestBodyDeadlineLayer,
 };
 
@@ -35,6 +36,11 @@ use crate::{
 const HTTP_BODY_DEADLINE: Duration = Duration::from_secs(10);
 const MAX_TICKET_BODY_BYTES: usize = 4 * 1024;
 const TRACKED_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(6);
+pub(crate) const ROOT_PATH: &str = "/";
+pub(crate) const APP_PREFIX: &str = "/app";
+pub(crate) const APP_ROUTE: &str = "/app/{*path}";
+pub(crate) const ASSETS_PREFIX: &str = "/assets";
+pub(crate) const ASSETS_ROUTE: &str = "/assets/{*path}";
 pub(crate) const JOIN_PATH: &str = "/join";
 pub(crate) const JOIN_SLASH_PATH: &str = "/join/";
 pub(crate) const JOIN_ASSETS_PREFIX: &str = "/join/assets";
@@ -43,6 +49,7 @@ pub(crate) const PAIR_PATH: &str = "/pair";
 pub(crate) const PAIR_SLASH_PATH: &str = "/pair/";
 pub(crate) const PAIR_ASSETS_PREFIX: &str = "/pair/assets";
 pub(crate) const PAIR_ASSETS_ROUTE: &str = "/pair/assets/{*path}";
+const STATIC_FRONTEND_CACHE_CONTROL: HeaderValue = HeaderValue::from_static("no-cache");
 #[derive(Debug, Error)]
 pub enum ServeError {
     #[error("server I/O failed: {0}")]
@@ -76,19 +83,24 @@ pub fn router(state: AppState) -> Router {
     if let Some(frontend_root) = frontend_root {
         let index = frontend_root.join("index.html");
         let assets = frontend_root.join("assets");
-        app = app
-            .route("/", get(|| async { Redirect::temporary("/app/") }))
+        let frontend = Router::new()
+            .route(ROOT_PATH, get(|| async { Redirect::temporary("/app/") }))
             .route_service(JOIN_PATH, ServeFile::new(index.clone()))
             .route_service(JOIN_SLASH_PATH, ServeFile::new(index.clone()))
             .route_service(PAIR_PATH, ServeFile::new(index.clone()))
             .route_service(PAIR_SLASH_PATH, ServeFile::new(index.clone()))
             .nest_service(JOIN_ASSETS_PREFIX, ServeDir::new(assets.clone()))
             .nest_service(PAIR_ASSETS_PREFIX, ServeDir::new(assets.clone()))
-            .nest_service("/assets", ServeDir::new(assets))
+            .nest_service(ASSETS_PREFIX, ServeDir::new(assets))
             .nest_service(
-                "/app",
+                APP_PREFIX,
                 ServeDir::new(frontend_root).not_found_service(ServeFile::new(index)),
-            );
+            )
+            .layer(SetResponseHeaderLayer::overriding(
+                header::CACHE_CONTROL,
+                STATIC_FRONTEND_CACHE_CONTROL,
+            ));
+        app = app.merge(frontend);
     }
     app.with_state(state)
         .layer(RequestBodyDeadlineLayer::new(HTTP_BODY_DEADLINE))

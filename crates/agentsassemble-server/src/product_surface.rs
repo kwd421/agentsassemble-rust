@@ -1,9 +1,18 @@
 use agentsassemble_protocol::{HttpRouteSurface, ServerProductSurface};
 
 const STATIC_ROUTES: &[(agentsassemble_protocol::HttpMethod, &str)] = &[
-    (agentsassemble_protocol::HttpMethod::Get, "/"),
-    (agentsassemble_protocol::HttpMethod::Get, "/app/{*path}"),
-    (agentsassemble_protocol::HttpMethod::Get, "/assets/{*path}"),
+    (
+        agentsassemble_protocol::HttpMethod::Get,
+        crate::web::ROOT_PATH,
+    ),
+    (
+        agentsassemble_protocol::HttpMethod::Get,
+        crate::web::APP_ROUTE,
+    ),
+    (
+        agentsassemble_protocol::HttpMethod::Get,
+        crate::web::ASSETS_ROUTE,
+    ),
     (
         agentsassemble_protocol::HttpMethod::Get,
         crate::web::JOIN_ASSETS_ROUTE,
