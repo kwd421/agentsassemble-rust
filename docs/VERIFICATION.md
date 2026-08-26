@@ -2452,3 +2452,58 @@ Manual review findings for backend range `88a9e07..8b5d4b1`: none. Web verdict:
 Manual review findings for frontend range `8b5d4b1..80243e8`: none. Web verdict:
 `APPROVE — Critical 0 / High 0 / Medium 0`. Daybreaker verdict:
 `APPROVE — Critical 0 / High 0 / Medium 0`.
+
+## Exact participant leave cutover: 2026-08-27
+
+Public commits `d7e1f4a`, `051ab5c`, and `8e52f63` add the exact durable
+`participant.leave` transaction, its authenticated WebSocket command/terminal-ACK
+boundary, and the original connector's separate bounded HTTP entry point. Correction
+commits `eec1462` and `1d07590` charge every non-fresh request identity, pass the
+original HTTP JSON value through the common admission path, and make one
+persistence-owned predicate the sole exact-empty-payload policy owner. Commit
+`708eb54` keeps the exact connection generation alive long enough to drain an
+already-delivered terminal ACK through asynchronous WebCrypto verification before
+deciding whether to reconnect. It does not make a closed socket sendable or retain a
+second connection state owner. The change adds no table, index, cache, background
+task, runtime trait, configuration layer, compatibility path, or provider cleanup
+state. Commits `565d84b` and `04fac7f` bind a terminal leave ACK to its durable event,
+exact room, and exact participant, latch protocol failure across the verification
+queue, and recheck that latch after asynchronous frame authentication. An ordinary
+server close still drains a frame received before close; a protocol-poisoned
+connection cannot consume any queued or already-verifying result.
+
+Computer Use admitted a one-use writable guest through the copied production `/join`
+entry, opened the reachable server-leave control, and confirmed the exact leave
+dialog. The UI removed the room and returned to the server list. Read-only SQLite
+inspection found the exact human session `ended`, participant `left`, one
+`participant_left` event, and one `participant.leave` command result. Reload did not
+restore the guest. The same database was then reopened by a fresh server process and
+reload again did not restore it. The fixture server, listener, database/key state,
+credential manifest, temporary source/build outputs, and production bundle were
+removed after verification. No provider or user-owned `.agents/` state was used.
+
+The first full verification run exposed a test-only readiness race: two provider
+fixture modules independently allowed two seconds for an external request marker,
+which was insufficient under the full suite's process load even though the focused
+contract passed. Commit `976d6f1` removes both copies and gives their single test-only
+owner the existing five-second fixture-readiness class. It returns as soon as the
+marker exists, so ordinary test latency is unchanged; no product timeout or runtime
+behavior changed. Final `make verify` at `04fac7f` passed architecture, source-growth,
+policy, formatting, generated bindings, original CSS, all 78 frontend files with 403
+tests including the terminal-ACK verification race regression, all 16 desktop tests,
+all workspace unit/integration/documentation tests,
+warning-denied workspace and desktop Clippy, and final diff validation.
+
+Manual review findings for participant-leave range `0736884..04fac7f`: (1) a prior
+committed leave request ID after reusable-identity rejoin escaped the process debit;
+(2) HTTP duplicated exact-empty validation and discarded the original payload before
+common admission; (3) the corrected HTTP path still left exact-empty policy expressed
+independently by command admission and the authoritative leave parser; (4) asynchronous
+WebCrypto verification could lose an already-delivered terminal leave ACK after the
+server closed the socket; (5) a protocol failure did not latch across its queued frames;
+(6) terminal leave ACK validation did not require a durable event or exact room and
+participant bindings; (7) a failure that occurred during asynchronous frame verification
+could still allow that frame to commit client state. All seven were fixed by `eec1462`,
+`1d07590`, `708eb54`, `565d84b`, and `04fac7f`. Daybreaker verdict:
+`APPROVE — Critical 0 / High 0 / Medium 0`. Web verdict:
+`APPROVE — Critical 0 / High 0 / Medium 0`.

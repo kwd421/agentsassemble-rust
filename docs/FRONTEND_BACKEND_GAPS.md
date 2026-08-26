@@ -4,7 +4,7 @@ Status: source-derived reimplementation exposure inventory, 2026-08-27
 
 Comparison baseline: original
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust
-`d07b2dc`. The local-authority, surface, connection-admission, subscription, and moderation
+`04fac7f`. The local-authority, surface, connection-admission, subscription, and moderation
 boundary is complete. Central registration, canonical participant roles, participant
 mute, exact provider interruption, and the required packaged provider matrix have
 passed both manual reviews. Room-global settings, local-operator preferences, human
@@ -13,8 +13,8 @@ WebSocket are source-connected and integration-verified. Real production-browser
 one-use/reusable normal and read-only admission, avatar, reload, posting/denial, and
 restart recovery pass against the canonical Rust authority. Remote-session
 preferences now pass their real write, read-only denial, reload, and restart flow.
-`participant.leave` remains visibly unavailable until its exact server transaction
-is connected.
+Exact `participant.leave` now passes its real WebSocket UI, HTTP connector, session
+revocation, reload, and restart flow.
 
 ## Scope and method
 
@@ -198,12 +198,12 @@ implemented; the frontend must not silently substitute Python or local fake data
 | --- | --- |
 | Startup identity and accounts | Fresh local desktop bootstrap, central guest creation/recovery, secure browser device identity, and proof-bound local-server registration are implemented. `/api/account`, Google account challenge/connect/delete, and the native Google handoff remain incomplete; the absent `open_central_google_login` host command keeps that button failed closed. |
 | Room lifecycle and settings | Canonical archive/delete lifecycle and public server info remain incomplete. Room-global settings mutation, local-operator preferences, and admitted remote-human preferences are connected. |
-| Admission and invites | Durable human invite/session create, join, verification, expiry, revoke, leave, restart recovery, the session-derived person-profile exchange, and the authenticated human WebSocket are implemented at their current persistence/server boundaries. Exact `/join`, `/join/`, `/pair`, and `/pair/` production entrances resolve their actual production assets; exact preflight/join response contracts bind request, room, client, server lineage, and product surface before bearer exposure. Real isolated browsers pass one-use/reusable normal and read-only admission, avatar transfer, profile edit, token removal, reload, posting/denial, consumed-link rejection, same-browser reusable recovery, server-restart reconnect, and purpose-exchanged preference read/write or read-only denial. `participant.leave` is absent from the signed server surface, and manager create/revoke controls, trusted public ingress, host claim, companion admission, operator pairing create/redeem, and public-invite status/URL/tunnel controls remain incomplete. |
+| Admission and invites | Durable human invite/session create, join, verification, expiry, revoke, leave, restart recovery, the session-derived person-profile exchange, and the authenticated human WebSocket are implemented at their current persistence/server boundaries. Exact `/join`, `/join/`, `/pair`, and `/pair/` production entrances resolve their actual production assets; exact preflight/join response contracts bind request, room, client, server lineage, and product surface before bearer exposure. Real isolated browsers pass one-use/reusable normal and read-only admission, avatar transfer, profile edit, token removal, reload, posting/denial, consumed-link rejection, same-browser reusable recovery, server-restart reconnect, purpose-exchanged preference read/write or read-only denial, and exact leave with durable session revocation. Manager create/revoke controls, trusted public ingress, host claim, companion admission, operator pairing create/redeem, and public-invite status/URL/tunnel controls remain incomplete. |
 | Roster, friends, and channels | The active-room roster, strict participant-role control, copied participant-mute control, canonical event projection, and exact Rust provider-interrupt owner are cut over and packaged-verified. Room friends, room channels, voice presence, and side chat remain incomplete. |
 | Attachments, personas, pins, and search | General-message and room-appearance attachment purposes, persona list/import/thumbnail, message pins, room search/context. Profile-avatar upload/read is implemented. |
 | Provider settings and diagnostics | Login, catalog refresh HTTP response, credential CRUD, provider usage, local resources, release health, and runtime version. The original `/api/local/workspace-picker` HTTP route is absent, but packaged desktop creation uses the native Tauri directory picker instead. |
 | Games and plugins | Mafia HTTP operations and generic plugin WebSocket hosting remain unimplemented. The copied RimWorld view is an external plugin consumer; its Python plugin package/runtime is intentionally outside the current Rust core-migration scope and is not a core parity exit condition. |
-| Canonical room commands | History, vote summary, edit/delete, re-add, general pause/interrupt, participant kick/leave, room lifecycle, and provider request resolution remain incomplete. Settings and random operations are implemented at the backend boundary; direct human random controls are intentionally absent because the original React client has none. Strict `participant.role.update`, stopped-session `agent.resume`, `agent.configure`, and verified `participant.mute` are connected to their existing copied controls. |
+| Canonical room commands | History, vote summary, edit/delete, re-add, general pause/interrupt, participant kick, room lifecycle, and provider request resolution remain incomplete. Settings and random operations are implemented at the backend boundary; direct human random controls are intentionally absent because the original React client has none. Strict `participant.role.update`, stopped-session `agent.resume`, `agent.configure`, verified `participant.mute`, and exact self `participant.leave` are connected to their existing copied controls. |
 | Canonical room events | The React projector recognizes the broader original event vocabulary; only Rust-emitted snapshot/events are currently verified. |
 
 ### Active local-authority exposure delta: 2026-08-25
@@ -439,5 +439,7 @@ stored channel mute, re-read it after reload, and retained it after an actual se
 restart. A distinct read-only guest loaded defaults, received the canonical write
 denial, displayed the stale-state rollback, and created no preference row. Guest
 leave still displays that `participant.leave` is absent from the bound signed product
-surface and performs no mutation. Manager invite create/revoke controls were not made
-reachable through fake host authority and remain incomplete.
+surface and performs no mutation. That cutoff was closed by the later exact
+participant-leave cutover recorded in `docs/VERIFICATION.md`. Manager invite
+create/revoke controls were not made reachable through fake host authority and remain
+incomplete.

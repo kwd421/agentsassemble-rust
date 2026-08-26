@@ -1,10 +1,10 @@
 # Human Invite, Admission, and Room Session Slice
 
 Status: atomic SQLite, bounded RoomRuntime admission, local HTTP preflight/join,
-pre-join avatar flow, fail-closed browser credential custody, and the live-session
-profile and WebSocket exchanges/targets are implemented and integration-verified;
-packaged browser verification, remaining typed exchanges, and trusted public ingress
-remain incomplete
+pre-join avatar flow, fail-closed browser credential custody, the live-session
+profile/preferences/WebSocket exchanges, and exact participant leave are implemented
+and production-browser verified; manager invite management, remaining typed exchanges,
+and trusted public ingress remain incomplete
 
 ## Definition
 
@@ -1247,6 +1247,62 @@ while promoting the same opaque ID through the profile lifecycle.
   cleanup write and restart the process; the exact key still returns unavailable,
   the same key with a changed payload still conflicts, and SQLite page/row growth per
   terminal admission is recorded.
+
+## Exact participant leave cutover
+
+The current copied guest UI reaches `participant.leave` over its authenticated room
+WebSocket. The original attendee/connector contract also retains its separate
+`POST /api/room-invite/leave` entry point; HTTP is not a fallback for WebSocket.
+Both transports enter the same `RoomRuntime` command owner and the same SQLite
+mutation.
+
+- Authority and state: a joined non-operator human with `participant.leave` may
+  leave whether its invite is read-only or writable. The local room owner is rejected
+  with `owner_must_transfer_or_delete`. Persistence alone owns exact `{}` payload
+  validation. One transaction changes the exact participant to `left`, ends the exact
+  live `human_room_sessions` row, inserts one `participant_left` event, and stores the
+  command result. Person profile, room preferences, messages, and every asset custody
+  table remain unchanged.
+- Session boundary: after commit, the runtime broadcasts only the returned session
+  fingerprint. Other sockets for that session close through durable revalidation. The
+  command socket receives its one authenticated committed ACK directly after commit
+  and then closes before any later product frame. No socket I/O is performed while a
+  SQLite transaction or room mutation lock is held. Lost notifications and restart
+  remain fail-closed because every later ticket, command, and outbound publication
+  revalidates durable session state. The browser accepts that terminal ACK only when
+  its durable event sequence, room, and participant bind the authenticated session.
+  An ordinary close drains a frame already received for that connection generation;
+  protocol failure latches across queued and asynchronously verifying frames, leaves
+  the exact request pending, and reconnects for server-owned outcome recovery.
+- HTTP boundary: the raw `aas1` bearer is authenticated before reading the body. The
+  route caps the body at 4 KiB, decodes JSON without interpreting leave semantics, and
+  passes the original value to `RoomRuntime`. Persistence is therefore the sole `{}`
+  policy owner. A semantic-invalid authenticated object traverses the normal
+  principal admission and room queue before returning `invalid_participant_leave` as
+  HTTP 400. Responses are `private, no-store`; unresolved failures remain 503 and
+  definitive permission, revocation, and conflict outcomes retain their distinct
+  status classes.
+- Cost and threat basis: the prior generic command path charged process and durable
+  room-write budgets even for a successful action that immediately destroys its own
+  authority. Only a fresh, valid, non-owner leave with no existing request identity
+  now skips the process debit and does not reserve durable room-write quota. Invalid
+  payloads, owner attempts, and every pre-existing leave identity retain the process
+  throttle. In particular, a reusable-identity rejoin that repeats the earlier
+  membership's committed leave request ID is charged and then conflicts without
+  ending the new session. The mutation adds no table, index, cache, background task,
+  trait, configuration layer, or cleanup scan; its durable cost is one participant
+  row update, one exact session-row update, one event insert, and one result insert.
+- Current boundary: admitted humans still have no `agent.control`, so no reachable
+  human-owned Agent Session exists to terminate. No future-only ownership or provider
+  cleanup state is added. Companion admission must expand this transaction before it
+  can be called complete if that later surface grants human-owned agent authority.
+- Verification: persistence tests cover atomic read-only leave, exact session end,
+  owner and nonempty rollback, real reusable-identity rejoin, charged old-ID conflict,
+  and preservation of the new session. Real Axum/SQLite WebSocket and HTTP tests cover
+  one ACK then close, closure of an idle sibling socket, post-leave ticket denial,
+  bounded invalid HTTP payload, HTTP status/no-store, and one durable leave. The copied
+  production frontend passed a real one-use guest join, server-menu confirmation,
+  room removal, reload, server restart on the same database, and no session recovery.
 
 No additional cache, repository interface, background cleanup framework, generic
 credential provider, multi-database saga, or future agent-session abstraction is
