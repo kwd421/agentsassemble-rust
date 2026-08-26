@@ -100,9 +100,9 @@ pub struct ConsumedSettingsDirectoryReadTicket {
     pub principal_id: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConsumedProfileTicket {
     Room(AuthenticatedPrincipal),
+    HumanSession(HumanSessionAuthorization),
     ServerOperator { principal_id: String },
 }
 
@@ -663,13 +663,22 @@ impl TicketStore {
         let TicketAuthority::HumanSession(public) = grant.authority else {
             return Err(TicketError::Invalid);
         };
+        let authorization = Self::resolve_human_session_authority(public, expected, now)?;
+        Ok(ConsumedHumanSessionGrant {
+            authorization,
+            proof_key: grant.proof_key,
+        })
+    }
+
+    fn resolve_human_session_authority(
+        public: HumanSessionGrant,
+        expected: HumanSessionGrantPurpose,
+        now: chrono::DateTime<Utc>,
+    ) -> Result<HumanSessionAuthorization, TicketError> {
         if public.purpose != expected || public.authorization.expires_at() <= now {
             return Err(TicketError::Invalid);
         }
-        Ok(ConsumedHumanSessionGrant {
-            authorization: public.authorization,
-            proof_key: grant.proof_key,
-        })
+        Ok(public.authorization)
     }
 
     #[cfg(test)]
@@ -719,11 +728,17 @@ impl TicketStore {
         let grant = self.consume_grant(ticket).await?;
         Ok(match grant.authority {
             TicketAuthority::Room(principal) => ConsumedProfileTicket::Room(principal),
+            TicketAuthority::HumanSession(public) => {
+                ConsumedProfileTicket::HumanSession(Self::resolve_human_session_authority(
+                    public,
+                    HumanSessionGrantPurpose::OwnProfile,
+                    Utc::now(),
+                )?)
+            }
             TicketAuthority::ServerOperator { principal_id } => {
                 ConsumedProfileTicket::ServerOperator { principal_id }
             }
             TicketAuthority::RoomHttp(_)
-            | TicketAuthority::HumanSession(_)
             | TicketAuthority::SettingsDirectoryRead { .. }
             | TicketAuthority::CentralRegistration { .. } => return Err(TicketError::Invalid),
         })

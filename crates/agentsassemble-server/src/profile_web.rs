@@ -1,6 +1,9 @@
-use agentsassemble_domain::{AuthenticatedPrincipal, LOCAL_OPERATOR_USER_ID, UserProfilePatch};
+use agentsassemble_domain::{
+    AuthenticatedPrincipal, InviteScope, LOCAL_OPERATOR_USER_ID, UserProfilePatch,
+};
 use agentsassemble_persistence::{
-    HumanPrejoinAvatarAuthorization, MAX_RASTER_BYTES, PersistenceError, ProfileAttachment,
+    HumanPrejoinAvatarAuthorization, HumanSessionAuthorization, MAX_RASTER_BYTES, PersistenceError,
+    ProfileAttachment,
 };
 use axum::{
     Json, Router, body,
@@ -63,6 +66,9 @@ async fn read_profile(
         .map_err(ProfileHttpError::from_body)?;
     let profile = match authority {
         ProfileAuthority::Room(principal) => state.store.user_profile(&principal).await?,
+        ProfileAuthority::HumanSession(authorization) => {
+            state.store.human_session_profile(&authorization).await?
+        }
         ProfileAuthority::LocalOperator => state.store.local_operator_profile().await?,
     };
     Ok(Json(json!({"profile": profile})))
@@ -80,6 +86,12 @@ async fn update_profile(
         ProfileAuthority::Room(principal) => {
             state.store.update_user_profile(&principal, patch).await?
         }
+        ProfileAuthority::HumanSession(authorization) => {
+            state
+                .store
+                .update_human_session_profile(&authorization, patch)
+                .await?
+        }
         ProfileAuthority::LocalOperator => state.store.update_local_operator_profile(patch).await?,
     };
     state.rooms.notify_committed_events(&outcome.events).await;
@@ -95,6 +107,19 @@ async fn upload_attachment(
     } else {
         None
     };
+    if authority.as_ref().is_some_and(|authority| {
+        matches!(
+            authority,
+            ProfileAuthority::HumanSession(authorization)
+                if authorization.principal().invite_scope == InviteScope::ReadOnly
+        )
+    }) {
+        return Err(ProfileHttpError::new(
+            StatusCode::FORBIDDEN,
+            "session_read_only",
+            "Read-only room sessions cannot upload profile avatars.",
+        ));
+    }
     let payload: AttachmentUpload = decode_json_body(request, MAX_ATTACHMENT_BODY_BYTES)
         .await
         .map_err(ProfileHttpError::from_body)?;
@@ -128,6 +153,17 @@ async fn upload_attachment(
                 .store
                 .store_profile_attachment(
                     &principal,
+                    &payload.filename,
+                    &payload.content_type,
+                    content,
+                )
+                .await?
+        }
+        (Some(ProfileAuthority::HumanSession(authorization)), None) => {
+            state
+                .store
+                .store_human_session_profile_attachment(
+                    &authorization,
                     &payload.filename,
                     &payload.content_type,
                     content,
@@ -250,6 +286,7 @@ fn attachment_response(
 
 enum ProfileAuthority {
     Room(AuthenticatedPrincipal),
+    HumanSession(HumanSessionAuthorization),
     LocalOperator,
 }
 
@@ -265,6 +302,9 @@ async fn consume_profile_authority(
         .map_err(|_| ProfileHttpError::unauthorized())?
     {
         ConsumedProfileTicket::Room(principal) => Ok(ProfileAuthority::Room(principal)),
+        ConsumedProfileTicket::HumanSession(authorization) => {
+            Ok(ProfileAuthority::HumanSession(authorization))
+        }
         ConsumedProfileTicket::ServerOperator { principal_id }
             if principal_id == LOCAL_OPERATOR_USER_ID =>
         {
@@ -347,7 +387,8 @@ impl From<PersistenceError> for ProfileHttpError {
                     "invite_invalid"
                     | "invite_revoked"
                     | "token_expired"
-                    | "invite_use_limit_reached" => StatusCode::FORBIDDEN,
+                    | "invite_use_limit_reached"
+                    | "session_read_only" => StatusCode::FORBIDDEN,
                     "room_unavailable" => StatusCode::GONE,
                     "attachment_owner_mismatch" | "profile_authority_mismatch" => {
                         StatusCode::FORBIDDEN

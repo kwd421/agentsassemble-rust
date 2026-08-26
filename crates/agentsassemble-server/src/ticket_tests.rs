@@ -101,10 +101,10 @@ async fn central_registration_ticket_is_not_generic_operator_or_profile_authorit
         .issue_central_registration("operator-local-user".to_owned())
         .await
         .unwrap_or_else(|error| panic!("issue profile-rejected ticket: {error}"));
-    assert_eq!(
+    assert!(matches!(
         store.consume_profile(&profile_rejected.ticket).await,
         Err(TicketError::Invalid)
-    );
+    ));
     assert_eq!(
         store
             .consume_central_registration(&profile_rejected.ticket)
@@ -163,10 +163,10 @@ async fn settings_directory_ticket_never_crosses_room_or_profile_scopes() {
         .issue_settings_directory_read("operator-local-user".to_owned())
         .await
         .unwrap_or_else(|error| panic!("issue directory read: {error}"));
-    assert_eq!(
+    assert!(matches!(
         store.consume_profile(&directory.ticket).await,
         Err(TicketError::Invalid)
-    );
+    ));
     assert_eq!(
         store
             .consume_settings_directory_read(&directory.ticket)
