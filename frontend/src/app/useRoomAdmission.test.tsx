@@ -203,13 +203,13 @@ describe("useRoomAdmission", () => {
     expect(apiMocks.joinRoomInvite).not.toHaveBeenCalled();
   });
 
-  it("keeps a matching valid session without consuming the invite again", async () => {
+  it("keeps a matching session and adopts its server-confirmed scope", async () => {
     apiMocks.preflightRoomInvite.mockResolvedValue({
       status: "existing_session",
       can_auto_join: true,
       room_id: "room-1",
       room_label: "Room One",
-      invite_scope: "room",
+      invite_scope: "read_only",
       participant: { participant_id: "guest-1", display_name: "Guest" },
     });
     const onRoomJoined = vi.fn();
@@ -229,6 +229,7 @@ describe("useRoomAdmission", () => {
     await waitFor(() => expect(result.current.guestAdmissionBusy).toBe(false));
     expect(result.current.guestSession?.sessionToken).toBe("session-1");
     expect(result.current.guestSession?.roomLabel).toBe("Room One");
+    expect(result.current.guestSession?.inviteScope).toBe("read_only");
     expect(apiMocks.preflightRoomInvite).toHaveBeenCalledWith({
       inviteToken: "invite-2",
       deviceToken: "device-1",
