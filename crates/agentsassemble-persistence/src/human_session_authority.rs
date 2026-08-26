@@ -11,6 +11,7 @@ use crate::{PersistenceError, SqliteStore, profile_store::decode_bound_profile};
 ///
 /// The raw bearer is intentionally absent. Private fields prevent another crate from
 /// constructing claimed session provenance without the persistence owner.
+#[derive(Clone)]
 pub struct HumanSessionAuthorization {
     session_fingerprint: [u8; 32],
     principal: AuthenticatedPrincipal,
@@ -66,6 +67,22 @@ impl SqliteStore {
             | ResolvedHumanSession::ForeignRoom
             | ResolvedHumanSession::Unavailable => Err(session_revoked()),
         }
+    }
+
+    /// Revalidates one persistence-issued authorization and refreshes mutable profile projection.
+    ///
+    /// # Errors
+    ///
+    /// Fails when any immutable session provenance, room, membership, profile binding, or expiry
+    /// no longer matches the consumed grant.
+    pub async fn revalidate_human_session_authorization(
+        &self,
+        expected: &HumanSessionAuthorization,
+    ) -> Result<HumanSessionAuthorization, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        let (current, _) = revalidate_human_session(&mut transaction, expected, Utc::now()).await?;
+        transaction.commit().await?;
+        Ok(current)
     }
 }
 

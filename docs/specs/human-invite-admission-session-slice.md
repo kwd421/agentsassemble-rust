@@ -926,6 +926,11 @@ while promoting the same opaque ID through the profile lifecycle.
 - Change intent: subscribe before grant consumption, revalidate after subscription,
   revalidate each inbound command and outbound product frame, own an expiry-deadline
   revalidation, and broadcast only after durable revocation commit.
+- The connection owner reuses one persistence method that runs the existing exact
+  resolver and immutable-provenance comparison in a read transaction, returning a
+  refreshed opaque authorization so mutable profile display data is current. Cloning
+  that raw-free value only carries it into the bounded command owner; it creates no
+  session cache or independently constructible authority.
 - Preserved contract: revocation after ticket issue or during an idle connection
   invalidates the exact session promptly; a missed/lagged notification fails closed.
 - Trade-off: outbound validation adds one indexed session/membership lookup per

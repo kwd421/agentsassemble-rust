@@ -56,6 +56,7 @@ async fn live_human_session_authority_revalidates_scope_membership_and_profile()
         .unwrap_or_else(|error| panic!("update session profile: {error}"));
     assert_eq!(updated.profile.display_name, "Updated Session Guest");
     assert_eq!(updated.events.len(), 1);
+    assert_refreshed_display(&store, &authority, "Updated Session Guest").await;
     assert_eq!(
         store
             .human_session_profile(&authority)
@@ -70,11 +71,23 @@ async fn live_human_session_authority_revalidates_scope_membership_and_profile()
         store.human_session_profile(&authority).await,
         "invalid_state",
     );
+    assert_rejected_code(
+        store
+            .revalidate_human_session_authorization(&authority)
+            .await,
+        "invalid_state",
+    );
     set_session_expiry(&store, authority.expires_at()).await;
 
     set_participant_status(&store, ParticipantStatus::Left).await;
     assert_rejected_code(
         store.authorize_human_session(&fingerprint).await,
+        "session_revoked",
+    );
+    assert_rejected_code(
+        store
+            .revalidate_human_session_authorization(&authority)
+            .await,
         "session_revoked",
     );
     assert_rejected_code(
@@ -177,6 +190,18 @@ async fn set_session_expiry(store: &SqliteStore, expires_at: DateTime<Utc>) {
         .execute(&store.pool)
         .await
         .unwrap_or_else(|error| panic!("update session expiry: {error}"));
+}
+
+async fn assert_refreshed_display(
+    store: &SqliteStore,
+    authority: &crate::HumanSessionAuthorization,
+    expected: &str,
+) {
+    let refreshed = store
+        .revalidate_human_session_authorization(authority)
+        .await
+        .unwrap_or_else(|error| panic!("refresh changed session profile: {error}"));
+    assert_eq!(refreshed.principal().display_name, expected);
 }
 
 async fn admitted_fixture(invite_scope: InviteScope) -> (SqliteStore, DateTime<Utc>) {
