@@ -128,14 +128,14 @@ async fn room_http_purposes_and_asset_bindings_are_consumed_on_mismatch() {
         )
         .await
         .unwrap_or_else(|error| panic!("issue preference read: {error}"));
-    assert_eq!(
+    assert!(matches!(
         store.consume_preferences_write(&preference.ticket).await,
         Err(TicketError::Invalid)
-    );
-    assert_eq!(
+    ));
+    assert!(matches!(
         store.consume_preferences_read(&preference.ticket).await,
         Err(TicketError::Invalid)
-    );
+    ));
 
     let asset = store
         .issue_pending_preview_read(
@@ -193,20 +193,16 @@ async fn human_session_grants_are_exact_purpose_and_one_use() {
         .issue_human_session_preferences_read(fixture.authorize(0).await)
         .await
         .unwrap_or_else(|error| panic!("issue read-only preference grant: {error}"));
-    assert!(
-        store
-            .consume_human_session_preferences_read(&preferences.ticket)
-            .await
-            .is_ok()
-    );
+    assert!(matches!(
+        store.consume_preferences_read(&preferences.ticket).await,
+        Ok(crate::ticket::ConsumedRoomPreferenceTicket::HumanSession(_))
+    ));
     let profile = store
         .issue_human_session_profile(fixture.authorize(0).await)
         .await
         .unwrap_or_else(|error| panic!("issue session profile grant: {error}"));
     assert!(matches!(
-        store
-            .consume_human_session_preferences_read(&profile.ticket)
-            .await,
+        store.consume_preferences_read(&profile.ticket).await,
         Err(TicketError::Invalid)
     ));
     assert!(matches!(

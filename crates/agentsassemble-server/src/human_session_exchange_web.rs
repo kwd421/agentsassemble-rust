@@ -1,3 +1,4 @@
+use agentsassemble_domain::InviteScope;
 use agentsassemble_persistence::PersistenceError;
 use axum::{
     Json, Router,
@@ -46,6 +47,8 @@ registered_routes! {
     fn session_exchange_routes<AppState>() {
         "/api/session-tickets/profile" => post(issue_profile_ticket),
         "/api/session-tickets/socket" => post(issue_socket_ticket),
+        "/api/session-tickets/preferences-read" => post(issue_preferences_read_ticket),
+        "/api/session-tickets/preferences-write" => post(issue_preferences_write_ticket),
     }
 }
 
@@ -82,6 +85,45 @@ async fn issue_socket_ticket(
         ticket: issued.ticket,
         ttl_seconds,
         server_proof_key: issued.proof_key,
+    })
+    .into_response())
+}
+
+async fn issue_preferences_read_ticket(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Response, SessionExchangeError> {
+    let authorization = authorize_exchange(&state, request).await?;
+    let ttl_seconds = session_ticket_ttl(&state, &authorization);
+    let issued = state
+        .tickets
+        .issue_human_session_preferences_read(authorization)
+        .await
+        .map_err(|_| SessionExchangeError::capacity())?;
+    Ok(Json(SessionTicketResponse {
+        ticket: issued.ticket,
+        ttl_seconds,
+    })
+    .into_response())
+}
+
+async fn issue_preferences_write_ticket(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Response, SessionExchangeError> {
+    let authorization = authorize_exchange(&state, request).await?;
+    if authorization.principal().invite_scope != InviteScope::ReadWrite {
+        return Err(SessionExchangeError::read_only());
+    }
+    let ttl_seconds = session_ticket_ttl(&state, &authorization);
+    let issued = state
+        .tickets
+        .issue_human_session_preferences_write(authorization)
+        .await
+        .map_err(|_| SessionExchangeError::capacity())?;
+    Ok(Json(SessionTicketResponse {
+        ticket: issued.ticket,
+        ttl_seconds,
     })
     .into_response())
 }
@@ -139,6 +181,14 @@ impl SessionExchangeError {
             status: StatusCode::TOO_MANY_REQUESTS,
             code: "ticket_capacity_reached",
             message: "Session ticket capacity is unavailable.",
+        }
+    }
+
+    const fn read_only() -> Self {
+        Self {
+            status: StatusCode::FORBIDDEN,
+            code: "session_read_only",
+            message: "Read-only room sessions cannot change preferences.",
         }
     }
 

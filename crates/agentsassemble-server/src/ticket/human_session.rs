@@ -272,36 +272,6 @@ impl TicketStore {
             .authorization)
     }
 
-    /// Consumes only an exact human-session preference-read credential.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Invalid` after consuming a wrong-purpose, expired, unknown, or reused ticket.
-    pub async fn consume_human_session_preferences_read(
-        &self,
-        ticket: &str,
-    ) -> Result<HumanSessionAuthorization, TicketError> {
-        Ok(self
-            .consume_human_session(ticket, HumanSessionGrantPurpose::PreferencesRead)
-            .await?
-            .authorization)
-    }
-
-    /// Consumes only an exact human-session preference-write credential.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Invalid` after consuming a wrong-purpose, expired, unknown, or reused ticket.
-    pub async fn consume_human_session_preferences_write(
-        &self,
-        ticket: &str,
-    ) -> Result<HumanSessionAuthorization, TicketError> {
-        Ok(self
-            .consume_human_session(ticket, HumanSessionGrantPurpose::PreferencesWrite)
-            .await?
-            .authorization)
-    }
-
     async fn consume_human_session(
         &self,
         ticket: &str,
@@ -326,7 +296,7 @@ impl TicketStore {
         })
     }
 
-    fn resolve_human_session_authority(
+    pub(super) fn resolve_human_session_authority(
         public: HumanSessionGrant,
         expected: HumanSessionGrantPurpose,
         now: chrono::DateTime<Utc>,

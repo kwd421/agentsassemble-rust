@@ -1,15 +1,17 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use agentsassemble_domain::AuthenticatedPrincipal;
+use agentsassemble_persistence::HumanSessionAuthorization;
+use chrono::Utc;
 use thiserror::Error;
 use tokio::{sync::Mutex, time::Instant};
 use uuid::Uuid;
 
 mod human_session;
 
-use human_session::HumanSessionGrant;
 pub use human_session::{ConsumedHumanSessionSocketTicket, ConsumedProfileTicket};
 pub(crate) use human_session::{ConsumedSocketTicket, SocketTicketHint};
+use human_session::{HumanSessionGrant, HumanSessionGrantPurpose};
 
 struct StoredTicketGrant {
     authority: TicketAuthority,
@@ -71,6 +73,11 @@ pub struct ConsumedRoomHttpTicket {
     pub room_id: String,
     pub principal_id: String,
     pub participant_id: String,
+}
+
+pub(crate) enum ConsumedRoomPreferenceTicket {
+    Local(ConsumedRoomHttpTicket),
+    HumanSession(HumanSessionAuthorization),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -359,12 +366,16 @@ impl TicketStore {
     /// # Errors
     ///
     /// Returns `Invalid` after consuming a wrong-purpose, expired, unknown, or reused ticket.
-    pub async fn consume_preferences_read(
+    pub(crate) async fn consume_preferences_read(
         &self,
         ticket: &str,
-    ) -> Result<ConsumedRoomHttpTicket, TicketError> {
-        self.consume_room_http(ticket, RoomHttpPurpose::PreferencesRead)
-            .await
+    ) -> Result<ConsumedRoomPreferenceTicket, TicketError> {
+        self.consume_room_preference(
+            ticket,
+            RoomHttpPurpose::PreferencesRead,
+            HumanSessionGrantPurpose::PreferencesRead,
+        )
+        .await
     }
 
     /// Consumes only an exact preference-write credential.
@@ -372,12 +383,16 @@ impl TicketStore {
     /// # Errors
     ///
     /// Returns `Invalid` after consuming a wrong-purpose, expired, unknown, or reused ticket.
-    pub async fn consume_preferences_write(
+    pub(crate) async fn consume_preferences_write(
         &self,
         ticket: &str,
-    ) -> Result<ConsumedRoomHttpTicket, TicketError> {
-        self.consume_room_http(ticket, RoomHttpPurpose::PreferencesWrite)
-            .await
+    ) -> Result<ConsumedRoomPreferenceTicket, TicketError> {
+        self.consume_room_preference(
+            ticket,
+            RoomHttpPurpose::PreferencesWrite,
+            HumanSessionGrantPurpose::PreferencesWrite,
+        )
+        .await
     }
 
     /// Consumes only an exact room-appearance upload credential.
@@ -456,14 +471,28 @@ impl TicketStore {
         let TicketAuthority::RoomHttp(room) = grant.authority else {
             return Err(TicketError::Invalid);
         };
-        if room.purpose != expected {
-            return Err(TicketError::Invalid);
+        resolve_room_http_authority(room, &expected)
+    }
+
+    async fn consume_room_preference(
+        &self,
+        ticket: &str,
+        room_purpose: RoomHttpPurpose,
+        session_purpose: HumanSessionGrantPurpose,
+    ) -> Result<ConsumedRoomPreferenceTicket, TicketError> {
+        let grant = self.consume_grant(ticket).await?;
+        match grant.authority {
+            TicketAuthority::RoomHttp(room) => resolve_room_http_authority(room, &room_purpose)
+                .map(ConsumedRoomPreferenceTicket::Local),
+            TicketAuthority::HumanSession(session) => {
+                Self::resolve_human_session_authority(session, session_purpose, Utc::now())
+                    .map(ConsumedRoomPreferenceTicket::HumanSession)
+            }
+            TicketAuthority::Room(_)
+            | TicketAuthority::SettingsDirectoryRead { .. }
+            | TicketAuthority::ServerOperator { .. }
+            | TicketAuthority::CentralRegistration { .. } => Err(TicketError::Invalid),
         }
-        Ok(ConsumedRoomHttpTicket {
-            room_id: room.room_id,
-            principal_id: room.principal_id,
-            participant_id: room.participant_id,
-        })
     }
 
     async fn consume_grant(&self, ticket: &str) -> Result<StoredTicketGrant, TicketError> {
@@ -483,6 +512,20 @@ impl TicketStore {
     pub fn ttl_seconds(&self) -> u64 {
         self.ttl.as_secs()
     }
+}
+
+fn resolve_room_http_authority(
+    room: RoomHttpGrant,
+    expected: &RoomHttpPurpose,
+) -> Result<ConsumedRoomHttpTicket, TicketError> {
+    if &room.purpose != expected {
+        return Err(TicketError::Invalid);
+    }
+    Ok(ConsumedRoomHttpTicket {
+        room_id: room.room_id,
+        principal_id: room.principal_id,
+        participant_id: room.participant_id,
+    })
 }
 
 fn insert_grant(

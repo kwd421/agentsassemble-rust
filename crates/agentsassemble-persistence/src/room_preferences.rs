@@ -4,7 +4,9 @@ use agentsassemble_domain::{
 use sqlx::{Row, Sqlite, Transaction};
 
 use crate::{
-    PersistenceError, SqliteStore, bootstrap::require_complete_bootstrap_in_transaction,
+    HumanSessionAuthorization, PersistenceError, SqliteStore,
+    bootstrap::require_complete_bootstrap_in_transaction,
+    human_session_authority::revalidate_human_session,
     room_user_identity::resolve_room_user_identity,
 };
 
@@ -91,6 +93,30 @@ impl SqliteStore {
         Ok(snapshot)
     }
 
+    /// Reads preferences only while the exact durable human session remains current.
+    ///
+    /// # Errors
+    ///
+    /// Fails when session provenance, membership, profile binding, stored JSON, or persistence is
+    /// no longer valid.
+    pub async fn human_session_room_preferences(
+        &self,
+        expected: &HumanSessionAuthorization,
+    ) -> Result<RoomPreferencesSnapshot, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        let (current, _) =
+            revalidate_human_session(&mut transaction, expected, chrono::Utc::now()).await?;
+        let principal = current.principal();
+        let snapshot = load_room_preferences_snapshot(
+            &mut transaction,
+            &principal.principal_id,
+            &principal.room_id,
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(snapshot)
+    }
+
     /// Replaces the supplied preference fields for one current human and returns one snapshot.
     ///
     /// # Errors
@@ -106,29 +132,66 @@ impl SqliteStore {
     ) -> Result<RoomPreferencesSnapshot, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
         resolve_room_user_identity(&mut transaction, room_id, user_id, participant_id).await?;
-        let current = load_room_preferences(&mut transaction, user_id, room_id).await?;
-        let preferences =
-            current
-                .apply_patch(patch)
-                .map_err(|error| PersistenceError::CommandRejected {
-                    code: error.code,
-                    message: error.message,
-                })?;
-        sqlx::query(
-            "INSERT INTO room_user_preferences(user_id, room_id, preferences_json) VALUES (?, ?, ?) ON CONFLICT(user_id, room_id) DO UPDATE SET preferences_json = excluded.preferences_json",
-        )
-        .bind(user_id)
-        .bind(room_id)
-        .bind(serde_json::to_string(&preferences)?)
-        .execute(&mut *transaction)
-        .await?;
-        let room_settings = load_room_settings(&mut transaction, room_id).await?;
+        let snapshot =
+            update_room_preferences_in_transaction(&mut transaction, room_id, user_id, patch)
+                .await?;
         transaction.commit().await?;
-        Ok(RoomPreferencesSnapshot {
-            room_settings,
-            preferences,
-        })
+        Ok(snapshot)
     }
+
+    /// Replaces preference fields only while the exact durable human session remains current.
+    ///
+    /// # Errors
+    ///
+    /// Fails without writing when session provenance, membership, profile binding, input, stored
+    /// state, or persistence is no longer valid.
+    pub async fn update_human_session_room_preferences(
+        &self,
+        expected: &HumanSessionAuthorization,
+        patch: RoomUserPreferencesPatch,
+    ) -> Result<RoomPreferencesSnapshot, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        let (current, _) =
+            revalidate_human_session(&mut transaction, expected, chrono::Utc::now()).await?;
+        let principal = current.principal();
+        let snapshot = update_room_preferences_in_transaction(
+            &mut transaction,
+            &principal.room_id,
+            &principal.principal_id,
+            patch,
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(snapshot)
+    }
+}
+
+async fn update_room_preferences_in_transaction(
+    transaction: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    user_id: &str,
+    patch: RoomUserPreferencesPatch,
+) -> Result<RoomPreferencesSnapshot, PersistenceError> {
+    let current = load_room_preferences(transaction, user_id, room_id).await?;
+    let preferences =
+        current
+            .apply_patch(patch)
+            .map_err(|error| PersistenceError::CommandRejected {
+                code: error.code,
+                message: error.message,
+            })?;
+    sqlx::query(
+        "INSERT INTO room_user_preferences(user_id, room_id, preferences_json) VALUES (?, ?, ?) ON CONFLICT(user_id, room_id) DO UPDATE SET preferences_json = excluded.preferences_json",
+    )
+    .bind(user_id)
+    .bind(room_id)
+    .bind(serde_json::to_string(&preferences)?)
+    .execute(&mut **transaction)
+    .await?;
+    Ok(RoomPreferencesSnapshot {
+        room_settings: load_room_settings(transaction, room_id).await?,
+        preferences,
+    })
 }
 
 fn invalid_stored_room() -> PersistenceError {

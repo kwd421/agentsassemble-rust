@@ -15,11 +15,12 @@ use serde_json::{Map, Value, json};
 use tower_http::set_header::SetResponseHeaderLayer;
 
 use crate::{
-    AppState, ConsumedRoomHttpTicket,
+    AppState,
     http_api::{
         BodyDecodeError, PRIVATE_NO_STORE, bearer_ticket, decode_json_body, ensure_empty_body,
         exact_tauri_cors,
     },
+    ticket::ConsumedRoomPreferenceTicket,
 };
 
 const MAX_PREFERENCES_BODY_BYTES: usize = 16 * 1024;
@@ -71,13 +72,23 @@ async fn read_settings(
     ensure_empty_body(request, MAX_PREFERENCES_BODY_BYTES)
         .await
         .map_err(RoomPreferencesHttpError::from_body)?;
-    let snapshot = state
-        .store
-        .room_preferences(&grant.room_id, &grant.principal_id, &grant.participant_id)
-        .await?;
+    let snapshot = match &grant {
+        ConsumedRoomPreferenceTicket::Local(grant) => {
+            state
+                .store
+                .room_preferences(&grant.room_id, &grant.principal_id, &grant.participant_id)
+                .await?
+        }
+        ConsumedRoomPreferenceTicket::HumanSession(authorization) => {
+            state
+                .store
+                .human_session_room_preferences(authorization)
+                .await?
+        }
+    };
     Ok(Json(json!({
-        "room_id": grant.room_id,
-        "settings": combined_settings_payload(&grant.room_id, &snapshot)?,
+        "room_id": requested_room_id,
+        "settings": combined_settings_payload(&requested_room_id, &snapshot)?,
     })))
 }
 
@@ -86,40 +97,58 @@ async fn update_preferences(
     request: Request,
 ) -> Result<Json<Value>, RoomPreferencesHttpError> {
     let grant = consume_preferences_write_ticket(&state, request.headers()).await?;
-    state
-        .store
-        .authorize_room_user(&grant.room_id, &grant.principal_id, &grant.participant_id)
-        .await?;
+    authorize_preference_write(&state, &grant).await?;
     let payload: Value = decode_json_body(request, MAX_PREFERENCES_BODY_BYTES)
         .await
         .map_err(RoomPreferencesHttpError::from_body)?;
-    let patch = parse_preference_update(&payload, &grant.room_id)?;
+    let room_id = preference_room_id(&grant);
+    let patch = parse_preference_update(&payload, room_id)?;
     let snapshot = if patch.notifications.is_none() && patch.channel_settings.is_none() {
-        state
-            .store
-            .room_preferences(&grant.room_id, &grant.principal_id, &grant.participant_id)
-            .await?
+        match &grant {
+            ConsumedRoomPreferenceTicket::Local(grant) => {
+                state
+                    .store
+                    .room_preferences(&grant.room_id, &grant.principal_id, &grant.participant_id)
+                    .await?
+            }
+            ConsumedRoomPreferenceTicket::HumanSession(authorization) => {
+                state
+                    .store
+                    .human_session_room_preferences(authorization)
+                    .await?
+            }
+        }
     } else {
-        state
-            .store
-            .update_room_preferences(
-                &grant.room_id,
-                &grant.principal_id,
-                &grant.participant_id,
-                patch,
-            )
-            .await?
+        match &grant {
+            ConsumedRoomPreferenceTicket::Local(grant) => {
+                state
+                    .store
+                    .update_room_preferences(
+                        &grant.room_id,
+                        &grant.principal_id,
+                        &grant.participant_id,
+                        patch,
+                    )
+                    .await?
+            }
+            ConsumedRoomPreferenceTicket::HumanSession(authorization) => {
+                state
+                    .store
+                    .update_human_session_room_preferences(authorization, patch)
+                    .await?
+            }
+        }
     };
     Ok(Json(json!({
-        "room_id": grant.room_id,
-        "settings": combined_settings_payload(&grant.room_id, &snapshot)?,
+        "room_id": room_id,
+        "settings": combined_settings_payload(room_id, &snapshot)?,
     })))
 }
 
 async fn consume_preferences_read_ticket(
     state: &AppState,
     headers: &axum::http::HeaderMap,
-) -> Result<ConsumedRoomHttpTicket, RoomPreferencesHttpError> {
+) -> Result<ConsumedRoomPreferenceTicket, RoomPreferencesHttpError> {
     let ticket = bearer_ticket(headers).ok_or_else(RoomPreferencesHttpError::unauthorized)?;
     state
         .tickets
@@ -131,13 +160,34 @@ async fn consume_preferences_read_ticket(
 async fn consume_preferences_write_ticket(
     state: &AppState,
     headers: &axum::http::HeaderMap,
-) -> Result<ConsumedRoomHttpTicket, RoomPreferencesHttpError> {
+) -> Result<ConsumedRoomPreferenceTicket, RoomPreferencesHttpError> {
     let ticket = bearer_ticket(headers).ok_or_else(RoomPreferencesHttpError::unauthorized)?;
     state
         .tickets
         .consume_preferences_write(ticket)
         .await
         .map_err(|_| RoomPreferencesHttpError::unauthorized())
+}
+
+async fn authorize_preference_write(
+    state: &AppState,
+    grant: &ConsumedRoomPreferenceTicket,
+) -> Result<(), RoomPreferencesHttpError> {
+    match grant {
+        ConsumedRoomPreferenceTicket::Local(grant) => {
+            state
+                .store
+                .authorize_room_user(&grant.room_id, &grant.principal_id, &grant.participant_id)
+                .await?;
+        }
+        ConsumedRoomPreferenceTicket::HumanSession(authorization) => {
+            state
+                .store
+                .revalidate_human_session_authorization(authorization)
+                .await?;
+        }
+    }
+    Ok(())
 }
 
 async fn consume_directory_ticket(
@@ -157,13 +207,22 @@ async fn consume_directory_ticket(
 }
 
 fn require_bound_room(
-    grant: &ConsumedRoomHttpTicket,
+    grant: &ConsumedRoomPreferenceTicket,
     requested_room_id: &str,
 ) -> Result<(), RoomPreferencesHttpError> {
-    if grant.room_id == requested_room_id {
+    if preference_room_id(grant) == requested_room_id {
         Ok(())
     } else {
         Err(RoomPreferencesHttpError::unauthorized())
+    }
+}
+
+fn preference_room_id(grant: &ConsumedRoomPreferenceTicket) -> &str {
+    match grant {
+        ConsumedRoomPreferenceTicket::Local(grant) => &grant.room_id,
+        ConsumedRoomPreferenceTicket::HumanSession(authorization) => {
+            &authorization.principal().room_id
+        }
     }
 }
 
