@@ -3,9 +3,9 @@
 Status: partial slice evidence; canonical invite management, credential
 authentication, read-only preflight, canonical admission inputs, the atomic SQLite
 plus bounded RoomRuntime owners, local HTTP preflight/join, and the fail-closed
-browser credential owner are implemented. Pre-join upload, session-derived grants,
-the authenticated room socket, and trusted public ingress are not implemented by
-these commits.
+browser credential owner and pre-join avatar upload/preview are implemented.
+Session-derived grants, the authenticated room socket, and trusted public ingress
+are not implemented by these commits.
 
 ## Provenance and scope
 
@@ -27,6 +27,8 @@ these commits.
   `c99a031`; queue routing/runtime ownership is `29d3d66`, `cf29ecd`, and `06587b0`,
   with exact-recovery/avatar correction `28d5d56`. Local HTTP preflight/join is
   `b32c2b7`; the browser credential owner and call-site cutover is `caf9e37`.
+- Pre-join avatar persistence is `facaaab`; its HTTP upload, preview, and admission
+  flow is `cc57217`, with evidence in `625e556` and `9c4a208`.
 - The schema is fresh-only at version 38. No migration, compatibility reader,
   fallback column, or partially upgraded authority is accepted.
 
