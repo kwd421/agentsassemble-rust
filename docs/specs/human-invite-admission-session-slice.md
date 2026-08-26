@@ -132,13 +132,15 @@ existing bounded `RoomRuntime` writer. Queue acceptance transfers custody to the
 runtime: disconnecting or cancelling the HTTP handler cannot cancel an accepted
 admission. The room runtime then performs one SQLite transaction:
 
-1. load the active room and invite and enforce expiry, revocation, client kind,
-   scope, and maximum use;
-2. derive the admission key and payload hash, returning only an exact live retry
-   and rejecting a conflicting or terminal retry;
+1. load the active room and invite and enforce room state, expiry, revocation,
+   client kind, and scope;
+2. derive the admission key and payload hash. Reject a conflicting or terminal row,
+   but return an exact live retry before applying maximum-use or new-session capacity
+   checks because that row already owns its consumed use and capacity;
 3. resolve the reusable credential user or allocate an invite-scoped one-use user,
-   keeping participant/profile collisions fail-closed, then enforce global/per-room
-   public-session capacity while excluding an existing same-participant session;
+   keeping participant/profile collisions fail-closed, then enforce maximum use for
+   this new invite principal and global/per-room public-session capacity while
+   excluding an existing same-participant session;
 4. consume one invite use when this is a new invite principal, upsert the joined
    human participant and matching profile, and mark any different live session for
    that `(room, participant)` replaced without charging another capacity slot;
@@ -236,6 +238,15 @@ timer never extends validity. A post-commit session/participant/room revocation
 broadcast closes an idle socket. Broadcast lag or closure triggers durable
 revalidation and fails closed. The database remains authority; the broadcast and
 deadline are only revalidation triggers, not independent validity sources.
+
+Frame-level validation is not commit authority. Every session-originated command
+carries the immutable session fingerprint and admitted scope beside the resolved
+principal through the bounded `RoomRuntime` queue. The exact SQLite mutation unit
+revalidates that fingerprint as active and unexpired and checks its room, user,
+participant, profile, membership, and scope before any command state transition.
+Local/private commands retain their existing separately typed authority. Therefore a
+revoke or replacement committed after frame validation but before dequeued mutation
+causes that mutation to fail closed even when the participant remains joined.
 
 Leaving performs membership-left transition, revokes that participant's room
 sessions, and appends the canonical event in one transaction. Exact session revoke
@@ -381,6 +392,9 @@ write-path work. A separate cleanup task requires later measured evidence.
   different device consumes a distinct principal; collision and all capacity edges
   fail before consumption; and no raw invite, device, or session bearer reaches
   SQLite, events, logs, or fixtures.
+- Lost-response tests consume the final use, drop the first HTTP result after commit,
+  and prove the exact live retry succeeds before max-use enforcement while a new
+  admission still receives the capacity error.
 - Replacement tests admit one stable participant through different reusable invites,
   prove only the new session remains live, the old bearer/grants/socket fail, and the
   same-participant replacement does not increase capacity.
@@ -400,7 +414,9 @@ write-path work. A separate cleanup task requires later measured evidence.
 - Real WebSocket tests prove initial snapshot readiness, normal/read-only command
   behavior, revoked-ticket denial, expiry close, outbound denial after revoke, and
   immediate connected-session close. Races use barriers or controlled channels,
-  never arbitrary sleeps. Handler-cancellation and restart tests prove one durable
+  never arbitrary sleeps. A barrier revokes or replaces the exact session between
+  frame validation and the SQLite mutation UOW and proves no durable command state
+  or event commits. Handler-cancellation and restart tests prove one durable
   canonical event and eventual publication-cursor acknowledgement after an accepted
   admission commit; replay may re-offer only the same sequence.
 - Browser-unit tests prove exactly one `aad1_` credential is reused by preflight,
