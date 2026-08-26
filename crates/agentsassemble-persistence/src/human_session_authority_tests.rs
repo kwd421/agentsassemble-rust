@@ -2,6 +2,7 @@ use agentsassemble_domain::{
     ClientKind, InviteScope, LOCAL_OPERATOR_USER_ID, Participant, ParticipantStatus, UserProfile,
     UserProfilePatch,
 };
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use chrono::{DateTime, Duration, Utc};
 
 use crate::{
@@ -15,7 +16,7 @@ const BROWSER: [u8; 32] = [0x43; 32];
 
 #[tokio::test]
 async fn live_human_session_authority_revalidates_scope_membership_and_profile() {
-    let (store, now) = admitted_fixture().await;
+    let (store, now) = admitted_fixture(InviteScope::ReadOnly).await;
     let fingerprint = session_fingerprint(&store).await;
 
     let authority = store
@@ -109,6 +110,67 @@ async fn live_human_session_authority_revalidates_scope_membership_and_profile()
     );
 }
 
+#[tokio::test]
+async fn human_session_avatar_upload_requires_live_write_scope() {
+    let (read_only_store, _) = admitted_fixture(InviteScope::ReadOnly).await;
+    let read_only = read_only_store
+        .authorize_human_session(&session_fingerprint(&read_only_store).await)
+        .await
+        .unwrap_or_else(|error| panic!("authorize read-only avatar session: {error}"));
+    assert_rejected_code(
+        read_only_store
+            .store_human_session_profile_attachment(
+                &read_only,
+                "ignored.png",
+                "image/png",
+                b"not decoded for read-only authority".to_vec(),
+            )
+            .await,
+        "session_read_only",
+    );
+
+    let (store, _) = admitted_fixture(InviteScope::ReadWrite).await;
+    let authorization = store
+        .authorize_human_session(&session_fingerprint(&store).await)
+        .await
+        .unwrap_or_else(|error| panic!("authorize writable avatar session: {error}"));
+    let stored = store
+        .store_human_session_profile_attachment(
+            &authorization,
+            "guest.png",
+            "image/png",
+            STANDARD
+                .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMQ0bD5DwACRAF4aig0hQAAAABJRU5ErkJggg==")
+                .unwrap_or_else(|error| panic!("decode avatar fixture: {error}")),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("store writable session avatar: {error}"));
+    set_participant_status(&store, ParticipantStatus::Left).await;
+    assert_rejected_code(
+        store
+            .store_human_session_profile_attachment(
+                &authorization,
+                "replacement.png",
+                "image/png",
+                STANDARD
+                    .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMQ0bD5DwACRAF4aig0hQAAAABJRU5ErkJggg==")
+                    .unwrap_or_else(|error| panic!("decode replacement fixture: {error}")),
+            )
+            .await,
+        "session_revoked",
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, String>(
+            "SELECT attachment_id FROM profile_avatar_assets WHERE owner_user_id = ? AND state = 'pending'",
+        )
+        .bind(&authorization.principal().principal_id)
+        .fetch_one(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("read retained session avatar: {error}")),
+        stored.id
+    );
+}
+
 async fn set_session_expiry(store: &SqliteStore, expires_at: DateTime<Utc>) {
     sqlx::query("UPDATE human_room_sessions SET expires_at = ?")
         .bind(expires_at.timestamp_micros())
@@ -117,7 +179,7 @@ async fn set_session_expiry(store: &SqliteStore, expires_at: DateTime<Utc>) {
         .unwrap_or_else(|error| panic!("update session expiry: {error}"));
 }
 
-async fn admitted_fixture() -> (SqliteStore, DateTime<Utc>) {
+async fn admitted_fixture(invite_scope: InviteScope) -> (SqliteStore, DateTime<Utc>) {
     let store = SqliteStore::open("sqlite::memory:")
         .await
         .unwrap_or_else(|error| panic!("open session authority fixture: {error}"));
@@ -135,11 +197,15 @@ async fn admitted_fixture() -> (SqliteStore, DateTime<Utc>) {
         .unwrap_or_else(|error| panic!("create session authority room: {error}"));
     let now = Utc::now();
     sqlx::query(
-        "INSERT INTO room_invites(invite_id, signed_token_fingerprint, join_code_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at) VALUES (?, ?, ?, 'general', 'session-guest', 'Session Guest', 'read_only', 1, 0, ?, 0, ?, ?)",
+        "INSERT INTO room_invites(invite_id, signed_token_fingerprint, join_code_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at) VALUES (?, ?, ?, 'general', 'session-guest', 'Session Guest', ?, 1, 0, ?, 0, ?, ?)",
     )
     .bind(hex::encode(&SIGNED[..8]))
     .bind(SIGNED.as_slice())
     .bind(JOIN.as_slice())
+    .bind(match invite_scope {
+        InviteScope::ReadWrite => "read_write",
+        InviteScope::ReadOnly => "read_only",
+    })
     .bind((now + Duration::hours(2)).timestamp_micros())
     .bind(LOCAL_OPERATOR_USER_ID)
     .bind((now - Duration::minutes(1)).timestamp_micros())
