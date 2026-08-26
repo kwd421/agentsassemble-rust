@@ -20,9 +20,14 @@ not an authority.
 
 ## Current reachable contract
 
-- A current human invite is room-bound, expiring, either read/write or read-only,
-  and bounded to 1, 5, or the reusable-link limit of 128 distinct principals. The
-  copied UI defaults to one use and 24 hours.
+- A current human invite is room-bound, expiring, and either read/write or read-only.
+  The copied UI offers configured `max_uses` values 1, 5, and 0 and defaults to one
+  use and 24 hours, but the moderator API also currently accepts other integers such
+  as 2 and 3. Negative input normalizes to 0. Configured value 1 is one-use; every
+  other nonnegative value is reusable. Its effective distinct-principal ceiling is
+  `min(configured_max_uses or 128, 128)`, while public JSON retains the configured
+  value. Rust preserves that split rather than narrowing the reachable API to the UI
+  presets.
 - Invite preflight does not write. It distinguishes invalid or expired invites,
   agent-only links, a live same-room session, a known reusable-link device, an
   already joined member, and a browser that must supply a profile.
@@ -70,8 +75,10 @@ SQLite connection. The clean current schema adds these records; no previous sche
 is migrated, imported, or interpreted.
 
 - `room_invites` owns invite UUID, token fingerprint, room, base participant and
-  display identity, scope, maximum uses, use count, expiry, revocation, creator, and
-  creation time. Raw invite tokens are never persisted.
+  display identity, scope, configured maximum uses, use count, expiry, revocation,
+  creator, and creation time. The effective use ceiling is the deterministic capped
+  function above, not a second stored policy value. Raw invite tokens are never
+  persisted.
 - `human_device_credentials` maps only reusable-link device fingerprints to one
   stable human user. One-use admissions do not create this mapping.
 - `human_room_sessions` owns both the admission result and session: unique admission
@@ -94,6 +101,11 @@ is migrated, imported, or interpreted.
   unavailable and changed-payload conflict results even after its invite is used,
   expired, or revoked. A reusable row may be removed after its invite is terminal
   because the original reusable path applies that current-invite gate before lookup.
+- Composite schema keys bind every session to one existing invite's exact
+  `(invite_id, room_id, scope)`, one profile's exact `(user_id, participant_id)`, and,
+  for reusable rows, one device credential's exact `(fingerprint, user_id)`. Separate
+  existence foreign keys are insufficient because a cross-bound durable row would
+  otherwise become the authority used by every later target revalidation.
 - `profile_attachments` remains the single human-avatar asset owner. Its state
   constraint permits either a user-owned pending/bound image or an admission-pending
   image. The latter stores separate fixed-size custody and invite-quota fingerprints.
@@ -375,11 +387,35 @@ flag is added meanwhile.
 - Prior cost: the original stores 32-byte digests as 64-character hex strings and
   its workflow journal serializes repeated state as JSON.
 - Change intent: fixed BLOB checks halve digest column bytes and eliminate parsing
-  ambiguity while retaining maintained SHA-256/HMAC implementations.
+  ambiguity while retaining maintained SHA-256/HMAC implementations. Every authority
+  column also checks `typeof(value) = 'blob'`; SQLite BLOB affinity alone accepts
+  TEXT, and TEXT/BLOB values compare as different storage classes under uniqueness.
 - Preserved contract: only fingerprints are durable and comparisons remain exact;
   public IDs and bearer formats do not change.
-- Verification: schema constraints reject the wrong length, database inspection
-  finds no raw bearer, and restart/exact-retry tests reproduce the same token.
+- Verification: schema constraints reject the wrong length and a 32-character TEXT,
+  accept exactly 32 BLOB bytes, database inspection finds no raw bearer, and
+  restart/exact-retry tests reproduce the same token.
+
+### Composite authority bindings instead of repository-only correlation
+
+- Prior threat: independent invite, room, scope, user, participant, and reusable
+  credential foreign keys prove only that each value exists. A writer bug could
+  combine a read-only invite from one room with read/write scope or another room's
+  participant, and every later authorization would then trust that corrupt session
+  row consistently.
+- Change intent: add only the redundant composite unique parent keys required by
+  SQLite and composite session foreign keys for invite/room/scope,
+  user/participant, and reusable credential/user. Repository validation remains but
+  is no longer the sole durable cross-binding defense.
+- Preserved contract: admission still creates the same invite, profile, participant,
+  and stable reusable identity; one-use rows remain independent of the reusable
+  credential table. Room deletion keeps its explicit cascade/purge behavior.
+- Trade-off: the redundant unique indexes consume a small fixed amount per authority
+  row and add index writes at admission. That cost protects the concrete privilege
+  and identity cross-binding threat without triggers or a second authority model.
+- Verification: schema tests reject invite/room, invite/scope, user/participant, and
+  reusable credential/user mismatches before repository code runs; matching one-use
+  and reusable rows still insert and obey the active-participant partial unique key.
 
 ### Event-driven revocation without periodic session polling
 
@@ -524,6 +560,10 @@ disk evidence; the current store-wide worst case remains capped by the existing
   session remains live. Separate reusable tests prove the original ordering: an
   existing device-key result is rejected after invite expiry, revocation, or use
   ceiling, while a new admission receives the same current-gate error.
+- Invite-limit tests preserve configured `max_uses` values 0, 1, 2, 3, 5, 128, and
+  greater than 128 in public results while enforcing effective ceilings 128, 1, 2,
+  3, 5, 128, and 128 respectively. Negative create input normalizes to configured 0;
+  the UI presets remain 1, 5, and 0 without becoming a database allow-list.
 - One-use tombstone tests end the backing session by natural expiry, exact revoke,
   and replacement, then trigger unrelated bounded cleanup and restart. Exact retry
   remains `admission_session_unavailable`, changed-payload retry remains a conflict,
