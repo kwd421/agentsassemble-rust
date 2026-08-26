@@ -319,7 +319,8 @@ async fn snapshot_is_trimmed_to_the_websocket_message_budget() {
 
 #[tokio::test]
 async fn static_frontend_has_browser_security_headers() {
-    let directory = tempfile::tempdir().expect("create test directory");
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
     let frontend = directory.path().join("frontend");
     tokio::fs::create_dir_all(frontend.join("assets"))
         .await
@@ -333,11 +334,10 @@ async fn static_frontend_has_browser_security_headers() {
     tokio::fs::write(frontend.join("assets/app.js"), "globalThis.loaded = true;")
         .await
         .unwrap_or_else(|error| panic!("write frontend asset: {error}"));
-    let database_path = directory.path().join("runtime.sqlite3");
-    let database_url = format!("sqlite://{}", database_path.display());
+    let database_url = format!("sqlite://{}/runtime.sqlite3", directory.path().display());
     let store = SqliteStore::open(&database_url)
         .await
-        .expect("open test store");
+        .unwrap_or_else(|error| panic!("open test store: {error}"));
     bootstrap(&store).await;
     let server = start_with_frontend(store, frontend).await;
     let response = Client::new()
