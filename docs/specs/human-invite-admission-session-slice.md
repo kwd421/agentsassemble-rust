@@ -1,9 +1,9 @@
 # Human Invite, Admission, and Room Session Slice
 
-Status: atomic SQLite, bounded RoomRuntime admission, local HTTP preflight/join,
-the fail-closed browser credential owner, and the pre-join avatar persistence owner
-are implemented and locally verified; the pre-join HTTP route, derived grants,
-WebSocket session activation, and trusted public ingress remain incomplete
+Status: atomic SQLite, bounded RoomRuntime admission, local HTTP preflight/join and
+pre-join avatar flow, and the fail-closed browser credential owner are implemented
+and locally verified; derived grants, WebSocket session activation, and trusted
+public ingress remain incomplete
 
 ## Definition
 
@@ -735,6 +735,56 @@ flag is added meanwhile.
   and workspace-check gates pass. The implementation commit is 537 insertions and
   8 deletions across four files; the new 521-line owner and existing 735-line
   canonical attachment owner remain below the mandatory 800-line source gate.
+
+### Pre-join upload and preview through the existing attachment route
+
+- Prior gap and threat: before `cc57217`, the copied guest profile panel sent its
+  current `invite_token`, canonical `device_token`, and cropped avatar to the existing
+  `/api/attachments` route, but that route unconditionally required a one-use profile
+  ticket and returned 401. Returning metadata without a readable pre-admission URL
+  would also leave the real panel's immediate image preview broken. Conversely,
+  treating a malformed supplied Authorization header as absence would let a caller
+  bypass consume-before-body ticket failure and fall into public invite handling.
+- Change intent and smallest design: the existing handler checks header presence. If
+  Authorization is supplied it consumes the existing profile ticket before reading
+  the body, with no public fallback. With no Authorization, it accepts only
+  `profile_avatar`, authenticates the two current invite credential forms and the
+  canonical browser credential immediately after bounded JSON decode, then performs
+  base64 and image work and calls the existing `store_human_prejoin_avatar`. The raw
+  upload type no longer derives `Debug` and raw credentials never cross the HTTP
+  module. No route, ticket kind, table, store, queue, task, or client orchestration was
+  added.
+- Preserved contract and preview boundary: authenticated local/session profile
+  uploads keep their existing ticket and authority paths. Pre-join upload returns the
+  same attachment metadata shape used by the copied UI. The existing opaque UUID URL
+  can read a live `admission_pending` image until its one-hour expiry, matching the
+  original immediate preview capability; ordinary 15-minute pending profile uploads
+  remain hidden. Exact-custody replacement makes the previous URL 404. Admission
+  still rechecks invite, room, attachment ID, exact custody, signed-invite provenance,
+  integrity, and TTL in its transaction before binding that image to the human-profile
+  SSoT. A leaked live opaque preview URL can render only that bounded avatar and grants
+  no invite, profile, room, or mutation authority; responses remain `private,
+  no-store` and `nosniff`.
+- Observed resource cost: every upload remains under the existing 14,046,552-byte
+  JSON-body and ten-second deadline, so the adapter buffers at most one bounded
+  base64 envelope. Public invite/browser authentication happens before base64 decode;
+  a valid payload then allocates one decoded input bounded just above the 10 MiB
+  binary ceiling before the shared decoder enforces the exact 10 MiB and raster
+  limits documented above. A preview performs one primary-key/state/expiry lookup and
+  returns the stored canonical PNG BLOB. The added branches, two fixed fingerprints,
+  and tuple are request-local; no retained state or success-path retry exists. No CPU,
+  memory, disk, or latency improvement is claimed without representative measurement.
+- Verification: a real loopback Axum flow proves an invalid supplied profile ticket
+  returns 401 before malformed JSON is decoded; two browsers retain separate custody;
+  exact same-browser replacement makes only the old URL 404; both live previews render
+  canonical PNG with `private, no-store`; admission binds only the exact selected
+  avatar; exact retry returns the same result; and both the bound avatar and unrelated
+  pending preview remain reachable afterward. The pre-existing profile boundary test
+  still proves ordinary pending avatars return 404. All 159 persistence tests, 54
+  server unit tests, and every server integration test pass, together with
+  warning-denied workspace Clippy and `make check`. The implementation/test commit is
+  182 insertions and 12 deletions across three files; the touched production modules
+  remain 380 and 737 lines under the unchanged 800-line gate.
 
 ### Binary digests instead of encoded digest text
 

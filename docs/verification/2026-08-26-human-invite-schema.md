@@ -871,9 +871,9 @@ Commit `b32c2b7` mounts the current `/api/room-invite/admission` and
   insertions and 2 deletions, below the mandatory split threshold.
 - Explicit incompleteness: the copied browser now produces the canonical `aad1_`
   credential and can call the local preflight/join routes, but the Rust pre-join
-  avatar upload, live-session ticket exchange, session-authenticated WebSocket,
-  leave/revoke, and trusted public ingress remain unavailable. No packaged frontend
-  parity or Computer Use result is claimed.
+  avatar upload is implemented by later commit `cc57217`. Live-session ticket
+  exchange, session-authenticated WebSocket, leave/revoke, and trusted public ingress
+  remain unavailable. No packaged frontend parity or Computer Use result is claimed.
 
 ## Fail-closed browser credential owner
 
@@ -978,3 +978,42 @@ admission surface is added.
   ephemeral token on failure. Warning-denied workspace Clippy, 54 server unit tests,
   every server integration test, and `make check` pass. The implementation/test
   commit is 109 insertions and 24 deletions across eight files.
+
+## Reachable pre-join avatar HTTP flow
+
+Commit `cc57217` connects the copied guest profile panel's existing request shape to
+the reviewed persistence owner without adding another product surface.
+
+- Prior observed gap and threat: `/api/attachments` required a profile ticket even
+  when the current guest UI sent an invite and durable browser credential before
+  admission, so the real flow returned 401. Header-based authenticated writes must
+  still consume their one-use ticket before body decode; an invalid supplied header
+  cannot become an invitation to try the public branch. Returning an unreadable
+  pending URL would also make the guest's immediate `<img>` preview fail.
+- Intent and preserved contract: the one existing handler selects its authority from
+  Authorization header presence. Supplied tickets are consumed first and never fall
+  through. No-header requests decode only the existing bounded envelope, accept only
+  `profile_avatar`, authenticate current invite and canonical `aad1_` credentials
+  before base64/image work, and pass only fingerprints to
+  `store_human_prejoin_avatar`. Existing local/session profile uploads are unchanged.
+  The existing public attachment lookup admits only bound images or unexpired
+  `admission_pending` images by opaque UUID; ordinary pending rows remain invisible.
+  Admission retains final exact attachment/custody/invite/room/TTL/integrity checks
+  before the profile and room projection can reference it.
+- Actual cost and security boundary: body buffering stays capped at 14,046,552 bytes
+  with the existing ten-second deadline. Valid public input incurs current credential
+  authentication, one bounded base64 decode, the already measured shared decoder
+  bounds, and the reviewed SQLite write. Preview is one primary-key/state/expiry
+  lookup plus the canonical BLOB read. The raw payload type is not `Debug` or
+  `Serialize`; raw invite/browser credentials remain HTTP-local. The live opaque URL
+  is a bounded read capability for one avatar only and conveys no mutation or room
+  authority. No cache, new route, grant, ticket, table, task, queue, retry, or retained
+  state was introduced. No CPU, memory, disk, or latency improvement is claimed.
+- Verification result: the real loopback test proves invalid Authorization wins over
+  malformed JSON, per-browser custody isolation, exact replacement/old-URL 404, live
+  canonical preview, atomic admission binding to the selected avatar, exact retry,
+  and post-admission reads. The existing profile test continues to prove ordinary
+  pending rows return 404. All 159 persistence tests, 54 server unit tests, all server
+  integration tests, warning-denied workspace Clippy, and `make check` pass. Commit
+  size is 182 insertions/12 deletions across three files; the production modules are
+  380 and 737 lines and pass the unchanged source gate.
