@@ -76,7 +76,9 @@ is migrated, imported, or interpreted.
 
 - `room_invites` owns invite UUID, token fingerprint, room, base participant and
   display identity, scope, configured maximum uses, use count, expiry, revocation,
-  creator, and creation time. The effective use ceiling is the deterministic capped
+  creator, and creation time. A generated classification derives `one_use` exactly
+  when configured maximum uses is 1 and `reusable` otherwise; it is not a second
+  writable policy value. The effective use ceiling is the deterministic capped
   function above, not a second stored policy value. Raw invite tokens are never
   persisted.
 - `human_device_credentials` maps only reusable-link device fingerprints to one
@@ -102,10 +104,12 @@ is migrated, imported, or interpreted.
   expired, or revoked. A reusable row may be removed after its invite is terminal
   because the original reusable path applies that current-invite gate before lookup.
 - Composite schema keys bind every session to one existing invite's exact
-  `(invite_id, room_id, scope)`, one profile's exact `(user_id, participant_id)`, and,
-  for reusable rows, one device credential's exact `(fingerprint, user_id)`. Separate
-  existence foreign keys are insufficient because a cross-bound durable row would
-  otherwise become the authority used by every later target revalidation.
+  `(invite_id, room_id, scope, generated key kind)`, one profile's exact
+  `(user_id, participant_id)`, and, for reusable rows, one device credential's exact
+  `(fingerprint, user_id)`. Separate existence foreign keys are insufficient because
+  a cross-bound durable row would otherwise become the authority used by every later
+  target revalidation. The generated parent value prevents a child from classifying
+  a reusable invite as one-use and thereby bypassing the reusable credential binding.
 - `profile_attachments` remains the single human-avatar asset owner. Its state
   constraint permits either a user-owned pending/bound image or an admission-pending
   image. The latter stores separate fixed-size custody and invite-quota fingerprints.
@@ -398,24 +402,29 @@ flag is added meanwhile.
 
 ### Composite authority bindings instead of repository-only correlation
 
-- Prior threat: independent invite, room, scope, user, participant, and reusable
-  credential foreign keys prove only that each value exists. A writer bug could
+- Prior threat: independent invite, room, scope, user, participant, key kind, and
+  reusable credential fields prove only that each value exists. A writer bug could
   combine a read-only invite from one room with read/write scope or another room's
-  participant, and every later authorization would then trust that corrupt session
-  row consistently.
+  participant. It could also label a reusable invite as one-use, use SQLite's nullable
+  composite-FK rule to omit the device credential, and make cleanup and uniqueness
+  trust that false classification. Every later authorization would then trust the
+  corrupt session row consistently.
 - Change intent: add only the redundant composite unique parent keys required by
-  SQLite and composite session foreign keys for invite/room/scope,
-  user/participant, and reusable credential/user. Repository validation remains but
-  is no longer the sole durable cross-binding defense.
+  SQLite and composite session foreign keys for invite/room/scope/generated key kind,
+  user/participant, and reusable credential/user. The invite key kind is generated
+  directly from configured maximum uses, so no second writable state or trigger is
+  introduced. Repository validation remains but is no longer the sole durable
+  cross-binding defense.
 - Preserved contract: admission still creates the same invite, profile, participant,
   and stable reusable identity; one-use rows remain independent of the reusable
   credential table. Room deletion keeps its explicit cascade/purge behavior.
 - Trade-off: the redundant unique indexes consume a small fixed amount per authority
   row and add index writes at admission. That cost protects the concrete privilege
   and identity cross-binding threat without triggers or a second authority model.
-- Verification: schema tests reject invite/room, invite/scope, user/participant, and
-  reusable credential/user mismatches before repository code runs; matching one-use
-  and reusable rows still insert and obey the active-participant partial unique key.
+- Verification: schema tests reject invite/room, invite/scope, invite/key-kind,
+  user/participant, and reusable credential/user mismatches before repository code
+  runs; matching one-use and reusable rows still insert and obey the active-participant
+  partial unique key. Invite limits 1 and 0/2/5/>128 exercise both generated classes.
 
 ### Event-driven revocation without periodic session polling
 
