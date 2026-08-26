@@ -123,15 +123,12 @@ is migrated, imported, or interpreted.
   a cross-bound durable row would otherwise become the authority used by every later
   target revalidation. The generated parent value prevents a child from classifying
   a reusable invite as one-use and thereby bypassing the reusable credential binding.
-- `profile_attachments` remains the single human-avatar asset owner. Its state
-  constraint permits either a user-owned pending/bound image or an admission-pending
-  image. The latter stores separate fixed-size custody and invite-quota fingerprints.
-  Admission atomically transfers a valid pending image to the new user and binds it,
-  while retaining immutable invite accounting provenance. The committed image stops
-  counting against pending-room quota, continues to count once against room/runtime
-  totals, and is not retroactively charged to the user's ordinary uploader quota,
-  matching the original metadata transition. No second filesystem store or duplicate
-  image decoder is introduced.
+- Profile and pre-join avatar ownership no longer share a state space. Their target
+  tables, atomic admission transfer, cleanup, and common safety arithmetic are owned
+  by [`asset-custody-lifecycle-slice.md`](asset-custody-lifecycle-slice.md). Invite,
+  browser, and room provenance authorize the pre-join row only and do not remain as
+  profile ownership after admission. No second filesystem store or duplicate image
+  decoder is introduced.
 
 Token fingerprints, admission keys, payload hashes, and pending-upload subjects are
 fixed 32-byte blobs. IDs used in public JSON remain their canonical text forms. The
@@ -693,6 +690,11 @@ flag is added meanwhile.
 
 ### One bounded pre-join avatar owner in the existing attachment store
 
+This section records the historical implementation and review evidence for commits
+`facaaab` and `81c04e7`. Its combined-table and generic quota decisions are
+superseded by the active asset-custody correction; they are not current target
+architecture.
+
 - Prior cost and threat: the original filesystem owner acquires its process lock,
   enumerates and parses every live attachment record, deletes an exact-custody
   predecessor, enumerates the directory again, then writes image bytes and metadata
@@ -1184,10 +1186,9 @@ disk evidence; the current store-wide worst case remains capped by the existing
   same-participant replacement does not increase capacity.
 - Pre-join avatar tests prove exact invite/credential custody, replacement, one-hour
   expiry, safe-raster limits, failed-admission custody, and atomic ownership transfer
-  to the same profile rendered in the room and lower-left panel. Boundary tests fix
-  10 MiB per asset, 8 files/32 MiB per invite, 64/128 MiB pending per room,
-  64/128 MiB per ordinary uploader, 512/1 GiB total per room, 4,096/8 GiB runtime,
-  and prevent quota reset by changing browser credentials.
+  to the same profile rendered in the room and lower-left panel. Current replacement
+  and storage acceptance is owned by the asset-custody correction rather than the
+  historical generic uploader quotas recorded above.
 - Real Axum tests exercise create, preflight, admission, every typed ticket exchange,
   target-ticket replay/wrong-purpose/wrong-room, raw-bearer rejection, read-only
   full person-profile patch success, read-only profile-avatar upload/room-upload denial,

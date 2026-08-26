@@ -51,11 +51,12 @@ viewer through canonical room events.
   `profile_avatar`, bounded base64 data, and declared PNG/JPEG/GIF/WebP input.
   Rust requires the bytes to match the declaration, decodes within fixed
   allocation/pixel/dimension limits, and canonicalizes the visible result to a
-  static PNG so trailing data and later animation frames are never served. A new
-  opaque attachment is non-public `pending` for at most 15 minutes. The profile
-  transaction alone promotes it to `bound` and deletes the previous bound avatar;
-  public reads serve only bound content with `no-store`. Other attachment purposes
-  remain explicitly unsupported until their own migration slice.
+  static PNG so trailing data and later animation frames are never served. The
+  exact ownership, one-current/one-pending cardinality, replacement arithmetic,
+  cleanup, and cross-lifecycle safety limits are owned by
+  [`asset-custody-lifecycle-slice.md`](asset-custody-lifecycle-slice.md). Public
+  reads serve only the current profile avatar with `no-store`. Other attachment
+  purposes remain explicitly unsupported until their own complete slice.
 
 ## Failure and retry semantics
 
@@ -71,10 +72,10 @@ viewer through canonical room events.
   cursor backlog. A reconnect recovers the same participant projection without
   client-side synthesis. Live clients ignore duplicate sequence numbers and
   require the next exact sequence or request resynchronization.
-- Attachment bodies, decoded resources, counts, and bytes are bounded. Unsupported
+- Attachment bodies, decoded resources, and absolute storage are bounded. Unsupported
   or mismatched content, invalid base64, path-shaped IDs, expired pending uploads,
-  ownership mismatch, or quota exhaustion fail closed. Expired pending uploads do
-  not count toward quota and are deleted on the next attachment/profile operation.
+  ownership mismatch, or absolute storage exhaustion fail closed. A limit failure
+  never deletes the current avatar or another owner's asset.
 
 ## Verification
 

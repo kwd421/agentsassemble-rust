@@ -233,18 +233,16 @@ is no handler fallback or duplicate route.
 Pending custody consists of `room_id`, `pending_owner_user_id`, and expiry. The
 schema requires owner and expiry for pending rows and requires both to be null for
 bound rows. Promotion clears both in the settings transaction, transferring
-lifetime ownership to the room. `created_by_user_id` remains immutable audit and
-quota-accounting metadata, not authorization or deletion authority. Deleting an
-uploader may remove pending assets but cannot remove bound room assets.
+lifetime ownership to the room. The settings event owns mutation audit; a separate
+creator quota key is not retained after transfer. Deleting an uploader may remove
+pending assets but cannot remove bound room assets.
 
-Profile and room images call one safe-raster decoder guarded by one global
-admission semaphore. Accepted PNG/JPEG/GIF/WebP is bounded by the existing input,
-dimension, pixel, allocation, and concurrency limits and re-encoded to static PNG.
-Both attachment writers use one serialized SQLite write unit and one quota owner.
-After expired pending cleanup it enforces the combined uploader limit of 64 assets
-and 128 MiB, the appearance-room limit of 512 assets and 1 GiB, and the combined
-runtime limit of 4096 assets and 8 GiB across profile and room tables. Bound room
-assets continue to count against their immutable uploader accounting key.
+Profile and room images call the one safe-raster owner defined by
+[`asset-custody-lifecycle-slice.md`](asset-custody-lifecycle-slice.md). That owner
+contains only shared hard safety limits and checked replacement arithmetic. Room
+appearance SQL owns room custody and evaluates `current - exact replaced + new`;
+bound banner/icon bytes count to the room, never to an uploader. This slice adds no
+generic uploader quota or speculative configuration layer.
 
 Pending preview requires the exact same room, uploader, unexpired asset, and
 current local manager. Bound read requires the exact same room, a bound and
