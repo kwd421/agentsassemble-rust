@@ -34,12 +34,16 @@ Do not reinvent frameworks, protocols, cryptography, database drivers, WebSocket
 Prefer the smallest boring design that fully works.
 Security takes priority over convenience.
 For each completed slice, inspect measurable CPU, memory, latency, task/process, and disk
-costs. Remove avoidable work and copying at the owning boundary, but do not trade product
-semantics, security, or maintainability for speculative micro-optimization.
-Record every material optimization where reviewers can find it: the prior cost or symptom,
-the optimization's intent and owning boundary, the product/security invariants preserved,
-the accepted trade-off, and the measurement or verification evidence. Code that is faster
-but whose reason cannot be reviewed is not a completed optimization.
+costs. Establish an observed cost or concrete threat before optimizing; intuition and future
+extension alone are not evidence. Remove avoidable work and copying at the owning boundary,
+but do not trade product semantics, security, or maintainability for speculative optimization.
+Before adding code, state, or abstraction for performance, security, or extensibility, check
+whether the existing owner or a smaller design can preserve the same complete contract.
+Record every material optimization alongside its implementation where reviewers can find it:
+the prior cost, symptom, or threat evidence; the intent and owning boundary; the product and
+security invariants preserved; the accepted trade-off; and the measurement or verification
+result. Code that is faster or more elaborate but whose necessity cannot be reviewed is not a
+completed optimization.
 
 Fallbacks are forbidden by default.
 When a path fails, find and fix the root cause.
