@@ -39,12 +39,21 @@ async fn preflight_and_join_preserve_bounded_credentials_and_exact_retry() {
     let server = start(store.clone()).await;
     let client = Client::new();
     let browser_credential = format!("aad1_{}", URL_SAFE_NO_PAD.encode([0xB7; 32]));
+    let other_browser_credential = format!("aad1_{}", URL_SAFE_NO_PAD.encode([0xB8; 32]));
 
     assert_preflight_boundary(
         &client,
         &server.base_url,
         credentials.invite_token(),
         &browser_credential,
+    )
+    .await;
+    let (avatar, other_browser_avatar) = prepare_prejoin_avatar_flow(
+        &client,
+        &server.base_url,
+        credentials.join_code(),
+        &browser_credential,
+        &other_browser_credential,
     )
     .await;
     let request_id = "123e4567-e89b-12d3-a456-426614174000";
@@ -55,6 +64,7 @@ async fn preflight_and_join_preserve_bounded_credentials_and_exact_retry() {
         &browser_credential,
         request_id,
         "Boundary Guest",
+        &avatar,
     )
     .await;
     assert_eq!(first["status"], "admitted");
@@ -64,6 +74,7 @@ async fn preflight_and_join_preserve_bounded_credentials_and_exact_retry() {
     assert_eq!(first["invite_scope"], "room");
     assert_eq!(first["client_type"], "browser");
     assert_eq!(first["participant_type"], "human");
+    assert_eq!(first["avatar_image_url"], avatar);
     let session_token = first["session_token"]
         .as_str()
         .unwrap_or_else(|| panic!("join response has no session token"));
@@ -77,6 +88,7 @@ async fn preflight_and_join_preserve_bounded_credentials_and_exact_retry() {
         &browser_credential,
         request_id,
         "Boundary Guest",
+        &avatar,
     )
     .await;
     assert!(retry == first, "exact retry response changed");
@@ -96,6 +108,7 @@ async fn preflight_and_join_preserve_bounded_credentials_and_exact_retry() {
             &browser_credential,
             request_id,
             "Changed Guest",
+            &avatar,
         ))
         .send()
         .await
@@ -114,8 +127,42 @@ async fn preflight_and_join_preserve_bounded_credentials_and_exact_retry() {
             .use_count,
         1
     );
+    assert_avatar_available(&client, &server.base_url, &avatar).await;
+    assert_avatar_available(&client, &server.base_url, &other_browser_avatar).await;
 
     server.stop().await;
+}
+
+async fn prepare_prejoin_avatar_flow(
+    client: &Client,
+    base_url: &str,
+    invite_token: &str,
+    browser_credential: &str,
+    other_browser_credential: &str,
+) -> (String, String) {
+    let invalid_ticket = client
+        .post(format!("{base_url}/api/attachments"))
+        .header("authorization", "Bearer invalid-profile-ticket")
+        .body("{")
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("request prejoin upload with invalid ticket: {error}"));
+    assert_eq!(invalid_ticket.status(), reqwest::StatusCode::UNAUTHORIZED);
+
+    let other_browser_avatar =
+        upload_prejoin_avatar(client, base_url, invite_token, other_browser_credential).await;
+    let replaced_avatar =
+        upload_prejoin_avatar(client, base_url, invite_token, browser_credential).await;
+    let avatar = upload_prejoin_avatar(client, base_url, invite_token, browser_credential).await;
+    let replaced = client
+        .get(format!("{base_url}{replaced_avatar}"))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("read replaced prejoin avatar: {error}"));
+    assert_eq!(replaced.status(), reqwest::StatusCode::NOT_FOUND);
+    assert_avatar_available(client, base_url, &avatar).await;
+    assert_avatar_available(client, base_url, &other_browser_avatar).await;
+    (avatar, other_browser_avatar)
 }
 
 async fn assert_preflight_boundary(
@@ -197,6 +244,7 @@ async fn join(
     browser_credential: &str,
     request_id: &str,
     display_name: &str,
+    avatar_image_url: &str,
 ) -> Value {
     let response = client
         .post(format!("{base_url}/api/room-invite/join"))
@@ -205,6 +253,7 @@ async fn join(
             browser_credential,
             request_id,
             display_name,
+            avatar_image_url,
         ))
         .send()
         .await
@@ -222,16 +271,60 @@ fn join_body(
     browser_credential: &str,
     request_id: &str,
     display_name: &str,
+    avatar_image_url: &str,
 ) -> Value {
     json!({
         "invite_token": invite_token,
         "request_id": request_id,
         "display_name": display_name,
-        "avatar_image_url": "",
+        "avatar_image_url": avatar_image_url,
         "device_token": browser_credential,
         "client_id": "browser-boundary-client",
         "participant_type": "human"
     })
+}
+
+async fn upload_prejoin_avatar(
+    client: &Client,
+    base_url: &str,
+    invite_token: &str,
+    browser_credential: &str,
+) -> String {
+    let response = client
+        .post(format!("{base_url}/api/attachments"))
+        .json(&json!({
+            "purpose": "profile_avatar",
+            "invite_token": invite_token,
+            "device_token": browser_credential,
+            "filename": "../guest.webp",
+            "content_type": "image/png",
+            "data_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMQ0bD5DwACRAF4aig0hQAAAABJRU5ErkJggg=="
+        }))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("upload prejoin avatar: {error}"));
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    let response: Value = response
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("decode prejoin avatar upload: {error}"));
+    assert_eq!(response["attachment"]["filename"], "guest.png");
+    assert_eq!(response["attachment"]["content_type"], "image/png");
+    response["attachment"]["url"]
+        .as_str()
+        .unwrap_or_else(|| panic!("prejoin avatar URL is missing"))
+        .to_owned()
+}
+
+async fn assert_avatar_available(client: &Client, base_url: &str, avatar_url: &str) {
+    let response = client
+        .get(format!("{base_url}{avatar_url}"))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("read prejoin avatar: {error}"));
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    assert_eq!(response.headers()["content-type"], "image/png");
+    assert_eq!(response.headers()["cache-control"], "private, no-store");
 }
 
 async fn fixture() -> (

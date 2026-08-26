@@ -16,15 +16,21 @@ use crate::{
     http_api::{
         BodyDecodeError, bearer_ticket, decode_json_body, ensure_empty_body, exact_tauri_cors,
     },
+    human_browser_credential::fingerprint_browser_credential,
+    human_invite_preflight::authenticated_invite_evidence,
 };
 
 const MAX_PROFILE_BODY_BYTES: usize = 16 * 1024;
 const MAX_ATTACHMENT_BYTES: usize = 10 * 1024 * 1024;
 const MAX_ATTACHMENT_BODY_BYTES: usize = MAX_ATTACHMENT_BYTES.div_ceil(3) * 4 + (64 * 1024);
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 struct AttachmentUpload {
     purpose: String,
+    #[serde(default)]
+    invite_token: String,
+    #[serde(default)]
+    device_token: String,
     filename: String,
     content_type: String,
     data_base64: String,
@@ -83,15 +89,57 @@ async fn upload_attachment(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<serde_json::Value>, ProfileHttpError> {
-    let authority = consume_profile_authority(&state, request.headers()).await?;
+    let authority = if request.headers().contains_key(header::AUTHORIZATION) {
+        Some(consume_profile_authority(&state, request.headers()).await?)
+    } else {
+        None
+    };
     let payload: AttachmentUpload = decode_json_body(request, MAX_ATTACHMENT_BODY_BYTES)
         .await
         .map_err(ProfileHttpError::from_body)?;
     if payload.purpose.trim() != "profile_avatar" {
-        return Err(ProfileHttpError::bad_request(
-            "Only profile_avatar attachments are available in this runtime.",
-        ));
+        return Err(match authority {
+            Some(_) => ProfileHttpError::bad_request(
+                "Only profile_avatar attachments are available in this runtime.",
+            ),
+            None => ProfileHttpError::new(
+                StatusCode::UNAUTHORIZED,
+                "profile_authority_required",
+                "A profile upload authority is required.",
+            ),
+        });
     }
+    let prejoin_authority = if authority.is_none() {
+        if payload.invite_token.trim().is_empty() {
+            return Err(ProfileHttpError::new(
+                StatusCode::UNAUTHORIZED,
+                "invite_token_required",
+                "invite_token is required for a pre-join profile upload.",
+            ));
+        }
+        let credential = authenticated_invite_evidence(
+            &state.human_invite_credentials,
+            payload.invite_token.trim(),
+        )
+        .map_err(|_| {
+            ProfileHttpError::new(
+                StatusCode::FORBIDDEN,
+                "invite_invalid",
+                "Invite is invalid.",
+            )
+        })?;
+        let browser_credential_fingerprint =
+            fingerprint_browser_credential(payload.device_token.trim()).ok_or_else(|| {
+                ProfileHttpError::new(
+                    StatusCode::BAD_REQUEST,
+                    "browser_credential_invalid",
+                    "A canonical browser credential is required.",
+                )
+            })?;
+        Some((credential, browser_credential_fingerprint))
+    } else {
+        None
+    };
     let encoded = payload.data_base64.trim();
     if encoded.is_empty() {
         return Err(ProfileHttpError::bad_request("data_base64 is required."));
@@ -99,8 +147,8 @@ async fn upload_attachment(
     let content = STANDARD
         .decode(encoded)
         .map_err(|_| ProfileHttpError::bad_request("data_base64 is invalid."))?;
-    let attachment = match authority {
-        ProfileAuthority::Room(principal) => {
+    let attachment = match (authority, prejoin_authority) {
+        (Some(ProfileAuthority::Room(principal)), None) => {
             state
                 .store
                 .store_profile_attachment(
@@ -111,7 +159,7 @@ async fn upload_attachment(
                 )
                 .await?
         }
-        ProfileAuthority::LocalOperator => {
+        (Some(ProfileAuthority::LocalOperator), None) => {
             state
                 .store
                 .store_local_operator_profile_attachment(
@@ -121,6 +169,19 @@ async fn upload_attachment(
                 )
                 .await?
         }
+        (None, Some((credential, browser_credential_fingerprint))) => {
+            state
+                .store
+                .store_human_prejoin_avatar(
+                    &credential,
+                    &browser_credential_fingerprint,
+                    &payload.filename,
+                    &payload.content_type,
+                    content,
+                )
+                .await?
+        }
+        _ => return Err(ProfileHttpError::internal()),
     };
     Ok(Json(json!({"attachment": attachment})))
 }
@@ -212,6 +273,14 @@ struct ProfileHttpError {
 }
 
 impl ProfileHttpError {
+    fn new(status: StatusCode, code: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            status,
+            code,
+            message: message.into(),
+        }
+    }
+
     fn from_body(error: BodyDecodeError) -> Self {
         match error {
             BodyDecodeError::RequestTimeout => Self {
@@ -266,6 +335,11 @@ impl From<PersistenceError> for ProfileHttpError {
                 let status = match code {
                     "session_revoked" => StatusCode::UNAUTHORIZED,
                     "attachment_missing" | "user_profile_missing" => StatusCode::NOT_FOUND,
+                    "invite_invalid"
+                    | "invite_revoked"
+                    | "token_expired"
+                    | "invite_use_limit_reached" => StatusCode::FORBIDDEN,
+                    "room_unavailable" => StatusCode::GONE,
                     "attachment_owner_mismatch" | "profile_authority_mismatch" => {
                         StatusCode::FORBIDDEN
                     }
@@ -275,6 +349,7 @@ impl From<PersistenceError> for ProfileHttpError {
                     | "attachment_type_mismatch"
                     | "attachment_invalid_image"
                     | "attachment_image_limits" => StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                    "invalid_state" => StatusCode::SERVICE_UNAVAILABLE,
                     _ => StatusCode::BAD_REQUEST,
                 };
                 Self {

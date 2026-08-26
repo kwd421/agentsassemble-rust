@@ -100,11 +100,12 @@ impl SqliteStore {
         Ok(metadata)
     }
 
-    /// Reads one bound public profile-avatar blob by opaque identifier.
+    /// Reads one bound or live pre-admission profile-avatar blob by opaque identifier.
     ///
     /// # Errors
     ///
-    /// Pending, expired, malformed, and unknown identifiers all fail as not found.
+    /// Ordinary pending, expired pre-admission, malformed, and unknown identifiers
+    /// all fail as not found.
     pub async fn profile_attachment(
         &self,
         attachment_id: &str,
@@ -113,9 +114,10 @@ impl SqliteStore {
             return Err(attachment_missing());
         }
         let row = sqlx::query(
-            "SELECT filename, content_type, content, size, created_at FROM profile_attachments WHERE attachment_id = ? AND state = 'bound'",
+            "SELECT filename, content_type, content, size, created_at FROM profile_attachments WHERE attachment_id = ? AND (state = 'bound' OR (state = 'admission_pending' AND expires_at > ?))",
         )
         .bind(attachment_id)
+        .bind(Utc::now().timestamp())
         .fetch_optional(&self.pool)
         .await?
         .ok_or_else(attachment_missing)?;
