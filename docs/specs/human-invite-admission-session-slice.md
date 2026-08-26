@@ -139,6 +139,16 @@ host-key owner. Invite and session fingerprints remain ordinary SHA-256. The iss
 does not reuse the Ed25519 host key or process-local host-control secret, log key
 material, or put bearer material in events or idempotency JSON.
 
+The bearer is exactly `aas1.` plus unpadded base64url of the first 24 bytes of
+`HMAC-SHA256(session_key, "agentsassemble-human-session-bearer-v1\0" ||
+admission_key)`. The admission key is always one fixed 32-byte value, so this
+transcript has no variable-field ambiguity. Truncation preserves the original
+`secrets.token_urlsafe(24)` 192-bit body and 32-character encoded length rather than
+changing the reachable token shape. The stored session fingerprint is SHA-256 of
+the complete ASCII bearer including `aas1.`. The issuer runs only for a newly
+committing or exact live admission row; terminal rows never receive a replacement
+bearer.
+
 The persistent host-identity envelope creates that session HMAC key only with a
 fresh host identity. Loading an existing envelope with a missing, short, or invalid
 session key fails closed; it never regenerates or derives a key and thereby silently
@@ -437,6 +447,34 @@ flag is added meanwhile.
   nonce-binding, and interrupted-initialization tests continue to pass. A later
   issuer test proves the same durable session input yields the same bearer across
   store reopen.
+
+### Deterministic bearer recovery without persisted raw tokens
+
+- Prior cost and correctness threat: the original creates one 24-random-byte session
+  body and its workflow can retain raw result material for recovery. Rust must return
+  the exact bearer after a lost committed response without persisting that bearer or
+  adding a second result table. Generating a new random bearer on retry would no
+  longer match the durable session fingerprint.
+- Change intent: use the fixed transcript above with the dedicated persisted HMAC
+  key, retain the original 24-byte/32-character body shape, and hash the final ASCII
+  bearer once for the durable lookup fingerprint. A small issuer and issued-bearer
+  value implement neither `Debug` nor serialization; no generic token framework or
+  configurable transcript is introduced.
+- Preserved contract: the public prefix and token shape, one-hour session expiry,
+  opaque bearer treatment, fingerprint-only persistence, exact live retry, and
+  terminal unavailability remain unchanged. A database-only copy still cannot mint
+  or recover a bearer, while the matching host envelope can recover exactly one.
+- Observed cost: each new or exact-live response performs one HMAC-SHA256 over one
+  fixed context plus 32 bytes, encodes 24 bytes, and performs one SHA-256 over the
+  resulting 37 ASCII bytes. It allocates only the returned bearer string and fixed
+  stack buffers; there is no RNG call, database read, cache, file I/O, or additional
+  durable column in the issuer itself. No performance gain is claimed without
+  measurement.
+- Verification: fixed vectors lock the transcript, 24-byte truncation, full token
+  shape, and fingerprint; different keys or admission keys differ; malformed input
+  cannot enter the fixed-size API. Reopening the same store reproduces the exact
+  bearer and fingerprint, while a fresh host differs. Tests and diagnostics never
+  format or serialize bearer/key-containing values.
 
 ### Composite authority bindings instead of repository-only correlation
 
