@@ -1328,8 +1328,12 @@ disk evidence; the current store-wide worst case remains capped by the existing
   read-only posting denial, one-use ticket replay denial, and immediate idle close
   after exact session replacement. Persistence tests replace the exact session
   before the SQLite mutation UOW and prove no durable command result or event
-  commits. Controlled expiry, notification-lag/closure, and final-outbound race
-  tests remain open. Handler-cancellation and restart tests prove one durable
+  commits. Controlled virtual-time expiry keeps a live socket active past the
+  independent idle deadline and closes it at durable session expiry. A bounded real
+  broadcast queue proves lag triggers durable revalidation and closure always fails
+  closed. A committed SQLite replacement with the derived notification deliberately
+  omitted proves the final outbound check blocks the next durable event. Handler
+  cancellation and restart tests prove one durable
   canonical event and eventual publication-cursor acknowledgement after an accepted
   admission commit; replay may re-offer only the same sequence.
 - Browser-unit tests prove exactly one `aad1_` credential is reused by preflight,

@@ -1310,9 +1310,11 @@ message publication, remote preferences, or public-ingress parity.
 
 ## Reachable human-session WebSocket and browser entrance
 
-Public commits `24a2179`, `aadbe99`, `1ef79f3`, and `62d191f` separate the
-human-session ticket authority, activate exact-session WebSockets, connect the copied
-browser transport, and close the admission response bindings discovered by review.
+Public commits `24a2179`, `aadbe99`, `1ef79f3`, `62d191f`, `2b1c7cf`, and
+`b91cd0a` separate the human-session ticket authority, activate exact-session
+WebSockets, connect the copied browser transport, close the admission response
+bindings discovered by review, share the real integration fixture, and verify the
+session lifetime boundary deterministically.
 
 - Preserved authority: raw `aas1.` bearer input exists only at the typed WebSocket
   ticket exchange. Subscription begins before consume; exact durable session state is
@@ -1337,19 +1339,30 @@ browser transport, and close the admission response bindings discovered by revie
   contract owner. No table, index,
   cache, trait, task, timer, fallback, migration, or generic authority framework was
   added. No CPU, memory, disk, or latency improvement is claimed.
+- Lifetime verification cost and intent: the previously unverified threats were a
+  dropped or overrun derived notification, confusion between the five-minute idle
+  deadline and one-hour durable expiry, and a replacement committed immediately
+  before outbound delivery. The correction adds no production cache, clock hook,
+  lock, state, SQL, or retry. It factors the existing revocation result branch into
+  one behavior helper and enables Tokio virtual time only for tests. Production CPU,
+  memory, disk, and latency are unchanged; test-only compilation and controlled
+  execution are the only added resource cost.
 - Verification result before manual review: real Axum/SQLite/WebSocket tests cover
   ticket no-store/replay, snapshot, normal post, read-only denial, replacement close,
   and no mutation after final transactional revalidation fails. Production-browser
   Computer Use additionally proves exact entrance, token removal, normal
   snapshot/roster/post, and isolated read-only snapshot/roster/visible denial; SQLite
   contains no denied write. Focused frontend tests prove invalid join and recovered
-  surfaces remain unpersisted and expose no bearer. Controlled expiry,
-  notification-lag/closure, final-outbound races, and the remaining real-browser
-  invite matrix remain open and are not claimed. A fresh isolated Chrome run at the
-  trailing-slash entrance loaded the production assets, admitted against the current
-  Axum/SQLite server, removed the token, rendered the snapshot/roster, and durably
-  published `STRICT_SURFACE_UI_OK`; all disposable resources were then closed or moved
-  to recoverable Trash.
+  surfaces remain unpersisted and expose no bearer. Controlled tests prove durable
+  expiry independently of idle timeout, actual `Lagged` and `Closed` receiver
+  behavior, and final-outbound rejection after a real SQLite replacement commit;
+  they use the canonical authorization and event paths without a second session
+  authority or a database transaction spanning socket I/O. The remaining real-
+  browser invite matrix remains open and is not claimed. A fresh isolated Chrome run
+  at the trailing-slash entrance loaded the production assets, admitted against the
+  current Axum/SQLite server, removed the token, rendered the snapshot/roster, and
+  durably published `STRICT_SURFACE_UI_OK`; all disposable resources were then closed
+  or moved to recoverable Trash.
 
 ## Human-session WebSocket and browser entrance manual-review findings
 
@@ -1370,3 +1383,10 @@ browser transport, and close the admission response bindings discovered by revie
   asset prefixes derive the signed surface and removes the second static route list.
 - Final outcome: the web reviewer and Daybreaker both returned `APPROVE — Critical 0 /
   High 0 / Medium 0` for public HEAD `62d191f`.
+- The web reviewer found one Medium in `b91cd0a`: advancing exactly five minutes
+  after the last authenticated ping made durable expiry and the independent idle
+  timeout simultaneously eligible, so the test did not determine which branch
+  closed the socket. Commit `a492df8` advances 270 seconds instead, crossing durable
+  expiry while remaining below the idle deadline.
+- Final outcome: the web reviewer and Daybreaker both returned `APPROVE — Critical 0 /
+  High 0 / Medium 0` for public HEAD `a492df8`.
