@@ -400,6 +400,36 @@ flag is added meanwhile.
   accept exactly 32 BLOB bytes, database inspection finds no raw bearer, and
   restart/exact-retry tests reproduce the same token.
 
+### Dedicated persisted session issuer key instead of key reuse or regeneration
+
+- Prior threat and cost: the current permission-checked host envelope owns only its
+  Ed25519 signing key. Reusing that private key for HMAC would violate key separation;
+  using process-local randomness would make a committed admission's deterministic
+  bearer unrecoverable after restart. Generating a missing key while loading an
+  existing envelope would silently create the same failure across every durable
+  session row.
+- Change intent: create one independent 32-byte operating-system-random HMAC key only
+  with a fresh host identity and store it in the same versioned private envelope.
+  Loading an envelope without one exact canonical 32-byte key fails closed. There is
+  no derivation from Ed25519 material, migration, compatibility reader, or secondary
+  secret file.
+- Preserved contract: the existing initialization-nonce binding, create/reuse policy,
+  canonical-path and symlink checks, single-link regular file, private-directory and
+  `0600` requirements, 512-byte envelope bound, and one write plus `fsync` remain the
+  authority. The key never enters the database, public identity, events, logs,
+  serialization, or generic debug output.
+- Observed cost: the live host material grows by exactly 32 secret bytes. Canonical
+  unpadded base64url adds 43 payload characters plus one JSON field inside the
+  existing bounded envelope; creation adds one system-random fill but no extra file
+  open, read, write, or disk synchronization. No CPU or latency improvement is
+  claimed.
+- Verification: fresh creation and exact reopen return the same private issuer key;
+  two fresh hosts differ; a missing, malformed, noncanonical, or wrong-length field
+  and an older envelope version are rejected without rewriting the file. Existing
+  permission, symlink, hard-link, nonce-binding, and interrupted-initialization tests
+  continue to pass. A later issuer test proves the same durable session input yields
+  the same bearer across store reopen.
+
 ### Composite authority bindings instead of repository-only correlation
 
 - Prior threat: independent invite, room, scope, user, participant, key kind, and
