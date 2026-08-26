@@ -636,6 +636,21 @@ flag is added meanwhile.
   architecture/source-growth gates, and `make check` passed. The route module is 434
   lines; commit `b32c2b7` is 792 insertions/2 deletions across seven files, below the
   1,000-line review threshold.
+- Review correction: critical line-by-line review found two reachable transport
+  mismatches. Before `888084e`, the shared body collector collapsed the existing
+  ten-second `tower-http` deadline error into 413, although the original returned
+  408 for a stalled bounded body; the join adapter also shortened the original
+  `participant_identity_conflict` code to `identity_conflict`. The correction walks
+  the maintained body's error chain only far enough to recognize
+  `tower_http::timeout::TimeoutError`, maps it to 408 `request_timeout`, and leaves
+  actual declared/collected length failures at 413. All routes using the shared
+  decoder preserve that distinction, and the host-ticket empty-body path now reuses
+  the same owner instead of duplicating collection. No timer, timeout layer, queue,
+  retry, or body buffer changed. A deterministic `DeadlineBody` test proves timeout
+  and length-limit separation, and an adapter test pins the exact collision status
+  and code. This adds only bounded error-chain inspection on a failed body read; no
+  success-path performance improvement is claimed. Warning-denied Clippy, all 54
+  server unit tests, every server integration test, and `make check` pass.
 
 ### One durable browser admission credential without fallback
 

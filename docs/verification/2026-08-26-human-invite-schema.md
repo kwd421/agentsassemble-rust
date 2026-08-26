@@ -947,3 +947,34 @@ without making the still-missing HTTP upload route appear complete.
   and `make check` pass. Commit size is 537 insertions/8 deletions across four files;
   the 521-line new module and 735-line existing canonicalizer owner both pass the
   unchanged 800-line source gate.
+
+## HTTP review corrections
+
+Critical web review of `b32c2b7`/`34d7149` returned `REVISE` with zero Critical,
+zero High, and two Medium findings. Commit `888084e` closes both before another
+admission surface is added.
+
+- Prior observed mismatch: `RequestBodyDeadlineLayer` already bounded every body to
+  ten seconds, but the shared Axum collector mapped every collection error to 413.
+  A client that declared a body within the route limit and then stalled therefore
+  received `payload_too_large`, while original commit `d504647` returned HTTP 408 for
+  `RequestBodyDeadlineExceeded`. Separately, participant collision returned
+  `identity_conflict` instead of the reachable original
+  `participant_identity_conflict` code.
+- Intent and preserved contract: the shared decoder inspects the maintained body
+  error chain for `tower_http::timeout::TimeoutError`, returns typed
+  `RequestTimeout`, and maps that to 408 `request_timeout` at every existing HTTP
+  adapter. Declared or collected size overflow remains 413. The host-ticket empty-body
+  route reuses this same owner, and join maps only the public collision string back to
+  `participant_identity_conflict`; persistence authority and its typed rejection are
+  unchanged. The existing ten-second timer, connection/route bounds, queue ownership,
+  cancellation behavior, and retry semantics are untouched.
+- Cost and verification: successful requests execute no new branch beyond the same
+  `Result` mapping. Only a failed body collection walks its short error-source chain;
+  no allocation, timer, task, state, retry, or dependency was added. A deterministic
+  `DeadlineBody` test completes in milliseconds and distinguishes 408 timeout from
+  413 length overflow. An adapter test pins 403
+  `participant_identity_conflict`. The bearer retry assertion no longer formats its
+  ephemeral token on failure. Warning-denied workspace Clippy, 54 server unit tests,
+  every server integration test, and `make check` pass. The implementation/test
+  commit is 109 insertions and 24 deletions across eight files.
