@@ -1185,7 +1185,9 @@ or speculative message-attachment owner was added.
   pre-join row ten, so neither pays for the other lifecycle's nullable state. The
   4,096-live-item/8-GiB absolute database bound and checked
   `current - exact predecessor + new` calculation have one implementation owner.
-  The 10-MiB runtime and three schema checks expand from one macro owner. Expired
+  The runtime 10-MiB owner is bound directly into one schema contract test: all
+  three asset tables accept the exact runtime value and reject that value plus one,
+  so the unavoidable SQLite literal mirrors cannot drift silently. Expired
   cleanup SQL remains in its lifecycle module and only deletes that lifecycle's
   pending rows; no limit path evicts current, bound, foreign, referenced, or merely
   old data. The profile 64-item/128-MiB and pre-join invite/room operating quotas and
@@ -1212,10 +1214,11 @@ or speculative message-attachment owner was added.
   without the old user quota. Nine distinct pre-join custodies prove removal of the
   generic invite quota. At 4,096 live rows, exact replacement succeeds and net growth
   fails. Admission rejects corrupt metadata without consuming invite/session state,
-  then transfers and promotes the repaired exact row. Three focused schema tests prove
+  then transfers and promotes the repaired exact row. Four focused schema tests prove
   one current plus one pending profile avatar, one pre-join row per custody with no
-  state column, and uploader deletion removing only pending—not bound—room assets.
-  All 163 persistence tests, all 58 server unit tests and server integration tests,
+  state column, exact agreement with the runtime item bound, and uploader deletion
+  removing only pending—not bound—room assets. All 164 persistence tests, all 58
+  server unit tests and server integration tests,
   warning-denied persistence/server Clippy, and `make check` passed. The production
-  modules are 721, 591, 477, 286, and 261 lines; no 800-line exception or gate change
+  modules are 711, 591, 477, 286, and 251 lines; no 800-line exception or gate change
   was made.

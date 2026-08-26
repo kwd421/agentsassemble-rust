@@ -2294,7 +2294,7 @@ threat, cost, deletion, and test evidence is recorded in
 `verification/2026-08-26-human-invite-schema.md` and
 `specs/asset-custody-lifecycle-slice.md`.
 
-All 163 persistence tests, all 58 server unit tests and server integration tests,
+All 164 persistence tests, all 58 server unit tests and server integration tests,
 warning-denied persistence/server Clippy, and `make check` passed. Production files are
 below the unchanged 800-line gate.
 
