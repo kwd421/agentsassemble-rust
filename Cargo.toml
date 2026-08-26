@@ -25,6 +25,7 @@ command-fds = { version = "0.3.3", features = ["tokio"] }
 futures-util = "0.3.31"
 fs2 = "0.4.3"
 getrandom = "0.4.3"
+hex = "0.4.3"
 hyper = { version = "1.11.0", features = ["client", "http1", "server"] }
 hyper-util = { version = "0.1.20", features = ["service", "tokio"] }
 http-body-util = "0.1.3"

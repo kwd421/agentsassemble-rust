@@ -531,6 +531,7 @@ pub(crate) fn persistence_error(error: &PersistenceError) -> (String, String) {
         | PersistenceError::SchemaVersionMismatch { .. }
         | PersistenceError::InvalidServerId
         | PersistenceError::InvalidHostIdentity
+        | PersistenceError::InvalidHumanInvite
         | PersistenceError::HostIdentityMissing
         | PersistenceError::HostIdentityFile(_)
         | PersistenceError::HostIdentityEntropy
@@ -558,6 +559,7 @@ pub(crate) fn persistence_error_is_internal(error: &PersistenceError) -> bool {
             | PersistenceError::SchemaVersionMismatch { .. }
             | PersistenceError::InvalidServerId
             | PersistenceError::InvalidHostIdentity
+            | PersistenceError::InvalidHumanInvite
             | PersistenceError::HostIdentityMissing
             | PersistenceError::HostIdentityFile(_)
             | PersistenceError::HostIdentityEntropy

@@ -43,6 +43,8 @@ pub enum PersistenceError {
     InvalidHostIdentity,
     #[error("database host signing key file is missing")]
     HostIdentityMissing,
+    #[error("database human invite authority is invalid")]
+    InvalidHumanInvite,
     #[error("host signing key file operation failed: {0}")]
     HostIdentityFile(#[source] io::Error),
     #[error("host signing identity entropy source failed")]
