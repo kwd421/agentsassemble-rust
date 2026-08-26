@@ -21,6 +21,7 @@ mod database_target;
 mod filesystem_authority;
 mod host_identity;
 mod host_key_file;
+mod human_invite_preflight;
 mod human_invites;
 mod private_fs;
 mod profile_attachments;
@@ -41,6 +42,8 @@ mod store_open;
 mod turn_authority;
 mod turn_queue;
 
+#[cfg(test)]
+mod human_invite_preflight_tests;
 mod participant_mute;
 mod participant_roles;
 #[cfg(test)]
@@ -64,6 +67,10 @@ pub use agent_reconciliation::{
 pub use agent_reconciliation_scan::{RuntimeReconciliationCursor, RuntimeReconciliationPage};
 pub use bootstrap::{LocalBootstrapCommit, LocalBootstrapPhase, LocalBootstrapStatus};
 pub use host_identity::PersistentHostIdentity;
+pub use human_invite_preflight::{
+    HumanInviteCredentialEvidence, HumanInvitePreflight, HumanInvitePreflightContext,
+    HumanInvitePreflightPerson, HumanInvitePreflightRejection, HumanInvitePreflightRequest,
+};
 pub use human_invites::{HumanInvite, NewHumanInvite};
 pub use participant_mute::ParticipantMuteMutation;
 pub use private_fs::secure_private_directory;

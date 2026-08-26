@@ -228,7 +228,7 @@ fn is_invite_id(value: &str) -> bool {
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
-fn decode_human_invite(row: &SqliteRow) -> Result<HumanInvite, PersistenceError> {
+pub(crate) fn decode_human_invite(row: &SqliteRow) -> Result<HumanInvite, PersistenceError> {
     let invite_id = row.try_get::<String, _>("invite_id")?;
     let signed_token_fingerprint = fingerprint(row, "signed_token_fingerprint")?;
     let join_code_fingerprint = fingerprint(row, "join_code_fingerprint")?;
