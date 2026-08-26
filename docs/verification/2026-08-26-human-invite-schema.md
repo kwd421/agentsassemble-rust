@@ -1222,3 +1222,23 @@ or speculative message-attachment owner was added.
   warning-denied persistence/server Clippy, and `make check` passed. The production
   modules are 711, 591, 477, 286, and 251 lines; no 800-line exception or gate change
   was made.
+
+## Asset custody manual-review findings
+
+- The web review found that the first shared-bound macro still encoded the 10-MiB
+  limit independently for Rust and SQLite, so either representation could drift.
+  Commit `cada7fb` removes that macro and binds the three schema boundary checks
+  directly to the runtime `MAX_RASTER_BYTES` owner.
+- The web review found that the first index commit did not itself record evidence for
+  replacing the pending-only profile index with `(state, expires_at)`. Commit
+  `7ebf90e` records the observed pre-change scan, post-change indexed plans, and
+  disk/write trade-off. It also corrects the SDD's stale description of the combined
+  table from current state to historical defect.
+- Daybreaker identified that one valid reusable-invite holder can exhaust the global
+  asset ceiling through distinct browser custodies. The accepted current policy
+  forbids fixed invite/room operating quotas and foreign-custody eviction, so this is
+  the documented residual availability risk rather than an unclaimed mitigation.
+- Final outcome: the web reviewer and Daybreaker both returned `APPROVE` with
+  Critical 0, High 0, and Medium 0. They found no remaining related duplicate policy
+  owner, ownership/lifecycle boundary defect, unsupported optimization,
+  overimplementation, removable compatibility state, or structure-gate issue.
