@@ -1242,3 +1242,55 @@ or speculative message-attachment owner was added.
   Critical 0, High 0, and Medium 0. They found no remaining related duplicate policy
   owner, ownership/lifecycle boundary defect, unsupported optimization,
   overimplementation, removable compatibility state, or structure-gate issue.
+
+## Reachable human-session profile exchange
+
+Public commits `51905c4`, `da372d8`, `868d41c`, `7b3f3bc`, `9fb9ce8`, and
+`83e1b0b` connect the existing durable human-session authorization and profile target
+to the copied profile UI. Commit `8cc1064` corrects the pre-admission UI boundary
+found by the real-client run.
+
+- Prior threat and authority boundary: accepting the raw `aas1.` session at
+  `/api/user-profile` or `/api/attachments` would turn a long-lived room credential
+  into a generic profile bearer. A grant issued before a participant left, a room
+  ended, a profile binding changed, or the session expired also could not authorize a
+  later mutation. The dedicated empty-body exchange consumes the raw session only at
+  `/api/session-tickets/profile`, returns a one-use profile ticket, and the target
+  revalidates the exact durable session/profile/participant/room state in the same
+  transaction as the read or write. The raw session is rejected at both profile
+  targets. Read-only humans may edit their person profile but cannot publish a new
+  avatar, preserving room posting scope without conflating it with person identity.
+- Smallest design and resource cost: the implementation reuses the existing bounded
+  ticket store, typed durable authorization, profile transaction, Axum route registry,
+  attachment decoder, and maintained no-store response layer. It adds no cache,
+  retry, session mirror, trait, table, index, timer, background task, compatibility
+  branch, or fallback. Each profile read, patch, or avatar upload intentionally pays
+  one extra short HTTP exchange plus one indexed SQLite authorization before the
+  existing target work. Browser requests use `cache: no-store`; every exchange and
+  target response uses `Cache-Control: private, no-store`. No CPU, memory, disk, or
+  latency improvement is claimed without a representative workload.
+- Frontend state boundary: the copied API obtains a fresh ticket for every operation
+  and never stores or reuses it. Before admission, the guest panel displays only the
+  profile being submitted with the invite and does not request or edit a server-owned
+  profile. Once admission returns the `aas1.` session, the panel hydrates from the
+  server SSoT and all later changes use the typed exchange. This keeps the pending
+  invite profile, person profile, room role/join/mute/permissions, and Agent Session
+  profile as separate authorities.
+- Verification result before manual review: the canonical HTTP boundary rejects a
+  raw session at the target, rejects a nonempty exchange body, proves one-use replay
+  failure, profile read/update, current-session revalidation, read-only profile edits,
+  read-only avatar denial, avatar replacement, and `private, no-store`. The copied
+  production frontend was driven through preflight and admission against a disposable
+  canonical SQLite/Axum fixture. It saved and freshly re-read display name `Guest
+  Verified`, status `AgentsAssemble Verified`, and a selected/cropped PNG; the same
+  image appeared again in the profile editor and left-bottom profile. That run exposed
+  the pre-admission unauthorized profile read fixed by `8cc1064`; the focused contract
+  test now proves zero profile requests before a session exists and the normal server
+  read immediately after admission. All 385 frontend tests and the production build
+  pass. The disposable tab, servers, identity data, fixture state, and unique bundles
+  were stopped and moved to the recoverable Trash; no verification-owned listener or
+  app remained.
+
+The authenticated human room WebSocket and preference exchanges are separate pending
+slices. The profile run therefore does not claim a canonical room snapshot, roster,
+message publication, remote preferences, or public-ingress parity.

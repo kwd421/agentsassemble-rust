@@ -193,7 +193,7 @@ implemented; the frontend must not silently substitute Python or local fake data
 | --- | --- |
 | Startup identity and accounts | Fresh local desktop bootstrap, central guest creation/recovery, secure browser device identity, and proof-bound local-server registration are implemented. `/api/account`, Google account challenge/connect/delete, and the native Google handoff remain incomplete; the absent `open_central_google_login` host command keeps that button failed closed. |
 | Room lifecycle and settings | Canonical archive/delete lifecycle and public server info remain incomplete. Room-global settings mutation and local-operator room preferences are connected; remote-session preferences are explicitly unavailable until admission owns their identity. |
-| Admission and invites | Durable human invite/session create, join, verification, expiry, revoke, leave, restart recovery, session-derived WebSocket/preference ticket exchange, host claim, companion admission, operator pairing create/redeem, and public-invite status/URL/tunnel controls. |
+| Admission and invites | Durable human invite/session create, join, verification, expiry, revoke, leave, restart recovery, and the session-derived person-profile exchange are implemented. The authenticated human WebSocket and preference exchanges, host claim, companion admission, operator pairing create/redeem, and public-invite status/URL/tunnel controls remain incomplete. |
 | Roster, friends, and channels | The active-room roster, strict participant-role control, copied participant-mute control, canonical event projection, and exact Rust provider-interrupt owner are cut over and packaged-verified. Room friends, room channels, voice presence, and side chat remain incomplete. |
 | Attachments, personas, pins, and search | General-message and room-appearance attachment purposes, persona list/import/thumbnail, message pins, room search/context. Profile-avatar upload/read is implemented. |
 | Provider settings and diagnostics | Login, catalog refresh HTTP response, credential CRUD, provider usage, local resources, release health, and runtime version. The original `/api/local/workspace-picker` HTTP route is absent, but packaged desktop creation uses the native Tauri directory picker instead. |
@@ -384,3 +384,20 @@ and the explicit Codex zero-turn resume limitation are recorded in
 `docs/VERIFICATION.md`. Provider-private session identifiers remain local evidence.
 
 This file must be updated when either side gains or removes a reachable surface.
+
+### Human-session profile exposure delta: 2026-08-26
+
+The copied left-bottom profile and settings UI now exchange a live admitted human
+session for a fresh one-use profile ticket on every read, patch, and avatar upload.
+The profile target never accepts the raw room session. Display name, custom status,
+and avatar use the server person-profile SSoT; room role, join state, mute, and
+permissions remain room-owned, while every Agent Session keeps its own profile.
+
+Before admission there is no server person-profile authority. The guest panel now
+shows only the invite-submission profile without sending a profile request or exposing
+settings; admission switches it to the server-owned profile path. Production-frontend
+Computer Use verified preflight, admission, two save/re-read cycles, and file
+selection/cropping/avatar re-read against a disposable canonical Rust fixture. The
+same run confirmed two adjacent gaps rather than hiding them: the authenticated human
+room socket is not connected, so the room remains unready, and Public Account settings
+still expose the missing `/api/account` route as 404.

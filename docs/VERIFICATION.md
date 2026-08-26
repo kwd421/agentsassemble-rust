@@ -2301,3 +2301,25 @@ below the unchanged 800-line gate.
 ## API verification scope
 
 When a reachable flow specifically needs an API-backed provider, the allowed paid/provider-specific candidates are the official DeepSeek API and the designated Flash provider path. Every other API-backed verification uses only an explicitly free API or free model. Missing credentials, exhausted free quota, or unavailable models fail visibly; they do not trigger a paid substitution or a fallback provider.
+
+## Human-session profile exchange verification: 2026-08-26
+
+The copied production frontend was served unchanged from its production build and
+proxied to a disposable canonical Axum/SQLite authority. Computer Use exercised the
+real `/join?token=…` entry, profile-required preflight, admission, fresh profile read,
+display-name save/re-read, custom-status save/re-read, native file selection, crop,
+avatar upload, and avatar re-read. The raw invite, browser credential, room session,
+and one-use profile tickets were not copied into committed evidence. The run used no
+provider because a human-profile flow does not create an Agent Session.
+
+The run found one real state-boundary defect: the pending guest panel tried to hydrate
+a server person profile before admission had issued a session. Commit `8cc1064`
+prevents that request and keeps the pending profile non-editable, while the focused
+test proves the server hydration starts when the admitted session appears. The same
+run correctly remained unready at the separate, still-incomplete human WebSocket
+exchange and exposed `/api/account` as 404; neither was counted as profile parity.
+
+After evidence capture the exact Safari tab, preview server, Rust fixture server,
+test identity data, temporary fixture state, and uniquely named application bundles
+were closed or moved to the recoverable Trash. Ports 5174 and 64126 had no remaining
+listener and both unique verification applications reported not running.
