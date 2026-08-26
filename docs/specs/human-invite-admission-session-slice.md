@@ -144,8 +144,8 @@ admission. The room runtime then performs one SQLite transaction:
    that `(room, participant)` replaced without charging another capacity slot;
 5. omit an optional pending avatar whose row is absent, expired, malformed, or owned
    by another custody subject; otherwise transfer the exact valid row, create the
-   session/result, and append at most one `participant_joined` event plus the existing
-   durable room-publication cursor;
+   session/result, and append at most one `participant_joined` event. Its sequence is
+   pending whenever it is newer than the room's existing durable publication cursor;
 6. commit before publishing the event, notifying displaced sessions, or returning
    the bearer.
 
@@ -243,9 +243,11 @@ does not remove membership. Kick and room close revoke affected sessions in thei
 own canonical room transactions. Notifications happen only after commit.
 
 The room runtime, not an HTTP request task, owns post-commit publication and
-revocation notification. Admission reuses `room_event_publication_cursors`: commit
-durably records the exact event handoff, and runtime/startup drains acknowledge that
-cursor only after broadcast publication. Handler cancellation can lose a response
+revocation notification. Admission reuses `room_event_publication_cursors` as the
+existing per-room published-sequence watermark, not as a per-event outbox row. The
+transaction appends the canonical event; runtime/startup drains select newer event
+sequences and advance the cursor only after broadcast offer. Handler cancellation
+can lose a response
 but cannot lose an accepted commit-to-publication handoff; exact retry recovers the
 stored result. A crash between broadcast offer and cursor acknowledgement may offer
 the same sequence again after restart; sequence-aware subscribers tolerate that
