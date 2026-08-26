@@ -3,9 +3,11 @@ import { PRODUCT_SURFACE_REVISION } from "../types/generated/PRODUCT_SURFACE_REV
 
 import {
   bindRoomDirectoryAuthority,
+  currentRoomDirectoryAuthority,
   parseStrictRoomCreateResponse,
   parseStrictRoomDirectory,
   retainRoomDirectoryAuthority,
+  verifyAndBindRoomSessionSurface,
 } from "./roomDirectoryContract";
 
 const serverId = "10000000-0000-4000-8000-000000000001";
@@ -117,5 +119,26 @@ describe("room directory contracts", () => {
         "https://surface-recomputed-digest.example"
       )
     ).rejects.toThrow(/bootstrap/);
+  });
+
+  it("does not pin authority for a stale room-session verification", async () => {
+    const origin = "https://stale-session.example";
+    await expect(
+      verifyAndBindRoomSessionSurface(
+        {
+          server_id: serverId,
+          authority_lineage_id: lineageId,
+          server_product_surface: {
+            ...surface,
+            http_routes: [...surface.http_routes],
+            websocket_streams: [...surface.websocket_streams],
+            websocket_actions: [...surface.websocket_actions],
+          },
+        },
+        () => false,
+        origin
+      )
+    ).resolves.toBe(false);
+    expect(currentRoomDirectoryAuthority(origin)).toBeNull();
   });
 });

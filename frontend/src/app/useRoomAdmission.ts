@@ -238,6 +238,7 @@ export function useRoomAdmission({
   const preflightAttemptedTokenRef = useRef("");
   const pairingAttemptedTokenRef = useRef("");
   const expectedInviteRoomIdRef = useRef("");
+  const admissionGenerationRef = useRef(0);
   const onPairingTokenConsumedRef = useRef(onPairingTokenConsumed);
   useEffect(() => {
     onPairingTokenConsumedRef.current = onPairingTokenConsumed;
@@ -249,11 +250,28 @@ export function useRoomAdmission({
     }
   }, [admissionState.kind]);
 
-  const bindSessionSurface = useCallback(async (session: RoomGuestSession) => {
-    await verifyAndBindRoomSessionSurface(session.serverSurface);
+  const beginAdmissionAttempt = useCallback(() => {
+    const generation = ++admissionGenerationRef.current;
+    return {
+      isCurrent: () => admissionGenerationRef.current === generation,
+      cancel: () => {
+        if (admissionGenerationRef.current === generation) {
+          admissionGenerationRef.current += 1;
+        }
+      },
+    };
+  }, []);
+
+  const bindSessionSurface = useCallback(async (
+    session: RoomGuestSession,
+    isCurrent: () => boolean
+  ) => {
+    const bound = await verifyAndBindRoomSessionSurface(session.serverSurface, isCurrent);
+    if (!bound || !isCurrent()) return false;
     const key = roomSessionSurfaceKey(session);
     boundSurfaceKeyRef.current = key;
     setBoundSurfaceKey(key);
+    return true;
   }, []);
 
   useEffect(() => {
@@ -261,9 +279,9 @@ export function useRoomAdmission({
     const session = admissionState.session;
     const key = roomSessionSurfaceKey(session);
     if (boundSurfaceKeyRef.current === key) return undefined;
-    let cancelled = false;
-    bindSessionSurface(session).catch((error) => {
-      if (cancelled) return;
+    const attempt = beginAdmissionAttempt();
+    bindSessionSurface(session, attempt.isCurrent).catch((error) => {
+      if (!attempt.isCurrent()) return;
       persistRoomGuestSession(null);
       dispatchAdmission({
         type: "session_surface_failed",
@@ -273,10 +291,8 @@ export function useRoomAdmission({
             : SERVER_SURFACE_INVALID_MESSAGE,
       });
     });
-    return () => {
-      cancelled = true;
-    };
-  }, [admissionState, bindSessionSurface]);
+    return attempt.cancel;
+  }, [admissionState, beginAdmissionAttempt, bindSessionSurface]);
 
   const guestSession = admissionState.session;
   const sessionSurfaceKey = guestSession ? roomSessionSurfaceKey(guestSession) : "";
@@ -398,9 +414,13 @@ export function useRoomAdmission({
   }, []);
 
   const applyJoinedSession = useCallback(
-    async (nextSession: RoomGuestSession, source: AdmissionSource) => {
+    async (
+      nextSession: RoomGuestSession,
+      source: AdmissionSource,
+      isCurrent: () => boolean
+    ) => {
       try {
-        await bindSessionSurface(nextSession);
+        if (!(await bindSessionSurface(nextSession, isCurrent))) return false;
       } catch (error) {
         throw new SessionSurfaceError(
           error instanceof Error
@@ -416,15 +436,20 @@ export function useRoomAdmission({
       dispatchAdmission({ type: "joined", session: nextSession, source });
       onRoomJoined(roomFromGuestSession(nextSession));
       clearInviteUrl();
+      return true;
     },
     [bindSessionSurface, clearInviteUrl, onRoomJoined, pendingGuestDisplayName]
   );
 
   const acceptRecoveredSession = useCallback(
     async (payload: GuestRecoveryRedeemResponse) => {
+      const attempt = beginAdmissionAttempt();
       try {
-        await applyJoinedSession(roomGuestSessionFromRecoveryPayload(payload), "recovery");
-        return true;
+        return await applyJoinedSession(
+          roomGuestSessionFromRecoveryPayload(payload),
+          "recovery",
+          attempt.isCurrent
+        );
       } catch (error) {
         const message =
           error instanceof Error
@@ -439,16 +464,18 @@ export function useRoomAdmission({
           status: message,
         });
         return false;
+      } finally {
+        attempt.cancel();
       }
     },
-    [applyJoinedSession]
+    [applyJoinedSession, beginAdmissionAttempt]
   );
 
   useEffect(() => {
     if (!operatorPairingToken || admissionState.kind !== "pairing") return;
     if (pairingAttemptedTokenRef.current === operatorPairingToken) return;
     pairingAttemptedTokenRef.current = operatorPairingToken;
-    let cancelled = false;
+    const attempt = beginAdmissionAttempt();
     dispatchAdmission({
       type: "pairing_started",
       status: "공개 주소의 운영자 신원을 연결하는 중...",
@@ -457,6 +484,7 @@ export function useRoomAdmission({
     try {
       deviceToken = getOrCreateBrowserCredential();
     } catch (error) {
+      attempt.cancel();
       dispatchAdmission(browserCredentialFailure("pairing", error));
       return;
     }
@@ -465,12 +493,16 @@ export function useRoomAdmission({
       deviceToken,
     })
       .then(async (payload) => {
-        if (cancelled) return;
-        onPairingTokenConsumedRef.current();
-        await applyJoinedSession(roomGuestSessionFromPairingPayload(payload), "pairing");
+        if (!attempt.isCurrent()) return;
+        const applied = await applyJoinedSession(
+          roomGuestSessionFromPairingPayload(payload),
+          "pairing",
+          attempt.isCurrent
+        );
+        if (applied) onPairingTokenConsumedRef.current();
       })
       .catch((error) => {
-        if (cancelled) return;
+        if (!attempt.isCurrent()) return;
         const retryable =
           !(error instanceof SessionSurfaceError) && pairingFailureIsRetryable(error);
         if (!retryable) onPairingTokenConsumedRef.current();
@@ -486,12 +518,11 @@ export function useRoomAdmission({
             : `${message} 이 연결 링크는 사용할 수 없습니다. 호스트에게 새 링크를 요청하세요.`,
         });
       });
-    return () => {
-      cancelled = true;
-    };
+    return attempt.cancel;
   }, [
     admissionState.kind,
     applyJoinedSession,
+    beginAdmissionAttempt,
     operatorPairingAttempt,
     operatorPairingToken,
   ]);
@@ -506,7 +537,7 @@ export function useRoomAdmission({
     }
     if (preflightAttemptedTokenRef.current === guestJoinToken) return;
     preflightAttemptedTokenRef.current = guestJoinToken;
-    let cancelled = false;
+    const attempt = beginAdmissionAttempt();
     dispatchAdmission({
       type: "preflight_started",
       status: "초대와 기존 신원을 확인하는 중...",
@@ -515,6 +546,7 @@ export function useRoomAdmission({
     try {
       deviceToken = getOrCreateBrowserCredential();
     } catch (error) {
+      attempt.cancel();
       dispatchAdmission(browserCredentialFailure("preflight", error));
       return;
     }
@@ -524,7 +556,7 @@ export function useRoomAdmission({
       sessionToken: guestSession?.sessionToken || "",
     })
       .then(async (decision) => {
-        if (cancelled) return;
+        if (!attempt.isCurrent()) return;
         expectedInviteRoomIdRef.current = decision.room_id || "";
         if (decision.status === "existing_session" && guestSession) {
           if (!expectedInviteRoomIdRef.current || guestSession.meetingId !== expectedInviteRoomIdRef.current) {
@@ -535,7 +567,7 @@ export function useRoomAdmission({
             roomLabel: decision.room_label || guestSession.roomLabel,
             inviteScope: decision.invite_scope || guestSession.inviteScope,
           };
-          await bindSessionSurface(preservedSession);
+          if (!(await bindSessionSurface(preservedSession, attempt.isCurrent))) return;
           dispatchAdmission({
             type: "joined",
             session: preservedSession,
@@ -581,7 +613,7 @@ export function useRoomAdmission({
         });
       })
       .catch((error) => {
-        if (cancelled) return;
+        if (!attempt.isCurrent()) return;
         const message = error instanceof Error ? error.message : "초대 확인 실패";
         dispatchAdmission({
           type: "failed",
@@ -592,11 +624,10 @@ export function useRoomAdmission({
           status: message,
         });
       });
-    return () => {
-      cancelled = true;
-    };
+    return attempt.cancel;
   }, [
     admissionState.kind,
+    beginAdmissionAttempt,
     bindSessionSurface,
     clearInviteUrl,
     guestJoinToken,
@@ -621,7 +652,7 @@ export function useRoomAdmission({
       });
       return;
     }
-    let cancelled = false;
+    const attempt = beginAdmissionAttempt();
     dispatchAdmission({
       type: "join_requested",
       status: "초대 링크로 방에 입장 중...",
@@ -630,6 +661,7 @@ export function useRoomAdmission({
     try {
       deviceToken = getOrCreateBrowserCredential();
     } catch (error) {
+      attempt.cancel();
       dispatchAdmission(browserCredentialFailure("join", error));
       return;
     }
@@ -637,6 +669,7 @@ export function useRoomAdmission({
     try {
       requestId = loadOrCreateAdmissionRequestId();
     } catch (error) {
+      attempt.cancel();
       const message =
         error instanceof Error ? error.message : "안전한 입장 요청을 만들 수 없습니다.";
       dispatchAdmission({
@@ -660,16 +693,18 @@ export function useRoomAdmission({
       participantType: "human",
     })
       .then(async (payload) => {
-        if (!cancelled) {
-          await applyJoinedSession(
+        if (attempt.isCurrent()) {
+          const applied = await applyJoinedSession(
             roomGuestSessionFromJoinPayload(guestJoinToken, payload),
-            "invite"
+            "invite",
+            attempt.isCurrent
           );
+          if (!applied) return;
           clearAdmissionRequestId();
         }
       })
       .catch((error) => {
-        if (cancelled) return;
+        if (!attempt.isCurrent()) return;
         const surfaceFailure = error instanceof SessionSurfaceError;
         const message = error instanceof Error ? error.message : "초대 링크 입장 실패";
         dispatchAdmission({
@@ -685,12 +720,11 @@ export function useRoomAdmission({
           status: message,
         });
       });
-    return () => {
-      cancelled = true;
-    };
+    return attempt.cancel;
   }, [
     admissionState.kind,
     applyJoinedSession,
+    beginAdmissionAttempt,
     clearInviteUrl,
     guestAlreadyJoinedThisInvite,
     guestJoinToken,

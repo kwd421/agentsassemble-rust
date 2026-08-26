@@ -25,7 +25,7 @@ const apiMocks = vi.hoisted(() => ({
 }));
 
 const surfaceMocks = vi.hoisted(() => ({
-  verifyAndBindRoomSessionSurface: vi.fn().mockResolvedValue(undefined),
+  verifyAndBindRoomSessionSurface: vi.fn().mockResolvedValue(true),
 }));
 
 const guestSessionStore = vi.hoisted(() => ({
@@ -83,7 +83,7 @@ describe("useRoomAdmission", () => {
       "aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
     );
     deviceMocks.loadRememberedGuestProfile.mockReturnValue(null);
-    surfaceMocks.verifyAndBindRoomSessionSurface.mockResolvedValue(undefined);
+    surfaceMocks.verifyAndBindRoomSessionSurface.mockResolvedValue(true);
     guestSessionStore.current = null;
     persistRoomGuestSession(null);
     window.sessionStorage.clear();
@@ -246,6 +246,52 @@ describe("useRoomAdmission", () => {
     expect(deviceMocks.rememberGuestProfile).not.toHaveBeenCalled();
     expect(onRoomJoined).not.toHaveBeenCalled();
     expect(window.location.search).toBe("?token=invite-1");
+  });
+
+  it("does not commit a session after its entrance attempt becomes stale", async () => {
+    apiMocks.preflightRoomInvite.mockResolvedValue({
+      status: "known_user",
+      can_auto_join: true,
+      room_id: "room-2",
+      participant: { participant_id: "guest-2", display_name: "Known Guest" },
+    });
+    apiMocks.joinRoomInvite.mockResolvedValue({
+      ...SESSION_SURFACE,
+      status: "admitted",
+      session_token: "stale-session",
+      agent_id: "guest-2",
+      display_name: "Known Guest",
+      meeting_id: "room-2",
+      invite_scope: "room",
+      expires_at: "2099-01-01T00:00:00Z",
+    });
+    let finishVerification = () => {};
+    surfaceMocks.verifyAndBindRoomSessionSurface.mockImplementation(
+      (_surface, isCurrent: () => boolean) =>
+        new Promise<boolean>((resolve) => {
+          finishVerification = () => resolve(isCurrent());
+        })
+    );
+    const onRoomJoined = vi.fn();
+    const { rerender } = renderHook(
+      ({ token }) =>
+        useRoomAdmission({
+          guestInvite: null,
+          guestJoinToken: token,
+          operatorPairingToken: "",
+          onPairingTokenConsumed: vi.fn(),
+          initialSession: null,
+          onRoomJoined,
+          onResetToLobby: vi.fn(),
+        }),
+      { initialProps: { token: "invite-1" } }
+    );
+    await waitFor(() => expect(surfaceMocks.verifyAndBindRoomSessionSurface).toHaveBeenCalled());
+    rerender({ token: "" });
+    finishVerification();
+    await act(async () => Promise.resolve());
+    expect(guestSessionStore.current).toBeNull();
+    expect(onRoomJoined).not.toHaveBeenCalled();
   });
 
   it("keeps recovery open when its server surface cannot be bound", async () => {

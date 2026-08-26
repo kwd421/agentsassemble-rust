@@ -363,7 +363,7 @@ export function retainRoomDirectoryAuthority(
 }
 
 export async function bindRoomDirectoryAuthority(
-  authority: StrictRoomDirectory,
+  authority: RoomSessionSurface,
   trustedSurface: TrustedServerProductSurface | null = null,
   origin = window.location.origin
 ) {
@@ -371,6 +371,13 @@ export async function bindRoomDirectoryAuthority(
     authority.server_product_surface,
     trustedSurface
   );
+  bindVerifiedRoomDirectoryAuthority(authority, origin);
+}
+
+function bindVerifiedRoomDirectoryAuthority(
+  authority: RoomSessionSurface,
+  origin: string
+) {
   if (boundAuthority?.origin === origin) {
     assertSameRoomDirectoryAuthority(authority, boundAuthority.authority);
     if (
@@ -394,16 +401,13 @@ export async function bindRoomDirectoryAuthority(
 
 export async function verifyAndBindRoomSessionSurface(
   authority: RoomSessionSurface,
+  isCurrent: () => boolean,
   origin = window.location.origin
-) {
-  await bindRoomDirectoryAuthority(
-    {
-      ...authority,
-      rooms: [],
-    },
-    null,
-    origin
-  );
+): Promise<boolean> {
+  await assertServerProductSurfaceIntegrity(authority.server_product_surface, null);
+  if (!isCurrent()) return false;
+  bindVerifiedRoomDirectoryAuthority(authority, origin);
+  return true;
 }
 
 export function currentRoomDirectoryAuthority(
