@@ -2,19 +2,13 @@ use agentsassemble_persistence::{
     HumanInviteCredentialEvidence, HumanInvitePreflight, HumanInvitePreflightRequest,
     PersistenceError, SqliteStore,
 };
-use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
-use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::{
     HumanInviteCredentialAuthority, HumanInviteCredentialError, VerifiedHumanInviteCredential,
+    human_browser_credential::fingerprint_browser_credential,
 };
-
-const BROWSER_CREDENTIAL_PREFIX: &str = "aad1_";
-const CLIENT_CREDENTIAL_BYTES: usize = 32;
-const CLIENT_CREDENTIAL_BODY_CHARS: usize = 43;
-const CLIENT_CREDENTIAL_CHARS: usize = 48;
 
 #[derive(Debug, Error)]
 pub enum HumanInvitePreflightError {
@@ -46,9 +40,8 @@ pub async fn preflight_human_invite(
     now: DateTime<Utc>,
 ) -> Result<HumanInvitePreflight, HumanInvitePreflightError> {
     let credential = authenticated_invite_evidence(authority, invite_credential)?;
-    let browser_credential_fingerprint =
-        fingerprint_client_credential(browser_credential, BROWSER_CREDENTIAL_PREFIX)
-            .ok_or(HumanInvitePreflightError::BrowserCredential)?;
+    let browser_credential_fingerprint = fingerprint_browser_credential(browser_credential)
+        .ok_or(HumanInvitePreflightError::BrowserCredential)?;
     let session_fingerprint = session_bearer
         .map(|bearer| {
             crate::human_session_bearer::fingerprint_presented_bearer(bearer)
@@ -88,25 +81,6 @@ fn authenticated_invite_evidence(
     })
 }
 
-fn fingerprint_client_credential(value: &str, prefix: &str) -> Option<[u8; 32]> {
-    if value.len() != CLIENT_CREDENTIAL_CHARS || !value.is_ascii() {
-        return None;
-    }
-    let encoded = value.strip_prefix(prefix)?;
-    if encoded.len() != CLIENT_CREDENTIAL_BODY_CHARS
-        || !encoded
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
-    {
-        return None;
-    }
-    let decoded = URL_SAFE_NO_PAD.decode(encoded).ok()?;
-    if decoded.len() != CLIENT_CREDENTIAL_BYTES || URL_SAFE_NO_PAD.encode(decoded) != encoded {
-        return None;
-    }
-    Some(Sha256::digest(value.as_bytes()).into())
-}
-
 #[cfg(test)]
 mod tests {
     use agentsassemble_domain::{
@@ -117,12 +91,10 @@ mod tests {
     use chrono::{TimeZone, Utc};
     use sha2::{Digest, Sha256};
 
-    use super::{
-        BROWSER_CREDENTIAL_PREFIX, HumanInvitePreflightError, fingerprint_client_credential,
-        preflight_human_invite,
-    };
+    use super::{HumanInvitePreflightError, preflight_human_invite};
     use crate::{
         HumanInviteCredentialAuthority, HumanInviteCredentialDraft,
+        human_browser_credential::{BROWSER_CREDENTIAL_PREFIX, fingerprint_browser_credential},
         human_session_bearer::fingerprint_presented_bearer,
     };
 
@@ -132,7 +104,7 @@ mod tests {
         let browser = format!("{BROWSER_CREDENTIAL_PREFIX}{body}");
         let session = format!("aas1.{body}");
         assert_eq!(
-            fingerprint_client_credential(&browser, BROWSER_CREDENTIAL_PREFIX),
+            fingerprint_browser_credential(&browser),
             Some(Sha256::digest(browser.as_bytes()).into())
         );
         assert_eq!(
@@ -140,7 +112,7 @@ mod tests {
             Some(Sha256::digest(session.as_bytes()).into())
         );
         assert_ne!(
-            fingerprint_client_credential(&browser, BROWSER_CREDENTIAL_PREFIX),
+            fingerprint_browser_credential(&browser),
             fingerprint_presented_bearer(&session)
         );
 
@@ -151,10 +123,7 @@ mod tests {
             format!(" {browser}"),
             session,
         ] {
-            assert_eq!(
-                fingerprint_client_credential(&malformed, BROWSER_CREDENTIAL_PREFIX),
-                None
-            );
+            assert_eq!(fingerprint_browser_credential(&malformed), None);
         }
     }
 
