@@ -4,11 +4,12 @@ Status: source-derived reimplementation exposure inventory, 2026-08-26
 
 Comparison baseline: original
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust
-`035416c`. The local-authority, surface, admission, subscription, and moderation
+`3dbeceb`. The local-authority, surface, connection-admission, subscription, and moderation
 boundary is complete. Central registration, canonical participant roles, participant
 mute, exact provider interruption, and the required packaged provider matrix have
-passed both manual reviews. Room settings, preferences, and appearance are now the
-active cutover boundary.
+passed both manual reviews. Room-global settings and local-operator preferences are cut
+over. Remote-session preferences now fail visibly until durable human admission exists;
+human admission is the active prerequisite before room appearance.
 
 ## Scope and method
 
@@ -191,8 +192,8 @@ implemented; the frontend must not silently substitute Python or local fake data
 | React feature group | Missing Rust surface |
 | --- | --- |
 | Startup identity and accounts | Fresh local desktop bootstrap, central guest creation/recovery, secure browser device identity, and proof-bound local-server registration are implemented. `/api/account`, Google account challenge/connect/delete, and the native Google handoff remain incomplete; the absent `open_central_google_login` host command keeps that button failed closed. |
-| Room lifecycle and settings | Canonical archive/delete lifecycle, room-global settings mutation, per-user room preferences, and public server info. |
-| Admission and invites | Host claim, room invite create/join/admission/companion/leave, operator pairing create/redeem, and public-invite status/URL/tunnel controls. |
+| Room lifecycle and settings | Canonical archive/delete lifecycle and public server info remain incomplete. Room-global settings mutation and local-operator room preferences are connected; remote-session preferences are explicitly unavailable until admission owns their identity. |
+| Admission and invites | Durable human invite/session create, join, verification, expiry, revoke, leave, restart recovery, session-derived WebSocket/preference ticket exchange, host claim, companion admission, operator pairing create/redeem, and public-invite status/URL/tunnel controls. |
 | Roster, friends, and channels | The active-room roster, strict participant-role control, copied participant-mute control, canonical event projection, and exact Rust provider-interrupt owner are cut over and packaged-verified. Room friends, room channels, voice presence, and side chat remain incomplete. |
 | Attachments, personas, pins, and search | General-message and room-appearance attachment purposes, persona list/import/thumbnail, message pins, room search/context. Profile-avatar upload/read is implemented. |
 | Provider settings and diagnostics | Login, catalog refresh HTTP response, credential CRUD, provider usage, local resources, release health, and runtime version. The original `/api/local/workspace-picker` HTTP route is absent, but packaged desktop creation uses the native Tauri directory picker instead. |
@@ -275,8 +276,34 @@ Provider roll/choose uses the existing private `RoomPortal` on Codex and the exa
 bound helper on Antigravity/OpenCode; it is not print mode or a client-side result.
 The original React client still has no direct human roll/choose control, so the
 human commands remain a reachable server contract without a fabricated button.
-Preferences, appearance assets, custom channels, invites, and plugin hosting stay
-explicitly incomplete until their complete owners exist.
+Local-operator preferences are connected through their complete purpose-ticketed HTTP
+owner. Remote-session preferences, appearance assets, custom channels, invites, and
+plugin hosting stay explicitly incomplete until their complete owners exist.
+
+## Stage B local preference exposure delta
+
+The copied room-settings UI now loads and saves the local operator's room and per-channel
+notification preferences through separate one-use read and write grants.
+Desktop grants are pinned to the advertised host surface and require exact string tickets,
+positive safe-integer TTLs, and canonical IPv4-loopback HTTP bases.
+
+The response parser rejects room mismatches, unknown fields, unsupported values, and
+noncanonical cursors instead of projecting defaults. POST bodies contain only preference
+fields; room-global settings remain WebSocket-owned. Both server responses and desktop
+fetches disable caching so a browser cache cannot bypass ticket consumption or current
+membership authorization. The copied settings control and restart flow are packaged-
+verified. Room appearance upload, authenticated preview/read, binding, replacement, and
+cleanup remain visibly incomplete and are not implied by preference completion.
+
+Manual cross-layer review found that the earlier frontend treated any room session bearer
+as a working preference credential even though the Rust route accepts only separate
+purpose tickets and Rust has no durable invite/session owner yet. That mock-only path
+always returned 401 at the real boundary. Commit `3fb8350` now reports remote-session
+preferences unavailable before native invocation or HTTP fetch, and `3dbeceb` verifies
+the API, controller, and disabled copied-UI controls. It does not substitute local
+operator authority, cached defaults, or a compatibility bearer branch. Human admission,
+live-session-bound purpose exchange, and real guest restart/revocation tests remain the
+exact missing operations.
 
 ## Public Rust slice, active gap, and provenance gate
 

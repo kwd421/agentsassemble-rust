@@ -2202,6 +2202,78 @@ verification-owned provider child remained. Their Application Support, WebKit, c
 packaging, were permanently removed. This completes the fresh packaged provider-matrix,
 exact-mute, review, and cleanup evidence for the Phase 4 moderation boundary.
 
+## Local room preference desktop cutover verification: 2026-08-26
+
+The copied room-settings UI now uses a fresh native purpose ticket for each desktop
+preference read and write. The browser never receives a generic operator credential for
+this flow. POST sends only preference fields, and the response parser requires the exact
+requested room and complete canonical wire shape. Production commits `1cb3892`,
+`5f44948`, and `490f527` separate the connection, cache isolation, and strict grant validation; commits `fcf49b8`,
+`2e155e1`, and `99c159d` separately own their regression evidence.
+
+The concrete cache threat was reuse of the same room-settings URL across a consumed
+ticket, changed membership, or changed user. A browser cache hit could otherwise avoid
+both one-use consumption and current server authorization. The server therefore applies
+`Cache-Control: private, no-store` through the maintained Tower HTTP response-header
+layer to every GET/POST success and error, while the desktop fetch also requests
+`cache: no-store`. This adds no application cache, custom middleware, or duplicate state.
+The concrete typed-boundary threats were JavaScript string coercion accepting a one-item
+array as a ticket and URL parsing repairing a noncanonical loopback representation. The
+validator now requires an actual string and exact `http://127.0.0.1:<port>` source text.
+It does not normalize a malformed host response into a usable capability.
+
+No CPU, memory, disk, or latency hot spot was measured in this slice, so no speculative
+performance layer was added. A fresh native grant on every operation is an intentional
+security cost that preserves one-use authority. The existing 16 KiB request limit,
+54-channel preference bound, short identity transaction, and release-before-body ordering
+remain the resource boundaries; the implementation reuses the existing ticket store,
+SQLite owner, fetch path, and maintained response-header layer.
+
+Computer Use first drove `AgentsAssemble Preference Verify` under isolated identifier
+`app.agentsassemble.rust.preferenceverify0826`, then repeated the final strict contract
+from a newly built `AgentsAssemble Preference Strict Verify` package under identifier
+`app.agentsassemble.rust.preferencestrictverify0826`. Both used an explicitly empty
+central URL and fresh local identities. A real room was created through the copied room
+rail. Its settings modal loaded the default room and channel preferences through the Rust
+runtime; room notifications and `#general` notifications were changed to `mute`. The
+modal and connection panel immediately showed `알림 끔` and `1 muted`. Read-only SQLite
+inspection found the same `mute` values in the room's canonical preference JSON.
+
+Normal quit stopped each exact app, supervisor, and sidecar. Relaunching the same package
+restored the user, room, `1 muted`, room-level `알림 끔`, and channel-level `알림 끔`
+through fresh tickets. No provider was started. After each run, exact process absence was
+checked and the isolated Application Support, cache, WebKit, app-bundle, copied sidecar,
+frontend distribution, generated schemas, and first run's separate 2.0 GiB temporary
+target were moved to the recoverable Trash. The default application identity and data
+were never used.
+
+The first complete `make verify` attempt exposed only three rustfmt differences in the
+desktop ticket bridge and stopped at that mandatory gate. Mechanical commit `11362af`
+fixed only those differences. The clean rerun passed architecture, source-growth, policy,
+formatting, generated bindings, original-CSS verification, all 76 frontend files with
+375 tests, all 16 desktop tests, every workspace Rust unit/integration and documentation
+test, warning-denied workspace and desktop Clippy, and final diff validation.
+
+The later cross-layer review identified a parity overclaim rather than a privilege
+bypass: a remote room session was sent directly to the purpose-ticket-only Rust route,
+so the real server returned 401 while a fetch mock described success. Rust has no durable
+invite/admission session owner yet, so accepting that opaque bearer or issuing a local
+operator ticket would have fabricated authority. Production commit `3fb8350` instead
+fails remote-session preference reads and writes before native invocation or network I/O,
+and the controller exposes that incomplete authority as an error so the copied controls
+remain disabled. Test commit `3dbeceb` proves both GET and POST make no fetch or Tauri
+call, background refresh remains off, and notification controls stay disabled; the three
+focused files passed 25 tests. The previously packaged local-operator read, write, and
+restart flow remains unchanged.
+
+This correction adds no cache, session store, protocol fallback, or future-only
+abstraction. No CPU, memory, disk, or latency cost justified an optimization. The change
+removes one dead request path and records the actual dependency: durable fingerprinted
+human admission must exist before a live-session-bound one-use preference exchange can
+restore remote parity. Security review additionally requires a derived ticket to retain
+session provenance and revalidate current expiry/revocation at consumption, including
+session revocation after ticket issuance.
+
 ## API verification scope
 
 When a reachable flow specifically needs an API-backed provider, the allowed paid/provider-specific candidates are the official DeepSeek API and the designated Flash provider path. Every other API-backed verification uses only an explicitly free API or free model. Missing credentials, exhausted free quota, or unavailable models fail visibly; they do not trigger a paid substitution or a fallback provider.

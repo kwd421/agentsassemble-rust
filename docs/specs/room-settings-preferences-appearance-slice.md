@@ -1,6 +1,7 @@
 # Room Settings, Scheduling, Tabletop, Preferences, and Appearance Slice
 
-Status: Stage A code and mandatory gates verified; Stage B design cross-approved, no Stage B surface active
+Status: Stage A verified; Stage B local-operator preferences packaged-verified;
+remote-session preferences and appearance assets inactive
 
 ## Definition
 
@@ -8,9 +9,10 @@ This slice completes the reachable current settings controls without creating
 storage-only success. Stage A owns canonical room settings, the ordered and ambient
 conversation schedulers that those settings change, typed durable provider input,
 and human/provider tabletop randomness. Stage B owns the authenticated user's room
-preferences and the room appearance asset lifecycle. Custom channels, voice/text
-streams, invites, activity-plugin hosting, and the original legacy relay mode
-remain outside this reimplementation.
+preferences and the room appearance asset lifecycle. Human invite/admission and
+its durable room-session owner are a prerequisite for remote-user preferences and
+bound appearance reads. Custom channels, voice/text streams, activity-plugin
+hosting, and the original legacy relay mode remain outside this slice.
 
 The comparison baseline is original commit
 `d5046473010d1353a81ee38337360e6d98f7bd6f` and public Rust commit `5aaa04b`.
@@ -188,6 +190,23 @@ cap, and builtin-or-`c[0-9a-f]{12}` channel grammar match the original.
 CR, LF, and TAB are forbidden. A top-level partial update replaces the complete
 `channel_settings` map when that field is present.
 
+The delivered preference path currently issues those purposes only from the
+desktop private-control owner for the exact local operator. Rust does not yet own
+the durable invite/admission room session needed to authenticate a remote human.
+Until that owner exists, a frontend with a room session reports preferences as
+unavailable before either native invocation or HTTP fetch; it does not send the
+opaque session bearer to a purpose-ticket route or substitute local authority.
+This is an explicitly incomplete parity path, not completed guest support.
+
+Remote activation requires real invite admission to issue a durable session
+stored only by token fingerprint and bound to exact room, user, participant,
+client, scope, expiry, and revocation state. A verified session may exchange for
+one exact preference purpose. The resulting in-memory grant retains immutable
+session provenance, and consumption revalidates the current durable session before
+room-user identity. Thus session-only revocation or expiry after ticket issuance
+invalidates the derived ticket. Read-only sessions cannot obtain a write ticket.
+No purpose-consume failure retries as session authentication.
+
 Per-room `GET /api/room-settings` preserves the combined `{room_id, settings}`
 wire response while the frontend projects only the caller preference fields.
 The reachable no-room local-operator branch has a distinct server-wide one-use
@@ -249,9 +268,11 @@ transport is a fallback for the other.
 Stage B internal support remains unreachable until its owner is complete. Ticket,
 private-control, persistence, decoder, and transaction-hook commits may land
 without registering a Tauri command or mounting a route. Preference activation
-adds its exact native commands, permissions, route, and product declaration
-together. Appearance activation occurs only after the existing attachment routes
-have one owner and upload, read, bind, cleanup, exact issuance, and settings-hook
+for the local operator added its exact native commands, permissions, route, and
+product declaration together. Remote preference activation additionally requires
+the complete admission/session owner and provenance-bound exchanges above.
+Appearance activation occurs only after that admission dependency and the existing
+attachment routes have one owner and upload, read, bind, cleanup, exact issuance, and settings-hook
 behavior are complete; it also advances the product-surface revision. The copied
 frontend is connected only after each backend surface is complete.
 
@@ -277,8 +298,9 @@ frontend is connected only after each backend surface is complete.
   older schema records fail instead of being migrated or executed.
 - Stage B tests cover two-user isolation, the no-room operator directory branch,
   wrong-purpose/room/asset and replayed tickets, auth-before-body, identity and
-  bootstrap races, exact preference merge and cursor semantics, shared raster
-  admission, combined cross-writer quotas, pending preview/expiry, reserved-prefix
+  bootstrap races, exact preference merge and cursor semantics, remote-session
+  expiry/revocation after ticket issuance, cross-room and read-only rejection,
+  shared raster admission, combined cross-writer quotas, pending preview/expiry, reserved-prefix
   rejection, bind/replacement/clear, restart, reference cleanup, response caching,
   and late object-URL revocation.
 - Mandatory architecture/source-growth/800-line gates, `make verify`, native and
@@ -297,7 +319,8 @@ frontend is connected only after each backend surface is complete.
   print mode, and removes every verification-owned process, window, server, and
   temporary resource afterward.
 
-Room close/archive/delete, invite/admission, custom channel registry and streams,
-voice, activity-plugin hosting, general message attachments, PostgreSQL, RimWorld,
-and new console/local-profile UI remain separate contracts. Their controls stay
-visibly unsupported until their complete authority boundary is implemented.
+Room close/archive/delete, operator pairing, external-agent admission, custom
+channel registry and streams, voice, activity-plugin hosting, general message
+attachments, PostgreSQL, RimWorld, and new console/local-profile UI remain
+separate contracts. Their controls stay visibly unsupported until their complete
+authority boundary is implemented.
