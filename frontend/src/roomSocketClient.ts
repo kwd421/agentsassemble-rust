@@ -182,8 +182,8 @@ export function openRoomSocket(
     }, ROOM_SOCKET_COMMAND_TIMEOUT_MS);
   }
 
-  function fail(currentSocket: WebSocket, error: unknown) {
-    if (socket !== currentSocket) return;
+  function fail(currentSocket: WebSocket, generation: number, error: unknown) {
+    if (closed || generation !== connectionGeneration) return;
     const normalized =
       error instanceof SubscriptionContractError
         ? new RoomSocketSayError(error.message, error.code)
@@ -198,7 +198,9 @@ export function openRoomSocket(
               ? error
               : new Error("Room WebSocket protocol failed.");
     handlers.onError?.(normalized);
-    if (socket === currentSocket) currentSocket.close();
+    if (socket === currentSocket && currentSocket.readyState !== WebSocket.CLOSED) {
+      currentSocket.close();
+    }
   }
 
   function acceptEventFrame(
@@ -293,6 +295,7 @@ export function openRoomSocket(
       let receipt: SubscriptionReceipt | null = null;
       let snapshotAccepted = false;
       let connectionEstablished = false;
+      let connectionFailed = false;
       let terminalLeaveCommitted = false;
       let verificationQueue = Promise.resolve();
       let outboundQueue = Promise.resolve();
@@ -306,6 +309,11 @@ export function openRoomSocket(
         ownsConnectionGeneration() &&
         socket === currentSocket &&
         currentSocket.readyState === WebSocket.OPEN;
+      const failConnection = (error: unknown) => {
+        if (connectionFailed) return;
+        connectionFailed = true;
+        fail(currentSocket, generation, error);
+      };
 
       sendPendingForConnection = () => {
         if (
@@ -351,7 +359,7 @@ export function openRoomSocket(
               command.everSent = true;
               armCommandDeadline(requestId, command);
             })
-            .catch((error) => fail(currentSocket, error));
+            .catch(failConnection);
         });
       };
 
@@ -497,6 +505,7 @@ export function openRoomSocket(
                   2 ** Math.min(command.retryAttempt - 1, 6)
               );
               command.retryNotBefore = Date.now() + retryDelay;
+              connectionFailed = true;
               currentSocket.close();
               return;
             }
@@ -514,7 +523,13 @@ export function openRoomSocket(
             msg.accepted !== true ||
             msg.resolution !== "committed" ||
             msg.action !== command.action ||
-            !commandAckResultIsValid(command.action, command.payload, msg.result)
+            !commandAckResultIsValid(
+              command.action,
+              command.payload,
+              msg.result,
+              dependencies.expectedRoomId,
+              dependencies.expectedParticipantId
+            )
           ) {
             throw new RoomSocketSayError(
               "Room ACK did not match its pending command contract; reconnecting.",
@@ -547,7 +562,7 @@ export function openRoomSocket(
       currentSocket.onmessage = (event) => {
         const raw = event.data;
         if (typeof raw !== "string") {
-          fail(currentSocket, new RoomSocketSayError(
+          failConnection(new RoomSocketSayError(
             "Binary WebSocket frames are not supported.",
             "binary_frame_unsupported"
           ));
@@ -557,11 +572,12 @@ export function openRoomSocket(
           .then(async () => {
             if (
               !ownsConnectionGeneration() ||
+              connectionFailed ||
               (!connectionEstablished && !canUseOpenSocket())
             ) return;
             await processFrame(raw);
           })
-          .catch((error) => fail(currentSocket, error));
+          .catch(failConnection);
       };
       currentSocket.onerror = (event) => {
         if (socket === currentSocket && generation === connectionGeneration) {

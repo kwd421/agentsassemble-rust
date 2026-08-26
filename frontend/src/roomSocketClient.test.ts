@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { RoomSocketSayError } from "./roomSocketClient";
 import { digestSnapshotFrame } from "./lib/serverProof";
 import {
+  authenticatedServerFrame,
   event,
   flushPromises,
   handshakeFrames,
@@ -14,6 +15,33 @@ import {
 } from "./test/roomSocketHarness";
 
 const ROOM_SOCKET_COMMAND_TIMEOUT_MS_FOR_TEST = 20_000;
+
+function leaveAck(
+  requestId: unknown,
+  mutate: (result: Record<string, unknown>) => void = () => {}
+) {
+  const result: Record<string, unknown> = {
+    participant: { room_id: "general", participant_id: "operator-local", status: "left" },
+    event: {
+      v: 1,
+      id: "leave-event-1",
+      room_id: "general",
+      seq: 1,
+      type: "participant_left",
+      participant_id: "operator-local",
+    },
+    event_seq: 1,
+  };
+  mutate(result);
+  return {
+    op: "ack",
+    accepted: true,
+    resolution: "committed",
+    request_id: requestId,
+    action: "participant.leave",
+    result,
+  };
+}
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -267,13 +295,22 @@ describe("proof-bound canonical room socket", () => {
       latest_seq: 1,
     });
     await vi.waitFor(() => expect(onEvents).toHaveBeenCalledWith([event(1)]));
-    await receiveAuthenticated(sockets[0], first, {
+    const resync = await authenticatedServerFrame(first, {
       op: "resync_required",
       stream: "room_events",
       latest_seq: 1,
       reason: "subscriber lagged",
     });
+    const staleEvent = await authenticatedServerFrame(first, {
+      op: "event",
+      stream: "room_events",
+      events: [event(2)],
+      latest_seq: 2,
+    });
+    sockets[0].receiveRaw(resync);
+    sockets[0].receiveRaw(staleEvent);
     await vi.waitFor(() => expect(onError).toHaveBeenCalled());
+    expect(onEvents).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(500);
     await vi.waitFor(() => expect(sockets).toHaveLength(2));
     sockets[1].open();
@@ -350,6 +387,7 @@ describe("proof-bound canonical room socket", () => {
   });
 
   it("fails closed on an authenticated command response for an unknown request", async () => {
+    vi.useFakeTimers();
     const errors: RoomSocketSayError[] = [];
     const { handle, sockets, tickets } = openHarness({
       onError: (error) => {
@@ -362,8 +400,12 @@ describe("proof-bound canonical room socket", () => {
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
+    const pendingLeave = handle.command("participant.leave", {});
+    void pendingLeave.catch(() => {});
+    await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
+    const command = await sentAuthenticatedCommand(sockets[0], frames);
 
-    await receiveAuthenticated(sockets[0], frames, {
+    const unknown = await authenticatedServerFrame(frames, {
       op: "nack",
       accepted: false,
       resolution: "rejected",
@@ -374,11 +416,16 @@ describe("proof-bound canonical room socket", () => {
         message: "Message content is invalid.",
       },
     });
+    const trailingLeave = await authenticatedServerFrame(frames, leaveAck(command.request_id));
+    sockets[0].receiveRaw(unknown);
+    sockets[0].receiveRaw(trailingLeave);
 
     await vi.waitFor(() =>
       expect(errors.at(-1)?.category).toBe("command_response_unexpected")
     );
     expect(sockets[0].readyState).toBe(WebSocket.CLOSED);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(sockets).toHaveLength(2);
     handle.close();
   });
 
@@ -408,6 +455,33 @@ describe("proof-bound canonical room socket", () => {
 
     await expect(pending).rejects.toMatchObject({ category: "message_invalid" });
     expect(sockets[0].readyState).toBe(WebSocket.OPEN);
+    handle.close();
+  });
+
+  it("does not accept a queued leave ACK after an unresolved outcome", async () => {
+    vi.useFakeTimers();
+    const { handle, sockets, tickets } = openHarness();
+    await flushPromises();
+    sockets[0].open();
+    const frames = await handshakeFrames(sockets[0], tickets[0], 0, 0);
+    sockets[0].receive(frames.receipt);
+    sockets[0].receiveRaw(frames.rawSnapshot);
+    await vi.waitFor(() => expect(handle.ready()).toBe(true));
+    const pendingLeave = handle.command("participant.leave", {});
+    void pendingLeave.catch(() => {});
+    await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
+    const command = await sentAuthenticatedCommand(sockets[0], frames);
+    const unresolved = await authenticatedServerFrame(frames, {
+      op: "nack", accepted: false, resolution: "unresolved",
+      request_id: command.request_id, action: "participant.leave",
+      error: { code: "persistence_failed", message: "Persistence operation failed." },
+    });
+    const trailingLeave = await authenticatedServerFrame(frames, leaveAck(command.request_id));
+    sockets[0].receiveRaw(unresolved);
+    sockets[0].receiveRaw(trailingLeave);
+    await vi.waitFor(() => expect(sockets[0].readyState).toBe(WebSocket.CLOSED));
+    await vi.advanceTimersByTimeAsync(500);
+    expect(sockets).toHaveLength(2);
     handle.close();
   });
 
@@ -571,25 +645,7 @@ describe("proof-bound canonical room socket", () => {
       }
     );
 
-    await receiveAuthenticated(sockets[0], frames, {
-      op: "ack",
-      accepted: true,
-      resolution: "committed",
-      request_id: command.request_id,
-      action: "participant.leave",
-      result: {
-        participant: { participant_id: "operator-local", status: "left" },
-        event: {
-          v: 1,
-          id: "leave-event-1",
-          room_id: "general",
-          seq: 1,
-          type: "participant_left",
-          participant_id: "operator-local",
-        },
-        event_seq: 1,
-      },
-    });
+    await receiveAuthenticated(sockets[0], frames, leaveAck(command.request_id));
     await verificationStarted;
     sockets[0].close();
     releaseVerification();
@@ -601,6 +657,46 @@ describe("proof-bound canonical room socket", () => {
     await vi.advanceTimersByTimeAsync(5_000);
     expect(sockets).toHaveLength(1);
     expect(handle.ready()).toBe(false);
+    handle.close();
+  });
+
+  it.each([
+    ["missing event sequence", (result: Record<string, unknown>) => { delete result.event_seq; }],
+    ["wrong event room", (result: Record<string, unknown>) => {
+      (result.event as Record<string, unknown>).room_id = "other";
+    }],
+    ["wrong event participant", (result: Record<string, unknown>) => {
+      (result.event as Record<string, unknown>).participant_id = "other";
+    }],
+    ["wrong participant room", (result: Record<string, unknown>) => {
+      (result.participant as Record<string, unknown>).room_id = "other";
+    }],
+    ["wrong participant identity", (result: Record<string, unknown>) => {
+      (result.participant as Record<string, unknown>).participant_id = "other";
+    }],
+  ])("rejects a close-before-verify leave ACK with %s", async (_case, mutate) => {
+    vi.useFakeTimers();
+    const errors: RoomSocketSayError[] = [];
+    const { handle, sockets, tickets } = openHarness({
+      onError: (error) => { if (error instanceof RoomSocketSayError) errors.push(error); },
+    });
+    await flushPromises();
+    sockets[0].open();
+    const frames = await handshakeFrames(sockets[0], tickets[0], 0, 0);
+    sockets[0].receive(frames.receipt);
+    sockets[0].receiveRaw(frames.rawSnapshot);
+    await vi.waitFor(() => expect(handle.ready()).toBe(true));
+    const pendingLeave = handle.command("participant.leave", {});
+    void pendingLeave.catch(() => {});
+    await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
+    const command = await sentAuthenticatedCommand(sockets[0], frames);
+    sockets[0].receiveRaw(await authenticatedServerFrame(
+      frames, leaveAck(command.request_id, mutate)
+    ));
+    sockets[0].close();
+    await vi.waitFor(() => expect(errors.at(-1)?.category).toBe("ack_contract_invalid"));
+    await vi.advanceTimersByTimeAsync(500);
+    expect(sockets).toHaveLength(2);
     handle.close();
   });
 

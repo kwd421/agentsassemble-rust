@@ -43,7 +43,9 @@ export function participantProjectionIsValid(event: RoomEvent): boolean {
 export function commandAckResultIsValid(
   action: string,
   payload: Record<string, unknown>,
-  result: unknown
+  result: unknown,
+  expectedRoomId: string,
+  expectedParticipantId: string
 ): boolean {
   if (!isRecord(result)) return false;
   const event = isRecord(result.event) ? result.event : null;
@@ -51,6 +53,7 @@ export function commandAckResultIsValid(
     event &&
     typeof event.id === "string" &&
     event.id &&
+    event.room_id === expectedRoomId &&
     isSequence(event.seq) &&
     event.seq > 0 &&
     result.event_seq === event.seq
@@ -111,9 +114,13 @@ export function commandAckResultIsValid(
   if (action === "participant.leave") {
     const participant = isRecord(result.participant) ? result.participant : null;
     return Boolean(
+      hasDurableEvent &&
       participant &&
+      participant.room_id === expectedRoomId &&
+      participant.participant_id === expectedParticipantId &&
       participant.status === "left" &&
-      event?.type === "participant_left"
+      event?.type === "participant_left" &&
+      event.participant_id === expectedParticipantId
     );
   }
   if (action === "room.delete") return result.deleted === true;

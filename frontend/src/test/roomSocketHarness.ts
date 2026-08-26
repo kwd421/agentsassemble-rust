@@ -182,15 +182,20 @@ export async function receiveAuthenticated(
   frames: Awaited<ReturnType<typeof handshakeFrames>>,
   message: Record<string, unknown>
 ) {
+  socket.receiveRaw(await authenticatedServerFrame(frames, message));
+}
+
+export async function authenticatedServerFrame(
+  frames: Awaited<ReturnType<typeof handshakeFrames>>,
+  message: Record<string, unknown>
+) {
   frames.serverCounter += 1;
-  socket.receiveRaw(
-    await encodeAuthenticatedFrame(
-      frames.frameKey,
-      frames.connectionNonce,
-      "server",
-      frames.serverCounter,
-      JSON.stringify(message)
-    )
+  return encodeAuthenticatedFrame(
+    frames.frameKey,
+    frames.connectionNonce,
+    "server",
+    frames.serverCounter,
+    JSON.stringify(message)
   );
 }
 
