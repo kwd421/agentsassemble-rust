@@ -155,7 +155,7 @@ describe("useRoomSettingsController", () => {
     const hook = renderHook(() =>
       useRoomSettingsController({
         activeRoom: roomA,
-        sessionToken: "session-a",
+        sessionToken: "",
         deviceToken: "device-test",
         canonicalGlobalSettings: globalSettings(roomA, "forest"),
         saveCanonicalGlobalSettings,
@@ -177,7 +177,7 @@ describe("useRoomSettingsController", () => {
       channelSettings: {
         lobby: { notifications: "mute", lastReadAt: "cursor-9" },
       },
-      identity: { sessionToken: "session-a", deviceToken: "device-test" },
+      identity: { sessionToken: "", deviceToken: "device-test" },
     });
     expect(saveCanonicalGlobalSettings).not.toHaveBeenCalled();
   });
@@ -190,7 +190,7 @@ describe("useRoomSettingsController", () => {
     const hook = renderHook(() =>
       useRoomSettingsController({
         activeRoom: roomA,
-        sessionToken: "session-a",
+        sessionToken: "",
         deviceToken: "device-test",
         canonicalGlobalSettings: globalSettings(roomA, "forest"),
         saveCanonicalGlobalSettings,
@@ -225,7 +225,7 @@ describe("useRoomSettingsController", () => {
     const hook = renderHook(() =>
       useRoomSettingsController({
         activeRoom: roomA,
-        sessionToken: "session-a",
+        sessionToken: "",
         deviceToken: "device-test",
         canonicalGlobalSettings: globalSettings(roomA, "forest"),
         saveCanonicalGlobalSettings,
@@ -241,12 +241,36 @@ describe("useRoomSettingsController", () => {
     );
   });
 
+  it("keeps remote-session preferences unavailable without background requests", async () => {
+    const hook = renderHook(() =>
+      useRoomSettingsController({
+        activeRoom: roomA,
+        sessionToken: "remote-session",
+        deviceToken: "device-test",
+        canonicalGlobalSettings: globalSettings(roomA, "forest"),
+        saveCanonicalGlobalSettings,
+        onRoomMetadataLoaded: vi.fn(),
+      })
+    );
+
+    await waitFor(() =>
+      expect(hook.result.current.preferenceStateFor(roomA)).toMatchObject({
+        status: "error",
+        error: { message: expect.stringContaining("Rust 초대·세션 권한") },
+      })
+    );
+    act(() => hook.result.current.refresh(roomA));
+
+    expect(apiMocks.fetchRoomSettings).not.toHaveBeenCalled();
+    expect(apiMocks.saveRoomSettings).not.toHaveBeenCalled();
+  });
+
   it("rolls an optimistic preference back to the last confirmed value on failure", async () => {
     apiMocks.saveRoomSettings.mockRejectedValue(new Error("preference save failed"));
     const hook = renderHook(() =>
       useRoomSettingsController({
         activeRoom: roomA,
-        sessionToken: "session-a",
+        sessionToken: "",
         deviceToken: "device-test",
         canonicalGlobalSettings: globalSettings(roomA, "forest"),
         saveCanonicalGlobalSettings,
@@ -284,7 +308,7 @@ describe("useRoomSettingsController", () => {
     const hook = renderHook(() =>
       useRoomSettingsController({
         activeRoom: roomA,
-        sessionToken: "session-a",
+        sessionToken: "",
         deviceToken: "device-test",
         canonicalGlobalSettings: globalSettings(roomA, "forest"),
         saveCanonicalGlobalSettings,

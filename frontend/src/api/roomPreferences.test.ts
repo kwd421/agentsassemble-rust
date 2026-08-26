@@ -134,29 +134,29 @@ describe("room preference HTTP authority", () => {
     });
   });
 
-  it("keeps an admitted guest on session authority without native ticket issuance", async () => {
+  it("rejects remote-session preferences before native or HTTP authority is used", async () => {
     const invoke = vi.fn();
     Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify(response()), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      })
-    );
+    const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
-    await fetchRoomSettings("general", {
+    const identity = {
       sessionToken: "guest-session",
       deviceToken: "guest-device",
-    });
+    };
+    await expect(fetchRoomSettings("general", identity)).rejects.toThrow(
+      "Rust 초대·세션 권한"
+    );
+    await expect(
+      saveRoomSettings({
+        roomId: "general",
+        appearance: { notifications: "mute" },
+        identity,
+      })
+    ).rejects.toThrow("Rust 초대·세션 권한");
 
     expect(invoke).not.toHaveBeenCalled();
-    expect(fetchMock).toHaveBeenCalledWith("/api/room-settings?room_id=general", {
-      headers: {
-        Authorization: "Bearer guest-session",
-        "X-Device-Token": "guest-device",
-      },
-    });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("rejects a mismatched response room instead of projecting defaults", async () => {

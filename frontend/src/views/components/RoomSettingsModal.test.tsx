@@ -197,4 +197,38 @@ describe("RoomSettingsModal conversation mode", () => {
       notifications: "mentions",
     });
   });
+
+  it("keeps notification controls disabled when preference authority is unavailable", () => {
+    render(
+      <RoomSettingsModal
+        room={room}
+        appearance={DEFAULT_ROOM_APPEARANCE}
+        channelSettings={{}}
+        settingsStatus="ready"
+        settingsError=""
+        preferenceStatus="error"
+        preferenceError="Rust 초대·세션 권한이 아직 연결되지 않았습니다."
+        conversationMode="ordered"
+        toolMode="chat"
+        orderedExcludePreviousSpeaker
+        canInvite={false}
+        onClose={() => undefined}
+        onInvite={() => undefined}
+        onRoomChange={() => undefined}
+        onAppearanceChange={async () => undefined}
+        onChannelSettingChange={async () => undefined}
+        onConversationModeChange={() => undefined}
+        onToolModeChange={() => undefined}
+        onOrderedExcludePreviousSpeakerChange={() => undefined}
+        onRetrySettings={() => undefined}
+        onDeleteRoom={async () => undefined}
+      />
+    );
+
+    expect((screen.getByRole("combobox") as HTMLSelectElement).disabled).toBe(true);
+    for (const radio of screen.getAllByRole("radio", { name: /모든 메시지|@멘션만|알림 끔/ })) {
+      expect((radio as HTMLInputElement).disabled).toBe(true);
+    }
+    expect(screen.getAllByRole("alert")[0]?.textContent).toContain("확인할 수 없어");
+  });
 });
