@@ -1,6 +1,7 @@
 import type { RoomAppearance } from "../lib/roomAppearance";
 import type { ParticipantRole } from "../types/generated/ParticipantRole";
 import {
+  fetchDesktopRoomPreferences,
   isDesktopWebview,
   requestDesktopRuntimeTicket,
   type DesktopRuntimeTicket,
@@ -15,6 +16,7 @@ import {
   postJsonServerOperator,
   postJsonWithIdentity,
   queryString,
+  responseError,
 } from "./http";
 import {
   parseStrictRoomCreateResponse,
@@ -217,26 +219,217 @@ type ApiUserProfile = {
   updated_at?: string;
 };
 
-function normalizeRoomSettings(payload: ApiRoomSettings | undefined, fallbackRoomId: string): RoomSettings {
-  const appearance = payload?.appearance || {};
+function strictRecord(value: unknown, label: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} 응답 형식이 올바르지 않습니다.`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function requireExactKeys(
+  value: Record<string, unknown>,
+  expected: readonly string[],
+  label: string
+) {
+  const actual = Object.keys(value).sort();
+  const canonical = [...expected].sort();
+  if (
+    actual.length !== canonical.length ||
+    actual.some((key, index) => key !== canonical[index])
+  ) {
+    throw new Error(`${label} 응답 계약이 일치하지 않습니다.`);
+  }
+}
+
+function requiredApiString(value: Record<string, unknown>, key: string, label: string): string {
+  if (typeof value[key] !== "string") {
+    throw new Error(`${label}.${key}가 올바르지 않습니다.`);
+  }
+  return value[key] as string;
+}
+
+function parseChannelSettings(
+  value: unknown,
+  label: string
+): Record<string, ChannelSettings> {
+  const settings = strictRecord(value, label);
+  if (Object.keys(settings).length > 54) {
+    throw new Error(`${label} 항목 수가 올바르지 않습니다.`);
+  }
+  return Object.fromEntries(
+    Object.entries(settings).map(([channelId, raw]) => {
+      if (!new Set(["lobby", "live", "board", "records"]).has(channelId) &&
+        !/^c[0-9a-f]{12}$/.test(channelId)) {
+        throw new Error(`${label}.${channelId} 식별자가 올바르지 않습니다.`);
+      }
+      const entry = strictRecord(raw, `${label}.${channelId}`);
+      requireExactKeys(
+        entry,
+        ["notifications", "last_read_at"],
+        `${label}.${channelId}`
+      );
+      const notifications = requiredApiString(
+        entry,
+        "notifications",
+        `${label}.${channelId}`
+      );
+      const lastReadAt = requiredApiString(entry, "last_read_at", `${label}.${channelId}`);
+      let cursorLength = 0;
+      let cursorValid = true;
+      for (const character of lastReadAt) {
+        cursorLength += 1;
+        if (cursorLength > 64 || character === "\r" || character === "\n" || character === "\t") {
+          cursorValid = false;
+          break;
+        }
+      }
+      if (
+        !new Set(["default", "all", "mentions", "mute"]).has(notifications) ||
+        !cursorValid
+      ) {
+        throw new Error(`${label}.${channelId} 값이 올바르지 않습니다.`);
+      }
+      return [
+        channelId,
+        {
+          notifications: notifications as ChannelNotificationSetting,
+          lastReadAt: lastReadAt || undefined,
+        },
+      ];
+    })
+  );
+}
+
+function validateApiChannels(value: unknown, label: string) {
+  if (!Array.isArray(value)) {
+    throw new Error(`${label}가 배열이 아닙니다.`);
+  }
+  value.forEach((raw, index) => {
+    const channel = strictRecord(raw, `${label}[${index}]`);
+    requireExactKeys(
+      channel,
+      ["id", "name", "type", "position", "created_at"],
+      `${label}[${index}]`
+    );
+    requiredApiString(channel, "id", `${label}[${index}]`);
+    requiredApiString(channel, "name", `${label}[${index}]`);
+    requiredApiString(channel, "created_at", `${label}[${index}]`);
+    if (
+      !new Set(["text", "voice"]).has(
+        requiredApiString(channel, "type", `${label}[${index}]`)
+      ) ||
+      !Number.isSafeInteger(channel.position) ||
+      Number(channel.position) < 0
+    ) {
+      throw new Error(`${label}[${index}] 값이 올바르지 않습니다.`);
+    }
+  });
+}
+
+function parseRoomSettingsResponse(value: unknown, expectedRoomId: string): RoomSettings {
+  const response = strictRecord(value, "방 preference");
+  requireExactKeys(response, ["room_id", "settings"], "방 preference");
+  if (requiredApiString(response, "room_id", "방 preference") !== expectedRoomId) {
+    throw new Error("방 preference 응답의 방 권위가 일치하지 않습니다.");
+  }
+  const payload = strictRecord(response.settings, "방 preference.settings");
+  requireExactKeys(
+    payload,
+    [
+      "room_id",
+      "settings_revision",
+      "label",
+      "topic",
+      "short_label",
+      "appearance",
+      "channel_settings",
+      "conversation_mode",
+      "tool_mode",
+      "ordered_exclude_previous_speaker",
+      "channels",
+      "activity_plugin",
+    ],
+    "방 preference.settings"
+  );
+  if (requiredApiString(payload, "room_id", "방 preference.settings") !== expectedRoomId) {
+    throw new Error("방 preference settings의 방 권위가 일치하지 않습니다.");
+  }
+  const revision = requiredApiString(payload, "settings_revision", "방 preference.settings");
+  if (!/^room-settings-v1-[0-9a-f]{64}$/.test(revision)) {
+    throw new Error("방 preference settings revision이 올바르지 않습니다.");
+  }
+  const appearance = strictRecord(payload.appearance, "방 preference.settings.appearance");
+  requireExactKeys(
+    appearance,
+    [
+      "banner_preset",
+      "banner_image_url",
+      "icon_image_url",
+      "icon_label",
+      "notifications",
+      "invite_scope",
+    ],
+    "방 preference.settings.appearance"
+  );
+  const bannerPreset = requiredApiString(
+    appearance,
+    "banner_preset",
+    "방 preference.settings.appearance"
+  );
+  const notifications = requiredApiString(
+    appearance,
+    "notifications",
+    "방 preference.settings.appearance"
+  );
+  const inviteScope = requiredApiString(
+    appearance,
+    "invite_scope",
+    "방 preference.settings.appearance"
+  );
+  const conversationMode = requiredApiString(
+    payload,
+    "conversation_mode",
+    "방 preference.settings"
+  );
+  const toolMode = requiredApiString(payload, "tool_mode", "방 preference.settings");
+  requiredApiString(payload, "activity_plugin", "방 preference.settings");
+  validateApiChannels(payload.channels, "방 preference.settings.channels");
+  if (
+    !new Set(["default", "forest", "midnight", "ember", "custom"]).has(bannerPreset) ||
+    !new Set(["all", "mentions", "mute"]).has(notifications) ||
+    !new Set(["room", "read_only"]).has(inviteScope) ||
+    !new Set(["ordered", "ambient"]).has(conversationMode) ||
+    !new Set(["chat", "tabletop"]).has(toolMode) ||
+    typeof payload.ordered_exclude_previous_speaker !== "boolean"
+  ) {
+    throw new Error("방 preference settings 값이 올바르지 않습니다.");
+  }
   return {
-    roomId: String(payload?.room_id || fallbackRoomId || ""),
-    label: String(payload?.label || ""),
-    topic: String(payload?.topic || ""),
-    shortLabel: String(payload?.short_label || ""),
+    roomId: expectedRoomId,
+    label: requiredApiString(payload, "label", "방 preference.settings"),
+    topic: requiredApiString(payload, "topic", "방 preference.settings"),
+    shortLabel: requiredApiString(payload, "short_label", "방 preference.settings"),
     appearance: {
-      bannerPreset: appearance.banner_preset || "default",
-      bannerImage: appearance.banner_image_url || undefined,
-      iconImage: appearance.icon_image_url || undefined,
-      iconLabel: appearance.icon_label || undefined,
-      notifications: appearance.notifications || "mentions",
-      inviteScope: appearance.invite_scope || "room",
+      bannerPreset: bannerPreset as RoomAppearance["bannerPreset"],
+      bannerImage:
+        requiredApiString(appearance, "banner_image_url", "방 preference.settings.appearance") ||
+        undefined,
+      iconImage:
+        requiredApiString(appearance, "icon_image_url", "방 preference.settings.appearance") ||
+        undefined,
+      iconLabel:
+        requiredApiString(appearance, "icon_label", "방 preference.settings.appearance") ||
+        undefined,
+      notifications: notifications as RoomAppearance["notifications"],
+      inviteScope: inviteScope as RoomAppearance["inviteScope"],
     },
-    channelSettings: normalizeChannelSettings(payload?.channel_settings),
-    conversationMode: payload?.conversation_mode === "ambient" ? "ambient" : "ordered",
-    toolMode: payload?.tool_mode === "tabletop" ? "tabletop" : "chat",
-    orderedExcludePreviousSpeaker:
-      payload?.ordered_exclude_previous_speaker !== false,
+    channelSettings: parseChannelSettings(
+      payload.channel_settings,
+      "방 preference.settings.channel_settings"
+    ),
+    conversationMode: conversationMode as ConversationMode,
+    toolMode: toolMode as RoomToolMode,
+    orderedExcludePreviousSpeaker: payload.ordered_exclude_previous_speaker,
   };
 }
 
@@ -325,32 +518,6 @@ export function roomGlobalSettingsUpdateToApi(
   return payload;
 }
 
-function roomAppearanceToApi(appearance: Partial<RoomAppearance> | undefined): ApiRoomAppearance {
-  return {
-    banner_preset: appearance?.bannerPreset,
-    banner_image_url: appearance?.bannerImage,
-    icon_image_url: appearance?.iconImage,
-    icon_label: appearance?.iconLabel,
-    notifications: appearance?.notifications,
-    invite_scope: appearance?.inviteScope,
-  };
-}
-
-function normalizeChannelSettings(
-  payload: Record<string, ApiChannelSettings> | undefined
-): Record<string, ChannelSettings> {
-  if (!payload || typeof payload !== "object") return {};
-  return Object.fromEntries(
-    Object.entries(payload).map(([channelId, settings]) => [
-      channelId,
-      {
-        notifications: settings?.notifications || "default",
-        lastReadAt: settings?.last_read_at || undefined,
-      },
-    ])
-  );
-}
-
 function channelSettingsToApi(
   settings: Record<string, ChannelSettings> | undefined
 ): Record<string, ApiChannelSettings> | undefined {
@@ -360,7 +527,7 @@ function channelSettingsToApi(
       channelId,
       {
         notifications: value.notifications || "default",
-        last_read_at: value.lastReadAt,
+        last_read_at: value.lastReadAt || "",
       },
     ])
   );
@@ -424,9 +591,10 @@ type RoomSettingsIdentity = {
   deviceToken?: string;
 };
 
-type RoomSettingsUpdate = Partial<Omit<RoomSettings, "roomId" | "appearance">> & {
+type RoomSettingsUpdate = {
   roomId: string;
-  appearance?: Partial<RoomAppearance>;
+  appearance?: Pick<RoomAppearance, "notifications">;
+  channelSettings?: Record<string, ChannelSettings>;
   identity?: RoomSettingsIdentity;
 };
 
@@ -434,35 +602,46 @@ export function fetchRoomSettings(
   roomId: string,
   identity: RoomSettingsIdentity = {}
 ): Promise<RoomSettings> {
-  return fetchJsonWithIdentity<{ room_id: string; settings: ApiRoomSettings }>(
-    `/api/room-settings${queryString({ room_id: roomId })}`,
-    identity
-  ).then((payload) => normalizeRoomSettings(payload.settings, payload.room_id || roomId));
+  const request =
+    !identity.sessionToken && isDesktopWebview()
+      ? fetchDesktopRoomPreferences(roomId).then(async (response) => {
+          if (!response.ok) throw await responseError(response);
+          return response.json() as Promise<unknown>;
+        })
+      : fetchJsonWithIdentity<unknown>(
+          `/api/room-settings${queryString({ room_id: roomId })}`,
+          identity
+        );
+  return request.then((payload) => parseRoomSettingsResponse(payload, roomId));
 }
 
 export function saveRoomSettings({
   roomId,
-  label,
-  topic,
-  shortLabel,
   appearance,
   channelSettings,
-  conversationMode,
   identity = {},
 }: RoomSettingsUpdate): Promise<RoomSettings> {
-  return postJsonWithIdentity<{ room_id: string; settings: ApiRoomSettings }>(
-    "/api/room-settings",
-    {
-      room_id: roomId,
-      label,
-      topic,
-      short_label: shortLabel,
-      appearance: roomAppearanceToApi(appearance),
-      channel_settings: channelSettingsToApi(channelSettings),
-      conversation_mode: conversationMode,
-    },
-    identity
-  ).then((payload) => normalizeRoomSettings(payload.settings, payload.room_id || roomId));
+  const body = {
+    room_id: roomId,
+    ...(appearance
+      ? { appearance: { notifications: appearance.notifications } }
+      : {}),
+    ...(channelSettings
+      ? { channel_settings: channelSettingsToApi(channelSettings) }
+      : {}),
+  };
+  const request =
+    !identity.sessionToken && isDesktopWebview()
+      ? fetchDesktopRoomPreferences(roomId, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }).then(async (response) => {
+          if (!response.ok) throw await responseError(response);
+          return response.json() as Promise<unknown>;
+        })
+      : postJsonWithIdentity<unknown>("/api/room-settings", body, identity);
+  return request.then((payload) => parseRoomSettingsResponse(payload, roomId));
 }
 
 export function fetchRoomFriends() {

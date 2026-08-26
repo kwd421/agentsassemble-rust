@@ -417,6 +417,31 @@ export function requestDesktopSettingsDirectoryReadTicket(): Promise<DesktopOper
   );
 }
 
+export async function fetchDesktopRoomPreferences(
+  roomId: string,
+  init: RequestInit = {}
+): Promise<Response> {
+  const method = String(init.method || "GET").toUpperCase();
+  if (method !== "GET" && method !== "POST") {
+    throw new Error("방 preference 요청은 GET 또는 POST만 허용합니다.");
+  }
+  if (method === "GET" && init.body !== undefined && init.body !== null) {
+    throw new Error("방 preference GET 요청에는 body를 보낼 수 없습니다.");
+  }
+  const issued =
+    method === "GET"
+      ? await requestDesktopPreferencesReadTicket(roomId)
+      : await requestDesktopPreferencesWriteTicket(roomId);
+  const query = method === "GET" ? `?room_id=${encodeURIComponent(roomId)}` : "";
+  const headers = new Headers(init.headers);
+  headers.set("Authorization", `Bearer ${issued.ticket}`);
+  return fetch(`${issued.http_base_url}/api/room-settings${query}`, {
+    ...init,
+    method,
+    headers,
+  });
+}
+
 export async function requestDesktopCentralRegistrationTicket(): Promise<DesktopCentralRegistrationTicket> {
   const tauri = tauriInternals();
   if (!tauri) {
