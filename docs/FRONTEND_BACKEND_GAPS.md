@@ -4,12 +4,13 @@ Status: source-derived reimplementation exposure inventory, 2026-08-26
 
 Comparison baseline: original
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust
-`3dbeceb`. The local-authority, surface, connection-admission, subscription, and moderation
+`644b1d5`. The local-authority, surface, connection-admission, subscription, and moderation
 boundary is complete. Central registration, canonical participant roles, participant
 mute, exact provider interruption, and the required packaged provider matrix have
-passed both manual reviews. Room-global settings and local-operator preferences are cut
-over. Remote-session preferences now fail visibly until durable human admission exists;
-human admission is the active prerequisite before room appearance.
+passed both manual reviews. Room-global settings, local-operator preferences, human
+admission, and the session-derived person-profile exchange are cut over. The admitted-
+human WebSocket and remote-session preferences remain visibly unavailable; WebSocket
+activation is the active prerequisite before remote preference and room appearance.
 
 ## Scope and method
 

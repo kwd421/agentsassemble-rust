@@ -1,9 +1,9 @@
 # Human Invite, Admission, and Room Session Slice
 
-Status: atomic SQLite, bounded RoomRuntime admission, local HTTP preflight/join and
-pre-join avatar flow, and the fail-closed browser credential owner are implemented
-and locally verified; derived grants, WebSocket session activation, and trusted
-public ingress remain incomplete
+Status: atomic SQLite, bounded RoomRuntime admission, local HTTP preflight/join,
+pre-join avatar flow, fail-closed browser credential custody, and the live-session
+profile exchange/target are implemented and verified; WebSocket session activation,
+remaining typed exchanges, and trusted public ingress remain incomplete
 
 ## Definition
 

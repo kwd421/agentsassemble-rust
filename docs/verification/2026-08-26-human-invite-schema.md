@@ -1294,3 +1294,16 @@ found by the real-client run.
 The authenticated human room WebSocket and preference exchanges are separate pending
 slices. The profile run therefore does not claim a canonical room snapshot, roster,
 message publication, remote preferences, or public-ingress parity.
+
+## Human-session profile exchange manual-review findings
+
+- The web reviewer and Daybreaker found one Medium cache-isolation defect: exchange
+  errors, profile target responses, and browser requests did not all enforce no-store,
+  while identical server cache literals had no single policy owner. Commit `644b1d5`
+  centralizes the server header, applies it to every affected route response, removes
+  the duplicate attachment literal, applies browser no-store to each exchange and
+  target request, and pins both sides with contract tests.
+- Final outcome: the web reviewer and Daybreaker both returned `APPROVE` with
+  Critical 0, High 0, and Medium 0. They found no remaining related duplicate policy
+  owner, ownership/lifecycle boundary defect, unsupported optimization,
+  overimplementation, removable compatibility state, or structure-gate issue.
