@@ -3,6 +3,7 @@ import { TEST_SERVER_PRODUCT_SURFACE } from "../test/serverProductSurface";
 import {
   parseGuestRecoveryRedeemResponse,
   parseOperatorPairingRedeemResponse,
+  parseRoomInviteAdmissionResponse,
   parseRoomInviteJoinResponse,
 } from "./roomAdmissionContract";
 
@@ -47,6 +48,34 @@ const join = {
 };
 
 describe("room admission response contracts", () => {
+  it("accepts only exact preflight variants without defaulting room authority", () => {
+    expect(
+      parseRoomInviteAdmissionResponse({
+        status: "profile_required",
+        can_auto_join: false,
+        room_id: "room-1",
+        room_label: "Room One",
+        invite_scope: "read_only",
+      })
+    ).toMatchObject({ room_id: "room-1", invite_scope: "read_only" });
+    expect(() =>
+      parseRoomInviteAdmissionResponse({
+        status: "profile_required",
+        can_auto_join: false,
+        room_id: "room-1",
+        room_label: "Room One",
+      })
+    ).toThrow(/계약/);
+    expect(() =>
+      parseRoomInviteAdmissionResponse({
+        status: "invite_invalid",
+        reason: "invite_invalid",
+        can_auto_join: false,
+        ignored: true,
+      })
+    ).toThrow(/계약/);
+  });
+
   it("binds an exact invite response to the request and preflight room", () => {
     expect(
       parseRoomInviteJoinResponse(join, join.request_id, "room-1")

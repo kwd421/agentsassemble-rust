@@ -557,15 +557,43 @@ export function useRoomAdmission({
     })
       .then(async (decision) => {
         if (!attempt.isCurrent()) return;
-        expectedInviteRoomIdRef.current = decision.room_id || "";
+        if (!("room_id" in decision)) {
+          const message =
+            decision.status === "invite_expired"
+              ? "초대 링크가 만료되었습니다."
+              : "유효하지 않은 초대 링크입니다.";
+          dispatchAdmission({
+            type: "failed",
+            operation: "preflight",
+            code: decision.status,
+            message,
+            retryable: false,
+            status: message,
+          });
+          return;
+        }
+        if (decision.status === "agent_client_required") {
+          const message =
+            "이 링크는 에이전트 세션 전용입니다. 터미널에서 AgentsAssemble 참가 명령으로 연결하세요.";
+          dispatchAdmission({
+            type: "failed",
+            operation: "preflight",
+            code: decision.status,
+            message,
+            retryable: false,
+            status: message,
+          });
+          return;
+        }
+        expectedInviteRoomIdRef.current = decision.room_id;
         if (decision.status === "existing_session" && guestSession) {
-          if (!expectedInviteRoomIdRef.current || guestSession.meetingId !== expectedInviteRoomIdRef.current) {
+          if (guestSession.meetingId !== expectedInviteRoomIdRef.current) {
             throw new Error("기존 세션이 초대가 가리키는 방과 일치하지 않습니다.");
           }
           const preservedSession = {
             ...guestSession,
-            roomLabel: decision.room_label || guestSession.roomLabel,
-            inviteScope: decision.invite_scope || guestSession.inviteScope,
+            roomLabel: decision.room_label,
+            inviteScope: decision.invite_scope,
           };
           if (!(await bindSessionSurface(preservedSession, attempt.isCurrent))) return;
           dispatchAdmission({
@@ -579,12 +607,11 @@ export function useRoomAdmission({
           return;
         }
         if (
-          decision.can_auto_join &&
           (decision.status === "known_user" || decision.status === "existing_member") &&
           decision.participant
         ) {
-          setPendingGuestDisplayName(decision.participant.display_name || "Guest");
-          setPendingGuestAvatarImage(decision.participant.avatar_image_url || "");
+          setPendingGuestDisplayName(decision.participant.display_name);
+          setPendingGuestAvatarImage(decision.participant.avatar_image_url);
           dispatchAdmission({ type: "join_requested", status: "" });
           return;
         }
@@ -597,12 +624,7 @@ export function useRoomAdmission({
           dispatchAdmission({ type: "profile_required" });
           return;
         }
-        const message =
-          decision.status === "invite_expired"
-            ? "초대 링크가 만료되었습니다."
-            : decision.status === "agent_client_required"
-              ? "이 링크는 에이전트 세션 전용입니다. 터미널에서 AgentsAssemble 참가 명령으로 연결하세요."
-              : decision.reason || "유효하지 않은 초대 링크입니다.";
+        const message = "현재 브라우저에 연결할 기존 방 세션이 없습니다.";
         dispatchAdmission({
           type: "failed",
           operation: "preflight",

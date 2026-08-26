@@ -1,8 +1,10 @@
 import type { RoomAppearance } from "../lib/roomAppearance";
 import {
   parseOperatorPairingRedeemResponse,
+  parseRoomInviteAdmissionResponse,
   parseRoomInviteJoinResponse,
   type OperatorPairingRedeemResponse,
+  type RoomInviteAdmissionResponse,
   type RoomInviteJoinResponse,
 } from "../lib/roomAdmissionContract";
 import {
@@ -31,28 +33,7 @@ export interface RoomInviteCreateResponse {
 
 export type { OperatorPairingRedeemResponse, RoomInviteJoinResponse };
 
-export interface RoomInviteAdmissionResponse {
-  status:
-    | "existing_session"
-    | "existing_member"
-    | "known_user"
-    | "profile_required"
-    | "pairing_required"
-    | "agent_client_required"
-    | "invite_invalid"
-    | "invite_expired";
-  reason?: string;
-  can_auto_join: boolean;
-  room_id?: string;
-  room_label?: string;
-  invite_scope?: RoomAppearance["inviteScope"];
-  participant?: {
-    participant_id: string;
-    display_name: string;
-    avatar_image_url?: string;
-  };
-  operator?: boolean;
-}
+export type { RoomInviteAdmissionResponse };
 
 export interface PublicInviteStatus {
   public_url: string;
@@ -191,11 +172,11 @@ export function preflightRoomInvite({
   deviceToken: string;
   sessionToken?: string;
 }) {
-  return postJsonWithIdentity<RoomInviteAdmissionResponse>(
+  return postJsonWithIdentity<unknown>(
     "/api/room-invite/admission",
     { invite_token: inviteToken },
     { deviceToken, sessionToken }
-  );
+  ).then(parseRoomInviteAdmissionResponse);
 }
 
 export function createOperatorPairing({
