@@ -170,7 +170,7 @@ fn unresolved_turn_task(
     }
 }
 
-pub(crate) async fn commit_provider_result(
+async fn commit_provider_result(
     store: &SqliteStore,
     provider_adapter: &ProviderAdapter,
     completed: ProviderTurnTaskResult,
@@ -416,7 +416,7 @@ fn turn_authority<'a>(
     }
 }
 
-pub(crate) async fn publish_turn_commit(
+async fn publish_turn_commit(
     store: &SqliteStore,
     event_tx: &broadcast::Sender<agentsassemble_domain::RoomEvent>,
     tasks: &mut JoinSet<ProviderTurnTaskResult>,
@@ -452,5 +452,64 @@ pub(crate) async fn publish_turn_commit(
             assignment,
             room_tool_ingress.clone(),
         );
+    }
+}
+
+pub(crate) async fn handle_provider_result(
+    store: &SqliteStore,
+    provider_adapter: &ProviderAdapter,
+    event_tx: &broadcast::Sender<agentsassemble_domain::RoomEvent>,
+    turn_tasks: &mut JoinSet<ProviderTurnTaskResult>,
+    result: Result<ProviderTurnTaskResult, tokio::task::JoinError>,
+    room_tool_ingress: &ProviderRoomToolIngress,
+) {
+    let result = match result {
+        Ok(result) => result,
+        Err(join_error) => {
+            tracing::error!(
+                cancelled = join_error.is_cancelled(),
+                panic = join_error.is_panic(),
+                "provider turn task ended without a result; durable restart recovery is required"
+            );
+            return;
+        }
+    };
+    let room_id = result.assignment.session.public.room_id.clone();
+    let session_id = result.assignment.session.public.session_id.clone();
+    if result.task_panicked {
+        tracing::error!(
+            room_id,
+            session_id,
+            turn_generation = result.assignment.turn_generation,
+            execution_id = result.assignment.execution_id,
+            "exact provider owner failed; retained proof remains for the live reconciler"
+        );
+        return;
+    }
+    match commit_provider_result(store, provider_adapter, result).await {
+        Ok(commit) => {
+            publish_turn_commit(
+                store,
+                event_tx,
+                turn_tasks,
+                provider_adapter.clone(),
+                room_tool_ingress.clone(),
+                commit,
+            )
+            .await;
+        }
+        Err(PersistenceError::CommandRejected {
+            code: "stale_provider_turn",
+            ..
+        }) => tracing::debug!(
+            room_id,
+            session_id,
+            "discarded provider result after durable turn authority changed"
+        ),
+        Err(_) => tracing::error!(
+            room_id,
+            session_id,
+            "provider turn result could not be committed; durable restart recovery is required"
+        ),
     }
 }

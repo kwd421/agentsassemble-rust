@@ -21,6 +21,20 @@ pub(crate) async fn drain_room_publications(
     }
 }
 
+pub(crate) async fn publish_durable_room_events(
+    store: &SqliteStore,
+    events: &broadcast::Sender<agentsassemble_domain::RoomEvent>,
+    room_id: &str,
+) {
+    if let Err(error) = drain_room_publications(store, events, room_id).await {
+        tracing::error!(
+            error = ?error,
+            room_id,
+            "durable room-event publication failed; the room owner will retry"
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use agentsassemble_domain::{

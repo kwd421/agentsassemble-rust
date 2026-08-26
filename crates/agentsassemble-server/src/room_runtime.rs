@@ -22,12 +22,11 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     agent_create_runtime::AgentCreateExecution,
+    event_publication::publish_durable_room_events,
     lifecycle_command_tracker::LifecycleCommandTracker,
     principal_mutation_admission::{MutationDebit, PrincipalMutationAdmission},
     provider_recovery_tracker::ProviderRecoveryTracker,
-    provider_turn::{
-        ProviderTurnTaskResult, commit_provider_result, publish_turn_commit, spawn_provider_turn,
-    },
+    provider_turn::{ProviderTurnTaskResult, handle_provider_result, spawn_provider_turn},
     provider_write_budget::ProviderWriteBudget,
     room_command_admission::{AdmittedHumanCommand, admit_human_command},
     room_command_result::{CommandFailure, public_command_outcome},
@@ -517,81 +516,6 @@ async fn handle_room_command(owners: RoomCommandOwners<'_>, command: RoomCommand
         Err(failure) => Err(failure),
     };
     let _ = command.reply.send(reply);
-}
-
-async fn handle_provider_result(
-    store: &SqliteStore,
-    provider_adapter: &ProviderAdapter,
-    event_tx: &broadcast::Sender<RoomEvent>,
-    turn_tasks: &mut JoinSet<ProviderTurnTaskResult>,
-    result: Result<ProviderTurnTaskResult, tokio::task::JoinError>,
-    room_tool_ingress: &ProviderRoomToolIngress,
-) {
-    let result = match result {
-        Ok(result) => result,
-        Err(join_error) => {
-            tracing::error!(
-                cancelled = join_error.is_cancelled(),
-                panic = join_error.is_panic(),
-                "provider turn task ended without a result; durable restart recovery is required"
-            );
-            return;
-        }
-    };
-    let room_id = result.assignment.session.public.room_id.clone();
-    let session_id = result.assignment.session.public.session_id.clone();
-    if result.task_panicked {
-        tracing::error!(
-            room_id,
-            session_id,
-            turn_generation = result.assignment.turn_generation,
-            execution_id = result.assignment.execution_id,
-            "exact provider owner failed; retained proof remains for the live reconciler"
-        );
-        return;
-    }
-    match commit_provider_result(store, provider_adapter, result).await {
-        Ok(commit) => {
-            publish_turn_commit(
-                store,
-                event_tx,
-                turn_tasks,
-                provider_adapter.clone(),
-                room_tool_ingress.clone(),
-                commit,
-            )
-            .await;
-        }
-        Err(PersistenceError::CommandRejected {
-            code: "stale_provider_turn",
-            ..
-        }) => tracing::debug!(
-            room_id,
-            session_id,
-            "discarded provider result after durable turn authority changed"
-        ),
-        Err(_) => tracing::error!(
-            room_id,
-            session_id,
-            "provider turn result could not be committed; durable restart recovery is required"
-        ),
-    }
-}
-
-async fn publish_durable_room_events(
-    store: &SqliteStore,
-    event_tx: &broadcast::Sender<RoomEvent>,
-    room_id: &str,
-) {
-    if let Err(error) =
-        crate::event_publication::drain_room_publications(store, event_tx, room_id).await
-    {
-        tracing::error!(
-            error = ?error,
-            room_id,
-            "durable room-event publication failed; the room owner will retry"
-        );
-    }
 }
 
 enum RoomInput {
