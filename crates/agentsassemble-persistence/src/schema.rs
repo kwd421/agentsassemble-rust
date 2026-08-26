@@ -282,7 +282,7 @@ mod tests {
 
     use super::{TABLES, product_tables, statements};
 
-    async fn installed_schema() -> SqlitePool {
+    pub(super) async fn installed_schema() -> SqlitePool {
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
             .connect("sqlite::memory:")
@@ -415,7 +415,7 @@ mod tests {
         .unwrap_or_else(|error| panic!("insert exact BLOB authority: {error}"));
     }
 
-    async fn seed_human_authorities(pool: &SqlitePool) {
+    pub(super) async fn seed_human_authorities(pool: &SqlitePool) {
         for room_id in ["room-a", "room-b"] {
             sqlx::query(
                 "INSERT INTO rooms(room_id, room_json, settings_json) VALUES (?, '{}', '{}')",
@@ -492,18 +492,18 @@ mod tests {
         }
     }
 
-    struct SessionAuthority<'a> {
-        marker: u8,
-        invite_id: &'a str,
-        key_kind: &'a str,
-        room_id: &'a str,
-        user_id: &'a str,
-        participant_id: &'a str,
-        invite_scope: &'a str,
-        reusable_identity: Option<Vec<u8>>,
+    pub(super) struct SessionAuthority<'a> {
+        pub(super) marker: u8,
+        pub(super) invite_id: &'a str,
+        pub(super) key_kind: &'a str,
+        pub(super) room_id: &'a str,
+        pub(super) user_id: &'a str,
+        pub(super) participant_id: &'a str,
+        pub(super) invite_scope: &'a str,
+        pub(super) reusable_identity: Option<Vec<u8>>,
     }
 
-    async fn insert_human_session(
+    pub(super) async fn insert_human_session(
         pool: &SqlitePool,
         session: SessionAuthority<'_>,
     ) -> Result<(), sqlx::Error> {
@@ -666,49 +666,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn reusable_invite_accepts_distinct_presented_credential_admissions() {
-        let pool = installed_schema().await;
-        seed_human_authorities(&pool).await;
-
-        insert_human_session(
-            &pool,
-            SessionAuthority {
-                marker: 9,
-                invite_id: "2222222222222222",
-                key_kind: "reusable",
-                room_id: "room-a",
-                user_id: "user-a",
-                participant_id: "participant-a",
-                invite_scope: "read_write",
-                reusable_identity: Some(vec![0x71; 32]),
-            },
-        )
-        .await
-        .unwrap_or_else(|error| panic!("insert signed-token admission: {error}"));
-        sqlx::query(concat!(
-            "INSERT INTO human_room_sessions(admission_key, key_kind, first_request_id, invite_id, ",
-            "payload_hash, session_fingerprint, room_id, user_id, participant_id, client_kind, invite_scope, browser_credential_fingerprint, reusable_identity_fingerprint, result_json, admitted_at, expires_at, state) ",
-            "SELECT ?, key_kind, 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', invite_id, payload_hash, ?, room_id, user_id, participant_id, client_kind, invite_scope, browser_credential_fingerprint, reusable_identity_fingerprint, result_json, admitted_at, expires_at, state ",
-            "FROM human_room_sessions WHERE admission_key = ?",
-        ))
-        .bind(vec![0x0A; 32])
-        .bind(vec![0x4A; 32])
-        .bind(vec![9; 32])
-        .execute(&pool)
-        .await
-        .unwrap_or_else(|error| panic!("insert join-code admission: {error}"));
-        let session_count = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM human_room_sessions WHERE invite_id = ? AND reusable_identity_fingerprint = ?",
-        )
-        .bind("2222222222222222")
-        .bind(vec![0x71; 32])
-        .fetch_one(&pool)
-        .await
-        .unwrap_or_else(|error| panic!("count distinct reusable admissions: {error}"));
-        assert_eq!(session_count, 2);
-    }
-
-    #[tokio::test]
     async fn invite_limits_preserve_configured_values_and_effective_ceilings() {
         let pool = installed_schema().await;
         sqlx::query(
@@ -797,3 +754,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "schema_human_session_tests.rs"]
+mod human_session_tests;
