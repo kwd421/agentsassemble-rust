@@ -1,8 +1,9 @@
 # Human invite schema verification — 2026-08-26
 
 Status: partial slice evidence; canonical invite reads and the manager-authorized
-create/revoke writes are implemented, while credential issuance, routes, admission,
-post-commit notification, and browser flow are not implemented by these commits.
+create/revoke writes plus standalone credential issuance/authentication are
+implemented, while row-bound preflight, routes, admission, post-commit notification,
+and browser flow are not implemented by these commits.
 
 ## Provenance and scope
 
@@ -14,6 +15,7 @@ post-commit notification, and browser flow are not implemented by these commits.
 - Manager-authorized invite create write: `a504835`.
 - Exact timestamp correction: `06201de`.
 - Invite revoke unit: `bbeeda7`, corrected by `a472566`.
+- Current credential authority: `ce2d2a3`, corrected by `9544081`.
 - The schema is fresh-only at version 35. No migration, compatibility reader,
   fallback column, or partially upgraded authority is accepted.
 
@@ -275,3 +277,91 @@ provenance.
 Production revoke latency is not claimed before the authorized HTTP route exists.
 Session closure is explicitly not an invite-revoke effect; each separate session
 revocation owner remains incomplete until its own implementation and live-flow test.
+
+## Current invite credential authority
+
+Commit `ce2d2a3`, corrected by `9544081`, adds the cryptographic boundary required
+before a real preflight or create route can exist. It owns the current signed `aai1`
+token and independent `aaj1_` join code, but performs no database lookup and therefore
+does not claim claims-to-row matching, invite usability, admission, or HTTP
+reachability.
+
+### Prior cost and threat
+
+The original code used a string signing secret and separately implemented signing,
+join-code generation, parsing, Base64 handling, URL rules, and fingerprints. Copying
+those mechanics into each future route would create multiple credential parsers and
+make the same raw token cross more owners. Parsing unbounded or noncanonical input
+before authentication would also allocate and decode attacker-controlled JSON.
+
+The Rust runtime already has one permission-checked persistent host envelope with a
+fresh 32-byte session HMAC key. Creating another key or secret store would add disk
+state, backup semantics, and rotation failure modes without a separate cryptographic
+authority. The approved SDD instead separates message domains with the fixed `aai1.`
+signing input and the distinct future session-bearer context.
+
+### Change intent and preserved contract
+
+- `HumanInviteCredentialAuthority` is constructed once from the database-bound
+  `PersistentHostIdentity` and shares the fixed key through one `Arc<[u8; 32]>` when
+  `AppState` is cloned. It exposes no key accessor and implements neither `Debug` nor
+  serialization. Issued raw credentials likewise implement neither trait.
+- The signed credential preserves the original `aai1.<payload>.<signature>` shape,
+  sorted compact UTF-8 JSON claim names and nested contracts, the 18-byte signed
+  nonce, scope-to-permission mapping, and HMAC-SHA256 over exact ASCII
+  `aai1.<payload>`. The join code remains a distinct `aaj1_` value backed by exactly
+  24 independent operating-system-random bytes.
+- Both fingerprints cover the complete ASCII credential with SHA-256 and remain
+  fixed 32-byte values ready for the existing BLOB columns. No raw credential,
+  claims copy, signing key, encoded digest, or nonce is made durable by this unit.
+- Creation rejects noncanonical identity text, sub-microsecond or inverted time,
+  unsafe room transport, and non-current URL shapes. Authentication bounds signed
+  input at 4 KiB, validates exact ASCII segments and canonical unpadded Base64url,
+  checks a 32-byte HMAC in constant time before decoding JSON, and then enforces the
+  exact claim, nonce, timestamp shape/order, URL, and permission contract. It exposes
+  signed expiry without applying the moving wall clock. The admission owner must
+  bind the claims to the durable row, resolve an exact one-use retry, and only then
+  apply current expiry to new and reusable admissions. A join code must have the
+  exact 37-byte public shape and decode canonically to 24 bytes.
+- The mature `url` crate owns generic URL parsing. Product policy permits HTTPS for
+  loopback, private/link-local IPs, `.local`, and single-label LAN hosts, while HTTP
+  remains loopback-only. Userinfo, query, and fragment are rejected. There is no
+  transport fallback or second parser.
+
+### Cost, limits, and verification
+
+- Successful creation performs two bounded OS-random fills, one bounded JSON encode,
+  one HMAC-SHA256, and two SHA-256 fingerprints. Authentication performs one bounded
+  HMAC before one JSON decode. The longest test vector is 1,049 bytes, below the
+  4-KiB parser ceiling; no heap or latency improvement is claimed without route-level
+  measurement.
+- App-state clones share the 32-byte key allocation instead of duplicating it. No
+  cache, replay set, generic credential-provider trait, background task, or mutable
+  parser state was added.
+- A full fixed token vector locks sorted claim names, nested field order, signing
+  input, signature, timestamp form, nonce size, and join-code size. Separate cases
+  reject tamper, padding/noncanonical input, oversized input, sub-microsecond
+  timestamps, public room hosts, and non-loopback HTTP. An authentic token still
+  yields its claims at and after expiry, while the explicit time predicate is false
+  one microsecond before expiry and true at the exact boundary.
+- The server library suite passed 46/46; warning-denied server lib/test Clippy and
+  `make check` passed after both commits. The issuer commit is five files with 711
+  additions and two deletions. The correction is one file with 36 additions and 41
+  deletions, leaving the single invariant-owning module at 692 lines below the
+  mandatory 800-line source limit.
+
+The first web review found one Medium contract error: `verify(credential, now)`
+combined immutable authentication with current invite usability. That API could not
+return the authenticated claims and fingerprint of an expired one-use credential,
+so the later admission owner would either reject before exact lost-response retry or
+bypass claims-to-row binding by looking up raw state first. Corrective commit
+`9544081` replaces it with `authenticate(credential)` and exposes only
+`is_expired_at(now)` on authenticated signed claims. It adds no mode flag, alternate
+parser, cache, durable state, or fallback. The correction removes one wall-clock
+comparison from authentication; it does not claim a meaningful latency improvement.
+The critical web reviewer and Daybreaker both manually approved the correction with
+C=0/H=0/M=0. Neither ran Deep Scan, an automated security scanner, or a provider.
+
+The next increment must compare the verified signed claims or join-code fingerprint
+against the exact current row and preserve read-only preflight behavior. Until then,
+no create/preflight route or browser flow is reported as implemented.
