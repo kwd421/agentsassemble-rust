@@ -7,7 +7,7 @@ use agentsassemble_persistence::{
 use axum::{
     Json, Router,
     extract::{Query, Request, State},
-    http::{HeaderValue, Method, StatusCode, header::CACHE_CONTROL},
+    http::{Method, StatusCode, header::CACHE_CONTROL},
     response::{IntoResponse, Response},
 };
 use serde::Deserialize;
@@ -17,7 +17,8 @@ use tower_http::set_header::SetResponseHeaderLayer;
 use crate::{
     AppState, ConsumedRoomHttpTicket,
     http_api::{
-        BodyDecodeError, bearer_ticket, decode_json_body, ensure_empty_body, exact_tauri_cors,
+        BodyDecodeError, PRIVATE_NO_STORE, bearer_ticket, decode_json_body, ensure_empty_body,
+        exact_tauri_cors,
     },
 };
 
@@ -34,7 +35,7 @@ pub(crate) fn routes() -> Router<AppState> {
     preference_routes()
         .layer(SetResponseHeaderLayer::overriding(
             CACHE_CONTROL,
-            HeaderValue::from_static("private, no-store"),
+            PRIVATE_NO_STORE.clone(),
         ))
         .layer(exact_tauri_cors([Method::GET, Method::POST]))
 }

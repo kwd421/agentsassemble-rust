@@ -14,12 +14,13 @@ use axum::{
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde::Deserialize;
 use serde_json::json;
-use tower_http::cors::CorsLayer;
+use tower_http::{cors::CorsLayer, set_header::SetResponseHeaderLayer};
 
 use crate::{
     AppState, ConsumedProfileTicket,
     http_api::{
-        BodyDecodeError, bearer_ticket, decode_json_body, ensure_empty_body, exact_tauri_cors,
+        BodyDecodeError, PRIVATE_NO_STORE, bearer_ticket, decode_json_body, ensure_empty_body,
+        exact_tauri_cors,
     },
     human_browser_credential::fingerprint_browser_credential,
     human_invite_preflight::authenticated_invite_evidence,
@@ -41,7 +42,12 @@ struct AttachmentUpload {
 }
 
 pub(crate) fn routes() -> Router<AppState> {
-    profile_routes().layer(profile_cors())
+    profile_routes()
+        .layer(SetResponseHeaderLayer::overriding(
+            header::CACHE_CONTROL,
+            PRIVATE_NO_STORE.clone(),
+        ))
+        .layer(profile_cors())
 }
 
 registered_routes! {
@@ -276,10 +282,6 @@ fn attachment_response(
         header::CONTENT_DISPOSITION,
         HeaderValue::from_str(&format!("{disposition}; filename=\"{fallback_name}\""))
             .map_err(|_| ProfileHttpError::internal())?,
-    );
-    response.headers_mut().insert(
-        header::CACHE_CONTROL,
-        HeaderValue::from_static("private, no-store"),
     );
     Ok(response)
 }

@@ -67,6 +67,7 @@ describe("desktop profile HTTP routing", () => {
       1,
       "http://127.0.0.1:49152/api/user-profile",
       expect.objectContaining({
+        cache: "no-store",
         headers: expect.objectContaining({}),
       })
     );
@@ -120,17 +121,21 @@ describe("desktop profile HTTP routing", () => {
 
     expect(invoke).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/session-tickets/profile", {
+      cache: "no-store",
       method: "POST",
       headers: { Authorization: "Bearer guest-session" },
     });
     expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/user-profile", {
+      cache: "no-store",
       headers: { Authorization: `Bearer ${"a".repeat(64)}` },
     });
     expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/session-tickets/profile", {
+      cache: "no-store",
       method: "POST",
       headers: { Authorization: "Bearer guest-session" },
     });
     expect(fetchMock).toHaveBeenNthCalledWith(4, "/api/user-profile", {
+      cache: "no-store",
       method: "POST",
       headers: {
         Authorization: `Bearer ${"b".repeat(64)}`,

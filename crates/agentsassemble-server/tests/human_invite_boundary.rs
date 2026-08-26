@@ -209,6 +209,7 @@ async fn assert_profile_exchange_boundary(
         .await
         .unwrap_or_else(|error| panic!("reject raw session at profile target: {error}"));
     assert_eq!(raw_target.status(), reqwest::StatusCode::UNAUTHORIZED);
+    assert_eq!(raw_target.headers()["cache-control"], "private, no-store");
 
     let nonempty = client
         .post(format!("{base_url}/api/session-tickets/profile"))
@@ -218,14 +219,17 @@ async fn assert_profile_exchange_boundary(
         .await
         .unwrap_or_else(|error| panic!("reject nonempty profile exchange: {error}"));
     assert_eq!(nonempty.status(), reqwest::StatusCode::BAD_REQUEST);
+    assert_eq!(nonempty.headers()["cache-control"], "private, no-store");
 
     let read_ticket = issue_profile_ticket(client, base_url, session_token).await;
-    let profile: Value = client
+    let profile = client
         .get(format!("{base_url}/api/user-profile"))
         .header("authorization", format!("Bearer {read_ticket}"))
         .send()
         .await
-        .unwrap_or_else(|error| panic!("read exchanged profile: {error}"))
+        .unwrap_or_else(|error| panic!("read exchanged profile: {error}"));
+    assert_eq!(profile.headers()["cache-control"], "private, no-store");
+    let profile: Value = profile
         .json()
         .await
         .unwrap_or_else(|error| panic!("decode exchanged profile: {error}"));

@@ -7,6 +7,8 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use crate::AppState;
 
+pub(crate) const PRIVATE_NO_STORE: HeaderValue = HeaderValue::from_static("private, no-store");
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BodyDecodeError {
     RequestTimeout,

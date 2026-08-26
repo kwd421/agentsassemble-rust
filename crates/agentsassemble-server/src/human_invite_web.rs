@@ -8,7 +8,7 @@ use agentsassemble_persistence::{
 use axum::{
     Json, Router,
     extract::{Request, State},
-    http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, header},
+    http::{HeaderMap, HeaderName, Method, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use chrono::Utc;
@@ -18,7 +18,9 @@ use tower_http::{cors::CorsLayer, set_header::SetResponseHeaderLayer};
 
 use crate::{
     AppState,
-    http_api::{BodyDecodeError, bearer_ticket, decode_json_body, exact_tauri_cors},
+    http_api::{
+        BodyDecodeError, PRIVATE_NO_STORE, bearer_ticket, decode_json_body, exact_tauri_cors,
+    },
     human_browser_credential::fingerprint_browser_credential,
     human_invite_preflight::{
         HumanInvitePreflightError, authenticated_invite_evidence, preflight_human_invite,
@@ -64,7 +66,7 @@ pub(crate) fn routes() -> Router<AppState> {
     invite_routes()
         .layer(SetResponseHeaderLayer::overriding(
             header::CACHE_CONTROL,
-            HeaderValue::from_static("private, no-store"),
+            PRIVATE_NO_STORE.clone(),
         ))
         .layer(invite_cors())
 }

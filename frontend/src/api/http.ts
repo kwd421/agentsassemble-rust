@@ -15,6 +15,7 @@ function isServerWideProfileRoute(url: string): boolean {
 
 async function exchangeProfileTicket(sessionToken: string): Promise<string> {
   const res = await fetch("/api/session-tickets/profile", {
+    cache: "no-store",
     method: "POST",
     headers: { Authorization: `Bearer ${sessionToken}` },
   });
@@ -155,13 +156,14 @@ export async function fetchJsonWithIdentity<T>(
   url: string,
   { sessionToken = "", deviceToken = "", roomId = "" }: { sessionToken?: string; deviceToken?: string; roomId?: string }
 ): Promise<T> {
+  const profileRequest = isServerWideProfileRoute(url) ? { cache: "no-store" as const } : {};
   if (!sessionToken && isDesktopWebview() && isServerWideProfileRoute(url)) {
-    const res = await fetchDesktopOperatorRuntime(url);
+    const res = await fetchDesktopOperatorRuntime(url, profileRequest);
     if (!res.ok) throw await responseError(res);
     return res.json();
   }
   if (roomId && !sessionToken && isDesktopWebview()) {
-    const res = await fetchDesktopRuntime(roomId, url);
+    const res = await fetchDesktopRuntime(roomId, url, profileRequest);
     if (!res.ok) throw await responseError(res);
     return res.json();
   }
@@ -169,7 +171,7 @@ export async function fetchJsonWithIdentity<T>(
   const headers: Record<string, string> = {};
   if (targetToken) headers.Authorization = `Bearer ${targetToken}`;
   if (deviceToken) headers["X-Device-Token"] = deviceToken;
-  const res = await fetch(url, { headers });
+  const res = await fetch(url, { ...profileRequest, headers });
   if (!res.ok) throw await responseError(res);
   return res.json();
 }
@@ -179,8 +181,10 @@ export async function postJsonWithIdentity<T>(
   body: object,
   { sessionToken = "", deviceToken = "", roomId = "" }: { sessionToken?: string; deviceToken?: string; roomId?: string }
 ): Promise<T> {
+  const profileRequest = isServerWideProfileRoute(url) ? { cache: "no-store" as const } : {};
   if (!sessionToken && isDesktopWebview() && isServerWideProfileRoute(url)) {
     const res = await fetchDesktopOperatorRuntime(url, {
+      ...profileRequest,
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -190,6 +194,7 @@ export async function postJsonWithIdentity<T>(
   }
   if (roomId && !sessionToken && isDesktopWebview()) {
     const res = await fetchDesktopRuntime(roomId, url, {
+      ...profileRequest,
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -202,6 +207,7 @@ export async function postJsonWithIdentity<T>(
   if (targetToken) headers.Authorization = `Bearer ${targetToken}`;
   if (deviceToken) headers["X-Device-Token"] = deviceToken;
   const res = await fetch(url, {
+    ...profileRequest,
     method: "POST",
     headers,
     body: JSON.stringify(body),

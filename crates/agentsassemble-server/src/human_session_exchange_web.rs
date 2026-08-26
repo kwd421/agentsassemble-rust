@@ -2,16 +2,19 @@ use agentsassemble_persistence::PersistenceError;
 use axum::{
     Json, Router,
     extract::{Request, State},
-    http::{HeaderValue, Method, StatusCode, header},
+    http::{Method, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use chrono::Utc;
 use serde::Serialize;
 use serde_json::json;
+use tower_http::set_header::SetResponseHeaderLayer;
 
 use crate::{
     AppState,
-    http_api::{BodyDecodeError, bearer_ticket, ensure_empty_body, exact_tauri_cors},
+    http_api::{
+        BodyDecodeError, PRIVATE_NO_STORE, bearer_ticket, ensure_empty_body, exact_tauri_cors,
+    },
     human_session_bearer::fingerprint_presented_bearer,
 };
 
@@ -24,7 +27,12 @@ struct SessionTicketResponse {
 }
 
 pub(crate) fn routes() -> Router<AppState> {
-    session_exchange_routes().layer(exact_tauri_cors([Method::POST]))
+    session_exchange_routes()
+        .layer(SetResponseHeaderLayer::overriding(
+            header::CACHE_CONTROL,
+            PRIVATE_NO_STORE.clone(),
+        ))
+        .layer(exact_tauri_cors([Method::POST]))
 }
 
 registered_routes! {
@@ -58,16 +66,11 @@ async fn issue_profile_ticket(
         .issue_human_session_profile(authorization)
         .await
         .map_err(|_| SessionExchangeError::capacity())?;
-    let mut response = Json(SessionTicketResponse {
+    Ok(Json(SessionTicketResponse {
         ticket: issued.ticket,
         ttl_seconds,
     })
-    .into_response();
-    response.headers_mut().insert(
-        header::CACHE_CONTROL,
-        HeaderValue::from_static("private, no-store"),
-    );
-    Ok(response)
+    .into_response())
 }
 
 #[derive(Debug)]
