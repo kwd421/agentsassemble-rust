@@ -58,7 +58,7 @@ pub async fn preflight_human_invite(
         .await?)
 }
 
-fn authenticated_invite_evidence(
+pub(crate) fn authenticated_invite_evidence(
     authority: &HumanInviteCredentialAuthority,
     credential: &str,
 ) -> Result<HumanInviteCredentialEvidence, HumanInviteCredentialError> {

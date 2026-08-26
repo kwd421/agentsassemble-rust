@@ -52,6 +52,7 @@ mod human_admission_runtime;
 mod human_browser_credential;
 mod human_invite_credentials;
 mod human_invite_preflight;
+mod human_invite_web;
 mod human_session_bearer;
 mod lifecycle_command_tracker;
 mod participant_mute_runtime;

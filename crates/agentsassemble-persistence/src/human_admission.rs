@@ -99,6 +99,19 @@ impl HumanAdmissionCommit {
         self.deduplicated
     }
 
+    /// Moves the bounded public result and raw bearer into the transport owner.
+    #[must_use]
+    pub fn into_result_and_bearer(self: Box<Self>) -> (HumanAdmissionResult, String) {
+        let Self {
+            result,
+            session_bearer,
+            events: _,
+            replaced_session_fingerprints: _,
+            deduplicated: _,
+        } = *self;
+        (result, session_bearer)
+    }
+
     #[must_use]
     pub fn invite_scope(&self) -> InviteScope {
         if self.result.invite_scope == "read_only" {
