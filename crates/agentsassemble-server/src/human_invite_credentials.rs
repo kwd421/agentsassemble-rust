@@ -33,8 +33,6 @@ pub enum HumanInviteCredentialError {
     InvalidSignature,
     #[error("human invite credential claims are unsupported")]
     UnsupportedClaims,
-    #[error("human invite credential is expired")]
-    Expired,
     #[error("human invite credential policy is invalid")]
     InvalidPolicy,
     #[error("human invite credential entropy source failed")]
@@ -117,15 +115,18 @@ impl HumanInviteCredentialAuthority {
         self.issue_with_material(draft, signed_nonce, join_code)
     }
 
-    /// Verifies one current signed token or canonical join code without persistence access.
+    /// Authenticates one signed token or canonical join code without persistence access.
+    ///
+    /// Signed-token expiry is deliberately exposed in the authenticated claims instead
+    /// of being enforced here. Admission must bind those claims to the durable invite
+    /// and resolve an exact one-use retry before applying current-invite expiry.
     ///
     /// # Errors
     ///
-    /// Rejects missing, malformed, invalidly signed, unsupported, or expired credentials.
-    pub fn verify(
+    /// Rejects missing, malformed, invalidly signed, or unsupported credentials.
+    pub fn authenticate(
         &self,
         credential: &str,
-        now: DateTime<Utc>,
     ) -> Result<VerifiedHumanInviteCredential, HumanInviteCredentialError> {
         let credential = credential.trim();
         if credential.is_empty() {
@@ -134,7 +135,7 @@ impl HumanInviteCredentialAuthority {
         if credential.starts_with(JOIN_CODE_PREFIX) {
             return verify_join_code(credential);
         }
-        self.verify_signed_token(credential, now)
+        self.authenticate_signed_token(credential)
     }
 
     fn issue_with_material(
@@ -161,10 +162,9 @@ impl HumanInviteCredentialAuthority {
         })
     }
 
-    fn verify_signed_token(
+    fn authenticate_signed_token(
         &self,
         credential: &str,
-        now: DateTime<Utc>,
     ) -> Result<VerifiedHumanInviteCredential, HumanInviteCredentialError> {
         if credential.len() > MAX_SIGNED_TOKEN_BYTES || !credential.is_ascii() {
             return Err(HumanInviteCredentialError::Malformed);
@@ -194,7 +194,7 @@ impl HumanInviteCredentialAuthority {
         let payload = decode_canonical(encoded_payload)?;
         let claims: InviteClaims = serde_json::from_slice(&payload)
             .map_err(|_| HumanInviteCredentialError::UnsupportedClaims)?;
-        let verified = claims.verify(now)?;
+        let verified = claims.authenticate()?;
         Ok(VerifiedHumanInviteCredential::Signed {
             fingerprint: fingerprint(credential.as_bytes()),
             claims: verified,
@@ -238,6 +238,13 @@ pub struct VerifiedHumanInviteClaims {
     pub invite_scope: InviteScope,
     pub issued_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
+}
+
+impl VerifiedHumanInviteClaims {
+    #[must_use]
+    pub fn is_expired_at(&self, now: DateTime<Utc>) -> bool {
+        self.expires_at <= now
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -315,10 +322,7 @@ impl InviteClaims {
         })
     }
 
-    fn verify(
-        self,
-        now: DateTime<Utc>,
-    ) -> Result<VerifiedHumanInviteClaims, HumanInviteCredentialError> {
+    fn authenticate(self) -> Result<VerifiedHumanInviteClaims, HumanInviteCredentialError> {
         if self.schema != CLAIM_SCHEMA
             || self.mode != CLAIM_MODE
             || self.client_kind != CLAIM_CLIENT_KIND
@@ -343,9 +347,6 @@ impl InviteClaims {
         let expires_at = parse_canonical_timestamp(&self.expires_at)?;
         if expires_at <= issued_at {
             return Err(HumanInviteCredentialError::UnsupportedClaims);
-        }
-        if expires_at <= now {
-            return Err(HumanInviteCredentialError::Expired);
         }
         let invite_scope = match self.admission.permission_mode.as_str() {
             "participant" => InviteScope::ReadWrite,
@@ -614,32 +615,22 @@ mod tests {
         );
         assert_eq!(
             authority()
-                .verify(
-                    issued.invite_token(),
-                    Utc.with_ymd_and_hms(2026, 8, 26, 1, 3, 0)
-                        .single()
-                        .unwrap_or_else(|| panic!("fixed verification time")),
-                )
-                .unwrap_or_else(|error| panic!("verify signed credential: {error}"))
+                .authenticate(issued.invite_token())
+                .unwrap_or_else(|error| panic!("authenticate signed credential: {error}"))
                 .fingerprint(),
             issued.signed_token_fingerprint()
         );
         assert_eq!(
             authority()
-                .verify(
-                    issued.join_code(),
-                    Utc.with_ymd_and_hms(2026, 8, 26, 1, 3, 0)
-                        .single()
-                        .unwrap_or_else(|| panic!("fixed verification time")),
-                )
-                .unwrap_or_else(|error| panic!("verify join credential: {error}"))
+                .authenticate(issued.join_code())
+                .unwrap_or_else(|error| panic!("authenticate join credential: {error}"))
                 .fingerprint(),
             issued.join_code_fingerprint()
         );
     }
 
     #[test]
-    fn verification_rejects_tamper_expiry_and_noncanonical_credentials() {
+    fn authentication_separates_expiry_from_credential_integrity() {
         let issued = authority()
             .issue_with_material(&draft(), [0x22; 18], [0x33; 24])
             .unwrap_or_else(|error| panic!("issue fixed credentials: {error}"));
@@ -649,26 +640,30 @@ mod tests {
         let tampered = String::from_utf8(tampered)
             .unwrap_or_else(|error| panic!("tampered credential remains UTF-8: {error}"));
         assert!(matches!(
-            authority().verify(&tampered, draft().issued_at),
+            authority().authenticate(&tampered),
             Err(HumanInviteCredentialError::InvalidSignature)
         ));
+        let authenticated = authority()
+            .authenticate(issued.invite_token())
+            .unwrap_or_else(|error| panic!("authenticate expired signed credential: {error}"));
+        let claims = authenticated
+            .signed_claims()
+            .unwrap_or_else(|| panic!("signed credential claims"));
+        assert!(!claims.is_expired_at(draft().expires_at - chrono::Duration::microseconds(1)));
+        assert!(claims.is_expired_at(draft().expires_at));
         assert!(matches!(
-            authority().verify(issued.invite_token(), draft().expires_at),
-            Err(HumanInviteCredentialError::Expired)
-        ));
-        assert!(matches!(
-            authority().verify("aaj1_AA==", draft().issued_at),
+            authority().authenticate("aaj1_AA=="),
             Err(HumanInviteCredentialError::Malformed)
         ));
         let oversized = "aai1.a.".to_owned() + &"a".repeat(5_000);
         assert!(matches!(
-            authority().verify(&oversized, draft().issued_at),
+            authority().authenticate(&oversized),
             Err(HumanInviteCredentialError::Malformed)
         ));
         assert!(matches!(
             authority()
-                .verify(issued.join_code(), draft().issued_at)
-                .unwrap_or_else(|error| panic!("verify join code: {error}")),
+                .authenticate(issued.join_code())
+                .unwrap_or_else(|error| panic!("authenticate join code: {error}")),
             VerifiedHumanInviteCredential::JoinCode { .. }
         ));
     }
