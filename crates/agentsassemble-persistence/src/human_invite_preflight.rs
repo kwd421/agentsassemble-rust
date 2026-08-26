@@ -53,6 +53,7 @@ pub enum HumanInvitePreflightRejection {
     InviteExpired,
     InviteUseLimitReached,
     RoomUnavailable,
+    SessionUnavailable,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -115,24 +116,49 @@ impl SqliteStore {
             room_label: room.label,
             invite_scope: invite.invite_scope,
         };
-        let decision = if let Some(fingerprint) = request.session_fingerprint
-            && let Some(person) = load_live_session_person(
-                &mut transaction,
-                &context.room_id,
-                &fingerprint,
-                request.now,
-            )
-            .await?
-        {
-            HumanInvitePreflight::ExistingSession { context, person }
-        } else if let Some(fingerprint) = request.browser_credential_fingerprint {
-            match load_device_person(&mut transaction, &context.room_id, &fingerprint).await? {
-                Some((person, true)) => HumanInvitePreflight::ExistingMember { context, person },
-                Some((person, false)) => HumanInvitePreflight::KnownUser { context, person },
-                None => HumanInvitePreflight::ProfileRequired(context),
+        let session = match request.session_fingerprint {
+            Some(fingerprint) => Some(
+                load_presented_session(
+                    &mut transaction,
+                    &context.room_id,
+                    &fingerprint,
+                    request.now,
+                )
+                .await?,
+            ),
+            None => None,
+        };
+        let decision = match session {
+            Some(PresentedSession::Live {
+                person,
+                invite_scope,
+            }) => HumanInvitePreflight::ExistingSession {
+                context: HumanInvitePreflightContext {
+                    invite_scope,
+                    ..context
+                },
+                person,
+            },
+            Some(PresentedSession::Unavailable) => {
+                HumanInvitePreflight::Rejected(HumanInvitePreflightRejection::SessionUnavailable)
             }
-        } else {
-            HumanInvitePreflight::ProfileRequired(context)
+            None => {
+                if let Some(fingerprint) = request.browser_credential_fingerprint {
+                    match load_device_person(&mut transaction, &context.room_id, &fingerprint)
+                        .await?
+                    {
+                        Some((person, true)) => {
+                            HumanInvitePreflight::ExistingMember { context, person }
+                        }
+                        Some((person, false)) => {
+                            HumanInvitePreflight::KnownUser { context, person }
+                        }
+                        None => HumanInvitePreflight::ProfileRequired(context),
+                    }
+                } else {
+                    HumanInvitePreflight::ProfileRequired(context)
+                }
+            }
         };
         transaction.commit().await?;
         Ok(decision)
@@ -194,25 +220,55 @@ fn require_credential_binding(
     Ok(())
 }
 
-async fn load_live_session_person(
+enum PresentedSession {
+    Unavailable,
+    Live {
+        person: HumanInvitePreflightPerson,
+        invite_scope: InviteScope,
+    },
+}
+
+async fn load_presented_session(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
     fingerprint: &[u8; 32],
     now: DateTime<Utc>,
-) -> Result<Option<HumanInvitePreflightPerson>, PersistenceError> {
+) -> Result<PresentedSession, PersistenceError> {
     let row = sqlx::query(
-        "SELECT sessions.user_id, sessions.participant_id, profiles.profile_json, participants.participant_json FROM human_room_sessions AS sessions JOIN user_profiles AS profiles ON profiles.user_id = sessions.user_id AND profiles.participant_id = sessions.participant_id JOIN participants ON participants.room_id = sessions.room_id AND participants.participant_id = sessions.participant_id WHERE sessions.session_fingerprint = ? AND sessions.room_id = ? AND sessions.client_kind = 'browser' AND sessions.state = 'active' AND sessions.expires_at > ?",
+        "SELECT sessions.room_id AS session_room_id, sessions.user_id, sessions.participant_id, sessions.client_kind, sessions.invite_scope AS session_invite_scope, sessions.state AS session_state, sessions.expires_at AS session_expires_at, profiles.profile_json, participants.participant_json FROM human_room_sessions AS sessions LEFT JOIN user_profiles AS profiles ON profiles.user_id = sessions.user_id AND profiles.participant_id = sessions.participant_id LEFT JOIN participants ON participants.room_id = sessions.room_id AND participants.participant_id = sessions.participant_id WHERE sessions.session_fingerprint = ?",
     )
     .bind(fingerprint.as_slice())
-    .bind(room_id)
-    .bind(now.timestamp_micros())
     .fetch_optional(&mut **transaction)
     .await?;
     let Some(row) = row else {
-        return Ok(None);
+        return Ok(PresentedSession::Unavailable);
     };
+    if row.try_get::<String, _>("session_room_id")? != room_id {
+        return Ok(PresentedSession::Unavailable);
+    }
+    if row.try_get::<String, _>("client_kind")? != "browser" {
+        return Err(invalid_state("Stored human session client is invalid."));
+    }
+    let invite_scope = match row.try_get::<String, _>("session_invite_scope")?.as_str() {
+        "read_write" => InviteScope::ReadWrite,
+        "read_only" => InviteScope::ReadOnly,
+        _ => return Err(invalid_state("Stored human session scope is invalid.")),
+    };
+    let state = row.try_get::<String, _>("session_state")?;
+    if !matches!(state.as_str(), "active" | "ended") {
+        return Err(invalid_state("Stored human session state is invalid."));
+    }
+    if state != "active" || row.try_get::<i64, _>("session_expires_at")? <= now.timestamp_micros() {
+        return Ok(PresentedSession::Unavailable);
+    }
     let (person, joined) = decode_person(&row, room_id, Some("participant_json"))?;
-    Ok(joined.then_some(person))
+    if !joined {
+        return Ok(PresentedSession::Unavailable);
+    }
+    Ok(PresentedSession::Live {
+        person,
+        invite_scope,
+    })
 }
 
 async fn load_device_person(
@@ -239,8 +295,10 @@ fn decode_person(
 ) -> Result<(HumanInvitePreflightPerson, bool), PersistenceError> {
     let user_id = row.try_get::<String, _>("user_id")?;
     let participant_id = row.try_get::<String, _>("participant_id")?;
-    let profile: UserProfile =
-        serde_json::from_str(row.try_get::<String, _>("profile_json")?.as_str())?;
+    let profile_json = row
+        .try_get::<Option<String>, _>("profile_json")?
+        .ok_or_else(|| invalid_state("Stored human profile authority is missing."))?;
+    let profile: UserProfile = serde_json::from_str(&profile_json)?;
     if profile.revision < 1 || user_id.is_empty() || participant_id.is_empty() {
         return Err(invalid_state("Stored human profile authority is invalid."));
     }

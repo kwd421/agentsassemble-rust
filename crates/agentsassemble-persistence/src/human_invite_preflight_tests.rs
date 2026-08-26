@@ -18,7 +18,16 @@ const DEVICE: [u8; 32] = [0xD1; 32];
 #[tokio::test]
 async fn preflight_requires_profile_without_writing() {
     let store = fixture().await;
-    insert_invite(&store, CURRENT_SIGNED, CURRENT_JOIN, 5, 0).await;
+    insert_invite(
+        &store,
+        CURRENT_SIGNED,
+        CURRENT_JOIN,
+        "general",
+        InviteScope::ReadWrite,
+        5,
+        0,
+    )
+    .await;
     let before = total_changes(&store).await;
 
     let decision = store
@@ -39,7 +48,16 @@ async fn preflight_requires_profile_without_writing() {
 #[tokio::test]
 async fn known_device_uses_profile_ssot_and_reports_joined_membership() {
     let store = fixture().await;
-    insert_invite(&store, CURRENT_SIGNED, CURRENT_JOIN, 5, 0).await;
+    insert_invite(
+        &store,
+        CURRENT_SIGNED,
+        CURRENT_JOIN,
+        "general",
+        InviteScope::ReadWrite,
+        5,
+        0,
+    )
+    .await;
     add_guest_profile(&store).await;
     add_device_credential(&store).await;
 
@@ -60,7 +78,7 @@ async fn known_device_uses_profile_ssot_and_reports_joined_membership() {
                 && !person.operator
     ));
 
-    add_guest_participant(&store, "Stale room projection").await;
+    add_guest_participant(&store, "general", "Stale room projection").await;
     let member = store
         .preflight_human_invite(&request(
             join_evidence(),
@@ -78,13 +96,39 @@ async fn known_device_uses_profile_ssot_and_reports_joined_membership() {
 }
 
 #[tokio::test]
-async fn live_same_room_session_precedes_device_and_expiry_is_read_only() {
+async fn presented_same_room_session_preserves_scope_and_rejects_unavailable_state() {
     let store = fixture().await;
-    insert_invite(&store, CURRENT_SIGNED, CURRENT_JOIN, 5, 0).await;
-    let session_invite = insert_invite(&store, [0xA2; 32], [0xB2; 32], 1, 1).await;
+    insert_invite(
+        &store,
+        CURRENT_SIGNED,
+        CURRENT_JOIN,
+        "general",
+        InviteScope::ReadWrite,
+        5,
+        0,
+    )
+    .await;
+    let session_invite = insert_invite(
+        &store,
+        [0xA2; 32],
+        [0xB2; 32],
+        "general",
+        InviteScope::ReadOnly,
+        1,
+        1,
+    )
+    .await;
     add_guest_profile(&store).await;
-    add_guest_participant(&store, "Profile Guest").await;
-    insert_session(&store, &session_invite, [0x51; 32]).await;
+    add_device_credential(&store).await;
+    add_guest_participant(&store, "general", "Profile Guest").await;
+    insert_session(
+        &store,
+        &session_invite,
+        [0x51; 32],
+        "general",
+        InviteScope::ReadOnly,
+    )
+    .await;
 
     let existing = store
         .preflight_human_invite(&request(
@@ -97,29 +141,115 @@ async fn live_same_room_session_precedes_device_and_expiry_is_read_only() {
         .unwrap_or_else(|error| panic!("preflight existing session: {error}"));
     assert!(matches!(
         existing,
-        HumanInvitePreflight::ExistingSession { person, .. }
+        HumanInvitePreflight::ExistingSession { context, person }
             if person.participant_id == GUEST_PARTICIPANT_ID
+                && context.invite_scope == InviteScope::ReadOnly
     ));
 
+    assert_session_unavailable_without_writes(&store, micros(4_000_000)).await;
+    assert_eq!(stored_session_state(&store).await, "active");
+
+    sqlx::query("UPDATE human_room_sessions SET state = 'ended'")
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("end fixture session: {error}"));
+    assert_session_unavailable_without_writes(&store, micros(2_000_000)).await;
+
+    sqlx::query("UPDATE human_room_sessions SET state = 'active'")
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("restore fixture session: {error}"));
+    set_guest_participant_status(&store, ParticipantStatus::Left).await;
+    assert_session_unavailable_without_writes(&store, micros(2_000_000)).await;
+}
+
+#[tokio::test]
+async fn presented_unknown_or_wrong_room_session_cannot_fall_back_to_device() {
+    let store = fixture().await;
+    insert_invite(
+        &store,
+        CURRENT_SIGNED,
+        CURRENT_JOIN,
+        "general",
+        InviteScope::ReadWrite,
+        5,
+        0,
+    )
+    .await;
+    add_guest_profile(&store).await;
+    add_device_credential(&store).await;
+    add_guest_participant(&store, "general", "Profile Guest").await;
+
     let before = total_changes(&store).await;
-    let expired = store
+    let unknown = store
         .preflight_human_invite(&request(
             join_evidence(),
-            Some([0x51; 32]),
-            None,
-            micros(4_000_000),
+            Some([0x61; 32]),
+            Some(DEVICE),
+            micros(2_000_000),
         ))
         .await
-        .unwrap_or_else(|error| panic!("preflight expired session: {error}"));
-    assert!(matches!(expired, HumanInvitePreflight::ProfileRequired(_)));
+        .unwrap_or_else(|error| panic!("preflight unknown session: {error}"));
+    assert_eq!(
+        unknown,
+        HumanInvitePreflight::Rejected(HumanInvitePreflightRejection::SessionUnavailable)
+    );
     assert_eq!(total_changes(&store).await, before);
-    assert_eq!(stored_session_state(&store).await, "active");
+
+    store
+        .create_room_for_local_operator("3fe225a9-3530-4faf-b718-df9ec6e61dc2", "other", "Other")
+        .await
+        .unwrap_or_else(|error| panic!("create other room: {error}"));
+    let other_invite = insert_invite(
+        &store,
+        [0xA3; 32],
+        [0xB3; 32],
+        "other",
+        InviteScope::ReadWrite,
+        1,
+        1,
+    )
+    .await;
+    add_guest_participant(&store, "other", "Profile Guest").await;
+    insert_session(
+        &store,
+        &other_invite,
+        [0x62; 32],
+        "other",
+        InviteScope::ReadWrite,
+    )
+    .await;
+
+    let before = total_changes(&store).await;
+    let wrong_room = store
+        .preflight_human_invite(&request(
+            join_evidence(),
+            Some([0x62; 32]),
+            Some(DEVICE),
+            micros(2_000_000),
+        ))
+        .await
+        .unwrap_or_else(|error| panic!("preflight wrong-room session: {error}"));
+    assert_eq!(
+        wrong_room,
+        HumanInvitePreflight::Rejected(HumanInvitePreflightRejection::SessionUnavailable)
+    );
+    assert_eq!(total_changes(&store).await, before);
 }
 
 #[tokio::test]
 async fn signed_binding_and_current_invite_gates_fail_closed() {
     let store = fixture().await;
-    insert_invite(&store, CURRENT_SIGNED, CURRENT_JOIN, 5, 0).await;
+    insert_invite(
+        &store,
+        CURRENT_SIGNED,
+        CURRENT_JOIN,
+        "general",
+        InviteScope::ReadWrite,
+        5,
+        0,
+    )
+    .await;
     let mut mismatched = signed_evidence();
     if let HumanInviteCredentialEvidence::Signed { display_name, .. } = &mut mismatched {
         *display_name = "Cross-bound name".to_owned();
@@ -245,16 +375,23 @@ async fn insert_invite(
     store: &SqliteStore,
     signed: [u8; 32],
     join: [u8; 32],
+    room_id: &str,
+    invite_scope: InviteScope,
     max_uses: i64,
     use_count: i64,
 ) -> String {
     let invite_id = hex::encode(&signed[..8]);
     sqlx::query(
-        "INSERT INTO room_invites(invite_id, signed_token_fingerprint, join_code_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at) VALUES (?, ?, ?, 'general', 'invite-guest', 'Invite Guest', 'read_write', ?, ?, 5000000, 0, ?, 1000000)",
+        "INSERT INTO room_invites(invite_id, signed_token_fingerprint, join_code_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at) VALUES (?, ?, ?, ?, 'invite-guest', 'Invite Guest', ?, ?, ?, 5000000, 0, ?, 1000000)",
     )
     .bind(&invite_id)
     .bind(signed.as_slice())
     .bind(join.as_slice())
+    .bind(room_id)
+    .bind(match invite_scope {
+        InviteScope::ReadWrite => "read_write",
+        InviteScope::ReadOnly => "read_only",
+    })
     .bind(max_uses)
     .bind(use_count)
     .bind(LOCAL_OPERATOR_USER_ID)
@@ -289,9 +426,9 @@ async fn add_device_credential(store: &SqliteStore) {
     .unwrap_or_else(|error| panic!("insert device credential: {error}"));
 }
 
-async fn add_guest_participant(store: &SqliteStore, display_name: &str) {
+async fn add_guest_participant(store: &SqliteStore, room_id: &str, display_name: &str) {
     let participant = Participant {
-        room_id: "general".to_owned(),
+        room_id: room_id.to_owned(),
         participant_id: GUEST_PARTICIPANT_ID.to_owned(),
         display_name: display_name.to_owned(),
         avatar_image_url: String::new(),
@@ -304,8 +441,9 @@ async fn add_guest_participant(store: &SqliteStore, display_name: &str) {
         updated_at: micros(1_200_000),
     };
     sqlx::query(
-        "INSERT INTO participants(room_id, participant_id, participant_json) VALUES ('general', ?, ?)",
+        "INSERT INTO participants(room_id, participant_id, participant_json) VALUES (?, ?, ?)",
     )
+    .bind(room_id)
     .bind(GUEST_PARTICIPANT_ID)
     .bind(
         serde_json::to_string(&participant)
@@ -316,16 +454,51 @@ async fn add_guest_participant(store: &SqliteStore, display_name: &str) {
     .unwrap_or_else(|error| panic!("insert guest participant: {error}"));
 }
 
-async fn insert_session(store: &SqliteStore, invite_id: &str, fingerprint: [u8; 32]) {
+async fn set_guest_participant_status(store: &SqliteStore, status: ParticipantStatus) {
+    let participant_json = sqlx::query_scalar::<_, String>(
+        "SELECT participant_json FROM participants WHERE room_id = 'general' AND participant_id = ?",
+    )
+    .bind(GUEST_PARTICIPANT_ID)
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("read guest participant: {error}"));
+    let mut participant: Participant = serde_json::from_str(&participant_json)
+        .unwrap_or_else(|error| panic!("decode guest participant: {error}"));
+    participant.status = status;
     sqlx::query(
-        "INSERT INTO human_room_sessions(admission_key, key_kind, first_request_id, invite_id, payload_hash, session_fingerprint, room_id, user_id, participant_id, client_kind, invite_scope, browser_credential_fingerprint, reusable_identity_fingerprint, result_json, admitted_at, expires_at, state) VALUES (?, 'one_use', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', ?, ?, ?, 'general', ?, ?, 'browser', 'read_write', ?, NULL, '{}', 1500000, 4000000, 'active')",
+        "UPDATE participants SET participant_json = ? WHERE room_id = 'general' AND participant_id = ?",
+    )
+    .bind(
+        serde_json::to_string(&participant)
+            .unwrap_or_else(|error| panic!("encode guest participant: {error}")),
+    )
+    .bind(GUEST_PARTICIPANT_ID)
+    .execute(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("update guest participant: {error}"));
+}
+
+async fn insert_session(
+    store: &SqliteStore,
+    invite_id: &str,
+    fingerprint: [u8; 32],
+    room_id: &str,
+    invite_scope: InviteScope,
+) {
+    sqlx::query(
+        "INSERT INTO human_room_sessions(admission_key, key_kind, first_request_id, invite_id, payload_hash, session_fingerprint, room_id, user_id, participant_id, client_kind, invite_scope, browser_credential_fingerprint, reusable_identity_fingerprint, result_json, admitted_at, expires_at, state) VALUES (?, 'one_use', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', ?, ?, ?, ?, ?, ?, 'browser', ?, ?, NULL, '{}', 1500000, 4000000, 'active')",
     )
     .bind([0x11; 32].as_slice())
     .bind(invite_id)
     .bind([0x22; 32].as_slice())
     .bind(fingerprint.as_slice())
+    .bind(room_id)
     .bind(GUEST_USER_ID)
     .bind(GUEST_PARTICIPANT_ID)
+    .bind(match invite_scope {
+        InviteScope::ReadWrite => "read_write",
+        InviteScope::ReadOnly => "read_only",
+    })
     .bind([0x33; 32].as_slice())
     .execute(&store.pool)
     .await
@@ -337,6 +510,24 @@ async fn total_changes(store: &SqliteStore) -> i64 {
         .fetch_one(&store.pool)
         .await
         .unwrap_or_else(|error| panic!("read total changes: {error}"))
+}
+
+async fn assert_session_unavailable_without_writes(store: &SqliteStore, now: DateTime<Utc>) {
+    let before = total_changes(store).await;
+    let decision = store
+        .preflight_human_invite(&request(
+            join_evidence(),
+            Some([0x51; 32]),
+            Some(DEVICE),
+            now,
+        ))
+        .await
+        .unwrap_or_else(|error| panic!("preflight unavailable session: {error}"));
+    assert_eq!(
+        decision,
+        HumanInvitePreflight::Rejected(HumanInvitePreflightRejection::SessionUnavailable)
+    );
+    assert_eq!(total_changes(store).await, before);
 }
 
 async fn stored_session_state(store: &SqliteStore) -> String {
