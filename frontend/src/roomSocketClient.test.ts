@@ -5,6 +5,7 @@ import {
   authenticatedServerFrame,
   event,
   flushPromises,
+  gateNextFrameVerification,
   handshakeFrames,
   malformedMuteEvent,
   malformedRoleEvent,
@@ -628,27 +629,12 @@ describe("proof-bound canonical room socket", () => {
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
     const command = await sentAuthenticatedCommand(sockets[0], frames);
 
-    let releaseVerification = () => {};
-    let reportVerificationStarted = () => {};
-    const verificationStarted = new Promise<void>((resolve) => {
-      reportVerificationStarted = resolve;
-    });
-    const verificationGate = new Promise<void>((resolve) => {
-      releaseVerification = resolve;
-    });
-    const realVerify = crypto.subtle.verify.bind(crypto.subtle);
-    vi.spyOn(crypto.subtle, "verify").mockImplementationOnce(
-      async (algorithm, key, signature, data) => {
-        reportVerificationStarted();
-        await verificationGate;
-        return realVerify(algorithm, key, signature, data);
-      }
-    );
+    const verification = gateNextFrameVerification();
 
     await receiveAuthenticated(sockets[0], frames, leaveAck(command.request_id));
-    await verificationStarted;
+    await verification.started;
     sockets[0].close();
-    releaseVerification();
+    verification.release();
 
     await expect(pendingLeave).resolves.toMatchObject({
       accepted: true,
@@ -657,6 +643,34 @@ describe("proof-bound canonical room socket", () => {
     await vi.advanceTimersByTimeAsync(5_000);
     expect(sockets).toHaveLength(1);
     expect(handle.ready()).toBe(false);
+    handle.close();
+  });
+
+  it("rejects a verified leave ACK when protocol failure wins during verification", async () => {
+    vi.useFakeTimers();
+    const { handle, sockets, tickets } = openHarness();
+    await flushPromises();
+    sockets[0].open();
+    const frames = await handshakeFrames(sockets[0], tickets[0], 0, 0);
+    sockets[0].receive(frames.receipt);
+    sockets[0].receiveRaw(frames.rawSnapshot);
+    await vi.waitFor(() => expect(handle.ready()).toBe(true));
+    const pendingLeave = handle.command("participant.leave", {});
+    let leaveSettled = false;
+    void pendingLeave.then(
+      () => { leaveSettled = true; },
+      () => { leaveSettled = true; }
+    );
+    await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
+    const command = await sentAuthenticatedCommand(sockets[0], frames);
+    const verification = gateNextFrameVerification();
+    await receiveAuthenticated(sockets[0], frames, leaveAck(command.request_id));
+    await verification.started;
+    sockets[0].onmessage?.({ data: new Uint8Array([0]) } as unknown as MessageEvent);
+    verification.release();
+    await vi.waitFor(() => expect(sockets[0].readyState).toBe(WebSocket.CLOSED));
+    await vi.waitFor(() => expect(sockets).toHaveLength(2));
+    expect(leaveSettled).toBe(false);
     handle.close();
   });
 

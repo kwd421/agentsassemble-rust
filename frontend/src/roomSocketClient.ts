@@ -448,7 +448,7 @@ export function openRoomSocket(
             "frame_authentication_invalid"
           );
         }
-        if (!ownsConnectionGeneration()) return;
+        if (!ownsConnectionGeneration() || connectionFailed) return;
         nextServerCounter += 1;
         const msg = JSON.parse(payload) as unknown;
         if (!isRecord(msg)) {

@@ -199,6 +199,22 @@ export async function authenticatedServerFrame(
   );
 }
 
+export function gateNextFrameVerification() {
+  let release = () => {};
+  let reportStarted = () => {};
+  const started = new Promise<void>((resolve) => { reportStarted = resolve; });
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const realVerify = crypto.subtle.verify.bind(crypto.subtle);
+  vi.spyOn(crypto.subtle, "verify").mockImplementationOnce(
+    async (algorithm, key, signature, data) => {
+      reportStarted();
+      await gate;
+      return realVerify(algorithm, key, signature, data);
+    }
+  );
+  return { release, started };
+}
+
 export async function sentAuthenticatedCommand(
   socket: FakeWebSocket,
   frames: Awaited<ReturnType<typeof handshakeFrames>>,
