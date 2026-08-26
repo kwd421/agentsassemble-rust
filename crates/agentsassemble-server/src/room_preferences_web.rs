@@ -7,11 +7,12 @@ use agentsassemble_persistence::{
 use axum::{
     Json, Router,
     extract::{Query, Request, State},
-    http::{Method, StatusCode},
+    http::{HeaderValue, Method, StatusCode, header::CACHE_CONTROL},
     response::{IntoResponse, Response},
 };
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
+use tower_http::set_header::SetResponseHeaderLayer;
 
 use crate::{
     AppState, ConsumedRoomHttpTicket,
@@ -30,7 +31,12 @@ struct SettingsQuery {
 }
 
 pub(crate) fn routes() -> Router<AppState> {
-    preference_routes().layer(exact_tauri_cors([Method::GET, Method::POST]))
+    preference_routes()
+        .layer(SetResponseHeaderLayer::overriding(
+            CACHE_CONTROL,
+            HeaderValue::from_static("private, no-store"),
+        ))
+        .layer(exact_tauri_cors([Method::GET, Method::POST]))
 }
 
 registered_routes! {

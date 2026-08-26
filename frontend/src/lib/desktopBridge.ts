@@ -437,6 +437,7 @@ export async function fetchDesktopRoomPreferences(
   headers.set("Authorization", `Bearer ${issued.ticket}`);
   return fetch(`${issued.http_base_url}/api/room-settings${query}`, {
     ...init,
+    cache: "no-store",
     method,
     headers,
   });
