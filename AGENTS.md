@@ -12,7 +12,8 @@ Do not reimplement the old v0 scripted-meeting runner. This exclusion covers an
 `research_focus` and smoke/standard/deep research steering, isolated
 `private_research/*` artifacts, generated agendas, forced numbered rounds and speaker
 order, `own_research`/`public_debate` phase switching, automatic moderator synthesis,
-automatic decisions or task assignment, the v0 `agenda.md`/`decision.md`/`tasks/*.md`
+automatic decision-making or automatic task assignment, the v0
+`agenda.md`/`decision.md`/`tasks/*.md`
 and research-JSON artifact system, its templates/configuration/seeds/tests/docs, and
 the v0-only `run_research`/`run_round`/`synthesize` adapter contracts and
 Research/Round/MeetingRecord models. Their presence in the Python tree or old product
@@ -22,9 +23,9 @@ This exclusion does not remove persona-card import and explicit selection (Risu,
 CCv3, or CHARX) or its prompt application; ordinary `ordered` and `ambient` room
 conversation; agent-initiated web search and tool use when permitted; room-owned
 participant roles and permissions; ordinary message history, search, and pins; or a
-normal conversation in which a human asks participants to summarize conclusions or
-work. These remain product behavior and must not be coupled to a scripted meeting
-pipeline.
+normal conversation in which a human asks participants for synthesis, a decision,
+task planning, or task-assignment discussion. These remain product behavior and must
+not be coupled to a scripted meeting pipeline.
 
 Use mature maintained libraries for solved infrastructure.
 Reuse mechanisms; implement AgentsAssemble product semantics.
