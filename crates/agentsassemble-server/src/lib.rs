@@ -67,6 +67,7 @@ mod provider_write_budget;
 mod raw_ingress;
 mod room_agent_lifecycle_runtime;
 mod room_command_admission;
+mod room_command_dispatch;
 mod room_command_execution;
 mod room_command_result;
 mod room_directory_web;

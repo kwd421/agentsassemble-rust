@@ -6,7 +6,8 @@ use agentsassemble_protocol::RoomAction;
 use agentsassemble_provider::{ProviderAdapter, ProviderAdapterError, ProviderRuntimeStarted};
 
 use crate::{
-    room_runtime::{CommandExecution, RoomCommand, progressed_execution},
+    room_command_execution::{CommandExecution, progressed_execution},
+    room_runtime::RoomCommand,
     runtime_reconciliation::recover_exact_lifecycle_command,
 };
 

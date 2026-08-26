@@ -937,6 +937,19 @@ while promoting the same opaque ID through the profile lifecycle.
   inbound-command and outbound-delivery races; tests do not sleep or inspect private
   maps. Query count and end-to-end fanout latency are recorded before and after.
 
+### Room command dispatch separated from room ownership
+
+- Prior structure and intent: `room_runtime.rs` was 798 lines because it owned both
+  the bounded room task and every action-dispatch branch. Adding session provenance
+  there would mix queue custody with command selection at the absolute source limit.
+  The unchanged dispatcher now has its own 200-line module, while the room owner is
+  607 lines and retains queues, task lifetime, publication, and replies.
+- Preserved contract and cost: the extracted function bodies are identical apart from
+  the module-visible entry point. No queue, allocation, task, branch, trait, state,
+  configuration, retry, fallback, or runtime call was added, so no performance claim
+  is made. Direct old/new function diff, all 58 server unit tests, warning-denied
+  workspace Clippy, and the architecture/source/check gates pass.
+
 ### One durable human-session resolver instead of repeated partial checks
 
 - Prior cost and threat: the original session service verifies a fingerprinted
