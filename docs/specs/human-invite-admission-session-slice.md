@@ -1,6 +1,7 @@
 # Human Invite, Admission, and Room Session Slice
 
-Status: revised design candidate; no Rust admission route is active
+Status: atomic SQLite admission owner implemented and locally verified; no Rust
+HTTP/RoomRuntime/browser admission route is active
 
 ## Definition
 
@@ -186,7 +187,11 @@ room cleaner—replace CR/LF with spaces, trim, truncate by Unicode scalar count
 again—with limits 128/128/32/64/128 in the order above. Tabs and repeated internal
 spaces are not collapsed and no Unicode normalization is introduced. The cleaned
 request participant-type token is hashed before the human-only authority decision,
-so accepted aliases do not silently merge distinct retry payloads. A syntactically
+so accepted aliases do not silently merge distinct retry payloads. The original
+browser join treats only `agent`, `ai`, `bot`, `subscription_ai`, `api`, `local`,
+`remote`, and `unknown` as known nonhuman values. Tokens such as `browser`, `people`,
+or any other cleaned unknown token therefore retain the original human coercion,
+while their distinct cleaned input remains in the payload hash. A syntactically
 invalid avatar reference canonicalizes to absent; a syntactically valid reference
 hashes its attachment ID even when later optional custody lookup omits it. Absence is
 byte `0x00`; presence is `0x01` followed by the framed ID. The vector
@@ -556,8 +561,30 @@ flag is added meanwhile.
 - Trade-off: admission write concurrency is serialized by the existing one-connection
   store. That is accepted because room mutations already have this owner and the
   public capacities are bounded. No unmeasured throughput claim is made.
-- Verification: rollback injection, exact/conflicting retry, restart, capacity, and
-  event-count tests query only committed public/durable results.
+- Current implementation evidence: commits `6f91ab7`, `ee747ab`, and `5f44cec` place
+  profile/device/membership/invite-use/session/result/event writes and deterministic
+  bearer ownership under one `SqliteStore` transaction. A trigger-injected final
+  session-insert failure leaves invite use, profile, device, participant, event, and
+  session state unchanged. Exact one-use retry, reusable replacement, changed input,
+  terminal expiry, event count, and raw-bearer exclusion tests inspect committed
+  durable/public results. HTTP dispatch and post-commit publication remain outside
+  this completed boundary and are not claimed.
+- Security correction: manual review found that malformed durable participant or
+  profile JSON could be mistaken for liveness loss and committed as `ended`.
+  Commit `c99a031` validates exact room/participant bindings, human type, and profile
+  revision before liveness, reuses that validated profile decoder before reusable
+  profile patching, and returns `invalid_state` so the transaction rolls back.
+  Controlled corruption tests prove both exact retry and reusable identity repair
+  fail closed without ending the live session or consuming another invite use.
+- Observed implementation cost: the durable owner is split by responsibility into a
+  633-line transaction module and a 266-line identity/avatar module, both below the
+  mandatory 800-line source gate without exceptions. Optional avatar resolution
+  selects only five metadata columns and does not fetch or decode the attachment
+  BLOB, avoiding a needless copy of an asset that may be as large as the existing
+  10 MiB per-file bound. Bearer issue/recovery performs exactly one HMAC-SHA256, one
+  unpadded base64url encoding, and one SHA-256 fingerprint. No end-to-end CPU,
+  latency, memory, or disk improvement is claimed before the route is active and
+  measured.
 
 ### Binary digests instead of encoded digest text
 

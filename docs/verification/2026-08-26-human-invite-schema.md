@@ -1,10 +1,9 @@
 # Human invite schema verification — 2026-08-26
 
-Status: partial slice evidence; canonical invite reads and the manager-authorized
-create/revoke writes plus standalone credential issuance/authentication are
-implemented. Row-bound read-only human preflight is also implemented, while raw
-credential transport, routes, admission, post-commit notification, and the activated
-browser flow are not implemented by these commits.
+Status: partial slice evidence; canonical invite management, credential
+authentication, read-only preflight, canonical admission inputs, and the atomic
+SQLite admission owner are implemented. HTTP/RoomRuntime dispatch, post-commit
+notification, and the activated browser flow are not implemented by these commits.
 
 ## Provenance and scope
 
@@ -21,6 +20,9 @@ browser flow are not implemented by these commits.
 - Existing-session frontend scope regression: `43d4609`.
 - Reusable admission corrections: `cba3cb8`, `9c5883f`, and `27cf90a`;
   `ddac71c` only separates their schema tests from the production owner.
+- Admission input and durable owner: `0606257`, `61745fb`, `3bbc8c6`, `dbcf928`,
+  `657701a`, `6f91ab7`, `ee747ab`, `5f44cec`, `d76b2e6`, and security correction
+  `c99a031`.
 - The schema is fresh-only at version 38. No migration, compatibility reader,
   fallback column, or partially upgraded authority is accepted.
 
@@ -675,9 +677,9 @@ continues to bind the equal fingerprint to its user.
   alternate authority.
 - Security: removing this non-authoritative index does not remove any constraint or
   authorize a different browser or user. The complete admission key, composite
-  foreign keys, and future atomic UOW's full-fingerprint collision checks remain
+  foreign keys, and the atomic UOW's full-fingerprint collision checks remain
   mandatory. The schema test proves only coexistence; actual `aai1.`/`aaj1_` key
-  derivation and live replacement remain a later integration proof.
+  derivation and live replacement are verified separately below.
 - Security: the version 38 equality check prevents cross-browser credential/user
   binding even if the future repository supplies internally inconsistent fields.
   This is defense against a concrete durable-authority corruption path, not a second
@@ -711,3 +713,70 @@ continues to bind the equal fingerprint to its user.
   claimed here.
 - No Deep Scan, automated security scanner, provider, product-browser flow, or
   Computer Use resource ran for this schema-only correction.
+
+## Atomic human admission owner
+
+Commits `657701a` through `c99a031` implement the durable boundary without activating
+an HTTP route. `SqliteStore::admit_human` owns the exact retry/current-gate ordering,
+identity resolution, capacity decision, invite consumption, profile and participant
+state, canonical room events, session replacement/insertion, public result snapshot,
+and deterministic raw bearer return in one SQLite transaction. The serialized result
+contains no raw bearer or credential. Events and replaced fingerprints are returned
+for the later RoomRuntime post-commit owner; this commit does not publish them early.
+
+### Prior cost or threat and change intent
+
+- The original admission coordinator is a 740-line multi-store saga with intermediate
+  workflow writes and compensations. The concrete migration risk was partial durable
+  authority after a crash or late write failure. The Rust change uses the existing
+  single-connection SQLite writer and one transaction; it does not introduce a saga,
+  repository hierarchy, background worker, or generic unit-of-work abstraction.
+- A detached issuer could mint a bearer before a transaction had selected a new or
+  exact-live durable row. Commit `ee747ab` removes that public issuer; the persistence
+  owner performs one HMAC-SHA256, one unpadded base64url encoding, and one SHA-256 of
+  the final 48-byte ASCII bearer only on those two successful branches.
+- Optional admission avatars may contain up to 10 MiB. The custody lookup selects
+  only state, room, two fixed fingerprints, and expiry; it does not select or decode
+  the attachment BLOB. This removes a concrete avoidable copy from the admission
+  transaction. No memory or latency number is inferred without a route benchmark.
+- Manual Daybreaker review found a concrete corruption path in the first durable
+  implementation: invalid participant/profile authority could be interpreted as
+  liveness loss, commit `state='ended'`, or let a reusable profile patch silently
+  repair revision zero. Commit `c99a031` validates room/participant JSON binding,
+  human type, and profile revision before liveness or patching. Corruption now returns
+  `invalid_state` and rolls the whole transaction back; only actual expiry, inactive
+  room, or non-Joined membership materializes an active session as ended.
+
+### Preserved contract and actual verification
+
+- One-use exact retry precedes later invite gates; reusable exact retry follows the
+  current invite gates. Same payload returns the original result and recovered live
+  bearer without another use/event, while changed payload conflicts and expired
+  completed admission remains terminal.
+- Reusable admission preserves room-owned role and mute, updates only person-profile
+  display/avatar authority, reuses the concrete cross-room projection function, and
+  replaces only the same participant's live session. New profiles use the admitted
+  human constructor; existing profiles are validated before patching.
+- A trigger rejecting the final session insert proves invite use, profile, device,
+  participant, event, and session writes all roll back. Controlled participant-type
+  and profile-revision corruption proves exact retry leaves the session active and
+  reusable re-admission consumes no invite use instead of repairing authority.
+- The complete persistence suite passed 152/152 after `c99a031`. Warning-denied
+  all-target/all-feature Clippy, formatter, workspace check, architecture,
+  source-growth, policy, and diff gates passed. The production transaction and
+  identity modules are 633 and 266 lines respectively; no 800-line gate exception
+  or threshold change was added. The implementation correction was 186 insertions
+  and 11 deletions across four files, below the 1,000-line commit review threshold.
+- Daybreaker returned `C=0/H=0/M=1` on the pre-fix implementation, then manually
+  approved `c99a031` and the complete admission series with `C=0/H=0/M=0`. It
+  confirmed structural validation precedes liveness, only genuine lifecycle loss
+  terminalizes a session, reusable profiles use the shared validator, and errors
+  escape before commit. The critical web review of the complete atomic series is
+  still pending, so cross-review approval is not yet claimed. No Deep Scan,
+  automated scanner, provider, browser flow, or Computer Use resource ran for this
+  inactive-route persistence increment.
+
+These are operation counts, bounded data sizes, and observed contract results, not
+an end-to-end performance claim. CPU time, heap peak, SQLite page growth, and request
+latency will be measured only after the real route and browser flow exist; speculative
+caches, batching, cleanup workers, and future-provider abstractions remain excluded.
