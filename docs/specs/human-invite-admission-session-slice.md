@@ -44,9 +44,11 @@ not an authority.
   invite-and-browser-credential subject, while all browsers using one invite share
   that invite's quota. It supersedes only that custody subject's older pending
   avatar, expires after one hour, and becomes the admitted user's profile avatar
-  only during successful admission. Invalid, missing, or expired optional avatar
-  data is treated as omitted: admission still commits, but it cannot claim unrelated
-  media or create partial profile state.
+  only during successful admission. An invalid request reference, missing row,
+  custody mismatch, or expired optional avatar is treated as omitted: admission
+  still commits, but it cannot claim unrelated media or create partial profile state.
+  A stored invariant violation or corrupt canonical image is an authority failure,
+  not optional absence.
 - The lower-left human profile, room member projection, profile editor, and the
   user's preferences must resolve the same `user_profiles` row. An Agent Session
   profile remains a separate Agent Session authority.
@@ -144,8 +146,9 @@ admission. The room runtime then performs one SQLite transaction:
 4. consume one invite use when this is a new invite principal, upsert the joined
    human participant and matching profile, and mark any different live session for
    that `(room, participant)` replaced without charging another capacity slot;
-5. omit an optional pending avatar whose row is absent, expired, malformed, or owned
-   by another custody subject; otherwise transfer the exact valid row, create the
+5. omit an optional pending avatar whose reference is invalid or whose row is absent,
+   expired, or owned by another custody subject; fail on a persisted invariant or
+   content-integrity violation; otherwise transfer the exact valid row, create the
    session/result, and append at most one `participant_joined` event. Its sequence is
    pending whenever it is newer than the room's existing durable publication cursor;
 6. commit before publishing the event, notifying displaced sessions, or returning
@@ -153,7 +156,8 @@ admission. The room runtime then performs one SQLite transaction:
 
 Any database/infrastructure failure rolls back every step. Optional-avatar semantic
 invalidity omits only that avatar as described above; it is not converted into a
-database-success fallback. Because all affected records share one SQLite transaction,
+database-success fallback. Persisted corruption is never classified as semantic
+invalidity. Because all affected records share one SQLite transaction,
 the Python coordinator's separate JSON invite
 repository, identity database, room repository, workflow journal, compensation,
 and resume saga are not reimplemented.
