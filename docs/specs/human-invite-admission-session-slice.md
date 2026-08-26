@@ -243,6 +243,13 @@ broadcast closes an idle socket. Broadcast lag or closure triggers durable
 revalidation and fails closed. The database remains authority; the broadcast and
 deadline are only revalidation triggers, not independent validity sources.
 
+The final durable outbound check is the authorization linearization point. A revoke
+or replacement committed before that check denies the frame. If it commits after the
+check, only the already-authorized in-flight frame may complete; notification closes
+the socket and every later frame revalidates. The implementation does not hold a
+SQLite transaction across socket I/O or add a second per-session lock/cache to claim
+an impossible atomic database-and-network send.
+
 Frame-level validation is not commit authority. Every session-originated command
 carries the immutable session fingerprint and admitted scope beside the resolved
 principal through the bounded `RoomRuntime` queue. The exact SQLite mutation unit
@@ -416,8 +423,9 @@ write-path work. A separate cleanup task requires later measured evidence.
   room/purpose binding, transactional capability revalidation, and that ingress
   custody is not management authority.
 - Real WebSocket tests prove initial snapshot readiness, normal/read-only command
-  behavior, revoked-ticket denial, expiry close, outbound denial after revoke, and
-  immediate connected-session close. Races use barriers or controlled channels,
+  behavior, revoked-ticket denial, expiry close, outbound denial when revoke commits
+  before final outbound validation, and immediate connected-session close. Races use
+  barriers or controlled channels,
   never arbitrary sleeps. A barrier revokes or replaces the exact session between
   frame validation and the SQLite mutation UOW and proves no durable command state
   or event commits. Handler-cancellation and restart tests prove one durable
