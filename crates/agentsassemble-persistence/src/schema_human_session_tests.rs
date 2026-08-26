@@ -46,4 +46,49 @@ async fn reusable_invite_accepts_distinct_presented_credential_admissions() {
         .unwrap_or_else(|error| panic!("count distinct reusable admissions: {error}")),
         2
     );
+
+    sqlx::query("UPDATE human_room_sessions SET state = 'active' WHERE admission_key = ?")
+        .bind(vec![9; 32])
+        .execute(&pool)
+        .await
+        .unwrap_or_else(|error| panic!("activate first admission: {error}"));
+    assert!(
+        sqlx::query("UPDATE human_room_sessions SET state = 'active' WHERE admission_key = ?")
+            .bind(vec![0x0A; 32])
+            .execute(&pool)
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
+async fn reusable_session_binds_request_browser_to_credential_identity() {
+    let pool = installed_schema().await;
+    seed_human_authorities(&pool).await;
+    insert_human_session(
+        &pool,
+        SessionAuthority {
+            marker: 10,
+            invite_id: "2222222222222222",
+            key_kind: "reusable",
+            room_id: "room-a",
+            user_id: "user-a",
+            participant_id: "participant-a",
+            invite_scope: "read_write",
+            reusable_identity: Some(vec![0x71; 32]),
+        },
+    )
+    .await
+    .unwrap_or_else(|error| panic!("insert reusable session: {error}"));
+
+    assert!(
+        sqlx::query(
+            "UPDATE human_room_sessions SET browser_credential_fingerprint = ? WHERE admission_key = ?",
+        )
+        .bind(vec![0x72; 32])
+        .bind(vec![10; 32])
+        .execute(&pool)
+        .await
+        .is_err()
+    );
 }

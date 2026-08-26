@@ -179,7 +179,8 @@ const TABLES: &[TableDefinition] = &[
             "CHECK(",
             "(key_kind = 'one_use' AND reusable_identity_fingerprint IS NULL) OR ",
             "(key_kind = 'reusable' AND reusable_identity_fingerprint IS NOT NULL ",
-            "AND length(reusable_identity_fingerprint) = 32)), ",
+            "AND length(reusable_identity_fingerprint) = 32 ",
+            "AND reusable_identity_fingerprint = browser_credential_fingerprint)), ",
             "FOREIGN KEY(invite_id, room_id, invite_scope, key_kind) ",
             "REFERENCES room_invites(invite_id, room_id, invite_scope, key_kind) ",
             "ON DELETE CASCADE, ",
@@ -519,7 +520,12 @@ mod tests {
         .bind(session.user_id)
         .bind(session.participant_id)
         .bind(session.invite_scope)
-        .bind(vec![session.marker.wrapping_add(0x20); 32])
+        .bind(
+            session
+                .reusable_identity
+                .clone()
+                .unwrap_or_else(|| vec![session.marker.wrapping_add(0x20); 32]),
+        )
         .bind(session.reusable_identity)
         .execute(pool)
         .await
