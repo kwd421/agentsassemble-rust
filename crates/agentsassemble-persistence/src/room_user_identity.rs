@@ -104,7 +104,7 @@ fn rejected(code: &'static str, message: impl Into<String>) -> PersistenceError 
 mod tests {
     use crate::{PersistenceError, SqliteStore};
     use agentsassemble_domain::{
-        LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, Participant,
+        LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, Participant, ParticipantStatus,
     };
 
     #[tokio::test]
@@ -126,6 +126,50 @@ mod tests {
             .unwrap_or_else(|error| panic!("resolve room user: {error}"));
         assert_eq!(identity.user_id, LOCAL_OPERATOR_USER_ID);
         assert_eq!(identity.participant_id, LOCAL_OPERATOR_PARTICIPANT_ID);
+    }
+
+    #[tokio::test]
+    async fn current_authorization_rejects_membership_revoked_after_an_earlier_read() {
+        let store = fixture().await;
+        store
+            .authorize_room_user(
+                "general",
+                LOCAL_OPERATOR_USER_ID,
+                LOCAL_OPERATOR_PARTICIPANT_ID,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("authorize current room user: {error}"));
+        let mut participant = store
+            .participant("general", LOCAL_OPERATOR_PARTICIPANT_ID)
+            .await
+            .unwrap_or_else(|error| panic!("read current participant: {error}"));
+        participant.status = ParticipantStatus::Left;
+        sqlx::query(
+            "UPDATE participants SET participant_json = ? WHERE room_id = ? AND participant_id = ?",
+        )
+        .bind(
+            serde_json::to_string(&participant)
+                .unwrap_or_else(|error| panic!("encode revoked participant: {error}")),
+        )
+        .bind(&participant.room_id)
+        .bind(&participant.participant_id)
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("revoke current participant: {error}"));
+
+        assert!(matches!(
+            store
+                .authorize_room_user(
+                    "general",
+                    LOCAL_OPERATOR_USER_ID,
+                    LOCAL_OPERATOR_PARTICIPANT_ID,
+                )
+                .await,
+            Err(PersistenceError::CommandRejected {
+                code: "session_revoked",
+                ..
+            })
+        ));
     }
 
     #[tokio::test]

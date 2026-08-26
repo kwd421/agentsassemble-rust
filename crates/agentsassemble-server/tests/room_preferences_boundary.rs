@@ -153,17 +153,17 @@ async fn preference_write_authorizes_before_body_and_directory_is_separate() {
             "missing-participant".to_owned(),
         )
         .await
-        .unwrap_or_else(|error| panic!("issue stale preference writer: {error}"))
+        .unwrap_or_else(|error| panic!("issue invalid-identity preference writer: {error}"))
         .ticket;
-    let revoked = client
+    let unauthorized = client
         .post(format!("{}/api/room-settings", server.base_url))
         .bearer_auth(write_ticket)
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .body("x".repeat(20 * 1024))
         .send()
         .await
-        .unwrap_or_else(|error| panic!("send revoked oversized write: {error}"));
-    assert_eq!(revoked.status(), StatusCode::UNAUTHORIZED);
+        .unwrap_or_else(|error| panic!("send unauthorized oversized write: {error}"));
+    assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
     server.stop().await;
 }
 
