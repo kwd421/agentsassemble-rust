@@ -64,7 +64,10 @@ import { useRoomCreation } from "./useRoomCreation";
 import { useRoomDirectory } from "./useRoomDirectory";
 import { useRoomInviteController } from "./useRoomInviteController";
 import { useRoomMembers } from "./useRoomMembers";
-import { useRoomSettingsController } from "./useRoomSettingsController";
+import {
+  useRoomSettingsController,
+  type RoomPreferenceAuthority,
+} from "./useRoomSettingsController";
 import { useRoomSideChat } from "./useRoomSideChat";
 import { useSidebarResize } from "./useSidebarResize";
 
@@ -328,11 +331,17 @@ export function useAppController() {
     canonicalParticipants: canonicalRoom.participants,
     enabled: startupIdentityResolved && !activeRoomDisconnected,
   });
+  const roomPreferenceAuthority = useMemo<RoomPreferenceAuthority>(
+    () =>
+      guestLocked
+        ? { kind: "remote-unavailable" }
+        : { kind: "local", deviceToken },
+    [deviceToken, guestLocked]
+  );
   const activeRoomMembers = roomMembers.activeMembers;
   const roomSettings = useRoomSettingsController({
     activeRoom,
-    sessionToken: admittedSessionToken,
-    deviceToken,
+    preferenceAuthority: roomPreferenceAuthority,
     canonicalGlobalSettings: canonicalRoom.roomSettings,
     saveCanonicalGlobalSettings: canonicalRoom.sendRoomSettingsUpdate,
     onRoomMetadataLoaded: updateRoomByMeetingId,

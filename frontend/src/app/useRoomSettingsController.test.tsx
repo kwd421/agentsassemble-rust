@@ -26,6 +26,10 @@ const roomA: RoomDockItem = {
   tone: "fresh",
 };
 const roomB: RoomDockItem = { ...roomA, id: "room-b", meetingId: "meeting-b", label: "Room B" };
+const localPreferenceAuthority = {
+  kind: "local" as const,
+  deviceToken: "device-test",
+};
 function settings(room: RoomDockItem, bannerPreset: "forest" | "ember"): RoomSettings {
   return {
     roomId: room.meetingId,
@@ -111,8 +115,7 @@ describe("useRoomSettingsController", () => {
       ({ room, canonical }) =>
         useRoomSettingsController({
           activeRoom: room,
-          sessionToken: "",
-          deviceToken: "device-test",
+          preferenceAuthority: localPreferenceAuthority,
           canonicalGlobalSettings: canonical,
           saveCanonicalGlobalSettings,
           onRoomMetadataLoaded,
@@ -155,8 +158,7 @@ describe("useRoomSettingsController", () => {
     const hook = renderHook(() =>
       useRoomSettingsController({
         activeRoom: roomA,
-        sessionToken: "",
-        deviceToken: "device-test",
+        preferenceAuthority: localPreferenceAuthority,
         canonicalGlobalSettings: globalSettings(roomA, "forest"),
         saveCanonicalGlobalSettings,
         onRoomMetadataLoaded,
@@ -190,8 +192,7 @@ describe("useRoomSettingsController", () => {
     const hook = renderHook(() =>
       useRoomSettingsController({
         activeRoom: roomA,
-        sessionToken: "",
-        deviceToken: "device-test",
+        preferenceAuthority: localPreferenceAuthority,
         canonicalGlobalSettings: globalSettings(roomA, "forest"),
         saveCanonicalGlobalSettings,
         onRoomMetadataLoaded: vi.fn(),
@@ -225,8 +226,7 @@ describe("useRoomSettingsController", () => {
     const hook = renderHook(() =>
       useRoomSettingsController({
         activeRoom: roomA,
-        sessionToken: "",
-        deviceToken: "device-test",
+        preferenceAuthority: localPreferenceAuthority,
         canonicalGlobalSettings: globalSettings(roomA, "forest"),
         saveCanonicalGlobalSettings,
         onRoomMetadataLoaded: vi.fn(),
@@ -245,8 +245,7 @@ describe("useRoomSettingsController", () => {
     const hook = renderHook(() =>
       useRoomSettingsController({
         activeRoom: roomA,
-        sessionToken: "remote-session",
-        deviceToken: "device-test",
+        preferenceAuthority: { kind: "remote-unavailable" },
         canonicalGlobalSettings: globalSettings(roomA, "forest"),
         saveCanonicalGlobalSettings,
         onRoomMetadataLoaded: vi.fn(),
@@ -270,8 +269,7 @@ describe("useRoomSettingsController", () => {
     const hook = renderHook(() =>
       useRoomSettingsController({
         activeRoom: roomA,
-        sessionToken: "",
-        deviceToken: "device-test",
+        preferenceAuthority: localPreferenceAuthority,
         canonicalGlobalSettings: globalSettings(roomA, "forest"),
         saveCanonicalGlobalSettings,
         onRoomMetadataLoaded: vi.fn(),
@@ -308,8 +306,7 @@ describe("useRoomSettingsController", () => {
     const hook = renderHook(() =>
       useRoomSettingsController({
         activeRoom: roomA,
-        sessionToken: "",
-        deviceToken: "device-test",
+        preferenceAuthority: localPreferenceAuthority,
         canonicalGlobalSettings: globalSettings(roomA, "forest"),
         saveCanonicalGlobalSettings,
         onRoomMetadataLoaded: vi.fn(),
@@ -356,8 +353,7 @@ describe("useRoomSettingsController", () => {
     const hook = renderHook(() =>
       useRoomSettingsController({
         activeRoom: roomA,
-        sessionToken: "",
-        deviceToken: "device-test",
+        preferenceAuthority: localPreferenceAuthority,
         canonicalGlobalSettings: null,
         saveCanonicalGlobalSettings,
         onRoomMetadataLoaded: vi.fn(),
@@ -375,8 +371,7 @@ describe("useRoomSettingsController", () => {
     const hook = renderHook(() =>
       useRoomSettingsController({
         activeRoom: roomA,
-        sessionToken: "",
-        deviceToken: "device-test",
+        preferenceAuthority: localPreferenceAuthority,
         canonicalGlobalSettings: globalSettings(roomA, "forest"),
         saveCanonicalGlobalSettings,
         onRoomMetadataLoaded: vi.fn(),
@@ -417,8 +412,7 @@ describe("useRoomSettingsController", () => {
     const hook = renderHook(() =>
       useRoomSettingsController({
         activeRoom: roomA,
-        sessionToken: "",
-        deviceToken: "device-test",
+        preferenceAuthority: localPreferenceAuthority,
         canonicalGlobalSettings: globalSettings(roomA, "forest"),
         saveCanonicalGlobalSettings,
         onRoomMetadataLoaded: vi.fn(),
@@ -460,8 +454,7 @@ describe("useRoomSettingsController", () => {
     const hook = renderHook(() =>
       useRoomSettingsController({
         activeRoom: roomA,
-        sessionToken: "",
-        deviceToken: "device-test",
+        preferenceAuthority: localPreferenceAuthority,
         canonicalGlobalSettings: globalSettings(roomA, "forest"),
         saveCanonicalGlobalSettings,
         onRoomMetadataLoaded: vi.fn(),
@@ -491,8 +484,7 @@ describe("useRoomSettingsController", () => {
     const hook = renderHook(() =>
       useRoomSettingsController({
         activeRoom: roomA,
-        sessionToken: "",
-        deviceToken: "device-test",
+        preferenceAuthority: localPreferenceAuthority,
         canonicalGlobalSettings: globalSettings(roomA, "forest"),
         saveCanonicalGlobalSettings,
         onRoomMetadataLoaded: vi.fn(),
@@ -526,8 +518,7 @@ describe("useRoomSettingsController", () => {
     const hook = renderHook(() =>
       useRoomSettingsController({
         activeRoom: roomA,
-        sessionToken: "",
-        deviceToken: "device-test",
+        preferenceAuthority: localPreferenceAuthority,
         canonicalGlobalSettings: globalSettings(roomA, "forest"),
         saveCanonicalGlobalSettings,
         onRoomMetadataLoaded: vi.fn(),
@@ -577,8 +568,7 @@ describe("useRoomSettingsController", () => {
     const hook = renderHook(() =>
       useRoomSettingsController({
         activeRoom: roomA,
-        sessionToken: "",
-        deviceToken: "device-test",
+        preferenceAuthority: localPreferenceAuthority,
         canonicalGlobalSettings: globalSettings(roomA, "forest"),
         saveCanonicalGlobalSettings,
         onRoomMetadataLoaded: vi.fn(),
@@ -638,8 +628,7 @@ describe("useRoomSettingsController", () => {
     renderHook(() =>
       useRoomSettingsController({
         activeRoom: roomA,
-        sessionToken: "",
-        deviceToken: "device-test",
+        preferenceAuthority: localPreferenceAuthority,
         canonicalGlobalSettings: globalSettings(roomA, "forest", {
           label: "",
           topic: "",

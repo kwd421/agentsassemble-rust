@@ -19,8 +19,7 @@ import { roomSettingsKey, type RoomDockItem } from "../lib/roomDockModel";
 
 type UseRoomSettingsControllerOptions = {
   activeRoom: RoomDockItem;
-  sessionToken: string;
-  deviceToken: string;
+  preferenceAuthority: RoomPreferenceAuthority;
   canonicalGlobalSettings: RoomGlobalSettings | null;
   saveCanonicalGlobalSettings: (
     updates: RoomGlobalSettingsUpdate
@@ -28,6 +27,10 @@ type UseRoomSettingsControllerOptions = {
   onRoomMetadataLoaded: (meetingId: string, updates: Partial<RoomDockItem>) => void;
   enabled?: boolean;
 };
+
+export type RoomPreferenceAuthority =
+  | { kind: "local"; deviceToken: string }
+  | { kind: "remote-unavailable" };
 
 type PersistedRoomSettingsOverrides = RoomGlobalSettingsUpdate;
 
@@ -81,8 +84,7 @@ function authoritativeSettings(
 
 export function useRoomSettingsController({
   activeRoom,
-  sessionToken,
-  deviceToken,
+  preferenceAuthority,
   canonicalGlobalSettings,
   saveCanonicalGlobalSettings,
   onRoomMetadataLoaded,
@@ -110,6 +112,9 @@ export function useRoomSettingsController({
   canonicalGlobalSettingsRef.current = canonicalGlobalSettings;
   const activeRoomKey = roomSettingsKey(activeRoom);
   const activeMeetingId = activeRoom.meetingId;
+  const preferenceAuthorityKind = preferenceAuthority.kind;
+  const preferenceDeviceToken =
+    preferenceAuthority.kind === "local" ? preferenceAuthority.deviceToken : "";
   const canonicalGlobalSettingsSignature = canonicalGlobalSettings
     ? JSON.stringify(canonicalGlobalSettings)
     : "";
@@ -250,7 +255,7 @@ export function useRoomSettingsController({
     const meetingId = activeMeetingId;
     const key = activeRoomKey;
     const generation = beginPreferenceOperation(key);
-    if (sessionToken) {
+    if (preferenceAuthorityKind === "remote-unavailable") {
       setPreferenceStates((previous) => ({
         ...previous,
         [key]: {
@@ -276,7 +281,10 @@ export function useRoomSettingsController({
         ) {
           return null;
         }
-        return fetchRoomSettings(meetingId, { sessionToken, deviceToken });
+        return fetchRoomSettings(meetingId, {
+          sessionToken: "",
+          deviceToken: preferenceDeviceToken,
+        });
       })
       .then((settings) => {
         if (
@@ -310,10 +318,10 @@ export function useRoomSettingsController({
     activeRoomKey,
     applyPreferences,
     beginPreferenceOperation,
-    deviceToken,
     enabled,
     isCurrentPreferenceOperation,
-    sessionToken,
+    preferenceAuthorityKind,
+    preferenceDeviceToken,
   ]);
 
   const savePreferences = useCallback(
@@ -324,6 +332,14 @@ export function useRoomSettingsController({
       if (!room.meetingId) return Promise.resolve();
       const key = roomSettingsKey(room);
       const generation = beginPreferenceOperation(key);
+      if (preferenceAuthorityKind === "remote-unavailable") {
+        const error = new Error(ROOM_SESSION_PREFERENCES_UNAVAILABLE);
+        setPreferenceStates((previous) => ({
+          ...previous,
+          [key]: { status: "error", error },
+        }));
+        return Promise.reject(error);
+      }
       setPreferenceStates((previous) => ({
         ...previous,
         [key]: { status: "saving", error: null },
@@ -336,7 +352,10 @@ export function useRoomSettingsController({
           saveRoomSettings({
             roomId: room.meetingId,
             ...updates,
-            identity: { sessionToken, deviceToken },
+            identity: {
+              sessionToken: "",
+              deviceToken: preferenceDeviceToken,
+            },
           })
         )
         .then((settings) => {
@@ -372,9 +391,9 @@ export function useRoomSettingsController({
     [
       applyPreferences,
       beginPreferenceOperation,
-      deviceToken,
       isCurrentPreferenceOperation,
-      sessionToken,
+      preferenceAuthorityKind,
+      preferenceDeviceToken,
     ]
   );
 
@@ -478,11 +497,17 @@ export function useRoomSettingsController({
   const updateAppearance = useCallback(
     (room: RoomDockItem, updates: Partial<RoomAppearance>) => {
       const key = roomSettingsKey(room);
-      const nextAppearance = completeRoomAppearance({ ...appearanceFor(room), ...updates });
+      const { notifications, ...globalUpdates } = updates;
+      const nextAppearance = completeRoomAppearance({
+        ...appearanceFor(room),
+        ...globalUpdates,
+        ...(notifications && preferenceAuthorityKind === "local"
+          ? { notifications }
+          : {}),
+      });
       setAppearances((previous) => {
         return { ...previous, [key]: nextAppearance };
       });
-      const { notifications, ...globalUpdates } = updates;
       const globalWrite =
         Object.keys(globalUpdates).length > 0
           ? persist(room, {
@@ -494,11 +519,16 @@ export function useRoomSettingsController({
         : Promise.resolve();
       return Promise.all([globalWrite, preferenceWrite]).then(() => undefined);
     },
-    [appearanceFor, persist, persistPreferences]
+    [appearanceFor, persist, persistPreferences, preferenceAuthorityKind]
   );
 
   const updateChannelSetting = useCallback(
     (room: RoomDockItem, channelId: string, updates: Partial<ChannelSettings>) => {
+      if (preferenceAuthorityKind === "remote-unavailable") {
+        return persistPreferences(room, {
+          channelSettings: channelSettingsFor(room),
+        });
+      }
       const key = roomSettingsKey(room);
       const currentSettings = channelSettingsFor(room);
       const current = currentSettings[channelId];
@@ -510,7 +540,7 @@ export function useRoomSettingsController({
       setChannelSettings((previous) => ({ ...previous, [key]: nextSettings }));
       return persistPreferences(room, { channelSettings: nextSettings });
     },
-    [channelSettingsFor, persistPreferences]
+    [channelSettingsFor, persistPreferences, preferenceAuthorityKind]
   );
 
   const updateConversationMode = useCallback(
@@ -546,7 +576,7 @@ export function useRoomSettingsController({
     (room: RoomDockItem) => {
       const key = roomSettingsKey(room);
       const generation = beginPreferenceOperation(key);
-      if (sessionToken) {
+      if (preferenceAuthorityKind === "remote-unavailable") {
         setPreferenceStates((previous) => ({
           ...previous,
           [key]: {
@@ -563,7 +593,10 @@ export function useRoomSettingsController({
           preferenceWriteChainsRef.current[key] || Promise.resolve();
         void pendingWrite
           .then(() =>
-            fetchRoomSettings(room.meetingId, { sessionToken, deviceToken })
+            fetchRoomSettings(room.meetingId, {
+              sessionToken: "",
+              deviceToken: preferenceDeviceToken,
+            })
           )
           .then((settings) => {
             if (isCurrentPreferenceOperation(key, generation)) {
@@ -600,9 +633,9 @@ export function useRoomSettingsController({
       beginPreferenceOperation,
       beginSettingsOperation,
       canonicalGlobalSettings,
-      deviceToken,
       isCurrentPreferenceOperation,
-      sessionToken,
+      preferenceAuthorityKind,
+      preferenceDeviceToken,
     ]
   );
 
