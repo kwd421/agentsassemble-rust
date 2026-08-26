@@ -988,8 +988,9 @@ architecture.
   consume-on-wrong-purpose; local/private issuers keep a reserved capacity floor;
   ordinary clients gain no new requests-per-minute rejection behavior. Each public
   entry owns the non-serializable persistence-issued authorization rather than copied
-  identity strings. Its deadline is capped by the backing session expiry, and a
-  read-only session cannot mint a preference-write grant. Existing local/private
+  identity strings. Its monotonic deadline is capped by the backing session expiry,
+  and consumption also rechecks the authorization's absolute expiry before returning
+  it. A read-only session cannot mint a preference-write grant. Existing local/private
   issuance and purpose behavior are unchanged.
 - Trade-off: a stolen live session may keep churning grants within the existing HTTP
   work bounds, but cannot hold more than eight or cross the public partition. A rate
@@ -1001,10 +1002,12 @@ architecture.
   expiry pass, length check, UUID work, and insertion. Temporary same-toolchain size
   measurement found the authorization and public grant are 168 and 176 bytes; adding
   the inline variant changes `TicketAuthority` from 120 to 176 bytes and each stored
-  entry from 160 to 216 bytes. The absolute worst-case store increase is therefore
-  4,096 × 56 = 229,376 bytes. Keeping the value inline avoids a separate heap
-  allocation for every public grant; no memory-performance improvement beyond that
-  measured representation choice is claimed. This slice performs no disk I/O.
+  entry from 160 to 216 bytes. That is at most 4,096 × 56 = 229,376 bytes of
+  additional inline value size. It excludes heap capacity owned by strings,
+  `HashMap` allocation, and allocator overhead, so no total-heap upper bound is
+  claimed. Keeping the value inline avoids a separate heap allocation for every
+  public grant; no memory-performance improvement beyond that measured
+  representation choice is claimed. This slice performs no disk I/O.
   Five warmed debug-build runs of the real 16-public/2,304-private boundary test
   measured the first 16 uncontended public issue calls, excluding durable
   authorization, at 9.1–10.1 microseconds average and 18.6–23.5 microseconds maximum.

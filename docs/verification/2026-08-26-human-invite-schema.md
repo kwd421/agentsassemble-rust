@@ -1086,14 +1086,18 @@ in-memory contract required by the still-unmounted typed public exchanges.
   also counts public and same-session entries, so no second state owner exists.
 - Preserved contract: the grant owns the opaque persistence-issued authorization and
   exactly one of WebSocket connect, own profile, preference read, or preference write.
-  Wrong-purpose presentation consumes the grant. Grant TTL cannot exceed session
-  expiry, read-only sessions cannot mint preference-write authority, and private ticket
-  behavior is unchanged. The public exchange routes and target durable revalidation
-  are not mounted yet and are not counted as reachable parity.
+  Wrong-purpose presentation consumes the grant. Grant issuance caps its monotonic
+  deadline at session expiry, and consumption also rejects an authorization whose
+  absolute expiry has passed. Read-only sessions cannot mint preference-write
+  authority, and private ticket behavior is unchanged. The public exchange routes
+  and target durable revalidation are not mounted yet and are not counted as
+  reachable parity.
 - Measured cost: the one-time same-toolchain size probe measured 168 bytes for
   `HumanSessionAuthorization`, 176 for its public grant, and stored-entry growth from
-  160 to 216 bytes. At the hard 4,096-entry process bound that is at most 229,376 extra
-  bytes and no disk state. Five warmed debug runs of the exact boundary test measured
+  160 to 216 bytes. At the hard 4,096-entry process bound that is at most 229,376
+  bytes of inline slot growth; principal/ticket/proof string heap capacity, `HashMap`
+  allocation, and allocator overhead are excluded, and no total-heap bound is
+  claimed. The store adds no disk state. Five warmed debug runs of the exact boundary test measured
   the first 16 uncontended public issue calls at 9.1–10.1 microseconds average and
   18.6–23.5 microseconds maximum, excluding durable authorization but including mutex
   acquisition, sweep/count, UUID generation, and insertion. This is local diagnostic
@@ -1137,3 +1141,14 @@ profile grant. It does not change the current profile HTTP adapter or frontend.
   Clippy, and `make check` pass. The diff is 166 insertions and 8 deletions across four
   files; the 228-line authority and 639-line profile owner pass the unchanged source
   gate. HTTP consumption and frontend use remain explicitly incomplete.
+
+## Public human-session grant manual-review findings
+
+- The web review found that monotonic grant expiry alone could outlive the durable
+  session after a forward wall-clock change. Commit `9e3c874` keeps remove-first
+  consumption and rejects absolute session expiry before returning authority; a
+  controlled-time regression proves the rejected grant cannot be replayed.
+- The same review found that 229,376 bytes described only inline enum growth, not
+  string heap capacity or map/allocator overhead. The resource claim above is now
+  limited to what the same-toolchain `size_of` probe measured.
+- Final web and Daybreaker approval is pending correction review.
