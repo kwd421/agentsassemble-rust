@@ -38,7 +38,7 @@ impl RunningServer {
 
 #[tokio::test]
 async fn preflight_and_join_preserve_bounded_credentials_and_exact_retry() {
-    let (store, credentials) = fixture().await;
+    let (store, credentials) = fixture(InviteScope::ReadWrite).await;
     let server = start(store.clone()).await;
     let client = Client::new();
     let browser_credential = format!("aad1_{}", URL_SAFE_NO_PAD.encode([0xB7; 32]));
@@ -78,11 +78,10 @@ async fn preflight_and_join_preserve_bounded_credentials_and_exact_retry() {
     assert_eq!(first["client_type"], "browser");
     assert_eq!(first["participant_type"], "human");
     assert_eq!(first["avatar_image_url"], avatar);
-    let session_token = first["session_token"]
-        .as_str()
-        .unwrap_or_else(|| panic!("join response has no session token"));
-    assert!(session_token.starts_with("aas1."));
-    assert_eq!(session_token.len(), 48);
+    let session_token = canonical_session_token(&first);
+    let replacement_avatar =
+        assert_profile_exchange_boundary(&client, &server.base_url, &store, session_token, &avatar)
+            .await;
 
     let retry = join(
         &client,
@@ -130,10 +129,206 @@ async fn preflight_and_join_preserve_bounded_credentials_and_exact_retry() {
             .use_count,
         1
     );
-    assert_avatar_available(&client, &server.base_url, &avatar).await;
+    let replaced = client
+        .get(format!("{}{}", server.base_url, avatar))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("read replaced admission avatar: {error}"));
+    assert_eq!(replaced.status(), reqwest::StatusCode::NOT_FOUND);
+    assert_avatar_available(&client, &server.base_url, &replacement_avatar).await;
     assert_avatar_available(&client, &server.base_url, &other_browser_avatar).await;
 
     server.stop().await;
+}
+
+#[tokio::test]
+async fn read_only_session_patches_profile_but_cannot_upload_an_avatar() {
+    let (store, credentials) = fixture(InviteScope::ReadOnly).await;
+    let server = start(store).await;
+    let client = Client::new();
+    let browser_credential = format!("aad1_{}", URL_SAFE_NO_PAD.encode([0xC7; 32]));
+    let admitted = join(
+        &client,
+        &server.base_url,
+        credentials.join_code(),
+        &browser_credential,
+        "223e4567-e89b-12d3-a456-426614174000",
+        "Read Only Guest",
+        "",
+    )
+    .await;
+    assert_eq!(admitted["invite_scope"], "read_only");
+    let session_token = admitted["session_token"]
+        .as_str()
+        .unwrap_or_else(|| panic!("read-only admission has no session token"));
+
+    let update_ticket = issue_profile_ticket(&client, &server.base_url, session_token).await;
+    let updated: Value = client
+        .post(format!("{}/api/user-profile", server.base_url))
+        .header("authorization", format!("Bearer {update_ticket}"))
+        .json(&json!({"custom_status": "Still a person profile"}))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("patch read-only person profile: {error}"))
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("decode read-only person profile: {error}"));
+    assert_eq!(
+        updated["profile"]["custom_status"],
+        "Still a person profile"
+    );
+
+    let upload_ticket = issue_profile_ticket(&client, &server.base_url, session_token).await;
+    let rejected = client
+        .post(format!("{}/api/attachments", server.base_url))
+        .header("authorization", format!("Bearer {upload_ticket}"))
+        .body("{")
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("reject read-only avatar upload: {error}"));
+    assert_eq!(rejected.status(), reqwest::StatusCode::FORBIDDEN);
+    let rejected: Value = rejected
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("decode read-only upload rejection: {error}"));
+    assert_eq!(rejected["code"], "session_read_only");
+    server.stop().await;
+}
+
+async fn assert_profile_exchange_boundary(
+    client: &Client,
+    base_url: &str,
+    store: &SqliteStore,
+    session_token: &str,
+    admitted_avatar: &str,
+) -> String {
+    let raw_target = client
+        .get(format!("{base_url}/api/user-profile"))
+        .header("authorization", format!("Bearer {session_token}"))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("reject raw session at profile target: {error}"));
+    assert_eq!(raw_target.status(), reqwest::StatusCode::UNAUTHORIZED);
+
+    let nonempty = client
+        .post(format!("{base_url}/api/session-tickets/profile"))
+        .header("authorization", format!("Bearer {session_token}"))
+        .body("{}")
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("reject nonempty profile exchange: {error}"));
+    assert_eq!(nonempty.status(), reqwest::StatusCode::BAD_REQUEST);
+
+    let read_ticket = issue_profile_ticket(client, base_url, session_token).await;
+    let profile: Value = client
+        .get(format!("{base_url}/api/user-profile"))
+        .header("authorization", format!("Bearer {read_ticket}"))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("read exchanged profile: {error}"))
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("decode exchanged profile: {error}"));
+    assert_eq!(profile["profile"]["display_name"], "Boundary Guest");
+    assert_eq!(profile["profile"]["avatar_image_url"], admitted_avatar);
+    let replay = client
+        .get(format!("{base_url}/api/user-profile"))
+        .header("authorization", format!("Bearer {read_ticket}"))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("reject profile ticket replay: {error}"));
+    assert_eq!(replay.status(), reqwest::StatusCode::UNAUTHORIZED);
+
+    let upload_ticket = issue_profile_ticket(client, base_url, session_token).await;
+    let upload: Value = client
+        .post(format!("{base_url}/api/attachments"))
+        .header("authorization", format!("Bearer {upload_ticket}"))
+        .json(&json!({
+            "purpose": "profile_avatar",
+            "filename": "replacement.png",
+            "content_type": "image/png",
+            "data_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMQ0bD5DwACRAF4aig0hQAAAABJRU5ErkJggg=="
+        }))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("upload exchanged profile avatar: {error}"))
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("decode exchanged profile avatar: {error}"));
+    let replacement_avatar = upload["attachment"]["url"]
+        .as_str()
+        .unwrap_or_else(|| panic!("exchanged profile avatar URL is missing"));
+
+    let update_ticket = issue_profile_ticket(client, base_url, session_token).await;
+    let updated: Value = client
+        .post(format!("{base_url}/api/user-profile"))
+        .header("authorization", format!("Bearer {update_ticket}"))
+        .json(&json!({
+            "display_name": "Exchanged Guest",
+            "avatar_image_url": replacement_avatar,
+            "mic_muted": true,
+            "deafened": true
+        }))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("update exchanged profile: {error}"))
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("decode updated exchanged profile: {error}"));
+    assert_eq!(updated["profile"]["display_name"], "Exchanged Guest");
+    assert_eq!(updated["profile"]["avatar_image_url"], replacement_avatar);
+    assert_eq!(updated["profile"]["mic_muted"], true);
+    assert_eq!(updated["profile"]["deafened"], true);
+
+    let participant = store
+        .participant("general", "invite-boundary-guest")
+        .await
+        .unwrap_or_else(|error| panic!("inspect exchanged participant projection: {error}"));
+    assert_eq!(participant.display_name, "Exchanged Guest");
+    assert_eq!(participant.avatar_image_url, replacement_avatar);
+    assert!(!participant.muted);
+    let old_avatar = client
+        .get(format!("{base_url}{admitted_avatar}"))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("read replaced admitted avatar: {error}"));
+    assert_eq!(old_avatar.status(), reqwest::StatusCode::NOT_FOUND);
+    assert_avatar_available(client, base_url, replacement_avatar).await;
+    replacement_avatar.to_owned()
+}
+
+async fn issue_profile_ticket(client: &Client, base_url: &str, session_token: &str) -> String {
+    let response = client
+        .post(format!("{base_url}/api/session-tickets/profile"))
+        .header("authorization", format!("Bearer {session_token}"))
+        .header("origin", "tauri://localhost")
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("exchange human profile ticket: {error}"));
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    assert_eq!(
+        response.headers()["access-control-allow-origin"],
+        "tauri://localhost"
+    );
+    assert_eq!(response.headers()["cache-control"], "private, no-store");
+    let response: Value = response
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("decode human profile ticket: {error}"));
+    assert!(response["ttl_seconds"].as_u64().is_some_and(|ttl| ttl > 0));
+    response["ticket"]
+        .as_str()
+        .unwrap_or_else(|| panic!("human profile ticket is missing"))
+        .to_owned()
+}
+
+fn canonical_session_token(admission: &Value) -> &str {
+    let token = admission["session_token"]
+        .as_str()
+        .unwrap_or_else(|| panic!("join response has no session token"));
+    assert!(token.starts_with("aas1."));
+    assert_eq!(token.len(), 48);
+    token
 }
 
 async fn prepare_prejoin_avatar_flow(
@@ -352,7 +547,9 @@ async fn assert_avatar_available(client: &Client, base_url: &str, avatar_url: &s
     assert_eq!(response.headers()["cache-control"], "private, no-store");
 }
 
-async fn fixture() -> (
+async fn fixture(
+    invite_scope: InviteScope,
+) -> (
     SqliteStore,
     agentsassemble_server::IssuedHumanInviteCredentials,
 ) {
@@ -387,7 +584,7 @@ async fn fixture() -> (
         room_id: "general".to_owned(),
         base_participant_id: "invite-boundary-guest".to_owned(),
         display_name: "Invite Boundary Guest".to_owned(),
-        invite_scope: InviteScope::ReadWrite,
+        invite_scope,
         issued_at,
         expires_at: issued_at + ChronoDuration::days(1),
     };
@@ -438,7 +635,7 @@ async fn start(store: SqliteStore) -> RunningServer {
     let server_cancellation = cancellation.clone();
     let state = AppState::local(
         store,
-        TicketStore::new(Duration::from_secs(30), 32),
+        TicketStore::new(Duration::from_secs(30), 4_096),
         HostSecret::new(HOST_TOKEN)
             .unwrap_or_else(|error| panic!("validate human invite host secret: {error}")),
         ProviderCatalogService::fixed(ProviderCatalog::default()),
