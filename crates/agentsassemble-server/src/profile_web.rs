@@ -1,5 +1,7 @@
 use agentsassemble_domain::{AuthenticatedPrincipal, LOCAL_OPERATOR_USER_ID, UserProfilePatch};
-use agentsassemble_persistence::{PersistenceError, ProfileAttachment};
+use agentsassemble_persistence::{
+    HumanPrejoinAvatarAuthorization, PersistenceError, ProfileAttachment,
+};
 use axum::{
     Json, Router, body,
     extract::{Path, Query, Request, State},
@@ -110,33 +112,7 @@ async fn upload_attachment(
         });
     }
     let prejoin_authority = if authority.is_none() {
-        if payload.invite_token.trim().is_empty() {
-            return Err(ProfileHttpError::new(
-                StatusCode::UNAUTHORIZED,
-                "invite_token_required",
-                "invite_token is required for a pre-join profile upload.",
-            ));
-        }
-        let credential = authenticated_invite_evidence(
-            &state.human_invite_credentials,
-            payload.invite_token.trim(),
-        )
-        .map_err(|_| {
-            ProfileHttpError::new(
-                StatusCode::FORBIDDEN,
-                "invite_invalid",
-                "Invite is invalid.",
-            )
-        })?;
-        let browser_credential_fingerprint =
-            fingerprint_browser_credential(payload.device_token.trim()).ok_or_else(|| {
-                ProfileHttpError::new(
-                    StatusCode::BAD_REQUEST,
-                    "browser_credential_invalid",
-                    "A canonical browser credential is required.",
-                )
-            })?;
-        Some((credential, browser_credential_fingerprint))
+        Some(authorize_prejoin_avatar_upload(&state, &payload).await?)
     } else {
         None
     };
@@ -169,12 +145,11 @@ async fn upload_attachment(
                 )
                 .await?
         }
-        (None, Some((credential, browser_credential_fingerprint))) => {
+        (None, Some(prejoin_authorization)) => {
             state
                 .store
                 .store_human_prejoin_avatar(
-                    &credential,
-                    &browser_credential_fingerprint,
+                    &prejoin_authorization,
                     &payload.filename,
                     &payload.content_type,
                     content,
@@ -184,6 +159,41 @@ async fn upload_attachment(
         _ => return Err(ProfileHttpError::internal()),
     };
     Ok(Json(json!({"attachment": attachment})))
+}
+
+async fn authorize_prejoin_avatar_upload(
+    state: &AppState,
+    payload: &AttachmentUpload,
+) -> Result<HumanPrejoinAvatarAuthorization, ProfileHttpError> {
+    if payload.invite_token.trim().is_empty() {
+        return Err(ProfileHttpError::new(
+            StatusCode::UNAUTHORIZED,
+            "invite_token_required",
+            "invite_token is required for a pre-join profile upload.",
+        ));
+    }
+    let credential =
+        authenticated_invite_evidence(&state.human_invite_credentials, payload.invite_token.trim())
+            .map_err(|_| {
+                ProfileHttpError::new(
+                    StatusCode::FORBIDDEN,
+                    "invite_invalid",
+                    "Invite is invalid.",
+                )
+            })?;
+    let browser_credential_fingerprint =
+        fingerprint_browser_credential(payload.device_token.trim()).ok_or_else(|| {
+            ProfileHttpError::new(
+                StatusCode::BAD_REQUEST,
+                "browser_credential_invalid",
+                "A canonical browser credential is required.",
+            )
+        })?;
+    state
+        .store
+        .authorize_human_prejoin_avatar(&credential, &browser_credential_fingerprint)
+        .await
+        .map_err(ProfileHttpError::from)
 }
 
 async fn read_attachment(

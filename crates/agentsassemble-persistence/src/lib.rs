@@ -80,6 +80,7 @@ pub use human_invite_preflight::{
     HumanInvitePreflightPerson, HumanInvitePreflightRejection, HumanInvitePreflightRequest,
 };
 pub use human_invites::{HumanInvite, NewHumanInvite};
+pub use human_prejoin_attachments::HumanPrejoinAvatarAuthorization;
 pub use participant_mute::ParticipantMuteMutation;
 pub use private_fs::secure_private_directory;
 pub use profile_attachments::{ProfileAttachment, ProfileAttachmentMetadata};

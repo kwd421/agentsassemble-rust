@@ -26,6 +26,15 @@ struct PrejoinAuthority {
     invite_quota_fingerprint: [u8; 32],
 }
 
+/// Fixed-size evidence that the invite and room were current before image decoding.
+///
+/// Fields are private so callers cannot construct or alter this capability. The
+/// final write still revalidates the durable authority to close the decode-time race.
+pub struct HumanPrejoinAvatarAuthorization {
+    credential: HumanInviteCredentialEvidence,
+    browser_credential_fingerprint: [u8; 32],
+}
+
 struct QuotaUsage {
     invite_count: i64,
     invite_bytes: i64,
@@ -38,11 +47,36 @@ struct QuotaUsage {
 }
 
 impl SqliteStore {
-    /// Stores one canonical avatar under exact invite-and-browser custody.
+    /// Authorizes image decoding for one current invite-and-browser custody subject.
     ///
-    /// Invite authority is checked before image decoding and again inside the final
-    /// write transaction. The successful write atomically supersedes only the same
-    /// custody subject's older pending avatar.
+    /// # Errors
+    ///
+    /// Fails on a non-current invite or durable authority/storage errors.
+    pub async fn authorize_human_prejoin_avatar(
+        &self,
+        credential: &HumanInviteCredentialEvidence,
+        browser_credential_fingerprint: &[u8; 32],
+    ) -> Result<HumanPrejoinAvatarAuthorization, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        current_prejoin_authority(
+            &mut transaction,
+            credential,
+            browser_credential_fingerprint,
+            Utc::now(),
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(HumanPrejoinAvatarAuthorization {
+            credential: credential.clone(),
+            browser_credential_fingerprint: *browser_credential_fingerprint,
+        })
+    }
+
+    /// Stores one canonical avatar under preauthorized invite-and-browser custody.
+    ///
+    /// The opaque authorization proves authority was checked before image decoding.
+    /// This method checks it again inside the final write transaction. A successful
+    /// write atomically supersedes only the same custody subject's older pending avatar.
     ///
     /// # Errors
     ///
@@ -50,29 +84,18 @@ impl SqliteStore {
     /// authority/storage errors. Raw invite and browser credentials are never accepted.
     pub async fn store_human_prejoin_avatar(
         &self,
-        credential: &HumanInviteCredentialEvidence,
-        browser_credential_fingerprint: &[u8; 32],
+        authorization: &HumanPrejoinAvatarAuthorization,
         filename: &str,
         content_type: &str,
         content: Vec<u8>,
     ) -> Result<ProfileAttachmentMetadata, PersistenceError> {
-        let mut precheck = self.pool.begin().await?;
-        current_prejoin_authority(
-            &mut precheck,
-            credential,
-            browser_credential_fingerprint,
-            Utc::now(),
-        )
-        .await?;
-        precheck.commit().await?;
-
         let (canonical, size) = prepare_profile_attachment(filename, content_type, content).await?;
         let now = Utc::now();
         let mut transaction = self.pool.begin().await?;
         let authority = current_prejoin_authority(
             &mut transaction,
-            credential,
-            browser_credential_fingerprint,
+            &authorization.credential,
+            &authorization.browser_credential_fingerprint,
             now,
         )
         .await?;
@@ -260,26 +283,37 @@ mod tests {
     async fn exact_custody_replaces_only_its_pending_avatar_and_revalidates_invite() {
         let store = fixture().await;
         let credential = join_credential();
-        let first = store
-            .store_human_prejoin_avatar(
-                &credential,
-                &[0x31; 32],
-                "../avatar.webp",
-                "image/webp",
-                valid_image(ImageFormat::WebP),
-            )
-            .await
-            .unwrap_or_else(|error| panic!("store first prejoin avatar: {error}"));
-        let second = store
-            .store_human_prejoin_avatar(
-                &credential,
-                &[0x31; 32],
-                "replacement.jpg",
-                "image/jpeg",
-                valid_image(ImageFormat::Jpeg),
-            )
-            .await
-            .unwrap_or_else(|error| panic!("replace exact-custody avatar: {error}"));
+        assert_rejected_code(
+            store
+                .authorize_human_prejoin_avatar(
+                    &HumanInviteCredentialEvidence::JoinCode {
+                        fingerprint: [0x99; 32],
+                    },
+                    &[0x31; 32],
+                )
+                .await,
+            "invite_invalid",
+        );
+        let first = store_prejoin_avatar(
+            &store,
+            &credential,
+            &[0x31; 32],
+            "../avatar.webp",
+            "image/webp",
+            valid_image(ImageFormat::WebP),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("store first prejoin avatar: {error}"));
+        let second = store_prejoin_avatar(
+            &store,
+            &credential,
+            &[0x31; 32],
+            "replacement.jpg",
+            "image/jpeg",
+            valid_image(ImageFormat::Jpeg),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("replace exact-custody avatar: {error}"));
         assert_ne!(first.id, second.id);
         assert_eq!(pending_count(&store).await, 1);
         assert!(!attachment_exists(&store, &first.id).await);
@@ -301,17 +335,22 @@ mod tests {
             .unwrap_or_else(|error| panic!("parse avatar created_at: {error}"));
         assert_eq!(row.get::<i64, _>("expires_at") - created.timestamp(), 3600);
 
-        store
-            .store_human_prejoin_avatar(
-                &credential,
-                &[0x32; 32],
-                "other.png",
-                "image/png",
-                valid_image(ImageFormat::Png),
-            )
-            .await
-            .unwrap_or_else(|error| panic!("store other browser avatar: {error}"));
+        store_prejoin_avatar(
+            &store,
+            &credential,
+            &[0x32; 32],
+            "other.png",
+            "image/png",
+            valid_image(ImageFormat::Png),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("store other browser avatar: {error}"));
         assert_eq!(pending_count(&store).await, 2);
+
+        let stale_authorization = store
+            .authorize_human_prejoin_avatar(&credential, &[0x33; 32])
+            .await
+            .unwrap_or_else(|error| panic!("authorize avatar before revoke: {error}"));
 
         sqlx::query("UPDATE room_invites SET revoked = 1")
             .execute(&store.pool)
@@ -320,8 +359,7 @@ mod tests {
         assert_rejected_code(
             store
                 .store_human_prejoin_avatar(
-                    &credential,
-                    &[0x33; 32],
+                    &stale_authorization,
                     "blocked.png",
                     "image/png",
                     valid_image(ImageFormat::Png),
@@ -338,43 +376,43 @@ mod tests {
         let credential = join_credential();
         let mut first_id = String::new();
         for byte in 0..8 {
-            let stored = store
-                .store_human_prejoin_avatar(
-                    &credential,
-                    &[byte; 32],
-                    "avatar.png",
-                    "image/png",
-                    valid_image(ImageFormat::Png),
-                )
-                .await
-                .unwrap_or_else(|error| panic!("store quota avatar {byte}: {error}"));
+            let stored = store_prejoin_avatar(
+                &store,
+                &credential,
+                &[byte; 32],
+                "avatar.png",
+                "image/png",
+                valid_image(ImageFormat::Png),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("store quota avatar {byte}: {error}"));
             if byte == 0 {
                 first_id = stored.id;
             }
         }
         assert_eq!(pending_count(&store).await, 8);
         assert_rejected_code(
-            store
-                .store_human_prejoin_avatar(
-                    &credential,
-                    &[0x40; 32],
-                    "ninth.png",
-                    "image/png",
-                    valid_image(ImageFormat::Png),
-                )
-                .await,
-            "attachment_quota_reached",
-        );
-        let replacement = store
-            .store_human_prejoin_avatar(
+            store_prejoin_avatar(
+                &store,
                 &credential,
-                &[0; 32],
-                "first-replacement.png",
+                &[0x40; 32],
+                "ninth.png",
                 "image/png",
                 valid_image(ImageFormat::Png),
             )
-            .await
-            .unwrap_or_else(|error| panic!("replace at quota boundary: {error}"));
+            .await,
+            "attachment_quota_reached",
+        );
+        let replacement = store_prejoin_avatar(
+            &store,
+            &credential,
+            &[0; 32],
+            "first-replacement.png",
+            "image/png",
+            valid_image(ImageFormat::Png),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("replace at quota boundary: {error}"));
         assert_ne!(replacement.id, first_id);
         assert!(!attachment_exists(&store, &first_id).await);
         assert_eq!(pending_count(&store).await, 8);
@@ -424,6 +462,22 @@ mod tests {
                 .await,
             "attachment_quota_reached",
         );
+    }
+
+    async fn store_prejoin_avatar(
+        store: &SqliteStore,
+        credential: &HumanInviteCredentialEvidence,
+        browser_credential_fingerprint: &[u8; 32],
+        filename: &str,
+        content_type: &str,
+        content: Vec<u8>,
+    ) -> Result<crate::ProfileAttachmentMetadata, PersistenceError> {
+        let authorization = store
+            .authorize_human_prejoin_avatar(credential, browser_credential_fingerprint)
+            .await?;
+        store
+            .store_human_prejoin_avatar(&authorization, filename, content_type, content)
+            .await
     }
 
     fn join_credential() -> HumanInviteCredentialEvidence {

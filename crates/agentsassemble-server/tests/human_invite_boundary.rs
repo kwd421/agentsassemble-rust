@@ -9,7 +9,10 @@ use agentsassemble_server::{
     AppState, HostSecret, HumanInviteCredentialAuthority, HumanInviteCredentialDraft, TicketStore,
     serve,
 };
-use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use base64::{
+    Engine as _,
+    engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+};
 use chrono::{DateTime, Duration as ChronoDuration, TimeZone, Utc};
 use reqwest::Client;
 use serde_json::{Value, json};
@@ -148,6 +151,28 @@ async fn prepare_prejoin_avatar_flow(
         .await
         .unwrap_or_else(|error| panic!("request prejoin upload with invalid ticket: {error}"));
     assert_eq!(invalid_ticket.status(), reqwest::StatusCode::UNAUTHORIZED);
+
+    let unknown_join_code = format!("aaj1_{}", URL_SAFE_NO_PAD.encode([0xE1; 24]));
+    let large_valid_base64 = STANDARD.encode(vec![0_u8; 10 * 1024 * 1024]);
+    let unknown_invite = client
+        .post(format!("{base_url}/api/attachments"))
+        .json(&json!({
+            "purpose": "profile_avatar",
+            "invite_token": unknown_join_code,
+            "device_token": browser_credential,
+            "filename": "unknown.png",
+            "content_type": "image/png",
+            "data_base64": large_valid_base64,
+        }))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("request unknown-invite prejoin upload: {error}"));
+    assert_eq!(unknown_invite.status(), reqwest::StatusCode::FORBIDDEN);
+    let unknown_invite: Value = unknown_invite
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("decode unknown-invite prejoin rejection: {error}"));
+    assert_eq!(unknown_invite["code"], "invite_invalid");
 
     let other_browser_avatar =
         upload_prejoin_avatar(client, base_url, invite_token, other_browser_credential).await;
