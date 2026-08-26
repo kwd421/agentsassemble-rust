@@ -77,25 +77,66 @@ describe("desktop profile HTTP routing", () => {
     expect(secondHeaders.get("Content-Type")).toBe("application/json");
   });
 
-  it("keeps an admitted participant on its own session authority", async () => {
+  it("exchanges an admitted session for a fresh one-use profile ticket", async () => {
     const invoke = vi.fn();
     Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ profile: { display_name: "Guest" } }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      })
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ ticket: "a".repeat(64), ttl_seconds: 30 }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ profile: { display_name: "Guest" } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ ticket: "b".repeat(64), ttl_seconds: 30 }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ profile: { display_name: "Changed" } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      );
     vi.stubGlobal("fetch", fetchMock);
 
     await fetchJsonWithIdentity("/api/user-profile", {
       roomId: "general",
       sessionToken: "guest-session",
     });
+    await postJsonWithIdentity(
+      "/api/user-profile",
+      { display_name: "Changed" },
+      { roomId: "general", sessionToken: "guest-session" }
+    );
 
     expect(invoke).not.toHaveBeenCalled();
-    expect(fetchMock).toHaveBeenCalledWith("/api/user-profile", {
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/session-tickets/profile", {
+      method: "POST",
       headers: { Authorization: "Bearer guest-session" },
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/user-profile", {
+      headers: { Authorization: `Bearer ${"a".repeat(64)}` },
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/session-tickets/profile", {
+      method: "POST",
+      headers: { Authorization: "Bearer guest-session" },
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(4, "/api/user-profile", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${"b".repeat(64)}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ display_name: "Changed" }),
     });
   });
 

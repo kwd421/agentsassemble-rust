@@ -13,6 +13,26 @@ function isServerWideProfileRoute(url: string): boolean {
   return path === "/api/user-profile" || path === "/api/attachments";
 }
 
+async function exchangeProfileTicket(sessionToken: string): Promise<string> {
+  const res = await fetch("/api/session-tickets/profile", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  });
+  if (!res.ok) throw await responseError(res);
+  const payload = await res.json() as { ticket?: unknown };
+  const ticket = typeof payload.ticket === "string" ? payload.ticket : "";
+  if (!/^[0-9a-f]{64}$/.test(ticket)) {
+    throw new Error("Profile ticket response is invalid.");
+  }
+  return ticket;
+}
+
+async function profileTargetToken(url: string, sessionToken: string): Promise<string> {
+  return sessionToken && isServerWideProfileRoute(url)
+    ? exchangeProfileTicket(sessionToken)
+    : sessionToken;
+}
+
 export function loadHostToken(): string {
   try {
     return String(sessionStorage.getItem(HOST_TOKEN_STORAGE_KEY) || inMemoryHostToken || "").trim();
@@ -145,8 +165,9 @@ export async function fetchJsonWithIdentity<T>(
     if (!res.ok) throw await responseError(res);
     return res.json();
   }
+  const targetToken = await profileTargetToken(url, sessionToken);
   const headers: Record<string, string> = {};
-  if (sessionToken) headers.Authorization = `Bearer ${sessionToken}`;
+  if (targetToken) headers.Authorization = `Bearer ${targetToken}`;
   if (deviceToken) headers["X-Device-Token"] = deviceToken;
   const res = await fetch(url, { headers });
   if (!res.ok) throw await responseError(res);
@@ -176,8 +197,9 @@ export async function postJsonWithIdentity<T>(
     if (!res.ok) throw await responseError(res);
     return res.json();
   }
+  const targetToken = await profileTargetToken(url, sessionToken);
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (sessionToken) headers.Authorization = `Bearer ${sessionToken}`;
+  if (targetToken) headers.Authorization = `Bearer ${targetToken}`;
   if (deviceToken) headers["X-Device-Token"] = deviceToken;
   const res = await fetch(url, {
     method: "POST",
