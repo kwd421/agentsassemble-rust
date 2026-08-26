@@ -1021,6 +1021,51 @@ flag is added meanwhile.
   exchange and target routes remain explicitly unmounted until their durable
   post-consumption revalidation is implemented.
 
+### Profile targets reuse one durable session snapshot
+
+- Prior cost and threat: accepting the principal snapshot carried by an in-memory
+  grant would allow a revoked, expired, left, foreign, or corrupt session to read or
+  mutate the person profile. Re-running the generic room-principal profile path would
+  still not prove the exact human-session fingerprint, expiry, client, scope, room,
+  user, and participant captured by the grant. A separate profile lookup after the
+  human-session join would also reread profile state already decoded by that join.
+- Change intent and smallest design: commit `8efaa25` adds one internal
+  `revalidate_human_session` function to the existing persistence owner. It resolves
+  the exact fingerprint in the target transaction and compares every immutable
+  provenance field plus the server-derived capability ceiling. Display name is
+  deliberately excluded from the equality check because the revisioned person
+  profile owns that mutable value. The resolver returns its already decoded profile
+  to the profile target, avoiding a second indexed profile query. `UserProfile` is
+  boxed only in the internal resolution enum to keep its small failure variants under
+  the warning-denied large-enum gate; this is one explicit heap allocation, not a
+  cache or retained owner.
+- Preserved contract: a profile read revalidates immediately before returning its
+  result. A profile patch revalidates and commits the profile, avatar binding, room
+  projection, and events in the same SQLite transaction. Read-only room scope may
+  still read and patch the person profile, but cannot acquire new upload authority.
+  Current profile name/status/avatar changes do not invalidate an otherwise exact
+  grant. Session end/expiry, inactive room, participant leave, missing/corrupt profile,
+  or changed immutable provenance fails closed. Existing local/private profile methods
+  and projection semantics are unchanged.
+- Observed CPU, memory, disk, and latency cost: a target performs one read transaction
+  and the existing indexed session lookup with three primary-key joins, JSON decoding
+  for one room, participant, and profile, plus one temporary profile box. Read commits
+  without another query. Write adds only the pre-existing profile patch, optional
+  avatar authorization/rebinding, and active-human room projection work. No cache,
+  table, index, timer, task, retry, route, or fallback was added, and no latency
+  improvement is claimed without a representative HTTP measurement. Reusing the
+  decoded profile removes one otherwise certain primary-key query rather than adding
+  speculative state.
+- Verification: a real read-only admission reads and updates its full profile, then
+  reuses the same grant provenance after the mutable display name changes. A changed
+  durable expiry is rejected as `invalid_state`; participant leave rejects both read
+  and write as `session_revoked`; the rejected patch leaves no value after membership
+  restoration; a corrupt profile revision still fails. All 160 persistence tests,
+  warning-denied persistence Clippy, and `make check` pass. The implementation is 166
+  insertions and 8 deletions across four files; production owners are 228 and 639
+  lines under the unchanged gate. Public exchange and profile HTTP consumption remain
+  unmounted and therefore are not yet reachable parity.
+
 ### Targeted expiry materialization instead of a session sweeper
 
 - Prior cost and correctness threat: the original session owner deletes expired

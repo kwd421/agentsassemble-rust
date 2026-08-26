@@ -1108,3 +1108,32 @@ in-memory contract required by the still-unmounted typed public exchanges.
   warning-denied server Clippy and `make check` pass. The implementation diff is 504
   insertions and 18 deletions across three files, below 1,000 lines, and the 757-line
   implementation passes the unchanged source gate.
+
+## Human-session profile target revalidation
+
+Commit `8efaa25` implements the persistence target behind the still-unmounted public
+profile grant. It does not change the current profile HTTP adapter or frontend.
+
+- Security contract: the target resolves the grant's exact session fingerprint in the
+  same transaction as the read or write and compares expiry, room, user, participant,
+  browser client kind, scope, operator state, and derived capabilities. A current
+  profile display-name change is allowed because profile state owns that mutable value;
+  a changed immutable session value is corrupt provenance. Ended/expired sessions,
+  inactive rooms, left participants, and missing or corrupt profile bindings fail
+  closed. Profile writes keep avatar ownership and every room projection/event in the
+  same transaction.
+- Smallest-design and cost evidence: the existing resolver now returns the full
+  profile it had already decoded, so the target does not issue a second profile query.
+  The profile is boxed once inside the internal resolution enum to satisfy the
+  warning-denied large-enum boundary; it is neither cached nor retained after the
+  operation. A read remains one transaction and one indexed session query with three
+  primary-key joins. A write adds the unchanged profile mutation/projection work. No
+  route, table, index, cache, task, timer, retry, compatibility path, or fallback was
+  added, and no unmeasured latency improvement is claimed.
+- Verification result: one real read-only admission proves profile read/update,
+  mutable display-name continuity, changed-expiry rejection, post-grant participant
+  leave rejection for both read and write, rollback of the rejected patch, and corrupt
+  profile-revision failure. All 160 persistence tests, warning-denied persistence
+  Clippy, and `make check` pass. The diff is 166 insertions and 8 deletions across four
+  files; the 228-line authority and 639-line profile owner pass the unchanged source
+  gate. HTTP consumption and frontend use remain explicitly incomplete.
