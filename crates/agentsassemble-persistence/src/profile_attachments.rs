@@ -1,4 +1,4 @@
-use agentsassemble_domain::{AuthenticatedPrincipal, avatar_attachment_id};
+use agentsassemble_domain::{AuthenticatedPrincipal, InviteScope, avatar_attachment_id};
 use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
 use sqlx::{Row, Sqlite, Transaction};
@@ -6,8 +6,9 @@ use uuid::Uuid;
 
 use crate::profile_store::ProfileIdentity;
 use crate::{
-    PersistenceError, SqliteStore,
+    HumanSessionAuthorization, PersistenceError, SqliteStore,
     authority::authorize_session,
+    human_session_authority::revalidate_human_session,
     raster_assets::{
         CanonicalRaster, MAX_RASTER_BYTES, enforce_storage_replacement, prepare_raster,
         sanitize_filename, validate_stored_raster,
@@ -50,6 +51,40 @@ impl SqliteStore {
         let (canonical, size) = prepare_raster(filename, content_type, content).await?;
         let mut transaction = self.pool.begin().await?;
         authorize_session(&mut transaction, principal).await?;
+        let metadata = store_profile_attachment_in_transaction(
+            &mut transaction,
+            ProfileIdentity {
+                user_id: &principal.principal_id,
+                participant_id: &principal.participant_id,
+            },
+            canonical,
+            size,
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(metadata)
+    }
+
+    /// Stores a pending avatar only after revalidating the consumed human-session grant.
+    ///
+    /// # Errors
+    ///
+    /// Fails closed for read-only scope, stale session provenance, malformed image bytes,
+    /// decode-resource limits, storage exhaustion, or `SQLite` errors.
+    pub async fn store_human_session_profile_attachment(
+        &self,
+        authorization: &HumanSessionAuthorization,
+        filename: &str,
+        content_type: &str,
+        content: Vec<u8>,
+    ) -> Result<ProfileAttachmentMetadata, PersistenceError> {
+        require_avatar_upload_scope(authorization)?;
+        let (canonical, size) = prepare_raster(filename, content_type, content).await?;
+        let mut transaction = self.pool.begin().await?;
+        let (current, _) =
+            revalidate_human_session(&mut transaction, authorization, Utc::now()).await?;
+        require_avatar_upload_scope(&current)?;
+        let principal = current.principal();
         let metadata = store_profile_attachment_in_transaction(
             &mut transaction,
             ProfileIdentity {
@@ -132,6 +167,19 @@ impl SqliteStore {
             ),
             content,
         })
+    }
+}
+
+fn require_avatar_upload_scope(
+    authorization: &HumanSessionAuthorization,
+) -> Result<(), PersistenceError> {
+    if authorization.principal().invite_scope == InviteScope::ReadWrite {
+        Ok(())
+    } else {
+        Err(rejected(
+            "session_read_only",
+            "Read-only room sessions cannot upload profile avatars.",
+        ))
     }
 }
 
