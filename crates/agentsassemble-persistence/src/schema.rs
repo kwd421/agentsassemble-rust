@@ -98,9 +98,16 @@ const TABLES: &[TableDefinition] = &[
         name: "room_invites",
         ddl: concat!(
             "CREATE TABLE IF NOT EXISTS room_invites (",
-            "invite_id TEXT PRIMARY KEY CHECK(length(invite_id) = 36), ",
-            "token_fingerprint BLOB NOT NULL UNIQUE ",
-            "CHECK(typeof(token_fingerprint) = 'blob' AND length(token_fingerprint) = 32), ",
+            "invite_id TEXT PRIMARY KEY CHECK(",
+            "typeof(invite_id) = 'text' AND length(invite_id) = 16 ",
+            "AND invite_id = lower(invite_id) ",
+            "AND invite_id NOT GLOB '*[^0-9a-f]*'), ",
+            "signed_token_fingerprint BLOB NOT NULL UNIQUE ",
+            "CHECK(typeof(signed_token_fingerprint) = 'blob' ",
+            "AND length(signed_token_fingerprint) = 32), ",
+            "join_code_fingerprint BLOB NOT NULL UNIQUE ",
+            "CHECK(typeof(join_code_fingerprint) = 'blob' ",
+            "AND length(join_code_fingerprint) = 32), ",
             "room_id TEXT NOT NULL, ",
             "base_participant_id TEXT NOT NULL CHECK(length(base_participant_id) > 0), ",
             "display_name TEXT NOT NULL CHECK(length(display_name) > 0), ",
@@ -445,25 +452,28 @@ mod tests {
                 panic!("insert participant {room_id}/{participant_id}: {error}")
             });
         }
-        for (invite_id, fingerprint, scope, max_uses) in [
+        for (invite_id, signed_fingerprint, join_fingerprint, scope, max_uses) in [
             (
-                "11111111-1111-1111-1111-111111111111",
+                "1111111111111111",
                 vec![0x11; 32],
+                vec![0x31; 32],
                 "read_only",
                 1_i64,
             ),
             (
-                "22222222-2222-2222-2222-222222222222",
+                "2222222222222222",
                 vec![0x22; 32],
+                vec![0x32; 32],
                 "read_write",
                 5_i64,
             ),
         ] {
             sqlx::query(
-                "INSERT INTO room_invites(invite_id, token_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at) VALUES (?, ?, 'room-a', 'participant-a', 'Guest', ?, ?, 0, 200, 0, 'user-a', 100)",
+                "INSERT INTO room_invites(invite_id, signed_token_fingerprint, join_code_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at) VALUES (?, ?, ?, 'room-a', 'participant-a', 'Guest', ?, ?, 0, 200, 0, 'user-a', 100)",
             )
             .bind(invite_id)
-            .bind(fingerprint)
+            .bind(signed_fingerprint)
+            .bind(join_fingerprint)
             .bind(scope)
             .bind(max_uses)
             .execute(pool)
@@ -520,8 +530,8 @@ mod tests {
     async fn human_sessions_require_exact_composite_authority() {
         let pool = installed_schema().await;
         seed_human_authorities(&pool).await;
-        let one_use = "11111111-1111-1111-1111-111111111111";
-        let reusable = "22222222-2222-2222-2222-222222222222";
+        let one_use = "1111111111111111";
+        let reusable = "2222222222222222";
 
         assert_eq!(
             sqlx::query_scalar::<_, String>(
@@ -676,12 +686,13 @@ mod tests {
         .into_iter()
         .enumerate()
         {
-            let accepted_id = format!("{:08}-0000-0000-0000-{:012}", index + 1, index + 1);
+            let accepted_id = format!("{:016x}", index + 1);
             sqlx::query(
-                "INSERT INTO room_invites(invite_id, token_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at) VALUES (?, ?, 'room-a', 'participant-a', 'Guest', 'read_write', ?, ?, 200, 0, 'user-a', 100)",
+                "INSERT INTO room_invites(invite_id, signed_token_fingerprint, join_code_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at) VALUES (?, ?, ?, 'room-a', 'participant-a', 'Guest', 'read_write', ?, ?, 200, 0, 'user-a', 100)",
             )
             .bind(&accepted_id)
             .bind(vec![index as u8 + 1; 32])
+            .bind(vec![index as u8 + 0x21; 32])
             .bind(configured)
             .bind(effective)
             .execute(&pool)
@@ -704,13 +715,14 @@ mod tests {
                 }
             );
 
-            let rejected_id = format!("{:08}-ffff-ffff-ffff-{:012}", index + 1, index + 1);
+            let rejected_id = format!("{:016x}", index + 0x101);
             assert!(
                 sqlx::query(
-                    "INSERT INTO room_invites(invite_id, token_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at) VALUES (?, ?, 'room-a', 'participant-a', 'Guest', 'read_write', ?, ?, 200, 0, 'user-a', 100)",
+                    "INSERT INTO room_invites(invite_id, signed_token_fingerprint, join_code_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at) VALUES (?, ?, ?, 'room-a', 'participant-a', 'Guest', 'read_write', ?, ?, 200, 0, 'user-a', 100)",
                 )
                 .bind(rejected_id)
                 .bind(vec![index as u8 + 0x41; 32])
+                .bind(vec![index as u8 + 0x61; 32])
                 .bind(configured)
                 .bind(effective + 1)
                 .execute(&pool)
