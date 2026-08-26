@@ -273,12 +273,19 @@ impl PreparedHumanAdmission {
 
     #[must_use]
     pub fn avatar_custody_fingerprint(&self) -> [u8; 32] {
-        let mut digest = Sha256::new();
-        digest.update(AVATAR_CUSTODY_CONTEXT);
-        digest.update(self.credential.fingerprint());
-        digest.update(self.browser_credential_fingerprint);
-        digest.finalize().into()
+        prejoin_avatar_custody_fingerprint(&self.credential, &self.browser_credential_fingerprint)
     }
+}
+
+pub(crate) fn prejoin_avatar_custody_fingerprint(
+    credential: &HumanInviteCredentialEvidence,
+    browser_credential_fingerprint: &[u8; 32],
+) -> [u8; 32] {
+    let mut digest = Sha256::new();
+    digest.update(AVATAR_CUSTODY_CONTEXT);
+    digest.update(credential.fingerprint());
+    digest.update(browser_credential_fingerprint);
+    digest.finalize().into()
 }
 
 impl HumanInviteCredentialEvidence {

@@ -26,6 +26,7 @@ mod human_admission_identity;
 mod human_admission_store;
 mod human_invite_preflight;
 mod human_invites;
+mod human_prejoin_attachments;
 mod private_fs;
 mod profile_attachments;
 mod profile_store;

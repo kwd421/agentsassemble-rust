@@ -403,7 +403,7 @@ async fn delete_expired_pending(
     now_timestamp: i64,
 ) -> Result<(), PersistenceError> {
     sqlx::query(
-        "DELETE FROM profile_attachments WHERE state = 'pending' AND expires_at IS NOT NULL AND expires_at <= ?",
+        "DELETE FROM profile_attachments WHERE state IN ('pending', 'admission_pending') AND expires_at IS NOT NULL AND expires_at <= ?",
     )
     .bind(now_timestamp)
     .execute(&mut **transaction)
@@ -418,14 +418,14 @@ async fn enforce_attachment_quota(
     now_timestamp: i64,
 ) -> Result<(), PersistenceError> {
     let subject = sqlx::query(
-        "SELECT COUNT(*) AS count, COALESCE(SUM(size), 0) AS bytes FROM profile_attachments WHERE owner_user_id = ? AND (state = 'bound' OR (state = 'pending' AND expires_at > ?))",
+        "SELECT COUNT(*) AS count, COALESCE(SUM(size), 0) AS bytes FROM profile_attachments WHERE owner_user_id = ? AND ((state = 'bound' AND invite_quota_fingerprint IS NULL) OR (state = 'pending' AND expires_at > ?))",
     )
     .bind(user_id)
     .bind(now_timestamp)
     .fetch_one(&mut **transaction)
     .await?;
     let total = sqlx::query(
-        "SELECT COUNT(*) AS count, COALESCE(SUM(size), 0) AS bytes FROM profile_attachments WHERE state = 'bound' OR (state = 'pending' AND expires_at > ?)",
+        "SELECT COUNT(*) AS count, COALESCE(SUM(size), 0) AS bytes FROM profile_attachments WHERE state = 'bound' OR (state IN ('pending', 'admission_pending') AND expires_at > ?)",
     )
     .bind(now_timestamp)
     .fetch_one(&mut **transaction)
