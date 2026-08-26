@@ -1,18 +1,19 @@
 # Frontend/backend exposure map
 
-Status: source-derived reimplementation exposure inventory, 2026-08-26
+Status: source-derived reimplementation exposure inventory, 2026-08-27
 
 Comparison baseline: original
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust
-`62d191f`. The local-authority, surface, connection-admission, subscription, and moderation
+`d07b2dc`. The local-authority, surface, connection-admission, subscription, and moderation
 boundary is complete. Central registration, canonical participant roles, participant
 mute, exact provider interruption, and the required packaged provider matrix have
 passed both manual reviews. Room-global settings, local-operator preferences, human
 admission, the session-derived person-profile exchange, and the admitted-human
 WebSocket are source-connected and integration-verified. Real production-browser
-normal posting and read-only denial pass against the canonical Rust authority; the
-remaining invite/reload/revocation matrix remains open. Remote-session preferences
-remain visibly unavailable until their exact exchange/target transaction is complete.
+one-use/reusable normal and read-only admission, avatar, reload, posting/denial, and
+restart recovery pass against the canonical Rust authority. Remote-session
+preferences and `participant.leave` remain visibly unavailable until their exact
+frontend exchange or server transaction is connected.
 
 ## Scope and method
 
@@ -196,7 +197,7 @@ implemented; the frontend must not silently substitute Python or local fake data
 | --- | --- |
 | Startup identity and accounts | Fresh local desktop bootstrap, central guest creation/recovery, secure browser device identity, and proof-bound local-server registration are implemented. `/api/account`, Google account challenge/connect/delete, and the native Google handoff remain incomplete; the absent `open_central_google_login` host command keeps that button failed closed. |
 | Room lifecycle and settings | Canonical archive/delete lifecycle and public server info remain incomplete. Room-global settings mutation and local-operator room preferences are connected; remote-session preferences are explicitly unavailable until admission owns their identity. |
-| Admission and invites | Durable human invite/session create, join, verification, expiry, revoke, leave, restart recovery, the session-derived person-profile exchange, and the authenticated human WebSocket are implemented. Exact `/join`, `/join/`, `/pair`, and `/pair/` production entrances resolve their actual production assets; exact preflight/join response contracts bind request, room, client, server lineage, and product surface before bearer exposure. Real isolated browsers pass normal snapshot/posting and read-only snapshot/denial. Avatar, reload, preference, leave/revoke/restart, complete one-use/reusable coverage, trusted public ingress, host claim, companion admission, operator pairing create/redeem, and public-invite status/URL/tunnel controls remain incomplete or not yet browser-verified as applicable. |
+| Admission and invites | Durable human invite/session create, join, verification, expiry, revoke, leave, restart recovery, the session-derived person-profile exchange, and the authenticated human WebSocket are implemented at their current persistence/server boundaries. Exact `/join`, `/join/`, `/pair`, and `/pair/` production entrances resolve their actual production assets; exact preflight/join response contracts bind request, room, client, server lineage, and product surface before bearer exposure. Real isolated browsers pass one-use/reusable normal and read-only admission, avatar transfer, profile edit, token removal, reload, posting/denial, consumed-link rejection, same-browser reusable recovery, and server-restart reconnect. Remote preferences are still client-blocked, `participant.leave` is absent from the signed server surface, and manager create/revoke controls, trusted public ingress, host claim, companion admission, operator pairing create/redeem, and public-invite status/URL/tunnel controls remain incomplete. |
 | Roster, friends, and channels | The active-room roster, strict participant-role control, copied participant-mute control, canonical event projection, and exact Rust provider-interrupt owner are cut over and packaged-verified. Room friends, room channels, voice presence, and side chat remain incomplete. |
 | Attachments, personas, pins, and search | General-message and room-appearance attachment purposes, persona list/import/thumbnail, message pins, room search/context. Profile-avatar upload/read is implemented. |
 | Provider settings and diagnostics | Login, catalog refresh HTTP response, credential CRUD, provider usage, local resources, release health, and runtime version. The original `/api/local/workspace-picker` HTTP route is absent, but packaged desktop creation uses the native Tauri directory picker instead. |
@@ -420,5 +421,23 @@ canonical Axum/SQLite state. Both removed their invite tokens and rendered the
 authenticated snapshot/roster. The normal browser published
 `HUMAN_SOCKET_NORMAL_UI_OK`; the read-only browser rendered disabled composer controls
 and produced no message event. This closes only that browser connection delta. The
-broader avatar/reload/preferences/leave/revoke/restart matrix, controlled socket races,
-and trusted external ingress remain open.
+controlled socket races are recorded separately; trusted external ingress remains open.
+
+The follow-up production-browser matrix exercised distinct one-use and reusable
+normal/read-only invites. One-use links admitted once, survived tokenless reload, and
+were rejected from a fresh browser identity after consumption. Reusable links
+re-entered with the same browser identity without another use or participant and
+retained history. Normal sessions published two durable messages. Read-only sessions
+rendered both messages, kept their composer and attachment controls disabled, allowed
+person-profile display-name edits, and rejected post-admission avatar upload without
+creating an asset. The normal one-use pre-admission avatar became exactly one current
+profile asset with no pending row. A live read-only reusable browser reported the
+server interruption and then automatically restored its authenticated snapshot and
+history after an actual process restart.
+
+The same run exposed two current boundaries rather than substituting client behavior.
+Remote room preferences remain deliberately rejected by the frontend before the
+already implemented session-ticket server exchange. Guest leave displays that
+`participant.leave` is absent from the bound signed product surface and performs no
+mutation. Manager invite create/revoke controls were not made reachable through fake
+host authority and remain incomplete.

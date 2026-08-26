@@ -2384,3 +2384,36 @@ carrying another `client_id` before it can reach session persistence.
 Final `make verify` at `62d191f` passed the unchanged architecture/source/policy gates,
 78 frontend files with 393 tests, 16 desktop tests, all workspace tests, warning-denied
 workspace and desktop Clippy, and final diff validation. No provider was started.
+
+## Human-session invite browser matrix: 2026-08-27
+
+Computer Use drove the copied production bundle against one disposable canonical
+Axum/SQLite authority using four distinct invitations: one-use and reusable normal,
+and one-use and reusable read-only. The one-use normal flow selected and cropped a
+real project PNG before admission, removed the token, published
+`ONE_USE_NORMAL_UI_OK`, saved and freshly re-read the display name and custom status,
+retained its current avatar and message across reload, and rejected the consumed link
+from a fresh browser identity. The reusable normal flow published
+`REUSABLE_NORMAL_UI_OK` and re-entered the same link with the same browser identity,
+profile, participant, and history without another use.
+
+Both read-only flows rendered the durable normal messages while keeping composer and
+attachment controls disabled. The one-use read-only guest saved a display-name change
+but received the canonical avatar-upload denial after selecting and cropping the same
+PNG; reload retained the name and denial, and a fresh browser identity could not reuse
+the consumed link. The reusable read-only guest re-entered with the same identity and
+remained read-only. While that browser stayed open, the exact fixture server process
+was stopped and reopened on the same SQLite authority. The UI first displayed its
+reconnect state, then automatically restored the authenticated snapshot, history, and
+read-only controls.
+
+Read-only SQLite inspection showed one use for each exercised invite, exactly the two
+normal `message_final` events, one current normal-profile avatar, no pending pre-join
+avatar, no read-only avatar, and no preference row. The guest leave confirmation
+reported that `participant.leave` is absent from the bound signed product surface and
+wrote nothing. Remote preferences remain deliberately client-blocked, and manager
+invite create/revoke was not exercised through fake host authority. All isolated
+browser windows and both owned fixture processes were closed; port 43217 had no
+listener. The fixture source was removed, its database/manifests and production bundle
+were moved to recoverable Trash, and its Cargo package artifacts were cleaned. No
+provider or user-owned `.agents/` state was used.
