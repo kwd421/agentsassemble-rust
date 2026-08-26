@@ -1035,3 +1035,34 @@ the reviewed persistence owner without adding another product surface.
   `cc57217` is 182 insertions/12 deletions; correction `81c04e7` is 198
   insertions/108 deletions across four files. The production modules are 390, 575,
   and 737 lines and pass the unchanged source gate.
+
+## Durable human-session authorization owner
+
+Commit `28babe8` implements the raw-free persistence contract needed by the still-
+unmounted public session exchanges; it does not mark WebSocket, profile, preference,
+or attachment session flows complete.
+
+- Prior observed duplication and threat: the original verifies a fingerprinted
+  session and then lets routes resolve user/room/membership separately. Rust preflight
+  likewise had a private session query. Copying that logic into exchange and target
+  routes could let liveness, corruption, profile binding, or scope decisions diverge.
+- Intent and preserved contract: one indexed joined snapshot now owns active state,
+  expiry, browser client kind, scope, Active room, Joined exact human participant,
+  and exact revisioned profile binding. It returns a non-serializable private-field
+  `HumanSessionAuthorization` with only fingerprint provenance, derived principal,
+  and expiry; no raw bearer crosses persistence. Preflight reuses the resolver while
+  preserving unknown/foreign-room `NotApplicable`, same-room unavailable status,
+  profile display-name SSoT, and read-only non-posting capabilities. Invite revocation
+  still does not revoke an already committed live session.
+- Actual bounded cost: one authorization begins a read transaction, performs one
+  session-fingerprint lookup with profile/participant/room primary-key joins, decodes
+  one room, participant, and profile JSON value, and commits the read. This adds a
+  room join/decode to the previous preflight path in exchange for deleting its second
+  session resolver. No performance improvement is claimed without representative
+  measurement. No table, index, cache, route, grant, task, timer, or fallback exists.
+- Verification result: five existing preflight tests continue to pass. A new
+  real-admission test fixes exact fingerprint/principal/profile projection, read-only
+  scope/capabilities, participant-left rejection, and corrupt profile-revision
+  failure. All 160 persistence tests, warning-denied persistence Clippy, and
+  `make check` pass. Commit size is 387 insertions/35 deletions across four files;
+  the 189-line owner and 168-line focused test module pass the unchanged source gate.

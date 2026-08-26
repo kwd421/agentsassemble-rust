@@ -930,6 +930,44 @@ flag is added meanwhile.
   inbound-command and outbound-delivery races; tests do not sleep or inspect private
   maps. Query count and end-to-end fanout latency are recorded before and after.
 
+### One durable human-session resolver instead of repeated partial checks
+
+- Prior cost and threat: the original session service verifies a fingerprinted
+  session record, while individual routes separately resolve its user, membership,
+  and room. Before commit `28babe8`, Rust invite preflight also carried its own
+  session SQL and liveness/profile decoder. Adding ticket exchanges beside that copy
+  would create two authorities that could disagree on corruption, room activity, or
+  membership state.
+- Change intent and smallest design: one 189-line persistence module now performs an
+  indexed session-fingerprint lookup with left joins to the exact room, user profile,
+  and room participant in one SQLite read transaction. It returns a private-field,
+  non-serializable `HumanSessionAuthorization` containing only the raw-free
+  fingerprint, derived principal/scope/capabilities, and expiry. Existing invite
+  preflight calls the same internal resolver and preserves its foreign-room
+  `NotApplicable` behavior before inspecting unrelated session state.
+- Preserved security and product contract: authority requires stored `active` state,
+  wall-clock expiry, browser client kind, canonical read-write/read-only scope, an
+  Active exact room, a Joined exact human participant, and an exact revisioned person
+  profile binding. Profile display name remains the person-profile SSoT; participant
+  role, room mute, and membership remain room state. Invite revocation still blocks
+  future admissions without retroactively ending a committed session. Read-only
+  derives non-posting capabilities and never becomes operator authority.
+- Observed cost and trade-off: one authorization performs one transaction begin, one
+  indexed session lookup with three primary-key joins, JSON decode of exactly one
+  room, participant, and profile, and one read commit. Compared with the prior
+  preflight query, this adds the room join/decode but removes a second implementation;
+  no CPU, memory, disk, or latency improvement is claimed. No session cache, table,
+  index, task, timer, fallback, grant, or route was added. The opaque type is the
+  minimum enforcement needed to prevent the next in-memory issuer from constructing
+  provenance without persistence.
+- Verification: the existing five preflight tests still prove same-room live,
+  same-room unavailable, unknown, and foreign-room behavior. One real-admission test
+  proves exact fingerprint/principal/profile projection, read-only capability
+  derivation, participant-left rejection, and corrupt profile-revision failure. All
+  160 persistence tests, warning-denied persistence Clippy, and `make check` pass.
+  Commit `28babe8` is 387 insertions and 35 deletions across four files; production
+  and test modules are 189 and 168 lines, with no source-gate exception.
+
 ### Shared grant-store limits instead of a second session ticket cache
 
 - Prior cost and threat: the current grant store is globally bounded at 4,096, but

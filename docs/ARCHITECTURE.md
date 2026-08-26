@@ -260,6 +260,16 @@ to post. The server derives that distinction from the invite and room state. A
 missing realtime connection is a failed admission flow, not a read-only downgrade
 or an HTTP fallback mode.
 
+A raw human `aas1.` bearer is reduced to its canonical SHA-256 fingerprint at the
+HTTP edge. Persistence resolves that fingerprint together with its active session,
+expiry, room, person profile, and joined human participant in one read snapshot.
+The resulting non-serializable `HumanSessionAuthorization` contains no raw bearer
+and has private fields, so adapters and the in-memory grant store can retain
+provenance but cannot manufacture it. Invite preflight reuses this same resolver;
+there is no second session-liveness or profile-binding authority. A foreign-room
+bearer remains inapplicable to preflight, while a same-room ended, expired, inactive,
+or left session is unavailable and malformed same-room authority fails visibly.
+
 Human browser admission, an externally owned RoomConnector session, and a managed
 Agent Session are separate product identities. They may reuse admission and
 realtime mechanisms, but one cannot be represented by another or inherit its
