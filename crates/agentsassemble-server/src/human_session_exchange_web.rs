@@ -2,7 +2,7 @@ use agentsassemble_persistence::PersistenceError;
 use axum::{
     Json, Router,
     extract::{Request, State},
-    http::{Method, StatusCode},
+    http::{HeaderValue, Method, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use chrono::Utc;
@@ -36,7 +36,7 @@ registered_routes! {
 async fn issue_profile_ticket(
     State(state): State<AppState>,
     request: Request,
-) -> Result<Json<SessionTicketResponse>, SessionExchangeError> {
+) -> Result<Response, SessionExchangeError> {
     let fingerprint = bearer_ticket(request.headers())
         .and_then(fingerprint_presented_bearer)
         .ok_or_else(SessionExchangeError::unauthorized)?;
@@ -58,10 +58,16 @@ async fn issue_profile_ticket(
         .issue_human_session_profile(authorization)
         .await
         .map_err(|_| SessionExchangeError::capacity())?;
-    Ok(Json(SessionTicketResponse {
+    let mut response = Json(SessionTicketResponse {
         ticket: issued.ticket,
         ttl_seconds,
-    }))
+    })
+    .into_response();
+    response.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("private, no-store"),
+    );
+    Ok(response)
 }
 
 #[derive(Debug)]
