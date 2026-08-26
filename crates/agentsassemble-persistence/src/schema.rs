@@ -252,7 +252,6 @@ const INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS profile_attachments_admission_room_idx ON profile_attachments(admission_room_id, state, expires_at) WHERE admission_room_id IS NOT NULL",
     "CREATE INDEX IF NOT EXISTS room_invites_room_state_idx ON room_invites(room_id, revoked, expires_at)",
     "CREATE UNIQUE INDEX IF NOT EXISTS human_room_sessions_active_participant_idx ON human_room_sessions(room_id, participant_id) WHERE state = 'active'",
-    "CREATE INDEX IF NOT EXISTS human_room_sessions_reusable_identity_idx ON human_room_sessions(invite_id, reusable_identity_fingerprint) WHERE key_kind = 'reusable'",
     "CREATE INDEX IF NOT EXISTS human_room_sessions_live_idx ON human_room_sessions(state, expires_at)",
     "CREATE INDEX IF NOT EXISTS human_room_sessions_room_live_idx ON human_room_sessions(room_id, state, expires_at)",
     "CREATE INDEX IF NOT EXISTS human_room_sessions_invite_state_idx ON human_room_sessions(invite_id, key_kind, state)",
