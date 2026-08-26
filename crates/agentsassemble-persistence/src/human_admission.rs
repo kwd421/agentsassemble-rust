@@ -204,3 +204,7 @@ fn update_field(digest: &mut Sha256, value: &str) {
     digest.update(length.to_be_bytes());
     digest.update(bytes);
 }
+
+#[cfg(test)]
+#[path = "human_admission_tests.rs"]
+mod tests;
