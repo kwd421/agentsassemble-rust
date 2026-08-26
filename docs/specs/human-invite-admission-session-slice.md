@@ -380,6 +380,39 @@ flag is added meanwhile.
 
 ## Evidence-driven simplifications and costs
 
+### One browser invite credential instead of a dual-token record
+
+- Prior cost and authority split: original create emits both an
+  `aai1.<claims>.<HMAC>` token and an independent `aaj1_` lookup token, then stores
+  the second token's fingerprint plus copies of the signed claims. The current human
+  browser copies `join_url`, which contains the `aaj1_` value, and admission resolves
+  that value to the durable invite before applying current expiry, revocation, scope,
+  client-kind, and use-limit policy. The self-contained signed token belongs to the
+  separately excluded native remote-client path, not that browser flow.
+- Change intent: create one `aaj1_` credential from exactly 24 operating-system-
+  random bytes and return that same opaque value through the existing `invite_token`
+  and `join_code` response aliases. Persist only its 32-byte SHA-256 fingerprint and
+  the canonical invite row. The join URL carries the same credential. No signing
+  secret, signed-claims parser, second nonce, or compatibility reader is introduced
+  into this human slice.
+- Preserved contract: the reachable human link retains its prefix, 32-character
+  unpadded-base64url body, 37-character total shape, 192-bit random strength,
+  fingerprint-only persistence, room binding, expiry, revocation, configured and
+  effective use limits, and both response field names. Tokens remain opaque; an old
+  token is not imported or reinterpreted. A later native remote-client slice must
+  own its own current contract rather than widening this browser authority.
+- Observed cost: creation performs one 24-byte random fill, one base64url encoding,
+  and one SHA-256 over the 37-byte token. It writes one 32-byte fingerprint and no
+  duplicate claims or nonce. Read/preflight performs one indexed fingerprint lookup
+  and does not verify or decode client-supplied claims. No latency improvement is
+  claimed until measured against the actual route.
+- Verification: fixed-shape tests assert canonical prefix/body length and reject
+  malformed or noncanonical encodings before lookup; database inspection finds no
+  raw token; response aliases and join URL carry the exact same value; revoke,
+  expiry, wrong room, and every configured use-limit boundary are decided by the
+  current row. Human admission rejects the excluded `aai1` shape rather than adding
+  a legacy or fallback path.
+
 ### Single transaction instead of the original admission saga
 
 - Prior cost and symptom: the original coordinator spans 740 lines and, together
