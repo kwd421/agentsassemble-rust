@@ -94,6 +94,9 @@ pub(crate) async fn run(
                 }
                 match client_frame {
                     ClientFrame::Command { request_id, action, payload } => {
+                        let closes_human_session =
+                            action == agentsassemble_protocol::RoomAction::ParticipantLeave
+                                && human_session.is_some();
                         let action_name = action.as_str().to_owned();
                         let outcome = if let Some(authorization) = &human_session {
                             state.rooms.execute_human_session(
@@ -114,6 +117,13 @@ pub(crate) async fn run(
                                     result: outcome.result,
                                     deduplicated: outcome.deduplicated,
                                 });
+                                if closes_human_session {
+                                    // This exact committed ACK is the final frame authorized by
+                                    // the command that revoked the session. Revalidation would
+                                    // suppress it and leave the copied browser flow unresolved.
+                                    let _ = channel.send(&mut sender, &state.shutdown, &frame).await;
+                                    return;
+                                }
                                 if send_authorized_frame(&state, &mut principal, &mut human_session, &mut channel, &mut sender, &frame).await.is_none() { return; }
                             }
                             Err(failure) => {

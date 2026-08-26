@@ -229,6 +229,7 @@ function validateServerProductSurface(value: unknown): ServerProductSurface {
         typeof action !== "string" ||
         !new Set([
           "message.send",
+          "participant.leave",
           "participant.mute",
           "participant.role.update",
           "room.settings.update",

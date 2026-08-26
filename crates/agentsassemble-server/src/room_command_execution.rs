@@ -1,7 +1,7 @@
 use agentsassemble_domain::RoomEvent;
 use agentsassemble_persistence::{
-    AgentTurnAssignment, AgentTurnCommit, CommandOutcome, ParticipantMuteMutation,
-    PersistenceError, RoomCommandMutation, SqliteStore,
+    AgentTurnAssignment, AgentTurnCommit, CommandOutcome, ParticipantLeaveMutation,
+    ParticipantMuteMutation, PersistenceError, RoomCommandMutation, SqliteStore,
 };
 use agentsassemble_protocol::CommandResolution;
 
@@ -11,6 +11,7 @@ pub(crate) struct CommandExecution {
     pub(crate) reply: Result<CommandOutcome, CommandFailure>,
     pub(crate) committed_events: Vec<RoomEvent>,
     pub(crate) assignments: Vec<AgentTurnAssignment>,
+    pub(crate) revoked_human_sessions: Vec<[u8; 32]>,
 }
 
 impl CommandExecution {
@@ -31,6 +32,7 @@ impl CommandExecution {
             reply: Ok(outcome),
             committed_events,
             assignments: Vec::new(),
+            revoked_human_sessions: Vec::new(),
         }
     }
 
@@ -44,6 +46,7 @@ impl CommandExecution {
             reply: Ok(mutation.outcome),
             committed_events,
             assignments: mutation.assignments,
+            revoked_human_sessions: Vec::new(),
         }
     }
 
@@ -57,6 +60,17 @@ impl CommandExecution {
             reply: Ok(mutation.outcome),
             committed_events,
             assignments: mutation.assignments,
+            revoked_human_sessions: Vec::new(),
+        }
+    }
+
+    pub(crate) fn participant_leave(mutation: ParticipantLeaveMutation) -> Self {
+        let committed_events = mutation.outcome.events.clone();
+        Self {
+            reply: Ok(mutation.outcome),
+            committed_events,
+            assignments: Vec::new(),
+            revoked_human_sessions: mutation.revoked_session_fingerprints,
         }
     }
 
@@ -70,6 +84,7 @@ impl CommandExecution {
             reply: Err(failure),
             committed_events: Vec::new(),
             assignments: Vec::new(),
+            revoked_human_sessions: Vec::new(),
         }
     }
 
@@ -82,6 +97,7 @@ impl CommandExecution {
             reply: Err(CommandFailure::unresolved(error)),
             committed_events: Vec::new(),
             assignments: Vec::new(),
+            revoked_human_sessions: Vec::new(),
         }
     }
 
@@ -93,6 +109,7 @@ impl CommandExecution {
             reply: Err(CommandFailure::unresolved(error)),
             committed_events,
             assignments: Vec::new(),
+            revoked_human_sessions: Vec::new(),
         }
     }
 
@@ -104,6 +121,7 @@ impl CommandExecution {
             reply: Err(CommandFailure::rejected(error)),
             committed_events,
             assignments: Vec::new(),
+            revoked_human_sessions: Vec::new(),
         }
     }
 }

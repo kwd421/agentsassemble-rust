@@ -98,7 +98,7 @@ async fn execute_leave_in(
         ));
     }
     let payload_hash = canonical_payload_hash(payload);
-    if let Some(outcome) = inspect_non_lifecycle_command(
+    if inspect_non_lifecycle_command(
         transaction,
         &principal.room_id,
         &principal.principal_id,
@@ -107,11 +107,12 @@ async fn execute_leave_in(
         &payload_hash,
     )
     .await?
+    .is_some()
     {
-        return Ok(ParticipantLeaveMutation {
-            outcome,
-            revoked_session_fingerprints: Vec::new(),
-        });
+        // A committed leave makes its own session unusable. Reaching the same
+        // request from a joined session means that identifier belongs to an
+        // earlier membership lifetime and must not revoke the new session.
+        return Err(PersistenceError::CommandConflict);
     }
     parse_payload(payload)?;
     let mut participant =

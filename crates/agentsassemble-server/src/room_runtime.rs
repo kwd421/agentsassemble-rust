@@ -559,7 +559,9 @@ async fn handle_room_mutation(
     mutation: RoomMutation,
 ) {
     match mutation {
-        RoomMutation::Command(command) => Box::pin(handle_room_command(owners, command)).await,
+        RoomMutation::Command(command) => {
+            Box::pin(handle_room_command(owners, session_revocations, command)).await;
+        }
         RoomMutation::HumanAdmission(command) => {
             handle_human_admission(
                 owners.store,
@@ -573,7 +575,11 @@ async fn handle_room_mutation(
     }
 }
 
-async fn handle_room_command(owners: RoomCommandOwners<'_>, command: RoomCommand) {
+async fn handle_room_command(
+    owners: RoomCommandOwners<'_>,
+    session_revocations: &broadcast::Sender<[u8; 32]>,
+    command: RoomCommand,
+) {
     let RoomCommandOwners {
         store,
         provider_catalog,
@@ -614,6 +620,7 @@ async fn handle_room_command(owners: RoomCommandOwners<'_>, command: RoomCommand
         reply,
         committed_events,
         assignments,
+        revoked_human_sessions,
     } = execution;
     if !committed_events.is_empty() {
         publish_durable_room_events(store, event_tx, &command.principal.room_id).await;
@@ -626,6 +633,9 @@ async fn handle_room_command(owners: RoomCommandOwners<'_>, command: RoomCommand
             assignment,
             room_tool_ingress.clone(),
         );
+    }
+    for fingerprint in revoked_human_sessions {
+        let _ = session_revocations.send(fingerprint);
     }
     let reply = match reply {
         Ok(outcome) => {

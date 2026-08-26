@@ -13,6 +13,7 @@ export const TEST_SERVER_PRODUCT_SURFACE: ServerProductSurface = {
     "agent.start",
     "agent.stop",
     "message.send",
+    "participant.leave",
     "participant.mute",
     "participant.role.update",
     "room.random.choose",

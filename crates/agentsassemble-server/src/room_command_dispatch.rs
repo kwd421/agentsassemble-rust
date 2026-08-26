@@ -112,6 +112,17 @@ pub(crate) async fn execute_command(
             }
             Err(error) => CommandExecution::transactional_failure(error),
         },
+        RoomAction::ParticipantLeave => execute_participant_leave(store, command).await,
+    }
+}
+
+async fn execute_participant_leave(store: &SqliteStore, command: &RoomCommand) -> CommandExecution {
+    match store
+        .execute_participant_leave(&command.principal, &command.request_id, &command.payload)
+        .await
+    {
+        Ok(mutation) => CommandExecution::participant_leave(mutation),
+        Err(error) => CommandExecution::transactional_failure(error),
     }
 }
 
@@ -158,6 +169,17 @@ async fn execute_human_session_command(
                 Err(error) => CommandExecution::transactional_failure(error),
             }
         }
+        RoomAction::ParticipantLeave => match store
+            .execute_human_session_participant_leave(
+                authorization,
+                &command.request_id,
+                &command.payload,
+            )
+            .await
+        {
+            Ok(mutation) => CommandExecution::participant_leave(mutation),
+            Err(error) => CommandExecution::transactional_failure(error),
+        },
         _ => CommandExecution::transactional_failure(PersistenceError::CommandRejected {
             code: "permission_denied",
             message: "This human room session cannot perform that action.".to_owned(),
@@ -194,6 +216,7 @@ async fn execute_agent_create_command(
         reply,
         committed_events,
         assignments: Vec::new(),
+        revoked_human_sessions: Vec::new(),
     };
     if advance_ordered_floor {
         progress_execution(store, &command.principal.room_id, execution).await

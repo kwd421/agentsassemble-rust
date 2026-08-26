@@ -9,7 +9,7 @@ use thiserror::Error;
 use ts_rs::TS;
 
 pub const PROTOCOL_VERSION: u32 = 1;
-pub const PRODUCT_SURFACE_REVISION: u32 = 3;
+pub const PRODUCT_SURFACE_REVISION: u32 = 4;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, TS)]
 #[serde(rename_all = "UPPERCASE")]
@@ -70,6 +70,8 @@ pub enum RoomAction {
     ParticipantRoleUpdate,
     #[serde(rename = "participant.mute")]
     ParticipantMute,
+    #[serde(rename = "participant.leave")]
+    ParticipantLeave,
     #[serde(rename = "room.settings.update")]
     RoomSettingsUpdate,
     #[serde(rename = "room.random.roll")]
@@ -89,13 +91,14 @@ pub enum RoomAction {
 }
 
 impl RoomAction {
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 12] = [
         Self::AgentConfigure,
         Self::AgentCreate,
         Self::AgentResume,
         Self::AgentStart,
         Self::AgentStop,
         Self::MessageSend,
+        Self::ParticipantLeave,
         Self::ParticipantMute,
         Self::ParticipantRoleUpdate,
         Self::RoomRandomChoose,
@@ -108,6 +111,7 @@ impl RoomAction {
         match self {
             Self::MessageSend => "message.send",
             Self::ParticipantMute => "participant.mute",
+            Self::ParticipantLeave => "participant.leave",
             Self::ParticipantRoleUpdate => "participant.role.update",
             Self::RoomSettingsUpdate => "room.settings.update",
             Self::RoomRandomRoll => "room.random.roll",
@@ -603,6 +607,11 @@ mod tests {
             surface
                 .websocket_actions
                 .contains(&super::RoomAction::ParticipantMute)
+        );
+        assert!(
+            surface
+                .websocket_actions
+                .contains(&super::RoomAction::ParticipantLeave)
         );
         assert_eq!(surface.digest.len(), 64);
         assert!(matches!(
