@@ -751,6 +751,11 @@ architecture.
 
 ### Pre-join upload and preview through the existing attachment route
 
+The reachable HTTP behavior in this section remains current. References to the old
+combined row state are superseded by `asset-custody-lifecycle-slice.md`: preview now
+reads an unexpired `prejoin_avatar_assets` row and admission removes that exact row
+while promoting the same opaque ID through the profile lifecycle.
+
 - Prior gap and threat: before `cc57217`, the copied guest profile panel sent its
   current `invite_token`, canonical `device_token`, and cropped avatar to the existing
   `/api/attachments` route, but that route unconditionally required a one-use profile
@@ -770,10 +775,10 @@ architecture.
 - Preserved contract and preview boundary: authenticated local/session profile
   uploads keep their existing ticket and authority paths. Pre-join upload returns the
   same attachment metadata shape used by the copied UI. The existing opaque UUID URL
-  can read a live `admission_pending` image until its one-hour expiry, matching the
+  can read a live pre-join image until its one-hour expiry, matching the
   original immediate preview capability; ordinary 15-minute pending profile uploads
   remain hidden. Exact-custody replacement makes the previous URL 404. Admission
-  still rechecks invite, room, attachment ID, exact custody, signed-invite provenance,
+  still rechecks invite, room, attachment ID, exact custody, invite fingerprint,
   integrity, and TTL in its transaction before binding that image to the human-profile
   SSoT. A leaked live opaque preview URL can render only that bounded avatar and grants
   no invite, profile, room, or mutation authority; responses remain `private,

@@ -1,7 +1,7 @@
 # Asset Custody and Lifecycle Correction
 
-Status: active correction; current Rust profile and pre-join storage still use the
-superseded combined table until this slice is implemented and verified
+Status: storage correction implemented through public commit `ac542de`; copied-
+frontend verification remains pending
 
 ## Definition
 
@@ -10,22 +10,22 @@ have different authority owners and lifetimes. Rust stores and mutates each thro
 that product owner while sharing only bounded raster validation and exact resource
 accounting.
 
-## Confirmed current defect
+## Corrected baseline defect
 
-- `profile_attachments` currently combines user-owned pending/current avatars and
+- The superseded `profile_attachments` combined user-owned pending/current avatars and
   invite/browser-owned pre-join avatars through one state column and five nullable
   provenance columns.
-- Profile upload inherited the original generic uploader policy of 64 items and
+- Profile upload had inherited the original generic uploader policy of 64 items and
   128 MiB even though one profile can use only one current avatar and one pending
   replacement.
-- Profile and pre-join modules duplicate expiry deletion, the 4,096-item/8-GiB
+- Profile and pre-join modules duplicated expiry deletion, the 4,096-item/8-GiB
   process ceilings, replacement arithmetic, and SQL over the combined state space.
-- A transferred pre-join row retains invite and room accounting provenance after
+- A transferred pre-join row retained invite and room accounting provenance after
   it becomes a person profile. That provenance no longer owns the asset.
-- `room_appearance_assets.created_by_user_id` is described as quota state even
+- `room_appearance_assets.created_by_user_id` was described as quota state even
   after room ownership transfer, although the applied banner or icon belongs to
   the room. The settings event already owns mutation audit.
-- Rust has no message-attachment persistence owner yet. A schema, trait, or generic
+- Rust still has no message-attachment persistence owner. A schema, trait, or generic
   asset framework for that absent slice would be speculative.
 
 These are implementation defects or stale design assumptions, not behavior that
@@ -37,7 +37,7 @@ them.
 ### Separate owners
 
 - A profile-avatar table owns only a user's avatar. Its only states are `pending`
-  and `current`; partial unique constraints permit at most one of each per user.
+  and `current`; one unique owner/state constraint permits at most one of each per user.
   Uploading a new pending avatar atomically replaces only that user's previous
   pending avatar. Applying it promotes that exact pending avatar and deletes only
   the previous current avatar after the profile reference changes in the same
@@ -93,6 +93,14 @@ deletion stay in their product lifecycle modules.
 - The public opaque attachment URL shape, canonical static PNG bytes, no-store
   reads, pre-join preview, admission result, profile projection, retry behavior, and
   room-settings authority remain unchanged.
+
+Residual availability threat: a holder of one valid reusable invite can mint many
+browser credentials and occupy the absolute live-asset ceiling with distinct pre-join
+custodies. The 128-connection, two-decode, and request-deadline bounds limit rate, not
+eventual occupancy. The current product decision does not hard-code an invite/room
+operating quota or silently evict another custody, so exhaustion fails closed until
+rows expire. A later configurable operating policy may address fairness; this slice
+does not disguise that policy choice as an absolute safety bound.
 
 ## Non-goals
 

@@ -1151,4 +1151,71 @@ profile grant. It does not change the current profile HTTP adapter or frontend.
 - The same review found that 229,376 bytes described only inline enum growth, not
   string heap capacity or map/allocator overhead. The resource claim above is now
   limited to what the same-toolchain `size_of` probe measured.
-- Final web and Daybreaker approval is pending correction review.
+- Daybreaker found that the production wall clock was sampled before waiting for the
+  grant mutex, so a forward clock change during that wait could compare the backing
+  session against stale time. Commit `12edda4` keeps remove-first consumption, then
+  samples production time and runs the shared purpose/absolute-expiry resolver; the
+  test seam injects time only after the same removal boundary.
+- Final outcome: the web reviewer and Daybreaker both returned `APPROVE` with
+  Critical 0, High 0, and Medium 0. They found no remaining duplicate policy owner,
+  unnecessary state/abstraction, overimplementation, or structure-gate issue.
+
+## Asset custody storage correction
+
+Public commits `334c918`, `d337003`, `23571fe`, and `ac542de` replace the superseded
+combined avatar state space with clean schema 40. No schema conversion, compatibility
+branch, fallback, background sweeper, cache, configuration layer, generic asset trait,
+or speculative message-attachment owner was added.
+
+- Prior cost and defect: one 12-column `profile_attachments` row shape represented
+  profile and pre-join ownership through three states and nullable user, room,
+  custody, and invite provenance. Profile uploads also inherited 64-item/128-MiB
+  uploader policy, while pre-join writes separately scanned conditional invite and
+  room quota state. A promoted pre-join row retained provenance that no longer owned
+  the profile asset.
+- Intent and preserved contract: `profile_avatar_assets` has only `pending` and
+  `current`, with one unique `(owner_user_id, state)` owner; `prejoin_avatar_assets`
+  has no state and permits one row per exact custody fingerprint. A new pending upload
+  deletes only its exact predecessor. Admission copies the exact BLOB metadata and
+  opaque ID into the user's pending lifecycle, deletes the exact pre-join row, and
+  promotes it in the same SQLite transaction. Failure rolls back every step. Opaque
+  URLs, canonical PNG validation, one-hour pre-join expiry, final invite/browser/
+  room revalidation, profile projection, and retry behavior remain unchanged.
+- Resource and deletion evidence: the current profile row has nine columns and the
+  pre-join row ten, so neither pays for the other lifecycle's nullable state. The
+  4,096-live-item/8-GiB absolute database bound and checked
+  `current - exact predecessor + new` calculation have one implementation owner.
+  The 10-MiB runtime and three schema checks expand from one macro owner. Expired
+  cleanup SQL remains in its lifecycle module and only deletes that lifecycle's
+  pending rows; no limit path evicts current, bound, foreign, referenced, or merely
+  old data. The profile 64-item/128-MiB and pre-join invite/room operating quotas and
+  their unused indexes are gone.
+- Residual availability threat: one valid reusable-invite holder can rotate browser
+  credentials and eventually occupy the absolute live-asset ceiling. Existing HTTP
+  connection/decode/deadline bounds slow attempts but do not prevent that occupancy.
+  The explicit current policy forbids a hard-coded invite/room operating quota and
+  forbids evicting another live custody, so the server fails closed at the absolute
+  ceiling and relies on one-hour expiry. No stronger fairness claim is made.
+- CPU/disk/latency evidence and trade-off: the shared live-usage statement now has
+  three `UNION ALL` branches and computes count plus bytes from that one stream,
+  instead of separately counting and summing the old stores. SQLite
+  `EXPLAIN QUERY PLAN` showed the pre-join expiry branch using its expiry index. It
+  also showed the profile OR predicate scanning before `23571fe`; replacing, not
+  adding to, the old partial expiry index with `(state, expires_at)` made both live
+  branches and expired-pending deletion indexed. Admission ownership transfer uses
+  insert/delete rather than an in-place cross-owner state mutation, so it performs
+  more SQLite statements; this is the explicit cost of removing impossible shared
+  state, and no latency improvement is claimed. The unconnected room-appearance
+  branch remains an empty-table scan; no speculative index was added for an absent
+  writer.
+- Verification result: 65 consecutive profile uploads prove exact pending replacement
+  without the old user quota. Nine distinct pre-join custodies prove removal of the
+  generic invite quota. At 4,096 live rows, exact replacement succeeds and net growth
+  fails. Admission rejects corrupt metadata without consuming invite/session state,
+  then transfers and promotes the repaired exact row. Three focused schema tests prove
+  one current plus one pending profile avatar, one pre-join row per custody with no
+  state column, and uploader deletion removing only pending—not bound—room assets.
+  All 163 persistence tests, all 58 server unit tests and server integration tests,
+  warning-denied persistence/server Clippy, and `make check` passed. The production
+  modules are 721, 591, 477, 286, and 261 lines; no 800-line exception or gate change
+  was made.

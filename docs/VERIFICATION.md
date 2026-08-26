@@ -2274,6 +2274,30 @@ restore remote parity. Security review additionally requires a derived ticket to
 session provenance and revalidate current expiry/revocation at consumption, including
 session revocation after ticket issuance.
 
+## Asset custody storage correction: 2026-08-26
+
+Public commits `334c918`, `d337003`, `23571fe`, and `ac542de` replace the combined
+profile/pre-join avatar table with clean schema 40. Profiles own at most one pending and
+one current avatar; exact invite/browser custody owns one expiring pre-join row; bound
+room appearance belongs to the room rather than its uploader. The user 64-item/128-MiB
+policy and pre-join invite/room operating quotas are removed. The common module owns
+only raster safety, the 4,096-item/8-GiB absolute bound, and checked exact-replacement
+arithmetic. No migration, compatibility path, fallback, generic asset framework,
+configuration layer, message-attachment state, or background cleanup task was added.
+
+The shared usage query streams the three owner tables once with `UNION ALL`. SQLite
+query-plan inspection justified replacing the existing profile pending-expiry index—not
+adding another index—with `(state, expires_at)`, which serves both live OR branches and
+expiry deletion. Admission now pays additional transactional insert/delete statements
+to remove impossible cross-owner state; no latency improvement is claimed. Detailed
+threat, cost, deletion, and test evidence is recorded in
+`verification/2026-08-26-human-invite-schema.md` and
+`specs/asset-custody-lifecycle-slice.md`.
+
+All 163 persistence tests, all 58 server unit tests and server integration tests,
+warning-denied persistence/server Clippy, and `make check` passed. Production files are
+below the unchanged 800-line gate.
+
 ## API verification scope
 
 When a reachable flow specifically needs an API-backed provider, the allowed paid/provider-specific candidates are the official DeepSeek API and the designated Flash provider path. Every other API-backed verification uses only an explicitly free API or free model. Missing credentials, exhausted free quota, or unavailable models fail visibly; they do not trigger a paid substitution or a fallback provider.
