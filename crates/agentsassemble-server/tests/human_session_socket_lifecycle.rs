@@ -56,7 +56,9 @@ async fn durable_session_deadline_closes_an_active_socket() {
         assert_eq!(pong["nonce"], format!("keepalive-{nonce}"));
         tokio::time::pause();
     }
-    tokio::time::advance(Duration::from_mins(5)).await;
+    // Cross the durable one-hour deadline without reaching the independent
+    // five-minute idle deadline measured from the last successful ping.
+    tokio::time::advance(Duration::from_secs(270)).await;
     tokio::task::yield_now().await;
     tokio::time::resume();
     assert!(
