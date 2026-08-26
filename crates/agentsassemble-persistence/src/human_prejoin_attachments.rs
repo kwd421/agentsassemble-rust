@@ -26,7 +26,7 @@ struct PrejoinAuthority {
     invite_quota_fingerprint: [u8; 32],
 }
 
-/// Fixed-size evidence that the invite and room were current before image decoding.
+/// Opaque evidence that the invite and room were current before image decoding.
 ///
 /// Fields are private so callers cannot construct or alter this capability. The
 /// final write still revalidates the durable authority to close the decode-time race.

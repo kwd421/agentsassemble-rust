@@ -918,11 +918,16 @@ without making the still-missing HTTP upload route appear complete.
   file and JSON metadata as separate filesystem objects. Checking invite authority
   only before decoding would also permit a revoke/use-limit race to commit afterward;
   checking only afterward would spend bounded decoder capacity for an already invalid
-  request.
-- Intent and smallest design: `SqliteStore::store_human_prejoin_avatar` accepts only
-  authenticated fixed-size invite evidence and a 32-byte browser fingerprint. It
-  checks invite/room gates before reusing the existing bounded PNG canonicalizer and
-  repeats the check in the final SQLite transaction. The transaction reuses the one
+  request. Review of `cc57217` found a narrower gap: canonical join-code parsing is
+  not durable authentication, so arbitrary `aaj1_` values could allocate a ten-MiB
+  Base64 output before the indexed invite lookup. Across the 128 admitted connections,
+  that was a 1.25-GiB additional decoded-output bound plus synchronous decode CPU.
+- Intent and smallest design: `81c04e7` splits preauthorization from storage without
+  adding another authority owner. `SqliteStore::authorize_human_prejoin_avatar`
+  checks current invite/room/use-limit state and returns one opaque capability with
+  private fields. `store_human_prejoin_avatar` accepts only that type, reuses the
+  existing bounded PNG canonicalizer, and repeats the durable check in the final
+  SQLite transaction. The transaction reuses the one
   existing attachment table, deletes expired pending rows, computes invite,
   pending-room, room, and runtime quotas in one aggregate, excludes/deletes only the
   exact custody predecessor, and inserts one one-hour `admission_pending` row. No new
@@ -934,21 +939,27 @@ without making the still-missing HTTP upload route appear complete.
   admitted user's ordinary uploader quota. Raw invite/browser credentials never
   enter this persistence API, rows, errors, or fixtures.
 - Actual bounded cost: rejected current authority performs one indexed invite/room
-  read and no decode/BLOB write. A valid write performs two current-authority reads
+  read and no Base64 output allocation, image decode, or BLOB write. The body-carried
+  credential contract still requires the adapter to buffer a JSON envelope capped at
+  14,046,552 bytes under the ten-second deadline and 128-connection process bound; the
+  patch does not claim to remove that accepted-body cost. A valid write still performs
+  exactly two current-authority reads
   around one existing decoder admission (two concurrent permits; 10 MiB input,
   4,096-pixel dimension, 16 Mi-pixel, and 72 MiB allocation bounds), one cleanup
   delete, one conditional aggregate over the live set bounded by 4,096 records, one
   exact delete, and one canonical PNG insert. The duplicate authority read is the
   explicit TOCTOU cost. No CPU, memory, disk, or latency improvement is claimed
   without representative measurement.
-- Verification result: the three focused tests cover exact replacement/isolation,
-  canonical metadata and one-hour TTL, post-decode revoke failure without mutation,
+- Verification result: the three focused persistence tests cover unknown durable
+  invite rejection, exact replacement/isolation, canonical metadata and one-hour TTL,
+  stale preauthorization rejection after revoke without mutation,
   shared eight-item invite quota, replacement while full, ordinary-uploader quota
   isolation, and rejection at 4,096 live pre-join rows. All 159 persistence tests
   pass. `RUSTFLAGS='-D warnings' cargo clippy --workspace --all-targets --all-features`
-  and `make check` pass. Commit size is 537 insertions/8 deletions across four files;
-  the 521-line new module and 735-line existing canonicalizer owner both pass the
-  unchanged 800-line source gate.
+  and `make check` pass. The original persistence commit is 537 insertions/8
+  deletions; correction `81c04e7` is 198 insertions/108 deletions across four files.
+  The current 575-line module and 737-line canonicalizer owner both pass the unchanged
+  800-line source gate.
 
 ## HTTP review corrections
 
@@ -995,16 +1006,18 @@ the reviewed persistence owner without adding another product surface.
 - Intent and preserved contract: the one existing handler selects its authority from
   Authorization header presence. Supplied tickets are consumed first and never fall
   through. No-header requests decode only the existing bounded envelope, accept only
-  `profile_avatar`, authenticate current invite and canonical `aad1_` credentials
-  before base64/image work, and pass only fingerprints to
+  `profile_avatar`, parse invite and canonical `aad1_` credentials, obtain current
+  durable invite/room authorization before Base64/image work, and pass only the opaque
+  authorization to
   `store_human_prejoin_avatar`. Existing local/session profile uploads are unchanged.
   The existing public attachment lookup admits only bound images or unexpired
   `admission_pending` images by opaque UUID; ordinary pending rows remain invisible.
   Admission retains final exact attachment/custody/invite/room/TTL/integrity checks
   before the profile and room projection can reference it.
 - Actual cost and security boundary: body buffering stays capped at 14,046,552 bytes
-  with the existing ten-second deadline. Valid public input incurs current credential
-  authentication, one bounded base64 decode, the already measured shared decoder
+  with the existing ten-second deadline. Invalid durable authority now stops after an
+  indexed read without allocating the decoded output; valid public input incurs that
+  read, one bounded Base64 decode, the already measured shared decoder
   bounds, and the reviewed SQLite write. Preview is one primary-key/state/expiry
   lookup plus the canonical BLOB read. The raw payload type is not `Debug` or
   `Serialize`; raw invite/browser credentials remain HTTP-local. The live opaque URL
@@ -1012,10 +1025,13 @@ the reviewed persistence owner without adding another product surface.
   authority. No cache, new route, grant, ticket, table, task, queue, retry, or retained
   state was introduced. No CPU, memory, disk, or latency improvement is claimed.
 - Verification result: the real loopback test proves invalid Authorization wins over
-  malformed JSON, per-browser custody isolation, exact replacement/old-URL 404, live
+  malformed JSON; an arbitrary canonical unknown `aaj1_` carrying valid Base64 for a
+  ten-MiB output is rejected as `invite_invalid` at the durable pre-decode gate;
+  per-browser custody isolation, exact replacement/old-URL 404, live
   canonical preview, atomic admission binding to the selected avatar, exact retry,
   and post-admission reads. The existing profile test continues to prove ordinary
   pending rows return 404. All 159 persistence tests, 54 server unit tests, all server
   integration tests, warning-denied workspace Clippy, and `make check` pass. Commit
-  size is 182 insertions/12 deletions across three files; the production modules are
-  380 and 737 lines and pass the unchanged source gate.
+  `cc57217` is 182 insertions/12 deletions; correction `81c04e7` is 198
+  insertions/108 deletions across four files. The production modules are 390, 575,
+  and 737 lines and pass the unchanged source gate.

@@ -700,12 +700,17 @@ flag is added meanwhile.
   read and rewrite to transfer the asset. More importantly, a single pre-join check
   before image work would let a revoked or exhausted invite consume the shared
   decoder, while a check only before decoding would allow an invite-state race to
-  commit bytes after authority changed.
-- Change intent: commit `facaaab` adds one persistence method to the existing
-  `SqliteStore` and `profile_attachments` table. It authenticates only fixed-size
-  invite and browser fingerprints, checks current invite/room authority before
-  decode, reuses the existing canonical static-raster decoder, and checks authority
-  again in the final transaction. That transaction removes expired pending rows,
+  commit bytes after authority changed. Review later found that commit `cc57217`
+  parsed canonical invite evidence before Base64 decode but did not prove a join-code
+  row was current until after that decode. With 128 admitted connections, arbitrary
+  canonical join codes could therefore retain up to 1.25 GiB of additional decoded
+  output while awaiting the durable lookup, besides spending synchronous decode CPU.
+- Change intent: commit `facaaab` adds the durable write to the existing `SqliteStore`
+  and `profile_attachments` table. Commit `81c04e7` makes the pre-decode check explicit:
+  the persistence owner returns one opaque, privately constructible authorization
+  only after the indexed current invite/room/use-limit read. The decoder/store accepts
+  that authorization and checks its immutable credential evidence again in the final
+  transaction. That transaction removes expired pending rows,
   evaluates all quota dimensions in one conditional aggregate, excludes only the
   exact custody predecessor, then deletes and replaces that row atomically.
 - Preserved contract: custody remains the exact presented invite credential plus
@@ -717,24 +722,30 @@ flag is added meanwhile.
   transferred by admission keep invite/room/runtime provenance without being
   retroactively charged to the admitted user's ordinary 64-file uploader quota.
 - Observed resource bound and trade-off: invalid current authority performs one
-  indexed invite/room read and no image decode or BLOB write. A valid attempt performs
-  that precheck, at most one existing decoder job under the process-wide two-permit
-  semaphore (10 MiB input, 4,096-pixel dimension, 16 Mi-pixel, and 72 MiB decoder
-  allocation bounds), one final indexed invite/room read, one expired-pending delete,
-  one aggregate over the post-cleanup live attachment set bounded by 4,096 rows, one
-  exact-custody delete, and one canonical PNG insert. The second authority read is
-  intentional TOCTOU protection. No cache, new table, filesystem store, decoder,
-  queue, task, trait, or future provider abstraction was added. This is operation and
-  allocation evidence, not a measured CPU, memory, disk, or latency improvement.
-- Verification: three focused tests prove exact-custody replacement and isolation,
-  one-hour canonical PNG metadata, post-decode revoke rejection without mutation,
-  shared eight-item invite quota across browsers, replacement at the quota boundary,
-  admission-provenance exclusion from ordinary user quota, and inclusion of 4,096
-  live pre-join rows in the shared runtime cap. All 159 persistence tests pass;
-  warning-denied workspace Clippy and architecture, source-growth, policy, formatting,
-  and workspace-check gates pass. The implementation commit is 537 insertions and
-  8 deletions across four files; the new 521-line owner and existing 735-line
-  canonical attachment owner remain below the mandatory 800-line source gate.
+  indexed invite/room read and no Base64 output allocation, image decode, or BLOB
+  write. The bounded JSON envelope is still admitted before its body-carried
+  credentials, matching the reachable client contract; the 14,046,552-byte route
+  limit, ten-second body deadline, and 128-connection process bound remain explicit
+  residual costs. A valid attempt performs that precheck, at most one existing decoder
+  job under the process-wide two-permit semaphore (10 MiB input, 4,096-pixel
+  dimension, 16 Mi-pixel, and 72 MiB decoder allocation bounds), one final indexed
+  invite/room read, one expired-pending delete, one aggregate over the post-cleanup
+  live attachment set bounded by 4,096 rows, one exact-custody delete, and one
+  canonical PNG insert. The second authority read is intentional TOCTOU protection.
+  No cache, new table, filesystem store, decoder, queue, task, trait, or future
+  provider abstraction was added. This is operation and allocation evidence, not a
+  measured CPU, memory, disk, or latency improvement.
+- Verification: three focused persistence tests prove exact-custody replacement and
+  isolation, one-hour canonical PNG metadata, rejection after preauthorization is
+  made stale by revoke without mutation, shared eight-item invite quota across
+  browsers, replacement at the quota boundary, admission-provenance exclusion from
+  ordinary user quota, and inclusion of 4,096 live pre-join rows in the shared runtime
+  cap. All 159 persistence tests pass; warning-denied workspace Clippy and
+  architecture, source-growth, policy, formatting, and workspace-check gates pass.
+  The original persistence implementation commit is 537 insertions and 8 deletions;
+  the pre-decode correction is 198 insertions and 108 deletions across four files.
+  The current 575-line owner and 737-line canonical attachment owner remain below the
+  mandatory 800-line source gate.
 
 ### Pre-join upload and preview through the existing attachment route
 
@@ -748,12 +759,12 @@ flag is added meanwhile.
 - Change intent and smallest design: the existing handler checks header presence. If
   Authorization is supplied it consumes the existing profile ticket before reading
   the body, with no public fallback. With no Authorization, it accepts only
-  `profile_avatar`, authenticates the two current invite credential forms and the
-  canonical browser credential immediately after bounded JSON decode, then performs
-  base64 and image work and calls the existing `store_human_prejoin_avatar`. The raw
-  upload type no longer derives `Debug` and raw credentials never cross the HTTP
-  module. No route, ticket kind, table, store, queue, task, or client orchestration was
-  added.
+  `profile_avatar`, parses the two invite credential forms and canonical browser
+  credential immediately after bounded JSON decode, obtains current durable
+  invite/room authorization from persistence, and only then performs Base64 and image
+  work. The raw upload type no longer derives `Debug` and raw credentials never cross
+  the HTTP module. No route, ticket kind, table, store, queue, task, or client
+  orchestration was added.
 - Preserved contract and preview boundary: authenticated local/session profile
   uploads keep their existing ticket and authority paths. Pre-join upload returns the
   same attachment metadata shape used by the copied UI. The existing opaque UUID URL
@@ -767,24 +778,29 @@ flag is added meanwhile.
   no-store` and `nosniff`.
 - Observed resource cost: every upload remains under the existing 14,046,552-byte
   JSON-body and ten-second deadline, so the adapter buffers at most one bounded
-  base64 envelope. Public invite/browser authentication happens before base64 decode;
-  a valid payload then allocates one decoded input bounded just above the 10 MiB
+  Base64 envelope. An unknown, revoked, expired, exhausted, or inactive-room invite
+  now stops after one indexed durable read and allocates no Base64 output. A valid
+  payload then allocates one decoded input bounded just above the 10 MiB
   binary ceiling before the shared decoder enforces the exact 10 MiB and raster
   limits documented above. A preview performs one primary-key/state/expiry lookup and
-  returns the stored canonical PNG BLOB. The added branches, two fixed fingerprints,
-  and tuple are request-local; no retained state or success-path retry exists. No CPU,
-  memory, disk, or latency improvement is claimed without representative measurement.
+  returns the stored canonical PNG BLOB. The two fingerprints and opaque
+  authorization are request-local; no retained state or success-path retry exists. No
+  CPU, memory, disk, or latency improvement is claimed without representative
+  measurement.
 - Verification: a real loopback Axum flow proves an invalid supplied profile ticket
-  returns 401 before malformed JSON is decoded; two browsers retain separate custody;
-  exact same-browser replacement makes only the old URL 404; both live previews render
-  canonical PNG with `private, no-store`; admission binds only the exact selected
-  avatar; exact retry returns the same result; and both the bound avatar and unrelated
-  pending preview remain reachable afterward. The pre-existing profile boundary test
-  still proves ordinary pending avatars return 404. All 159 persistence tests, 54
-  server unit tests, and every server integration test pass, together with
-  warning-denied workspace Clippy and `make check`. The implementation/test commit is
-  182 insertions and 12 deletions across three files; the touched production modules
-  remain 380 and 737 lines under the unchanged 800-line gate.
+  returns 401 before malformed JSON is decoded; an arbitrary canonical unknown join
+  code carrying a valid ten-MiB Base64 payload returns `invite_invalid` through the
+  pre-decode durable gate; two browsers retain separate custody; exact same-browser
+  replacement makes only the old URL 404; both live previews render canonical PNG
+  with `private, no-store`; admission binds only the exact selected avatar; exact retry
+  returns the same result; and both the bound avatar and unrelated pending preview
+  remain reachable afterward. The pre-existing profile boundary test still proves
+  ordinary pending avatars return 404. All 159 persistence tests, 54 server unit
+  tests, and every server integration test pass, together with warning-denied
+  workspace Clippy and `make check`. The original HTTP commit is 182 insertions and 12
+  deletions; correction `81c04e7` is 198 insertions and 108 deletions across four
+  files. Current touched production modules are 390, 575, and 737 lines under the
+  unchanged 800-line gate.
 
 ### Binary digests instead of encoded digest text
 
