@@ -319,8 +319,7 @@ async fn snapshot_is_trimmed_to_the_websocket_message_budget() {
 
 #[tokio::test]
 async fn static_frontend_has_browser_security_headers() {
-    let directory =
-        tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
+    let directory = tempfile::tempdir().expect("create test directory");
     let frontend = directory.path().join("frontend");
     tokio::fs::create_dir_all(frontend.join("assets"))
         .await
@@ -334,13 +333,11 @@ async fn static_frontend_has_browser_security_headers() {
     tokio::fs::write(frontend.join("assets/app.js"), "globalThis.loaded = true;")
         .await
         .unwrap_or_else(|error| panic!("write frontend asset: {error}"));
-    let database_url = format!(
-        "sqlite://{}",
-        directory.path().join("runtime.sqlite3").display()
-    );
+    let database_path = directory.path().join("runtime.sqlite3");
+    let database_url = format!("sqlite://{}", database_path.display());
     let store = SqliteStore::open(&database_url)
         .await
-        .unwrap_or_else(|error| panic!("open test store: {error}"));
+        .expect("open test store");
     bootstrap(&store).await;
     let server = start_with_frontend(store, frontend).await;
     let response = Client::new()
@@ -382,20 +379,23 @@ async fn static_frontend_has_browser_security_headers() {
             "browser entrance {entrance}"
         );
         assert!(response.headers().contains_key("content-security-policy"));
-        assert!(
-            response
-                .text()
-                .await
-                .is_ok_and(|body| body.contains("./assets/app.js"))
-        );
+        let asset_url = response
+            .url()
+            .join("./assets/app.js")
+            .unwrap_or_else(|error| panic!("resolve browser asset from {entrance}: {error}"));
+        let body = response
+            .text()
+            .await
+            .unwrap_or_else(|error| panic!("read browser entrance {entrance}: {error}"));
+        assert!(body.contains("./assets/app.js"));
+        let asset = Client::new()
+            .get(asset_url)
+            .send()
+            .await
+            .unwrap_or_else(|error| panic!("request browser asset from {entrance}: {error}"));
+        assert!(asset.status().is_success(), "browser asset from {entrance}");
+        assert!(asset.headers().contains_key("content-security-policy"));
     }
-    let asset = Client::new()
-        .get(format!("{}/assets/app.js", server.base_url))
-        .send()
-        .await
-        .unwrap_or_else(|error| panic!("request root-relative frontend asset: {error}"));
-    assert!(asset.status().is_success());
-    assert!(asset.headers().contains_key("content-security-policy"));
     server.stop().await;
 }
 

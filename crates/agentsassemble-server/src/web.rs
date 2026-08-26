@@ -37,8 +37,12 @@ const MAX_TICKET_BODY_BYTES: usize = 4 * 1024;
 const TRACKED_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(6);
 pub(crate) const JOIN_PATH: &str = "/join";
 pub(crate) const JOIN_SLASH_PATH: &str = "/join/";
+pub(crate) const JOIN_ASSETS_PREFIX: &str = "/join/assets";
+pub(crate) const JOIN_ASSETS_ROUTE: &str = "/join/assets/{*path}";
 pub(crate) const PAIR_PATH: &str = "/pair";
 pub(crate) const PAIR_SLASH_PATH: &str = "/pair/";
+pub(crate) const PAIR_ASSETS_PREFIX: &str = "/pair/assets";
+pub(crate) const PAIR_ASSETS_ROUTE: &str = "/pair/assets/{*path}";
 #[derive(Debug, Error)]
 pub enum ServeError {
     #[error("server I/O failed: {0}")]
@@ -78,6 +82,8 @@ pub fn router(state: AppState) -> Router {
             .route_service(JOIN_SLASH_PATH, ServeFile::new(index.clone()))
             .route_service(PAIR_PATH, ServeFile::new(index.clone()))
             .route_service(PAIR_SLASH_PATH, ServeFile::new(index.clone()))
+            .nest_service(JOIN_ASSETS_PREFIX, ServeDir::new(assets.clone()))
+            .nest_service(PAIR_ASSETS_PREFIX, ServeDir::new(assets.clone()))
             .nest_service("/assets", ServeDir::new(assets))
             .nest_service(
                 "/app",
