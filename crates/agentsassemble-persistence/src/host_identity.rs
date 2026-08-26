@@ -119,6 +119,7 @@ mod tests {
             .unwrap_or_else(|error| panic!("load first host identity: {error}"));
         let first_server_id = first_identity.server_id().to_owned();
         let first_private_key = first_identity.private_key_pkcs8().to_vec();
+        let first_session_hmac_key = *first_identity.session_hmac_key();
         drop(first_identity);
         drop(first);
 
@@ -134,6 +135,77 @@ mod tests {
             reopened_identity.private_key_pkcs8() == first_private_key,
             "host private key changed across reopen"
         );
+        assert!(
+            reopened_identity.session_hmac_key() == &first_session_hmac_key,
+            "session HMAC key changed across reopen"
+        );
+
+        let other_directory =
+            tempfile::tempdir().unwrap_or_else(|error| panic!("other tempdir: {error}"));
+        let other_database = other_directory.path().join("runtime.sqlite3");
+        let other = SqliteStore::open_path(&other_database)
+            .await
+            .unwrap_or_else(|error| panic!("create other authority: {error}"));
+        let other_identity = other
+            .host_identity()
+            .await
+            .unwrap_or_else(|error| panic!("load other host identity: {error}"));
+        assert!(
+            other_identity.session_hmac_key() != &first_session_hmac_key,
+            "fresh hosts shared a session HMAC key"
+        );
+    }
+
+    #[tokio::test]
+    async fn invalid_session_hmac_envelopes_fail_closed_without_rewrite() {
+        for corruption in ["missing", "short", "noncanonical", "old-version"] {
+            let directory =
+                tempfile::tempdir().unwrap_or_else(|error| panic!("{corruption} tempdir: {error}"));
+            let database = directory.path().join("runtime.sqlite3");
+            let store = SqliteStore::open_path(&database)
+                .await
+                .unwrap_or_else(|error| panic!("create {corruption} authority: {error}"));
+            drop(store);
+
+            let key_file = key_path(directory.path());
+            let original = std::fs::read(&key_file)
+                .unwrap_or_else(|error| panic!("read {corruption} envelope: {error}"));
+            let mut value: serde_json::Value = serde_json::from_slice(&original)
+                .unwrap_or_else(|error| panic!("decode {corruption} envelope: {error}"));
+            let object = value
+                .as_object_mut()
+                .unwrap_or_else(|| panic!("{corruption} envelope must be an object"));
+            match corruption {
+                "missing" => {
+                    object.remove("session_hmac_key");
+                }
+                "short" => {
+                    object.insert("session_hmac_key".to_owned(), "AA".into());
+                }
+                "noncanonical" => {
+                    object.insert("session_hmac_key".to_owned(), "AA==".into());
+                }
+                "old-version" => {
+                    object.insert("version".to_owned(), 1.into());
+                }
+                _ => unreachable!("bounded corruption cases"),
+            }
+            let corrupted = serde_json::to_vec(&value)
+                .unwrap_or_else(|error| panic!("encode {corruption} envelope: {error}"));
+            std::fs::write(&key_file, &corrupted)
+                .unwrap_or_else(|error| panic!("write {corruption} envelope: {error}"));
+
+            assert!(matches!(
+                SqliteStore::open_path(&database).await,
+                Err(PersistenceError::InvalidHostIdentity)
+            ));
+            let after = std::fs::read(&key_file)
+                .unwrap_or_else(|error| panic!("reread {corruption} envelope: {error}"));
+            assert!(
+                after == corrupted,
+                "{corruption} envelope was rewritten after fail-closed load"
+            );
+        }
     }
 
     #[tokio::test]
