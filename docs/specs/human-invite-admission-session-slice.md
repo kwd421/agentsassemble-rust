@@ -89,6 +89,11 @@ is migrated, imported, or interpreted.
 - A completed but later expired, replaced, or revoked admission remains a terminal
   `admission_session_unavailable`; exact retry never creates a replacement session.
   The deterministic issuer reproduces the bearer only while that exact row is live.
+  A one-use request-key row is never deleted by routine cleanup in this slice: its
+  admission key, payload hash, and terminal outcome remain the authority for exact
+  unavailable and changed-payload conflict results even after its invite is used,
+  expired, or revoked. A reusable row may be removed after its invite is terminal
+  because the original reusable path applies that current-invite gate before lookup.
 - `profile_attachments` remains the single human-avatar asset owner. Its state
   constraint permits either a user-owned pending/bound image or an admission-pending
   image. The latter stores separate fixed-size custody and invite-quota fingerprints.
@@ -444,14 +449,44 @@ flag is added meanwhile.
   admission remains `admission_session_unavailable`. Query count and transaction
   latency are recorded for the targeted update.
 
+### One-use terminal authority instead of cleanup-induced gate drift
+
+- Prior cost and correctness threat: the original request-key workflow is checked
+  before current invite gates. Deleting its terminal record after a one-use invite
+  becomes used, expired, or revoked changes an exact retry from the stored
+  `admission_session_unavailable` or payload conflict to a later invite-gate error.
+  A one-use invite can be terminal immediately after its first successful use, so
+  invite terminality is not a safe deletion condition.
+- Change intent: retain the same `human_room_sessions` row as the one-use terminal
+  authority. Routine cleanup never deletes it. Reusable tombstones remain separately
+  eligible only after their backing invite is terminal because their current gate is
+  evaluated before lookup in the original reachable path.
+- Preserved contract: exact one-use retries and changed-payload retries return the
+  same terminal result across restart and unrelated cleanup-triggering writes; no
+  deleted tombstone can reopen admission or shift the deciding authority.
+- Trade-off: durable row count grows by one fixed-size row per one-use admission,
+  matching the original retained workflow rather than inventing a retention window.
+  No compaction table or expiry policy is added without measured page growth. A
+  later in-row compaction is acceptable only if it retains admission key, payload
+  hash, key kind, and terminal outcome and demonstrates lower disk cost without a new
+  lifecycle owner.
+- Verification: after session expiry, revoke, and replacement, trigger every bounded
+  cleanup write and restart the process; the exact key still returns unavailable,
+  the same key with a changed payload still conflicts, and SQLite page/row growth per
+  terminal admission is recorded.
+
 No additional cache, repository interface, background cleanup framework, generic
 credential provider, multi-database saga, or future agent-session abstraction is
 authorized by this slice. Expired rows are rejected authoritatively and only the
 request-relevant rows described above are materialized as ended. Admission
-tombstones remain until their backing invite is terminal so a reusable exact retry
-cannot become a new admission after cleanup; only then may bounded work on relevant
-writes remove them. Expired pending attachments may be reclaimed by the same bounded
-write-path work. A separate cleanup task requires later measured evidence.
+tombstone cleanup is key-kind aware: routine work never removes a one-use
+request-key tombstone, while a reusable tombstone becomes removable only after its
+backing invite is terminal so its current gate prevents re-admission. Expired pending
+attachments may be reclaimed by the same bounded write-path work. Exact attachment
+authorization checks only its target row and never invokes a global expired-row
+delete. A separate cleanup task or smaller batch requires measured transaction and
+disk evidence; the current store-wide worst case remains capped by the existing
+4,096-item runtime limit rather than described as unbounded.
 
 ## Non-goals
 
@@ -489,6 +524,12 @@ write-path work. A separate cleanup task requires later measured evidence.
   session remains live. Separate reusable tests prove the original ordering: an
   existing device-key result is rejected after invite expiry, revocation, or use
   ceiling, while a new admission receives the same current-gate error.
+- One-use tombstone tests end the backing session by natural expiry, exact revoke,
+  and replacement, then trigger unrelated bounded cleanup and restart. Exact retry
+  remains `admission_session_unavailable`, changed-payload retry remains a conflict,
+  and no cleanup path removes the request-key authority. Separate reusable tests
+  prove removal is allowed only after the backing invite is terminal and can never
+  reopen admission because its current gate precedes device-key lookup.
 - Replacement tests admit one stable participant through different reusable invites,
   prove only the new session remains live, the old bearer/grants/socket fail, and the
   same-participant replacement does not increase capacity.
