@@ -26,6 +26,7 @@ use crate::{
     host_ticket::{AuthenticatedTicketResponse, HostChallengeResponse},
     http_api::{BodyDecodeError, ensure_empty_body},
     http_transport::{MAX_HTTP_CONNECTIONS, RejectionCounter, serve_connection},
+    ingress_trust::{LocalIngress, require_trusted_ingress},
     issue_local_ticket,
     provider_turn_reconciliation_runtime::reconcile_provider_turn_ownership,
     reconcile_runtime_ownership,
@@ -105,6 +106,7 @@ pub fn router(state: AppState) -> Router {
     }
     app.with_state(state)
         .layer(RequestBodyDeadlineLayer::new(HTTP_BODY_DEADLINE))
+        .layer(middleware::from_fn(require_trusted_ingress))
         .layer(middleware::map_response(crate::security_headers::apply))
 }
 
@@ -149,6 +151,13 @@ pub async fn serve(
     state: AppState,
     cancellation: CancellationToken,
 ) -> Result<(), ServeError> {
+    let listener_address = listener.local_addr()?;
+    let ingress = LocalIngress::from_listener(listener_address).ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::AddrNotAvailable,
+            "the local runtime listener is not bound to loopback",
+        )
+    })?;
     let reconciled_turns = Box::pin(reconcile_provider_turn_ownership(
         &state.store,
         &state.provider_adapter,
@@ -193,7 +202,7 @@ pub async fn serve(
             () = cancellation.cancelled() => break Ok(()),
             accepted = listener.accept() => accepted,
         };
-        let (stream, _) = match accepted {
+        let (stream, peer) = match accepted {
             Ok(accepted) => accepted,
             Err(error) => break Err(error),
         };
@@ -203,11 +212,12 @@ pub async fn serve(
             continue;
         };
         let connection_app = app.clone();
+        let connection_ingress = ingress;
         let shutdown = connection_shutdown.clone();
         connections.spawn(async move {
             tokio::select! {
                 () = shutdown.cancelled() => {}
-                () = serve_connection(stream, connection_app, permit) => {}
+                () = serve_connection(stream, peer, connection_ingress, connection_app, permit) => {}
             }
         });
     };

@@ -8,6 +8,11 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 use crate::AppState;
 
 pub(crate) const PRIVATE_NO_STORE: HeaderValue = HeaderValue::from_static("private, no-store");
+pub(crate) const TAURI_ORIGINS: [&str; 3] = [
+    "tauri://localhost",
+    "http://tauri.localhost",
+    "https://tauri.localhost",
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BodyDecodeError {
@@ -18,11 +23,7 @@ pub(crate) enum BodyDecodeError {
 }
 
 pub(crate) fn exact_tauri_cors(methods: impl IntoIterator<Item = Method>) -> CorsLayer {
-    let origins = [
-        HeaderValue::from_static("tauri://localhost"),
-        HeaderValue::from_static("http://tauri.localhost"),
-        HeaderValue::from_static("https://tauri.localhost"),
-    ];
+    let origins = TAURI_ORIGINS.map(HeaderValue::from_static);
     CorsLayer::new()
         .allow_origin(AllowOrigin::list(origins))
         .allow_methods(methods.into_iter().collect::<Vec<_>>())

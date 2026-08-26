@@ -1,4 +1,5 @@
 use std::{
+    net::SocketAddr,
     sync::{
         Arc,
         atomic::{AtomicU64, Ordering},
@@ -13,6 +14,8 @@ use hyper_util::{
     service::TowerToHyperService,
 };
 use tokio::{net::TcpStream, sync::OwnedSemaphorePermit};
+
+use crate::ingress_trust::{LocalIngress, PeerAddr};
 
 pub(crate) const MAX_HTTP_CONNECTIONS: usize = 128;
 pub(crate) const HTTP_CONNECTION_LIFETIME: Duration = Duration::from_secs(30);
@@ -34,6 +37,8 @@ impl RejectionCounter {
 
 pub(crate) async fn serve_connection(
     stream: TcpStream,
+    peer: SocketAddr,
+    ingress: LocalIngress,
     app: Router,
     _permit: OwnedSemaphorePermit,
 ) {
@@ -42,6 +47,9 @@ pub(crate) async fn serve_connection(
         .timer(TokioTimer::new())
         .header_read_timeout(HTTP_HEADER_TIMEOUT)
         .max_buf_size(MAX_HTTP_BUFFER_BYTES);
+    let app = app
+        .layer(axum::Extension(PeerAddr(peer)))
+        .layer(axum::Extension(ingress));
     let connection = builder
         .serve_connection(TokioIo::new(stream), TowerToHyperService::new(app))
         .with_upgrades();

@@ -249,7 +249,9 @@ async fn ticket_auth_and_route_limit_are_checked_before_request_body() {
 
     let unauthorized = header_only_request(
         &address,
-        "POST /api/ws-ticket HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1048576\r\n\r\n",
+        &format!(
+            "POST /api/ws-ticket HTTP/1.1\r\nHost: {address}\r\nContent-Length: 1048576\r\n\r\n"
+        ),
     )
     .await;
     assert!(unauthorized.starts_with("HTTP/1.1 401"));
@@ -259,7 +261,7 @@ async fn ticket_auth_and_route_limit_are_checked_before_request_body() {
     let oversized = header_only_request(
         &address,
         &format!(
-            "POST /api/ws-ticket HTTP/1.1\r\nHost: localhost\r\nx-host-challenge: {challenge}\r\nx-host-meeting: general\r\nx-host-proof: {proof}\r\nContent-Length: 1048576\r\n\r\n"
+            "POST /api/ws-ticket HTTP/1.1\r\nHost: {address}\r\nx-host-challenge: {challenge}\r\nx-host-meeting: general\r\nx-host-proof: {proof}\r\nContent-Length: 1048576\r\n\r\n"
         ),
     )
     .await;

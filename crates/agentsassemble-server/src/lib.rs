@@ -55,6 +55,7 @@ mod human_invite_preflight;
 mod human_invite_web;
 mod human_session_bearer;
 mod human_session_exchange_web;
+mod ingress_trust;
 mod lifecycle_command_tracker;
 mod participant_mute_runtime;
 mod principal_mutation_admission;
