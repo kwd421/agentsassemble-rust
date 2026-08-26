@@ -905,3 +905,45 @@ fallback-capable helper to one canonical durable credential owner.
   verification pass. `make check` passes architecture, source-growth, policy,
   formatting, and workspace compilation gates. The commit is 361 insertions and 47
   deletions across 11 files, below 1,000 lines.
+
+## Bounded pre-join avatar persistence owner
+
+Commit `facaaab` implements the durable pre-join avatar write and quota boundary
+without making the still-missing HTTP upload route appear complete.
+
+- Prior observed cost and threat: the original filesystem path scans and parses the
+  attachment directory, deletes an exact-custody predecessor, rescans, and writes the
+  file and JSON metadata as separate filesystem objects. Checking invite authority
+  only before decoding would also permit a revoke/use-limit race to commit afterward;
+  checking only afterward would spend bounded decoder capacity for an already invalid
+  request.
+- Intent and smallest design: `SqliteStore::store_human_prejoin_avatar` accepts only
+  authenticated fixed-size invite evidence and a 32-byte browser fingerprint. It
+  checks invite/room gates before reusing the existing bounded PNG canonicalizer and
+  repeats the check in the final SQLite transaction. The transaction reuses the one
+  existing attachment table, deletes expired pending rows, computes invite,
+  pending-room, room, and runtime quotas in one aggregate, excludes/deletes only the
+  exact custody predecessor, and inserts one one-hour `admission_pending` row. No new
+  store, table, decoder, queue, task, trait, compatibility path, or fallback exists.
+- Preserved product and security contract: exact invite-plus-browser custody, shared
+  signed-invite quota provenance, all original item/count/byte limits, atomic exact
+  replacement, one-hour expiry, and admission-owned transfer remain unchanged.
+  Bound admission assets keep invite/room/runtime provenance but do not consume the
+  admitted user's ordinary uploader quota. Raw invite/browser credentials never
+  enter this persistence API, rows, errors, or fixtures.
+- Actual bounded cost: rejected current authority performs one indexed invite/room
+  read and no decode/BLOB write. A valid write performs two current-authority reads
+  around one existing decoder admission (two concurrent permits; 10 MiB input,
+  4,096-pixel dimension, 16 Mi-pixel, and 72 MiB allocation bounds), one cleanup
+  delete, one conditional aggregate over the live set bounded by 4,096 records, one
+  exact delete, and one canonical PNG insert. The duplicate authority read is the
+  explicit TOCTOU cost. No CPU, memory, disk, or latency improvement is claimed
+  without representative measurement.
+- Verification result: the three focused tests cover exact replacement/isolation,
+  canonical metadata and one-hour TTL, post-decode revoke failure without mutation,
+  shared eight-item invite quota, replacement while full, ordinary-uploader quota
+  isolation, and rejection at 4,096 live pre-join rows. All 159 persistence tests
+  pass. `RUSTFLAGS='-D warnings' cargo clippy --workspace --all-targets --all-features`
+  and `make check` pass. Commit size is 537 insertions/8 deletions across four files;
+  the 521-line new module and 735-line existing canonicalizer owner both pass the
+  unchanged 800-line source gate.

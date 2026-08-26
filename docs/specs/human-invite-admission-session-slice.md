@@ -1,9 +1,9 @@
 # Human Invite, Admission, and Room Session Slice
 
-Status: atomic SQLite, bounded RoomRuntime admission, local HTTP preflight/join, and
-the fail-closed browser credential owner are implemented and locally verified;
-pre-join upload, derived grants, WebSocket session activation, and trusted public
-ingress remain incomplete
+Status: atomic SQLite, bounded RoomRuntime admission, local HTTP preflight/join,
+the fail-closed browser credential owner, and the pre-join avatar persistence owner
+are implemented and locally verified; the pre-join HTTP route, derived grants,
+WebSocket session activation, and trusted public ingress remain incomplete
 
 ## Definition
 
@@ -675,6 +675,51 @@ flag is added meanwhile.
   workspace architecture, source-growth, policy, formatting, and Rust check gates
   pass. The implementation/test commit is 361 insertions and 47 deletions across 11
   files, below the mandatory split threshold.
+
+### One bounded pre-join avatar owner in the existing attachment store
+
+- Prior cost and threat: the original filesystem owner acquires its process lock,
+  enumerates and parses every live attachment record, deletes an exact-custody
+  predecessor, enumerates the directory again, then writes image bytes and metadata
+  separately before a directory rename. Admission later performs another metadata
+  read and rewrite to transfer the asset. More importantly, a single pre-join check
+  before image work would let a revoked or exhausted invite consume the shared
+  decoder, while a check only before decoding would allow an invite-state race to
+  commit bytes after authority changed.
+- Change intent: commit `facaaab` adds one persistence method to the existing
+  `SqliteStore` and `profile_attachments` table. It authenticates only fixed-size
+  invite and browser fingerprints, checks current invite/room authority before
+  decode, reuses the existing canonical static-raster decoder, and checks authority
+  again in the final transaction. That transaction removes expired pending rows,
+  evaluates all quota dimensions in one conditional aggregate, excludes only the
+  exact custody predecessor, then deletes and replaces that row atomically.
+- Preserved contract: custody remains the exact presented invite credential plus
+  browser credential, while both credential forms and every browser for one invite
+  share the signed-invite quota. The limits remain 10 MiB per image, 8 files/32 MiB
+  per invite, 64 files/128 MiB pending per room, 512 files/1 GiB per room, and
+  4,096 files/8 GiB per runtime. Pending lifetime remains one hour. A successful
+  replacement removes only its exact predecessor; failure leaves it intact. Assets
+  transferred by admission keep invite/room/runtime provenance without being
+  retroactively charged to the admitted user's ordinary 64-file uploader quota.
+- Observed resource bound and trade-off: invalid current authority performs one
+  indexed invite/room read and no image decode or BLOB write. A valid attempt performs
+  that precheck, at most one existing decoder job under the process-wide two-permit
+  semaphore (10 MiB input, 4,096-pixel dimension, 16 Mi-pixel, and 72 MiB decoder
+  allocation bounds), one final indexed invite/room read, one expired-pending delete,
+  one aggregate over the post-cleanup live attachment set bounded by 4,096 rows, one
+  exact-custody delete, and one canonical PNG insert. The second authority read is
+  intentional TOCTOU protection. No cache, new table, filesystem store, decoder,
+  queue, task, trait, or future provider abstraction was added. This is operation and
+  allocation evidence, not a measured CPU, memory, disk, or latency improvement.
+- Verification: three focused tests prove exact-custody replacement and isolation,
+  one-hour canonical PNG metadata, post-decode revoke rejection without mutation,
+  shared eight-item invite quota across browsers, replacement at the quota boundary,
+  admission-provenance exclusion from ordinary user quota, and inclusion of 4,096
+  live pre-join rows in the shared runtime cap. All 159 persistence tests pass;
+  warning-denied workspace Clippy and architecture, source-growth, policy, formatting,
+  and workspace-check gates pass. The implementation commit is 537 insertions and
+  8 deletions across four files; the new 521-line owner and existing 735-line
+  canonical attachment owner remain below the mandatory 800-line source gate.
 
 ### Binary digests instead of encoded digest text
 
