@@ -160,6 +160,8 @@ fn validate_new_human_invite(invite: &NewHumanInvite) -> Result<(), PersistenceE
         || !is_canonical_text(&invite.display_name, 128)
         || invite.max_uses < 0
         || invite.expires_at <= invite.created_at
+        || !is_exact_microsecond(invite.created_at)
+        || !is_exact_microsecond(invite.expires_at)
     {
         return Err(rejected(
             "invalid_human_invite",
@@ -167,6 +169,10 @@ fn validate_new_human_invite(invite: &NewHumanInvite) -> Result<(), PersistenceE
         ));
     }
     Ok(())
+}
+
+fn is_exact_microsecond(value: DateTime<Utc>) -> bool {
+    value.timestamp_subsec_nanos().is_multiple_of(1_000)
 }
 
 fn is_canonical_text(value: &str, max_chars: usize) -> bool {
@@ -270,7 +276,7 @@ mod tests {
     use agentsassemble_domain::{
         InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID,
     };
-    use chrono::{TimeZone, Utc};
+    use chrono::{Duration, TimeZone, Utc};
 
     use super::{HumanInvite, MAX_EFFECTIVE_INVITE_USES, NewHumanInvite};
     use crate::{PersistenceError, SqliteStore};
@@ -286,6 +292,17 @@ mod tests {
             )
             .await
             .unwrap_or_else(|error| panic!("authorize manager: {error}"));
+        let mut sub_microsecond = new_invite(0xAA, 0xCC);
+        sub_microsecond.expires_at += Duration::nanoseconds(1);
+        assert!(matches!(
+            store
+                .create_human_invite_for_local_manager(&manager, sub_microsecond)
+                .await,
+            Err(PersistenceError::CommandRejected {
+                code: "invalid_human_invite",
+                ..
+            })
+        ));
         let created = store
             .create_human_invite_for_local_manager(&manager, new_invite(0xAB, 0xCD))
             .await
