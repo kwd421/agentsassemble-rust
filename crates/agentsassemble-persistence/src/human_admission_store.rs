@@ -560,7 +560,11 @@ struct IssuedBearer {
 }
 
 fn issue_session_bearer(store: &SqliteStore, admission_key: &[u8; 32]) -> IssuedBearer {
-    let mut signer = Hmac::<Sha256>::new_from_slice(store.host_key.session_hmac_key())
+    derive_session_bearer(store.host_key.session_hmac_key(), admission_key)
+}
+
+fn derive_session_bearer(key: &[u8; 32], admission_key: &[u8; 32]) -> IssuedBearer {
+    let mut signer = Hmac::<Sha256>::new_from_slice(key)
         .unwrap_or_else(|_| unreachable!("HMAC accepts a 32-byte key"));
     signer.update(SESSION_BEARER_CONTEXT);
     signer.update(admission_key);
@@ -610,3 +614,7 @@ fn invalid_state(message: &str) -> PersistenceError {
         message: message.to_owned(),
     }
 }
+
+#[cfg(test)]
+#[path = "human_admission_store_tests.rs"]
+mod tests;
