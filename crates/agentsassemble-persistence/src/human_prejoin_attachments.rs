@@ -7,7 +7,8 @@ use crate::{
     HumanInviteCredentialEvidence, PersistenceError, ProfileAttachmentMetadata, SqliteStore,
     human_admission::prejoin_avatar_custody_fingerprint,
     human_invite_preflight::{load_invite_and_room, require_credential_binding},
-    profile_attachments::{attachment_metadata, prepare_profile_attachment},
+    profile_attachments::attachment_metadata,
+    raster_assets::prepare_raster,
 };
 
 const PREJOIN_ATTACHMENT_TTL: Duration = Duration::hours(1);
@@ -89,7 +90,7 @@ impl SqliteStore {
         content_type: &str,
         content: Vec<u8>,
     ) -> Result<ProfileAttachmentMetadata, PersistenceError> {
-        let (canonical, size) = prepare_profile_attachment(filename, content_type, content).await?;
+        let (canonical, size) = prepare_raster(filename, content_type, content).await?;
         let now = Utc::now();
         let mut transaction = self.pool.begin().await?;
         let authority = current_prejoin_authority(

@@ -5,8 +5,8 @@ use sqlx::{Row, Sqlite, Transaction};
 use crate::{
     HumanInvite, PersistenceError, PreparedHumanAdmission,
     profile_attachments::replace_profile_avatar,
-    profile_attachments::validate_stored_avatar_integrity,
     profile_store::{ProfileIdentity, decode_bound_profile, project_profile_into_rooms},
+    raster_assets::validate_stored_raster,
 };
 
 pub(super) struct ResolvedIdentity {
@@ -214,7 +214,7 @@ pub(super) async fn resolve_admission_avatar(
     if !valid {
         return Ok(None);
     }
-    validate_stored_avatar_integrity(
+    validate_stored_raster(
         row.get::<String, _>("content_type").as_str(),
         row.get("size"),
         row.get("content_length"),

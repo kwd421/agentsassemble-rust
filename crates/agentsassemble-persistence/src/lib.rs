@@ -31,6 +31,7 @@ mod human_session_authority;
 mod private_fs;
 mod profile_attachments;
 mod profile_store;
+mod raster_assets;
 mod room_directory;
 mod room_event_publication;
 mod room_preferences;
@@ -99,6 +100,7 @@ pub use provider_turn_reconciliation::{
     ProviderTurnReconciliationCandidate, ProviderTurnReconciliationCursor,
     ProviderTurnReconciliationPage,
 };
+pub use raster_assets::MAX_RASTER_BYTES;
 pub use room_directory::{RoomCreateCommit, StoredRoomSummary};
 pub use room_preferences::{LocalRoomPreferencesDirectoryEntry, RoomPreferencesSnapshot};
 pub use room_random::{ProviderRoomRandomCommit, RoomRandomCommit};
