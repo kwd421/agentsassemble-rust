@@ -97,9 +97,9 @@ pub use room_runtime::RoomRuntime;
 pub use room_shutdown::RoomShutdownError;
 pub use runtime_reconciliation::{RuntimeReconciliationSummary, reconcile_runtime_ownership};
 pub use ticket::{
-    ConsumedCentralRegistrationTicket, ConsumedProfileTicket, ConsumedRoomHttpTicket,
-    ConsumedServerOperatorTicket, ConsumedSettingsDirectoryReadTicket, ConsumedTicket,
-    IssuedTicket, RoomHttpPurpose, TicketError, TicketStore,
+    ConsumedCentralRegistrationTicket, ConsumedHumanSessionSocketTicket, ConsumedProfileTicket,
+    ConsumedRoomHttpTicket, ConsumedServerOperatorTicket, ConsumedSettingsDirectoryReadTicket,
+    ConsumedTicket, IssuedTicket, RoomHttpPurpose, TicketError, TicketStore,
 };
 pub use ticket_issuer::{
     TicketIssueError, issue_central_registration_ticket, issue_local_operator_http_ticket,

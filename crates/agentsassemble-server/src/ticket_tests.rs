@@ -1,8 +1,16 @@
 use std::time::Duration;
 
-use agentsassemble_domain::{AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope};
+use agentsassemble_domain::{
+    AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID,
+    LOCAL_OPERATOR_USER_ID,
+};
+use agentsassemble_persistence::{
+    HumanAdmissionDecision, HumanAdmissionInput, HumanInviteCredentialEvidence,
+    HumanSessionAuthorization, NewHumanInvite, PreparedHumanAdmission, SqliteStore,
+};
+use chrono::{Duration as ChronoDuration, Utc};
 
-use crate::{TicketError, TicketStore};
+use crate::{TicketError, TicketStore, human_session_bearer::fingerprint_presented_bearer};
 
 fn principal() -> AuthenticatedPrincipal {
     AuthenticatedPrincipal {
@@ -165,4 +173,246 @@ async fn settings_directory_ticket_never_crosses_room_or_profile_scopes() {
             .await,
         Err(TicketError::Invalid)
     );
+}
+
+#[tokio::test]
+async fn human_session_grants_are_exact_purpose_and_one_use() {
+    let fixture = HumanSessionFixture::new(1).await;
+    let store = TicketStore::new(Duration::from_secs(30), 4_096);
+    assert!(matches!(
+        store
+            .issue_human_session_preferences_write(fixture.authorize(0).await)
+            .await,
+        Err(TicketError::Invalid)
+    ));
+    let preferences = store
+        .issue_human_session_preferences_read(fixture.authorize(0).await)
+        .await
+        .unwrap_or_else(|error| panic!("issue read-only preference grant: {error}"));
+    assert!(
+        store
+            .consume_human_session_preferences_read(&preferences.ticket)
+            .await
+            .is_ok()
+    );
+    let profile = store
+        .issue_human_session_profile(fixture.authorize(0).await)
+        .await
+        .unwrap_or_else(|error| panic!("issue session profile grant: {error}"));
+    assert!(matches!(
+        store
+            .consume_human_session_preferences_read(&profile.ticket)
+            .await,
+        Err(TicketError::Invalid)
+    ));
+    assert!(matches!(
+        store.consume_human_session_profile(&profile.ticket).await,
+        Err(TicketError::Invalid)
+    ));
+
+    let socket = store
+        .issue_human_session_socket(fixture.authorize(0).await)
+        .await
+        .unwrap_or_else(|error| panic!("issue session socket grant: {error}"));
+    let consumed = store
+        .consume_human_session_socket(&socket.ticket)
+        .await
+        .unwrap_or_else(|error| panic!("consume session socket grant: {error}"));
+    let (authorization, proof_key, connection_nonce) = consumed.into_parts();
+    assert_eq!(
+        authorization.session_fingerprint(),
+        &fixture.fingerprints[0]
+    );
+    assert_eq!(proof_key, socket.proof_key);
+    assert_eq!(connection_nonce.len(), 64);
+    assert!(matches!(
+        store.consume_human_session_socket(&socket.ticket).await,
+        Err(TicketError::Invalid)
+    ));
+}
+
+#[tokio::test]
+async fn human_session_grants_enforce_per_session_limit_and_reclaim_consumption() {
+    let fixture = HumanSessionFixture::new(1).await;
+    let store = TicketStore::new(Duration::from_secs(30), 4_096);
+    let mut issued = Vec::new();
+    for _ in 0..8 {
+        issued.push(
+            store
+                .issue_human_session_profile(fixture.authorize(0).await)
+                .await
+                .unwrap_or_else(|error| panic!("issue bounded session grant: {error}")),
+        );
+    }
+    assert!(matches!(
+        store
+            .issue_human_session_profile(fixture.authorize(0).await)
+            .await,
+        Err(TicketError::Invalid)
+    ));
+    store
+        .consume_human_session_profile(&issued[0].ticket)
+        .await
+        .unwrap_or_else(|error| panic!("consume bounded session grant: {error}"));
+    assert!(
+        store
+            .issue_human_session_profile(fixture.authorize(0).await)
+            .await
+            .is_ok()
+    );
+}
+
+#[tokio::test]
+async fn public_partition_preserves_private_reserve_and_reclaims_both_classes() {
+    let fixture = HumanSessionFixture::new(3).await;
+    let store = TicketStore::new(Duration::from_secs(30), 2_320);
+    let mut public = Vec::new();
+    for session in 0..2 {
+        for _ in 0..8 {
+            public.push(
+                store
+                    .issue_human_session_profile(fixture.authorize(session).await)
+                    .await
+                    .unwrap_or_else(|error| panic!("fill public partition: {error}")),
+            );
+        }
+    }
+    assert!(matches!(
+        store
+            .issue_human_session_profile(fixture.authorize(2).await)
+            .await,
+        Err(TicketError::Invalid)
+    ));
+
+    let mut private = Vec::new();
+    for _ in 0..2_304 {
+        private.push(
+            store
+                .issue(principal())
+                .await
+                .unwrap_or_else(|error| panic!("fill private reserve: {error}")),
+        );
+    }
+    assert_eq!(store.issue(principal()).await, Err(TicketError::Invalid));
+
+    store
+        .consume_human_session_profile(&public[0].ticket)
+        .await
+        .unwrap_or_else(|error| panic!("reclaim public grant: {error}"));
+    assert!(
+        store
+            .issue_human_session_profile(fixture.authorize(2).await)
+            .await
+            .is_ok()
+    );
+    assert_eq!(store.issue(principal()).await, Err(TicketError::Invalid));
+    store
+        .consume(&private[0].ticket)
+        .await
+        .unwrap_or_else(|error| panic!("reclaim private grant: {error}"));
+    assert!(store.issue(principal()).await.is_ok());
+
+    let production = TicketStore::new(Duration::from_secs(30), 4_096);
+    assert_eq!(production.public_session_capacity(), 1_792);
+}
+
+struct HumanSessionFixture {
+    store: SqliteStore,
+    fingerprints: Vec<[u8; 32]>,
+}
+
+impl HumanSessionFixture {
+    async fn new(count: usize) -> Self {
+        let store = SqliteStore::open("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("open human session fixture: {error}"));
+        store
+            .bootstrap_local_authority("62e24662-d666-4166-bb60-c131412585c5", "Host")
+            .await
+            .unwrap_or_else(|error| panic!("bootstrap human session fixture: {error}"));
+        store
+            .create_room_for_local_operator(
+                "80efcfd2-75e0-40b7-9e2a-d735485ef7e8",
+                "general",
+                "General",
+            )
+            .await
+            .unwrap_or_else(|error| panic!("create human session room: {error}"));
+        let manager = store
+            .authorize_local_room_manager(
+                "general",
+                LOCAL_OPERATOR_USER_ID,
+                LOCAL_OPERATOR_PARTICIPANT_ID,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("authorize human session manager: {error}"));
+        let now = Utc::now();
+        let mut fingerprints = Vec::with_capacity(count);
+        for index in 0..count {
+            let marker = u8::try_from(index + 1)
+                .unwrap_or_else(|_| panic!("human session fixture marker overflow"));
+            let join_fingerprint = [marker.saturating_add(0x40); 32];
+            store
+                .create_human_invite_for_local_manager(
+                    &manager,
+                    NewHumanInvite {
+                        signed_token_fingerprint: [marker; 32],
+                        join_code_fingerprint: join_fingerprint,
+                        base_participant_id: format!("ticket-guest-{index}"),
+                        display_name: format!("Ticket Guest {index}"),
+                        invite_scope: if index == 0 {
+                            InviteScope::ReadOnly
+                        } else {
+                            InviteScope::ReadWrite
+                        },
+                        max_uses: 1,
+                        expires_at: now + ChronoDuration::hours(2),
+                        created_at: now,
+                    },
+                )
+                .await
+                .unwrap_or_else(|error| panic!("create human session invite: {error}"));
+            let prepared = PreparedHumanAdmission::prepare(
+                HumanInviteCredentialEvidence::JoinCode {
+                    fingerprint: join_fingerprint,
+                },
+                [marker.saturating_add(0x60); 32],
+                &HumanAdmissionInput {
+                    request_id: format!("00000000-0000-4000-8000-{:012x}", index + 1),
+                    meeting_id_assertion: "general".to_owned(),
+                    display_name: format!("Ticket Guest {index}"),
+                    participant_type: "human".to_owned(),
+                    owner_display_name: "Host".to_owned(),
+                    client_id: format!("ticket-browser-{index}"),
+                    avatar_image_url: String::new(),
+                },
+            )
+            .unwrap_or_else(|error| panic!("prepare human session admission: {error}"));
+            let commit = match store
+                .admit_human(&prepared, now)
+                .await
+                .unwrap_or_else(|error| panic!("admit human session fixture: {error}"))
+            {
+                HumanAdmissionDecision::Admitted(commit) => commit,
+                HumanAdmissionDecision::Rejected(rejection) => {
+                    panic!("human session fixture rejected: {rejection:?}")
+                }
+            };
+            fingerprints.push(
+                fingerprint_presented_bearer(commit.session_bearer())
+                    .unwrap_or_else(|| panic!("admission returned invalid session bearer")),
+            );
+        }
+        Self {
+            store,
+            fingerprints,
+        }
+    }
+
+    async fn authorize(&self, index: usize) -> HumanSessionAuthorization {
+        self.store
+            .authorize_human_session(&self.fingerprints[index])
+            .await
+            .unwrap_or_else(|error| panic!("authorize ticket session: {error}"))
+    }
 }
