@@ -85,9 +85,13 @@ fn canonical_input_preserves_original_text_and_human_alias_contracts() {
 
     let human = prepared("human", "/api/attachments/avatar_1234?view=1");
     let person = prepared("person", "/api/attachments/avatar_1234?view=1");
+    let browser = prepared("browser", "/api/attachments/avatar_1234?view=1");
+    let unknown_token = prepared("some-unknown-value", "/api/attachments/avatar_1234?view=1");
     assert_eq!(human.display_name(), person.display_name());
     assert_eq!(human.avatar_attachment_id(), person.avatar_attachment_id());
     assert_ne!(human.payload_hash(), person.payload_hash());
+    assert_ne!(human.payload_hash(), browser.payload_hash());
+    assert_ne!(browser.payload_hash(), unknown_token.payload_hash());
 }
 
 #[test]
@@ -110,17 +114,28 @@ fn invalid_identity_input_fails_and_invalid_optional_avatar_is_omitted() {
             Some(HumanAdmissionInputError::RequestId)
         );
     }
-    assert_eq!(
-        PreparedHumanAdmission::prepare(
-            HumanInviteCredentialEvidence::JoinCode {
-                fingerprint: [0x11; 32],
-            },
-            [0x22; 32],
-            &input("123e4567-e89b-12d3-a456-426614174000", "agent", ""),
-        )
-        .err(),
-        Some(HumanAdmissionInputError::ParticipantType)
-    );
+    for participant_type in [
+        "agent",
+        "ai",
+        "bot",
+        "subscription_ai",
+        "api",
+        "local",
+        "remote",
+        "unknown",
+    ] {
+        assert_eq!(
+            PreparedHumanAdmission::prepare(
+                HumanInviteCredentialEvidence::JoinCode {
+                    fingerprint: [0x11; 32],
+                },
+                [0x22; 32],
+                &input("123e4567-e89b-12d3-a456-426614174000", participant_type, "",),
+            )
+            .err(),
+            Some(HumanAdmissionInputError::ParticipantType)
+        );
+    }
 
     let malformed = prepared("human", "/api/attachments/not valid?view=1");
     let absent = prepared("human", "");

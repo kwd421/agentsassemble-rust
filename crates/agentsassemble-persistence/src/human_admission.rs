@@ -287,9 +287,9 @@ fn canonical_request_id(value: &str) -> Result<Uuid, HumanAdmissionInputError> {
 }
 
 fn is_human_participant_type(value: &str) -> bool {
-    matches!(
+    !matches!(
         value.to_ascii_lowercase().as_str(),
-        "" | "human" | "person" | "user"
+        "agent" | "ai" | "bot" | "subscription_ai" | "api" | "local" | "remote" | "unknown"
     )
 }
 
