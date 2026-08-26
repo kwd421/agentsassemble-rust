@@ -333,59 +333,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn room_asset_custody_moves_from_uploader_to_room_in_the_schema() {
-        let pool = installed_schema().await;
-        sqlx::query(
-            "INSERT INTO rooms(room_id, room_json, settings_json) VALUES ('general', '{}', '{}')",
-        )
-        .execute(&pool)
-        .await
-        .unwrap_or_else(|error| panic!("insert room: {error}"));
-        sqlx::query(
-            "INSERT INTO user_profiles(user_id, participant_id, profile_json) VALUES ('user-1', 'participant-1', '{}')",
-        )
-        .execute(&pool)
-        .await
-        .unwrap_or_else(|error| panic!("insert profile: {error}"));
-        sqlx::query(
-            "INSERT INTO room_appearance_assets(asset_id, room_id, pending_owner_user_id, filename, content_type, content, size, created_at, state, expires_at) VALUES ('ra_00000000000000000000000000000000', 'general', 'user-1', 'pending.png', 'image/png', X'00', 1, '2026-08-26T00:00:00Z', 'pending', 1)",
-        )
-        .execute(&pool)
-        .await
-        .unwrap_or_else(|error| panic!("insert pending asset: {error}"));
-        sqlx::query(
-            "INSERT INTO room_appearance_assets(asset_id, room_id, pending_owner_user_id, filename, content_type, content, size, created_at, state, expires_at) VALUES ('ra_11111111111111111111111111111111', 'general', NULL, 'bound.png', 'image/png', X'00', 1, '2026-08-26T00:00:00Z', 'bound', NULL)",
-        )
-        .execute(&pool)
-        .await
-        .unwrap_or_else(|error| panic!("insert bound asset: {error}"));
-
-        assert!(
-            sqlx::query(
-                "INSERT INTO room_appearance_assets(asset_id, room_id, pending_owner_user_id, filename, content_type, content, size, created_at, state, expires_at) VALUES ('ra_22222222222222222222222222222222', 'general', NULL, 'invalid.png', 'image/png', X'00', 1, '2026-08-26T00:00:00Z', 'pending', NULL)",
-            )
-            .execute(&pool)
-            .await
-            .is_err()
-        );
-
-        sqlx::query("DELETE FROM user_profiles WHERE user_id = 'user-1'")
-            .execute(&pool)
-            .await
-            .unwrap_or_else(|error| panic!("delete uploader: {error}"));
-        let remaining = sqlx::query_scalar::<_, String>(
-            "SELECT asset_id FROM room_appearance_assets ORDER BY asset_id",
-        )
-        .fetch_all(&pool)
-        .await
-        .unwrap_or_else(|error| panic!("read remaining assets: {error}"));
-        assert_eq!(
-            remaining,
-            vec!["ra_11111111111111111111111111111111".to_owned()]
-        );
-    }
-
-    #[tokio::test]
     async fn fixed_authority_bytes_require_blob_storage() {
         let pool = installed_schema().await;
         let text_key = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -758,3 +705,7 @@ mod tests {
 #[cfg(test)]
 #[path = "schema_human_session_tests.rs"]
 mod human_session_tests;
+
+#[cfg(test)]
+#[path = "schema_asset_tests.rs"]
+mod asset_tests;
