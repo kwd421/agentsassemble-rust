@@ -1,9 +1,10 @@
 # Human invite schema verification — 2026-08-26
 
 Status: partial slice evidence; canonical invite management, credential
-authentication, read-only preflight, canonical admission inputs, and the atomic
-SQLite plus bounded RoomRuntime admission owners are implemented. HTTP transport and
-the activated browser flow are not implemented by these commits.
+authentication, read-only preflight, canonical admission inputs, the atomic SQLite
+plus bounded RoomRuntime owners, and local HTTP preflight/join are implemented. The
+browser credential cutover, session-derived grants, authenticated room socket, and
+trusted public ingress are not implemented by these commits.
 
 ## Provenance and scope
 
@@ -23,7 +24,8 @@ the activated browser flow are not implemented by these commits.
 - Admission input and durable owner: `0606257`, `61745fb`, `3bbc8c6`, `dbcf928`,
   `657701a`, `6f91ab7`, `ee747ab`, `5f44cec`, `d76b2e6`, and security correction
   `c99a031`; queue routing/runtime ownership is `29d3d66`, `cf29ecd`, and `06587b0`,
-  with exact-recovery/avatar correction `28d5d56`.
+  with exact-recovery/avatar correction `28d5d56`. Local HTTP preflight/join is
+  `b32c2b7`.
 - The schema is fresh-only at version 38. No migration, compatibility reader,
   fallback column, or partially upgraded authority is accepted.
 
@@ -786,7 +788,7 @@ only after commit for the RoomRuntime post-commit owner.
   clock equality, exact terminalization scope, and avatar integrity are closed by
   `28d5d56`. Both reviewers are manually rereviewing the latest HEAD, so final
   cross-review approval is not yet claimed. No Deep Scan, automated scanner,
-  provider, browser flow, or Computer Use resource ran for this inactive-HTTP
+  provider, browser flow, or Computer Use resource ran for that durable-owner
   increment.
 
 ## Bounded RoomRuntime admission ownership
@@ -818,7 +820,8 @@ behavior and lowered the file before admission integration rather than weakening
 - Actual verification: three focused runtime tests prove dropped-reply completion,
   joined/update publication plus replacement notification, and an ordered cross-room
   case where another room's profile event precedes the target join without crossing
-  streams. The complete server run passed 52 unit and 31 integration tests. Clippy,
+  streams. Before HTTP activation, the complete server run passed 52 unit and 31
+  integration tests. Clippy,
   `make check`, architecture/source-growth/policy gates passed. The runtime commit is
   437 insertions/25 deletions; `room_runtime.rs` is 798 lines and the focused
   admission module is 314 lines, with no threshold exception. These tests establish
@@ -826,5 +829,47 @@ behavior and lowered the file before admission integration rather than weakening
 
 These are operation counts, bounded data sizes, and observed contract results, not
 an end-to-end performance claim. CPU time, heap peak, SQLite page growth, and request
-latency will be measured only after the real route and browser flow exist; speculative
+latency will be measured only after the complete browser flow exists; speculative
 caches, batching, cleanup workers, and future-provider abstractions remain excluded.
+
+## Local HTTP preflight and admission boundary
+
+Commit `b32c2b7` mounts the current `/api/room-invite/admission` and
+`/api/room-invite/join` contracts without creating another admission owner.
+
+- Prior cost and threat: the copied frontend reached 404 despite the durable UOW and
+  bounded room actor being complete. Raw invite, `aad1_`, and optional `aas1.` values
+  are replay authority and cannot enter serialized internal messages, diagnostics, or
+  persistence. The old frontend helper still generates weak fallback device values,
+  so mounting the route must not be confused with activating the browser flow.
+- Intent and smallest design: one 434-line adapter owns only bounded decode,
+  credential authentication, public projection, and status mapping. It reuses the
+  shared 16 KiB Axum decoder, existing 128-connection/deadline owner, canonical raw
+  credential authenticators, read-only preflight snapshot, and RoomRuntime admission
+  queue. There is no HTTP workflow, new queue, cache, limiter, background task,
+  compatibility credential, or alternate mutation path.
+- Preserved contract: both current invite credentials work, invite-auth failures do
+  not disclose signature/format detail, `room`/`read_only` and all current preflight
+  decisions keep their copied frontend shape, admission returns the original bounded
+  result plus exact live bearer, and every rejection maps from the deciding durable
+  authority. Handler cancellation after queue acceptance cannot cancel the room
+  owner; exact retry remains the response-loss recovery mechanism.
+- Resource and security evidence: bodies are buffered once with a 16 KiB ceiling and
+  responses carry `private, no-store`. Fixed browser/session headers are shape-checked
+  before owned copies and before body decode. A successful response consumes the
+  already published commit to move, rather than clone, the result and bearer. These
+  are observed operation and allocation bounds, not benchmark evidence; no latency,
+  CPU, memory, disk, or throughput improvement is claimed.
+- Verification: a real loopback server test checks missing browser authority,
+  uniform invalid-invite preflight, exact CORS headers, no-store, read-only profile
+  preflight, actual queue/UOW admission, 48-character `aas1.` issuance, byte-identical
+  exact retry after one-use exhaustion, and changed-payload 409 with use count still
+  one. The complete server run passed 52 unit plus 32 integration tests, with zero
+  failures. Warning-denied all-target/all-feature Clippy, formatter, workspace check,
+  architecture/source-growth/policy gates, and `make check` passed. The commit is 792
+  insertions and 2 deletions, below the mandatory split threshold.
+- Explicit incompleteness: the copied browser still uses its old fallback-capable
+  device helper and therefore cannot satisfy `aad1_`; pre-join avatar upload,
+  live-session ticket exchange, session-authenticated WebSocket, leave/revoke, and
+  trusted public ingress remain unavailable. No packaged frontend parity or
+  Computer Use result is claimed.

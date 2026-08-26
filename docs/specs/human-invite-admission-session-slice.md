@@ -1,7 +1,8 @@
 # Human Invite, Admission, and Room Session Slice
 
-Status: atomic SQLite and bounded RoomRuntime admission owners implemented and
-locally verified; no Rust HTTP/browser admission route is active
+Status: atomic SQLite, bounded RoomRuntime admission, and local HTTP preflight/join
+owners implemented and locally verified; browser credential cutover, derived grants,
+WebSocket session activation, and trusted public ingress remain incomplete
 
 ## Definition
 
@@ -567,8 +568,8 @@ flag is added meanwhile.
   session-insert failure leaves invite use, profile, device, participant, event, and
   session state unchanged. Exact one-use retry, reusable replacement, changed input,
   terminal expiry, event count, and raw-bearer exclusion tests inspect committed
-  durable/public results. RoomRuntime dispatch and post-commit publication are now
-  implemented separately; HTTP activation remains outside this completed boundary.
+  durable/public results. RoomRuntime dispatch, post-commit publication, and local
+  HTTP activation are implemented by later separate commits.
 - Security correction: manual review found that malformed durable participant or
   profile JSON could be mistaken for liveness loss and committed as `ended`.
   Commit `c99a031` validates exact room/participant bindings, human type, and profile
@@ -587,7 +588,53 @@ flag is added meanwhile.
   10 MiB bound while still checking stored length equality. Bearer issue/recovery
   performs exactly one HMAC-SHA256, one unpadded base64url encoding, and one SHA-256
   fingerprint. No end-to-end CPU, latency, memory, or disk improvement is claimed
-  before the HTTP route is active and measured.
+  before the complete browser flow is active and measured.
+
+### Bounded HTTP adapter without transport-owned admission state
+
+- Prior cost and threat: before `b32c2b7`, the complete SQLite and RoomRuntime owners
+  had no reachable Rust HTTP entry point, so the copied browser's preflight and join
+  requests received 404. Raw invite, browser, and optional session credentials must
+  cross this boundary, but allowing them into a serializable command, generic error,
+  log, or durable row would disclose replay authority. Reading an arbitrary request
+  body before checking the fixed credential domains would also spend bounded body
+  work on a request that cannot enter admission.
+- Change intent: add only the two original request/response routes under one 16 KiB
+  JSON limit and `private, no-store`. Preflight authenticates fixed-size `aad1_` and
+  optional `aas1.` shapes before making owned copies or reading the body, then calls
+  the existing read-only snapshot. Join authenticates the invite and browser
+  credential in the adapter, constructs the existing non-debuggable prepared input,
+  and submits it to the existing shared room queue. The HTTP task owns no workflow,
+  identity, membership, event, retry, bearer, or publication state.
+- Preserved contract: both current `aai1` and `aaj1_` invite credentials remain
+  accepted; public preflight statuses retain `profile_required`, `known_user`,
+  `existing_member`, `existing_session`, `invite_invalid`, and `invite_expired`;
+  read/write scope remains public `room` and read-only remains `read_only`. Admission
+  preserves the original response fields and adds the exact recovered `session_token`
+  only after the room owner commits and publishes. One-use lost-response retry still
+  precedes current invite gates, changed input is 409, capacity is 429, a missing room
+  is 410, and queue saturation is an explicit 503 rather than a fallback path.
+- Observed cost: every HTTP connection remains inside the existing process-wide
+  128-connection admission bound and ten-second request-body deadline. Each request
+  buffers at most 16 KiB once through the shared Axum decoder. The fixed header check
+  hashes at most the 48-byte browser credential and optional 48-byte session bearer
+  before copying them; the existing raw-authentication owner repeats those tiny hashes
+  while producing the only fingerprints passed to persistence. A successful join
+  moves the bounded result and bearer out of the post-publication commit rather than
+  cloning them. No queue, cache, rate-limit map, task, database write, or transport
+  fallback was added. No CPU, heap, disk, throughput, or latency improvement is
+  claimed without representative browser measurements.
+- Verification: a real loopback Axum test proves missing/malformed browser authority
+  fails before persistence, malformed invite preflight is uniformly non-disclosing,
+  the Tauri CORS header set includes only the needed identity header, responses are
+  non-cacheable, and valid preflight is read-only. It then admits through the actual
+  RoomRuntime and SQLite UOW, proves the 48-character `aas1.` result, retries the
+  consumed one-use invite to receive the byte-identical JSON/bearer with use count
+  still one, and proves changed payload returns 409 without another use. The complete
+  server run passed 52 unit and 32 integration tests; warning-denied all-target Clippy,
+  architecture/source-growth gates, and `make check` passed. The route module is 434
+  lines; commit `b32c2b7` is 792 insertions/2 deletions across seven files, below the
+  1,000-line review threshold.
 
 ### Binary digests instead of encoded digest text
 
