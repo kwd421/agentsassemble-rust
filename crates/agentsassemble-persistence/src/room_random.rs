@@ -10,10 +10,11 @@ use sqlx::{Sqlite, Transaction};
 use uuid::Uuid;
 
 use crate::{
-    CommandOutcome, PersistenceError, SqliteStore,
+    CommandOutcome, HumanSessionAuthorization, PersistenceError, SqliteStore,
     agent_lifecycle::load_session,
     authority::active_room_for_principal,
     command_admission::admit_non_lifecycle_command,
+    human_session_authority::revalidate_human_session,
     room_turns::support::{insert_event, load_active_room, load_participant, next_sequence},
     room_write_budget::{command_size, reserve_room_write_budget},
     turn_authority::active_turn_authority,
@@ -54,70 +55,47 @@ impl SqliteStore {
         payload: &Value,
         result: &RoomRandomResult,
     ) -> Result<CommandOutcome, PersistenceError> {
-        let payload_hash = canonical_payload_hash(payload);
         let mut transaction = self.pool.begin().await?;
-        let _ = active_room_for_principal(&mut transaction, principal).await?;
-        if !principal.capabilities.room_random {
-            return Err(rejected(
-                "permission_denied",
-                "This room session cannot use room randomness.",
-            ));
-        }
-        if let Some(outcome) = admit_non_lifecycle_command(
+        let outcome = execute_room_random_command_in(
             &mut transaction,
-            &principal.room_id,
-            &principal.principal_id,
+            principal,
             request_id,
             action,
-            &payload_hash,
-            command_size(request_id, action, payload)?,
-        )
-        .await?
-        {
-            transaction.commit().await?;
-            return Ok(outcome);
-        }
-        let request = RoomRandomRequest::parse(action, payload)
-            .map_err(|error| rejected("invalid_room_random_request", error.message))?;
-        require_tabletop(&mut transaction, &principal.room_id).await?;
-        let participant = load_participant(
-            &mut transaction,
-            &principal.room_id,
-            &principal.participant_id,
-        )
-        .await?;
-        require_participant(participant.status, participant.muted)?;
-        validate_result(&request, result)?;
-        let event = random_event(
-            &mut transaction,
-            &principal.room_id,
-            &principal.participant_id,
-            &participant.display_name,
-            "",
-            &format!("result-{}", Uuid::new_v4().simple()),
+            payload,
             result,
         )
         .await?;
-        let response = json!({"event": event, "event_seq": event.seq});
-        insert_event(&mut transaction, &event).await?;
-        sqlx::query(
-            "INSERT INTO command_results(room_id, principal_id, request_id, action, payload_hash, result_json) VALUES (?, ?, ?, ?, ?, ?)",
+        transaction.commit().await?;
+        Ok(outcome)
+    }
+
+    /// Commits one admitted-human random command in the transaction that revalidates its session.
+    ///
+    /// # Errors
+    ///
+    /// Returns session provenance, replay, permission, room-mode, validation, or storage failures.
+    pub async fn execute_human_session_room_random_command(
+        &self,
+        authorization: &HumanSessionAuthorization,
+        request_id: &str,
+        action: &str,
+        payload: &Value,
+        result: &RoomRandomResult,
+    ) -> Result<CommandOutcome, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        let (current, _) =
+            revalidate_human_session(&mut transaction, authorization, Utc::now()).await?;
+        let outcome = execute_room_random_command_in(
+            &mut transaction,
+            current.principal(),
+            request_id,
+            action,
+            payload,
+            result,
         )
-        .bind(&principal.room_id)
-        .bind(&principal.principal_id)
-        .bind(request_id)
-        .bind(action)
-        .bind(payload_hash)
-        .bind(serde_json::to_string(&response)?)
-        .execute(&mut *transaction)
         .await?;
         transaction.commit().await?;
-        Ok(CommandOutcome {
-            result: response,
-            event: event.clone(),
-            events: vec![event],
-            deduplicated: false,
-        })
+        Ok(outcome)
     }
 
     /// Commits one provider `RoomPortal` random result under its active durable turn.
@@ -216,6 +194,73 @@ impl SqliteStore {
             result: result.clone(),
         })
     }
+}
+
+async fn execute_room_random_command_in(
+    transaction: &mut Transaction<'_, Sqlite>,
+    principal: &AuthenticatedPrincipal,
+    request_id: &str,
+    action: &str,
+    payload: &Value,
+    result: &RoomRandomResult,
+) -> Result<CommandOutcome, PersistenceError> {
+    let payload_hash = canonical_payload_hash(payload);
+    let _ = active_room_for_principal(transaction, principal).await?;
+    if !principal.capabilities.room_random {
+        return Err(rejected(
+            "permission_denied",
+            "This room session cannot use room randomness.",
+        ));
+    }
+    if let Some(outcome) = admit_non_lifecycle_command(
+        transaction,
+        &principal.room_id,
+        &principal.principal_id,
+        request_id,
+        action,
+        &payload_hash,
+        command_size(request_id, action, payload)?,
+    )
+    .await?
+    {
+        return Ok(outcome);
+    }
+    let request = RoomRandomRequest::parse(action, payload)
+        .map_err(|error| rejected("invalid_room_random_request", error.message))?;
+    require_tabletop(transaction, &principal.room_id).await?;
+    let participant =
+        load_participant(transaction, &principal.room_id, &principal.participant_id).await?;
+    require_participant(participant.status, participant.muted)?;
+    validate_result(&request, result)?;
+    let event = random_event(
+        transaction,
+        &principal.room_id,
+        &principal.participant_id,
+        &participant.display_name,
+        "",
+        &format!("result-{}", Uuid::new_v4().simple()),
+        result,
+    )
+    .await?;
+    let response = json!({"event": event, "event_seq": event.seq});
+    insert_event(transaction, &event).await?;
+    sqlx::query(
+        "INSERT INTO command_results(room_id, principal_id, request_id, action, payload_hash, result_json) VALUES (?, ?, ?, ?, ?, ?)",
+    )
+    .bind(&principal.room_id)
+    .bind(&principal.principal_id)
+    .bind(request_id)
+    .bind(action)
+    .bind(payload_hash)
+    .bind(serde_json::to_string(&response)?)
+    .execute(&mut **transaction)
+    .await?;
+    Ok(CommandOutcome {
+        result: response,
+        event: event.clone(),
+        events: vec![event],
+        deduplicated: false,
+    })
 }
 
 async fn require_tabletop(

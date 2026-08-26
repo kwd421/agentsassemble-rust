@@ -9,9 +9,10 @@ use std::collections::BTreeMap;
 use uuid::Uuid;
 
 use crate::{
-    CommandOutcome, PersistenceError, SqliteStore,
+    CommandOutcome, HumanSessionAuthorization, PersistenceError, SqliteStore,
     agent_lifecycle::{load_session, save_session},
     command_admission::admit_non_lifecycle_command,
+    human_session_authority::revalidate_human_session,
     room_write_budget::command_size,
     turn_queue::merge_room_inputs,
 };
@@ -157,73 +158,38 @@ impl SqliteStore {
         action: &str,
         payload: &Value,
     ) -> Result<RoomCommandMutation, PersistenceError> {
-        let payload_hash = canonical_payload_hash(payload);
         let mut transaction = self.pool.begin().await?;
-        let (room, settings) = load_active_room(&mut transaction, &principal.room_id).await?;
-        if let Some(outcome) = admit_non_lifecycle_command(
+        let mutation =
+            execute_message_in(&mut transaction, principal, request_id, action, payload).await?;
+        transaction.commit().await?;
+        Ok(mutation)
+    }
+
+    /// Commits one admitted-human message in the transaction that revalidates its exact session.
+    ///
+    /// # Errors
+    ///
+    /// Returns session provenance, idempotency, room-state, or storage failures.
+    pub async fn execute_human_session_message_with_turn(
+        &self,
+        authorization: &HumanSessionAuthorization,
+        request_id: &str,
+        action: &str,
+        payload: &Value,
+    ) -> Result<RoomCommandMutation, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        let (current, _) =
+            revalidate_human_session(&mut transaction, authorization, Utc::now()).await?;
+        let mutation = execute_message_in(
             &mut transaction,
-            &principal.room_id,
-            &principal.principal_id,
+            current.principal(),
             request_id,
             action,
-            &payload_hash,
-            command_size(request_id, action, payload)?,
+            payload,
         )
-        .await?
-        {
-            transaction.commit().await?;
-            return Ok(RoomCommandMutation {
-                outcome,
-                assignments: Vec::new(),
-            });
-        }
-        if action != "message.send" {
-            return Err(rejected(
-                "unsupported_action",
-                format!("Unsupported room command: {action}"),
-            ));
-        }
-        let command = MessageSend::from_payload(payload).map_err(rejection)?;
-        let participant = load_participant(
-            &mut transaction,
-            &principal.room_id,
-            &principal.participant_id,
-        )
-        .await?;
-        let sequence = next_sequence(&mut transaction, &principal.room_id).await?;
-        let event = prepare_message_event(principal, &participant, &command, sequence, Utc::now())
-            .map_err(rejection)?;
-        insert_event(&mut transaction, &event).await?;
-        route_message(&mut transaction, &settings, &event).await?;
-        let prepared = assign_available_pending(&mut transaction, &room, &settings).await?;
-        let mut events = vec![event.clone()];
-        let mut assignments = Vec::with_capacity(prepared.len());
-        for item in prepared {
-            events.extend(item.events);
-            assignments.push(item.assignment);
-        }
-        let result = json!({"event": event, "event_seq": sequence});
-        sqlx::query(
-            "INSERT INTO command_results(room_id, principal_id, request_id, action, payload_hash, result_json) VALUES (?, ?, ?, ?, ?, ?)",
-        )
-        .bind(&principal.room_id)
-        .bind(&principal.principal_id)
-        .bind(request_id)
-        .bind(action)
-        .bind(payload_hash)
-        .bind(serde_json::to_string(&result)?)
-        .execute(&mut *transaction)
         .await?;
         transaction.commit().await?;
-        Ok(RoomCommandMutation {
-            outcome: CommandOutcome {
-                result,
-                event,
-                events,
-                deduplicated: false,
-            },
-            assignments,
-        })
+        Ok(mutation)
     }
 
     /// Keeps the existing persistence API for callers that do not execute provider effects.
@@ -485,6 +451,75 @@ impl SqliteStore {
             next_assignments,
         })
     }
+}
+
+async fn execute_message_in(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    principal: &AuthenticatedPrincipal,
+    request_id: &str,
+    action: &str,
+    payload: &Value,
+) -> Result<RoomCommandMutation, PersistenceError> {
+    let payload_hash = canonical_payload_hash(payload);
+    let (room, settings) = load_active_room(transaction, &principal.room_id).await?;
+    if let Some(outcome) = admit_non_lifecycle_command(
+        transaction,
+        &principal.room_id,
+        &principal.principal_id,
+        request_id,
+        action,
+        &payload_hash,
+        command_size(request_id, action, payload)?,
+    )
+    .await?
+    {
+        return Ok(RoomCommandMutation {
+            outcome,
+            assignments: Vec::new(),
+        });
+    }
+    if action != "message.send" {
+        return Err(rejected(
+            "unsupported_action",
+            format!("Unsupported room command: {action}"),
+        ));
+    }
+    let command = MessageSend::from_payload(payload).map_err(rejection)?;
+    let participant =
+        load_participant(transaction, &principal.room_id, &principal.participant_id).await?;
+    let sequence = next_sequence(transaction, &principal.room_id).await?;
+    let event = prepare_message_event(principal, &participant, &command, sequence, Utc::now())
+        .map_err(rejection)?;
+    insert_event(transaction, &event).await?;
+    route_message(transaction, &settings, &event).await?;
+    let prepared = assign_available_pending(transaction, &room, &settings).await?;
+    let mut events = vec![event.clone()];
+    let mut assignments = Vec::with_capacity(prepared.len());
+    for item in prepared {
+        events.extend(item.events);
+        assignments.push(item.assignment);
+    }
+    let result = json!({"event": event, "event_seq": sequence});
+    sqlx::query(
+        "INSERT INTO command_results(room_id, principal_id, request_id, action, payload_hash, result_json) VALUES (?, ?, ?, ?, ?, ?)",
+    )
+    .bind(&principal.room_id)
+    .bind(&principal.principal_id)
+    .bind(request_id)
+    .bind(action)
+    .bind(payload_hash)
+    .bind(serde_json::to_string(&result)?)
+    .execute(&mut **transaction)
+    .await?;
+    Ok(RoomCommandMutation {
+        outcome: CommandOutcome {
+            result,
+            event,
+            events,
+            deduplicated: false,
+        },
+        assignments,
+    })
 }
 
 fn public_assignment_error_code(value: &str) -> &'static str {

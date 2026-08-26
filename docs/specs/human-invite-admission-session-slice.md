@@ -931,6 +931,12 @@ while promoting the same opaque ID through the profile lifecycle.
   refreshed opaque authorization so mutable profile display data is current. Cloning
   that raw-free value only carries it into the bounded command owner; it creates no
   session cache or independently constructible authority.
+- The only room commands available to a non-operator admitted browser—message send
+  and room randomness—share their existing transaction bodies with session-specific
+  entry points. Those entry points revalidate the exact fingerprint and scope in the
+  same SQLite transaction before replay admission, write-budget reservation, event,
+  result, routing, or turn assignment. Local/private callers retain their existing
+  entry points; no generic authority framework or duplicated SQL transition was added.
 - Preserved contract: revocation after ticket issue or during an idle connection
   invalidates the exact session promptly; a missed/lagged notification fails closed.
 - Trade-off: outbound validation adds one indexed session/membership lookup per

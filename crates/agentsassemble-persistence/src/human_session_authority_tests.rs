@@ -1,9 +1,10 @@
 use agentsassemble_domain::{
-    ClientKind, InviteScope, LOCAL_OPERATOR_USER_ID, Participant, ParticipantStatus, UserProfile,
-    UserProfilePatch,
+    ClientKind, InviteScope, LOCAL_OPERATOR_USER_ID, Participant, ParticipantStatus,
+    RoomRandomResult, UserProfile, UserProfilePatch,
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use chrono::{DateTime, Duration, Utc};
+use serde_json::json;
 
 use crate::{
     HumanAdmissionDecision, HumanAdmissionInput, HumanInviteCredentialEvidence, PersistenceError,
@@ -181,6 +182,66 @@ async fn human_session_avatar_upload_requires_live_write_scope() {
         .await
         .unwrap_or_else(|error| panic!("read retained session avatar: {error}")),
         stored.id
+    );
+}
+
+#[tokio::test]
+async fn session_originated_command_units_revalidate_exact_provenance() {
+    let (store, _) = admitted_fixture(InviteScope::ReadWrite).await;
+    let authorization = store
+        .authorize_human_session(&session_fingerprint(&store).await)
+        .await
+        .unwrap_or_else(|error| panic!("authorize command session: {error}"));
+    let baseline_events = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM room_events")
+        .fetch_one(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("count baseline events: {error}"));
+
+    set_session_expiry(&store, authorization.expires_at() + Duration::minutes(1)).await;
+    assert_rejected_code(
+        store
+            .execute_human_session_message_with_turn(
+                &authorization,
+                "revoked-message",
+                "message.send",
+                &json!({"content": "must not commit"}),
+            )
+            .await,
+        "invalid_state",
+    );
+
+    set_session_expiry(&store, authorization.expires_at()).await;
+    set_participant_status(&store, ParticipantStatus::Left).await;
+    assert_rejected_code(
+        store
+            .execute_human_session_room_random_command(
+                &authorization,
+                "revoked-random",
+                "room.random.roll",
+                &json!({"notation": "1d6"}),
+                &RoomRandomResult::RollDice {
+                    notation: "1d6".to_owned(),
+                    rolls: vec![3],
+                    modifier: 0,
+                    total: 3,
+                },
+            )
+            .await,
+        "session_revoked",
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM room_events")
+            .fetch_one(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("count rejected command events: {error}")),
+        baseline_events
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM command_results")
+            .fetch_one(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("count rejected command results: {error}")),
+        0
     );
 }
 
