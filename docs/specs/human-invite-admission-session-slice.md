@@ -38,8 +38,12 @@ not an authority.
   leave or kick, room close, or credential revoke. A connected WebSocket stops being
   authorized when its backing session is revoked or expires.
 - A normal session can post; a read-only session cannot. Both can read the canonical
-  room. Room role, mute, membership, and command capabilities remain room-owned and
-  are never taken from the person's profile.
+  room and read or patch every existing person-owned `UserProfile` field. Read-only
+  cannot upload new avatar bytes, but profile patch may clear the avatar or select an
+  available attachment already owned by that user. Only display name and avatar are
+  projected into room participants. Profile `mic_muted` and `deafened` remain
+  person/device presentation state: they never alter room mute, role, membership, or
+  command capabilities, which remain room-owned.
 - A pre-join avatar upload is optional and bounded. Custody belongs to the exact
   invite-and-browser-credential subject, while all browsers using one invite share
   that invite's quota. It supersedes only that custody subject's older pending
@@ -75,9 +79,13 @@ is migrated, imported, or interpreted.
   exact room/user/participant, browser client kind, invite scope, browser credential
   fingerprint, optional reusable-identity fingerprint, bounded public result,
   admission/expiry time, and active/ended state. Raw session tokens are never
-  persisted. A partial unique constraint permits at most one live human session for
-  each `(room_id, participant_id)`. Keeping the retry result in this row avoids a
-  fourth admission-results table and prevents session/result lifecycle drift.
+  persisted. A partial unique constraint over stored `active` rows permits at most
+  one live human session for each `(room_id, participant_id)`. Wall-clock expiry is
+  authoritative even before its stored state is materialized as `ended`; admission
+  materializes only the expired rows relevant to its exact key or resolved
+  participant before the partial unique constraint can be reached. Keeping the retry
+  result in this row avoids a fourth admission-results table and prevents
+  session/result lifecycle drift.
 - A completed but later expired, replaced, or revoked admission remains a terminal
   `admission_session_unavailable`; exact retry never creates a replacement session.
   The deterministic issuer reproduces the bearer only while that exact row is live.
@@ -129,6 +137,20 @@ without allocating durable state. A presented session counts as `existing_sessio
 only when its durable row, expiry, room, active membership, participant/profile
 binding, client kind, and scope all remain valid.
 
+Every authorization and capacity decision treats a row as live only when its stored
+state is `active` and `expires_at` is later than the transaction's fixed current
+time. SQLite cannot put the moving wall clock into the partial unique predicate, so
+the admission transaction materializes expiry only where it matters: an expired
+exact retry row is changed to `ended` before returning
+`admission_session_unavailable`, and expired active rows for a newly resolved
+`(room_id, participant_id)` are changed to `ended` before capacity and insertion.
+An exact-retry expiry transition commits even though its product result is terminal
+rejection; a database/infrastructure failure still rolls it back. A distinct new
+admission commits the relevant expiry transition and new session together.
+Preflight remains read-only and rejects time-expired rows without depending on that
+materialization. Ticket exchange, WebSocket validation, and all target units also
+reject time-expired rows immediately; cleanup is never required for authorization.
+
 After bounded envelope validation, the admission route submits one request to the
 existing bounded `RoomRuntime` writer. Queue acceptance transfers custody to the
 runtime: disconnecting or cancelling the HTTP handler cannot cancel an accepted
@@ -137,19 +159,23 @@ admission. The room runtime then performs one SQLite transaction:
 1. validate the bounded request, derive its payload hash and one-use candidate key,
    and load invite metadata without yet treating current invite usability as a new
    admission decision;
-2. if that exact one-use row exists, reject a payload conflict or terminal backing
-   session, otherwise return its live result before current invite expiry,
+2. if that exact one-use row exists, reject a payload conflict; materialize an
+   expired active row as `ended` and reject any terminal backing session, otherwise
+   return its live result before current invite expiry,
    revocation, used-nonce, maximum-use, or new-session capacity checks. This retains
    the original request-workflow recovery after a response was lost;
 3. for every new admission and every reusable retry, enforce the active room plus
    current invite expiry, revocation, client kind, scope, and maximum-use gates;
 4. derive the reusable invite/credential key when applicable. Reject a conflicting
-   or terminal row, or return its exact live result without another use, capacity
-   slot, identity, or event. The current invite gate remains before this lookup, as
-   in the original reusable-device path;
+   row; materialize an expired active row as `ended` and reject any terminal row, or
+   return its exact live result without another use, capacity slot, identity, or
+   event. The current invite gate remains before this lookup, as in the original
+   reusable-device path;
 5. resolve the reusable credential user or allocate an invite-scoped one-use user,
-   keeping participant/profile collisions fail-closed, then enforce global/per-room
-   public-session capacity while excluding an existing same-participant session;
+   keeping participant/profile collisions fail-closed; materialize expired active
+   rows for that exact `(room, participant)` as `ended`, then enforce global/per-room
+   public-session capacity using the live predicate while excluding an existing
+   same-participant session;
 6. consume one invite use when this is a new invite principal, upsert the joined
    human participant and matching profile, and mark any different live session for
    that `(room, participant)` replaced without charging another capacity slot;
@@ -191,7 +217,9 @@ a server-owned revocation notification.
 The current public capacity is preserved: at most 448 live public sessions globally
 and 112 per room, with at most 128 distinct reusable-link principals. The remaining
 original 64 global and 16 per-room slots are reserved for later separately owned
-operator and external-agent sessions, not borrowed by this human slice.
+operator and external-agent sessions, not borrowed by this human slice. Capacity
+queries use the same stored-active-and-unexpired live predicate as authorization;
+an unmaterialized expired row never consumes a slot.
 
 ## Session-derived grants and revocation
 
@@ -209,8 +237,13 @@ client-selected purpose string:
   message behavior is active.
 
 Read-only room scope denies posting, preference mutation, profile-avatar upload, and
-every room attachment upload. It still permits the human to read and edit their own
-text/person profile because that profile is not room role or posting authority.
+every room attachment upload. It still permits the human to read and patch their
+complete existing person profile because that profile is not room role or posting
+authority. An `avatar_image_url` patch can clear the avatar or bind only an available
+attachment already owned by the same user; it cannot create or claim media. Banner,
+accent, status, `mic_muted`, and `deafened` remain person-profile fields and never
+become room authority. Only display name and avatar changes are projected into room
+participants.
 Bound profile-avatar reads retain the current unguessable public attachment URL and
 do not mint or consume a session-derived avatar-read grant, so other room members can
 render the avatar. Unexpired pre-admission preview remains exact invite/credential
@@ -383,9 +416,38 @@ flag is added meanwhile.
   lock time are recorded; a later limiter is considered only if those measurements
   demonstrate a concrete exhaustion path not covered by the existing bounds.
 
+### Targeted expiry materialization instead of a session sweeper
+
+- Prior cost and correctness threat: the original session owner deletes expired
+  records during verification and active-session enumeration. Rust retains terminal
+  admission results, but a partial unique index over stored `active` state cannot
+  observe wall-clock expiry. Merely filtering reads would leave an expired row able
+  to block the same participant's later admission, while counting state alone would
+  also charge expired rows to capacity.
+- Change intent: all authority and capacity queries use `state = active AND
+  expires_at > now`; an admission write changes only its expired exact-retry row and
+  expired rows for its resolved `(room, participant)` to `ended` before terminal
+  return, capacity, or insertion. The update uses the admission-key and
+  room/participant indexes already required by those operations.
+- Preserved contract: preflight performs no writes; an expired bearer fails
+  immediately; an expired completed admission remains terminal and exact retry never
+  creates a replacement; a different valid admission for the same stable participant
+  is not blocked or charged by stale time-expired state.
+- Trade-off: unrelated tombstones remain durable and bounded by invite lifecycle.
+  This avoids periodic database reads, a background task, and full-table cleanup in
+  the latency path. No claim of lower CPU or disk cost is made until measurements
+  exist.
+- Verification: a controlled clock expires a stored-active session without cleanup,
+  proves preflight and ticket exchange reject it, then admits the same participant
+  through a distinct valid admission and proves the old row is `ended`, the partial
+  unique constraint does not fail, capacity is unchanged, and exact retry of the old
+  admission remains `admission_session_unavailable`. Query count and transaction
+  latency are recorded for the targeted update.
+
 No additional cache, repository interface, background cleanup framework, generic
 credential provider, multi-database saga, or future agent-session abstraction is
-authorized by this slice. Expired rows are filtered authoritatively. Admission
+authorized by this slice. Expired rows are rejected authoritatively and only the
+request-relevant rows described above are materialized as ended. Admission
 tombstones remain until their backing invite is terminal so a reusable exact retry
 cannot become a new admission after cleanup; only then may bounded work on relevant
 writes remove them. Expired pending attachments may be reclaimed by the same bounded
@@ -416,6 +478,12 @@ write-path work. A separate cleanup task requires later measured evidence.
   payload conflicts and a different device consumes a distinct principal; collision
   and all capacity edges fail before consumption; and no raw invite, device, or
   session bearer reaches SQLite, events, logs, or fixtures.
+- Controlled-clock persistence tests leave an expired session stored as `active`,
+  prove every read/authorization/capacity path treats it as unavailable, then admit
+  the same participant through a distinct valid admission and prove the admission
+  transaction changes only the relevant expired row to `ended` before capacity and
+  insertion. The stale row neither consumes capacity nor violates the partial unique
+  constraint, and its exact retry remains terminal.
 - Lost-response tests consume the final one-use invite, drop the first HTTP result
   after commit, and prove the exact request-key retry succeeds while its backing
   session remains live. Separate reusable tests prove the original ordering: an
@@ -432,8 +500,10 @@ write-path work. A separate cleanup task requires later measured evidence.
   and prevent quota reset by changing browser credentials.
 - Real Axum tests exercise create, preflight, admission, every typed ticket exchange,
   target-ticket replay/wrong-purpose/wrong-room, raw-bearer rejection, read-only
-  profile-text success, read-only profile-avatar/room-upload denial, public bound
-  profile-avatar read, normal posting, profile SSoT, preferences, leave, exact
+  full person-profile patch success, read-only profile-avatar upload/room-upload denial,
+  same-user existing-avatar bind/clear, foreign-avatar rejection, public bound
+  profile-avatar read, and proof that profile mic/deaf fields do not mutate room mute
+  or capability; normal posting, profile SSoT, preferences, leave, exact
   revoke, kick, and room close. Invite management tests prove consume-before-body,
   room/purpose binding, transactional capability revalidation, and that ingress
   custody is not management authority.
