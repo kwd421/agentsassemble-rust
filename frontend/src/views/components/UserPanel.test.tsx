@@ -99,15 +99,13 @@ describe("UserPanel", () => {
     expect(screen.getByRole("button", { name: /Guest After/ })).toBeTruthy();
   });
 
-  it("clears a pre-admission profile error after the guest session becomes authenticated", async () => {
+  it("waits for guest admission before reading the server-owned profile", async () => {
     const loaded = {
       ...DEFAULT_USER_PROFILE,
       displayName: "Guest Joined",
       avatarLabel: "GJ",
     };
-    apiMocks.fetchUserProfile
-      .mockRejectedValueOnce(new Error("authenticated user profile required"))
-      .mockResolvedValueOnce(loaded);
+    apiMocks.fetchUserProfile.mockResolvedValue(loaded);
 
     const view = render(
       <UserPanel
@@ -123,7 +121,8 @@ describe("UserPanel", () => {
       />
     );
 
-    await within(view.container).findByText("authenticated user profile required");
+    expect(apiMocks.fetchUserProfile).not.toHaveBeenCalled();
+    expect(within(view.container).getByText("Guest Pending")).toBeTruthy();
 
     view.rerender(
       <UserPanel
@@ -147,11 +146,6 @@ describe("UserPanel", () => {
         sessionToken: "guest-session",
         deviceToken: "guest-device",
       })
-    );
-    await waitFor(() =>
-      expect(
-        within(view.container).queryByText("authenticated user profile required")
-      ).toBeNull()
     );
     expect(
       within(view.container).getByRole("button", { name: /Guest Joined/ })

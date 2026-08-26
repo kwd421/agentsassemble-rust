@@ -84,9 +84,10 @@ export default function UserPanel({
     .slice(0, 2)
     .toUpperCase();
   const guestHasAvatarImage = Boolean(guestProfile?.avatarImage);
+  const guestAwaitingAdmission = Boolean(guestProfile && !profileIdentity.sessionToken);
 
   useEffect(() => {
-    if (guestProfile?.expired) return;
+    if (guestProfile?.expired || guestAwaitingAdmission) return;
     let ignore = false;
     setProfileHydrated(false);
     setProfileError("");
@@ -107,6 +108,7 @@ export default function UserPanel({
     };
   }, [
     guestProfile?.expired,
+    guestAwaitingAdmission,
     profileIdentity.deviceToken,
     profileIdentity.roomId,
     profileIdentity.sessionToken,
@@ -212,7 +214,7 @@ export default function UserPanel({
     }
   }
 
-  if (guestProfile?.expired) {
+  if (guestProfile && (guestProfile.expired || guestAwaitingAdmission)) {
     return (
       <div className="dc-user-panel" ref={rootRef}>
         <div className="dc-current-user">
