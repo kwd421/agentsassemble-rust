@@ -271,21 +271,32 @@ pub(crate) fn product_tables() -> impl Iterator<Item = &'static TableDefinition>
 mod tests {
     use std::collections::BTreeSet;
 
-    use sqlx::{Row, SqlitePool};
+    use sqlx::{Row, SqlitePool, sqlite::SqlitePoolOptions};
 
     use super::{TABLES, product_tables, statements};
 
-    #[tokio::test]
-    async fn installed_table_set_and_product_inventory_share_one_descriptor_owner() {
-        let pool = SqlitePool::connect("sqlite::memory:")
+    async fn installed_schema() -> SqlitePool {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
             .await
             .unwrap_or_else(|error| panic!("open in-memory schema database: {error}"));
+        sqlx::query("PRAGMA foreign_keys = ON")
+            .execute(&pool)
+            .await
+            .unwrap_or_else(|error| panic!("enable foreign keys: {error}"));
         for statement in statements() {
             sqlx::query(statement)
                 .execute(&pool)
                 .await
                 .unwrap_or_else(|error| panic!("install schema statement: {error}"));
         }
+        pool
+    }
+
+    #[tokio::test]
+    async fn installed_table_set_and_product_inventory_share_one_descriptor_owner() {
+        let pool = installed_schema().await;
         let actual = sqlx::query(
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
         )
@@ -321,19 +332,7 @@ mod tests {
 
     #[tokio::test]
     async fn room_asset_custody_moves_from_uploader_to_room_in_the_schema() {
-        let pool = SqlitePool::connect("sqlite::memory:")
-            .await
-            .unwrap_or_else(|error| panic!("open in-memory schema database: {error}"));
-        sqlx::query("PRAGMA foreign_keys = ON")
-            .execute(&pool)
-            .await
-            .unwrap_or_else(|error| panic!("enable foreign keys: {error}"));
-        for statement in statements() {
-            sqlx::query(statement)
-                .execute(&pool)
-                .await
-                .unwrap_or_else(|error| panic!("install schema statement: {error}"));
-        }
+        let pool = installed_schema().await;
         sqlx::query(
             "INSERT INTO rooms(room_id, room_json, settings_json) VALUES ('general', '{}', '{}')",
         )
@@ -382,5 +381,340 @@ mod tests {
             remaining,
             vec!["ra_11111111111111111111111111111111".to_owned()]
         );
+    }
+
+    #[tokio::test]
+    async fn fixed_authority_bytes_require_blob_storage() {
+        let pool = installed_schema().await;
+        let text_key = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+        assert!(
+            sqlx::query(
+                "INSERT INTO runtime_host_identity(singleton, server_id, public_key) VALUES (1, 'server-text', ?)",
+            )
+            .bind(text_key)
+            .execute(&pool)
+            .await
+            .is_err()
+        );
+        sqlx::query(
+            "INSERT INTO runtime_host_identity(singleton, server_id, public_key) VALUES (1, 'server-blob', ?)",
+        )
+        .bind(vec![0xAA; 32])
+        .execute(&pool)
+        .await
+        .unwrap_or_else(|error| panic!("insert exact BLOB authority: {error}"));
+    }
+
+    async fn seed_human_authorities(pool: &SqlitePool) {
+        for room_id in ["room-a", "room-b"] {
+            sqlx::query(
+                "INSERT INTO rooms(room_id, room_json, settings_json) VALUES (?, '{}', '{}')",
+            )
+            .bind(room_id)
+            .execute(pool)
+            .await
+            .unwrap_or_else(|error| panic!("insert room {room_id}: {error}"));
+        }
+        for (user_id, participant_id) in [("user-a", "participant-a"), ("user-b", "participant-b")]
+        {
+            sqlx::query(
+                "INSERT INTO user_profiles(user_id, participant_id, profile_json) VALUES (?, ?, '{}')",
+            )
+            .bind(user_id)
+            .bind(participant_id)
+            .execute(pool)
+            .await
+            .unwrap_or_else(|error| panic!("insert profile {user_id}: {error}"));
+        }
+        for (room_id, participant_id) in [
+            ("room-a", "participant-a"),
+            ("room-a", "participant-b"),
+            ("room-b", "participant-b"),
+        ] {
+            sqlx::query(
+                "INSERT INTO participants(room_id, participant_id, participant_json) VALUES (?, ?, '{}')",
+            )
+            .bind(room_id)
+            .bind(participant_id)
+            .execute(pool)
+            .await
+            .unwrap_or_else(|error| {
+                panic!("insert participant {room_id}/{participant_id}: {error}")
+            });
+        }
+        for (invite_id, fingerprint, scope, max_uses) in [
+            (
+                "11111111-1111-1111-1111-111111111111",
+                vec![0x11; 32],
+                "read_only",
+                1_i64,
+            ),
+            (
+                "22222222-2222-2222-2222-222222222222",
+                vec![0x22; 32],
+                "read_write",
+                5_i64,
+            ),
+        ] {
+            sqlx::query(
+                "INSERT INTO room_invites(invite_id, token_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at) VALUES (?, ?, 'room-a', 'participant-a', 'Guest', ?, ?, 0, 200, 0, 'user-a', 100)",
+            )
+            .bind(invite_id)
+            .bind(fingerprint)
+            .bind(scope)
+            .bind(max_uses)
+            .execute(pool)
+            .await
+            .unwrap_or_else(|error| panic!("insert invite {invite_id}: {error}"));
+        }
+        for (fingerprint, user_id) in [(vec![0x71; 32], "user-a"), (vec![0x72; 32], "user-b")] {
+            sqlx::query(
+                "INSERT INTO human_device_credentials(credential_fingerprint, user_id, created_at) VALUES (?, ?, 100)",
+            )
+            .bind(fingerprint)
+            .bind(user_id)
+            .execute(pool)
+            .await
+            .unwrap_or_else(|error| panic!("insert credential for {user_id}: {error}"));
+        }
+    }
+
+    struct SessionAuthority<'a> {
+        marker: u8,
+        invite_id: &'a str,
+        key_kind: &'a str,
+        room_id: &'a str,
+        user_id: &'a str,
+        participant_id: &'a str,
+        invite_scope: &'a str,
+        reusable_identity: Option<Vec<u8>>,
+    }
+
+    async fn insert_human_session(
+        pool: &SqlitePool,
+        session: SessionAuthority<'_>,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            "INSERT INTO human_room_sessions(admission_key, key_kind, first_request_id, invite_id, payload_hash, session_fingerprint, room_id, user_id, participant_id, client_kind, invite_scope, browser_credential_fingerprint, reusable_identity_fingerprint, result_json, admitted_at, expires_at, state) VALUES (?, ?, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', ?, ?, ?, ?, ?, ?, 'browser', ?, ?, ?, '{}', 100, 200, 'ended')",
+        )
+        .bind(vec![session.marker; 32])
+        .bind(session.key_kind)
+        .bind(session.invite_id)
+        .bind(vec![0x31; 32])
+        .bind(vec![session.marker.wrapping_add(0x40); 32])
+        .bind(session.room_id)
+        .bind(session.user_id)
+        .bind(session.participant_id)
+        .bind(session.invite_scope)
+        .bind(vec![session.marker.wrapping_add(0x20); 32])
+        .bind(session.reusable_identity)
+        .execute(pool)
+        .await
+        .map(|_| ())
+    }
+
+    #[tokio::test]
+    async fn human_sessions_require_exact_composite_authority() {
+        let pool = installed_schema().await;
+        seed_human_authorities(&pool).await;
+        let one_use = "11111111-1111-1111-1111-111111111111";
+        let reusable = "22222222-2222-2222-2222-222222222222";
+
+        assert_eq!(
+            sqlx::query_scalar::<_, String>(
+                "SELECT key_kind FROM room_invites WHERE invite_id = ?",
+            )
+            .bind(one_use)
+            .fetch_one(&pool)
+            .await
+            .unwrap_or_else(|error| panic!("read one-use classification: {error}")),
+            "one_use"
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, String>(
+                "SELECT key_kind FROM room_invites WHERE invite_id = ?",
+            )
+            .bind(reusable)
+            .fetch_one(&pool)
+            .await
+            .unwrap_or_else(|error| panic!("read reusable classification: {error}")),
+            "reusable"
+        );
+
+        for invalid in [
+            SessionAuthority {
+                marker: 1,
+                invite_id: reusable,
+                key_kind: "one_use",
+                room_id: "room-a",
+                user_id: "user-a",
+                participant_id: "participant-a",
+                invite_scope: "read_write",
+                reusable_identity: None,
+            },
+            SessionAuthority {
+                marker: 2,
+                invite_id: one_use,
+                key_kind: "reusable",
+                room_id: "room-a",
+                user_id: "user-a",
+                participant_id: "participant-a",
+                invite_scope: "read_only",
+                reusable_identity: Some(vec![0x71; 32]),
+            },
+            SessionAuthority {
+                marker: 3,
+                invite_id: reusable,
+                key_kind: "reusable",
+                room_id: "room-b",
+                user_id: "user-b",
+                participant_id: "participant-b",
+                invite_scope: "read_write",
+                reusable_identity: Some(vec![0x72; 32]),
+            },
+            SessionAuthority {
+                marker: 4,
+                invite_id: reusable,
+                key_kind: "reusable",
+                room_id: "room-a",
+                user_id: "user-a",
+                participant_id: "participant-a",
+                invite_scope: "read_only",
+                reusable_identity: Some(vec![0x71; 32]),
+            },
+            SessionAuthority {
+                marker: 5,
+                invite_id: reusable,
+                key_kind: "reusable",
+                room_id: "room-a",
+                user_id: "user-a",
+                participant_id: "participant-b",
+                invite_scope: "read_write",
+                reusable_identity: Some(vec![0x71; 32]),
+            },
+            SessionAuthority {
+                marker: 6,
+                invite_id: reusable,
+                key_kind: "reusable",
+                room_id: "room-a",
+                user_id: "user-a",
+                participant_id: "participant-a",
+                invite_scope: "read_write",
+                reusable_identity: Some(vec![0x72; 32]),
+            },
+        ] {
+            assert!(insert_human_session(&pool, invalid).await.is_err());
+        }
+
+        insert_human_session(
+            &pool,
+            SessionAuthority {
+                marker: 7,
+                invite_id: one_use,
+                key_kind: "one_use",
+                room_id: "room-a",
+                user_id: "user-a",
+                participant_id: "participant-a",
+                invite_scope: "read_only",
+                reusable_identity: None,
+            },
+        )
+        .await
+        .unwrap_or_else(|error| panic!("insert valid one-use session: {error}"));
+        insert_human_session(
+            &pool,
+            SessionAuthority {
+                marker: 8,
+                invite_id: reusable,
+                key_kind: "reusable",
+                room_id: "room-a",
+                user_id: "user-a",
+                participant_id: "participant-a",
+                invite_scope: "read_write",
+                reusable_identity: Some(vec![0x71; 32]),
+            },
+        )
+        .await
+        .unwrap_or_else(|error| panic!("insert valid reusable session: {error}"));
+
+        let session_count =
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM human_room_sessions")
+                .fetch_one(&pool)
+                .await
+                .unwrap_or_else(|error| panic!("count admitted sessions: {error}"));
+        assert_eq!(session_count, 2);
+    }
+
+    #[tokio::test]
+    async fn invite_limits_preserve_configured_values_and_effective_ceilings() {
+        let pool = installed_schema().await;
+        sqlx::query(
+            "INSERT INTO rooms(room_id, room_json, settings_json) VALUES ('room-a', '{}', '{}')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap_or_else(|error| panic!("insert room: {error}"));
+        sqlx::query(
+            "INSERT INTO user_profiles(user_id, participant_id, profile_json) VALUES ('user-a', 'participant-a', '{}')",
+        )
+        .execute(&pool)
+        .await
+        .unwrap_or_else(|error| panic!("insert profile: {error}"));
+
+        for (index, (configured, effective)) in [
+            (0_i64, 128_i64),
+            (1, 1),
+            (2, 2),
+            (3, 3),
+            (5, 5),
+            (128, 128),
+            (129, 128),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let accepted_id = format!("{:08}-0000-0000-0000-{:012}", index + 1, index + 1);
+            sqlx::query(
+                "INSERT INTO room_invites(invite_id, token_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at) VALUES (?, ?, 'room-a', 'participant-a', 'Guest', 'read_write', ?, ?, 200, 0, 'user-a', 100)",
+            )
+            .bind(&accepted_id)
+            .bind(vec![index as u8 + 1; 32])
+            .bind(configured)
+            .bind(effective)
+            .execute(&pool)
+            .await
+            .unwrap_or_else(|error| panic!("insert configured invite {configured}: {error}"));
+
+            let stored =
+                sqlx::query("SELECT max_uses, key_kind FROM room_invites WHERE invite_id = ?")
+                    .bind(&accepted_id)
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap_or_else(|error| panic!("read configured invite {configured}: {error}"));
+            assert_eq!(stored.get::<i64, _>("max_uses"), configured);
+            assert_eq!(
+                stored.get::<String, _>("key_kind"),
+                if configured == 1 {
+                    "one_use"
+                } else {
+                    "reusable"
+                }
+            );
+
+            let rejected_id = format!("{:08}-ffff-ffff-ffff-{:012}", index + 1, index + 1);
+            assert!(
+                sqlx::query(
+                    "INSERT INTO room_invites(invite_id, token_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at) VALUES (?, ?, 'room-a', 'participant-a', 'Guest', 'read_write', ?, ?, 200, 0, 'user-a', 100)",
+                )
+                .bind(rejected_id)
+                .bind(vec![index as u8 + 0x41; 32])
+                .bind(configured)
+                .bind(effective + 1)
+                .execute(&pool)
+                .await
+                .is_err()
+            );
+        }
     }
 }
