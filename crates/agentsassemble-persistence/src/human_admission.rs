@@ -1,4 +1,9 @@
-use agentsassemble_domain::{avatar_attachment_id, canonical_avatar_url, clean_identifier};
+use agentsassemble_domain::{
+    InviteScope, RoomEvent, avatar_attachment_id, canonical_avatar_url, clean_identifier,
+};
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
@@ -16,6 +21,97 @@ pub enum HumanAdmissionInputError {
     RequestId,
     #[error("browser invite admission requires a human participant type")]
     ParticipantType,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HumanAdmissionRejection {
+    InviteNotFound,
+    InviteRevoked,
+    InviteExpired,
+    InviteUseLimitReached,
+    RoomUnavailable,
+    MeetingMismatch,
+    IdentityConflict,
+    CapacityReached,
+    SessionUnavailable,
+    IdempotencyConflict,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HumanAdmissionResult {
+    pub status: String,
+    pub request_id: String,
+    pub agent_id: String,
+    pub display_name: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub avatar_image_url: String,
+    pub meeting_id: String,
+    pub invite_scope: String,
+    pub participant_type: String,
+    pub client_type: String,
+    pub provider_kind: String,
+    pub owner_display_name: String,
+    pub owner_id: String,
+    pub stable_identity: bool,
+    pub operator: bool,
+    pub connection_kind: String,
+    pub client_id: String,
+    pub expires_at: DateTime<Utc>,
+    pub room_label: String,
+    pub room_topic: String,
+    pub room_created_at: DateTime<Utc>,
+    pub guide: Value,
+}
+
+/// One committed admission response. The raw bearer is intentionally non-debuggable.
+pub struct HumanAdmissionCommit {
+    pub(crate) result: HumanAdmissionResult,
+    pub(crate) session_bearer: String,
+    pub(crate) events: Vec<RoomEvent>,
+    pub(crate) replaced_session_fingerprints: Vec<[u8; 32]>,
+    pub(crate) deduplicated: bool,
+}
+
+impl HumanAdmissionCommit {
+    #[must_use]
+    pub const fn result(&self) -> &HumanAdmissionResult {
+        &self.result
+    }
+
+    #[must_use]
+    pub fn session_bearer(&self) -> &str {
+        &self.session_bearer
+    }
+
+    #[must_use]
+    pub fn events(&self) -> &[RoomEvent] {
+        &self.events
+    }
+
+    #[must_use]
+    pub fn replaced_session_fingerprints(&self) -> &[[u8; 32]] {
+        &self.replaced_session_fingerprints
+    }
+
+    #[must_use]
+    pub const fn deduplicated(&self) -> bool {
+        self.deduplicated
+    }
+
+    #[must_use]
+    pub fn invite_scope(&self) -> InviteScope {
+        if self.result.invite_scope == "read_only" {
+            InviteScope::ReadOnly
+        } else {
+            InviteScope::ReadWrite
+        }
+    }
+}
+
+pub enum HumanAdmissionDecision {
+    Admitted(Box<HumanAdmissionCommit>),
+    Rejected(HumanAdmissionRejection),
 }
 
 /// Raw-free browser admission fields before durable invite authority is consulted.

@@ -226,7 +226,7 @@ pub(crate) async fn load_profile_for_identity(
     Ok(profile)
 }
 
-async fn project_profile_into_rooms(
+pub(crate) async fn project_profile_into_rooms(
     transaction: &mut Transaction<'_, Sqlite>,
     identity: ProfileIdentity<'_>,
     profile: &UserProfile,

@@ -165,7 +165,7 @@ impl SqliteStore {
     }
 }
 
-async fn load_invite_and_room(
+pub(crate) async fn load_invite_and_room(
     transaction: &mut Transaction<'_, Sqlite>,
     credential: &HumanInviteCredentialEvidence,
 ) -> Result<Option<(HumanInvite, Room)>, PersistenceError> {
@@ -195,7 +195,7 @@ fn decode_invite_room(row: &SqliteRow) -> Result<(HumanInvite, Room), Persistenc
     Ok((invite, room))
 }
 
-fn require_credential_binding(
+pub(crate) fn require_credential_binding(
     invite: &HumanInvite,
     credential: &HumanInviteCredentialEvidence,
 ) -> Result<(), PersistenceError> {

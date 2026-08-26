@@ -22,6 +22,8 @@ mod filesystem_authority;
 mod host_identity;
 mod host_key_file;
 mod human_admission;
+mod human_admission_identity;
+mod human_admission_store;
 mod human_invite_preflight;
 mod human_invites;
 mod private_fs;
@@ -68,7 +70,10 @@ pub use agent_reconciliation::{
 pub use agent_reconciliation_scan::{RuntimeReconciliationCursor, RuntimeReconciliationPage};
 pub use bootstrap::{LocalBootstrapCommit, LocalBootstrapPhase, LocalBootstrapStatus};
 pub use host_identity::PersistentHostIdentity;
-pub use human_admission::{HumanAdmissionInput, HumanAdmissionInputError, PreparedHumanAdmission};
+pub use human_admission::{
+    HumanAdmissionCommit, HumanAdmissionDecision, HumanAdmissionInput, HumanAdmissionInputError,
+    HumanAdmissionRejection, HumanAdmissionResult, PreparedHumanAdmission,
+};
 pub use human_invite_preflight::{
     HumanInviteCredentialEvidence, HumanInvitePreflight, HumanInvitePreflightContext,
     HumanInvitePreflightPerson, HumanInvitePreflightRejection, HumanInvitePreflightRequest,
