@@ -72,6 +72,7 @@ impl SqliteStore {
 mod tests {
     use std::fs::OpenOptions;
 
+    use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
     use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
     use crate::{
@@ -164,7 +165,13 @@ mod tests {
 
     #[tokio::test]
     async fn invalid_session_hmac_envelopes_fail_closed_without_rewrite() {
-        for corruption in ["missing", "short", "noncanonical", "old-version"] {
+        for corruption in [
+            "missing",
+            "short",
+            "noncanonical",
+            "substituted",
+            "old-version",
+        ] {
             let directory =
                 tempfile::tempdir().unwrap_or_else(|error| panic!("{corruption} tempdir: {error}"));
             let database = directory.path().join("runtime.sqlite3");
@@ -190,6 +197,12 @@ mod tests {
                 }
                 "noncanonical" => {
                     object.insert("session_hmac_key".to_owned(), "AA==".into());
+                }
+                "substituted" => {
+                    object.insert(
+                        "session_hmac_key".to_owned(),
+                        URL_SAFE_NO_PAD.encode([0x42; 32]).into(),
+                    );
                 }
                 "old-version" => {
                     object.insert("version".to_owned(), 1.into());
