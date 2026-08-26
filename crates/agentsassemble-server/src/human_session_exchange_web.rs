@@ -8,8 +8,8 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use chrono::Utc;
-use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde::Serialize;
+use serde_json::{Value, json};
 use tower_http::set_header::SetResponseHeaderLayer;
 
 use crate::{
@@ -37,10 +37,6 @@ struct SessionSocketTicketResponse {
     ttl_seconds: u64,
     server_proof_key: String,
 }
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct LeaveRequest {}
 
 #[derive(Serialize)]
 struct LeaveResponse {
@@ -72,7 +68,7 @@ async fn leave_room(
     request: Request,
 ) -> Result<Json<LeaveResponse>, SessionExchangeError> {
     let authorization = authorize_presented_session(&state, request.headers()).await?;
-    let _: LeaveRequest = decode_json_body(request, MAX_EXCHANGE_BODY_BYTES)
+    let payload: Value = decode_json_body(request, MAX_EXCHANGE_BODY_BYTES)
         .await
         .map_err(SessionExchangeError::from_leave_body)?;
     let participant_id = authorization.principal().participant_id.clone();
@@ -82,7 +78,7 @@ async fn leave_room(
             &authorization,
             uuid::Uuid::new_v4().to_string(),
             RoomAction::ParticipantLeave,
-            json!({}),
+            payload,
         )
         .await
         .map_err(|failure| SessionExchangeError::from_command(&failure))?;
@@ -300,6 +296,10 @@ impl SessionExchangeError {
                 }
                 | PersistenceError::ParticipantMissing
                 | PersistenceError::RoomMissing => StatusCode::UNAUTHORIZED,
+                PersistenceError::CommandRejected {
+                    code: "invalid_participant_leave",
+                    ..
+                } => StatusCode::BAD_REQUEST,
                 PersistenceError::CommandRejected { .. }
                 | PersistenceError::CommandConflict
                 | PersistenceError::StoredCommandRejected { .. } => StatusCode::CONFLICT,

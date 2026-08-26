@@ -261,11 +261,14 @@ mod tests {
     const JOIN: [u8; 32] = [0x61; 32];
     const SIGNED: [u8; 32] = [0x62; 32];
     const BROWSER: [u8; 32] = [0x63; 32];
+    const REJOIN_JOIN: [u8; 32] = [0x64; 32];
+    const REJOIN_SIGNED: [u8; 32] = [0x65; 32];
 
     #[tokio::test]
     async fn read_only_leave_is_one_unbudgeted_membership_and_session_transaction() {
         let (store, authorization, fingerprint) = admitted_fixture(InviteScope::ReadOnly).await;
         let payload = json!({});
+        let participant_id = authorization.principal().participant_id.clone();
         assert!(
             !store
                 .command_requires_principal_budget(
@@ -288,8 +291,9 @@ mod tests {
 
         let participant: Participant = serde_json::from_str(
             &sqlx::query_scalar::<_, String>(
-                "SELECT participant_json FROM participants WHERE room_id = 'general' AND participant_id = 'leave-guest'",
+                "SELECT participant_json FROM participants WHERE room_id = 'general' AND participant_id = ?",
             )
+            .bind(&participant_id)
             .fetch_one(&store.pool)
             .await
             .unwrap_or_else(|error| panic!("read left participant: {error}")),
@@ -322,6 +326,28 @@ mod tests {
                 ..
             })
         ));
+        let rejoined = rejoin(&store).await;
+        assert!(
+            store
+                .command_requires_principal_budget(
+                    rejoined.principal(),
+                    "leave-request",
+                    PARTICIPANT_LEAVE_ACTION,
+                    &payload,
+                )
+                .await
+                .unwrap_or_else(|error| panic!("inspect old leave identity budget: {error}"))
+        );
+        assert!(matches!(
+            store
+                .execute_human_session_participant_leave(&rejoined, "leave-request", &payload,)
+                .await,
+            Err(PersistenceError::CommandConflict)
+        ));
+        store
+            .authorize_human_session(rejoined.session_fingerprint())
+            .await
+            .unwrap_or_else(|error| panic!("old leave identity revoked rejoined session: {error}"));
     }
 
     #[tokio::test]
@@ -420,7 +446,7 @@ mod tests {
             .unwrap_or_else(|error| panic!("create leave room: {error}"));
         let now = Utc::now();
         sqlx::query(
-            "INSERT INTO room_invites(invite_id, signed_token_fingerprint, join_code_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at) VALUES (?, ?, ?, 'general', 'leave-guest', 'Leave Guest', ?, 1, 0, ?, 0, ?, ?)",
+            "INSERT INTO room_invites(invite_id, signed_token_fingerprint, join_code_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at) VALUES (?, ?, ?, 'general', 'leave-guest', 'Leave Guest', ?, 0, 0, ?, 0, ?, ?)",
         )
         .bind(hex::encode(&SIGNED[..8]))
         .bind(SIGNED.as_slice())
@@ -457,7 +483,7 @@ mod tests {
             HumanAdmissionDecision::Admitted(_)
         ));
         let fingerprint: [u8; 32] = sqlx::query_scalar::<_, Vec<u8>>(
-            "SELECT session_fingerprint FROM human_room_sessions WHERE participant_id = 'leave-guest'",
+            "SELECT session_fingerprint FROM human_room_sessions WHERE state = 'active'",
         )
         .fetch_one(&store.pool)
         .await
@@ -469,5 +495,56 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("authorize leave guest: {error}"));
         (store, authorization, fingerprint)
+    }
+
+    async fn rejoin(store: &SqliteStore) -> crate::HumanSessionAuthorization {
+        let now = Utc::now();
+        sqlx::query(
+            "INSERT INTO room_invites(invite_id, signed_token_fingerprint, join_code_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at) VALUES (?, ?, ?, 'general', 'unused', 'Leave Guest', 'read_only', 0, 0, ?, 0, ?, ?)",
+        )
+        .bind(hex::encode(&REJOIN_SIGNED[..8]))
+        .bind(REJOIN_SIGNED.as_slice())
+        .bind(REJOIN_JOIN.as_slice())
+        .bind((now + Duration::hours(1)).timestamp_micros())
+        .bind(LOCAL_OPERATOR_USER_ID)
+        .bind(now.timestamp_micros())
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("insert rejoin invite: {error}"));
+        let request = PreparedHumanAdmission::prepare(
+            HumanInviteCredentialEvidence::JoinCode {
+                fingerprint: REJOIN_JOIN,
+            },
+            BROWSER,
+            &HumanAdmissionInput {
+                request_id: "1d87cc04-6cbb-4409-8b10-f54057c47cbd".to_owned(),
+                meeting_id_assertion: "general".to_owned(),
+                display_name: "Leave Guest".to_owned(),
+                participant_type: "human".to_owned(),
+                owner_display_name: "Host".to_owned(),
+                client_id: "leave-browser".to_owned(),
+                avatar_image_url: String::new(),
+            },
+        )
+        .unwrap_or_else(|error| panic!("prepare rejoin: {error}"));
+        assert!(matches!(
+            store
+                .admit_human(&request, now)
+                .await
+                .unwrap_or_else(|error| panic!("rejoin leave guest: {error}")),
+            HumanAdmissionDecision::Admitted(_)
+        ));
+        let fingerprint: [u8; 32] = sqlx::query_scalar::<_, Vec<u8>>(
+            "SELECT session_fingerprint FROM human_room_sessions WHERE state = 'active'",
+        )
+        .fetch_one(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("read rejoined fingerprint: {error}"))
+        .try_into()
+        .unwrap_or_else(|value: Vec<u8>| panic!("invalid fingerprint length: {}", value.len()));
+        store
+            .authorize_human_session(&fingerprint)
+            .await
+            .unwrap_or_else(|error| panic!("authorize rejoined guest: {error}"))
     }
 }

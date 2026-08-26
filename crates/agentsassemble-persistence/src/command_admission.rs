@@ -130,11 +130,17 @@ impl SqliteStore {
             && !principal.is_operator
             && principal.capabilities.participant_leave
             && payload.as_object().is_some_and(serde_json::Map::is_empty);
-        let required = !self_disabling_leave
-            && matches!(
+        let required = if self_disabling_leave {
+            // A fresh leave disables its own authority, so charging it cannot
+            // improve abuse resistance. Any pre-existing identity is instead
+            // a replay/conflict path and must retain the normal process debit.
+            existing.is_some()
+        } else {
+            matches!(
                 existing,
                 None | Some(ExistingRequestIdentity::RejectedLifecycle)
-            );
+            )
+        };
         transaction.commit().await?;
         Ok(required)
     }
