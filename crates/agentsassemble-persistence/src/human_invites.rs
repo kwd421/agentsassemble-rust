@@ -37,6 +37,11 @@ pub struct NewHumanInvite {
     pub created_at: DateTime<Utc>,
 }
 
+pub struct HumanInviteRevocation {
+    pub invite_id: String,
+    pub ended_session_fingerprints: Vec<[u8; 32]>,
+}
+
 impl HumanInvite {
     #[must_use]
     pub const fn is_reusable(&self) -> bool {
@@ -97,6 +102,64 @@ impl SqliteStore {
         let stored = decode_human_invite(&row)?;
         transaction.commit().await?;
         Ok(stored)
+    }
+
+    /// Revokes one room-owned invite and every active session derived from it.
+    ///
+    /// Returned fingerprints let the server notify affected live connections only after commit.
+    /// Existing revoked rows remain successful and return no already-ended sessions.
+    ///
+    /// # Errors
+    ///
+    /// Fails on an invalid public ID, stale manager authority, malformed stored session
+    /// fingerprints, or database errors.
+    pub async fn revoke_human_invite_for_local_manager(
+        &self,
+        manager: &RoomUserIdentity,
+        invite_id: &str,
+    ) -> Result<Option<HumanInviteRevocation>, PersistenceError> {
+        if !is_invite_id(invite_id) {
+            return Err(rejected(
+                "invalid_human_invite_id",
+                "Human invite ID is invalid.",
+            ));
+        }
+        let mut transaction = self.pool.begin().await?;
+        let current = resolve_room_user_identity(
+            &mut transaction,
+            &manager.room_id,
+            &manager.user_id,
+            &manager.participant_id,
+        )
+        .await?;
+        require_current_local_room_manager(&mut transaction, &current).await?;
+        let found = sqlx::query_scalar::<_, String>(
+            "UPDATE room_invites SET revoked = 1 WHERE invite_id = ? AND room_id = ? RETURNING invite_id",
+        )
+        .bind(invite_id)
+        .bind(&current.room_id)
+        .fetch_optional(&mut *transaction)
+        .await?;
+        let Some(invite_id) = found else {
+            transaction.commit().await?;
+            return Ok(None);
+        };
+        let session_rows = sqlx::query(
+            "UPDATE human_room_sessions SET state = 'ended' WHERE invite_id = ? AND room_id = ? AND state = 'active' RETURNING session_fingerprint",
+        )
+        .bind(&invite_id)
+        .bind(&current.room_id)
+        .fetch_all(&mut *transaction)
+        .await?;
+        let ended_session_fingerprints = session_rows
+            .iter()
+            .map(|row| fingerprint(row, "session_fingerprint"))
+            .collect::<Result<Vec<_>, _>>()?;
+        transaction.commit().await?;
+        Ok(Some(HumanInviteRevocation {
+            invite_id,
+            ended_session_fingerprints,
+        }))
     }
 
     /// Finds one canonical human invite by the complete signed-token fingerprint.
@@ -180,6 +243,13 @@ fn is_canonical_text(value: &str, max_chars: usize) -> bool {
         && value.trim() == value
         && value.chars().count() <= max_chars
         && !value.contains(['\r', '\n'])
+}
+
+fn is_invite_id(value: &str) -> bool {
+    value.len() == 16
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
 fn decode_human_invite(row: &SqliteRow) -> Result<HumanInvite, PersistenceError> {
@@ -274,12 +344,68 @@ fn rejected(code: &'static str, message: impl Into<String>) -> PersistenceError 
 #[cfg(test)]
 mod tests {
     use agentsassemble_domain::{
-        InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID,
+        InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, Participant,
     };
     use chrono::{Duration, TimeZone, Utc};
 
     use super::{HumanInvite, MAX_EFFECTIVE_INVITE_USES, NewHumanInvite};
     use crate::{PersistenceError, SqliteStore};
+
+    const GUEST_USER_ID: &str = "invite-user-ab";
+    const GUEST_PARTICIPANT_ID: &str = "guest-ab";
+
+    #[tokio::test]
+    async fn revoke_ends_exact_active_sessions_and_replays_for_existing_invite() {
+        let store = fixture().await;
+        let manager = store
+            .authorize_local_room_manager(
+                "general",
+                LOCAL_OPERATOR_USER_ID,
+                LOCAL_OPERATOR_PARTICIPANT_ID,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("authorize manager: {error}"));
+        let mut draft = new_invite(0xAB, 0xCD);
+        draft.max_uses = 1;
+        let invite = store
+            .create_human_invite_for_local_manager(&manager, draft)
+            .await
+            .unwrap_or_else(|error| panic!("create invite: {error}"));
+        add_guest_human(&store).await;
+        insert_active_session(&store, &invite.invite_id, [0x33; 32]).await;
+
+        let Some(revoked) = store
+            .revoke_human_invite_for_local_manager(&manager, &invite.invite_id)
+            .await
+            .unwrap_or_else(|error| panic!("revoke invite: {error}"))
+        else {
+            panic!("created invite must exist");
+        };
+        assert_eq!(revoked.invite_id, invite.invite_id);
+        assert_eq!(revoked.ended_session_fingerprints, vec![[0x33; 32]]);
+        assert_eq!(stored_session_state(&store).await, "ended");
+        assert!(
+            store
+                .human_invite_by_signed_fingerprint(&invite.signed_token_fingerprint)
+                .await
+                .unwrap_or_else(|error| panic!("read revoked invite: {error}"))
+                .is_some_and(|stored| stored.revoked)
+        );
+
+        let replay = store
+            .revoke_human_invite_for_local_manager(&manager, &invite.invite_id)
+            .await
+            .unwrap_or_else(|error| panic!("replay invite revoke: {error}"))
+            .unwrap_or_else(|| panic!("revoked invite must remain addressable"));
+        assert!(replay.ended_session_fingerprints.is_empty());
+        assert!(
+            store
+                .revoke_human_invite_for_local_manager(&manager, "ffffffffffffffff")
+                .await
+                .unwrap_or_else(|error| panic!("revoke missing invite: {error}"))
+                .is_none()
+        );
+    }
 
     #[tokio::test]
     async fn create_derives_room_and_creator_then_rejects_stale_manager() {
@@ -440,5 +566,71 @@ mod tests {
                 .single()
                 .unwrap_or_else(|| panic!("valid creation time")),
         }
+    }
+
+    async fn insert_active_session(
+        store: &SqliteStore,
+        invite_id: &str,
+        session_fingerprint: [u8; 32],
+    ) {
+        sqlx::query(
+            "INSERT INTO human_room_sessions(admission_key, key_kind, first_request_id, invite_id, payload_hash, session_fingerprint, room_id, user_id, participant_id, client_kind, invite_scope, browser_credential_fingerprint, reusable_identity_fingerprint, result_json, admitted_at, expires_at, state) VALUES (?, 'one_use', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', ?, ?, ?, 'general', ?, ?, 'browser', 'read_write', ?, NULL, '{}', 1100000, 1900000, 'active')",
+        )
+        .bind([0x11; 32].as_slice())
+        .bind(invite_id)
+        .bind([0x22; 32].as_slice())
+        .bind(session_fingerprint.as_slice())
+        .bind(GUEST_USER_ID)
+        .bind(GUEST_PARTICIPANT_ID)
+        .bind([0x44; 32].as_slice())
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("insert active session: {error}"));
+    }
+
+    async fn stored_session_state(store: &SqliteStore) -> String {
+        sqlx::query_scalar("SELECT state FROM human_room_sessions")
+            .fetch_one(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("read session state: {error}"))
+    }
+
+    async fn add_guest_human(store: &SqliteStore) {
+        let profile_json = sqlx::query_scalar::<_, String>(
+            "SELECT profile_json FROM user_profiles WHERE user_id = ?",
+        )
+        .bind(LOCAL_OPERATOR_USER_ID)
+        .fetch_one(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("read profile fixture: {error}"));
+        sqlx::query(
+            "INSERT INTO user_profiles(user_id, participant_id, profile_json) VALUES (?, ?, ?)",
+        )
+        .bind(GUEST_USER_ID)
+        .bind(GUEST_PARTICIPANT_ID)
+        .bind(profile_json)
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("insert guest profile: {error}"));
+
+        let participant_json = sqlx::query_scalar::<_, String>(
+            "SELECT participant_json FROM participants WHERE room_id = 'general' AND participant_id = ?",
+        )
+        .bind(LOCAL_OPERATOR_PARTICIPANT_ID)
+        .fetch_one(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("read participant fixture: {error}"));
+        let mut participant: Participant = serde_json::from_str(&participant_json)
+            .unwrap_or_else(|error| panic!("decode participant fixture: {error}"));
+        participant.participant_id = GUEST_PARTICIPANT_ID.to_owned();
+        participant.display_name = "Guest".to_owned();
+        sqlx::query(
+            "INSERT INTO participants(room_id, participant_id, participant_json) VALUES ('general', ?, ?)",
+        )
+        .bind(GUEST_PARTICIPANT_ID)
+        .bind(serde_json::to_string(&participant).unwrap_or_else(|error| panic!("encode guest participant: {error}")))
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("insert guest participant: {error}"));
     }
 }
