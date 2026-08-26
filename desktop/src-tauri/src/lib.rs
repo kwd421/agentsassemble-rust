@@ -5,8 +5,8 @@ mod room_directory_cache;
 mod runtime_supervisor;
 
 use agentsassemble_protocol::{HostProductSurface, LocalBootstrapGrant};
-pub use local_runtime::{HttpTicketGrant, LocalRuntime};
 use local_runtime::{CentralRegistrationTicketGrant, TicketGrant};
+pub use local_runtime::{HttpTicketGrant, LocalRuntime};
 use serde::{Deserialize, Serialize};
 use tauri::{Manager, RunEvent, WebviewWindow};
 

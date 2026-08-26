@@ -148,10 +148,7 @@ impl LocalRuntime {
     /// # Errors
     ///
     /// Returns an error when authority is rejected or the owned runtime is broken.
-    pub fn issue_operator_http_ticket(
-        &self,
-        app: &AppHandle,
-    ) -> Result<HttpTicketGrant, String> {
+    pub fn issue_operator_http_ticket(&self, app: &AppHandle) -> Result<HttpTicketGrant, String> {
         let mut process = self
             .process
             .lock()
@@ -197,8 +194,7 @@ impl LocalRuntime {
             .process
             .lock()
             .map_err(|_| "local runtime state lock is poisoned".to_owned())?;
-        let result =
-            request_preferences_write_ticket(ensure_runtime(&mut process, app)?, &room_id);
+        let result = request_preferences_write_ticket(ensure_runtime(&mut process, app)?, &room_id);
         handle_ticket_result(&mut process, result)
     }
 
