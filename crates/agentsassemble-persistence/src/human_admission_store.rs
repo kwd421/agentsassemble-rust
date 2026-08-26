@@ -27,6 +27,34 @@ const MAX_PUBLIC_SESSIONS: i64 = 448;
 const MAX_PUBLIC_ROOM_SESSIONS: i64 = 112;
 
 impl SqliteStore {
+    /// Resolves only the room queue that must own an admission attempt.
+    ///
+    /// This is not an authorization decision. Signed evidence already carries its
+    /// authenticated room claim; join-code evidence needs one indexed lookup. The
+    /// admission transaction re-resolves and validates the complete invite authority.
+    ///
+    /// # Errors
+    ///
+    /// Fails only when the join-code routing lookup cannot read persistence.
+    pub async fn human_admission_room_id(
+        &self,
+        request: &PreparedHumanAdmission,
+    ) -> Result<Option<String>, PersistenceError> {
+        match request.credential() {
+            crate::HumanInviteCredentialEvidence::Signed { room_id, .. } => {
+                Ok(Some(room_id.clone()))
+            }
+            crate::HumanInviteCredentialEvidence::JoinCode { fingerprint } => {
+                Ok(sqlx::query_scalar(
+                    "SELECT room_id FROM room_invites WHERE join_code_fingerprint = ?",
+                )
+                .bind(fingerprint.as_slice())
+                .fetch_optional(&self.pool)
+                .await?)
+            }
+        }
+    }
+
     /// Atomically consumes one browser invite and commits its profile, membership, session,
     /// result snapshot, and canonical room events.
     ///

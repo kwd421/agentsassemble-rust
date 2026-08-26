@@ -128,6 +128,38 @@ async fn admission_failure_rolls_back_every_product_record() {
 }
 
 #[tokio::test]
+async fn join_code_routing_ignores_current_gates_but_never_authorizes_admission() {
+    let (store, now) = fixture().await;
+    insert_invite(&store, SIGNED_ONE, JOIN_ONE, "one-use-guest", 1, now).await;
+    let request = prepared(
+        JOIN_ONE,
+        BROWSER,
+        "aeaeaeae-aeae-4eae-8eae-aeaeaeaeaeae",
+        "Guest",
+    );
+    sqlx::query("UPDATE room_invites SET revoked = 1, use_count = 1")
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("make invite terminal: {error}"));
+
+    assert_eq!(
+        store
+            .human_admission_room_id(&request)
+            .await
+            .unwrap_or_else(|error| panic!("resolve routing room: {error}"))
+            .as_deref(),
+        Some("general")
+    );
+    assert_rejected(
+        &store
+            .admit_human(&request, now)
+            .await
+            .unwrap_or_else(|error| panic!("apply admission authority: {error}")),
+        HumanAdmissionRejection::InviteRevoked,
+    );
+}
+
+#[tokio::test]
 async fn corrupt_retry_authority_fails_closed_without_terminalizing_session() {
     let (store, now) = fixture().await;
     insert_invite(&store, SIGNED_ONE, JOIN_ONE, "one-use-guest", 1, now).await;
