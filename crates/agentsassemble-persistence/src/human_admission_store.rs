@@ -17,6 +17,7 @@ use crate::{
     HumanInvite, PersistenceError, PreparedHumanAdmission, SqliteStore,
     human_admission_identity::{persist_identity, resolve_admission_avatar, resolve_identity},
     human_invite_preflight::{load_invite_and_room, require_credential_binding},
+    profile_store::decode_bound_profile,
 };
 
 const SESSION_BEARER_CONTEXT: &[u8] = b"agentsassemble-human-session-bearer-v1\0";
@@ -250,7 +251,7 @@ async fn exact_admission(
     now: DateTime<Utc>,
 ) -> Result<Option<HumanAdmissionDecision>, PersistenceError> {
     let row = sqlx::query(
-        "SELECT sessions.key_kind, sessions.first_request_id, sessions.invite_id, sessions.payload_hash, sessions.session_fingerprint, sessions.room_id, sessions.user_id, sessions.participant_id, sessions.client_kind, sessions.invite_scope, sessions.browser_credential_fingerprint, sessions.result_json, sessions.expires_at, sessions.state, profiles.profile_json, participants.participant_json, rooms.room_json FROM human_room_sessions AS sessions JOIN user_profiles AS profiles ON profiles.user_id = sessions.user_id AND profiles.participant_id = sessions.participant_id JOIN participants ON participants.room_id = sessions.room_id AND participants.participant_id = sessions.participant_id JOIN rooms ON rooms.room_id = sessions.room_id WHERE sessions.admission_key = ?",
+        "SELECT sessions.key_kind, sessions.first_request_id, sessions.invite_id, sessions.payload_hash, sessions.session_fingerprint, sessions.room_id, sessions.user_id, sessions.participant_id, sessions.client_kind, sessions.invite_scope, sessions.browser_credential_fingerprint, sessions.result_json, sessions.expires_at, sessions.state, profiles.participant_id AS profile_participant_id, profiles.profile_json, participants.participant_json, rooms.room_json FROM human_room_sessions AS sessions JOIN user_profiles AS profiles ON profiles.user_id = sessions.user_id AND profiles.participant_id = sessions.participant_id JOIN participants ON participants.room_id = sessions.room_id AND participants.participant_id = sessions.participant_id JOIN rooms ON rooms.room_id = sessions.room_id WHERE sessions.admission_key = ?",
     )
     .bind(admission_key.as_slice())
     .fetch_optional(&mut **transaction)
@@ -281,14 +282,26 @@ async fn exact_admission(
         serde_json::from_str(row.get::<String, _>("room_json").as_str())?;
     let participant: Participant =
         serde_json::from_str(row.get::<String, _>("participant_json").as_str())?;
-    let profile: UserProfile = serde_json::from_str(row.get::<String, _>("profile_json").as_str())?;
+    let room_id = row.get::<String, _>("room_id");
+    let participant_id = row.get::<String, _>("participant_id");
+    if room.room_id != room_id
+        || participant.room_id != room_id
+        || participant.participant_id != participant_id
+        || participant.participant_type != "human"
+    {
+        return Err(invalid_state(
+            "Stored human admission room or participant authority is invalid.",
+        ));
+    }
+    decode_bound_profile(
+        row.get::<String, _>("profile_participant_id").as_str(),
+        &participant_id,
+        row.get::<String, _>("profile_json").as_str(),
+    )?;
     let live = state == "active"
         && expires_at > now
         && room.status == RoomStatus::Active
-        && participant.status == ParticipantStatus::Joined
-        && participant.participant_type == "human"
-        && participant.participant_id == row.get::<String, _>("participant_id")
-        && profile.revision > 0;
+        && participant.status == ParticipantStatus::Joined;
     if !live {
         if state == "active" {
             sqlx::query("UPDATE human_room_sessions SET state = 'ended' WHERE admission_key = ?")

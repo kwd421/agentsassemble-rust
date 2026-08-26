@@ -128,6 +128,143 @@ async fn admission_failure_rolls_back_every_product_record() {
 }
 
 #[tokio::test]
+async fn corrupt_retry_authority_fails_closed_without_terminalizing_session() {
+    let (store, now) = fixture().await;
+    insert_invite(&store, SIGNED_ONE, JOIN_ONE, "one-use-guest", 1, now).await;
+    let request = prepared(
+        JOIN_ONE,
+        BROWSER,
+        "abababab-abab-4bab-8bab-abababababab",
+        "Guest",
+    );
+    let first = admitted(
+        store
+            .admit_human(&request, now)
+            .await
+            .unwrap_or_else(|error| panic!("admit one-use human: {error}")),
+    );
+    let participant_id = first.result().agent_id.clone();
+
+    let original_participant = sqlx::query_scalar::<_, String>(
+        "SELECT participant_json FROM participants WHERE room_id = 'general' AND participant_id = ?",
+    )
+    .bind(&participant_id)
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("read participant: {error}"));
+    let mut corrupt_participant: Participant = serde_json::from_str(&original_participant)
+        .unwrap_or_else(|error| panic!("decode participant: {error}"));
+    corrupt_participant.participant_type = "agent".to_owned();
+    sqlx::query(
+        "UPDATE participants SET participant_json = ? WHERE room_id = 'general' AND participant_id = ?",
+    )
+    .bind(
+        serde_json::to_string(&corrupt_participant)
+            .unwrap_or_else(|error| panic!("encode participant: {error}")),
+    )
+    .bind(&participant_id)
+    .execute(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("corrupt participant: {error}"));
+
+    assert_invalid_state(
+        &store
+            .admit_human(&request, now + Duration::seconds(1))
+            .await,
+    );
+    assert_eq!(session_states(&store).await, vec!["active"]);
+
+    sqlx::query(
+        "UPDATE participants SET participant_json = ? WHERE room_id = 'general' AND participant_id = ?",
+    )
+    .bind(original_participant)
+    .bind(&participant_id)
+    .execute(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("restore participant: {error}"));
+    let profile_json = sqlx::query_scalar::<_, String>(
+        "SELECT profile_json FROM user_profiles WHERE participant_id = ?",
+    )
+    .bind(&participant_id)
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("read profile: {error}"));
+    let mut profile: serde_json::Value = serde_json::from_str(&profile_json)
+        .unwrap_or_else(|error| panic!("decode profile: {error}"));
+    profile["revision"] = serde_json::json!(0);
+    sqlx::query("UPDATE user_profiles SET profile_json = ? WHERE participant_id = ?")
+        .bind(profile.to_string())
+        .bind(&participant_id)
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("corrupt profile: {error}"));
+
+    assert_invalid_state(
+        &store
+            .admit_human(&request, now + Duration::seconds(2))
+            .await,
+    );
+    assert_eq!(session_states(&store).await, vec!["active"]);
+    assert_eq!(invite_use_count(&store, SIGNED_ONE).await, 1);
+}
+
+#[tokio::test]
+async fn reusable_identity_rejects_a_corrupt_profile_before_patching_it() {
+    let (store, now) = fixture().await;
+    insert_invite(&store, SIGNED_ONE, JOIN_ONE, "unused-one", 5, now).await;
+    let first = admitted(
+        store
+            .admit_human(
+                &prepared(
+                    JOIN_ONE,
+                    BROWSER,
+                    "acacacac-acac-4cac-8cac-acacacacacac",
+                    "First",
+                ),
+                now,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("first reusable admission: {error}")),
+    );
+    let participant_id = first.result().agent_id.clone();
+    let profile_json = sqlx::query_scalar::<_, String>(
+        "SELECT profile_json FROM user_profiles WHERE participant_id = ?",
+    )
+    .bind(&participant_id)
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("read profile: {error}"));
+    let mut profile: serde_json::Value = serde_json::from_str(&profile_json)
+        .unwrap_or_else(|error| panic!("decode profile: {error}"));
+    profile["revision"] = serde_json::json!(0);
+    sqlx::query("UPDATE user_profiles SET profile_json = ? WHERE participant_id = ?")
+        .bind(profile.to_string())
+        .bind(&participant_id)
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("corrupt profile: {error}"));
+
+    let signed_two = [0x44; 32];
+    let join_two = [0x55; 32];
+    insert_invite(&store, signed_two, join_two, "unused-two", 5, now).await;
+    assert_invalid_state(
+        &store
+            .admit_human(
+                &prepared(
+                    join_two,
+                    BROWSER,
+                    "adadadad-adad-4dad-8dad-adadadadadad",
+                    "Second",
+                ),
+                now + Duration::seconds(1),
+            )
+            .await,
+    );
+    assert_eq!(invite_use_count(&store, signed_two).await, 0);
+    assert_eq!(session_states(&store).await, vec!["active"]);
+}
+
+#[tokio::test]
 async fn reusable_identity_replaces_only_its_session_and_preserves_room_authority() {
     let (store, now) = fixture().await;
     insert_invite(&store, SIGNED_ONE, JOIN_ONE, "unused-one", 5, now).await;
@@ -319,6 +456,16 @@ fn assert_rejected(decision: &HumanAdmissionDecision, expected: HumanAdmissionRe
         HumanAdmissionDecision::Rejected(actual) => assert_eq!(*actual, expected),
         HumanAdmissionDecision::Admitted(_) => panic!("expected rejected decision"),
     }
+}
+
+fn assert_invalid_state(result: &Result<HumanAdmissionDecision, PersistenceError>) {
+    assert!(matches!(
+        result,
+        Err(PersistenceError::CommandRejected {
+            code: "invalid_state",
+            ..
+        })
+    ));
 }
 
 async fn invite_use_count(store: &SqliteStore, signed: [u8; 32]) -> i64 {

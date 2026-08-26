@@ -210,13 +210,25 @@ pub(crate) async fn load_profile_for_identity(
                     "Authenticated user profile was not found.",
                 )
             })?;
-    if row.get::<String, _>("participant_id") != participant_id {
+    decode_bound_profile(
+        row.get::<String, _>("participant_id").as_str(),
+        participant_id,
+        row.get::<String, _>("profile_json").as_str(),
+    )
+}
+
+pub(crate) fn decode_bound_profile(
+    stored_participant_id: &str,
+    expected_participant_id: &str,
+    profile_json: &str,
+) -> Result<UserProfile, PersistenceError> {
+    if stored_participant_id != expected_participant_id {
         return Err(rejected(
             "profile_authority_mismatch",
             "Authenticated user profile does not own this participant.",
         ));
     }
-    let profile: UserProfile = serde_json::from_str(row.get::<String, _>("profile_json").as_str())?;
+    let profile: UserProfile = serde_json::from_str(profile_json)?;
     if profile.revision < 1 {
         return Err(rejected(
             "invalid_state",

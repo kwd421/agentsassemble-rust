@@ -5,7 +5,7 @@ use sqlx::{Row, Sqlite, Transaction};
 use crate::{
     HumanInvite, PersistenceError, PreparedHumanAdmission,
     profile_attachments::replace_profile_avatar,
-    profile_store::{ProfileIdentity, project_profile_into_rooms},
+    profile_store::{ProfileIdentity, decode_bound_profile, project_profile_into_rooms},
 };
 
 pub(super) struct ResolvedIdentity {
@@ -41,8 +41,11 @@ pub(super) async fn resolve_identity(
         {
             let user_id = row.get::<String, _>("user_id");
             let participant_id = row.get::<String, _>("participant_id");
-            let profile: UserProfile =
-                serde_json::from_str(row.get::<String, _>("profile_json").as_str())?;
+            let profile = decode_bound_profile(
+                row.get::<String, _>("participant_id").as_str(),
+                &participant_id,
+                row.get::<String, _>("profile_json").as_str(),
+            )?;
             let previous_avatar_url = profile.avatar_image_url.clone();
             let mut updated = profile;
             let profile_changed = updated.apply_patch(
