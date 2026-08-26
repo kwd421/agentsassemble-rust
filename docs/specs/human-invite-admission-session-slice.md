@@ -134,24 +134,31 @@ existing bounded `RoomRuntime` writer. Queue acceptance transfers custody to the
 runtime: disconnecting or cancelling the HTTP handler cannot cancel an accepted
 admission. The room runtime then performs one SQLite transaction:
 
-1. load the active room and invite and enforce room state, expiry, revocation,
-   client kind, and scope;
-2. derive the admission key and payload hash. Reject a conflicting or terminal row,
-   but return an exact live retry before applying maximum-use or new-session capacity
-   checks because that row already owns its consumed use and capacity;
-3. resolve the reusable credential user or allocate an invite-scoped one-use user,
-   keeping participant/profile collisions fail-closed, then enforce maximum use for
-   this new invite principal and global/per-room public-session capacity while
-   excluding an existing same-participant session;
-4. consume one invite use when this is a new invite principal, upsert the joined
+1. validate the bounded request, derive its payload hash and one-use candidate key,
+   and load invite metadata without yet treating current invite usability as a new
+   admission decision;
+2. if that exact one-use row exists, reject a payload conflict or terminal backing
+   session, otherwise return its live result before current invite expiry,
+   revocation, used-nonce, maximum-use, or new-session capacity checks. This retains
+   the original request-workflow recovery after a response was lost;
+3. for every new admission and every reusable retry, enforce the active room plus
+   current invite expiry, revocation, client kind, scope, and maximum-use gates;
+4. derive the reusable invite/credential key when applicable. Reject a conflicting
+   or terminal row, or return its exact live result without another use, capacity
+   slot, identity, or event. The current invite gate remains before this lookup, as
+   in the original reusable-device path;
+5. resolve the reusable credential user or allocate an invite-scoped one-use user,
+   keeping participant/profile collisions fail-closed, then enforce global/per-room
+   public-session capacity while excluding an existing same-participant session;
+6. consume one invite use when this is a new invite principal, upsert the joined
    human participant and matching profile, and mark any different live session for
    that `(room, participant)` replaced without charging another capacity slot;
-5. omit an optional pending avatar whose reference is invalid or whose row is absent,
+7. omit an optional pending avatar whose reference is invalid or whose row is absent,
    expired, or owned by another custody subject; fail on a persisted invariant or
    content-integrity violation; otherwise transfer the exact valid row, create the
    session/result, and append at most one `participant_joined` event. Its sequence is
    pending whenever it is newer than the room's existing durable publication cursor;
-6. commit before publishing the event, notifying displaced sessions, or returning
+8. commit before publishing the event, notifying displaced sessions, or returning
    the bearer.
 
 Any database/infrastructure failure rolls back every step. Optional-avatar semantic
@@ -226,13 +233,11 @@ key and claimed ceiling, never authority on its own.
 The existing 4,096-item grant store remains one implementation owner, not a second
 session cache. Grants from this public-human slice have hard sublimits of 1,792 total
 and 8 outstanding per session fingerprint, leaving at least 2,304 entries for
-local/private authority. An admitted session may exchange at most
-a token-bucket capacity of 64, refilled at 64 grants per minute. The copied foreground
-flow needs fewer than ten exchanges to join, load profile/preferences, and open its
-socket; the larger ceiling preserves ordinary interaction while bounding a stolen
-session's allocation and lock/UUID churn. The limiter stores only token count and
-last-refill time per live session and disappears on session end; it does not become
-authentication authority.
+local/private authority. Expired and consumed grants are reclaimed by the existing
+store owner. No new request-rate limiter is introduced in this slice: the existing
+128-connection HTTP admission bound, 4,096-item store capacity, public/private
+partition, and per-session outstanding bound are observed controls, while an
+additional requests-per-minute threshold would be an unmeasured product restriction.
 
 A session WebSocket subscribes to revocation notification before its connect grant
 is consumed, then revalidates the database after subscription. It revalidates before
@@ -361,16 +366,22 @@ flag is added meanwhile.
 
 - Prior cost and threat: the current grant store is globally bounded at 4,096, but
   an exchange endpoint without provenance sublimits lets public sessions occupy all
-  slots or repeatedly allocate and expire grants, starving private control.
+  slots and starve private control. The server already bounds admitted HTTP
+  connections at 128; no measured exchange-rate or CPU/lock-latency result supports
+  a second per-minute threshold.
 - Change intent: keep the existing store and add only provenance accounting, pending
-  sublimits, and a capacity-64/64-per-minute live-session token bucket.
+  sublimits, and a fixed local/private reserve.
 - Preserved contract: grants stay opaque, short-lived, exact-purpose, one-use, and
-  consume-on-wrong-purpose; local/private issuers keep a reserved capacity floor.
-- Trade-off: one small bucket record is held per live session and an abusive client
-  receives an explicit rate/capacity error instead of allocating more grants.
+  consume-on-wrong-purpose; local/private issuers keep a reserved capacity floor;
+  ordinary clients gain no new requests-per-minute rejection behavior.
+- Trade-off: a stolen live session may keep churning grants within the existing HTTP
+  work bounds, but cannot hold more than eight or cross the public partition. A rate
+  limiter requires measured CPU/lock/latency evidence and a separately reviewed
+  product limit rather than a speculative threshold in this migration slice.
 - Verification: boundaries prove 8-per-session, 1,792-public total, the 2,304-entry
-  private reserve, expiry reclamation, and token-bucket capacity/refill behavior with
-  a controlled clock rather than sleeps.
+  private reserve, and expiry/consumption reclamation. Before/after issue latency and
+  lock time are recorded; a later limiter is considered only if those measurements
+  demonstrate a concrete exhaustion path not covered by the existing bounds.
 
 No additional cache, repository interface, background cleanup framework, generic
 credential provider, multi-database saga, or future agent-session abstraction is
@@ -397,15 +408,19 @@ write-path work. A separate cleanup task requires later measured evidence.
 - Fresh-schema tests prove constraints, cascade/revoke behavior, and rejection of
   every non-current schema without migration.
 - Persistence tests prove preflight has no writes; admission is atomic under injected
-  failure; exact retry is stable across restart; conflicting/expired/revoked retry is
-  terminal; a reusable exact retry with a different request UUID returns the same
-  identity/live bearer without another use or event; changed payload conflicts and a
-  different device consumes a distinct principal; collision and all capacity edges
-  fail before consumption; and no raw invite, device, or session bearer reaches
-  SQLite, events, logs, or fixtures.
-- Lost-response tests consume the final use, drop the first HTTP result after commit,
-  and prove the exact live retry succeeds before max-use enforcement while a new
-  admission still receives the capacity error.
+  failure; exact retry is stable across restart; a one-use exact retry is governed by
+  its stored backing session rather than later invite expiry/revocation/use state; a
+  conflicting or unavailable stored session is terminal; a reusable exact retry
+  with a different request UUID returns the same identity/live bearer without
+  another use or event only while the current invite gate remains valid; changed
+  payload conflicts and a different device consumes a distinct principal; collision
+  and all capacity edges fail before consumption; and no raw invite, device, or
+  session bearer reaches SQLite, events, logs, or fixtures.
+- Lost-response tests consume the final one-use invite, drop the first HTTP result
+  after commit, and prove the exact request-key retry succeeds while its backing
+  session remains live. Separate reusable tests prove the original ordering: an
+  existing device-key result is rejected after invite expiry, revocation, or use
+  ceiling, while a new admission receives the same current-gate error.
 - Replacement tests admit one stable participant through different reusable invites,
   prove only the new session remains live, the old bearer/grants/socket fail, and the
   same-participant replacement does not increase capacity.
