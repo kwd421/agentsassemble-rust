@@ -1,5 +1,6 @@
 import type { RoomAgentSession, RoomEvent, RoomMember } from "../api";
 import { isParticipantRole } from "./participantRole";
+import { assertExactKeys, strictRecord } from "./strictJsonContract";
 
 const PARTICIPANT_KEYS = [
   "room_id",
@@ -70,22 +71,21 @@ const AGENT_SESSION_INTEGER_KEYS = [
   "turn_count",
 ] as const;
 
-function strictRecord(
+function exactEventRecord(
   value: unknown,
   keys: readonly string[],
   missingMessage: string,
   invalidMessage: string
 ): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  let record: Record<string, unknown>;
+  try {
+    record = strictRecord(value, missingMessage);
+  } catch {
     throw new Error(missingMessage);
   }
-  const record = value as Record<string, unknown>;
-  const actualKeys = Object.keys(record).sort();
-  const expectedKeys = [...keys].sort();
-  if (
-    actualKeys.length !== expectedKeys.length ||
-    actualKeys.some((key, index) => key !== expectedKeys[index])
-  ) {
+  try {
+    assertExactKeys(record, keys, invalidMessage);
+  } catch {
     throw new Error(invalidMessage);
   }
   return record;
@@ -95,7 +95,7 @@ function participantFromEvent(
   event: RoomEvent,
   expectedStatus: "joined" | "detached"
 ): RoomMember {
-  const participant = strictRecord(
+  const participant = exactEventRecord(
     (event as unknown as Record<string, unknown>).participant,
     PARTICIPANT_KEYS,
     `${event.type} 이벤트에 참가자 투영이 없습니다.`,
@@ -142,7 +142,7 @@ export function agentCreationProjectionFromEvent(event: RoomEvent): {
 } {
   const eventRecord = event as unknown as Record<string, unknown>;
   const participant = participantFromEvent(event, "detached");
-  const session = strictRecord(
+  const session = exactEventRecord(
     eventRecord.agent_session,
     AGENT_SESSION_KEYS,
     "agent_session_created 이벤트에 Agent Session 투영이 없습니다.",

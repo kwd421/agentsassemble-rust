@@ -24,6 +24,11 @@ import {
   parseStrictRoomDirectory,
 } from "../lib/roomDirectoryContract";
 import {
+  assertExactKeys,
+  strictRecord,
+  stringField,
+} from "../lib/strictJsonContract";
+import {
   normalizeRoomChannelList,
   roomChannelListToApi,
   type ApiRoomChannel,
@@ -220,35 +225,6 @@ type ApiUserProfile = {
   updated_at?: string;
 };
 
-function strictRecord(value: unknown, label: string): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`${label} 응답 형식이 올바르지 않습니다.`);
-  }
-  return value as Record<string, unknown>;
-}
-
-function requireExactKeys(
-  value: Record<string, unknown>,
-  expected: readonly string[],
-  label: string
-) {
-  const actual = Object.keys(value).sort();
-  const canonical = [...expected].sort();
-  if (
-    actual.length !== canonical.length ||
-    actual.some((key, index) => key !== canonical[index])
-  ) {
-    throw new Error(`${label} 응답 계약이 일치하지 않습니다.`);
-  }
-}
-
-function requiredApiString(value: Record<string, unknown>, key: string, label: string): string {
-  if (typeof value[key] !== "string") {
-    throw new Error(`${label}.${key}가 올바르지 않습니다.`);
-  }
-  return value[key] as string;
-}
-
 function parseChannelSettings(
   value: unknown,
   label: string
@@ -264,17 +240,17 @@ function parseChannelSettings(
         throw new Error(`${label}.${channelId} 식별자가 올바르지 않습니다.`);
       }
       const entry = strictRecord(raw, `${label}.${channelId}`);
-      requireExactKeys(
+      assertExactKeys(
         entry,
         ["notifications", "last_read_at"],
         `${label}.${channelId}`
       );
-      const notifications = requiredApiString(
+      const notifications = stringField(
         entry,
         "notifications",
         `${label}.${channelId}`
       );
-      const lastReadAt = requiredApiString(entry, "last_read_at", `${label}.${channelId}`);
+      const lastReadAt = stringField(entry, "last_read_at", `${label}.${channelId}`);
       let cursorLength = 0;
       let cursorValid = true;
       for (const character of lastReadAt) {
@@ -307,17 +283,17 @@ function validateApiChannels(value: unknown, label: string) {
   }
   value.forEach((raw, index) => {
     const channel = strictRecord(raw, `${label}[${index}]`);
-    requireExactKeys(
+    assertExactKeys(
       channel,
       ["id", "name", "type", "position", "created_at"],
       `${label}[${index}]`
     );
-    requiredApiString(channel, "id", `${label}[${index}]`);
-    requiredApiString(channel, "name", `${label}[${index}]`);
-    requiredApiString(channel, "created_at", `${label}[${index}]`);
+    stringField(channel, "id", `${label}[${index}]`);
+    stringField(channel, "name", `${label}[${index}]`);
+    stringField(channel, "created_at", `${label}[${index}]`);
     if (
       !new Set(["text", "voice"]).has(
-        requiredApiString(channel, "type", `${label}[${index}]`)
+        stringField(channel, "type", `${label}[${index}]`)
       ) ||
       !Number.isSafeInteger(channel.position) ||
       Number(channel.position) < 0
@@ -329,12 +305,12 @@ function validateApiChannels(value: unknown, label: string) {
 
 function parseRoomSettingsResponse(value: unknown, expectedRoomId: string): RoomSettings {
   const response = strictRecord(value, "방 preference");
-  requireExactKeys(response, ["room_id", "settings"], "방 preference");
-  if (requiredApiString(response, "room_id", "방 preference") !== expectedRoomId) {
+  assertExactKeys(response, ["room_id", "settings"], "방 preference");
+  if (stringField(response, "room_id", "방 preference") !== expectedRoomId) {
     throw new Error("방 preference 응답의 방 권위가 일치하지 않습니다.");
   }
   const payload = strictRecord(response.settings, "방 preference.settings");
-  requireExactKeys(
+  assertExactKeys(
     payload,
     [
       "room_id",
@@ -352,15 +328,15 @@ function parseRoomSettingsResponse(value: unknown, expectedRoomId: string): Room
     ],
     "방 preference.settings"
   );
-  if (requiredApiString(payload, "room_id", "방 preference.settings") !== expectedRoomId) {
+  if (stringField(payload, "room_id", "방 preference.settings") !== expectedRoomId) {
     throw new Error("방 preference settings의 방 권위가 일치하지 않습니다.");
   }
-  const revision = requiredApiString(payload, "settings_revision", "방 preference.settings");
+  const revision = stringField(payload, "settings_revision", "방 preference.settings");
   if (!/^room-settings-v1-[0-9a-f]{64}$/.test(revision)) {
     throw new Error("방 preference settings revision이 올바르지 않습니다.");
   }
   const appearance = strictRecord(payload.appearance, "방 preference.settings.appearance");
-  requireExactKeys(
+  assertExactKeys(
     appearance,
     [
       "banner_preset",
@@ -372,28 +348,28 @@ function parseRoomSettingsResponse(value: unknown, expectedRoomId: string): Room
     ],
     "방 preference.settings.appearance"
   );
-  const bannerPreset = requiredApiString(
+  const bannerPreset = stringField(
     appearance,
     "banner_preset",
     "방 preference.settings.appearance"
   );
-  const notifications = requiredApiString(
+  const notifications = stringField(
     appearance,
     "notifications",
     "방 preference.settings.appearance"
   );
-  const inviteScope = requiredApiString(
+  const inviteScope = stringField(
     appearance,
     "invite_scope",
     "방 preference.settings.appearance"
   );
-  const conversationMode = requiredApiString(
+  const conversationMode = stringField(
     payload,
     "conversation_mode",
     "방 preference.settings"
   );
-  const toolMode = requiredApiString(payload, "tool_mode", "방 preference.settings");
-  requiredApiString(payload, "activity_plugin", "방 preference.settings");
+  const toolMode = stringField(payload, "tool_mode", "방 preference.settings");
+  stringField(payload, "activity_plugin", "방 preference.settings");
   validateApiChannels(payload.channels, "방 preference.settings.channels");
   if (
     !new Set(["default", "forest", "midnight", "ember", "custom"]).has(bannerPreset) ||
@@ -407,19 +383,19 @@ function parseRoomSettingsResponse(value: unknown, expectedRoomId: string): Room
   }
   return {
     roomId: expectedRoomId,
-    label: requiredApiString(payload, "label", "방 preference.settings"),
-    topic: requiredApiString(payload, "topic", "방 preference.settings"),
-    shortLabel: requiredApiString(payload, "short_label", "방 preference.settings"),
+    label: stringField(payload, "label", "방 preference.settings"),
+    topic: stringField(payload, "topic", "방 preference.settings"),
+    shortLabel: stringField(payload, "short_label", "방 preference.settings"),
     appearance: {
       bannerPreset: bannerPreset as RoomAppearance["bannerPreset"],
       bannerImage:
-        requiredApiString(appearance, "banner_image_url", "방 preference.settings.appearance") ||
+        stringField(appearance, "banner_image_url", "방 preference.settings.appearance") ||
         undefined,
       iconImage:
-        requiredApiString(appearance, "icon_image_url", "방 preference.settings.appearance") ||
+        stringField(appearance, "icon_image_url", "방 preference.settings.appearance") ||
         undefined,
       iconLabel:
-        requiredApiString(appearance, "icon_label", "방 preference.settings.appearance") ||
+        stringField(appearance, "icon_label", "방 preference.settings.appearance") ||
         undefined,
       notifications: notifications as RoomAppearance["notifications"],
       inviteScope: inviteScope as RoomAppearance["inviteScope"],
