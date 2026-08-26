@@ -8,9 +8,10 @@ Comparison baseline: original
 boundary is complete. Central registration, canonical participant roles, participant
 mute, exact provider interruption, and the required packaged provider matrix have
 passed both manual reviews. Room-global settings, local-operator preferences, human
-admission, and the session-derived person-profile exchange are cut over. The admitted-
-human WebSocket and remote-session preferences remain visibly unavailable; WebSocket
-activation is the active prerequisite before remote preference and room appearance.
+admission, the session-derived person-profile exchange, and the admitted-human
+WebSocket are source-connected and integration-verified. Packaged browser validation
+for the human socket remains open. Remote-session preferences remain visibly
+unavailable until their exact exchange/target transaction is complete.
 
 ## Scope and method
 
@@ -194,7 +195,7 @@ implemented; the frontend must not silently substitute Python or local fake data
 | --- | --- |
 | Startup identity and accounts | Fresh local desktop bootstrap, central guest creation/recovery, secure browser device identity, and proof-bound local-server registration are implemented. `/api/account`, Google account challenge/connect/delete, and the native Google handoff remain incomplete; the absent `open_central_google_login` host command keeps that button failed closed. |
 | Room lifecycle and settings | Canonical archive/delete lifecycle and public server info remain incomplete. Room-global settings mutation and local-operator room preferences are connected; remote-session preferences are explicitly unavailable until admission owns their identity. |
-| Admission and invites | Durable human invite/session create, join, verification, expiry, revoke, leave, restart recovery, and the session-derived person-profile exchange are implemented. The authenticated human WebSocket and preference exchanges, host claim, companion admission, operator pairing create/redeem, and public-invite status/URL/tunnel controls remain incomplete. |
+| Admission and invites | Durable human invite/session create, join, verification, expiry, revoke, leave, restart recovery, the session-derived person-profile exchange, and the authenticated human WebSocket are implemented. Packaged browser validation of that socket remains open. Preference exchanges, host claim, companion admission, operator pairing create/redeem, and public-invite status/URL/tunnel controls remain incomplete. |
 | Roster, friends, and channels | The active-room roster, strict participant-role control, copied participant-mute control, canonical event projection, and exact Rust provider-interrupt owner are cut over and packaged-verified. Room friends, room channels, voice presence, and side chat remain incomplete. |
 | Attachments, personas, pins, and search | General-message and room-appearance attachment purposes, persona list/import/thumbnail, message pins, room search/context. Profile-avatar upload/read is implemented. |
 | Provider settings and diagnostics | Login, catalog refresh HTTP response, credential CRUD, provider usage, local resources, release health, and runtime version. The original `/api/local/workspace-picker` HTTP route is absent, but packaged desktop creation uses the native Tauri directory picker instead. |

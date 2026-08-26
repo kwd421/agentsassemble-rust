@@ -17,7 +17,14 @@ use chrono::{DateTime, Duration as ChronoDuration, TimeZone, Utc};
 use reqwest::Client;
 use serde_json::{Value, json};
 use tokio::{net::TcpListener, task::JoinHandle};
+use tokio_tungstenite::connect_async;
 use tokio_util::sync::CancellationToken;
+
+mod support {
+    pub mod subscription_proof;
+}
+
+use support::subscription_proof::AuthenticatedTestSocket;
 
 const HOST_TOKEN: &str = "human-invite-boundary-host-token-0001";
 
@@ -82,6 +89,7 @@ async fn preflight_and_join_preserve_bounded_credentials_and_exact_retry() {
     let replacement_avatar =
         assert_profile_exchange_boundary(&client, &server.base_url, &store, session_token, &avatar)
             .await;
+    assert_session_socket_boundary(&client, &server.base_url, session_token).await;
 
     let retry = join(
         &client,
@@ -192,6 +200,73 @@ async fn read_only_session_patches_profile_but_cannot_upload_an_avatar() {
         .await
         .unwrap_or_else(|error| panic!("decode read-only upload rejection: {error}"));
     assert_eq!(rejected["code"], "session_read_only");
+
+    let mut socket = open_session_socket(&client, &server.base_url, session_token).await;
+    socket
+        .send_json(&json!({
+            "op": "command",
+            "request_id": "read-only-message-1",
+            "action": "message.send",
+            "payload": {"content": "must not commit"}
+        }))
+        .await;
+    let nack = socket.receive_json().await;
+    assert_eq!(nack["op"], "nack");
+    assert_eq!(nack["error"]["code"], "permission_denied");
+    socket.close().await;
+    server.stop().await;
+}
+
+#[tokio::test]
+async fn replacement_admission_closes_an_idle_human_socket() {
+    let (store, first_invite) = fixture_with_max_uses(InviteScope::ReadWrite, 5).await;
+    let second_invite = persist_invite(
+        &store,
+        InviteScope::ReadWrite,
+        5,
+        "replacement-boundary-guest",
+        "Replacement Boundary Guest",
+    )
+    .await;
+    let server = start(store).await;
+    let client = Client::new();
+    let browser_credential = format!("aad1_{}", URL_SAFE_NO_PAD.encode([0xD7; 32]));
+    let first = join(
+        &client,
+        &server.base_url,
+        first_invite.join_code(),
+        &browser_credential,
+        "323e4567-e89b-12d3-a456-426614174000",
+        "First Reusable Guest",
+        "",
+    )
+    .await;
+    let first_session = canonical_session_token(&first);
+    let mut socket = open_session_socket(&client, &server.base_url, first_session).await;
+
+    let second = join(
+        &client,
+        &server.base_url,
+        second_invite.join_code(),
+        &browser_credential,
+        "423e4567-e89b-12d3-a456-426614174000",
+        "Replacement Reusable Guest",
+        "",
+    )
+    .await;
+    assert_ne!(canonical_session_token(&second), first_session);
+    assert!(
+        socket.wait_closed().await,
+        "replaced idle socket stayed open"
+    );
+
+    let rejected = client
+        .post(format!("{}/api/session-tickets/socket", server.base_url))
+        .header("authorization", format!("Bearer {first_session}"))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("recheck replaced session exchange: {error}"));
+    assert_eq!(rejected.status(), reqwest::StatusCode::UNAUTHORIZED);
     server.stop().await;
 }
 
@@ -324,6 +399,80 @@ async fn issue_profile_ticket(client: &Client, base_url: &str, session_token: &s
         .as_str()
         .unwrap_or_else(|| panic!("human profile ticket is missing"))
         .to_owned()
+}
+
+async fn assert_session_socket_boundary(client: &Client, base_url: &str, session_token: &str) {
+    let mut socket = open_session_socket(client, base_url, session_token).await;
+    socket
+        .send_json(&json!({
+            "op": "command",
+            "request_id": "human-socket-message-1",
+            "action": "message.send",
+            "payload": {"content": "human socket boundary"}
+        }))
+        .await;
+    let first = socket.receive_json().await;
+    let second = socket.receive_json().await;
+    assert!(
+        [&first, &second].iter().any(|frame| {
+            frame["op"] == "ack" && frame["request_id"] == "human-socket-message-1"
+        })
+    );
+    assert!([&first, &second].iter().any(|frame| {
+        frame["op"] == "event"
+            && frame["events"].as_array().is_some_and(|events| {
+                events
+                    .iter()
+                    .any(|event| event["content"] == "human socket boundary")
+            })
+    }));
+    socket.close().await;
+}
+
+async fn open_session_socket(
+    client: &Client,
+    base_url: &str,
+    session_token: &str,
+) -> AuthenticatedTestSocket<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
+    let response = client
+        .post(format!("{base_url}/api/session-tickets/socket"))
+        .header("authorization", format!("Bearer {session_token}"))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("exchange human socket ticket: {error}"));
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    assert_eq!(response.headers()["cache-control"], "private, no-store");
+    let grant: Value = response
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("decode human socket ticket: {error}"));
+    let ticket = grant["ticket"]
+        .as_str()
+        .unwrap_or_else(|| panic!("human socket ticket is missing"))
+        .to_owned();
+    let proof_key = grant["server_proof_key"]
+        .as_str()
+        .unwrap_or_else(|| panic!("human socket proof key is missing"))
+        .to_owned();
+    let socket = connect_async(format!(
+        "{}/ws?ticket={ticket}",
+        base_url.replacen("http://", "ws://", 1)
+    ))
+    .await
+    .unwrap_or_else(|error| panic!("connect human room socket: {error}"))
+    .0;
+    let mut socket = AuthenticatedTestSocket::new(socket, ticket.clone(), proof_key);
+    let receipt = socket.subscribe(0).await;
+    assert_eq!(receipt["op"], "subscribed");
+    assert_eq!(receipt["room_id"], "general");
+    assert_eq!(socket.receive_json().await["op"], "snapshot");
+    let replay = connect_async(format!(
+        "{}/ws?ticket={ticket}",
+        base_url.replacen("http://", "ws://", 1)
+    ))
+    .await;
+    assert!(replay.is_err(), "one-use human socket ticket was replayed");
+    socket
 }
 
 fn canonical_session_token(admission: &Value) -> &str {
@@ -557,6 +706,16 @@ async fn fixture(
     SqliteStore,
     agentsassemble_server::IssuedHumanInviteCredentials,
 ) {
+    fixture_with_max_uses(invite_scope, 1).await
+}
+
+async fn fixture_with_max_uses(
+    invite_scope: InviteScope,
+    max_uses: i64,
+) -> (
+    SqliteStore,
+    agentsassemble_server::IssuedHumanInviteCredentials,
+) {
     let url = format!(
         "sqlite:file:{}?mode=memory&cache=shared",
         uuid::Uuid::new_v4()
@@ -576,6 +735,24 @@ async fn fixture(
         )
         .await
         .unwrap_or_else(|error| panic!("create human invite room: {error}"));
+    let credentials = persist_invite(
+        &store,
+        invite_scope,
+        max_uses,
+        "invite-boundary-guest",
+        "Invite Boundary Guest",
+    )
+    .await;
+    (store, credentials)
+}
+
+async fn persist_invite(
+    store: &SqliteStore,
+    invite_scope: InviteScope,
+    max_uses: i64,
+    base_participant_id: &str,
+    display_name: &str,
+) -> agentsassemble_server::IssuedHumanInviteCredentials {
     let identity = store
         .host_identity()
         .await
@@ -586,8 +763,8 @@ async fn fixture(
         room_url: "http://127.0.0.1:8765".to_owned(),
         public_room_url: String::new(),
         room_id: "general".to_owned(),
-        base_participant_id: "invite-boundary-guest".to_owned(),
-        display_name: "Invite Boundary Guest".to_owned(),
+        base_participant_id: base_participant_id.to_owned(),
+        display_name: display_name.to_owned(),
         invite_scope,
         issued_at,
         expires_at: issued_at + ChronoDuration::days(1),
@@ -612,14 +789,14 @@ async fn fixture(
                 base_participant_id: draft.base_participant_id,
                 display_name: draft.display_name,
                 invite_scope: draft.invite_scope,
-                max_uses: 1,
+                max_uses,
                 expires_at: draft.expires_at,
                 created_at: draft.issued_at,
             },
         )
         .await
         .unwrap_or_else(|error| panic!("persist human invite: {error}"));
-    (store, credentials)
+    credentials
 }
 
 fn canonical_now() -> DateTime<Utc> {

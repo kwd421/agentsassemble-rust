@@ -7,6 +7,7 @@ import {
   postJsonWithIdentity,
 } from "./http";
 import { requestDesktopHostProductSurface } from "../lib/desktopBridge";
+import { getWsTicket } from "./room";
 import { PRODUCT_SURFACE_REVISION } from "../types/generated/PRODUCT_SURFACE_REVISION";
 
 const HOST_SURFACE = {
@@ -196,5 +197,43 @@ describe("desktop profile HTTP routing", () => {
     expect(listHeaders.get("Authorization")).toBe("Bearer operator-list");
     expect(createHeaders.get("Authorization")).toBe("Bearer operator-create");
     expect(createHeaders.get("Content-Type")).toBe("application/json");
+  });
+});
+
+describe("browser session WebSocket ticket routing", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("exchanges the raw session once and derives the socket origin without fallback", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          ticket: "c".repeat(64),
+          ttl_seconds: 30,
+          server_proof_key: "d".repeat(64),
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const grant = await getWsTicket({
+      kind: "session",
+      sessionToken: "aas1.browser-session",
+    });
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledWith("/api/session-tickets/socket", {
+      cache: "no-store",
+      method: "POST",
+      headers: { Authorization: "Bearer aas1.browser-session" },
+    });
+    expect(grant).toEqual({
+      ticket: "c".repeat(64),
+      ttl_seconds: 30,
+      websocket_base_url: window.location.origin.replace(/^http/, "ws"),
+      server_proof_key: "d".repeat(64),
+    });
   });
 });

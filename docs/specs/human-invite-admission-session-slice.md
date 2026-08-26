@@ -2,8 +2,9 @@
 
 Status: atomic SQLite, bounded RoomRuntime admission, local HTTP preflight/join,
 pre-join avatar flow, fail-closed browser credential custody, and the live-session
-profile exchange/target are implemented and verified; WebSocket session activation,
-remaining typed exchanges, and trusted public ingress remain incomplete
+profile and WebSocket exchanges/targets are implemented and integration-verified;
+packaged browser verification, remaining typed exchanges, and trusted public ingress
+remain incomplete
 
 ## Definition
 
@@ -409,8 +410,8 @@ additional requests-per-minute threshold would be an unmeasured product restrict
 A session WebSocket subscribes to revocation notification before its connect grant
 is consumed, then revalidates the database after subscription. It revalidates before
 each client command and before every outbound product frame. Its connection task owns
-an expiry-deadline timer that performs durable revalidation and closes at expiry; the
-timer never extends validity. A post-commit session/participant/room revocation
+an expiry-deadline timer that closes at the durable expiry; the timer never extends
+validity. A post-commit session/participant/room revocation
 broadcast closes an idle socket. Broadcast lag or closure triggers durable
 revalidation and fails closed. The database remains authority; the broadcast and
 deadline are only revalidation triggers, not independent validity sources.
@@ -937,16 +938,37 @@ while promoting the same opaque ID through the profile lifecycle.
   same SQLite transaction before replay admission, write-budget reservation, event,
   result, routing, or turn assignment. Local/private callers retain their existing
   entry points; no generic authority framework or duplicated SQL transition was added.
+- The bounded room command carries one optional opaque human-session authorization
+  beside its current resolved principal. Only the runtime admission owner can create
+  that pairing. Human dispatch accepts only message and room-random actions; every
+  operator/Agent lifecycle/settings action fails before external effects, while the
+  existing local/private dispatch remains unchanged.
+- The authorization is boxed only when a human-session command enters the 128-item
+  room queue. The first value layout made every `RoomInput::Mutation` slot at least
+  456 bytes while the next-largest variant was at least 224 bytes; warning-denied
+  Clippy rejected that cost. Indirection restores the bounded local/private queue
+  layout while charging one allocation only to session-originated commands that
+  need provenance custody. No throughput or latency gain is claimed without a
+  benchmark.
+- Public-human grant policy and resolution now occupy the 393-line
+  `ticket/human_session.rs` responsibility, while the shared one-use map, lock,
+  insertion, expiry removal, and non-session purposes remain in the 504-line
+  `ticket.rs` owner. This is a source-structure split only: it adds no map, lock,
+  cache, trait, configuration layer, or state transition.
 - Preserved contract: revocation after ticket issue or during an idle connection
   invalidates the exact session promptly; a missed/lagged notification fails closed.
 - Trade-off: outbound validation adds one indexed session/membership lookup per
   recipient frame. That cost is accepted for the concrete threat of a revoked or
   replaced human receiving a queued event; no unmeasured cache is introduced.
   Process restart closes the socket and reconnect must revalidate the database.
-- Verification: deterministic barriers cover revoke-before-consume,
-  revoke-after-connect idle close, deadline expiry, notification lag/closure,
-  inbound-command and outbound-delivery races; tests do not sleep or inspect private
-  maps. Query count and end-to-end fanout latency are recorded before and after.
+- Current verification: real Axum/SQLite/WebSocket tests cover typed no-store
+  exchange, one-use consumption/replay rejection, authenticated subscription and
+  snapshot, normal message commit, read-only message denial, and immediate idle
+  socket close after a second reusable admission replaces the exact session.
+  Persistence tests separately prove an invalid/replaced authorization commits no
+  message or random-command result/event. Deadline-expiry, notification-lag/closure,
+  and controlled inbound/outbound race tests remain required before this slice's
+  packaged verification is complete; no query-count or latency result is claimed.
 
 ### Room command dispatch separated from room ownership
 
@@ -1244,13 +1266,12 @@ disk evidence; the current store-wide worst case remains capped by the existing
   revoke, kick, and room close. Invite management tests prove consume-before-body,
   room/purpose binding, transactional capability revalidation, and that ingress
   custody is not management authority.
-- Real WebSocket tests prove initial snapshot readiness, normal/read-only command
-  behavior, revoked-ticket denial, expiry close, outbound denial when revoke commits
-  before final outbound validation, and immediate connected-session close. Races use
-  barriers or controlled channels,
-  never arbitrary sleeps. A barrier revokes or replaces the exact session between
-  frame validation and the SQLite mutation UOW and proves no durable command state
-  or event commits. Handler-cancellation and restart tests prove one durable
+- Current real WebSocket tests prove initial snapshot readiness, normal posting,
+  read-only posting denial, one-use ticket replay denial, and immediate idle close
+  after exact session replacement. Persistence tests replace the exact session
+  before the SQLite mutation UOW and prove no durable command result or event
+  commits. Controlled expiry, notification-lag/closure, and final-outbound race
+  tests remain open. Handler-cancellation and restart tests prove one durable
   canonical event and eventual publication-cursor acknowledgement after an accepted
   admission commit; replay may re-offer only the same sequence.
 - Browser-unit tests prove exactly one `aad1_` credential is reused by preflight,

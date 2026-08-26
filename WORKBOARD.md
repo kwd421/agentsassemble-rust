@@ -1,6 +1,6 @@
 # WORKBOARD
 
-Status: Phase 5 — the admitted-human WebSocket is the active authority boundary. Durable admission, grant custody, corrected asset lifecycles, and the live-session profile exchange/target are reachable, real-client verified, and manually approved; WebSocket activation and remaining typed exchanges stay explicitly incomplete.
+Status: Phase 5 — the admitted-human WebSocket exchange, exact session lifetime, bounded command provenance, and copied frontend transport are implemented and integration-verified. Packaged browser validation and both manual approvals remain open; remaining typed exchanges and trusted public ingress stay explicitly incomplete.
 
 Purpose: route the asynchronous Rust reimplementation without duplicating its contracts.
 
@@ -12,7 +12,7 @@ Purpose: route the asynchronous Rust reimplementation without duplicating its co
 - Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - Real-client verification: [`docs/VERIFICATION.md`](docs/VERIFICATION.md)
 - Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust baseline `644b1d5`.
-- Required order: activate the admitted-human WebSocket only with subscribe-before-consume revocation custody, durable session revalidation, command-UOW provenance, and final outbound checks; then connect each remaining typed exchange after its exact target revalidation, followed by trusted public ingress, remote preference, and appearance. Update the exposure map only after a surface is reachable and verified; inspect `git diff --stat`, then commit and push each independently buildable, verifiable, and rollbackable change before both manual reviews.
+- Required order: finish controlled WebSocket expiry/lag/race verification, split and push independently reviewable changes, run packaged browser validation, then obtain both manual approvals. After approval, connect each remaining typed exchange only with its exact target revalidation, followed by trusted public ingress, remote preference, and appearance. Update the exposure map only after a surface is reachable and verified.
 - Exit: local and remote humans reach preferences through their real authority owner, appearance uses its complete asset lifecycle, incomplete adjacent surfaces remain visibly unavailable, and mandatory gates, packaged frontend flows, cross-reviews, and verification cleanup pass.
 
 ## Read routes
