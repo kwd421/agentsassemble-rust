@@ -38,17 +38,16 @@ const MAX_TICKET_BODY_BYTES: usize = 4 * 1024;
 const TRACKED_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(6);
 pub(crate) const ROOT_PATH: &str = "/";
 pub(crate) const APP_PREFIX: &str = "/app";
-pub(crate) const APP_ROUTE: &str = "/app/{*path}";
+const APP_ENTRY_PATH: &str = "/app/";
 pub(crate) const ASSETS_PREFIX: &str = "/assets";
-pub(crate) const ASSETS_ROUTE: &str = "/assets/{*path}";
 pub(crate) const JOIN_PATH: &str = "/join";
 pub(crate) const JOIN_SLASH_PATH: &str = "/join/";
 pub(crate) const JOIN_ASSETS_PREFIX: &str = "/join/assets";
-pub(crate) const JOIN_ASSETS_ROUTE: &str = "/join/assets/{*path}";
 pub(crate) const PAIR_PATH: &str = "/pair";
 pub(crate) const PAIR_SLASH_PATH: &str = "/pair/";
 pub(crate) const PAIR_ASSETS_PREFIX: &str = "/pair/assets";
-pub(crate) const PAIR_ASSETS_ROUTE: &str = "/pair/assets/{*path}";
+const FRONTEND_INDEX_PATHS: [&str; 4] = [JOIN_PATH, JOIN_SLASH_PATH, PAIR_PATH, PAIR_SLASH_PATH];
+const FRONTEND_ASSET_PREFIXES: [&str; 3] = [JOIN_ASSETS_PREFIX, PAIR_ASSETS_PREFIX, ASSETS_PREFIX];
 const STATIC_FRONTEND_CACHE_CONTROL: HeaderValue = HeaderValue::from_static("no-cache");
 #[derive(Debug, Error)]
 pub enum ServeError {
@@ -83,28 +82,52 @@ pub fn router(state: AppState) -> Router {
     if let Some(frontend_root) = frontend_root {
         let index = frontend_root.join("index.html");
         let assets = frontend_root.join("assets");
-        let frontend = Router::new()
-            .route(ROOT_PATH, get(|| async { Redirect::temporary("/app/") }))
-            .route_service(JOIN_PATH, ServeFile::new(index.clone()))
-            .route_service(JOIN_SLASH_PATH, ServeFile::new(index.clone()))
-            .route_service(PAIR_PATH, ServeFile::new(index.clone()))
-            .route_service(PAIR_SLASH_PATH, ServeFile::new(index.clone()))
-            .nest_service(JOIN_ASSETS_PREFIX, ServeDir::new(assets.clone()))
-            .nest_service(PAIR_ASSETS_PREFIX, ServeDir::new(assets.clone()))
-            .nest_service(ASSETS_PREFIX, ServeDir::new(assets))
+        let mut frontend = Router::new()
+            .route(
+                ROOT_PATH,
+                get(|| async { Redirect::temporary(APP_ENTRY_PATH) }),
+            )
             .nest_service(
                 APP_PREFIX,
-                ServeDir::new(frontend_root).not_found_service(ServeFile::new(index)),
-            )
-            .layer(SetResponseHeaderLayer::overriding(
-                header::CACHE_CONTROL,
-                STATIC_FRONTEND_CACHE_CONTROL,
-            ));
+                ServeDir::new(frontend_root).not_found_service(ServeFile::new(index.clone())),
+            );
+        for path in FRONTEND_INDEX_PATHS {
+            frontend = frontend.route_service(path, ServeFile::new(index.clone()));
+        }
+        for prefix in FRONTEND_ASSET_PREFIXES {
+            frontend = frontend.nest_service(prefix, ServeDir::new(assets.clone()));
+        }
+        frontend = frontend.layer(SetResponseHeaderLayer::overriding(
+            header::CACHE_CONTROL,
+            STATIC_FRONTEND_CACHE_CONTROL,
+        ));
         app = app.merge(frontend);
     }
     app.with_state(state)
         .layer(RequestBodyDeadlineLayer::new(HTTP_BODY_DEADLINE))
         .layer(middleware::map_response(crate::security_headers::apply))
+}
+
+pub(crate) fn static_frontend_surfaces() -> Vec<agentsassemble_protocol::HttpRouteSurface> {
+    use agentsassemble_protocol::{HttpMethod, HttpRouteSurface};
+
+    let mut routes = Vec::with_capacity(9);
+    routes.push(HttpRouteSurface::new(HttpMethod::Get, ROOT_PATH));
+    routes.extend(
+        FRONTEND_INDEX_PATHS
+            .into_iter()
+            .map(|path| HttpRouteSurface::new(HttpMethod::Get, path)),
+    );
+    routes.push(HttpRouteSurface::new(
+        HttpMethod::Get,
+        format!("{APP_PREFIX}/{{*path}}"),
+    ));
+    routes.extend(
+        FRONTEND_ASSET_PREFIXES
+            .into_iter()
+            .map(|prefix| HttpRouteSurface::new(HttpMethod::Get, format!("{prefix}/{{*path}}"))),
+    );
+    routes
 }
 
 registered_routes! {

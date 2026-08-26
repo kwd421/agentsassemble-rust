@@ -1,44 +1,5 @@
 use agentsassemble_protocol::{HttpRouteSurface, ServerProductSurface};
 
-const STATIC_ROUTES: &[(agentsassemble_protocol::HttpMethod, &str)] = &[
-    (
-        agentsassemble_protocol::HttpMethod::Get,
-        crate::web::ROOT_PATH,
-    ),
-    (
-        agentsassemble_protocol::HttpMethod::Get,
-        crate::web::APP_ROUTE,
-    ),
-    (
-        agentsassemble_protocol::HttpMethod::Get,
-        crate::web::ASSETS_ROUTE,
-    ),
-    (
-        agentsassemble_protocol::HttpMethod::Get,
-        crate::web::JOIN_ASSETS_ROUTE,
-    ),
-    (
-        agentsassemble_protocol::HttpMethod::Get,
-        crate::web::JOIN_PATH,
-    ),
-    (
-        agentsassemble_protocol::HttpMethod::Get,
-        crate::web::JOIN_SLASH_PATH,
-    ),
-    (
-        agentsassemble_protocol::HttpMethod::Get,
-        crate::web::PAIR_PATH,
-    ),
-    (
-        agentsassemble_protocol::HttpMethod::Get,
-        crate::web::PAIR_SLASH_PATH,
-    ),
-    (
-        agentsassemble_protocol::HttpMethod::Get,
-        crate::web::PAIR_ASSETS_ROUTE,
-    ),
-];
-
 pub(crate) struct RegisteredHttpRoute {
     pub(crate) method: agentsassemble_protocol::HttpMethod,
     pub(crate) path: &'static str,
@@ -59,11 +20,7 @@ pub(crate) fn server_product_surface(
         extend_registered(&mut routes, crate::central_registration_web::HTTP_ROUTES);
     }
     if frontend_enabled {
-        routes.extend(
-            STATIC_ROUTES
-                .iter()
-                .map(|(method, path)| HttpRouteSurface::new(*method, *path)),
-        );
+        routes.extend(crate::web::static_frontend_surfaces());
     }
     ServerProductSurface::from_http_routes(routes)
         .unwrap_or_else(|error| panic!("invalid server product-surface registry: {error}"))
