@@ -19,7 +19,9 @@ browser flow are not implemented by these commits.
 - Current credential authority: `ce2d2a3`, corrected by `9544081`.
 - Read-only preflight snapshot: `c2abc58`, corrected by `2520cf0` and `7982161`.
 - Existing-session frontend scope regression: `43d4609`.
-- The schema is fresh-only at version 35. No migration, compatibility reader,
+- Reusable admission corrections: `cba3cb8`, `9c5883f`, and `27cf90a`;
+  `ddac71c` only separates their schema tests from the production owner.
+- The schema is fresh-only at version 38. No migration, compatibility reader,
   fallback column, or partially upgraded authority is accepted.
 
 The initial schema increment changed only the durable `room_invites` authority and the fixtures
@@ -610,3 +612,102 @@ No key derivation layer or second persistent secret is needed.
   retained terminal-row exclusion as a mandatory integration condition: the future
   admission transaction may issue only for a newly committing or exact-live row.
   No Deep Scan, automated security scanner, provider, or Computer Use resource ran.
+
+## Reusable credential admission corrections
+
+Commits `cba3cb8`, `9c5883f`, and `27cf90a` correct two schema-level admission
+defects before the atomic admission unit exists, then remove the correction's
+now-unowned lookup index. Commit `ddac71c` moves only the focused tests into the
+existing schema test module so the production owner remains below its mandatory
+size gate. These commits do not implement admission, issue a bearer, consume an
+invite, or make the browser flow reachable.
+
+### Prior cost, observed threat, and change intent
+
+Version 35 made `(invite_id, reusable_identity_fingerprint)` unique for every
+reusable session. That accidentally treated one stable browser using one invite as
+one admission identity. The reachable original flow instead derives identity from
+the complete presented invite credential, so using the signed `aai1.` token and then
+the independent `aaj1_` join code creates two distinct admission keys. Both consume
+the reusable invite as distinct principals while resolving the same user and room
+participant; the later live session replaces the earlier one.
+
+The unique index rejected the second durable row even after the earlier row ended.
+This was not initially a performance optimization opportunity: it was a concrete
+mismatch between stored uniqueness authority and the approved retry/replacement
+contract. Version 36 first removed only `UNIQUE`. A second ownership audit then found
+that no current or approved future product query uses the resulting
+`(invite_id, reusable_identity_fingerprint)` index, so version 37 removes the index
+instead of preserving speculative disk and write cost. Exact retry ownership remains
+the 32-byte `admission_key` primary key, and one live session per room participant
+remains the separate partial unique index on
+`(room_id, participant_id) WHERE state = 'active'`. Invite/room/scope/key-kind,
+profile/participant, reusable-credential/user, and room-participant composite foreign
+keys remain unchanged.
+
+The remaining composite foreign key proved that the reusable credential and user
+exist, but it did not prove that the request browser fingerprint stored in the same
+session row is that credential. A writer defect could therefore persist browser A
+as request custody while binding the durable user identity of browser B. Version 38
+adds the smallest durable invariant: every reusable row must have
+`reusable_identity_fingerprint = browser_credential_fingerprint`. One-use rows still
+carry no reusable identity, and the existing composite credential/user foreign key
+continues to bind the equal fingerprint to its user.
+
+### Resource and security record
+
+- Disk: no table, column, or replacement index was added. Version 37 removes one
+  B-tree entry per reusable session. A browser that deliberately exercises both
+  current credential forms may now retain the intended second terminal session row;
+  the removed index therefore also avoids one entry for that row. Exact SQLite page
+  savings are not claimed before the admission route and representative workload
+  exist.
+- CPU and latency: each reusable-session insert avoids one B-tree maintenance write.
+  No production query loses an index: exact retry uses the admission primary key,
+  session lookup uses the session-fingerprint unique key, reusable identity uses the
+  device-credential primary key, active replacement uses the participant partial
+  unique key, cleanup uses the invite-state index, and capacity uses the live-state
+  indexes. No end-to-end speedup is claimed without a production admission request.
+- Version 38 adds one fixed 32-byte equality comparison on each reusable-session
+  write. It adds no lookup, allocation, index entry, stored value, or runtime branch;
+  no measurable latency effect is claimed.
+- Memory: the schema correction adds no runtime object, cache, task, allocation, or
+  alternate authority.
+- Security: removing this non-authoritative index does not remove any constraint or
+  authorize a different browser or user. The complete admission key, composite
+  foreign keys, and future atomic UOW's full-fingerprint collision checks remain
+  mandatory. The schema test proves only coexistence; actual `aai1.`/`aaj1_` key
+  derivation and live replacement remain a later integration proof.
+- Security: the version 38 equality check prevents cross-browser credential/user
+  binding even if the future repository supplies internally inconsistent fields.
+  This is defense against a concrete durable-authority corruption path, not a second
+  identity model.
+- Clean cutover: the schema version increases from 35 through 36 to 37, so either
+  older shape is rejected. Version 38 likewise rejects version 37 instead of
+  migrating, reinterpreting, or accepting it through compatibility behavior.
+
+### Verification result
+
+- The focused coexistence test inserts two ended reusable rows with the same invite,
+  browser credential, reusable identity, user, and participant but distinct admission
+  and session fingerprints; both rows persist. Existing composite-authority tests
+  still reject cross-room, wrong-scope, wrong-kind, wrong-user, wrong-participant, and
+  wrong-credential bindings.
+- The focused binding test inserts a valid reusable row and proves SQLite rejects an
+  attempt to change only its request-browser fingerprint. The coexistence test also
+  proves two distinct reusable admissions can persist and that the existing partial
+  unique key still rejects activating both for the same room participant.
+- The complete persistence suite passed 143/143. Warning-denied workspace all-target
+  Clippy, `make check`, formatter, source-growth, architecture, policy, and diff gates
+  passed. `cba3cb8` changes 47 lines across two files; `9c5883f` changes three lines;
+  `ddac71c` separates 49 test lines; and `27cf90a` changes 54 lines across three
+  files. The production `schema.rs` is 766 lines without weakening or excepting the
+  mandatory gate.
+- Daybreaker manually approved all pushed semantic corrections with C=0/H=0/M=0.
+  For version 38 it found only one fixed 32-byte comparison per reusable write and no
+  index, state, runtime read, or measurable latency concern. The critical
+  web reviewer independently found the same uniqueness defect during its broader
+  admission-plan review; its commit-specific final review is still pending and is not
+  claimed here.
+- No Deep Scan, automated security scanner, provider, product-browser flow, or
+  Computer Use resource ran for this schema-only correction.

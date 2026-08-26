@@ -61,6 +61,13 @@ not an authority.
 - The lower-left human profile, room member projection, profile editor, and the
   user's preferences must resolve the same `user_profiles` row. An Agent Session
   profile remains a separate Agent Session authority.
+- When a reusable admission actually changes the stable person's display name or
+  avatar, the transaction reuses the existing concrete
+  `project_profile_into_rooms` behavior: update only active joined human projections
+  in every room, preserve each room's role/mute/owner/join state, and append each
+  required `participant_updated` event. Admission does not add a generic projection
+  trait or a second fan-out owner. Its target room still emits `participant_joined`
+  only when the previous participant state was not joined.
 - The original one-use browser path leaves `principal_user_id` empty, which makes
   its admitted lower-left profile and preferences unauthenticated. This contradicts
   the required human-profile SSoT. Rust corrects it by creating an admission-scoped
@@ -133,6 +140,66 @@ There is no date, `Math.random`, short-token, or ephemeral-memory fallback. A on
 admission binds this credential for proof/retry custody but never registers it as a
 reusable identity.
 
+Admission identity uses ordinary SHA-256, not the private session HMAC key. The two
+fixed, unambiguous transcripts are:
+
+```text
+SHA256("agentsassemble-human-admission-key-one-use-v1\0"
+       || presented_invite_fingerprint[32]
+       || browser_credential_fingerprint[32]
+       || canonical_request_uuid_bytes[16])
+
+SHA256("agentsassemble-human-admission-key-reusable-v1\0"
+       || presented_invite_fingerprint[32]
+       || browser_credential_fingerprint[32])
+```
+
+The complete presented-credential fingerprint already distinguishes `aai1.` from
+`aaj1_`, so no credential-kind byte or variable-length framing is added. Request UUID
+input is outer-trimmed and then must equal its parsed lowercase hyphenated canonical
+form and be nonzero; no UUID-version restriction is invented. The database retains
+that 36-character form while the digest receives the UUID's 16 raw bytes. With an
+invite fingerprint of 32 `0x11` bytes, browser fingerprint of 32 `0x22` bytes, and
+UUID `123e4567-e89b-12d3-a456-426614174000`, the one-use digest is
+`febebeab644e0344588b8c81db98427d32b8afdf4053cceadb92f8097ee24648` and the
+reusable digest is
+`dd65660dafacc7aad639e45d2236713262bccc4148710e264960e92306eca539`.
+
+The admitted-input payload digest uses one fixed context and an unsigned 32-bit
+big-endian UTF-8 byte length before every text field:
+
+```text
+SHA256("agentsassemble-human-admission-payload-v1\0"
+       || field(meeting_id_assertion)
+       || field(display_name_input)
+       || field(participant_type_input)
+       || field(owner_display_name)
+       || field(client_id)
+       || avatar_presence[1]
+       || (field(attachment_id) when present))
+```
+
+The direct HTTP fields remain part of retry identity even when the copied frontend
+does not currently use all of them. `meeting_id_assertion` is not authority: when
+nonempty it must match the durable invite room. Each text value follows the original
+room cleaner—replace CR/LF with spaces, trim, truncate by Unicode scalar count, trim
+again—with limits 128/128/32/64/128 in the order above. Tabs and repeated internal
+spaces are not collapsed and no Unicode normalization is introduced. The cleaned
+request participant-type token is hashed before the human-only authority decision,
+so accepted aliases do not silently merge distinct retry payloads. A syntactically
+invalid avatar reference canonicalizes to absent; a syntactically valid reference
+hashes its attachment ID even when later optional custody lookup omits it. Absence is
+byte `0x00`; presence is `0x01` followed by the framed ID. The vector
+`general`, `홍길동\tGuest`, `human`, `Host`, `client-α`, and `avatar_1234` hashes to
+`243c9e5901c07a27c4bd10abc081a1e6283e6a3f14c5c7a996d010a2ea375e65`.
+
+Pre-join avatar custody is
+`SHA256("agentsassemble-human-prejoin-avatar-custody-v1\0" ||
+presented_invite_fingerprint[32] || browser_credential_fingerprint[32])`. Its quota
+fingerprint remains the invite row's signed-token fingerprint so switching between
+the two current invite credentials does not split one invite's quota. No raw
+credential or secret enters any of these transcripts.
+
 Human invite creation preserves both current credentials. `invite_token` is the
 signed `aai1.<claims>.<HMAC-SHA256>` value, while `join_code` is `aaj1_` plus exactly
 24 operating-system-random bytes encoded as unpadded base64url; `join_url` carries
@@ -151,6 +218,10 @@ derivation layer is needed. A small non-serializable, non-debuggable session iss
 uses that key without reusing the Ed25519 host key or process-local host-control
 secret. Raw invite/session credentials and key material never enter logs, events, or
 idempotency JSON; only ordinary SHA-256 fingerprints are durable.
+
+`SqliteStore` already owns the session HMAC key and derives a bearer only after its
+admission transaction has selected a newly committing or exact-live branch. It does
+not expose an open transaction, callback, issuer trait, second secret, or key cache.
 
 The bearer is exactly `aas1.` plus unpadded base64url of the complete 32-byte
 `HMAC-SHA256(session_key, "agentsassemble-human-session-bearer-v1\0" ||
@@ -236,7 +307,9 @@ admission. The room runtime then performs one SQLite transaction:
 7. omit an optional pending avatar whose reference is invalid or whose row is absent,
    expired, or owned by another custody subject; fail on a persisted invariant or
    content-integrity violation; otherwise transfer the exact valid row, create the
-   session/result, and append at most one `participant_joined` event. Its sequence is
+   session/result, and append at most one `participant_joined` event containing the
+   canonical full participant projection required by the existing frontend event
+   contract. Its sequence is
    pending whenever it is newer than the room's existing durable publication cursor;
 8. commit before publishing the event, notifying displaced sessions, or returning
    the bearer.
@@ -260,10 +333,10 @@ the original identity, result, and live bearer even with a new request UUID, wit
 consuming another use; deliberately switching between the separately exposed
 `aai1` and `aaj1_` credentials retains the original distinct admission identity. A
 changed payload conflicts and a different device is a distinct reusable principal.
-The payload hash covers every
-field that can change identity or membership, including display name, client ID,
-participant type, and optional avatar reference. Client input never chooses user ID,
-participant ID, capabilities, role, mute state, or session expiry.
+The payload hash covers every field that can change identity or membership,
+including the optional meeting assertion, display name, participant-type token,
+owner display name, client ID, and optional avatar reference. Client input never
+chooses user ID, participant ID, capabilities, role, mute state, or session expiry.
 
 At most one human room session is live for `(room_id, participant_id)`. A new
 admission through another invite for the same stable participant replaces the old
@@ -442,6 +515,32 @@ flag is added meanwhile.
   encoding, row/claim mismatch, revoke, expiry, wrong room, and every configured
   use-limit boundary fail from their exact current authority. No generic token parser,
   legacy reader, or fallback branch is added.
+
+### Fixed binary admission transcripts without secret-key coupling
+
+- Prior cost and threat: the original workflow hashes JSON containing encoded
+  fingerprints and request text. Reusing JSON would retain serialization work and
+  leave field representation as implicit authority. Keying the admission locator
+  with the private session secret would add HMAC work and couple durable idempotency
+  identity to a secret even though possession of the locator grants no capability.
+- Change intent: use the fixed SHA-256 transcripts and vectors above. Fixed-width
+  fingerprint/UUID fields need no framing; variable payload fields use one explicit
+  32-bit byte length. The private key remains confined to bearer derivation.
+- Preserved contract: exact invite, browser credential, request identity, admitted
+  inputs, and current `aai1.`/`aaj1_` distinction remain bound. Only a caller with the
+  exact presented credentials can reproduce a locator, and reproducing it still
+  cannot mint a bearer without the host's HMAC key.
+- Observed cost: one-use identity hashes a fixed context plus 80 bytes; reusable
+  identity hashes its context plus 64 bytes. Payload hashing streams five bounded
+  text fields, one presence byte, and at most one bounded attachment ID. The design
+  adds no RNG call, heap-built JSON, secret lookup, index, cache, or durable column.
+  CPU or latency improvement is not claimed until the completed admission route is
+  measured.
+- Verification: fixed vectors pin contexts, NUL separators, field order, UUID raw
+  bytes, UTF-8 byte lengths, tabs, non-ASCII input, and avatar presence. Boundary
+  tests prove outer-trimmed canonical nonzero UUID acceptance, malformed avatar
+  omission, distinct presented credentials, and changed payload conflict without
+  logging raw inputs or secrets.
 
 ### Single transaction instead of the original admission saga
 
