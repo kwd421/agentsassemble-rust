@@ -54,6 +54,11 @@ export interface DesktopOperatorHttpTicket {
   http_base_url: string;
 }
 
+type DesktopHttpTicketCommand =
+  | "runtime_preferences_read_ticket"
+  | "runtime_preferences_write_ticket"
+  | "runtime_settings_directory_read_ticket";
+
 export interface DesktopCentralRegistrationBinding {
   server_id: string;
   host_public_key_x: string;
@@ -255,6 +260,46 @@ function rememberDesktopOperatorRuntime(
   return ticket;
 }
 
+function validateDesktopHttpTicket(
+  value: unknown,
+  label: string
+): DesktopOperatorHttpTicket {
+  const grant = exactObject(
+    value,
+    ["ticket", "ttl_seconds", "http_base_url"],
+    label
+  );
+  if (
+    !/^[0-9a-f]{64}$/.test(String(grant.ticket)) ||
+    !Number.isSafeInteger(grant.ttl_seconds) ||
+    Number(grant.ttl_seconds) < 1 ||
+    typeof grant.http_base_url !== "string"
+  ) {
+    throw new Error(`${label} 권위가 올바르지 않습니다.`);
+  }
+  return {
+    ticket: grant.ticket as string,
+    ttl_seconds: grant.ttl_seconds as number,
+    http_base_url: validatedDesktopHttpBase(grant.http_base_url),
+  };
+}
+
+async function requestDesktopHttpTicket(
+  command: DesktopHttpTicketCommand,
+  args: Record<string, unknown> | undefined,
+  label: string
+): Promise<DesktopOperatorHttpTicket> {
+  const tauri = tauriInternals();
+  if (!tauri) {
+    throw new Error("데스크톱 Rust 런타임을 사용할 수 없습니다.");
+  }
+  requireDesktopHostCommand(command);
+  return validateDesktopHttpTicket(
+    await tauri.invoke<unknown>(command, args),
+    label
+  );
+}
+
 function validateDesktopCentralRegistrationTicket(
   value: unknown
 ): DesktopCentralRegistrationTicket {
@@ -342,6 +387,34 @@ export async function requestDesktopOperatorTicket(): Promise<DesktopOperatorHtt
   return tauri
     .invoke<DesktopOperatorHttpTicket>("runtime_operator_ticket")
     .then(rememberDesktopOperatorRuntime);
+}
+
+export function requestDesktopPreferencesReadTicket(
+  roomId: string
+): Promise<DesktopOperatorHttpTicket> {
+  return requestDesktopHttpTicket(
+    "runtime_preferences_read_ticket",
+    { roomId },
+    "방 preference read 티켓"
+  );
+}
+
+export function requestDesktopPreferencesWriteTicket(
+  roomId: string
+): Promise<DesktopOperatorHttpTicket> {
+  return requestDesktopHttpTicket(
+    "runtime_preferences_write_ticket",
+    { roomId },
+    "방 preference write 티켓"
+  );
+}
+
+export function requestDesktopSettingsDirectoryReadTicket(): Promise<DesktopOperatorHttpTicket> {
+  return requestDesktopHttpTicket(
+    "runtime_settings_directory_read_ticket",
+    undefined,
+    "방 settings directory 티켓"
+  );
 }
 
 export async function requestDesktopCentralRegistrationTicket(): Promise<DesktopCentralRegistrationTicket> {
