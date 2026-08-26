@@ -46,6 +46,7 @@ async fn preference_http_surface_binds_room_purpose_and_global_transport() {
         .await
         .unwrap_or_else(|error| panic!("send wrong-room read: {error}"));
     assert_eq!(wrong_room.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(wrong_room.headers()["cache-control"], "private, no-store");
     let replay = client
         .get(format!(
             "{}/api/room-settings?room_id=general",
@@ -66,6 +67,7 @@ async fn preference_http_surface_binds_room_purpose_and_global_transport() {
         .await
         .unwrap_or_else(|error| panic!("send global HTTP write: {error}"));
     assert_eq!(global.status(), StatusCode::CONFLICT);
+    assert_eq!(global.headers()["cache-control"], "private, no-store");
 
     let write_ticket = issue_write(&server.tickets, "general").await;
     let updated = client
@@ -82,6 +84,7 @@ async fn preference_http_surface_binds_room_purpose_and_global_transport() {
         .await
         .unwrap_or_else(|error| panic!("write room preferences: {error}"));
     assert_eq!(updated.status(), StatusCode::OK);
+    assert_eq!(updated.headers()["cache-control"], "private, no-store");
     let updated: Value = updated
         .json()
         .await
@@ -130,6 +133,7 @@ async fn preference_write_authorizes_before_body_and_directory_is_separate() {
         .await
         .unwrap_or_else(|error| panic!("read settings directory: {error}"));
     assert_eq!(directory.status(), StatusCode::OK);
+    assert_eq!(directory.headers()["cache-control"], "private, no-store");
     let directory: Value = directory
         .json()
         .await
@@ -164,6 +168,7 @@ async fn preference_write_authorizes_before_body_and_directory_is_separate() {
         .await
         .unwrap_or_else(|error| panic!("send unauthorized oversized write: {error}"));
     assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(unauthorized.headers()["cache-control"], "private, no-store");
     server.stop().await;
 }
 

@@ -105,12 +105,20 @@ describe("room preference HTTP authority", () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       "http://127.0.0.1:49155/api/room-settings?room_id=general",
-      expect.objectContaining({ method: "GET", headers: expect.any(Headers) })
+      expect.objectContaining({
+        cache: "no-store",
+        method: "GET",
+        headers: expect.any(Headers),
+      })
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       "http://127.0.0.1:49155/api/room-settings",
-      expect.objectContaining({ method: "POST", headers: expect.any(Headers) })
+      expect.objectContaining({
+        cache: "no-store",
+        method: "POST",
+        headers: expect.any(Headers),
+      })
     );
     const readHeaders = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
     const writeInit = fetchMock.mock.calls[1]?.[1] as RequestInit;
