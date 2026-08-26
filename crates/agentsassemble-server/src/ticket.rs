@@ -9,6 +9,7 @@ mod human_session;
 
 use human_session::HumanSessionGrant;
 pub use human_session::{ConsumedHumanSessionSocketTicket, ConsumedProfileTicket};
+pub(crate) use human_session::{ConsumedSocketTicket, SocketTicketHint};
 
 struct StoredTicketGrant {
     authority: TicketAuthority,

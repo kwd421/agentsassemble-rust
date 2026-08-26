@@ -1,5 +1,7 @@
 use agentsassemble_domain::{AuthenticatedPrincipal, canonical_payload_hash};
-use agentsassemble_persistence::{PersistenceError, SqliteStore, room_write_command_size};
+use agentsassemble_persistence::{
+    HumanSessionAuthorization, PersistenceError, SqliteStore, room_write_command_size,
+};
 use agentsassemble_protocol::RoomAction;
 use serde_json::Value;
 use tokio::sync::OwnedSemaphorePermit;
@@ -28,6 +30,42 @@ pub(crate) async fn admit_human_command(
         .resolve_principal(principal)
         .await
         .map_err(CommandFailure::unresolved)?;
+    admit_current_command(store, admission, principal, request_id, action, payload).await
+}
+
+pub(crate) async fn admit_human_session_command(
+    store: &SqliteStore,
+    admission: &PrincipalMutationAdmission,
+    authorization: &HumanSessionAuthorization,
+    request_id: &str,
+    action: RoomAction,
+    payload: &Value,
+) -> Result<(AdmittedHumanCommand, HumanSessionAuthorization), CommandFailure> {
+    validate_command_envelope(request_id).map_err(CommandFailure::rejected)?;
+    let current = store
+        .revalidate_human_session_authorization(authorization)
+        .await
+        .map_err(CommandFailure::unresolved)?;
+    let admitted = admit_current_command(
+        store,
+        admission,
+        current.principal().clone(),
+        request_id,
+        action,
+        payload,
+    )
+    .await?;
+    Ok((admitted, current))
+}
+
+async fn admit_current_command(
+    store: &SqliteStore,
+    admission: &PrincipalMutationAdmission,
+    principal: AuthenticatedPrincipal,
+    request_id: &str,
+    action: RoomAction,
+    payload: &Value,
+) -> Result<AdmittedHumanCommand, CommandFailure> {
     let action_name = action.as_str();
     let payload_bytes = room_write_command_size(request_id, action_name, payload)
         .map_err(CommandFailure::unresolved)?;

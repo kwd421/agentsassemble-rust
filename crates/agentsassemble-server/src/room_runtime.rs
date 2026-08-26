@@ -7,7 +7,7 @@ use std::{
 use agentsassemble_domain::{AuthenticatedPrincipal, RoomEvent};
 use agentsassemble_persistence::{
     AgentTurnAssignment, CommandOutcome, HumanAdmissionDecision, HumanAdmissionRejection,
-    PersistenceError, PreparedHumanAdmission, SqliteStore,
+    HumanSessionAuthorization, PersistenceError, PreparedHumanAdmission, SqliteStore,
 };
 use agentsassemble_protocol::RoomAction;
 use agentsassemble_provider::{
@@ -28,7 +28,9 @@ use crate::{
     provider_recovery_tracker::ProviderRecoveryTracker,
     provider_turn::{ProviderTurnTaskResult, handle_provider_result, spawn_provider_turn},
     provider_write_budget::ProviderWriteBudget,
-    room_command_admission::{AdmittedHumanCommand, admit_human_command},
+    room_command_admission::{
+        AdmittedHumanCommand, admit_human_command, admit_human_session_command,
+    },
     room_command_result::{CommandFailure, public_command_outcome},
     room_recovery_runtime::{RecoveredAssignment, RecoveredAssignments, publish_then_resume},
     room_shutdown::{RoomShutdownError, join_room_tasks},
@@ -44,6 +46,7 @@ const ROOM_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(3);
 
 pub(crate) struct RoomCommand {
     pub(crate) principal: AuthenticatedPrincipal,
+    pub(crate) human_session: Option<Box<HumanSessionAuthorization>>,
     pub(crate) request_id: String,
     pub(crate) action: RoomAction,
     pub(crate) payload: Value,
@@ -129,11 +132,7 @@ impl RoomRuntime {
         action: RoomAction,
         payload: Value,
     ) -> Result<CommandOutcome, CommandFailure> {
-        let AdmittedHumanCommand {
-            principal,
-            mutation_debit,
-            inflight_permit,
-        } = admit_human_command(
+        let admitted = admit_human_command(
             &self.store,
             &self.principal_mutations,
             &principal,
@@ -142,12 +141,56 @@ impl RoomRuntime {
             &payload,
         )
         .await?;
+        self.enqueue_command(admitted, None, request_id, action, payload)
+            .await
+    }
+
+    pub(crate) async fn execute_human_session(
+        &self,
+        authorization: &HumanSessionAuthorization,
+        request_id: String,
+        action: RoomAction,
+        payload: Value,
+    ) -> Result<CommandOutcome, CommandFailure> {
+        let (admitted, current) = admit_human_session_command(
+            &self.store,
+            &self.principal_mutations,
+            authorization,
+            &request_id,
+            action,
+            &payload,
+        )
+        .await?;
+        self.enqueue_command(
+            admitted,
+            Some(Box::new(current)),
+            request_id,
+            action,
+            payload,
+        )
+        .await
+    }
+
+    async fn enqueue_command(
+        &self,
+        admitted: AdmittedHumanCommand,
+        human_session: Option<Box<HumanSessionAuthorization>>,
+        request_id: String,
+        action: RoomAction,
+        payload: Value,
+    ) -> Result<CommandOutcome, CommandFailure> {
+        let AdmittedHumanCommand {
+            principal,
+            mutation_debit,
+            inflight_permit,
+        } = admitted;
         let handle = self.handle(&principal.room_id).await;
         let (reply, response) = oneshot::channel();
         handle
             .mutations
             .try_send(RoomMutation::Command(RoomCommand {
                 principal,
+                human_session,
                 request_id,
                 action,
                 payload,

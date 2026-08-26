@@ -26,6 +26,13 @@ struct SessionTicketResponse {
     ttl_seconds: u64,
 }
 
+#[derive(Serialize)]
+struct SessionSocketTicketResponse {
+    ticket: String,
+    ttl_seconds: u64,
+    server_proof_key: String,
+}
+
 pub(crate) fn routes() -> Router<AppState> {
     session_exchange_routes()
         .layer(SetResponseHeaderLayer::overriding(
@@ -38,6 +45,7 @@ pub(crate) fn routes() -> Router<AppState> {
 registered_routes! {
     fn session_exchange_routes<AppState>() {
         "/api/session-tickets/profile" => post(issue_profile_ticket),
+        "/api/session-tickets/socket" => post(issue_socket_ticket),
     }
 }
 
@@ -45,22 +53,8 @@ async fn issue_profile_ticket(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Response, SessionExchangeError> {
-    let fingerprint = bearer_ticket(request.headers())
-        .and_then(fingerprint_presented_bearer)
-        .ok_or_else(SessionExchangeError::unauthorized)?;
-    ensure_empty_body(request, MAX_EXCHANGE_BODY_BYTES)
-        .await
-        .map_err(SessionExchangeError::from_body)?;
-    let authorization = state.store.authorize_human_session(&fingerprint).await?;
-    let ttl_seconds = state.tickets.ttl_seconds().min(
-        authorization
-            .expires_at()
-            .signed_duration_since(Utc::now())
-            .num_seconds()
-            .max(0)
-            .try_into()
-            .unwrap_or(0),
-    );
+    let authorization = authorize_exchange(&state, request).await?;
+    let ttl_seconds = session_ticket_ttl(&state, &authorization);
     let issued = state
         .tickets
         .issue_human_session_profile(authorization)
@@ -71,6 +65,57 @@ async fn issue_profile_ticket(
         ttl_seconds,
     })
     .into_response())
+}
+
+async fn issue_socket_ticket(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Response, SessionExchangeError> {
+    let authorization = authorize_exchange(&state, request).await?;
+    let ttl_seconds = session_ticket_ttl(&state, &authorization);
+    let issued = state
+        .tickets
+        .issue_human_session_socket(authorization)
+        .await
+        .map_err(|_| SessionExchangeError::capacity())?;
+    Ok(Json(SessionSocketTicketResponse {
+        ticket: issued.ticket,
+        ttl_seconds,
+        server_proof_key: issued.proof_key,
+    })
+    .into_response())
+}
+
+async fn authorize_exchange(
+    state: &AppState,
+    request: Request,
+) -> Result<agentsassemble_persistence::HumanSessionAuthorization, SessionExchangeError> {
+    let fingerprint = bearer_ticket(request.headers())
+        .and_then(fingerprint_presented_bearer)
+        .ok_or_else(SessionExchangeError::unauthorized)?;
+    ensure_empty_body(request, MAX_EXCHANGE_BODY_BYTES)
+        .await
+        .map_err(SessionExchangeError::from_body)?;
+    state
+        .store
+        .authorize_human_session(&fingerprint)
+        .await
+        .map_err(Into::into)
+}
+
+fn session_ticket_ttl(
+    state: &AppState,
+    authorization: &agentsassemble_persistence::HumanSessionAuthorization,
+) -> u64 {
+    state.tickets.ttl_seconds().min(
+        authorization
+            .expires_at()
+            .signed_duration_since(Utc::now())
+            .num_seconds()
+            .max(0)
+            .try_into()
+            .unwrap_or(0),
+    )
 }
 
 #[derive(Debug)]

@@ -27,6 +27,26 @@ pub struct ConsumedHumanSessionSocketTicket {
     connection_nonce: String,
 }
 
+pub(crate) enum SocketTicketHint {
+    Local,
+    HumanSession { room_id: String },
+}
+
+pub(crate) enum ConsumedSocketTicket {
+    Local(ConsumedTicket),
+    HumanSession(ConsumedHumanSessionSocketTicket),
+}
+
+impl ConsumedSocketTicket {
+    #[must_use]
+    pub(crate) fn principal(&self) -> &AuthenticatedPrincipal {
+        match self {
+            Self::Local(grant) => &grant.principal,
+            Self::HumanSession(grant) => grant.authorization.principal(),
+        }
+    }
+}
+
 impl ConsumedHumanSessionSocketTicket {
     #[must_use]
     pub fn into_parts(self) -> (HumanSessionAuthorization, String, String) {
@@ -146,6 +166,76 @@ impl TicketStore {
             }),
             now + self.ttl.min(session_remaining),
         ))
+    }
+
+    /// Inspects only enough socket authority to subscribe to human-session revocation before
+    /// consuming the one-use grant. Wrong-purpose and expired grants are consumed immediately.
+    pub(crate) async fn socket_ticket_hint(
+        &self,
+        ticket: &str,
+    ) -> Result<SocketTicketHint, TicketError> {
+        let now = Instant::now();
+        let mut grants = self.grants.lock().await;
+        let Some(grant) = grants.get(ticket) else {
+            return Err(TicketError::Invalid);
+        };
+        if grant.expires_at <= now {
+            grants.remove(ticket);
+            return Err(TicketError::Invalid);
+        }
+        match &grant.authority {
+            TicketAuthority::Room(_) => Ok(SocketTicketHint::Local),
+            TicketAuthority::HumanSession(session)
+                if session.purpose == HumanSessionGrantPurpose::WebSocketConnect =>
+            {
+                Ok(SocketTicketHint::HumanSession {
+                    room_id: session.authorization.principal().room_id.clone(),
+                })
+            }
+            TicketAuthority::RoomHttp(_)
+            | TicketAuthority::HumanSession(_)
+            | TicketAuthority::SettingsDirectoryRead { .. }
+            | TicketAuthority::ServerOperator { .. }
+            | TicketAuthority::CentralRegistration { .. } => {
+                grants.remove(ticket);
+                Err(TicketError::Invalid)
+            }
+        }
+    }
+
+    /// Removes and resolves either current socket credential exactly once without trying one
+    /// authority kind and falling back to another.
+    pub(crate) async fn consume_socket(
+        &self,
+        ticket: &str,
+    ) -> Result<ConsumedSocketTicket, TicketError> {
+        let grant = self.consume_grant(ticket).await?;
+        let connection_nonce = crate::server_proof::derive_connection_nonce(ticket);
+        match grant.authority {
+            TicketAuthority::Room(principal) => Ok(ConsumedSocketTicket::Local(ConsumedTicket {
+                principal,
+                proof_key: grant.proof_key,
+                connection_nonce,
+            })),
+            TicketAuthority::HumanSession(public) => {
+                let authorization = Self::resolve_human_session_authority(
+                    public,
+                    HumanSessionGrantPurpose::WebSocketConnect,
+                    Utc::now(),
+                )?;
+                Ok(ConsumedSocketTicket::HumanSession(
+                    ConsumedHumanSessionSocketTicket {
+                        authorization,
+                        proof_key: grant.proof_key,
+                        connection_nonce,
+                    },
+                ))
+            }
+            TicketAuthority::RoomHttp(_)
+            | TicketAuthority::SettingsDirectoryRead { .. }
+            | TicketAuthority::ServerOperator { .. }
+            | TicketAuthority::CentralRegistration { .. } => Err(TicketError::Invalid),
+        }
     }
 
     /// Consumes only an exact human-session WebSocket credential.

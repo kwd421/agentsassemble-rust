@@ -1,7 +1,7 @@
 use agentsassemble_domain::{RoomRandomRequest, RoomRandomResult};
 use agentsassemble_persistence::{
-    CommandOutcome, PersistenceError, ProviderRoomRandomCommit, SqliteStore,
-    room_write_command_size,
+    CommandOutcome, HumanSessionAuthorization, PersistenceError, ProviderRoomRandomCommit,
+    SqliteStore, room_write_command_size,
 };
 use agentsassemble_provider::{ProviderRoomToolCommand, ProviderRoomToolError};
 use tokio::sync::broadcast;
@@ -35,6 +35,30 @@ pub(crate) async fn execute_room_random(
     store
         .execute_room_random_command(
             &command.principal,
+            &command.request_id,
+            command.action.as_str(),
+            &command.payload,
+            &result,
+        )
+        .await
+}
+
+pub(crate) async fn execute_human_session_room_random(
+    store: &SqliteStore,
+    command: &RoomCommand,
+    authorization: &HumanSessionAuthorization,
+) -> Result<CommandOutcome, PersistenceError> {
+    let request =
+        RoomRandomRequest::parse(command.action.as_str(), &command.payload).map_err(|error| {
+            PersistenceError::CommandRejected {
+                code: "invalid_room_random_request",
+                message: error.message,
+            }
+        })?;
+    let result = generate_room_random(&request);
+    store
+        .execute_human_session_room_random_command(
+            authorization,
             &command.request_id,
             command.action.as_str(),
             &command.payload,

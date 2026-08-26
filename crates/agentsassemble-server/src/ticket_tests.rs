@@ -10,7 +10,11 @@ use agentsassemble_persistence::{
 };
 use chrono::{Duration as ChronoDuration, Utc};
 
-use crate::{TicketError, TicketStore, human_session_bearer::fingerprint_presented_bearer};
+use crate::{
+    TicketError, TicketStore,
+    human_session_bearer::fingerprint_presented_bearer,
+    ticket::{ConsumedSocketTicket, SocketTicketHint},
+};
 
 fn principal() -> AuthenticatedPrincipal {
     AuthenticatedPrincipal {
@@ -214,10 +218,17 @@ async fn human_session_grants_are_exact_purpose_and_one_use() {
         .issue_human_session_socket(fixture.authorize(0).await)
         .await
         .unwrap_or_else(|error| panic!("issue session socket grant: {error}"));
+    assert!(matches!(
+        store.socket_ticket_hint(&socket.ticket).await,
+        Ok(SocketTicketHint::HumanSession { room_id }) if room_id == "general"
+    ));
     let consumed = store
-        .consume_human_session_socket(&socket.ticket)
+        .consume_socket(&socket.ticket)
         .await
         .unwrap_or_else(|error| panic!("consume session socket grant: {error}"));
+    let ConsumedSocketTicket::HumanSession(consumed) = consumed else {
+        panic!("human socket grant resolved as local authority");
+    };
     let (authorization, proof_key, connection_nonce) = consumed.into_parts();
     assert_eq!(
         authorization.session_fingerprint(),
@@ -227,6 +238,25 @@ async fn human_session_grants_are_exact_purpose_and_one_use() {
     assert_eq!(connection_nonce.len(), 64);
     assert!(matches!(
         store.consume_human_session_socket(&socket.ticket).await,
+        Err(TicketError::Invalid)
+    ));
+}
+
+#[tokio::test]
+async fn socket_hint_consumes_wrong_purpose_without_cross_authority_fallback() {
+    let fixture = HumanSessionFixture::new(1).await;
+    let store = TicketStore::new(Duration::from_secs(30), 4_096);
+    let profile = store
+        .issue_human_session_profile(fixture.authorize(0).await)
+        .await
+        .unwrap_or_else(|error| panic!("issue wrong-purpose profile grant: {error}"));
+
+    assert!(matches!(
+        store.socket_ticket_hint(&profile.ticket).await,
+        Err(TicketError::Invalid)
+    ));
+    assert!(matches!(
+        store.consume_human_session_profile(&profile.ticket).await,
         Err(TicketError::Invalid)
     ));
 }

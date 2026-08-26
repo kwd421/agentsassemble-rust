@@ -29,6 +29,7 @@ use crate::{
     provider_turn_reconciliation_runtime::reconcile_provider_turn_ownership,
     reconcile_runtime_ownership,
     runtime_reconciliation::watch_runtime_reconciliation,
+    ticket::{ConsumedSocketTicket, SocketTicketHint},
 };
 
 const HTTP_BODY_DEADLINE: Duration = Duration::from_secs(10);
@@ -251,14 +252,28 @@ async fn upgrade_socket(
     Query(query): Query<TicketQuery>,
     upgrade: WebSocketUpgrade,
 ) -> Result<Response, ApiError> {
-    let grant = state
+    let hint = state
         .tickets
-        .consume(&query.ticket)
+        .socket_ticket_hint(&query.ticket)
         .await
         .map_err(|error| ApiError::unauthorized(error.to_string()))?;
+    let revocations = match &hint {
+        SocketTicketHint::Local => None,
+        SocketTicketHint::HumanSession { room_id } => {
+            Some(state.rooms.session_revocations(room_id).await)
+        }
+    };
+    let grant = state
+        .tickets
+        .consume_socket(&query.ticket)
+        .await
+        .map_err(|error| ApiError::unauthorized(error.to_string()))?;
+    if !socket_hint_matches_grant(&hint, &grant) {
+        return Err(ApiError::unauthorized("Socket ticket authority changed."));
+    }
     let lease = state
         .connection_admission
-        .acquire(&grant.principal)
+        .acquire(grant.principal())
         .map_err(|error| ApiError::unavailable(error.to_string()))?;
     let connections = state.connections.clone();
     Ok(upgrade
@@ -267,9 +282,25 @@ async fn upgrade_socket(
         .write_buffer_size(64 * 1024)
         .max_write_buffer_size(512 * 1024)
         .on_upgrade(move |socket| {
-            connections.track_future(crate::room_socket_session::run(socket, state, grant, lease))
+            connections.track_future(crate::room_socket_session::run(
+                socket,
+                state,
+                grant,
+                revocations,
+                lease,
+            ))
         })
         .into_response())
+}
+
+fn socket_hint_matches_grant(hint: &SocketTicketHint, grant: &ConsumedSocketTicket) -> bool {
+    match (hint, grant) {
+        (SocketTicketHint::Local, ConsumedSocketTicket::Local(_)) => true,
+        (SocketTicketHint::HumanSession { room_id }, ConsumedSocketTicket::HumanSession(_)) => {
+            room_id == &grant.principal().room_id
+        }
+        _ => false,
+    }
 }
 
 #[derive(Debug)]

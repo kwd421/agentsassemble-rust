@@ -1,5 +1,5 @@
 use agentsassemble_domain::RoomEvent;
-use agentsassemble_persistence::{PersistenceError, SqliteStore};
+use agentsassemble_persistence::{PersistenceError, ProviderTurnInterruptEffect, SqliteStore};
 use agentsassemble_protocol::RoomAction;
 use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService};
 use tokio::sync::broadcast;
@@ -19,6 +19,9 @@ pub(crate) async fn execute_command(
     event_tx: &broadcast::Sender<RoomEvent>,
     command: &RoomCommand,
 ) -> CommandExecution {
+    if let Some(authorization) = &command.human_session {
+        return execute_human_session_command(store, command, authorization).await;
+    }
     match command.action {
         RoomAction::AgentCreate => {
             execute_agent_create_command(
@@ -102,18 +105,63 @@ pub(crate) async fn execute_command(
                     .await
                     {
                         Ok(commit) => execution.extend_turn_commit(commit),
-                        Err(error) => tracing::error!(
-                            code = persistence_error_code(&error),
-                            room_id = command.principal.room_id,
-                            session_id = effect.session_id,
-                            "participant mute committed; exact provider interrupt remains quarantined"
-                        ),
+                        Err(error) => log_interrupt_error(&error, command, &effect),
                     }
                 }
                 execution
             }
             Err(error) => CommandExecution::transactional_failure(error),
         },
+    }
+}
+
+fn log_interrupt_error(
+    error: &PersistenceError,
+    command: &RoomCommand,
+    effect: &ProviderTurnInterruptEffect,
+) {
+    tracing::error!(
+        code = persistence_error_code(error),
+        room_id = command.principal.room_id,
+        session_id = effect.session_id,
+        "participant mute committed; exact provider interrupt remains quarantined"
+    );
+}
+
+async fn execute_human_session_command(
+    store: &SqliteStore,
+    command: &RoomCommand,
+    authorization: &agentsassemble_persistence::HumanSessionAuthorization,
+) -> CommandExecution {
+    match command.action {
+        RoomAction::MessageSend => match store
+            .execute_human_session_message_with_turn(
+                authorization,
+                &command.request_id,
+                command.action.as_str(),
+                &command.payload,
+            )
+            .await
+        {
+            Ok(mutation) => CommandExecution::mutation(mutation),
+            Err(error) => CommandExecution::transactional_failure(error),
+        },
+        RoomAction::RoomRandomRoll | RoomAction::RoomRandomChoose => {
+            match crate::room_random_runtime::execute_human_session_room_random(
+                store,
+                command,
+                authorization,
+            )
+            .await
+            {
+                Ok(outcome) => CommandExecution::success(outcome),
+                Err(error) => CommandExecution::transactional_failure(error),
+            }
+        }
+        _ => CommandExecution::transactional_failure(PersistenceError::CommandRejected {
+            code: "permission_denied",
+            message: "This human room session cannot perform that action.".to_owned(),
+        }),
     }
 }
 
