@@ -243,7 +243,7 @@ const TABLES: &[TableDefinition] = &[
 
 const INDEXES: &[&str] = &[
     "CREATE UNIQUE INDEX IF NOT EXISTS profile_avatar_assets_owner_state_idx ON profile_avatar_assets(owner_user_id, state)",
-    "CREATE INDEX IF NOT EXISTS profile_avatar_assets_pending_expiry_idx ON profile_avatar_assets(expires_at) WHERE state = 'pending'",
+    "CREATE INDEX IF NOT EXISTS profile_avatar_assets_state_expiry_idx ON profile_avatar_assets(state, expires_at)",
     "CREATE UNIQUE INDEX IF NOT EXISTS prejoin_avatar_assets_custody_idx ON prejoin_avatar_assets(custody_fingerprint)",
     "CREATE INDEX IF NOT EXISTS prejoin_avatar_assets_expiry_idx ON prejoin_avatar_assets(expires_at)",
     "CREATE INDEX IF NOT EXISTS room_invites_room_state_idx ON room_invites(room_id, revoked, expires_at)",
