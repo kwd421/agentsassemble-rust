@@ -540,6 +540,70 @@ describe("proof-bound canonical room socket", () => {
     handle.close();
   });
 
+  it("finishes a delivered leave ACK after the server closes during WebCrypto verification", async () => {
+    vi.useFakeTimers();
+    const { handle, sockets, tickets } = openHarness();
+    await flushPromises();
+    sockets[0].open();
+    const frames = await handshakeFrames(sockets[0], tickets[0], 0, 0);
+    sockets[0].receive(frames.receipt);
+    sockets[0].receiveRaw(frames.rawSnapshot);
+    await vi.waitFor(() => expect(handle.ready()).toBe(true));
+
+    const pendingLeave = handle.command("participant.leave", {});
+    await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
+    const command = await sentAuthenticatedCommand(sockets[0], frames);
+
+    let releaseVerification = () => {};
+    let reportVerificationStarted = () => {};
+    const verificationStarted = new Promise<void>((resolve) => {
+      reportVerificationStarted = resolve;
+    });
+    const verificationGate = new Promise<void>((resolve) => {
+      releaseVerification = resolve;
+    });
+    const realVerify = crypto.subtle.verify.bind(crypto.subtle);
+    vi.spyOn(crypto.subtle, "verify").mockImplementationOnce(
+      async (algorithm, key, signature, data) => {
+        reportVerificationStarted();
+        await verificationGate;
+        return realVerify(algorithm, key, signature, data);
+      }
+    );
+
+    await receiveAuthenticated(sockets[0], frames, {
+      op: "ack",
+      accepted: true,
+      resolution: "committed",
+      request_id: command.request_id,
+      action: "participant.leave",
+      result: {
+        participant: { participant_id: "operator-local", status: "left" },
+        event: {
+          v: 1,
+          id: "leave-event-1",
+          room_id: "general",
+          seq: 1,
+          type: "participant_left",
+          participant_id: "operator-local",
+        },
+        event_seq: 1,
+      },
+    });
+    await verificationStarted;
+    sockets[0].close();
+    releaseVerification();
+
+    await expect(pendingLeave).resolves.toMatchObject({
+      accepted: true,
+      action: "participant.leave",
+    });
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(sockets).toHaveLength(1);
+    expect(handle.ready()).toBe(false);
+    handle.close();
+  });
+
   it("does not project an old socket after asynchronous snapshot verification", async () => {
     const onOpen = vi.fn();
     const onSnapshot = vi.fn();

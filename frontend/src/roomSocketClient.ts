@@ -138,6 +138,13 @@ export function openRoomSocket(
     sendPendingForConnection?.();
   }
 
+  function scheduleReconnect(generation: number) {
+    if (closed || generation !== connectionGeneration) return;
+    reconnectAttempt += 1;
+    const delay = Math.min(5_000, 250 * 2 ** Math.min(reconnectAttempt, 5));
+    reconnectTimer = window.setTimeout(() => void connect(), delay);
+  }
+
   function rejectAll(error: Error) {
     pending.forEach((command) => {
       if (command.timerId !== null) window.clearTimeout(command.timerId);
@@ -195,7 +202,6 @@ export function openRoomSocket(
   }
 
   function acceptEventFrame(
-    currentSocket: WebSocket,
     msg: Record<string, unknown>,
     highWater: number,
     establishing: boolean
@@ -260,7 +266,6 @@ export function openRoomSocket(
     }
     lastSeq = nextSeq;
     handlers.onRoomEvents?.(freshEvents);
-    if (socket !== currentSocket) throw new Error("stale room socket");
   }
 
   async function connect() {
@@ -287,15 +292,18 @@ export function openRoomSocket(
       transportReady = false;
       let receipt: SubscriptionReceipt | null = null;
       let snapshotAccepted = false;
+      let connectionEstablished = false;
+      let terminalLeaveCommitted = false;
       let verificationQueue = Promise.resolve();
       let outboundQueue = Promise.resolve();
       let frameKey: CryptoKey | null = null;
       let nextServerCounter = 1;
       let nextClientCounter = 1;
       const sentRequestIds = new Set<string>();
-      const isCurrentConnection = () =>
-        !closed &&
-        generation === connectionGeneration &&
+      const ownsConnectionGeneration = () =>
+        !closed && generation === connectionGeneration;
+      const canUseOpenSocket = () =>
+        ownsConnectionGeneration() &&
         socket === currentSocket &&
         currentSocket.readyState === WebSocket.OPEN;
 
@@ -325,7 +333,7 @@ export function openRoomSocket(
           outboundQueue = outboundQueue
             .then(async () => {
               if (
-                !isCurrentConnection() ||
+                !canUseOpenSocket() ||
                 !transportReady ||
                 !frameKey ||
                 pending.get(requestId) !== command
@@ -337,7 +345,7 @@ export function openRoomSocket(
                 nextClientCounter,
                 command.encoded
               );
-              if (!isCurrentConnection() || pending.get(requestId) !== command) return;
+              if (!canUseOpenSocket() || pending.get(requestId) !== command) return;
               currentSocket.send(encoded);
               nextClientCounter += 1;
               command.everSent = true;
@@ -349,12 +357,13 @@ export function openRoomSocket(
 
       const markReady = () => {
         if (
-          !isCurrentConnection() ||
+          !canUseOpenSocket() ||
           transportReady ||
           !receipt ||
           !snapshotAccepted ||
           lastSeq !== receipt.catchup_high_water
         ) return;
+        connectionEstablished = true;
         transportReady = true;
         reconnectAttempt = 0;
         handlers.onOpen?.();
@@ -379,12 +388,12 @@ export function openRoomSocket(
             streams,
             serverSurface: dependencies.serverSurface,
           });
-          if (!isCurrentConnection()) return;
+          if (!canUseOpenSocket()) return;
           const derivedFrameKey = await deriveAuthenticatedFrameKey(
             issued.server_proof_key,
             verifiedReceipt.connection_nonce
           );
-          if (!isCurrentConnection()) return;
+          if (!canUseOpenSocket()) return;
           receipt = verifiedReceipt;
           frameKey = derivedFrameKey;
           return;
@@ -392,7 +401,7 @@ export function openRoomSocket(
         if (!snapshotAccepted) {
           const msg = JSON.parse(raw) as unknown;
           await verifyBoundSnapshot(raw, msg, receipt);
-          if (!isCurrentConnection()) return;
+          if (!canUseOpenSocket()) return;
           const validationError = snapshotValidationError(msg, {
             expectedRoomId: dependencies.expectedRoomId,
             currentLastSeq: lastSeq,
@@ -431,19 +440,19 @@ export function openRoomSocket(
             "frame_authentication_invalid"
           );
         }
-        if (!isCurrentConnection()) return;
+        if (!ownsConnectionGeneration()) return;
         nextServerCounter += 1;
         const msg = JSON.parse(payload) as unknown;
         if (!isRecord(msg)) {
           throw new RoomSocketSayError("Room socket frame was invalid.", "frame_schema_invalid");
         }
-        if (!transportReady) {
-          acceptEventFrame(currentSocket, msg, receipt.catchup_high_water, true);
+        if (!connectionEstablished) {
+          acceptEventFrame(msg, receipt.catchup_high_water, true);
           markReady();
           return;
         }
         if (msg.op === "event") {
-          acceptEventFrame(currentSocket, msg, Number.MAX_SAFE_INTEGER, false);
+          acceptEventFrame(msg, Number.MAX_SAFE_INTEGER, false);
           return;
         }
         if (msg.op === "provider_catalog_updated" && isRecord(msg.catalog)) {
@@ -515,6 +524,7 @@ export function openRoomSocket(
           pending.delete(msg.request_id);
           if (command.timerId !== null) window.clearTimeout(command.timerId);
           if (command.retryTimerId !== null) window.clearTimeout(command.retryTimerId);
+          if (command.action === "participant.leave") terminalLeaveCommitted = true;
           command.resolve(msg as unknown as RoomCommandAck);
           return;
         }
@@ -526,7 +536,7 @@ export function openRoomSocket(
       };
 
       currentSocket.onopen = () => {
-        if (!isCurrentConnection()) return;
+        if (!canUseOpenSocket()) return;
         currentSocket.send(JSON.stringify({
           op: "subscribe",
           streams,
@@ -545,7 +555,10 @@ export function openRoomSocket(
         }
         verificationQueue = verificationQueue
           .then(async () => {
-            if (socket !== currentSocket || currentSocket.readyState !== WebSocket.OPEN) return;
+            if (
+              !ownsConnectionGeneration() ||
+              (!connectionEstablished && !canUseOpenSocket())
+            ) return;
             await processFrame(raw);
           })
           .catch((error) => fail(currentSocket, error));
@@ -562,18 +575,15 @@ export function openRoomSocket(
         transportReady = false;
         handlers.onClose?.();
         if (closed) return;
-        reconnectAttempt += 1;
-        const delay = Math.min(5_000, 250 * 2 ** Math.min(reconnectAttempt, 5));
-        reconnectTimer = window.setTimeout(() => void connect(), delay);
+        void verificationQueue.finally(() => {
+          if (terminalLeaveCommitted) return;
+          scheduleReconnect(generation);
+        });
       };
     } catch (error) {
       if (generation !== connectionGeneration) return;
       handlers.onError?.(error as Error);
-      if (!closed) {
-        reconnectAttempt += 1;
-        const delay = Math.min(5_000, 250 * 2 ** Math.min(reconnectAttempt, 5));
-        reconnectTimer = window.setTimeout(() => void connect(), delay);
-      }
+      scheduleReconnect(generation);
     }
   }
 
