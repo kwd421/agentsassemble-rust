@@ -86,7 +86,7 @@ pub(crate) async fn require_current_local_room_manager(
     {
         return Err(rejected(
             "permission_denied",
-            "Only the current local room manager may change room appearance.",
+            "Only the current local room manager may manage this room.",
         ));
     }
     require_complete_bootstrap_in_transaction(transaction).await?;

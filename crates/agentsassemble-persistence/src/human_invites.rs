@@ -2,7 +2,10 @@ use agentsassemble_domain::InviteScope;
 use chrono::{DateTime, Utc};
 use sqlx::{Row, sqlite::SqliteRow};
 
-use crate::{PersistenceError, SqliteStore};
+use crate::{
+    PersistenceError, RoomUserIdentity, SqliteStore,
+    room_user_identity::{require_current_local_room_manager, resolve_room_user_identity},
+};
 
 const MAX_EFFECTIVE_INVITE_USES: i64 = 128;
 
@@ -23,6 +26,17 @@ pub struct HumanInvite {
     pub created_at: DateTime<Utc>,
 }
 
+pub struct NewHumanInvite {
+    pub signed_token_fingerprint: [u8; 32],
+    pub join_code_fingerprint: [u8; 32],
+    pub base_participant_id: String,
+    pub display_name: String,
+    pub invite_scope: InviteScope,
+    pub max_uses: i64,
+    pub expires_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+}
+
 impl HumanInvite {
     #[must_use]
     pub const fn is_reusable(&self) -> bool {
@@ -40,6 +54,51 @@ impl HumanInvite {
 }
 
 impl SqliteStore {
+    /// Creates one canonical human invite under current local room-manager authority.
+    ///
+    /// The caller supplies only credential fingerprints and public invite policy. Room and
+    /// creator authority are re-resolved from the current manager inside the write transaction.
+    ///
+    /// # Errors
+    ///
+    /// Fails on invalid invite input, stale manager authority, conflicts, or database errors.
+    pub async fn create_human_invite_for_local_manager(
+        &self,
+        manager: &RoomUserIdentity,
+        invite: NewHumanInvite,
+    ) -> Result<HumanInvite, PersistenceError> {
+        validate_new_human_invite(&invite)?;
+        let invite_id = fingerprint_hex_prefix(&invite.signed_token_fingerprint);
+        let mut transaction = self.pool.begin().await?;
+        let current = resolve_room_user_identity(
+            &mut transaction,
+            &manager.room_id,
+            &manager.user_id,
+            &manager.participant_id,
+        )
+        .await?;
+        require_current_local_room_manager(&mut transaction, &current).await?;
+        let row = sqlx::query(
+            "INSERT INTO room_invites(invite_id, signed_token_fingerprint, join_code_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?) RETURNING invite_id, signed_token_fingerprint, join_code_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at",
+        )
+        .bind(invite_id)
+        .bind(invite.signed_token_fingerprint.as_slice())
+        .bind(invite.join_code_fingerprint.as_slice())
+        .bind(&current.room_id)
+        .bind(invite.base_participant_id)
+        .bind(invite.display_name)
+        .bind(invite_scope_text(invite.invite_scope))
+        .bind(invite.max_uses)
+        .bind(invite.expires_at.timestamp_micros())
+        .bind(&current.user_id)
+        .bind(invite.created_at.timestamp_micros())
+        .fetch_one(&mut *transaction)
+        .await?;
+        let stored = decode_human_invite(&row)?;
+        transaction.commit().await?;
+        Ok(stored)
+    }
+
     /// Finds one canonical human invite by the complete signed-token fingerprint.
     ///
     /// # Errors
@@ -94,6 +153,27 @@ impl SqliteStore {
         .map(decode_human_invite)
         .collect()
     }
+}
+
+fn validate_new_human_invite(invite: &NewHumanInvite) -> Result<(), PersistenceError> {
+    if !is_canonical_text(&invite.base_participant_id, 64)
+        || !is_canonical_text(&invite.display_name, 128)
+        || invite.max_uses < 0
+        || invite.expires_at <= invite.created_at
+    {
+        return Err(rejected(
+            "invalid_human_invite",
+            "Human invite policy is invalid.",
+        ));
+    }
+    Ok(())
+}
+
+fn is_canonical_text(value: &str, max_chars: usize) -> bool {
+    !value.is_empty()
+        && value.trim() == value
+        && value.chars().count() <= max_chars
+        && !value.contains(['\r', '\n'])
 }
 
 fn decode_human_invite(row: &SqliteRow) -> Result<HumanInvite, PersistenceError> {
@@ -167,16 +247,75 @@ fn effective_use_limit(max_uses: i64) -> i64 {
     }
 }
 
+const fn invite_scope_text(scope: InviteScope) -> &'static str {
+    match scope {
+        InviteScope::ReadWrite => "read_write",
+        InviteScope::ReadOnly => "read_only",
+    }
+}
+
 fn fingerprint_hex_prefix(fingerprint: &[u8; 32]) -> String {
     hex::encode(&fingerprint[..8])
 }
 
+fn rejected(code: &'static str, message: impl Into<String>) -> PersistenceError {
+    PersistenceError::CommandRejected {
+        code,
+        message: message.into(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use agentsassemble_domain::{
+        InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID,
+    };
     use chrono::{TimeZone, Utc};
 
-    use super::{HumanInvite, MAX_EFFECTIVE_INVITE_USES};
-    use crate::SqliteStore;
+    use super::{HumanInvite, MAX_EFFECTIVE_INVITE_USES, NewHumanInvite};
+    use crate::{PersistenceError, SqliteStore};
+
+    #[tokio::test]
+    async fn create_derives_room_and_creator_then_rejects_stale_manager() {
+        let store = fixture().await;
+        let manager = store
+            .authorize_local_room_manager(
+                "general",
+                LOCAL_OPERATOR_USER_ID,
+                LOCAL_OPERATOR_PARTICIPANT_ID,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("authorize manager: {error}"));
+        let created = store
+            .create_human_invite_for_local_manager(&manager, new_invite(0xAB, 0xCD))
+            .await
+            .unwrap_or_else(|error| panic!("create invite: {error}"));
+        assert_eq!(created.invite_id, "abababababababab");
+        assert_eq!(created.room_id, "general");
+        assert_eq!(created.created_by_user_id, LOCAL_OPERATOR_USER_ID);
+        assert_eq!(created.use_count, 0);
+        assert!(!created.revoked);
+
+        sqlx::query("DELETE FROM participants WHERE room_id = ? AND participant_id = ?")
+            .bind(&manager.room_id)
+            .bind(&manager.participant_id)
+            .execute(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("remove manager membership: {error}"));
+        assert!(matches!(
+            store
+                .create_human_invite_for_local_manager(&manager, new_invite(0xEF, 0x12))
+                .await,
+            Err(PersistenceError::ParticipantMissing)
+        ));
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM room_invites")
+                .fetch_one(&store.pool)
+                .await
+                .unwrap_or_else(|error| panic!("count invites: {error}")),
+            1
+        );
+    }
 
     #[tokio::test]
     async fn both_fingerprints_resolve_the_same_typed_invite_without_writes() {
@@ -265,5 +404,24 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("create room: {error}"));
         store
+    }
+
+    fn new_invite(signed_marker: u8, join_marker: u8) -> NewHumanInvite {
+        NewHumanInvite {
+            signed_token_fingerprint: [signed_marker; 32],
+            join_code_fingerprint: [join_marker; 32],
+            base_participant_id: format!("guest-{signed_marker:02x}"),
+            display_name: "Guest".to_owned(),
+            invite_scope: InviteScope::ReadWrite,
+            max_uses: 5,
+            expires_at: Utc
+                .timestamp_micros(2_000_000)
+                .single()
+                .unwrap_or_else(|| panic!("valid expiry")),
+            created_at: Utc
+                .timestamp_micros(1_000_000)
+                .single()
+                .unwrap_or_else(|| panic!("valid creation time")),
+        }
     }
 }
