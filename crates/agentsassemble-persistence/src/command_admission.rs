@@ -4,8 +4,10 @@ use sqlx::{Row, Sqlite, Transaction};
 
 use crate::{
     CommandOutcome, PersistenceError, SqliteStore,
-    agent_lifecycle_reservations::reject_reserved_request_id, authority::active_room_for_principal,
-    participant_leave::PARTICIPANT_LEAVE_ACTION, room_write_budget::reserve_room_write_budget,
+    agent_lifecycle_reservations::reject_reserved_request_id,
+    authority::active_room_for_principal,
+    participant_leave::{PARTICIPANT_LEAVE_ACTION, participant_leave_payload_is_exact},
+    room_write_budget::reserve_room_write_budget,
 };
 
 pub(crate) async fn existing_command(
@@ -129,7 +131,7 @@ impl SqliteStore {
         let self_disabling_leave = action == PARTICIPANT_LEAVE_ACTION
             && !principal.is_operator
             && principal.capabilities.participant_leave
-            && payload.as_object().is_some_and(serde_json::Map::is_empty);
+            && participant_leave_payload_is_exact(payload);
         let required = if self_disabling_leave {
             // A fresh leave disables its own authority, so charging it cannot
             // improve abuse resistance. Any pre-existing identity is instead

@@ -5,7 +5,6 @@ use agentsassemble_domain::{
     canonical_payload_hash,
 };
 use chrono::Utc;
-use serde::Deserialize;
 use serde_json::{Value, json};
 use sqlx::{Row, Sqlite, Transaction};
 use uuid::Uuid;
@@ -27,9 +26,9 @@ pub struct ParticipantLeaveMutation {
     pub revoked_session_fingerprints: Vec<[u8; 32]>,
 }
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ParticipantLeave {}
+pub(crate) fn participant_leave_payload_is_exact(payload: &Value) -> bool {
+    matches!(payload, Value::Object(fields) if fields.is_empty())
+}
 
 impl SqliteStore {
     /// Rejects the local room owner while preserving the same command identity rules.
@@ -155,13 +154,15 @@ async fn execute_leave_in(
     })
 }
 
-fn parse_payload(payload: &Value) -> Result<ParticipantLeave, PersistenceError> {
-    serde_json::from_value(payload.clone()).map_err(|_| {
-        rejected(
-            "invalid_participant_leave",
-            "participant.leave requires an empty object.",
-        )
-    })
+fn parse_payload(payload: &Value) -> Result<(), PersistenceError> {
+    participant_leave_payload_is_exact(payload)
+        .then_some(())
+        .ok_or_else(|| {
+            rejected(
+                "invalid_participant_leave",
+                "participant.leave requires an empty object.",
+            )
+        })
 }
 
 fn require_exact_joined_human(
