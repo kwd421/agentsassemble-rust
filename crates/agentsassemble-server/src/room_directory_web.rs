@@ -183,6 +183,11 @@ impl DirectoryHttpError {
 
     fn from_body(error: BodyDecodeError) -> Self {
         match error {
+            BodyDecodeError::RequestTimeout => Self {
+                status: StatusCode::REQUEST_TIMEOUT,
+                code: "request_timeout",
+                message: "Request body timed out.".to_owned(),
+            },
             BodyDecodeError::PayloadTooLarge => Self {
                 status: StatusCode::PAYLOAD_TOO_LARGE,
                 code: "payload_too_large",

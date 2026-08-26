@@ -314,6 +314,11 @@ impl HumanInviteHttpError {
 
     fn from_body(error: BodyDecodeError) -> Self {
         match error {
+            BodyDecodeError::RequestTimeout => Self::new(
+                StatusCode::REQUEST_TIMEOUT,
+                "request_timeout",
+                "Request body timed out.",
+            ),
             BodyDecodeError::PayloadTooLarge => Self::new(
                 StatusCode::PAYLOAD_TOO_LARGE,
                 "payload_too_large",
@@ -375,7 +380,7 @@ impl From<HumanAdmissionRejection> for HumanInviteHttpError {
                 "Invite room does not match the request.",
             ),
             HumanAdmissionRejection::IdentityConflict => Self::forbidden(
-                "identity_conflict",
+                "participant_identity_conflict",
                 "The invited identity conflicts with an existing participant.",
             ),
             HumanAdmissionRejection::CapacityReached => Self::new(
@@ -430,5 +435,24 @@ impl IntoResponse for HumanInviteHttpError {
             Json(json!({"error": self.message, "code": self.code})),
         )
             .into_response()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use agentsassemble_persistence::HumanAdmissionRejection;
+    use axum::http::StatusCode;
+
+    use super::{BodyDecodeError, HumanInviteHttpError};
+
+    #[test]
+    fn public_error_mapping_preserves_timeout_and_identity_collision() {
+        let timeout = HumanInviteHttpError::from_body(BodyDecodeError::RequestTimeout);
+        assert_eq!(timeout.status, StatusCode::REQUEST_TIMEOUT);
+        assert_eq!(timeout.code, "request_timeout");
+
+        let collision = HumanInviteHttpError::from(HumanAdmissionRejection::IdentityConflict);
+        assert_eq!(collision.status, StatusCode::FORBIDDEN);
+        assert_eq!(collision.code, "participant_identity_conflict");
     }
 }

@@ -79,7 +79,7 @@ async fn preflight_and_join_preserve_bounded_credentials_and_exact_retry() {
         "Boundary Guest",
     )
     .await;
-    assert_eq!(retry, first);
+    assert!(retry == first, "exact retry response changed");
     assert_eq!(
         store
             .list_human_invites()

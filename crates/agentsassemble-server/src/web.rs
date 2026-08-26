@@ -6,12 +6,12 @@ use agentsassemble_protocol::{
     ClientFrame, CommandAck, CommandResolution, ProtocolError, ServerFrame,
 };
 use axum::{
-    Json, Router, body,
+    Json, Router,
     extract::{
         Query, Request, State, WebSocketUpgrade,
         ws::{Message, WebSocket},
     },
-    http::{StatusCode, header},
+    http::StatusCode,
     middleware,
     response::{IntoResponse, Redirect, Response},
     routing::get,
@@ -32,6 +32,7 @@ use crate::{
     authenticated_channel::MAX_WS_WIRE_MESSAGE_BYTES,
     connection_admission::ConnectionLease,
     host_ticket::{AuthenticatedTicketResponse, HostChallengeResponse},
+    http_api::{BodyDecodeError, ensure_empty_body},
     http_transport::{MAX_HTTP_CONNECTIONS, RejectionCounter, serve_connection},
     issue_local_ticket,
     provider_turn_reconciliation_runtime::reconcile_provider_turn_ownership,
@@ -245,25 +246,9 @@ async fn issue_ticket(
     else {
         return Err(ApiError::unauthorized("A valid host proof is required."));
     };
-    if request
-        .headers()
-        .get(header::CONTENT_LENGTH)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.parse::<usize>().ok())
-        .is_some_and(|length| length > MAX_TICKET_BODY_BYTES)
-    {
-        return Err(ApiError::payload_too_large(
-            "Ticket request body exceeds the route limit.",
-        ));
-    }
-    let encoded = body::to_bytes(request.into_body(), MAX_TICKET_BODY_BYTES)
+    ensure_empty_body(request, MAX_TICKET_BODY_BYTES)
         .await
-        .map_err(|_| ApiError::payload_too_large("Ticket request body exceeds the route limit."))?;
-    if !encoded.is_empty() {
-        return Err(ApiError::bad_request(
-            "Ticket requests must not contain a body.",
-        ));
-    }
+        .map_err(ApiError::from_body)?;
     let grant = issue_local_ticket(&state, &authenticated.meeting_id)
         .await
         .map_err(ApiError::from)?;
@@ -455,6 +440,22 @@ struct ApiError {
 }
 
 impl ApiError {
+    fn from_body(error: BodyDecodeError) -> Self {
+        match error {
+            BodyDecodeError::RequestTimeout => Self {
+                status: StatusCode::REQUEST_TIMEOUT,
+                code: "request_timeout",
+                message: "Request body timed out.".to_owned(),
+            },
+            BodyDecodeError::PayloadTooLarge => {
+                Self::payload_too_large("Ticket request body exceeds the route limit.")
+            }
+            BodyDecodeError::InvalidJson | BodyDecodeError::NonEmpty => {
+                Self::bad_request("Ticket requests must not contain a body.")
+            }
+        }
+    }
+
     fn bad_request(message: impl Into<String>) -> Self {
         Self {
             status: StatusCode::BAD_REQUEST,

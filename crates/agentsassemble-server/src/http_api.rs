@@ -9,6 +9,7 @@ use crate::AppState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BodyDecodeError {
+    RequestTimeout,
     PayloadTooLarge,
     InvalidJson,
     NonEmpty,
@@ -64,7 +65,7 @@ pub(crate) async fn ensure_empty_body(
     reject_declared_oversize(request.headers(), limit)?;
     let encoded = body::to_bytes(request.into_body(), limit)
         .await
-        .map_err(|_| BodyDecodeError::PayloadTooLarge)?;
+        .map_err(|error| classify_body_read_error(&error))?;
     if encoded.is_empty() {
         Ok(())
     } else {
@@ -79,8 +80,21 @@ pub(crate) async fn decode_json_body<T: serde::de::DeserializeOwned>(
     reject_declared_oversize(request.headers(), limit)?;
     let encoded = body::to_bytes(request.into_body(), limit)
         .await
-        .map_err(|_| BodyDecodeError::PayloadTooLarge)?;
+        .map_err(|error| classify_body_read_error(&error))?;
     serde_json::from_slice(&encoded).map_err(|_| BodyDecodeError::InvalidJson)
+}
+
+fn classify_body_read_error(error: &axum::Error) -> BodyDecodeError {
+    let mut cause: &(dyn std::error::Error + 'static) = error;
+    loop {
+        if cause.is::<tower_http::timeout::TimeoutError>() {
+            return BodyDecodeError::RequestTimeout;
+        }
+        let Some(source) = cause.source() else {
+            return BodyDecodeError::PayloadTooLarge;
+        };
+        cause = source;
+    }
 }
 
 fn reject_declared_oversize(headers: &HeaderMap, limit: usize) -> Result<(), BodyDecodeError> {
@@ -93,5 +107,31 @@ fn reject_declared_oversize(headers: &HeaderMap, limit: usize) -> Result<(), Bod
         Err(BodyDecodeError::PayloadTooLarge)
     } else {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{convert::Infallible, time::Duration};
+
+    use axum::{
+        body::{Body, Bytes},
+        extract::Request,
+    };
+    use futures_util::stream;
+    use serde_json::Value;
+    use tower_http::timeout::DeadlineBody;
+
+    use super::{BodyDecodeError, decode_json_body};
+
+    #[tokio::test]
+    async fn body_deadline_remains_distinct_from_length_limit() {
+        let stalled = Body::from_stream(stream::pending::<Result<Bytes, Infallible>>());
+        let deadline = Body::new(DeadlineBody::new(Duration::from_millis(1), stalled));
+        let timed_out = decode_json_body::<Value>(Request::new(deadline), 16).await;
+        assert_eq!(timed_out, Err(BodyDecodeError::RequestTimeout));
+
+        let oversized = decode_json_body::<Value>(Request::new(Body::from("0123456789")), 4).await;
+        assert_eq!(oversized, Err(BodyDecodeError::PayloadTooLarge));
     }
 }
