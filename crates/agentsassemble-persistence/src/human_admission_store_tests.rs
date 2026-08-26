@@ -1,4 +1,6 @@
-use agentsassemble_domain::{LOCAL_OPERATOR_USER_ID, Participant, ParticipantRole};
+use agentsassemble_domain::{
+    LOCAL_OPERATOR_USER_ID, Participant, ParticipantRole, ParticipantStatus,
+};
 use chrono::{DateTime, Duration, Utc};
 use sqlx::Row;
 
@@ -96,6 +98,44 @@ async fn one_use_retry_precedes_current_invite_gates_and_terminal_state_wins() {
 }
 
 #[tokio::test]
+async fn sub_microsecond_clock_is_canonicalized_once_for_exact_retry() {
+    let (store, _) = fixture().await;
+    let now = DateTime::parse_from_rfc3339("2026-08-26T09:00:00.000000001Z")
+        .unwrap_or_else(|error| panic!("parse controlled clock: {error}"))
+        .to_utc();
+    insert_invite(&store, SIGNED_ONE, JOIN_ONE, "one-use-guest", 1, now).await;
+    let request = prepared(
+        JOIN_ONE,
+        BROWSER,
+        "a1a1a1a1-a1a1-41a1-81a1-a1a1a1a1a1a1",
+        "Guest",
+    );
+
+    let first = admitted(
+        store
+            .admit_human(&request, now)
+            .await
+            .unwrap_or_else(|error| panic!("admit sub-microsecond request: {error}")),
+    );
+    assert_eq!(
+        first.result().expires_at.timestamp_subsec_nanos() % 1_000,
+        0
+    );
+    let retry = admitted(
+        store
+            .admit_human(
+                &request,
+                now + Duration::seconds(1) + Duration::nanoseconds(1),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("retry sub-microsecond request: {error}")),
+    );
+    assert!(retry.deduplicated());
+    assert_eq!(retry.session_bearer(), first.session_bearer());
+    assert_eq!(retry.result(), first.result());
+}
+
+#[tokio::test]
 async fn admission_failure_rolls_back_every_product_record() {
     let (store, now) = fixture().await;
     insert_invite(&store, SIGNED_ONE, JOIN_ONE, "one-use-guest", 1, now).await;
@@ -160,6 +200,66 @@ async fn join_code_routing_ignores_current_gates_but_never_authorizes_admission(
 }
 
 #[tokio::test]
+async fn valid_custody_never_promotes_corrupt_avatar_metadata() {
+    let (store, now) = fixture().await;
+    insert_invite(&store, SIGNED_ONE, JOIN_ONE, "one-use-guest", 1, now).await;
+    let request = prepared_with_avatar(
+        JOIN_ONE,
+        BROWSER,
+        "afafafaf-afaf-4faf-8faf-afafafafafaf",
+        "Guest",
+        "/api/attachments/avatar_corrupt?view=1",
+    );
+    sqlx::query(
+        "INSERT INTO profile_attachments(attachment_id, owner_user_id, admission_room_id, admission_custody_fingerprint, invite_quota_fingerprint, filename, content_type, content, size, created_at, state, expires_at) VALUES ('avatar_corrupt', NULL, 'general', ?, ?, 'avatar.png', 'image/png', X'00', 0, ?, 'admission_pending', ?)",
+    )
+    .bind(request.avatar_custody_fingerprint().as_slice())
+    .bind(SIGNED_ONE.as_slice())
+    .bind(now.to_rfc3339())
+    .bind((now + Duration::hours(1)).timestamp())
+    .execute(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("insert corrupt pending avatar: {error}"));
+
+    assert_invalid_state(&store.admit_human(&request, now).await);
+    assert_eq!(invite_use_count(&store, SIGNED_ONE).await, 0);
+    assert_eq!(count(&store, "human_room_sessions").await, 0);
+    assert_eq!(
+        sqlx::query_scalar::<_, String>(
+            "SELECT state FROM profile_attachments WHERE attachment_id = 'avatar_corrupt'",
+        )
+        .fetch_one(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("read corrupt avatar state: {error}")),
+        "admission_pending"
+    );
+
+    sqlx::query("UPDATE profile_attachments SET size = 1 WHERE attachment_id = 'avatar_corrupt'")
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("repair pending avatar metadata: {error}"));
+    let admitted = admitted(
+        store
+            .admit_human(&request, now)
+            .await
+            .unwrap_or_else(|error| panic!("admit repaired avatar: {error}")),
+    );
+    assert_eq!(
+        admitted.result().avatar_image_url,
+        "/api/attachments/avatar_corrupt?view=1"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, String>(
+            "SELECT state FROM profile_attachments WHERE attachment_id = 'avatar_corrupt'",
+        )
+        .fetch_one(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("read bound avatar state: {error}")),
+        "bound"
+    );
+}
+
+#[tokio::test]
 async fn corrupt_retry_authority_fails_closed_without_terminalizing_session() {
     let (store, now) = fixture().await;
     insert_invite(&store, SIGNED_ONE, JOIN_ONE, "one-use-guest", 1, now).await;
@@ -186,7 +286,7 @@ async fn corrupt_retry_authority_fails_closed_without_terminalizing_session() {
     .unwrap_or_else(|error| panic!("read participant: {error}"));
     let mut corrupt_participant: Participant = serde_json::from_str(&original_participant)
         .unwrap_or_else(|error| panic!("decode participant: {error}"));
-    corrupt_participant.participant_type = "agent".to_owned();
+    corrupt_participant.room_id = "other-room".to_owned();
     sqlx::query(
         "UPDATE participants SET participant_json = ? WHERE room_id = 'general' AND participant_id = ?",
     )
@@ -209,7 +309,7 @@ async fn corrupt_retry_authority_fails_closed_without_terminalizing_session() {
     sqlx::query(
         "UPDATE participants SET participant_json = ? WHERE room_id = 'general' AND participant_id = ?",
     )
-    .bind(original_participant)
+    .bind(&original_participant)
     .bind(&participant_id)
     .execute(&store.pool)
     .await
@@ -234,6 +334,55 @@ async fn corrupt_retry_authority_fails_closed_without_terminalizing_session() {
     assert_invalid_state(
         &store
             .admit_human(&request, now + Duration::seconds(2))
+            .await,
+    );
+    assert_eq!(session_states(&store).await, vec!["active"]);
+    assert_eq!(invite_use_count(&store, SIGNED_ONE).await, 1);
+}
+
+#[tokio::test]
+async fn active_session_with_nonjoined_membership_is_not_silently_repaired() {
+    let (store, now) = fixture().await;
+    insert_invite(&store, SIGNED_ONE, JOIN_ONE, "one-use-guest", 1, now).await;
+    let request = prepared(
+        JOIN_ONE,
+        BROWSER,
+        "bcbcbcbc-bcbc-4cbc-8cbc-bcbcbcbcbcbc",
+        "Guest",
+    );
+    let first = admitted(
+        store
+            .admit_human(&request, now)
+            .await
+            .unwrap_or_else(|error| panic!("admit one-use human: {error}")),
+    );
+    let participant_id = first.result().agent_id.clone();
+    let mut participant: Participant = serde_json::from_str(
+        &sqlx::query_scalar::<_, String>(
+            "SELECT participant_json FROM participants WHERE room_id = 'general' AND participant_id = ?",
+        )
+        .bind(&participant_id)
+        .fetch_one(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("read participant: {error}")),
+    )
+    .unwrap_or_else(|error| panic!("decode participant: {error}"));
+    participant.status = ParticipantStatus::Left;
+    sqlx::query(
+        "UPDATE participants SET participant_json = ? WHERE room_id = 'general' AND participant_id = ?",
+    )
+    .bind(
+        serde_json::to_string(&participant)
+            .unwrap_or_else(|error| panic!("encode participant: {error}")),
+    )
+    .bind(&participant_id)
+    .execute(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("make participant unavailable: {error}"));
+
+    assert_invalid_state(
+        &store
+            .admit_human(&request, now + Duration::seconds(1))
             .await,
     );
     assert_eq!(session_states(&store).await, vec!["active"]);
@@ -392,6 +541,22 @@ fn prepared(
     request_id: &str,
     display_name: &str,
 ) -> PreparedHumanAdmission {
+    prepared_with_avatar(
+        invite_fingerprint,
+        browser_fingerprint,
+        request_id,
+        display_name,
+        "",
+    )
+}
+
+fn prepared_with_avatar(
+    invite_fingerprint: [u8; 32],
+    browser_fingerprint: [u8; 32],
+    request_id: &str,
+    display_name: &str,
+    avatar_image_url: &str,
+) -> PreparedHumanAdmission {
     PreparedHumanAdmission::prepare(
         HumanInviteCredentialEvidence::JoinCode {
             fingerprint: invite_fingerprint,
@@ -404,7 +569,7 @@ fn prepared(
             participant_type: "human".to_owned(),
             owner_display_name: "Host".to_owned(),
             client_id: "browser-client".to_owned(),
-            avatar_image_url: String::new(),
+            avatar_image_url: avatar_image_url.to_owned(),
         },
     )
     .unwrap_or_else(|error| panic!("prepare admission: {error}"))

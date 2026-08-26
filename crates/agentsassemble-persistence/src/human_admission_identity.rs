@@ -5,6 +5,7 @@ use sqlx::{Row, Sqlite, Transaction};
 use crate::{
     HumanInvite, PersistenceError, PreparedHumanAdmission,
     profile_attachments::replace_profile_avatar,
+    profile_attachments::validate_stored_avatar_integrity,
     profile_store::{ProfileIdentity, decode_bound_profile, project_profile_into_rooms},
 };
 
@@ -187,7 +188,7 @@ pub(super) async fn resolve_admission_avatar(
         return Ok(None);
     };
     let row = sqlx::query(
-        "SELECT state, admission_room_id, admission_custody_fingerprint, invite_quota_fingerprint, expires_at FROM profile_attachments WHERE attachment_id = ?",
+        "SELECT state, admission_room_id, admission_custody_fingerprint, invite_quota_fingerprint, expires_at, content_type, size, length(content) AS content_length, created_at FROM profile_attachments WHERE attachment_id = ?",
     )
     .bind(attachment_id)
     .fetch_optional(&mut **transaction)
@@ -210,7 +211,16 @@ pub(super) async fn resolve_admission_avatar(
         && row
             .get::<Option<i64>, _>("expires_at")
             .is_some_and(|expires_at| expires_at > now.timestamp());
-    Ok(valid.then(|| AdmissionAvatar {
+    if !valid {
+        return Ok(None);
+    }
+    validate_stored_avatar_integrity(
+        row.get::<String, _>("content_type").as_str(),
+        row.get("size"),
+        row.get("content_length"),
+        row.get::<String, _>("created_at").as_str(),
+    )?;
+    Ok(Some(AdmissionAvatar {
         attachment_id: attachment_id.to_owned(),
         url: format!("/api/attachments/{attachment_id}?view=1"),
     }))

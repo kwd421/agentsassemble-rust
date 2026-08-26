@@ -120,16 +120,14 @@ impl SqliteStore {
         .await?
         .ok_or_else(attachment_missing)?;
         let content_type = row.get::<String, _>("content_type");
-        if content_type != "image/png" {
-            return Err(invalid_stored_avatar());
-        }
         let content = row.get::<Vec<u8>, _>("content");
         let size = row.get::<i64, _>("size");
-        DateTime::parse_from_rfc3339(row.get::<String, _>("created_at").as_str())
-            .map_err(|_| invalid_stored_avatar())?;
-        if size < 0 || usize::try_from(size).ok() != Some(content.len()) {
-            return Err(invalid_stored_avatar());
-        }
+        validate_stored_avatar_integrity(
+            &content_type,
+            size,
+            i64::try_from(content.len()).unwrap_or(i64::MAX),
+            row.get::<String, _>("created_at").as_str(),
+        )?;
         Ok(ProfileAttachment {
             metadata: attachment_metadata(
                 attachment_id.to_owned(),
@@ -139,6 +137,22 @@ impl SqliteStore {
             content,
         })
     }
+}
+
+pub(crate) fn validate_stored_avatar_integrity(
+    content_type: &str,
+    size: i64,
+    content_length: i64,
+    created_at: &str,
+) -> Result<(), PersistenceError> {
+    if content_type != "image/png"
+        || !(1..=i64::try_from(MAX_ATTACHMENT_BYTES).unwrap_or(i64::MAX)).contains(&size)
+        || size != content_length
+        || DateTime::parse_from_rfc3339(created_at).is_err()
+    {
+        return Err(invalid_stored_avatar());
+    }
+    Ok(())
 }
 
 async fn prepare_profile_attachment(

@@ -67,6 +67,7 @@ impl SqliteStore {
         request: &PreparedHumanAdmission,
         now: DateTime<Utc>,
     ) -> Result<HumanAdmissionDecision, PersistenceError> {
+        let now = timestamp(now.timestamp_micros())?;
         let mut transaction = self.pool.begin().await?;
         let decision = admit_human_in_transaction(self, &mut transaction, request, now).await?;
         transaction.commit().await?;
@@ -326,18 +327,20 @@ async fn exact_admission(
         &participant_id,
         row.get::<String, _>("profile_json").as_str(),
     )?;
-    let live = state == "active"
-        && expires_at > now
-        && room.status == RoomStatus::Active
-        && participant.status == ParticipantStatus::Joined;
-    if !live {
-        if state == "active" {
-            sqlx::query("UPDATE human_room_sessions SET state = 'ended' WHERE admission_key = ?")
-                .bind(admission_key.as_slice())
-                .execute(&mut **transaction)
-                .await?;
-        }
+    if state != "active" {
         return Ok(Some(rejected(HumanAdmissionRejection::SessionUnavailable)));
+    }
+    if expires_at <= now {
+        sqlx::query("UPDATE human_room_sessions SET state = 'ended' WHERE admission_key = ?")
+            .bind(admission_key.as_slice())
+            .execute(&mut **transaction)
+            .await?;
+        return Ok(Some(rejected(HumanAdmissionRejection::SessionUnavailable)));
+    }
+    if room.status != RoomStatus::Active || participant.status != ParticipantStatus::Joined {
+        return Err(invalid_state(
+            "Stored active human session has unavailable room membership authority.",
+        ));
     }
     let result: HumanAdmissionResult =
         serde_json::from_str(row.get::<String, _>("result_json").as_str())?;
