@@ -2,6 +2,11 @@ import type { ServerRoomDockSource } from "./roomDockModel";
 import type { ServerProductSurface } from "../types/generated/ServerProductSurface";
 import { PRODUCT_SURFACE_REVISION } from "../types/generated/PRODUCT_SURFACE_REVISION";
 import { lengthDelimitedTranscript, sha256Hex } from "./lengthDelimitedCrypto";
+import {
+  assertExactKeys as exactKeys,
+  requiredString,
+  strictRecord as record,
+} from "./strictJsonContract";
 
 export type StrictRoomDirectory = {
   server_id: string;
@@ -35,35 +40,6 @@ let boundSurface: { origin: string; surface: ServerProductSurface } | null = nul
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function record(value: unknown, label: string): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`${label} 응답 형식이 올바르지 않습니다.`);
-  }
-  return value as Record<string, unknown>;
-}
-
-function exactKeys(
-  value: Record<string, unknown>,
-  expected: readonly string[],
-  label: string
-) {
-  const actual = Object.keys(value).sort();
-  const canonical = [...expected].sort();
-  if (
-    actual.length !== canonical.length ||
-    actual.some((key, index) => key !== canonical[index])
-  ) {
-    throw new Error(`${label} 응답 계약이 일치하지 않습니다.`);
-  }
-}
-
-function requiredString(value: Record<string, unknown>, key: string, label: string) {
-  if (typeof value[key] !== "string" || !value[key]) {
-    throw new Error(`${label}.${key}가 올바르지 않습니다.`);
-  }
-  return value[key] as string;
-}
 
 function validateAppearance(value: unknown, label: string) {
   const appearance = record(value, label);
