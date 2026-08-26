@@ -290,7 +290,8 @@ function validateGuide(value: unknown): RoomInviteJoinResponse["guide"] {
 export function parseRoomInviteJoinResponse(
   value: unknown,
   expectedRequestId: string,
-  expectedRoomId: string
+  expectedRoomId: string,
+  expectedClientId: string
 ): RoomInviteJoinResponse {
   const label = "방 입장";
   const payload = strictRecord(value, label);
@@ -321,6 +322,10 @@ export function parseRoomInviteJoinResponse(
   if (!expectedRoomId || common.meeting_id !== expectedRoomId) {
     throw new Error("방 입장 응답이 확인된 방과 일치하지 않습니다.");
   }
+  const clientId = requiredString(payload, "client_id", label);
+  if (!expectedClientId || clientId !== expectedClientId) {
+    throw new Error("방 입장 응답이 현재 클라이언트와 일치하지 않습니다.");
+  }
   if (typeof payload.stable_identity !== "boolean" || typeof payload.operator !== "boolean") {
     throw new Error("방 입장 신원 상태가 올바르지 않습니다.");
   }
@@ -333,7 +338,7 @@ export function parseRoomInviteJoinResponse(
     owner_id: requiredString(payload, "owner_id", label),
     stable_identity: payload.stable_identity,
     operator: payload.operator,
-    client_id: requiredString(payload, "client_id", label),
+    client_id: clientId,
     guide: validateGuide(payload.guide),
   };
 }

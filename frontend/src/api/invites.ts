@@ -148,7 +148,7 @@ export function joinRoomInvite({
   displayName?: string;
   avatarImage?: string;
   deviceToken?: string;
-  clientId?: string;
+  clientId: string;
   participantType?: "human" | "agent";
 }) {
   return postJson<unknown>("/api/room-invite/join", {
@@ -160,7 +160,9 @@ export function joinRoomInvite({
     device_token: deviceToken,
     client_id: clientId,
     participant_type: participantType,
-  }).then((payload) => parseRoomInviteJoinResponse(payload, requestId, meetingId));
+  }).then((payload) =>
+    parseRoomInviteJoinResponse(payload, requestId, meetingId, clientId)
+  );
 }
 
 export function preflightRoomInvite({

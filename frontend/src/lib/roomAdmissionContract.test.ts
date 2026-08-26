@@ -78,21 +78,34 @@ describe("room admission response contracts", () => {
 
   it("binds an exact invite response to the request and preflight room", () => {
     expect(
-      parseRoomInviteJoinResponse(join, join.request_id, "room-1")
+      parseRoomInviteJoinResponse(join, join.request_id, "room-1", "client-1")
     ).toMatchObject({
       request_id: join.request_id,
       meeting_id: "room-1",
       invite_scope: "room",
     });
     expect(() =>
-      parseRoomInviteJoinResponse({ ...join, invite_scope: undefined }, join.request_id, "room-1")
+      parseRoomInviteJoinResponse(
+        { ...join, invite_scope: undefined },
+        join.request_id,
+        "room-1",
+        "client-1"
+      )
     ).toThrow(/invite_scope/);
     expect(() =>
-      parseRoomInviteJoinResponse({ ...join, unexpected: true }, join.request_id, "room-1")
+      parseRoomInviteJoinResponse(
+        { ...join, unexpected: true },
+        join.request_id,
+        "room-1",
+        "client-1"
+      )
     ).toThrow(/계약/);
     expect(() =>
-      parseRoomInviteJoinResponse(join, join.request_id, "room-2")
+      parseRoomInviteJoinResponse(join, join.request_id, "room-2", "client-1")
     ).toThrow(/확인된 방/);
+    expect(() =>
+      parseRoomInviteJoinResponse(join, join.request_id, "room-1", "client-2")
+    ).toThrow(/현재 클라이언트/);
   });
 
   it("accepts only the canonical operator pairing shape", () => {
