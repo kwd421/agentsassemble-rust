@@ -528,7 +528,85 @@ presented value is not converted to absence or a compatibility path.
   mandatory architecture/source-growth gates, workspace all-target build, formatter,
   and diff checks passed. The implementation is one 274-line owner plus a two-line
   module/export connection; the commit has 276 additions.
-- Daybreaker manually approved the pushed commit with C=0/H=0/M=0. The critical-web
-  review is still in progress and is recorded before this increment is treated as
-  closed. No Deep Scan, automated security scanner, provider, or Computer Use
-  resource ran.
+- Daybreaker and the critical-web reviewer manually approved the pushed commit with
+  C=0/H=0/M=0. The web review separately re-read the credential authority, durable
+  snapshot, copied HTTP helper, and inactive route registry. It retained the copied
+  frontend's old device-token generator as an explicit activation dependency rather
+  than treating the inactive server boundary as browser parity. No Deep Scan,
+  automated security scanner, provider, or Computer Use resource ran.
+
+## Deterministic human session bearer
+
+Commit `1b1c7e6` adds the restart-stable `aas1.` issuer required by the future atomic
+admission owner. It also moves presented-session shape validation out of preflight so
+issuance and lookup fingerprinting have one format owner. It does not create a
+session row, inspect terminal admission state, register a route, or claim a reachable
+session flow.
+
+### Prior cost, threat, and change intent
+
+A committed admission must return the same raw bearer after a lost response without
+storing that bearer. A random issuer would make recovery impossible; truncating the
+MAC to the original generic random issuer's 24-byte body would change the reachable
+human-admission shape. Independently defining `aas1.` in issuance and preflight would
+also permit their prefix, length, canonical encoding, or fingerprint rules to drift.
+
+The issuer uses the existing persisted 32-byte session HMAC key and the one fixed
+transcript `agentsassemble-human-session-bearer-v1\0 || admission_key[32]`. The NUL
+terminator and fixed-size admission key make the two fields unambiguous, while the
+session context is disjoint from the existing `aai1.<payload>` invite signing input.
+No key derivation layer or second persistent secret is needed.
+
+### Preserved contract and design size
+
+- HMAC-SHA256 consumes the complete fixed transcript. Its full 32-byte output is
+  encoded as 43 canonical unpadded Base64url characters after the exact `aas1.`
+  prefix, producing the approved 48-character bearer without truncation.
+- SHA-256 covers that complete 48-byte ASCII bearer and exposes only the resulting
+  `[u8; 32]` for durable lookup. The authority and issued value implement neither
+  `Debug` nor serialization; tests do not include the actual bearer in failure text.
+- `AppState` constructs the invite authority and bearer authority from the same
+  database-bound host identity. Each authority owns one separate `Arc<[u8; 32]>`, so
+  initialization makes one additional 32-byte secret copy and allocation; later
+  `AppState` clones share both allocations. A shared-key wrapper would save only that
+  fixed copy while coupling two disjoint credential domains, so it is not added
+  without a measured need.
+- The same module now checks every presented bearer for exact ASCII length, prefix,
+  URL-safe alphabet, 32-byte decode, and decode/re-encode canonicality before hashing.
+  Preflight still forwards only the fingerprint and retains its exact
+  NotApplicable/Unavailable/Live state meanings.
+- The unit adds no RNG, database access, durable state, cache, trait, fallback,
+  alternate token format, or background owner. Future admission code must call it
+  only for a newly committing or exact-live row; terminal rows remain unavailable.
+
+### Resource cost and verification
+
+- Each issue performs one HMAC-SHA256 over the fixed context plus 32-byte admission
+  key, one Base64url encode of 32 bytes, and one SHA-256 over 48 bytes. The returned
+  48-byte `String` is allocated once at exact capacity and the maintained Base64
+  encoder appends directly into it.
+- During implementation review, `format!` was observed to construct a separate
+  43-byte encoded-body `String` before the returned bearer. Direct `encode_string`
+  removes that one known temporary heap allocation while preserving the fixed vector.
+  The pinned `base64 0.22.1` implementation writes through a 1,024-byte stack buffer
+  and `StringSink::push_str`; after the five-byte prefix, the preallocated string has
+  exactly the required 43 bytes of remaining capacity. This is a structural
+  allocation count, not a production latency or throughput claim. Parsing a
+  presented bearer retains its two bounded decode/re-encode temporaries for
+  canonicality; no speculative parser optimization was added.
+- A fixed vector locks the transcript, full MAC, bearer shape, and complete-bearer
+  fingerprint. Tests prove same key/admission determinism, different admission
+  separation, canonical presented parsing, exact recovery after reopening the same
+  SQLite host, and a different result from a freshly initialized host.
+- Focused issuer tests passed 3/3 and the complete server library passed 51/51.
+  Warning-denied server all-target Clippy, formatter, mandatory architecture and
+  source-growth gates, workspace all-target build, and diff checks passed. The new
+  format owner is 199 lines; the commit has 218 additions and 11 deletions across
+  four files.
+- Daybreaker and the critical-web reviewer manually approved the pushed commit with
+  C=0/H=0/M=0. The web review independently confirmed the disjoint HMAC domains,
+  complete-MAC and complete-bearer hashing, restart recovery, fresh-host separation,
+  parser preservation, and the pinned encoder's single output allocation. It also
+  retained terminal-row exclusion as a mandatory integration condition: the future
+  admission transaction may issue only for a newly committing or exact-live row.
+  No Deep Scan, automated security scanner, provider, or Computer Use resource ran.
