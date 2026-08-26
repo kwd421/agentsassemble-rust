@@ -1,6 +1,8 @@
 use agentsassemble_persistence::{PersistenceError, SqliteStore};
 use tokio::sync::broadcast;
 
+const PUBLICATION_RETRY_INTERVAL: std::time::Duration = std::time::Duration::from_millis(250);
+
 pub(crate) async fn drain_room_publications(
     store: &SqliteStore,
     events: &broadcast::Sender<agentsassemble_domain::RoomEvent>,
@@ -33,6 +35,17 @@ pub(crate) async fn publish_durable_room_events(
             "durable room-event publication failed; the room owner will retry"
         );
     }
+}
+
+pub(crate) async fn start_publication_owner(
+    store: &SqliteStore,
+    events: &broadcast::Sender<agentsassemble_domain::RoomEvent>,
+    room_id: &str,
+) -> tokio::time::Interval {
+    publish_durable_room_events(store, events, room_id).await;
+    let mut interval = tokio::time::interval(PUBLICATION_RETRY_INTERVAL);
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    interval
 }
 
 #[cfg(test)]

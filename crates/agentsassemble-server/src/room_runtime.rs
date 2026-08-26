@@ -6,7 +6,8 @@ use std::{
 
 use agentsassemble_domain::{AuthenticatedPrincipal, RoomEvent};
 use agentsassemble_persistence::{
-    AgentTurnAssignment, CommandOutcome, PersistenceError, SqliteStore,
+    AgentTurnAssignment, CommandOutcome, HumanAdmissionDecision, HumanAdmissionRejection,
+    PersistenceError, PreparedHumanAdmission, SqliteStore,
 };
 use agentsassemble_protocol::RoomAction;
 use agentsassemble_provider::{
@@ -16,13 +17,13 @@ use serde_json::Value;
 use tokio::{
     sync::{Mutex, OwnedSemaphorePermit, broadcast, mpsc, oneshot},
     task::{JoinHandle, JoinSet},
-    time::MissedTickBehavior,
 };
 use tokio_util::sync::CancellationToken;
 
 use crate::{
     agent_create_runtime::AgentCreateExecution,
-    event_publication::publish_durable_room_events,
+    event_publication::{publish_durable_room_events, start_publication_owner},
+    human_admission_runtime::{HumanAdmissionCommand, handle_human_admission},
     lifecycle_command_tracker::LifecycleCommandTracker,
     principal_mutation_admission::{MutationDebit, PrincipalMutationAdmission},
     provider_recovery_tracker::ProviderRecoveryTracker,
@@ -43,7 +44,6 @@ const ROOM_QUEUE_CAPACITY: usize = 128;
 const ROOM_TOOL_QUEUE_CAPACITY: usize = 64;
 const EVENT_RECEIVER_CAPACITY: usize = 256;
 const PUBLICATION_WAKE_CAPACITY: usize = 128;
-const PUBLICATION_RETRY_INTERVAL: Duration = Duration::from_millis(250);
 const ROOM_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(3);
 
 pub(crate) struct RoomCommand {
@@ -58,8 +58,9 @@ pub(crate) struct RoomCommand {
 
 #[derive(Clone)]
 struct RoomHandle {
-    commands: mpsc::Sender<RoomCommand>,
+    mutations: mpsc::Sender<RoomMutation>,
     events: broadcast::Sender<RoomEvent>,
+    human_session_revocations: broadcast::Sender<[u8; 32]>,
     publication_wake: mpsc::Sender<()>,
     provider_recovery: mpsc::Sender<RecoveredAssignments>,
 }
@@ -71,6 +72,7 @@ struct RoomTaskContext {
     provider_adapter: ProviderAdapter,
     cancellation: CancellationToken,
     event_tx: broadcast::Sender<RoomEvent>,
+    human_session_revocation_tx: broadcast::Sender<[u8; 32]>,
     room_tool_ingress: ProviderRoomToolIngress,
     lifecycle_commands: LifecycleCommandTracker,
 }
@@ -147,8 +149,8 @@ impl RoomRuntime {
         let handle = self.handle(&principal.room_id).await;
         let (reply, response) = oneshot::channel();
         handle
-            .commands
-            .try_send(RoomCommand {
+            .mutations
+            .try_send(RoomMutation::Command(RoomCommand {
                 principal,
                 request_id,
                 action,
@@ -156,7 +158,7 @@ impl RoomRuntime {
                 mutation_debit,
                 _inflight_permit: inflight_permit,
                 reply,
-            })
+            }))
             .map_err(|error| {
                 CommandFailure::unresolved(match error {
                     mpsc::error::TrySendError::Full(_) => PersistenceError::CommandRejected {
@@ -177,8 +179,56 @@ impl RoomRuntime {
         })?
     }
 
+    /// Enqueues one prepared human admission on the room's bounded mutation owner.
+    ///
+    /// # Errors
+    ///
+    /// Fails when routing, queue custody, or the admission transaction fails.
+    pub async fn admit_human(
+        &self,
+        request: PreparedHumanAdmission,
+    ) -> Result<HumanAdmissionDecision, PersistenceError> {
+        let Some(room_id) = self.store.human_admission_room_id(&request).await? else {
+            return Ok(HumanAdmissionDecision::Rejected(
+                HumanAdmissionRejection::InviteNotFound,
+            ));
+        };
+        let handle = self.handle(&room_id).await;
+        let (reply, response) = oneshot::channel();
+        handle
+            .mutations
+            .try_send(RoomMutation::HumanAdmission(HumanAdmissionCommand {
+                request,
+                reply,
+            }))
+            .map_err(|error| match error {
+                mpsc::error::TrySendError::Full(_) => PersistenceError::CommandRejected {
+                    code: "room_busy",
+                    message: "Room mutation queue is full.".to_owned(),
+                },
+                mpsc::error::TrySendError::Closed(_) => PersistenceError::CommandRejected {
+                    code: "room_unavailable",
+                    message: "Room mutation task stopped.".to_owned(),
+                },
+            })?;
+        response
+            .await
+            .map_err(|_| PersistenceError::CommandRejected {
+                code: "room_unavailable",
+                message: "Room admission response was lost.".to_owned(),
+            })?
+    }
+
     pub async fn subscribe(&self, room_id: &str) -> broadcast::Receiver<RoomEvent> {
         self.handle(room_id).await.events.subscribe()
+    }
+
+    /// Subscribes to post-commit replacement of human session fingerprints.
+    pub async fn session_revocations(&self, room_id: &str) -> broadcast::Receiver<[u8; 32]> {
+        self.handle(room_id)
+            .await
+            .human_session_revocations
+            .subscribe()
     }
 
     pub async fn notify_committed_events(&self, events: &[RoomEvent]) {
@@ -308,15 +358,17 @@ impl RoomRuntime {
         if let Some(handle) = rooms.get(room_id) {
             return handle.clone();
         }
-        let (command_tx, command_rx) = mpsc::channel::<RoomCommand>(ROOM_QUEUE_CAPACITY);
+        let (mutation_tx, mutation_rx) = mpsc::channel::<RoomMutation>(ROOM_QUEUE_CAPACITY);
         let (event_tx, _) = broadcast::channel(EVENT_RECEIVER_CAPACITY);
+        let (human_session_revocation_tx, _) = broadcast::channel(EVENT_RECEIVER_CAPACITY);
         let (publication_tx, publication_rx) = mpsc::channel(PUBLICATION_WAKE_CAPACITY);
         let (provider_recovery_tx, provider_recovery_rx) = mpsc::channel(ROOM_TOOL_QUEUE_CAPACITY);
         let (room_tool_ingress, room_tool_rx) =
             ProviderRoomToolIngress::channel(ROOM_TOOL_QUEUE_CAPACITY);
         let handle = RoomHandle {
-            commands: command_tx,
+            mutations: mutation_tx,
             events: event_tx.clone(),
+            human_session_revocations: human_session_revocation_tx.clone(),
             publication_wake: publication_tx,
             provider_recovery: provider_recovery_tx,
         };
@@ -333,10 +385,11 @@ impl RoomRuntime {
                 provider_adapter,
                 cancellation,
                 event_tx,
+                human_session_revocation_tx,
                 room_tool_ingress,
                 lifecycle_commands: self.lifecycle_commands.clone(),
             },
-            command_rx,
+            mutation_rx,
             publication_rx,
             room_tool_rx,
             provider_recovery_rx,
@@ -348,7 +401,7 @@ impl RoomRuntime {
 
 fn spawn_room_task(
     context: RoomTaskContext,
-    mut command_rx: mpsc::Receiver<RoomCommand>,
+    mut mutation_rx: mpsc::Receiver<RoomMutation>,
     mut publication_rx: mpsc::Receiver<()>,
     mut room_tool_rx: mpsc::Receiver<ProviderRoomToolCommand>,
     mut provider_recovery_rx: mpsc::Receiver<RecoveredAssignments>,
@@ -361,24 +414,22 @@ fn spawn_room_task(
             provider_adapter,
             cancellation,
             event_tx,
+            human_session_revocation_tx,
             room_tool_ingress,
             lifecycle_commands,
         } = context;
         let mut turn_tasks = JoinSet::new();
-        let mut publication_retry = tokio::time::interval(PUBLICATION_RETRY_INTERVAL);
+        let mut publication_retry = start_publication_owner(&store, &event_tx, &room_id).await;
         let mut provider_write_budget = ProviderWriteBudget::new();
-        publication_retry.set_missed_tick_behavior(MissedTickBehavior::Delay);
-        publish_durable_room_events(&store, &event_tx, &room_id).await;
         loop {
             let input = tokio::select! {
                 () = cancellation.cancelled() => {
-                    turn_tasks.abort_all();
-                    while turn_tasks.join_next().await.is_some() {}
+                    abort_provider_turns(&mut turn_tasks).await;
                     break;
                 }
-                command = command_rx.recv() => {
-                    let Some(command) = command else { break; };
-                    RoomInput::Command(command)
+                mutation = mutation_rx.recv() => {
+                    let Some(mutation) = mutation else { break; };
+                    RoomInput::Mutation(mutation)
                 }
                 wake = publication_rx.recv() => {
                     let Some(()) = wake else { break; };
@@ -399,8 +450,8 @@ fn spawn_room_task(
                 }
             };
             match input {
-                RoomInput::Command(command) => {
-                    Box::pin(handle_room_command(
+                RoomInput::Mutation(mutation) => {
+                    handle_room_mutation(
                         RoomCommandOwners {
                             store: &store,
                             provider_catalog: &provider_catalog,
@@ -410,8 +461,10 @@ fn spawn_room_task(
                             room_tool_ingress: &room_tool_ingress,
                             lifecycle_commands: &lifecycle_commands,
                         },
-                        command,
-                    ))
+                        &room_id,
+                        &human_session_revocation_tx,
+                        mutation,
+                    )
                     .await;
                 }
                 RoomInput::Provider(result) => {
@@ -453,6 +506,32 @@ fn spawn_room_task(
             }
         }
     })
+}
+
+async fn abort_provider_turns(turn_tasks: &mut JoinSet<ProviderTurnTaskResult>) {
+    turn_tasks.abort_all();
+    while turn_tasks.join_next().await.is_some() {}
+}
+
+async fn handle_room_mutation(
+    owners: RoomCommandOwners<'_>,
+    room_id: &str,
+    session_revocations: &broadcast::Sender<[u8; 32]>,
+    mutation: RoomMutation,
+) {
+    match mutation {
+        RoomMutation::Command(command) => Box::pin(handle_room_command(owners, command)).await,
+        RoomMutation::HumanAdmission(command) => {
+            handle_human_admission(
+                owners.store,
+                room_id,
+                owners.event_tx,
+                session_revocations,
+                command,
+            )
+            .await;
+        }
+    }
 }
 
 async fn handle_room_command(owners: RoomCommandOwners<'_>, command: RoomCommand) {
@@ -519,11 +598,16 @@ async fn handle_room_command(owners: RoomCommandOwners<'_>, command: RoomCommand
 }
 
 enum RoomInput {
-    Command(RoomCommand),
+    Mutation(RoomMutation),
     Provider(Box<Result<ProviderTurnTaskResult, tokio::task::JoinError>>),
     Publication,
     Tool(ProviderRoomToolCommand),
     ProviderRecovery(Box<RecoveredAssignments>),
+}
+
+enum RoomMutation {
+    Command(RoomCommand),
+    HumanAdmission(HumanAdmissionCommand),
 }
 
 async fn execute_command(

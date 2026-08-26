@@ -48,6 +48,7 @@ mod event_publication;
 mod host_ticket;
 mod http_api;
 mod http_transport;
+mod human_admission_runtime;
 mod human_browser_credential;
 mod human_invite_credentials;
 mod human_invite_preflight;
