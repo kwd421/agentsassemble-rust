@@ -55,23 +55,13 @@ pub(crate) async fn run(
             () = state.shutdown.cancelled() => return,
             () = &mut expiry => return,
             revoked = receive_revocation(&mut revocations), if revocations.is_some() => {
-                match revoked {
-                    Ok(fingerprint) => {
-                        if human_session.as_ref().is_some_and(|authorization| {
-                            authorization.session_fingerprint() == &fingerprint
-                        }) {
-                            return;
-                        }
-                    }
-                    Err(broadcast::error::RecvError::Lagged(_)) => {
-                        if refresh_human_session(&state, &mut principal, &mut human_session).await.is_none() {
-                            return;
-                        }
-                    }
-                    Err(broadcast::error::RecvError::Closed) => {
-                        let _ = refresh_human_session(&state, &mut principal, &mut human_session).await;
-                        return;
-                    }
+                if !session_remains_authorized_after_revocation_signal(
+                    &state,
+                    &mut principal,
+                    &mut human_session,
+                    revoked,
+                ).await {
+                    return;
                 }
             }
             incoming = tokio::time::timeout(SOCKET_IDLE_TIMEOUT, receiver.next()) => {
@@ -238,6 +228,28 @@ async fn receive_revocation(
     }
 }
 
+async fn session_remains_authorized_after_revocation_signal(
+    state: &AppState,
+    principal: &mut agentsassemble_domain::AuthenticatedPrincipal,
+    human_session: &mut Option<HumanSessionAuthorization>,
+    signal: Result<[u8; 32], broadcast::error::RecvError>,
+) -> bool {
+    match signal {
+        Ok(fingerprint) => human_session
+            .as_ref()
+            .is_none_or(|authorization| authorization.session_fingerprint() != &fingerprint),
+        Err(broadcast::error::RecvError::Lagged(_)) => {
+            refresh_human_session(state, principal, human_session)
+                .await
+                .is_some()
+        }
+        Err(broadcast::error::RecvError::Closed) => {
+            let _ = refresh_human_session(state, principal, human_session).await;
+            false
+        }
+    }
+}
+
 async fn send_authorized_frame(
     state: &AppState,
     principal: &mut agentsassemble_domain::AuthenticatedPrincipal,
@@ -263,4 +275,104 @@ async fn send_authorized_nack(
         .send_nack(sender, &state.shutdown, nack.0, nack.1, nack.2, nack.3)
         .await
         .ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use agentsassemble_domain::{ProviderCatalog, UserProfilePatch};
+    use agentsassemble_provider::ProviderCatalogService;
+    use tokio::sync::broadcast;
+
+    use super::{receive_revocation, session_remains_authorized_after_revocation_signal};
+    use crate::{AppState, HostSecret, TicketStore, ticket_tests::HumanSessionFixture};
+
+    #[tokio::test]
+    async fn lagged_revocations_revalidate_and_closed_notification_fails_closed() {
+        let fixture = HumanSessionFixture::new(1).await;
+        let authorization = fixture.authorize(0).await;
+        let mut principal = authorization.principal().clone();
+        let mut human_session = Some(authorization);
+        let state = AppState::local(
+            fixture.store().clone(),
+            TicketStore::new(Duration::from_secs(30), 8),
+            HostSecret::new("socket-revocation-test-host-secret")
+                .unwrap_or_else(|error| panic!("construct test host secret: {error}")),
+            ProviderCatalogService::fixed(ProviderCatalog::default()),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("construct socket revocation state: {error}"));
+
+        fixture
+            .store()
+            .update_human_session_profile(
+                human_session
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("test human session is absent")),
+                UserProfilePatch {
+                    display_name: Some("Lag Refresh".to_owned()),
+                    ..UserProfilePatch::default()
+                },
+            )
+            .await
+            .unwrap_or_else(|error| panic!("update profile before lag signal: {error}"));
+        let (lag_tx, lag_rx) = broadcast::channel(1);
+        lag_tx
+            .send([0x11; 32])
+            .unwrap_or_else(|error| panic!("send first lag signal: {error}"));
+        lag_tx
+            .send([0x22; 32])
+            .unwrap_or_else(|error| panic!("send second lag signal: {error}"));
+        let mut lag_rx = Some(lag_rx);
+        let lagged = receive_revocation(&mut lag_rx).await;
+        assert!(matches!(
+            lagged,
+            Err(broadcast::error::RecvError::Lagged(1))
+        ));
+        assert!(
+            session_remains_authorized_after_revocation_signal(
+                &state,
+                &mut principal,
+                &mut human_session,
+                lagged,
+            )
+            .await
+        );
+        assert_eq!(principal.display_name, "Lag Refresh");
+
+        fixture
+            .store()
+            .update_human_session_profile(
+                human_session
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("refreshed human session is absent")),
+                UserProfilePatch {
+                    display_name: Some("Closed Refresh".to_owned()),
+                    ..UserProfilePatch::default()
+                },
+            )
+            .await
+            .unwrap_or_else(|error| panic!("update profile before closed signal: {error}"));
+        let (closed_tx, closed_rx) = broadcast::channel::<[u8; 32]>(1);
+        drop(closed_tx);
+        let mut closed_rx = Some(closed_rx);
+        let closed = receive_revocation(&mut closed_rx).await;
+        assert!(matches!(closed, Err(broadcast::error::RecvError::Closed)));
+        assert!(
+            !session_remains_authorized_after_revocation_signal(
+                &state,
+                &mut principal,
+                &mut human_session,
+                closed,
+            )
+            .await
+        );
+        assert_eq!(principal.display_name, "Closed Refresh");
+        state
+            .rooms
+            .shutdown()
+            .await
+            .unwrap_or_else(|error| panic!("shutdown socket revocation state: {error}"));
+    }
 }

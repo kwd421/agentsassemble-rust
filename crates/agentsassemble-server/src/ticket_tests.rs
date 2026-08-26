@@ -369,13 +369,13 @@ async fn public_partition_preserves_private_reserve_and_reclaims_both_classes() 
     assert_eq!(production.public_session_capacity(), 1_792);
 }
 
-struct HumanSessionFixture {
+pub(crate) struct HumanSessionFixture {
     store: SqliteStore,
     fingerprints: Vec<[u8; 32]>,
 }
 
 impl HumanSessionFixture {
-    async fn new(count: usize) -> Self {
+    pub(crate) async fn new(count: usize) -> Self {
         let store = SqliteStore::open("sqlite::memory:")
             .await
             .unwrap_or_else(|error| panic!("open human session fixture: {error}"));
@@ -462,7 +462,11 @@ impl HumanSessionFixture {
         }
     }
 
-    async fn authorize(&self, index: usize) -> HumanSessionAuthorization {
+    pub(crate) const fn store(&self) -> &SqliteStore {
+        &self.store
+    }
+
+    pub(crate) async fn authorize(&self, index: usize) -> HumanSessionAuthorization {
         self.store
             .authorize_human_session(&self.fingerprints[index])
             .await
