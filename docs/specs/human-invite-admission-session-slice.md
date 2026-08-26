@@ -221,11 +221,12 @@ The existing 4,096-item grant store remains one implementation owner, not a seco
 session cache. Grants from this public-human slice have hard sublimits of 1,792 total
 and 8 outstanding per session fingerprint, leaving at least 2,304 entries for
 local/private authority. An admitted session may exchange at most
-64 grants in a rolling 60-second window. The copied foreground flow needs fewer than
-ten exchanges to join, load profile/preferences, and open its socket; the larger
-ceiling preserves ordinary interaction while bounding a stolen session's allocation
-and lock/UUID churn. The limiter stores only one bounded bucket state per live
-session and disappears on session end; it does not become authentication authority.
+a token-bucket capacity of 64, refilled at 64 grants per minute. The copied foreground
+flow needs fewer than ten exchanges to join, load profile/preferences, and open its
+socket; the larger ceiling preserves ordinary interaction while bounding a stolen
+session's allocation and lock/UUID churn. The limiter stores only token count and
+last-refill time per live session and disappears on session end; it does not become
+authentication authority.
 
 A session WebSocket subscribes to revocation notification before its connect grant
 is consumed, then revalidates the database after subscription. It revalidates before
@@ -246,7 +247,9 @@ revocation notification. Admission reuses `room_event_publication_cursors`: comm
 durably records the exact event handoff, and runtime/startup drains acknowledge that
 cursor only after broadcast publication. Handler cancellation can lose a response
 but cannot lose an accepted commit-to-publication handoff; exact retry recovers the
-stored result, and cursor replay does not create a second canonical event.
+stored result. A crash between broadcast offer and cursor acknowledgement may offer
+the same sequence again after restart; sequence-aware subscribers tolerate that
+at-least-once delivery, and cursor replay never creates a second durable event.
 
 ## Transport and frontend activation
 
@@ -336,19 +339,22 @@ flag is added meanwhile.
   an exchange endpoint without provenance sublimits lets public sessions occupy all
   slots or repeatedly allocate and expire grants, starving private control.
 - Change intent: keep the existing store and add only provenance accounting, pending
-  sublimits, and a 64-per-60-second live-session exchange bucket.
+  sublimits, and a capacity-64/64-per-minute live-session token bucket.
 - Preserved contract: grants stay opaque, short-lived, exact-purpose, one-use, and
   consume-on-wrong-purpose; local/private issuers keep a reserved capacity floor.
 - Trade-off: one small bucket record is held per live session and an abusive client
   receives an explicit rate/capacity error instead of allocating more grants.
 - Verification: boundaries prove 8-per-session, 1,792-public total, the 2,304-entry
-  private reserve, expiry reclamation, and 64-per-window behavior without sleeps.
+  private reserve, expiry reclamation, and token-bucket capacity/refill behavior with
+  a controlled clock rather than sleeps.
 
 No additional cache, repository interface, background cleanup framework, generic
 credential provider, multi-database saga, or future agent-session abstraction is
-authorized by this slice. Expired rows are filtered authoritatively and removed by
-bounded work piggybacked on relevant writes unless measured evidence later proves a
-separate cleanup task necessary.
+authorized by this slice. Expired rows are filtered authoritatively. Admission
+tombstones remain until their backing invite is terminal so a reusable exact retry
+cannot become a new admission after cleanup; only then may bounded work on relevant
+writes remove them. Expired pending attachments may be reclaimed by the same bounded
+write-path work. A separate cleanup task requires later measured evidence.
 
 ## Non-goals
 
@@ -392,8 +398,9 @@ separate cleanup task necessary.
 - Real WebSocket tests prove initial snapshot readiness, normal/read-only command
   behavior, revoked-ticket denial, expiry close, outbound denial after revoke, and
   immediate connected-session close. Races use barriers or controlled channels,
-  never arbitrary sleeps. Handler-cancellation and restart tests prove the durable
-  publication cursor drains exactly once after an accepted admission commit.
+  never arbitrary sleeps. Handler-cancellation and restart tests prove one durable
+  canonical event and eventual publication-cursor acknowledgement after an accepted
+  admission commit; replay may re-offer only the same sequence.
 - Browser-unit tests prove exactly one `aad1_` credential is reused by preflight,
   pre-join upload, and admission; malformed stored values, unavailable WebCrypto,
   and failed durable storage stop before network I/O without generating a fallback.
