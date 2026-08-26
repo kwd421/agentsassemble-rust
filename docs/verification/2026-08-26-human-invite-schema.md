@@ -2,9 +2,10 @@
 
 Status: partial slice evidence; canonical invite management, credential
 authentication, read-only preflight, canonical admission inputs, the atomic SQLite
-plus bounded RoomRuntime owners, and local HTTP preflight/join are implemented. The
-browser credential cutover, session-derived grants, authenticated room socket, and
-trusted public ingress are not implemented by these commits.
+plus bounded RoomRuntime owners, local HTTP preflight/join, and the fail-closed
+browser credential owner are implemented. Pre-join upload, session-derived grants,
+the authenticated room socket, and trusted public ingress are not implemented by
+these commits.
 
 ## Provenance and scope
 
@@ -25,7 +26,7 @@ trusted public ingress are not implemented by these commits.
   `657701a`, `6f91ab7`, `ee747ab`, `5f44cec`, `d76b2e6`, and security correction
   `c99a031`; queue routing/runtime ownership is `29d3d66`, `cf29ecd`, and `06587b0`,
   with exact-recovery/avatar correction `28d5d56`. Local HTTP preflight/join is
-  `b32c2b7`.
+  `b32c2b7`; the browser credential owner and call-site cutover is `caf9e37`.
 - The schema is fresh-only at version 38. No migration, compatibility reader,
   fallback column, or partially upgraded authority is accepted.
 
@@ -868,8 +869,39 @@ Commit `b32c2b7` mounts the current `/api/room-invite/admission` and
   failures. Warning-denied all-target/all-feature Clippy, formatter, workspace check,
   architecture/source-growth/policy gates, and `make check` passed. The commit is 792
   insertions and 2 deletions, below the mandatory split threshold.
-- Explicit incompleteness: the copied browser still uses its old fallback-capable
-  device helper and therefore cannot satisfy `aad1_`; pre-join avatar upload,
-  live-session ticket exchange, session-authenticated WebSocket, leave/revoke, and
-  trusted public ingress remain unavailable. No packaged frontend parity or
-  Computer Use result is claimed.
+- Explicit incompleteness: the copied browser now produces the canonical `aad1_`
+  credential and can call the local preflight/join routes, but the Rust pre-join
+  avatar upload, live-session ticket exchange, session-authenticated WebSocket,
+  leave/revoke, and trusted public ingress remain unavailable. No packaged frontend
+  parity or Computer Use result is claimed.
+
+## Fail-closed browser credential owner
+
+Commit `caf9e37` cuts every current browser identity caller over from the copied
+fallback-capable helper to one canonical durable credential owner.
+
+- Prior observed threat: the copied helper accepted arbitrary stored strings with a
+  length of eight and generated `Date.now`/`Math.random` values when native UUID or
+  storage failed. The latter could be weak and page-scoped. Because the durable
+  admission and pending-upload subjects include this credential, regeneration can
+  change response-loss custody and browser-bound quota identity rather than reporting
+  that durable identity is unavailable.
+- Intent and smallest design: one new origin-storage key owns exactly `aad1_` plus
+  canonical unpadded Base64url for 32 `crypto.getRandomValues` bytes. Creation performs
+  one fixed-size random fill, one write, and one readback equality check. Reuse reads
+  and canonically decodes/re-encodes only 32 bytes. The old key remains untouched and
+  is never a migration or compatibility input. No cache, context, background work,
+  package, alternate generator, or ephemeral success path was added.
+- Preserved contract: the same value is supplied through the existing `device_token`
+  body/header fields to preflight, admission, pre-join upload, recovery, pairing,
+  host claim, profile, and preference paths. Unsupported WebCrypto, storage access or
+  durability failure, and malformed persisted values are visible failures. Preflight,
+  join, and pre-join upload tests prove those failures occur before network adapter
+  invocation; stored malformed values are not repaired or deleted.
+- Actual cost and verification: first use adds one exact storage readback after the
+  write; subsequent use is one storage read plus fixed 32-byte validation. No CPU,
+  heap, disk, or latency improvement is claimed. All 77 frontend test files and 385
+  tests pass. The production TypeScript/Vite build and exact copied-CSS cascade/hash
+  verification pass. `make check` passes architecture, source-growth, policy,
+  formatting, and workspace compilation gates. The commit is 361 insertions and 47
+  deletions across 11 files, below 1,000 lines.

@@ -1,8 +1,9 @@
 # Human Invite, Admission, and Room Session Slice
 
-Status: atomic SQLite, bounded RoomRuntime admission, and local HTTP preflight/join
-owners implemented and locally verified; browser credential cutover, derived grants,
-WebSocket session activation, and trusted public ingress remain incomplete
+Status: atomic SQLite, bounded RoomRuntime admission, local HTTP preflight/join, and
+the fail-closed browser credential owner are implemented and locally verified;
+pre-join upload, derived grants, WebSocket session activation, and trusted public
+ingress remain incomplete
 
 ## Definition
 
@@ -635,6 +636,45 @@ flag is added meanwhile.
   architecture/source-growth gates, and `make check` passed. The route module is 434
   lines; commit `b32c2b7` is 792 insertions/2 deletions across seven files, below the
   1,000-line review threshold.
+
+### One durable browser admission credential without fallback
+
+- Prior cost and threat: the copied frontend accepted any trimmed stored value of at
+  least eight characters. New values preferred `randomUUID`, but missing crypto or
+  failed `localStorage` silently fell back to `Date.now` plus `Math.random` and could
+  return a page-lifetime value without durable confirmation. That value is admission
+  and pending-upload custody input: weak generation permits guessing, while silent
+  regeneration changes exact-retry identity and can reset browser-bound quota
+  subjects. It also cannot pass the Rust boundary's exact `aad1_` parser.
+- Change intent: commit `caf9e37` replaces that owner with exactly one fresh-only
+  `agentsassemble.browserCredential.v1` value: `aad1_` plus 32 bytes from
+  `crypto.getRandomValues`, encoded as canonical unpadded Base64url. First use performs
+  one storage lookup, one 32-byte random fill, one write, and one exact readback.
+  Later use performs one storage lookup and canonical decode/re-encode of 32 bytes.
+  The old device-token key is neither read, changed, imported, nor migrated.
+- Preserved contract: every current browser identity call site obtains the same
+  durable value; preflight, join, pre-join avatar upload, recovery, pairing, host
+  claim, startup identity, and local profile/preferences continue to use the existing
+  request fields and headers. Missing WebCrypto, inaccessible/non-durable storage, or
+  a malformed stored value now produces a visible hard stop. Admission and pre-join
+  upload catch that failure before invoking their network adapters. No malformed
+  value is silently deleted or replaced.
+- Design and resource bound: the existing identity module remains the sole owner.
+  There is no credential context, memory cache, second storage copy, timer, task,
+  dependency, compatibility reader, or future credential abstraction. The fixed
+  32-byte arrays and 48-character string are the complete live data. This removes a
+  concrete weak/ephemeral-authority threat; it does not claim lower CPU, memory,
+  disk, or latency, and the first-use readback intentionally adds one tiny storage
+  read to prove durability.
+- Verification: focused browser tests prove one random fill and exact reuse,
+  canonical 48-character shape, no old-key import, malformed-value preservation,
+  WebCrypto failure, and failed write confirmation. Hook/component tests prove
+  credential failure performs no preflight, join, or pre-join upload request and is
+  rendered as an error. All 77 frontend test files (385 tests) pass. TypeScript/Vite
+  production build passes, including the exact original CSS cascade/hash check; the
+  workspace architecture, source-growth, policy, formatting, and Rust check gates
+  pass. The implementation/test commit is 361 insertions and 47 deletions across 11
+  files, below the mandatory split threshold.
 
 ### Binary digests instead of encoded digest text
 
