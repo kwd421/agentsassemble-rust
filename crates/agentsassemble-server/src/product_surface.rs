@@ -3,6 +3,23 @@ use agentsassemble_protocol::{HttpRouteSurface, ServerProductSurface};
 const STATIC_ROUTES: &[(agentsassemble_protocol::HttpMethod, &str)] = &[
     (agentsassemble_protocol::HttpMethod::Get, "/"),
     (agentsassemble_protocol::HttpMethod::Get, "/app/{*path}"),
+    (agentsassemble_protocol::HttpMethod::Get, "/assets/{*path}"),
+    (
+        agentsassemble_protocol::HttpMethod::Get,
+        crate::web::JOIN_PATH,
+    ),
+    (
+        agentsassemble_protocol::HttpMethod::Get,
+        crate::web::JOIN_SLASH_PATH,
+    ),
+    (
+        agentsassemble_protocol::HttpMethod::Get,
+        crate::web::PAIR_PATH,
+    ),
+    (
+        agentsassemble_protocol::HttpMethod::Get,
+        crate::web::PAIR_SLASH_PATH,
+    ),
 ];
 
 pub(crate) struct RegisteredHttpRoute {
@@ -51,13 +68,19 @@ mod tests {
     fn bundled_surface_adds_only_the_static_routes() {
         let server = server_product_surface(false, false);
         let bundled = server_product_surface(true, false);
-        assert_eq!(bundled.http_routes.len(), server.http_routes.len() + 2);
+        assert_eq!(bundled.http_routes.len(), server.http_routes.len() + 7);
         assert_ne!(bundled.digest, server.digest);
         assert!(
             bundled
                 .http_routes
                 .iter()
                 .any(|route| route.path == "/app/{*path}")
+        );
+        assert!(
+            bundled
+                .http_routes
+                .iter()
+                .any(|route| route.path == "/join")
         );
     }
 }

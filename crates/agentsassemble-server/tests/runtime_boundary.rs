@@ -322,15 +322,18 @@ async fn static_frontend_has_browser_security_headers() {
     let directory =
         tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
     let frontend = directory.path().join("frontend");
-    tokio::fs::create_dir(&frontend)
+    tokio::fs::create_dir_all(frontend.join("assets"))
         .await
         .unwrap_or_else(|error| panic!("create frontend root: {error}"));
     tokio::fs::write(
         frontend.join("index.html"),
-        "<!doctype html><title>test</title>",
+        "<!doctype html><title>test</title><script src=\"./assets/app.js\"></script>",
     )
     .await
     .unwrap_or_else(|error| panic!("write frontend index: {error}"));
+    tokio::fs::write(frontend.join("assets/app.js"), "globalThis.loaded = true;")
+        .await
+        .unwrap_or_else(|error| panic!("write frontend asset: {error}"));
     let database_url = format!(
         "sqlite://{}",
         directory.path().join("runtime.sqlite3").display()
@@ -368,6 +371,31 @@ async fn static_frontend_has_browser_security_headers() {
             .and_then(|value| value.to_str().ok()),
         Some("close")
     );
+    for entrance in ["/join?token=one-use", "/join/", "/pair", "/pair/"] {
+        let response = Client::new()
+            .get(format!("{}{entrance}", server.base_url))
+            .send()
+            .await
+            .unwrap_or_else(|error| panic!("request browser entrance {entrance}: {error}"));
+        assert!(
+            response.status().is_success(),
+            "browser entrance {entrance}"
+        );
+        assert!(response.headers().contains_key("content-security-policy"));
+        assert!(
+            response
+                .text()
+                .await
+                .is_ok_and(|body| body.contains("./assets/app.js"))
+        );
+    }
+    let asset = Client::new()
+        .get(format!("{}/assets/app.js", server.base_url))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("request root-relative frontend asset: {error}"));
+    assert!(asset.status().is_success());
+    assert!(asset.headers().contains_key("content-security-policy"));
     server.stop().await;
 }
 

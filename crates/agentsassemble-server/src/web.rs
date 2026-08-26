@@ -35,6 +35,10 @@ use crate::{
 const HTTP_BODY_DEADLINE: Duration = Duration::from_secs(10);
 const MAX_TICKET_BODY_BYTES: usize = 4 * 1024;
 const TRACKED_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(6);
+pub(crate) const JOIN_PATH: &str = "/join";
+pub(crate) const JOIN_SLASH_PATH: &str = "/join/";
+pub(crate) const PAIR_PATH: &str = "/pair";
+pub(crate) const PAIR_SLASH_PATH: &str = "/pair/";
 #[derive(Debug, Error)]
 pub enum ServeError {
     #[error("server I/O failed: {0}")]
@@ -67,8 +71,14 @@ pub fn router(state: AppState) -> Router {
     }
     if let Some(frontend_root) = frontend_root {
         let index = frontend_root.join("index.html");
+        let assets = frontend_root.join("assets");
         app = app
             .route("/", get(|| async { Redirect::temporary("/app/") }))
+            .route_service(JOIN_PATH, ServeFile::new(index.clone()))
+            .route_service(JOIN_SLASH_PATH, ServeFile::new(index.clone()))
+            .route_service(PAIR_PATH, ServeFile::new(index.clone()))
+            .route_service(PAIR_SLASH_PATH, ServeFile::new(index.clone()))
+            .nest_service("/assets", ServeDir::new(assets))
             .nest_service(
                 "/app",
                 ServeDir::new(frontend_root).not_found_service(ServeFile::new(index)),
