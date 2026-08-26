@@ -176,7 +176,7 @@ async fn delete_expired_pending(
     now_timestamp: i64,
 ) -> Result<(), PersistenceError> {
     sqlx::query(
-        "DELETE FROM profile_attachments WHERE state IN ('pending', 'admission_pending') AND expires_at IS NOT NULL AND expires_at <= ?",
+        "DELETE FROM profile_attachments WHERE state = 'admission_pending' AND expires_at IS NOT NULL AND expires_at <= ?",
     )
     .bind(now_timestamp)
     .execute(&mut **transaction)

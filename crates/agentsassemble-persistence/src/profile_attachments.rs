@@ -9,15 +9,11 @@ use crate::{
     PersistenceError, SqliteStore,
     authority::authorize_session,
     raster_assets::{
-        CanonicalRaster, MAX_RASTER_BYTES, prepare_raster, sanitize_filename,
-        validate_stored_raster,
+        CanonicalRaster, MAX_RASTER_BYTES, enforce_storage_replacement, prepare_raster,
+        sanitize_filename, validate_stored_raster,
     },
 };
 
-const MAX_ATTACHMENTS_PER_USER: i64 = 64;
-const MAX_ATTACHMENT_BYTES_PER_USER: i64 = 128 * 1024 * 1024;
-const MAX_ATTACHMENTS_TOTAL: i64 = 4096;
-const MAX_ATTACHMENT_BYTES_TOTAL: i64 = 8 * 1024 * 1024 * 1024;
 const PENDING_ATTACHMENT_TTL: Duration = Duration::minutes(15);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -145,7 +141,32 @@ async fn store_profile_attachment_in_transaction(
     let expires_at = (now + PENDING_ATTACHMENT_TTL).timestamp();
     ensure_profile_exists(transaction, identity).await?;
     delete_expired_pending(transaction, now.timestamp()).await?;
-    enforce_attachment_quota(transaction, identity.user_id, size, now.timestamp()).await?;
+    let previous = sqlx::query(
+        "SELECT attachment_id, size FROM profile_attachments WHERE owner_user_id = ? AND state = 'pending' ORDER BY attachment_id LIMIT 2",
+    )
+    .bind(identity.user_id)
+    .fetch_all(&mut **transaction)
+    .await?;
+    if previous.len() > 1 {
+        return Err(invalid_pending_cardinality());
+    }
+    let previous_id = previous
+        .first()
+        .map(|row| row.get::<String, _>("attachment_id"));
+    let previous_size = previous.first().map(|row| row.get::<i64, _>("size"));
+    enforce_storage_replacement(transaction, previous_size, size, now.timestamp()).await?;
+    if let Some(previous_id) = previous_id {
+        let deleted = sqlx::query(
+            "DELETE FROM profile_attachments WHERE attachment_id = ? AND owner_user_id = ? AND state = 'pending'",
+        )
+        .bind(previous_id)
+        .bind(identity.user_id)
+        .execute(&mut **transaction)
+        .await?;
+        if deleted.rows_affected() != 1 {
+            return Err(invalid_pending_cardinality());
+        }
+    }
     let attachment_id = Uuid::new_v4().simple().to_string();
     sqlx::query(
             "INSERT INTO profile_attachments(attachment_id, owner_user_id, filename, content_type, content, size, created_at, state, expires_at) VALUES (?, ?, ?, 'image/png', ?, ?, ?, 'pending', ?)",
@@ -263,43 +284,11 @@ async fn delete_expired_pending(
     now_timestamp: i64,
 ) -> Result<(), PersistenceError> {
     sqlx::query(
-        "DELETE FROM profile_attachments WHERE state IN ('pending', 'admission_pending') AND expires_at IS NOT NULL AND expires_at <= ?",
+        "DELETE FROM profile_attachments WHERE state = 'pending' AND expires_at IS NOT NULL AND expires_at <= ?",
     )
     .bind(now_timestamp)
     .execute(&mut **transaction)
     .await?;
-    Ok(())
-}
-
-async fn enforce_attachment_quota(
-    transaction: &mut Transaction<'_, Sqlite>,
-    user_id: &str,
-    size: i64,
-    now_timestamp: i64,
-) -> Result<(), PersistenceError> {
-    let subject = sqlx::query(
-        "SELECT COUNT(*) AS count, COALESCE(SUM(size), 0) AS bytes FROM profile_attachments WHERE owner_user_id = ? AND ((state = 'bound' AND invite_quota_fingerprint IS NULL) OR (state = 'pending' AND expires_at > ?))",
-    )
-    .bind(user_id)
-    .bind(now_timestamp)
-    .fetch_one(&mut **transaction)
-    .await?;
-    let total = sqlx::query(
-        "SELECT COUNT(*) AS count, COALESCE(SUM(size), 0) AS bytes FROM profile_attachments WHERE state = 'bound' OR (state IN ('pending', 'admission_pending') AND expires_at > ?)",
-    )
-    .bind(now_timestamp)
-    .fetch_one(&mut **transaction)
-    .await?;
-    if subject.get::<i64, _>("count") >= MAX_ATTACHMENTS_PER_USER
-        || subject.get::<i64, _>("bytes").saturating_add(size) > MAX_ATTACHMENT_BYTES_PER_USER
-        || total.get::<i64, _>("count") >= MAX_ATTACHMENTS_TOTAL
-        || total.get::<i64, _>("bytes").saturating_add(size) > MAX_ATTACHMENT_BYTES_TOTAL
-    {
-        return Err(rejected(
-            "attachment_quota_reached",
-            "Profile avatar storage quota reached.",
-        ));
-    }
     Ok(())
 }
 
@@ -328,6 +317,13 @@ fn valid_attachment_id(value: &str) -> bool {
 
 fn attachment_missing() -> PersistenceError {
     rejected("attachment_missing", "Profile avatar was not found.")
+}
+
+fn invalid_pending_cardinality() -> PersistenceError {
+    rejected(
+        "invalid_state",
+        "Profile avatar pending ownership is invalid.",
+    )
 }
 
 fn rejected(code: &'static str, message: &str) -> PersistenceError {

@@ -2,11 +2,14 @@ use std::{io::Cursor, sync::OnceLock};
 
 use chrono::DateTime;
 use image::{DynamicImage, ImageFormat, ImageReader, Limits};
+use sqlx::{Row, Sqlite, Transaction};
 use tokio::sync::Semaphore;
 
 use crate::PersistenceError;
 
 pub const MAX_RASTER_BYTES: usize = 10 * 1024 * 1024;
+const MAX_LIVE_RASTER_ASSETS: i64 = 4096;
+const MAX_LIVE_RASTER_BYTES: i64 = 8 * 1024 * 1024 * 1024;
 const MAX_IMAGE_DIMENSION: u32 = 4096;
 const MAX_IMAGE_PIXELS: u64 = 16 * 1024 * 1024;
 const MAX_DECODE_ALLOC_BYTES: u64 = 72 * 1024 * 1024;
@@ -53,6 +56,46 @@ pub(crate) fn validate_stored_raster(
         return Err(rejected(
             "invalid_state",
             "Stored profile avatar metadata is invalid.",
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) async fn enforce_storage_replacement(
+    transaction: &mut Transaction<'_, Sqlite>,
+    previous_size: Option<i64>,
+    new_size: i64,
+    now_timestamp: i64,
+) -> Result<(), PersistenceError> {
+    if !(1..=i64::try_from(MAX_RASTER_BYTES).unwrap_or(i64::MAX)).contains(&new_size)
+        || previous_size.is_some_and(|size| size <= 0)
+    {
+        return Err(invalid_storage_usage());
+    }
+    let row = sqlx::query(
+        "SELECT (SELECT COUNT(*) FROM profile_attachments WHERE state = 'bound' OR (state IN ('pending', 'admission_pending') AND expires_at > ?)) + (SELECT COUNT(*) FROM room_appearance_assets WHERE state = 'bound' OR (state = 'pending' AND expires_at > ?)) AS asset_count, (SELECT COALESCE(SUM(size), 0) FROM profile_attachments WHERE state = 'bound' OR (state IN ('pending', 'admission_pending') AND expires_at > ?)) + (SELECT COALESCE(SUM(size), 0) FROM room_appearance_assets WHERE state = 'bound' OR (state = 'pending' AND expires_at > ?)) AS asset_bytes",
+    )
+    .bind(now_timestamp)
+    .bind(now_timestamp)
+    .bind(now_timestamp)
+    .bind(now_timestamp)
+    .fetch_one(&mut **transaction)
+    .await?;
+    let current_count = row.try_get::<i64, _>("asset_count")?;
+    let current_bytes = row.try_get::<i64, _>("asset_bytes")?;
+    let previous_count = i64::from(previous_size.is_some());
+    let next_count = current_count
+        .checked_sub(previous_count)
+        .and_then(|count| count.checked_add(1))
+        .ok_or_else(invalid_storage_usage)?;
+    let next_bytes = current_bytes
+        .checked_sub(previous_size.unwrap_or(0))
+        .and_then(|bytes| bytes.checked_add(new_size))
+        .ok_or_else(invalid_storage_usage)?;
+    if next_count > MAX_LIVE_RASTER_ASSETS || next_bytes > MAX_LIVE_RASTER_BYTES {
+        return Err(rejected(
+            "attachment_quota_reached",
+            "Absolute raster storage limit reached.",
         ));
     }
     Ok(())
@@ -195,6 +238,10 @@ fn invalid_image() -> PersistenceError {
 
 fn decode_task_failed() -> PersistenceError {
     PersistenceError::RuntimeAuthorityTask("profile avatar validation task failed".to_owned())
+}
+
+fn invalid_storage_usage() -> PersistenceError {
+    rejected("invalid_state", "Stored raster usage is invalid.")
 }
 
 fn rejected(code: &'static str, message: &str) -> PersistenceError {
