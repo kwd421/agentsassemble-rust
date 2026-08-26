@@ -1,8 +1,8 @@
 # Human invite schema verification — 2026-08-26
 
 Status: partial slice evidence; canonical invite reads and the manager-authorized
-create write are implemented, while credential issuance, revoke, routes, admission,
-and browser flow are not implemented by these commits.
+create/revoke writes are implemented, while credential issuance, routes, admission,
+post-commit notification, and browser flow are not implemented by these commits.
 
 ## Provenance and scope
 
@@ -13,6 +13,7 @@ and browser flow are not implemented by these commits.
 - Canonical invite read boundary: `afd3f6d`.
 - Manager-authorized invite create write: `a504835`.
 - Exact timestamp correction: `06201de`.
+- Invite revoke unit: `bbeeda7`, corrected by `a472566`.
 - The schema is fresh-only at version 35. No migration, compatibility reader,
   fallback column, or partially upgraded authority is accepted.
 
@@ -223,3 +224,54 @@ not round or normalize after signing.
 This evidence proves only the manager-authorized durable insert and rollback on
 stale membership. Credential entropy, signing, response custody, exact route grants,
 revoke, and browser behavior remain explicitly incomplete.
+
+## Invite revoke unit
+
+Commit `bbeeda7` first made invite revocation one room-scoped manager transaction but
+incorrectly ended sessions derived from the invite. Manual review found that this
+conflated two separate original authorities. Corrective commit `a472566` retains the
+manager transaction and exact invite update while removing all session mutation and
+notification targets from this unit.
+
+### Revoke threat and preserved contract
+
+The original invite revoke prevents future admission but does not revoke sessions
+that were already established. Device/browser credential revoke, exact session
+revoke, participant leave or kick, and room close are separate session lifecycle
+authorities. Treating invite revoke as credential revoke would terminate every
+current reusable-link participant and make a lost-response one-use exact retry
+unavailable after the invite was revoked. That shrank reachable behavior and
+contradicted the SDD's retry ordering, so it was removed rather than justified as
+security hardening.
+
+Existing invite IDs remain idempotent: revoking an already-revoked row succeeds and
+missing or other-room IDs return false. Room and manager are derived from current
+durable identity, not invite metadata supplied by the caller. The operation returns
+only a boolean and exposes no credential, session fingerprint, or notification
+provenance.
+
+### Revoke cost and verification
+
+- The corrected unit performs one primary-key invite update inside the existing
+  manager transaction. It performs no session scan/update, builds no fingerprint
+  vector, publishes no event, and adds no cache or index.
+- Prior cost removed: the first implementation performed one indexed session update
+  and allocated one 32-byte return item per active session for the invite. No
+  performance improvement is claimed beyond eliminating work that had no product
+  authority and was semantically wrong.
+- The focused invite suite passed 3/3 in 0.02 seconds. Its revoke contract uses a
+  separate person profile, matching `guest-ab` participant, one-use invite, and one
+  active browser session under all current foreign keys; it proves the invite flag,
+  active session preservation after both first revoke and idempotent replay, and a
+  false missing result.
+- The complete persistence suite passed 136/136 in 1.06 seconds; warning-denied
+  all-target Clippy and `make check` also passed.
+- The critical web reviewer and Daybreaker both re-reviewed corrective commit
+  `a472566` manually and approved it with C=0/H=0/M=0. Neither used Deep Scan or an
+  automated security scanner.
+- The correction changes two files with 22 additions and 49 deletions. The invite
+  module is smaller than before and remains below the mandatory source limit.
+
+Production revoke latency is not claimed before the authorized HTTP route exists.
+Session closure is explicitly not an invite-revoke effect; each separate session
+revocation owner remains incomplete until its own implementation and live-flow test.
