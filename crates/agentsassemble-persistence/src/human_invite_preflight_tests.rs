@@ -164,7 +164,7 @@ async fn presented_same_room_session_preserves_scope_and_rejects_unavailable_sta
 }
 
 #[tokio::test]
-async fn presented_unknown_or_wrong_room_session_cannot_fall_back_to_device() {
+async fn unknown_or_wrong_room_session_does_not_replace_current_room_device_authority() {
     let store = fixture().await;
     insert_invite(
         &store,
@@ -190,10 +190,11 @@ async fn presented_unknown_or_wrong_room_session_cannot_fall_back_to_device() {
         ))
         .await
         .unwrap_or_else(|error| panic!("preflight unknown session: {error}"));
-    assert_eq!(
+    assert!(matches!(
         unknown,
-        HumanInvitePreflight::Rejected(HumanInvitePreflightRejection::SessionUnavailable)
-    );
+        HumanInvitePreflight::ExistingMember { person, .. }
+            if person.participant_id == GUEST_PARTICIPANT_ID
+    ));
     assert_eq!(total_changes(&store).await, before);
 
     store
@@ -230,10 +231,11 @@ async fn presented_unknown_or_wrong_room_session_cannot_fall_back_to_device() {
         ))
         .await
         .unwrap_or_else(|error| panic!("preflight wrong-room session: {error}"));
-    assert_eq!(
+    assert!(matches!(
         wrong_room,
-        HumanInvitePreflight::Rejected(HumanInvitePreflightRejection::SessionUnavailable)
-    );
+        HumanInvitePreflight::ExistingMember { person, .. }
+            if person.participant_id == GUEST_PARTICIPANT_ID
+    ));
     assert_eq!(total_changes(&store).await, before);
 }
 

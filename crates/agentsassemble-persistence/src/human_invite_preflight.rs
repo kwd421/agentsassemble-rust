@@ -142,7 +142,7 @@ impl SqliteStore {
             Some(PresentedSession::Unavailable) => {
                 HumanInvitePreflight::Rejected(HumanInvitePreflightRejection::SessionUnavailable)
             }
-            None => {
+            Some(PresentedSession::NotApplicable) | None => {
                 if let Some(fingerprint) = request.browser_credential_fingerprint {
                     match load_device_person(&mut transaction, &context.room_id, &fingerprint)
                         .await?
@@ -221,6 +221,7 @@ fn require_credential_binding(
 }
 
 enum PresentedSession {
+    NotApplicable,
     Unavailable,
     Live {
         person: HumanInvitePreflightPerson,
@@ -241,10 +242,10 @@ async fn load_presented_session(
     .fetch_optional(&mut **transaction)
     .await?;
     let Some(row) = row else {
-        return Ok(PresentedSession::Unavailable);
+        return Ok(PresentedSession::NotApplicable);
     };
     if row.try_get::<String, _>("session_room_id")? != room_id {
-        return Ok(PresentedSession::Unavailable);
+        return Ok(PresentedSession::NotApplicable);
     }
     if row.try_get::<String, _>("client_kind")? != "browser" {
         return Err(invalid_state("Stored human session client is invalid."));
