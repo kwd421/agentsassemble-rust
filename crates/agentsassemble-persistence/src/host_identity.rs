@@ -9,6 +9,7 @@ use crate::{PersistenceError, SqliteStore};
 pub struct PersistentHostIdentity {
     server_id: String,
     private_key_pkcs8: Vec<u8>,
+    session_hmac_key: [u8; 32],
 }
 
 impl PersistentHostIdentity {
@@ -20,6 +21,11 @@ impl PersistentHostIdentity {
     #[must_use]
     pub fn private_key_pkcs8(&self) -> &[u8] {
         &self.private_key_pkcs8
+    }
+
+    #[must_use]
+    pub fn session_hmac_key(&self) -> &[u8; 32] {
+        &self.session_hmac_key
     }
 }
 
@@ -51,6 +57,7 @@ impl SqliteStore {
         Ok(PersistentHostIdentity {
             server_id,
             private_key_pkcs8: self.host_key.private_key_pkcs8().to_vec(),
+            session_hmac_key: *self.host_key.session_hmac_key(),
         })
     }
 }

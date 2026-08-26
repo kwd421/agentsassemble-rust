@@ -6,7 +6,7 @@ use std::{
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use ring::{
-    rand::SystemRandom,
+    rand::{SecureRandom, SystemRandom},
     signature::{Ed25519KeyPair, KeyPair},
 };
 use serde::{Deserialize, Serialize};
@@ -17,8 +17,9 @@ use crate::{
     private_fs::{secure_file, secure_private_directory, validate_directory, validate_file},
 };
 
-const HOST_KEY_ENVELOPE_VERSION: u32 = 1;
+const HOST_KEY_ENVELOPE_VERSION: u32 = 2;
 const MAX_PRIVATE_KEY_BYTES: u64 = 512;
+const SESSION_HMAC_KEY_BYTES: usize = 32;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum HostKeyPolicy {
@@ -30,6 +31,7 @@ pub(crate) enum HostKeyPolicy {
 pub(crate) struct HostKeyMaterial {
     private_key_pkcs8: Vec<u8>,
     public_key: [u8; 32],
+    session_hmac_key: [u8; SESSION_HMAC_KEY_BYTES],
 }
 
 #[derive(Serialize, Deserialize)]
@@ -38,6 +40,7 @@ struct StoredHostKey {
     version: u32,
     initialization_nonce: String,
     private_key_pkcs8: String,
+    session_hmac_key: String,
 }
 
 impl HostKeyMaterial {
@@ -77,10 +80,19 @@ impl HostKeyMaterial {
         &self.private_key_pkcs8
     }
 
+    pub(crate) const fn session_hmac_key(&self) -> &[u8; SESSION_HMAC_KEY_BYTES] {
+        &self.session_hmac_key
+    }
+
     fn generate() -> Result<Self, PersistenceError> {
-        let document = Ed25519KeyPair::generate_pkcs8(&SystemRandom::new())
+        let random = SystemRandom::new();
+        let document = Ed25519KeyPair::generate_pkcs8(&random)
             .map_err(|_| PersistenceError::HostIdentityEntropy)?;
-        Self::parse(document.as_ref().to_vec())
+        let mut session_hmac_key = [0_u8; SESSION_HMAC_KEY_BYTES];
+        random
+            .fill(&mut session_hmac_key)
+            .map_err(|_| PersistenceError::HostIdentityEntropy)?;
+        Self::parse(document.as_ref().to_vec(), session_hmac_key)
     }
 
     fn read(mut file: File, initialization_nonce: &str) -> Result<Self, PersistenceError> {
@@ -105,10 +117,22 @@ impl HostKeyMaterial {
         if URL_SAFE_NO_PAD.encode(&private_key_pkcs8) != stored.private_key_pkcs8 {
             return Err(PersistenceError::InvalidHostIdentity);
         }
-        Self::parse(private_key_pkcs8)
+        let session_hmac_key = URL_SAFE_NO_PAD
+            .decode(stored.session_hmac_key.as_bytes())
+            .map_err(|_| PersistenceError::InvalidHostIdentity)?;
+        if URL_SAFE_NO_PAD.encode(&session_hmac_key) != stored.session_hmac_key {
+            return Err(PersistenceError::InvalidHostIdentity);
+        }
+        let session_hmac_key = session_hmac_key
+            .try_into()
+            .map_err(|_| PersistenceError::InvalidHostIdentity)?;
+        Self::parse(private_key_pkcs8, session_hmac_key)
     }
 
-    fn parse(private_key_pkcs8: Vec<u8>) -> Result<Self, PersistenceError> {
+    fn parse(
+        private_key_pkcs8: Vec<u8>,
+        session_hmac_key: [u8; SESSION_HMAC_KEY_BYTES],
+    ) -> Result<Self, PersistenceError> {
         let key_pair = Ed25519KeyPair::from_pkcs8(&private_key_pkcs8)
             .map_err(|_| PersistenceError::InvalidHostIdentity)?;
         let public_key = key_pair
@@ -119,6 +143,7 @@ impl HostKeyMaterial {
         Ok(Self {
             private_key_pkcs8,
             public_key,
+            session_hmac_key,
         })
     }
 }
@@ -168,6 +193,7 @@ fn write_key(
         version: HOST_KEY_ENVELOPE_VERSION,
         initialization_nonce: initialization_nonce.to_owned(),
         private_key_pkcs8: URL_SAFE_NO_PAD.encode(material.private_key_pkcs8()),
+        session_hmac_key: URL_SAFE_NO_PAD.encode(material.session_hmac_key()),
     })
     .map_err(io::Error::other)?;
     if payload.len() as u64 > MAX_PRIVATE_KEY_BYTES {
