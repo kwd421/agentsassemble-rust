@@ -81,6 +81,8 @@ mod security_headers;
 mod server_proof;
 mod ticket;
 mod ticket_issuer;
+#[cfg(test)]
+mod ticket_tests;
 mod web;
 
 pub use app_state::{AppState, AppStateBuildError};
