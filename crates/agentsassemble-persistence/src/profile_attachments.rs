@@ -486,6 +486,48 @@ mod tests {
         assert_eq!(count, 0);
     }
 
+    #[tokio::test]
+    async fn pending_avatar_replacement_has_no_generic_uploader_quota() {
+        let (store, principal) = fixture().await;
+        let mut first_id = String::new();
+        let mut last_id = String::new();
+        for index in 0..65 {
+            let stored = store
+                .store_profile_attachment(
+                    &principal,
+                    &format!("avatar-{index}.png"),
+                    "image/png",
+                    valid_png(),
+                )
+                .await
+                .unwrap_or_else(|error| panic!("replace pending avatar {index}: {error}"));
+            if index == 0 {
+                first_id.clone_from(&stored.id);
+            }
+            last_id = stored.id;
+        }
+
+        let rows = sqlx::query_scalar::<_, String>(
+            "SELECT attachment_id FROM profile_attachments WHERE owner_user_id = ? AND state = 'pending'",
+        )
+        .bind(&principal.principal_id)
+        .fetch_all(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("read pending profile avatar: {error}"));
+        assert_eq!(rows, vec![last_id]);
+        assert_ne!(rows[0], first_id);
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM profile_attachments WHERE attachment_id = ?",
+            )
+            .bind(first_id)
+            .fetch_one(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("check first pending avatar: {error}")),
+            0
+        );
+    }
+
     fn valid_png() -> Vec<u8> {
         let image =
             DynamicImage::ImageRgba8(ImageBuffer::from_pixel(4, 4, Rgba([20, 40, 60, 255])));
