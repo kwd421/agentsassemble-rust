@@ -1,4 +1,4 @@
-use std::{path::Path, time::Duration};
+use std::path::Path;
 
 use serde_json::Value;
 
@@ -74,7 +74,7 @@ async fn cancelled_thread_start_is_read_on_retry_without_retransmission() {
     let pending_adapter = adapter.clone();
     let pending_session = session.clone();
     let pending = tokio::spawn(async move { pending_adapter.start(&pending_session).await });
-    wait_for_file(&seen).await;
+    super::fixture::wait_for_path(&seen).await;
     pending.abort();
     let _ = pending.await;
     std::fs::write(&release, b"release")
@@ -360,16 +360,6 @@ async fn stop_and_release(
             &started.runtime_lease_token,
         )
         .await;
-}
-
-async fn wait_for_file(path: &Path) {
-    for _ in 0..200 {
-        if path.exists() {
-            return;
-        }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
-    panic!("provider fixture did not publish its request marker");
 }
 
 fn shell_quote(path: &Path) -> String {

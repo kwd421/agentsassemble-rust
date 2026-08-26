@@ -728,6 +728,9 @@ impl Default for ProviderAdapter {
 }
 
 #[cfg(all(test, unix))]
+#[path = "runtime_fixture.rs"]
+mod fixture;
+#[cfg(all(test, unix))]
 #[path = "runtime_launch_tests.rs"]
 mod launch_tests;
 #[path = "runtime_observation.rs"]

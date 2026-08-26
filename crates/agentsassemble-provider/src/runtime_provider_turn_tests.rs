@@ -199,7 +199,7 @@ async fn cancelled_codex_turn_start_continues_without_retransmission() {
             .send_turn(&pending_session, &pending_request)
             .await
     });
-    wait_for_file(&seen).await;
+    super::fixture::wait_for_path(&seen).await;
     pending.abort();
     let _ = pending.await;
     std::fs::write(&release, b"release")
@@ -253,7 +253,7 @@ async fn exact_codex_turn_interrupt_uses_official_identity_and_retains_runtime()
             .send_prepared_turn(prepared, &turn_session, &turn_request)
             .await
     });
-    wait_for_file(&seen).await;
+    super::fixture::wait_for_path(&seen).await;
     let mut control = adapter
         .begin_exact_turn(&authority)
         .await
@@ -332,7 +332,7 @@ async fn owned_stop_cancels_a_blocked_turn_without_waiting_for_inactivity() {
             .send_prepared_turn(prepared, &pending_session, &pending_request)
             .await
     });
-    wait_for_file(&seen).await;
+    super::fixture::wait_for_path(&seen).await;
     let mut control = adapter
         .begin_exact_turn(&authority)
         .await
@@ -662,16 +662,6 @@ pub(super) async fn stop_and_release(
             &started.runtime_lease_token,
         )
         .await;
-}
-
-async fn wait_for_file(path: &Path) {
-    for _ in 0..200 {
-        if path.exists() {
-            return;
-        }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
-    panic!("provider-turn fixture did not publish its request marker");
 }
 
 fn shell_quote(path: &Path) -> String {
