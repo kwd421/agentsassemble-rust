@@ -39,7 +39,13 @@ impl SqliteStore {
         for statement in crate::schema::statements() {
             sqlx::query(statement).execute(&mut *transaction).await?;
         }
-        install_metadata(&mut transaction, self.host_key.public_key()).await?;
+        let session_hmac_key_fingerprint = self.host_key.session_hmac_key_fingerprint();
+        install_metadata(
+            &mut transaction,
+            self.host_key.public_key(),
+            &session_hmac_key_fingerprint,
+        )
+        .await?;
         transaction.commit().await?;
         Ok(())
     }
@@ -123,6 +129,7 @@ impl SqliteStore {
 async fn install_metadata(
     transaction: &mut Transaction<'_, Sqlite>,
     host_public_key: &[u8; 32],
+    session_hmac_key_fingerprint: &[u8; 32],
 ) -> Result<(), PersistenceError> {
     let owner = sqlx::query_scalar::<_, String>(
         "SELECT value FROM runtime_metadata WHERE key = 'schema_owner'",
@@ -147,10 +154,11 @@ async fn install_metadata(
         .execute(&mut **transaction)
         .await?;
     sqlx::query(
-        "INSERT INTO runtime_host_identity(singleton, server_id, public_key) VALUES (1, ?, ?)",
+        "INSERT INTO runtime_host_identity(singleton, server_id, public_key, session_hmac_key_fingerprint) VALUES (1, ?, ?, ?)",
     )
     .bind(&server_id)
     .bind(host_public_key.as_slice())
+    .bind(session_hmac_key_fingerprint.as_slice())
     .execute(&mut **transaction)
     .await?;
     sqlx::query(

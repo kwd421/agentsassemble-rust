@@ -37,7 +37,8 @@ impl SqliteStore {
     /// Rejects missing, malformed, or differently bound host identity state.
     pub async fn host_identity(&self) -> Result<PersistentHostIdentity, PersistenceError> {
         let row = sqlx::query(
-            "SELECT host.server_id, host.public_key, metadata.value AS expected_server_id
+            "SELECT host.server_id, host.public_key, host.session_hmac_key_fingerprint,
+                    metadata.value AS expected_server_id
              FROM runtime_host_identity AS host
              JOIN runtime_metadata AS metadata ON metadata.key = 'server_id'
              WHERE host.singleton = 1",
@@ -51,7 +52,12 @@ impl SqliteStore {
             return Err(PersistenceError::InvalidHostIdentity);
         }
         let public_key = row.get::<Vec<u8>, _>("public_key");
-        if public_key.as_slice() != self.host_key.public_key() {
+        let session_hmac_key_fingerprint = row.get::<Vec<u8>, _>("session_hmac_key_fingerprint");
+        let expected_session_hmac_key_fingerprint = self.host_key.session_hmac_key_fingerprint();
+        if public_key.as_slice() != self.host_key.public_key()
+            || session_hmac_key_fingerprint.as_slice()
+                != expected_session_hmac_key_fingerprint.as_slice()
+        {
             return Err(PersistenceError::InvalidHostIdentity);
         }
         Ok(PersistentHostIdentity {

@@ -10,6 +10,7 @@ use ring::{
     signature::{Ed25519KeyPair, KeyPair},
 };
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use crate::{
     PersistenceError,
@@ -82,6 +83,10 @@ impl HostKeyMaterial {
 
     pub(crate) const fn session_hmac_key(&self) -> &[u8; SESSION_HMAC_KEY_BYTES] {
         &self.session_hmac_key
+    }
+
+    pub(crate) fn session_hmac_key_fingerprint(&self) -> [u8; 32] {
+        Sha256::digest(self.session_hmac_key.as_slice()).into()
     }
 
     fn generate() -> Result<Self, PersistenceError> {

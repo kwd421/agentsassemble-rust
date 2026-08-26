@@ -24,7 +24,7 @@ const TABLES: &[TableDefinition] = &[
     },
     TableDefinition {
         name: "runtime_host_identity",
-        ddl: "CREATE TABLE IF NOT EXISTS runtime_host_identity (singleton INTEGER PRIMARY KEY CHECK(singleton = 1), server_id TEXT NOT NULL UNIQUE, public_key BLOB NOT NULL CHECK(typeof(public_key) = 'blob' AND length(public_key) = 32))",
+        ddl: "CREATE TABLE IF NOT EXISTS runtime_host_identity (singleton INTEGER PRIMARY KEY CHECK(singleton = 1), server_id TEXT NOT NULL UNIQUE, public_key BLOB NOT NULL CHECK(typeof(public_key) = 'blob' AND length(public_key) = 32), session_hmac_key_fingerprint BLOB NOT NULL CHECK(typeof(session_hmac_key_fingerprint) = 'blob' AND length(session_hmac_key_fingerprint) = 32))",
         infrastructure: true,
     },
     TableDefinition {
@@ -390,17 +390,19 @@ mod tests {
 
         assert!(
             sqlx::query(
-                "INSERT INTO runtime_host_identity(singleton, server_id, public_key) VALUES (1, 'server-text', ?)",
+                "INSERT INTO runtime_host_identity(singleton, server_id, public_key, session_hmac_key_fingerprint) VALUES (1, 'server-text', ?, ?)",
             )
             .bind(text_key)
+            .bind(vec![0xBB; 32])
             .execute(&pool)
             .await
             .is_err()
         );
         sqlx::query(
-            "INSERT INTO runtime_host_identity(singleton, server_id, public_key) VALUES (1, 'server-blob', ?)",
+            "INSERT INTO runtime_host_identity(singleton, server_id, public_key, session_hmac_key_fingerprint) VALUES (1, 'server-blob', ?, ?)",
         )
         .bind(vec![0xAA; 32])
+        .bind(vec![0xBB; 32])
         .execute(&pool)
         .await
         .unwrap_or_else(|error| panic!("insert exact BLOB authority: {error}"));
