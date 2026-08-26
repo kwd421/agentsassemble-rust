@@ -311,6 +311,15 @@ with the validated loopback WebSocket origin or a purpose-separated server-opera
 HTTP ticket with the validated loopback HTTP origin. React receives neither the
 host secret nor a reusable credential. A ticket presented to the wrong transport
 or scope is consumed and rejected rather than interpreted as another authority.
+Public human-session grants reuse this same bounded store but retain the opaque
+durable `HumanSessionAuthorization` and one exact purpose. Issuance is capped at
+1,792 live public grants and eight per session fingerprint, leaving at least 2,304
+of the production store's 4,096 entries for local/private authority. Grant expiry is
+the earlier of the store TTL and backing session expiry. Read-only sessions cannot
+mint preference-write grants. Consumption removes a wrong-purpose grant before
+rejecting it; the later target adapter must still revalidate its durable session
+before any read or write. The store contract exists, but no public exchange route is
+claimed reachable until that target revalidation is connected and verified.
 Central server registration is a third, exact-purpose one-use ticket issued only
 through the private desktop control pipe and consumed only by the desktop-mounted
 registration-proof POST. Its Ed25519 private key is a separate owner-only write-once

@@ -1035,6 +1035,12 @@ the reviewed persistence owner without adding another product surface.
   `cc57217` is 182 insertions/12 deletions; correction `81c04e7` is 198
   insertions/108 deletions across four files. The production modules are 390, 575,
   and 737 lines and pass the unchanged source gate.
+  Daybreaker Blue High and the critical web reviewer then manually re-read the
+  correction and both returned `APPROVE` with Critical 0, High 0, and Medium 0. The
+  web review explicitly checked the pre-decode durable ordering, opaque capability
+  custody, final transactional recheck, residual 14,046,552-byte envelope cost,
+  ten-MiB regression input, source gates, and credential-safe errors. Neither review
+  used Deep Scan, another automated scanner, or a real provider.
 
 ## Durable human-session authorization owner
 
@@ -1066,3 +1072,39 @@ or attachment session flows complete.
   failure. All 160 persistence tests, warning-denied persistence Clippy, and
   `make check` pass. Commit size is 387 insertions/35 deletions across four files;
   the 189-line owner and 168-line focused test module pass the unchanged source gate.
+
+## Bounded public human-session grant owner
+
+Structure-only commit `294b239` separates the pre-existing ticket tests from their
+single implementation owner without changing behavior. Commit `7af1345` then adds the
+in-memory contract required by the still-unmounted typed public exchanges.
+
+- Threat and intent: a global-only 4,096-entry limit allowed public sessions to starve
+  private control. The existing store now admits at most 1,792 public grants, eight per
+  exact session fingerprint, and therefore preserves 2,304 production entries for
+  local/private authority. It keeps one mutex and one map; the existing expiry sweep
+  also counts public and same-session entries, so no second state owner exists.
+- Preserved contract: the grant owns the opaque persistence-issued authorization and
+  exactly one of WebSocket connect, own profile, preference read, or preference write.
+  Wrong-purpose presentation consumes the grant. Grant TTL cannot exceed session
+  expiry, read-only sessions cannot mint preference-write authority, and private ticket
+  behavior is unchanged. The public exchange routes and target durable revalidation
+  are not mounted yet and are not counted as reachable parity.
+- Measured cost: the one-time same-toolchain size probe measured 168 bytes for
+  `HumanSessionAuthorization`, 176 for its public grant, and stored-entry growth from
+  160 to 216 bytes. At the hard 4,096-entry process bound that is at most 229,376 extra
+  bytes and no disk state. Five warmed debug runs of the exact boundary test measured
+  the first 16 uncontended public issue calls at 9.1–10.1 microseconds average and
+  18.6–23.5 microseconds maximum, excluding durable authorization but including mutex
+  acquisition, sweep/count, UUID generation, and insertion. This is local diagnostic
+  evidence, not a production latency claim. The private algorithm remains its previous
+  single expiry pass and insert; no speculative rate limiter or accounting index was
+  introduced.
+- Verification result: all test authorizations come from real SQLite admissions.
+  Nine focused tests cover exact purpose, replay, read-only write denial, the eighth
+  and ninth outstanding grants, consumption reclamation, a scaled 16-public boundary
+  beside the exact 2,304 private reserve, full-store rejection, and the production
+  1,792 calculation. All 57 server unit tests and every server integration test pass;
+  warning-denied server Clippy and `make check` pass. The implementation diff is 504
+  insertions and 18 deletions across three files, below 1,000 lines, and the 757-line
+  implementation passes the unchanged source gate.

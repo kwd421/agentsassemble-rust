@@ -970,24 +970,56 @@ flag is added meanwhile.
 
 ### Shared grant-store limits instead of a second session ticket cache
 
-- Prior cost and threat: the current grant store is globally bounded at 4,096, but
+- Prior cost and threat: the existing grant store was globally bounded at 4,096, but
   an exchange endpoint without provenance sublimits lets public sessions occupy all
   slots and starve private control. The server already bounds admitted HTTP
   connections at 128; no measured exchange-rate or CPU/lock-latency result supports
   a second per-minute threshold.
-- Change intent: keep the existing store and add only provenance accounting, pending
-  sublimits, and a fixed local/private reserve.
+- Change intent and smallest design: commit `7af1345` keeps the existing mutex and
+  `HashMap`. A public issuance performs the same expired-entry retain pass while also
+  counting live public grants and entries with the exact 32-byte session fingerprint.
+  It adds no second map, cache, index, timer, task, rate limiter, or synchronization
+  owner. Structure-only commit `294b239` first moved the pre-existing ticket tests out
+  of the 696-line implementation owner; the resulting implementation is 757 lines and
+  the focused test module is 418 lines under the unchanged source gate.
 - Preserved contract: grants stay opaque, short-lived, exact-purpose, one-use, and
   consume-on-wrong-purpose; local/private issuers keep a reserved capacity floor;
-  ordinary clients gain no new requests-per-minute rejection behavior.
+  ordinary clients gain no new requests-per-minute rejection behavior. Each public
+  entry owns the non-serializable persistence-issued authorization rather than copied
+  identity strings. Its deadline is capped by the backing session expiry, and a
+  read-only session cannot mint a preference-write grant. Existing local/private
+  issuance and purpose behavior are unchanged.
 - Trade-off: a stolen live session may keep churning grants within the existing HTTP
   work bounds, but cannot hold more than eight or cross the public partition. A rate
   limiter requires measured CPU/lock/latency evidence and a separately reviewed
   product limit rather than a speculative threshold in this migration slice.
-- Verification: boundaries prove 8-per-session, 1,792-public total, the 2,304-entry
-  private reserve, and expiry/consumption reclamation. Before/after issue latency and
-  lock time are recorded; a later limiter is considered only if those measurements
-  demonstrate a concrete exhaustion path not covered by the existing bounds.
+- Observed CPU, memory, disk, and latency cost: public issuance is one `O(n)` pass over
+  at most 4,096 in-memory entries, one mutex critical section with no nested await,
+  four UUID generations, and one insertion. The private path retains its prior one
+  expiry pass, length check, UUID work, and insertion. Temporary same-toolchain size
+  measurement found the authorization and public grant are 168 and 176 bytes; adding
+  the inline variant changes `TicketAuthority` from 120 to 176 bytes and each stored
+  entry from 160 to 216 bytes. The absolute worst-case store increase is therefore
+  4,096 × 56 = 229,376 bytes. Keeping the value inline avoids a separate heap
+  allocation for every public grant; no memory-performance improvement beyond that
+  measured representation choice is claimed. This slice performs no disk I/O.
+  Five warmed debug-build runs of the real 16-public/2,304-private boundary test
+  measured the first 16 uncontended public issue calls, excluding durable
+  authorization, at 9.1–10.1 microseconds average and 18.6–23.5 microseconds maximum.
+  The call includes mutex acquisition, sweep/count, UUID work, and insertion, so it is
+  not presented as a production benchmark or a separately instrumented lock metric.
+  The existing private `O(n)` sweep reached 26.5–56.0 microseconds average while the
+  test filled entries 17 through 2,320, with noisy maxima of 0.74–6.42 milliseconds;
+  this evidence supports keeping the fixed bound and does not justify another index.
+- Verification: real persisted admissions supply every test authorization; no test
+  constructor can manufacture provenance. Tests prove exact purpose and
+  consume-on-mismatch, read-only write denial, eight-per-session enforcement,
+  consumption reclamation, a 16-entry public partition beside the exact 2,304 private
+  reserve, full-store rejection, private/public reclamation, and the production
+  4,096 → 1,792 capacity calculation. All 57 server unit tests, every server
+  integration test, warning-denied server Clippy, and `make check` pass. Public
+  exchange and target routes remain explicitly unmounted until their durable
+  post-consumption revalidation is implemented.
 
 ### Targeted expiry materialization instead of a session sweeper
 
