@@ -1,14 +1,15 @@
 # Human Invite, Admission, and Room Session Slice
 
-Status: design candidate; no Rust admission route is active
+Status: revised design candidate; no Rust admission route is active
 
 ## Definition
 
 This slice establishes one durable authority for a human browser invite, admission,
 profile binding, room membership, and expiring room session. It then lets that live
 session exchange for exact one-use WebSocket, profile, attachment, and preference
-grants. It does not make an external invite reachable until the separate trusted
-public-ingress owner is complete.
+grants. Invite management remains local-operator authority. This slice does not make
+an external invite reachable until the separate trusted public-ingress owner is
+complete.
 
 The behavior comparison baseline is original commit
 `d5046473010d1353a81ee38337360e6d98f7bd6f`. The Rust baseline for this design is
@@ -25,9 +26,9 @@ not an authority.
 - Invite preflight does not write. It distinguishes invalid or expired invites,
   agent-only links, a live same-room session, a known reusable-link device, an
   already joined member, and a browser that must supply a profile.
-- Admission requires a canonical nonzero UUID request ID. Exact retry returns the
-  same admitted identity and bearer. Reusing that request with different admitted
-  input conflicts.
+- Admission requires a canonical nonzero UUID request ID and one canonical durable
+  browser credential. Exact retry returns the same admitted identity and bearer.
+  Reusing the same admission identity with different admitted input conflicts.
 - A successful admission consumes invite capacity, creates or resolves the human
   identity, joins the participant, creates the session, and emits the canonical
   participant-joined event. A collision with a different profile-bound participant
@@ -39,12 +40,13 @@ not an authority.
 - A normal session can post; a read-only session cannot. Both can read the canonical
   room. Room role, mute, membership, and command capabilities remain room-owned and
   are never taken from the person's profile.
-- A pre-join avatar upload is optional and bounded. It is temporarily owned by the
-  exact invite-and-device subject, supersedes that subject's older pending avatar,
-  expires, and becomes the admitted user's profile avatar only during successful
-  admission. Invalid or expired optional avatar data is treated as an omitted
-  optional avatar: admission still commits, but it cannot claim unrelated media or
-  create partial profile state.
+- A pre-join avatar upload is optional and bounded. Custody belongs to the exact
+  invite-and-browser-credential subject, while all browsers using one invite share
+  that invite's quota. It supersedes only that custody subject's older pending
+  avatar, expires after one hour, and becomes the admitted user's profile avatar
+  only during successful admission. Invalid, missing, or expired optional avatar
+  data is treated as omitted: admission still commits, but it cannot claim unrelated
+  media or create partial profile state.
 - The lower-left human profile, room member projection, profile editor, and the
   user's preferences must resolve the same `user_profiles` row. An Agent Session
   profile remains a separate Agent Session authority.
@@ -66,22 +68,37 @@ is migrated, imported, or interpreted.
   creation time. Raw invite tokens are never persisted.
 - `human_device_credentials` maps only reusable-link device fingerprints to one
   stable human user. One-use admissions do not create this mapping.
-- `human_room_sessions` owns the session fingerprint and exact room, user,
-  participant, browser client kind, invite scope, optional reusable credential
-  fingerprint, admission time, and expiry. Raw session tokens are never persisted.
-- `human_admission_results` binds an admission key, canonical request UUID, invite,
-  payload hash, session fingerprint, and bounded public result without the raw
-  bearer. The deterministic issuer can reproduce the exact bearer for a live exact
-  retry. A completed but later expired or revoked admission is a terminal
-  `admission_session_unavailable`; it never creates a replacement session.
+- `human_room_sessions` owns both the admission result and session: unique admission
+  key, first canonical request UUID, invite, payload hash, session fingerprint,
+  exact room/user/participant, browser client kind, invite scope, browser credential
+  fingerprint, optional reusable-identity fingerprint, bounded public result,
+  admission/expiry time, and active/ended state. Raw session tokens are never
+  persisted. A partial unique constraint permits at most one live human session for
+  each `(room_id, participant_id)`. Keeping the retry result in this row avoids a
+  fourth admission-results table and prevents session/result lifecycle drift.
+- A completed but later expired, replaced, or revoked admission remains a terminal
+  `admission_session_unavailable`; exact retry never creates a replacement session.
+  The deterministic issuer reproduces the bearer only while that exact row is live.
 - `profile_attachments` remains the single human-avatar asset owner. Its state
   constraint permits either a user-owned pending/bound image or an admission-pending
-  image bound by invite ID plus a fixed-size opaque subject fingerprint. Admission
-  atomically transfers a valid pending image to the new user and binds it. No second
-  filesystem store or duplicate image decoder is introduced.
+  image. The latter stores separate fixed-size custody and invite-quota fingerprints.
+  Admission atomically transfers a valid pending image to the new user and binds it,
+  while retaining immutable invite accounting provenance. The committed image stops
+  counting against pending-room quota, continues to count once against room/runtime
+  totals, and is not retroactively charged to the user's ordinary uploader quota,
+  matching the original metadata transition. No second filesystem store or duplicate
+  image decoder is introduced.
 
 Token fingerprints, admission keys, payload hashes, and pending-upload subjects are
-fixed 32-byte blobs. IDs used in public JSON remain their canonical text forms.
+fixed 32-byte blobs. IDs used in public JSON remain their canonical text forms. The
+browser credential is exactly `aad1_` plus 32 WebCrypto/operating-system-random bytes
+encoded as unpadded base64url. The browser persists that single value in durable
+origin storage; missing WebCrypto, failed durable storage, a weak/malformed value,
+or per-page regeneration makes admission and pre-join upload visibly unavailable.
+There is no date, `Math.random`, short-token, or ephemeral-memory fallback. A one-use
+admission binds this credential for proof/retry custody but never registers it as a
+reusable identity.
+
 Invite tokens use operating-system randomness and the existing `aaj1_` prefix; the
 human response exposes that one value through the current `invite_token` and
 `join_code` aliases rather than retaining a second signed LAN bearer. A small
@@ -91,36 +108,72 @@ host-key owner. Invite and session fingerprints remain ordinary SHA-256. The iss
 does not reuse the Ed25519 host key or process-local host-control secret, log key
 material, or put bearer material in events or idempotency JSON.
 
+The persistent host-identity envelope creates that session HMAC key only with a
+fresh host identity. Loading an existing envelope with a missing, short, or invalid
+session key fails closed; it never regenerates or derives a key and thereby silently
+invalidates retry results. Existing file ownership, canonical-path, `0600`, symlink,
+and non-serialization protections apply to the combined envelope.
+
+Invite create and revoke use separate, one-use local-private-control grants bound to
+the exact room and exact operation. The route consumes the grant before reading a
+bounded body, and the room transaction revalidates the current local user/profile,
+room membership, and `room.manage` capability. A configured or trusted public
+ingress proves transport custody only and is never invite-management authority.
+
 ## Admission transitions
 
-Preflight reads the invite, optional current bearer, and reusable device fingerprint
+Preflight reads the invite, optional current bearer, and canonical browser credential
 without allocating durable state. A presented session counts as `existing_session`
 only when its durable row, expiry, room, active membership, participant/profile
 binding, client kind, and scope all remain valid.
 
-Admission validates bounded input and then performs one SQLite transaction:
+After bounded envelope validation, the admission route submits one request to the
+existing bounded `RoomRuntime` writer. Queue acceptance transfers custody to the
+runtime: disconnecting or cancelling the HTTP handler cannot cancel an accepted
+admission. The room runtime then performs one SQLite transaction:
 
 1. load the active room and invite and enforce expiry, revocation, client kind,
-   scope, maximum use, and global/per-room public-session capacity;
-2. derive the idempotency key and payload hash, returning only an exact live retry
+   scope, and maximum use;
+2. derive the admission key and payload hash, returning only an exact live retry
    and rejecting a conflicting or terminal retry;
 3. resolve the reusable credential user or allocate an invite-scoped one-use user,
-   keeping participant/profile collisions fail-closed;
-4. consume one invite use, upsert the joined human participant and matching profile,
-   claim the optional exact pending avatar, create the session/result, and append at
-   most one `participant_joined` event;
-5. commit before publishing the event or returning the bearer.
+   keeping participant/profile collisions fail-closed, then enforce global/per-room
+   public-session capacity while excluding an existing same-participant session;
+4. consume one invite use when this is a new invite principal, upsert the joined
+   human participant and matching profile, and mark any different live session for
+   that `(room, participant)` replaced without charging another capacity slot;
+5. omit an optional pending avatar whose row is absent, expired, malformed, or owned
+   by another custody subject; otherwise transfer the exact valid row, create the
+   session/result, and append at most one `participant_joined` event plus the existing
+   durable room-publication cursor;
+6. commit before publishing the event, notifying displaced sessions, or returning
+   the bearer.
 
-Any validation or database failure rolls back every step. Because all affected
-records share one SQLite transaction, the Python coordinator's separate JSON invite
+Any database/infrastructure failure rolls back every step. Optional-avatar semantic
+invalidity omits only that avatar as described above; it is not converted into a
+database-success fallback. Because all affected records share one SQLite transaction,
+the Python coordinator's separate JSON invite
 repository, identity database, room repository, workflow journal, compensation,
 and resume saga are not reimplemented.
 
-For a one-use invite the idempotency key binds invite and request. For a reusable
-invite it also binds the required device fingerprint. The payload hash covers every
+For a one-use invite the admission key binds invite fingerprint, browser credential
+fingerprint, and canonical request UUID. This credential binding prevents a second
+invite holder who guesses or obtains only the request UUID from recovering the
+deterministic session bearer. For a reusable invite the key binds only invite and
+browser credential fingerprints: request UUID is deliberately excluded, while the
+first request UUID remains audit/result data. Thus the same reusable invite/device
+and same payload returns the original identity, result, and live bearer even with a
+new request UUID, without consuming another use; a changed payload conflicts and a
+different device is a distinct reusable principal. The payload hash covers every
 field that can change identity or membership, including display name, client ID,
-participant type, and optional avatar reference. Client input never chooses user
-ID, participant ID, capabilities, role, mute state, or session expiry.
+participant type, and optional avatar reference. Client input never chooses user ID,
+participant ID, capabilities, role, mute state, or session expiry.
+
+At most one human room session is live for `(room_id, participant_id)`. A new
+admission through another invite for the same stable participant replaces the old
+row in the transaction. Capacity excludes that same-participant row; after commit
+the displaced fingerprint's grants and sockets fail durable revalidation and receive
+a server-owned revocation notification.
 
 The current public capacity is preserved: at most 448 live public sessions globally
 and 112 per room, with at most 128 distinct reusable-link principals. The remaining
@@ -137,13 +190,18 @@ The session exchange surface is a closed set of typed routes rather than a
 client-selected purpose string:
 
 - WebSocket connect;
-- own profile read, update, avatar upload, and avatar read;
+- own profile access, used by profile read/update and normal-scope avatar upload;
 - room preference read and, for normal scope only, preference write;
-- room attachment upload/read when the corresponding message behavior is active.
+- room attachment upload and exact private-attachment read when the corresponding
+  message behavior is active.
 
-Read-only room scope denies posting, preference mutation, and room attachment
-upload. It still permits the human to read and edit their own person profile because
-that profile is not room role or posting authority.
+Read-only room scope denies posting, preference mutation, profile-avatar upload, and
+every room attachment upload. It still permits the human to read and edit their own
+text/person profile because that profile is not room role or posting authority.
+Bound profile-avatar reads retain the current unguessable public attachment URL and
+do not mint or consume a session-derived avatar-read grant, so other room members can
+render the avatar. Unexpired pre-admission preview remains exact invite/credential
+custody rather than admitted-session authority.
 
 Every derived grant retains immutable session-fingerprint provenance plus the exact
 room, user, participant, client kind, scope, and purpose. Grant consumption removes
@@ -152,17 +210,43 @@ room/profile/membership binding. Wrong purpose, wrong room, replay, expiry, or
 session-only revocation consumes and rejects the grant. Existing local-operator
 typed grants remain separate and unchanged.
 
+A derived grant never outlives its backing session. A target write consumes the
+grant before reading its bounded body, then revalidates the session, membership,
+profile binding, and operation capability inside the same SQLite transaction that
+commits the write. A target read performs the same durable validation in the read
+unit immediately before selecting its result. The in-memory provenance is a lookup
+key and claimed ceiling, never authority on its own.
+
+The existing 4,096-item grant store remains one implementation owner, not a second
+session cache. Grants from this public-human slice have hard sublimits of 1,792 total
+and 8 outstanding per session fingerprint, leaving at least 2,304 entries for
+local/private authority. An admitted session may exchange at most
+64 grants in a rolling 60-second window. The copied foreground flow needs fewer than
+ten exchanges to join, load profile/preferences, and open its socket; the larger
+ceiling preserves ordinary interaction while bounding a stolen session's allocation
+and lock/UUID churn. The limiter stores only one bounded bucket state per live
+session and disappears on session end; it does not become authentication authority.
+
 A session WebSocket subscribes to revocation notification before its connect grant
 is consumed, then revalidates the database after subscription. It revalidates before
-each client frame, and a post-commit session/participant/room revocation broadcast
-closes an idle socket. Broadcast lag or closure triggers durable revalidation and
-fails closed. The database remains authority; the broadcast is only prompt
-notification. No timer or cache independently decides session validity.
+each client command and before every outbound product frame. Its connection task owns
+an expiry-deadline timer that performs durable revalidation and closes at expiry; the
+timer never extends validity. A post-commit session/participant/room revocation
+broadcast closes an idle socket. Broadcast lag or closure triggers durable
+revalidation and fails closed. The database remains authority; the broadcast and
+deadline are only revalidation triggers, not independent validity sources.
 
 Leaving performs membership-left transition, revokes that participant's room
 sessions, and appends the canonical event in one transaction. Exact session revoke
 does not remove membership. Kick and room close revoke affected sessions in their
 own canonical room transactions. Notifications happen only after commit.
+
+The room runtime, not an HTTP request task, owns post-commit publication and
+revocation notification. Admission reuses `room_event_publication_cursors`: commit
+durably records the exact event handoff, and runtime/startup drains acknowledge that
+cursor only after broadcast publication. Handler cancellation can lose a response
+but cannot lose an accepted commit-to-publication handoff; exact retry recovers the
+stored result, and cursor replay does not create a second canonical event.
 
 ## Transport and frontend activation
 
@@ -221,7 +305,7 @@ flag is added meanwhile.
 - Prior cost: the original stores 32-byte digests as 64-character hex strings and
   its workflow journal serializes repeated state as JSON.
 - Change intent: fixed BLOB checks halve digest column bytes and eliminate parsing
-  ambiguity while retaining maintained SHA-256/HMAC/HKDF implementations.
+  ambiguity while retaining maintained SHA-256/HMAC implementations.
 - Preserved contract: only fingerprints are durable and comparisons remain exact;
   public IDs and bearer formats do not change.
 - Verification: schema constraints reject the wrong length, database inspection
@@ -233,14 +317,32 @@ flag is added meanwhile.
   even when no revocation occurs, while notification alone has a subscribe/consume
   race and is not durable authority.
 - Change intent: subscribe before grant consumption, revalidate after subscription,
-  revalidate each client frame, and broadcast only after durable revocation commit.
+  revalidate each inbound command and outbound product frame, own an expiry-deadline
+  revalidation, and broadcast only after durable revocation commit.
 - Preserved contract: revocation after ticket issue or during an idle connection
   invalidates the exact session promptly; a missed/lagged notification fails closed.
-- Trade-off: an idle socket depends on the process-local broadcast for prompt close,
-  but process restart closes the socket and reconnect must revalidate the database.
+- Trade-off: outbound validation adds one indexed session/membership lookup per
+  recipient frame. That cost is accepted for the concrete threat of a revoked or
+  replaced human receiving a queued event; no unmeasured cache is introduced.
+  Process restart closes the socket and reconnect must revalidate the database.
 - Verification: deterministic barriers cover revoke-before-consume,
-  revoke-after-connect idle close, notification lag/closure, and client-frame races;
-  tests do not sleep or inspect private maps.
+  revoke-after-connect idle close, deadline expiry, notification lag/closure,
+  inbound-command and outbound-delivery races; tests do not sleep or inspect private
+  maps. Query count and end-to-end fanout latency are recorded before and after.
+
+### Shared grant-store limits instead of a second session ticket cache
+
+- Prior cost and threat: the current grant store is globally bounded at 4,096, but
+  an exchange endpoint without provenance sublimits lets public sessions occupy all
+  slots or repeatedly allocate and expire grants, starving private control.
+- Change intent: keep the existing store and add only provenance accounting, pending
+  sublimits, and a 64-per-60-second live-session exchange bucket.
+- Preserved contract: grants stay opaque, short-lived, exact-purpose, one-use, and
+  consume-on-wrong-purpose; local/private issuers keep a reserved capacity floor.
+- Trade-off: one small bucket record is held per live session and an abusive client
+  receives an explicit rate/capacity error instead of allocating more grants.
+- Verification: boundaries prove 8-per-session, 1,792-public total, the 2,304-entry
+  private reserve, expiry reclamation, and 64-per-window behavior without sleeps.
 
 No additional cache, repository interface, background cleanup framework, generic
 credential provider, multi-database saga, or future agent-session abstraction is
@@ -266,18 +368,37 @@ separate cleanup task necessary.
   every non-current schema without migration.
 - Persistence tests prove preflight has no writes; admission is atomic under injected
   failure; exact retry is stable across restart; conflicting/expired/revoked retry is
-  terminal; collision and all capacity edges fail before consumption; and no raw
-  invite, device, or session bearer reaches SQLite, events, logs, or fixtures.
-- Pre-join avatar tests prove exact invite/device ownership, replacement, expiry,
-  safe-raster limits, failed-admission custody, and atomic ownership transfer to the
-  same profile rendered in the room and lower-left panel.
+  terminal; a reusable exact retry with a different request UUID returns the same
+  identity/live bearer without another use or event; changed payload conflicts and a
+  different device consumes a distinct principal; collision and all capacity edges
+  fail before consumption; and no raw invite, device, or session bearer reaches
+  SQLite, events, logs, or fixtures.
+- Replacement tests admit one stable participant through different reusable invites,
+  prove only the new session remains live, the old bearer/grants/socket fail, and the
+  same-participant replacement does not increase capacity.
+- Pre-join avatar tests prove exact invite/credential custody, replacement, one-hour
+  expiry, safe-raster limits, failed-admission custody, and atomic ownership transfer
+  to the same profile rendered in the room and lower-left panel. Boundary tests fix
+  10 MiB per asset, 8 files/32 MiB per invite, 64/128 MiB pending per room,
+  64/128 MiB per ordinary uploader, 512/1 GiB total per room, 4,096/8 GiB runtime,
+  and prevent quota reset by changing browser credentials.
 - Real Axum tests exercise create, preflight, admission, every typed ticket exchange,
   target-ticket replay/wrong-purpose/wrong-room, raw-bearer rejection, read-only
-  denial, normal posting, profile SSoT, preferences, leave, exact revoke, kick, and
-  room close.
+  profile-text success, read-only profile-avatar/room-upload denial, public bound
+  profile-avatar read, normal posting, profile SSoT, preferences, leave, exact
+  revoke, kick, and room close. Invite management tests prove consume-before-body,
+  room/purpose binding, transactional capability revalidation, and that ingress
+  custody is not management authority.
 - Real WebSocket tests prove initial snapshot readiness, normal/read-only command
-  behavior, revoked-ticket denial, and immediate connected-session close. Races use
-  barriers or controlled channels, never arbitrary sleeps.
+  behavior, revoked-ticket denial, expiry close, outbound denial after revoke, and
+  immediate connected-session close. Races use barriers or controlled channels,
+  never arbitrary sleeps. Handler-cancellation and restart tests prove the durable
+  publication cursor drains exactly once after an accepted admission commit.
+- Browser-unit tests prove exactly one `aad1_` credential is reused by preflight,
+  pre-join upload, and admission; malformed stored values, unavailable WebCrypto,
+  and failed durable storage stop before network I/O without generating a fallback.
+  Host-identity tests prove a missing/invalid persisted session HMAC key fails closed
+  and never regenerates over existing admission state.
 - Each implementation commit remains independently buildable, verifiable, and
   rollbackable. `git diff --stat` is checked before commit and a 1,000-line change is
   split unless one documented invariant makes that impossible.
