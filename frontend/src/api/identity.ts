@@ -4,7 +4,10 @@ import {
   postJson,
   postJsonWithIdentity,
 } from "./http";
-import type { RoomInviteJoinResponse } from "./invites";
+import {
+  parseGuestRecoveryRedeemResponse,
+  type GuestRecoveryRedeemResponse,
+} from "../lib/roomAdmissionContract";
 import type { UserProfileIdentity } from "./room";
 
 export type PublicAccount = {
@@ -97,13 +100,7 @@ export type GuestRecoveryCodeResponse = {
   recovery_url: string;
 };
 
-export type GuestRecoveryRedeemResponse = RoomInviteJoinResponse & {
-  status: "recovered";
-  client_id: string;
-  room_uid?: string;
-  server_id?: string;
-  recovery_code: string;
-};
+export type { GuestRecoveryRedeemResponse };
 
 export function issueGuestRecoveryCode({
   sessionToken,
@@ -130,10 +127,10 @@ export function redeemGuestRecoveryCode({
   deviceToken: string;
   clientId: string;
 }): Promise<GuestRecoveryRedeemResponse> {
-  return postJson<GuestRecoveryRedeemResponse>("/api/identity/recovery-code/redeem", {
+  return postJson<unknown>("/api/identity/recovery-code/redeem", {
     recovery_code: recoveryCode,
     room_id: roomId,
     device_token: deviceToken,
     client_id: clientId,
-  });
+  }).then((payload) => parseGuestRecoveryRedeemResponse(payload, roomId, clientId));
 }

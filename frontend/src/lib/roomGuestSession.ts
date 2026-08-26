@@ -3,6 +3,18 @@ import {
   parseRoomSessionSurface,
   type RoomSessionSurface,
 } from "./roomDirectoryContract";
+import type {
+  GuestRecoveryRedeemResponse,
+  OperatorPairingRedeemResponse,
+  RoomInviteJoinResponse,
+} from "./roomAdmissionContract";
+import {
+  assertExactKeys,
+  optionalString,
+  requiredString,
+  strictRecord,
+  stringField,
+} from "./strictJsonContract";
 
 export type RoomGuestSession = {
   inviteToken: string;
@@ -33,10 +45,6 @@ function cleanText(value: unknown, limit: number): string {
     .trim()
     .slice(0, limit)
     .trim();
-}
-
-function normalizeInviteScope(value: unknown): RoomAppearance["inviteScope"] {
-  return cleanText(value, 32) === "read_only" ? "read_only" : "room";
 }
 
 export function joinInviteTokenFromUrl(url: string): string {
@@ -70,60 +78,110 @@ export function consumeOperatorPairingTokenFromUrl(): string {
 
 export function roomGuestSessionFromJoinPayload(
   inviteToken: string,
-  payload: object,
+  payload: RoomInviteJoinResponse,
   now = new Date()
 ): RoomGuestSession {
-  const record = payload as Record<string, unknown>;
-  const serverSurface = parseRoomSessionSurface({
-    server_id: record.server_id,
-    authority_lineage_id: record.authority_lineage_id,
-    server_product_surface: record.server_product_surface,
-  });
+  return roomGuestSessionFromAdmissionPayload(inviteToken, payload, now);
+}
+
+export function roomGuestSessionFromPairingPayload(
+  payload: OperatorPairingRedeemResponse,
+  now = new Date()
+): RoomGuestSession {
+  return roomGuestSessionFromAdmissionPayload("", payload, now);
+}
+
+export function roomGuestSessionFromRecoveryPayload(
+  payload: GuestRecoveryRedeemResponse,
+  now = new Date()
+): RoomGuestSession {
+  return roomGuestSessionFromAdmissionPayload("", payload, now);
+}
+
+function roomGuestSessionFromAdmissionPayload(
+  inviteToken: string,
+  payload:
+    | RoomInviteJoinResponse
+    | OperatorPairingRedeemResponse
+    | GuestRecoveryRedeemResponse,
+  now: Date
+): RoomGuestSession {
   return {
-    inviteToken: cleanText(inviteToken, 4096),
-    sessionToken: cleanText(record.session_token, 4096),
-    meetingId: cleanText(record.meeting_id, 128),
-    agentId: cleanText(record.agent_id, 128),
-    displayName: cleanText(record.display_name, 128),
-    avatarImage: cleanText(record.avatar_image_url || record.avatarImage, 4096) || undefined,
-    inviteScope: normalizeInviteScope(record.invite_scope),
-    expiresAt: cleanText(record.expires_at, 64),
-    joinedAt: now.toISOString(),
-    roomLabel: cleanText(record.room_label || record.roomLabel, 80) || undefined,
-    roomTopic: cleanText(record.room_topic || record.roomTopic, 160) || undefined,
-    roomCreatedAt: cleanText(record.room_created_at || record.roomCreatedAt, 64) || undefined,
-    roomUid: cleanText(record.room_uid || record.roomUid, 64) || undefined,
-    clientId: cleanText(record.client_id || record.clientId, 128) || undefined,
-    serverSurface,
-    operator: record.operator === true,
+    inviteToken,
+    sessionToken: payload.session_token,
+    meetingId: payload.meeting_id,
+    agentId: payload.agent_id,
+    displayName: payload.display_name,
+    avatarImage: "avatar_image_url" in payload ? payload.avatar_image_url : undefined,
+    inviteScope: payload.invite_scope,
+    expiresAt: payload.expires_at,
+    joinedAt: "joined_at" in payload ? payload.joined_at : now.toISOString(),
+    roomLabel: payload.room_label || undefined,
+    roomTopic: payload.room_topic || undefined,
+    roomCreatedAt: payload.room_created_at || undefined,
+    roomUid: "room_uid" in payload ? payload.room_uid : undefined,
+    clientId: "client_id" in payload ? payload.client_id : undefined,
+    serverSurface: {
+      server_id: payload.server_id,
+      authority_lineage_id: payload.authority_lineage_id,
+      server_product_surface: payload.server_product_surface,
+    },
+    operator: "operator" in payload && payload.operator,
   };
 }
 
 export function normalizeRoomGuestSession(value: unknown): RoomGuestSession | null {
-  if (!value || typeof value !== "object") return null;
-  const record = value as Record<string, unknown>;
-  const storedSurface = record.serverSurface as Record<string, unknown> | undefined;
-  const session = roomGuestSessionFromJoinPayload(cleanText(record.inviteToken, 4096), {
-    session_token: record.sessionToken,
-    meeting_id: record.meetingId,
-    agent_id: record.agentId,
-    display_name: record.displayName,
-    avatar_image_url: record.avatarImage,
-    invite_scope: record.inviteScope,
-    expires_at: record.expiresAt,
-    operator: record.operator,
-    room_label: record.roomLabel,
-    room_topic: record.roomTopic,
-    room_created_at: record.roomCreatedAt,
-    room_uid: record.roomUid,
-    server_id: storedSurface?.server_id,
-    client_id: record.clientId,
-    authority_lineage_id: storedSurface?.authority_lineage_id,
-    server_product_surface: storedSurface?.server_product_surface,
-  });
-  session.joinedAt = cleanText(record.joinedAt, 64) || session.joinedAt;
-  if (!session.sessionToken || !session.meetingId || !session.agentId) return null;
-  return session;
+  try {
+    const record = strictRecord(value, "저장된 방 세션");
+    assertExactKeys(
+      record,
+      [
+        "inviteToken",
+        "sessionToken",
+        "meetingId",
+        "agentId",
+        "displayName",
+        "inviteScope",
+        "expiresAt",
+        "joinedAt",
+        "serverSurface",
+        "operator",
+      ],
+      "저장된 방 세션",
+      ["avatarImage", "roomLabel", "roomTopic", "roomCreatedAt", "roomUid", "clientId"]
+    );
+    if (
+      (record.inviteScope !== "room" && record.inviteScope !== "read_only") ||
+      typeof record.operator !== "boolean"
+    ) {
+      return null;
+    }
+    const expiresAt = requiredString(record, "expiresAt", "저장된 방 세션");
+    const joinedAt = requiredString(record, "joinedAt", "저장된 방 세션");
+    if (Number.isNaN(Date.parse(expiresAt)) || Number.isNaN(Date.parse(joinedAt))) {
+      return null;
+    }
+    return {
+      inviteToken: stringField(record, "inviteToken", "저장된 방 세션"),
+      sessionToken: requiredString(record, "sessionToken", "저장된 방 세션"),
+      meetingId: requiredString(record, "meetingId", "저장된 방 세션"),
+      agentId: requiredString(record, "agentId", "저장된 방 세션"),
+      displayName: requiredString(record, "displayName", "저장된 방 세션"),
+      avatarImage: optionalString(record, "avatarImage", "저장된 방 세션"),
+      inviteScope: record.inviteScope,
+      expiresAt,
+      joinedAt,
+      roomLabel: optionalString(record, "roomLabel", "저장된 방 세션"),
+      roomTopic: optionalString(record, "roomTopic", "저장된 방 세션"),
+      roomCreatedAt: optionalString(record, "roomCreatedAt", "저장된 방 세션"),
+      roomUid: optionalString(record, "roomUid", "저장된 방 세션"),
+      clientId: optionalString(record, "clientId", "저장된 방 세션"),
+      serverSurface: parseRoomSessionSurface(record.serverSurface),
+      operator: record.operator,
+    };
+  } catch {
+    return null;
+  }
 }
 
 // A guest session token lives ~1h server-side. Treat it as expired a minute
@@ -137,7 +195,7 @@ export function roomGuestSessionExpired(
 ): boolean {
   if (!session) return true;
   const expiresAt = Date.parse(session.expiresAt || "");
-  if (Number.isNaN(expiresAt)) return false; // unknown expiry — let the server decide
+  if (Number.isNaN(expiresAt)) return true;
   return expiresAt - GUEST_SESSION_EXPIRY_SKEW_MS <= now;
 }
 

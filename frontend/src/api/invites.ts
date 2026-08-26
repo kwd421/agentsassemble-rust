@@ -1,5 +1,10 @@
 import type { RoomAppearance } from "../lib/roomAppearance";
-import type { RoomSessionSurface } from "../lib/roomDirectoryContract";
+import {
+  parseOperatorPairingRedeemResponse,
+  parseRoomInviteJoinResponse,
+  type OperatorPairingRedeemResponse,
+  type RoomInviteJoinResponse,
+} from "../lib/roomAdmissionContract";
 import {
   fetchJson,
   postJson,
@@ -24,24 +29,7 @@ export interface RoomInviteCreateResponse {
   provider_kind?: string;
 }
 
-export interface RoomInviteJoinResponse extends RoomSessionSurface {
-  status: string;
-  request_id?: string;
-  session_token: string;
-  agent_id: string;
-  display_name: string;
-  avatar_image_url?: string;
-  meeting_id: string;
-  invite_scope: RoomAppearance["inviteScope"];
-  connection_kind: string;
-  expires_at: string;
-  operator?: boolean;
-  room_label?: string;
-  room_topic?: string;
-  room_created_at?: string;
-  room_uid?: string;
-  client_id?: string;
-}
+export type { OperatorPairingRedeemResponse, RoomInviteJoinResponse };
 
 export interface RoomInviteAdmissionResponse {
   status:
@@ -166,6 +154,7 @@ export function stopPublicInviteTunnel() {
 export function joinRoomInvite({
   inviteToken,
   requestId,
+  meetingId,
   displayName,
   avatarImage,
   deviceToken,
@@ -174,21 +163,23 @@ export function joinRoomInvite({
 }: {
   inviteToken: string;
   requestId: string;
+  meetingId: string;
   displayName?: string;
   avatarImage?: string;
   deviceToken?: string;
   clientId?: string;
   participantType?: "human" | "agent";
 }) {
-  return postJson<RoomInviteJoinResponse>("/api/room-invite/join", {
+  return postJson<unknown>("/api/room-invite/join", {
     invite_token: inviteToken,
     request_id: requestId,
+    meeting_id: meetingId,
     display_name: displayName,
     avatar_image_url: avatarImage,
     device_token: deviceToken,
     client_id: clientId,
     participant_type: participantType,
-  });
+  }).then((payload) => parseRoomInviteJoinResponse(payload, requestId, meetingId));
 }
 
 export function preflightRoomInvite({
@@ -228,11 +219,11 @@ export function redeemOperatorPairing({
   pairingToken: string;
   deviceToken: string;
 }) {
-  return postJsonWithIdentity<RoomInviteJoinResponse>(
+  return postJsonWithIdentity<unknown>(
     "/api/operator-pairing/redeem",
     { pairing_token: pairingToken },
     { deviceToken }
-  );
+  ).then(parseOperatorPairingRedeemResponse);
 }
 
 export function createCompanionRoomInvite({

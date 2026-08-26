@@ -145,6 +145,7 @@ describe("useRoomAdmission", () => {
       session_token: "session-2",
       agent_id: "guest-2",
       display_name: "Known Guest",
+      avatar_image_url: "data:image/png;base64,avatar",
       meeting_id: "room-2",
       invite_scope: "room",
       connection_kind: "browser",
@@ -177,6 +178,7 @@ describe("useRoomAdmission", () => {
     });
     expect(apiMocks.joinRoomInvite).toHaveBeenCalledWith({
       inviteToken: "invite-1",
+      meetingId: "room-2",
       displayName: "Known Guest",
       avatarImage: "data:image/png;base64,avatar",
       deviceToken: "aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
@@ -266,14 +268,24 @@ describe("useRoomAdmission", () => {
     await act(async () => {
       accepted = await result.current.acceptRecoveredSession({
         ...SESSION_SURFACE,
-        status: "admitted",
+        status: "recovered",
         session_token: "untrusted-recovery",
         agent_id: "guest-1",
         display_name: "Recovered Guest",
         meeting_id: "room-1",
         invite_scope: "room",
-        connection_kind: "browser",
+        participant_type: "human",
+        client_type: "browser",
+        provider_kind: "manual",
+        connection_kind: "native_remote_room_client",
+        client_id: "client-1",
         expires_at: "2099-01-01T00:00:00Z",
+        room_label: "Room One",
+        room_topic: "",
+        room_created_at: "2026-07-10T00:00:00Z",
+        room_uid: "11111111-2222-4333-8444-555555555555",
+        joined_at: "2026-07-11T00:00:00Z",
+        recovery_code: "replacement-code",
       });
     });
     expect(accepted).toBe(false);
@@ -611,6 +623,7 @@ describe("useRoomAdmission", () => {
     apiMocks.preflightRoomInvite.mockResolvedValue({
       status: "known_user",
       can_auto_join: true,
+      room_id: "room-1",
       participant: { participant_id: "guest-1", display_name: "Guest" },
     });
     apiMocks.joinRoomInvite.mockRejectedValue(new Error("network unavailable"));
@@ -644,6 +657,7 @@ describe("useRoomAdmission", () => {
     apiMocks.preflightRoomInvite.mockResolvedValue({
       status: "known_user",
       can_auto_join: true,
+      room_id: "room-1",
       participant: { participant_id: "guest-1", display_name: "Guest" },
     });
     apiMocks.joinRoomInvite

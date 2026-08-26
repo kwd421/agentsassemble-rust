@@ -3,7 +3,7 @@ import {
   joinRoomInvite,
   preflightRoomInvite,
   redeemOperatorPairing,
-  type RoomInviteJoinResponse,
+  type GuestRecoveryRedeemResponse,
 } from "../api";
 import { ApiError, GUEST_SESSION_EXPIRED_MESSAGE } from "../lib/apiErrors";
 import {
@@ -18,6 +18,8 @@ import {
   persistRoomGuestSession,
   roomGuestSessionExpired,
   roomGuestSessionFromJoinPayload,
+  roomGuestSessionFromPairingPayload,
+  roomGuestSessionFromRecoveryPayload,
   type RoomGuestSession,
 } from "../lib/roomGuestSession";
 
@@ -235,6 +237,7 @@ export function useRoomAdmission({
   const boundSurfaceKeyRef = useRef("");
   const preflightAttemptedTokenRef = useRef("");
   const pairingAttemptedTokenRef = useRef("");
+  const expectedInviteRoomIdRef = useRef("");
   const onPairingTokenConsumedRef = useRef(onPairingTokenConsumed);
   useEffect(() => {
     onPairingTokenConsumedRef.current = onPairingTokenConsumed;
@@ -395,18 +398,8 @@ export function useRoomAdmission({
   }, []);
 
   const applyJoinedSession = useCallback(
-    async (
-      inviteToken: string,
-      payload: RoomInviteJoinResponse,
-      avatarImage: string,
-      source: AdmissionSource
-    ) => {
-      let nextSession: RoomGuestSession;
+    async (nextSession: RoomGuestSession, source: AdmissionSource) => {
       try {
-        nextSession = roomGuestSessionFromJoinPayload(inviteToken, {
-          ...payload,
-          avatar_image_url: payload.avatar_image_url || avatarImage,
-        });
         await bindSessionSurface(nextSession);
       } catch (error) {
         throw new SessionSurfaceError(
@@ -418,7 +411,7 @@ export function useRoomAdmission({
       persistRoomGuestSession(nextSession);
       rememberGuestProfile({
         displayName: nextSession.displayName || pendingGuestDisplayName,
-        avatarImage: nextSession.avatarImage || avatarImage || undefined,
+        avatarImage: nextSession.avatarImage,
       });
       dispatchAdmission({ type: "joined", session: nextSession, source });
       onRoomJoined(roomFromGuestSession(nextSession));
@@ -428,9 +421,9 @@ export function useRoomAdmission({
   );
 
   const acceptRecoveredSession = useCallback(
-    async (payload: RoomInviteJoinResponse) => {
+    async (payload: GuestRecoveryRedeemResponse) => {
       try {
-        await applyJoinedSession("", payload, payload.avatar_image_url || "", "recovery");
+        await applyJoinedSession(roomGuestSessionFromRecoveryPayload(payload), "recovery");
         return true;
       } catch (error) {
         const message =
@@ -474,7 +467,7 @@ export function useRoomAdmission({
       .then(async (payload) => {
         if (cancelled) return;
         onPairingTokenConsumedRef.current();
-        await applyJoinedSession("", payload, payload.avatar_image_url || "", "pairing");
+        await applyJoinedSession(roomGuestSessionFromPairingPayload(payload), "pairing");
       })
       .catch((error) => {
         if (cancelled) return;
@@ -532,7 +525,11 @@ export function useRoomAdmission({
     })
       .then(async (decision) => {
         if (cancelled) return;
+        expectedInviteRoomIdRef.current = decision.room_id || "";
         if (decision.status === "existing_session" && guestSession) {
+          if (!expectedInviteRoomIdRef.current || guestSession.meetingId !== expectedInviteRoomIdRef.current) {
+            throw new Error("기존 세션이 초대가 가리키는 방과 일치하지 않습니다.");
+          }
           const preservedSession = {
             ...guestSession,
             roomLabel: decision.room_label || guestSession.roomLabel,
@@ -611,6 +608,19 @@ export function useRoomAdmission({
   useEffect(() => {
     if (!guestJoinToken || guestAlreadyJoinedThisInvite) return;
     if (admissionState.kind !== "joining") return;
+    const expectedRoomId = expectedInviteRoomIdRef.current;
+    if (!expectedRoomId) {
+      const message = "초대가 가리키는 방을 확인할 수 없습니다.";
+      dispatchAdmission({
+        type: "failed",
+        operation: "join",
+        code: "invite_room_unverified",
+        message,
+        retryable: false,
+        status: message,
+      });
+      return;
+    }
     let cancelled = false;
     dispatchAdmission({
       type: "join_requested",
@@ -642,6 +652,7 @@ export function useRoomAdmission({
     joinRoomInvite({
       inviteToken: guestJoinToken,
       requestId,
+      meetingId: expectedRoomId,
       displayName: pendingGuestDisplayName,
       avatarImage: pendingGuestAvatarImage,
       deviceToken,
@@ -651,9 +662,7 @@ export function useRoomAdmission({
       .then(async (payload) => {
         if (!cancelled) {
           await applyJoinedSession(
-            guestJoinToken,
-            payload,
-            pendingGuestAvatarImage,
+            roomGuestSessionFromJoinPayload(guestJoinToken, payload),
             "invite"
           );
           clearAdmissionRequestId();

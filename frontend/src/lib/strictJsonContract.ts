@@ -32,6 +32,17 @@ export function requiredString(
   return value[key];
 }
 
+export function stringField(
+  value: Record<string, unknown>,
+  key: string,
+  label: string
+): string {
+  if (typeof value[key] !== "string") {
+    throw new Error(`${label}.${key}가 올바르지 않습니다.`);
+  }
+  return value[key];
+}
+
 export function optionalString(
   value: Record<string, unknown>,
   key: string,
