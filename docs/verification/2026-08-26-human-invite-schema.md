@@ -1,7 +1,8 @@
 # Human invite schema verification — 2026-08-26
 
-Status: partial slice evidence; invite repository, issuer, routes, and browser flow
-are not implemented by these commits.
+Status: partial slice evidence; canonical invite reads are implemented, while invite
+writes, issuer, routes, admission, and browser flow are not implemented by these
+commits.
 
 ## Provenance and scope
 
@@ -9,6 +10,7 @@ are not implemented by these commits.
 - Approved Rust design: `bfde3de`.
 - Dual-credential schema commit: `b20c3b7`.
 - Locator-binding correction: `b46eae9`.
+- Canonical invite read boundary: `afd3f6d`.
 - The schema is fresh-only at version 35. No migration, compatibility reader,
   fallback column, or partially upgraded authority is accepted.
 
@@ -90,3 +92,63 @@ On `b46eae9`:
 These results prove only the physical schema invariants and clean cutover. The real
 dual create/join paths, raw-credential absence, exact retry ordering, concurrency,
 revocation, restart, and copied-frontend behavior remain required later evidence.
+
+## Canonical read boundary
+
+Commit `afd3f6d` adds the smallest read-only persistence surface needed by the next
+issuer and admission increments. Both complete 32-byte credential fingerprints
+resolve one canonical `HumanInvite`; listing returns stable `(created_at, invite_id)`
+order and retains expired and revoked rows so a later route can apply the original
+view policy. Reads never clean up, revoke, consume, cache, or otherwise write invite
+state.
+
+Stored authority is decoded fail-closed. Fixed fingerprints, timestamps, scope,
+boolean state, public-ID derivation, nonempty identity fields, configured/effective
+use counts, and time ordering must all remain valid. A malformed row becomes the
+internal `InvalidHumanInvite` persistence failure. The existing WebSocket error
+boundary redacts that variant to `persistence_failed`; it is not misreported as an
+ordinary invalid invite and no stored credential or row value is returned to the
+client.
+
+### Read cost and design restraint
+
+- A one-off SQLite planner check over the same primary/unique key shape reported an
+  indexed search for each exact fingerprint query: the signed and join lookups used
+  their separate SQLite automatic uniqueness indexes. Each successful lookup
+  decodes one row and allocates only the returned owned strings and two fixed
+  32-byte arrays. No process cache, background cleanup, or duplicate authority was
+  added.
+- The stable list plan reported a table scan and temporary B-tree sort because no
+  `(created_at, invite_id)` index exists. That is a real potential CPU/memory cost,
+  but no invite route or representative invite workload exists yet, and the current
+  original behavior returns the complete list. Adding another persistent index or
+  speculative pagination would therefore trade disk and write amplification for an
+  unmeasured benefit or change reachable behavior. This increment records the cost
+  and leaves it unchanged until route-level evidence justifies a contract-preserving
+  change.
+- The read code performs no disk writes and adds no schema bytes. `hex` was already
+  present in the resolved dependency graph; declaring it directly avoids a private
+  formatter without adding another resolved package.
+- Production latency is not claimed from unit-test wall time. There is no active
+  invite HTTP path in this increment to benchmark honestly.
+
+### Read verification
+
+- `cargo test -p agentsassemble-persistence -- --nocapture` passed all 134 tests in
+  1.10 seconds, including one contract test proving that both complete fingerprints
+  return the same typed row, listing preserves that row, the effective reusable
+  ceiling remains 128, and an unknown fingerprint returns no row;
+- `cargo clippy -p agentsassemble-persistence --all-targets -- -D warnings` passed;
+- `make check` passed architecture, source-growth, policy, formatting, and all-target
+  workspace compilation after the new internal error was explicitly mapped;
+- the commit contains 278 added lines across seven files, including the 269-line
+  read module, and every touched source file remains below the mandatory limit;
+- the critical web reviewer compared both original PostgreSQL and local repository
+  ordering/filter boundaries, and it and the same Daybreaker manual security
+  reviewer returned `APPROVE` with no Critical, High, or Medium finding;
+- no provider, browser, Computer Use resource, Deep Scan, or automated security
+  scanner was used for this read-only increment.
+
+This evidence does not prove creation, revocation, credential parsing/signing,
+preflight policy, admission, concurrency, restart behavior, HTTP authorization, or
+frontend parity. Those paths remain explicitly incomplete.
