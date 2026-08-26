@@ -134,29 +134,112 @@ describe("room preference HTTP authority", () => {
     });
   });
 
-  it("rejects remote-session preferences before native or HTTP authority is used", async () => {
+  it("exchanges a remote session for a fresh exact-purpose ticket per operation", async () => {
     const invoke = vi.fn();
     Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
-    const fetchMock = vi.fn();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ ticket: "d".repeat(64), ttl_seconds: 30 }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(response()), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ ticket: "e".repeat(64), ttl_seconds: 30 }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(response("general", "mute")), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      );
     vi.stubGlobal("fetch", fetchMock);
 
     const identity = {
-      sessionToken: "guest-session",
+      sessionToken: "aas1.guest-session",
       deviceToken: "guest-device",
     };
-    await expect(fetchRoomSettings("general", identity)).rejects.toThrow(
-      "Rust 초대·세션 권한"
+    await fetchRoomSettings("general", identity);
+    await saveRoomSettings({
+      roomId: "general",
+      appearance: { notifications: "mute" },
+      identity,
+    });
+
+    expect(invoke).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/session-tickets/preferences-read", {
+      cache: "no-store",
+      method: "POST",
+      headers: { Authorization: "Bearer aas1.guest-session" },
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/room-settings?room_id=general",
+      expect.objectContaining({ cache: "no-store", headers: expect.any(Headers) })
     );
+    expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/session-tickets/preferences-write", {
+      cache: "no-store",
+      method: "POST",
+      headers: { Authorization: "Bearer aas1.guest-session" },
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      "/api/room-settings",
+      expect.objectContaining({
+        cache: "no-store",
+        method: "POST",
+        headers: expect.any(Headers),
+      })
+    );
+    const readHeaders = fetchMock.mock.calls[1]?.[1]?.headers as Headers;
+    const writeInit = fetchMock.mock.calls[3]?.[1] as RequestInit;
+    const writeHeaders = writeInit.headers as Headers;
+    expect(readHeaders.get("Authorization")).toBe(`Bearer ${"d".repeat(64)}`);
+    expect(readHeaders.get("X-Device-Token")).toBeNull();
+    expect(writeHeaders.get("Authorization")).toBe(`Bearer ${"e".repeat(64)}`);
+    expect(writeHeaders.get("X-Device-Token")).toBeNull();
+    expect(writeHeaders.get("Content-Type")).toBe("application/json");
+    expect(JSON.parse(String(writeInit.body))).toEqual({
+      room_id: "general",
+      appearance: { notifications: "mute" },
+    });
+  });
+
+  it("does not call the preference target when session exchange is denied", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          error: "Read-only room sessions cannot change preferences.",
+          code: "session_read_only",
+        }),
+        { status: 403, headers: { "Content-Type": "application/json" } }
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
     await expect(
       saveRoomSettings({
         roomId: "general",
         appearance: { notifications: "mute" },
-        identity,
+        identity: { sessionToken: "aas1.read-only-session" },
       })
-    ).rejects.toThrow("Rust 초대·세션 권한");
-
-    expect(invoke).not.toHaveBeenCalled();
-    expect(fetchMock).not.toHaveBeenCalled();
+    ).rejects.toThrow("Read-only room sessions cannot change preferences.");
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledWith("/api/session-tickets/preferences-write", {
+      cache: "no-store",
+      method: "POST",
+      headers: { Authorization: "Bearer aas1.read-only-session" },
+    });
   });
 
   it("rejects a mismatched response room instead of projecting defaults", async () => {

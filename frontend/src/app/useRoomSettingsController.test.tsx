@@ -184,6 +184,41 @@ describe("useRoomSettingsController", () => {
     expect(saveCanonicalGlobalSettings).not.toHaveBeenCalled();
   });
 
+  it("keeps the admitted remote session on preference reads and writes", async () => {
+    const hook = renderHook(() =>
+      useRoomSettingsController({
+        activeRoom: roomA,
+        preferenceAuthority: {
+          kind: "remote",
+          sessionToken: "aas1.remote-preference-session",
+        },
+        canonicalGlobalSettings: globalSettings(roomA, "forest"),
+        saveCanonicalGlobalSettings,
+        onRoomMetadataLoaded: vi.fn(),
+      })
+    );
+    await waitFor(() =>
+      expect(hook.result.current.preferenceStateFor(roomA).status).toBe("ready")
+    );
+    expect(apiMocks.fetchRoomSettings).toHaveBeenCalledWith(roomA.meetingId, {
+      sessionToken: "aas1.remote-preference-session",
+      deviceToken: "",
+    });
+
+    await act(async () => {
+      await hook.result.current.updateAppearance(roomA, { notifications: "mute" });
+    });
+    expect(apiMocks.saveRoomSettings).toHaveBeenCalledWith({
+      roomId: roomA.meetingId,
+      appearance: { notifications: "mute" },
+      identity: {
+        sessionToken: "aas1.remote-preference-session",
+        deviceToken: "",
+      },
+    });
+    expect(saveCanonicalGlobalSettings).not.toHaveBeenCalled();
+  });
+
   it("does not let the initial preference response overwrite a newer save", async () => {
     const initialRequest = deferred<RoomSettings>();
     const saveRequest = deferred<RoomSettings>();
@@ -255,19 +290,19 @@ describe("useRoomSettingsController", () => {
     await waitFor(() =>
       expect(hook.result.current.preferenceStateFor(roomA)).toMatchObject({
         status: "error",
-        error: { message: expect.stringContaining("Rust 초대·세션 권한") },
+        error: { message: expect.stringContaining("방 세션 인증") },
       })
     );
     await act(async () => {
       hook.result.current.refresh(roomA);
       await expect(
         hook.result.current.updateAppearance(roomA, { notifications: "mute" })
-      ).rejects.toThrow("Rust 초대·세션 권한");
+      ).rejects.toThrow("방 세션 인증");
       await expect(
         hook.result.current.updateChannelSetting(roomA, "lobby", {
           notifications: "mute",
         })
-      ).rejects.toThrow("Rust 초대·세션 권한");
+      ).rejects.toThrow("방 세션 인증");
     });
 
     expect(apiMocks.fetchRoomSettings).not.toHaveBeenCalled();

@@ -333,13 +333,11 @@ export function useAppController() {
     canonicalParticipants: canonicalRoom.participants,
     enabled: startupIdentityResolved && !activeRoomDisconnected,
   });
-  const roomPreferenceAuthority = useMemo<RoomPreferenceAuthority>(
-    () =>
-      guestLocked
-        ? { kind: "remote-unavailable" }
-        : { kind: "local", deviceToken },
-    [deviceToken, guestLocked]
-  );
+  const roomPreferenceAuthority: RoomPreferenceAuthority = guestLocked
+    ? admittedSessionToken
+      ? { kind: "remote", sessionToken: admittedSessionToken }
+      : { kind: "remote-unavailable" }
+    : { kind: "local", deviceToken };
   const activeRoomMembers = roomMembers.activeMembers;
   const roomSettings = useRoomSettingsController({
     activeRoom,

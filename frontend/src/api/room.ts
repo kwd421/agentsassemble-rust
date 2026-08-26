@@ -11,6 +11,7 @@ import {
   fetchJsonServerOperator,
   fetchJsonWithIdentity,
   fetchJsonWithToken,
+  exchangeSessionHttpTicket,
   exchangeSessionTicket,
   deleteJson,
   postJson,
@@ -569,7 +570,7 @@ type RoomSettingsIdentity = {
 };
 
 export const ROOM_SESSION_PREFERENCES_UNAVAILABLE =
-  "원격 세션의 방 알림 설정은 Rust 초대·세션 권한이 연결될 때까지 사용할 수 없습니다.";
+  "방 세션 인증이 완료되기 전에는 원격 알림 설정을 사용할 수 없습니다.";
 
 type RoomSettingsUpdate = {
   roomId: string;
@@ -582,11 +583,14 @@ export function fetchRoomSettings(
   roomId: string,
   identity: RoomSettingsIdentity = {}
 ): Promise<RoomSettings> {
-  if (identity.sessionToken) {
-    return Promise.reject(new Error(ROOM_SESSION_PREFERENCES_UNAVAILABLE));
-  }
   const request =
-    isDesktopWebview()
+    identity.sessionToken
+      ? requestSessionRoomPreferences(
+          "preferences-read",
+          identity.sessionToken,
+          `/api/room-settings${queryString({ room_id: roomId })}`
+        )
+      : isDesktopWebview()
       ? fetchDesktopRoomPreferences(roomId).then(async (response) => {
           if (!response.ok) throw await responseError(response);
           return response.json() as Promise<unknown>;
@@ -604,9 +608,6 @@ export function saveRoomSettings({
   channelSettings,
   identity = {},
 }: RoomSettingsUpdate): Promise<RoomSettings> {
-  if (identity.sessionToken) {
-    return Promise.reject(new Error(ROOM_SESSION_PREFERENCES_UNAVAILABLE));
-  }
   const body = {
     room_id: roomId,
     ...(appearance
@@ -617,7 +618,18 @@ export function saveRoomSettings({
       : {}),
   };
   const request =
-    isDesktopWebview()
+    identity.sessionToken
+      ? requestSessionRoomPreferences(
+          "preferences-write",
+          identity.sessionToken,
+          "/api/room-settings",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          }
+        )
+      : isDesktopWebview()
       ? fetchDesktopRoomPreferences(roomId, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -628,6 +640,20 @@ export function saveRoomSettings({
         })
       : postJsonWithIdentity<unknown>("/api/room-settings", body, identity);
   return request.then((payload) => parseRoomSettingsResponse(payload, roomId));
+}
+
+async function requestSessionRoomPreferences(
+  purpose: "preferences-read" | "preferences-write",
+  sessionToken: string,
+  url: string,
+  init: RequestInit = {}
+): Promise<unknown> {
+  const ticket = await exchangeSessionHttpTicket(purpose, sessionToken);
+  const headers = new Headers(init.headers);
+  headers.set("Authorization", `Bearer ${ticket}`);
+  const response = await fetch(url, { ...init, cache: "no-store", headers });
+  if (!response.ok) throw await responseError(response);
+  return response.json();
 }
 
 export function fetchRoomFriends() {

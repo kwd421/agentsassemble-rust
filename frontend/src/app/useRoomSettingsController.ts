@@ -30,6 +30,7 @@ type UseRoomSettingsControllerOptions = {
 
 export type RoomPreferenceAuthority =
   | { kind: "local"; deviceToken: string }
+  | { kind: "remote"; sessionToken: string }
   | { kind: "remote-unavailable" };
 
 type PersistedRoomSettingsOverrides = RoomGlobalSettingsUpdate;
@@ -115,6 +116,8 @@ export function useRoomSettingsController({
   const preferenceAuthorityKind = preferenceAuthority.kind;
   const preferenceDeviceToken =
     preferenceAuthority.kind === "local" ? preferenceAuthority.deviceToken : "";
+  const preferenceSessionToken =
+    preferenceAuthority.kind === "remote" ? preferenceAuthority.sessionToken : "";
   const canonicalGlobalSettingsSignature = canonicalGlobalSettings
     ? JSON.stringify(canonicalGlobalSettings)
     : "";
@@ -282,7 +285,7 @@ export function useRoomSettingsController({
           return null;
         }
         return fetchRoomSettings(meetingId, {
-          sessionToken: "",
+          sessionToken: preferenceSessionToken,
           deviceToken: preferenceDeviceToken,
         });
       })
@@ -322,6 +325,7 @@ export function useRoomSettingsController({
     isCurrentPreferenceOperation,
     preferenceAuthorityKind,
     preferenceDeviceToken,
+    preferenceSessionToken,
   ]);
 
   const savePreferences = useCallback(
@@ -353,7 +357,7 @@ export function useRoomSettingsController({
             roomId: room.meetingId,
             ...updates,
             identity: {
-              sessionToken: "",
+              sessionToken: preferenceSessionToken,
               deviceToken: preferenceDeviceToken,
             },
           })
@@ -394,6 +398,7 @@ export function useRoomSettingsController({
       isCurrentPreferenceOperation,
       preferenceAuthorityKind,
       preferenceDeviceToken,
+      preferenceSessionToken,
     ]
   );
 
@@ -501,7 +506,7 @@ export function useRoomSettingsController({
       const nextAppearance = completeRoomAppearance({
         ...appearanceFor(room),
         ...globalUpdates,
-        ...(notifications && preferenceAuthorityKind === "local"
+        ...(notifications && preferenceAuthorityKind !== "remote-unavailable"
           ? { notifications }
           : {}),
       });
@@ -594,7 +599,7 @@ export function useRoomSettingsController({
         void pendingWrite
           .then(() =>
             fetchRoomSettings(room.meetingId, {
-              sessionToken: "",
+              sessionToken: preferenceSessionToken,
               deviceToken: preferenceDeviceToken,
             })
           )
@@ -636,6 +641,7 @@ export function useRoomSettingsController({
       isCurrentPreferenceOperation,
       preferenceAuthorityKind,
       preferenceDeviceToken,
+      preferenceSessionToken,
     ]
   );
 

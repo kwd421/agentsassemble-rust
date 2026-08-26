@@ -14,7 +14,7 @@ function isServerWideProfileRoute(url: string): boolean {
 }
 
 export async function exchangeSessionTicket(
-  purpose: "profile" | "socket",
+  purpose: "profile" | "socket" | "preferences-read" | "preferences-write",
   sessionToken: string
 ): Promise<Record<string, unknown>> {
   const res = await fetch(`/api/session-tickets/${purpose}`, {
@@ -30,18 +30,21 @@ export async function exchangeSessionTicket(
   return payload as Record<string, unknown>;
 }
 
-async function exchangeProfileTicket(sessionToken: string): Promise<string> {
-  const payload = await exchangeSessionTicket("profile", sessionToken);
+export async function exchangeSessionHttpTicket(
+  purpose: "profile" | "preferences-read" | "preferences-write",
+  sessionToken: string
+): Promise<string> {
+  const payload = await exchangeSessionTicket(purpose, sessionToken);
   const ticket = typeof payload.ticket === "string" ? payload.ticket : "";
   if (!/^[0-9a-f]{64}$/.test(ticket)) {
-    throw new Error("Profile ticket response is invalid.");
+    throw new Error("Session HTTP ticket response is invalid.");
   }
   return ticket;
 }
 
 async function profileTargetToken(url: string, sessionToken: string): Promise<string> {
   return sessionToken && isServerWideProfileRoute(url)
-    ? exchangeProfileTicket(sessionToken)
+    ? exchangeSessionHttpTicket("profile", sessionToken)
     : sessionToken;
 }
 
