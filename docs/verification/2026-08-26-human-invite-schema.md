@@ -1,8 +1,8 @@
 # Human invite schema verification — 2026-08-26
 
-Status: partial slice evidence; canonical invite reads are implemented, while invite
-writes, issuer, routes, admission, and browser flow are not implemented by these
-commits.
+Status: partial slice evidence; canonical invite reads and the manager-authorized
+create write are implemented, while credential issuance, revoke, routes, admission,
+and browser flow are not implemented by these commits.
 
 ## Provenance and scope
 
@@ -11,6 +11,8 @@ commits.
 - Dual-credential schema commit: `b20c3b7`.
 - Locator-binding correction: `b46eae9`.
 - Canonical invite read boundary: `afd3f6d`.
+- Manager-authorized invite create write: `a504835`.
+- Exact timestamp correction: `06201de`.
 - The schema is fresh-only at version 35. No migration, compatibility reader,
   fallback column, or partially upgraded authority is accepted.
 
@@ -152,3 +154,72 @@ client.
 This evidence does not prove creation, revocation, credential parsing/signing,
 preflight policy, admission, concurrency, restart behavior, HTTP authorization, or
 frontend parity. Those paths remain explicitly incomplete.
+
+## Manager-authorized create write
+
+Commit `a504835` adds one persistence write; it does not mint or return the raw
+`aai1` or `aaj1_` credentials. Its input contains only both fixed fingerprints,
+normalized public invite policy, and timestamps. Room and creator are deliberately
+absent. The transaction re-resolves the supplied manager's current room membership
+and profile binding, proves the exact local operator plus complete bootstrap
+integrity, derives room and creator from that current identity, inserts the fresh
+row, decodes the returned canonical authority, and only then commits.
+
+### Create threat and preserved contract
+
+A `RoomUserIdentity` is an earlier observation, not a durable capability. Trusting
+its strings directly would let a stale identity create an invite after membership
+loss or let a future caller select another room or creator. Revalidation inside the
+same write transaction closes that concrete time-of-check/time-of-use and confused-
+deputy boundary. The test removes the manager membership after obtaining the typed
+identity and proves the next create fails without another row.
+
+The write preserves exact nonnegative configured `max_uses`, including zero and
+values above the effective ceiling; the stored effective limit remains derived and
+never overwrites the public configured value. Typed scope, expiry, base participant,
+display name, both independent fingerprints, fresh `use_count = 0`, and
+`revoked = false` remain one row. Upstream issuance must still perform the original
+normalization and generate the real credentials before this input exists. Both
+timestamps must also be exactly representable in microseconds, matching the original
+Python time precision and the SQLite integer contract.
+
+The original repository used an upsert keyed by the truncated public invite ID.
+Rust deliberately performs a fresh insert. A different full signed fingerprint that
+shares the first 64 digest bits must fail instead of overwriting an existing invite
+and silently rebinding its join credential. This is a security-preserving collision
+rejection, not compatibility or retry behavior; no hidden second attempt is made.
+
+The first web review found one concrete Medium issue in `a504835`: Chrono can carry
+nanoseconds that `timestamp_micros()` silently discards. Because the signed-token
+fingerprint already exists at this boundary, truncating here could make signed expiry
+claims disagree with the newly committed row. Commit `06201de` rejects either
+timestamp unless its subsecond nanoseconds are an exact multiple of 1,000. It does
+not round or normalize after signing.
+
+### Create cost and verification
+
+- Input validation scans at most 64 participant-ID characters and 128 display-name
+  characters, derives 16 lowercase hex characters from eight fingerprint bytes,
+  and allocates no cache or background state.
+- The existing one-connection SQLite writer performs current membership/profile and
+  bootstrap-integrity reads followed by one `INSERT ... RETURNING`. Returning the
+  inserted columns avoids a second select while still reusing the canonical decoder.
+  The transaction adds no event, session, cleanup, or unrelated write.
+- Durable cost is exactly one `room_invites` row plus the schema's existing primary,
+  two credential-uniqueness, composite-authority, and room-state index entries. No
+  new table or index was added by this commit.
+- `cargo test -p agentsassemble-persistence -- --nocapture` passed all 135 tests in
+  1.06 seconds; the focused invite tests passed 2/2 in 0.02 seconds. The create test
+  adds one nanosecond to an exact expiry, proves rejection, then proves the later
+  valid create is the only persisted row;
+- warning-denied persistence all-target Clippy and `make check` passed;
+- the commit is three files with 163 additions and five deletions; the invite module
+  is 428 lines and no gate exception was added;
+- Daybreaker approved the original create commit and the correction. The critical
+  web reviewer returned one Medium for lossy timestamp conversion, then approved
+  `06201de` with no remaining Critical, High, or Medium finding;
+- no production HTTP latency is claimed because the issuer and route remain absent.
+
+This evidence proves only the manager-authorized durable insert and rollback on
+stale membership. Credential entropy, signing, response custody, exact route grants,
+revoke, and browser behavior remain explicitly incomplete.
