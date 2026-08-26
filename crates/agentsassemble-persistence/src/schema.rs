@@ -111,11 +111,7 @@ const TABLES: &[TableDefinition] = &[
             "max_uses INTEGER NOT NULL CHECK(max_uses >= 0), ",
             "key_kind TEXT GENERATED ALWAYS AS (CASE ",
             "WHEN max_uses = 1 THEN 'one_use' ELSE 'reusable' END) STORED, ",
-            "use_count INTEGER NOT NULL DEFAULT 0 CHECK(",
-            "use_count >= 0 AND use_count <= CASE ",
-            "WHEN max_uses = 1 THEN 1 ",
-            "WHEN max_uses = 0 OR max_uses > 128 THEN 128 ",
-            "ELSE max_uses END), ",
+            "use_count INTEGER NOT NULL DEFAULT 0 CHECK(use_count >= 0), ",
             "expires_at INTEGER NOT NULL, ",
             "revoked INTEGER NOT NULL DEFAULT 0 CHECK(revoked IN (0, 1)), ",
             "created_by_user_id TEXT NOT NULL, ",
@@ -613,7 +609,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn invite_limits_preserve_configured_values_and_effective_ceilings() {
+    async fn invite_schema_preserves_configured_values_and_key_kind() {
         let pool = installed_schema().await;
         sqlx::query(
             "INSERT INTO rooms(room_id, room_json, settings_json) VALUES ('room-a', '{}', '{}')",
@@ -639,18 +635,7 @@ mod tests {
             .is_err()
         );
 
-        for (index, (configured, effective)) in [
-            (0_i64, 128_i64),
-            (1, 1),
-            (2, 2),
-            (3, 3),
-            (5, 5),
-            (128, 128),
-            (129, 128),
-        ]
-        .into_iter()
-        .enumerate()
-        {
+        for (index, configured) in [0_i64, 1, 2, 3, 5, 128, 129].into_iter().enumerate() {
             let index = u8::try_from(index)
                 .unwrap_or_else(|_| panic!("invite limit fixture index exceeds u8"));
             let accepted_marker = index + 1;
@@ -662,7 +647,7 @@ mod tests {
             .bind(vec![accepted_marker; 32])
             .bind(vec![index + 0x21; 32])
             .bind(configured)
-            .bind(effective)
+            .bind(0_i64)
             .execute(&pool)
             .await
             .unwrap_or_else(|error| panic!("insert configured invite {configured}: {error}"));
@@ -681,22 +666,6 @@ mod tests {
                 } else {
                     "reusable"
                 }
-            );
-
-            let rejected_marker = index + 0x41;
-            let rejected_id = format!("{rejected_marker:02x}").repeat(8);
-            assert!(
-                sqlx::query(
-                    "INSERT INTO room_invites(invite_id, signed_token_fingerprint, join_code_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at) VALUES (?, ?, ?, 'room-a', 'participant-a', 'Guest', 'read_write', ?, ?, 200, 0, 'user-a', 100)",
-                )
-                .bind(rejected_id)
-                .bind(vec![rejected_marker; 32])
-                .bind(vec![index + 0x61; 32])
-                .bind(configured)
-                .bind(effective + 1)
-                .execute(&pool)
-                .await
-                .is_err()
             );
         }
     }

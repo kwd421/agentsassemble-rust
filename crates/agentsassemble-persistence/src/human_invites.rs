@@ -45,11 +45,7 @@ impl HumanInvite {
 
     #[must_use]
     pub const fn effective_use_limit(&self) -> i64 {
-        if self.max_uses == 0 || self.max_uses > MAX_EFFECTIVE_INVITE_USES {
-            MAX_EFFECTIVE_INVITE_USES
-        } else {
-            self.max_uses
-        }
+        effective_human_invite_use_limit(self.max_uses)
     }
 }
 
@@ -258,7 +254,7 @@ pub(crate) fn decode_human_invite(row: &SqliteRow) -> Result<HumanInvite, Persis
         || created_by_user_id.is_empty()
         || max_uses < 0
         || use_count < 0
-        || use_count > effective_use_limit(max_uses)
+        || use_count > effective_human_invite_use_limit(max_uses)
         || expires_at <= created_at
     {
         return Err(PersistenceError::InvalidHumanInvite);
@@ -291,7 +287,7 @@ fn timestamp(row: &SqliteRow, column: &str) -> Result<DateTime<Utc>, Persistence
         .ok_or(PersistenceError::InvalidHumanInvite)
 }
 
-fn effective_use_limit(max_uses: i64) -> i64 {
+pub(crate) const fn effective_human_invite_use_limit(max_uses: i64) -> i64 {
     if max_uses == 0 || max_uses > MAX_EFFECTIVE_INVITE_USES {
         MAX_EFFECTIVE_INVITE_USES
     } else {
@@ -324,7 +320,9 @@ mod tests {
     };
     use chrono::{Duration, TimeZone, Utc};
 
-    use super::{HumanInvite, MAX_EFFECTIVE_INVITE_USES, NewHumanInvite};
+    use super::{
+        HumanInvite, MAX_EFFECTIVE_INVITE_USES, NewHumanInvite, effective_human_invite_use_limit,
+    };
     use crate::{PersistenceError, SqliteStore};
 
     const GUEST_USER_ID: &str = "invite-user-ab";
@@ -501,6 +499,40 @@ mod tests {
                 .unwrap_or_else(|error| panic!("read missing invite: {error}"))
                 .is_none()
         );
+    }
+
+    #[test]
+    fn configured_invite_use_limits_have_one_effective_policy() {
+        for (configured, effective) in [
+            (0, 128),
+            (1, 1),
+            (2, 2),
+            (3, 3),
+            (5, 5),
+            (128, 128),
+            (129, 128),
+        ] {
+            assert_eq!(effective_human_invite_use_limit(configured), effective);
+        }
+    }
+
+    #[tokio::test]
+    async fn durable_invite_above_the_effective_limit_fails_closed() {
+        let store = fixture().await;
+        let signed = [0xAD; 32];
+        sqlx::query(
+            "INSERT INTO room_invites(invite_id, signed_token_fingerprint, join_code_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at) VALUES ('adadadadadadadad', ?, ?, 'general', 'guest-ad', 'Guest AD', 'read_write', 2, 3, 2000000, 0, 'operator-local-user', 1000000)",
+        )
+        .bind(signed.as_slice())
+        .bind([0xCE; 32].as_slice())
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("insert malformed durable invite: {error}"));
+
+        assert!(matches!(
+            store.human_invite_by_signed_fingerprint(&signed).await,
+            Err(PersistenceError::InvalidHumanInvite)
+        ));
     }
 
     async fn fixture() -> SqliteStore {

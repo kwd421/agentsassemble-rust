@@ -207,10 +207,11 @@ async fn commit_new_admission(
     .await?;
 
     let consumed = sqlx::query(
-        "UPDATE room_invites SET use_count = use_count + 1 WHERE invite_id = ? AND revoked = 0 AND expires_at > ? AND use_count < CASE WHEN max_uses = 1 THEN 1 WHEN max_uses = 0 OR max_uses > 128 THEN 128 ELSE max_uses END",
+        "UPDATE room_invites SET use_count = use_count + 1 WHERE invite_id = ? AND revoked = 0 AND expires_at > ? AND use_count < ?",
     )
     .bind(&invite.invite_id)
     .bind(now.timestamp_micros())
+    .bind(invite.effective_use_limit())
     .execute(&mut **transaction)
     .await?;
     if consumed.rows_affected() != 1 {

@@ -98,6 +98,61 @@ async fn one_use_retry_precedes_current_invite_gates_and_terminal_state_wins() {
 }
 
 #[tokio::test]
+async fn competing_final_invite_use_has_one_durable_winner() {
+    let (store, now) = fixture().await;
+    insert_invite(&store, SIGNED_ONE, JOIN_ONE, "limited-guest", 2, now).await;
+    sqlx::query("UPDATE room_invites SET use_count = 1")
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("prepare final invite use: {error}"));
+    let first = prepared(
+        JOIN_ONE,
+        [0x34; 32],
+        "a2a2a2a2-a2a2-42a2-82a2-a2a2a2a2a2a2",
+        "First",
+    );
+    let second = prepared(
+        JOIN_ONE,
+        [0x35; 32],
+        "a3a3a3a3-a3a3-43a3-83a3-a3a3a3a3a3a3",
+        "Second",
+    );
+
+    let (first, second) = tokio::join!(
+        store.admit_human(&first, now),
+        store.admit_human(&second, now),
+    );
+    let decisions = [
+        first.unwrap_or_else(|error| panic!("first competing admission: {error}")),
+        second.unwrap_or_else(|error| panic!("second competing admission: {error}")),
+    ];
+
+    assert_eq!(
+        decisions
+            .iter()
+            .filter(|decision| matches!(decision, HumanAdmissionDecision::Admitted(_)))
+            .count(),
+        1
+    );
+    assert_eq!(
+        decisions
+            .iter()
+            .filter(|decision| {
+                matches!(
+                    decision,
+                    HumanAdmissionDecision::Rejected(
+                        HumanAdmissionRejection::InviteUseLimitReached
+                    )
+                )
+            })
+            .count(),
+        1
+    );
+    assert_eq!(invite_use_count(&store, SIGNED_ONE).await, 2);
+    assert_eq!(count(&store, "human_room_sessions").await, 1);
+}
+
+#[tokio::test]
 async fn sub_microsecond_clock_is_canonicalized_once_for_exact_retry() {
     let (store, _) = fixture().await;
     let now = DateTime::parse_from_rfc3339("2026-08-26T09:00:00.000000001Z")
