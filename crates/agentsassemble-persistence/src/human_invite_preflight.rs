@@ -246,16 +246,17 @@ async fn load_presented_session(
         ResolvedHumanSession::Unavailable => Ok(PresentedSession::Unavailable),
         ResolvedHumanSession::Live {
             authorization,
-            avatar_image_url,
+            profile,
         } => {
             let principal = authorization.principal();
+            let profile = *profile;
             Ok(PresentedSession::Live {
                 person: HumanInvitePreflightPerson {
                     operator: principal.principal_id == LOCAL_OPERATOR_USER_ID
                         && principal.participant_id == LOCAL_OPERATOR_PARTICIPANT_ID,
                     participant_id: principal.participant_id.clone(),
                     display_name: principal.display_name.clone(),
-                    avatar_image_url,
+                    avatar_image_url: profile.avatar_image_url,
                 },
                 invite_scope: principal.invite_scope,
             })

@@ -1,6 +1,6 @@
 use agentsassemble_domain::{
     AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, Participant, ParticipantStatus,
-    Room, RoomStatus,
+    Room, RoomStatus, UserProfile,
 };
 use chrono::{DateTime, Utc};
 use sqlx::{Row, Sqlite, Transaction};
@@ -23,7 +23,7 @@ pub(crate) enum ResolvedHumanSession {
     Unavailable,
     Live {
         authorization: HumanSessionAuthorization,
-        avatar_image_url: String,
+        profile: Box<UserProfile>,
     },
 }
 
@@ -139,13 +139,12 @@ pub(crate) async fn resolve_human_session(
     }
     let client_kind = ClientKind::Browser;
     Ok(ResolvedHumanSession::Live {
-        avatar_image_url: profile.avatar_image_url.clone(),
         authorization: HumanSessionAuthorization {
             session_fingerprint: *session_fingerprint,
             principal: AuthenticatedPrincipal {
                 principal_id: user_id,
                 participant_id,
-                display_name: profile.display_name,
+                display_name: profile.display_name.clone(),
                 room_id,
                 client_kind,
                 invite_scope,
@@ -154,7 +153,47 @@ pub(crate) async fn resolve_human_session(
             },
             expires_at,
         },
+        profile: Box::new(profile),
     })
+}
+
+pub(crate) async fn revalidate_human_session(
+    transaction: &mut Transaction<'_, Sqlite>,
+    expected: &HumanSessionAuthorization,
+    now: DateTime<Utc>,
+) -> Result<(HumanSessionAuthorization, UserProfile), PersistenceError> {
+    let resolution =
+        resolve_human_session(transaction, expected.session_fingerprint(), None, now).await?;
+    let ResolvedHumanSession::Live {
+        authorization,
+        profile,
+    } = resolution
+    else {
+        return Err(session_revoked());
+    };
+    if !same_provenance(&authorization, expected) {
+        return Err(invalid_state(
+            "Stored human session provenance changed after grant issuance.",
+        ));
+    }
+    Ok((authorization, *profile))
+}
+
+fn same_provenance(
+    current: &HumanSessionAuthorization,
+    expected: &HumanSessionAuthorization,
+) -> bool {
+    let current_principal = current.principal();
+    let expected_principal = expected.principal();
+    current.session_fingerprint == expected.session_fingerprint
+        && current.expires_at == expected.expires_at
+        && current_principal.principal_id == expected_principal.principal_id
+        && current_principal.participant_id == expected_principal.participant_id
+        && current_principal.room_id == expected_principal.room_id
+        && current_principal.client_kind == expected_principal.client_kind
+        && current_principal.invite_scope == expected_principal.invite_scope
+        && current_principal.is_operator == expected_principal.is_operator
+        && current_principal.capabilities == expected_principal.capabilities
 }
 
 fn required_text<'a>(

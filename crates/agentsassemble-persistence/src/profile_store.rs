@@ -11,8 +11,9 @@ use sqlx::{Row, Sqlite, SqliteConnection, Transaction};
 use uuid::Uuid;
 
 use crate::{
-    PersistenceError, SqliteStore,
+    HumanSessionAuthorization, PersistenceError, SqliteStore,
     authority::authorize_session,
+    human_session_authority::revalidate_human_session,
     profile_attachments::{authorize_profile_avatar, replace_profile_avatar},
 };
 
@@ -62,6 +63,23 @@ impl SqliteStore {
         Ok(profile)
     }
 
+    /// Reads one profile only after revalidating the durable session behind a consumed grant.
+    ///
+    /// # Errors
+    ///
+    /// Fails when the session or its exact room, membership, profile, scope, or expiry binding
+    /// changed after grant issuance.
+    pub async fn human_session_profile(
+        &self,
+        authorization: &HumanSessionAuthorization,
+    ) -> Result<UserProfile, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        let (_, profile) =
+            revalidate_human_session(&mut transaction, authorization, Utc::now()).await?;
+        transaction.commit().await?;
+        Ok(profile)
+    }
+
     /// Reads the bootstrapped local human profile without inventing a room membership.
     ///
     /// # Errors
@@ -97,6 +115,31 @@ impl SqliteStore {
         Ok(outcome)
     }
 
+    /// Updates one profile in the same transaction that revalidates a consumed session grant.
+    ///
+    /// # Errors
+    ///
+    /// Fails closed on stale session provenance, foreign avatar references, corrupt state, or
+    /// `SQLite` errors without committing a partial profile or room projection.
+    pub async fn update_human_session_profile(
+        &self,
+        authorization: &HumanSessionAuthorization,
+        patch: UserProfilePatch,
+    ) -> Result<ProfileUpdateOutcome, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        let (current, profile) =
+            revalidate_human_session(&mut transaction, authorization, Utc::now()).await?;
+        let outcome = apply_profile_patch_in_transaction(
+            &mut transaction,
+            ProfileIdentity::from_principal(current.principal()),
+            profile,
+            patch,
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(outcome)
+    }
+
     /// Updates the server-wide local human profile and all existing room projections.
     ///
     /// # Errors
@@ -124,7 +167,16 @@ async fn update_profile_in_transaction(
     identity: ProfileIdentity<'_>,
     patch: UserProfilePatch,
 ) -> Result<ProfileUpdateOutcome, PersistenceError> {
-    let mut profile = load_profile(transaction, identity).await?;
+    let profile = load_profile(transaction, identity).await?;
+    apply_profile_patch_in_transaction(transaction, identity, profile, patch).await
+}
+
+async fn apply_profile_patch_in_transaction(
+    transaction: &mut Transaction<'_, Sqlite>,
+    identity: ProfileIdentity<'_>,
+    mut profile: UserProfile,
+    patch: UserProfilePatch,
+) -> Result<ProfileUpdateOutcome, PersistenceError> {
     let previous_display_name = profile.display_name.clone();
     let previous_avatar_url = profile.avatar_image_url.clone();
     let now = Utc::now();

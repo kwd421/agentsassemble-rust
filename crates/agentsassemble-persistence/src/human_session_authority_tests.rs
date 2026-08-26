@@ -1,5 +1,6 @@
 use agentsassemble_domain::{
     ClientKind, InviteScope, LOCAL_OPERATOR_USER_ID, Participant, ParticipantStatus, UserProfile,
+    UserProfilePatch,
 };
 use chrono::{DateTime, Duration, Utc};
 
@@ -37,18 +38,83 @@ async fn live_human_session_authority_revalidates_scope_membership_and_profile()
     assert!(!authority.principal().is_operator);
     assert!(!authority.principal().capabilities.message_send);
 
+    let profile = store
+        .human_session_profile(&authority)
+        .await
+        .unwrap_or_else(|error| panic!("read session profile: {error}"));
+    assert_eq!(profile.display_name, "Session Guest");
+    let updated = store
+        .update_human_session_profile(
+            &authority,
+            UserProfilePatch {
+                display_name: Some("Updated Session Guest".to_owned()),
+                ..UserProfilePatch::default()
+            },
+        )
+        .await
+        .unwrap_or_else(|error| panic!("update session profile: {error}"));
+    assert_eq!(updated.profile.display_name, "Updated Session Guest");
+    assert_eq!(updated.events.len(), 1);
+    assert_eq!(
+        store
+            .human_session_profile(&authority)
+            .await
+            .unwrap_or_else(|error| panic!("read changed session profile: {error}"))
+            .display_name,
+        "Updated Session Guest"
+    );
+
+    set_session_expiry(&store, authority.expires_at() + Duration::minutes(1)).await;
+    assert_rejected_code(
+        store.human_session_profile(&authority).await,
+        "invalid_state",
+    );
+    set_session_expiry(&store, authority.expires_at()).await;
+
     set_participant_status(&store, ParticipantStatus::Left).await;
     assert_rejected_code(
         store.authorize_human_session(&fingerprint).await,
         "session_revoked",
     );
+    assert_rejected_code(
+        store.human_session_profile(&authority).await,
+        "session_revoked",
+    );
+    assert_rejected_code(
+        store
+            .update_human_session_profile(
+                &authority,
+                UserProfilePatch {
+                    custom_status: Some("must not commit".to_owned()),
+                    ..UserProfilePatch::default()
+                },
+            )
+            .await,
+        "session_revoked",
+    );
 
     set_participant_status(&store, ParticipantStatus::Joined).await;
+    assert!(
+        store
+            .human_session_profile(&authority)
+            .await
+            .unwrap_or_else(|error| panic!("read profile after rejected update: {error}"))
+            .custom_status
+            .is_empty()
+    );
     set_profile_revision(&store, &authority.principal().principal_id, 0).await;
     assert_rejected_code(
         store.authorize_human_session(&fingerprint).await,
         "invalid_state",
     );
+}
+
+async fn set_session_expiry(store: &SqliteStore, expires_at: DateTime<Utc>) {
+    sqlx::query("UPDATE human_room_sessions SET expires_at = ?")
+        .bind(expires_at.timestamp_micros())
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("update session expiry: {error}"));
 }
 
 async fn admitted_fixture() -> (SqliteStore, DateTime<Utc>) {
