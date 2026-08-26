@@ -232,6 +232,29 @@ async fn human_session_grants_are_exact_purpose_and_one_use() {
 }
 
 #[tokio::test]
+async fn human_session_grant_rechecks_absolute_expiry_after_issue() {
+    let fixture = HumanSessionFixture::new(1).await;
+    let store = TicketStore::new(Duration::from_secs(30), 4_096);
+    let authorization = fixture.authorize(0).await;
+    let after_session_expiry = authorization.expires_at() + ChronoDuration::microseconds(1);
+    let profile = store
+        .issue_human_session_profile(authorization)
+        .await
+        .unwrap_or_else(|error| panic!("issue session profile grant: {error}"));
+
+    assert!(matches!(
+        store
+            .consume_human_session_profile_at(&profile.ticket, after_session_expiry)
+            .await,
+        Err(TicketError::Invalid)
+    ));
+    assert!(matches!(
+        store.consume_human_session_profile(&profile.ticket).await,
+        Err(TicketError::Invalid)
+    ));
+}
+
+#[tokio::test]
 async fn human_session_grants_enforce_per_session_limit_and_reclaim_consumption() {
     let fixture = HumanSessionFixture::new(1).await;
     let store = TicketStore::new(Duration::from_secs(30), 4_096);
