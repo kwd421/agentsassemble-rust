@@ -9,7 +9,9 @@ import {
 import { useRoomAdmission } from "./useRoomAdmission";
 
 const deviceMocks = vi.hoisted(() => ({
-  getOrCreateDeviceToken: vi.fn(() => "device-1"),
+  getOrCreateBrowserCredential: vi.fn(
+    () => "aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  ),
   getOrCreateClientId: vi.fn(() => "client-1"),
   loadRememberedGuestProfile: vi.fn<() => { displayName: string; avatarImage?: string } | null>(() => null),
   rememberGuestProfile: vi.fn(),
@@ -58,7 +60,9 @@ const SESSION: RoomGuestSession = {
 describe("useRoomAdmission", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    deviceMocks.getOrCreateDeviceToken.mockReturnValue("device-1");
+    deviceMocks.getOrCreateBrowserCredential.mockReturnValue(
+      "aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    );
     deviceMocks.loadRememberedGuestProfile.mockReturnValue(null);
     guestSessionStore.current = null;
     persistRoomGuestSession(null);
@@ -71,6 +75,35 @@ describe("useRoomAdmission", () => {
       invite_scope: "room",
     });
     window.history.replaceState({}, "", "/join?token=invite-1");
+  });
+
+  it("stops before preflight network I/O when durable browser custody is unavailable", async () => {
+    deviceMocks.getOrCreateBrowserCredential.mockImplementation(() => {
+      throw new Error("브라우저 저장소를 사용할 수 없습니다.");
+    });
+
+    const { result } = renderHook(() =>
+      useRoomAdmission({
+        guestInvite: null,
+        guestJoinToken: "invite-1",
+        operatorPairingToken: "",
+        onPairingTokenConsumed: vi.fn(),
+        initialSession: null,
+        onRoomJoined: vi.fn(),
+        onResetToLobby: vi.fn(),
+      })
+    );
+
+    await waitFor(() =>
+      expect(result.current.admissionState).toMatchObject({
+        kind: "failed",
+        operation: "preflight",
+        code: "browser_credential_unavailable",
+      })
+    );
+    expect(result.current.guestJoinStatus).toContain("저장소");
+    expect(apiMocks.preflightRoomInvite).not.toHaveBeenCalled();
+    expect(apiMocks.joinRoomInvite).not.toHaveBeenCalled();
   });
 
   it("auto-joins only when preflight recognizes the server-side identity", async () => {
@@ -116,11 +149,16 @@ describe("useRoomAdmission", () => {
       kind: "joined",
       source: "invite",
     });
+    expect(apiMocks.preflightRoomInvite).toHaveBeenCalledWith({
+      inviteToken: "invite-1",
+      deviceToken: "aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      sessionToken: "",
+    });
     expect(apiMocks.joinRoomInvite).toHaveBeenCalledWith({
       inviteToken: "invite-1",
       displayName: "Known Guest",
       avatarImage: "data:image/png;base64,avatar",
-      deviceToken: "device-1",
+      deviceToken: "aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
       clientId: "client-1",
       participantType: "human",
       requestId: expect.any(String),
@@ -232,7 +270,7 @@ describe("useRoomAdmission", () => {
     expect(result.current.guestSession?.inviteScope).toBe("read_only");
     expect(apiMocks.preflightRoomInvite).toHaveBeenCalledWith({
       inviteToken: "invite-2",
-      deviceToken: "device-1",
+      deviceToken: "aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
       sessionToken: "session-1",
     });
     expect(apiMocks.joinRoomInvite).not.toHaveBeenCalled();
@@ -372,7 +410,7 @@ describe("useRoomAdmission", () => {
     expect(apiMocks.joinRoomInvite).not.toHaveBeenCalled();
     expect(apiMocks.redeemOperatorPairing).toHaveBeenCalledWith({
       pairingToken: "aap1_pairing-token",
-      deviceToken: "device-1",
+      deviceToken: "aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     });
     expect(loadRoomGuestSession()?.operator).toBe(true);
     expect(onRoomJoined).toHaveBeenCalledWith(expect.objectContaining({ meetingId: "room-1" }));

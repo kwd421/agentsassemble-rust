@@ -7,8 +7,8 @@ import {
 } from "../api";
 import { ApiError, GUEST_SESSION_EXPIRED_MESSAGE } from "../lib/apiErrors";
 import {
+  getOrCreateBrowserCredential,
   getOrCreateClientId,
-  getOrCreateDeviceToken,
   loadRememberedGuestProfile,
   rememberGuestProfile,
 } from "../lib/deviceIdentity";
@@ -176,6 +176,24 @@ function clearAdmissionRequestId(): void {
 function pairingFailureIsRetryable(error: unknown): boolean {
   if (!(error instanceof ApiError)) return true;
   return error.status === 408 || error.status === 429 || error.status >= 500;
+}
+
+function browserCredentialFailure(
+  operation: AdmissionOperation,
+  error: unknown
+): AdmissionAction {
+  const message =
+    error instanceof Error
+      ? error.message
+      : "이 브라우저에서는 안전한 입장 자격 증명을 사용할 수 없습니다.";
+  return {
+    type: "failed",
+    operation,
+    code: "browser_credential_unavailable",
+    message,
+    retryable: true,
+    status: `${message} 브라우저 설정을 확인한 뒤 다시 시도해 주세요.`,
+  };
 }
 
 export function useRoomAdmission({
@@ -363,9 +381,16 @@ export function useRoomAdmission({
       type: "pairing_started",
       status: "공개 주소의 운영자 신원을 연결하는 중...",
     });
+    let deviceToken = "";
+    try {
+      deviceToken = getOrCreateBrowserCredential();
+    } catch (error) {
+      dispatchAdmission(browserCredentialFailure("pairing", error));
+      return;
+    }
     redeemOperatorPairing({
       pairingToken: operatorPairingToken,
-      deviceToken: getOrCreateDeviceToken(),
+      deviceToken,
     })
       .then((payload) => {
         if (cancelled) return;
@@ -413,9 +438,16 @@ export function useRoomAdmission({
       type: "preflight_started",
       status: "초대와 기존 신원을 확인하는 중...",
     });
+    let deviceToken = "";
+    try {
+      deviceToken = getOrCreateBrowserCredential();
+    } catch (error) {
+      dispatchAdmission(browserCredentialFailure("preflight", error));
+      return;
+    }
     preflightRoomInvite({
       inviteToken: guestJoinToken,
-      deviceToken: getOrCreateDeviceToken(),
+      deviceToken,
       sessionToken: guestSession?.sessionToken || "",
     })
       .then((decision) => {
@@ -502,6 +534,13 @@ export function useRoomAdmission({
       type: "join_requested",
       status: "초대 링크로 방에 입장 중...",
     });
+    let deviceToken = "";
+    try {
+      deviceToken = getOrCreateBrowserCredential();
+    } catch (error) {
+      dispatchAdmission(browserCredentialFailure("join", error));
+      return;
+    }
     let requestId = "";
     try {
       requestId = loadOrCreateAdmissionRequestId();
@@ -523,7 +562,7 @@ export function useRoomAdmission({
       requestId,
       displayName: pendingGuestDisplayName,
       avatarImage: pendingGuestAvatarImage,
-      deviceToken: getOrCreateDeviceToken(),
+      deviceToken,
       clientId: getOrCreateClientId(),
       participantType: "human",
     })

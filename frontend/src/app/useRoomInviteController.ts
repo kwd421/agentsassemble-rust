@@ -14,7 +14,7 @@ import {
   type PublicInviteStatus,
   type RoomFriend,
 } from "../api";
-import { getOrCreateDeviceToken } from "../lib/deviceIdentity";
+import { getOrCreateBrowserCredential } from "../lib/deviceIdentity";
 import {
   remoteClientPacketPreview,
   secureInviteCopyTarget,
@@ -141,7 +141,7 @@ export function useRoomInviteController({
           }
         }
         if (!cancelled && loadHostToken()) {
-          await claimHostDevice({ deviceToken: getOrCreateDeviceToken() });
+          await claimHostDevice({ deviceToken: getOrCreateBrowserCredential() });
         }
       } catch {
         // Moderation actions report a concrete error if bootstrap did not succeed.

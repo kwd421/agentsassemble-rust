@@ -1,14 +1,19 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import GuestJoinProfilePanel from "./GuestJoinProfilePanel";
 
 const apiMocks = vi.hoisted(() => ({
   uploadLobbyAttachment: vi.fn(),
 }));
+const deviceMocks = vi.hoisted(() => ({
+  getOrCreateBrowserCredential: vi.fn(
+    () => "aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  ),
+}));
 
 vi.mock("../../lib/deviceIdentity", () => ({
-  getOrCreateDeviceToken: () => "device-current-browser",
+  getOrCreateBrowserCredential: deviceMocks.getOrCreateBrowserCredential,
 }));
 
 vi.mock("../../api", async (importOriginal) => {
@@ -36,7 +41,13 @@ vi.mock("./ImageCropper", () => ({
 describe("GuestJoinProfilePanel", () => {
   beforeEach(() => {
     apiMocks.uploadLobbyAttachment.mockReset();
+    deviceMocks.getOrCreateBrowserCredential.mockReset();
+    deviceMocks.getOrCreateBrowserCredential.mockReturnValue(
+      "aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    );
   });
+
+  afterEach(cleanup);
 
   it("uses the current invite only for an explicit pre-join profile upload", async () => {
     const onAvatarImageChange = vi.fn();
@@ -69,12 +80,37 @@ describe("GuestJoinProfilePanel", () => {
     await waitFor(() =>
       expect(apiMocks.uploadLobbyAttachment).toHaveBeenCalledWith(croppedFile, {
         inviteToken: "aaj1_valid-invite",
-        deviceToken: "device-current-browser",
+        deviceToken: "aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
         purpose: "profile_avatar",
       })
     );
     expect(onAvatarImageChange).toHaveBeenCalledWith(
       "/api/attachments/avatar-12345678?view=1"
     );
+  });
+
+  it("stops a pre-join upload before network I/O without durable browser custody", async () => {
+    deviceMocks.getOrCreateBrowserCredential.mockImplementation(() => {
+      throw new Error("브라우저 저장소를 사용할 수 없습니다.");
+    });
+    const croppedFile = new File(["avatar"], "avatar.png", { type: "image/png" });
+
+    render(
+      <GuestJoinProfilePanel
+        inviteToken="aaj1_valid-invite"
+        displayName="Guest"
+        onDisplayNameChange={vi.fn()}
+        onAvatarImageChange={vi.fn()}
+        onJoin={vi.fn()}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText("프로필 사진"), {
+      target: { files: [croppedFile] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "테스트 이미지 적용" }));
+
+    await waitFor(() => expect(screen.getByText(/브라우저 저장소/)).toBeTruthy());
+    expect(apiMocks.uploadLobbyAttachment).not.toHaveBeenCalled();
   });
 });

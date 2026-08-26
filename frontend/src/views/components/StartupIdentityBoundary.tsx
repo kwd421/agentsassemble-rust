@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 
 import {
-  getOrCreateDeviceToken,
+  getOrCreateBrowserCredential,
   hasStartupIdentitySelection,
   loadRememberedGuestProfile,
 } from "../../lib/deviceIdentity";
@@ -87,8 +87,46 @@ export default function StartupIdentityBoundary({ children }: { children: ReactN
       );
     }
   );
-  const [deviceToken] = useState(getOrCreateDeviceToken);
+  const [browserCredential] = useState(() => {
+    try {
+      return { deviceToken: getOrCreateBrowserCredential(), error: "" };
+    } catch (error) {
+      return {
+        deviceToken: "",
+        error:
+          error instanceof Error
+            ? error.message
+            : "이 브라우저에서는 안전한 입장 자격 증명을 사용할 수 없습니다.",
+      };
+    }
+  });
+
+  if (browserCredential.error) {
+    return (
+      <div className="fixed inset-0 z-[400] grid place-items-center bg-[#101114] p-5">
+        <main
+          className="grid w-full max-w-[520px] gap-3 rounded-xl border border-white/10 bg-[#202126] p-6 shadow-2xl"
+          aria-label="브라우저 신원 사용 불가"
+        >
+          <h1 className="text-2xl font-black text-text-primary">
+            안전한 브라우저 신원을 사용할 수 없습니다
+          </h1>
+          <p
+            role="alert"
+            className="rounded-md bg-[#3a2526] p-3 text-[11px] font-bold leading-5 text-[#ffb4b5]"
+          >
+            {browserCredential.error}
+          </p>
+        </main>
+      </div>
+    );
+  }
 
   if (ready) return <>{children}</>;
-  return <StartupIdentityGate deviceToken={deviceToken} onComplete={() => setReady(true)} />;
+  return (
+    <StartupIdentityGate
+      deviceToken={browserCredential.deviceToken}
+      onComplete={() => setReady(true)}
+    />
+  );
 }

@@ -5,7 +5,10 @@ import {
   redeemGuestRecoveryCode,
   type GuestRecoveryRedeemResponse,
 } from "../../api";
-import { getOrCreateClientId, getOrCreateDeviceToken } from "../../lib/deviceIdentity";
+import {
+  getOrCreateBrowserCredential,
+  getOrCreateClientId,
+} from "../../lib/deviceIdentity";
 import type { GuestRecoveryRequest } from "../../lib/guestRecovery";
 
 export default function GuestIdentityRecoveryPanel({
@@ -29,7 +32,7 @@ export default function GuestIdentityRecoveryPanel({
       const payload = await redeemGuestRecoveryCode({
         recoveryCode,
         roomId: request.roomId,
-        deviceToken: getOrCreateDeviceToken(),
+        deviceToken: getOrCreateBrowserCredential(),
         clientId: getOrCreateClientId(),
       });
       setRecovered(payload);

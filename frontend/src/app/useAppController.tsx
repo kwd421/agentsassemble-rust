@@ -24,7 +24,7 @@ import { useRoomMessageSearch } from "../views/useRoomMessageSearch";
 import { loadAgentActivityVisibility } from "../lib/agentActivityPreferences";
 import { isDesktopWebview } from "../lib/desktopBridge";
 import {
-  getOrCreateDeviceToken,
+  getOrCreateBrowserCredential,
   hasStartupIdentitySelection,
   loadRememberedGuestProfile,
 } from "../lib/deviceIdentity";
@@ -81,7 +81,7 @@ export function useAppController() {
   const [startupRoute] = useState(() =>
     createStartupRoute({ operatorPairingPending: Boolean(operatorPairingToken) })
   );
-  const [deviceToken] = useState(getOrCreateDeviceToken);
+  const [deviceToken] = useState(getOrCreateBrowserCredential);
   const [startupIdentityReady, setStartupIdentityReady] = useState(
     () =>
       isDesktopWebview() ||
