@@ -2,8 +2,9 @@
 
 Status: partial slice evidence; canonical invite reads and the manager-authorized
 create/revoke writes plus standalone credential issuance/authentication are
-implemented, while row-bound preflight, routes, admission, post-commit notification,
-and browser flow are not implemented by these commits.
+implemented. Row-bound read-only human preflight is also implemented, while raw
+credential transport, routes, admission, post-commit notification, and the activated
+browser flow are not implemented by these commits.
 
 ## Provenance and scope
 
@@ -16,10 +17,12 @@ and browser flow are not implemented by these commits.
 - Exact timestamp correction: `06201de`.
 - Invite revoke unit: `bbeeda7`, corrected by `a472566`.
 - Current credential authority: `ce2d2a3`, corrected by `9544081`.
+- Read-only preflight snapshot: `c2abc58`, corrected by `2520cf0` and `7982161`.
+- Existing-session frontend scope regression: `43d4609`.
 - The schema is fresh-only at version 35. No migration, compatibility reader,
   fallback column, or partially upgraded authority is accepted.
 
-This increment changes only the durable `room_invites` authority and the fixtures
+The initial schema increment changed only the durable `room_invites` authority and the fixtures
 that must insert valid parent rows. It does not claim invite creation, inspection,
 admission, HTTP, WebSocket, or frontend completion.
 
@@ -362,6 +365,96 @@ comparison from authentication; it does not claim a meaningful latency improveme
 The critical web reviewer and Daybreaker both manually approved the correction with
 C=0/H=0/M=0. Neither ran Deep Scan, an automated security scanner, or a provider.
 
-The next increment must compare the verified signed claims or join-code fingerprint
-against the exact current row and preserve read-only preflight behavior. Until then,
-no create/preflight route or browser flow is reported as implemented.
+## Row-bound read-only preflight snapshot
+
+Commit `c2abc58`, corrected by `2520cf0` and `7982161`, compares authenticated
+signed evidence or a complete join-code fingerprint with the exact current invite
+row and resolves browser startup state from one SQLite read transaction. It does not
+accept raw credentials, create identity, consume an invite, materialize expiry, end a
+session, publish an event, or claim an HTTP route.
+
+### Prior cost, threat, and change intent
+
+The original product split invite, room, session, device identity, profile, and
+membership reads across separate JSON-backed owners. Reproducing those unsnapshotted
+reads would permit one preflight response to combine authority observed at different
+times. Rust instead reads the current invite and room together, then optional session
+or device/profile/membership state inside one transaction on the existing single
+SQLite connection. This adds no second state owner or client-side orchestration.
+
+The first implementation correctly bound signed claims to the durable row and kept
+preflight read-only, but its session query discarded expired, ended, and inactive
+same-room rows in SQL. Those failures became indistinguishable from no session and
+could fall through to device/profile authority. Both manual reviewers ultimately
+classified that credential-state collapse as Medium. `2520cf0` reads the exact row
+before classifying it and returns one generic `SessionUnavailable` for a resolved
+same-room row that is expired, ended, or no longer a joined human. Durable corruption
+remains a persistence error rather than being relabeled as ordinary unavailability.
+
+The same correction also reads `sessions.invite_scope` strictly. A read-only session
+presented while inspecting a read-write invite remains read-only in the
+`ExistingSession` response. Test-only commit `43d4609` proves the copied frontend
+adopts that server-confirmed scope instead of retaining or inventing a broader local
+value.
+
+`2520cf0` initially over-applied fail-closed behavior to a missing fingerprint and a
+valid session for another room. Daybreaker found that this breaks a reachable flow:
+the copied frontend stores one global room session and must send it before a new
+invite's room is known. The original route also converted an unknown/expired bearer
+to no session before preflight and treated a valid other-room session as inapplicable,
+then evaluated the independent current device authority. Corrective commit `7982161`
+adds only that `NotApplicable` distinction. It does not permit an expired, ended, or
+inactive session row for the current room to downgrade to device authority.
+
+### Preserved contract and resource record
+
+- Current invite authority is resolved first and applies revoke, expiry, effective
+  use limit, and active-room gates. Signed evidence must match its complete
+  fingerprint, room, base participant, display name, scope, creation time, and expiry;
+  a mismatch is `InvalidHumanInvite`, not a semantic rejection.
+- A live same-room session precedes device identity and requires its unique
+  fingerprint, browser client kind, stored active state, wall-clock expiry, exact
+  profile/participant binding, joined-human membership, and stored scope. Unknown and
+  other-room sessions authorize nothing; they merely do not replace the separately
+  durable current-room device/profile decision.
+- Human display name and avatar come only from `user_profiles`. Participant JSON owns
+  room membership and status, not the person profile. Operator status requires the
+  exact local user and participant pair.
+- The longest path remains three indexed queries: invite credential unique index to
+  room primary key, session fingerprint unique index to profile/participant keys, and
+  only when the session is absent or inapplicable, device fingerprint primary key to
+  profile/participant keys. A matching or unavailable same-room session stops after
+  two queries. No schema, index, cache, trait, cleanup task, or background state was
+  added.
+- The corrected session query reads one bounded row and performs fixed string/time
+  checks in Rust so absence and current-room unavailability remain distinguishable.
+  Expired and ended rows return before profile JSON decoding. No production latency,
+  CPU, memory, or throughput improvement is claimed from unit-test time or the
+  one-off planner evidence.
+- The frontend production build reported a real 761.64 kB main JavaScript chunk
+  warning. This preflight correction changes no production frontend bytes, and there
+  is no evidence that speculative code splitting belongs in this persistence slice;
+  the observation is retained for later frontend performance work.
+
+### Verification result
+
+- Focused preflight tests passed 5/5. They cover profile-required with no writes,
+  profile SSoT and existing membership, signed row mismatch and current invite gates,
+  same-room session priority, immutable read-only session scope, stored-active expiry
+  without materialization, ended state, inactive membership, unknown fingerprint,
+  and a valid other-room session. A valid device credential is present in the
+  contested cases to prove the intended rejection or independent-authority path.
+- The complete persistence suite passed 141/141 in 1.15 seconds. Warning-denied
+  persistence all-target Clippy, `make check`, and `git diff --check` passed without a
+  gate exception. The implementation is 341 lines and the test module 544 lines.
+- Frontend `useRoomAdmission` tests passed 14/14 and the production build completed,
+  including the existing-session scope regression.
+- Daybreaker approved final commit `7982161` with C=0/H=0/M=0. The critical web
+  reviewer approved `2520cf0` before the cross-room reachable-flow correction; its
+  final `7982161` re-review is recorded when complete. No Deep Scan, automated
+  security scanner, provider, or Computer Use resource ran for this increment.
+
+The next increment must authenticate raw `aai1`/`aaj1_` input plus canonical browser
+and session credentials at the server boundary and submit only this typed evidence
+to the snapshot. Until that route exists, preflight is not reported as a reachable
+browser feature.

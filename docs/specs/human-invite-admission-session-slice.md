@@ -182,6 +182,15 @@ without allocating durable state. A presented session counts as `existing_sessio
 only when its durable row, expiry, room, active membership, participant/profile
 binding, client kind, and scope all remain valid.
 
+The copied browser keeps one room session globally and sends it while preflighting a
+new invite whose room is not known yet. Therefore a bearer with no durable row or a
+valid row for another room is not current-room session authority; preflight continues
+with the independently durable browser credential exactly as the original route did.
+Once the exact bearer resolves to a row for the current room, an expired, ended, or
+inactive-membership row is `session_unavailable` and never falls through to the
+browser credential. A valid existing-session result returns the immutable stored
+session scope, not the scope of the invite currently being inspected.
+
 Every authorization and capacity decision treats a row as live only when its stored
 state is `active` and `expires_at` is later than the transaction's fixed current
 time. SQLite cannot put the moving wall clock into the partial unique predicate, so
@@ -613,16 +622,16 @@ flag is added meanwhile.
   expired rows for its resolved `(room, participant)` to `ended` before terminal
   return, capacity, or insertion. The update uses the admission-key and
   room/participant indexes already required by those operations.
-- Preserved contract: preflight performs no writes; an expired bearer fails
-  immediately; an expired completed admission remains terminal and exact retry never
-  creates a replacement; a different valid admission for the same stable participant
-  is not blocked or charged by stale time-expired state.
+- Preserved contract: preflight performs no writes; an expired bearer resolved to
+  the current room fails immediately; an expired completed admission remains terminal
+  and exact retry never creates a replacement; a different valid admission for the
+  same stable participant is not blocked or charged by stale time-expired state.
 - Trade-off: unrelated tombstones remain durable and bounded by invite lifecycle.
   This avoids periodic database reads, a background task, and full-table cleanup in
   the latency path. No claim of lower CPU or disk cost is made until measurements
   exist.
-- Verification: a controlled clock expires a stored-active session without cleanup,
-  proves preflight and ticket exchange reject it, then admits the same participant
+- Verification: a controlled clock expires a stored-active same-room session without
+  cleanup, proves preflight and ticket exchange reject it, then admits the same participant
   through a distinct valid admission and proves the old row is `ended`, the partial
   unique constraint does not fail, capacity is unchanged, and exact retry of the old
   admission remains `admission_session_unavailable`. Query count and transaction
