@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   fetchRoomSettings,
+  ROOM_SESSION_PREFERENCES_UNAVAILABLE,
   saveRoomSettings,
   type ChannelSettings,
   type ConversationMode,
@@ -249,6 +250,16 @@ export function useRoomSettingsController({
     const meetingId = activeMeetingId;
     const key = activeRoomKey;
     const generation = beginPreferenceOperation(key);
+    if (sessionToken) {
+      setPreferenceStates((previous) => ({
+        ...previous,
+        [key]: {
+          status: "error",
+          error: new Error(ROOM_SESSION_PREFERENCES_UNAVAILABLE),
+        },
+      }));
+      return;
+    }
     const pendingWrite =
       preferenceWriteChainsRef.current[key] || Promise.resolve();
     let cancelled = false;
@@ -535,31 +546,41 @@ export function useRoomSettingsController({
     (room: RoomDockItem) => {
       const key = roomSettingsKey(room);
       const generation = beginPreferenceOperation(key);
-      setPreferenceStates((previous) => ({
-        ...previous,
-        [key]: { status: "loading", error: null },
-      }));
-      const pendingWrite =
-        preferenceWriteChainsRef.current[key] || Promise.resolve();
-      void pendingWrite
-        .then(() =>
-          fetchRoomSettings(room.meetingId, { sessionToken, deviceToken })
-        )
-        .then((settings) => {
-          if (isCurrentPreferenceOperation(key, generation)) {
-            applyPreferences(key, settings);
-          }
-        })
-        .catch((errorValue) => {
-          if (!isCurrentPreferenceOperation(key, generation)) return;
-          setPreferenceStates((previous) => ({
-            ...previous,
-            [key]: {
-              status: "error",
-              error: settingsError(errorValue, "Room preferences load failed"),
-            },
-          }));
-        });
+      if (sessionToken) {
+        setPreferenceStates((previous) => ({
+          ...previous,
+          [key]: {
+            status: "error",
+            error: new Error(ROOM_SESSION_PREFERENCES_UNAVAILABLE),
+          },
+        }));
+      } else {
+        setPreferenceStates((previous) => ({
+          ...previous,
+          [key]: { status: "loading", error: null },
+        }));
+        const pendingWrite =
+          preferenceWriteChainsRef.current[key] || Promise.resolve();
+        void pendingWrite
+          .then(() =>
+            fetchRoomSettings(room.meetingId, { sessionToken, deviceToken })
+          )
+          .then((settings) => {
+            if (isCurrentPreferenceOperation(key, generation)) {
+              applyPreferences(key, settings);
+            }
+          })
+          .catch((errorValue) => {
+            if (!isCurrentPreferenceOperation(key, generation)) return;
+            setPreferenceStates((previous) => ({
+              ...previous,
+              [key]: {
+                status: "error",
+                error: settingsError(errorValue, "Room preferences load failed"),
+              },
+            }));
+          });
+      }
       if (
         canonicalGlobalSettings &&
         canonicalGlobalSettings.roomId === room.meetingId

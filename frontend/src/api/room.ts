@@ -591,6 +591,9 @@ type RoomSettingsIdentity = {
   deviceToken?: string;
 };
 
+export const ROOM_SESSION_PREFERENCES_UNAVAILABLE =
+  "원격 세션의 방 알림 설정은 Rust 초대·세션 권한이 연결될 때까지 사용할 수 없습니다.";
+
 type RoomSettingsUpdate = {
   roomId: string;
   appearance?: Pick<RoomAppearance, "notifications">;
@@ -602,8 +605,11 @@ export function fetchRoomSettings(
   roomId: string,
   identity: RoomSettingsIdentity = {}
 ): Promise<RoomSettings> {
+  if (identity.sessionToken) {
+    return Promise.reject(new Error(ROOM_SESSION_PREFERENCES_UNAVAILABLE));
+  }
   const request =
-    !identity.sessionToken && isDesktopWebview()
+    isDesktopWebview()
       ? fetchDesktopRoomPreferences(roomId).then(async (response) => {
           if (!response.ok) throw await responseError(response);
           return response.json() as Promise<unknown>;
@@ -621,6 +627,9 @@ export function saveRoomSettings({
   channelSettings,
   identity = {},
 }: RoomSettingsUpdate): Promise<RoomSettings> {
+  if (identity.sessionToken) {
+    return Promise.reject(new Error(ROOM_SESSION_PREFERENCES_UNAVAILABLE));
+  }
   const body = {
     room_id: roomId,
     ...(appearance
@@ -631,7 +640,7 @@ export function saveRoomSettings({
       : {}),
   };
   const request =
-    !identity.sessionToken && isDesktopWebview()
+    isDesktopWebview()
       ? fetchDesktopRoomPreferences(roomId, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
