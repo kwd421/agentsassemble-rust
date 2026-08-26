@@ -981,20 +981,31 @@ while promoting the same opaque ID through the profile lifecycle.
   The copied admission hook also restored a stored session after any failed join,
   allowing an unrelated transport or validation failure to appear successful.
 - Change intent and smallest design: the static router serves the same production
-  index at the four exact original entrances and exposes the existing Vite asset
-  directory at `/assets`; no catch-all or redirect fallback was added. A successful
-  admission response now carries the existing immutable server ID, authority lineage,
-  and `ServerProductSurface`. The existing room-directory validator owns exact shape,
+  index at the four exact original entrances and exposes the same Vite asset
+  directory at `/assets`, `/join/assets`, and `/pair/assets` so both slash forms
+  resolve the copied bundle's `./assets/*` URLs; no copy, catch-all, or redirect
+  fallback was added. One router-owned `no-cache` layer covers all static responses,
+  and the signed surface derives wildcard paths from the exact entrance and asset
+  prefixes used by that router rather than maintaining a second route list. A
+  successful admission response now carries the existing immutable server ID,
+  authority lineage, and `ServerProductSurface`. The existing room-directory validator owns exact shape,
   digest verification, and lifetime binding for both host directory and guest session
   sources. The guest session owns one verified surface projection; it does not add a
   directory cache, authority trait, compatibility reader, or second socket state.
 - Preserved security and product contract: the raw human bearer remains confined to
-  typed ticket exchange. A join, pairing, recovered, or persisted session cannot
+  typed ticket exchange. Preflight and admission variants reject missing, extra, or
+  mistyped fields. Fresh join binds the echoed request ID, preflight room, and
+  requesting client; recovery binds the requested room and client. The server-returned
+  avatar is the only avatar
+  persisted after admission. A join, pairing, recovered, or persisted session cannot
   expose its bearer to the socket until the surface structure and digest bind to the
   current origin and any existing lifetime pin. Invalid surfaces fail terminally,
   remain unpersisted, do not update the remembered person profile, and do not clear
   the invite URL. Stored sessions without the current surface contract are invalid;
-  failed admission is not converted into stored-session success. The later signed
+  failed admission is not converted into stored-session success. Per-attempt generation
+  fencing rechecks after asynchronous digest verification and before the lifetime pin
+  or any persistence/UI side effect, so a changed entrance cannot commit stale state.
+  The later signed
   WebSocket receipt still pins the exact surface digest and room/participant.
 - CPU, memory, disk, and latency cost: a successful admission response performs one
   existing bootstrap-status SQLite read so server ID and lineage are not copied into
@@ -1003,9 +1014,12 @@ while promoting the same opaque ID through the profile lifecycle.
   WebCrypto SHA-256 over the small sorted registry. No table, index, cache, task,
   timer, retry, fallback, trait, or configuration layer was added, and no performance
   improvement is claimed without representative measurement.
-- Verification: exact-route integration checks request all four entrances and a real
-  asset from the production bundle. Admission tests reject a malformed surface before
-  persistence/token exposure, including the identity-recovery path. Computer Use ran
+- Verification: exact-route integration resolves `./assets/app.js` from all four
+  entrance response URLs, requests each resulting asset path, and requires the same
+  browser-security and `no-cache` headers on every response. Admission tests reject
+  malformed or loose response variants, another client's join response, and a stale
+  post-digest attempt before persistence/token exposure, including the
+  identity-recovery path. Computer Use ran
   the production frontend against a disposable canonical Axum/SQLite server in
   isolated real browsers: a normal guest admitted, removed the URL token, received the
   canonical snapshot/roster, and published one durable message; a separate read-only

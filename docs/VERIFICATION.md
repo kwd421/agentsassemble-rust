@@ -2342,6 +2342,20 @@ session restore. Focused tests cover fresh join and identity-recovery rejection 
 session/profile persistence, and real Axum tests request every exact static entrance
 plus a production asset.
 
+The post-review correction makes preflight, join, pairing, and recovery response
+variants exact at the transport boundary. Fresh joins are bound to the request ID,
+preflight room, and requesting client; recovery is bound to the requested room and
+client. Only the server-returned avatar can become the admitted profile projection.
+Surface verification now checks the admission generation after the asynchronous
+digest and before mutating the lifetime pin or any persisted/UI state. The shared
+binder accepts the surface type it actually consumes and no longer fabricates
+`rooms: []`. Because Vite retains the
+copied desktop-compatible `./` base, the same asset directory is mounted at
+`/join/assets` and `/pair/assets` rather than copying files or adding a catch-all.
+The static router owns one `no-cache` policy for root, app, asset, join, and pair
+responses. Its exact entrance and asset-prefix arrays also derive the signed product
+surface, removing independently editable wildcard route strings.
+
 The final disposable run used the production frontend bundle and no provider. In an
 isolated Chrome guest, normal admission removed the URL token, rendered the canonical
 snapshot and roster, and published `HUMAN_SOCKET_NORMAL_UI_OK`. A distinct Safari
@@ -2357,3 +2371,16 @@ This evidence is limited to normal snapshot/posting and read-only snapshot/denia
 It does not claim the remaining one-use/reusable avatar, reload, preference,
 leave/revoke/restart matrix, controlled expiry/notification-lag/final-outbound races,
 or trusted public ingress.
+
+A fresh post-correction Computer Use run opened the production bundle at the exact
+trailing-slash `/join/?token=…` entrance in an isolated Chrome window. The asset-loaded
+profile form admitted against the current Axum/SQLite server, removed the URL token,
+rendered the canonical snapshot and roster, and published `STRICT_SURFACE_UI_OK`; a
+read-only SQLite query found the same single `message_final`. The window, fixture
+server, listener, database/key state, temporary example source and Cargo artifacts,
+production bundle, and generated sidecar were closed or moved to recoverable Trash.
+The subsequent client-binding regression rejects a same-request/same-room response
+carrying another `client_id` before it can reach session persistence.
+Final `make verify` at `62d191f` passed the unchanged architecture/source/policy gates,
+78 frontend files with 393 tests, 16 desktop tests, all workspace tests, warning-denied
+workspace and desktop Clippy, and final diff validation. No provider was started.

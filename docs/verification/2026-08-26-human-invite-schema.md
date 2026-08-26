@@ -1310,10 +1310,9 @@ message publication, remote preferences, or public-ingress parity.
 
 ## Reachable human-session WebSocket and browser entrance
 
-Public commits `24a2179`, `aadbe99`, and `1ef79f3` separate the human-session ticket
-authority, activate exact-session WebSockets, and connect the copied browser
-transport. The current candidate corrects the exact production entrances and guest
-server-surface bootstrap discovered by the real-browser run.
+Public commits `24a2179`, `aadbe99`, `1ef79f3`, and `62d191f` separate the
+human-session ticket authority, activate exact-session WebSockets, connect the copied
+browser transport, and close the admission response bindings discovered by review.
 
 - Preserved authority: raw `aas1.` bearer input exists only at the typed WebSocket
   ticket exchange. Subscription begins before consume; exact durable session state is
@@ -1322,15 +1321,20 @@ server-surface bootstrap discovered by the real-browser run.
   post. Replacement, revoke, leave, room close, expiry, or notification lag closes or
   denies the exact socket without a polling cache or client-owned authority.
 - Browser correction: exact original `/join`, `/join/`, `/pair`, and `/pair/`
-  entrances serve the production bundle and `/assets` serves its root-relative Vite
-  assets. Successful admission carries the already-owned server ID, lineage, and
-  product surface. The existing strict directory contract validates and binds that
-  surface before session persistence/token exposure. Stored pre-contract sessions and
-  failed-join restoration are rejected rather than treated as compatibility paths.
+  entrances serve the production bundle; the same asset directory is mounted at the
+  root and entrance-relative paths required by the copied Vite `./` base. Successful
+  admission carries the already-owned server ID, lineage, and product surface. Exact
+  response contracts bind request, preflight room, requesting client, server lineage,
+  and product surface before session persistence/token exposure. Stored pre-contract
+  sessions and failed-join restoration are rejected rather than treated as
+  compatibility paths. One static-router `no-cache` policy covers the index and every
+  app/asset entrance; the signed surface derives its wildcard paths from the same
+  exact-path and asset-prefix arrays used to build the router.
 - Actual cost and structure: successful admission adds one bootstrap-status SQLite
   read and one bounded surface object in the response/session. Browser binding adds
   one SHA-256 digest calculation. The server reuses its existing product-surface and
-  bootstrap owners; the frontend reuses its existing directory pin. No table, index,
+  bootstrap owners; the frontend reuses its existing directory pin and one strict JSON
+  contract owner. No table, index,
   cache, trait, task, timer, fallback, migration, or generic authority framework was
   added. No CPU, memory, disk, or latency improvement is claimed.
 - Verification result before manual review: real Axum/SQLite/WebSocket tests cover
@@ -1341,4 +1345,28 @@ server-surface bootstrap discovered by the real-browser run.
   contains no denied write. Focused frontend tests prove invalid join and recovered
   surfaces remain unpersisted and expose no bearer. Controlled expiry,
   notification-lag/closure, final-outbound races, and the remaining real-browser
-  invite matrix remain open and are not claimed.
+  invite matrix remain open and are not claimed. A fresh isolated Chrome run at the
+  trailing-slash entrance loaded the production assets, admitted against the current
+  Axum/SQLite server, removed the token, rendered the snapshot/roster, and durably
+  published `STRICT_SURFACE_UI_OK`; all disposable resources were then closed or moved
+  to recoverable Trash.
+
+## Human-session WebSocket and browser entrance manual-review findings
+
+- Daybreaker found two Medium admission defects: runtime response variants accepted
+  loose or client-supplied profile authority, and asynchronous surface verification
+  could commit a stale attempt after the active entrance changed. Commits `1b67bee`
+  and `af52fc5` close those paths with exact response contracts, server-returned avatar
+  authority, and a post-digest generation fence.
+- Daybreaker found one further Medium authority mismatch: a same-request/same-room
+  join response could carry another `client_id` into persistence. Commit `2ac8935`
+  binds the response to the requesting client before session construction.
+- The web reviewer found three Medium structure and cache defects: static frontend
+  responses lacked the original `no-cache` contract, strict JSON response validation
+  had a second local owner, and actual static routes could drift from the signed
+  product surface. Commits `2b25ddb` and `ac343d7` centralize those policies.
+- Both reviewers found that the first route correction still left route-set membership
+  independently enumerable. Commit `62d191f` makes the actual router's exact paths and
+  asset prefixes derive the signed surface and removes the second static route list.
+- Final outcome: the web reviewer and Daybreaker both returned `APPROVE — Critical 0 /
+  High 0 / Medium 0` for public HEAD `62d191f`.
