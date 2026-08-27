@@ -1,12 +1,25 @@
 use std::path::PathBuf;
 
+#[cfg(unix)]
+use std::time::Duration;
+
 use super::{StableEntry, StableEntryConfig, StableEntryFile};
+#[cfg(unix)]
+use crate::{AppState, HostSecret, TicketStore, serve};
 use crate::{
     public_ingress::{ManagedIngressConfig, PublicIngress, PublicIngressControlError},
     public_ingress_runtime::run_generation,
 };
+#[cfg(unix)]
+use agentsassemble_domain::ProviderCatalog;
+#[cfg(unix)]
+use agentsassemble_persistence::SqliteStore;
+#[cfg(unix)]
+use agentsassemble_provider::ProviderCatalogService;
 use parking_lot::RwLock;
 use std::sync::Arc;
+#[cfg(unix)]
+use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
 const DIRECT_ORIGIN: &str = "https://quick-entry.trycloudflare.com";
@@ -212,6 +225,53 @@ async fn tunnel_spawn_failure_still_clears_the_stable_target() {
             .unwrap_or_else(|error| panic!("read publisher calls: {error}"))
             .starts_with("kv key delete target ")
     );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn serve_preflight_failure_clears_claimed_stable_entry() {
+    let fixture = publisher_fixture("printf '%s\\n' \"$*\" >> \"$0.calls\"\nexit 0");
+    let database = fixture.directory.path().join("runtime.sqlite3");
+    let store = SqliteStore::open_path(&database)
+        .await
+        .unwrap_or_else(|error| panic!("open cleanup test store: {error}"));
+    store
+        .bootstrap_local_authority("018f301c-e3bf-4b1c-82dd-5853bacb837f", "Host")
+        .await
+        .unwrap_or_else(|error| panic!("bootstrap cleanup test store: {error}"));
+    let state = AppState::local(
+        store,
+        TicketStore::new(Duration::from_secs(30), 8),
+        HostSecret::new("stable-cleanup-test-host-token-000001")
+            .unwrap_or_else(|error| panic!("build cleanup host secret: {error}")),
+        ProviderCatalogService::fixed(ProviderCatalog::default()),
+    )
+    .await
+    .unwrap_or_else(|error| panic!("build cleanup app state: {error}"));
+    let listener = TcpListener::bind("0.0.0.0:0")
+        .await
+        .unwrap_or_else(|error| panic!("bind unsupported cleanup listener: {error}"));
+    let listener_address = listener
+        .local_addr()
+        .unwrap_or_else(|error| panic!("read cleanup listener: {error}"));
+    let state = state
+        .with_managed_public_ingress(
+            listener_address,
+            Some(config(&fixture.publisher)),
+            fixture.directory.path(),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("activate cleanup stable entry: {error}"));
+
+    assert!(
+        serve(listener, state, CancellationToken::new())
+            .await
+            .is_err()
+    );
+    let calls = std::fs::read_to_string(fixture.publisher.with_extension("calls"))
+        .unwrap_or_else(|error| panic!("read cleanup publisher calls: {error}"));
+    assert_eq!(calls.lines().count(), 1);
+    assert!(calls.starts_with("kv key delete target "));
 }
 
 #[cfg(unix)]

@@ -14,7 +14,7 @@ use crate::{
     CentralHostIdentity, HostIdentityError, HostSecret, HumanInviteCredentialAuthority,
     RoomRuntime, TicketStore,
     connection_admission::ConnectionAdmission,
-    public_ingress::{ManualPublicIngressError, PublicIngress},
+    public_ingress::{ManualPublicIngressError, PublicIngress, PublicIngressControlError},
     raw_ingress::RawIngressGovernor,
     stable_entry::{StableEntryActivationError, StableEntryConfig},
 };
@@ -153,6 +153,15 @@ impl AppState {
     ) -> Result<Self, StableEntryActivationError> {
         self.public_ingress = PublicIngress::managed(listener, stable_entry, state_root).await?;
         Ok(self)
+    }
+
+    /// Closes every managed public-ingress effect owned by this server state.
+    ///
+    /// # Errors
+    ///
+    /// Fails when the exact managed child or stable-entry cleanup cannot be confirmed.
+    pub async fn shutdown_public_ingress(&self) -> Result<(), PublicIngressControlError> {
+        self.public_ingress.shutdown().await
     }
 
     pub(crate) fn public_ingress(&self) -> PublicIngress {

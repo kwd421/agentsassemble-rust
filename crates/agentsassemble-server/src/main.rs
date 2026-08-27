@@ -58,6 +58,7 @@ async fn main() -> anyhow::Result<()> {
         .with_writer(std::io::stderr)
         .init();
     let args = Args::parse();
+    let frontend_path = resolve_frontend_path(args.frontend.as_deref())?;
     let manual_public_ingress = manual_public_ingress_environment()?;
     let stable_entry = stable_entry_configuration(
         args.stable_entry_config.as_deref(),
@@ -111,20 +112,11 @@ async fn main() -> anyhow::Result<()> {
         args.desktop_native_registration,
     )
     .await?;
-    let frontend_path = if let Some(frontend) = args.frontend {
-        let path = frontend
-            .canonicalize()
-            .with_context(|| format!("resolve frontend directory {}", frontend.display()))?;
-        if !path.join("index.html").is_file() {
-            anyhow::bail!("frontend directory {} has no index.html", path.display());
-        }
-        state = state.with_frontend(path.clone());
-        Some(path)
-    } else {
-        None
-    };
+    if let Some(frontend) = frontend_path.as_ref() {
+        state = state.with_frontend(frontend.clone());
+    }
     let mut stdout = tokio::io::stdout();
-    write_json_line(
+    if let Err(error) = write_json_line(
         &mut stdout,
         &serde_json::json!({
             "status": "ready",
@@ -135,7 +127,14 @@ async fn main() -> anyhow::Result<()> {
             "pid": std::process::id(),
         }),
     )
-    .await?;
+    .await
+    {
+        state
+            .shutdown_public_ingress()
+            .await
+            .context("clean public ingress after readiness reporting failed")?;
+        return Err(error);
+    }
     let control_state = state.clone();
     let control_cancellation = cancellation.clone();
     tokio::spawn(async move {
@@ -158,6 +157,19 @@ async fn open_store(args: &Args) -> anyhow::Result<SqliteStore> {
 
 fn database_state_root(database: &Path) -> anyhow::Result<&Path> {
     database.parent().context("database path has no state root")
+}
+
+fn resolve_frontend_path(frontend: Option<&Path>) -> anyhow::Result<Option<PathBuf>> {
+    let Some(frontend) = frontend else {
+        return Ok(None);
+    };
+    let path = frontend
+        .canonicalize()
+        .with_context(|| format!("resolve frontend directory {}", frontend.display()))?;
+    if !path.join("index.html").is_file() {
+        anyhow::bail!("frontend directory {} has no index.html", path.display());
+    }
+    Ok(Some(path))
 }
 
 async fn configure_startup_surface(

@@ -108,7 +108,7 @@ pub enum ManualPublicIngressError {
 }
 
 #[derive(Debug, Error)]
-pub(crate) enum PublicIngressControlError {
+pub enum PublicIngressControlError {
     #[error("managed public ingress is not configured")]
     Unconfigured,
     #[error("managed public ingress cleanup failed")]

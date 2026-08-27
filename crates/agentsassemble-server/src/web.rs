@@ -267,6 +267,20 @@ pub async fn serve(
     state: AppState,
     cancellation: CancellationToken,
 ) -> Result<(), ServeError> {
+    let public_ingress = state.public_ingress();
+    let result = serve_runtime(listener, state, cancellation).await;
+    public_ingress
+        .shutdown()
+        .await
+        .map_err(|_| ServeError::PublicIngressCleanup)?;
+    result
+}
+
+async fn serve_runtime(
+    listener: TcpListener,
+    state: AppState,
+    cancellation: CancellationToken,
+) -> Result<(), ServeError> {
     let listener_address = listener.local_addr()?;
     let ingress = LocalIngress::from_listener(listener_address).ok_or_else(|| {
         std::io::Error::new(

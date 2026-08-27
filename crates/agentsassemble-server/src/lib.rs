@@ -118,7 +118,7 @@ pub use human_invite_credentials::{
 };
 pub use human_invite_preflight::{HumanInvitePreflightError, preflight_human_invite};
 pub use ingress_trust::local_bind_is_supported;
-pub use public_ingress::ManualPublicIngressError;
+pub use public_ingress::{ManualPublicIngressError, PublicIngressControlError};
 pub use room_runtime::RoomRuntime;
 pub use room_shutdown::RoomShutdownError;
 pub use runtime_reconciliation::{RuntimeReconciliationSummary, reconcile_runtime_ownership};
