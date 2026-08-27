@@ -187,8 +187,19 @@ test("retains one frozen admission intent across response loss and a later invit
   await expect.poll(() => joinBodies.length).toBe(3);
   await expect(page.getByRole("region", { name: "입장 재시도" })).toBeVisible();
   expect(
-    await page.evaluate((key) => sessionStorage.getItem(key), ADMISSION_INTENT_KEY)
-  ).not.toBeNull();
+    await page.evaluate((key) => {
+      const raw = sessionStorage.getItem(key);
+      return raw ? JSON.parse(raw) : null;
+    }, ADMISSION_INTENT_KEY)
+  ).toMatchObject({
+    state: "settled",
+    outcome: "terminal",
+    terminalCode: "admission_session_unavailable",
+  });
+
+  await page.reload();
+  await expect(page.getByRole("region", { name: "입장 확인 재시도" })).toBeVisible();
+  expect(joinBodies).toHaveLength(3);
 
   await page.evaluate(() =>
     localStorage.setItem("agentsassemble.test.blockTerminalIntentRemoval", "0")
@@ -204,7 +215,7 @@ test("retains one frozen admission intent across response loss and a later invit
   expect(joinBodies[2]).toEqual(joinBodies[0]);
 });
 
-test("repairs an expired completed admission without presenting its bearer", async ({
+test("repairs durable settlement after completed session custody is removed", async ({
   page,
 }) => {
   await page.addInitScript((intentKey) => {
@@ -264,17 +275,17 @@ test("repairs an expired completed admission without presenting its bearer", asy
   await expect
     .poll(() => page.evaluate((key) => sessionStorage.getItem(key), ADMISSION_INTENT_KEY))
     .not.toBeNull();
+  expect(
+    await page.evaluate((key) => {
+      const raw = sessionStorage.getItem(key);
+      return raw ? JSON.parse(raw) : null;
+    }, ADMISSION_INTENT_KEY)
+  ).toMatchObject({ state: "settled", outcome: "completed_session" });
 
   await page.evaluate(() =>
     localStorage.setItem("agentsassemble.test.blockIntentRemoval", "0")
   );
-  await page.evaluate((sessionKey) => {
-    const raw = localStorage.getItem(sessionKey);
-    if (!raw) throw new Error("completed session was not persisted");
-    const session = JSON.parse(raw) as { expiresAt: string };
-    session.expiresAt = "2000-01-01T00:00:00Z";
-    localStorage.setItem(sessionKey, JSON.stringify(session));
-  }, GUEST_SESSION_KEY);
+  await page.evaluate((sessionKey) => localStorage.removeItem(sessionKey), GUEST_SESSION_KEY);
   await page.goto("/join?token=invite-b");
 
   await expect.poll(() => preflightTokens).toEqual(["invite-a", "invite-b"]);

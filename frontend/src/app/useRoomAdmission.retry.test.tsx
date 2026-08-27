@@ -132,10 +132,10 @@ describe("room admission retry custody", () => {
       if (key === ROOM_ADMISSION_INTENT_STORAGE_KEY) return;
       setItem.call(this, key, value);
     });
-    const { result } = renderAdmission();
+    const first = renderAdmission();
 
     await waitFor(() =>
-      expect(result.current.admissionState).toMatchObject({
+      expect(first.result.current.admissionState).toMatchObject({
         kind: "failed",
         code: "request_id_unavailable",
         retryable: true,
@@ -285,7 +285,7 @@ describe("room admission retry custody", () => {
     expect(apiMocks.joinRoomInvite).toHaveBeenCalledOnce();
   });
 
-  it("retires a completed session's stale intent before evaluating a different invite", async () => {
+  it("uses durable settlement after completed session custody is removed", async () => {
     const removeItem = Storage.prototype.removeItem;
     let removalBlocked = true;
     vi.spyOn(Storage.prototype, "removeItem").mockImplementation(function (
@@ -302,9 +302,11 @@ describe("room admission retry custody", () => {
     await waitFor(() =>
       expect(first.result.current.guestSession?.sessionToken).toBe("session-a")
     );
-    const retainedSession = first.result.current.guestSession;
-    expect(retainedSession?.clientId).toBe("client-1");
-    expect(window.sessionStorage.getItem(ROOM_ADMISSION_INTENT_STORAGE_KEY)).not.toBeNull();
+    expect(
+      JSON.parse(
+        window.sessionStorage.getItem(ROOM_ADMISSION_INTENT_STORAGE_KEY) || "{}"
+      )
+    ).toMatchObject({ state: "settled", outcome: "completed_session" });
     first.unmount();
 
     removalBlocked = false;
@@ -323,7 +325,7 @@ describe("room admission retry custody", () => {
     apiMocks.joinRoomInvite.mockResolvedValueOnce(
       joinedPayload("session-b", "room-2")
     );
-    const second = renderAdmission(vi.fn(), retainedSession, "invite-2");
+    const second = renderAdmission(vi.fn(), null, "invite-2");
 
     await waitFor(() =>
       expect(second.result.current.guestSession?.sessionToken).toBe("session-b")
@@ -333,32 +335,20 @@ describe("room admission retry custody", () => {
     expect(window.sessionStorage.getItem(ROOM_ADMISSION_INTENT_STORAGE_KEY)).toBeNull();
   });
 
-  it("uses an expired completed session only to retire its exact stale intent", async () => {
-    const removeItem = Storage.prototype.removeItem;
-    let removalBlocked = true;
-    vi.spyOn(Storage.prototype, "removeItem").mockImplementation(function (
-      this: Storage,
-      key
-    ) {
-      if (key === ROOM_ADMISSION_INTENT_STORAGE_KEY && removalBlocked) {
-        throw new Error("storage unavailable");
-      }
-      removeItem.call(this, key);
-    });
-    apiMocks.joinRoomInvite.mockResolvedValueOnce(joinedPayload("session-a"));
-    const first = renderAdmission();
-    await waitFor(() =>
-      expect(first.result.current.guestSession?.sessionToken).toBe("session-a")
-    );
-    const expiredSession = {
-      ...first.result.current.guestSession!,
+  it("does not present an expired completed session as preflight authority", async () => {
+    const expiredSession: RoomGuestSession = {
+      inviteToken: "invite-1",
+      sessionToken: "expired-session",
+      meetingId: "room-1",
+      agentId: "guest-1",
+      displayName: "Guest",
+      inviteScope: "room",
       expiresAt: "2000-01-01T00:00:00Z",
+      joinedAt: "1999-01-01T00:00:00Z",
+      clientId: "client-1",
+      serverSurface: SESSION_SURFACE,
     };
-    first.unmount();
-
-    removalBlocked = false;
     window.history.replaceState({}, "", "/join?token=invite-2");
-    apiMocks.preflightRoomInvite.mockClear();
     apiMocks.preflightRoomInvite.mockResolvedValue({
       status: "known_user",
       can_auto_join: true,
@@ -372,17 +362,16 @@ describe("room admission retry custody", () => {
     apiMocks.joinRoomInvite.mockResolvedValueOnce(
       joinedPayload("session-b", "room-2")
     );
-    const second = renderAdmission(vi.fn(), expiredSession, "invite-2");
+    const { result } = renderAdmission(vi.fn(), expiredSession, "invite-2");
 
     await waitFor(() =>
-      expect(second.result.current.guestSession?.sessionToken).toBe("session-b")
+      expect(result.current.guestSession?.sessionToken).toBe("session-b")
     );
     expect(apiMocks.preflightRoomInvite).toHaveBeenCalledWith({
       inviteToken: "invite-2",
       deviceToken: DEVICE_TOKEN,
       sessionToken: "",
     });
-    expect(window.sessionStorage.getItem(ROOM_ADMISSION_INTENT_STORAGE_KEY)).toBeNull();
   });
 
   it("retires the intent only when the server proves a no-commit outcome", async () => {
@@ -393,10 +382,10 @@ describe("room admission retry custody", () => {
         "participant_identity_conflict"
       )
     );
-    const { result } = renderAdmission();
+    const first = renderAdmission();
 
     await waitFor(() =>
-      expect(result.current.admissionState).toMatchObject({
+      expect(first.result.current.admissionState).toMatchObject({
         kind: "failed",
         operation: "join",
         retryable: false,
@@ -448,24 +437,43 @@ describe("room admission retry custody", () => {
         "admission_session_unavailable"
       )
     );
-    const { result } = renderAdmission();
+    const first = renderAdmission();
 
     await waitFor(() =>
-      expect(result.current.admissionState).toMatchObject({
+      expect(first.result.current.admissionState).toMatchObject({
         kind: "failed",
         operation: "intent_cleanup",
         code: "admission_session_unavailable",
         retryable: true,
       })
     );
-    expect(window.sessionStorage.getItem(ROOM_ADMISSION_INTENT_STORAGE_KEY)).not.toBeNull();
+    expect(
+      JSON.parse(
+        window.sessionStorage.getItem(ROOM_ADMISSION_INTENT_STORAGE_KEY) || "{}"
+      )
+    ).toMatchObject({
+      state: "settled",
+      outcome: "terminal",
+      terminalCode: "admission_session_unavailable",
+    });
+    first.unmount();
+
+    const second = renderAdmission();
+    await waitFor(() =>
+      expect(second.result.current.admissionState).toMatchObject({
+        kind: "failed",
+        operation: "preflight",
+        retryable: true,
+      })
+    );
+    expect(apiMocks.joinRoomInvite).toHaveBeenCalledOnce();
 
     removalBlocked = false;
-    act(() => result.current.requestGuestJoin());
+    act(() => second.result.current.requestGuestJoin());
     await waitFor(() =>
-      expect(result.current.admissionState).toMatchObject({
+      expect(second.result.current.admissionState).toMatchObject({
         kind: "failed",
-        operation: "join",
+        operation: "preflight",
         code: "admission_session_unavailable",
         retryable: false,
       })

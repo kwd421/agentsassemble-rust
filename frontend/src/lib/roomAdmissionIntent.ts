@@ -34,11 +34,25 @@ export type RoomAdmissionIntent = {
   participantType: "human";
 };
 
-type StoredRoomAdmissionIntent = RoomAdmissionIntent & {
+type StoredPendingRoomAdmissionIntent = RoomAdmissionIntent & {
   version: 1;
   inviteCredentialFingerprint: string;
   browserCredentialFingerprint: string;
 };
+
+type StoredSettledRoomAdmissionIntent = {
+  version: 1;
+  state: "settled";
+  inviteCredentialFingerprint: string;
+  browserCredentialFingerprint: string;
+  clientId: string;
+  outcome: "completed_session" | "terminal";
+  terminalCode: string;
+};
+
+type StoredRoomAdmissionIntent =
+  | StoredPendingRoomAdmissionIntent
+  | StoredSettledRoomAdmissionIntent;
 
 type RoomAdmissionIntentContext = {
   inviteToken: string;
@@ -52,6 +66,13 @@ type CompletedAdmissionSession = Pick<
   RoomGuestSession,
   "inviteToken" | "clientId" | "expiresAt"
 >;
+export type RoomAdmissionIntentResolution =
+  | { kind: "pending"; intent: RoomAdmissionIntent }
+  | { kind: "terminal"; code: string }
+  | null;
+export type RoomAdmissionSettlement =
+  | { outcome: "completed_session" }
+  | { outcome: "terminal"; code: string };
 
 function unavailable(): never {
   throw new Error(INTENT_UNAVAILABLE_MESSAGE);
@@ -61,10 +82,46 @@ function canonicalUuid(value: string): boolean {
   return value !== NIL_UUID && CANONICAL_UUID_PATTERN.test(value);
 }
 
+function validStoredBinding(source: Record<string, unknown>): boolean {
+  return (
+    source.version === 1 &&
+    typeof source.inviteCredentialFingerprint === "string" &&
+    SHA256_HEX_PATTERN.test(source.inviteCredentialFingerprint) &&
+    typeof source.browserCredentialFingerprint === "string" &&
+    SHA256_HEX_PATTERN.test(source.browserCredentialFingerprint) &&
+    typeof source.clientId === "string" &&
+    source.clientId.trim() === source.clientId &&
+    source.clientId.length > 0 &&
+    source.clientId.length <= 128
+  );
+}
+
 function validStoredIntent(value: unknown): value is StoredRoomAdmissionIntent {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const source = value as Record<string, unknown>;
   const keys = Object.keys(source).sort().join("\n");
+  const settledKeys = [
+    "browserCredentialFingerprint",
+    "clientId",
+    "inviteCredentialFingerprint",
+    "outcome",
+    "state",
+    "terminalCode",
+    "version",
+  ]
+    .sort()
+    .join("\n");
+  if (keys === settledKeys) {
+    return (
+      validStoredBinding(source) &&
+      source.state === "settled" &&
+      (source.outcome === "completed_session" || source.outcome === "terminal") &&
+      typeof source.terminalCode === "string" &&
+      (source.outcome === "completed_session"
+        ? source.terminalCode === ""
+        : DEFINITIVE_INTENT_END_CODES.has(source.terminalCode))
+    );
+  }
   if (
     keys !==
     [
@@ -84,14 +141,10 @@ function validStoredIntent(value: unknown): value is StoredRoomAdmissionIntent {
     return false;
   }
   return (
-    source.version === 1 &&
+    validStoredBinding(source) &&
     source.participantType === "human" &&
     typeof source.requestId === "string" &&
     canonicalUuid(source.requestId) &&
-    typeof source.inviteCredentialFingerprint === "string" &&
-    SHA256_HEX_PATTERN.test(source.inviteCredentialFingerprint) &&
-    typeof source.browserCredentialFingerprint === "string" &&
-    SHA256_HEX_PATTERN.test(source.browserCredentialFingerprint) &&
     typeof source.meetingId === "string" &&
     source.meetingId.length > 0 &&
     source.meetingId.length <= 128 &&
@@ -99,11 +152,7 @@ function validStoredIntent(value: unknown): value is StoredRoomAdmissionIntent {
     source.displayName.trim().length > 0 &&
     source.displayName.length <= 128 &&
     typeof source.avatarImage === "string" &&
-    source.avatarImage.length <= 2048 &&
-    typeof source.clientId === "string" &&
-    source.clientId.trim() === source.clientId &&
-    source.clientId.length > 0 &&
-    source.clientId.length <= 128
+    source.avatarImage.length <= 2048
   );
 }
 
@@ -165,9 +214,81 @@ function storedIntentMatches(
   );
 }
 
+function storedIntentUnchanged(
+  observed: StoredRoomAdmissionIntent,
+  current: StoredRoomAdmissionIntent
+): boolean {
+  return JSON.stringify(observed) === JSON.stringify(current);
+}
+
 function removeStoredIntent(storage: Storage): boolean {
   storage.removeItem(ROOM_ADMISSION_INTENT_STORAGE_KEY);
   return storage.getItem(ROOM_ADMISSION_INTENT_STORAGE_KEY) === null;
+}
+
+function tryRemoveStoredIntent(storage: Storage): boolean {
+  try {
+    return removeStoredIntent(storage);
+  } catch {
+    return false;
+  }
+}
+
+function writeStoredIntent(
+  storage: Storage,
+  stored: StoredRoomAdmissionIntent
+): boolean {
+  const serialized = JSON.stringify(stored);
+  if (serialized.length > MAX_STORED_INTENT_BYTES) unavailable();
+  storage.setItem(ROOM_ADMISSION_INTENT_STORAGE_KEY, serialized);
+  return storage.getItem(ROOM_ADMISSION_INTENT_STORAGE_KEY) === serialized;
+}
+
+function settledIntent(
+  stored: StoredRoomAdmissionIntent,
+  settlement: RoomAdmissionSettlement
+): StoredSettledRoomAdmissionIntent {
+  return {
+    version: 1,
+    state: "settled",
+    inviteCredentialFingerprint: stored.inviteCredentialFingerprint,
+    browserCredentialFingerprint: stored.browserCredentialFingerprint,
+    clientId: stored.clientId,
+    outcome: settlement.outcome,
+    terminalCode: settlement.outcome === "terminal" ? settlement.code : "",
+  };
+}
+
+function settlementMatches(
+  stored: StoredSettledRoomAdmissionIntent,
+  settlement: RoomAdmissionSettlement
+): boolean {
+  return (
+    stored.outcome === settlement.outcome &&
+    stored.terminalCode === (settlement.outcome === "terminal" ? settlement.code : "")
+  );
+}
+
+function persistSettlementThenRemove(
+  storage: Storage,
+  stored: StoredRoomAdmissionIntent,
+  settlement: RoomAdmissionSettlement
+): boolean {
+  if ("state" in stored) {
+    if (!settlementMatches(stored, settlement)) return false;
+  } else {
+    const settled = settledIntent(stored, settlement);
+    if (!validStoredIntent(settled)) return false;
+    try {
+      if (!writeStoredIntent(storage, settled)) {
+        return tryRemoveStoredIntent(storage);
+      }
+    } catch {
+      return tryRemoveStoredIntent(storage);
+    }
+  }
+  // Failed removal leaves the durable settled record cleanup-only for a later load.
+  return tryRemoveStoredIntent(storage);
 }
 
 function completedSessionContext(
@@ -202,22 +323,37 @@ async function expectedFingerprints(context: RoomAdmissionIntentContext) {
 export async function loadRoomAdmissionIntent(
   context: RoomAdmissionIntentContext,
   completedSession?: CompletedAdmissionSession | null
-): Promise<RoomAdmissionIntent | null> {
+): Promise<RoomAdmissionIntentResolution> {
   const storage = sessionStorageOwner();
   const stored = readStoredIntent(storage);
   if (!stored) return null;
   const fingerprints = await expectedFingerprints(context);
-  if (!storedIntentMatches(stored, context, fingerprints)) {
+  const current = readStoredIntent(storage);
+  if (!current) return null;
+  if (!storedIntentUnchanged(stored, current)) unavailable();
+  const matchesCurrent = storedIntentMatches(current, context, fingerprints);
+  if ("state" in current) {
+    if (!tryRemoveStoredIntent(storage)) unavailable();
+    return matchesCurrent && current.outcome === "terminal"
+      ? { kind: "terminal", code: current.terminalCode }
+      : null;
+  }
+  if (!matchesCurrent) {
     const completed = completedSessionContext(context, completedSession);
     if (completed) {
       const completedFingerprints = await expectedFingerprints(completed);
-      if (storedIntentMatches(stored, completed, completedFingerprints)) {
-        try {
-          if (!removeStoredIntent(storage)) unavailable();
-          return null;
-        } catch {
-          unavailable();
-        }
+      const afterCompletedFingerprint = readStoredIntent(storage);
+      if (
+        !afterCompletedFingerprint ||
+        !storedIntentUnchanged(current, afterCompletedFingerprint)
+      ) unavailable();
+      if (storedIntentMatches(current, completed, completedFingerprints)) {
+        if (
+          !persistSettlementThenRemove(storage, current, {
+            outcome: "completed_session",
+          })
+        ) unavailable();
+        return null;
       }
     }
     unavailable();
@@ -227,18 +363,19 @@ export async function loadRoomAdmissionIntent(
     inviteCredentialFingerprint: _inviteFingerprint,
     browserCredentialFingerprint: _browserFingerprint,
     ...intent
-  } = stored;
-  return intent;
+  } = current;
+  return { kind: "pending", intent };
 }
 
 export async function loadOrCreateRoomAdmissionIntent(
   input: NewRoomAdmissionIntent
 ): Promise<RoomAdmissionIntent> {
   const existing = await loadRoomAdmissionIntent(input);
-  if (existing) return existing;
+  if (existing?.kind === "pending") return existing.intent;
+  if (existing) unavailable();
   if (typeof globalThis.crypto?.randomUUID !== "function") unavailable();
   const fingerprints = await expectedFingerprints(input);
-  const stored: StoredRoomAdmissionIntent = {
+  const stored: StoredPendingRoomAdmissionIntent = {
     version: 1,
     ...fingerprints,
     requestId: globalThis.crypto.randomUUID(),
@@ -249,11 +386,10 @@ export async function loadOrCreateRoomAdmissionIntent(
     participantType: "human",
   };
   if (!validStoredIntent(stored)) unavailable();
-  const serialized = JSON.stringify(stored);
   const storage = sessionStorageOwner();
+  if (readStoredIntent(storage)) unavailable();
   try {
-    storage.setItem(ROOM_ADMISSION_INTENT_STORAGE_KEY, serialized);
-    if (storage.getItem(ROOM_ADMISSION_INTENT_STORAGE_KEY) !== serialized) unavailable();
+    if (!writeStoredIntent(storage, stored)) unavailable();
   } catch {
     try {
       storage.removeItem(ROOM_ADMISSION_INTENT_STORAGE_KEY);
@@ -272,17 +408,28 @@ export async function loadOrCreateRoomAdmissionIntent(
   };
 }
 
-export function retireRoomAdmissionIntent(): boolean {
+export async function settleRoomAdmissionIntent(
+  context: RoomAdmissionIntentContext,
+  settlement: RoomAdmissionSettlement
+): Promise<boolean> {
+  let storage: Storage;
+  let stored: StoredRoomAdmissionIntent | null;
   try {
-    return removeStoredIntent(window.sessionStorage);
+    storage = sessionStorageOwner();
+    stored = readStoredIntent(storage);
+    if (!stored) return true;
+    const fingerprints = await expectedFingerprints(context);
+    const current = readStoredIntent(storage);
+    if (!current) return true;
+    if (
+      !storedIntentUnchanged(stored, current) ||
+      !storedIntentMatches(current, context, fingerprints)
+    ) return false;
+    stored = current;
   } catch {
     return false;
   }
-}
-
-export function releaseRoomAdmissionIntentAfterCompletedSession(): void {
-  // A durably persisted completed session is exact cleanup evidence on a later entrance.
-  retireRoomAdmissionIntent();
+  return persistSettlementThenRemove(storage, stored, settlement);
 }
 
 export function roomAdmissionFailureEndsIntentCustody(error: unknown): boolean {

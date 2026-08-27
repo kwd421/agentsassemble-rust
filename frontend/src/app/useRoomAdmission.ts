@@ -9,11 +9,10 @@ import { ApiError, GUEST_SESSION_EXPIRED_MESSAGE } from "../lib/apiErrors";
 import { loadRememberedGuestProfile, rememberGuestProfile } from "../lib/deviceIdentity";
 import { roomFromGuestSession, type RoomDockItem } from "../lib/roomDockModel";
 import {
-  releaseRoomAdmissionIntentAfterCompletedSession,
   loadOrCreateRoomAdmissionIntent,
   loadRoomAdmissionIntent,
-  retireRoomAdmissionIntent,
   roomAdmissionFailureEndsIntentCustody,
+  settleRoomAdmissionIntent,
 } from "../lib/roomAdmissionIntent";
 import { verifyAndBindRoomSessionSurface } from "../lib/roomDirectoryContract";
 import {
@@ -260,7 +259,12 @@ export function useRoomAdmission({
       admissionState.kind === "failed" &&
       admissionState.operation === "intent_cleanup"
     ) {
-      if (retireRoomAdmissionIntent()) {
+      const attempt = beginAdmissionAttempt();
+      void settleRoomAdmissionIntent(
+        { inviteToken: guestJoinToken, browserCredential: deviceToken, clientId },
+        { outcome: "terminal", code: admissionState.code }
+      ).then((retired) => {
+        if (!retired || !attempt.isCurrent()) return;
         dispatchAdmission({
           type: "failed",
           operation: "join",
@@ -269,7 +273,7 @@ export function useRoomAdmission({
           retryable: false,
           status: admissionState.message,
         });
-      }
+      });
       return;
     }
     if (guestPreflightRetryable) {
@@ -281,7 +285,14 @@ export function useRoomAdmission({
       return;
     }
     dispatchAdmission({ type: "join_requested", status: "" });
-  }, [admissionState, guestPreflightRetryable]);
+  }, [
+    admissionState,
+    beginAdmissionAttempt,
+    clientId,
+    deviceToken,
+    guestJoinToken,
+    guestPreflightRetryable,
+  ]);
 
   const retryOperatorPairing = useCallback(() => {
     if (operatorPairingState !== "pairing_failed_retryable") return;
@@ -449,9 +460,22 @@ export function useRoomAdmission({
           browserCredential: deviceToken,
           clientId,
         }, completedSessionEvidence);
-    pendingIntent.then((intent) => {
+    pendingIntent.then((resolution) => {
         if (!attempt.isCurrent()) return null;
-        if (intent) {
+        if (resolution?.kind === "terminal") {
+          const message = "이 브라우저의 이전 입장 요청은 이미 종료되었습니다.";
+          dispatchAdmission({
+            type: "failed",
+            operation: "preflight",
+            code: resolution.code,
+            message,
+            retryable: false,
+            status: message,
+          });
+          return null;
+        }
+        if (resolution?.kind === "pending") {
+          const { intent } = resolution;
           expectedInviteRoomIdRef.current = intent.meetingId;
           setPendingGuestDisplayName(intent.displayName);
           setPendingGuestAvatarImage(intent.avatarImage);
@@ -513,7 +537,10 @@ export function useRoomAdmission({
             attempt.isCurrent
           );
           if (!applied) return;
-          releaseRoomAdmissionIntentAfterCompletedSession();
+          await settleRoomAdmissionIntent(
+            { inviteToken: guestJoinToken, browserCredential: deviceToken, clientId },
+            { outcome: "completed_session" }
+          );
           return;
         }
         if (
@@ -630,10 +657,13 @@ export function useRoomAdmission({
             attempt.isCurrent
           );
           if (!applied) return;
-          releaseRoomAdmissionIntentAfterCompletedSession();
+          await settleRoomAdmissionIntent(
+            { inviteToken: guestJoinToken, browserCredential: deviceToken, clientId },
+            { outcome: "completed_session" }
+          );
         }
       })
-      .catch((error) => {
+      .catch(async (error) => {
         if (!attempt.isCurrent()) return;
         const surfaceFailure = error instanceof SessionSurfaceError;
         const custodyFailure = error instanceof SessionCustodyError;
@@ -650,7 +680,11 @@ export function useRoomAdmission({
               ? error.code || error.message
               : "join_failed";
         if (networkDispatched && roomAdmissionFailureEndsIntentCustody(error)) {
-          if (!retireRoomAdmissionIntent()) {
+          const retired = await settleRoomAdmissionIntent(
+            { inviteToken: guestJoinToken, browserCredential: deviceToken, clientId },
+            { outcome: "terminal", code }
+          );
+          if (!retired) {
             dispatchAdmission({
               type: "failed",
               operation: "intent_cleanup",
