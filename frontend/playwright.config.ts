@@ -12,8 +12,7 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   webServer: {
-    command: "python3 ../tests/fixtures/room_ui_server.py",
-    env: { AGENTSASSEMBLE_E2E_PORT: String(port) },
+    command: `npm run preview -- --host 127.0.0.1 --port ${port}`,
     url: `http://127.0.0.1:${port}`,
     reuseExistingServer: false,
     timeout: 30_000,
