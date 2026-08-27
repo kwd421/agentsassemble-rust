@@ -38,6 +38,8 @@ export type RoomGuestSession = {
 };
 
 const ROOM_GUEST_SESSION_STORAGE_KEY = "agentsassemble.roomGuestSession.v1";
+const ROOM_GUEST_SESSION_STORAGE_UNAVAILABLE =
+  "방 세션을 브라우저에 영구 저장할 수 없습니다. 저장 공간 또는 사이트 설정을 확인한 뒤 다시 시도해 주세요.";
 
 function cleanText(value: unknown, limit: number): string {
   return String(value || "")
@@ -209,16 +211,25 @@ export function loadRoomGuestSession(): RoomGuestSession | null {
 }
 
 export function persistRoomGuestSession(session: RoomGuestSession | null) {
-  try {
-    if (!session) {
-      window.localStorage.removeItem(ROOM_GUEST_SESSION_STORAGE_KEY);
-      // Keep an explicit tombstone as well. Some embedded/mobile WebViews have
-      // restored a just-removed value during same-origin navigation.
-      window.localStorage.setItem(ROOM_GUEST_SESSION_STORAGE_KEY, "null");
+  if (session) {
+    try {
+      const serialized = JSON.stringify(session);
+      window.localStorage.setItem(ROOM_GUEST_SESSION_STORAGE_KEY, serialized);
+      const stored = window.localStorage.getItem(ROOM_GUEST_SESSION_STORAGE_KEY);
+      if (
+        stored !== serialized ||
+        !normalizeRoomGuestSession(JSON.parse(stored))
+      ) {
+        throw new Error(ROOM_GUEST_SESSION_STORAGE_UNAVAILABLE);
+      }
       return;
+    } catch {
+      throw new Error(ROOM_GUEST_SESSION_STORAGE_UNAVAILABLE);
     }
-    window.localStorage.setItem(ROOM_GUEST_SESSION_STORAGE_KEY, JSON.stringify(session));
+  }
+  try {
+    window.localStorage.removeItem(ROOM_GUEST_SESSION_STORAGE_KEY);
   } catch {
-    // Guest session persistence is a browser convenience; the live React state remains authoritative.
+    // Server-side expiry/revocation remains authoritative when local cleanup fails.
   }
 }

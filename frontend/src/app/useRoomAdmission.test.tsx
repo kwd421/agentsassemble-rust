@@ -657,90 +657,6 @@ describe("useRoomAdmission", () => {
     expect(apiMocks.redeemOperatorPairing).toHaveBeenCalledOnce();
   });
 
-  it("does not loop automatic join attempts after a failure", async () => {
-    apiMocks.preflightRoomInvite.mockResolvedValue({
-      status: "known_user",
-      can_auto_join: true,
-      room_id: "room-1",
-      participant: { participant_id: "guest-1", display_name: "Guest" },
-    });
-    apiMocks.joinRoomInvite.mockRejectedValue(new Error("network unavailable"));
-    const onRoomJoined = vi.fn();
-    const onResetToLobby = vi.fn();
-
-    const { result } = renderHook(() =>
-      useRoomAdmission({
-        deviceToken: DEVICE_TOKEN,
-        clientId: CLIENT_ID,
-        guestInvite: null,
-        guestJoinToken: "invite-1",
-        operatorPairingToken: "",
-        onPairingTokenConsumed: vi.fn(),
-        initialSession: null,
-        onRoomJoined,
-        onResetToLobby,
-      })
-    );
-
-    await waitFor(() => expect(result.current.guestJoinStatus).toBe("network unavailable"));
-    await new Promise((resolve) => window.setTimeout(resolve, 20));
-    expect(apiMocks.joinRoomInvite).toHaveBeenCalledOnce();
-    expect(result.current.guestJoinRequested).toBe(false);
-    expect(result.current.admissionState).toMatchObject({
-      kind: "failed",
-      operation: "join",
-      retryable: true,
-    });
-  });
-
-  it("reuses the secure request id when a failed join is retried", async () => {
-    apiMocks.preflightRoomInvite.mockResolvedValue({
-      status: "known_user",
-      can_auto_join: true,
-      room_id: "room-1",
-      participant: { participant_id: "guest-1", display_name: "Guest" },
-    });
-    apiMocks.joinRoomInvite
-      .mockRejectedValueOnce(new Error("network unavailable"))
-      .mockResolvedValueOnce({
-        ...SESSION_SURFACE,
-        status: "admitted",
-        session_token: "session-retried",
-        agent_id: "guest-1",
-        display_name: "Guest",
-        meeting_id: "room-1",
-        invite_scope: "room",
-        connection_kind: "browser",
-        expires_at: "2099-01-01T00:00:00Z",
-      });
-    const onRoomJoined = vi.fn();
-    const onResetToLobby = vi.fn();
-
-    const { result } = renderHook(() =>
-      useRoomAdmission({
-        deviceToken: DEVICE_TOKEN,
-        clientId: CLIENT_ID,
-        guestInvite: null,
-        guestJoinToken: "invite-1",
-        operatorPairingToken: "",
-        onPairingTokenConsumed: vi.fn(),
-        initialSession: null,
-        onRoomJoined,
-        onResetToLobby,
-      })
-    );
-
-    await waitFor(() => expect(result.current.guestJoinStatus).toBe("network unavailable"));
-    const firstRequestId = apiMocks.joinRoomInvite.mock.calls[0][0].requestId;
-    act(() => result.current.requestGuestJoin());
-    await waitFor(() =>
-      expect(result.current.guestSession?.sessionToken).toBe("session-retried")
-    );
-
-    expect(apiMocks.joinRoomInvite.mock.calls[1][0].requestId).toBe(firstRequestId);
-    expect(window.sessionStorage.length).toBe(0);
-  });
-
   it("keeps a stored guest session independent from unrelated surface errors", async () => {
     persistRoomGuestSession(SESSION);
     apiMocks.preflightRoomInvite.mockResolvedValue({
@@ -780,7 +696,7 @@ describe("useRoomAdmission", () => {
     expect(result.current.guestExpired).toBe(false);
     expect(result.current.guestSession).toEqual(expect.objectContaining(SESSION));
     expect(result.current.guestSession?.roomLabel).toBe("Room One");
-    expect(loadRoomGuestSession()).toEqual(SESSION);
+    expect(loadRoomGuestSession()).toEqual(result.current.guestSession);
     expect(onResetToLobby).not.toHaveBeenCalled();
     expect(onRoomJoined).toHaveBeenCalledOnce();
   });

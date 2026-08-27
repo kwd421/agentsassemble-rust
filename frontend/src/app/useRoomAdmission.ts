@@ -49,8 +49,10 @@ type AdmissionSource =
 type AdmissionOperation = "preflight" | "join" | "pairing";
 
 class SessionSurfaceError extends Error {}
+class SessionCustodyError extends Error {}
 const SERVER_SURFACE_INVALID_CODE = "server_surface_invalid";
 const SERVER_SURFACE_INVALID_MESSAGE = "방 서버의 제품 표면을 검증하지 못했습니다.";
+const SESSION_CUSTODY_INVALID_CODE = "session_storage_unavailable";
 
 function roomSessionSurfaceKey(session: RoomGuestSession): string {
   return `${session.serverSurface.server_id}:${session.serverSurface.server_product_surface.digest}`;
@@ -412,7 +414,15 @@ export function useRoomAdmission({
             : SERVER_SURFACE_INVALID_MESSAGE
         );
       }
-      persistRoomGuestSession(nextSession);
+      try {
+        persistRoomGuestSession(nextSession);
+      } catch (error) {
+        throw new SessionCustodyError(
+          error instanceof Error
+            ? error.message
+            : "방 세션을 브라우저에 영구 저장할 수 없습니다."
+        );
+      }
       rememberGuestProfile({
         displayName: nextSession.displayName || pendingGuestDisplayName,
         avatarImage: nextSession.avatarImage,
@@ -435,6 +445,7 @@ export function useRoomAdmission({
           attempt.isCurrent
         );
       } catch (error) {
+        const surfaceFailure = error instanceof SessionSurfaceError;
         const message =
           error instanceof Error
             ? error.message
@@ -442,9 +453,11 @@ export function useRoomAdmission({
         dispatchAdmission({
           type: "failed",
           operation: "join",
-          code: SERVER_SURFACE_INVALID_CODE,
+          code: surfaceFailure
+            ? SERVER_SURFACE_INVALID_CODE
+            : SESSION_CUSTODY_INVALID_CODE,
           message,
-          retryable: false,
+          retryable: !surfaceFailure,
           status: message,
         });
         return false;
@@ -564,15 +577,13 @@ export function useRoomAdmission({
             roomLabel: decision.room_label,
             inviteScope: decision.invite_scope,
           };
-          if (!(await bindSessionSurface(preservedSession, attempt.isCurrent))) return;
-          dispatchAdmission({
-            type: "joined",
-            session: preservedSession,
-            source: "existing_session",
-          });
-          onRoomJoined(roomFromGuestSession(preservedSession));
+          const applied = await applyJoinedSession(
+            preservedSession,
+            "existing_session",
+            attempt.isCurrent
+          );
+          if (!applied) return;
           clearAdmissionRequestId();
-          clearInviteUrl();
           return;
         }
         if (
@@ -618,13 +629,11 @@ export function useRoomAdmission({
     return attempt.cancel;
   }, [
     admissionState.kind,
+    applyJoinedSession,
     beginAdmissionAttempt,
-    bindSessionSurface,
-    clearInviteUrl,
     deviceToken,
     guestJoinToken,
     guestSession,
-    onRoomJoined,
     operatorPairingToken,
   ]);
 
@@ -690,15 +699,18 @@ export function useRoomAdmission({
       .catch((error) => {
         if (!attempt.isCurrent()) return;
         const surfaceFailure = error instanceof SessionSurfaceError;
+        const custodyFailure = error instanceof SessionCustodyError;
         const message = error instanceof Error ? error.message : "초대 링크 입장 실패";
         dispatchAdmission({
           type: "failed",
           operation: "join",
           code: surfaceFailure
             ? SERVER_SURFACE_INVALID_CODE
-            : error instanceof ApiError
-              ? error.message
-              : "join_failed",
+            : custodyFailure
+              ? SESSION_CUSTODY_INVALID_CODE
+              : error instanceof ApiError
+                ? error.message
+                : "join_failed",
           message,
           retryable: !surfaceFailure,
           status: message,
@@ -709,12 +721,10 @@ export function useRoomAdmission({
     admissionState.kind,
     applyJoinedSession,
     beginAdmissionAttempt,
-    clearInviteUrl,
     clientId,
     deviceToken,
     guestAlreadyJoinedThisInvite,
     guestJoinToken,
-    onRoomJoined,
     pendingGuestAvatarImage,
     pendingGuestDisplayName,
   ]);

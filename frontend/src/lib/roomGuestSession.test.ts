@@ -85,4 +85,28 @@ describe("guest room projection", () => {
       }
     }
   });
+
+  it("rejects a session write that durable storage cannot read back", () => {
+    const originalStorage = Object.getOwnPropertyDescriptor(window, "localStorage");
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: () => null,
+        removeItem: () => undefined,
+        setItem: () => undefined,
+      },
+    });
+    try {
+      const session = roomGuestSessionFromJoinPayload("aaj1_test", {
+        ...joinResponse,
+      });
+
+      expect(() => persistRoomGuestSession(session)).toThrow(/영구 저장/);
+      expect(loadRoomGuestSession()).toBeNull();
+    } finally {
+      if (originalStorage) {
+        Object.defineProperty(window, "localStorage", originalStorage);
+      }
+    }
+  });
 });
