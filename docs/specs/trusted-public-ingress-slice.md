@@ -400,11 +400,13 @@ ownership with one private file lock, atomically replaces the owner record, and 
 that lock across each Wrangler mutation. A predecessor that never published cannot
 reclaim after a successor. The same owner binds stable readiness to the current
 direct target, avoids duplicate same-target puts, cancels and joins superseded work,
-and clears only after the publication task and managed child are reaped. Wrangler
-uses a server-owned empty configuration, a bounded environment containing the
-currently supported Cloudflare authentication forms, validated non-option keys, and
-no Windows batch shim. Frontend validation happens before ownership claim; every
-fallible path after claim passes through the same idempotent ingress shutdown.
+and clears only after publication is joined and child cleanup has either been
+confirmed or recorded as failed. A failed child reap never suppresses stable clear,
+and the combined cleanup remains explicit. Wrangler uses a server-owned empty
+configuration, a bounded environment containing the currently supported Cloudflare
+authentication forms, validated non-option keys, and no Windows batch shim. Frontend
+validation happens before ownership claim; every fallible path after claim passes
+through the same idempotent ingress shutdown.
 
 The preserved contracts are the original quick-tunnel reconnect behavior, exact
 direct/stable target correlation, a configuration-absent `unconfigured` state, and
@@ -599,3 +601,12 @@ no second lifecycle or policy owner.
 Commit `fea32fa` web review: `APPROVE — Critical 0 / High 0 / Medium 0`.
 
 Commit `fea32fa` Daybreaker review: `APPROVE — Critical 0 / High 0 / Medium 0`.
+
+Commit `76a7cbc` web review: `REVISE — Critical 0 / High 0 / Medium 1`.
+
+Commit `76a7cbc` Daybreaker review: `REVISE — Critical 0 / High 0 / Medium 2`.
+
+The documentation review found one stale canonical frontend/backend inventory entry
+and one overstatement that stable clear required confirmed child reaping. The
+inventory now separates implemented stable backend custody from incomplete frontend
+activation, and the lifecycle record preserves the real fail-explicit cleanup order.
