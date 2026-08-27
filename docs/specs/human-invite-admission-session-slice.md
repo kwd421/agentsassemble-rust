@@ -4,17 +4,19 @@ Status: atomic SQLite, bounded RoomRuntime admission, local HTTP preflight/join,
 pre-join avatar flow, fail-closed browser credential custody, the live-session
 profile/preferences/WebSocket exchanges, and exact participant leave are implemented
 and production-browser verified; configured-manual and managed public ingress with
-stable entry are implemented and verified; manager invite management, remaining typed
-exchanges, and frontend activation remain incomplete
+stable entry plus backend manager invite create/revoke and private-control ticket
+issuance are implemented and verified; desktop manager-invite bridging, remaining
+typed exchanges, and frontend activation remain incomplete
 
 ## Definition
 
 This slice establishes one durable authority for a human browser invite, admission,
 profile binding, room membership, and expiring room session. It then lets that live
 session exchange for exact one-use WebSocket, profile, attachment, and preference
-grants. Invite management remains local-operator authority. This slice does not make
-an external invite reachable until manager control and frontend activation are
-complete against one ready ingress snapshot.
+grants. Invite management remains local-operator authority. The backend manager
+control already binds each mutation to one ready ingress snapshot; an external invite
+is not a completed user flow until the desktop bridge and frontend activate that
+control.
 
 The behavior comparison baseline is original commit
 `d5046473010d1353a81ee38337360e6d98f7bd6f`. The Rust baseline for this design is
@@ -469,23 +471,21 @@ The copied external-access modal/controller entry is already mounted, but its le
 Host-token/raw-fetch calls cannot satisfy the Rust one-use server-operator-ticket
 boundary and therefore fail closed. Its legacy public-URL input/configure path is
 removed during activation rather than restored as mutable manual-ingress authority.
-Manager invite controls and complete frontend activation must use the ready ingress
-snapshot; a local preview is not presented as admission parity. The token is removed
-from browser history after it is captured, and stored session state cannot override
-a failed durable verification.
+Backend manager invite controls already issue against one ready ingress snapshot.
+Desktop and frontend activation must consume their exact operation grant and copy only
+the returned public join URL; a local preview is not presented as admission parity.
+The token is removed from browser history after it is captured, and stored session
+state cannot override a failed durable verification.
 
 ## Trusted ingress boundary
 
 Managed Cloudflare direct-tunnel custody, configured stable-entry publication, and
 startup-configured reverse-proxy proof are implemented by the separate ingress slice.
-Manager controls and operator pairing remain incomplete. Forwarding headers or a
-configured URL alone are not ingress authority. This slice may be exercised through
-the real local Axum server, but that does not prove an external browser flow.
-
-External invite creation remains disabled until manager controls consume one exact
-ready origin/host/protocol snapshot from either the process-owned managed tunnel or
-configured reverse-proxy owner. No raw legacy host token, local-development bypass,
-query flag, or client-side readiness authority is added meanwhile.
+Backend manager controls consume one exact ready origin/host/protocol snapshot from
+either that process-owned managed tunnel or the configured reverse-proxy owner.
+Operator pairing and the copied frontend bridge remain incomplete. Forwarding headers
+or a configured URL alone are not ingress authority. No raw legacy host token,
+local-development bypass, query flag, or client-side readiness authority is added.
 
 ## Evidence-driven simplifications and costs
 
