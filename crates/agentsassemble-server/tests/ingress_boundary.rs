@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, time::Duration};
+use std::{net::SocketAddr, path::PathBuf, time::Duration};
 
 use agentsassemble_domain::ProviderCatalog;
 use agentsassemble_persistence::SqliteStore;
@@ -30,7 +30,7 @@ impl RunningServer {
 
 #[tokio::test]
 async fn tcp_ingress_enforces_peer_host_origin_and_proxy_boundaries() {
-    let server = start().await;
+    let server = start(None).await;
     let authority = server.address.to_string();
     let valid = request(
         server.address,
@@ -75,7 +75,82 @@ async fn tcp_ingress_enforces_peer_host_origin_and_proxy_boundaries() {
     server.stop().await;
 }
 
-async fn start() -> RunningServer {
+#[tokio::test]
+async fn static_routes_match_the_declared_mounts() {
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create frontend fixture: {error}"));
+    let frontend = directory.path().join("frontend");
+    tokio::fs::create_dir_all(frontend.join("assets"))
+        .await
+        .unwrap_or_else(|error| panic!("create asset fixture: {error}"));
+    tokio::fs::write(frontend.join("index.html"), "INDEX")
+        .await
+        .unwrap_or_else(|error| panic!("write index fixture: {error}"));
+    tokio::fs::write(frontend.join("assets/app.js"), "ASSET")
+        .await
+        .unwrap_or_else(|error| panic!("write asset fixture: {error}"));
+    let server = start(Some(frontend)).await;
+    let authority = server.address.to_string();
+    for path in ["/app", "/app/"] {
+        let response = request(
+            server.address,
+            &format!("GET {path} HTTP/1.1"),
+            &format!("Host: {authority}\r\n"),
+        )
+        .await;
+        assert!(response.starts_with("HTTP/1.1 200"), "{path}: {response}");
+        assert!(response.contains("INDEX"), "{path}: {response}");
+    }
+    let app_fallback = request(
+        server.address,
+        "GET /app/missing HTTP/1.1",
+        &format!("Host: {authority}\r\n"),
+    )
+    .await;
+    assert!(app_fallback.starts_with("HTTP/1.1 404"));
+    assert!(app_fallback.contains("INDEX"));
+    for path in [
+        "/app/assets/app.js",
+        "/assets/app.js",
+        "/join/assets/app.js?v=1",
+        "/pair/assets/app.js",
+    ] {
+        let response = request(
+            server.address,
+            &format!("GET {path} HTTP/1.1"),
+            &format!("Host: {authority}\r\n"),
+        )
+        .await;
+        assert!(response.starts_with("HTTP/1.1 200"), "{path}: {response}");
+        assert!(response.contains("ASSET"), "{path}: {response}");
+    }
+    let asset_method_mismatch = request(
+        server.address,
+        "POST /assets/app.js HTTP/1.1",
+        &format!("Host: {authority}\r\n"),
+    )
+    .await;
+    assert!(asset_method_mismatch.starts_with("HTTP/1.1 405"));
+    for path in [
+        "/assets",
+        "/assets/",
+        "/join/assets",
+        "/join/assets/",
+        "/pair/assets",
+        "/pair/assets/",
+    ] {
+        let response = request(
+            server.address,
+            &format!("GET {path} HTTP/1.1"),
+            &format!("Host: {authority}\r\n"),
+        )
+        .await;
+        assert!(response.starts_with("HTTP/1.1 404"), "{path}: {response}");
+    }
+    server.stop().await;
+}
+
+async fn start(frontend: Option<PathBuf>) -> RunningServer {
     let store = SqliteStore::open("sqlite::memory:")
         .await
         .unwrap_or_else(|error| panic!("open ingress store: {error}"));
@@ -83,7 +158,7 @@ async fn start() -> RunningServer {
         .bootstrap_local_authority("518f301c-e3bf-4b1c-82dd-5853bacb837f", "Host")
         .await
         .unwrap_or_else(|error| panic!("bootstrap ingress identity: {error}"));
-    let state = AppState::local(
+    let mut state = AppState::local(
         store,
         TicketStore::new(Duration::from_secs(30), 8),
         HostSecret::new(HOST_TOKEN)
@@ -92,6 +167,9 @@ async fn start() -> RunningServer {
     )
     .await
     .unwrap_or_else(|error| panic!("build ingress state: {error}"));
+    if let Some(frontend) = frontend {
+        state = state.with_frontend(frontend);
+    }
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
         .unwrap_or_else(|error| panic!("bind ingress server: {error}"));

@@ -74,7 +74,7 @@ mod tests {
     fn bundled_surface_adds_only_the_static_routes() {
         let server = server_product_surface(false, false);
         let bundled = server_product_surface(true, false);
-        assert_eq!(bundled.http_routes.len(), server.http_routes.len() + 9);
+        assert_eq!(bundled.http_routes.len(), server.http_routes.len() + 11);
         assert_ne!(bundled.digest, server.digest);
         assert!(
             bundled

@@ -7,7 +7,7 @@ use axum::{
     http::{HeaderValue, StatusCode, header},
     middleware,
     response::{IntoResponse, Redirect, Response},
-    routing::get,
+    routing::{get, get_service},
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -64,7 +64,17 @@ const APP_ROUTE: StaticFrontendRoute = StaticFrontendRoute {
     surface: "/app/{*path}",
     exposure: crate::product_surface::RouteExposure::Private,
 };
-const FRONTEND_INDEX_ROUTES: [StaticFrontendRoute; 4] = [
+const FRONTEND_INDEX_ROUTES: [StaticFrontendRoute; 6] = [
+    StaticFrontendRoute {
+        mount: APP_PREFIX,
+        surface: APP_PREFIX,
+        exposure: crate::product_surface::RouteExposure::Private,
+    },
+    StaticFrontendRoute {
+        mount: APP_ENTRY_PATH,
+        surface: APP_ENTRY_PATH,
+        exposure: crate::product_surface::RouteExposure::Private,
+    },
     StaticFrontendRoute {
         mount: JOIN_PATH,
         surface: JOIN_PATH,
@@ -145,23 +155,25 @@ pub fn router(state: AppState) -> Router {
             ),
             ROOT_ROUTE.exposure,
         )
-        .merge(static_ingress_router(
-            Router::new().nest_service(
-                APP_ROUTE.mount,
-                ServeDir::new(frontend_root).not_found_service(ServeFile::new(index.clone())),
+        .merge(static_directory_router(
+            Router::new().route(
+                APP_ROUTE.surface,
+                get_service(
+                    ServeDir::new(frontend_root).not_found_service(ServeFile::new(index.clone())),
+                ),
             ),
-            APP_ROUTE.exposure,
+            APP_ROUTE,
         ));
         for route in FRONTEND_INDEX_ROUTES {
             frontend = frontend.merge(static_ingress_router(
-                Router::new().route_service(route.mount, ServeFile::new(index.clone())),
+                Router::new().route(route.mount, get_service(ServeFile::new(index.clone()))),
                 route.exposure,
             ));
         }
         for route in FRONTEND_ASSET_ROUTES {
-            frontend = frontend.merge(static_ingress_router(
-                Router::new().nest_service(route.mount, ServeDir::new(assets.clone())),
-                route.exposure,
+            frontend = frontend.merge(static_directory_router(
+                Router::new().route(route.surface, get_service(ServeDir::new(assets.clone()))),
+                route,
             ));
         }
         frontend = frontend.layer(SetResponseHeaderLayer::overriding(
@@ -184,10 +196,39 @@ fn static_ingress_router(
         .layer(Extension(exposure))
 }
 
+fn static_directory_router(
+    router: Router<AppState>,
+    route: StaticFrontendRoute,
+) -> Router<AppState> {
+    let prefix = route.mount;
+    static_ingress_router(
+        router.route_layer(middleware::map_request(move |request| async move {
+            strip_static_prefix(request, prefix)
+        })),
+        route.exposure,
+    )
+}
+
+fn strip_static_prefix(mut request: Request, prefix: &str) -> Result<Request, StatusCode> {
+    let Some(path) = request.uri().path().strip_prefix(prefix) else {
+        return Err(StatusCode::NOT_FOUND);
+    };
+    if !path.starts_with('/') {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    let rewritten = if let Some(query) = request.uri().query() {
+        format!("{path}?{query}")
+    } else {
+        path.to_owned()
+    };
+    *request.uri_mut() = rewritten.parse().map_err(|_| StatusCode::BAD_REQUEST)?;
+    Ok(request)
+}
+
 pub(crate) fn static_frontend_surfaces() -> Vec<agentsassemble_protocol::HttpRouteSurface> {
     use agentsassemble_protocol::{HttpMethod, HttpRouteSurface};
 
-    let mut routes = Vec::with_capacity(9);
+    let mut routes = Vec::with_capacity(11);
     routes.push(HttpRouteSurface::new(HttpMethod::Get, ROOT_ROUTE.surface));
     routes.extend(
         FRONTEND_INDEX_ROUTES
@@ -552,6 +593,8 @@ mod static_route_tests {
             [
                 ("/", RouteExposure::Private),
                 ("/app/{*path}", RouteExposure::Private),
+                ("/app", RouteExposure::Private),
+                ("/app/", RouteExposure::Private),
                 ("/join", RouteExposure::SameOriginPublic),
                 ("/join/", RouteExposure::SameOriginPublic),
                 ("/pair", RouteExposure::Private),

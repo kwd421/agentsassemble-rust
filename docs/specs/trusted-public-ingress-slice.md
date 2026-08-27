@@ -176,26 +176,36 @@ so this prerequisite adds no unused future state.
 
 Static frontend registration now owns its actual mount, signed surface pattern, and
 exposure in one descriptor. The small static router wrapper passes that exact
-descriptor through a server-owned request extension. Dynamic lookup uses Axum's
-matched path and actual method, maps HEAD to its GET route, and retains registered
-path admission only for Axum-owned method mismatch and CORS preflight handling. No
-raw-URI prefix allow-list, second trust policy, compatibility route, fallback, or
-client authority was introduced. The public static classification is exactly
-`/join`, `/join/`, `/assets/{*path}`, and `/join/assets/{*path}`; root, app, pair,
-and pair assets remain private.
+descriptor through a server-owned request extension. Static directory services use
+an exact GET wildcard route and strip only their descriptor's fixed prefix before
+calling the maintained `ServeDir`; they do not use `nest_service`, whose implicit
+bare-prefix routes exceed the declared wildcard. `/app` and `/app/` are explicit
+private index descriptors. Bare asset prefixes are not registered and retain their
+previous 404 response without inheriting public exposure. Dynamic lookup uses
+Axum's matched path and actual method, maps HEAD to its GET route, and retains
+registered path admission only for Axum-owned method mismatch and CORS preflight
+handling. No raw-URI prefix allow-list, second trust policy, compatibility route,
+new fallback, or client authority was introduced. The public static classification
+is exactly `/join`, `/join/`, `/assets/{*path}`, and
+`/join/assets/{*path}`; root, app, pair, and pair assets remain private.
 
 The concrete threat was route-policy drift: product-surface signing, dynamic router
 registration, static mounts, and the future public trust decision could otherwise
 name independently changeable surfaces. A normal dynamic request performs one
 bounded linear scan of at most 20 compile-time descriptors; static requests read
-their attached descriptor without a scan. This slice adds no task, cache, map,
-process, disk state, or claimed latency improvement. The fixed inventory is too
-small to justify another runtime owner without observed cost.
+their attached descriptor without a scan. Exact static directory dispatch replaces
+Axum's internal prefix stripping with one bounded path/query string allocation and
+URI parse per static file request. That accepted cost closes the observed exposure
+gap without a second route policy. This slice adds no task, cache, map, process,
+disk state, or claimed latency improvement. The fixed inventory is too small to
+justify another runtime owner without observed cost.
 
 Verification proves descriptor uniqueness and the exact public/private static map,
 preserves a real TCP 405 for method mismatch and a real Tauri CORS preflight, and
-keeps the existing packaged-static security/cache flow reachable. All 66 server
-unit tests and 40 server integration tests passed. Complete repository verification
+keeps the existing packaged-static security/cache flow reachable. A real TCP/static
+fixture additionally proves `/app` and `/app/`, query-bearing assets, all three
+asset aliases, GET-only dispatch, and 404 bare asset prefixes. All 66 server unit
+tests and 41 server integration tests passed. Complete repository verification
 also passed the architecture and source-growth gates, frontend build and 403 tests,
 desktop build and 16 tests, all 171 persistence and 120 provider tests, and
 warning-denied workspace Clippy.
@@ -242,6 +252,11 @@ warning-denied workspace Clippy.
   bytes and fingerprint already bind it.
 - Static nested services do not expose Axum `MatchedPath`; static exposure therefore
   needed direct canonical-descriptor binding rather than a raw-URI fallback.
+- The first exposure implementation used `nest_service` for wildcard static
+  descriptors. Axum also registered each bare prefix and trailing slash under the
+  same exposure, so the actual match set exceeded the signed surface even though the
+  asset service returned 404 there. Exact GET wildcard registration and explicit app
+  index descriptors removed that undeclared route authority.
 - The first local ingress implementation omitted `Via`, `X-Real-IP`, and complete
   forwarded/proxy header families from its provenance rejection.
 - The first local ingress implementation accepted every loopback bind but discarded
@@ -272,3 +287,7 @@ Commit `c25bcea` Daybreaker review: `REVISE — Critical 0 / High 0 / Medium 1`.
 Commit `a2e4216` web review: `APPROVE — Critical 0 / High 0 / Medium 0`.
 
 Commit `a2e4216` Daybreaker review: `APPROVE — Critical 0 / High 0 / Medium 0`.
+
+Commit `aa123ef` web review: `REVISE — Critical 0 / High 0 / Medium 1`.
+
+Commit `aa123ef` Daybreaker review: `APPROVE — Critical 0 / High 0 / Medium 0`.
