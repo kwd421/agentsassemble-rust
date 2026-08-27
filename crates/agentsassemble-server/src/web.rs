@@ -126,6 +126,8 @@ pub enum ServeError {
     RoomShutdown(#[from] RoomShutdownError),
     #[error("runtime reconciliation failed: {0}")]
     Reconciliation(#[from] PersistenceError),
+    #[error("public ingress cleanup failed")]
+    PublicIngressCleanup,
 }
 
 #[derive(Debug, Deserialize)]
@@ -340,6 +342,7 @@ pub async fn serve(
             shutdown,
         ));
     };
+    let ingress_shutdown = tokio::spawn(async move { public_ingress.shutdown().await });
     drain_connections(&connections, &connection_shutdown).await;
     let rejected = rejected_connections.total();
     if rejected > 0 {
@@ -355,6 +358,10 @@ pub async fn serve(
     room_shutdown?;
     provider_shutdown?;
     reconciliation_shutdown.map_err(ServeError::RuntimeReconciliationTask)?;
+    ingress_shutdown
+        .await
+        .map_err(|_| ServeError::PublicIngressCleanup)?
+        .map_err(|_| ServeError::PublicIngressCleanup)?;
     result.map_err(ServeError::Io)
 }
 

@@ -94,6 +94,8 @@ async fn main() -> anyhow::Result<()> {
     .await?;
     if let Some((origin, proxy_secret)) = manual_public_ingress {
         state = state.with_manual_public_ingress(&origin, &proxy_secret)?;
+    } else {
+        state = state.with_managed_public_ingress(address);
     }
     if args.desktop_native_registration {
         state = state.with_central_registration();

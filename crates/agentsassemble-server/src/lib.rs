@@ -80,6 +80,8 @@ mod provider_turn;
 mod provider_turn_reconciliation_runtime;
 mod provider_write_budget;
 mod public_ingress;
+mod public_ingress_process;
+mod public_ingress_runtime;
 mod public_ingress_web;
 mod raw_ingress;
 mod room_agent_lifecycle_runtime;

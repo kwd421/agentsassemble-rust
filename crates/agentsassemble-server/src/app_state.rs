@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
 use agentsassemble_persistence::{PersistenceError, SqliteStore};
 use agentsassemble_protocol::ServerProductSurface;
@@ -133,6 +133,12 @@ impl AppState {
     ) -> Result<Self, ManualPublicIngressError> {
         self.public_ingress = PublicIngress::configured_manual(origin, proxy_secret)?;
         Ok(self)
+    }
+
+    #[must_use]
+    pub fn with_managed_public_ingress(mut self, listener: SocketAddr) -> Self {
+        self.public_ingress = PublicIngress::managed(listener);
+        self
     }
 
     pub(crate) fn public_ingress(&self) -> PublicIngress {

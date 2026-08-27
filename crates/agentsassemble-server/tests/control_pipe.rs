@@ -244,7 +244,7 @@ async fn public_ingress_status_requires_one_exact_operator_ticket() {
     );
     assert_eq!(
         preflight.headers()[reqwest::header::ACCESS_CONTROL_ALLOW_METHODS],
-        reqwest::Method::GET.as_str()
+        "GET,POST"
     );
     let allowed_headers = preflight.headers()[reqwest::header::ACCESS_CONTROL_ALLOW_HEADERS]
         .to_str()
@@ -278,7 +278,7 @@ async fn public_ingress_status_requires_one_exact_operator_ticket() {
         .json()
         .await
         .unwrap_or_else(|error| panic!("decode ingress status: {error}"));
-    assert_eq!(status["mode"], "unconfigured");
+    assert_eq!(status["mode"], "managed");
     assert_eq!(status["tunnel"]["phase"], "stopped");
     assert_eq!(status["tunnel"]["stable_phase"], "unconfigured");
     assert_eq!(

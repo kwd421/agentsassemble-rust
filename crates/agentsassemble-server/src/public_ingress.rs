@@ -1,10 +1,13 @@
-use std::{fmt, sync::Arc};
+use std::{fmt, net::SocketAddr, path::PathBuf, sync::Arc};
 
 use axum::http::{HeaderMap, header, uri::Authority};
+use parking_lot::RwLock;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 use thiserror::Error;
+use tokio::{sync::Mutex, task::JoinHandle};
+use tokio_util::sync::CancellationToken;
 use url::Url;
 
 use crate::{
@@ -13,12 +16,14 @@ use crate::{
         single_optional_header,
     },
     product_surface::RouteExposure,
+    public_ingress_runtime::{GenerationOutcome, run_generation},
 };
 
 pub(crate) const MANUAL_PROXY_TOKEN_HEADER: &str = "x-agentsassemble-proxy-token";
+const FORWARDED_HOST_HEADER: &str = "x-forwarded-host";
 const FORWARDED_PROTO_HEADER: &str = "x-forwarded-proto";
-const MIN_MANUAL_PROXY_SECRET_BYTES: usize = 32;
-const MAX_MANUAL_PROXY_SECRET_BYTES: usize = 128;
+const MIN_PROXY_SECRET_BYTES: usize = 32;
+const MAX_PROXY_SECRET_BYTES: usize = 128;
 
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct PublicIngressStatus {
@@ -41,7 +46,13 @@ pub(crate) struct TunnelStatus {
 }
 
 #[derive(Clone)]
-pub(crate) struct PublicIngress(Option<Arc<ManualPublicIngress>>);
+pub(crate) struct PublicIngress(Arc<PublicIngressKind>);
+
+enum PublicIngressKind {
+    Disabled,
+    Manual(ManualPublicIngress),
+    Managed(ManagedPublicIngress),
+}
 
 struct ManualPublicIngress {
     origin: Arc<str>,
@@ -50,14 +61,28 @@ struct ManualPublicIngress {
     proxy_secret_digest: [u8; 32],
 }
 
+struct ManagedPublicIngress {
+    projection: Arc<RwLock<ManagedProjection>>,
+    controller: ManagedController,
+}
+
+struct ManagedController {
+    config: ManagedIngressConfig,
+    active: Mutex<Option<ActiveGeneration>>,
+}
+
 impl fmt::Debug for PublicIngress {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.0 {
-            None => formatter.write_str("PublicIngress::Disabled"),
-            Some(ingress) => formatter
+        match self.0.as_ref() {
+            PublicIngressKind::Disabled => formatter.write_str("PublicIngress::Disabled"),
+            PublicIngressKind::Manual(ingress) => formatter
                 .debug_struct("PublicIngress::Manual")
                 .field("origin", &ingress.origin)
                 .field("proxy_secret", &"[REDACTED]")
+                .finish_non_exhaustive(),
+            PublicIngressKind::Managed(ingress) => formatter
+                .debug_struct("PublicIngress::Managed")
+                .field("status", &ingress.projection.read().status())
                 .finish_non_exhaustive(),
         }
     }
@@ -71,28 +96,101 @@ pub enum ManualPublicIngressError {
     InvalidSecret,
 }
 
+#[derive(Debug, Error)]
+pub(crate) enum PublicIngressControlError {
+    #[error("managed public ingress is not configured")]
+    Unconfigured,
+    #[error("managed public ingress cleanup failed")]
+    CleanupFailed,
+}
+
 impl PublicIngress {
     pub(crate) fn disabled() -> Self {
-        Self(None)
+        Self(Arc::new(PublicIngressKind::Disabled))
     }
 
     pub(crate) fn configured_manual(
         origin: &str,
         proxy_secret: &str,
     ) -> Result<Self, ManualPublicIngressError> {
-        let origin = public_origin(origin)?;
-        if !(MIN_MANUAL_PROXY_SECRET_BYTES..=MAX_MANUAL_PROXY_SECRET_BYTES)
-            .contains(&proxy_secret.len())
+        let origin = CanonicalPublicOrigin::parse(origin)?;
+        if !(MIN_PROXY_SECRET_BYTES..=MAX_PROXY_SECRET_BYTES).contains(&proxy_secret.len())
             || !proxy_secret.bytes().all(|byte| byte.is_ascii_graphic())
         {
             return Err(ManualPublicIngressError::InvalidSecret);
         }
-        Ok(Self(Some(Arc::new(ManualPublicIngress {
-            origin: origin.value.into(),
-            host: origin.host.into(),
-            port: origin.port,
-            proxy_secret_digest: Sha256::digest(proxy_secret.as_bytes()).into(),
-        }))))
+        Ok(Self(Arc::new(PublicIngressKind::Manual(
+            ManualPublicIngress {
+                origin: origin.value.into(),
+                host: origin.host.into(),
+                port: origin.port,
+                proxy_secret_digest: Sha256::digest(proxy_secret.as_bytes()).into(),
+            },
+        ))))
+    }
+
+    pub(crate) fn managed(listener: SocketAddr) -> Self {
+        let local_url = format!("http://{listener}");
+        let cloudflared = which::which("cloudflared").ok();
+        let projection = Arc::new(RwLock::new(ManagedProjection::new(
+            &local_url,
+            cloudflared.is_some(),
+        )));
+        Self(Arc::new(PublicIngressKind::Managed(ManagedPublicIngress {
+            projection,
+            controller: ManagedController {
+                config: ManagedIngressConfig {
+                    local_url,
+                    cloudflared,
+                },
+                active: Mutex::new(None),
+            },
+        })))
+    }
+
+    pub(crate) fn status(&self) -> PublicIngressStatus {
+        match self.0.as_ref() {
+            PublicIngressKind::Disabled => static_status("unconfigured", ""),
+            PublicIngressKind::Manual(ingress) => static_status("manual", &ingress.origin),
+            PublicIngressKind::Managed(ingress) => ingress.projection.read().status(),
+        }
+    }
+
+    pub(crate) async fn start(&self) -> Result<PublicIngressStatus, PublicIngressControlError> {
+        let ingress = self.managed_ingress()?;
+        let mut active = ingress.controller.active.lock().await;
+        if active
+            .as_ref()
+            .is_some_and(|current| current.owner.is_finished())
+        {
+            let current = active.take().unwrap_or_else(|| unreachable!());
+            if current.owner.await.is_err() {
+                ingress
+                    .projection
+                    .write()
+                    .finish(current.number, GenerationOutcome::owner_failed());
+            }
+        }
+        if active.is_none() {
+            *active = start_generation(&ingress.controller.config, &ingress.projection);
+        }
+        Ok(ingress.projection.read().status())
+    }
+
+    pub(crate) async fn stop(&self) -> Result<PublicIngressStatus, PublicIngressControlError> {
+        let ingress = self.managed_ingress()?;
+        let mut active = ingress.controller.active.lock().await;
+        stop_active(&ingress.projection, &mut active).await;
+        Ok(ingress.projection.read().status())
+    }
+
+    pub(crate) async fn shutdown(&self) -> Result<(), PublicIngressControlError> {
+        let PublicIngressKind::Managed(ingress) = self.0.as_ref() else {
+            return Ok(());
+        };
+        let mut active = ingress.controller.active.lock().await;
+        stop_active(&ingress.projection, &mut active).await;
+        ingress.projection.read().cleanup_result()
     }
 
     pub(crate) fn authorizes(
@@ -101,40 +199,49 @@ impl PublicIngress {
         headers: &HeaderMap,
         exposure: RouteExposure,
     ) -> bool {
-        self.0
-            .as_ref()
-            .is_some_and(|ingress| ingress.authorizes(peer, headers, exposure))
+        match self.0.as_ref() {
+            PublicIngressKind::Disabled => false,
+            PublicIngressKind::Manual(ingress) => ingress.authorizes(peer, headers, exposure),
+            PublicIngressKind::Managed(ingress) => {
+                peer.0.ip().is_loopback()
+                    && exposure != RouteExposure::Private
+                    && ingress.projection.read().authorizes(headers, exposure)
+            }
+        }
     }
 
     pub(crate) fn identity_origin(&self) -> Option<TrustedIdentityOrigin> {
-        self.0
-            .as_ref()
-            .map(|ingress| TrustedIdentityOrigin(ingress.origin.clone()))
+        match self.0.as_ref() {
+            PublicIngressKind::Disabled => None,
+            PublicIngressKind::Manual(ingress) => {
+                Some(TrustedIdentityOrigin(ingress.origin.clone()))
+            }
+            PublicIngressKind::Managed(ingress) => ingress.projection.read().identity_origin(),
+        }
     }
 
-    pub(crate) fn status(&self) -> PublicIngressStatus {
-        let public_url = self
-            .0
-            .as_ref()
-            .map_or_else(String::new, |ingress| ingress.origin.to_string());
-        PublicIngressStatus {
-            mode: if self.0.is_some() {
-                "manual"
-            } else {
-                "unconfigured"
-            },
-            public_url: public_url.clone(),
-            stable_url: String::new(),
-            tunnel: TunnelStatus {
-                available: false,
-                running: false,
-                phase: "stopped",
-                public_url,
-                local_url: String::new(),
-                stable_phase: "unconfigured",
-                last_error: None,
-            },
-        }
+    fn managed_ingress(&self) -> Result<&ManagedPublicIngress, PublicIngressControlError> {
+        let PublicIngressKind::Managed(ingress) = self.0.as_ref() else {
+            return Err(PublicIngressControlError::Unconfigured);
+        };
+        Ok(ingress)
+    }
+}
+
+fn static_status(mode: &'static str, public_url: &str) -> PublicIngressStatus {
+    PublicIngressStatus {
+        mode,
+        public_url: public_url.to_owned(),
+        stable_url: String::new(),
+        tunnel: TunnelStatus {
+            available: false,
+            running: false,
+            phase: "stopped",
+            public_url: public_url.to_owned(),
+            local_url: String::new(),
+            stable_phase: "unconfigured",
+            last_error: None,
+        },
     }
 }
 
@@ -144,15 +251,12 @@ impl ManualPublicIngress {
             return false;
         }
         single_header(headers, header::HOST).is_some_and(|host| self.authority_matches(host))
-            && single_header(
-                headers,
-                header::HeaderName::from_static(FORWARDED_PROTO_HEADER),
-            ) == Some("https")
+            && forwarded_https(headers)
             && single_header(
                 headers,
                 header::HeaderName::from_static(MANUAL_PROXY_TOKEN_HEADER),
             )
-            .is_some_and(|secret| self.secret_matches(secret))
+            .is_some_and(|secret| digest_matches(secret, &self.proxy_secret_digest))
             && single_optional_header(headers, header::ORIGIN).is_ok_and(|origin| match exposure {
                 RouteExposure::Private => false,
                 RouteExposure::IdentityProbePublic => true,
@@ -171,48 +275,307 @@ impl ManualPublicIngress {
     }
 
     fn origin_matches(&self, value: &str) -> bool {
-        public_origin(value).is_ok_and(|origin| origin.value == self.origin.as_ref())
-    }
-
-    fn secret_matches(&self, value: &str) -> bool {
-        let observed: [u8; 32] = Sha256::digest(value.as_bytes()).into();
-        bool::from(self.proxy_secret_digest.ct_eq(&observed))
+        CanonicalPublicOrigin::parse(value).is_ok_and(|origin| origin.value == self.origin.as_ref())
     }
 }
 
-struct PublicOrigin {
-    value: String,
+pub(crate) struct CanonicalPublicOrigin {
+    pub(crate) value: String,
     host: String,
     port: u16,
 }
 
-fn public_origin(value: &str) -> Result<PublicOrigin, ManualPublicIngressError> {
-    let url = Url::parse(value.trim()).map_err(|_| ManualPublicIngressError::InvalidOrigin)?;
-    if url.scheme() != "https"
-        || !url.username().is_empty()
-        || url.password().is_some()
-        || url.path() != "/"
-        || url.query().is_some()
-        || url.fragment().is_some()
-    {
-        return Err(ManualPublicIngressError::InvalidOrigin);
+impl CanonicalPublicOrigin {
+    pub(crate) fn parse(value: &str) -> Result<Self, ManualPublicIngressError> {
+        let url = Url::parse(value.trim()).map_err(|_| ManualPublicIngressError::InvalidOrigin)?;
+        if url.scheme() != "https"
+            || !url.username().is_empty()
+            || url.password().is_some()
+            || url.path() != "/"
+            || url.query().is_some()
+            || url.fragment().is_some()
+        {
+            return Err(ManualPublicIngressError::InvalidOrigin);
+        }
+        let host = url
+            .host_str()
+            .map(normalized_host)
+            .filter(|host| !host.is_empty())
+            .ok_or(ManualPublicIngressError::InvalidOrigin)?;
+        let numeric_host = authority_host_ip(host);
+        if host.trim_end_matches('.').eq_ignore_ascii_case("localhost")
+            || numeric_host.is_some_and(|address| address.is_loopback() || address.is_unspecified())
+        {
+            return Err(ManualPublicIngressError::InvalidOrigin);
+        }
+        Ok(Self {
+            value: url.origin().ascii_serialization(),
+            host: host.to_ascii_lowercase(),
+            port: url
+                .port_or_known_default()
+                .ok_or(ManualPublicIngressError::InvalidOrigin)?,
+        })
     }
-    let host = url
-        .host_str()
-        .map(normalized_host)
-        .filter(|host| !host.is_empty())
-        .ok_or(ManualPublicIngressError::InvalidOrigin)?;
-    let numeric_host = authority_host_ip(host);
-    if host.trim_end_matches('.').eq_ignore_ascii_case("localhost")
-        || numeric_host.is_some_and(|address| address.is_loopback() || address.is_unspecified())
-    {
-        return Err(ManualPublicIngressError::InvalidOrigin);
+
+    fn authority_matches(&self, value: &str) -> bool {
+        let Ok(authority) = value.parse::<Authority>() else {
+            return false;
+        };
+        normalized_host(authority.host()).eq_ignore_ascii_case(&self.host)
+            && authority.port_u16().unwrap_or(443) == self.port
     }
-    Ok(PublicOrigin {
-        value: url.origin().ascii_serialization(),
-        host: host.to_ascii_lowercase(),
-        port: url
-            .port_or_known_default()
-            .ok_or(ManualPublicIngressError::InvalidOrigin)?,
+}
+
+#[derive(Clone)]
+pub(crate) struct ManagedIngressConfig {
+    pub(crate) local_url: String,
+    pub(crate) cloudflared: Option<PathBuf>,
+}
+
+struct ActiveGeneration {
+    number: u64,
+    cancellation: CancellationToken,
+    owner: JoinHandle<()>,
+}
+
+fn start_generation(
+    config: &ManagedIngressConfig,
+    projection: &Arc<RwLock<ManagedProjection>>,
+) -> Option<ActiveGeneration> {
+    if config.cloudflared.is_none() {
+        projection.write().unavailable();
+        return None;
+    }
+    let generation = projection.write().begin_start();
+    let cancellation = CancellationToken::new();
+    let task_config = config.clone();
+    let task_projection = projection.clone();
+    let task_cancellation = cancellation.clone();
+    let owner = tokio::spawn(async move {
+        let outcome = run_generation(
+            generation,
+            task_config,
+            task_projection.clone(),
+            task_cancellation,
+        )
+        .await;
+        task_projection.write().finish(generation, outcome);
+    });
+    Some(ActiveGeneration {
+        number: generation,
+        cancellation,
+        owner,
     })
+}
+
+async fn stop_active(
+    projection: &Arc<RwLock<ManagedProjection>>,
+    active: &mut Option<ActiveGeneration>,
+) {
+    let Some(current) = active.take() else {
+        projection.write().settle_stopped();
+        return;
+    };
+    projection.write().begin_stop(current.number);
+    current.cancellation.cancel();
+    if current.owner.await.is_err() {
+        projection
+            .write()
+            .finish(current.number, GenerationOutcome::owner_failed());
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum IngressPhase {
+    Stopped,
+    Starting,
+    Running,
+    Stopping,
+    Error,
+}
+
+pub(crate) struct ManagedProjection {
+    generation: u64,
+    phase: IngressPhase,
+    trust: Option<ManagedTrust>,
+    available: bool,
+    local_url: String,
+    last_error: Option<String>,
+    cleanup_failed: bool,
+}
+
+struct ManagedTrust {
+    origin: CanonicalPublicOrigin,
+    origin_host_digest: [u8; 32],
+}
+
+impl ManagedProjection {
+    fn new(local_url: &str, available: bool) -> Self {
+        Self {
+            generation: 0,
+            phase: IngressPhase::Stopped,
+            trust: None,
+            available,
+            local_url: local_url.to_owned(),
+            last_error: None,
+            cleanup_failed: false,
+        }
+    }
+
+    fn begin_start(&mut self) -> u64 {
+        self.generation = self.generation.saturating_add(1);
+        self.phase = IngressPhase::Starting;
+        self.trust = None;
+        self.last_error = None;
+        self.cleanup_failed = false;
+        self.generation
+    }
+
+    pub(crate) fn ready_managed(
+        &mut self,
+        generation: u64,
+        origin: CanonicalPublicOrigin,
+        origin_host: &str,
+    ) -> bool {
+        if self.generation != generation {
+            return false;
+        }
+        self.phase = IngressPhase::Running;
+        self.trust = Some(ManagedTrust {
+            origin,
+            origin_host_digest: Sha256::digest(origin_host.as_bytes()).into(),
+        });
+        true
+    }
+
+    pub(crate) fn begin_stop(&mut self, generation: u64) {
+        if self.generation == generation {
+            self.phase = IngressPhase::Stopping;
+            self.trust = None;
+        }
+    }
+
+    pub(crate) fn revoke(&mut self, generation: u64) {
+        if self.generation == generation {
+            self.trust = None;
+        }
+    }
+
+    fn finish(&mut self, generation: u64, outcome: GenerationOutcome) {
+        if self.generation != generation {
+            return;
+        }
+        self.trust = None;
+        self.last_error = outcome.error;
+        self.cleanup_failed = outcome.cleanup_failed;
+        self.phase = if self.last_error.is_some() {
+            IngressPhase::Error
+        } else {
+            IngressPhase::Stopped
+        };
+    }
+
+    fn unavailable(&mut self) {
+        self.phase = IngressPhase::Stopped;
+        self.trust = None;
+        self.last_error = Some("cloudflared is not installed".to_owned());
+    }
+
+    fn settle_stopped(&mut self) {
+        if self.phase != IngressPhase::Error {
+            self.phase = IngressPhase::Stopped;
+            self.trust = None;
+        }
+    }
+
+    fn cleanup_result(&self) -> Result<(), PublicIngressControlError> {
+        (!self.cleanup_failed)
+            .then_some(())
+            .ok_or(PublicIngressControlError::CleanupFailed)
+    }
+
+    fn status(&self) -> PublicIngressStatus {
+        let public_url = self
+            .trust
+            .as_ref()
+            .map_or_else(String::new, |trust| trust.origin.value.clone());
+        PublicIngressStatus {
+            mode: "managed",
+            public_url: public_url.clone(),
+            stable_url: String::new(),
+            tunnel: TunnelStatus {
+                available: self.available,
+                running: matches!(
+                    self.phase,
+                    IngressPhase::Starting | IngressPhase::Running | IngressPhase::Stopping
+                ),
+                phase: match self.phase {
+                    IngressPhase::Stopped => "stopped",
+                    IngressPhase::Starting => "starting",
+                    IngressPhase::Running => "running",
+                    IngressPhase::Stopping => "stopping",
+                    IngressPhase::Error => "error",
+                },
+                public_url,
+                local_url: self.local_url.clone(),
+                stable_phase: "unconfigured",
+                last_error: self.last_error.clone(),
+            },
+        }
+    }
+
+    fn authorizes(&self, headers: &HeaderMap, exposure: RouteExposure) -> bool {
+        self.trust
+            .as_ref()
+            .is_some_and(|trust| trust.authorizes(headers, exposure))
+    }
+
+    fn identity_origin(&self) -> Option<TrustedIdentityOrigin> {
+        self.trust
+            .as_ref()
+            .map(|trust| TrustedIdentityOrigin(trust.origin.value.as_str().into()))
+    }
+}
+
+impl ManagedTrust {
+    fn authorizes(&self, headers: &HeaderMap, exposure: RouteExposure) -> bool {
+        single_header(headers, header::HOST)
+            .and_then(|host| host.parse::<Authority>().ok())
+            .is_some_and(|host| {
+                host.port_u16().is_none()
+                    && digest_matches(
+                        &normalized_host(host.host()).to_ascii_lowercase(),
+                        &self.origin_host_digest,
+                    )
+            })
+            && forwarded_https(headers)
+            && single_header(
+                headers,
+                header::HeaderName::from_static(FORWARDED_HOST_HEADER),
+            )
+            .is_some_and(|host| self.origin.authority_matches(host))
+            && single_optional_header(headers, header::ORIGIN).is_ok_and(|origin| {
+                exposure == RouteExposure::IdentityProbePublic
+                    || origin.is_none_or(|origin| {
+                        CanonicalPublicOrigin::parse(origin)
+                            .is_ok_and(|observed| observed.value == self.origin.value)
+                    })
+            })
+    }
+}
+
+fn forwarded_https(headers: &HeaderMap) -> bool {
+    single_header(
+        headers,
+        header::HeaderName::from_static(FORWARDED_PROTO_HEADER),
+    ) == Some("https")
+}
+
+fn digest_matches(value: &str, expected: &[u8; 32]) -> bool {
+    let observed: [u8; 32] = Sha256::digest(value.as_bytes()).into();
+    bool::from(expected.ct_eq(&observed))
+}
+
+pub(crate) fn generated_origin_host() -> String {
+    format!("aas-{}.origin.invalid", uuid::Uuid::new_v4().simple())
 }
