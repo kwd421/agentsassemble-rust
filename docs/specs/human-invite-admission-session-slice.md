@@ -465,10 +465,12 @@ verified session principal and room state, not query flags or local storage.
 
 The copied frontend's `localPreviewInviteUrlForRoom` query-only guest path and
 `secureInviteCopyTarget` fallback are removed when real invite creation activates.
-Until manager invite controls and frontend activation use the ready ingress snapshot,
-the external-invite controls remain explicitly unavailable; a local preview is not
-presented as admission parity. The token is removed from browser history after it is
-captured, and stored session state cannot override a failed durable verification.
+The copied external-access modal/controller entry is already mounted, but its legacy
+Host-token/raw-fetch calls cannot satisfy the Rust one-use server-operator-ticket
+boundary and therefore fail closed. Manager invite controls and complete frontend
+activation must use the ready ingress snapshot; a local preview is not presented as
+admission parity. The token is removed from browser history after it is captured,
+and stored session state cannot override a failed durable verification.
 
 ## Trusted ingress boundary
 

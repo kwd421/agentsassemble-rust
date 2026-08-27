@@ -454,7 +454,10 @@ remain 625, 196, and 798 lines rather than weakening the 800-line gate.
 - The first lifecycle evidence record omitted the child-supervisor task, assigned
   the temporary directory to that task instead of the generation owner, and left the
   canonical frontend/backend exposure inventory saying all public ingress was
-  incomplete; the follow-up corrected both resource custody and exposure status.
+  incomplete. Its first correction then described the copied frontend entry as
+  absent, although the mounted modal/controller still calls the routes through an
+  incompatible legacy authority. The final record distinguishes implemented backend,
+  partially connected failed-closed UI, and incomplete activation.
 
 Final plan review: `APPROVE — Critical 0 / High 0 / Medium 0`.
 
@@ -525,3 +528,7 @@ Commit `4249e12` Daybreaker review: `APPROVE — Critical 0 / High 0 / Medium 0`
 Commit `82538b2` web review: `REVISE — Critical 0 / High 0 / Medium 1`.
 
 Commit `82538b2` Daybreaker review: `REVISE — Critical 0 / High 0 / Medium 1`.
+
+Commit `e04a32d` web review: `REVISE — Critical 0 / High 0 / Medium 1`.
+
+Commit `e04a32d` Daybreaker review: `APPROVE — Critical 0 / High 0 / Medium 0`.
