@@ -470,16 +470,17 @@ verified session principal and room state, not query flags or local storage.
 The copied frontend's `localPreviewInviteUrlForRoom` query-only guest path and
 `secureInviteCopyTarget` fallback are removed when real invite creation activates.
 The copied external-access modal/controller entry is already mounted, but its legacy
-Host-token/raw-fetch calls cannot satisfy the Rust one-use server-operator-ticket
+Host-token/raw-fetch calls cannot satisfy the Rust one-use room-bound manager-ticket
 boundary and therefore fail closed. Its legacy public-URL input/configure path is
 removed during activation rather than restored as mutable manual-ingress authority.
 Backend manager invite create already captures one ready ingress snapshot; revoke
 uses only its exact room-bound manager grant and remains available when ingress is not
-ready. The native desktop bridge consumes the exact operation grant. Frontend
-activation must invoke that bridge and copy only the create response's public join
-URL; a local preview is not presented as admission parity. The token is removed from
-browser history after it is captured, and stored session state cannot override a
-failed durable verification.
+ready. The native desktop bridge obtains and returns the exact operation grant.
+Frontend activation must invoke that bridge and present its ticket to the matching
+HTTP route, which consumes the ticket before reading the body. It copies only the
+create response's public join URL; a local preview is not presented as admission
+parity. The token is removed from browser history after it is captured, and stored
+session state cannot override a failed durable verification.
 
 ## Trusted ingress boundary
 

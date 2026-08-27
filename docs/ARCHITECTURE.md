@@ -322,10 +322,12 @@ credential. Browser-compatible HTTP ticket issuance stays an adapter while it is
 a reachable flow and always requires a high-entropy host secret or an authenticated
 session. Desktop mode cannot start with an empty host secret; Tauri generates it
 per owned runtime. Its private control pipe issues either a room WebSocket ticket
-with the validated loopback WebSocket origin or a purpose-separated server-operator
-HTTP ticket with the validated loopback HTTP origin. React receives neither the
-host secret nor a reusable credential. A ticket presented to the wrong transport
-or scope is consumed and rejected rather than interpreted as another authority.
+with the validated loopback WebSocket origin or one exact-purpose local HTTP grant
+with the validated loopback HTTP origin. Current HTTP grants separate server-operator,
+room-bound preference and human-invite create/revoke, settings-directory-read, and
+central-registration authority. React receives neither the host secret nor a reusable
+credential. A ticket presented to the wrong transport or scope is consumed and
+rejected rather than interpreted as another authority.
 Public human-session grants reuse this same bounded store but retain the opaque
 durable `HumanSessionAuthorization` and one exact purpose. Issuance is capped at
 1,792 live public grants and eight per session fingerprint, leaving at least 2,304
