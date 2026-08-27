@@ -99,22 +99,6 @@ impl SqliteStore {
         };
         require_credential_binding(&invite, &request.credential)?;
 
-        let rejection = if invite.revoked {
-            Some(HumanInvitePreflightRejection::InviteRevoked)
-        } else if invite.expires_at <= request.now {
-            Some(HumanInvitePreflightRejection::InviteExpired)
-        } else if invite.use_count >= invite.effective_use_limit() {
-            Some(HumanInvitePreflightRejection::InviteUseLimitReached)
-        } else if room.status != RoomStatus::Active {
-            Some(HumanInvitePreflightRejection::RoomUnavailable)
-        } else {
-            None
-        };
-        if let Some(rejection) = rejection {
-            transaction.commit().await?;
-            return Ok(HumanInvitePreflight::Rejected(rejection));
-        }
-
         let context = HumanInvitePreflightContext {
             room_id: invite.room_id.clone(),
             room_label: room.label,
@@ -132,21 +116,36 @@ impl SqliteStore {
             ),
             None => None,
         };
-        let decision = match session {
-            Some(PresentedSession::Live {
-                person,
-                invite_scope,
-            }) => HumanInvitePreflight::ExistingSession {
+        let rejection = if invite.revoked {
+            Some(HumanInvitePreflightRejection::InviteRevoked)
+        } else if invite.expires_at <= request.now {
+            Some(HumanInvitePreflightRejection::InviteExpired)
+        } else if invite.use_count >= invite.effective_use_limit() {
+            Some(HumanInvitePreflightRejection::InviteUseLimitReached)
+        } else if room.status != RoomStatus::Active {
+            Some(HumanInvitePreflightRejection::RoomUnavailable)
+        } else {
+            None
+        };
+        let decision = match (session, rejection) {
+            (
+                Some(PresentedSession::Live {
+                    person,
+                    invite_scope,
+                }),
+                _,
+            ) => HumanInvitePreflight::ExistingSession {
                 context: HumanInvitePreflightContext {
                     invite_scope,
                     ..context
                 },
                 person,
             },
-            Some(PresentedSession::Unavailable) => {
+            (_, Some(rejection)) => HumanInvitePreflight::Rejected(rejection),
+            (Some(PresentedSession::Unavailable), None) => {
                 HumanInvitePreflight::Rejected(HumanInvitePreflightRejection::SessionUnavailable)
             }
-            Some(PresentedSession::NotApplicable) | None => {
+            (Some(PresentedSession::NotApplicable) | None, None) => {
                 if let Some(fingerprint) = request.browser_credential_fingerprint {
                     match load_device_person(&mut transaction, &context.room_id, &fingerprint)
                         .await?

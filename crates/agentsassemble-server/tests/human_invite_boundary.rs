@@ -1,4 +1,5 @@
 use agentsassemble_domain::InviteScope;
+use agentsassemble_persistence::SqliteStore;
 use base64::{
     Engine as _,
     engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
@@ -66,6 +67,14 @@ async fn preflight_and_join_preserve_bounded_credentials_and_exact_retry() {
     assert_eq!(first["avatar_image_url"], avatar);
     assert_session_server_surface(&first);
     let session_token = canonical_session_token(&first);
+    assert_consumed_invite_preserves_live_session(
+        &client,
+        &server.base_url,
+        credentials.join_code(),
+        &browser_credential,
+        session_token,
+    )
+    .await;
     let replacement_avatar =
         assert_profile_exchange_boundary(&client, &server.base_url, &store, session_token, &avatar)
             .await;
@@ -91,32 +100,16 @@ async fn preflight_and_join_preserve_bounded_credentials_and_exact_retry() {
         1
     );
 
-    let conflict = client
-        .post(format!("{}/api/room-invite/join", server.base_url))
-        .json(&join_body(
-            credentials.join_code(),
-            &browser_credential,
-            request_id,
-            "Changed Guest",
-            &avatar,
-        ))
-        .send()
-        .await
-        .unwrap_or_else(|error| panic!("request conflicting exact join: {error}"));
-    assert_eq!(conflict.status(), reqwest::StatusCode::CONFLICT);
-    let conflict: Value = conflict
-        .json()
-        .await
-        .unwrap_or_else(|error| panic!("decode conflicting exact join: {error}"));
-    assert_eq!(conflict["code"], "idempotency_conflict");
-    assert_eq!(
-        store
-            .list_human_invites()
-            .await
-            .unwrap_or_else(|error| panic!("inspect invite after conflict: {error}"))[0]
-            .use_count,
-        1
-    );
+    assert_changed_exact_join_conflicts(
+        &client,
+        &server.base_url,
+        &store,
+        credentials.join_code(),
+        &browser_credential,
+        request_id,
+        &avatar,
+    )
+    .await;
     let replaced = client
         .get(format!("{}{}", server.base_url, avatar))
         .send()
@@ -633,6 +626,66 @@ async fn assert_preflight_boundary(
     assert!(allowed.contains("authorization"));
     assert!(allowed.contains("content-type"));
     assert!(allowed.contains("x-device-token"));
+}
+
+async fn assert_consumed_invite_preserves_live_session(
+    client: &Client,
+    base_url: &str,
+    invite_token: &str,
+    browser_credential: &str,
+    session_token: &str,
+) {
+    let existing: Value = client
+        .post(format!("{base_url}/api/room-invite/admission"))
+        .bearer_auth(session_token)
+        .header("x-device-token", browser_credential)
+        .json(&json!({"invite_token": invite_token}))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("preflight consumed invite with live session: {error}"))
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("decode live-session preflight: {error}"));
+    assert_eq!(existing["status"], "existing_session");
+    assert_eq!(existing["invite_scope"], "room");
+    assert_eq!(existing["can_auto_join"], true);
+}
+
+async fn assert_changed_exact_join_conflicts(
+    client: &Client,
+    base_url: &str,
+    store: &SqliteStore,
+    invite_token: &str,
+    browser_credential: &str,
+    request_id: &str,
+    avatar: &str,
+) {
+    let conflict = client
+        .post(format!("{base_url}/api/room-invite/join"))
+        .json(&join_body(
+            invite_token,
+            browser_credential,
+            request_id,
+            "Changed Guest",
+            avatar,
+        ))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("request conflicting exact join: {error}"));
+    assert_eq!(conflict.status(), reqwest::StatusCode::CONFLICT);
+    let conflict: Value = conflict
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("decode conflicting exact join: {error}"));
+    assert_eq!(conflict["code"], "idempotency_conflict");
+    assert_eq!(
+        store
+            .list_human_invites()
+            .await
+            .unwrap_or_else(|error| panic!("inspect invite after conflict: {error}"))[0]
+            .use_count,
+        1
+    );
 }
 
 async fn upload_prejoin_avatar(

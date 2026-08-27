@@ -98,20 +98,10 @@ async fn known_device_uses_profile_ssot_and_reports_joined_membership() {
 #[tokio::test]
 async fn presented_same_room_session_preserves_scope_and_rejects_unavailable_state() {
     let store = fixture().await;
-    insert_invite(
+    let session_invite = insert_invite(
         &store,
         CURRENT_SIGNED,
         CURRENT_JOIN,
-        "general",
-        InviteScope::ReadWrite,
-        5,
-        0,
-    )
-    .await;
-    let session_invite = insert_invite(
-        &store,
-        [0xA2; 32],
-        [0xB2; 32],
         "general",
         InviteScope::ReadOnly,
         1,
@@ -146,6 +136,10 @@ async fn presented_same_room_session_preserves_scope_and_rejects_unavailable_sta
                 && context.invite_scope == InviteScope::ReadOnly
     ));
 
+    sqlx::query("UPDATE room_invites SET use_count = 0")
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("restore fixture invite capacity: {error}"));
     assert_session_unavailable_without_writes(&store, micros(4_000_000)).await;
     assert_eq!(stored_session_state(&store).await, "active");
 
