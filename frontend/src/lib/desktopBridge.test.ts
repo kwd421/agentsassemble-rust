@@ -139,6 +139,9 @@ describe("desktop exact-purpose HTTP bridge", () => {
     await expect(
       fetchDesktopHumanInviteCreate("general", { method: "GET" })
     ).rejects.toThrow("POST");
+    await expect(
+      fetchDesktopHumanInviteRevoke("general", { method: "" })
+    ).rejects.toThrow("POST");
     expect(invoke).not.toHaveBeenCalled();
   });
 });

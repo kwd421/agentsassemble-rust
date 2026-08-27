@@ -475,7 +475,8 @@ async function fetchDesktopHumanInvite(
   operation: "create" | "revoke",
   init: RequestInit
 ): Promise<Response> {
-  if (String(init.method || "POST").toUpperCase() !== "POST") {
+  const method = init.method === undefined ? "POST" : String(init.method).toUpperCase();
+  if (method !== "POST") {
     throw new Error("사람 초대 요청은 POST만 허용합니다.");
   }
   const issued =
