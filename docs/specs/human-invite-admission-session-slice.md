@@ -13,10 +13,10 @@ typed exchanges, and frontend activation remain incomplete
 This slice establishes one durable authority for a human browser invite, admission,
 profile binding, room membership, and expiring room session. It then lets that live
 session exchange for exact one-use WebSocket, profile, attachment, and preference
-grants. Invite management remains local-operator authority. The backend manager
-control already binds each mutation to one ready ingress snapshot; an external invite
-is not a completed user flow until the desktop bridge and frontend activate that
-control.
+grants. Invite management remains local-operator authority. Backend create binds its
+new credentials and URLs to one ready ingress snapshot, while revoke remains
+room-bound and ingress-independent. An external invite is not a completed user flow
+until the desktop bridge and frontend activate those controls.
 
 The behavior comparison baseline is original commit
 `d5046473010d1353a81ee38337360e6d98f7bd6f`. The Rust baseline for this design is
@@ -471,21 +471,23 @@ The copied external-access modal/controller entry is already mounted, but its le
 Host-token/raw-fetch calls cannot satisfy the Rust one-use server-operator-ticket
 boundary and therefore fail closed. Its legacy public-URL input/configure path is
 removed during activation rather than restored as mutable manual-ingress authority.
-Backend manager invite controls already issue against one ready ingress snapshot.
-Desktop and frontend activation must consume their exact operation grant and copy only
-the returned public join URL; a local preview is not presented as admission parity.
-The token is removed from browser history after it is captured, and stored session
-state cannot override a failed durable verification.
+Backend manager invite create already captures one ready ingress snapshot; revoke
+uses only its exact room-bound manager grant and remains available when ingress is not
+ready. Desktop and frontend activation must consume the exact operation grant and copy
+only the create response's public join URL; a local preview is not presented as
+admission parity. The token is removed from browser history after it is captured, and
+stored session state cannot override a failed durable verification.
 
 ## Trusted ingress boundary
 
 Managed Cloudflare direct-tunnel custody, configured stable-entry publication, and
 startup-configured reverse-proxy proof are implemented by the separate ingress slice.
-Backend manager controls consume one exact ready origin/host/protocol snapshot from
-either that process-owned managed tunnel or the configured reverse-proxy owner.
-Operator pairing and the copied frontend bridge remain incomplete. Forwarding headers
-or a configured URL alone are not ingress authority. No raw legacy host token,
-local-development bypass, query flag, or client-side readiness authority is added.
+Backend manager create consumes one exact ready origin/host/protocol snapshot from
+either that process-owned managed tunnel or the configured reverse-proxy owner;
+room-bound revoke does not depend on ingress readiness. Operator pairing and the
+copied frontend bridge remain incomplete. Forwarding headers or a configured URL
+alone are not ingress authority. No raw legacy host token, local-development bypass,
+query flag, or client-side readiness authority is added.
 
 ## Evidence-driven simplifications and costs
 

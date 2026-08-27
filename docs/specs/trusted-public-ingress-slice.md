@@ -1,9 +1,10 @@
 # Trusted Public Ingress Slice
 
 Status: design approved; invite-use, exact local TCP trust, route exposure, local
-identity probes, configured-manual trust, and the direct managed quick-tunnel
-lifecycle with stable-entry publication are implemented and verified; manager
-controls and frontend activation remain incomplete
+identity probes, configured-manual trust, the direct managed quick-tunnel lifecycle
+with stable-entry publication, and backend manager create/revoke controls are
+implemented and verified; desktop manager bridging and frontend activation remain
+incomplete
 
 ## Definition
 
@@ -104,8 +105,9 @@ only the latest pending target, cancels and joins a superseded publication, and
 suppresses an unchanged target. Stop, child failure, spawn failure, startup failure,
 and shutdown converge on the same finalizer, which joins publication before clearing
 the stable target. Unconfirmed cleanup is explicit and blocks restart. The stable URL
-is not a fallback invite URL, and the still-incomplete manager/frontend activation
-cannot substitute it for a ready-ingress snapshot.
+is not a fallback invite URL. Backend create requires the current ready-ingress
+snapshot, and the still-incomplete desktop/frontend activation cannot substitute the
+stable URL for it; ingress-independent revoke needs no such snapshot.
 
 ## Human invite activation
 
