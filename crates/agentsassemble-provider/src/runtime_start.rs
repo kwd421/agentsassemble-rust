@@ -1,7 +1,8 @@
 use agentsassemble_domain::DurableAgentSession;
+use tokio_util::sync::CancellationToken;
 
 use super::{
-    DriverError, OwnedRuntime, ProviderAdapterError, ProviderRuntimeStarted,
+    DriverError, OwnedRuntime, ProviderAdapterError, ProviderDriver, ProviderRuntimeStarted,
     ProviderSessionAttachment, revalidate_runtime_authority,
 };
 
@@ -46,6 +47,7 @@ pub(super) async fn reuse_owned_runtime(
     }
     let attachment = attach_owned(
         runtime.driver.clone(),
+        runtime.turn_cancellation.clone(),
         session.clone(),
         true,
         &runtime.handle_id,
@@ -63,6 +65,7 @@ pub(super) async fn initialize_owned_runtime(
 ) -> Result<ProviderRuntimeStarted, ProviderAdapterError> {
     let attachment = attach_owned(
         runtime.driver.clone(),
+        runtime.turn_cancellation.clone(),
         session.clone(),
         false,
         &runtime.handle_id,
@@ -76,35 +79,23 @@ pub(super) async fn initialize_owned_runtime(
 
 async fn attach_owned(
     driver_cell: std::sync::Arc<super::runtime_driver::DriverCell>,
+    cancellation: CancellationToken,
     session: DurableAgentSession,
     require_health: bool,
     handle_id: &str,
     owner_id: &str,
 ) -> Result<ProviderSessionAttachment, ProviderAdapterError> {
     let task = tokio::spawn(async move {
-        let mut driver = driver_cell.take().await?;
-        let result = async {
-            if driver.requires_restart() {
-                return Err(DriverError::new(
-                    "provider_runtime_restart_required",
-                    "The owned provider runtime must be stopped before it can be reused.",
-                ));
-            }
-            if require_health {
-                match driver.is_alive().await {
-                    Ok(true) => {}
-                    Ok(false) => {
-                        return Err(DriverError::new(
-                            "provider_runtime_exited",
-                            "The owned provider runtime exited before it became ready.",
-                        ));
-                    }
-                    Err(error) => return Err(error),
-                }
-            }
-            driver.attach_session(&session).await
-        }
-        .await;
+        let mut driver = tokio::select! {
+            biased;
+            () = cancellation.cancelled() => return Err(attachment_cancelled()),
+            driver = driver_cell.take() => driver?,
+        };
+        let result = tokio::select! {
+            biased;
+            () = cancellation.cancelled() => Err(attachment_cancelled()),
+            result = attach_driver_session(driver.as_mut(), &session, require_health) => result,
+        };
         driver_cell.put(driver).await;
         result
     });
@@ -120,6 +111,39 @@ async fn attach_owned(
             )
         })?
         .map_err(|error| ProviderAdapterError::uncertain(error, handle_id, owner_id))
+}
+
+async fn attach_driver_session(
+    driver: &mut dyn ProviderDriver,
+    session: &DurableAgentSession,
+    require_health: bool,
+) -> Result<ProviderSessionAttachment, DriverError> {
+    if driver.requires_restart() {
+        return Err(DriverError::new(
+            "provider_runtime_restart_required",
+            "The owned provider runtime must be stopped before it can be reused.",
+        ));
+    }
+    if require_health {
+        match driver.is_alive().await {
+            Ok(true) => {}
+            Ok(false) => {
+                return Err(DriverError::new(
+                    "provider_runtime_exited",
+                    "The owned provider runtime exited before it became ready.",
+                ));
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    driver.attach_session(session).await
+}
+
+const fn attachment_cancelled() -> DriverError {
+    DriverError::new(
+        "provider_attachment_cancelled",
+        "The provider attachment was cancelled for owned runtime shutdown.",
+    )
 }
 
 pub(super) fn validate_owned_runtime(

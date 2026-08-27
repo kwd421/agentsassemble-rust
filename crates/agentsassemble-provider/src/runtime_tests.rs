@@ -584,7 +584,7 @@ async fn cancelled_initialization_remains_owned_for_shutdown() {
         tempfile::tempdir().unwrap_or_else(|error| panic!("create cancellation fixture: {error}"));
     let descendant_pid = directory.path().join("cancelled-descendant.pid");
     let script = format!(
-        "#!/bin/sh\n(while :; do sleep 1; done) </dev/null >/dev/null 2>&1 &\nprintf '%s' \"$!\" > {}\nIFS= read -r initialize\nwhile :; do sleep 1; done\n",
+        "#!/bin/sh\nIFS= read -r initialize\n(while :; do sleep 1; done) </dev/null >/dev/null 2>&1 &\nprintf '%s' \"$!\" > {}\nwhile :; do sleep 1; done\n",
         shell_quote(&descendant_pid)
     );
     let session = fixture_session(directory.path(), &script).await;
