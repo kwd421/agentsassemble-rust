@@ -484,6 +484,21 @@ create response's public join URL; a local preview is not presented as admission
 parity. The token is removed from browser history after it is captured, and stored
 session state cannot override a failed durable verification.
 
+Browser admission retry custody has one bounded session-storage owner. A request is
+`pending` only while its exact invite credential fingerprint, current browser
+credential fingerprint, client ID, immutable request ID, room, and submitted profile
+remain eligible for an exact retry. Once a durable session is accepted or an exact
+definitive terminal result is observed, the owner writes and verifies a strict
+`settled` record before attempting deletion. A surviving settled record is
+cleanup-only across reload, session expiration or clearing, and later invite
+navigation; it can never resend admission. Completed settlement remains sufficient
+after the separately owned room session is cleared. Only an unresolved pending
+mismatch may consult exact completed-session evidence, and that evidence must bind the
+same invite fingerprint, current browser credential fingerprint, and client ID.
+Every asynchronous fingerprint calculation rechecks the exact stored record before
+mutation. The intent stores no raw credential and adds no second key, cache, timer,
+task, migration, compatibility path, or fallback.
+
 The approved activation order is deliberately split at authority and lifecycle
 boundaries:
 
@@ -566,6 +581,11 @@ buildable commit must remain below 1,000 changed lines, must pass the repository
 and focused contract tests, must be pushed, and must receive both manual reviews
 before the next stage. Packaged Computer Use remains the completion test rather than
 a substitute for these authority and failure contracts.
+
+B1a/B1b and the browser admission-custody corrections are public through `fdb4e49`,
+fully verified, and approved by both manual reviewers. B2 is the next incomplete
+stage; manager-invite frontend activation and its packaged flow are not implied by
+the completed foundation.
 
 ## Trusted ingress boundary
 

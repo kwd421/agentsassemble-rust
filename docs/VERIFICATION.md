@@ -8,7 +8,7 @@ Verification claims only the boundary actually observed. Build, lint, unit tests
 
 The active comparison baseline is original
 `d5046473010d1353a81ee38337360e6d98f7bd6f` and public Rust
-`644b1d5`. Local uncommitted behavior
+`fdb4e49`. Local uncommitted behavior
 is never described as public completion. Every completed-slice evidence entry must
 name the tested Rust commit, original provenance commit, platform/build, exact
 entry point and command flow, viewer identity, provider/model where applicable,
@@ -2661,3 +2661,69 @@ source-growth gates, formatting, generated bindings, original CSS verification, 
 integration, and documentation test, warning-denied Clippy, and diff validation. The
 production main bundle remained one existing large chunk at 768.01 kB; no speculative
 code-splitting change was added without a measured runtime bottleneck.
+
+## Frontend admission intent custody correction: 2026-08-28
+
+The browser entrance and admission-custody series from `8a8b47d` through `fdb4e49`
+removes the copied query-preview authority and binds preflight, admission request,
+browser identity, durable session acceptance, and retry classification to their real
+owners. Corrections `bccb7ff`, `dc067f4`, `72e9f22`, `291e890`, `3c7127f`, and
+`fdb4e49` close the review findings without adding a fallback, compatibility path, or
+second admission owner.
+
+The final browser owner stores at most one record under the existing
+`agentsassemble.roomAdmissionIntent.v1` session-storage key, capped at 8 KiB. A
+network-eligible request is `pending`. After a durable session is accepted or an
+exact definitive terminal result is observed, that same owner first replaces it with
+a strict `settled` record and verifies the write before best-effort deletion. A failed
+delete therefore leaves a compact cleanup-only record; reload, expiration, ordinary
+session clearing, and later invite navigation cannot turn it back into a `/join`
+request. A matching terminal record restores only its explicit non-retryable result.
+A completed-session record permits a different invite to continue after local session
+evidence has been removed. A still-pending record for another invite remains
+fail-closed unless exact completed-session evidence matches the invite credential,
+current browser credential, and client ID.
+
+No raw invite, device, or session bearer is stored in the intent. Ordinary
+load/create computes two SHA-256 fingerprints; the exceptional historical
+completed-session comparison computes two additional fingerprints only after a
+pending mismatch. Each asynchronous digest boundary re-reads and compares the exact
+stored record before overwrite or removal, preventing stale work from deleting a
+newer intent. The change adds no database row or index, cache, lock, timer, background
+task, configuration layer, or second storage key. The pure admission state/reducer is
+separated from the effect hook; storage lifecycle remains in the intent module.
+
+The TCP test correction has a separate observed cost. Its prior managed-ingress
+readiness helper exhausted 256 immediate polls in about 1.3 seconds while advertising
+a five-second readiness window. One five-second deadline owner with a 10 ms poll
+interval now returns as soon as readiness is observed, without changing product
+timeouts or ingress behavior.
+
+Focused admission tests passed 27/27. The production-browser startup boundary passed
+10/10: a definitive terminal response followed by blocked deletion and full reload
+kept the join count at three, exposed cleanup-only retry, and removed the record after
+storage recovered without a fourth join. A successful invite whose cleanup was
+blocked left completed settlement; after the separate RoomGuestSession local-storage
+record was removed entirely, a different invite still reached preflight with no
+session bearer and retired the stale settlement.
+
+Final `make verify` at `fdb4e49` passed architecture, source-growth, policy,
+formatting, generated-binding, original-CSS, production-build, workspace-test,
+warning-denied Clippy, and diff gates; all 81 frontend files with 451 tests, all 16
+desktop tests, and every Rust unit, integration, and documentation test passed. The
+real TCP suite exercised managed/manual public ingress, process readiness and
+revocation, peer/Host/Origin/proxy boundaries, incomplete headers, and admission
+bounds. The production main bundle was 774.01 kB; no speculative split was added
+without a measured runtime bottleneck. No Computer Use resource or provider process
+was required for this browser-storage/reload correction, and no Deep Scan or other
+automated security scanner ran.
+
+Manual review findings were: ambiguous response-loss errors could be classified as
+terminal; live same-room session evidence was checked after the invite gate; cleanup
+could discard retry custody or retain it indefinitely; expired session bearers could
+reach preflight; reducer/effect ownership was too entangled; and terminal/completed
+settlement depended on volatile reducer or separately expiring session state. The
+commits above correct each owning boundary. Final web verdict for `fdb4e49` and
+`8a8b47d..fdb4e49`: `APPROVE — Critical 0 / High 0 / Medium 0`. Final Daybreaker
+verdict for both scopes: `APPROVE — Critical 0 / High 0 / Medium 0`. Neither review
+used Deep Scan or another automated security scanner.

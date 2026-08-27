@@ -270,6 +270,17 @@ there is no second session-liveness or profile-binding authority. A foreign-room
 bearer remains inapplicable to preflight, while a same-room ended, expired, inactive,
 or left session is unavailable and malformed same-room authority fails visibly.
 
+The browser owns one bounded admission-intent record, separate from the durable room
+session. Pending state binds only fingerprints of the invite and current browser
+credentials plus the exact client/request/profile input. Durable session acceptance
+or a definitive terminal response first replaces pending state with a verified
+settled marker before deletion. If deletion fails, reload and later navigation treat
+that marker as cleanup-only and never replay admission. Session expiry or clearing
+cannot erase this settlement fact. An unresolved pending mismatch remains
+fail-closed unless exact completed-session evidence binds the same invite, current
+browser credential, and client. No raw credential, second storage owner, fallback,
+or client-side admission authority is introduced.
+
 Human browser admission, an externally owned RoomConnector session, and a managed
 Agent Session are separate product identities. They may reuse admission and
 realtime mechanisms, but one cannot be represented by another or inherit its
