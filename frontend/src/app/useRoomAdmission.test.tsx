@@ -1,7 +1,8 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../lib/apiErrors";
 import { TEST_SERVER_PRODUCT_SURFACE } from "../test/serverProductSurface";
+import { TEST_WEB_CRYPTO, TestTextEncoder } from "../test/webCrypto";
 import {
   loadRoomGuestSession,
   persistRoomGuestSession,
@@ -77,6 +78,8 @@ const SESSION: RoomGuestSession = {
 describe("useRoomAdmission", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubGlobal("crypto", TEST_WEB_CRYPTO);
+    vi.stubGlobal("TextEncoder", TestTextEncoder);
     deviceMocks.loadRememberedGuestProfile.mockReturnValue(null);
     surfaceMocks.verifyAndBindRoomSessionSurface.mockResolvedValue(true);
     guestSessionStore.current = null;
@@ -90,6 +93,10 @@ describe("useRoomAdmission", () => {
       invite_scope: "room",
     });
     window.history.replaceState({}, "", "/join?token=invite-1");
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("auto-joins only when preflight recognizes the server-side identity", async () => {
@@ -171,7 +178,11 @@ describe("useRoomAdmission", () => {
       room_id: "room-2",
       room_label: "Room Two",
       invite_scope: "room",
-      participant: { participant_id: "guest-2", display_name: "Known Guest" },
+      participant: {
+        participant_id: "guest-2",
+        display_name: "Known Guest",
+        avatar_image_url: "",
+      },
     });
     apiMocks.joinRoomInvite.mockResolvedValue({
       ...SESSION_SURFACE,
@@ -223,7 +234,11 @@ describe("useRoomAdmission", () => {
       status: "known_user",
       can_auto_join: true,
       room_id: "room-2",
-      participant: { participant_id: "guest-2", display_name: "Known Guest" },
+      participant: {
+        participant_id: "guest-2",
+        display_name: "Known Guest",
+        avatar_image_url: "",
+      },
     });
     apiMocks.joinRoomInvite.mockResolvedValue({
       ...SESSION_SURFACE,

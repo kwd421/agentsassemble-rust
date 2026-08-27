@@ -86,7 +86,7 @@ describe("GuestJoinProfilePanel", () => {
         inviteToken="aaj1_valid-invite"
         displayName="Guest"
         status="방 세션을 브라우저에 영구 저장할 수 없습니다."
-        preflightRetry
+        retryMode="preflight"
         onDisplayNameChange={vi.fn()}
         onAvatarImageChange={vi.fn()}
         onJoin={onJoin}
@@ -97,6 +97,25 @@ describe("GuestJoinProfilePanel", () => {
     expect(screen.queryByRole("textbox", { name: "이름" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "다시 시도" }));
     expect(onJoin).toHaveBeenCalledOnce();
+  });
+
+  it("retries a frozen join intent without presenting editable profile fields", () => {
+    render(
+      <GuestJoinProfilePanel
+        deviceToken="aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        inviteToken="aaj1_valid-invite"
+        displayName="Guest"
+        status="입장 응답을 확인하지 못했습니다."
+        retryMode="join"
+        onDisplayNameChange={vi.fn()}
+        onAvatarImageChange={vi.fn()}
+        onJoin={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole("region", { name: "입장 재시도" })).toBeTruthy();
+    expect(screen.queryByRole("textbox", { name: "이름" })).toBeNull();
+    expect(screen.getByRole("button", { name: "다시 시도" })).toBeTruthy();
   });
 
 });

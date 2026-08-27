@@ -41,6 +41,47 @@ test("does not let legacy query state override a server-owned invite", async ({ 
   await expect(page.getByText("legacy-room")).toHaveCount(0);
 });
 
+test("replays one frozen admission intent after a lost join response and reload", async ({
+  page,
+}) => {
+  let preflightCount = 0;
+  const joinBodies: unknown[] = [];
+  await page.route("**/api/room-invite/admission", async (route) => {
+    preflightCount += 1;
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: "known_user",
+        can_auto_join: true,
+        room_id: "room-1",
+        room_label: "Room One",
+        invite_scope: "room",
+        participant: {
+          participant_id: "guest-1",
+          display_name: "Guest",
+          avatar_image_url: "",
+        },
+        operator: false,
+      }),
+    });
+  });
+  await page.route("**/api/room-invite/join", async (route) => {
+    joinBodies.push(route.request().postDataJSON());
+    await route.abort("connectionrefused");
+  });
+
+  await page.goto("/join?token=invite-token");
+  await expect(page.getByRole("region", { name: "입장 재시도" })).toBeVisible();
+  await expect.poll(() => joinBodies.length).toBe(1);
+
+  await page.reload();
+  await expect(page.getByRole("region", { name: "입장 재시도" })).toBeVisible();
+  await expect.poll(() => joinBodies.length).toBe(2);
+
+  expect(preflightCount).toBe(1);
+  expect(joinBodies[1]).toEqual(joinBodies[0]);
+});
+
 test("retains pairing while consuming its URL secret", async ({ page }) => {
   await page.goto("/pair?token=aap1_pairing-token");
 

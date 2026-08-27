@@ -17,7 +17,7 @@ export default function AppOverlays({ controller }: { controller: AppController 
     createChannel, createChannelOpen, deleteRoom, deviceToken, clientId, generateAgentInviteLink,
     generateInviteLink, generateOperatorPairingLink, guestAdmissionBusy, guestExpired,
     guestJoinRequested, guestJoinStatus, guestJoinToken, guestLocked,
-    guestPreflightRetryable,
+    guestPreflightRetryable, guestJoinRetryable,
     guestRecoveryRequest, guestSession, homeFriendsPayload, hostTokenDraft,
     inviteCopyStatus, inviteFriendStatuses, inviteFriendToRoom, inviteHostTokenRequired,
     inviteModalAppearance, inviteModalMembers, inviteModalRoom, invitePublicUrl,
@@ -209,14 +209,16 @@ export default function AppOverlays({ controller }: { controller: AppController 
         )}
 
         {(guestJoinToken || operatorPairingPending) &&
-          (!guestSession || guestPreflightRetryable) &&
+          (!guestSession || guestPreflightRetryable || guestJoinRetryable) &&
           !guestExpired && (
           <GuestJoinProfilePanel
             deviceToken={deviceToken}
             inviteToken={guestJoinToken}
             pairing={operatorPairingPending}
             pairingState={operatorPairingState}
-            preflightRetry={guestPreflightRetryable}
+            retryMode={
+              guestPreflightRetryable ? "preflight" : guestJoinRetryable ? "join" : undefined
+            }
             displayName={pendingGuestDisplayName}
             avatarImage={pendingGuestAvatarImage || undefined}
             status={guestJoinStatus}

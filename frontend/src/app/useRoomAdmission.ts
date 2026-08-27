@@ -6,15 +6,13 @@ import {
   type GuestRecoveryRedeemResponse,
 } from "../api";
 import { ApiError, GUEST_SESSION_EXPIRED_MESSAGE } from "../lib/apiErrors";
-import {
-  loadRememberedGuestProfile,
-  rememberGuestProfile,
-} from "../lib/deviceIdentity";
+import { loadRememberedGuestProfile, rememberGuestProfile } from "../lib/deviceIdentity";
 import { roomFromGuestSession, type RoomDockItem } from "../lib/roomDockModel";
 import {
-  clearAdmissionRequestId,
-  loadOrCreateAdmissionRequestId,
-} from "../lib/roomAdmissionRequestId";
+  clearRoomAdmissionIntent,
+  loadOrCreateRoomAdmissionIntent,
+  loadRoomAdmissionIntent,
+} from "../lib/roomAdmissionIntent";
 import { verifyAndBindRoomSessionSurface } from "../lib/roomDirectoryContract";
 import {
   persistRoomGuestSession,
@@ -288,6 +286,12 @@ export function useRoomAdmission({
       admissionState.operation === "preflight" &&
       admissionState.retryable
   );
+  const guestJoinRetryable = Boolean(
+    admissionState.kind === "failed" &&
+      admissionState.operation === "join" &&
+      admissionState.retryable &&
+      admissionState.code !== "request_id_unavailable"
+  );
   const guestAdmissionBusy =
     admissionState.kind === "preflighting" ||
     admissionState.kind === "joining" ||
@@ -538,13 +542,30 @@ export function useRoomAdmission({
       type: "preflight_started",
       status: "초대와 기존 신원을 확인하는 중...",
     });
-    preflightRoomInvite({
-      inviteToken: guestJoinToken,
-      deviceToken,
-      sessionToken: guestSession?.sessionToken || "",
-    })
+    const pendingIntent = guestAlreadyJoinedThisInvite
+      ? Promise.resolve(null)
+      : loadRoomAdmissionIntent({
+          inviteToken: guestJoinToken,
+          browserCredential: deviceToken,
+          clientId,
+        });
+    pendingIntent.then((intent) => {
+        if (!attempt.isCurrent()) return null;
+        if (intent) {
+          expectedInviteRoomIdRef.current = intent.meetingId;
+          setPendingGuestDisplayName(intent.displayName);
+          setPendingGuestAvatarImage(intent.avatarImage);
+          dispatchAdmission({ type: "join_requested", status: "" });
+          return null;
+        }
+        return preflightRoomInvite({
+          inviteToken: guestJoinToken,
+          deviceToken,
+          sessionToken: guestSession?.sessionToken || "",
+        });
+      })
       .then(async (decision) => {
-        if (!attempt.isCurrent()) return;
+        if (!attempt.isCurrent() || !decision) return;
         if (!("room_id" in decision)) {
           const message =
             decision.status === "invite_expired"
@@ -589,7 +610,7 @@ export function useRoomAdmission({
             attempt.isCurrent
           );
           if (!applied) return;
-          clearAdmissionRequestId();
+          clearRoomAdmissionIntent();
           return;
         }
         if (
@@ -645,7 +666,9 @@ export function useRoomAdmission({
     admissionState.kind,
     applyJoinedSession,
     beginAdmissionAttempt,
+    clientId,
     deviceToken,
+    guestAlreadyJoinedThisInvite,
     guestJoinToken,
     guestSession,
     operatorPairingToken,
@@ -672,53 +695,56 @@ export function useRoomAdmission({
       type: "join_requested",
       status: "초대 링크로 방에 입장 중...",
     });
-    let requestId = "";
-    try {
-      requestId = loadOrCreateAdmissionRequestId();
-    } catch (error) {
-      attempt.cancel();
-      const message =
-        error instanceof Error ? error.message : "안전한 입장 요청을 만들 수 없습니다.";
-      dispatchAdmission({
-        type: "failed",
-        operation: "join",
-        code: "request_id_unavailable",
-        message,
-        retryable: true,
-        status: message,
-      });
-      return;
-    }
-    joinRoomInvite({
+    let networkDispatched = false;
+    loadOrCreateRoomAdmissionIntent({
       inviteToken: guestJoinToken,
-      requestId,
+      browserCredential: deviceToken,
       meetingId: expectedRoomId,
       displayName: pendingGuestDisplayName,
       avatarImage: pendingGuestAvatarImage,
-      deviceToken,
       clientId,
-      participantType: "human",
     })
+      .then((intent) => {
+        if (!attempt.isCurrent()) return null;
+        networkDispatched = true;
+        return joinRoomInvite({
+          inviteToken: guestJoinToken,
+          requestId: intent.requestId,
+          meetingId: intent.meetingId,
+          displayName: intent.displayName,
+          avatarImage: intent.avatarImage,
+          deviceToken,
+          clientId: intent.clientId,
+          participantType: intent.participantType,
+        });
+      })
       .then(async (payload) => {
-        if (attempt.isCurrent()) {
+        if (attempt.isCurrent() && payload) {
           const applied = await applyJoinedSession(
             roomGuestSessionFromJoinPayload(guestJoinToken, payload),
             "invite",
             attempt.isCurrent
           );
           if (!applied) return;
-          clearAdmissionRequestId();
+          clearRoomAdmissionIntent();
         }
       })
       .catch((error) => {
         if (!attempt.isCurrent()) return;
         const surfaceFailure = error instanceof SessionSurfaceError;
         const custodyFailure = error instanceof SessionCustodyError;
+        const retryable =
+          custodyFailure || (!surfaceFailure && pairingFailureIsRetryable(error));
+        if (networkDispatched && !retryable && !surfaceFailure) {
+          clearRoomAdmissionIntent();
+        }
         const message = error instanceof Error ? error.message : "초대 링크 입장 실패";
         dispatchAdmission({
           type: "failed",
           operation: "join",
-          code: surfaceFailure
+          code: !networkDispatched
+            ? "request_id_unavailable"
+            : surfaceFailure
             ? SERVER_SURFACE_INVALID_CODE
             : custodyFailure
               ? SESSION_CUSTODY_INVALID_CODE
@@ -726,7 +752,7 @@ export function useRoomAdmission({
                 ? error.message
                 : "join_failed",
           message,
-          retryable: !surfaceFailure,
+          retryable,
           status: message,
         });
       });
@@ -750,6 +776,7 @@ export function useRoomAdmission({
     guestExpired,
     guestJoinRequested,
     guestPreflightRetryable,
+    guestJoinRetryable,
     pendingGuestDisplayName,
     pendingGuestAvatarImage,
     guestJoinStatus,
