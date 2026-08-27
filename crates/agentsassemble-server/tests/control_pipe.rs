@@ -9,11 +9,10 @@ use tokio::{
     net::TcpStream,
     process::{Child, ChildStdin, ChildStdout, Command},
 };
-
+mod control_pipe_invite_tickets;
 const HOST_TOKEN: &str = "control-pipe-test-host-token-000000001";
 const PUBLIC_ORIGIN: &str = "https://public.example.test";
 const PROXY_SECRET: &str = "manual-ingress-control-secret-000000001";
-
 #[test]
 fn command_line_does_not_accept_a_host_secret() {
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_agentsassemble-server"))
@@ -571,6 +570,8 @@ async fn owned_control_pipe_issues_exact_settings_tickets_after_authority_exists
             && ticket.len() == 64
             && ttl_seconds > 0
     ));
+
+    control_pipe_invite_tickets::assert_invite_tickets(&mut server).await;
 
     let directory = server
         .send_control(&LocalControlRequest::IssueSettingsDirectoryReadTicket {

@@ -51,7 +51,13 @@ fn running_reconnect_replaces_origin_but_stopping_and_terminal_cannot() {
         projection.status().public_url,
         "https://second.trycloudflare.com"
     );
+    let ready = projection
+        .ready_snapshot()
+        .unwrap_or_else(|| panic!("running generation must expose one ready snapshot"));
+    assert_eq!(ready.local_url, "http://127.0.0.1:41955");
+    assert_eq!(ready.public_url, "https://second.trycloudflare.com");
     projection.begin_stop(generation);
+    assert!(projection.ready_snapshot().is_none());
     assert!(matches!(
         projection.ready_managed(
             generation,
