@@ -120,7 +120,7 @@ export default function AppView({ controller }: { controller: AppController }) {
           onlineCount={scopedOnlineCount}
           agentCount={scopedAgents.length || 0}
           hasBackendError={Boolean(canonicalRoom.syncIssue || roomDirectorySyncIssue)}
-          profileIdentity={{ deviceToken, roomId: activeRoom.meetingId }}
+          profileIdentity={{ deviceToken }}
           friends={homeFriendsPayload.friends}
           selectedFriendId={selectedHomeFriendId}
           onFriendSelect={selectHomeFriend}
@@ -335,7 +335,6 @@ export default function AppView({ controller }: { controller: AppController }) {
             profileIdentity={{
               sessionToken: admittedSessionToken,
               deviceToken,
-              roomId: activeRoom.meetingId,
             }}
             onGuestExit={guestExpired ? exitGuestSurface : undefined}
           />

@@ -28,7 +28,6 @@ export interface UserProfile {
 export type UserProfileIdentity = {
   sessionToken?: string;
   deviceToken?: string;
-  roomId?: string;
 };
 
 export type UserProfileSnapshot = {
