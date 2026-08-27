@@ -491,12 +491,14 @@ remain eligible for an exact retry. Once a durable session is accepted or an exa
 definitive terminal result is observed, one retirement operation first tries a strict
 verified `settled` write and then best-effort removal. If the write cannot be
 verified, it instead attempts and verifies direct removal of the observed pending
-record; failure of both remains unresolved and exposes cleanup retry. A surviving
+record. Failure of both remains unresolved; terminal retirement exposes explicit
+cleanup retry, while completed-session retirement does not claim that UI. A surviving
 settled record is cleanup-only across reload, expiry or clearing of the separately
-owned RoomGuestSession local-storage record, and later invite navigation; it can never
-resend admission. Direct external deletion of the admission-intent session-storage
-key erases that custody and is outside this guarantee. Only an unresolved pending
-mismatch may consult exact completed-session evidence, and that evidence must bind
+owned RoomGuestSession local-storage record, and later invite navigation; it can
+never resend admission. Direct external deletion of the admission-intent
+session-storage key erases that custody and is outside this guarantee. Only an
+unresolved pending mismatch may consult exact completed-session evidence, and that
+evidence must bind
 the same invite fingerprint, current browser credential fingerprint, and client ID.
 Every asynchronous fingerprint calculation rechecks the exact stored record before
 mutation. The intent stores no raw credential and adds no second key, cache, timer,

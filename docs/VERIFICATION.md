@@ -2677,10 +2677,11 @@ network-eligible request is `pending`. After a durable session is accepted or an
 exact definitive terminal result is observed, that same owner attempts one retirement
 operation. A verified `settled` write is followed by best-effort removal. If the write
 cannot be verified, the owner instead attempts and verifies direct removal of the
-observed pending record; failure of both remains unresolved and exposes cleanup
-retry. A settled record surviving removal is compact and cleanup-only. Reload,
-expiration or clearing of the separately owned RoomGuestSession local-storage record,
-and later invite navigation cannot turn that marker back into a `/join` request.
+observed pending record. Failure of both remains unresolved; terminal retirement
+exposes explicit cleanup retry, while completed-session retirement does not claim
+that UI. A settled record surviving removal is compact and cleanup-only. Reload,
+expiration or clearing of the separately owned RoomGuestSession local-storage
+record, and later invite navigation cannot turn that marker back into a `/join` request.
 Direct external deletion of the admission-intent session-storage key erases the
 marker and is outside this guarantee. A matching terminal record restores only its
 explicit non-retryable result. A completed-session record permits a different invite
@@ -2738,3 +2739,9 @@ RoomGuestSession local-storage cleanup from direct deletion of the admission-int
 session-storage key. The correction records the actual verified-write-or-verified-
 direct-removal branches and leaves both-failed retirement unresolved; product code and
 the approved implementation verdict are unchanged.
+
+Web re-review of correction `ae8486a` found one further Medium documentation issue:
+the unresolved branch was described as always exposing cleanup retry even though only
+terminal settlement dispatches that UI operation. The completed-session branch does
+not expose it. This is a documentation correction only; the approved product code is
+unchanged.
