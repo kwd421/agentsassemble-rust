@@ -32,6 +32,7 @@ import {
   type RoomSocketSnapshot,
 } from "./roomSocketTypes";
 import { PRODUCT_SURFACE_REVISION } from "./types/generated/PRODUCT_SURFACE_REVISION";
+import { requireAcceptedRoomRuntimeTicket } from "./lib/roomRuntimeTicket";
 
 export type { RoomSocketAuth } from "./api";
 export type { PluginEnvelope } from "./pluginSocketProtocol";
@@ -92,12 +93,6 @@ function validateClientAuthority(
 
 function ticketSocketUrl(websocketBaseUrl: string, ticket: string): string {
   const base = new URL(websocketBaseUrl);
-  if ((base.protocol !== "ws:" && base.protocol !== "wss:") || base.username || base.password) {
-    throw new RoomSocketSayError(
-      "The desktop runtime returned an invalid WebSocket authority.",
-      "websocket_authority_invalid"
-    );
-  }
   const url = new URL("/ws", base);
   url.searchParams.set("ticket", ticket);
   return url.toString();
@@ -274,15 +269,12 @@ export function openRoomSocket(
     const generation = ++connectionGeneration;
     try {
       validateClientAuthority(streams, dependencies);
-      const issued = await requestTicket(auth);
+      const rawTicket = await requestTicket(auth);
       if (closed || generation !== connectionGeneration) return;
-      if (
-        !issued ||
-        typeof issued.ticket !== "string" ||
-        !isHex32Bytes(issued.ticket) ||
-        typeof issued.websocket_base_url !== "string" ||
-        !isHex32Bytes(issued.server_proof_key)
-      ) {
+      let issued;
+      try {
+        issued = requireAcceptedRoomRuntimeTicket(rawTicket);
+      } catch {
         throw new RoomSocketSayError(
           "The desktop runtime ticket contract is incomplete.",
           "runtime_ticket_invalid"
@@ -416,7 +408,12 @@ export function openRoomSocket(
           });
           if (validationError) throw validationError;
           const snapshot = msg as RoomSocketSnapshot;
-          if (handlers.onRoomSnapshot?.(snapshot) === false) {
+          if (
+            handlers.onRoomSnapshot?.(
+              snapshot,
+              issued.displayResourceBase
+            ) === false
+          ) {
             throw new RoomSocketSayError(
               "The room projection rejected its authenticated snapshot.",
               "snapshot_rejected"

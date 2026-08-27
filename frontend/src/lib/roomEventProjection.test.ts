@@ -36,11 +36,11 @@ describe("projectRoomEventsToTimeline", () => {
         type: "message_final",
         turn_id: "turn-1",
         content: "hello world",
-        avatar_image_url: "/api/attachments/codex-avatar",
+        avatar_image_url: "/api/attachments/codex-avatar?view=1",
         provider_kind: "codex_app_server",
         attachments: [attachment],
       }),
-    ]);
+    ], { displayResourceBase: "http://127.0.0.1:43123" });
 
     expect(timeline).toHaveLength(1);
     expect(timeline[0]).toMatchObject({
@@ -48,7 +48,7 @@ describe("projectRoomEventsToTimeline", () => {
       message: "hello world",
       flow_action: "message_final",
       attachments: [attachment],
-      avatar_image_url: "/api/attachments/codex-avatar",
+      avatar_image_url: "http://127.0.0.1:43123/api/attachments/codex-avatar?view=1",
       provider_kind: "codex_app_server",
     });
   });

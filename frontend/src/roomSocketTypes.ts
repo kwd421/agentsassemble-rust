@@ -17,12 +17,16 @@ import type { PluginEnvelope } from "./pluginSocketProtocol";
 import type { CommandAck } from "./types/generated/CommandAck";
 import type { CommandResolution } from "./types/generated/CommandResolution";
 import type { ServerProductSurface } from "./types/generated/ServerProductSurface";
+import type { RoomRuntimeTicket } from "./lib/roomRuntimeTicket";
 
 export interface RoomSocketHandlers {
   onLobby?: (events: LobbyEvent[]) => void;
   onRoster?: (members: RoomMember[]) => void;
   onSideChat?: (events: SideChatEvent[]) => void;
-  onRoomSnapshot?: (snapshot: RoomSocketSnapshot) => boolean | void;
+  onRoomSnapshot?: (
+    snapshot: RoomSocketSnapshot,
+    displayResourceBase: string
+  ) => boolean | void;
   onProviderCatalog?: (catalog: ProviderCatalogSnapshot) => void;
   onRoomEvents?: (events: RoomEvent[]) => void;
   onPlugin?: (events: PluginEnvelope[], snapshot: boolean) => void;
@@ -148,13 +152,7 @@ export type RoomCommandAck = Pick<
 };
 
 export interface RoomSocketClientDependencies {
-  getTicket?: (auth: RoomSocketAuth) => Promise<
-    {
-      ticket: string;
-      websocket_base_url: string;
-      server_proof_key: string;
-    }
-  >;
+  getTicket?: (auth: RoomSocketAuth) => Promise<RoomRuntimeTicket>;
   createSocket?: (url: string) => WebSocket;
   serverSurface: ServerProductSurface;
   expectedRoomId: string;

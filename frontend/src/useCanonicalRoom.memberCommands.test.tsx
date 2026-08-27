@@ -100,7 +100,7 @@ describe("useCanonicalRoom member commands", () => {
       available_providers: [],
       capabilities: { "room.manage": true },
     } satisfies RoomSocketSnapshot;
-    act(() => handlers?.onRoomSnapshot?.(snapshot));
+    act(() => handlers?.onRoomSnapshot?.(snapshot, "http://127.0.0.1:43123"));
 
     await act(async () => {
       await result.current.sendParticipantRole("agent-one", "reviewer");

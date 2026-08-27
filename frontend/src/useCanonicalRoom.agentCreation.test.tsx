@@ -180,7 +180,7 @@ describe("useCanonicalRoom agent creation projection", () => {
       })
     );
     await waitFor(() => expect(test.openSocket).toHaveBeenCalledOnce());
-    act(() => test.handlers()?.onRoomSnapshot?.(snapshot()));
+    act(() => test.handlers()?.onRoomSnapshot?.(snapshot(), "http://127.0.0.1:43123"));
     const created = createdAgentEvent();
 
     act(() => test.handlers()?.onRoomEvents?.([created]));
@@ -226,7 +226,7 @@ describe("useCanonicalRoom agent creation projection", () => {
       })
     );
     await waitFor(() => expect(test.openSocket).toHaveBeenCalledOnce());
-    act(() => test.handlers()?.onRoomSnapshot?.(snapshot()));
+    act(() => test.handlers()?.onRoomSnapshot?.(snapshot(), "http://127.0.0.1:43123"));
 
     act(() => test.handlers()?.onRoomEvents?.([createdAgentEvent(2, "starting")]));
 
@@ -252,7 +252,8 @@ describe("useCanonicalRoom agent creation projection", () => {
     await waitFor(() => expect(test.openSocket).toHaveBeenCalledOnce());
     act(() =>
       test.handlers()?.onRoomSnapshot?.(
-        snapshot([currentParticipant()], [currentSession()], [event(3, "message_final")])
+        snapshot([currentParticipant()], [currentSession()], [event(3, "message_final")]),
+        "http://127.0.0.1:43123"
       )
     );
     const resumed = snapshot(
@@ -262,7 +263,7 @@ describe("useCanonicalRoom agent creation projection", () => {
     );
     resumed.snapshot_mode = "resume";
 
-    act(() => test.handlers()?.onRoomSnapshot?.(resumed));
+    act(() => test.handlers()?.onRoomSnapshot?.(resumed, "http://127.0.0.1:43123"));
 
     expect(result.current.participants[0].status).toBe("joined");
     expect(result.current.agentSessions[0]).toMatchObject({
@@ -290,7 +291,8 @@ describe("useCanonicalRoom agent creation projection", () => {
     await waitFor(() => expect(test.openSocket).toHaveBeenCalledOnce());
     act(() =>
       test.handlers()?.onRoomSnapshot?.(
-        snapshot([currentParticipant()], [currentSession()], [event(3, "message_final")])
+        snapshot([currentParticipant()], [currentSession()], [event(3, "message_final")]),
+        "http://127.0.0.1:43123"
       )
     );
 

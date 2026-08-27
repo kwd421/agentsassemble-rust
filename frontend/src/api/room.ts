@@ -6,6 +6,7 @@ import {
   requestDesktopRuntimeTicket,
   type DesktopRuntimeTicket,
 } from "../lib/desktopBridge";
+import { parseBrowserRoomRuntimeTicket } from "../lib/roomRuntimeTicket";
 import {
   fetchJson,
   fetchJsonServerOperator,
@@ -622,30 +623,7 @@ export async function getWsTicket(auth: RoomSocketAuth): Promise<RoomSocketTicke
   }
   if (auth.kind === "session") {
     const payload = await exchangeSessionTicket("socket", auth.sessionToken);
-    const ticket = typeof payload.ticket === "string" ? payload.ticket : "";
-    const serverProofKey = typeof payload.server_proof_key === "string"
-      ? payload.server_proof_key
-      : "";
-    const ttlSeconds = payload.ttl_seconds;
-    if (
-      !/^[0-9a-f]{64}$/.test(ticket) ||
-      !/^[0-9a-f]{64}$/.test(serverProofKey) ||
-      !Number.isSafeInteger(ttlSeconds) ||
-      Number(ttlSeconds) < 0
-    ) {
-      throw new Error("Room session socket ticket response is invalid.");
-    }
-    const base = new URL(window.location.href);
-    if (base.protocol !== "http:" && base.protocol !== "https:") {
-      throw new Error("Room session socket origin is invalid.");
-    }
-    base.protocol = base.protocol === "https:" ? "wss:" : "ws:";
-    return {
-      ticket,
-      ttl_seconds: Number(ttlSeconds),
-      websocket_base_url: base.origin,
-      server_proof_key: serverProofKey,
-    };
+    return parseBrowserRoomRuntimeTicket(payload, window.location.href);
   }
   throw new Error("Host WebSocket authority requires the desktop Rust runtime.");
 }

@@ -247,8 +247,10 @@ export function openHarness(handlers: Parameters<typeof openRoomSocket>[2] = {})
         tickets.push(ticket);
         return {
           ticket,
+          ttl_seconds: 30,
           websocket_base_url: "ws://127.0.0.1:43123",
           server_proof_key: PROOF_KEY,
+          displayResourceBase: "http://127.0.0.1:43123",
         };
       },
       createSocket: () => {

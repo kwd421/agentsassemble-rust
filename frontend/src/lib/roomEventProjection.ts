@@ -1,4 +1,5 @@
 import type { LobbyEvent, RoomEvent } from "../api";
+import { resolveAttachmentReference } from "./attachmentReference";
 
 export type AgentSessionProgress = {
   participantId: string;
@@ -10,6 +11,7 @@ export type AgentSessionProgress = {
 
 type ProjectionOptions = {
   viewerParticipantId?: string;
+  displayResourceBase?: string;
   participantProfiles?: Record<
     string,
     {
@@ -38,14 +40,17 @@ function speakerIdentity(
   event: RoomEvent,
   actorId: string,
   viewerParticipantId: string,
-  participantProfiles: NonNullable<ProjectionOptions["participantProfiles"]>
+  participantProfiles: NonNullable<ProjectionOptions["participantProfiles"]>,
+  displayResourceBase: string,
 ) {
   const mine = actorId === "operator-local" || Boolean(viewerParticipantId && actorId === viewerParticipantId);
   const currentProfile = participantProfiles[actorId];
   return {
     name: String(currentProfile?.displayName || event.display_name || actorId || "Agent Session"),
     avatarImageUrl: String(
-      currentProfile ? currentProfile.avatarImageUrl || "" : event.avatar_image_url || ""
+      currentProfile
+        ? currentProfile.avatarImageUrl || ""
+        : resolveAttachmentReference(event.avatar_image_url, displayResourceBase) || ""
     ),
     providerKind: String(currentProfile?.providerKind || event.provider_kind || ""),
     role: String(currentProfile?.role || event.role || ""),
@@ -64,12 +69,19 @@ export function projectRoomEventsToTimeline(
   const activityIndex = new Map<string, number>();
   const viewerParticipantId = String(options.viewerParticipantId || "");
   const participantProfiles = options.participantProfiles || {};
+  const displayResourceBase = String(options.displayResourceBase || "");
 
   events.forEach((event) => {
     if (!event.id) return;
     const eventActor = actor(event);
     const key = timelineKey(event, eventActor.id);
-    const speaker = speakerIdentity(event, eventActor.id, viewerParticipantId, participantProfiles);
+    const speaker = speakerIdentity(
+      event,
+      eventActor.id,
+      viewerParticipantId,
+      participantProfiles,
+      displayResourceBase,
+    );
 
     if (event.type === "activity_delta" && event.category === "compaction") {
       return;

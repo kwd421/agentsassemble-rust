@@ -234,6 +234,7 @@ describe("browser session WebSocket ticket routing", () => {
       ttl_seconds: 30,
       websocket_base_url: window.location.origin.replace(/^http/, "ws"),
       server_proof_key: "d".repeat(64),
+      displayResourceBase: window.location.origin,
     });
   });
 });

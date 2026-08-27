@@ -48,6 +48,7 @@ import {
   type PendingProviderRequest,
   type ProviderRequestResolution,
 } from "./lib/providerRequestModel";
+import { useAcceptedRoomProjection } from "./lib/useAcceptedRoomProjection";
 
 export type { CanonicalRoomHistoryState } from "./lib/canonicalRoomProjection";
 
@@ -132,9 +133,6 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     "disconnected"
   );
   const [lastError, setLastError] = useState<Error | null>(null);
-  const [acceptedProjectionScope, setAcceptedProjectionScope] = useState("");
-  const acceptedProjectionScopeRef = useRef("");
-  const acceptedSocketRef = useRef<RoomSocketHandle | null>(null);
   const activeCatalogRevision = providerCatalogByRoom[roomId]?.catalog_revision || "";
 
   const applyEvents = useCallback((
@@ -240,30 +238,33 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     auth,
     viewerParticipantId
   );
+  const {
+    accepted: acceptedProjection,
+    accept: acceptProjection,
+    clear: clearAcceptedProjection,
+    scopeIsAccepted,
+    socketIsAccepted,
+  } = useAcceptedRoomProjection(projectionScopeKey);
   const authKey = projectionScopeKey;
   const projectionIsCurrent =
-    Boolean(projectionScopeKey) && acceptedProjectionScope === projectionScopeKey;
+    Boolean(projectionScopeKey) && acceptedProjection.scope === projectionScopeKey;
 
   useEffect(() => {
     if (!roomId || !auth || !serverSurface) {
       connectionGenerationRef.current += 1;
-      acceptedProjectionScopeRef.current = "";
-      acceptedSocketRef.current = null;
-      setAcceptedProjectionScope("");
+      clearAcceptedProjection();
       setSocket(null);
       setConnectionState("disconnected");
       return undefined;
     }
-    acceptedProjectionScopeRef.current = "";
-    acceptedSocketRef.current = null;
-    setAcceptedProjectionScope("");
+    clearAcceptedProjection();
     const connectionGeneration = connectionGenerationRef.current + 1;
     connectionGenerationRef.current = connectionGeneration;
     const connectionIsCurrent = () => connectionGenerationRef.current === connectionGeneration;
     setLastError(null);
     setConnectionState("connecting");
     const currentSocket = openSocket(auth, streams, {
-      onRoomSnapshot: (snapshot) => {
+      onRoomSnapshot: (snapshot, displayResourceBase) => {
         if (!connectionIsCurrent()) return false;
         const snapshotRoomId = String(snapshot.room?.room_id || "").trim();
         if (snapshotRoomId !== roomId) {
@@ -276,8 +277,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
           currentSocket.resync?.();
           return false;
         }
-        const projectionAlreadyAccepted =
-          acceptedProjectionScopeRef.current === projectionScopeKey;
+        const projectionAlreadyAccepted = scopeIsAccepted();
         const snapshotSettings = normalizeRoomGlobalSettings(
           snapshot.room_settings,
           roomId
@@ -373,25 +373,18 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
             ? previous
             : null
         );
-        acceptedProjectionScopeRef.current = projectionScopeKey;
-        acceptedSocketRef.current = currentSocket;
-        setAcceptedProjectionScope(projectionScopeKey);
+        acceptProjection(currentSocket, displayResourceBase);
         return true;
       },
       onRoomEvents: (events) => {
-        if (
-          connectionIsCurrent() &&
-          acceptedProjectionScopeRef.current === projectionScopeKey &&
-          acceptedSocketRef.current === currentSocket
-        ) {
+        if (connectionIsCurrent() && socketIsAccepted(currentSocket)) {
           applyEvents(roomId, events);
         }
       },
       onPlugin: (envelopes, snapshot) => {
         if (
           !connectionIsCurrent() ||
-          acceptedProjectionScopeRef.current !== projectionScopeKey ||
-          acceptedSocketRef.current !== currentSocket
+          !socketIsAccepted(currentSocket)
         ) return;
         setPluginEnvelopesByRoom((previous) => ({
           ...previous,
@@ -411,18 +404,13 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
       onProviderCatalog: (catalog) => {
         if (
           !connectionIsCurrent() ||
-          acceptedProjectionScopeRef.current !== projectionScopeKey ||
-          acceptedSocketRef.current !== currentSocket
+          !socketIsAccepted(currentSocket)
         ) return;
         setProviderCatalogByRoom((previous) => ({ ...previous, [roomId]: catalog }));
         setProvidersByRoom((previous) => ({ ...previous, [roomId]: catalog.providers || [] }));
       },
       onSideChat: (events) => {
-        if (
-          connectionIsCurrent() &&
-          acceptedProjectionScopeRef.current === projectionScopeKey &&
-          acceptedSocketRef.current === currentSocket
-        ) {
+        if (connectionIsCurrent() && socketIsAccepted(currentSocket)) {
           callbacksRef.current.onSideChat?.(events);
         }
       },
@@ -468,9 +456,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     return () => {
       if (connectionIsCurrent()) {
         connectionGenerationRef.current += 1;
-        acceptedProjectionScopeRef.current = "";
-        acceptedSocketRef.current = null;
-        setAcceptedProjectionScope("");
+        clearAcceptedProjection();
       }
       currentSocket.close();
       setSocket((current) => (current === currentSocket ? null : current));
@@ -478,11 +464,15 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     };
   }, [
     applyEvents,
+    acceptProjection,
     authKey,
+    clearAcceptedProjection,
     openSocket,
     projectionScopeKey,
     roomId,
     serverSurface,
+    scopeIsAccepted,
+    socketIsAccepted,
     streams,
     viewerParticipantId,
   ]);
@@ -491,13 +481,12 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     if (
       !projectionIsCurrent ||
       !socket ||
-      acceptedProjectionScopeRef.current !== projectionScopeKey ||
-      acceptedSocketRef.current !== socket
+      !socketIsAccepted(socket)
     ) {
       throw new Error("방 연결이 준비되지 않았습니다.");
     }
     return socket;
-  }, [projectionIsCurrent, projectionScopeKey, socket]);
+  }, [projectionIsCurrent, socket, socketIsAccepted]);
 
   const loadHistory = useCallback(
     async (beforeSeq: number) => {
@@ -746,11 +735,19 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
   const participants = projectionIsCurrent ? participantsByRoom[roomId] || [] : [];
   const agentSessions = projectionIsCurrent ? sessionsByRoom[roomId] || [] : [];
   const participantProfiles = useMemo(() => {
-    return canonicalParticipantProfiles(agentSessions, participants);
-  }, [agentSessions, participants]);
+    return canonicalParticipantProfiles(
+      agentSessions,
+      participants,
+      acceptedProjection.displayResourceBase,
+    );
+  }, [acceptedProjection.displayResourceBase, agentSessions, participants]);
   const timelineEvents: LobbyEvent[] = useMemo(
-    () => projectRoomEventsToTimeline(events, { viewerParticipantId, participantProfiles }),
-    [events, participantProfiles, viewerParticipantId]
+    () => projectRoomEventsToTimeline(events, {
+      viewerParticipantId,
+      participantProfiles,
+      displayResourceBase: acceptedProjection.displayResourceBase,
+    }),
+    [acceptedProjection.displayResourceBase, events, participantProfiles, viewerParticipantId]
   );
 
   return {

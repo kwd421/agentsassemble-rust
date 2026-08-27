@@ -126,7 +126,10 @@ describe("useCanonicalRoom synchronization", () => {
     );
     await waitFor(() => expect(harness.openSocket).toHaveBeenCalledOnce());
     act(() =>
-      harness.handlers()?.onRoomSnapshot?.(snapshot([event(5, "message_final")]))
+      harness.handlers()?.onRoomSnapshot?.(
+        snapshot([event(5, "message_final")]),
+        "http://127.0.0.1:43123"
+      )
     );
     act(() =>
       harness.handlers()?.onRoomEvents?.([
@@ -175,7 +178,10 @@ describe("useCanonicalRoom synchronization", () => {
     );
     await waitFor(() => expect(harness.openSocket).toHaveBeenCalledOnce());
     act(() =>
-      harness.handlers()?.onRoomSnapshot?.(snapshot([event(5, "message_final")]))
+      harness.handlers()?.onRoomSnapshot?.(
+        snapshot([event(5, "message_final")]),
+        "http://127.0.0.1:43123"
+      )
     );
 
     await expect(
@@ -216,7 +222,10 @@ describe("useCanonicalRoom synchronization", () => {
     act(() =>
       harness
         .handlers()
-        ?.onRoomSnapshot?.(snapshot([event(8, "message_final", "recovered")]))
+        ?.onRoomSnapshot?.(
+          snapshot([event(8, "message_final", "recovered")]),
+          "http://127.0.0.1:43123"
+        )
     );
     expect(result.current.syncIssue).toBeNull();
   });
@@ -244,7 +253,10 @@ describe("useCanonicalRoom synchronization", () => {
     expect(result.current.syncIssue?.category).toBe("plugin_event_gap");
 
     act(() =>
-      harness.handlers()?.onRoomSnapshot?.(snapshot([event(8, "message_final")]))
+      harness.handlers()?.onRoomSnapshot?.(
+        snapshot([event(8, "message_final")]),
+        "http://127.0.0.1:43123"
+      )
     );
     expect(result.current.syncIssue?.category).toBe("plugin_event_gap");
 
@@ -278,7 +290,10 @@ describe("useCanonicalRoom synchronization", () => {
     act(() =>
       harness
         .handlers()
-        ?.onRoomSnapshot?.(snapshot([event(8, "message_final", "connected")]))
+        ?.onRoomSnapshot?.(
+          snapshot([event(8, "message_final", "connected")]),
+          "http://127.0.0.1:43123"
+        )
     );
     expect(result.current.syncIssue).toBeNull();
   });

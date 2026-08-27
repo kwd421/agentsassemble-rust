@@ -3,7 +3,7 @@ import type {
   ProviderCatalogSnapshot,
   RoomSocketAuth,
 } from "../roomSocketClient";
-import { resolveDesktopRuntimeResource } from "./desktopBridge";
+import { resolveAttachmentReference } from "./attachmentReference";
 import { isParticipantRole } from "./participantRole";
 import {
   agentCreationProjectionFromEvent,
@@ -42,13 +42,17 @@ export type CanonicalParticipantProfile = {
 export function canonicalParticipantProfiles(
   sessions: RoomAgentSession[],
   participants: RoomMember[],
+  displayResourceBase: string,
 ): Record<string, CanonicalParticipantProfile> {
   const profiles: Record<string, CanonicalParticipantProfile> = {};
   sessions.forEach((session) => {
     if (!session.participant_id) return;
     profiles[session.participant_id] = {
       displayName: session.display_name,
-      avatarImageUrl: session.avatar_image_url,
+      avatarImageUrl: resolveAttachmentReference(
+        session.avatar_image_url,
+        displayResourceBase,
+      ),
       providerKind: session.provider_kind,
     };
   });
@@ -59,7 +63,10 @@ export function canonicalParticipantProfiles(
       displayName: participant.display_name || previous.displayName,
       avatarImageUrl:
         participant.avatar_image_url !== undefined
-          ? participant.avatar_image_url
+          ? resolveAttachmentReference(
+              participant.avatar_image_url,
+              displayResourceBase,
+            )
           : previous.avatarImageUrl,
       providerKind: participant.provider_kind || previous.providerKind,
       role: participant.role,
@@ -124,9 +131,7 @@ export function normalizeRoomParticipant(
       (participant.participant_type === "human" ? "room" : "agent_session"),
     created_at: participant.created_at || "",
     updated_at: participant.updated_at || "",
-    avatar_image_url: resolveDesktopRuntimeResource(
-      participant.avatar_image_url,
-    ),
+    avatar_image_url: participant.avatar_image_url,
   };
 }
 
@@ -219,9 +224,7 @@ export function applyParticipantEvents(
       role,
       avatar_image_url:
         "avatar_image_url" in event
-          ? resolveDesktopRuntimeResource(
-              String(event.avatar_image_url || "") || undefined,
-            )
+          ? String(event.avatar_image_url || "") || undefined
           : participant.avatar_image_url,
       updated_at: event.created_at || participant.updated_at,
     });

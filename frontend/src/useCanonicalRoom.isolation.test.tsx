@@ -37,6 +37,7 @@ function participant(participantId: string, role: RoomMember["role"]): RoomMembe
     meeting_id: "general",
     participant_id: participantId,
     display_name: participantId,
+    avatar_image_url: "/api/attachments/avatar-123?view=1",
     role,
     participant_type: "human",
     provider_kind: "",
@@ -58,6 +59,7 @@ function roomEvent(sequence: number, content: string): RoomEvent {
     type: "message_final",
     actor: { participant_id: "host-user", participant_type: "human" },
     display_name: "Host User",
+    avatar_image_url: "/api/attachments/avatar-123?view=1",
     content,
   };
 }
@@ -166,11 +168,15 @@ describe("useCanonicalRoom projection isolation", () => {
           participants: [participant("host-user", "director")],
           events: [roomEvent(1, "host-only message")],
           capabilities: { "room.manage": true, "participant.role.update": true },
-        })
+        }),
+        "http://127.0.0.1:43123"
       );
     });
     expect(hook.result.current.capabilities["room.manage"]).toBe(true);
     expect(hook.result.current.timelineEvents[0].message).toBe("host-only message");
+    expect(hook.result.current.timelineEvents[0].avatar_image_url).toBe(
+      "http://127.0.0.1:43123/api/attachments/avatar-123?view=1"
+    );
 
     const pendingHostCommand = hook.result.current.sendParticipantRole(
       "guest-user",
@@ -201,7 +207,8 @@ describe("useCanonicalRoom projection isolation", () => {
           participants: [participant("guest-user", "human")],
           events: [roomEvent(3, "guest-visible message")],
           capabilities: { "message.send": true },
-        })
+        }),
+        "http://127.0.0.1:43124"
       );
     });
     expect(hook.result.current.capabilities).toEqual({ "message.send": true });
@@ -211,6 +218,9 @@ describe("useCanonicalRoom projection isolation", () => {
     expect(hook.result.current.timelineEvents.map((item) => item.message)).toEqual([
       "guest-visible message",
     ]);
+    expect(hook.result.current.timelineEvents[0].avatar_image_url).toBe(
+      "http://127.0.0.1:43124/api/attachments/avatar-123?view=1"
+    );
 
     await act(async () => {
       hostCommand.resolve({
@@ -278,7 +288,8 @@ describe("useCanonicalRoom projection isolation", () => {
           participants: [participant("other-user", "director")],
           events: [roomEvent(1, "other-room secret")],
           capabilities: { "room.manage": true },
-        })
+        }),
+        "http://127.0.0.1:43123"
       );
     });
 

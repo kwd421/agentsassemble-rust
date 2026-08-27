@@ -1,5 +1,9 @@
 import type { HostProductSurface } from "../types/generated/HostProductSurface";
 import { PRODUCT_SURFACE_REVISION } from "../types/generated/PRODUCT_SURFACE_REVISION";
+import {
+  parseNativeRoomRuntimeTicket,
+  type RoomRuntimeTicket,
+} from "./roomRuntimeTicket";
 
 type TauriInternals = {
   invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>;
@@ -17,12 +21,7 @@ export function isDesktopWebview(): boolean {
   return Boolean(tauriInternals());
 }
 
-export interface DesktopRuntimeTicket {
-  ticket: string;
-  ttl_seconds: number;
-  websocket_base_url: string;
-  server_proof_key: string;
-}
+export type DesktopRuntimeTicket = RoomRuntimeTicket;
 
 export interface DesktopBootstrapGrant {
   phase: "empty" | "initializing" | "complete" | "repair_required";
@@ -86,7 +85,6 @@ export interface DesktopWorkspaceSelection {
   path: string;
 }
 
-let desktopRoomRuntimeHttpBase = "";
 let desktopHostSurface: HostProductSurface | null = null;
 
 function requireDesktopHostCommand(command: string) {
@@ -255,15 +253,6 @@ function validatedDesktopHttpBase(value: string): string {
   return expected;
 }
 
-function rememberDesktopRuntime(ticket: DesktopRuntimeTicket): DesktopRuntimeTicket {
-  const endpoint = new URL(ticket.websocket_base_url);
-  if (endpoint.protocol !== "ws:" || endpoint.hostname !== "127.0.0.1" || !endpoint.port) {
-    throw new Error("데스크톱 Rust 런타임 주소가 안전하지 않습니다.");
-  }
-  desktopRoomRuntimeHttpBase = `http://127.0.0.1:${endpoint.port}`;
-  return ticket;
-}
-
 function validateDesktopHttpTicket(
   value: unknown,
   label: string
@@ -354,8 +343,8 @@ export async function requestDesktopRuntimeTicket(
   }
   requireDesktopHostCommand("runtime_ticket");
   return tauri
-    .invoke<DesktopRuntimeTicket>("runtime_ticket", { roomId })
-    .then(rememberDesktopRuntime);
+    .invoke<unknown>("runtime_ticket", { roomId })
+    .then(parseNativeRoomRuntimeTicket);
 }
 
 export async function requestDesktopBootstrapStatus(): Promise<DesktopBootstrapGrant> {
@@ -530,7 +519,7 @@ export async function fetchDesktopRuntime(
   const issued = await requestDesktopRuntimeTicket(roomId);
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${issued.ticket}`);
-  return fetch(`${desktopRoomRuntimeHttpBase}${path}`, { ...init, headers });
+  return fetch(`${issued.displayResourceBase}${path}`, { ...init, headers });
 }
 
 export async function fetchDesktopOperatorRuntimeWithBase(
@@ -577,11 +566,6 @@ export async function fetchDesktopCentralRegistration(
       host_key_fingerprint: issued.host_key_fingerprint,
     },
   };
-}
-
-export function resolveDesktopRuntimeResource(value: string | undefined): string | undefined {
-  if (!value || !value.startsWith("/api/attachments/")) return value;
-  return desktopRoomRuntimeHttpBase ? `${desktopRoomRuntimeHttpBase}${value}` : value;
 }
 
 export async function chooseDesktopWorkspace(): Promise<DesktopWorkspaceSelection> {

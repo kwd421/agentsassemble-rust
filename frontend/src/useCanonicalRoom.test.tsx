@@ -149,7 +149,7 @@ describe("useCanonicalRoom", () => {
     await waitFor(() => expect(openSocket).toHaveBeenCalledOnce());
     const initial = snapshot([event(5, "message_final", "hello")]);
 
-    act(() => handlers?.onRoomSnapshot?.(initial));
+    act(() => handlers?.onRoomSnapshot?.(initial, "http://127.0.0.1:43123"));
     expect(result.current.roomSettings?.conversationMode).toBe("ordered");
 
     act(() =>
@@ -195,7 +195,7 @@ describe("useCanonicalRoom", () => {
     );
     await waitFor(() => expect(openSocket).toHaveBeenCalledOnce());
 
-    act(() => handlers?.onRoomSnapshot?.(snapshot([])));
+    act(() => handlers?.onRoomSnapshot?.(snapshot([]), "http://127.0.0.1:43123"));
     act(() =>
       handlers?.onProviderCatalog?.({
         status: "ready",
@@ -248,7 +248,10 @@ describe("useCanonicalRoom", () => {
     await waitFor(() => expect(openSocket).toHaveBeenCalledOnce());
     const stale = { ...event(4, "agent_session_state"), agent_session: session("idle") };
 
-    act(() => handlers?.onRoomSnapshot?.(snapshot([stale], "initial", [session("stopped")])));
+    act(() => handlers?.onRoomSnapshot?.(
+      snapshot([stale], "initial", [session("stopped")]),
+      "http://127.0.0.1:43123"
+    ));
 
     expect(result.current.agentSessions[0].runtime_status).toBe("stopped");
   });
@@ -298,7 +301,10 @@ describe("useCanonicalRoom", () => {
     );
     await waitFor(() => expect(openSocket).toHaveBeenCalledOnce());
 
-    act(() => handlers?.onRoomSnapshot?.(snapshot([event(3, "message_delta", "hello ")])));
+    act(() => handlers?.onRoomSnapshot?.(
+      snapshot([event(3, "message_delta", "hello ")]),
+      "http://127.0.0.1:43123"
+    ));
     act(() =>
       handlers?.onRoomEvents?.([
         event(4, "message_delta", "world"),
@@ -312,7 +318,10 @@ describe("useCanonicalRoom", () => {
     expect(result.current.agentSessions[0].runtime_status).toBe("busy");
     expect(result.current.agentSessionProgress).toBeNull();
 
-    act(() => handlers?.onRoomSnapshot?.(snapshot([], "resume")));
+    act(() => handlers?.onRoomSnapshot?.(
+      snapshot([], "resume"),
+      "http://127.0.0.1:43123"
+    ));
     expect(result.current.timelineEvents[0].message).toBe("hello world");
 
     await act(async () => {
@@ -362,7 +371,7 @@ describe("useCanonicalRoom", () => {
         meeting_id: "general",
         participant_id: "codex",
         display_name: "Antigravity CLI",
-        avatar_image_url: "/api/attachments/old-avatar",
+        avatar_image_url: "/api/attachments/old-avatar?view=1",
         role: "agent",
         participant_type: "local",
         provider_kind: "antigravity_live_session",
@@ -374,11 +383,14 @@ describe("useCanonicalRoom", () => {
       },
     ];
 
-    act(() => handlers?.onRoomSnapshot?.(initial));
+    act(() => handlers?.onRoomSnapshot?.(initial, "http://127.0.0.1:43123"));
     expect(result.current.timelineEvents[0]).toMatchObject({
       name: "Antigravity CLI",
-      avatar_image_url: "/api/attachments/old-avatar",
+      avatar_image_url: "http://127.0.0.1:43123/api/attachments/old-avatar?view=1",
     });
+    expect(result.current.participants[0].avatar_image_url).toBe(
+      "/api/attachments/old-avatar?view=1"
+    );
 
     act(() =>
       handlers?.onRoomEvents?.([
@@ -387,7 +399,7 @@ describe("useCanonicalRoom", () => {
           turn_id: undefined,
           participant_id: "codex",
           display_name: "Makima",
-          avatar_image_url: "/api/attachments/makima-avatar",
+          avatar_image_url: "/api/attachments/makima-avatar?view=1",
           role: "director",
         },
       ])
@@ -395,7 +407,7 @@ describe("useCanonicalRoom", () => {
 
     expect(result.current.timelineEvents[0]).toMatchObject({
       name: "Makima",
-      avatar_image_url: "/api/attachments/makima-avatar",
+      avatar_image_url: "http://127.0.0.1:43123/api/attachments/makima-avatar?view=1",
       role: "director",
     });
     expect(result.current.participants[0].display_name).toBe("Makima");
@@ -461,7 +473,7 @@ describe("useCanonicalRoom", () => {
           updated_at: "",
         },
       ];
-      act(() => handlers?.onRoomSnapshot?.(initial));
+      act(() => handlers?.onRoomSnapshot?.(initial, "http://127.0.0.1:43123"));
       expect(result.current.participants.map((participant) => participant.participant_id)).toEqual([
         "codex",
       ]);
@@ -485,7 +497,10 @@ describe("useCanonicalRoom", () => {
           status: eventType === "participant_left" ? "left" : "kicked",
         },
       ];
-      act(() => handlers?.onRoomSnapshot?.(terminalSnapshot));
+      act(() => handlers?.onRoomSnapshot?.(
+        terminalSnapshot,
+        "http://127.0.0.1:43123"
+      ));
       expect(result.current.participants).toEqual([]);
     }
   );
@@ -549,7 +564,7 @@ describe("useCanonicalRoom", () => {
         updated_at: "",
       },
     ];
-    act(() => handlers?.onRoomSnapshot?.(initial));
+    act(() => handlers?.onRoomSnapshot?.(initial, "http://127.0.0.1:43123"));
 
     await act(async () => result.current.sendParticipantKick("codex"));
 
@@ -596,7 +611,7 @@ describe("useCanonicalRoom", () => {
       },
     ];
 
-    act(() => handlers?.onRoomSnapshot?.(initial));
+    act(() => handlers?.onRoomSnapshot?.(initial, "http://127.0.0.1:43123"));
 
     expect(result.current.timelineEvents[0]).toMatchObject({
       name: "Luna",
@@ -610,7 +625,7 @@ describe("useCanonicalRoom", () => {
       meeting_id: "general",
       participant_id: "codex",
       display_name: "Makima",
-      avatar_image_url: "/api/attachments/makima-avatar",
+      avatar_image_url: "/api/attachments/makima-avatar?view=1",
       role: "agent",
       participant_type: "local",
       provider_kind: "antigravity_live_session",
@@ -623,7 +638,7 @@ describe("useCanonicalRoom", () => {
     const updatedSession = {
       ...session(),
       display_name: "Makima",
-      avatar_image_url: "/api/attachments/makima-avatar",
+      avatar_image_url: "/api/attachments/makima-avatar?view=1",
     };
     const command = vi.fn(async (action: string) => ({
       op: "ack",
@@ -669,13 +684,13 @@ describe("useCanonicalRoom", () => {
       { ...updatedParticipant, display_name: "Antigravity CLI", avatar_image_url: "" },
     ];
 
-    act(() => handlers?.onRoomSnapshot?.(initial));
+    act(() => handlers?.onRoomSnapshot?.(initial, "http://127.0.0.1:43123"));
     expect(result.current.timelineEvents[0].name).toBe("Antigravity CLI");
 
     await act(async () => {
       await result.current.sendAgentConfigure(session(), {
         display_name: "Makima",
-        avatar_image_url: "/api/attachments/makima-avatar",
+        avatar_image_url: "/api/attachments/makima-avatar?view=1",
       });
     });
 
@@ -683,7 +698,7 @@ describe("useCanonicalRoom", () => {
     expect(result.current.agentSessions[0]).toMatchObject(updatedSession);
     expect(result.current.timelineEvents[0]).toMatchObject({
       name: "Makima",
-      avatar_image_url: "/api/attachments/makima-avatar",
+      avatar_image_url: "http://127.0.0.1:43123/api/attachments/makima-avatar?view=1",
     });
 
     await act(async () => {
@@ -695,7 +710,7 @@ describe("useCanonicalRoom", () => {
       expect.arrayContaining([
         expect.objectContaining({
           name: "Makima",
-          avatar_image_url: "/api/attachments/makima-avatar",
+          avatar_image_url: "http://127.0.0.1:43123/api/attachments/makima-avatar?view=1",
         }),
       ])
     );
