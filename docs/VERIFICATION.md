@@ -2534,14 +2534,15 @@ changing other persistence failures. Commit `ded26f5` separated implemented/test
 native commands, capabilities, and permissions from the still-incomplete frontend and
 packaged flow.
 
-Re-review found: (3) the active spec assigned operation-grant consumption to the native
-bridge instead of the matching HTTP route; (4) architecture collapsed distinct local
-HTTP grants into server-operator authority; (5) architecture still claimed every public
-session exchange was unreachable; and (6) the active spec claimed an attachment grant
-that has no current purpose or route. Commits `d7dfb44`, `4bf1938`, and `5db9cdd`
-corrected the custody owner and exact-purpose families, recorded the verified
-WebSocket/profile/preference exchanges, and left room attachment exchange explicitly
-incomplete. Full `make verify` passed at `c104791`; every later documentation correction
+Web re-review of `ded26f5` found: (3) the active spec assigned operation-grant
+consumption to the native bridge instead of the matching HTTP route; and (4)
+architecture collapsed distinct local HTTP grants into server-operator authority.
+Commit `d7dfb44` corrected both. Daybreaker review of `d7dfb44` then found (5)
+architecture still claimed every public session exchange was unreachable; commit
+`4bf1938` recorded the verified WebSocket/profile/preference exchanges. Web review of
+`4bf1938` then found (6) the active spec claimed an attachment grant that has no current
+purpose or route; commit `5db9cdd` left room attachment exchange explicitly incomplete.
+Full `make verify` passed at `c104791`; every later documentation correction
 passed architecture, source-growth, policy, and diff gates. Final web verdict for
 `5db9cdd`: `APPROVE — Critical 0 / High 0 / Medium 0`. Final Daybreaker verdict:
 `APPROVE — Critical 0 / High 0 / Medium 0`. Neither review used Deep Scan or another
