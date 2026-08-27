@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 
 use axum::{
     extract::Request,
@@ -9,41 +9,45 @@ use axum::{
 
 use crate::http_api::TAURI_ORIGINS;
 
-const PROXY_PROVENANCE_HEADERS: [&str; 9] = [
+const EXACT_PROXY_PROVENANCE_HEADERS: [&str; 6] = [
     "forwarded",
-    "x-forwarded-for",
-    "x-forwarded-host",
-    "x-forwarded-proto",
-    "cf-connecting-ip",
-    "cf-ipcountry",
-    "cf-ray",
-    "cf-visitor",
+    "via",
+    "x-real-ip",
     "cdn-loop",
+    "x-agentsassemble-proxy-token",
+    "x-agentsassemble-client-ip",
 ];
 
 #[derive(Clone, Copy)]
 pub(crate) struct LocalIngress {
-    port: u16,
+    listener: SocketAddr,
 }
 
 impl LocalIngress {
     pub(crate) fn from_listener(address: SocketAddr) -> Option<Self> {
-        address.ip().is_loopback().then_some(Self {
-            port: address.port(),
-        })
+        local_bind_is_supported(address).then_some(Self { listener: address })
     }
 
     fn authorizes(self, peer: PeerAddr, headers: &HeaderMap) -> bool {
-        peer.0.ip().is_loopback()
-            && !has_proxy_provenance(headers)
-            && single_header(headers, header::HOST)
-                .is_some_and(|host| local_authority(host, self.port))
-            && single_optional_header(headers, header::ORIGIN).is_ok_and(|origin| {
-                origin.is_none_or(|origin| {
-                    TAURI_ORIGINS.contains(&origin) || local_origin(origin, self.port)
-                })
+        if !peer.0.ip().is_loopback() || has_proxy_provenance(headers) {
+            return false;
+        }
+        let Some(authority) = single_header(headers, header::HOST)
+            .and_then(|host| local_authority(host, self.listener))
+        else {
+            return false;
+        };
+        single_optional_header(headers, header::ORIGIN).is_ok_and(|origin| {
+            origin.is_none_or(|origin| {
+                TAURI_ORIGINS.contains(&origin) || local_origin(origin, &authority)
             })
+        })
     }
+}
+
+#[must_use]
+pub fn local_bind_is_supported(address: SocketAddr) -> bool {
+    address.ip().is_loopback()
 }
 
 #[derive(Clone, Copy)]
@@ -81,40 +85,65 @@ fn single_optional_header(
 }
 
 fn has_proxy_provenance(headers: &HeaderMap) -> bool {
-    PROXY_PROVENANCE_HEADERS
-        .iter()
-        .any(|name| headers.contains_key(*name))
+    headers.keys().any(|name| {
+        let name = name.as_str();
+        EXACT_PROXY_PROVENANCE_HEADERS.contains(&name)
+            || name.starts_with("x-forwarded-")
+            || name.starts_with("cf-")
+    })
 }
 
-fn local_origin(origin: &str, port: u16) -> bool {
-    origin
+fn local_origin(origin: &str, request_authority: &Authority) -> bool {
+    let Some(origin_authority) = origin
         .strip_prefix("http://")
-        .is_some_and(|authority| local_authority(authority, port))
-}
-
-fn local_authority(value: &str, port: u16) -> bool {
-    let Ok(authority) = value.parse::<Authority>() else {
+        .and_then(|authority| authority.parse::<Authority>().ok())
+    else {
         return false;
     };
-    authority.port_u16() == Some(port)
-        && (authority.host().eq_ignore_ascii_case("localhost")
-            || authority.host() == "127.0.0.1"
-            || authority.host() == "[::1]")
+    origin_authority
+        .host()
+        .eq_ignore_ascii_case(request_authority.host())
+        && origin_authority.port_u16() == request_authority.port_u16()
+}
+
+fn local_authority(value: &str, listener: SocketAddr) -> Option<Authority> {
+    let Ok(authority) = value.parse::<Authority>() else {
+        return None;
+    };
+    let hostname_matches = authority_host_ip(authority.host()) == Some(listener.ip())
+        || (authority.host().eq_ignore_ascii_case("localhost")
+            && listener_accepts_localhost(listener.ip()));
+    (authority.port_u16() == Some(listener.port()) && hostname_matches).then_some(authority)
+}
+
+fn listener_accepts_localhost(address: IpAddr) -> bool {
+    match address {
+        IpAddr::V4(address) => address.octets() == [127, 0, 0, 1],
+        IpAddr::V6(address) => address.is_loopback(),
+    }
+}
+
+fn authority_host_ip(host: &str) -> Option<IpAddr> {
+    host.strip_prefix('[')
+        .and_then(|host| host.strip_suffix(']'))
+        .unwrap_or(host)
+        .parse()
+        .ok()
 }
 
 #[cfg(test)]
 mod tests {
-    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
     use axum::http::{HeaderMap, HeaderValue, header};
 
-    use super::{LocalIngress, PeerAddr};
+    use super::{LocalIngress, PeerAddr, TAURI_ORIGINS};
 
     const PORT: u16 = 41_955;
 
     #[test]
     fn local_authority_accepts_only_exact_loopback_aliases_and_port() {
-        for host in ["localhost:41955", "127.0.0.1:41955", "[::1]:41955"] {
+        for host in ["localhost:41955", "127.0.0.1:41955"] {
             assert!(trusted(&[("host", host)]));
         }
         for host in [
@@ -125,20 +154,35 @@ mod tests {
         ] {
             assert!(!trusted(&[("host", host)]));
         }
+
+        let alternate = LocalIngress::from_listener(SocketAddr::from(([127, 0, 0, 2], PORT)))
+            .unwrap_or_else(|| panic!("alternate loopback listener must be accepted"));
+        assert!(alternate.authorizes(loopback_peer(), &headers(&[("host", "127.0.0.2:41955")])));
+        assert!(!alternate.authorizes(loopback_peer(), &headers(&[("host", "127.0.0.3:41955")])));
+        assert!(!alternate.authorizes(loopback_peer(), &headers(&[("host", "localhost:41955")])));
+
+        let ipv6 = LocalIngress::from_listener(SocketAddr::from((Ipv6Addr::LOCALHOST, PORT)))
+            .unwrap_or_else(|| panic!("IPv6 loopback listener must be accepted"));
+        for host in ["localhost:41955", "[::1]:41955"] {
+            assert!(ipv6.authorizes(loopback_peer(), &headers(&[("host", host)])));
+        }
     }
 
     #[test]
     fn local_origin_preserves_same_server_and_exact_tauri_origins() {
-        for origin in [
-            "http://localhost:41955",
-            "http://127.0.0.1:41955",
-            "http://[::1]:41955",
-            "tauri://localhost",
-            "http://tauri.localhost",
-            "https://tauri.localhost",
+        for (host, origin) in [
+            ("localhost:41955", "http://localhost:41955"),
+            ("127.0.0.1:41955", "http://127.0.0.1:41955"),
         ] {
+            assert!(trusted(&[("host", host), ("origin", origin)]));
+        }
+        for origin in TAURI_ORIGINS {
             assert!(trusted(&[("host", "127.0.0.1:41955"), ("origin", origin)]));
         }
+        assert!(!trusted(&[
+            ("host", "127.0.0.1:41955"),
+            ("origin", "http://localhost:41955"),
+        ]));
         assert!(!trusted(&[
             ("host", "127.0.0.1:41955"),
             ("origin", "https://example.com"),
@@ -147,10 +191,9 @@ mod tests {
 
     #[test]
     fn proxy_provenance_and_non_loopback_peer_fail_closed() {
-        assert!(!trusted(&[
-            ("host", "127.0.0.1:41955"),
-            ("x-forwarded-for", "203.0.113.10"),
-        ]));
+        for header in ["via", "x-real-ip", "x-forwarded-client-cert", "cf-ray"] {
+            assert!(!trusted(&[("host", "127.0.0.1:41955"), (header, "proxy"),]));
+        }
         let headers = headers(&[("host", "127.0.0.1:41955")]);
         let peer = PeerAddr(SocketAddr::from(([192, 0, 2, 1], 50_000)));
         assert!(!ingress().authorizes(peer, &headers));

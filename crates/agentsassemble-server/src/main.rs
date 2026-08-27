@@ -1,8 +1,4 @@
-use std::{
-    net::{IpAddr, Ipv4Addr, SocketAddr},
-    path::PathBuf,
-    time::Duration,
-};
+use std::{net::SocketAddr, path::PathBuf, time::Duration};
 
 use agentsassemble_persistence::{
     LocalBootstrapPhase as PersistenceBootstrapPhase, LocalBootstrapStatus, PersistenceError,
@@ -16,7 +12,8 @@ use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService};
 use agentsassemble_server::{
     AppState, HostSecret, TicketIssueError, TicketStore, issue_central_registration_ticket,
     issue_local_operator_http_ticket, issue_local_ticket, issue_preferences_read_ticket,
-    issue_preferences_write_ticket, issue_settings_directory_read_ticket, serve,
+    issue_preferences_write_ticket, issue_settings_directory_read_ticket, local_bind_is_supported,
+    serve,
 };
 use anyhow::Context;
 use clap::Parser;
@@ -57,7 +54,7 @@ async fn main() -> anyhow::Result<()> {
     let host_token = read_control_secret(&mut stdin).await?;
     let host_secret = HostSecret::new(host_token)?;
     let cancellation = CancellationToken::new();
-    if args.bind.ip() != IpAddr::V4(Ipv4Addr::LOCALHOST) && !args.bind.ip().is_loopback() {
+    if !local_bind_is_supported(args.bind) {
         anyhow::bail!("the local runtime may bind only to loopback");
     }
     if let Some(parent) = args.database.parent() {
