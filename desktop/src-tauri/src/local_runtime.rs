@@ -20,6 +20,7 @@ use uuid::Uuid;
 use crate::runtime_supervisor;
 
 mod control;
+mod human_invite;
 
 use control::{
     TicketFailure, request_bootstrap_initialize, request_bootstrap_status,

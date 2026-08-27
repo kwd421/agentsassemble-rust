@@ -140,6 +140,20 @@ pub(super) fn request_preferences_write_ticket(
     request_http_ticket(runtime, HttpTicketKind::PreferencesWrite(room_id))
 }
 
+pub(super) fn request_human_invite_create_ticket(
+    runtime: &mut RuntimeProcess,
+    room_id: &str,
+) -> Result<HttpTicketGrant, TicketFailure> {
+    request_http_ticket(runtime, HttpTicketKind::HumanInviteCreate(room_id))
+}
+
+pub(super) fn request_human_invite_revoke_ticket(
+    runtime: &mut RuntimeProcess,
+    room_id: &str,
+) -> Result<HttpTicketGrant, TicketFailure> {
+    request_http_ticket(runtime, HttpTicketKind::HumanInviteRevoke(room_id))
+}
+
 pub(super) fn request_settings_directory_read_ticket(
     runtime: &mut RuntimeProcess,
 ) -> Result<HttpTicketGrant, TicketFailure> {
@@ -151,6 +165,8 @@ enum HttpTicketKind<'a> {
     Operator,
     PreferencesRead(&'a str),
     PreferencesWrite(&'a str),
+    HumanInviteCreate(&'a str),
+    HumanInviteRevoke(&'a str),
     SettingsDirectoryRead,
 }
 
@@ -175,6 +191,18 @@ fn request_http_ticket(
                 meeting_id: room_id.to_owned(),
             }
         }
+        HttpTicketKind::HumanInviteCreate(room_id) => {
+            LocalControlRequest::IssueHumanInviteCreateTicket {
+                request_id: request_id.clone(),
+                meeting_id: room_id.to_owned(),
+            }
+        }
+        HttpTicketKind::HumanInviteRevoke(room_id) => {
+            LocalControlRequest::IssueHumanInviteRevokeTicket {
+                request_id: request_id.clone(),
+                meeting_id: room_id.to_owned(),
+            }
+        }
         HttpTicketKind::SettingsDirectoryRead => {
             LocalControlRequest::IssueSettingsDirectoryReadTicket {
                 request_id: request_id.clone(),
@@ -188,7 +216,7 @@ fn request_http_ticket(
         || ttl_seconds == 0
     {
         return Err(TicketFailure::Broken(
-            "local runtime returned an invalid operator ticket grant".to_owned(),
+            "local runtime returned an invalid HTTP ticket grant".to_owned(),
         ));
     }
     Ok(HttpTicketGrant {
@@ -223,6 +251,22 @@ fn decode_http_ticket_response(
         (
             HttpTicketKind::PreferencesWrite(_),
             LocalControlResponse::PreferencesWriteOk {
+                request_id: response_id,
+                ticket,
+                ttl_seconds,
+            },
+        ) if response_id == request_id => Ok((ticket, ttl_seconds)),
+        (
+            HttpTicketKind::HumanInviteCreate(_),
+            LocalControlResponse::HumanInviteCreateOk {
+                request_id: response_id,
+                ticket,
+                ttl_seconds,
+            },
+        ) if response_id == request_id => Ok((ticket, ttl_seconds)),
+        (
+            HttpTicketKind::HumanInviteRevoke(_),
+            LocalControlResponse::HumanInviteRevokeOk {
                 request_id: response_id,
                 ticket,
                 ttl_seconds,
@@ -403,6 +447,20 @@ mod tests {
             decode_http_ticket_response(
                 HttpTicketKind::PreferencesRead("general"),
                 "request-1",
+                response,
+            ),
+            Err(TicketFailure::Broken(_))
+        ));
+
+        let response = LocalControlResponse::HumanInviteRevokeOk {
+            request_id: "request-2".to_owned(),
+            ticket: "b".repeat(64),
+            ttl_seconds: 30,
+        };
+        assert!(matches!(
+            decode_http_ticket_response(
+                HttpTicketKind::HumanInviteCreate("general"),
+                "request-2",
                 response,
             ),
             Err(TicketFailure::Broken(_))

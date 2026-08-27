@@ -5,6 +5,8 @@ desktop_commands! {
     runtime_operator_ticket => "allow-runtime-operator-ticket",
     runtime_preferences_read_ticket => "allow-runtime-preferences-read-ticket",
     runtime_preferences_write_ticket => "allow-runtime-preferences-write-ticket",
+    runtime_human_invite_create_ticket => "allow-runtime-human-invite-create-ticket",
+    runtime_human_invite_revoke_ticket => "allow-runtime-human-invite-revoke-ticket",
     runtime_settings_directory_read_ticket => "allow-runtime-settings-directory-read-ticket",
     runtime_central_registration_ticket => "allow-runtime-central-registration-ticket",
     cache_selected_room_directory => "allow-cache-selected-room-directory",

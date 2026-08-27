@@ -159,6 +159,40 @@ async fn runtime_preferences_write_ticket(
     .map_err(|error| format!("runtime preferences write ticket worker failed: {error}"))?
 }
 
+#[tauri::command(rename_all = "camelCase")]
+async fn runtime_human_invite_create_ticket(
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+    room_id: String,
+) -> Result<HttpTicketGrant, String> {
+    caller_is_bundled_ui(&window)?;
+    let runtime_app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        runtime_app
+            .state::<LocalRuntime>()
+            .issue_human_invite_create_ticket(&runtime_app, &room_id)
+    })
+    .await
+    .map_err(|error| format!("runtime human invite create ticket worker failed: {error}"))?
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn runtime_human_invite_revoke_ticket(
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+    room_id: String,
+) -> Result<HttpTicketGrant, String> {
+    caller_is_bundled_ui(&window)?;
+    let runtime_app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        runtime_app
+            .state::<LocalRuntime>()
+            .issue_human_invite_revoke_ticket(&runtime_app, &room_id)
+    })
+    .await
+    .map_err(|error| format!("runtime human invite revoke ticket worker failed: {error}"))?
+}
+
 #[tauri::command]
 async fn runtime_settings_directory_read_ticket(
     window: WebviewWindow,
@@ -316,7 +350,7 @@ mod tests {
     #[test]
     fn host_surface_is_the_registered_permission_intersection() {
         let surface = registered_host_product_surface();
-        assert_eq!(surface.commands.len(), 11);
+        assert_eq!(surface.commands.len(), 13);
         assert!(
             surface
                 .commands

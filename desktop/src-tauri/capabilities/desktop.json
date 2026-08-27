@@ -11,6 +11,8 @@
     "allow-runtime-operator-ticket",
     "allow-runtime-preferences-read-ticket",
     "allow-runtime-preferences-write-ticket",
+    "allow-runtime-human-invite-create-ticket",
+    "allow-runtime-human-invite-revoke-ticket",
     "allow-runtime-settings-directory-read-ticket",
     "allow-runtime-central-registration-ticket",
     "allow-cache-selected-room-directory",
