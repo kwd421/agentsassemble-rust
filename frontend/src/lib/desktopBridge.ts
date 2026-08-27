@@ -57,6 +57,8 @@ export interface DesktopOperatorHttpTicket {
 type DesktopHttpTicketCommand =
   | "runtime_preferences_read_ticket"
   | "runtime_preferences_write_ticket"
+  | "runtime_human_invite_create_ticket"
+  | "runtime_human_invite_revoke_ticket"
   | "runtime_settings_directory_read_ticket";
 
 export interface DesktopCentralRegistrationBinding {
@@ -414,6 +416,26 @@ export function requestDesktopPreferencesWriteTicket(
   );
 }
 
+export function requestDesktopHumanInviteCreateTicket(
+  roomId: string
+): Promise<DesktopOperatorHttpTicket> {
+  return requestDesktopHttpTicket(
+    "runtime_human_invite_create_ticket",
+    { roomId },
+    "사람 초대 생성 티켓"
+  );
+}
+
+export function requestDesktopHumanInviteRevokeTicket(
+  roomId: string
+): Promise<DesktopOperatorHttpTicket> {
+  return requestDesktopHttpTicket(
+    "runtime_human_invite_revoke_ticket",
+    { roomId },
+    "사람 초대 취소 티켓"
+  );
+}
+
 export function requestDesktopSettingsDirectoryReadTicket(): Promise<DesktopOperatorHttpTicket> {
   return requestDesktopHttpTicket(
     "runtime_settings_directory_read_ticket",
@@ -446,6 +468,42 @@ export async function fetchDesktopRoomPreferences(
     method,
     headers,
   });
+}
+
+async function fetchDesktopHumanInvite(
+  roomId: string,
+  operation: "create" | "revoke",
+  init: RequestInit
+): Promise<Response> {
+  if (String(init.method || "POST").toUpperCase() !== "POST") {
+    throw new Error("사람 초대 요청은 POST만 허용합니다.");
+  }
+  const issued =
+    operation === "create"
+      ? await requestDesktopHumanInviteCreateTicket(roomId)
+      : await requestDesktopHumanInviteRevokeTicket(roomId);
+  const headers = new Headers(init.headers);
+  headers.set("Authorization", `Bearer ${issued.ticket}`);
+  return fetch(`${issued.http_base_url}/api/room-invite/${operation}`, {
+    ...init,
+    cache: "no-store",
+    method: "POST",
+    headers,
+  });
+}
+
+export function fetchDesktopHumanInviteCreate(
+  roomId: string,
+  init: RequestInit
+): Promise<Response> {
+  return fetchDesktopHumanInvite(roomId, "create", init);
+}
+
+export function fetchDesktopHumanInviteRevoke(
+  roomId: string,
+  init: RequestInit
+): Promise<Response> {
+  return fetchDesktopHumanInvite(roomId, "revoke", init);
 }
 
 export async function requestDesktopCentralRegistrationTicket(): Promise<DesktopCentralRegistrationTicket> {
