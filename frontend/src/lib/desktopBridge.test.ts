@@ -64,6 +64,42 @@ describe("desktop exact-purpose HTTP bridge", () => {
     expect(headers.get("Content-Type")).toBe("application/json");
   });
 
+  it("rejects coercible central-registration fields before network dispatch", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const canonicalGrant = {
+      ticket: "a".repeat(64),
+      ttl_seconds: 30,
+      http_base_url: "http://127.0.0.1:49154",
+      server_id: "0198f492-c76a-7000-8000-000000000001",
+      host_public_key_x: "A".repeat(43),
+      host_key_fingerprint: "B".repeat(43),
+    };
+
+    for (const field of ["ticket", "host_public_key_x", "host_key_fingerprint"] as const) {
+      const malformedGrant = {
+        ...canonicalGrant,
+        [field]: [canonicalGrant[field]],
+      };
+      const invoke = vi
+        .fn()
+        .mockResolvedValueOnce({
+          revision: PRODUCT_SURFACE_REVISION,
+          digest: "2".repeat(64),
+          commands: hostCommands,
+        })
+        .mockResolvedValueOnce(malformedGrant);
+      Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
+
+      await requestDesktopHostProductSurface();
+      await expect(
+        fetchDesktopCentralRegistration({ method: "POST", body: "{}" })
+      ).rejects.toThrow("권위");
+    }
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("keeps invite create and revoke on separate native grants and fixed routes", async () => {
     const invoke = vi
       .fn()

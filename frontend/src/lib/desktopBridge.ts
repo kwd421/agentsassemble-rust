@@ -321,24 +321,27 @@ function validateDesktopCentralRegistrationTicket(
     "중앙 등록 티켓"
   );
   if (
-    !/^[0-9a-f]{64}$/.test(String(grant.ticket)) ||
+    typeof grant.ticket !== "string" ||
+    !/^[0-9a-f]{64}$/.test(grant.ticket) ||
     !Number.isSafeInteger(grant.ttl_seconds) ||
     Number(grant.ttl_seconds) < 1 ||
     typeof grant.http_base_url !== "string" ||
     typeof grant.server_id !== "string" ||
     !UUID_PATTERN.test(grant.server_id) ||
-    !/^[A-Za-z0-9_-]{43}$/.test(String(grant.host_public_key_x)) ||
-    !/^[A-Za-z0-9_-]{43}$/.test(String(grant.host_key_fingerprint))
+    typeof grant.host_public_key_x !== "string" ||
+    !/^[A-Za-z0-9_-]{43}$/.test(grant.host_public_key_x) ||
+    typeof grant.host_key_fingerprint !== "string" ||
+    !/^[A-Za-z0-9_-]{43}$/.test(grant.host_key_fingerprint)
   ) {
     throw new Error("중앙 등록 티켓 권위가 올바르지 않습니다.");
   }
   return {
-    ticket: grant.ticket as string,
+    ticket: grant.ticket,
     ttl_seconds: grant.ttl_seconds as number,
     http_base_url: validatedDesktopHttpBase(grant.http_base_url),
-    server_id: grant.server_id as string,
-    host_public_key_x: grant.host_public_key_x as string,
-    host_key_fingerprint: grant.host_key_fingerprint as string,
+    server_id: grant.server_id,
+    host_public_key_x: grant.host_public_key_x,
+    host_key_fingerprint: grant.host_key_fingerprint,
   };
 }
 
