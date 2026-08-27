@@ -8,7 +8,7 @@ import UserPanel from "./UserPanel";
 const apiMocks = vi.hoisted(() => ({
   fetchUserProfile: vi.fn(),
   saveUserProfile: vi.fn(),
-  uploadLobbyAttachment: vi.fn(),
+  uploadUserProfileAvatar: vi.fn(),
 }));
 
 vi.mock("../../api", async (importOriginal) => {
@@ -17,7 +17,7 @@ vi.mock("../../api", async (importOriginal) => {
     ...actual,
     fetchUserProfile: apiMocks.fetchUserProfile,
     saveUserProfile: apiMocks.saveUserProfile,
-    uploadLobbyAttachment: apiMocks.uploadLobbyAttachment,
+    uploadUserProfileAvatar: apiMocks.uploadUserProfileAvatar,
   };
 });
 
@@ -32,7 +32,7 @@ describe("UserPanel", () => {
   beforeEach(() => {
     apiMocks.fetchUserProfile.mockReset();
     apiMocks.saveUserProfile.mockReset();
-    apiMocks.uploadLobbyAttachment.mockReset();
+    apiMocks.uploadUserProfileAvatar.mockReset();
   });
 
   it("does not present the local default as authority before server hydration", async () => {

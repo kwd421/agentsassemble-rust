@@ -5,6 +5,7 @@ import {
 import { profileAvatarReference } from "../lib/attachmentReference";
 import {
   fetchJsonWithIdentity,
+  fileToBase64,
   postJsonWithIdentity,
   responseError,
 } from "./http";
@@ -171,4 +172,26 @@ export async function saveUserProfile(
     profile: normalizeUserProfile(payload.profile),
     displayResourceBase,
   };
+}
+
+export async function uploadUserProfileAvatar(
+  file: File,
+  identity: UserProfileIdentity = {}
+): Promise<string> {
+  const dataBase64 = await fileToBase64(file);
+  const payload = await postJsonWithIdentity<{ attachment?: { url?: unknown } }>(
+    "/api/attachments",
+    {
+      purpose: "profile_avatar",
+      filename: file.name || "avatar.png",
+      content_type: file.type || "application/octet-stream",
+      data_base64: dataBase64,
+    },
+    identity
+  );
+  const avatarImage = profileAvatarReference(payload.attachment?.url);
+  if (!avatarImage) {
+    throw new Error("서버 프로필 사진 응답이 현재 계약과 일치하지 않습니다.");
+  }
+  return avatarImage;
 }

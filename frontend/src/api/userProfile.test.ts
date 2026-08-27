@@ -3,7 +3,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_USER_PROFILE } from "../lib/userProfileModel";
 import { requestDesktopHostProductSurface } from "../lib/desktopBridge";
 import { PRODUCT_SURFACE_REVISION } from "../types/generated/PRODUCT_SURFACE_REVISION";
-import { fetchUserProfile, saveUserProfile } from "./userProfile";
+import {
+  fetchUserProfile,
+  saveUserProfile,
+  uploadUserProfileAvatar,
+} from "./userProfile";
 
 const PROFILE = {
   revision: 1,
@@ -101,5 +105,42 @@ describe("canonical user profile provenance", () => {
       })
     ).rejects.toThrow("아바타 참조");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("uploads a local profile avatar through operator authority without a room", async () => {
+    const invoke = desktopInvoke();
+    Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          attachment: { url: "/api/attachments/avatar_1234?view=1" },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await requestDesktopHostProductSurface();
+    const avatar = await uploadUserProfileAvatar(
+      new File(["avatar"], "avatar.png", { type: "image/png" })
+    );
+
+    expect(avatar).toBe("/api/attachments/avatar_1234?view=1");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "http://127.0.0.1:49163/api/attachments"
+    );
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(request.method).toBe("POST");
+    const headers = new Headers(request.headers);
+    expect(headers.get("Authorization")).toBe(`Bearer ${"f".repeat(64)}`);
+    expect(headers.get("Content-Type")).toBe("application/json");
+    expect(headers.has("X-Host-Token")).toBe(false);
+    expect(JSON.parse(String(request.body))).toEqual({
+      purpose: "profile_avatar",
+      filename: "avatar.png",
+      content_type: "image/png",
+      data_base64: "YXZhdGFy",
+    });
   });
 });

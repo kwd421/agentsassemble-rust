@@ -14,7 +14,7 @@ import {
 import {
   fetchUserProfile,
   saveUserProfile,
-  uploadLobbyAttachment,
+  uploadUserProfileAvatar,
   type UserProfile,
   type UserProfileIdentity,
 } from "../../api";
@@ -25,7 +25,6 @@ import {
   profileStatusClass,
   profileStatusLabel,
 } from "../../lib/userProfileModel";
-import { profileAvatarReference } from "../../lib/attachmentReference";
 import ImageCropper from "./ImageCropper";
 import UserSettingsPanel, { type UserSettingsSection } from "./UserSettingsPanel";
 
@@ -215,13 +214,8 @@ export default function UserPanel({
     setSaving(false);
     setAvatarStatus("프로필 사진 저장 중...");
     try {
-      const attachment = await uploadLobbyAttachment(file, {
-        purpose: "profile_avatar",
-        roomId: profileIdentity.roomId,
-        sessionToken: profileIdentity.sessionToken,
-      });
+      const avatarImage = await uploadUserProfileAvatar(file, profileIdentity);
       if (profileGeneration.current !== uploadGeneration) return;
-      const avatarImage = profileAvatarReference(attachment.url);
       const result = await persistProfile({ ...profile, avatarImage });
       if (result === "stale") return;
       if (result === "failed") {
