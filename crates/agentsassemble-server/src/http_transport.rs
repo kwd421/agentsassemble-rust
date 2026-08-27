@@ -16,7 +16,10 @@ use hyper_util::{
 use tokio::{net::TcpStream, sync::OwnedSemaphorePermit};
 use tokio_util::sync::CancellationToken;
 
-use crate::ingress_trust::{LocalIngress, PeerAddr, PublicIngress};
+use crate::{
+    ingress_trust::{LocalIngress, PeerAddr},
+    public_ingress::PublicIngress,
+};
 
 pub(crate) const MAX_HTTP_CONNECTIONS: usize = 128;
 pub(crate) const HTTP_CONNECTION_LIFETIME: Duration = Duration::from_secs(30);
@@ -40,7 +43,7 @@ pub(crate) async fn serve_connection(
     stream: TcpStream,
     peer: SocketAddr,
     ingress: LocalIngress,
-    public_ingress: Option<PublicIngress>,
+    public_ingress: PublicIngress,
     app: Router,
     _permit: OwnedSemaphorePermit,
     shutdown: CancellationToken,
@@ -52,12 +55,8 @@ pub(crate) async fn serve_connection(
         .max_buf_size(MAX_HTTP_BUFFER_BYTES);
     let app = app
         .layer(axum::Extension(PeerAddr(peer)))
-        .layer(axum::Extension(ingress));
-    let app = if let Some(public_ingress) = public_ingress {
-        app.layer(axum::Extension(public_ingress))
-    } else {
-        app
-    };
+        .layer(axum::Extension(ingress))
+        .layer(axum::Extension(public_ingress));
     let connection = builder
         .serve_connection(TokioIo::new(stream), TowerToHyperService::new(app))
         .with_upgrades();

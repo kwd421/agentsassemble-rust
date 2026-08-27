@@ -79,6 +79,7 @@ mod provider_recovery_tracker;
 mod provider_turn;
 mod provider_turn_reconciliation_runtime;
 mod provider_write_budget;
+mod public_ingress;
 mod raw_ingress;
 mod room_agent_lifecycle_runtime;
 mod room_command_admission;
@@ -112,7 +113,8 @@ pub use human_invite_credentials::{
     IssuedHumanInviteCredentials, VerifiedHumanInviteClaims, VerifiedHumanInviteCredential,
 };
 pub use human_invite_preflight::{HumanInvitePreflightError, preflight_human_invite};
-pub use ingress_trust::{ManualPublicIngressError, local_bind_is_supported};
+pub use ingress_trust::local_bind_is_supported;
+pub use public_ingress::ManualPublicIngressError;
 pub use room_runtime::RoomRuntime;
 pub use room_shutdown::RoomShutdownError;
 pub use runtime_reconciliation::{RuntimeReconciliationSummary, reconcile_runtime_ownership};

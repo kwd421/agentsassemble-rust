@@ -10,7 +10,7 @@ use crate::{
     CentralHostIdentity, HostIdentityError, HostSecret, HumanInviteCredentialAuthority,
     RoomRuntime, TicketStore,
     connection_admission::ConnectionAdmission,
-    ingress_trust::{ManualPublicIngressError, PublicIngress},
+    public_ingress::{ManualPublicIngressError, PublicIngress},
     raw_ingress::RawIngressGovernor,
 };
 
@@ -36,7 +36,7 @@ pub struct AppState {
     pub connections: TaskTracker,
     pub(crate) connection_admission: ConnectionAdmission,
     pub(crate) raw_ingress: RawIngressGovernor,
-    pub(crate) public_ingress: Option<PublicIngress>,
+    pub(crate) public_ingress: PublicIngress,
     pub server_product_surface: Arc<ServerProductSurface>,
     pub frontend_root: Option<PathBuf>,
     pub(crate) central_registration_enabled: bool,
@@ -98,7 +98,7 @@ impl AppState {
             connections: TaskTracker::new(),
             connection_admission: ConnectionAdmission::new(),
             raw_ingress: RawIngressGovernor::new(),
-            public_ingress: None,
+            public_ingress: PublicIngress::disabled(),
             server_product_surface: Arc::new(crate::product_surface::server_product_surface(
                 false, false,
             )),
@@ -131,11 +131,11 @@ impl AppState {
         origin: &str,
         proxy_secret: &str,
     ) -> Result<Self, ManualPublicIngressError> {
-        self.public_ingress = Some(PublicIngress::configured_manual(origin, proxy_secret)?);
+        self.public_ingress = PublicIngress::configured_manual(origin, proxy_secret)?;
         Ok(self)
     }
 
-    pub(crate) fn public_ingress(&self) -> Option<PublicIngress> {
+    pub(crate) fn public_ingress(&self) -> PublicIngress {
         self.public_ingress.clone()
     }
 
