@@ -223,6 +223,33 @@ async fn public_ingress_status_requires_one_exact_operator_ticket() {
     ));
     let url = format!("{}/api/public-invite/status", server.address);
     let client = reqwest::Client::new();
+    let preflight = client
+        .request(reqwest::Method::OPTIONS, &url)
+        .header(reqwest::header::ORIGIN, "tauri://localhost")
+        .header(
+            reqwest::header::ACCESS_CONTROL_REQUEST_METHOD,
+            reqwest::Method::GET.as_str(),
+        )
+        .header(
+            reqwest::header::ACCESS_CONTROL_REQUEST_HEADERS,
+            reqwest::header::AUTHORIZATION.as_str(),
+        )
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("request ingress status preflight: {error}"));
+    assert!(preflight.status().is_success());
+    assert_eq!(
+        preflight.headers()[reqwest::header::ACCESS_CONTROL_ALLOW_ORIGIN],
+        "tauri://localhost"
+    );
+    assert_eq!(
+        preflight.headers()[reqwest::header::ACCESS_CONTROL_ALLOW_METHODS],
+        reqwest::Method::GET.as_str()
+    );
+    let allowed_headers = preflight.headers()[reqwest::header::ACCESS_CONTROL_ALLOW_HEADERS]
+        .to_str()
+        .unwrap_or_else(|error| panic!("decode ingress status CORS headers: {error}"));
+    assert!(allowed_headers.contains("authorization"));
     assert_eq!(
         client
             .get(&url)
@@ -243,6 +270,10 @@ async fn public_ingress_status_requires_one_exact_operator_ticket() {
         .await
         .unwrap_or_else(|error| panic!("request ingress status: {error}"));
     assert_eq!(response.status(), reqwest::StatusCode::OK);
+    assert_eq!(
+        response.headers()[reqwest::header::CACHE_CONTROL],
+        "private, no-store"
+    );
     let status: Value = response
         .json()
         .await

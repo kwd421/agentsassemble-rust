@@ -1,23 +1,36 @@
 use axum::{
-    Json,
+    Json, Router,
     extract::{Request, State},
-    http::StatusCode,
+    http::{Method, StatusCode, header::CACHE_CONTROL},
     response::{IntoResponse, Response},
 };
 use serde_json::json;
+use tower_http::set_header::SetResponseHeaderLayer;
 
 use crate::{
     AppState,
-    http_api::{BodyDecodeError, consume_local_operator, ensure_empty_body},
+    http_api::{
+        BodyDecodeError, PRIVATE_NO_STORE, consume_local_operator, ensure_empty_body,
+        exact_tauri_cors,
+    },
     public_ingress::PublicIngressStatus,
 };
 
 const MAX_STATUS_BODY_BYTES: usize = 4 * 1024;
 
 registered_routes! {
-    pub(crate) fn routes<AppState>() {
+    fn status_routes<AppState>() {
         private "/api/public-invite/status" => get(status),
     }
+}
+
+pub(crate) fn routes() -> Router<AppState> {
+    status_routes()
+        .layer(SetResponseHeaderLayer::overriding(
+            CACHE_CONTROL,
+            PRIVATE_NO_STORE.clone(),
+        ))
+        .layer(exact_tauri_cors([Method::GET]))
 }
 
 async fn status(
