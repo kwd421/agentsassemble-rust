@@ -273,7 +273,7 @@ fn map_room_identity_error(error: PersistenceError) -> TicketIssueError {
                 | "profile_authority_mismatch",
             ..
         } => TicketIssueError::ParticipantInactive,
-        error => TicketIssueError::Persistence(error),
+        error => map_bootstrap_error(error),
     }
 }
 
@@ -284,5 +284,26 @@ fn map_bootstrap_error(error: PersistenceError) -> TicketIssueError {
             ..
         } => TicketIssueError::BootstrapIncomplete,
         error => TicketIssueError::Persistence(error),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use agentsassemble_persistence::PersistenceError;
+
+    use super::{TicketIssueError, map_room_identity_error};
+
+    #[test]
+    fn room_identity_mapper_preserves_bootstrap_rejections() {
+        for code in ["bootstrap_required", "bootstrap_repair_required"] {
+            let error = PersistenceError::CommandRejected {
+                code,
+                message: "bootstrap authority is unavailable".to_owned(),
+            };
+            assert!(matches!(
+                map_room_identity_error(error),
+                TicketIssueError::BootstrapIncomplete
+            ));
+        }
     }
 }
