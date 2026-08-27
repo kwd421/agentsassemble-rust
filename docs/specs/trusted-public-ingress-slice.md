@@ -1,7 +1,8 @@
 # Trusted Public Ingress Slice
 
-Status: design approved; invite-use policy prerequisite implemented; trusted ingress,
-manager controls, and frontend activation remain incomplete
+Status: design approved; invite-use, exact local TCP trust, and route-exposure
+prerequisites implemented; managed/manual trust, manager controls, and frontend
+activation remain incomplete
 
 ## Definition
 
@@ -163,6 +164,41 @@ and a cross-alias Origin receive 403. The complete repository verification passe
 the structure and source-growth gates, frontend build and 403 tests, desktop build
 and 16 tests, all Rust workspace tests including 120 provider and 63 server unit
 tests plus the new TCP boundary test, and warning-denied workspace Clippy.
+
+## Route exposure prerequisite
+
+The dynamic registration macro now owns method, matched path, handler, and exposure
+together. One iterator over those descriptors supplies both the signed product
+surface and ingress lookup; the prior duplicate module inventory was removed. The
+currently reachable routes are explicitly private or same-origin public. The
+identity-probe variant is deliberately absent until its two routes are implemented,
+so this prerequisite adds no unused future state.
+
+Static frontend registration now owns its actual mount, signed surface pattern, and
+exposure in one descriptor. The small static router wrapper passes that exact
+descriptor through a server-owned request extension. Dynamic lookup uses Axum's
+matched path and actual method, maps HEAD to its GET route, and retains registered
+path admission only for Axum-owned method mismatch and CORS preflight handling. No
+raw-URI prefix allow-list, second trust policy, compatibility route, fallback, or
+client authority was introduced. The public static classification is exactly
+`/join`, `/join/`, `/assets/{*path}`, and `/join/assets/{*path}`; root, app, pair,
+and pair assets remain private.
+
+The concrete threat was route-policy drift: product-surface signing, dynamic router
+registration, static mounts, and the future public trust decision could otherwise
+name independently changeable surfaces. A normal dynamic request performs one
+bounded linear scan of at most 20 compile-time descriptors; static requests read
+their attached descriptor without a scan. This slice adds no task, cache, map,
+process, disk state, or claimed latency improvement. The fixed inventory is too
+small to justify another runtime owner without observed cost.
+
+Verification proves descriptor uniqueness and the exact public/private static map,
+preserves a real TCP 405 for method mismatch and a real Tauri CORS preflight, and
+keeps the existing packaged-static security/cache flow reachable. All 66 server
+unit tests and 40 server integration tests passed. Complete repository verification
+also passed the architecture and source-growth gates, frontend build and 403 tests,
+desktop build and 16 tests, all 171 persistence and 120 provider tests, and
+warning-denied workspace Clippy.
 
 ## Verification requirements
 

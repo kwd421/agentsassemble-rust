@@ -27,7 +27,7 @@ pub(crate) fn routes() -> Router<AppState> {
 
 registered_routes! {
     fn registration_routes<AppState>() {
-        "/api/central-directory/registration-proof" => post(issue_registration_proof),
+        private "/api/central-directory/registration-proof" => post(issue_registration_proof),
     }
 }
 

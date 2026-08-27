@@ -52,9 +52,9 @@ pub(crate) fn routes() -> Router<AppState> {
 
 registered_routes! {
     fn profile_routes<AppState>() {
-        "/api/user-profile" => get(read_profile).post(update_profile),
-        "/api/attachments" => post(upload_attachment),
-        "/api/attachments/{attachment_id}" => get(read_attachment),
+        same_origin_public "/api/user-profile" => get(read_profile).post(update_profile),
+        same_origin_public "/api/attachments" => post(upload_attachment),
+        same_origin_public "/api/attachments/{attachment_id}" => get(read_attachment),
     }
 }
 

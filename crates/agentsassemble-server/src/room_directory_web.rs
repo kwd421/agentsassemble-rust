@@ -41,7 +41,7 @@ pub(crate) fn routes() -> Router<AppState> {
 
 registered_routes! {
     fn directory_routes<AppState>() {
-        "/api/rooms" => get(list_rooms).post(create_room),
+        private "/api/rooms" => get(list_rooms).post(create_room),
     }
 }
 

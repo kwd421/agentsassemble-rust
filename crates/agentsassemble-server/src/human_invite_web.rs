@@ -76,8 +76,8 @@ pub(crate) fn routes() -> Router<AppState> {
 
 registered_routes! {
     fn invite_routes<AppState>() {
-        "/api/room-invite/admission" => post(preflight),
-        "/api/room-invite/join" => post(join),
+        same_origin_public "/api/room-invite/admission" => post(preflight),
+        same_origin_public "/api/room-invite/join" => post(join),
     }
 }
 

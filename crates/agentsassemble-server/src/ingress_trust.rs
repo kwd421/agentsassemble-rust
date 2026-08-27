@@ -1,13 +1,14 @@
 use std::net::{IpAddr, SocketAddr};
 
 use axum::{
-    extract::Request,
-    http::{HeaderMap, StatusCode, header, uri::Authority},
+    extract::{MatchedPath, Request},
+    http::{HeaderMap, Method, StatusCode, header, uri::Authority},
     middleware::Next,
     response::{IntoResponse, Response},
 };
 
 use crate::http_api::TAURI_ORIGINS;
+use crate::product_surface::{RouteExposure, registered_route_exposure, registered_route_path};
 
 const EXACT_PROXY_PROVENANCE_HEADERS: [&str; 6] = [
     "forwarded",
@@ -54,16 +55,36 @@ pub fn local_bind_is_supported(address: SocketAddr) -> bool {
 pub(crate) struct PeerAddr(pub(crate) SocketAddr);
 
 pub(crate) async fn require_trusted_ingress(request: Request, next: Next) -> Response {
-    let trusted = request
+    let local_trusted = request
         .extensions()
         .get::<LocalIngress>()
         .copied()
         .zip(request.extensions().get::<PeerAddr>().copied())
         .is_some_and(|(ingress, peer)| ingress.authorizes(peer, request.headers()));
-    if !trusted {
+    let exact_exposure = request
+        .extensions()
+        .get::<RouteExposure>()
+        .copied()
+        .or_else(|| dynamic_exposure(&request));
+    let registered = exact_exposure.is_some()
+        || request
+            .extensions()
+            .get::<MatchedPath>()
+            .is_some_and(|path| registered_route_path(path.as_str()));
+    if !local_trusted || !registered {
         return StatusCode::FORBIDDEN.into_response();
     }
     next.run(request).await
+}
+
+fn dynamic_exposure(request: &Request) -> Option<RouteExposure> {
+    let method = match *request.method() {
+        Method::GET | Method::HEAD => agentsassemble_protocol::HttpMethod::Get,
+        Method::POST => agentsassemble_protocol::HttpMethod::Post,
+        _ => return None,
+    };
+    let path = request.extensions().get::<MatchedPath>()?.as_str();
+    registered_route_exposure(method, path)
 }
 
 fn single_header(headers: &HeaderMap, name: header::HeaderName) -> Option<&str> {

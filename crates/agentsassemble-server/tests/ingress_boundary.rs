@@ -34,6 +34,7 @@ async fn tcp_ingress_enforces_peer_host_origin_and_proxy_boundaries() {
     let authority = server.address.to_string();
     let valid = request(
         server.address,
+        "GET /healthz HTTP/1.1",
         &format!("Host: {authority}\r\nOrigin: http://{authority}\r\n"),
     )
     .await;
@@ -47,12 +48,30 @@ async fn tcp_ingress_enforces_peer_host_origin_and_proxy_boundaries() {
             server.address.port()
         ),
     ] {
-        let response = request(server.address, &rejected_headers).await;
+        let response = request(server.address, "GET /healthz HTTP/1.1", &rejected_headers).await;
         assert!(
             response.starts_with("HTTP/1.1 403"),
             "untrusted TCP request was not rejected: {response}"
         );
     }
+
+    let method_mismatch = request(
+        server.address,
+        "POST /healthz HTTP/1.1",
+        &format!("Host: {authority}\r\n"),
+    )
+    .await;
+    assert!(method_mismatch.starts_with("HTTP/1.1 405"));
+
+    let cors_preflight = request(
+        server.address,
+        "OPTIONS /api/room-invite/admission HTTP/1.1",
+        &format!(
+            "Host: {authority}\r\nOrigin: tauri://localhost\r\nAccess-Control-Request-Method: POST\r\nAccess-Control-Request-Headers: authorization,content-type,x-device-token\r\n"
+        ),
+    )
+    .await;
+    assert!(cors_preflight.starts_with("HTTP/1.1 200"));
     server.stop().await;
 }
 
@@ -93,14 +112,12 @@ async fn start() -> RunningServer {
     }
 }
 
-async fn request(address: SocketAddr, headers: &str) -> String {
+async fn request(address: SocketAddr, request_line: &str, headers: &str) -> String {
     let mut socket = TcpStream::connect(address)
         .await
         .unwrap_or_else(|error| panic!("connect ingress client: {error}"));
     socket
-        .write_all(
-            format!("GET /healthz HTTP/1.1\r\n{headers}Connection: close\r\n\r\n").as_bytes(),
-        )
+        .write_all(format!("{request_line}\r\n{headers}Connection: close\r\n\r\n").as_bytes())
         .await
         .unwrap_or_else(|error| panic!("write ingress request: {error}"));
     let mut response = Vec::new();

@@ -55,11 +55,11 @@ pub(crate) fn routes() -> Router<AppState> {
 
 registered_routes! {
     fn session_exchange_routes<AppState>() {
-        "/api/session-tickets/profile" => post(issue_profile_ticket),
-        "/api/session-tickets/socket" => post(issue_socket_ticket),
-        "/api/session-tickets/preferences-read" => post(issue_preferences_read_ticket),
-        "/api/session-tickets/preferences-write" => post(issue_preferences_write_ticket),
-        "/api/room-invite/leave" => post(leave_room),
+        same_origin_public "/api/session-tickets/profile" => post(issue_profile_ticket),
+        same_origin_public "/api/session-tickets/socket" => post(issue_socket_ticket),
+        same_origin_public "/api/session-tickets/preferences-read" => post(issue_preferences_read_ticket),
+        same_origin_public "/api/session-tickets/preferences-write" => post(issue_preferences_write_ticket),
+        same_origin_public "/api/room-invite/leave" => post(leave_room),
     }
 }
 

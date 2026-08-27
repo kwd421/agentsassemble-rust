@@ -2,7 +2,7 @@ use std::{future::Future, net::SocketAddr, sync::Arc, time::Duration};
 
 use agentsassemble_persistence::PersistenceError;
 use axum::{
-    Json, Router,
+    Extension, Json, Router,
     extract::{Query, Request, State, WebSocketUpgrade},
     http::{HeaderValue, StatusCode, header},
     middleware,
@@ -37,18 +37,72 @@ use crate::{
 const HTTP_BODY_DEADLINE: Duration = Duration::from_secs(10);
 const MAX_TICKET_BODY_BYTES: usize = 4 * 1024;
 const TRACKED_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(6);
-pub(crate) const ROOT_PATH: &str = "/";
-pub(crate) const APP_PREFIX: &str = "/app";
+const ROOT_PATH: &str = "/";
+const APP_PREFIX: &str = "/app";
 const APP_ENTRY_PATH: &str = "/app/";
-pub(crate) const ASSETS_PREFIX: &str = "/assets";
-pub(crate) const JOIN_PATH: &str = "/join";
-pub(crate) const JOIN_SLASH_PATH: &str = "/join/";
-pub(crate) const JOIN_ASSETS_PREFIX: &str = "/join/assets";
-pub(crate) const PAIR_PATH: &str = "/pair";
-pub(crate) const PAIR_SLASH_PATH: &str = "/pair/";
-pub(crate) const PAIR_ASSETS_PREFIX: &str = "/pair/assets";
-const FRONTEND_INDEX_PATHS: [&str; 4] = [JOIN_PATH, JOIN_SLASH_PATH, PAIR_PATH, PAIR_SLASH_PATH];
-const FRONTEND_ASSET_PREFIXES: [&str; 3] = [JOIN_ASSETS_PREFIX, PAIR_ASSETS_PREFIX, ASSETS_PREFIX];
+const ASSETS_PREFIX: &str = "/assets";
+const JOIN_PATH: &str = "/join";
+const JOIN_SLASH_PATH: &str = "/join/";
+const JOIN_ASSETS_PREFIX: &str = "/join/assets";
+const PAIR_PATH: &str = "/pair";
+const PAIR_SLASH_PATH: &str = "/pair/";
+const PAIR_ASSETS_PREFIX: &str = "/pair/assets";
+#[derive(Clone, Copy)]
+struct StaticFrontendRoute {
+    mount: &'static str,
+    surface: &'static str,
+    exposure: crate::product_surface::RouteExposure,
+}
+
+const ROOT_ROUTE: StaticFrontendRoute = StaticFrontendRoute {
+    mount: ROOT_PATH,
+    surface: ROOT_PATH,
+    exposure: crate::product_surface::RouteExposure::Private,
+};
+const APP_ROUTE: StaticFrontendRoute = StaticFrontendRoute {
+    mount: APP_PREFIX,
+    surface: "/app/{*path}",
+    exposure: crate::product_surface::RouteExposure::Private,
+};
+const FRONTEND_INDEX_ROUTES: [StaticFrontendRoute; 4] = [
+    StaticFrontendRoute {
+        mount: JOIN_PATH,
+        surface: JOIN_PATH,
+        exposure: crate::product_surface::RouteExposure::SameOriginPublic,
+    },
+    StaticFrontendRoute {
+        mount: JOIN_SLASH_PATH,
+        surface: JOIN_SLASH_PATH,
+        exposure: crate::product_surface::RouteExposure::SameOriginPublic,
+    },
+    StaticFrontendRoute {
+        mount: PAIR_PATH,
+        surface: PAIR_PATH,
+        exposure: crate::product_surface::RouteExposure::Private,
+    },
+    StaticFrontendRoute {
+        mount: PAIR_SLASH_PATH,
+        surface: PAIR_SLASH_PATH,
+        exposure: crate::product_surface::RouteExposure::Private,
+    },
+];
+const FRONTEND_ASSET_ROUTES: [StaticFrontendRoute; 3] = [
+    StaticFrontendRoute {
+        mount: JOIN_ASSETS_PREFIX,
+        surface: "/join/assets/{*path}",
+        exposure: crate::product_surface::RouteExposure::SameOriginPublic,
+    },
+    StaticFrontendRoute {
+        mount: PAIR_ASSETS_PREFIX,
+        surface: "/pair/assets/{*path}",
+        exposure: crate::product_surface::RouteExposure::Private,
+    },
+    StaticFrontendRoute {
+        mount: ASSETS_PREFIX,
+        surface: "/assets/{*path}",
+        exposure: crate::product_surface::RouteExposure::SameOriginPublic,
+    },
+];
 const STATIC_FRONTEND_CACHE_CONTROL: HeaderValue = HeaderValue::from_static("no-cache");
 #[derive(Debug, Error)]
 pub enum ServeError {
@@ -80,23 +134,35 @@ pub fn router(state: AppState) -> Router {
     if state.central_registration_enabled {
         app = app.merge(crate::central_registration_web::routes());
     }
+    app = app.route_layer(middleware::from_fn(require_trusted_ingress));
     if let Some(frontend_root) = frontend_root {
         let index = frontend_root.join("index.html");
         let assets = frontend_root.join("assets");
-        let mut frontend = Router::new()
-            .route(
-                ROOT_PATH,
+        let mut frontend = static_ingress_router(
+            Router::new().route(
+                ROOT_ROUTE.mount,
                 get(|| async { Redirect::temporary(APP_ENTRY_PATH) }),
-            )
-            .nest_service(
-                APP_PREFIX,
+            ),
+            ROOT_ROUTE.exposure,
+        )
+        .merge(static_ingress_router(
+            Router::new().nest_service(
+                APP_ROUTE.mount,
                 ServeDir::new(frontend_root).not_found_service(ServeFile::new(index.clone())),
-            );
-        for path in FRONTEND_INDEX_PATHS {
-            frontend = frontend.route_service(path, ServeFile::new(index.clone()));
+            ),
+            APP_ROUTE.exposure,
+        ));
+        for route in FRONTEND_INDEX_ROUTES {
+            frontend = frontend.merge(static_ingress_router(
+                Router::new().route_service(route.mount, ServeFile::new(index.clone())),
+                route.exposure,
+            ));
         }
-        for prefix in FRONTEND_ASSET_PREFIXES {
-            frontend = frontend.nest_service(prefix, ServeDir::new(assets.clone()));
+        for route in FRONTEND_ASSET_ROUTES {
+            frontend = frontend.merge(static_ingress_router(
+                Router::new().nest_service(route.mount, ServeDir::new(assets.clone())),
+                route.exposure,
+            ));
         }
         frontend = frontend.layer(SetResponseHeaderLayer::overriding(
             header::CACHE_CONTROL,
@@ -106,38 +172,43 @@ pub fn router(state: AppState) -> Router {
     }
     app.with_state(state)
         .layer(RequestBodyDeadlineLayer::new(HTTP_BODY_DEADLINE))
-        .layer(middleware::from_fn(require_trusted_ingress))
         .layer(middleware::map_response(crate::security_headers::apply))
+}
+
+fn static_ingress_router(
+    router: Router<AppState>,
+    exposure: crate::product_surface::RouteExposure,
+) -> Router<AppState> {
+    router
+        .route_layer(middleware::from_fn(require_trusted_ingress))
+        .layer(Extension(exposure))
 }
 
 pub(crate) fn static_frontend_surfaces() -> Vec<agentsassemble_protocol::HttpRouteSurface> {
     use agentsassemble_protocol::{HttpMethod, HttpRouteSurface};
 
     let mut routes = Vec::with_capacity(9);
-    routes.push(HttpRouteSurface::new(HttpMethod::Get, ROOT_PATH));
+    routes.push(HttpRouteSurface::new(HttpMethod::Get, ROOT_ROUTE.surface));
     routes.extend(
-        FRONTEND_INDEX_PATHS
+        FRONTEND_INDEX_ROUTES
             .into_iter()
-            .map(|path| HttpRouteSurface::new(HttpMethod::Get, path)),
+            .map(|route| HttpRouteSurface::new(HttpMethod::Get, route.surface)),
     );
-    routes.push(HttpRouteSurface::new(
-        HttpMethod::Get,
-        format!("{APP_PREFIX}/{{*path}}"),
-    ));
+    routes.push(HttpRouteSurface::new(HttpMethod::Get, APP_ROUTE.surface));
     routes.extend(
-        FRONTEND_ASSET_PREFIXES
+        FRONTEND_ASSET_ROUTES
             .into_iter()
-            .map(|prefix| HttpRouteSurface::new(HttpMethod::Get, format!("{prefix}/{{*path}}"))),
+            .map(|route| HttpRouteSurface::new(HttpMethod::Get, route.surface)),
     );
     routes
 }
 
 registered_routes! {
     fn core_routes<AppState>() {
-        "/healthz" => get(health),
-        "/api/host-challenge" => get(issue_host_challenge),
-        "/api/ws-ticket" => post(issue_ticket),
-        "/ws" => get(upgrade_socket),
+        private "/healthz" => get(health),
+        private "/api/host-challenge" => get(issue_host_challenge),
+        private "/api/ws-ticket" => post(issue_ticket),
+        same_origin_public "/ws" => get(upgrade_socket),
     }
 }
 
@@ -460,6 +531,36 @@ impl IntoResponse for ApiError {
             Json(json!({"error": {"code": self.code, "message": self.message}})),
         )
             .into_response()
+    }
+}
+
+#[cfg(test)]
+mod static_route_tests {
+    use super::{APP_ROUTE, FRONTEND_ASSET_ROUTES, FRONTEND_INDEX_ROUTES, ROOT_ROUTE};
+    use crate::product_surface::RouteExposure;
+
+    #[test]
+    fn static_exposure_map_is_exact() {
+        let routes = std::iter::once(ROOT_ROUTE)
+            .chain(std::iter::once(APP_ROUTE))
+            .chain(FRONTEND_INDEX_ROUTES)
+            .chain(FRONTEND_ASSET_ROUTES)
+            .map(|route| (route.surface, route.exposure))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            routes,
+            [
+                ("/", RouteExposure::Private),
+                ("/app/{*path}", RouteExposure::Private),
+                ("/join", RouteExposure::SameOriginPublic),
+                ("/join/", RouteExposure::SameOriginPublic),
+                ("/pair", RouteExposure::Private),
+                ("/pair/", RouteExposure::Private),
+                ("/join/assets/{*path}", RouteExposure::SameOriginPublic,),
+                ("/pair/assets/{*path}", RouteExposure::Private),
+                ("/assets/{*path}", RouteExposure::SameOriginPublic),
+            ]
+        );
     }
 }
 

@@ -7,9 +7,18 @@ macro_rules! http_method {
     };
 }
 
+macro_rules! route_exposure {
+    (private) => {
+        crate::product_surface::RouteExposure::Private
+    };
+    (same_origin_public) => {
+        crate::product_surface::RouteExposure::SameOriginPublic
+    };
+}
+
 macro_rules! registered_routes {
     ($visibility:vis fn $function:ident<$state:ty>() {
-        $($path:literal => $first_method:ident($first_handler:expr)
+        $($exposure:ident $path:literal => $first_method:ident($first_handler:expr)
             $(.$more_method:ident($more_handler:expr))*),+ $(,)?
     }) => {
         pub(crate) const HTTP_ROUTES: &[crate::product_surface::RegisteredHttpRoute] = &[
@@ -17,11 +26,13 @@ macro_rules! registered_routes {
                 crate::product_surface::RegisteredHttpRoute {
                     method: http_method!($first_method),
                     path: $path,
+                    exposure: route_exposure!($exposure),
                 },
                 $(
                     crate::product_surface::RegisteredHttpRoute {
                         method: http_method!($more_method),
                         path: $path,
+                        exposure: route_exposure!($exposure),
                     },
                 )*
             )+
