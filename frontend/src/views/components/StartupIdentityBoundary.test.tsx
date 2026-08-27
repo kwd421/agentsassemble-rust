@@ -8,14 +8,13 @@ const deviceMocks = vi.hoisted(() => ({
     () => "aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
   ),
 }));
+const boundaryMocks = vi.hoisted(() => ({ desktop: true }));
 
 vi.mock("../../lib/desktopBridge", () => ({
-  isDesktopWebview: () => true,
+  isDesktopWebview: () => boundaryMocks.desktop,
 }));
 vi.mock("../../lib/deviceIdentity", () => ({
   getOrCreateBrowserCredential: deviceMocks.getOrCreateBrowserCredential,
-  hasStartupIdentitySelection: () => true,
-  loadRememberedGuestProfile: () => ({ displayName: "Remembered" }),
 }));
 vi.mock("./StartupIdentityGate", () => ({
   default: () => <main aria-label="authoritative startup gate" />,
@@ -27,12 +26,14 @@ afterEach(() => {
   deviceMocks.getOrCreateBrowserCredential.mockReturnValue(
     "aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
   );
+  boundaryMocks.desktop = true;
+  window.localStorage.clear();
   window.history.replaceState({}, "", "/");
 });
 
 describe("StartupIdentityBoundary", () => {
-  it("never lets legacy invite or guest routes bypass desktop bootstrap", () => {
-    window.history.replaceState({}, "", "/join?guest=1#invite=legacy");
+  it("never lets a browser entrance bypass desktop bootstrap", () => {
+    window.history.replaceState({}, "", "/join?token=invite-token");
 
     render(
       <StartupIdentityBoundary>
@@ -40,8 +41,53 @@ describe("StartupIdentityBoundary", () => {
       </StartupIdentityBoundary>
     );
 
-    expect(screen.getByRole("main", { name: "authoritative startup gate" })).toBeTruthy();
+    expect(
+      screen.getByRole("main", { name: "authoritative startup gate" })
+    ).toBeTruthy();
     expect(screen.queryByRole("main", { name: "product" })).toBeNull();
+  });
+
+  it("keeps direct non-desktop startup unavailable without inventing profile authority", () => {
+    boundaryMocks.desktop = false;
+
+    render(
+      <StartupIdentityBoundary>
+        <main aria-label="product" />
+      </StartupIdentityBoundary>
+    );
+
+    expect(
+      screen.getByRole("main", { name: "브라우저 직접 시작 사용 불가" })
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("main", { name: "authoritative startup gate" })
+    ).toBeNull();
+    expect(screen.queryByRole("main", { name: "product" })).toBeNull();
+    expect(deviceMocks.getOrCreateBrowserCredential).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["invite", "/join?token=invite-token"],
+    ["pairing", "/pair?token=aap1_pairing-token"],
+    [
+      "recovery",
+      "/?recover=1&room=friend-room#recovery=ABCD-EFGH-IJKL-MNOP-QRST-UVWX-YZ23-4567",
+    ],
+  ])("retains the authorized %s browser entrance", (_kind, url) => {
+    boundaryMocks.desktop = false;
+    window.history.replaceState({}, "", url);
+
+    render(
+      <StartupIdentityBoundary>
+        <main aria-label="product" />
+      </StartupIdentityBoundary>
+    );
+
+    expect(screen.getByRole("main", { name: "product" })).toBeTruthy();
+    expect(
+      screen.queryByRole("main", { name: "브라우저 직접 시작 사용 불가" })
+    ).toBeNull();
+    expect(deviceMocks.getOrCreateBrowserCredential).not.toHaveBeenCalled();
   });
 
   it("shows a hard stop instead of rendering identity-bound surfaces without durable custody", () => {

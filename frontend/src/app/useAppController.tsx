@@ -23,11 +23,7 @@ import type { RoomMenuState } from "../views/components/RoomRail";
 import { useRoomMessageSearch } from "../views/useRoomMessageSearch";
 import { loadAgentActivityVisibility } from "../lib/agentActivityPreferences";
 import { isDesktopWebview } from "../lib/desktopBridge";
-import {
-  getOrCreateBrowserCredential,
-  hasStartupIdentitySelection,
-  loadRememberedGuestProfile,
-} from "../lib/deviceIdentity";
+import { getOrCreateBrowserCredential } from "../lib/deviceIdentity";
 import { consumeGuestRecoveryRequestFromUrl } from "../lib/guestRecovery";
 import { roomAppearanceStyle } from "../lib/roomAppearance";
 import {
@@ -82,13 +78,7 @@ export function useAppController() {
     createStartupRoute({ operatorPairingPending: Boolean(operatorPairingToken) })
   );
   const [deviceToken] = useState(getOrCreateBrowserCredential);
-  const [startupIdentityReady, setStartupIdentityReady] = useState(
-    () =>
-      isDesktopWebview() ||
-      hasStartupIdentitySelection() ||
-      Boolean(loadRememberedGuestProfile())
-  );
-  const completeStartupIdentity = useCallback(() => setStartupIdentityReady(true), []);
+  const [startupIdentityReady] = useState(isDesktopWebview);
   const guestInvite = startupRoute.guestInvite;
   const guestJoinToken = startupRoute.guestJoinToken;
   const startupIdentityResolved =
@@ -754,7 +744,7 @@ export function useAppController() {
     changeAgentActivityVisibility, changeHomeFilter, channel, channelHeaderActions,
     channelMenu, channelSearchNeedle, channelSearchQuery, channelSidebarWidth,
     closeInviteModal, closeMobileRoomInfo, closeMobileSidebar, collapsedChannelSections,
-    completeStartupIdentity, configureInvitePublicUrl, copyAgentInviteLink, copyGuestAiPacket,
+    configureInvitePublicUrl, copyAgentInviteLink, copyGuestAiPacket,
     copyInviteLink, copyLocalPreviewLink, copyOperatorPairingLink, copyRemoteClientPacket,
     createChannel, createChannelOpen, createCompanionAiPacket, deleteDirectoryFriend,
     deleteRoom, deviceToken, exitGuestSurface, expireGuestSession,

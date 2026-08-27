@@ -1,93 +1,38 @@
 import { useState, type ReactNode } from "react";
 
-import {
-  getOrCreateBrowserCredential,
-  hasStartupIdentitySelection,
-  loadRememberedGuestProfile,
-} from "../../lib/deviceIdentity";
+import { getOrCreateBrowserCredential } from "../../lib/deviceIdentity";
 import { isDesktopWebview } from "../../lib/desktopBridge";
+import { guestRecoveryRequestFromUrl } from "../../lib/guestRecovery";
+import {
+  joinInviteTokenFromUrl,
+  loadRoomGuestSession,
+  operatorPairingTokenFromUrl,
+  roomGuestSessionExpired,
+} from "../../lib/roomGuestSession";
 import StartupIdentityGate from "./StartupIdentityGate";
 
-const GUEST_SESSION_STORAGE_KEY = "agentsassemble.roomGuestSession.v1";
-
-function hasStoredGuestSession(): boolean {
-  try {
-    return Boolean(window.localStorage.getItem(GUEST_SESSION_STORAGE_KEY));
-  } catch {
-    return false;
-  }
+function browserEntranceHasAuthority(): boolean {
+  const url = window.location.href;
+  const guestSession = loadRoomGuestSession();
+  return Boolean(
+    joinInviteTokenFromUrl(url) ||
+      operatorPairingTokenFromUrl(url) ||
+      guestRecoveryRequestFromUrl(url) ||
+      (guestSession && !roomGuestSessionExpired(guestSession))
+  );
 }
 
-function startupIdentityBypassRequested(): boolean {
-  try {
-    const url = new URL(window.location.href);
-    const query = url.searchParams;
-    const fragment = new URLSearchParams(url.hash.replace(/^#/, ""));
-    const pathname = url.pathname.replace(/\/+$/, "") || "/";
-    return Boolean(
-      query.get("guest") === "1" ||
-        query.has("invite") ||
-        query.get("recover") === "1" ||
-        query.has("pair") ||
-        pathname === "/join" ||
-        pathname === "/pair" ||
-        fragment.has("invite") ||
-        fragment.has("recovery") ||
-        fragment.has("pairing") ||
-        fragment.has("operatorPairing")
-    );
-  } catch {
-    return false;
-  }
-}
-
-function startupIdentityRunsOnThisOrigin(): boolean {
-  try {
-    const url = new URL(window.location.href);
-    const hostname = url.hostname.toLowerCase();
-    const loopbackHosts = new Set([
-      "localhost",
-      "127.0.0.1",
-      "::1",
-      "[::1]",
-    ]);
-    const nativeShell =
-      url.protocol === "tauri:" ||
-      url.protocol === "asset:" ||
-      hostname === "tauri.localhost";
-    const configuredCentral = String(
-      import.meta.env.VITE_AGENTSASSEMBLE_CENTRAL_URL || ""
-    )
-      .trim()
-      .replace(/\/+$/, "");
-    let centralOrigin = "";
-    if (configuredCentral) {
-      try {
-        centralOrigin = new URL(configuredCentral).origin;
-      } catch {
-        centralOrigin = "";
-      }
-    }
-    return nativeShell || loopbackHosts.has(hostname) || url.origin === centralOrigin;
-  } catch {
-    return false;
-  }
-}
-
-export default function StartupIdentityBoundary({ children }: { children: ReactNode }) {
+export default function StartupIdentityBoundary({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  const desktop = isDesktopWebview();
   const [ready, setReady] = useState(
-    () => {
-      if (isDesktopWebview()) return false;
-      if (startupIdentityBypassRequested()) return true;
-      return (
-        !startupIdentityRunsOnThisOrigin() ||
-        hasStartupIdentitySelection() ||
-        Boolean(loadRememberedGuestProfile()) ||
-        hasStoredGuestSession()
-      );
-    }
+    () => !desktop && browserEntranceHasAuthority()
   );
   const [browserCredential] = useState(() => {
+    if (!desktop) return { deviceToken: "", error: "" };
     try {
       return { deviceToken: getOrCreateBrowserCredential(), error: "" };
     } catch (error) {
@@ -100,6 +45,28 @@ export default function StartupIdentityBoundary({ children }: { children: ReactN
       };
     }
   });
+
+  if (!desktop && !ready) {
+    return (
+      <div className="fixed inset-0 z-[400] grid place-items-center bg-[#101114] p-5">
+        <main
+          className="grid w-full max-w-[520px] gap-3 rounded-xl border border-white/10 bg-[#202126] p-6 shadow-2xl"
+          aria-label="브라우저 직접 시작 사용 불가"
+        >
+          <h1 className="text-2xl font-black text-text-primary">
+            데스크톱 앱에서 시작해 주세요
+          </h1>
+          <p
+            role="alert"
+            className="rounded-md bg-[#3a2526] p-3 text-[11px] font-bold leading-5 text-[#ffb4b5]"
+          >
+            이 브라우저에는 서버가 소유하는 시작 권위가 없습니다. 방 초대·운영자 연결·복구
+            링크로 들어오거나 데스크톱 앱을 사용해 주세요.
+          </p>
+        </main>
+      </div>
+    );
+  }
 
   if (browserCredential.error) {
     return (

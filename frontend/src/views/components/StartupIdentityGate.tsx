@@ -10,8 +10,6 @@ import {
   UserRound,
 } from "lucide-react";
 
-import { fetchAccountStatus } from "../../api/identity";
-import { fetchUserProfile, saveUserProfile } from "../../api/userProfile";
 import {
   bootstrapCentral,
   centralIdentityConfigured,
@@ -27,15 +25,11 @@ import {
 import {
   fetchDesktopOperatorRuntime,
   initializeDesktopBootstrap,
-  isDesktopWebview,
   requestDesktopHostProductSurface,
   requestDesktopBootstrapStatus,
   type DesktopBootstrapGrant,
 } from "../../lib/desktopBridge";
-import {
-  rememberGuestProfile,
-  rememberStartupIdentitySelection,
-} from "../../lib/deviceIdentity";
+import { rememberGuestProfile } from "../../lib/deviceIdentity";
 import {
   hydratePersistedRoom,
   mergeServerRoomsIntoDock,
@@ -49,48 +43,28 @@ import {
   bindRoomDirectoryAuthority,
   parseStrictRoomDirectory,
 } from "../../lib/roomDirectoryContract";
-import { DEFAULT_USER_PROFILE } from "../../lib/userProfileModel";
-import GoogleAccountSettings from "./GoogleAccountSettings";
 
 type Screen = "choice" | "guest" | "recover" | "recovery-code";
 
 async function saveLocalProfile(
   displayName: string,
-  deviceToken: string,
   bootstrapRequestId: string
 ) {
   const name = displayName.trim();
   if (!name) return;
-  if (isDesktopWebview()) {
-    const current = await requestDesktopBootstrapStatus();
-    const bootstrap =
-      current.phase === "empty"
-        ? await initializeDesktopBootstrap(bootstrapRequestId, name)
-        : current;
-    if (bootstrap.phase !== "complete" || !bootstrap.profile) {
-      throw new Error("로컬 신원 권위를 안전하게 초기화하지 못했습니다.");
-    }
-    rememberGuestProfile({
-      displayName: bootstrap.profile.display_name,
-      avatarImage: bootstrap.profile.avatar_image_url,
-    });
-    return bootstrap;
+  const current = await requestDesktopBootstrapStatus();
+  const bootstrap =
+    current.phase === "empty"
+      ? await initializeDesktopBootstrap(bootstrapRequestId, name)
+      : current;
+  if (bootstrap.phase !== "complete" || !bootstrap.profile) {
+    throw new Error("로컬 신원 권위를 안전하게 초기화하지 못했습니다.");
   }
-  const current = await fetchUserProfile({ deviceToken });
-  const saved = await saveUserProfile(
-    {
-      ...DEFAULT_USER_PROFILE,
-      displayName: name,
-      avatarLabel: name.slice(0, 2).toUpperCase(),
-    },
-    current.revision,
-    { deviceToken }
-  );
   rememberGuestProfile({
-    displayName: saved.profile.displayName,
-    avatarImage: saved.profile.avatarImage,
+    displayName: bootstrap.profile.display_name,
+    avatarImage: bootstrap.profile.avatar_image_url,
   });
-  return undefined;
+  return bootstrap;
 }
 
 export default function StartupIdentityGate({
@@ -124,33 +98,28 @@ export default function StartupIdentityGate({
   async function enterApplication(expectedDesktopAuthority?: DesktopBootstrapGrant) {
     setChecking(true);
     setStatus("로컬 엔진과 방 목록을 준비하는 중");
-    const desktop = isDesktopWebview();
-    const desktopAuthority = desktop
-      ? expectedDesktopAuthority || (await requestDesktopBootstrapStatus())
-      : undefined;
-    if (desktop && desktopAuthority?.phase !== "complete") {
+    const desktopAuthority =
+      expectedDesktopAuthority || (await requestDesktopBootstrapStatus());
+    if (desktopAuthority.phase !== "complete") {
       throw new Error("완료된 데스크톱 권위가 방 목록을 소유하지 않습니다.");
     }
-    const response = desktop
-      ? await fetchDesktopOperatorRuntime("/api/rooms", { cache: "no-store" })
-      : await fetch("/api/rooms", { cache: "no-store" });
+    const response = await fetchDesktopOperatorRuntime("/api/rooms", {
+      cache: "no-store",
+    });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const payload = parseStrictRoomDirectory(await response.json());
     if (
-      desktopAuthority &&
-      (payload.server_id !== desktopAuthority.server_id ||
-        payload.authority_lineage_id !== desktopAuthority.authority_lineage_id)
+      payload.server_id !== desktopAuthority.server_id ||
+      payload.authority_lineage_id !== desktopAuthority.authority_lineage_id
     ) {
       throw new Error("방 목록 권위가 네이티브 bootstrap 계보와 일치하지 않습니다.");
     }
     await bindRoomDirectoryAuthority(
       payload,
-      desktopAuthority
-        ? {
-            revision: desktopAuthority.server_product_surface_revision,
-            digest: desktopAuthority.server_product_surface_digest,
-          }
-        : null
+      {
+        revision: desktopAuthority.server_product_surface_revision,
+        digest: desktopAuthority.server_product_surface_digest,
+      }
     );
     const current = loadRoomDockItems().map(hydratePersistedRoom);
     const synchronized = mergeServerRoomsIntoDock(
@@ -160,7 +129,6 @@ export default function StartupIdentityGate({
       payload.server_id
     );
     persistRoomDockItems(synchronized.map(persistableRoom));
-    rememberStartupIdentitySelection();
     onComplete();
   }
 
@@ -175,94 +143,70 @@ export default function StartupIdentityGate({
   useEffect(() => {
     let active = true;
     async function initialize() {
-      if (isDesktopWebview()) {
-        try {
-          await requestDesktopHostProductSurface();
-          const bootstrap = await requestDesktopBootstrapStatus();
-          if (bootstrap.phase === "complete") {
-            if (active) await enterApplication(bootstrap);
-            return;
-          }
-          if (bootstrap.phase !== "empty") {
-            throw new Error("로컬 신원 권위에 명시적 복구가 필요합니다.");
-          }
-        } catch (reason) {
-          if (active) {
-            setError(
-              reason instanceof Error
-                ? reason.message
-                : "로컬 신원 권위를 확인하지 못했습니다."
-            );
-            setChecking(false);
-          }
-          return;
-        }
-        if (!centralEnabled) {
-          if (active) setChecking(false);
-          return;
-        }
-      }
-      if (centralEnabled) {
-        const pendingRecoveryCode = loadPendingCentralRecoveryCode();
-        if (pendingRecoveryCode) {
-          if (active) {
-            setIssuedRecoveryCode(pendingRecoveryCode);
-            setSavedRecoveryCode(false);
-            setCopied(false);
-            setScreen("recovery-code");
-            setChecking(false);
-          }
-          return;
-        }
-
-        const existing = loadCentralSession();
-        if (!existing) {
-          if (active) setChecking(false);
-          return;
-        }
-        try {
-          setStatus("중앙 신원과 서버 목록을 확인하는 중");
-          await bootstrapCentral();
-          const localAuthority = await saveLocalProfile(
-            existing.person.display_name,
-            deviceToken,
-            bootstrapRequestId.current
-          );
-          await registerLocalServer(deviceToken);
-          if (active) await enterApplication(localAuthority);
-        } catch (reason) {
-          if (isCentralAuthenticationError(reason)) {
-            if (active) {
-              setError("중앙 로그인이 만료됐습니다. 다시 로그인해 주세요.");
-              setChecking(false);
-            }
-            return;
-          }
-          if (active) {
-            setError(
-              reason instanceof Error
-                ? reason.message
-                : "중앙 신원과 로컬 권위를 동기화하지 못했습니다."
-            );
-            setChecking(false);
-          }
-        }
-        return;
-      }
       try {
-        const account = await fetchAccountStatus({ deviceToken });
-        if (!active) return;
-        if (account.account) {
-          await enterApplication();
-        } else {
-          setChecking(false);
+        await requestDesktopHostProductSurface();
+        const bootstrap = await requestDesktopBootstrapStatus();
+        if (bootstrap.phase === "complete") {
+          if (active) await enterApplication(bootstrap);
+          return;
+        }
+        if (bootstrap.phase !== "empty") {
+          throw new Error("로컬 신원 권위에 명시적 복구가 필요합니다.");
         }
       } catch (reason) {
         if (active) {
           setError(
             reason instanceof Error
               ? reason.message
-              : "저장된 사용자와 방 목록을 확인하지 못했습니다."
+              : "로컬 신원 권위를 확인하지 못했습니다."
+          );
+          setChecking(false);
+        }
+        return;
+      }
+      if (!centralEnabled) {
+        if (active) setChecking(false);
+        return;
+      }
+      const pendingRecoveryCode = loadPendingCentralRecoveryCode();
+      if (pendingRecoveryCode) {
+        if (active) {
+          setIssuedRecoveryCode(pendingRecoveryCode);
+          setSavedRecoveryCode(false);
+          setCopied(false);
+          setScreen("recovery-code");
+          setChecking(false);
+        }
+        return;
+      }
+
+      const existing = loadCentralSession();
+      if (!existing) {
+        if (active) setChecking(false);
+        return;
+      }
+      try {
+        setStatus("중앙 신원과 서버 목록을 확인하는 중");
+        await bootstrapCentral();
+        const localAuthority = await saveLocalProfile(
+          existing.person.display_name,
+          bootstrapRequestId.current
+        );
+        await registerLocalServer(deviceToken);
+        if (active) await enterApplication(localAuthority);
+      } catch (reason) {
+        if (isCentralAuthenticationError(reason)) {
+          if (active) {
+            setError("중앙 로그인이 만료됐습니다. 다시 로그인해 주세요.");
+            setChecking(false);
+          }
+          return;
+        }
+        if (active) {
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : "중앙 신원과 로컬 권위를 동기화하지 못했습니다."
           );
           setChecking(false);
         }
@@ -284,7 +228,6 @@ export default function StartupIdentityGate({
       const result = await createCentralGuest(name);
       await saveLocalProfile(
         result.person.display_name || name,
-        deviceToken,
         bootstrapRequestId.current
       );
       await registerLocalServer(deviceToken);
@@ -320,7 +263,6 @@ export default function StartupIdentityGate({
       const result = await recoverCentralGuest(recoveryInput);
       await saveLocalProfile(
         result.person.display_name || "Guest",
-        deviceToken,
         bootstrapRequestId.current
       );
       await registerLocalServer(deviceToken);
@@ -357,7 +299,6 @@ export default function StartupIdentityGate({
       const session = await loginCentralGoogle(setStatus, controller.signal);
       const localAuthority = await saveLocalProfile(
         session.person.display_name,
-        deviceToken,
         bootstrapRequestId.current
       );
       await registerLocalServer(deviceToken);
@@ -399,7 +340,6 @@ export default function StartupIdentityGate({
     try {
       const localAuthority = await saveLocalProfile(
         name,
-        deviceToken,
         bootstrapRequestId.current
       );
       await enterApplication(localAuthority);
@@ -443,18 +383,6 @@ export default function StartupIdentityGate({
             >
               {error}
             </p>
-          )}
-          {!isDesktopWebview() && (
-            <>
-              <GoogleAccountSettings
-                identity={{ deviceToken }}
-                onAccountConnected={() => void enterApplication()}
-              />
-              <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-wider text-text-muted">
-                <span className="h-px flex-1 bg-white/10" /> 또는{" "}
-                <span className="h-px flex-1 bg-white/10" />
-              </div>
-            </>
           )}
           <label className="grid gap-2 text-[11px] font-black text-text-secondary">
             게스트 표시 이름

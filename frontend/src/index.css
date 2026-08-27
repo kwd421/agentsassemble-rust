@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@source inline("h-px bg-white/10 tracking-wider");
 @import "./styles/original/segment-01.css";
 @import "./styles/original/segment-02.css";
 @import "./styles/original/segment-03.css";

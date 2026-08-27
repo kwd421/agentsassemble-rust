@@ -2,13 +2,6 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { fetchAccountStatus } from "../../api/identity";
-import { fetchUserProfile, saveUserProfile } from "../../api/userProfile";
-import {
-  rememberGuestProfile,
-  rememberStartupIdentitySelection,
-} from "../../lib/deviceIdentity";
-import { DEFAULT_USER_PROFILE } from "../../lib/userProfileModel";
 import { PRODUCT_SURFACE_REVISION } from "../../types/generated/PRODUCT_SURFACE_REVISION";
 import StartupIdentityGate from "./StartupIdentityGate";
 
@@ -17,7 +10,6 @@ const centralMocks = vi.hoisted(() => ({
   login: vi.fn(),
 }));
 const desktopMocks = vi.hoisted(() => ({
-  desktop: false,
   fetchOperatorRuntime: vi.fn(),
   initializeBootstrap: vi.fn(),
   requestBootstrapStatus: vi.fn(),
@@ -67,21 +59,14 @@ const desktopProfile = {
   updated_at: "2026-08-25T00:00:00.000000000Z",
 };
 
-vi.mock("../../api/identity", () => ({ fetchAccountStatus: vi.fn() }));
-vi.mock("../../api/userProfile", () => ({
-  fetchUserProfile: vi.fn(),
-  saveUserProfile: vi.fn(),
-}));
 vi.mock("../../lib/desktopBridge", () => ({
   fetchDesktopOperatorRuntime: desktopMocks.fetchOperatorRuntime,
   initializeDesktopBootstrap: desktopMocks.initializeBootstrap,
-  isDesktopWebview: () => desktopMocks.desktop,
   requestDesktopBootstrapStatus: desktopMocks.requestBootstrapStatus,
   requestDesktopHostProductSurface: desktopMocks.requestHostProductSurface,
 }));
 vi.mock("../../lib/deviceIdentity", () => ({
   rememberGuestProfile: vi.fn(),
-  rememberStartupIdentitySelection: vi.fn(),
 }));
 vi.mock("../../lib/centralIdentity", () => ({
   centralIdentityConfigured: () => centralMocks.configured,
@@ -95,15 +80,10 @@ vi.mock("../../lib/centralIdentity", () => ({
   recoverCentralGuest: vi.fn(),
   registerLocalServer: vi.fn(),
 }));
-vi.mock("./GoogleAccountSettings", () => ({
-  default: () => <section aria-label="공개 계정 연결" />,
-}));
-
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   centralMocks.configured = false;
-  desktopMocks.desktop = false;
   vi.clearAllMocks();
   desktopMocks.requestHostProductSurface.mockResolvedValue({
     revision: PRODUCT_SURFACE_REVISION,
@@ -113,116 +93,7 @@ afterEach(() => {
 });
 
 describe("StartupIdentityGate", () => {
-  it("does not show identity choices while an existing account is still being checked", () => {
-    vi.mocked(fetchAccountStatus).mockReturnValue(new Promise(() => undefined));
-
-    render(<StartupIdentityGate deviceToken="device-1" onComplete={vi.fn()} />);
-
-    expect(screen.queryByRole("main", { name: "시작 로그인" })).toBeNull();
-    expect(screen.getByRole("status")).toBeTruthy();
-  });
-
-  it("keeps the product gated until a local guest identity is persisted", async () => {
-    vi.mocked(fetchUserProfile).mockResolvedValue({
-      profile: DEFAULT_USER_PROFILE,
-      revision: 1,
-      displayResourceBase: "http://localhost:3000",
-    });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify(directory()), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        })
-      )
-    );
-    vi.mocked(fetchAccountStatus).mockResolvedValue({
-      account: null,
-      google: { enabled: false, client_id: "", unavailable_reason: "" },
-    });
-    vi.mocked(saveUserProfile).mockResolvedValue({
-      profile: { ...DEFAULT_USER_PROFILE, displayName: "Local Guest" },
-      revision: 2,
-      displayResourceBase: "http://localhost:3000",
-    });
-    const onComplete = vi.fn();
-
-    render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
-
-    const name = await screen.findByRole("textbox", { name: "게스트 표시 이름" });
-    expect(onComplete).not.toHaveBeenCalled();
-    await userEvent.type(name, "Local Guest");
-    await userEvent.click(screen.getByRole("button", { name: "게스트로 계속" }));
-
-    expect(rememberGuestProfile).toHaveBeenCalledWith({
-      displayName: "Local Guest",
-      avatarImage: undefined,
-    });
-    expect(saveUserProfile).toHaveBeenCalled();
-    expect(onComplete).toHaveBeenCalledOnce();
-  });
-
-  it("does not bypass a failed authoritative room-directory synchronization", async () => {
-    vi.mocked(fetchUserProfile).mockResolvedValue({
-      profile: DEFAULT_USER_PROFILE,
-      revision: 1,
-      displayResourceBase: "http://localhost:3000",
-    });
-    vi.mocked(fetchAccountStatus).mockResolvedValue({
-      account: null,
-      google: { enabled: false, client_id: "", unavailable_reason: "" },
-    });
-    vi.mocked(saveUserProfile).mockResolvedValue({
-      profile: { ...DEFAULT_USER_PROFILE, displayName: "Local Guest" },
-      revision: 2,
-      displayResourceBase: "http://localhost:3000",
-    });
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 503 })));
-    const onComplete = vi.fn();
-
-    render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
-    await userEvent.type(
-      await screen.findByRole("textbox", { name: "게스트 표시 이름" }),
-      "Local Guest"
-    );
-    await userEvent.click(screen.getByRole("button", { name: "게스트로 계속" }));
-
-    await vi.waitFor(() => expect(saveUserProfile).toHaveBeenCalledOnce());
-    expect(onComplete).not.toHaveBeenCalled();
-  });
-
-  it("resumes an already linked account without asking for a guest name", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify(directory()), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        })
-      )
-    );
-    vi.mocked(fetchAccountStatus).mockResolvedValue({
-      account: {
-        account_id: "acct-1",
-        provider: "google",
-        display_name: "Linked User",
-        email: "linked@example.test",
-        avatar_image_url: "",
-      },
-      google: { enabled: true, client_id: "client", unavailable_reason: "" },
-    });
-    const onComplete = vi.fn();
-
-    render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
-
-    await vi.waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
-    expect(rememberStartupIdentitySelection).toHaveBeenCalledOnce();
-    expect(screen.queryByRole("textbox", { name: "표시 이름" })).toBeNull();
-  });
-
   it("initializes desktop authority before fetching the real empty room directory", async () => {
-    desktopMocks.desktop = true;
     desktopMocks.requestBootstrapStatus.mockResolvedValue({
       phase: "empty",
       authority_lineage_id: LINEAGE_ID,
@@ -264,7 +135,6 @@ describe("StartupIdentityGate", () => {
     expect(desktopMocks.fetchOperatorRuntime).toHaveBeenCalledWith("/api/rooms", {
       cache: "no-store",
     });
-    expect(saveUserProfile).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -274,7 +144,6 @@ describe("StartupIdentityGate", () => {
       directory("30000000-0000-4000-8000-000000000099"),
     ],
   ])("rejects a %s zero-room response", async (_case, payload) => {
-    desktopMocks.desktop = true;
     desktopMocks.requestBootstrapStatus.mockResolvedValue({
       phase: "complete",
       authority_lineage_id: LINEAGE_ID,
@@ -296,11 +165,19 @@ describe("StartupIdentityGate", () => {
 
     await screen.findByRole("alert");
     expect(onComplete).not.toHaveBeenCalled();
-    expect(rememberStartupIdentitySelection).not.toHaveBeenCalled();
   });
 
   it("lets the user cancel a central Google handoff that is still pending", async () => {
     centralMocks.configured = true;
+    desktopMocks.requestBootstrapStatus.mockResolvedValue({
+      phase: "empty",
+      authority_lineage_id: LINEAGE_ID,
+      server_id: SERVER_ID,
+      server_product_surface_revision: SERVER_SURFACE.revision,
+      server_product_surface_digest: SERVER_SURFACE.digest,
+      profile: null,
+      deduplicated: false,
+    });
     centralMocks.login.mockImplementation(
       (_status: (message: string) => void, signal: AbortSignal) =>
         new Promise((_resolve, reject) => {

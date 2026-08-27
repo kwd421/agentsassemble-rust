@@ -9,7 +9,7 @@ function cleanRecoveryCode(value: string): string {
   return normalized.match(/.{1,4}/g)?.join("-") || "";
 }
 
-export function consumeGuestRecoveryRequestFromUrl(
+export function guestRecoveryRequestFromUrl(
   url = window.location.href
 ): GuestRecoveryRequest | null {
   try {
@@ -21,12 +21,21 @@ export function consumeGuestRecoveryRequestFromUrl(
       return null;
     }
 
-    parsed.hash = "";
-    parsed.searchParams.delete("recover");
-    parsed.searchParams.delete("room");
-    window.history.replaceState({}, "", `${parsed.pathname}${parsed.search}` || "/");
     return { recoveryCode, roomId };
   } catch {
     return null;
   }
+}
+
+export function consumeGuestRecoveryRequestFromUrl(
+  url = window.location.href
+): GuestRecoveryRequest | null {
+  const request = guestRecoveryRequestFromUrl(url);
+  if (!request) return null;
+  const parsed = new URL(url);
+  parsed.hash = "";
+  parsed.searchParams.delete("recover");
+  parsed.searchParams.delete("room");
+  window.history.replaceState({}, "", `${parsed.pathname}${parsed.search}` || "/");
+  return request;
 }
