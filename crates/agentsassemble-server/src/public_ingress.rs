@@ -474,13 +474,7 @@ impl ManagedProjection {
         if self.generation != generation {
             return false;
         }
-        if self.phase == IngressPhase::Running {
-            return self
-                .trust
-                .as_ref()
-                .is_some_and(|trust| trust.origin.value == origin.value);
-        }
-        if self.phase != IngressPhase::Starting {
+        if !matches!(self.phase, IngressPhase::Starting | IngressPhase::Running) {
             return false;
         }
         self.phase = IngressPhase::Running;
