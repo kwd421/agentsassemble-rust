@@ -126,6 +126,16 @@ function initialAdmissionState({
 function admissionReducer(state: AdmissionState, action: AdmissionAction): AdmissionState {
   switch (action.type) {
     case "preflight_started":
+      if (
+        state.kind !== "preflighting" &&
+        !(
+          state.kind === "failed" &&
+          state.operation === "preflight" &&
+          state.retryable
+        )
+      ) {
+        return state;
+      }
       return { kind: "preflighting", session: state.session, status: action.status };
     case "profile_required":
       return { kind: "profile_required", session: state.session, status: "" };
@@ -273,6 +283,11 @@ export function useRoomAdmission({
       : "";
   const guestExpired = admissionState.kind === "expired";
   const guestJoinRequested = admissionState.kind === "joining";
+  const guestPreflightRetryable = Boolean(
+    admissionState.kind === "failed" &&
+      admissionState.operation === "preflight" &&
+      admissionState.retryable
+  );
   const guestAdmissionBusy =
     admissionState.kind === "preflighting" ||
     admissionState.kind === "joining" ||
@@ -361,8 +376,16 @@ export function useRoomAdmission({
   }, []);
 
   const requestGuestJoin = useCallback(() => {
+    if (guestPreflightRetryable) {
+      preflightAttemptedTokenRef.current = "";
+      dispatchAdmission({
+        type: "preflight_started",
+        status: "초대와 기존 신원을 다시 확인하는 중...",
+      });
+      return;
+    }
     dispatchAdmission({ type: "join_requested", status: "" });
-  }, []);
+  }, [guestPreflightRetryable]);
 
   const retryOperatorPairing = useCallback(() => {
     if (operatorPairingState !== "pairing_failed_retryable") return;
@@ -599,13 +622,21 @@ export function useRoomAdmission({
       })
       .catch((error) => {
         if (!attempt.isCurrent()) return;
+        const surfaceFailure = error instanceof SessionSurfaceError;
+        const custodyFailure = error instanceof SessionCustodyError;
         const message = error instanceof Error ? error.message : "초대 확인 실패";
         dispatchAdmission({
           type: "failed",
           operation: "preflight",
-          code: error instanceof ApiError ? error.message : "preflight_failed",
+          code: surfaceFailure
+            ? SERVER_SURFACE_INVALID_CODE
+            : custodyFailure
+            ? SESSION_CUSTODY_INVALID_CODE
+            : error instanceof ApiError
+            ? error.message
+            : "preflight_failed",
           message,
-          retryable: pairingFailureIsRetryable(error),
+          retryable: custodyFailure || (!surfaceFailure && pairingFailureIsRetryable(error)),
           status: message,
         });
       });
@@ -718,6 +749,7 @@ export function useRoomAdmission({
     admittedSessionToken,
     guestExpired,
     guestJoinRequested,
+    guestPreflightRetryable,
     pendingGuestDisplayName,
     pendingGuestAvatarImage,
     guestJoinStatus,

@@ -67,7 +67,10 @@ function joinedPayload(sessionToken: string) {
   };
 }
 
-function renderAdmission(onRoomJoined = vi.fn()) {
+function renderAdmission(
+  onRoomJoined = vi.fn(),
+  initialSession: RoomGuestSession | null = null
+) {
   const hook = renderHook(() =>
     useRoomAdmission({
       deviceToken: DEVICE_TOKEN,
@@ -76,7 +79,7 @@ function renderAdmission(onRoomJoined = vi.fn()) {
       guestJoinToken: "invite-1",
       operatorPairingToken: "",
       onPairingTokenConsumed: vi.fn(),
-      initialSession: null,
+      initialSession,
       onRoomJoined,
       onResetToLobby: vi.fn(),
     })
@@ -142,6 +145,61 @@ describe("room admission retry custody", () => {
       operation: "join",
       retryable: true,
     });
+  });
+
+  it("retries existing-session custody through preflight without a join effect", async () => {
+    const initialSession: RoomGuestSession = {
+      inviteToken: "previous-invite",
+      sessionToken: "existing-session",
+      meetingId: "room-1",
+      agentId: "guest-1",
+      displayName: "Guest",
+      inviteScope: "room",
+      expiresAt: "2099-01-01T00:00:00Z",
+      joinedAt: "2026-08-28T00:00:00Z",
+      serverSurface: {
+        server_id: SESSION_SURFACE.server_id,
+        authority_lineage_id: SESSION_SURFACE.authority_lineage_id,
+        server_product_surface: SESSION_SURFACE.server_product_surface,
+      },
+    };
+    apiMocks.preflightRoomInvite.mockResolvedValue({
+      status: "existing_session",
+      can_auto_join: true,
+      room_id: "room-1",
+      room_label: "Room One",
+      invite_scope: "room",
+      participant: { participant_id: "guest-1", display_name: "Guest" },
+    });
+    sessionStore.current = initialSession;
+    sessionStore.writeError = new Error("방 세션을 영구 저장할 수 없습니다.");
+    const { result, onRoomJoined } = renderAdmission(vi.fn(), initialSession);
+
+    await waitFor(() =>
+      expect(result.current.admissionState).toMatchObject({
+        kind: "failed",
+        operation: "preflight",
+        code: "session_storage_unavailable",
+        retryable: true,
+      })
+    );
+    expect(result.current.guestPreflightRetryable).toBe(true);
+    expect(apiMocks.joinRoomInvite).not.toHaveBeenCalled();
+    expect(window.location.search).toBe("?token=invite-1");
+
+    sessionStore.writeError = null;
+    act(() => result.current.requestGuestJoin());
+    await waitFor(() => expect(apiMocks.preflightRoomInvite).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(result.current.admissionState).toMatchObject({
+        kind: "joined",
+        source: "existing_session",
+      })
+    );
+
+    expect(apiMocks.joinRoomInvite).not.toHaveBeenCalled();
+    expect(onRoomJoined).toHaveBeenCalledOnce();
+    expect(window.location.search).toBe("");
   });
 
   it("reuses the secure request id when a failed join is retried", async () => {

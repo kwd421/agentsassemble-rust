@@ -77,4 +77,26 @@ describe("GuestJoinProfilePanel", () => {
     );
   });
 
+  it("retries preflight without presenting editable join-profile fields", () => {
+    const onJoin = vi.fn();
+
+    render(
+      <GuestJoinProfilePanel
+        deviceToken="aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        inviteToken="aaj1_valid-invite"
+        displayName="Guest"
+        status="방 세션을 브라우저에 영구 저장할 수 없습니다."
+        preflightRetry
+        onDisplayNameChange={vi.fn()}
+        onAvatarImageChange={vi.fn()}
+        onJoin={onJoin}
+      />
+    );
+
+    expect(screen.getByRole("region", { name: "입장 확인 재시도" })).toBeTruthy();
+    expect(screen.queryByRole("textbox", { name: "이름" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "다시 시도" }));
+    expect(onJoin).toHaveBeenCalledOnce();
+  });
+
 });

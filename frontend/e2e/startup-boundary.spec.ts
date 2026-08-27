@@ -31,12 +31,13 @@ test("retains the server-owned invite entrance", async ({ page }) => {
 });
 
 test("does not let legacy query state override a server-owned invite", async ({ page }) => {
+  await page.route("**/api/room-invite/admission", (route) => route.abort());
   await page.goto(
     "/join?token=invite-token&guest=1&room=legacy-room&scope=read_only"
   );
 
-  await expect(page.getByRole("region", { name: "입장 프로필" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "초대 확인 중", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "입장 확인 재시도" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "다시 시도", exact: true })).toBeVisible();
   await expect(page.getByText("legacy-room")).toHaveCount(0);
 });
 

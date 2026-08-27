@@ -13,6 +13,7 @@ type GuestJoinProfilePanelProps = {
   busy?: boolean;
   pairing?: boolean;
   pairingState?: OperatorPairingState;
+  preflightRetry?: boolean;
   onDisplayNameChange: (value: string) => void;
   onAvatarImageChange: (value: string) => void;
   onJoin: () => void;
@@ -28,6 +29,7 @@ export default function GuestJoinProfilePanel({
   busy = false,
   pairing = false,
   pairingState = "idle",
+  preflightRetry = false,
   onDisplayNameChange,
   onAvatarImageChange,
   onJoin,
@@ -57,10 +59,18 @@ export default function GuestJoinProfilePanel({
     <div className="dc-guest-join-panel">
       <section
         className="dc-guest-join-card"
-        aria-label={pairing ? "운영자 기기 연결" : "입장 프로필"}
+        aria-label={
+          pairing
+            ? "운영자 기기 연결"
+            : preflightRetry
+            ? "입장 확인 재시도"
+            : "입장 프로필"
+        }
       >
-        <h1>{pairing ? "운영자 기기 연결" : "입장 프로필"}</h1>
-        {!pairing && (
+        <h1>
+          {pairing ? "운영자 기기 연결" : preflightRetry ? "입장 확인" : "입장 프로필"}
+        </h1>
+        {!pairing && !preflightRetry && (
           <div className="dc-guest-avatar-row">
           <span className="dc-guest-avatar" data-has-image={Boolean(avatarImage)}>
             {avatarImage ? <img src={avatarImage} alt="" /> : avatarLabel}
@@ -97,14 +107,25 @@ export default function GuestJoinProfilePanel({
             새 연결 링크 받기
           </a>
         )}
-        {!pairing && cropFile && (
+        {preflightRetry && (
+          <button
+            type="button"
+            className="dc-guest-join-button"
+            disabled={busy}
+            onClick={onJoin}
+          >
+            <RotateCcw size={16} />
+            다시 시도
+          </button>
+        )}
+        {!pairing && !preflightRetry && cropFile && (
           <ImageCropper
             file={cropFile}
             onCancel={() => setCropFile(null)}
             onCropped={(file) => void handleCropped(file)}
           />
         )}
-        {!pairing && (
+        {!pairing && !preflightRetry && (
           <>
             <label className="dc-guest-name-field">
               이름
