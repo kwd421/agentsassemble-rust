@@ -5,8 +5,9 @@ pre-join avatar flow, fail-closed browser credential custody, the live-session
 profile/preferences/WebSocket exchanges, and exact participant leave are implemented
 and production-browser verified; configured-manual and managed public ingress with
 stable entry plus backend manager invite create/revoke and private-control ticket
-issuance are implemented and verified; desktop manager-invite bridging, remaining
-typed exchanges, and frontend activation remain incomplete
+issuance and the native desktop manager-invite ticket bridge are implemented and
+test-verified; frontend API/controller/UI integration, remaining typed exchanges,
+and packaged activation remain incomplete and unverified
 
 ## Definition
 
@@ -16,7 +17,8 @@ session exchange for exact one-use WebSocket, profile, attachment, and preferenc
 grants. Invite management remains local-operator authority. Backend create binds its
 new credentials and URLs to one ready ingress snapshot, while revoke remains
 room-bound and ingress-independent. An external invite is not a completed user flow
-until the desktop bridge and frontend activate those controls.
+until the frontend consumes the native bridge and activates those controls in the
+packaged flow.
 
 The behavior comparison baseline is original commit
 `d5046473010d1353a81ee38337360e6d98f7bd6f`. The Rust baseline for this design is
@@ -473,10 +475,11 @@ boundary and therefore fail closed. Its legacy public-URL input/configure path i
 removed during activation rather than restored as mutable manual-ingress authority.
 Backend manager invite create already captures one ready ingress snapshot; revoke
 uses only its exact room-bound manager grant and remains available when ingress is not
-ready. Desktop and frontend activation must consume the exact operation grant and copy
-only the create response's public join URL; a local preview is not presented as
-admission parity. The token is removed from browser history after it is captured, and
-stored session state cannot override a failed durable verification.
+ready. The native desktop bridge consumes the exact operation grant. Frontend
+activation must invoke that bridge and copy only the create response's public join
+URL; a local preview is not presented as admission parity. The token is removed from
+browser history after it is captured, and stored session state cannot override a
+failed durable verification.
 
 ## Trusted ingress boundary
 
@@ -484,8 +487,8 @@ Managed Cloudflare direct-tunnel custody, configured stable-entry publication, a
 startup-configured reverse-proxy proof are implemented by the separate ingress slice.
 Backend manager create consumes one exact ready origin/host/protocol snapshot from
 either that process-owned managed tunnel or the configured reverse-proxy owner;
-room-bound revoke does not depend on ingress readiness. Operator pairing and the
-copied frontend bridge remain incomplete. Forwarding headers or a configured URL
+room-bound revoke does not depend on ingress readiness. Operator pairing and copied
+frontend activation remain incomplete. Forwarding headers or a configured URL
 alone are not ingress authority. No raw legacy host token, local-development bypass,
 query flag, or client-side readiness authority is added.
 

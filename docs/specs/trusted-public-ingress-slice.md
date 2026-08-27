@@ -3,8 +3,9 @@
 Status: design approved; invite-use, exact local TCP trust, route exposure, local
 identity probes, configured-manual trust, the direct managed quick-tunnel lifecycle
 with stable-entry publication, and backend manager create/revoke controls are
-implemented and verified; desktop manager bridging and frontend activation remain
-incomplete
+implemented and verified; the native desktop manager-invite ticket bridge is
+implemented and test-verified, while frontend API/controller/UI integration and
+packaged activation remain incomplete and unverified
 
 ## Definition
 
@@ -106,8 +107,8 @@ suppresses an unchanged target. Stop, child failure, spawn failure, startup fail
 and shutdown converge on the same finalizer, which joins publication before clearing
 the stable target. Unconfirmed cleanup is explicit and blocks restart. The stable URL
 is not a fallback invite URL. Backend create requires the current ready-ingress
-snapshot, and the still-incomplete desktop/frontend activation cannot substitute the
-stable URL for it; ingress-independent revoke needs no such snapshot.
+snapshot, and the still-incomplete frontend activation cannot substitute the stable
+URL for it; ingress-independent revoke needs no such snapshot.
 
 ## Human invite activation
 
