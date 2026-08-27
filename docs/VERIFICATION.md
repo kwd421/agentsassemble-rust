@@ -2507,3 +2507,16 @@ could still allow that frame to commit client state. All seven were fixed by `ee
 `1d07590`, `708eb54`, `565d84b`, and `04fac7f`. Daybreaker verdict:
 `APPROVE — Critical 0 / High 0 / Medium 0`. Web verdict:
 `APPROVE — Critical 0 / High 0 / Medium 0`.
+
+## Manager invite backend review: 2026-08-27
+
+Manual review findings for implementation/test commits `24ca404` and `4db3448`:
+(1) active routing and exposure documents still classified the implemented backend
+manager create/revoke controls as incomplete; (2) the first documentation correction
+incorrectly generalized create's `ReadyIngress` prerequisite to ingress-independent
+revoke; (3) the trusted-ingress status owner retained the stale backend-incomplete
+classification. Documentation commits `b3c8f53` and `c697f5c` corrected those three
+findings without changing product code. Final web verdict:
+`APPROVE — Critical 0 / High 0 / Medium 0`. Final Daybreaker verdict:
+`APPROVE — Critical 0 / High 0 / Medium 0`. Neither review used Deep Scan or another
+automated security scanner.
