@@ -75,6 +75,7 @@ pub(crate) async fn assert_profile_exchange_boundary(
         .post(format!("{base_url}/api/user-profile"))
         .header("authorization", format!("Bearer {update_ticket}"))
         .json(&json!({
+            "expected_revision": 1,
             "display_name": "Exchanged Guest",
             "avatar_image_url": replacement_avatar,
             "mic_muted": true,

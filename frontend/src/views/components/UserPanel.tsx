@@ -64,11 +64,9 @@ export default function UserPanel({
         avatarImage: guestProfile.avatarImage,
       }
     : DEFAULT_USER_PROFILE;
-  const [profileSnapshot, setProfileSnapshot] = useState({
-    profile: initialProfile,
-    displayResourceBase: "",
-  });
-  const profile = profileSnapshot.profile;
+  const [profileSnapshot, setProfileSnapshot] = useState<UserProfileSnapshot | null>(null);
+  const profile = profileSnapshot?.profile ?? initialProfile;
+  const displayResourceBase = profileSnapshot?.displayResourceBase || "";
   const [draft, setDraft] = useState<UserProfile>(initialProfile);
   const [profileOpen, setProfileOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -81,7 +79,7 @@ export default function UserPanel({
   const [profileError, setProfileError] = useState("");
   const [profileHydrated, setProfileHydrated] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const profileSnapshotRef = useRef(profileSnapshot);
+  const profileSnapshotRef = useRef<UserProfileSnapshot | null>(null);
   const profileScopeGeneration = useRef(0);
   const profileIntentGeneration = useRef(0);
   const profileWriteGeneration = useRef(0);
@@ -191,7 +189,7 @@ export default function UserPanel({
   }
 
   async function enqueueProfileOperation(
-    execute: (currentProfile: UserProfile) => Promise<UserProfileSnapshot>
+    execute: (currentSnapshot: UserProfileSnapshot) => Promise<UserProfileSnapshot | null>
   ): Promise<"saved" | "stale" | "failed"> {
     const scopeGeneration = profileScopeGeneration.current;
     const intentGeneration = profileIntentGeneration.current;
@@ -205,9 +203,12 @@ export default function UserPanel({
         ) {
           return "stale";
         }
+        const currentSnapshot = profileSnapshotRef.current;
+        if (!currentSnapshot) return "stale";
         setProfileError("");
         try {
-          const savedSnapshot = await execute(profileSnapshotRef.current.profile);
+          const savedSnapshot = await execute(currentSnapshot);
+          if (!savedSnapshot) return "stale";
           if (profileScopeGeneration.current !== scopeGeneration) return "stale";
           profileSnapshotRef.current = savedSnapshot;
           setProfileSnapshot(savedSnapshot);
@@ -261,8 +262,12 @@ export default function UserPanel({
   function persistProfile(
     applyMutation: (currentProfile: UserProfile) => UserProfile
   ): Promise<"saved" | "stale" | "failed"> {
-    return enqueueProfileOperation((currentProfile) =>
-      saveUserProfile(applyMutation(currentProfile), profileIdentity)
+    return enqueueProfileOperation((currentSnapshot) =>
+      saveUserProfile(
+        applyMutation(currentSnapshot.profile),
+        currentSnapshot.revision,
+        profileIdentity
+      )
     );
   }
 
@@ -282,11 +287,17 @@ export default function UserPanel({
   async function handleAvatarCropped(file: File) {
     if (avatarSubmissionInFlight.current) return;
     avatarSubmissionInFlight.current = true;
+    const avatarScopeGeneration = profileScopeGeneration.current;
     setAvatarStatus("프로필 사진 저장 중...");
     try {
-      const result = await enqueueProfileOperation(async (currentProfile) => {
+      const result = await enqueueProfileOperation(async (currentSnapshot) => {
         const avatarImage = await uploadUserProfileAvatar(file, profileIdentity);
-        return saveUserProfile({ ...currentProfile, avatarImage }, profileIdentity);
+        if (profileScopeGeneration.current !== avatarScopeGeneration) return null;
+        return saveUserProfile(
+          { ...currentSnapshot.profile, avatarImage },
+          currentSnapshot.revision,
+          profileIdentity
+        );
       });
       if (result === "stale") return;
       if (result === "failed") {
@@ -382,7 +393,7 @@ export default function UserPanel({
     <div
       className="dc-user-panel"
       ref={rootRef}
-      style={profileCssVars(profile, profileSnapshot.displayResourceBase)}
+      style={profileCssVars(profile, displayResourceBase)}
     >
       {profileOpen && (
         <section
@@ -392,7 +403,7 @@ export default function UserPanel({
           <div
             className="dc-profile-banner"
             data-preset={profile.bannerPreset}
-            style={profileCssVars(profile, profileSnapshot.displayResourceBase)}
+            style={profileCssVars(profile, displayResourceBase)}
           />
           <button
             type="button"
@@ -576,7 +587,7 @@ export default function UserPanel({
             onSave={() => void saveDraft()}
             onEditAvatar={openAvatarEditor}
             profileIdentity={profileIdentity}
-            displayResourceBase={profileSnapshot.displayResourceBase}
+            displayResourceBase={displayResourceBase}
           />
         </section>
       )}

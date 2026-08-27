@@ -443,6 +443,7 @@ mod tests {
         store
             .update_user_profile(
                 &principal,
+                1,
                 UserProfilePatch {
                     avatar_image_url: Some(first.url.clone()),
                     ..UserProfilePatch::default()
@@ -471,6 +472,7 @@ mod tests {
             store
                 .update_user_profile(
                     &principal,
+                    2,
                     UserProfilePatch {
                         avatar_image_url: Some(second.url.clone()),
                         ..UserProfilePatch::default()
@@ -494,6 +496,7 @@ mod tests {
         store
             .update_user_profile(
                 &principal,
+                2,
                 UserProfilePatch {
                     avatar_image_url: Some(second.url.clone()),
                     ..UserProfilePatch::default()

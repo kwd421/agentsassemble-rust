@@ -7,8 +7,8 @@ use chrono::{DateTime, Duration, Utc};
 use serde_json::json;
 
 use crate::{
-    HumanAdmissionDecision, HumanAdmissionInput, HumanInviteCredentialEvidence, PersistenceError,
-    PreparedHumanAdmission, SqliteStore,
+    HumanAdmissionDecision, HumanAdmissionInput, HumanInviteCredentialEvidence,
+    HumanSessionAuthorization, PersistenceError, PreparedHumanAdmission, SqliteStore,
 };
 
 const SIGNED: [u8; 32] = [0x41; 32];
@@ -24,21 +24,7 @@ async fn live_human_session_authority_revalidates_scope_membership_and_profile()
         .authorize_human_session(&fingerprint)
         .await
         .unwrap_or_else(|error| panic!("authorize live human session: {error}"));
-    assert_eq!(authority.session_fingerprint(), &fingerprint);
-    assert!(authority.expires_at() > now);
-    assert!(
-        authority
-            .principal()
-            .principal_id
-            .starts_with("u-admission-")
-    );
-    assert_eq!(authority.principal().participant_id, "session-guest");
-    assert_eq!(authority.principal().display_name, "Session Guest");
-    assert_eq!(authority.principal().room_id, "general");
-    assert_eq!(authority.principal().client_kind, ClientKind::Browser);
-    assert_eq!(authority.principal().invite_scope, InviteScope::ReadOnly);
-    assert!(!authority.principal().is_operator);
-    assert!(!authority.principal().capabilities.message_send);
+    assert_live_session_identity(&authority, &fingerprint, now);
 
     let profile = store
         .human_session_profile(&authority)
@@ -48,6 +34,7 @@ async fn live_human_session_authority_revalidates_scope_membership_and_profile()
     let updated = store
         .update_human_session_profile(
             &authority,
+            profile.revision,
             UserProfilePatch {
                 display_name: Some("Updated Session Guest".to_owned()),
                 ..UserProfilePatch::default()
@@ -99,6 +86,7 @@ async fn live_human_session_authority_revalidates_scope_membership_and_profile()
         store
             .update_human_session_profile(
                 &authority,
+                updated.profile.revision,
                 UserProfilePatch {
                     custom_status: Some("must not commit".to_owned()),
                     ..UserProfilePatch::default()
@@ -332,6 +320,24 @@ async fn session_fingerprint(store: &SqliteStore) -> [u8; 32] {
         .unwrap_or_else(|value: Vec<u8>| {
             panic!("invalid session fingerprint length: {}", value.len())
         })
+}
+
+fn assert_live_session_identity(
+    authority: &HumanSessionAuthorization,
+    fingerprint: &[u8; 32],
+    now: DateTime<Utc>,
+) {
+    assert_eq!(authority.session_fingerprint(), fingerprint);
+    assert!(authority.expires_at() > now);
+    let principal = authority.principal();
+    assert!(principal.principal_id.starts_with("u-admission-"));
+    assert_eq!(principal.participant_id, "session-guest");
+    assert_eq!(principal.display_name, "Session Guest");
+    assert_eq!(principal.room_id, "general");
+    assert_eq!(principal.client_kind, ClientKind::Browser);
+    assert_eq!(principal.invite_scope, InviteScope::ReadOnly);
+    assert!(!principal.is_operator);
+    assert!(!principal.capabilities.message_send);
 }
 
 async fn set_participant_status(store: &SqliteStore, status: ParticipantStatus) {

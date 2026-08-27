@@ -36,9 +36,10 @@ vi.mock("./ImageCropper", () => ({
 
 function snapshot(
   profile: UserProfile,
-  displayResourceBase = "http://localhost:3000"
+  displayResourceBase = "http://localhost:3000",
+  revision = 1
 ): UserProfileSnapshot {
-  return { profile, displayResourceBase };
+  return { profile, revision, displayResourceBase };
 }
 
 describe("UserPanel", () => {
@@ -117,6 +118,7 @@ describe("UserPanel", () => {
     await waitFor(() =>
       expect(apiMocks.saveUserProfile).toHaveBeenCalledWith(
         expect.objectContaining({ displayName: "Guest After" }),
+        1,
         { sessionToken: "guest-session" }
       )
     );
@@ -238,7 +240,69 @@ describe("UserPanel", () => {
     await waitFor(() => expect(apiMocks.saveUserProfile).toHaveBeenCalledTimes(1));
     expect(apiMocks.saveUserProfile).toHaveBeenLastCalledWith(
       expect.objectContaining({ avatarImage: "/api/attachments/avatar?view=1" }),
+      1,
       { deviceToken: "device-token" }
+    );
+  });
+
+  it("does not bind an uploaded avatar after the profile identity changes", async () => {
+    let resolveUpload: ((avatar: string) => void) | undefined;
+    apiMocks.fetchUserProfile
+      .mockResolvedValueOnce(snapshot(DEFAULT_USER_PROFILE))
+      .mockResolvedValueOnce(
+        snapshot({ ...DEFAULT_USER_PROFILE, displayName: "Replacement Identity" })
+      );
+    apiMocks.uploadUserProfileAvatar.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveUpload = resolve;
+        })
+    );
+    const view = render(
+      <UserPanel
+        onlineCount={1}
+        agentCount={0}
+        hasBackendError={false}
+        profileIdentity={{ sessionToken: "session-a" }}
+      />
+    );
+    await waitFor(() =>
+      expect(within(view.container).getByRole("button", { name: /SeiNel/ })).toBeTruthy()
+    );
+    fireEvent.click(within(view.container).getByRole("button", { name: "사용자 설정" }));
+    fireEvent.click(within(view.container).getByRole("button", { name: /프로필/ }));
+    fireEvent.click(
+      within(view.container).getByRole("button", { name: "프로필 사진 변경" })
+    );
+    fireEvent.change(within(view.container).getByLabelText("이미지 선택"), {
+      target: {
+        files: [new File(["source"], "source.png", { type: "image/png" })],
+      },
+    });
+    fireEvent.click(await within(view.container).findByRole("button", { name: "적용" }));
+    await waitFor(() => expect(apiMocks.uploadUserProfileAvatar).toHaveBeenCalledTimes(1));
+
+    view.rerender(
+      <UserPanel
+        onlineCount={1}
+        agentCount={0}
+        hasBackendError={false}
+        profileIdentity={{ sessionToken: "session-b" }}
+      />
+    );
+    expect(apiMocks.fetchUserProfile).toHaveBeenCalledTimes(1);
+    resolveUpload?.("/api/attachments/retired-avatar?view=1");
+
+    await waitFor(() =>
+      expect(apiMocks.fetchUserProfile).toHaveBeenLastCalledWith({
+        sessionToken: "session-b",
+      })
+    );
+    expect(apiMocks.saveUserProfile).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(
+        within(view.container).getByRole("button", { name: /Replacement Identity/ })
+      ).toBeTruthy()
     );
   });
 
@@ -269,6 +333,7 @@ describe("UserPanel", () => {
     expect(apiMocks.saveUserProfile).toHaveBeenCalledTimes(1);
     expect(apiMocks.saveUserProfile).toHaveBeenLastCalledWith(
       expect.objectContaining({ micMuted: false, deafened: false }),
+      1,
       { deviceToken: "device-token" }
     );
 
@@ -280,13 +345,15 @@ describe("UserPanel", () => {
           micMuted: false,
           avatarImage: "/api/attachments/first_avatar?view=1",
         },
-        "http://127.0.0.1:49171"
+        "http://127.0.0.1:49171",
+        2
       )
     );
     await waitFor(() => expect(resolvers).toHaveLength(2));
     expect(apiMocks.saveUserProfile).toHaveBeenCalledTimes(2);
     expect(apiMocks.saveUserProfile).toHaveBeenLastCalledWith(
       expect.objectContaining({ micMuted: false, deafened: true }),
+      2,
       { deviceToken: "device-token" }
     );
 
@@ -299,7 +366,8 @@ describe("UserPanel", () => {
           deafened: true,
           avatarImage: "/api/attachments/new_avatar?view=1",
         },
-        "http://127.0.0.1:49172"
+        "http://127.0.0.1:49172",
+        3
       )
     );
     await waitFor(() =>
@@ -374,7 +442,11 @@ describe("UserPanel", () => {
     apiMocks.fetchUserProfile
       .mockResolvedValueOnce(snapshot(DEFAULT_USER_PROFILE))
       .mockResolvedValueOnce(
-        snapshot({ ...DEFAULT_USER_PROFILE, displayName: "Recovered Authority" })
+        snapshot(
+          { ...DEFAULT_USER_PROFILE, displayName: "Recovered Authority" },
+          "http://localhost:3000",
+          2
+        )
       );
     apiMocks.saveUserProfile
       .mockImplementationOnce(
@@ -418,6 +490,7 @@ describe("UserPanel", () => {
     await waitFor(() => expect(apiMocks.saveUserProfile).toHaveBeenCalledTimes(2));
     expect(apiMocks.saveUserProfile).toHaveBeenLastCalledWith(
       expect.objectContaining({ displayName: "Recovered Authority", deafened: true }),
+      2,
       { sessionToken: "guest-session" }
     );
   });

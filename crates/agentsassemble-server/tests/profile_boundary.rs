@@ -78,6 +78,7 @@ async fn server_operator_profile_authority_works_before_the_first_room() {
         .post(format!("{}/api/user-profile", server.base_url))
         .header("authorization", format!("Bearer {update_ticket}"))
         .json(&json!({
+            "expected_revision": 1,
             "display_name": "Canonical Before Room",
             "avatar_image_url": avatar_url
         }))
@@ -98,6 +99,32 @@ async fn server_operator_profile_authority_works_before_the_first_room() {
         .unwrap_or_else(|error| panic!("inspect zero-room profile: {error}"));
     assert_eq!(stored.display_name, "Canonical Before Room");
     assert_eq!(stored.avatar_image_url, avatar_url);
+
+    let stale_ticket = issue_operator_ticket(&issuer).await;
+    let stale = client
+        .post(format!("{}/api/user-profile", server.base_url))
+        .header("authorization", format!("Bearer {stale_ticket}"))
+        .json(&json!({
+            "expected_revision": 1,
+            "display_name": "Stale Overwrite"
+        }))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("reject stale zero-room profile: {error}"));
+    assert_eq!(stale.status(), reqwest::StatusCode::CONFLICT);
+    let stale: Value = stale
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("decode stale profile rejection: {error}"));
+    assert_eq!(stale["code"], "profile_revision_conflict");
+    assert_eq!(
+        inspection_store
+            .local_operator_profile()
+            .await
+            .unwrap_or_else(|error| panic!("inspect profile after stale write: {error}"))
+            .display_name,
+        "Canonical Before Room"
+    );
     server.stop().await;
 }
 
@@ -239,6 +266,7 @@ async fn assert_profile_update_and_avatar(
         .post(format!("{base_url}/api/user-profile"))
         .header("authorization", format!("Bearer {update_ticket}"))
         .json(&json!({
+            "expected_revision": 1,
             "display_name": "Canonical Human",
             "avatar_image_url": avatar_url,
             "mic_muted": false

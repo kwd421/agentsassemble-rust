@@ -101,6 +101,7 @@ impl SqliteStore {
     pub async fn update_user_profile(
         &self,
         principal: &AuthenticatedPrincipal,
+        expected_revision: i64,
         patch: UserProfilePatch,
     ) -> Result<ProfileUpdateOutcome, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
@@ -108,6 +109,7 @@ impl SqliteStore {
         let outcome = update_profile_in_transaction(
             &mut transaction,
             ProfileIdentity::from_principal(principal),
+            expected_revision,
             patch,
         )
         .await?;
@@ -124,6 +126,7 @@ impl SqliteStore {
     pub async fn update_human_session_profile(
         &self,
         authorization: &HumanSessionAuthorization,
+        expected_revision: i64,
         patch: UserProfilePatch,
     ) -> Result<ProfileUpdateOutcome, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
@@ -133,6 +136,7 @@ impl SqliteStore {
             &mut transaction,
             ProfileIdentity::from_principal(current.principal()),
             profile,
+            expected_revision,
             patch,
         )
         .await?;
@@ -147,6 +151,7 @@ impl SqliteStore {
     /// Fails when local bootstrap is incomplete, profile authority is corrupt, or projection fails.
     pub async fn update_local_operator_profile(
         &self,
+        expected_revision: i64,
         patch: UserProfilePatch,
     ) -> Result<ProfileUpdateOutcome, PersistenceError> {
         self.require_local_bootstrap_complete().await?;
@@ -154,6 +159,7 @@ impl SqliteStore {
         let outcome = update_profile_in_transaction(
             &mut transaction,
             ProfileIdentity::local_operator(),
+            expected_revision,
             patch,
         )
         .await?;
@@ -165,18 +171,27 @@ impl SqliteStore {
 async fn update_profile_in_transaction(
     transaction: &mut Transaction<'_, Sqlite>,
     identity: ProfileIdentity<'_>,
+    expected_revision: i64,
     patch: UserProfilePatch,
 ) -> Result<ProfileUpdateOutcome, PersistenceError> {
     let profile = load_profile(transaction, identity).await?;
-    apply_profile_patch_in_transaction(transaction, identity, profile, patch).await
+    apply_profile_patch_in_transaction(transaction, identity, profile, expected_revision, patch)
+        .await
 }
 
 async fn apply_profile_patch_in_transaction(
     transaction: &mut Transaction<'_, Sqlite>,
     identity: ProfileIdentity<'_>,
     mut profile: UserProfile,
+    expected_revision: i64,
     patch: UserProfilePatch,
 ) -> Result<ProfileUpdateOutcome, PersistenceError> {
+    if profile.revision != expected_revision {
+        return Err(rejected(
+            "profile_revision_conflict",
+            "Profile revision does not match current authority.",
+        ));
+    }
     let previous_display_name = profile.display_name.clone();
     let previous_avatar_url = profile.avatar_image_url.clone();
     let now = Utc::now();
@@ -449,6 +464,7 @@ mod tests {
         let outcome = store
             .update_user_profile(
                 &principal,
+                1,
                 UserProfilePatch {
                     display_name: Some("Canonical Human".to_owned()),
                     ..UserProfilePatch::default()
@@ -491,6 +507,7 @@ mod tests {
         let retry = store
             .update_user_profile(
                 &principal,
+                outcome.profile.revision,
                 UserProfilePatch {
                     display_name: Some("Canonical Human".to_owned()),
                     ..UserProfilePatch::default()
@@ -521,6 +538,7 @@ mod tests {
             store
                 .update_user_profile(
                     &principal,
+                    before.revision,
                     UserProfilePatch {
                         display_name: Some("Must Roll Back".to_owned()),
                         ..UserProfilePatch::default()

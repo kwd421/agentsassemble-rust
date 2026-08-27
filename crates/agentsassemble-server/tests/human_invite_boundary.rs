@@ -154,7 +154,10 @@ async fn read_only_session_patches_profile_but_cannot_upload_an_avatar() {
     let updated: Value = client
         .post(format!("{}/api/user-profile", server.base_url))
         .header("authorization", format!("Bearer {update_ticket}"))
-        .json(&json!({"custom_status": "Still a person profile"}))
+        .json(&json!({
+            "expected_revision": 1,
+            "custom_status": "Still a person profile"
+        }))
         .send()
         .await
         .unwrap_or_else(|error| panic!("patch read-only person profile: {error}"))

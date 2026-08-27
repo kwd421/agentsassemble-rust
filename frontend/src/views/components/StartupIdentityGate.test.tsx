@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { fetchAccountStatus } from "../../api/identity";
-import { saveUserProfile } from "../../api/userProfile";
+import { fetchUserProfile, saveUserProfile } from "../../api/userProfile";
 import {
   rememberGuestProfile,
   rememberStartupIdentitySelection,
@@ -68,7 +68,10 @@ const desktopProfile = {
 };
 
 vi.mock("../../api/identity", () => ({ fetchAccountStatus: vi.fn() }));
-vi.mock("../../api/userProfile", () => ({ saveUserProfile: vi.fn() }));
+vi.mock("../../api/userProfile", () => ({
+  fetchUserProfile: vi.fn(),
+  saveUserProfile: vi.fn(),
+}));
 vi.mock("../../lib/desktopBridge", () => ({
   fetchDesktopOperatorRuntime: desktopMocks.fetchOperatorRuntime,
   initializeDesktopBootstrap: desktopMocks.initializeBootstrap,
@@ -120,6 +123,11 @@ describe("StartupIdentityGate", () => {
   });
 
   it("keeps the product gated until a local guest identity is persisted", async () => {
+    vi.mocked(fetchUserProfile).mockResolvedValue({
+      profile: DEFAULT_USER_PROFILE,
+      revision: 1,
+      displayResourceBase: "http://localhost:3000",
+    });
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -135,6 +143,7 @@ describe("StartupIdentityGate", () => {
     });
     vi.mocked(saveUserProfile).mockResolvedValue({
       profile: { ...DEFAULT_USER_PROFILE, displayName: "Local Guest" },
+      revision: 2,
       displayResourceBase: "http://localhost:3000",
     });
     const onComplete = vi.fn();
@@ -155,12 +164,18 @@ describe("StartupIdentityGate", () => {
   });
 
   it("does not bypass a failed authoritative room-directory synchronization", async () => {
+    vi.mocked(fetchUserProfile).mockResolvedValue({
+      profile: DEFAULT_USER_PROFILE,
+      revision: 1,
+      displayResourceBase: "http://localhost:3000",
+    });
     vi.mocked(fetchAccountStatus).mockResolvedValue({
       account: null,
       google: { enabled: false, client_id: "", unavailable_reason: "" },
     });
     vi.mocked(saveUserProfile).mockResolvedValue({
       profile: { ...DEFAULT_USER_PROFILE, displayName: "Local Guest" },
+      revision: 2,
       displayResourceBase: "http://localhost:3000",
     });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 503 })));

@@ -41,6 +41,13 @@ struct AttachmentUpload {
     data_base64: String,
 }
 
+#[derive(Deserialize)]
+struct ProfileUpdateRequest {
+    expected_revision: i64,
+    #[serde(flatten)]
+    patch: UserProfilePatch,
+}
+
 pub(crate) fn routes() -> Router<AppState> {
     profile_routes()
         .layer(SetResponseHeaderLayer::overriding(
@@ -85,20 +92,32 @@ async fn update_profile(
     request: Request,
 ) -> Result<Json<serde_json::Value>, ProfileHttpError> {
     let authority = consume_profile_authority(&state, request.headers()).await?;
-    let patch: UserProfilePatch = decode_json_body(request, MAX_PROFILE_BODY_BYTES)
+    let update: ProfileUpdateRequest = decode_json_body(request, MAX_PROFILE_BODY_BYTES)
         .await
         .map_err(ProfileHttpError::from_body)?;
     let outcome = match authority {
         ProfileAuthority::Room(principal) => {
-            state.store.update_user_profile(&principal, patch).await?
+            state
+                .store
+                .update_user_profile(&principal, update.expected_revision, update.patch)
+                .await?
         }
         ProfileAuthority::HumanSession(authorization) => {
             state
                 .store
-                .update_human_session_profile(&authorization, patch)
+                .update_human_session_profile(
+                    &authorization,
+                    update.expected_revision,
+                    update.patch,
+                )
                 .await?
         }
-        ProfileAuthority::LocalOperator => state.store.update_local_operator_profile(patch).await?,
+        ProfileAuthority::LocalOperator => {
+            state
+                .store
+                .update_local_operator_profile(update.expected_revision, update.patch)
+                .await?
+        }
     };
     state.rooms.notify_committed_events(&outcome.events).await;
     Ok(Json(json!({"profile": outcome.profile})))
@@ -396,6 +415,7 @@ impl From<PersistenceError> for ProfileHttpError {
                         StatusCode::FORBIDDEN
                     }
                     "attachment_quota_reached" => StatusCode::TOO_MANY_REQUESTS,
+                    "profile_revision_conflict" => StatusCode::CONFLICT,
                     "attachment_too_large" => StatusCode::PAYLOAD_TOO_LARGE,
                     "attachment_type_unsupported"
                     | "attachment_type_mismatch"

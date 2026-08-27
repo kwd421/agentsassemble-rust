@@ -32,6 +32,7 @@ export type UserProfileIdentity = {
 
 export type UserProfileSnapshot = {
   profile: UserProfile;
+  revision: number;
   displayResourceBase: string;
 };
 
@@ -51,7 +52,9 @@ type ApiUserProfile = {
   updated_at?: string;
 };
 
-function normalizeUserProfile(payload: ApiUserProfile | undefined): UserProfile {
+function normalizeUserProfile(
+  payload: ApiUserProfile | undefined
+): Pick<UserProfileSnapshot, "profile" | "revision"> {
   if (
     !payload ||
     !Number.isInteger(payload.revision) ||
@@ -74,18 +77,21 @@ function normalizeUserProfile(payload: ApiUserProfile | undefined): UserProfile 
     throw new Error("서버 사용자 프로필 응답이 현재 계약과 일치하지 않습니다.");
   }
   return {
-    displayName: payload.display_name,
-    handle: payload.handle,
-    status: payload.status as UserProfile["status"],
-    customStatus: payload.custom_status,
-    avatarLabel: payload.avatar_label,
-    avatarImage: profileAvatarReference(payload.avatar_image_url),
-    bannerPreset: payload.banner_preset as UserProfile["bannerPreset"],
-    accentColor: payload.accent_color,
-    micMuted: payload.mic_muted,
-    deafened: payload.deafened,
-    createdAt: payload.created_at,
-    updatedAt: payload.updated_at,
+    revision: Number(payload.revision),
+    profile: {
+      displayName: payload.display_name,
+      handle: payload.handle,
+      status: payload.status as UserProfile["status"],
+      customStatus: payload.custom_status,
+      avatarLabel: payload.avatar_label,
+      avatarImage: profileAvatarReference(payload.avatar_image_url),
+      bannerPreset: payload.banner_preset as UserProfile["bannerPreset"],
+      accentColor: payload.accent_color,
+      micMuted: payload.mic_muted,
+      deafened: payload.deafened,
+      createdAt: payload.created_at,
+      updatedAt: payload.updated_at,
+    },
   };
 }
 
@@ -129,7 +135,7 @@ export async function fetchUserProfile(
   if (!identity.sessionToken && isDesktopWebview()) {
     const result = await requestDesktopProfile({ cache: "no-store" });
     return {
-      profile: normalizeUserProfile(result.payload.profile),
+      ...normalizeUserProfile(result.payload.profile),
       displayResourceBase: result.displayResourceBase,
     };
   }
@@ -139,16 +145,23 @@ export async function fetchUserProfile(
     identity
   );
   return {
-    profile: normalizeUserProfile(payload.profile),
+    ...normalizeUserProfile(payload.profile),
     displayResourceBase,
   };
 }
 
 export async function saveUserProfile(
   profile: UserProfile,
+  expectedRevision: number,
   identity: UserProfileIdentity = {}
 ): Promise<UserProfileSnapshot> {
-  const body = userProfileToApi(profile);
+  if (!Number.isInteger(expectedRevision) || expectedRevision < 1) {
+    throw new Error("프로필 revision이 현재 계약과 일치하지 않습니다.");
+  }
+  const body = {
+    ...userProfileToApi(profile),
+    expected_revision: expectedRevision,
+  };
   if (!identity.sessionToken && isDesktopWebview()) {
     const result = await requestDesktopProfile({
       cache: "no-store",
@@ -157,7 +170,7 @@ export async function saveUserProfile(
       body: JSON.stringify(body),
     });
     return {
-      profile: normalizeUserProfile(result.payload.profile),
+      ...normalizeUserProfile(result.payload.profile),
       displayResourceBase: result.displayResourceBase,
     };
   }
@@ -168,7 +181,7 @@ export async function saveUserProfile(
     identity
   );
   return {
-    profile: normalizeUserProfile(payload.profile),
+    ...normalizeUserProfile(payload.profile),
     displayResourceBase,
   };
 }

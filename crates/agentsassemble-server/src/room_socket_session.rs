@@ -320,6 +320,7 @@ mod tests {
                 human_session
                     .as_ref()
                     .unwrap_or_else(|| panic!("test human session is absent")),
+                1,
                 UserProfilePatch {
                     display_name: Some("Lag Refresh".to_owned()),
                     ..UserProfilePatch::default()
@@ -357,6 +358,7 @@ mod tests {
                 human_session
                     .as_ref()
                     .unwrap_or_else(|| panic!("refreshed human session is absent")),
+                2,
                 UserProfilePatch {
                     display_name: Some("Closed Refresh".to_owned()),
                     ..UserProfilePatch::default()

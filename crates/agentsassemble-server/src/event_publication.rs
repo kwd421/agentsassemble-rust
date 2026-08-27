@@ -70,6 +70,7 @@ mod tests {
         let outcome = store
             .update_user_profile(
                 &principal,
+                1,
                 UserProfilePatch {
                     display_name: Some("Publication Owner".to_owned()),
                     ..UserProfilePatch::default()
@@ -103,6 +104,7 @@ mod tests {
         let profile = store
             .update_user_profile(
                 &principal,
+                1,
                 UserProfilePatch {
                     display_name: Some("Committed First".to_owned()),
                     ..UserProfilePatch::default()

@@ -328,6 +328,7 @@ mod tests {
         store
             .update_user_profile(
                 &principal,
+                1,
                 UserProfilePatch {
                     display_name: Some("Directory Human".to_owned()),
                     ..UserProfilePatch::default()

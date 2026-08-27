@@ -65,6 +65,7 @@ describe("canonical user profile provenance", () => {
     expect(snapshot.profile.avatarImage).toBe(
       "/api/attachments/avatar_1234?view=1"
     );
+    expect(snapshot.revision).toBe(1);
     expect(snapshot.displayResourceBase).toBe("http://127.0.0.1:49163");
   });
 
@@ -80,15 +81,19 @@ describe("canonical user profile provenance", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await requestDesktopHostProductSurface();
-    await saveUserProfile({
-      ...DEFAULT_USER_PROFILE,
-      avatarImage: "/api/attachments/avatar_1234?view=1",
-      micMuted: false,
-    });
+    await saveUserProfile(
+      {
+        ...DEFAULT_USER_PROFILE,
+        avatarImage: "/api/attachments/avatar_1234?view=1",
+        micMuted: false,
+      },
+      1
+    );
 
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual(
       expect.objectContaining({
         avatar_image_url: "/api/attachments/avatar_1234?view=1",
+        expected_revision: 1,
         mic_muted: false,
       })
     );
@@ -99,10 +104,13 @@ describe("canonical user profile provenance", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(
-      saveUserProfile({
-        ...DEFAULT_USER_PROFILE,
-        avatarImage: "https://other.example/api/attachments/avatar_1234?view=1",
-      })
+      saveUserProfile(
+        {
+          ...DEFAULT_USER_PROFILE,
+          avatarImage: "https://other.example/api/attachments/avatar_1234?view=1",
+        },
+        1
+      )
     ).rejects.toThrow("아바타 참조");
     expect(fetchMock).not.toHaveBeenCalled();
   });
