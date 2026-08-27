@@ -212,6 +212,58 @@ async fn owned_control_pipe_issues_a_distinct_operator_http_ticket() {
 }
 
 #[tokio::test]
+async fn public_ingress_status_requires_one_exact_operator_ticket() {
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
+    let database = directory.path().join("runtime.sqlite3");
+    let mut server = start_controlled(&database).await;
+    assert!(matches!(
+        server.initialize_bootstrap().await,
+        LocalControlResponse::BootstrapOk { .. }
+    ));
+    let url = format!("{}/api/public-invite/status", server.address);
+    let client = reqwest::Client::new();
+    assert_eq!(
+        client
+            .get(&url)
+            .send()
+            .await
+            .unwrap_or_else(|error| panic!("request unauthorized ingress status: {error}"))
+            .status(),
+        reqwest::StatusCode::UNAUTHORIZED
+    );
+    let LocalControlResponse::OperatorHttpOk { ticket, .. } = server.issue_operator_ticket().await
+    else {
+        panic!("operator ticket request was rejected");
+    };
+    let response = client
+        .get(&url)
+        .bearer_auth(&ticket)
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("request ingress status: {error}"));
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    let status: Value = response
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("decode ingress status: {error}"));
+    assert_eq!(status["mode"], "unconfigured");
+    assert_eq!(status["tunnel"]["phase"], "stopped");
+    assert_eq!(status["tunnel"]["stable_phase"], "unconfigured");
+    assert_eq!(
+        client
+            .get(url)
+            .bearer_auth(ticket)
+            .send()
+            .await
+            .unwrap_or_else(|error| panic!("reuse ingress status ticket: {error}"))
+            .status(),
+        reqwest::StatusCode::UNAUTHORIZED
+    );
+    server.close_parent_pipe().await;
+}
+
+#[tokio::test]
 async fn owned_control_pipe_issues_exact_settings_tickets_after_authority_exists() {
     let directory =
         tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));

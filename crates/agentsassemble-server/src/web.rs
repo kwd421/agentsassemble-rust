@@ -140,6 +140,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::room_preferences_web::routes())
         .merge(crate::profile_web::routes())
         .merge(crate::server_identity_web::routes())
+        .merge(crate::public_ingress_web::routes())
         .merge(crate::human_session_exchange_web::routes())
         .merge(crate::human_invite_web::routes());
     if state.central_registration_enabled {

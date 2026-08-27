@@ -1,6 +1,7 @@
 use std::{fmt, sync::Arc};
 
 use axum::http::{HeaderMap, header, uri::Authority};
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 use thiserror::Error;
@@ -18,6 +19,26 @@ pub(crate) const MANUAL_PROXY_TOKEN_HEADER: &str = "x-agentsassemble-proxy-token
 const FORWARDED_PROTO_HEADER: &str = "x-forwarded-proto";
 const MIN_MANUAL_PROXY_SECRET_BYTES: usize = 32;
 const MAX_MANUAL_PROXY_SECRET_BYTES: usize = 128;
+
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct PublicIngressStatus {
+    pub(crate) mode: &'static str,
+    pub(crate) public_url: String,
+    pub(crate) stable_url: String,
+    pub(crate) tunnel: TunnelStatus,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct TunnelStatus {
+    pub(crate) available: bool,
+    pub(crate) running: bool,
+    pub(crate) phase: &'static str,
+    pub(crate) public_url: String,
+    pub(crate) local_url: String,
+    pub(crate) stable_phase: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) last_error: Option<String>,
+}
 
 #[derive(Clone)]
 pub(crate) struct PublicIngress(Option<Arc<ManualPublicIngress>>);
@@ -89,6 +110,31 @@ impl PublicIngress {
         self.0
             .as_ref()
             .map(|ingress| TrustedIdentityOrigin(ingress.origin.clone()))
+    }
+
+    pub(crate) fn status(&self) -> PublicIngressStatus {
+        let public_url = self
+            .0
+            .as_ref()
+            .map_or_else(String::new, |ingress| ingress.origin.to_string());
+        PublicIngressStatus {
+            mode: if self.0.is_some() {
+                "manual"
+            } else {
+                "unconfigured"
+            },
+            public_url: public_url.clone(),
+            stable_url: String::new(),
+            tunnel: TunnelStatus {
+                available: false,
+                running: false,
+                phase: "stopped",
+                public_url,
+                local_url: String::new(),
+                stable_phase: "unconfigured",
+                last_error: None,
+            },
+        }
     }
 }
 
