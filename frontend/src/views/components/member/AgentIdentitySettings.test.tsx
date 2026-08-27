@@ -54,6 +54,8 @@ const ENTRY: MemberEntry = {
   role: "agent",
   owner: true,
   ownedByViewer: true,
+  avatarImage: "http://127.0.0.1:43123/api/attachments/original-avatar?view=1",
+  avatarReference: "/api/attachments/original-avatar?view=1",
   active: true,
   muted: false,
   meetingId: "room-a",

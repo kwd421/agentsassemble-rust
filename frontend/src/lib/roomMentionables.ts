@@ -1,4 +1,5 @@
 import type { Mentionable } from "./mentionComposerModel";
+import { resolveAttachmentReference } from "./attachmentReference";
 
 type AgentMentionIdentity = {
   agent_id: string;
@@ -26,10 +27,12 @@ export function roomMentionables({
   viewerParticipantId,
   agents,
   members,
+  displayResourceBase,
 }: {
   viewerParticipantId: string;
   agents: AgentMentionIdentity[];
   members: MemberMentionIdentity[];
+  displayResourceBase: string;
 }): Mentionable[] {
   const viewerId = clean(viewerParticipantId);
   const agentById = new Map(agents.map((agent) => [clean(agent.agent_id), agent]));
@@ -78,7 +81,10 @@ export function roomMentionables({
         : displayName
           ? `${displayName} · ${participantId}`
           : participantId,
-      avatarImage: clean(member?.avatar_image_url || agent?.avatar_image_url) || undefined,
+      avatarImage: resolveAttachmentReference(
+        member?.avatar_image_url || agent?.avatar_image_url,
+        displayResourceBase
+      ),
       participantKind,
       providerKind: clean(member?.provider_kind || agent?.provider_kind) || undefined,
       detail:
@@ -95,7 +101,10 @@ export function roomMentionables({
       ? [{
           token: viewerId,
           label: viewerDisplayName,
-          avatarImage: clean(memberById.get(viewerId)?.avatar_image_url) || undefined,
+          avatarImage: resolveAttachmentReference(
+            memberById.get(viewerId)?.avatar_image_url,
+            displayResourceBase
+          ),
           participantKind: "human" as const,
           detail: "사람",
         }]

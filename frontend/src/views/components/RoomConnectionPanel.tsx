@@ -23,6 +23,7 @@ type RoomConnectionPanelProps = {
   members: RoomMember[];
   roomSessionToken?: string;
   viewerParticipantId?: string;
+  displayResourceBase?: string;
   onRoleChange?: (memberId: string, role: RoleId) => void;
   guestLocked?: boolean;
   guestAiPacketPreview?: string;
@@ -65,6 +66,7 @@ export default function RoomConnectionPanel({
   members,
   roomSessionToken = "",
   viewerParticipantId = "operator-local",
+  displayResourceBase = "",
   onRoleChange,
   guestLocked = false,
   guestAiPacketPreview = "",
@@ -147,6 +149,7 @@ export default function RoomConnectionPanel({
         members={members}
         roomSessionToken={roomSessionToken}
         viewerParticipantId={viewerParticipantId}
+        displayResourceBase={displayResourceBase}
         roomId={room.id}
         roomName={room.label}
         onRoleChange={onRoleChange}

@@ -9,12 +9,13 @@ import { roomMentionables } from "./roomMentionables";
 describe("roomMentionables", () => {
   it("shows one display-name option per participant instead of a second id option", () => {
     const mentionables = roomMentionables({
+      displayResourceBase: "http://127.0.0.1:43123",
         viewerParticipantId: "operator-local",
         agents: [
           {
             agent_id: "codex-codex-gpt-5.6-luna",
             display_name: "Luna — 플레이어",
-            avatar_image_url: "/api/avatar/luna.png",
+            avatar_image_url: "/api/attachments/luna-avatar?view=1",
             owner_id: "operator-local",
             provider_kind: "codex_live_session",
           },
@@ -43,7 +44,7 @@ describe("roomMentionables", () => {
       {
         token: "codex-codex-gpt-5.6-luna",
         label: "Luna — 플레이어",
-        avatarImage: "/api/avatar/luna.png",
+        avatarImage: "http://127.0.0.1:43123/api/attachments/luna-avatar?view=1",
         participantKind: "agent",
         providerKind: "codex_live_session",
         detail: "SeiNel의 에이전트",
@@ -61,6 +62,7 @@ describe("roomMentionables", () => {
   it("falls back to ids when names are absent or collide", () => {
     expect(
       roomMentionables({
+        displayResourceBase: "http://127.0.0.1:43123",
         viewerParticipantId: "host",
         agents: [
           { agent_id: "alpha", display_name: "동일 이름" },
@@ -79,6 +81,7 @@ describe("roomMentionables", () => {
   it("inserts a participant id while preserving a spaced display label", () => {
     const expectedMention = "<@sol-dm> ";
     const mentionable = roomMentionables({
+      displayResourceBase: "http://127.0.0.1:43123",
       viewerParticipantId: "host",
       agents: [{ agent_id: "sol-dm", display_name: "Sol — 던전 마스터" }],
       members: [],

@@ -20,6 +20,7 @@ import { providerExecutionLabel } from "../../lib/agentLabels";
 import type { RoomAppearance } from "../../lib/roomAppearance";
 import { isActivePresence, presenceStatusLabel } from "../../lib/presenceStatus";
 import { participantTypeMeta } from "../../lib/participantTypes";
+import { resolveAttachmentReference } from "../../lib/attachmentReference";
 import type { NativeCliProviderAvailability } from "../../roomSocketClient";
 import AgentSessionDetails, { type AgentSessionControlAction } from "./AgentSessionDetails";
 import { memberRole } from "./member/memberHelpers";
@@ -131,10 +132,12 @@ function buildMobileMembers({
   agents,
   members,
   viewerParticipantId,
+  displayResourceBase,
 }: {
   agents: LiveAgent[];
   members: RoomMember[];
   viewerParticipantId: string;
+  displayResourceBase: string;
 }) {
   const memberById = new Map(
     members.map((member) => [member.participant_id, member])
@@ -166,7 +169,10 @@ function buildMobileMembers({
       active: isActivePresence(agent.status),
       role,
       icon: Bot,
-      avatarImage: member ? member.avatar_image_url : agent.avatar_image_url,
+      avatarImage: resolveAttachmentReference(
+        member ? member.avatar_image_url : agent.avatar_image_url,
+        displayResourceBase
+      ),
       providerKind: member ? member.provider_kind : agent.provider_kind,
       app: true,
       ownerId: ownerId || (ownedByViewer ? self.id : undefined),
@@ -194,7 +200,10 @@ function buildMobileMembers({
         active: isActivePresence(member.status),
         role,
         icon: typeMeta.icon,
-        avatarImage: member.avatar_image_url,
+        avatarImage: resolveAttachmentReference(
+          member.avatar_image_url,
+          displayResourceBase
+        ),
         providerKind: member.provider_kind,
         app: member.participant_type !== "human",
         ownerId:
@@ -304,6 +313,7 @@ export default function MobileRoomInfoPanel({
   agents,
   members,
   viewerParticipantId = "operator-local",
+  displayResourceBase = "",
   guestLocked = false,
   onClose,
   onInvite,
@@ -324,6 +334,7 @@ export default function MobileRoomInfoPanel({
   agents: LiveAgent[];
   members: RoomMember[];
   viewerParticipantId?: string;
+  displayResourceBase?: string;
   guestLocked?: boolean;
   onClose: () => void;
   onInvite?: () => void;
@@ -353,8 +364,13 @@ export default function MobileRoomInfoPanel({
     (session) => session.session_id === selectedAgentSessionId
   );
   const memberGroups = useMemo(
-    () => buildMobileMembers({ agents, members, viewerParticipantId }),
-    [agents, members, viewerParticipantId]
+    () => buildMobileMembers({
+      agents,
+      members,
+      viewerParticipantId,
+      displayResourceBase,
+    }),
+    [agents, displayResourceBase, members, viewerParticipantId]
   );
   const tabLabel = MOBILE_INFO_TABS.find((tab) => tab.id === activeTab)?.label || "멤버";
   const hasRoomIconImage = Boolean(appearance.iconImage);

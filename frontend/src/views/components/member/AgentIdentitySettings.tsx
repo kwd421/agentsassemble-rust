@@ -25,7 +25,7 @@ export default function AgentIdentitySettings({
   const [name, setName] = useState(
     entry.agentDisplayName || entry.displayName || ""
   );
-  const [avatar, setAvatar] = useState(entry.avatarImage || "");
+  const [avatar, setAvatar] = useState(entry.avatarReference || "");
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [status, setStatus] = useState("");
 
@@ -33,12 +33,12 @@ export default function AgentIdentitySettings({
     setName(
       entry.agentDisplayName || entry.displayName || ""
     );
-    setAvatar(entry.avatarImage || "");
+    setAvatar(entry.avatarReference || "");
     setStatus("");
   }, [
     entry.agent?.agent_id,
     entry.agentDisplayName,
-    entry.avatarImage,
+    entry.avatarReference,
     entry.displayName,
   ]);
 

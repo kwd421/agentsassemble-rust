@@ -29,6 +29,7 @@ export default function MemberList({
   members = [],
   roomSessionToken = "",
   viewerParticipantId = "operator-local",
+  displayResourceBase = "",
   roomName,
   onRoleChange,
   canEditRoles = true,
@@ -52,6 +53,7 @@ export default function MemberList({
   members?: RoomMember[];
   roomSessionToken?: string;
   viewerParticipantId?: string;
+  displayResourceBase?: string;
   roomId: string;
   roomName: string;
   onRoleChange?: (memberId: string, role: RoleId) => void | Promise<void>;
@@ -89,6 +91,7 @@ export default function MemberList({
     agents,
     members,
     viewerParticipantId,
+    displayResourceBase,
     agentSessions,
     quotaViewer,
     canEditRoles,

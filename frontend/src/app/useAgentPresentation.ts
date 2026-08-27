@@ -141,8 +141,14 @@ export function useAgentPresentation({
         viewerParticipantId: scopedViewerParticipantId,
         agents: scopedAgents,
         members: activeRoomMembers,
+        displayResourceBase: canonicalRoom.displayResourceBase,
       }),
-    [activeRoomMembers, scopedAgents, scopedViewerParticipantId]
+    [
+      activeRoomMembers,
+      canonicalRoom.displayResourceBase,
+      scopedAgents,
+      scopedViewerParticipantId,
+    ]
   );
   const scopedOnlineCount = scopedAgents.filter((agent) => isActivePresence(agent.status)).length;
   const typingIndicators = useMemo(

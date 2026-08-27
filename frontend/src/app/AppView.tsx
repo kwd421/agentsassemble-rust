@@ -507,6 +507,7 @@ export default function AppView({ controller }: { controller: AppController }) {
           agents={scopedAgents}
           members={activeRoomMembers}
           viewerParticipantId={guestSession?.agentId || "operator-local"}
+          displayResourceBase={canonicalRoom.displayResourceBase}
           guestLocked={guestLocked}
           initialMode={mobileRoomInfoInitialMode}
           onClose={closeMobileRoomInfo}
@@ -603,6 +604,7 @@ export default function AppView({ controller }: { controller: AppController }) {
                 members={activeRoomMembers}
                 roomSessionToken={admittedSessionToken}
                 viewerParticipantId={guestSession?.agentId || "operator-local"}
+                displayResourceBase={canonicalRoom.displayResourceBase}
                 onRoleChange={updateMemberRole}
                 guestLocked={guestLocked}
                 guestAiPacketPreview={guestAiPacketPreview}

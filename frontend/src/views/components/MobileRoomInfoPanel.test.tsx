@@ -34,19 +34,26 @@ const SESSION: RoomAgentSession = {
 
 describe("MobileRoomInfoPanel", () => {
   it("does not expose Agent Session controls without the room capability", () => {
-    render(
+    const view = render(
       <MobileRoomInfoPanel
         room={{ id: "room-1", label: "Room One", meetingId: "room-1", topic: "" }}
         appearance={DEFAULT_ROOM_APPEARANCE}
         channelLabel="general"
-        agents={[AGENT]}
+        agents={[{
+          ...AGENT,
+          avatar_image_url: "/api/attachments/agent-avatar?view=1",
+        }]}
         members={[]}
+        displayResourceBase="http://127.0.0.1:43123"
         agentSessions={[SESSION]}
         onClose={vi.fn()}
         onAgentControl={vi.fn()}
       />
     );
 
+    expect(
+      view.container.querySelector(".dc-member-avatar-image")?.getAttribute("src")
+    ).toBe("http://127.0.0.1:43123/api/attachments/agent-avatar?view=1");
     fireEvent.click(screen.getByRole("button", { name: /Agent One/ }));
 
     expect(screen.queryByTitle("세션 시작")).toBeNull();

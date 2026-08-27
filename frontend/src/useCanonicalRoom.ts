@@ -771,6 +771,8 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
         : null,
     events,
     timelineEvents,
+    displayResourceBase:
+      projectionIsCurrent ? acceptedProjection.displayResourceBase : "",
     participants,
     roomSettings: projectionIsCurrent ? roomSettingsByRoom[roomId] || null : null,
     agentSessions,

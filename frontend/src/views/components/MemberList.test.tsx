@@ -417,11 +417,16 @@ describe("MemberList component wiring", () => {
 
   it("saves profile changes only through Agent Session authority", async () => {
     const onAgentConfigure = vi.fn().mockResolvedValue(undefined);
+    const sessionWithAvatar = {
+      ...SESSION,
+      avatar_image_url: "/api/attachments/agent-avatar?view=1",
+    };
 
     render(
       <MemberList
         agents={[AGENT]}
-        agentSessions={[SESSION]}
+        agentSessions={[sessionWithAvatar]}
+        displayResourceBase="http://127.0.0.1:43123"
         roomId="room-1"
         roomName="Room One"
         onAgentControl={vi.fn()}
@@ -429,6 +434,11 @@ describe("MemberList component wiring", () => {
       />
     );
 
+    expect(
+      screen.getByText("Agent One").closest("[role='button']")
+        ?.querySelector(".dc-member-avatar-image")
+        ?.getAttribute("src")
+    ).toBe("http://127.0.0.1:43123/api/attachments/agent-avatar?view=1");
     fireEvent.click(screen.getByText("Agent One"));
     const dialog = screen.getByRole("dialog", { name: "Agent One" });
     const avatarInput = within(dialog).getByLabelText("에이전트 프로필 사진 선택");
@@ -445,9 +455,9 @@ describe("MemberList component wiring", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "프로필 저장" }));
 
     await waitFor(() =>
-      expect(onAgentConfigure).toHaveBeenCalledWith(SESSION, {
+      expect(onAgentConfigure).toHaveBeenCalledWith(sessionWithAvatar, {
         display_name: "Makima",
-        avatar_image_url: "",
+        avatar_image_url: "/api/attachments/agent-avatar?view=1",
       })
     );
     expect(localStorage.getItem("agentsassemble.agentProfiles.v1")).toBeNull();

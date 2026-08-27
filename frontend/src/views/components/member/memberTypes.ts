@@ -24,6 +24,7 @@ export type MemberEntry = {
   ownerDisplayName?: string;
   agentDisplayName?: string;
   avatarImage?: string;
+  avatarReference?: string;
   providerKind?: string;
   active: boolean;
   muted: boolean;

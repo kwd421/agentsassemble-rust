@@ -11,6 +11,7 @@ import {
   type AgentQuotaVisibilityViewer,
 } from "../../../lib/agentQuotaVisibility";
 import { participantTypeMeta } from "../../../lib/participantTypes";
+import { resolveAttachmentReference } from "../../../lib/attachmentReference";
 import {
   agentSessionIsPresent,
   agentSessionStatusLabel,
@@ -32,6 +33,7 @@ type MemberEntriesOptions = {
   agentSessions: RoomAgentSession[];
   quotaViewer?: AgentQuotaVisibilityViewer;
   canEditRoles: boolean;
+  displayResourceBase: string;
 };
 
 export function useMemberEntries({
@@ -41,6 +43,7 @@ export function useMemberEntries({
   agentSessions,
   quotaViewer,
   canEditRoles,
+  displayResourceBase,
 }: MemberEntriesOptions): {
   entries: MemberEntry[];
   contextBadges: ReturnType<typeof roomContextSummaryBadges>;
@@ -70,6 +73,11 @@ export function useMemberEntries({
       ownedByViewer: true,
       ownerId: viewerEntryId,
       ownerDisplayName: viewerDisplayName,
+      avatarImage: resolveAttachmentReference(
+        viewerMember.avatar_image_url,
+        displayResourceBase
+      ),
+      avatarReference: viewerMember.avatar_image_url,
       icon: UserCheck,
     } : null;
     const agentEntries = agents.map((agent) => {
@@ -93,9 +101,13 @@ export function useMemberEntries({
           ? canonicalIdentity.display_name || agent.agent_id
           : agent.display_name || agent.agent_id
       ).trim();
-      const avatarImage = canonicalIdentity
+      const avatarReference = canonicalIdentity
         ? canonicalIdentity.avatar_image_url
         : agent.avatar_image_url;
+      const avatarImage = resolveAttachmentReference(
+        avatarReference,
+        displayResourceBase
+      );
       const executionDetail = providerExecutionLabel(agent);
       const modelLabel = String(agentSession?.model || agent.model_id || "").trim();
       const reasoningEffort = String(
@@ -143,6 +155,7 @@ export function useMemberEntries({
         ownerDisplayName,
         agentDisplayName,
         avatarImage,
+        avatarReference,
         providerKind: String(
           canonicalIdentity?.provider_kind || agent.provider_kind || ""
         ),
@@ -210,7 +223,11 @@ export function useMemberEntries({
             memberById.get(String(member.owner_id || ""))?.display_name ||
               ""
           ).trim() || undefined,
-          avatarImage: member.avatar_image_url,
+          avatarImage: resolveAttachmentReference(
+            member.avatar_image_url,
+            displayResourceBase
+          ),
+          avatarReference: member.avatar_image_url,
           providerKind: String(agentSession?.provider_kind || member.provider_kind || ""),
           icon: ROLE_OPTIONS.find((option) => option.id === role)?.icon || typeMeta.icon,
         } satisfies MemberEntry;
@@ -220,6 +237,7 @@ export function useMemberEntries({
     agentSessions,
     agents,
     canEditRoles,
+    displayResourceBase,
     members,
     quotaViewer,
     viewerParticipantId,
