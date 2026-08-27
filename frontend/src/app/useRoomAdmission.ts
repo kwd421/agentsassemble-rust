@@ -11,7 +11,8 @@ import { roomFromGuestSession, type RoomDockItem } from "../lib/roomDockModel";
 import {
   clearRoomAdmissionIntent,
   loadOrCreateRoomAdmissionIntent,
-  loadRoomAdmissionIntent, roomAdmissionFailureProvesNoCommit,
+  loadRoomAdmissionIntent,
+  roomAdmissionFailureEndsIntentCustody,
 } from "../lib/roomAdmissionIntent";
 import { verifyAndBindRoomSessionSurface } from "../lib/roomDirectoryContract";
 import {
@@ -548,7 +549,7 @@ export function useRoomAdmission({
           inviteToken: guestJoinToken,
           browserCredential: deviceToken,
           clientId,
-        });
+        }, guestSession);
     pendingIntent.then((intent) => {
         if (!attempt.isCurrent()) return null;
         if (intent) {
@@ -735,7 +736,7 @@ export function useRoomAdmission({
         const custodyFailure = error instanceof SessionCustodyError;
         const retryable =
           custodyFailure || (!surfaceFailure && pairingFailureIsRetryable(error));
-        if (networkDispatched && roomAdmissionFailureProvesNoCommit(error)) {
+        if (networkDispatched && roomAdmissionFailureEndsIntentCustody(error)) {
           clearRoomAdmissionIntent();
         }
         const message = error instanceof Error ? error.message : "초대 링크 입장 실패";

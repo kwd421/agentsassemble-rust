@@ -192,7 +192,7 @@ export function normalizeRoomGuestSession(value: unknown): RoomGuestSession | nu
 const GUEST_SESSION_EXPIRY_SKEW_MS = 60_000;
 
 export function roomGuestSessionExpired(
-  session: RoomGuestSession | null | undefined,
+  session: Pick<RoomGuestSession, "expiresAt"> | null | undefined,
   now: number = Date.now()
 ): boolean {
   if (!session) return true;

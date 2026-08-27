@@ -55,30 +55,36 @@ const SESSION_SURFACE = {
   server_product_surface: TEST_SERVER_PRODUCT_SURFACE,
 };
 
-function joinedPayload(sessionToken: string) {
+function joinedPayload(
+  sessionToken: string,
+  meetingId = "room-1",
+  clientId = "client-1"
+) {
   return {
     ...SESSION_SURFACE,
     status: "admitted",
     session_token: sessionToken,
     agent_id: "guest-1",
     display_name: "Guest",
-    meeting_id: "room-1",
+    meeting_id: meetingId,
     invite_scope: "room",
     connection_kind: "browser",
     expires_at: "2099-01-01T00:00:00Z",
+    client_id: clientId,
   };
 }
 
 function renderAdmission(
   onRoomJoined = vi.fn(),
-  initialSession: RoomGuestSession | null = null
+  initialSession: RoomGuestSession | null = null,
+  guestJoinToken = "invite-1"
 ) {
   const hook = renderHook(() =>
     useRoomAdmission({
       deviceToken: DEVICE_TOKEN,
       clientId: "client-1",
       guestInvite: null,
-      guestJoinToken: "invite-1",
+      guestJoinToken,
       operatorPairingToken: "",
       onPairingTokenConsumed: vi.fn(),
       initialSession,
@@ -279,6 +285,54 @@ describe("room admission retry custody", () => {
     expect(apiMocks.joinRoomInvite).toHaveBeenCalledOnce();
   });
 
+  it("retires a completed session's stale intent before evaluating a different invite", async () => {
+    const removeItem = Storage.prototype.removeItem;
+    let removalBlocked = true;
+    vi.spyOn(Storage.prototype, "removeItem").mockImplementation(function (
+      this: Storage,
+      key
+    ) {
+      if (key === ROOM_ADMISSION_INTENT_STORAGE_KEY && removalBlocked) {
+        throw new Error("storage unavailable");
+      }
+      removeItem.call(this, key);
+    });
+    apiMocks.joinRoomInvite.mockResolvedValueOnce(joinedPayload("session-a"));
+    const first = renderAdmission();
+    await waitFor(() =>
+      expect(first.result.current.guestSession?.sessionToken).toBe("session-a")
+    );
+    const retainedSession = first.result.current.guestSession;
+    expect(retainedSession?.clientId).toBe("client-1");
+    expect(window.sessionStorage.getItem(ROOM_ADMISSION_INTENT_STORAGE_KEY)).not.toBeNull();
+    first.unmount();
+
+    removalBlocked = false;
+    window.history.replaceState({}, "", "/join?token=invite-2");
+    apiMocks.preflightRoomInvite.mockClear();
+    apiMocks.preflightRoomInvite.mockResolvedValue({
+      status: "known_user",
+      can_auto_join: true,
+      room_id: "room-2",
+      participant: {
+        participant_id: "guest-1",
+        display_name: "Guest",
+        avatar_image_url: "",
+      },
+    });
+    apiMocks.joinRoomInvite.mockResolvedValueOnce(
+      joinedPayload("session-b", "room-2")
+    );
+    const second = renderAdmission(vi.fn(), retainedSession, "invite-2");
+
+    await waitFor(() =>
+      expect(second.result.current.guestSession?.sessionToken).toBe("session-b")
+    );
+    expect(apiMocks.preflightRoomInvite).toHaveBeenCalledOnce();
+    expect(apiMocks.joinRoomInvite).toHaveBeenCalledTimes(2);
+    expect(window.sessionStorage.getItem(ROOM_ADMISSION_INTENT_STORAGE_KEY)).toBeNull();
+  });
+
   it("retires the intent only when the server proves a no-commit outcome", async () => {
     apiMocks.joinRoomInvite.mockRejectedValue(
       new ApiError(
@@ -298,6 +352,28 @@ describe("room admission retry custody", () => {
     );
 
     expect(apiMocks.joinRoomInvite).toHaveBeenCalledOnce();
+    expect(window.sessionStorage.getItem(ROOM_ADMISSION_INTENT_STORAGE_KEY)).toBeNull();
+  });
+
+  it("retires the intent when the exact admission is permanently unavailable", async () => {
+    apiMocks.joinRoomInvite.mockRejectedValue(
+      new ApiError(
+        403,
+        "The admission session is no longer available.",
+        "admission_session_unavailable"
+      )
+    );
+    const { result } = renderAdmission();
+
+    await waitFor(() =>
+      expect(result.current.admissionState).toMatchObject({
+        kind: "failed",
+        operation: "join",
+        code: "admission_session_unavailable",
+        retryable: false,
+      })
+    );
+
     expect(window.sessionStorage.getItem(ROOM_ADMISSION_INTENT_STORAGE_KEY)).toBeNull();
   });
 

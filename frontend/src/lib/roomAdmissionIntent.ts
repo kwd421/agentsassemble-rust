@@ -1,4 +1,8 @@
 import { ApiError } from "./apiErrors";
+import {
+  roomGuestSessionExpired,
+  type RoomGuestSession,
+} from "./roomGuestSession";
 
 export const ROOM_ADMISSION_INTENT_STORAGE_KEY =
   "agentsassemble.roomAdmissionIntent.v1";
@@ -10,7 +14,8 @@ const NIL_UUID = "00000000-0000-0000-0000-000000000000";
 const MAX_STORED_INTENT_BYTES = 8 * 1024;
 const INTENT_UNAVAILABLE_MESSAGE =
   "이 브라우저에서는 입장 재시도 정보를 안전하게 보관할 수 없습니다.";
-const DEFINITIVE_NO_COMMIT_CODES = new Set([
+const DEFINITIVE_INTENT_END_CODES = new Set([
+  "admission_session_unavailable",
   "bad_request",
   "browser_credential_invalid",
   "idempotency_conflict",
@@ -46,6 +51,10 @@ type RoomAdmissionIntentContext = {
 
 type NewRoomAdmissionIntent = RoomAdmissionIntentContext &
   Omit<RoomAdmissionIntent, "requestId" | "clientId" | "participantType">;
+type CompletedAdmissionSession = Pick<
+  RoomGuestSession,
+  "inviteToken" | "clientId" | "expiresAt"
+>;
 
 function unavailable(): never {
   throw new Error(INTENT_UNAVAILABLE_MESSAGE);
@@ -147,6 +156,42 @@ function readStoredIntent(storage: Storage): StoredRoomAdmissionIntent | null {
   }
 }
 
+function storedIntentMatches(
+  stored: StoredRoomAdmissionIntent,
+  context: RoomAdmissionIntentContext,
+  fingerprints: Awaited<ReturnType<typeof expectedFingerprints>>
+): boolean {
+  return (
+    stored.inviteCredentialFingerprint === fingerprints.inviteCredentialFingerprint &&
+    stored.browserCredentialFingerprint === fingerprints.browserCredentialFingerprint &&
+    stored.clientId === context.clientId
+  );
+}
+
+function removeStoredIntent(storage: Storage): boolean {
+  storage.removeItem(ROOM_ADMISSION_INTENT_STORAGE_KEY);
+  return storage.getItem(ROOM_ADMISSION_INTENT_STORAGE_KEY) === null;
+}
+
+function completedSessionContext(
+  context: RoomAdmissionIntentContext,
+  session: CompletedAdmissionSession | null | undefined
+): RoomAdmissionIntentContext | undefined {
+  if (
+    !session ||
+    roomGuestSessionExpired(session) ||
+    !session.inviteToken ||
+    session.clientId !== context.clientId
+  ) {
+    return undefined;
+  }
+  return {
+    inviteToken: session.inviteToken,
+    browserCredential: context.browserCredential,
+    clientId: session.clientId,
+  };
+}
+
 async function expectedFingerprints(context: RoomAdmissionIntentContext) {
   if (!context.inviteToken || !context.browserCredential) unavailable();
   const [inviteCredentialFingerprint, browserCredentialFingerprint] =
@@ -158,17 +203,26 @@ async function expectedFingerprints(context: RoomAdmissionIntentContext) {
 }
 
 export async function loadRoomAdmissionIntent(
-  context: RoomAdmissionIntentContext
+  context: RoomAdmissionIntentContext,
+  completedSession?: CompletedAdmissionSession | null
 ): Promise<RoomAdmissionIntent | null> {
   const storage = sessionStorageOwner();
   const stored = readStoredIntent(storage);
   if (!stored) return null;
   const fingerprints = await expectedFingerprints(context);
-  if (
-    stored.inviteCredentialFingerprint !== fingerprints.inviteCredentialFingerprint ||
-    stored.browserCredentialFingerprint !== fingerprints.browserCredentialFingerprint ||
-    stored.clientId !== context.clientId
-  ) {
+  if (!storedIntentMatches(stored, context, fingerprints)) {
+    const completed = completedSessionContext(context, completedSession);
+    if (completed) {
+      const completedFingerprints = await expectedFingerprints(completed);
+      if (storedIntentMatches(stored, completed, completedFingerprints)) {
+        try {
+          if (!removeStoredIntent(storage)) unavailable();
+          return null;
+        } catch {
+          unavailable();
+        }
+      }
+    }
     unavailable();
   }
   const {
@@ -221,14 +275,15 @@ export async function loadOrCreateRoomAdmissionIntent(
   };
 }
 
-export function clearRoomAdmissionIntent(): void {
+export function clearRoomAdmissionIntent(): boolean {
   try {
-    window.sessionStorage.removeItem(ROOM_ADMISSION_INTENT_STORAGE_KEY);
+    return removeStoredIntent(window.sessionStorage);
   } catch {
     // Verified room-session custody is authoritative after admission completes.
+    return false;
   }
 }
 
-export function roomAdmissionFailureProvesNoCommit(error: unknown): boolean {
-  return error instanceof ApiError && DEFINITIVE_NO_COMMIT_CODES.has(error.code);
+export function roomAdmissionFailureEndsIntentCustody(error: unknown): boolean {
+  return error instanceof ApiError && DEFINITIVE_INTENT_END_CODES.has(error.code);
 }
