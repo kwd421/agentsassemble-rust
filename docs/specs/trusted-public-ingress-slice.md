@@ -345,15 +345,16 @@ canonical origin owner, and rejects deceptive suffixes, nested labels, and inval
 tenant labels. Raw cloudflared output, environment values, and the generated origin
 Host are not returned to the browser or persisted.
 
-The measured steady-state resource boundary is one cloudflared child tree, one
-generation owner task, two bounded output-reader tasks, an eight-event channel, and
-at most one 16 KiB line per reader. Start creates one private temporary directory
-containing an empty config; its `TempDir` is retained by the exact child owner and
-removed on cleanup. Stop has one five-second graceful deadline and one five-second
-forced-stop deadline, while each reader has a five-second join deadline. No polling
-task, durable row, cache, compatibility state, retry fallback, or stable-entry state
-was added. No throughput or latency improvement is claimed; the accepted bounded
-work purchases exact process, trust, and cancellation custody.
+The measured steady-state resource boundary is one cloudflared child tree and four
+owned tasks: one generation owner, one child supervisor, and two bounded output
+readers. The readers feed an eight-event channel and accept at most one 16 KiB line
+each. Start creates one private temporary directory containing an empty config; after
+the child is moved to its supervisor, the generation-owner future retains that
+`TempDir` until cleanup completes. Stop has one five-second graceful deadline and one
+five-second forced-stop deadline, while each reader has a five-second join deadline.
+No polling task, durable row, cache, compatibility state, retry fallback, or
+stable-entry state was added. No throughput or latency improvement is claimed; the
+accepted bounded work purchases exact process, trust, and cancellation custody.
 
 Commits `fd9e7e4` and `4249e12` add only contract tests. Four lifecycle tests cover
 same-generation reconnect, stop and terminal trust revocation, one-snapshot identity
@@ -450,6 +451,10 @@ remain 625, 196, and 798 lines rather than weakening the 800-line gate.
   process-group cleanup were not directly asserted; `4249e12` added both proofs and
   moved the cohesive lifecycle tests out of the production owner at its responsibility
   boundary.
+- The first lifecycle evidence record omitted the child-supervisor task, assigned
+  the temporary directory to that task instead of the generation owner, and left the
+  canonical frontend/backend exposure inventory saying all public ingress was
+  incomplete; the follow-up corrected both resource custody and exposure status.
 
 Final plan review: `APPROVE — Critical 0 / High 0 / Medium 0`.
 
@@ -516,3 +521,7 @@ Commit `fd9e7e4` Daybreaker review: `APPROVE — Critical 0 / High 0 / Medium 0`
 Commit `4249e12` web review: `APPROVE — Critical 0 / High 0 / Medium 0`.
 
 Commit `4249e12` Daybreaker review: `APPROVE — Critical 0 / High 0 / Medium 0`.
+
+Commit `82538b2` web review: `REVISE — Critical 0 / High 0 / Medium 1`.
+
+Commit `82538b2` Daybreaker review: `REVISE — Critical 0 / High 0 / Medium 1`.
