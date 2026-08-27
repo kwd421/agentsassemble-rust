@@ -73,10 +73,15 @@ pub(crate) async fn run_generation(
             }
             event = output_events.recv() => match event {
                 Some(OutputEvent::Origin(origin)) => {
+                    let public_url = origin.value.clone();
                     if !projection.write().ready_managed(generation, origin, &origin_host) {
                         stopped = true;
                         break;
                     }
+                    config
+                        .stable_entry
+                        .publish(&public_url, &cancellation)
+                        .await;
                 }
                 Some(OutputEvent::Invalid) => {
                     error = Some("cloudflared output violated its safety limit".to_owned());
@@ -110,7 +115,8 @@ pub(crate) async fn run_generation(
     let child_cleanup_failed = !matches!(child_result, Ok(Ok(_)));
     let reader_cleanup_failed =
         !join_reader(stdout_owner).await || !join_reader(stderr_owner).await;
-    let cleanup_failed = child_cleanup_failed || reader_cleanup_failed;
+    let stable_cleanup_failed = !config.stable_entry.clear().await;
+    let cleanup_failed = child_cleanup_failed || reader_cleanup_failed || stable_cleanup_failed;
     if stopped && !cleanup_failed {
         error = None;
     } else if cleanup_failed && error.is_none() {

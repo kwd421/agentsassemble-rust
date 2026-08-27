@@ -168,6 +168,7 @@ fn managed(active: Option<ActiveGeneration>) -> PublicIngress {
             config: ManagedIngressConfig {
                 local_url: "http://127.0.0.1:41955".to_owned(),
                 cloudflared: None,
+                stable_entry: crate::stable_entry::StableEntry::new(None),
             },
             lifecycle: Mutex::new(ManagedLifecycle {
                 closed: false,

@@ -17,6 +17,7 @@ use crate::{
     },
     product_surface::RouteExposure,
     public_ingress_runtime::{GenerationOutcome, run_generation},
+    stable_entry::{StableEntry, StableEntryConfig},
 };
 
 pub(crate) const MANUAL_PROXY_TOKEN_HEADER: &str = "x-agentsassemble-proxy-token";
@@ -87,7 +88,7 @@ impl fmt::Debug for PublicIngress {
                 .finish_non_exhaustive(),
             PublicIngressKind::Managed(ingress) => formatter
                 .debug_struct("PublicIngress::Managed")
-                .field("status", &ingress.projection.read().status())
+                .field("status", &ingress.status())
                 .finish_non_exhaustive(),
         }
     }
@@ -141,9 +142,10 @@ impl PublicIngress {
         ))))
     }
 
-    pub(crate) fn managed(listener: SocketAddr) -> Self {
+    pub(crate) fn managed(listener: SocketAddr, stable_entry: Option<StableEntryConfig>) -> Self {
         let local_url = format!("http://{listener}");
         let cloudflared = which::which("cloudflared").ok();
+        let stable_entry = StableEntry::new(stable_entry);
         let projection = Arc::new(RwLock::new(ManagedProjection::new(
             &local_url,
             cloudflared.is_some(),
@@ -154,6 +156,7 @@ impl PublicIngress {
                 config: ManagedIngressConfig {
                     local_url,
                     cloudflared,
+                    stable_entry,
                 },
                 lifecycle: Mutex::new(ManagedLifecycle {
                     closed: false,
@@ -167,7 +170,7 @@ impl PublicIngress {
         match self.0.as_ref() {
             PublicIngressKind::Disabled => static_status("unconfigured", ""),
             PublicIngressKind::Manual(ingress) => static_status("manual", &ingress.origin),
-            PublicIngressKind::Managed(ingress) => ingress.projection.read().status(),
+            PublicIngressKind::Managed(ingress) => ingress.status(),
         }
     }
 
@@ -188,7 +191,7 @@ impl PublicIngress {
             ingress.projection.read().cleanup_result()?;
             lifecycle.active = start_generation(&ingress.controller.config, &ingress.projection);
         }
-        Ok(ingress.projection.read().status())
+        Ok(ingress.status())
     }
 
     pub(crate) async fn stop(&self) -> Result<PublicIngressStatus, PublicIngressControlError> {
@@ -197,8 +200,13 @@ impl PublicIngress {
         if lifecycle.closed {
             return Err(PublicIngressControlError::Closed);
         }
-        stop_active(&ingress.projection, &mut lifecycle.active).await;
-        Ok(ingress.projection.read().status())
+        stop_active(
+            &ingress.projection,
+            &ingress.controller.config.stable_entry,
+            &mut lifecycle.active,
+        )
+        .await;
+        Ok(ingress.status())
     }
 
     pub(crate) async fn shutdown(&self) -> Result<(), PublicIngressControlError> {
@@ -207,7 +215,12 @@ impl PublicIngress {
         };
         let mut lifecycle = ingress.controller.lifecycle.lock().await;
         lifecycle.closed = true;
-        stop_active(&ingress.projection, &mut lifecycle.active).await;
+        stop_active(
+            &ingress.projection,
+            &ingress.controller.config.stable_entry,
+            &mut lifecycle.active,
+        )
+        .await;
         ingress.projection.read().cleanup_result()
     }
 
@@ -301,6 +314,17 @@ impl ManualPublicIngress {
     }
 }
 
+impl ManagedPublicIngress {
+    fn status(&self) -> PublicIngressStatus {
+        let stable = self.controller.config.stable_entry.status();
+        let mut status = self.projection.read().status();
+        status.stable_url = stable.url;
+        status.tunnel.stable_phase = stable.phase;
+        status.tunnel.last_error = status.tunnel.last_error.or(stable.last_error);
+        status
+    }
+}
+
 pub(crate) struct CanonicalPublicOrigin {
     pub(crate) value: String,
     host: String,
@@ -352,6 +376,7 @@ impl CanonicalPublicOrigin {
 pub(crate) struct ManagedIngressConfig {
     pub(crate) local_url: String,
     pub(crate) cloudflared: Option<PathBuf>,
+    pub(crate) stable_entry: StableEntry,
 }
 
 struct ActiveGeneration {
@@ -392,10 +417,16 @@ fn start_generation(
 
 async fn stop_active(
     projection: &Arc<RwLock<ManagedProjection>>,
+    stable_entry: &StableEntry,
     active: &mut Option<ActiveGeneration>,
 ) {
     let Some(current) = active.as_mut() else {
         projection.write().settle_stopped();
+        if !stable_entry.clear().await {
+            projection
+                .write()
+                .cleanup_failed("stable-entry cleanup failed");
+        }
         return;
     };
     if !current.owner.is_finished() {
@@ -403,6 +434,11 @@ async fn stop_active(
         current.cancellation.cancel();
     }
     join_active(projection, active).await;
+    if !stable_entry.clear().await {
+        projection
+            .write()
+            .cleanup_failed("stable-entry cleanup failed");
+    }
 }
 
 async fn join_active(
@@ -444,6 +480,13 @@ struct ManagedTrust {
 }
 
 impl ManagedProjection {
+    #[cfg(test)]
+    pub(crate) fn started_for_test(local_url: &str) -> (Self, u64) {
+        let mut projection = Self::new(local_url, true);
+        let generation = projection.begin_start();
+        (projection, generation)
+    }
+
     fn new(local_url: &str, available: bool) -> Self {
         Self {
             generation: 0,
@@ -531,6 +574,13 @@ impl ManagedProjection {
         (!self.cleanup_failed)
             .then_some(())
             .ok_or(PublicIngressControlError::CleanupFailed)
+    }
+
+    fn cleanup_failed(&mut self, message: &str) {
+        self.trust = None;
+        self.last_error = Some(message.to_owned());
+        self.cleanup_failed = true;
+        self.phase = IngressPhase::Error;
     }
 
     fn status(&self) -> PublicIngressStatus {

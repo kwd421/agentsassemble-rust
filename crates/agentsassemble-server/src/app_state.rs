@@ -12,6 +12,7 @@ use crate::{
     connection_admission::ConnectionAdmission,
     public_ingress::{ManualPublicIngressError, PublicIngress},
     raw_ingress::RawIngressGovernor,
+    stable_entry::StableEntryConfig,
 };
 
 #[derive(Debug, Error)]
@@ -136,8 +137,12 @@ impl AppState {
     }
 
     #[must_use]
-    pub fn with_managed_public_ingress(mut self, listener: SocketAddr) -> Self {
-        self.public_ingress = PublicIngress::managed(listener);
+    pub fn with_managed_public_ingress(
+        mut self,
+        listener: SocketAddr,
+        stable_entry: Option<StableEntryConfig>,
+    ) -> Self {
+        self.public_ingress = PublicIngress::managed(listener, stable_entry);
         self
     }
 

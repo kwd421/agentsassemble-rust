@@ -102,6 +102,7 @@ mod runtime_reconciliation_cleanup;
 mod security_headers;
 mod server_identity_web;
 mod server_proof;
+mod stable_entry;
 mod ticket;
 mod ticket_issuer;
 #[cfg(test)]
@@ -121,6 +122,7 @@ pub use public_ingress::ManualPublicIngressError;
 pub use room_runtime::RoomRuntime;
 pub use room_shutdown::RoomShutdownError;
 pub use runtime_reconciliation::{RuntimeReconciliationSummary, reconcile_runtime_ownership};
+pub use stable_entry::{StableEntryConfig, StableEntryConfigError};
 pub use ticket::{
     ConsumedCentralRegistrationTicket, ConsumedHumanSessionSocketTicket, ConsumedProfileTicket,
     ConsumedRoomHttpTicket, ConsumedServerOperatorTicket, ConsumedSettingsDirectoryReadTicket,

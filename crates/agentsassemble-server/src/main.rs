@@ -1,4 +1,8 @@
-use std::{net::SocketAddr, path::PathBuf, time::Duration};
+use std::{
+    net::SocketAddr,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 use agentsassemble_persistence::{
     LocalBootstrapPhase as PersistenceBootstrapPhase, LocalBootstrapStatus, PersistenceError,
@@ -10,10 +14,10 @@ use agentsassemble_protocol::{
 };
 use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService};
 use agentsassemble_server::{
-    AppState, HostSecret, TicketIssueError, TicketStore, issue_central_registration_ticket,
-    issue_local_operator_http_ticket, issue_local_ticket, issue_preferences_read_ticket,
-    issue_preferences_write_ticket, issue_settings_directory_read_ticket, local_bind_is_supported,
-    serve,
+    AppState, HostSecret, StableEntryConfig, TicketIssueError, TicketStore,
+    issue_central_registration_ticket, issue_local_operator_http_ticket, issue_local_ticket,
+    issue_preferences_read_ticket, issue_preferences_write_ticket,
+    issue_settings_directory_read_ticket, local_bind_is_supported, serve,
 };
 use anyhow::Context;
 use clap::Parser;
@@ -40,6 +44,8 @@ struct Args {
     frontend: Option<PathBuf>,
     #[arg(long)]
     desktop_native_registration: bool,
+    #[arg(long)]
+    stable_entry_config: Option<PathBuf>,
 }
 
 #[tokio::main]
@@ -53,6 +59,10 @@ async fn main() -> anyhow::Result<()> {
         .init();
     let args = Args::parse();
     let manual_public_ingress = manual_public_ingress_environment()?;
+    let stable_entry = stable_entry_configuration(
+        args.stable_entry_config.as_deref(),
+        manual_public_ingress.is_some(),
+    )?;
     let mut stdin = tokio::io::stdin();
     let host_token = read_control_secret(&mut stdin).await?;
     let host_secret = HostSecret::new(host_token)?;
@@ -95,7 +105,7 @@ async fn main() -> anyhow::Result<()> {
     if let Some((origin, proxy_secret)) = manual_public_ingress {
         state = state.with_manual_public_ingress(&origin, &proxy_secret)?;
     } else {
-        state = state.with_managed_public_ingress(address);
+        state = state.with_managed_public_ingress(address, stable_entry);
     }
     if args.desktop_native_registration {
         state = state.with_central_registration();
@@ -504,6 +514,18 @@ fn manual_public_ingress_environment() -> anyhow::Result<Option<(String, String)
             "{PUBLIC_URL_ENV} and {TRUSTED_PROXY_TOKEN_ENV} must be configured together"
         ),
     }
+}
+
+fn stable_entry_configuration(
+    path: Option<&Path>,
+    manual_public_ingress: bool,
+) -> anyhow::Result<Option<StableEntryConfig>> {
+    if manual_public_ingress && path.is_some() {
+        anyhow::bail!("stable entry applies only to the managed public tunnel");
+    }
+    path.map(StableEntryConfig::load)
+        .transpose()
+        .map_err(Into::into)
 }
 
 fn unicode_environment(name: &str) -> anyhow::Result<Option<String>> {
