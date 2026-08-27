@@ -11,8 +11,8 @@ Purpose: route the asynchronous Rust reimplementation without duplicating its co
 - Downstream owner: [`docs/specs/room-settings-preferences-appearance-slice.md`](docs/specs/room-settings-preferences-appearance-slice.md)
 - Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - Real-client verification: [`docs/VERIFICATION.md`](docs/VERIFICATION.md)
-- Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust baseline `b67f4a2`.
-- Approved next slice: B1a exact per-grant operator dispatch and atomic canonical-profile/display provenance. The reviewed B1a/B1b/B2/C1a/C1b/C2 order is recorded in the active owner above.
+- Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`; verified public Rust implementation baseline `dfa94e1`.
+- Active gate: B1a/B1b implementation is pushed and fully verified; correction cross-review remains open. B2 starts only after final approval. The reviewed B1a/B1b/B2/C1a/C1b/C2 order is recorded in the active owner above.
 - Required order: connect the copied frontend through the implemented exact desktop manager-invite grants to the create/revoke routes, then complete packaged frontend activation before continuing with appearance. Update the exposure map only after a surface is reachable and verified.
 - Exit: local and remote humans reach preferences through their real authority owner, appearance uses its complete asset lifecycle, incomplete adjacent surfaces remain visibly unavailable, and mandatory gates, packaged frontend flows, cross-reviews, and verification cleanup pass.
 
