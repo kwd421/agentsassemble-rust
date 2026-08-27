@@ -13,8 +13,9 @@ and packaged activation remain incomplete and unverified
 
 This slice establishes one durable authority for a human browser invite, admission,
 profile binding, room membership, and expiring room session. It then lets that live
-session exchange for exact one-use WebSocket, profile, attachment, and preference
-grants. Invite management remains local-operator authority. Backend create binds its
+session exchange for exact one-use WebSocket, own-profile, and preference read/write
+grants. The room attachment exchange remains incomplete and unclaimed. Invite
+management remains local-operator authority. Backend create binds its
 new credentials and URLs to one ready ingress snapshot, while revoke remains
 room-bound and ingress-independent. An external invite is not a completed user flow
 until the frontend consumes the native bridge and activates those controls in the
@@ -364,8 +365,9 @@ an unmaterialized expired row never consumes a slot.
 ## Session-derived grants and revocation
 
 Raw room-session bearers are accepted only by the admission preflight, leave/revoke,
-and typed session-exchange endpoints. Target profile, attachment, preference, and
-WebSocket routes never interpret a raw session bearer as a purpose ticket.
+and typed session-exchange endpoints. Target profile, preference, and WebSocket
+routes—and any future attachment route—never interpret a raw session bearer as a
+purpose ticket.
 
 The session exchange surface is a closed set of typed routes rather than a
 client-selected purpose string:
