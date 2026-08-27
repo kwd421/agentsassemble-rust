@@ -40,6 +40,8 @@ struct RoomHttpGrant {
 pub enum RoomHttpPurpose {
     PreferencesRead,
     PreferencesWrite,
+    HumanInviteCreate,
+    HumanInviteRevoke,
     AppearanceUpload,
     PendingPreviewRead { asset_id: String },
     BoundAppearanceRead { asset_id: String },
@@ -188,6 +190,46 @@ impl TicketStore {
             principal_id,
             participant_id,
             RoomHttpPurpose::PreferencesWrite,
+        )
+        .await
+    }
+
+    /// Issues one exact human-invite creation credential for a resolved room manager.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` for empty identity fields or exhausted ticket capacity.
+    pub async fn issue_human_invite_create(
+        &self,
+        room_id: String,
+        principal_id: String,
+        participant_id: String,
+    ) -> Result<IssuedTicket, TicketError> {
+        self.issue_room_http(
+            room_id,
+            principal_id,
+            participant_id,
+            RoomHttpPurpose::HumanInviteCreate,
+        )
+        .await
+    }
+
+    /// Issues one exact human-invite revocation credential for a resolved room manager.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` for empty identity fields or exhausted ticket capacity.
+    pub async fn issue_human_invite_revoke(
+        &self,
+        room_id: String,
+        principal_id: String,
+        participant_id: String,
+    ) -> Result<IssuedTicket, TicketError> {
+        self.issue_room_http(
+            room_id,
+            principal_id,
+            participant_id,
+            RoomHttpPurpose::HumanInviteRevoke,
         )
         .await
     }
@@ -393,6 +435,32 @@ impl TicketStore {
             HumanSessionGrantPurpose::PreferencesWrite,
         )
         .await
+    }
+
+    /// Consumes only an exact human-invite creation credential.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` after consuming a wrong-purpose, expired, unknown, or reused ticket.
+    pub(crate) async fn consume_human_invite_create(
+        &self,
+        ticket: &str,
+    ) -> Result<ConsumedRoomHttpTicket, TicketError> {
+        self.consume_room_http(ticket, RoomHttpPurpose::HumanInviteCreate)
+            .await
+    }
+
+    /// Consumes only an exact human-invite revocation credential.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` after consuming a wrong-purpose, expired, unknown, or reused ticket.
+    pub(crate) async fn consume_human_invite_revoke(
+        &self,
+        ticket: &str,
+    ) -> Result<ConsumedRoomHttpTicket, TicketError> {
+        self.consume_room_http(ticket, RoomHttpPurpose::HumanInviteRevoke)
+            .await
     }
 
     /// Consumes only an exact room-appearance upload credential.

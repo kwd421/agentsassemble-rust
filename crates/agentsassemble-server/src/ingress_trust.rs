@@ -278,6 +278,7 @@ mod tests {
     #[test]
     fn manual_public_config_and_headers_are_exact() {
         let ingress = PublicIngress::configured_manual(
+            SocketAddr::from(([127, 0, 0, 1], 41955)),
             "https://Public.Example.test:443/",
             "manual-proxy-secret-0000000000000001",
         )
@@ -320,12 +321,20 @@ mod tests {
             "https://public.example.test/path",
         ] {
             assert!(matches!(
-                PublicIngress::configured_manual(origin, "manual-proxy-secret-0000000000000001",),
+                PublicIngress::configured_manual(
+                    SocketAddr::from(([127, 0, 0, 1], 41955)),
+                    origin,
+                    "manual-proxy-secret-0000000000000001",
+                ),
                 Err(ManualPublicIngressError::InvalidOrigin)
             ));
         }
         assert!(matches!(
-            PublicIngress::configured_manual("https://public.example.test", "short"),
+            PublicIngress::configured_manual(
+                SocketAddr::from(([127, 0, 0, 1], 41955)),
+                "https://public.example.test",
+                "short",
+            ),
             Err(ManualPublicIngressError::InvalidSecret)
         ));
     }

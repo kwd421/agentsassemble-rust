@@ -29,7 +29,7 @@ const actions = [
 ] as const;
 const surface = {
   revision: PRODUCT_SURFACE_REVISION,
-  digest: "b49aff9ac3fe96d19687ddbc3af6c6f7c2e524f10a9177c34fa6ac37ebb3083b",
+  digest: "fa9f15121b05ce4e2687d6f36187aa333c1c2f387c2fb42047aad91d5097ada6",
   http_routes: [],
   websocket_streams: ["room_events"],
   websocket_actions: [...actions],
@@ -112,7 +112,7 @@ describe("room directory contracts", () => {
           ...authority,
           server_product_surface: {
             ...surface,
-            digest: "30f1f3d357fc4ff68f868259516826d6b49bdbfcb93f76dae8b0b206a0003467",
+            digest: "44d854d6b59b454049bbbd062b0d01ea479d28b4ef9c0ede666141f5fa4d878c",
             websocket_streams: [],
           },
         }),

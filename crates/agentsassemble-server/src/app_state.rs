@@ -133,10 +133,11 @@ impl AppState {
     /// Rejects a non-public origin or a weak/unrepresentable proxy credential.
     pub fn with_manual_public_ingress(
         mut self,
+        listener: SocketAddr,
         origin: &str,
         proxy_secret: &str,
     ) -> Result<Self, ManualPublicIngressError> {
-        self.public_ingress = PublicIngress::configured_manual(origin, proxy_secret)?;
+        self.public_ingress = PublicIngress::configured_manual(listener, origin, proxy_secret)?;
         Ok(self)
     }
 

@@ -136,6 +136,42 @@ pub async fn issue_preferences_write_ticket(
     Ok(operator_http_response(state, issued))
 }
 
+/// Issues an exact invite-create credential for the current local room manager.
+///
+/// # Errors
+///
+/// Returns a bounded room, manager, persistence, or ticket-capacity error.
+pub async fn issue_human_invite_create_ticket(
+    state: &AppState,
+    requested_room_id: &str,
+) -> Result<OperatorHttpTicketResponse, TicketIssueError> {
+    let identity = resolve_local_room_manager(state, requested_room_id).await?;
+    let issued = state
+        .tickets
+        .issue_human_invite_create(identity.room_id, identity.user_id, identity.participant_id)
+        .await
+        .map_err(|_| TicketIssueError::Unavailable)?;
+    Ok(operator_http_response(state, issued))
+}
+
+/// Issues an exact invite-revoke credential for the current local room manager.
+///
+/// # Errors
+///
+/// Returns a bounded room, manager, persistence, or ticket-capacity error.
+pub async fn issue_human_invite_revoke_ticket(
+    state: &AppState,
+    requested_room_id: &str,
+) -> Result<OperatorHttpTicketResponse, TicketIssueError> {
+    let identity = resolve_local_room_manager(state, requested_room_id).await?;
+    let issued = state
+        .tickets
+        .issue_human_invite_revoke(identity.room_id, identity.user_id, identity.participant_id)
+        .await
+        .map_err(|_| TicketIssueError::Unavailable)?;
+    Ok(operator_http_response(state, issued))
+}
+
 /// Issues the server-wide settings-directory read credential for the local operator.
 ///
 /// # Errors
@@ -190,6 +226,23 @@ async fn resolve_local_room_user(
     state
         .store
         .authorize_room_user(
+            &room_id,
+            LOCAL_OPERATOR_USER_ID,
+            LOCAL_OPERATOR_PARTICIPANT_ID,
+        )
+        .await
+        .map_err(map_room_identity_error)
+}
+
+async fn resolve_local_room_manager(
+    state: &AppState,
+    requested_room_id: &str,
+) -> Result<agentsassemble_persistence::RoomUserIdentity, TicketIssueError> {
+    let room_id = validate_room_id(requested_room_id)
+        .map_err(|error| TicketIssueError::InvalidRoom(error.message))?;
+    state
+        .store
+        .authorize_local_room_manager(
             &room_id,
             LOCAL_OPERATOR_USER_ID,
             LOCAL_OPERATOR_PARTICIPANT_ID,

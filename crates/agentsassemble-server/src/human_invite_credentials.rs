@@ -311,8 +311,8 @@ impl InviteClaims {
                 provider_kind: HUMAN_PROVIDER_KIND.to_owned(),
             },
             client_kind: CLAIM_CLIENT_KIND.to_owned(),
-            expires_at: format_timestamp(draft.expires_at),
-            issued_at: format_timestamp(draft.issued_at),
+            expires_at: format_invite_timestamp(draft.expires_at),
+            issued_at: format_invite_timestamp(draft.issued_at),
             meeting_id: draft.room_id.clone(),
             mode: CLAIM_MODE.to_owned(),
             nonce: URL_SAFE_NO_PAD.encode(nonce),
@@ -484,13 +484,13 @@ fn parse_canonical_timestamp(value: &str) -> Result<DateTime<Utc>, HumanInviteCr
     let timestamp = DateTime::parse_from_rfc3339(value)
         .map_err(|_| HumanInviteCredentialError::UnsupportedClaims)?
         .with_timezone(&Utc);
-    if !exact_microsecond(timestamp) || format_timestamp(timestamp) != value {
+    if !exact_microsecond(timestamp) || format_invite_timestamp(timestamp) != value {
         return Err(HumanInviteCredentialError::UnsupportedClaims);
     }
     Ok(timestamp)
 }
 
-fn format_timestamp(value: DateTime<Utc>) -> String {
+pub(crate) fn format_invite_timestamp(value: DateTime<Utc>) -> String {
     let precision = if value.timestamp_subsec_nanos() == 0 {
         SecondsFormat::Secs
     } else {

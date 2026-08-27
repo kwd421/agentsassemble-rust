@@ -455,6 +455,9 @@ async fn start_on_with_manual(
     frontend: Option<PathBuf>,
     manual_public: bool,
 ) -> RunningServer {
+    let address = listener
+        .local_addr()
+        .unwrap_or_else(|error| panic!("read ingress address: {error}"));
     let store = SqliteStore::open("sqlite::memory:")
         .await
         .unwrap_or_else(|error| panic!("open ingress store: {error}"));
@@ -473,15 +476,12 @@ async fn start_on_with_manual(
     .unwrap_or_else(|error| panic!("build ingress state: {error}"));
     if manual_public {
         state = state
-            .with_manual_public_ingress(PUBLIC_ORIGIN, PROXY_SECRET)
+            .with_manual_public_ingress(address, PUBLIC_ORIGIN, PROXY_SECRET)
             .unwrap_or_else(|error| panic!("configure manual public ingress: {error}"));
     }
     if let Some(frontend) = frontend {
         state = state.with_frontend(frontend);
     }
-    let address = listener
-        .local_addr()
-        .unwrap_or_else(|error| panic!("read ingress address: {error}"));
     let cancellation = CancellationToken::new();
     let server_cancellation = cancellation.clone();
     let task = tokio::spawn(async move {

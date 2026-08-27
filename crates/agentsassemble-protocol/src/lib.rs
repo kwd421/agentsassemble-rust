@@ -9,7 +9,7 @@ use thiserror::Error;
 use ts_rs::TS;
 
 pub const PROTOCOL_VERSION: u32 = 1;
-pub const PRODUCT_SURFACE_REVISION: u32 = 4;
+pub const PRODUCT_SURFACE_REVISION: u32 = 5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, TS)]
 #[serde(rename_all = "UPPERCASE")]
@@ -375,6 +375,14 @@ pub enum LocalControlRequest {
         request_id: String,
         meeting_id: String,
     },
+    IssueHumanInviteCreateTicket {
+        request_id: String,
+        meeting_id: String,
+    },
+    IssueHumanInviteRevokeTicket {
+        request_id: String,
+        meeting_id: String,
+    },
     IssueSettingsDirectoryReadTicket {
         request_id: String,
     },
@@ -428,6 +436,16 @@ pub enum LocalControlResponse {
         ttl_seconds: u64,
     },
     PreferencesWriteOk {
+        request_id: String,
+        ticket: String,
+        ttl_seconds: u64,
+    },
+    HumanInviteCreateOk {
+        request_id: String,
+        ticket: String,
+        ttl_seconds: u64,
+    },
+    HumanInviteRevokeOk {
         request_id: String,
         ticket: String,
         ttl_seconds: u64,

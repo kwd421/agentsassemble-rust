@@ -15,7 +15,8 @@ use agentsassemble_protocol::{
 use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService};
 use agentsassemble_server::{
     AppState, HostSecret, StableEntryConfig, TicketIssueError, TicketStore,
-    issue_central_registration_ticket, issue_local_operator_http_ticket, issue_local_ticket,
+    issue_central_registration_ticket, issue_human_invite_create_ticket,
+    issue_human_invite_revoke_ticket, issue_local_operator_http_ticket, issue_local_ticket,
     issue_preferences_read_ticket, issue_preferences_write_ticket,
     issue_settings_directory_read_ticket, local_bind_is_supported, serve,
 };
@@ -181,7 +182,9 @@ async fn configure_startup_surface(
     central_registration: bool,
 ) -> anyhow::Result<AppState> {
     let state = match manual {
-        Some((origin, proxy_secret)) => state.with_manual_public_ingress(&origin, &proxy_secret)?,
+        Some((origin, proxy_secret)) => {
+            state.with_manual_public_ingress(listener, &origin, &proxy_secret)?
+        }
         None => {
             state
                 .with_managed_public_ingress(listener, stable_entry, database_state_root(database)?)
@@ -262,21 +265,7 @@ async fn control_response(state: &AppState, line: &[u8]) -> LocalControlResponse
             }
         }
         LocalControlRequest::InitializeBootstrap { display_name, .. } => {
-            match state
-                .store
-                .bootstrap_local_authority(&request_id, &display_name)
-                .await
-            {
-                Ok(commit) => LocalControlResponse::BootstrapOk {
-                    request_id,
-                    bootstrap: Box::new(bootstrap_grant(
-                        commit.status,
-                        commit.deduplicated,
-                        &state.server_product_surface,
-                    )),
-                },
-                Err(error) => bootstrap_control_error(request_id, error),
-            }
+            initialize_bootstrap_control_response(state, request_id, &display_name).await
         }
         LocalControlRequest::IssueTicket { meeting_id, .. } => {
             match issue_local_ticket(state, &meeting_id).await {
@@ -315,6 +304,22 @@ async fn control_response(state: &AppState, line: &[u8]) -> LocalControlResponse
             )
             .await
         }
+        LocalControlRequest::IssueHumanInviteCreateTicket { meeting_id, .. } => {
+            invite_ticket_control_response(
+                state,
+                request_id,
+                InviteTicketRequest::Create(meeting_id),
+            )
+            .await
+        }
+        LocalControlRequest::IssueHumanInviteRevokeTicket { meeting_id, .. } => {
+            invite_ticket_control_response(
+                state,
+                request_id,
+                InviteTicketRequest::Revoke(meeting_id),
+            )
+            .await
+        }
         LocalControlRequest::IssueSettingsDirectoryReadTicket { .. } => {
             settings_ticket_control_response(
                 state,
@@ -326,6 +331,63 @@ async fn control_response(state: &AppState, line: &[u8]) -> LocalControlResponse
         LocalControlRequest::IssueCentralRegistrationTicket { .. } => {
             central_registration_control_response(state, request_id).await
         }
+    }
+}
+
+async fn initialize_bootstrap_control_response(
+    state: &AppState,
+    request_id: String,
+    display_name: &str,
+) -> LocalControlResponse {
+    match state
+        .store
+        .bootstrap_local_authority(&request_id, display_name)
+        .await
+    {
+        Ok(commit) => LocalControlResponse::BootstrapOk {
+            request_id,
+            bootstrap: Box::new(bootstrap_grant(
+                commit.status,
+                commit.deduplicated,
+                &state.server_product_surface,
+            )),
+        },
+        Err(error) => bootstrap_control_error(request_id, error),
+    }
+}
+
+enum InviteTicketRequest {
+    Create(String),
+    Revoke(String),
+}
+
+async fn invite_ticket_control_response(
+    state: &AppState,
+    request_id: String,
+    request: InviteTicketRequest,
+) -> LocalControlResponse {
+    let (create, ticket) = match request {
+        InviteTicketRequest::Create(room_id) => (
+            true,
+            issue_human_invite_create_ticket(state, &room_id).await,
+        ),
+        InviteTicketRequest::Revoke(room_id) => (
+            false,
+            issue_human_invite_revoke_ticket(state, &room_id).await,
+        ),
+    };
+    match (create, ticket) {
+        (true, Ok(ticket)) => LocalControlResponse::HumanInviteCreateOk {
+            request_id,
+            ticket: ticket.ticket,
+            ttl_seconds: ticket.ttl_seconds,
+        },
+        (false, Ok(ticket)) => LocalControlResponse::HumanInviteRevokeOk {
+            request_id,
+            ticket: ticket.ticket,
+            ttl_seconds: ticket.ttl_seconds,
+        },
+        (_, Err(error)) => control_error(request_id, error),
     }
 }
 
@@ -382,6 +444,8 @@ fn control_request_id(request: &LocalControlRequest) -> &str {
         | LocalControlRequest::IssueOperatorHttpTicket { request_id }
         | LocalControlRequest::IssuePreferencesReadTicket { request_id, .. }
         | LocalControlRequest::IssuePreferencesWriteTicket { request_id, .. }
+        | LocalControlRequest::IssueHumanInviteCreateTicket { request_id, .. }
+        | LocalControlRequest::IssueHumanInviteRevokeTicket { request_id, .. }
         | LocalControlRequest::IssueSettingsDirectoryReadTicket { request_id }
         | LocalControlRequest::IssueCentralRegistrationTicket { request_id } => request_id,
     }

@@ -65,6 +65,7 @@ mod http_transport;
 mod human_admission_runtime;
 mod human_browser_credential;
 mod human_invite_credentials;
+mod human_invite_manager_web;
 mod human_invite_preflight;
 mod human_invite_web;
 mod human_session_bearer;
@@ -129,8 +130,9 @@ pub use ticket::{
     ConsumedTicket, IssuedTicket, RoomHttpPurpose, TicketError, TicketStore,
 };
 pub use ticket_issuer::{
-    TicketIssueError, issue_central_registration_ticket, issue_local_operator_http_ticket,
-    issue_local_ticket, issue_preferences_read_ticket, issue_preferences_write_ticket,
+    TicketIssueError, issue_central_registration_ticket, issue_human_invite_create_ticket,
+    issue_human_invite_revoke_ticket, issue_local_operator_http_ticket, issue_local_ticket,
+    issue_preferences_read_ticket, issue_preferences_write_ticket,
     issue_settings_directory_read_ticket,
 };
 pub use web::{ServeError, router, serve};

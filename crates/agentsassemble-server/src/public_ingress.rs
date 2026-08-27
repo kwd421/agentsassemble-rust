@@ -61,6 +61,7 @@ enum PublicIngressKind {
 }
 
 struct ManualPublicIngress {
+    local_url: Arc<str>,
     origin: Arc<str>,
     host: Arc<str>,
     port: u16,
@@ -122,12 +123,19 @@ pub(crate) enum PublicIngressAuthorization {
     Identity(TrustedIdentityOrigin),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ReadyIngress {
+    pub(crate) local_url: String,
+    pub(crate) public_url: String,
+}
+
 impl PublicIngress {
     pub(crate) fn disabled() -> Self {
         Self(Arc::new(PublicIngressKind::Disabled))
     }
 
     pub(crate) fn configured_manual(
+        listener: SocketAddr,
         origin: &str,
         proxy_secret: &str,
     ) -> Result<Self, ManualPublicIngressError> {
@@ -139,6 +147,7 @@ impl PublicIngress {
         }
         Ok(Self(Arc::new(PublicIngressKind::Manual(
             ManualPublicIngress {
+                local_url: format!("http://{listener}").into(),
                 origin: origin.value.into(),
                 host: origin.host.into(),
                 port: origin.port,
@@ -182,6 +191,17 @@ impl PublicIngress {
             PublicIngressKind::Disabled => static_status("unconfigured", ""),
             PublicIngressKind::Manual(ingress) => static_status("manual", &ingress.origin),
             PublicIngressKind::Managed(ingress) => ingress.status(),
+        }
+    }
+
+    pub(crate) fn ready_snapshot(&self) -> Option<ReadyIngress> {
+        match self.0.as_ref() {
+            PublicIngressKind::Disabled => None,
+            PublicIngressKind::Manual(ingress) => Some(ReadyIngress {
+                local_url: ingress.local_url.to_string(),
+                public_url: ingress.origin.to_string(),
+            }),
+            PublicIngressKind::Managed(ingress) => ingress.projection.read().ready_snapshot(),
         }
     }
 
@@ -671,6 +691,14 @@ impl ManagedProjection {
                 last_error: self.last_error.clone(),
             },
         }
+    }
+
+    fn ready_snapshot(&self) -> Option<ReadyIngress> {
+        let trust = self.trust.as_ref()?;
+        (self.phase == IngressPhase::Running).then(|| ReadyIngress {
+            local_url: self.local_url.clone(),
+            public_url: trust.origin.value.clone(),
+        })
     }
 
     fn authorize(
