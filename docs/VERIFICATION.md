@@ -2547,3 +2547,22 @@ passed architecture, source-growth, policy, and diff gates. Final web verdict fo
 `5db9cdd`: `APPROVE — Critical 0 / High 0 / Medium 0`. Final Daybreaker verdict:
 `APPROVE — Critical 0 / High 0 / Medium 0`. Neither review used Deep Scan or another
 automated security scanner.
+
+## Initialization fixture scheduling correction: 2026-08-28
+
+A full verification run exposed a test-only scheduling cost in
+`shutdown_checkpoints_gone_after_aborting_initialization`: its synthetic shell
+runtime busy-spun on a release file and could occupy one CPU core while the full
+suite was also waiting for the observer WebSocket. The focused contract passed, so
+there was no evidence for changing a product timeout or runtime lifecycle rule.
+The fixture now sleeps while polling the release file. This preserves its exact
+blocked-initialization and shutdown ownership transitions while removing avoidable
+test-host CPU contention; the accepted trade-off is at most one second of extra
+fixture release latency.
+
+The exact boundary test passed three sequential repetitions, the complete
+`agent_session_boundary` target passed all 9 tests, and `make verify` passed the
+architecture, source-growth, policy, formatting, generated-binding, original-CSS,
+frontend, desktop, workspace-test, warning-denied Clippy, and diff gates. No product
+code, timeout, persistence state, provider process, or user-owned `.agents/` state
+changed.
