@@ -154,6 +154,11 @@ fn listener_accepts_localhost(address: IpAddr) -> bool {
     }
 }
 
+pub(crate) fn is_loopback_http_host(host: &str) -> bool {
+    host.eq_ignore_ascii_case("localhost")
+        || authority_host_ip(host).is_some_and(|address| address.is_loopback())
+}
+
 fn authority_host_ip(host: &str) -> Option<IpAddr> {
     host.strip_prefix('[')
         .and_then(|host| host.strip_suffix(']'))

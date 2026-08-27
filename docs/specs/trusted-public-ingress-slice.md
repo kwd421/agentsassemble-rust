@@ -169,10 +169,11 @@ tests plus the new TCP boundary test, and warning-denied workspace Clippy.
 
 The dynamic registration macro now owns method, matched path, handler, and exposure
 together. One iterator over those descriptors supplies both the signed product
-surface and ingress lookup; the prior duplicate module inventory was removed. The
-currently reachable routes are explicitly private or same-origin public. The
-identity-probe variant is deliberately absent until its two routes are implemented,
-so this prerequisite adds no unused future state.
+surface and ingress lookup; the prior duplicate module inventory was removed. At
+this prerequisite commit, the reachable routes were explicitly private or
+same-origin public and the identity-probe variant was absent. The later local
+identity-probe increment adds that exposure only with its two implemented routes, so
+the prerequisite itself added no unused future state.
 
 Static frontend registration now owns its actual mount, signed surface pattern, and
 exposure in one descriptor. The small static router wrapper passes that exact
@@ -192,7 +193,7 @@ is exactly `/join`, `/join/`, `/assets/{*path}`, and
 The concrete threat was route-policy drift: product-surface signing, dynamic router
 registration, static mounts, and the future public trust decision could otherwise
 name independently changeable surfaces. A normal dynamic request performs one
-bounded linear scan of at most 20 compile-time descriptors; static requests read
+bounded linear scan of the compile-time descriptor inventory; static requests read
 their attached descriptor without a scan. Exact static directory dispatch replaces
 Axum's internal prefix stripping with one bounded path/query string allocation and
 URI parse per static file request. That accepted cost closes the observed exposure
@@ -241,14 +242,23 @@ path or public-origin placeholder.
 
 The concrete security requirement is endpoint-key substitution resistance: the
 caller nonce and exact current origin must be covered by the already durable host key.
+The first implementation repeated the loopback host policy as a fixed three-value
+list, so a server successfully bound to another numeric loopback address admitted
+the request but rejected its challenge origin. The common HTTP host classifier now
+uses `IpAddr::is_loopback()` while preserving the exact trusted address and port;
+the invite URL policy reuses the same classifier instead of retaining another copy.
+Invite issuance therefore performs one additional bounded numeric parse of an
+already length-limited host; it adds no allocation, task, cache, or disk state, and
+that small accepted cost removes the observed policy-drift owner.
 This increment adds no task, cache, process, disk row, secret, retry, fallback, or
 compatibility state. A GET clones the bounded public identity projection. A POST adds
 one bounded body decode, one origin parse, one short transcript allocation, and one
 Ed25519 signature; no throughput improvement is claimed without an observed cost.
 Focused verification used the real TCP server to prove stable GET/POST identity,
-exact local-origin binding, signature verification, invalid-challenge rejection,
+exact local-origin binding on both primary and alternate numeric loopback listeners,
+signature verification, invalid-challenge rejection,
 foreign local-Origin denial, the credential-free Tauri preflight, and path/method
-preflight mismatch rejection. All 67 server unit tests and 42 server integration tests passed. Complete repository verification
+preflight mismatch rejection. All 67 server unit tests and 43 server integration tests passed. Complete repository verification
 also passed the architecture and source-growth gates, frontend build and 403 tests,
 desktop build and 16 tests, all 171 persistence and 120 provider tests, and
 warning-denied workspace Clippy.
@@ -313,6 +323,10 @@ warning-denied workspace Clippy.
 - A local challenge must sign the already trusted request authority. Deriving or
   accepting an HTTPS public origin before `PublicIngress` owns that origin would be a
   placeholder trust path.
+- Identity origin normalization repeated loopback policy as three fixed host strings,
+  so an admitted alternate numeric loopback listener could not issue a challenge.
+- The route-exposure prerequisite retained a pre-identity historical statement and a
+  fixed descriptor count after the identity routes changed both facts.
 
 Final plan review: `APPROVE — Critical 0 / High 0 / Medium 0`.
 

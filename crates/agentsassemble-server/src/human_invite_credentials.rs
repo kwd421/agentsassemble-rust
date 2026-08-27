@@ -12,6 +12,8 @@ use subtle::ConstantTimeEq;
 use thiserror::Error;
 use url::{Host, Url};
 
+use crate::ingress_trust::is_loopback_http_host;
+
 const SIGNED_TOKEN_PREFIX: &str = "aai1";
 const JOIN_CODE_PREFIX: &str = "aaj1_";
 const CLAIM_SCHEMA: &str = "agentsassemble.lan_invite.v1";
@@ -455,7 +457,7 @@ fn normalize_room_url(value: &str) -> Result<(String, String), HumanInviteCreden
             return Err(HumanInviteCredentialError::InvalidPolicy);
         }
     };
-    if url.scheme() == "http" && !host_is_loopback(&host) {
+    if url.scheme() == "http" && !url.host_str().is_some_and(is_loopback_http_host) {
         return Err(HumanInviteCredentialError::InvalidPolicy);
     }
     if url.path() == "/" {
@@ -476,14 +478,6 @@ fn is_local_hostname(domain: &str) -> bool {
             .rsplit('.')
             .next()
             .is_some_and(|suffix| suffix.eq_ignore_ascii_case("local"))
-}
-
-fn host_is_loopback(host: &Host<&str>) -> bool {
-    match host {
-        Host::Domain(domain) => domain.eq_ignore_ascii_case("localhost"),
-        Host::Ipv4(address) => address.is_loopback(),
-        Host::Ipv6(address) => address.is_loopback(),
-    }
 }
 
 fn parse_canonical_timestamp(value: &str) -> Result<DateTime<Utc>, HumanInviteCredentialError> {

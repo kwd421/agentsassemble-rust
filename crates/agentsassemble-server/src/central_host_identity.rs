@@ -13,6 +13,8 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+use crate::ingress_trust::is_loopback_http_host;
+
 const REGISTRATION_CONTEXT: &str = "AA-HOST-REGISTER-1";
 const REGISTRATION_NONCE_BYTES: usize = 18;
 const SERVER_CHALLENGE_CONTEXT: &str = "AA-SERVER-CHALLENGE-1";
@@ -226,7 +228,7 @@ fn normalize_server_identity_origin(value: &str) -> Result<String, ServerChallen
         .host()
         .trim_matches(['[', ']'])
         .to_ascii_lowercase();
-    let loopback = matches!(host.as_str(), "localhost" | "127.0.0.1" | "::1");
+    let loopback = is_loopback_http_host(&host);
     if host.is_empty() || (scheme != "https" && !(scheme == "http" && loopback)) {
         return Err(ServerChallengeError::InvalidOrigin);
     }
@@ -272,6 +274,7 @@ mod tests {
                 "https://home.trycloudflare.com:443",
             ),
             ("http://127.0.0.1:8765/", "http://127.0.0.1:8765"),
+            ("http://127.0.0.2:8765/", "http://127.0.0.2:8765"),
             ("http://[::1]:8765", "http://[::1]:8765"),
         ] {
             assert_eq!(

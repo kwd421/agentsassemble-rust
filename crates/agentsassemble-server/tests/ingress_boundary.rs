@@ -1,4 +1,8 @@
-use std::{net::SocketAddr, path::PathBuf, time::Duration};
+use std::{
+    net::{Ipv6Addr, SocketAddr},
+    path::PathBuf,
+    time::Duration,
+};
 
 use agentsassemble_domain::ProviderCatalog;
 use agentsassemble_persistence::SqliteStore;
@@ -134,6 +138,40 @@ async fn identity_probe_uses_the_persistent_key_and_exact_local_origin() {
     assert_eq!(foreign_origin.status(), reqwest::StatusCode::FORBIDDEN);
 
     verify_identity_preflight(&client, &base_url).await;
+    server.stop().await;
+}
+
+#[tokio::test]
+async fn identity_challenge_accepts_an_exact_numeric_loopback_listener() {
+    let listener = match TcpListener::bind(SocketAddr::from(([127, 0, 0, 2], 0))).await {
+        Ok(listener) => listener,
+        Err(error) if error.kind() == std::io::ErrorKind::AddrNotAvailable => {
+            TcpListener::bind(SocketAddr::from((Ipv6Addr::LOCALHOST, 0)))
+                .await
+                .unwrap_or_else(|error| panic!("bind IPv6 loopback ingress server: {error}"))
+        }
+        Err(error) => panic!("bind alternate-loopback ingress server: {error}"),
+    };
+    let server = start_on(listener, None).await;
+    let base_url = format!("http://{}", server.address);
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .unwrap_or_else(|error| panic!("build direct ingress client: {error}"));
+    let challenge = "Q2hhbGxlbmdlX2Zvcl9sb29wYmFja18wMg";
+    let response = client
+        .post(format!("{base_url}/api/server-info/challenge"))
+        .json(&json!({"challenge": challenge}))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("request alternate-loopback challenge: {error}"));
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    let proof: Value = response
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("decode alternate-loopback challenge: {error}"));
+    assert_eq!(proof["origin"], base_url);
+    verify_identity_signature(&proof, &base_url, challenge);
     server.stop().await;
 }
 
@@ -276,6 +314,13 @@ async fn static_routes_match_the_declared_mounts() {
 }
 
 async fn start(frontend: Option<PathBuf>) -> RunningServer {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .unwrap_or_else(|error| panic!("bind ingress server: {error}"));
+    start_on(listener, frontend).await
+}
+
+async fn start_on(listener: TcpListener, frontend: Option<PathBuf>) -> RunningServer {
     let store = SqliteStore::open("sqlite::memory:")
         .await
         .unwrap_or_else(|error| panic!("open ingress store: {error}"));
@@ -295,9 +340,6 @@ async fn start(frontend: Option<PathBuf>) -> RunningServer {
     if let Some(frontend) = frontend {
         state = state.with_frontend(frontend);
     }
-    let listener = TcpListener::bind("127.0.0.1:0")
-        .await
-        .unwrap_or_else(|error| panic!("bind ingress server: {error}"));
     let address = listener
         .local_addr()
         .unwrap_or_else(|error| panic!("read ingress address: {error}"));
