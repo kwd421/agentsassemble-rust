@@ -273,13 +273,17 @@ or left session is unavailable and malformed same-room authority fails visibly.
 The browser owns one bounded admission-intent record, separate from the durable room
 session. Pending state binds only fingerprints of the invite and current browser
 credentials plus the exact client/request/profile input. Durable session acceptance
-or a definitive terminal response first replaces pending state with a verified
-settled marker before deletion. If deletion fails, reload and later navigation treat
-that marker as cleanup-only and never replay admission. Session expiry or clearing
-cannot erase this settlement fact. An unresolved pending mismatch remains
-fail-closed unless exact completed-session evidence binds the same invite, current
-browser credential, and client. No raw credential, second storage owner, fallback,
-or client-side admission authority is introduced.
+or a definitive terminal response invokes one retirement operation. A verified
+settled write is followed by best-effort removal; if that write cannot be verified,
+the owner instead attempts and verifies direct removal of the observed pending
+record. Failure of both operations remains unresolved. A settled record surviving
+removal is cleanup-only and never replays admission. Ordinary expiry or clearing of
+the separately owned RoomGuestSession local-storage record does not erase that
+marker; direct external deletion of the admission-intent session-storage key does and
+is outside this guarantee. An unresolved pending mismatch remains fail-closed unless
+exact completed-session evidence binds the same invite, current browser credential,
+and client. No raw credential, second storage owner, fallback, or client-side
+admission authority is introduced.
 
 Human browser admission, an externally owned RoomConnector session, and a managed
 Agent Session are separate product identities. They may reuse admission and

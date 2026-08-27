@@ -488,13 +488,16 @@ Browser admission retry custody has one bounded session-storage owner. A request
 `pending` only while its exact invite credential fingerprint, current browser
 credential fingerprint, client ID, immutable request ID, room, and submitted profile
 remain eligible for an exact retry. Once a durable session is accepted or an exact
-definitive terminal result is observed, the owner writes and verifies a strict
-`settled` record before attempting deletion. A surviving settled record is
-cleanup-only across reload, session expiration or clearing, and later invite
-navigation; it can never resend admission. Completed settlement remains sufficient
-after the separately owned room session is cleared. Only an unresolved pending
-mismatch may consult exact completed-session evidence, and that evidence must bind the
-same invite fingerprint, current browser credential fingerprint, and client ID.
+definitive terminal result is observed, one retirement operation first tries a strict
+verified `settled` write and then best-effort removal. If the write cannot be
+verified, it instead attempts and verifies direct removal of the observed pending
+record; failure of both remains unresolved and exposes cleanup retry. A surviving
+settled record is cleanup-only across reload, expiry or clearing of the separately
+owned RoomGuestSession local-storage record, and later invite navigation; it can never
+resend admission. Direct external deletion of the admission-intent session-storage
+key erases that custody and is outside this guarantee. Only an unresolved pending
+mismatch may consult exact completed-session evidence, and that evidence must bind
+the same invite fingerprint, current browser credential fingerprint, and client ID.
 Every asynchronous fingerprint calculation rechecks the exact stored record before
 mutation. The intent stores no raw credential and adds no second key, cache, timer,
 task, migration, compatibility path, or fallback.

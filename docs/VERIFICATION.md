@@ -2674,15 +2674,19 @@ second admission owner.
 The final browser owner stores at most one record under the existing
 `agentsassemble.roomAdmissionIntent.v1` session-storage key, capped at 8 KiB. A
 network-eligible request is `pending`. After a durable session is accepted or an
-exact definitive terminal result is observed, that same owner first replaces it with
-a strict `settled` record and verifies the write before best-effort deletion. A failed
-delete therefore leaves a compact cleanup-only record; reload, expiration, ordinary
-session clearing, and later invite navigation cannot turn it back into a `/join`
-request. A matching terminal record restores only its explicit non-retryable result.
-A completed-session record permits a different invite to continue after local session
-evidence has been removed. A still-pending record for another invite remains
-fail-closed unless exact completed-session evidence matches the invite credential,
-current browser credential, and client ID.
+exact definitive terminal result is observed, that same owner attempts one retirement
+operation. A verified `settled` write is followed by best-effort removal. If the write
+cannot be verified, the owner instead attempts and verifies direct removal of the
+observed pending record; failure of both remains unresolved and exposes cleanup
+retry. A settled record surviving removal is compact and cleanup-only. Reload,
+expiration or clearing of the separately owned RoomGuestSession local-storage record,
+and later invite navigation cannot turn that marker back into a `/join` request.
+Direct external deletion of the admission-intent session-storage key erases the
+marker and is outside this guarantee. A matching terminal record restores only its
+explicit non-retryable result. A completed-session record permits a different invite
+to continue after RoomGuestSession evidence has been removed. A still-pending record
+for another invite remains fail-closed unless exact completed-session evidence
+matches the invite credential, current browser credential, and client ID.
 
 No raw invite, device, or session bearer is stored in the intent. Ordinary
 load/create computes two SHA-256 fingerprints; the exceptional historical
@@ -2727,3 +2731,10 @@ commits above correct each owning boundary. Final web verdict for `fdb4e49` and
 `8a8b47d..fdb4e49`: `APPROVE — Critical 0 / High 0 / Medium 0`. Final Daybreaker
 verdict for both scopes: `APPROVE — Critical 0 / High 0 / Medium 0`. Neither review
 used Deep Scan or another automated security scanner.
+
+Cross-review of documentation commit `5729aef` found one Medium overstatement: it
+described settled-write-before-delete as unconditional and did not distinguish
+RoomGuestSession local-storage cleanup from direct deletion of the admission-intent
+session-storage key. The correction records the actual verified-write-or-verified-
+direct-removal branches and leaves both-failed retirement unresolved; product code and
+the approved implementation verdict are unchanged.
