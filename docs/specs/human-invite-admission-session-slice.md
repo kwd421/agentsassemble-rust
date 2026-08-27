@@ -506,11 +506,14 @@ boundaries:
    socket generation. Canonical room and Agent Session avatar references remain
    relative; stale generations cannot publish state or display provenance.
 3. B2 parses the complete native ingress status before controller publication.
-   Before any ingress mutation or manager-invite grant request, the controller
-   requires the packaged Tauri host, a non-guest local operator, and the exact
-   `{server_id, authority_lineage_id, room_id, room_uid}` from the currently
-   verified room directory. Browser route flags, local storage, and a cached room
-   label or ID cannot establish that eligibility.
+   Packaged-Tauri and non-guest local-operator eligibility is established before
+   mounting any ingress status request, poller, status-ticket request, Start, or Stop
+   handler; an ineligible surface makes no native, network, or timer call. This is a
+   server-wide ingress boundary and does not depend on a room tuple. A manager-invite
+   operation separately requires the exact `{server_id, authority_lineage_id,
+   room_id, room_uid}` from the currently verified room directory before requesting
+   its grant. Browser route flags, local storage, and a cached room label or ID cannot
+   establish either eligibility.
    Active `starting`, `running`, and `stopping` phases require availability;
    `error` and stable `failed` require a nonempty error; stable `ready` is equivalent
    to either a nonempty stable URL with a running direct target or a confirmed-clear
@@ -520,36 +523,42 @@ boundaries:
    manual, managed, unconfigured, direct-URL, running, and top-level URL relations
    remain exact.
 4. C1a keeps manager create credential consistency inside the existing persistence
-   transaction. The Tauri command, private-control request and response, and exact
-   one-use create or revoke ticket carry the captured `{server_id,
-   authority_lineage_id, room_id, room_uid}` unchanged. Ticket issuance verifies
-   that tuple against current authority, and the matching create or revoke
-   persistence transaction revalidates the same server, lineage, stable room UID,
-   room ID, and current local manager before mutation. The persistence owner also
-   compares the just-issued signed and join-code fingerprints with the decoded
+   transaction. The frontend/native invocation and private `LocalControlRequest`
+   carry the captured `{server_id, authority_lineage_id, room_id, room_uid}`
+   unchanged. Ticket issuance verifies that tuple against current authority, and the
+   exact-purpose server-side one-use grant retains it without adding tuple echoes to
+   the existing private-control or Tauri ticket response. The matching create or
+   revoke persistence transaction revalidates the same server, lineage, stable room
+   UID, room ID, and current local manager before mutation. The persistence owner
+   also compares the just-issued signed and join-code fingerprints with the decoded
    inserted row before commit and rolls back on any mismatch. The HTTP route emits
    only that verified result and does not repeat the policy or create a post-commit
    orphan check.
 5. C1b is the sole strict create-response, timestamp, URL, and revoke-dispatch
-   parser. A create response must match the exact captured authority tuple and
-   canonical outbound request, its join URL must carry the exact returned join-code
-   credential at the current ingress origin, and its lowercase 16-hex `invite_id`
-   must equal the first 16 hex characters of SHA-256 over the exact returned signed
-   invite token. It retains that validated join URL, canonical public origin, finite
-   exact server expiry, room/invite tuple, and revoke custody without reconstructing
-   a URL. Native grant failure is `proven_not_dispatched`; once `fetch` is invoked,
-   transport loss, malformed or mismatched response, and every result not proven
-   non-mutating are `outcome_unknown`. Canonical exact success and exact
-   `invite_not_found` are the only terminal revoke results.
+   parser. It receives the captured authority tuple as operation and custody context,
+   but binds the response only to fields that the existing HTTP contract actually
+   echoes from the canonical outbound request. The join URL is intrinsically a
+   canonical non-loopback HTTPS URL with exact `/join`, no userinfo or fragment, and
+   the sole `token` query value equal to the exact returned join-code credential. Its
+   lowercase 16-hex `invite_id` must equal the first 16 hex characters of SHA-256
+   over the exact returned signed invite token. Acceptance does not compare the URL
+   with live ingress status: it retains the validated join URL and its response
+   origin, finite exact server expiry, room/invite tuple, and revoke custody without
+   reconstructing a URL. Native grant failure is `proven_not_dispatched`; once
+   `fetch` is invoked, transport loss, malformed or mismatched response, and every
+   result not proven non-mutating are `outcome_unknown`. Canonical exact success and
+   exact `invite_not_found` are the only terminal revoke results.
 6. C2 owns only retained controller custody and current presentation. Each record's
    revocation state is `idle`, `in_flight`, `unknown`, or `dead`. Copy requires
-   `idle`, the exact current ingress origin, and current time before expiry.
-   Retired or expired records remain revoke-only. One nearest-expiry timer updates
-   derived presentation and never authority. A revoke attempt captures its `idle`
-   or `unknown` source plus an attempt generation before dispatch; a proven
-   pre-dispatch failure restores that source, while a post-dispatch uncertainty
-   becomes `unknown`. Duplicate `in_flight` and `dead` calls have no effect, there
-   is no automatic retry, and only an explicit retry obtains a fresh one-use grant.
+   `idle`, the exact current ingress origin, current time before expiry, and a
+   currently verified room tuple exactly equal to the retained custody tuple.
+   Retired, expired, or no-longer-eligible records remain revoke-only. One
+   nearest-expiry timer updates derived presentation and never authority. A revoke
+   attempt captures its `idle` or `unknown` source plus an attempt generation before
+   dispatch; a proven pre-dispatch failure restores that source, while a
+   post-dispatch uncertainty becomes `unknown`. Duplicate `in_flight` and `dead`
+   calls have no effect, there is no automatic retry, and only an explicit retry
+   obtains a fresh one-use grant.
 
 These stages add no durable frontend invite state, second URL/timestamp policy,
 generic resource framework, compatibility path, or fallback. Each independently

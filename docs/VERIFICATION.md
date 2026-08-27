@@ -2590,8 +2590,9 @@ races; canonical writable avatar references could not become absolute display UR
 the native socket ticket needed one strict validator; expiry had to disable Copy
 without discarding revoke custody; and an in-flight, unknown, or failed retry outcome
 could not reopen Copy. It also required packaged-Tauri and non-guest eligibility
-before ingress effects; immutable `{server_id, authority_lineage_id, room_id,
-room_uid}` custody through the native/private-control/ticket path plus
+before ingress controller mount, status requests, polling, and actions; immutable
+`{server_id, authority_lineage_id, room_id, room_uid}` custody through the
+native/private-control/ticket path plus
 same-transaction stable-room revalidation; and exact outbound-request, returned
 credential, and signed-token-digest-derived `invite_id` binding at create-response
 acceptance. The accepted design assigns those policies once across
@@ -2610,3 +2611,17 @@ found that B2 incorrectly rejected the existing confirmed-clear stable-entry sta
 whose canonical representation is stable `ready` with an empty stable URL and an
 inactive direct target. This correction restores both sets of invariants without
 changing product code or adding another policy owner.
+
+Review of correction `52de760` found three remaining boundary defects. First,
+create-response acceptance compared the returned join URL with live ingress even
+though ingress can independently stop after the invite transaction commits; that
+could discard revoke custody for a real invite. Second, the plan required tuple
+echoes from private-control, Tauri-ticket, and HTTP responses whose exact current
+contracts do not contain them. Third, B2 delayed packaged-host/operator eligibility
+until mutation while coupling server-wide ingress control to room authority. The
+corrected plan validates the returned join URL intrinsically and defers live-origin
+shareability to C2, retains the room tuple only through request/grant/transaction
+owners, and separates pre-mount server-wide ingress eligibility from per-room invite
+eligibility. Web verdict: `REVISE — Critical 0 / High 1 / Medium 2`. Daybreaker
+verdict: `REVISE — Critical 0 / High 0 / Medium 1`. Neither review used Deep Scan or
+another automated security scanner.
