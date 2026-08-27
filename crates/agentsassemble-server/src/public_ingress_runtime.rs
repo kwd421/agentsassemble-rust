@@ -199,3 +199,32 @@ fn failed(message: &str) -> GenerationOutcome {
         cleanup_failed: false,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::trycloudflare_origin;
+
+    #[test]
+    fn output_parser_extracts_one_exact_trycloudflare_tenant() {
+        let origin =
+            trycloudflare_origin("INF Visit https://Soft-River-7.trycloudflare.com to connect")
+                .unwrap_or_else(|| panic!("valid quick-tunnel origin was not extracted"));
+        assert_eq!(origin.value, "https://soft-river-7.trycloudflare.com");
+    }
+
+    #[test]
+    fn output_parser_rejects_deceptive_or_non_tenant_hosts() {
+        for line in [
+            "https://trycloudflare.com",
+            "https://-tenant.trycloudflare.com",
+            "https://tenant-.trycloudflare.com",
+            "https://nested.tenant.trycloudflare.com",
+            "https://tenant.trycloudflare.com.example",
+        ] {
+            assert!(
+                trycloudflare_origin(line).is_none(),
+                "accepted deceptive output: {line}"
+            );
+        }
+    }
+}
