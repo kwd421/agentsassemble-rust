@@ -2521,3 +2521,28 @@ web verdict:
 `APPROVE — Critical 0 / High 0 / Medium 0`. Final Daybreaker verdict:
 `APPROVE — Critical 0 / High 0 / Medium 0`. Neither review used Deep Scan or another
 automated security scanner.
+
+## Manager invite native bridge review: 2026-08-27
+
+Manual review of native bridge commit `329d8c1` found: (1) manager authority's
+`bootstrap_required` and `bootstrap_repair_required` rejections were flattened into a
+persistence failure, which made the desktop treat a valid application rejection as a
+broken owned runtime; and (2) current workboard, active-spec, ingress-spec, and exposure
+owners still classified the implemented native bridge as incomplete. Commit `c104791`
+reused the existing bootstrap-error policy owner and preserved both rejections without
+changing other persistence failures. Commit `ded26f5` separated implemented/tested
+native commands, capabilities, and permissions from the still-incomplete frontend and
+packaged flow.
+
+Re-review found: (3) the active spec assigned operation-grant consumption to the native
+bridge instead of the matching HTTP route; (4) architecture collapsed distinct local
+HTTP grants into server-operator authority; (5) architecture still claimed every public
+session exchange was unreachable; and (6) the active spec claimed an attachment grant
+that has no current purpose or route. Commits `d7dfb44`, `4bf1938`, and `5db9cdd`
+corrected the custody owner and exact-purpose families, recorded the verified
+WebSocket/profile/preference exchanges, and left room attachment exchange explicitly
+incomplete. Full `make verify` passed at `c104791`; every later documentation correction
+passed architecture, source-growth, policy, and diff gates. Final web verdict for
+`5db9cdd`: `APPROVE — Critical 0 / High 0 / Medium 0`. Final Daybreaker verdict:
+`APPROVE — Critical 0 / High 0 / Medium 0`. Neither review used Deep Scan or another
+automated security scanner.
