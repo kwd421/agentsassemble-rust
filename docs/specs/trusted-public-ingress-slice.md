@@ -138,6 +138,31 @@ test, malformed durable-row rejection, schema-40 rejection, warning-denied
 persistence Clippy, and the workspace architecture, source-growth, formatting, and
 all-target check gates.
 
+## Local TCP ingress prerequisite
+
+Commits `b5b700e` and `4b54317` make the accepted TCP peer and the actual bound
+loopback address the local trust owner. The concrete threat was that forwarded
+provenance could be mistaken for transport identity, while the first implementation
+lost the listener IP and treated distinct loopback Origin aliases as same-origin.
+`LocalIngress` now keeps one `SocketAddr`; a request must arrive from a loopback peer,
+carry no recognized proxy-provenance header family, use the exact bound numeric
+address and port or the applicable `localhost` alias, and either omit Origin, use the
+exact same HTTP authority, or use one existing Tauri Origin.
+
+The correction replaces independent proxy-header lookups with one bounded scan of
+the request header names so standard and product-specific provenance families have
+one owner. This is a policy-drift correction, not a claimed throughput improvement;
+it adds no runtime task, cache, fallback, compatibility path, or public state. The
+accepted local HTTP, WebSocket upgrade, static frontend, CORS, body-deadline, and
+security-header contracts remain unchanged.
+
+An actual `TcpListener`/`TcpStream` test proves the accepted peer extension reaches
+the middleware: exact same-origin receives 200, while `Via`, a mismatched Host port,
+and a cross-alias Origin receive 403. The complete repository verification passed
+the structure and source-growth gates, frontend build and 403 tests, desktop build
+and 16 tests, all Rust workspace tests including 120 provider and 63 server unit
+tests plus the new TCP boundary test, and warning-denied workspace Clippy.
+
 ## Verification requirements
 
 - Header tests cover local Host and Origin aliases, Tauri origins, forged forwarded
@@ -180,9 +205,23 @@ all-target check gates.
   bytes and fingerprint already bind it.
 - Static nested services do not expose Axum `MatchedPath`; static exposure therefore
   needed direct canonical-descriptor binding rather than a raw-URI fallback.
+- The first local ingress implementation omitted `Via`, `X-Real-IP`, and complete
+  forwarded/proxy header families from its provenance rejection.
+- The first local ingress implementation accepted every loopback bind but discarded
+  the listener IP, so an exact alternate-loopback Host was rejected after startup.
+- The first local Origin check validated Host and Origin aliases independently,
+  allowing cross-alias origins that were not same-origin with the request Host.
 
 Final plan review: `APPROVE — Critical 0 / High 0 / Medium 0`.
 
 Commit `f83707c` web review: `APPROVE — Critical 0 / High 0 / Medium 0`.
 
 Commit `f83707c` Daybreaker review: `APPROVE — Critical 0 / High 0 / Medium 0`.
+
+Commit `b5b700e` web review: `REVISE — Critical 0 / High 0 / Medium 2`.
+
+Commit `b5b700e` Daybreaker review: `REVISE — Critical 0 / High 0 / Medium 2`.
+
+Commit `4b54317` web review: `APPROVE — Critical 0 / High 0 / Medium 0`.
+
+Commit `4b54317` Daybreaker review: `APPROVE — Critical 0 / High 0 / Medium 0`.
