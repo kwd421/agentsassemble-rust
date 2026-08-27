@@ -290,16 +290,18 @@ is passed privately to host-identity signing rather than reconstructed from an
 untrusted handler header. Missing, one-sided, or invalid startup configuration fails
 closed and creates no runtime fallback or mutable public-ingress state.
 
-The current owned direct public-tunnel lifecycle includes process custody, generated
-origin credential, public URL publication, ingress revocation, and confirmed cleanup.
-Shutdown is incomplete until the exact cloudflared process tree has exited and the
-managed ingress and public URL are revoked. Stable-entry ownership remains a required
-later increment; once configured, the same lifecycle cannot complete shutdown until
-the stable entry has durably cleared or reported an explicit cleanup failure. A daemon
-task that may be abandoned at process exit is not cleanup authority. Internally this
-boundary may share maintained HTTP, WebSocket, process, and Cloudflare mechanisms;
-optimization may not weaken origin binding, credential separation, or completion
-semantics.
+The current owned managed public-ingress lifecycle includes process custody, generated
+origin credential, direct public URL publication, configured stable-entry publication,
+ingress revocation, and confirmed cleanup. Configured stable ownership is claimed at
+activation and bound to the canonical database state root; a superseded process cannot
+publish or clear its successor. Shutdown is incomplete until the exact cloudflared
+process tree and any stable publication task have exited, the managed ingress and
+public URL are revoked, and the stable target has durably cleared or reported an
+explicit cleanup failure. Every fallible startup path after ownership claim enters
+that same cleanup boundary. A daemon task that may be abandoned at process exit is
+not cleanup authority. Internally this boundary may share maintained HTTP, WebSocket,
+process, and Cloudflare mechanisms; optimization may not weaken origin binding,
+credential separation, or completion semantics.
 
 ### Destructive mutation semantics
 

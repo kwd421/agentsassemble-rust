@@ -3,8 +3,8 @@
 Status: atomic SQLite, bounded RoomRuntime admission, local HTTP preflight/join,
 pre-join avatar flow, fail-closed browser credential custody, the live-session
 profile/preferences/WebSocket exchanges, and exact participant leave are implemented
-and production-browser verified; configured-manual and direct managed public ingress
-are implemented and verified; stable entry, manager invite management, remaining typed
+and production-browser verified; configured-manual and managed public ingress with
+stable entry are implemented and verified; manager invite management, remaining typed
 exchanges, and frontend activation remain incomplete
 
 ## Definition
@@ -476,11 +476,11 @@ a failed durable verification.
 
 ## Trusted ingress boundary
 
-Managed Cloudflare direct-tunnel custody and startup-configured reverse-proxy proof
-are implemented by the separate ingress slice. Stable entry, manager host controls,
-and operator pairing remain incomplete. Forwarding headers or a configured URL alone
-are not ingress authority. This slice may be exercised through the real local Axum
-server, but that does not prove an external browser flow.
+Managed Cloudflare direct-tunnel custody, configured stable-entry publication, and
+startup-configured reverse-proxy proof are implemented by the separate ingress slice.
+Manager controls and operator pairing remain incomplete. Forwarding headers or a
+configured URL alone are not ingress authority. This slice may be exercised through
+the real local Axum server, but that does not prove an external browser flow.
 
 External invite creation remains disabled until manager controls consume one exact
 ready origin/host/protocol snapshot from either the process-owned managed tunnel or

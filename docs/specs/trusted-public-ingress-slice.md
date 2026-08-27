@@ -2,8 +2,8 @@
 
 Status: design approved; invite-use, exact local TCP trust, route exposure, local
 identity probes, configured-manual trust, and the direct managed quick-tunnel
-lifecycle are implemented and verified; stable entry, manager controls, and
-frontend activation remain incomplete
+lifecycle with stable-entry publication are implemented and verified; manager
+controls and frontend activation remain incomplete
 
 ## Definition
 
@@ -22,7 +22,7 @@ old product markdown.
 
 - `PublicIngress` is the only owner of the active generation, direct public origin,
   generated origin credential, managed cloudflared child, ingress revocation, and
-  cleanup completion. Stable-entry state must join this same owner when implemented.
+  stable-entry publication, revocation, and cleanup completion.
 - The TCP accept boundary preserves the actual peer `SocketAddr` in one private
   request extension. Forwarding or client-IP headers never replace that transport
   fact.
@@ -96,11 +96,16 @@ revoke ingress first, request graceful child termination, enforce a deadline, ki
 the owned group or job if needed, and await the child and both output readers.
 Cleanup failure is explicit and blocks restart.
 
-Stable publish and clear are not implemented yet. Their eventual configuration-absent
-state is exactly `unconfigured`; configured operations require explicit pending,
-ready, or failed results under the same lifecycle owner. The stable URL will not be
-a fallback invite URL, and the still-incomplete manager/frontend activation must not
-claim stable-entry readiness meanwhile.
+Configuration-absent stable state is exactly `unconfigured`. A configured runtime
+claims persisted ownership before any remote operation and reports only explicit
+pending, ready, or failed state. Stable readiness is bound to the exact currently
+published direct target. Publication is an owned cancellable task: reconnect keeps
+only the latest pending target, cancels and joins a superseded publication, and
+suppresses an unchanged target. Stop, child failure, spawn failure, startup failure,
+and shutdown converge on the same finalizer, which joins publication before clearing
+the stable target. Unconfirmed cleanup is explicit and blocks restart. The stable URL
+is not a fallback invite URL, and the still-incomplete manager/frontend activation
+cannot substitute it for a ready-ingress snapshot.
 
 ## Human invite activation
 
@@ -353,9 +358,10 @@ each. Start creates one private temporary directory containing an empty config; 
 the child is moved to its supervisor, the generation-owner future retains that
 `TempDir` until cleanup completes. Stop has one five-second graceful deadline and one
 five-second forced-stop deadline, while each reader has a five-second join deadline.
-No polling task, durable row, cache, compatibility state, retry fallback, or
-stable-entry state was added. No throughput or latency improvement is claimed; the
-accepted bounded work purchases exact process, trust, and cancellation custody.
+That direct-only increment added no polling task, durable row, cache, compatibility
+state, retry fallback, or stable-entry state. No throughput or latency improvement
+was claimed; the accepted bounded work purchased exact process, trust, and
+cancellation custody.
 
 Commits `fd9e7e4` and `4249e12` add only contract tests. Four lifecycle tests cover
 same-generation reconnect, stop and terminal trust revocation, one-snapshot identity
@@ -375,6 +381,41 @@ tests; all workspace tests including 171 persistence, 120 provider, and 74 serve
 unit tests plus the server integration suite; and warning-denied workspace Clippy.
 The test-only lifecycle module is separate from the production owner; relevant files
 remain 625, 196, and 798 lines rather than weakening the 800-line gate.
+
+## Stable-entry lifecycle increment
+
+Commits `7e4498c`, `83d847d`, and `fea32fa` add configured stable publication to
+the existing `PublicIngress` lifecycle. The observed latency and teardown threat was
+concrete: a synchronous Wrangler operation may consume three 90-second attempts plus
+two 15-second backoffs, during which the direct generation could otherwise miss child
+exit, revoke, or reconnect work. A process-backed regression deliberately leaves the
+publisher sleeping for 600 seconds; cancellation, process reaping, stable clear, and
+generation completion finished in 0.67 seconds (0.90 seconds including Cargo test
+startup) on the verification host.
+
+The owning boundary therefore keeps exactly one stable publication task and one
+latest-target slot while a managed generation is active. `PublicIngress` claims a
+UUID owner at the canonical database state root before remote work, serializes exact
+ownership with one private file lock, atomically replaces the owner record, and holds
+that lock across each Wrangler mutation. A predecessor that never published cannot
+reclaim after a successor. The same owner binds stable readiness to the current
+direct target, avoids duplicate same-target puts, cancels and joins superseded work,
+and clears only after the publication task and managed child are reaped. Wrangler
+uses a server-owned empty configuration, a bounded environment containing the
+currently supported Cloudflare authentication forms, validated non-option keys, and
+no Windows batch shim. Frontend validation happens before ownership claim; every
+fallible path after claim passes through the same idempotent ingress shutdown.
+
+The preserved contracts are the original quick-tunnel reconnect behavior, exact
+direct/stable target correlation, a configuration-absent `unconfigured` state, and
+failure-closed cleanup with no stable-URL fallback, legacy compatibility, mutable
+browser authority, or scripted-meeting state. The accepted cost is one task and one
+latest target only while publication is active, plus a private owner record, lock,
+and isolated temporary Wrangler config. No throughput claim is made. Full
+`make verify` passed, including the real TCP ingress rejection boundary, real managed
+process/TCP revocation boundary, seven focused stable-entry tests, warning-denied
+Clippy, and the post-claim serve-preflight regression that observes exactly one
+remote delete.
 
 ## Verification requirements
 
@@ -541,3 +582,20 @@ Commit `e04a32d` Daybreaker review: `APPROVE — Critical 0 / High 0 / Medium 0`
 Commit `8920d57` web review: `REVISE — Critical 0 / High 0 / Medium 1`.
 
 Commit `8920d57` Daybreaker review: `APPROVE — Critical 0 / High 0 / Medium 0`.
+
+Commit `7e4498c` web review: `REVISE — Critical 0 / High 0 / Medium 3`.
+
+Commit `7e4498c` Daybreaker review: `APPROVE — Critical 0 / High 0 / Medium 0`.
+
+Commit `83d847d` web review: `REVISE — Critical 0 / High 0 / Medium 1`.
+
+Commit `83d847d` Daybreaker review: `APPROVE — Critical 0 / High 0 / Medium 0`.
+
+The web findings required activation-time ownership, isolated Wrangler configuration,
+bounded preservation of supported authentication, nonblocking latest-target
+publication, and cleanup of every post-claim startup failure. The corrections added
+no second lifecycle or policy owner.
+
+Commit `fea32fa` web review: `APPROVE — Critical 0 / High 0 / Medium 0`.
+
+Commit `fea32fa` Daybreaker review: `APPROVE — Critical 0 / High 0 / Medium 0`.
