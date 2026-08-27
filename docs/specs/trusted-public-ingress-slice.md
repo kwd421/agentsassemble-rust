@@ -39,9 +39,10 @@ old product markdown.
 ## Trust and route exposure
 
 Every accepted request has an actual loopback peer. Local requests additionally
-require a recognized bound loopback authority (`localhost`, `127.0.0.1`, or `[::1]`
-with the exact port), no proxy provenance, and either no Origin, the same loopback
-Origin, or one of the exact Tauri origins already owned by the CORS policy.
+require the exact bound numeric loopback address and port, or `localhost` with that
+port only when bound to `127.0.0.1` or `[::1]`; no proxy provenance; and either no
+Origin, the exact same HTTP authority, or one of the exact Tauri origins already
+owned by the CORS policy.
 
 A managed request requires the current generation's secret `.origin.invalid` Host,
 the exact current public HTTPS forwarded authority and scheme, and the actual
@@ -211,6 +212,8 @@ tests plus the new TCP boundary test, and warning-denied workspace Clippy.
   the listener IP, so an exact alternate-loopback Host was rejected after startup.
 - The first local Origin check validated Host and Origin aliases independently,
   allowing cross-alias origins that were not same-origin with the request Host.
+- The first review record still described local Host authority as three fixed
+  aliases, contradicting the implemented exact-bound numeric loopback policy.
 
 Final plan review: `APPROVE — Critical 0 / High 0 / Medium 0`.
 
@@ -225,3 +228,7 @@ Commit `b5b700e` Daybreaker review: `REVISE — Critical 0 / High 0 / Medium 2`.
 Commit `4b54317` web review: `APPROVE — Critical 0 / High 0 / Medium 0`.
 
 Commit `4b54317` Daybreaker review: `APPROVE — Critical 0 / High 0 / Medium 0`.
+
+Commit `c25bcea` web review: `REVISE — Critical 0 / High 0 / Medium 1`.
+
+Commit `c25bcea` Daybreaker review: `REVISE — Critical 0 / High 0 / Medium 1`.
