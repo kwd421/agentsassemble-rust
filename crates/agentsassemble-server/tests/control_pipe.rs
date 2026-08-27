@@ -395,6 +395,8 @@ async fn managed_public_ingress_enforces_real_process_tcp_and_revocation_boundar
         .unwrap_or_else(|error| panic!("decode stopped managed ingress: {error}"));
     assert_eq!(stopped["tunnel"]["phase"], "stopped");
     assert!(fixture.cloudflared.with_extension("stopped").is_file());
+    let descendant = fixture.cloudflared.with_extension("descendant-stopped");
+    assert!(descendant.is_file());
     let revoked = tcp_request(&server.address, "GET /join HTTP/1.1", &trusted_headers).await;
     assert!(revoked.starts_with("HTTP/1.1 403"));
     server.close_parent_pipe().await;
@@ -432,12 +434,17 @@ async fn managed_ingress_fixture() -> ManagedIngressFixture {
         &cloudflared,
         r#"#!/bin/sh
 printf '%s\n' "$@" > "$0.args"
-trap 'printf stopped > "$0.stopped"; exit 0' TERM INT
+(
+  trap 'printf stopped > "$0.descendant-stopped"; exit 0' TERM INT
+  while :; do
+    /bin/sleep 60 &
+    wait $!
+  done
+) &
+descendant=$!
+trap 'wait "$descendant"; printf stopped > "$0.stopped"; exit 0' TERM INT
 printf '%s\n' 'INF Visit https://soft-river-demo.trycloudflare.com'
-while :; do
-  /bin/sleep 60 &
-  wait $!
-done
+wait "$descendant"
 "#,
     )
     .await
