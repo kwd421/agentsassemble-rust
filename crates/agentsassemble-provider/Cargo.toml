@@ -14,7 +14,7 @@ fs2.workspace = true
 http-body-util.workspace = true
 hyper.workspace = true
 hyper-util.workspace = true
-process-wrap = { version = "9.1.0", default-features = false, features = ["job-object", "kill-on-drop", "process-group", "tokio1"] }
+process-wrap.workspace = true
 rmcp.workspace = true
 regex.workspace = true
 reqwest.workspace = true
