@@ -13,7 +13,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use thiserror::Error;
 use tokio::{net::TcpListener, sync::Semaphore, task::JoinHandle};
-use tokio_util::sync::CancellationToken;
+use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use tower_http::{
     services::{ServeDir, ServeFile},
     set_header::SetResponseHeaderLayer,
@@ -340,14 +340,7 @@ pub async fn serve(
             shutdown,
         ));
     };
-    connection_shutdown.cancel();
-    connections.close();
-    if tokio::time::timeout(TRACKED_SHUTDOWN_TIMEOUT, connections.wait())
-        .await
-        .is_err()
-    {
-        tracing::warn!("tracked connections exceeded the shutdown deadline");
-    }
+    drain_connections(&connections, &connection_shutdown).await;
     let rejected = rejected_connections.total();
     if rejected > 0 {
         tracing::warn!(rejected, "HTTP overload connections were rejected");
@@ -363,6 +356,17 @@ pub async fn serve(
     provider_shutdown?;
     reconciliation_shutdown.map_err(ServeError::RuntimeReconciliationTask)?;
     result.map_err(ServeError::Io)
+}
+
+async fn drain_connections(connections: &TaskTracker, shutdown: &CancellationToken) {
+    shutdown.cancel();
+    connections.close();
+    if tokio::time::timeout(TRACKED_SHUTDOWN_TIMEOUT, connections.wait())
+        .await
+        .is_err()
+    {
+        tracing::warn!("tracked connections exceeded the shutdown deadline");
+    }
 }
 
 async fn drain_reconciliation_then<T>(
