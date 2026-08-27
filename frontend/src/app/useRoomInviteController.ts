@@ -18,7 +18,7 @@ import {
   remoteClientPacketPreview,
   secureInviteCopyTarget,
 } from "../lib/roomInviteCopy";
-import { localPreviewInviteUrlForRoom, type RoomDockItem } from "../lib/roomDockModel";
+import type { RoomDockItem } from "../lib/roomDockModel";
 import type { RoomAppearance } from "../lib/roomAppearance";
 
 type InviteModalState = { roomId: string } | null;
@@ -271,7 +271,6 @@ export function useRoomInviteController({
     startTunnelIfNeeded?: boolean;
   }) {
     await requirePublicInviteReady(startTunnelIfNeeded);
-    const localPreviewUrl = localPreviewInviteUrlForRoom(room);
     let invite;
     try {
       invite = await createRoomInvite({
@@ -296,7 +295,7 @@ export function useRoomInviteController({
         sessionToken,
       });
     }
-    const target = secureInviteCopyTarget({ joinUrl: invite.join_url || "", localPreviewUrl });
+    const target = secureInviteCopyTarget({ joinUrl: invite.join_url || "" });
     if (!target.copyUrl) throw new Error(target.status);
     setSecureInviteUrl(target.copyUrl);
     return { invite, target };
@@ -440,7 +439,6 @@ export function useRoomInviteController({
       });
       const target = secureInviteCopyTarget({
         joinUrl: invite.join_url || "",
-        localPreviewUrl: localPreviewInviteUrlForRoom(room),
       });
       if (!target.copyUrl) throw new Error(target.status);
       setAgentInviteUrl(target.copyUrl);
@@ -477,10 +475,9 @@ export function useRoomInviteController({
     setCopyStatus(copied ? "운영자 연결 링크 복사됨" : "운영자 연결 링크 복사 실패");
   }
 
-  async function copySecureInvite(room: RoomDockItem) {
+  async function copySecureInvite() {
     const target = secureInviteCopyTarget({
       joinUrl: secureInviteUrl,
-      localPreviewUrl: localPreviewInviteUrlForRoom(room),
     });
     if (!target.copyUrl) {
       setCopyStatus(target.status);
@@ -488,11 +485,6 @@ export function useRoomInviteController({
     }
     const copied = await copyText(target.copyUrl);
     setCopyStatus(copied ? target.status : "보안 초대 링크 복사 실패");
-  }
-
-  async function copyLocalPreview(room: RoomDockItem) {
-    const copied = await copyText(localPreviewInviteUrlForRoom(room));
-    setCopyStatus(copied ? "로컬 미리보기 복사됨" : "로컬 미리보기 복사 실패");
   }
 
   async function copyRemoteClientPacket() {
@@ -577,7 +569,6 @@ export function useRoomInviteController({
     copyAgentInvite,
     copyOperatorPairing,
     copySecureInvite,
-    copyLocalPreview,
     copyRemoteClientPacket,
     inviteFriend,
   };

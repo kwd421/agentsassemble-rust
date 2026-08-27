@@ -13,7 +13,7 @@ export default function AppOverlays({ controller }: { controller: AppController 
   const {
     acceptRecoveredSession, activeRoom, agentCreateOpen, agentInviteUrl,
     canonicalRoom, closeInviteModal, configureInvitePublicUrl, copyAgentInviteLink,
-    copyInviteLink, copyLocalPreviewLink, copyOperatorPairingLink, copyRemoteClientPacket,
+    copyInviteLink, copyOperatorPairingLink, copyRemoteClientPacket,
     createChannel, createChannelOpen, deleteRoom, deviceToken, generateAgentInviteLink,
     generateInviteLink, generateOperatorPairingLink, guestAdmissionBusy, guestExpired,
     guestJoinRequested, guestJoinStatus, guestJoinToken, guestLocked,
@@ -21,7 +21,7 @@ export default function AppOverlays({ controller }: { controller: AppController 
     inviteCopyStatus, inviteFriendStatuses, inviteFriendToRoom, inviteHostTokenRequired,
     inviteModalAppearance, inviteModalMembers, inviteModalRoom, invitePublicUrl,
     inviteRemoteClientPacket, inviteRoom, leaveRoom, leaveRoomTarget,
-    localPreviewUrl, operatorPairingPending, operatorPairingState, operatorPairingUrl,
+    operatorPairingPending, operatorPairingState, operatorPairingUrl,
     pendingGuestAvatarImage, pendingGuestDisplayName, publicInviteStatus, publicInviteUrlDraft,
     requestGuestJoin, retryOperatorPairing, roomInvite,
     roomSettings, roomSocket, saveHostTokenFromDraft, secureInviteUrl,
@@ -47,7 +47,6 @@ export default function AppOverlays({ controller }: { controller: AppController 
             secureInviteUrl={secureInviteUrl}
             agentInviteUrl={agentInviteUrl}
             operatorPairingUrl={operatorPairingUrl}
-            localPreviewUrl={localPreviewUrl}
             publicUrl={invitePublicUrl}
             publicUrlDraft={publicInviteUrlDraft}
             hostTokenDraft={hostTokenDraft}
@@ -70,14 +69,13 @@ export default function AppOverlays({ controller }: { controller: AppController 
                 startTunnelIfNeeded
               )
             }
-            onCopy={() => void copyInviteLink(inviteModalRoom)}
+            onCopy={() => void copyInviteLink()}
             onGenerateAgentInvite={(startTunnelIfNeeded) =>
               void generateAgentInviteLink(inviteModalRoom, startTunnelIfNeeded)
             }
             onCopyAgentInvite={() => void copyAgentInviteLink()}
             onGenerateOperatorPairing={() => void generateOperatorPairingLink(inviteModalRoom)}
             onCopyOperatorPairing={() => void copyOperatorPairingLink()}
-            onCopyLocalPreview={() => void copyLocalPreviewLink(inviteModalRoom)}
             onPublicUrlDraftChange={setPublicInviteUrlDraft}
             onConfigurePublicUrl={() => void configureInvitePublicUrl()}
             onHostTokenDraftChange={setHostTokenDraft}

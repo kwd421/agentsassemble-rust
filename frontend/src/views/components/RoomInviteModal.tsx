@@ -49,7 +49,6 @@ export default function RoomInviteModal({
   secureInviteUrl,
   agentInviteUrl,
   operatorPairingUrl,
-  localPreviewUrl,
   publicUrl,
   publicUrlDraft,
   hostTokenDraft,
@@ -70,7 +69,6 @@ export default function RoomInviteModal({
   onCopyAgentInvite,
   onGenerateOperatorPairing,
   onCopyOperatorPairing,
-  onCopyLocalPreview,
   onPublicUrlDraftChange,
   onConfigurePublicUrl,
   onHostTokenDraftChange,
@@ -84,7 +82,6 @@ export default function RoomInviteModal({
   secureInviteUrl: string;
   agentInviteUrl: string;
   operatorPairingUrl: string;
-  localPreviewUrl: string;
   publicUrl?: string;
   publicUrlDraft?: string;
   hostTokenDraft?: string;
@@ -111,7 +108,6 @@ export default function RoomInviteModal({
   onCopyAgentInvite: () => void;
   onGenerateOperatorPairing: () => void;
   onCopyOperatorPairing: () => void;
-  onCopyLocalPreview: () => void;
   onPublicUrlDraftChange: (value: string) => void;
   onConfigurePublicUrl: () => void;
   onHostTokenDraftChange: (value: string) => void;
@@ -535,24 +531,6 @@ export default function RoomInviteModal({
             </div>
           </label>
         )}
-        <details className="dc-invite-link-label">
-          <summary>로컬/dev 미리보기</summary>
-          <span className="text-[12px] font-bold text-text-muted preserve-words">
-            이 링크는 이 컴퓨터에서만 확인하는 개발용입니다. 친구에게 보내지 마세요.
-          </span>
-          <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_132px]">
-            <input
-              className="dc-invite-link-input"
-              value={localPreviewUrl}
-              readOnly
-              onFocus={(event) => event.currentTarget.select()}
-            />
-            <button type="button" className="dc-invite-copy-button" onClick={onCopyLocalPreview}>
-              <Copy size={15} />
-              로컬 미리보기 복사
-            </button>
-          </div>
-        </details>
         {remoteClientPacketPreview && (
           <label className="dc-invite-link-label">
             선택한 AI 친구 연결 정보

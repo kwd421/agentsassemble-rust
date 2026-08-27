@@ -298,40 +298,6 @@ function cleanInviteValue(value: string | null, fallback: string, limit: number)
   return (text || fallback).slice(0, limit);
 }
 
-export function roomFromInviteParams(): RoomDockItem | null {
-  try {
-    const query = new URLSearchParams(window.location.search);
-    const guestMode =
-      query.get("guest") === "1" ||
-      query.get("invite") === "1" ||
-      query.get("invite") === "room";
-    const meetingId = cleanInviteValue(
-      query.get("room") || query.get("meeting") || query.get("meeting_id"),
-      "",
-      128
-    );
-    if (!guestMode || !meetingId) return null;
-    const label = cleanInviteValue(query.get("roomName") || query.get("name"), meetingId, 80);
-    const topic = cleanInviteValue(query.get("topic"), "초대받은 방", 160);
-    return {
-      id: `guest-${meetingId}`,
-      label: label || meetingId,
-      meetingId,
-      roomOrigin: "remote_server",
-      serverOrigin: window.location.origin,
-      connectionState: "connected",
-      topic,
-      shortLabel: (label || meetingId).slice(0, 1).toUpperCase() || "G",
-      inviteScope: "read_only",
-      icon: Users,
-      createdAt: "",
-      tone: "resident",
-    };
-  } catch {
-    return null;
-  }
-}
-
 export function roomFromGuestSession(session: RoomGuestSession): RoomDockItem {
   const label = session.roomLabel || session.meetingId || "초대받은 방";
   return {
@@ -436,14 +402,13 @@ export function createStartupRoute({ operatorPairingPending = false } = {}): Sta
   const guestJoinToken = operatorPairingPending ? "" : joinInviteTokenFromUrl(window.location.href);
   const guestSession = loadRoomGuestSession();
   const guestInvite =
-    roomFromInviteParams() ||
-    (operatorPairingPending
+    operatorPairingPending
       ? roomFromPendingAdmission("pairing")
       : guestJoinToken
       ? roomFromPendingAdmission("invite")
       : guestSession
         ? roomFromGuestSession(guestSession)
-        : null);
+        : null;
   const directRoom = guestInvite ? null : roomFromDirectParams();
   const mafiaRoom = guestInvite || directRoom ? null : roomFromMafiaParams();
   const routeRoom = directRoom || mafiaRoom;
@@ -482,17 +447,4 @@ export function roomHasAgent(room: RoomDockItem, agent: { meeting_id?: string })
 
 export function roomSettingsKey(room: RoomDockItem) {
   return room.meetingId ? roomDockIdentity(room) : room.id;
-}
-
-export function localPreviewInviteUrlForRoom(room: RoomDockItem) {
-  const url = new URL(window.location.href);
-  url.search = "";
-  url.hash = "";
-  url.searchParams.set("guest", "1");
-  url.searchParams.set("room", room.meetingId);
-  url.searchParams.set("roomName", room.label);
-  if (room.topic) url.searchParams.set("topic", room.topic);
-  url.searchParams.set("scope", "read_only");
-  url.searchParams.set("preview", "local-dev");
-  return url.toString();
 }

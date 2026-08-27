@@ -49,6 +49,20 @@ describe("createStartupRoute", () => {
     expect(route.guestInvite?.meetingId).toBe("pending-join");
   });
 
+  it("does not let legacy query state steer a canonical invite", () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/join?token=new-invite&guest=1&room=legacy-room&scope=read_only"
+    );
+
+    const route = createStartupRoute();
+
+    expect(route.guestJoinToken).toBe("new-invite");
+    expect(route.guestInvite?.meetingId).toBe("pending-join");
+    expect(route.guestInvite?.inviteScope).toBe("room");
+  });
+
   it("captures and immediately removes a one-time pairing token from the URL", () => {
     window.history.replaceState({}, "", "/pair?token=aap1_secret-token");
 

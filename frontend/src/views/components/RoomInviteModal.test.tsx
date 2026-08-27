@@ -13,7 +13,6 @@ function renderInviteModal({ publicAccess = true } = {}) {
       secureInviteUrl=""
       agentInviteUrl=""
       operatorPairingUrl=""
-      localPreviewUrl="http://127.0.0.1:8765/join"
       publicUrl={publicAccess ? "https://room.example.com" : ""}
       publicUrlDraft=""
       tunnelStatus={{
@@ -29,7 +28,6 @@ function renderInviteModal({ publicAccess = true } = {}) {
       onCopyAgentInvite={vi.fn()}
       onGenerateOperatorPairing={vi.fn()}
       onCopyOperatorPairing={vi.fn()}
-      onCopyLocalPreview={vi.fn()}
       onPublicUrlDraftChange={vi.fn()}
       onConfigurePublicUrl={vi.fn()}
       onHostTokenDraftChange={vi.fn()}
@@ -43,6 +41,12 @@ function renderInviteModal({ publicAccess = true } = {}) {
 }
 
 describe("RoomInviteModal", () => {
+  it("does not expose the removed client-only preview entrance", () => {
+    renderInviteModal();
+
+    expect(screen.queryByText(/로컬\/dev 미리보기/)).toBeNull();
+  });
+
   it("creates a human invite with the selected use limit and lifetime", () => {
     const { onGenerateSecureInvite } = renderInviteModal();
 

@@ -27,7 +27,6 @@ import { consumeGuestRecoveryRequestFromUrl } from "../lib/guestRecovery";
 import { roomAppearanceStyle } from "../lib/roomAppearance";
 import {
   createStartupRoute,
-  localPreviewInviteUrlForRoom,
   roomIsDisconnected,
   type RoomDockItem,
 } from "../lib/roomDockModel";
@@ -369,7 +368,6 @@ export function useAppController(deviceToken: string) {
     copyAgentInvite: copyAgentInviteLink,
     copyOperatorPairing: copyOperatorPairingLink,
     copySecureInvite: copyInviteLink,
-    copyLocalPreview: copyLocalPreviewLink,
     copyRemoteClientPacket,
     inviteFriend: inviteFriendToRoom,
   } = roomInvite;
@@ -678,9 +676,6 @@ export function useAppController(deviceToken: string) {
   const inviteModalAppearance = inviteModalRoom
     ? roomSettings.appearanceFor(inviteModalRoom)
     : undefined;
-  const localPreviewUrl = inviteModalRoom
-    ? localPreviewInviteUrlForRoom(inviteModalRoom)
-    : "";
   const inviteModalMembers = inviteModalRoom
     ? roomMembers.membersFor(inviteModalRoom)
     : [];
@@ -745,7 +740,7 @@ export function useAppController(deviceToken: string) {
     channelMenu, channelSearchNeedle, channelSearchQuery, channelSidebarWidth,
     closeInviteModal, closeMobileRoomInfo, closeMobileSidebar, collapsedChannelSections,
     configureInvitePublicUrl, copyAgentInviteLink, copyGuestAiPacket,
-    copyInviteLink, copyLocalPreviewLink, copyOperatorPairingLink, copyRemoteClientPacket,
+    copyInviteLink, copyOperatorPairingLink, copyRemoteClientPacket,
     createChannel, createChannelOpen, createCompanionAiPacket, deleteDirectoryFriend,
     deleteRoom, deviceToken, exitGuestSurface, expireGuestSession,
     friendAddDraftName, friendListFilter, friendsBusyId, friendsLoading,
@@ -758,7 +753,7 @@ export function useAppController(deviceToken: string) {
     inviteFriendToRoom, inviteHostTokenRequired, inviteModalAppearance, inviteModalMembers,
     inviteModalRoom, invitePublicUrl, inviteRemoteClientPacket, inviteRoom,
     leaveRoom, leaveRoomTarget, loadCanonicalRoomHistory, loadProviderUsage,
-    lobbyPostingState, localPreviewUrl, markChannelRead, markRoomRead,
+    lobbyPostingState, markChannelRead, markRoomRead,
     membersOpen, menuChannelDisplay, menuRoom, messageSearchChannelLabels,
     messageSearchScope, mobileRoomInfoInitialMode, mobileRoomInfoOpen, mobileSidebarOpen,
     mobileViewportIsActive, openAddFriendView, openAgentCreate, openChannelMenu,

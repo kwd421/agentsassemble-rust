@@ -39,14 +39,11 @@ export function isExternalInviteUrl(url: string): boolean {
 
 export function secureInviteCopyTarget({
   joinUrl,
-  localPreviewUrl,
 }: {
   joinUrl?: string;
-  localPreviewUrl?: string;
 }): {
   copyUrl: string;
   status: string;
-  previewLabel: string;
   secure: boolean;
 } {
   const cleanJoinUrl = String(joinUrl || "").trim();
@@ -54,20 +51,15 @@ export function secureInviteCopyTarget({
     return {
       copyUrl: cleanJoinUrl,
       status: "보안 초대 링크 복사됨",
-      previewLabel: "로컬/dev 미리보기 링크",
       secure: true,
     };
   }
   const hasJoinUrl = Boolean(cleanJoinUrl);
-  const hasLocalPreview = Boolean(String(localPreviewUrl || "").trim());
   return {
     copyUrl: "",
     status: hasJoinUrl
       ? "외부 초대 링크가 아직 준비되지 않았습니다. 공개 URL 또는 터널을 먼저 설정하세요."
-      : hasLocalPreview
-      ? "공개 URL이 없어 보안 초대 링크를 만들 수 없습니다. 아래 링크는 로컬/dev 미리보기 전용입니다."
       : "공개 URL이 없어 보안 초대 링크를 만들 수 없습니다.",
-    previewLabel: "로컬/dev 미리보기 링크",
     secure: false,
   };
 }
