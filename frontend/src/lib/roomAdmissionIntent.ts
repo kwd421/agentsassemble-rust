@@ -1,8 +1,5 @@
 import { ApiError } from "./apiErrors";
-import {
-  roomGuestSessionExpired,
-  type RoomGuestSession,
-} from "./roomGuestSession";
+import type { RoomGuestSession } from "./roomGuestSession";
 
 export const ROOM_ADMISSION_INTENT_STORAGE_KEY =
   "agentsassemble.roomAdmissionIntent.v1";
@@ -179,8 +176,8 @@ function completedSessionContext(
 ): RoomAdmissionIntentContext | undefined {
   if (
     !session ||
-    roomGuestSessionExpired(session) ||
     !session.inviteToken ||
+    Number.isNaN(Date.parse(session.expiresAt)) ||
     session.clientId !== context.clientId
   ) {
     return undefined;
@@ -275,13 +272,17 @@ export async function loadOrCreateRoomAdmissionIntent(
   };
 }
 
-export function clearRoomAdmissionIntent(): boolean {
+export function retireRoomAdmissionIntent(): boolean {
   try {
     return removeStoredIntent(window.sessionStorage);
   } catch {
-    // Verified room-session custody is authoritative after admission completes.
     return false;
   }
+}
+
+export function releaseRoomAdmissionIntentAfterCompletedSession(): void {
+  // A durably persisted completed session is exact cleanup evidence on a later entrance.
+  retireRoomAdmissionIntent();
 }
 
 export function roomAdmissionFailureEndsIntentCustody(error: unknown): boolean {

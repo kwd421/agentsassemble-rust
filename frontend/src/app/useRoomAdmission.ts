@@ -9,9 +9,10 @@ import { ApiError, GUEST_SESSION_EXPIRED_MESSAGE } from "../lib/apiErrors";
 import { loadRememberedGuestProfile, rememberGuestProfile } from "../lib/deviceIdentity";
 import { roomFromGuestSession, type RoomDockItem } from "../lib/roomDockModel";
 import {
-  clearRoomAdmissionIntent,
+  releaseRoomAdmissionIntentAfterCompletedSession,
   loadOrCreateRoomAdmissionIntent,
   loadRoomAdmissionIntent,
+  retireRoomAdmissionIntent,
   roomAdmissionFailureEndsIntentCustody,
 } from "../lib/roomAdmissionIntent";
 import { verifyAndBindRoomSessionSurface } from "../lib/roomDirectoryContract";
@@ -23,6 +24,13 @@ import {
   roomGuestSessionFromRecoveryPayload,
   type RoomGuestSession,
 } from "../lib/roomGuestSession";
+import {
+  admissionReducer,
+  initialAdmissionState,
+  SERVER_SURFACE_INVALID_CODE,
+  SESSION_CUSTODY_INVALID_CODE,
+  type AdmissionSource,
+} from "./roomAdmissionState";
 
 type RoomAdmissionOptions = {
   deviceToken: string;
@@ -43,148 +51,14 @@ export type OperatorPairingState =
   | "pairing_failed_terminal"
   | "paired";
 
-type AdmissionSource =
-  | "initial"
-  | "invite"
-  | "pairing"
-  | "existing_session"
-  | "recovery";
-type AdmissionOperation = "preflight" | "join" | "pairing";
-
 class SessionSurfaceError extends Error {}
 class SessionCustodyError extends Error {}
-const SERVER_SURFACE_INVALID_CODE = "server_surface_invalid";
 const SERVER_SURFACE_INVALID_MESSAGE = "방 서버의 제품 표면을 검증하지 못했습니다.";
-const SESSION_CUSTODY_INVALID_CODE = "session_storage_unavailable";
+const INTENT_CLEANUP_RETRY_MESSAGE =
+  "입장 재시도 정보 정리를 완료하지 못했습니다. 브라우저 저장소 접근을 복구한 뒤 다시 시도하세요.";
 
 function roomSessionSurfaceKey(session: RoomGuestSession): string {
   return `${session.serverSurface.server_id}:${session.serverSurface.server_product_surface.digest}`;
-}
-
-export type AdmissionState =
-  | { kind: "idle"; session: null; status: "" }
-  | { kind: "preflighting"; session: RoomGuestSession | null; status: string }
-  | { kind: "profile_required"; session: RoomGuestSession | null; status: "" }
-  | { kind: "joining"; session: RoomGuestSession | null; status: string }
-  | {
-      kind: "joined";
-      session: RoomGuestSession;
-      source: AdmissionSource;
-      status: "";
-    }
-  | { kind: "pairing"; session: RoomGuestSession | null; status: string }
-  | {
-      kind: "failed";
-      session: RoomGuestSession | null;
-      operation: AdmissionOperation;
-      code: string;
-      message: string;
-      retryable: boolean;
-      status: string;
-    }
-  | { kind: "expired"; session: null; status: string };
-
-type AdmissionAction =
-  | { type: "preflight_started"; status: string }
-  | { type: "profile_required" }
-  | { type: "join_requested"; status: string }
-  | { type: "pairing_started"; status: string }
-  | { type: "joined"; session: RoomGuestSession; source: AdmissionSource }
-  | {
-      type: "failed";
-      operation: AdmissionOperation;
-      code: string;
-      message: string;
-      retryable: boolean;
-      status: string;
-    }
-  | { type: "expired"; status: string }
-  | { type: "session_surface_failed"; message: string }
-  | { type: "session_cleared" };
-
-function initialAdmissionState({
-  guestJoinToken,
-  operatorPairingToken,
-  initialSession,
-}: Pick<RoomAdmissionOptions, "guestJoinToken" | "operatorPairingToken" | "initialSession">): AdmissionState {
-  if (operatorPairingToken) {
-    return { kind: "pairing", session: initialSession, status: "" };
-  }
-  if (guestJoinToken) {
-    return { kind: "preflighting", session: initialSession, status: "" };
-  }
-  if (initialSession) {
-    if (roomGuestSessionExpired(initialSession)) {
-      return { kind: "expired", session: null, status: GUEST_SESSION_EXPIRED_MESSAGE };
-    }
-    return { kind: "joined", session: initialSession, source: "initial", status: "" };
-  }
-  return { kind: "idle", session: null, status: "" };
-}
-
-function admissionReducer(state: AdmissionState, action: AdmissionAction): AdmissionState {
-  switch (action.type) {
-    case "preflight_started":
-      if (
-        state.kind !== "preflighting" &&
-        !(
-          state.kind === "failed" &&
-          state.operation === "preflight" &&
-          state.retryable
-        )
-      ) {
-        return state;
-      }
-      return { kind: "preflighting", session: state.session, status: action.status };
-    case "profile_required":
-      return { kind: "profile_required", session: state.session, status: "" };
-    case "join_requested":
-      if (
-        state.kind !== "preflighting" &&
-        state.kind !== "profile_required" &&
-        state.kind !== "joining" &&
-        !(state.kind === "failed" && state.operation === "join" && state.retryable)
-      ) {
-        return state;
-      }
-      return { kind: "joining", session: state.session, status: action.status };
-    case "pairing_started":
-      if (
-        state.kind !== "pairing" &&
-        !(state.kind === "failed" && state.operation === "pairing" && state.retryable)
-      ) {
-        return state;
-      }
-      return { kind: "pairing", session: state.session, status: action.status };
-    case "joined":
-      return { kind: "joined", session: action.session, source: action.source, status: "" };
-    case "failed":
-      return {
-        kind: "failed",
-        session: state.session,
-        operation: action.operation,
-        code: action.code,
-        message: action.message,
-        retryable: action.retryable,
-        status: action.status,
-      };
-    case "expired":
-      return { kind: "expired", session: null, status: action.status };
-    case "session_surface_failed":
-      return {
-        kind: "failed",
-        session: null,
-        operation: "join",
-        code: SERVER_SURFACE_INVALID_CODE,
-        message: action.message,
-        retryable: false,
-        status: action.message,
-      };
-    case "session_cleared":
-      if (state.kind === "idle" || state.kind === "expired") return state;
-      if (state.kind === "joined") return { kind: "idle", session: null, status: "" };
-      return { ...state, session: null };
-  }
 }
 
 function pairingFailureIsRetryable(error: unknown): boolean {
@@ -289,7 +163,8 @@ export function useRoomAdmission({
   );
   const guestJoinRetryable = Boolean(
     admissionState.kind === "failed" &&
-      admissionState.operation === "join" &&
+      (admissionState.operation === "join" ||
+        admissionState.operation === "intent_cleanup") &&
       admissionState.retryable &&
       admissionState.code !== "request_id_unavailable"
   );
@@ -381,6 +256,22 @@ export function useRoomAdmission({
   }, []);
 
   const requestGuestJoin = useCallback(() => {
+    if (
+      admissionState.kind === "failed" &&
+      admissionState.operation === "intent_cleanup"
+    ) {
+      if (retireRoomAdmissionIntent()) {
+        dispatchAdmission({
+          type: "failed",
+          operation: "join",
+          code: admissionState.code,
+          message: admissionState.message,
+          retryable: false,
+          status: admissionState.message,
+        });
+      }
+      return;
+    }
     if (guestPreflightRetryable) {
       preflightAttemptedTokenRef.current = "";
       dispatchAdmission({
@@ -390,7 +281,7 @@ export function useRoomAdmission({
       return;
     }
     dispatchAdmission({ type: "join_requested", status: "" });
-  }, [guestPreflightRetryable]);
+  }, [admissionState, guestPreflightRetryable]);
 
   const retryOperatorPairing = useCallback(() => {
     if (operatorPairingState !== "pairing_failed_retryable") return;
@@ -543,13 +434,21 @@ export function useRoomAdmission({
       type: "preflight_started",
       status: "초대와 기존 신원을 확인하는 중...",
     });
+    const completedSession = guestSession || initialSession;
+    const completedSessionEvidence = completedSession
+      ? {
+          inviteToken: completedSession.inviteToken,
+          clientId: completedSession.clientId,
+          expiresAt: completedSession.expiresAt,
+        }
+      : null;
     const pendingIntent = guestAlreadyJoinedThisInvite
       ? Promise.resolve(null)
       : loadRoomAdmissionIntent({
           inviteToken: guestJoinToken,
           browserCredential: deviceToken,
           clientId,
-        }, guestSession);
+        }, completedSessionEvidence);
     pendingIntent.then((intent) => {
         if (!attempt.isCurrent()) return null;
         if (intent) {
@@ -562,7 +461,10 @@ export function useRoomAdmission({
         return preflightRoomInvite({
           inviteToken: guestJoinToken,
           deviceToken,
-          sessionToken: guestSession?.sessionToken || "",
+          sessionToken:
+            guestSession && !roomGuestSessionExpired(guestSession)
+              ? guestSession.sessionToken
+              : "",
         });
       })
       .then(async (decision) => {
@@ -611,7 +513,7 @@ export function useRoomAdmission({
             attempt.isCurrent
           );
           if (!applied) return;
-          clearRoomAdmissionIntent();
+          releaseRoomAdmissionIntentAfterCompletedSession();
           return;
         }
         if (
@@ -672,6 +574,7 @@ export function useRoomAdmission({
     guestAlreadyJoinedThisInvite,
     guestJoinToken,
     guestSession,
+    initialSession,
     operatorPairingToken,
   ]);
 
@@ -727,7 +630,7 @@ export function useRoomAdmission({
             attempt.isCurrent
           );
           if (!applied) return;
-          clearRoomAdmissionIntent();
+          releaseRoomAdmissionIntentAfterCompletedSession();
         }
       })
       .catch((error) => {
@@ -736,22 +639,33 @@ export function useRoomAdmission({
         const custodyFailure = error instanceof SessionCustodyError;
         const retryable =
           custodyFailure || (!surfaceFailure && pairingFailureIsRetryable(error));
-        if (networkDispatched && roomAdmissionFailureEndsIntentCustody(error)) {
-          clearRoomAdmissionIntent();
-        }
         const message = error instanceof Error ? error.message : "초대 링크 입장 실패";
+        const code = !networkDispatched
+          ? "request_id_unavailable"
+          : surfaceFailure
+          ? SERVER_SURFACE_INVALID_CODE
+          : custodyFailure
+            ? SESSION_CUSTODY_INVALID_CODE
+            : error instanceof ApiError
+              ? error.code || error.message
+              : "join_failed";
+        if (networkDispatched && roomAdmissionFailureEndsIntentCustody(error)) {
+          if (!retireRoomAdmissionIntent()) {
+            dispatchAdmission({
+              type: "failed",
+              operation: "intent_cleanup",
+              code,
+              message,
+              retryable: true,
+              status: INTENT_CLEANUP_RETRY_MESSAGE,
+            });
+            return;
+          }
+        }
         dispatchAdmission({
           type: "failed",
           operation: "join",
-          code: !networkDispatched
-            ? "request_id_unavailable"
-            : surfaceFailure
-            ? SERVER_SURFACE_INVALID_CODE
-            : custodyFailure
-              ? SESSION_CUSTODY_INVALID_CODE
-              : error instanceof ApiError
-                ? error.code || error.message
-                : "join_failed",
+          code,
           message,
           retryable,
           status: message,

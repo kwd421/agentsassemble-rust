@@ -7,6 +7,7 @@ import { PRODUCT_SURFACE_REVISION } from "../src/types/generated/PRODUCT_SURFACE
 
 const RECOVERY_CODE = "ABCD-EFGH-IJKL-MNOP-QRST-UVWX-YZ23-4567";
 const ADMISSION_INTENT_KEY = "agentsassemble.roomAdmissionIntent.v1";
+const GUEST_SESSION_KEY = "agentsassemble.roomGuestSession.v1";
 
 function knownUserPreflight(roomId: string) {
   return {
@@ -126,6 +127,18 @@ test("does not let legacy query state override a server-owned invite", async ({ 
 test("retains one frozen admission intent across response loss and a later invite gate", async ({
   page,
 }) => {
+  await page.addInitScript((intentKey) => {
+    const removeItem = Storage.prototype.removeItem;
+    Storage.prototype.removeItem = function (key) {
+      if (
+        key === intentKey &&
+        localStorage.getItem("agentsassemble.test.blockTerminalIntentRemoval") === "1"
+      ) {
+        throw new Error("storage unavailable");
+      }
+      removeItem.call(this, key);
+    };
+  }, ADMISSION_INTENT_KEY);
   let preflightCount = 0;
   const joinBodies: unknown[] = [];
   await page.route("**/api/room-invite/admission", async (route) => {
@@ -159,6 +172,10 @@ test("retains one frozen admission intent across response loss and a later invit
     await route.abort("connectionrefused");
   });
 
+  await page.goto("/");
+  await page.evaluate(() =>
+    localStorage.setItem("agentsassemble.test.blockTerminalIntentRemoval", "1")
+  );
   await page.goto("/join?token=invite-token");
   await expect(page.getByRole("region", { name: "입장 재시도" })).toBeVisible();
   await expect.poll(() => joinBodies.length).toBe(1);
@@ -168,16 +185,26 @@ test("retains one frozen admission intent across response loss and a later invit
 
   await page.reload();
   await expect.poll(() => joinBodies.length).toBe(3);
+  await expect(page.getByRole("region", { name: "입장 재시도" })).toBeVisible();
+  expect(
+    await page.evaluate((key) => sessionStorage.getItem(key), ADMISSION_INTENT_KEY)
+  ).not.toBeNull();
+
+  await page.evaluate(() =>
+    localStorage.setItem("agentsassemble.test.blockTerminalIntentRemoval", "0")
+  );
+  await page.getByRole("button", { name: "다시 시도", exact: true }).click();
   await expect
     .poll(() => page.evaluate((key) => sessionStorage.getItem(key), ADMISSION_INTENT_KEY))
     .toBeNull();
 
   expect(preflightCount).toBe(1);
+  expect(joinBodies).toHaveLength(3);
   expect(joinBodies[1]).toEqual(joinBodies[0]);
   expect(joinBodies[2]).toEqual(joinBodies[0]);
 });
 
-test("repairs a completed admission cleanup before a different invite", async ({
+test("repairs an expired completed admission without presenting its bearer", async ({
   page,
 }) => {
   await page.addInitScript((intentKey) => {
@@ -193,9 +220,14 @@ test("repairs a completed admission cleanup before a different invite", async ({
     };
   }, ADMISSION_INTENT_KEY);
   const preflightTokens: string[] = [];
+  const preflightSessionTokens: string[] = [];
   await page.route("**/api/room-invite/admission", async (route) => {
-    const request = route.request().postDataJSON() as { invite_token: string };
+    const request = route.request().postDataJSON() as {
+      invite_token: string;
+      session_token?: string;
+    };
     preflightTokens.push(request.invite_token);
+    preflightSessionTokens.push(request.session_token || "");
     const roomId = request.invite_token === "invite-a" ? "room-a" : "room-b";
     await route.fulfill({
       contentType: "application/json",
@@ -236,9 +268,17 @@ test("repairs a completed admission cleanup before a different invite", async ({
   await page.evaluate(() =>
     localStorage.setItem("agentsassemble.test.blockIntentRemoval", "0")
   );
+  await page.evaluate((sessionKey) => {
+    const raw = localStorage.getItem(sessionKey);
+    if (!raw) throw new Error("completed session was not persisted");
+    const session = JSON.parse(raw) as { expiresAt: string };
+    session.expiresAt = "2000-01-01T00:00:00Z";
+    localStorage.setItem(sessionKey, JSON.stringify(session));
+  }, GUEST_SESSION_KEY);
   await page.goto("/join?token=invite-b");
 
   await expect.poll(() => preflightTokens).toEqual(["invite-a", "invite-b"]);
+  expect(preflightSessionTokens).toEqual(["", ""]);
   await expect
     .poll(() => page.evaluate((key) => sessionStorage.getItem(key), ADMISSION_INTENT_KEY))
     .toBeNull();

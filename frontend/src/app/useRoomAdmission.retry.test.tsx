@@ -333,6 +333,58 @@ describe("room admission retry custody", () => {
     expect(window.sessionStorage.getItem(ROOM_ADMISSION_INTENT_STORAGE_KEY)).toBeNull();
   });
 
+  it("uses an expired completed session only to retire its exact stale intent", async () => {
+    const removeItem = Storage.prototype.removeItem;
+    let removalBlocked = true;
+    vi.spyOn(Storage.prototype, "removeItem").mockImplementation(function (
+      this: Storage,
+      key
+    ) {
+      if (key === ROOM_ADMISSION_INTENT_STORAGE_KEY && removalBlocked) {
+        throw new Error("storage unavailable");
+      }
+      removeItem.call(this, key);
+    });
+    apiMocks.joinRoomInvite.mockResolvedValueOnce(joinedPayload("session-a"));
+    const first = renderAdmission();
+    await waitFor(() =>
+      expect(first.result.current.guestSession?.sessionToken).toBe("session-a")
+    );
+    const expiredSession = {
+      ...first.result.current.guestSession!,
+      expiresAt: "2000-01-01T00:00:00Z",
+    };
+    first.unmount();
+
+    removalBlocked = false;
+    window.history.replaceState({}, "", "/join?token=invite-2");
+    apiMocks.preflightRoomInvite.mockClear();
+    apiMocks.preflightRoomInvite.mockResolvedValue({
+      status: "known_user",
+      can_auto_join: true,
+      room_id: "room-2",
+      participant: {
+        participant_id: "guest-1",
+        display_name: "Guest",
+        avatar_image_url: "",
+      },
+    });
+    apiMocks.joinRoomInvite.mockResolvedValueOnce(
+      joinedPayload("session-b", "room-2")
+    );
+    const second = renderAdmission(vi.fn(), expiredSession, "invite-2");
+
+    await waitFor(() =>
+      expect(second.result.current.guestSession?.sessionToken).toBe("session-b")
+    );
+    expect(apiMocks.preflightRoomInvite).toHaveBeenCalledWith({
+      inviteToken: "invite-2",
+      deviceToken: DEVICE_TOKEN,
+      sessionToken: "",
+    });
+    expect(window.sessionStorage.getItem(ROOM_ADMISSION_INTENT_STORAGE_KEY)).toBeNull();
+  });
+
   it("retires the intent only when the server proves a no-commit outcome", async () => {
     apiMocks.joinRoomInvite.mockRejectedValue(
       new ApiError(
@@ -374,6 +426,51 @@ describe("room admission retry custody", () => {
       })
     );
 
+    expect(window.sessionStorage.getItem(ROOM_ADMISSION_INTENT_STORAGE_KEY)).toBeNull();
+  });
+
+  it("retries failed terminal intent retirement without resending admission", async () => {
+    const removeItem = Storage.prototype.removeItem;
+    let removalBlocked = true;
+    vi.spyOn(Storage.prototype, "removeItem").mockImplementation(function (
+      this: Storage,
+      key
+    ) {
+      if (key === ROOM_ADMISSION_INTENT_STORAGE_KEY && removalBlocked) {
+        throw new Error("storage unavailable");
+      }
+      removeItem.call(this, key);
+    });
+    apiMocks.joinRoomInvite.mockRejectedValue(
+      new ApiError(
+        403,
+        "The admission session is no longer available.",
+        "admission_session_unavailable"
+      )
+    );
+    const { result } = renderAdmission();
+
+    await waitFor(() =>
+      expect(result.current.admissionState).toMatchObject({
+        kind: "failed",
+        operation: "intent_cleanup",
+        code: "admission_session_unavailable",
+        retryable: true,
+      })
+    );
+    expect(window.sessionStorage.getItem(ROOM_ADMISSION_INTENT_STORAGE_KEY)).not.toBeNull();
+
+    removalBlocked = false;
+    act(() => result.current.requestGuestJoin());
+    await waitFor(() =>
+      expect(result.current.admissionState).toMatchObject({
+        kind: "failed",
+        operation: "join",
+        code: "admission_session_unavailable",
+        retryable: false,
+      })
+    );
+    expect(apiMocks.joinRoomInvite).toHaveBeenCalledOnce();
     expect(window.sessionStorage.getItem(ROOM_ADMISSION_INTENT_STORAGE_KEY)).toBeNull();
   });
 
