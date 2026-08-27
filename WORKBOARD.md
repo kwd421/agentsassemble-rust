@@ -1,6 +1,6 @@
 # WORKBOARD
 
-Status: Phase 5 — the admitted-human WebSocket exchange, exact session lifetime, bounded command provenance, copied frontend transport, reachable one-use/reusable normal/read-only browser matrix, remote human preferences, exact `participant.leave`, and startup-configured manual public trust are implemented and verified. Managed public-ingress lifecycle, manager invite controls, and frontend activation stay explicitly incomplete.
+Status: Phase 5 — the admitted-human WebSocket exchange, exact session lifetime, bounded command provenance, copied frontend transport, reachable one-use/reusable normal/read-only browser matrix, remote human preferences, exact `participant.leave`, startup-configured manual public trust, and the direct managed quick-tunnel lifecycle are implemented and verified. Stable entry, manager invite controls, and frontend activation stay explicitly incomplete.
 
 Purpose: route the asynchronous Rust reimplementation without duplicating its contracts.
 

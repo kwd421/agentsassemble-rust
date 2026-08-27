@@ -1,8 +1,9 @@
 # Trusted Public Ingress Slice
 
 Status: design approved; invite-use, exact local TCP trust, route exposure, local
-identity probes, and configured-manual trust implemented; managed lifecycle,
-manager controls, and frontend activation remain incomplete
+identity probes, configured-manual trust, and the direct managed quick-tunnel
+lifecycle are implemented and verified; stable entry, manager controls, and
+frontend activation remain incomplete
 
 ## Definition
 
@@ -20,8 +21,8 @@ old product markdown.
 ## Authority boundaries
 
 - `PublicIngress` is the only owner of the active generation, direct public origin,
-  generated origin credential, managed cloudflared child, stable-entry state,
-  ingress revocation, and cleanup completion.
+  generated origin credential, managed cloudflared child, ingress revocation, and
+  cleanup completion. Stable-entry state must join this same owner when implemented.
 - The TCP accept boundary preserves the actual peer `SocketAddr` in one private
   request extension. Forwarding or client-IP headers never replace that transport
   fact.
@@ -85,19 +86,20 @@ kill-on-drop safety. Output readers enforce bounded lines and total buffering,
 accept only a strict `https://<valid>.trycloudflare.com` URL, and never retain or
 return raw logs.
 
-Start, stop, child exit, and stable publish or clear are serialized by one generation.
-The transition is a tracked task owned and joined by `PublicIngress`, not by an HTTP
-handler. Caller disconnect, the HTTP connection deadline, or retry cannot drop the
-transition or create another generation. Start becomes ready only after the exact
-configured stable publish succeeds. A publish failure revokes ingress and cleans up
-the child. Stop and shutdown revoke ingress first, await stable clear, request
-graceful child termination, enforce a deadline, kill the owned group or job if
-needed, and await the child and both output readers. Cleanup failure is explicit.
+Start, stop, child exit, and direct-origin replacement are serialized by one
+generation. The transition is a tracked task owned and joined by `PublicIngress`,
+not by an HTTP handler. Caller disconnect, the HTTP connection deadline, or retry
+cannot drop the transition or create another generation. Direct readiness begins
+only after the same generation emits a strict quick-tunnel origin. Stop and shutdown
+revoke ingress first, request graceful child termination, enforce a deadline, kill
+the owned group or job if needed, and await the child and both output readers.
+Cleanup failure is explicit and blocks restart.
 
-Stable configuration absent means exactly `unconfigured`. When configured, publish
-and clear have explicit pending, ready, or failed results. The stable URL is not a
-fallback invite URL; the current frontend continues to copy the direct quick-tunnel
-URL.
+Stable publish and clear are not implemented yet. Their eventual configuration-absent
+state is exactly `unconfigured`; configured operations require explicit pending,
+ready, or failed results under the same lifecycle owner. The stable URL will not be
+a fallback invite URL, and the still-incomplete manager/frontend activation must not
+claim stable-entry readiness meanwhile.
 
 ## Human invite activation
 
@@ -311,6 +313,67 @@ formatting, and warning-denied Clippy gates; the frontend build and 403 tests;
 desktop build, Clippy, and 16 tests; all 171 persistence and 120 provider tests; and
 all 68 server unit plus 45 server integration tests.
 
+## Managed direct lifecycle increment
+
+Commits `0110e5b`, `db88968`, and `cc54242` implement the direct managed
+quick-tunnel lifecycle without stable-entry publication. `PublicIngress` owns one
+mutex-protected lifecycle containing the closed bit and optional active generation;
+the projection separately contains the same generation's bounded public status and
+trust snapshot. Start and stop require exact one-use operator HTTP tickets. The HTTP
+handlers await the server-owned transition but never own its process or task custody.
+Shutdown closes the lifecycle before joining the same stop path, and ingress cleanup
+is awaited before unrelated room, provider, or reconciliation errors are propagated.
+
+The concrete threats were observable rather than speculative: an HTTP caller could
+cancel after removing the only generation handle; a ready line could restore trust
+after stop; a racing start could spawn after shutdown; separate projection reads
+could authenticate generation N but sign generation N+1's origin; terminal error
+could be overwritten by stop; and an updater or descendant process could escape the
+server's generation custody. The implementation therefore keeps the `JoinHandle`
+inside the lifecycle mutex until its owner finishes, rejects readiness outside the
+same generation's `Starting` or `Running` phase, returns identity authorization and
+its origin from one projection read, fixes `--no-autoupdate`, and uses maintained
+`process-wrap` process-group or job-object custody. Cleanup failure is retained as a
+restart-blocking state rather than hidden by a fallback.
+
+Running quick tunnels preserve the original reachable reconnect contract: another
+valid trycloudflare origin from the same generation atomically replaces the old
+origin and trust. Stale generations and `Stopping`, `Error`, or `Stopped` cannot
+install trust. Output parsing accepts only one bounded single-label
+`https://<label>.trycloudflare.com` origin from a line, lowercases it through the
+canonical origin owner, and rejects deceptive suffixes, nested labels, and invalid
+tenant labels. Raw cloudflared output, environment values, and the generated origin
+Host are not returned to the browser or persisted.
+
+The measured steady-state resource boundary is one cloudflared child tree, one
+generation owner task, two bounded output-reader tasks, an eight-event channel, and
+at most one 16 KiB line per reader. Start creates one private temporary directory
+containing an empty config; its `TempDir` is retained by the exact child owner and
+removed on cleanup. Stop has one five-second graceful deadline and one five-second
+forced-stop deadline, while each reader has a five-second join deadline. No polling
+task, durable row, cache, compatibility state, retry fallback, or stable-entry state
+was added. No throughput or latency improvement is claimed; the accepted bounded
+work purchases exact process, trust, and cancellation custody.
+
+Commits `fd9e7e4` and `4249e12` add only contract tests. Four lifecycle tests cover
+same-generation reconnect, stop and terminal trust revocation, one-snapshot identity
+origin, cancelled-stop handle retention, shutdown closure, and cleanup-failure
+restart denial. Parser tests cover exact valid and deceptive origins. A Unix
+integration test starts the real server with a spawned fake cloudflared process,
+crosses raw TCP for the accepted `/join` request, rejects forged forwarded Host,
+scheme, Origin, and private status access, checks the exact child arguments, stops
+the process group, observes both leader and descendant termination markers, and
+proves the retired trust can no longer load `/join`.
+
+The actual raw-TCP/process test passed three consecutive focused runs after the
+final review correction. Complete `make verify` passed architecture, source-growth,
+and policy gates; formatting; all-target workspace check; generated protocol types;
+frontend build, original-CSS verification, and 403 tests; desktop Clippy and 16
+tests; all workspace tests including 171 persistence, 120 provider, and 74 server
+unit tests plus the server integration suite; and warning-denied workspace Clippy.
+The test-only lifecycle module is separate from the production owner; relevant files
+remain 625, 196, and 798 lines rather than weakening the 800-line gate.
+
 ## Verification requirements
 
 - Header tests cover local Host and Origin aliases, Tauri origins, forged forwarded
@@ -337,13 +400,14 @@ all 68 server unit plus 45 server integration tests.
 - Local trust had to preserve the three existing Tauri origins and recognized
   loopback Host aliases.
 - Manual proxy secret provisioning had to be startup-only and server-owned.
-- Stable publish and clear had to be a prerequisite of completed trusted ingress,
-  not later best-effort cleanup.
+- Stable publish and clear had to be a prerequisite of completed stable-entry
+  activation, not later best-effort cleanup.
 - Human create had to preserve the direct API's `meeting_id`, optional display name,
   arbitrary positive TTL, negative-to-zero use normalization, and non-preset use
   counts while removing agent identity fields.
 - Ingress transitions needed a server-owned tracked task so HTTP cancellation could
-  not abandon revocation, stable cleanup, child exit, or reader joins.
+  not abandon revocation, child exit, or reader joins; stable cleanup must join that
+  same owner when implemented.
 - Public guest exit had to navigate to token-free `/join` rather than private root.
 - Effective invite-use policy was duplicated in Rust, SQL consume, and schema DDL.
 - Invite creation needed a server-side ready-generation snapshot; frontend readiness
@@ -375,6 +439,17 @@ all 68 server unit plus 45 server integration tests.
   so an admitted alternate numeric loopback listener could not issue a challenge.
 - The route-exposure prerequisite retained a pre-identity historical statement and a
   fixed descriptor count after the identity routes changed both facts.
+- The first managed lifecycle review found cancel-sensitive generation-handle
+  removal, readiness after stop, restart after cleanup failure, a shutdown/start
+  race, delayed ingress cleanup joining, split trust/origin projection reads,
+  terminal-state overwrite, and missing `--no-autoupdate`; `db88968` closed them.
+- The managed reconnect review found that accepting only the identical origin while
+  `Running` narrowed the original same-generation reconnect behavior; `cc54242`
+  restored atomic replacement without reopening terminal trust.
+- The first test review found that terminal readiness rejection and descendant
+  process-group cleanup were not directly asserted; `4249e12` added both proofs and
+  moved the cohesive lifecycle tests out of the production owner at its responsibility
+  boundary.
 
 Final plan review: `APPROVE — Critical 0 / High 0 / Medium 0`.
 
@@ -417,3 +492,27 @@ Commit `2d97e77` Daybreaker review: `APPROVE — Critical 0 / High 0 / Medium 0`
 Commit `d9d798d` web review: `APPROVE — Critical 0 / High 0 / Medium 0`.
 
 Commit `d9d798d` Daybreaker review: `APPROVE — Critical 0 / High 0 / Medium 0`.
+
+Commit `4e333ad` web review: `APPROVE — Critical 0 / High 0 / Medium 0`.
+
+Commit `4e333ad` Daybreaker review: `APPROVE — Critical 0 / High 0 / Medium 0`.
+
+Commit `0110e5b` web review: `REVISE — Critical 0 / High 0 / Medium 5`.
+
+Commit `0110e5b` Daybreaker review: `REVISE — Critical 0 / High 0 / Medium 4`.
+
+Commit `db88968` web review: `APPROVE — Critical 0 / High 0 / Medium 0`.
+
+Commit `db88968` Daybreaker review: `REVISE — Critical 0 / High 0 / Medium 1`.
+
+Commit `cc54242` web review: `APPROVE — Critical 0 / High 0 / Medium 0`.
+
+Commit `cc54242` Daybreaker review: `APPROVE — Critical 0 / High 0 / Medium 0`.
+
+Commit `fd9e7e4` web review: `REVISE — Critical 0 / High 0 / Medium 2`.
+
+Commit `fd9e7e4` Daybreaker review: `APPROVE — Critical 0 / High 0 / Medium 0`.
+
+Commit `4249e12` web review: `APPROVE — Critical 0 / High 0 / Medium 0`.
+
+Commit `4249e12` Daybreaker review: `APPROVE — Critical 0 / High 0 / Medium 0`.
