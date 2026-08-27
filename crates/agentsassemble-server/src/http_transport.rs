@@ -14,8 +14,9 @@ use hyper_util::{
     service::TowerToHyperService,
 };
 use tokio::{net::TcpStream, sync::OwnedSemaphorePermit};
+use tokio_util::sync::CancellationToken;
 
-use crate::ingress_trust::{LocalIngress, PeerAddr};
+use crate::ingress_trust::{LocalIngress, PeerAddr, PublicIngress};
 
 pub(crate) const MAX_HTTP_CONNECTIONS: usize = 128;
 pub(crate) const HTTP_CONNECTION_LIFETIME: Duration = Duration::from_secs(30);
@@ -39,8 +40,10 @@ pub(crate) async fn serve_connection(
     stream: TcpStream,
     peer: SocketAddr,
     ingress: LocalIngress,
+    public_ingress: Option<PublicIngress>,
     app: Router,
     _permit: OwnedSemaphorePermit,
+    shutdown: CancellationToken,
 ) {
     let mut builder = http1::Builder::new();
     builder
@@ -50,13 +53,21 @@ pub(crate) async fn serve_connection(
     let app = app
         .layer(axum::Extension(PeerAddr(peer)))
         .layer(axum::Extension(ingress));
+    let app = if let Some(public_ingress) = public_ingress {
+        app.layer(axum::Extension(public_ingress))
+    } else {
+        app
+    };
     let connection = builder
         .serve_connection(TokioIo::new(stream), TowerToHyperService::new(app))
         .with_upgrades();
-    match tokio::time::timeout(HTTP_CONNECTION_LIFETIME, connection).await {
-        Ok(Ok(())) => {}
-        Ok(Err(error)) => tracing::debug!(error = ?error, "HTTP connection closed"),
-        Err(_) => tracing::debug!("HTTP connection exceeded its absolute lifetime"),
+    tokio::select! {
+        () = shutdown.cancelled() => {}
+        result = tokio::time::timeout(HTTP_CONNECTION_LIFETIME, connection) => match result {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => tracing::debug!(error = ?error, "HTTP connection closed"),
+            Err(_) => tracing::debug!("HTTP connection exceeded its absolute lifetime"),
+        }
     }
 }
 

@@ -1,8 +1,8 @@
 # Trusted Public Ingress Slice
 
-Status: design approved; invite-use, exact local TCP trust, route exposure, and
-local identity probes implemented; managed/manual trust, manager controls, and
-frontend activation remain incomplete
+Status: design approved; invite-use, exact local TCP trust, route exposure, local
+identity probes, and configured-manual trust implemented; managed lifecycle,
+manager controls, and frontend activation remain incomplete
 
 ## Definition
 
@@ -47,11 +47,13 @@ owned by the CORS policy.
 
 A managed request requires the current generation's secret `.origin.invalid` Host,
 the exact current public HTTPS forwarded authority and scheme, and the actual
-loopback peer. `CF-Ray` is only corroborating data. A configured manual proxy uses
-the same checks plus a startup-only high-entropy secret compared in constant time.
-The secret is non-serializable, never enters HTTP or frontend state, and cannot be
-changed at runtime. Without it, manual mode is unavailable. The local operator may
-select or clear only the canonical HTTPS public origin.
+loopback peer. `CF-Ray` is only corroborating data. A configured manual proxy instead
+requires the exact current public HTTPS Host, exact forwarded `https` scheme, actual
+loopback peer, and a startup-only high-entropy secret compared through fixed-size
+digests in constant time. The secret is non-serializable, never enters response or
+frontend state, and cannot be changed at runtime. Without both startup values,
+manual mode is unavailable. The local operator may select or clear only the canonical
+HTTPS public origin after that separate control contract is implemented.
 
 Dynamic route registration owns method, path, and one of exactly three exposure
 meanings: private, same-origin public, or identity-probe public. Dynamic requests use
@@ -235,10 +237,10 @@ The route-local CORS policy is credential-free, permits only GET/POST and
 admits the request. Preflight resolves its requested method through the same route
 descriptor, so a module-wide CORS method list cannot authorize a path/method pair that
 is not registered. Local Host, peer, proxy-provenance, and Origin checks are unchanged:
-a foreign Origin against a loopback Host still fails closed. Cross-origin public
-probing will become reachable only when `PublicIngress` can supply and verify the
-current managed or configured-manual origin; this increment adds no permissive proxy
-path or public-origin placeholder.
+a foreign Origin against a loopback Host still fails closed. At that prerequisite
+commit, cross-origin public probing remained unreachable because `PublicIngress` did
+not yet supply and verify an origin; the configured-manual increment below now opens
+that exact path without changing the local rule.
 
 The concrete security requirement is endpoint-key substitution resistance: the
 caller nonce and exact current origin must be covered by the already durable host key.
@@ -262,6 +264,52 @@ preflight mismatch rejection. All 67 server unit tests and 43 server integration
 also passed the architecture and source-growth gates, frontend build and 403 tests,
 desktop build and 16 tests, all 171 persistence and 120 provider tests, and
 warning-denied workspace Clippy.
+
+## Configured-manual trust increment
+
+`PublicIngress` now owns the immutable configured-manual public origin and proxy
+credential projection. Startup enables it only when both
+`AGENTSASSEMBLE_PUBLIC_URL` and `AGENTSASSEMBLE_TRUSTED_PROXY_TOKEN` are present;
+one-sided configuration fails before the private control secret or database is read.
+The origin parser accepts one root HTTPS origin, normalizes its default port and host,
+and rejects userinfo, path, query, fragment, `localhost`, numeric loopback, and
+unspecified numeric hosts. The proxy credential must be 32-128 visible ASCII bytes.
+Only its SHA-256 digest is retained by ingress state, and each request hashes the
+presented value before a fixed-size constant-time comparison.
+
+The existing common ingress middleware remains the sole request trust decision. A
+configured-manual request must have an actual loopback TCP peer plus one exact public
+Host, `X-Forwarded-Proto: https`, and proxy-token header. It can reach only the route
+descriptor's `same-origin public` or `identity-probe public` exposure; `private`
+always fails. Same-origin public permits no Origin or the normalized configured
+origin. Identity probes permit a foreign Origin only after the full proxy decision,
+then receive the already trusted HTTPS origin through a private request extension so
+the challenge handler does not independently infer scheme or authority.
+
+The concrete threat was accepting forged forwarding headers from a local process or
+letting a public Host bypass route and Origin classification. This implementation
+adds no process, task, timer, cache, database state, compatibility path, fallback, or
+runtime mutation. Each configured connection clones one small immutable projection;
+each attempted public request performs one bounded authority parse and one SHA-256
+operation, plus an origin parse when Origin is present. No throughput improvement is
+claimed. The connection cancellation select moved into the HTTP connection owner so
+the server accept loop stayed below its structural limit; the existing task tracker,
+shutdown token, connection deadline, and cleanup order are unchanged. Repository-wide
+search found the startup environment names only at the
+executable owner and the proxy header name only at the common trust owner outside
+tests; local provenance rejection reuses that same header constant.
+
+Focused verification uses the real binary startup/control pipe and a real TCP
+listener. It proves paired startup reaches the public identity route, one-sided
+startup fails, exact and absent same-origin requests load `/join`, a foreign Origin,
+wrong Host, wrong scheme, wrong token, private route, and unconfigured server all
+receive 403, a foreign-origin identity probe succeeds, and its Ed25519 challenge
+signature binds the configured HTTPS origin.
+
+Complete repository verification passed the architecture, source-growth, policy,
+formatting, and warning-denied Clippy gates; the frontend build and 403 tests;
+desktop build, Clippy, and 16 tests; all 171 persistence and 120 provider tests; and
+all 68 server unit plus 45 server integration tests.
 
 ## Verification requirements
 

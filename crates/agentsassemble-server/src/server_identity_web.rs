@@ -12,6 +12,7 @@ use crate::{
     AppState,
     central_host_identity::{ServerChallengeEnvelope, ServerChallengeError, ServerInfoEnvelope},
     http_api::{BodyDecodeError, decode_json_body},
+    ingress_trust::TrustedIdentityOrigin,
 };
 
 const MAX_CHALLENGE_BODY_BYTES: usize = 4 * 1024;
@@ -60,12 +61,11 @@ async fn issue_challenge(
 }
 
 fn request_origin(request: &Request) -> Result<String, IdentityHttpError> {
-    let host = request
-        .headers()
-        .get(header::HOST)
-        .and_then(|value| value.to_str().ok())
+    let origin = request
+        .extensions()
+        .get::<TrustedIdentityOrigin>()
         .ok_or_else(IdentityHttpError::invalid_origin)?;
-    Ok(format!("http://{host}"))
+    Ok(origin.as_str().to_owned())
 }
 
 #[derive(Debug)]

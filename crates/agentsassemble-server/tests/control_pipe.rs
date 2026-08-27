@@ -10,6 +10,8 @@ use tokio::{
 };
 
 const HOST_TOKEN: &str = "control-pipe-test-host-token-000000001";
+const PUBLIC_ORIGIN: &str = "https://public.example.test";
+const PROXY_SECRET: &str = "manual-ingress-control-secret-000000001";
 
 #[test]
 fn command_line_does_not_accept_a_host_secret() {
@@ -346,8 +348,57 @@ async fn owned_control_pipe_issues_a_purpose_bound_central_registration_ticket()
     server.close_parent_pipe().await;
 }
 
+#[tokio::test]
+async fn startup_manual_public_ingress_requires_a_pair_and_reaches_identity() {
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
+    let database = directory.path().join("runtime.sqlite3");
+    let output = Command::new(env!("CARGO_BIN_EXE_agentsassemble-server"))
+        .args(["--database", database.to_string_lossy().as_ref()])
+        .env("AGENTSASSEMBLE_PUBLIC_URL", PUBLIC_ORIGIN)
+        .env_remove("AGENTSASSEMBLE_TRUSTED_PROXY_TOKEN")
+        .stdin(Stdio::null())
+        .output()
+        .await
+        .unwrap_or_else(|error| panic!("run incomplete manual ingress: {error}"));
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("must be configured together"),
+        "unexpected startup failure: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let server = start_controlled_with_manual(&database).await;
+    let identity = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .unwrap_or_else(|error| panic!("build manual-ingress client: {error}"))
+        .get(format!("{}/api/server-info", server.address))
+        .header("host", "public.example.test")
+        .header("origin", "https://directory.example")
+        .header("x-forwarded-proto", "https")
+        .header("x-agentsassemble-proxy-token", PROXY_SECRET)
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("request startup-configured identity: {error}"));
+    assert_eq!(identity.status(), reqwest::StatusCode::OK);
+    server.close_parent_pipe().await;
+}
+
 async fn start_controlled(database: &Path) -> ControlledServer {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_agentsassemble-server"))
+    start_controlled_with_environment(database, false).await
+}
+
+async fn start_controlled_with_manual(database: &Path) -> ControlledServer {
+    start_controlled_with_environment(database, true).await
+}
+
+async fn start_controlled_with_environment(
+    database: &Path,
+    manual_public: bool,
+) -> ControlledServer {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_agentsassemble-server"));
+    command
         .args([
             "--bind",
             "127.0.0.1:0",
@@ -357,9 +408,17 @@ async fn start_controlled(database: &Path) -> ControlledServer {
                 .unwrap_or_else(|| panic!("database path is not UTF-8")),
         ])
         .env_remove("AGENTSASSEMBLE_HOST_TOKEN")
+        .env_remove("AGENTSASSEMBLE_PUBLIC_URL")
+        .env_remove("AGENTSASSEMBLE_TRUSTED_PROXY_TOKEN")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
+        .stderr(Stdio::inherit());
+    if manual_public {
+        command
+            .env("AGENTSASSEMBLE_PUBLIC_URL", PUBLIC_ORIGIN)
+            .env("AGENTSASSEMBLE_TRUSTED_PROXY_TOKEN", PROXY_SECRET);
+    }
+    let mut child = command
         .spawn()
         .unwrap_or_else(|error| panic!("spawn controlled server: {error}"));
     let mut control = child

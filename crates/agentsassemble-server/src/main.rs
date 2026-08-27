@@ -26,6 +26,8 @@ use tracing_subscriber::EnvFilter;
 
 const MAX_CONTROL_SECRET_BYTES: usize = 128;
 const MAX_CONTROL_MESSAGE_BYTES: usize = 4 * 1024;
+const PUBLIC_URL_ENV: &str = "AGENTSASSEMBLE_PUBLIC_URL";
+const TRUSTED_PROXY_TOKEN_ENV: &str = "AGENTSASSEMBLE_TRUSTED_PROXY_TOKEN";
 
 #[derive(Debug, Parser)]
 #[command(name = "agentsassemble-server")]
@@ -50,6 +52,7 @@ async fn main() -> anyhow::Result<()> {
         .with_writer(std::io::stderr)
         .init();
     let args = Args::parse();
+    let manual_public_ingress = manual_public_ingress_environment()?;
     let mut stdin = tokio::io::stdin();
     let host_token = read_control_secret(&mut stdin).await?;
     let host_secret = HostSecret::new(host_token)?;
@@ -89,6 +92,9 @@ async fn main() -> anyhow::Result<()> {
         provider_adapter,
     )
     .await?;
+    if let Some((origin, proxy_secret)) = manual_public_ingress {
+        state = state.with_manual_public_ingress(&origin, &proxy_secret)?;
+    }
     if args.desktop_native_registration {
         state = state.with_central_registration();
     }
@@ -484,4 +490,26 @@ fn ensure_parent_alive(cancellation: &CancellationToken) -> anyhow::Result<()> {
         anyhow::bail!("parent control pipe closed during startup");
     }
     Ok(())
+}
+
+fn manual_public_ingress_environment() -> anyhow::Result<Option<(String, String)>> {
+    let origin = unicode_environment(PUBLIC_URL_ENV)?;
+    let proxy_secret = unicode_environment(TRUSTED_PROXY_TOKEN_ENV)?;
+    match (origin, proxy_secret) {
+        (None, None) => Ok(None),
+        (Some(origin), Some(proxy_secret)) => Ok(Some((origin, proxy_secret))),
+        _ => anyhow::bail!(
+            "{PUBLIC_URL_ENV} and {TRUSTED_PROXY_TOKEN_ENV} must be configured together"
+        ),
+    }
+}
+
+fn unicode_environment(name: &str) -> anyhow::Result<Option<String>> {
+    match std::env::var(name) {
+        Ok(value) => Ok(Some(value)),
+        Err(std::env::VarError::NotPresent) => Ok(None),
+        Err(std::env::VarError::NotUnicode(_)) => {
+            anyhow::bail!("{name} must contain valid UTF-8")
+        }
+    }
 }

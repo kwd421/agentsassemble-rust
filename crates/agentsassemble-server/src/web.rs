@@ -299,6 +299,7 @@ pub async fn serve(
     }
     let rooms = state.rooms.clone();
     let provider_catalog = state.provider_catalog.clone();
+    let public_ingress = state.public_ingress();
     let connections = state.connections.clone();
     let connection_shutdown = state.shutdown.clone();
     let http_admission = Arc::new(Semaphore::new(MAX_HTTP_CONNECTIONS));
@@ -326,13 +327,17 @@ pub async fn serve(
         };
         let connection_app = app.clone();
         let connection_ingress = ingress;
+        let connection_public_ingress = public_ingress.clone();
         let shutdown = connection_shutdown.clone();
-        connections.spawn(async move {
-            tokio::select! {
-                () = shutdown.cancelled() => {}
-                () = serve_connection(stream, peer, connection_ingress, connection_app, permit) => {}
-            }
-        });
+        connections.spawn(serve_connection(
+            stream,
+            peer,
+            connection_ingress,
+            connection_public_ingress,
+            connection_app,
+            permit,
+            shutdown,
+        ));
     };
     connection_shutdown.cancel();
     connections.close();

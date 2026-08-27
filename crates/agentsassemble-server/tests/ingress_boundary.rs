@@ -19,6 +19,9 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 const HOST_TOKEN: &str = "ingress-boundary-host-token-000000001";
+const PUBLIC_ORIGIN: &str = "https://public.example.test";
+const PUBLIC_AUTHORITY: &str = "public.example.test";
+const PROXY_SECRET: &str = "manual-ingress-proxy-secret-000000001";
 
 struct RunningServer {
     address: SocketAddr,
@@ -175,6 +178,122 @@ async fn identity_challenge_accepts_an_exact_numeric_loopback_listener() {
     server.stop().await;
 }
 
+#[tokio::test]
+async fn manual_public_ingress_enforces_the_real_tcp_route_and_origin_boundary() {
+    let (_directory, frontend) = public_frontend_fixture().await;
+    let server = start_manual(Some(frontend)).await;
+    let base_url = format!("http://{}", server.address);
+    let trusted_headers = format!(
+        "Host: {PUBLIC_AUTHORITY}\r\nX-Forwarded-Proto: https\r\nX-AgentsAssemble-Proxy-Token: {PROXY_SECRET}\r\n"
+    );
+
+    for origin in ["", "Origin: https://public.example.test:443\r\n"] {
+        let response = request(
+            server.address,
+            "GET /join HTTP/1.1",
+            &format!("{trusted_headers}{origin}"),
+        )
+        .await;
+        assert!(response.starts_with("HTTP/1.1 200"), "{response}");
+        assert!(response.contains("PUBLIC INDEX"), "{response}");
+    }
+    for (path, rejected_headers) in [
+        (
+            "/join",
+            format!("{trusted_headers}Origin: https://hostile.example\r\n"),
+        ),
+        (
+            "/join",
+            format!(
+                "Host: {PUBLIC_AUTHORITY}\r\nX-Forwarded-Proto: https\r\nX-AgentsAssemble-Proxy-Token: wrong\r\n"
+            ),
+        ),
+        (
+            "/join",
+            format!(
+                "Host: hostile.example\r\nX-Forwarded-Proto: https\r\nX-AgentsAssemble-Proxy-Token: {PROXY_SECRET}\r\n"
+            ),
+        ),
+        (
+            "/join",
+            format!(
+                "Host: {PUBLIC_AUTHORITY}\r\nX-Forwarded-Proto: http\r\nX-AgentsAssemble-Proxy-Token: {PROXY_SECRET}\r\n"
+            ),
+        ),
+        ("/healthz", trusted_headers.clone()),
+    ] {
+        let response = request(
+            server.address,
+            &format!("GET {path} HTTP/1.1"),
+            &rejected_headers,
+        )
+        .await;
+        assert!(
+            response.starts_with("HTTP/1.1 403"),
+            "untrusted public request was not rejected: {response}"
+        );
+    }
+
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .unwrap_or_else(|error| panic!("build direct public-ingress client: {error}"));
+    let info = client
+        .get(format!("{base_url}/api/server-info"))
+        .header("host", PUBLIC_AUTHORITY)
+        .header("x-forwarded-proto", "https")
+        .header("x-agentsassemble-proxy-token", PROXY_SECRET)
+        .header("origin", "https://directory.example")
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("request public server identity: {error}"));
+    assert_eq!(info.status(), reqwest::StatusCode::OK);
+    assert_eq!(info.headers()["access-control-allow-origin"], "*");
+
+    let challenge = "Q2hhbGxlbmdlX2Zvcl9wdWJsaWNfMDE";
+    let proof = client
+        .post(format!("{base_url}/api/server-info/challenge"))
+        .header("host", PUBLIC_AUTHORITY)
+        .header("x-forwarded-proto", "https")
+        .header("x-agentsassemble-proxy-token", PROXY_SECRET)
+        .header("origin", "https://directory.example")
+        .json(&json!({"challenge": challenge}))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("request public identity challenge: {error}"));
+    assert_eq!(proof.status(), reqwest::StatusCode::OK);
+    let proof: Value = proof
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("decode public identity challenge: {error}"));
+    assert_eq!(proof["origin"], PUBLIC_ORIGIN);
+    verify_identity_signature(&proof, PUBLIC_ORIGIN, challenge);
+    server.stop().await;
+
+    let unconfigured = start(None).await;
+    let response = request(
+        unconfigured.address,
+        "GET /api/server-info HTTP/1.1",
+        &trusted_headers,
+    )
+    .await;
+    assert!(response.starts_with("HTTP/1.1 403"), "{response}");
+    unconfigured.stop().await;
+}
+
+async fn public_frontend_fixture() -> (tempfile::TempDir, PathBuf) {
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create frontend fixture: {error}"));
+    let frontend = directory.path().join("frontend");
+    tokio::fs::create_dir_all(&frontend)
+        .await
+        .unwrap_or_else(|error| panic!("create public frontend fixture: {error}"));
+    tokio::fs::write(frontend.join("index.html"), "PUBLIC INDEX")
+        .await
+        .unwrap_or_else(|error| panic!("write public frontend fixture: {error}"));
+    (directory, frontend)
+}
+
 fn verify_identity_signature(proof: &Value, base_url: &str, challenge: &str) {
     let issued_at = proof["issued_at"]
         .as_i64()
@@ -320,7 +439,22 @@ async fn start(frontend: Option<PathBuf>) -> RunningServer {
     start_on(listener, frontend).await
 }
 
+async fn start_manual(frontend: Option<PathBuf>) -> RunningServer {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .unwrap_or_else(|error| panic!("bind manual ingress server: {error}"));
+    start_on_with_manual(listener, frontend, true).await
+}
+
 async fn start_on(listener: TcpListener, frontend: Option<PathBuf>) -> RunningServer {
+    start_on_with_manual(listener, frontend, false).await
+}
+
+async fn start_on_with_manual(
+    listener: TcpListener,
+    frontend: Option<PathBuf>,
+    manual_public: bool,
+) -> RunningServer {
     let store = SqliteStore::open("sqlite::memory:")
         .await
         .unwrap_or_else(|error| panic!("open ingress store: {error}"));
@@ -337,6 +471,11 @@ async fn start_on(listener: TcpListener, frontend: Option<PathBuf>) -> RunningSe
     )
     .await
     .unwrap_or_else(|error| panic!("build ingress state: {error}"));
+    if manual_public {
+        state = state
+            .with_manual_public_ingress(PUBLIC_ORIGIN, PROXY_SECRET)
+            .unwrap_or_else(|error| panic!("configure manual public ingress: {error}"));
+    }
     if let Some(frontend) = frontend {
         state = state.with_frontend(frontend);
     }

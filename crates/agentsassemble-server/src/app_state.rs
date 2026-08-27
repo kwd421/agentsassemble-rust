@@ -8,7 +8,9 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
 use crate::{
     CentralHostIdentity, HostIdentityError, HostSecret, HumanInviteCredentialAuthority,
-    RoomRuntime, TicketStore, connection_admission::ConnectionAdmission,
+    RoomRuntime, TicketStore,
+    connection_admission::ConnectionAdmission,
+    ingress_trust::{ManualPublicIngressError, PublicIngress},
     raw_ingress::RawIngressGovernor,
 };
 
@@ -34,6 +36,7 @@ pub struct AppState {
     pub connections: TaskTracker,
     pub(crate) connection_admission: ConnectionAdmission,
     pub(crate) raw_ingress: RawIngressGovernor,
+    pub(crate) public_ingress: Option<PublicIngress>,
     pub server_product_surface: Arc<ServerProductSurface>,
     pub frontend_root: Option<PathBuf>,
     pub(crate) central_registration_enabled: bool,
@@ -95,6 +98,7 @@ impl AppState {
             connections: TaskTracker::new(),
             connection_admission: ConnectionAdmission::new(),
             raw_ingress: RawIngressGovernor::new(),
+            public_ingress: None,
             server_product_surface: Arc::new(crate::product_surface::server_product_surface(
                 false, false,
             )),
@@ -115,6 +119,24 @@ impl AppState {
         self.central_registration_enabled = true;
         self.refresh_product_surface();
         self
+    }
+
+    /// Enables one immutable, startup-configured HTTPS reverse-proxy boundary.
+    ///
+    /// # Errors
+    ///
+    /// Rejects a non-public origin or a weak/unrepresentable proxy credential.
+    pub fn with_manual_public_ingress(
+        mut self,
+        origin: &str,
+        proxy_secret: &str,
+    ) -> Result<Self, ManualPublicIngressError> {
+        self.public_ingress = Some(PublicIngress::configured_manual(origin, proxy_secret)?);
+        Ok(self)
+    }
+
+    pub(crate) fn public_ingress(&self) -> Option<PublicIngress> {
+        self.public_ingress.clone()
     }
 
     #[must_use]

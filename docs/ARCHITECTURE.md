@@ -278,6 +278,18 @@ short-lived one-use credential. Redemption removes the secret from browser
 history, restores the canonical operator identity, and makes every replay fail
 without consulting an existing browser session as fallback authority.
 
+A configured manual public ingress exists only when startup supplies both one
+canonical non-loopback HTTPS origin and one bounded high-entropy reverse-proxy
+secret. `PublicIngress` owns that immutable pair. The common TCP ingress policy
+requires an actual loopback peer, the exact public Host and HTTPS forwarded scheme,
+and a fixed-size digest comparison of the presented proxy secret before consulting
+the route descriptor. Private routes never become public; same-origin public routes
+require an absent or exact public Origin, while the two identity-probe routes may
+accept a foreign Origin after complete transport authentication. The verified origin
+is passed privately to host-identity signing rather than reconstructed from an
+untrusted handler header. Missing, one-sided, or invalid startup configuration fails
+closed and creates no runtime fallback or mutable public-ingress state.
+
 The owned public-tunnel lifecycle includes process custody, generated origin
 credential, public URL publication, stable-entry ownership, ingress revocation,
 and confirmed cleanup. Shutdown is incomplete until the exact cloudflared process
