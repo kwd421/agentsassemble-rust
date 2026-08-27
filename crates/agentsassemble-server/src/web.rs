@@ -355,13 +355,14 @@ pub async fn serve(
             (room_shutdown, provider_shutdown)
         })
         .await;
+    let ingress_shutdown = ingress_shutdown
+        .await
+        .map_err(|_| ServeError::PublicIngressCleanup)
+        .and_then(|result| result.map_err(|_| ServeError::PublicIngressCleanup));
     room_shutdown?;
     provider_shutdown?;
     reconciliation_shutdown.map_err(ServeError::RuntimeReconciliationTask)?;
-    ingress_shutdown
-        .await
-        .map_err(|_| ServeError::PublicIngressCleanup)?
-        .map_err(|_| ServeError::PublicIngressCleanup)?;
+    ingress_shutdown?;
     result.map_err(ServeError::Io)
 }
 

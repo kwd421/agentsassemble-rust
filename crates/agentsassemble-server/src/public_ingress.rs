@@ -68,7 +68,12 @@ struct ManagedPublicIngress {
 
 struct ManagedController {
     config: ManagedIngressConfig,
-    active: Mutex<Option<ActiveGeneration>>,
+    lifecycle: Mutex<ManagedLifecycle>,
+}
+
+struct ManagedLifecycle {
+    closed: bool,
+    active: Option<ActiveGeneration>,
 }
 
 impl fmt::Debug for PublicIngress {
@@ -102,6 +107,13 @@ pub(crate) enum PublicIngressControlError {
     Unconfigured,
     #[error("managed public ingress cleanup failed")]
     CleanupFailed,
+    #[error("managed public ingress is shutting down")]
+    Closed,
+}
+
+pub(crate) enum PublicIngressAuthorization {
+    Authorized,
+    Identity(TrustedIdentityOrigin),
 }
 
 impl PublicIngress {
@@ -143,7 +155,10 @@ impl PublicIngress {
                     local_url,
                     cloudflared,
                 },
-                active: Mutex::new(None),
+                lifecycle: Mutex::new(ManagedLifecycle {
+                    closed: false,
+                    active: None,
+                }),
             },
         })))
     }
@@ -158,29 +173,31 @@ impl PublicIngress {
 
     pub(crate) async fn start(&self) -> Result<PublicIngressStatus, PublicIngressControlError> {
         let ingress = self.managed_ingress()?;
-        let mut active = ingress.controller.active.lock().await;
-        if active
+        let mut lifecycle = ingress.controller.lifecycle.lock().await;
+        if lifecycle.closed {
+            return Err(PublicIngressControlError::Closed);
+        }
+        if lifecycle
+            .active
             .as_ref()
             .is_some_and(|current| current.owner.is_finished())
         {
-            let current = active.take().unwrap_or_else(|| unreachable!());
-            if current.owner.await.is_err() {
-                ingress
-                    .projection
-                    .write()
-                    .finish(current.number, GenerationOutcome::owner_failed());
-            }
+            join_active(&ingress.projection, &mut lifecycle.active).await;
         }
-        if active.is_none() {
-            *active = start_generation(&ingress.controller.config, &ingress.projection);
+        if lifecycle.active.is_none() {
+            ingress.projection.read().cleanup_result()?;
+            lifecycle.active = start_generation(&ingress.controller.config, &ingress.projection);
         }
         Ok(ingress.projection.read().status())
     }
 
     pub(crate) async fn stop(&self) -> Result<PublicIngressStatus, PublicIngressControlError> {
         let ingress = self.managed_ingress()?;
-        let mut active = ingress.controller.active.lock().await;
-        stop_active(&ingress.projection, &mut active).await;
+        let mut lifecycle = ingress.controller.lifecycle.lock().await;
+        if lifecycle.closed {
+            return Err(PublicIngressControlError::Closed);
+        }
+        stop_active(&ingress.projection, &mut lifecycle.active).await;
         Ok(ingress.projection.read().status())
     }
 
@@ -188,35 +205,29 @@ impl PublicIngress {
         let PublicIngressKind::Managed(ingress) = self.0.as_ref() else {
             return Ok(());
         };
-        let mut active = ingress.controller.active.lock().await;
-        stop_active(&ingress.projection, &mut active).await;
+        let mut lifecycle = ingress.controller.lifecycle.lock().await;
+        lifecycle.closed = true;
+        stop_active(&ingress.projection, &mut lifecycle.active).await;
         ingress.projection.read().cleanup_result()
     }
 
-    pub(crate) fn authorizes(
+    pub(crate) fn authorize(
         &self,
         peer: PeerAddr,
         headers: &HeaderMap,
         exposure: RouteExposure,
-    ) -> bool {
-        match self.0.as_ref() {
-            PublicIngressKind::Disabled => false,
-            PublicIngressKind::Manual(ingress) => ingress.authorizes(peer, headers, exposure),
-            PublicIngressKind::Managed(ingress) => {
-                peer.0.ip().is_loopback()
-                    && exposure != RouteExposure::Private
-                    && ingress.projection.read().authorizes(headers, exposure)
-            }
-        }
-    }
-
-    pub(crate) fn identity_origin(&self) -> Option<TrustedIdentityOrigin> {
+    ) -> Option<PublicIngressAuthorization> {
         match self.0.as_ref() {
             PublicIngressKind::Disabled => None,
-            PublicIngressKind::Manual(ingress) => {
-                Some(TrustedIdentityOrigin(ingress.origin.clone()))
+            PublicIngressKind::Manual(ingress) => ingress
+                .authorizes(peer, headers, exposure)
+                .then(|| authorization(exposure, || TrustedIdentityOrigin(ingress.origin.clone()))),
+            PublicIngressKind::Managed(ingress) => {
+                if !peer.0.ip().is_loopback() || exposure == RouteExposure::Private {
+                    return None;
+                }
+                ingress.projection.read().authorize(headers, exposure)
             }
-            PublicIngressKind::Managed(ingress) => ingress.projection.read().identity_origin(),
         }
     }
 
@@ -225,6 +236,17 @@ impl PublicIngress {
             return Err(PublicIngressControlError::Unconfigured);
         };
         Ok(ingress)
+    }
+}
+
+fn authorization(
+    exposure: RouteExposure,
+    identity_origin: impl FnOnce() -> TrustedIdentityOrigin,
+) -> PublicIngressAuthorization {
+    if exposure == RouteExposure::IdentityProbePublic {
+        PublicIngressAuthorization::Identity(identity_origin())
+    } else {
+        PublicIngressAuthorization::Authorized
     }
 }
 
@@ -372,17 +394,29 @@ async fn stop_active(
     projection: &Arc<RwLock<ManagedProjection>>,
     active: &mut Option<ActiveGeneration>,
 ) {
-    let Some(current) = active.take() else {
+    let Some(current) = active.as_mut() else {
         projection.write().settle_stopped();
         return;
     };
-    projection.write().begin_stop(current.number);
-    current.cancellation.cancel();
-    if current.owner.await.is_err() {
+    if !current.owner.is_finished() {
+        projection.write().begin_stop(current.number);
+        current.cancellation.cancel();
+    }
+    join_active(projection, active).await;
+}
+
+async fn join_active(
+    projection: &Arc<RwLock<ManagedProjection>>,
+    active: &mut Option<ActiveGeneration>,
+) {
+    let current = active.as_mut().unwrap_or_else(|| unreachable!());
+    let number = current.number;
+    if (&mut current.owner).await.is_err() {
         projection
             .write()
-            .finish(current.number, GenerationOutcome::owner_failed());
+            .finish(number, GenerationOutcome::owner_failed());
     }
+    active.take();
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -440,6 +474,15 @@ impl ManagedProjection {
         if self.generation != generation {
             return false;
         }
+        if self.phase == IngressPhase::Running {
+            return self
+                .trust
+                .as_ref()
+                .is_some_and(|trust| trust.origin.value == origin.value);
+        }
+        if self.phase != IngressPhase::Starting {
+            return false;
+        }
         self.phase = IngressPhase::Running;
         self.trust = Some(ManagedTrust {
             origin,
@@ -449,7 +492,9 @@ impl ManagedProjection {
     }
 
     pub(crate) fn begin_stop(&mut self, generation: u64) {
-        if self.generation == generation {
+        if self.generation == generation
+            && matches!(self.phase, IngressPhase::Starting | IngressPhase::Running)
+        {
             self.phase = IngressPhase::Stopping;
             self.trust = None;
         }
@@ -524,16 +569,17 @@ impl ManagedProjection {
         }
     }
 
-    fn authorizes(&self, headers: &HeaderMap, exposure: RouteExposure) -> bool {
-        self.trust
-            .as_ref()
-            .is_some_and(|trust| trust.authorizes(headers, exposure))
-    }
-
-    fn identity_origin(&self) -> Option<TrustedIdentityOrigin> {
-        self.trust
-            .as_ref()
-            .map(|trust| TrustedIdentityOrigin(trust.origin.value.as_str().into()))
+    fn authorize(
+        &self,
+        headers: &HeaderMap,
+        exposure: RouteExposure,
+    ) -> Option<PublicIngressAuthorization> {
+        let trust = self.trust.as_ref()?;
+        trust.authorizes(headers, exposure).then(|| {
+            authorization(exposure, || {
+                TrustedIdentityOrigin(trust.origin.value.as_str().into())
+            })
+        })
     }
 }
 

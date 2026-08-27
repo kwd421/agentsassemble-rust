@@ -127,6 +127,9 @@ impl From<PublicIngressControlError> for ControlApiError {
                 "ingress_cleanup_failed",
                 "Managed public ingress cleanup failed.",
             ),
+            PublicIngressControlError::Closed => {
+                ("ingress_closed", "Managed public ingress is shutting down.")
+            }
         };
         Self {
             status: StatusCode::SERVICE_UNAVAILABLE,

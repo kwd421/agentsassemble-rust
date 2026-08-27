@@ -44,6 +44,7 @@ pub(crate) async fn spawn_cloudflared(
         command
             .args([
                 "tunnel",
+                "--no-autoupdate",
                 "--config",
                 config_path.to_string_lossy().as_ref(),
                 "--url",

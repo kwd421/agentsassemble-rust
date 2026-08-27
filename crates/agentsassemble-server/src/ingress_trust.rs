@@ -5,7 +5,7 @@ use std::{
 
 use crate::http_api::TAURI_ORIGINS;
 use crate::product_surface::{RouteExposure, registered_route_exposure, registered_route_path};
-use crate::public_ingress::{MANUAL_PROXY_TOKEN_HEADER, PublicIngress};
+use crate::public_ingress::{MANUAL_PROXY_TOKEN_HEADER, PublicIngress, PublicIngressAuthorization};
 use axum::{
     extract::{MatchedPath, Request},
     http::{HeaderMap, Method, StatusCode, header, uri::Authority},
@@ -94,13 +94,14 @@ pub(crate) async fn require_trusted_ingress(mut request: Request, next: Next) ->
                 .get::<MatchedPath>()
                 .is_some_and(|path| registered_route_path(path.as_str())));
     let public_ingress = request.extensions().get::<PublicIngress>().cloned();
-    let public_trusted = public_ingress
+    let public_authorization = public_ingress
         .as_ref()
         .zip(peer)
         .zip(exact_exposure)
-        .is_some_and(|((ingress, peer), exposure)| {
-            ingress.authorizes(peer, request.headers(), exposure)
+        .and_then(|((ingress, peer), exposure)| {
+            ingress.authorize(peer, request.headers(), exposure)
         });
+    let public_trusted = public_authorization.is_some();
     if !(local_trusted || public_trusted) || !registered {
         return StatusCode::FORBIDDEN.into_response();
     }
@@ -109,7 +110,10 @@ pub(crate) async fn require_trusted_ingress(mut request: Request, next: Next) ->
             single_header(request.headers(), header::HOST)
                 .map(|host| TrustedIdentityOrigin(format!("http://{host}").into()))
         } else {
-            public_ingress.and_then(|ingress| ingress.identity_origin())
+            match public_authorization {
+                Some(PublicIngressAuthorization::Identity(origin)) => Some(origin),
+                Some(PublicIngressAuthorization::Authorized) | None => None,
+            }
         };
         let Some(identity_origin) = identity_origin else {
             return StatusCode::FORBIDDEN.into_response();
@@ -287,20 +291,28 @@ mod tests {
             ),
             ("origin", "https://public.example.test:443"),
         ]);
-        assert!(ingress.authorizes(loopback_peer(), &trusted, RouteExposure::SameOriginPublic));
-        assert!(ingress.authorizes(
-            loopback_peer(),
-            &headers(&[
-                ("host", "public.example.test"),
-                ("x-forwarded-proto", "https"),
-                (
-                    "x-agentsassemble-proxy-token",
-                    "manual-proxy-secret-0000000000000001",
-                ),
-                ("origin", "https://directory.example"),
-            ]),
-            RouteExposure::IdentityProbePublic
-        ));
+        assert!(
+            ingress
+                .authorize(loopback_peer(), &trusted, RouteExposure::SameOriginPublic)
+                .is_some()
+        );
+        assert!(
+            ingress
+                .authorize(
+                    loopback_peer(),
+                    &headers(&[
+                        ("host", "public.example.test"),
+                        ("x-forwarded-proto", "https"),
+                        (
+                            "x-agentsassemble-proxy-token",
+                            "manual-proxy-secret-0000000000000001",
+                        ),
+                        ("origin", "https://directory.example"),
+                    ]),
+                    RouteExposure::IdentityProbePublic,
+                )
+                .is_some()
+        );
         for origin in [
             "http://public.example.test",
             "https://127.0.0.2",
