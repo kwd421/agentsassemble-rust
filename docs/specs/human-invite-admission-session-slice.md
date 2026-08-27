@@ -506,20 +506,38 @@ boundaries:
    socket generation. Canonical room and Agent Session avatar references remain
    relative; stale generations cannot publish state or display provenance.
 3. B2 parses the complete native ingress status before controller publication.
+   Before any ingress mutation or manager-invite grant request, the controller
+   requires the packaged Tauri host, a non-guest local operator, and the exact
+   `{server_id, authority_lineage_id, room_id, room_uid}` from the currently
+   verified room directory. Browser route flags, local storage, and a cached room
+   label or ID cannot establish that eligibility.
    Active `starting`, `running`, and `stopping` phases require availability;
    `error` and stable `failed` require a nonempty error; stable `ready` is equivalent
-   to a nonempty stable URL and also requires a running direct target. Every
-   non-ready stable phase has an empty stable URL. Existing manual, managed,
-   unconfigured, direct-URL, running, and top-level URL relations remain exact.
+   to either a nonempty stable URL with a running direct target or a confirmed-clear
+   empty stable URL with no direct public URL and a non-active `stopped` or `error`
+   phase. A nonempty stable URL therefore requires stable `ready` and a running
+   direct target; every non-ready stable phase has an empty stable URL. Existing
+   manual, managed, unconfigured, direct-URL, running, and top-level URL relations
+   remain exact.
 4. C1a keeps manager create credential consistency inside the existing persistence
-   transaction. The persistence owner compares the just-issued signed and join-code
-   fingerprints with the decoded inserted row before commit and rolls back on any
-   mismatch. The HTTP route emits only that verified result and does not repeat the
-   policy or create a post-commit orphan check.
+   transaction. The Tauri command, private-control request and response, and exact
+   one-use create or revoke ticket carry the captured `{server_id,
+   authority_lineage_id, room_id, room_uid}` unchanged. Ticket issuance verifies
+   that tuple against current authority, and the matching create or revoke
+   persistence transaction revalidates the same server, lineage, stable room UID,
+   room ID, and current local manager before mutation. The persistence owner also
+   compares the just-issued signed and join-code fingerprints with the decoded
+   inserted row before commit and rolls back on any mismatch. The HTTP route emits
+   only that verified result and does not repeat the policy or create a post-commit
+   orphan check.
 5. C1b is the sole strict create-response, timestamp, URL, and revoke-dispatch
-   parser. It retains the validated join URL, canonical public origin, finite exact
-   server expiry, room/invite tuple, and revoke custody without reconstructing a
-   URL. Native grant failure is `proven_not_dispatched`; once `fetch` is invoked,
+   parser. A create response must match the exact captured authority tuple and
+   canonical outbound request, its join URL must carry the exact returned join-code
+   credential at the current ingress origin, and its lowercase 16-hex `invite_id`
+   must equal the first 16 hex characters of SHA-256 over the exact returned signed
+   invite token. It retains that validated join URL, canonical public origin, finite
+   exact server expiry, room/invite tuple, and revoke custody without reconstructing
+   a URL. Native grant failure is `proven_not_dispatched`; once `fetch` is invoked,
    transport loss, malformed or mismatched response, and every result not proven
    non-mutating are `outcome_unknown`. Canonical exact success and exact
    `invite_not_found` are the only terminal revoke results.
@@ -535,10 +553,10 @@ boundaries:
 
 These stages add no durable frontend invite state, second URL/timestamp policy,
 generic resource framework, compatibility path, or fallback. Each independently
-buildable commit remains below 1,000 changed lines, passes the repository gates and
-focused contract tests, is pushed, and receives both manual reviews before the next
-stage. Packaged Computer Use remains the completion test rather than a substitute
-for these authority and failure contracts.
+buildable commit must remain below 1,000 changed lines, must pass the repository gates
+and focused contract tests, must be pushed, and must receive both manual reviews
+before the next stage. Packaged Computer Use remains the completion test rather than
+a substitute for these authority and failure contracts.
 
 ## Trusted ingress boundary
 

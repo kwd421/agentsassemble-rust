@@ -2589,9 +2589,24 @@ status relations were incomplete; a mutable runtime-resource base had last-write
 races; canonical writable avatar references could not become absolute display URLs;
 the native socket ticket needed one strict validator; expiry had to disable Copy
 without discarding revoke custody; and an in-flight, unknown, or failed retry outcome
-could not reopen Copy. The accepted design assigns those policies once across
+could not reopen Copy. It also required packaged-Tauri and non-guest eligibility
+before ingress effects; immutable `{server_id, authority_lineage_id, room_id,
+room_uid}` custody through the native/private-control/ticket path plus
+same-transaction stable-room revalidation; and exact outbound-request, returned
+credential, and signed-token-digest-derived `invite_id` binding at create-response
+acceptance. The accepted design assigns those policies once across
 B1a/B1b/B2/C1a/C1b/C2, including restoration of the exact captured revoke-attempt
 source state. Final web Pro verdict: `APPROVE — Critical 0 / High 0 / Medium 0`.
 Final Daybreaker verdict: `APPROVE — Critical 0 / High 0 / Medium 0`. The web session
 was then switched and visibly verified at very-high reasoning for implementation
 reviews. Neither review used Deep Scan or another automated security scanner.
+
+Review of published plan record `396169a` found two Medium documentation defects
+before implementation. Daybreaker found that the record omitted the approved
+packaged-Tauri/non-guest eligibility, exact server/lineage/room/room-UID custody and
+same-transaction revalidation, and exact request/credential/invite-ID digest binding,
+and that future stages were written as already completed. The independent web review
+found that B2 incorrectly rejected the existing confirmed-clear stable-entry state,
+whose canonical representation is stable `ready` with an empty stable URL and an
+inactive direct target. This correction restores both sets of invariants without
+changing product code or adding another policy owner.
