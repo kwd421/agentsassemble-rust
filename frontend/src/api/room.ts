@@ -160,21 +160,6 @@ export interface RoomFriendsResponse {
   candidates: RoomFriend[];
 }
 
-export interface UserProfile {
-  displayName: string;
-  handle: string;
-  status: "online" | "idle" | "dnd" | "offline";
-  customStatus: string;
-  avatarLabel: string;
-  avatarImage?: string;
-  bannerPreset: "default" | "forest" | "midnight" | "ember" | "custom";
-  accentColor: string;
-  micMuted: boolean;
-  deafened: boolean;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
 export interface VoiceParticipant {
   participantId: string;
   name: string;
@@ -208,22 +193,6 @@ type ApiRoomSettings = {
 type ApiChannelSettings = {
   notifications?: ChannelNotificationSetting;
   last_read_at?: string;
-};
-
-type ApiUserProfile = {
-  revision?: number;
-  display_name?: string;
-  handle?: string;
-  status?: UserProfile["status"];
-  custom_status?: string;
-  avatar_label?: string;
-  avatar_image_url?: string;
-  banner_preset?: UserProfile["bannerPreset"];
-  accent_color?: string;
-  mic_muted?: boolean;
-  deafened?: boolean;
-  created_at?: string;
-  updated_at?: string;
 };
 
 function parseChannelSettings(
@@ -511,59 +480,6 @@ function channelSettingsToApi(
   );
 }
 
-function normalizeUserProfile(payload: ApiUserProfile | undefined): UserProfile {
-  if (
-    !payload ||
-    !Number.isInteger(payload.revision) ||
-    Number(payload.revision) < 1 ||
-    typeof payload.display_name !== "string" ||
-    typeof payload.handle !== "string" ||
-    !["online", "idle", "dnd", "offline"].includes(String(payload.status || "")) ||
-    typeof payload.custom_status !== "string" ||
-    typeof payload.avatar_label !== "string" ||
-    typeof payload.avatar_image_url !== "string" ||
-    !["default", "forest", "midnight", "ember", "custom"].includes(
-      String(payload.banner_preset || "")
-    ) ||
-    typeof payload.accent_color !== "string" ||
-    typeof payload.mic_muted !== "boolean" ||
-    typeof payload.deafened !== "boolean" ||
-    typeof payload.created_at !== "string" ||
-    typeof payload.updated_at !== "string"
-  ) {
-    throw new Error("서버 사용자 프로필 응답이 현재 계약과 일치하지 않습니다.");
-  }
-  return {
-    displayName: payload.display_name,
-    handle: payload.handle,
-    status: payload.status as UserProfile["status"],
-    customStatus: payload.custom_status,
-    avatarLabel: payload.avatar_label,
-    avatarImage: payload.avatar_image_url || undefined,
-    bannerPreset: payload.banner_preset as UserProfile["bannerPreset"],
-    accentColor: payload.accent_color,
-    micMuted: payload.mic_muted,
-    deafened: payload.deafened,
-    createdAt: payload.created_at,
-    updatedAt: payload.updated_at,
-  };
-}
-
-function userProfileToApi(profile: UserProfile): ApiUserProfile {
-  return {
-    display_name: profile.displayName,
-    handle: profile.handle,
-    status: profile.status,
-    custom_status: profile.customStatus,
-    avatar_label: profile.avatarLabel,
-    avatar_image_url: profile.avatarImage,
-    banner_preset: profile.bannerPreset,
-    accent_color: profile.accentColor,
-    mic_muted: profile.micMuted,
-    deafened: profile.deafened,
-  };
-}
-
 type RoomSettingsIdentity = {
   sessionToken?: string;
   deviceToken?: string;
@@ -683,31 +599,6 @@ export function addRoomFriend(friend: Partial<RoomFriend>) {
 export function deleteRoomFriend(friendId: string) {
   return deleteJson<RoomFriendsResponse & { deleted: { friend_id: string } }>(
     `/api/room-friends${queryString({ friend_id: friendId })}`
-  );
-}
-
-export type UserProfileIdentity = {
-  sessionToken?: string;
-  deviceToken?: string;
-  roomId?: string;
-};
-
-export function fetchUserProfile(identity: UserProfileIdentity = {}): Promise<UserProfile> {
-  return fetchJsonWithIdentity<{ profile: ApiUserProfile }>("/api/user-profile", identity).then((payload) =>
-    normalizeUserProfile(payload.profile)
-  );
-}
-
-export function saveUserProfile(
-  profile: UserProfile,
-  identity: UserProfileIdentity = {}
-): Promise<UserProfile> {
-  return postJsonWithIdentity<{ profile: ApiUserProfile }>(
-    "/api/user-profile",
-    userProfileToApi(profile),
-    identity
-  ).then(
-    (payload) => normalizeUserProfile(payload.profile)
   );
 }
 

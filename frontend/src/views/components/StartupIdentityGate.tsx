@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 
 import { fetchAccountStatus } from "../../api/identity";
-import { saveUserProfile } from "../../api/room";
+import { saveUserProfile } from "../../api/userProfile";
 import {
   bootstrapCentral,
   centralIdentityConfigured,
@@ -85,8 +85,8 @@ async function saveLocalProfile(
     { deviceToken }
   );
   rememberGuestProfile({
-    displayName: saved.displayName,
-    avatarImage: saved.avatarImage,
+    displayName: saved.profile.displayName,
+    avatarImage: saved.profile.avatarImage,
   });
   return undefined;
 }

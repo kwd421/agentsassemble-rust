@@ -17,6 +17,7 @@ export * from "./api/moderation";
 export * from "./api/personas";
 export * from "./api/room";
 export * from "./api/roomHistory";
+export * from "./api/userProfile";
 export { clearHostToken, loadHostToken, postJsonHost, saveHostToken } from "./api/http";
 
 export interface LiveAgent {

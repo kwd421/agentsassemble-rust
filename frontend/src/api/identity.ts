@@ -8,7 +8,7 @@ import {
   parseGuestRecoveryRedeemResponse,
   type GuestRecoveryRedeemResponse,
 } from "../lib/roomAdmissionContract";
-import type { UserProfileIdentity } from "./room";
+import type { UserProfileIdentity } from "./userProfile";
 
 export type PublicAccount = {
   account_id: string;

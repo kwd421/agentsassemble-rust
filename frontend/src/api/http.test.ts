@@ -27,12 +27,12 @@ describe("desktop profile HTTP routing", () => {
       .fn()
       .mockResolvedValueOnce(HOST_SURFACE)
       .mockResolvedValueOnce({
-        ticket: "ticket-read",
+        ticket: "a".repeat(64),
         ttl_seconds: 30,
         http_base_url: "http://127.0.0.1:49152",
       })
       .mockResolvedValueOnce({
-        ticket: "ticket-write",
+        ticket: "b".repeat(64),
         ttl_seconds: 30,
         http_base_url: "http://127.0.0.1:49152",
       });
@@ -74,8 +74,8 @@ describe("desktop profile HTTP routing", () => {
     );
     const firstHeaders = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
     const secondHeaders = fetchMock.mock.calls[1]?.[1]?.headers as Headers;
-    expect(firstHeaders.get("Authorization")).toBe("Bearer ticket-read");
-    expect(secondHeaders.get("Authorization")).toBe("Bearer ticket-write");
+    expect(firstHeaders.get("Authorization")).toBe(`Bearer ${"a".repeat(64)}`);
+    expect(secondHeaders.get("Authorization")).toBe(`Bearer ${"b".repeat(64)}`);
     expect(secondHeaders.get("Content-Type")).toBe("application/json");
   });
 
@@ -151,12 +151,12 @@ describe("desktop profile HTTP routing", () => {
       .fn()
       .mockResolvedValueOnce(HOST_SURFACE)
       .mockResolvedValueOnce({
-        ticket: "operator-list",
+        ticket: "c".repeat(64),
         ttl_seconds: 30,
         http_base_url: "http://127.0.0.1:49153",
       })
       .mockResolvedValueOnce({
-        ticket: "operator-create",
+        ticket: "d".repeat(64),
         ttl_seconds: 30,
         http_base_url: "http://127.0.0.1:49153",
       });
@@ -194,8 +194,8 @@ describe("desktop profile HTTP routing", () => {
     );
     const listHeaders = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
     const createHeaders = fetchMock.mock.calls[1]?.[1]?.headers as Headers;
-    expect(listHeaders.get("Authorization")).toBe("Bearer operator-list");
-    expect(createHeaders.get("Authorization")).toBe("Bearer operator-create");
+    expect(listHeaders.get("Authorization")).toBe(`Bearer ${"c".repeat(64)}`);
+    expect(createHeaders.get("Authorization")).toBe(`Bearer ${"d".repeat(64)}`);
     expect(createHeaders.get("Content-Type")).toBe("application/json");
   });
 });

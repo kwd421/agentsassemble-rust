@@ -5,6 +5,7 @@ import {
   fetchDesktopCentralRegistration,
   fetchDesktopHumanInviteCreate,
   fetchDesktopHumanInviteRevoke,
+  fetchDesktopOperatorRuntime,
   requestDesktopHostProductSurface,
 } from "./desktopBridge";
 
@@ -13,6 +14,7 @@ const hostCommands = [
   "runtime_central_registration_ticket",
   "runtime_human_invite_create_ticket",
   "runtime_human_invite_revoke_ticket",
+  "runtime_operator_ticket",
 ];
 
 describe("desktop exact-purpose HTTP bridge", () => {
@@ -143,5 +145,53 @@ describe("desktop exact-purpose HTTP bridge", () => {
       fetchDesktopHumanInviteRevoke("general", { method: "" })
     ).rejects.toThrow("POST");
     expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("dispatches concurrent operator requests only to their own grant base", async () => {
+    let resolveFirst: ((value: unknown) => void) | undefined;
+    let resolveSecond: ((value: unknown) => void) | undefined;
+    const invoke = vi
+      .fn()
+      .mockResolvedValueOnce({
+        revision: PRODUCT_SURFACE_REVISION,
+        digest: "2".repeat(64),
+        commands: hostCommands,
+      })
+      .mockImplementationOnce(
+        () => new Promise((resolve) => { resolveFirst = resolve; })
+      )
+      .mockImplementationOnce(
+        () => new Promise((resolve) => { resolveSecond = resolve; })
+      );
+    Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await requestDesktopHostProductSurface();
+    const first = fetchDesktopOperatorRuntime("/api/rooms?request=first");
+    const second = fetchDesktopOperatorRuntime("/api/rooms?request=second");
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledTimes(3));
+    resolveFirst?.({
+      ticket: "d".repeat(64),
+      ttl_seconds: 30,
+      http_base_url: "http://127.0.0.1:49161",
+    });
+    resolveSecond?.({
+      ticket: "e".repeat(64),
+      ttl_seconds: 30,
+      http_base_url: "http://127.0.0.1:49162",
+    });
+    await Promise.all([first, second]);
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "http://127.0.0.1:49161/api/rooms?request=first",
+      expect.objectContaining({ headers: expect.any(Headers) })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "http://127.0.0.1:49162/api/rooms?request=second",
+      expect.objectContaining({ headers: expect.any(Headers) })
+    );
   });
 });

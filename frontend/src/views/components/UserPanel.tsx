@@ -25,6 +25,7 @@ import {
   profileStatusClass,
   profileStatusLabel,
 } from "../../lib/userProfileModel";
+import { profileAvatarReference } from "../../lib/attachmentReference";
 import ImageCropper from "./ImageCropper";
 import UserSettingsPanel, { type UserSettingsSection } from "./UserSettingsPanel";
 
@@ -63,7 +64,11 @@ export default function UserPanel({
         avatarImage: guestProfile.avatarImage,
       }
     : DEFAULT_USER_PROFILE;
-  const [profile, setProfile] = useState<UserProfile>(initialProfile);
+  const [profileSnapshot, setProfileSnapshot] = useState({
+    profile: initialProfile,
+    displayResourceBase: "",
+  });
+  const profile = profileSnapshot.profile;
   const [draft, setDraft] = useState<UserProfile>(initialProfile);
   const [profileOpen, setProfileOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -76,6 +81,7 @@ export default function UserPanel({
   const [profileError, setProfileError] = useState("");
   const [profileHydrated, setProfileHydrated] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const profileGeneration = useRef(0);
   const statusClass = profileStatusClass(profile, hasBackendError);
   const hasAvatarImage = Boolean(profile.avatarImage);
   const guestDisplayName = String(guestProfile?.displayName || "게스트").trim() || "게스트";
@@ -87,24 +93,31 @@ export default function UserPanel({
   const guestAwaitingAdmission = Boolean(guestProfile && !profileIdentity.sessionToken);
 
   useEffect(() => {
-    if (guestProfile?.expired || guestAwaitingAdmission) return;
-    let ignore = false;
+    if (guestProfile?.expired || guestAwaitingAdmission) {
+      profileGeneration.current += 1;
+      setSaving(false);
+      return;
+    }
+    const generation = ++profileGeneration.current;
+    setSaving(false);
     setProfileHydrated(false);
     setProfileError("");
     fetchUserProfile(profileIdentity)
-      .then((loadedProfile) => {
-        if (ignore) return;
-        setProfile(loadedProfile);
-        setDraft(loadedProfile);
+      .then((loadedSnapshot) => {
+        if (profileGeneration.current !== generation) return;
+        setProfileSnapshot(loadedSnapshot);
+        setDraft(loadedSnapshot.profile);
         setProfileHydrated(true);
       })
       .catch((error: Error) => {
-        if (ignore) return;
+        if (profileGeneration.current !== generation) return;
         setProfileHydrated(false);
         setProfileError(error.message || "프로필을 불러오지 못했습니다.");
       });
     return () => {
-      ignore = true;
+      if (profileGeneration.current === generation) {
+        profileGeneration.current += 1;
+      }
     };
   }, [
     guestProfile?.expired,
@@ -162,20 +175,25 @@ export default function UserPanel({
     setAvatarEditorOpen(true);
   }
 
-  async function persistProfile(nextProfile: UserProfile): Promise<string> {
+  async function persistProfile(
+    nextProfile: UserProfile
+  ): Promise<"saved" | "stale" | "failed"> {
+    const generation = ++profileGeneration.current;
     setSaving(true);
     setProfileError("");
     try {
-      const savedProfile = await saveUserProfile(nextProfile, profileIdentity);
-      setProfile(savedProfile);
-      setDraft(savedProfile);
-      return "";
+      const savedSnapshot = await saveUserProfile(nextProfile, profileIdentity);
+      if (profileGeneration.current !== generation) return "stale";
+      setProfileSnapshot(savedSnapshot);
+      setDraft(savedSnapshot.profile);
+      return "saved";
     } catch (error) {
+      if (profileGeneration.current !== generation) return "stale";
       const message = error instanceof Error ? error.message : "프로필을 저장하지 못했습니다.";
       setProfileError(message);
-      return message;
+      return "failed";
     } finally {
-      setSaving(false);
+      if (profileGeneration.current === generation) setSaving(false);
     }
   }
 
@@ -189,11 +207,12 @@ export default function UserPanel({
   }
 
   async function saveDraft() {
-    const error = await persistProfile(draft);
-    if (!error) setSettingsOpen(false);
+    if ((await persistProfile(draft)) === "saved") setSettingsOpen(false);
   }
 
   async function handleAvatarCropped(file: File) {
+    const uploadGeneration = ++profileGeneration.current;
+    setSaving(false);
     setAvatarStatus("프로필 사진 저장 중...");
     try {
       const attachment = await uploadLobbyAttachment(file, {
@@ -201,15 +220,19 @@ export default function UserPanel({
         roomId: profileIdentity.roomId,
         sessionToken: profileIdentity.sessionToken,
       });
-      const error = await persistProfile({ ...profile, avatarImage: attachment.url });
-      if (error) {
-        setAvatarStatus(error);
+      if (profileGeneration.current !== uploadGeneration) return;
+      const avatarImage = profileAvatarReference(attachment.url);
+      const result = await persistProfile({ ...profile, avatarImage });
+      if (result === "stale") return;
+      if (result === "failed") {
+        setAvatarStatus("프로필 사진을 저장하지 못했습니다.");
         return;
       }
       setAvatarCropFile(null);
       setAvatarEditorOpen(false);
       setAvatarStatus("");
     } catch (error) {
+      if (profileGeneration.current !== uploadGeneration) return;
       setAvatarStatus(error instanceof Error ? error.message : "프로필 사진 저장 실패");
     }
   }
@@ -290,7 +313,11 @@ export default function UserPanel({
   }
 
   return (
-    <div className="dc-user-panel" ref={rootRef} style={profileCssVars(profile)}>
+    <div
+      className="dc-user-panel"
+      ref={rootRef}
+      style={profileCssVars(profile, profileSnapshot.displayResourceBase)}
+    >
       {profileOpen && (
         <section
           className="dc-profile-card"
@@ -299,7 +326,7 @@ export default function UserPanel({
           <div
             className="dc-profile-banner"
             data-preset={profile.bannerPreset}
-            style={profileCssVars(profile)}
+            style={profileCssVars(profile, profileSnapshot.displayResourceBase)}
           />
           <button
             type="button"
@@ -483,6 +510,7 @@ export default function UserPanel({
             onSave={() => void saveDraft()}
             onEditAvatar={openAvatarEditor}
             profileIdentity={profileIdentity}
+            displayResourceBase={profileSnapshot.displayResourceBase}
           />
         </section>
       )}

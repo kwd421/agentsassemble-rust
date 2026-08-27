@@ -9,7 +9,7 @@ import {
   type AccountStatusResponse,
   type GoogleAccountChallengeResponse,
 } from "../../api/identity";
-import type { UserProfileIdentity } from "../../api/room";
+import type { UserProfileIdentity } from "../../api/userProfile";
 import { isDesktopWebview } from "../../lib/desktopBridge";
 import { clearRememberedGuestProfile } from "../../lib/deviceIdentity";
 import { googleIdentityApi, loadGoogleIdentityScript } from "../../lib/googleIdentity";

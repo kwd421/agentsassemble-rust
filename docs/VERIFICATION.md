@@ -2625,3 +2625,39 @@ owners, and separates pre-mount server-wide ingress eligibility from per-room in
 eligibility. Web verdict: `REVISE — Critical 0 / High 1 / Medium 2`. Daybreaker
 verdict: `REVISE — Critical 0 / High 0 / Medium 1`. Neither review used Deep Scan or
 another automated security scanner.
+
+Correction `bc752d6` separated those owners and retained committed invite custody.
+Final web verdict: `APPROVE — Critical 0 / High 0 / Medium 0`. Final Daybreaker
+verdict: `APPROVE — Critical 0 / High 0 / Medium 0`. Neither review used Deep Scan or
+another automated security scanner.
+
+## Frontend operator dispatch and profile provenance: 2026-08-28
+
+The prior desktop client projected socket, operator, and central-registration grants
+through one mutable HTTP base. Two operator grants completing in the same microtask
+turn could therefore let the first request continuation observe the second grant's
+base. Profile rendering also derived absolute attachment URLs from that global value,
+so canonical writable profile state and the request that supplied its display origin
+did not have one owner.
+
+B1a dispatches every operator and central-registration request with its own strictly
+validated grant base. Profile GET and POST now publish one atomic
+`{profile, displayResourceBase}` snapshot, while stored and submitted avatar values
+remain exact relative `view` references. One shared parser owns the current relative
+`view`/`download` attachment forms for profile and room-dock consumers; a pure
+resolver combines a validated reference with the immutable response base only for
+rendering. One component-owned generation rejects older fetch or save results. The
+change adds no network request, retry, timer, cache, durable state, compatibility
+path, or background task. Its bounded in-memory cost is one origin string and one
+integer per mounted user panel; its security effect is to remove ambient mutable
+authority from operator dispatch and prevent absolute or malformed avatar references
+from reaching profile persistence.
+
+The deterministic concurrent-grant regression and the profile provenance, relative
+serialization, malformed-reference, stale-generation, startup, and persistence
+contracts passed as 26 focused tests. Full `make verify` passed architecture and
+source-growth gates, formatting, generated bindings, original CSS verification, all
+79 frontend files and 410 tests, all 16 desktop tests, every workspace unit,
+integration, and documentation test, warning-denied Clippy, and diff validation. The
+production main bundle remained one existing large chunk at 768.01 kB; no speculative
+code-splitting change was added without a measured runtime bottleneck.

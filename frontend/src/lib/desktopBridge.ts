@@ -76,12 +76,17 @@ export interface DesktopCentralRegistrationResponse {
   binding: DesktopCentralRegistrationBinding;
 }
 
+export interface DesktopOperatorHttpResponse {
+  response: Response;
+  httpBaseUrl: string;
+}
+
 export interface DesktopWorkspaceSelection {
   selected: boolean;
   path: string;
 }
 
-let desktopRuntimeHttpBase = "";
+let desktopRoomRuntimeHttpBase = "";
 let desktopHostSurface: HostProductSurface | null = null;
 
 function requireDesktopHostCommand(command: string) {
@@ -255,14 +260,7 @@ function rememberDesktopRuntime(ticket: DesktopRuntimeTicket): DesktopRuntimeTic
   if (endpoint.protocol !== "ws:" || endpoint.hostname !== "127.0.0.1" || !endpoint.port) {
     throw new Error("데스크톱 Rust 런타임 주소가 안전하지 않습니다.");
   }
-  desktopRuntimeHttpBase = `http://127.0.0.1:${endpoint.port}`;
-  return ticket;
-}
-
-function rememberDesktopOperatorRuntime(
-  ticket: DesktopOperatorHttpTicket
-): DesktopOperatorHttpTicket {
-  desktopRuntimeHttpBase = validatedDesktopHttpBase(ticket.http_base_url);
+  desktopRoomRuntimeHttpBase = `http://127.0.0.1:${endpoint.port}`;
   return ticket;
 }
 
@@ -334,14 +332,14 @@ function validateDesktopCentralRegistrationTicket(
   ) {
     throw new Error("중앙 등록 티켓 권위가 올바르지 않습니다.");
   }
-  return grant as unknown as DesktopCentralRegistrationTicket;
-}
-
-function rememberDesktopCentralRegistration(
-  ticket: DesktopCentralRegistrationTicket
-): DesktopCentralRegistrationTicket {
-  rememberDesktopOperatorRuntime(ticket);
-  return ticket;
+  return {
+    ticket: grant.ticket as string,
+    ttl_seconds: grant.ttl_seconds as number,
+    http_base_url: validatedDesktopHttpBase(grant.http_base_url),
+    server_id: grant.server_id as string,
+    host_public_key_x: grant.host_public_key_x as string,
+    host_key_fingerprint: grant.host_key_fingerprint as string,
+  };
 }
 
 export async function requestDesktopRuntimeTicket(
@@ -392,8 +390,8 @@ export async function requestDesktopOperatorTicket(): Promise<DesktopOperatorHtt
   }
   requireDesktopHostCommand("runtime_operator_ticket");
   return tauri
-    .invoke<DesktopOperatorHttpTicket>("runtime_operator_ticket")
-    .then(rememberDesktopOperatorRuntime);
+    .invoke<unknown>("runtime_operator_ticket")
+    .then((value) => validateDesktopHttpTicket(value, "서버 operator 티켓"));
 }
 
 export function requestDesktopPreferencesReadTicket(
@@ -515,8 +513,7 @@ export async function requestDesktopCentralRegistrationTicket(): Promise<Desktop
   requireDesktopHostCommand("runtime_central_registration_ticket");
   return tauri
     .invoke<unknown>("runtime_central_registration_ticket")
-    .then(validateDesktopCentralRegistrationTicket)
-    .then(rememberDesktopCentralRegistration);
+    .then(validateDesktopCentralRegistrationTicket);
 }
 
 export async function fetchDesktopRuntime(
@@ -530,20 +527,30 @@ export async function fetchDesktopRuntime(
   const issued = await requestDesktopRuntimeTicket(roomId);
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${issued.ticket}`);
-  return fetch(`${desktopRuntimeHttpBase}${path}`, { ...init, headers });
+  return fetch(`${desktopRoomRuntimeHttpBase}${path}`, { ...init, headers });
 }
 
-export async function fetchDesktopOperatorRuntime(
+export async function fetchDesktopOperatorRuntimeWithBase(
   path: string,
   init: RequestInit = {}
-): Promise<Response> {
+): Promise<DesktopOperatorHttpResponse> {
   if (!path.startsWith("/") || path.startsWith("//")) {
     throw new Error("데스크톱 Rust 런타임 경로가 잘못되었습니다.");
   }
   const issued = await requestDesktopOperatorTicket();
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${issued.ticket}`);
-  return fetch(`${desktopRuntimeHttpBase}${path}`, { ...init, headers });
+  return {
+    response: await fetch(`${issued.http_base_url}${path}`, { ...init, headers }),
+    httpBaseUrl: issued.http_base_url,
+  };
+}
+
+export async function fetchDesktopOperatorRuntime(
+  path: string,
+  init: RequestInit = {}
+): Promise<Response> {
+  return (await fetchDesktopOperatorRuntimeWithBase(path, init)).response;
 }
 
 export async function fetchDesktopCentralRegistration(
@@ -556,7 +563,7 @@ export async function fetchDesktopCentralRegistration(
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${issued.ticket}`);
   const response = await fetch(
-    `${desktopRuntimeHttpBase}/api/central-directory/registration-proof`,
+    `${issued.http_base_url}/api/central-directory/registration-proof`,
     { ...init, headers }
   );
   return {
@@ -571,7 +578,7 @@ export async function fetchDesktopCentralRegistration(
 
 export function resolveDesktopRuntimeResource(value: string | undefined): string | undefined {
   if (!value || !value.startsWith("/api/attachments/")) return value;
-  return desktopRuntimeHttpBase ? `${desktopRuntimeHttpBase}${value}` : value;
+  return desktopRoomRuntimeHttpBase ? `${desktopRoomRuntimeHttpBase}${value}` : value;
 }
 
 export async function chooseDesktopWorkspace(): Promise<DesktopWorkspaceSelection> {

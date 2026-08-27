@@ -1,7 +1,7 @@
 import { Camera, Headphones, Mic, MicOff, Palette, UserCircle } from "lucide-react";
 
 import type { UserProfile, UserProfileIdentity } from "../../api";
-import { resolveDesktopRuntimeResource } from "../../lib/desktopBridge";
+import { resolveAttachmentReference } from "../../lib/attachmentReference";
 import GuestRecoverySettings from "./GuestRecoverySettings";
 import GoogleAccountSettings from "./GoogleAccountSettings";
 import "./UserSettingsPanel.css";
@@ -30,6 +30,7 @@ export default function UserSettingsPanel({
   onSave,
   onEditAvatar,
   profileIdentity,
+  displayResourceBase,
 }: {
   draft: UserProfile;
   saving: boolean;
@@ -41,10 +42,15 @@ export default function UserSettingsPanel({
   onSave: () => void;
   onEditAvatar: () => void;
   profileIdentity?: UserProfileIdentity;
+  displayResourceBase: string;
 }) {
   const sections = profileIdentity?.sessionToken
     ? USER_SETTINGS_SECTIONS
     : USER_SETTINGS_SECTIONS.filter((section) => section.id !== "recovery");
+  const draftAvatarUrl = resolveAttachmentReference(
+    draft.avatarImage,
+    displayResourceBase
+  );
   return (
     <div className="dc-user-settings-panel" aria-label="사용자 설정">
       <div className="dc-user-settings-shell">
@@ -129,17 +135,17 @@ export default function UserSettingsPanel({
                 >
                   <span
                     className="dc-user-settings-avatar-preview"
-                    data-has-image={Boolean(draft.avatarImage)}
+                    data-has-image={Boolean(draftAvatarUrl)}
                     style={
-                      draft.avatarImage
+                      draftAvatarUrl
                         ? {
-                            backgroundImage: `url(${resolveDesktopRuntimeResource(draft.avatarImage)})`,
+                            backgroundImage: `url(${draftAvatarUrl})`,
                           }
                         : undefined
                     }
                     aria-hidden
                   >
-                    {draft.avatarImage ? null : draft.avatarLabel}
+                    {draftAvatarUrl ? null : draft.avatarLabel}
                   </span>
                   <span>
                     <strong>프로필 사진 변경</strong>

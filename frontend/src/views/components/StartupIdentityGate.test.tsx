@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { fetchAccountStatus } from "../../api/identity";
-import { saveUserProfile } from "../../api/room";
+import { saveUserProfile } from "../../api/userProfile";
 import {
   rememberGuestProfile,
   rememberStartupIdentitySelection,
@@ -68,7 +68,7 @@ const desktopProfile = {
 };
 
 vi.mock("../../api/identity", () => ({ fetchAccountStatus: vi.fn() }));
-vi.mock("../../api/room", () => ({ saveUserProfile: vi.fn() }));
+vi.mock("../../api/userProfile", () => ({ saveUserProfile: vi.fn() }));
 vi.mock("../../lib/desktopBridge", () => ({
   fetchDesktopOperatorRuntime: desktopMocks.fetchOperatorRuntime,
   initializeDesktopBootstrap: desktopMocks.initializeBootstrap,
@@ -134,8 +134,8 @@ describe("StartupIdentityGate", () => {
       google: { enabled: false, client_id: "", unavailable_reason: "" },
     });
     vi.mocked(saveUserProfile).mockResolvedValue({
-      ...DEFAULT_USER_PROFILE,
-      displayName: "Local Guest",
+      profile: { ...DEFAULT_USER_PROFILE, displayName: "Local Guest" },
+      displayResourceBase: "http://localhost:3000",
     });
     const onComplete = vi.fn();
 
@@ -160,8 +160,8 @@ describe("StartupIdentityGate", () => {
       google: { enabled: false, client_id: "", unavailable_reason: "" },
     });
     vi.mocked(saveUserProfile).mockResolvedValue({
-      ...DEFAULT_USER_PROFILE,
-      displayName: "Local Guest",
+      profile: { ...DEFAULT_USER_PROFILE, displayName: "Local Guest" },
+      displayResourceBase: "http://localhost:3000",
     });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 503 })));
     const onComplete = vi.fn();

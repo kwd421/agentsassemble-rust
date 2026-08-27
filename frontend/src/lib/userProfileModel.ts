@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import type { UserProfile } from "../api";
-import { resolveDesktopRuntimeResource } from "./desktopBridge";
+import { resolveAttachmentReference } from "./attachmentReference";
 
 export const DEFAULT_USER_PROFILE: UserProfile = {
   displayName: "SeiNel",
@@ -37,11 +37,13 @@ export function profileStatusLabel(status: UserProfile["status"]) {
   return PROFILE_STATUS_OPTIONS.find((option) => option.id === status)?.label || "온라인으로 표시";
 }
 
-export function profileCssVars(profile: UserProfile): CSSProperties {
+export function profileCssVars(
+  profile: UserProfile,
+  displayResourceBase: string
+): CSSProperties {
+  const avatarUrl = resolveAttachmentReference(profile.avatarImage, displayResourceBase);
   return {
     "--profile-accent": profile.accentColor,
-    "--profile-avatar-image": profile.avatarImage
-      ? `url("${resolveDesktopRuntimeResource(profile.avatarImage)}")`
-      : undefined,
+    "--profile-avatar-image": avatarUrl ? `url("${avatarUrl}")` : undefined,
   } as CSSProperties;
 }

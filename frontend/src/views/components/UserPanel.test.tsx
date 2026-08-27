@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_USER_PROFILE } from "../../lib/userProfileModel";
+import type { UserProfile, UserProfileSnapshot } from "../../api";
 import UserPanel from "./UserPanel";
 
 const apiMocks = vi.hoisted(() => ({
@@ -20,6 +21,13 @@ vi.mock("../../api", async (importOriginal) => {
   };
 });
 
+function snapshot(
+  profile: UserProfile,
+  displayResourceBase = "http://localhost:3000"
+): UserProfileSnapshot {
+  return { profile, displayResourceBase };
+}
+
 describe("UserPanel", () => {
   beforeEach(() => {
     apiMocks.fetchUserProfile.mockReset();
@@ -28,7 +36,7 @@ describe("UserPanel", () => {
   });
 
   it("does not present the local default as authority before server hydration", async () => {
-    let resolveProfile: ((profile: typeof DEFAULT_USER_PROFILE) => void) | undefined;
+    let resolveProfile: ((profile: UserProfileSnapshot) => void) | undefined;
     apiMocks.fetchUserProfile.mockImplementation(
       () =>
         new Promise((resolve) => {
@@ -48,7 +56,9 @@ describe("UserPanel", () => {
     expect(screen.queryByRole("button", { name: /SeiNel/ })).toBeNull();
     expect(screen.getByRole("status", { name: "프로필 불러오는 중" })).toBeTruthy();
 
-    resolveProfile?.({ ...DEFAULT_USER_PROFILE, displayName: "Server Authority" });
+    resolveProfile?.(
+      snapshot({ ...DEFAULT_USER_PROFILE, displayName: "Server Authority" })
+    );
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /Server Authority/ })).toBeTruthy()
     );
@@ -60,8 +70,8 @@ describe("UserPanel", () => {
       displayName: "Guest Before",
       avatarLabel: "GB",
     };
-    apiMocks.fetchUserProfile.mockResolvedValue(loaded);
-    apiMocks.saveUserProfile.mockImplementation(async (profile) => profile);
+    apiMocks.fetchUserProfile.mockResolvedValue(snapshot(loaded));
+    apiMocks.saveUserProfile.mockImplementation(async (profile) => snapshot(profile));
 
     render(
       <UserPanel
@@ -105,7 +115,7 @@ describe("UserPanel", () => {
       displayName: "Guest Joined",
       avatarLabel: "GJ",
     };
-    apiMocks.fetchUserProfile.mockResolvedValue(loaded);
+    apiMocks.fetchUserProfile.mockResolvedValue(snapshot(loaded));
 
     const view = render(
       <UserPanel
@@ -153,7 +163,7 @@ describe("UserPanel", () => {
   });
 
   it("uses one profile-photo editor instead of exposing the stored attachment URL", async () => {
-    apiMocks.fetchUserProfile.mockResolvedValue(DEFAULT_USER_PROFILE);
+    apiMocks.fetchUserProfile.mockResolvedValue(snapshot(DEFAULT_USER_PROFILE));
 
     const view = render(
       <UserPanel
@@ -172,5 +182,63 @@ describe("UserPanel", () => {
     fireEvent.click(within(view.container).getByRole("button", { name: "프로필 사진 변경" }));
     expect(within(view.container).getByRole("dialog", { name: "프로필 사진 수정" })).toBeTruthy();
     expect(within(view.container).getByLabelText("이미지 선택")).toBeTruthy();
+  });
+
+  it("does not let an older profile response replace the newer profile/base pair", async () => {
+    const resolvers: Array<(value: UserProfileSnapshot) => void> = [];
+    apiMocks.fetchUserProfile.mockResolvedValue(snapshot(DEFAULT_USER_PROFILE));
+    apiMocks.saveUserProfile.mockImplementation(
+      () => new Promise((resolve) => { resolvers.push(resolve); })
+    );
+    const view = render(
+      <UserPanel
+        onlineCount={1}
+        agentCount={0}
+        hasBackendError={false}
+        profileIdentity={{ roomId: "general" }}
+      />
+    );
+    await waitFor(() =>
+      expect(within(view.container).getByRole("button", { name: /SeiNel/ })).toBeTruthy()
+    );
+    fireEvent.click(
+      within(view.container).getByRole("button", { name: "마이크 음소거 해제" })
+    );
+    fireEvent.click(
+      within(view.container).getByRole("button", { name: "헤드셋 끄기" })
+    );
+    await waitFor(() => expect(resolvers).toHaveLength(2));
+
+    resolvers[1](
+      snapshot(
+        {
+          ...DEFAULT_USER_PROFILE,
+          displayName: "New Authority",
+          avatarImage: "/api/attachments/new_avatar?view=1",
+        },
+        "http://127.0.0.1:49172"
+      )
+    );
+    await waitFor(() =>
+      expect(within(view.container).getByRole("button", { name: /New Authority/ })).toBeTruthy()
+    );
+    resolvers[0](
+      snapshot(
+        {
+          ...DEFAULT_USER_PROFILE,
+          displayName: "Old Authority",
+          avatarImage: "/api/attachments/old_avatar?view=1",
+        },
+        "http://127.0.0.1:49171"
+      )
+    );
+    await Promise.resolve();
+
+    expect(within(view.container).queryByText("Old Authority")).toBeNull();
+    expect(
+      (view.container.querySelector(".dc-user-panel") as HTMLElement).style.getPropertyValue(
+        "--profile-avatar-image"
+      )
+    ).toContain("http://127.0.0.1:49172/api/attachments/new_avatar?view=1");
   });
 });

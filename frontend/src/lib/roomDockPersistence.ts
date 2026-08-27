@@ -1,5 +1,6 @@
 import type { RoomAppearance } from "./roomAppearance";
 import { cacheNativeRoomDirectory } from "./desktopBridge";
+import { parseAttachmentReference } from "./attachmentReference";
 
 type PersistedRoomAppearance = Omit<RoomAppearance, "notifications">;
 
@@ -34,10 +35,7 @@ function safeTone(value: unknown): PersistedRoomDockItem["tone"] {
 }
 
 function safeRoomAssetUrl(value: unknown) {
-  const text = String(value || "").trim();
-  return /^\/api\/attachments\/[A-Za-z0-9_-]{8,64}\?(?:view|download)=1$/.test(text)
-    ? text
-    : undefined;
+  return parseAttachmentReference(value)?.value;
 }
 
 function safeServerOrigin(value: unknown) {
