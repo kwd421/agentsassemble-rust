@@ -1,4 +1,8 @@
-use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{
+    net::SocketAddr,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use agentsassemble_persistence::{PersistenceError, SqliteStore};
 use agentsassemble_protocol::ServerProductSurface;
@@ -141,8 +145,9 @@ impl AppState {
         mut self,
         listener: SocketAddr,
         stable_entry: Option<StableEntryConfig>,
+        state_root: &Path,
     ) -> Self {
-        self.public_ingress = PublicIngress::managed(listener, stable_entry);
+        self.public_ingress = PublicIngress::managed(listener, stable_entry, state_root);
         self
     }
 

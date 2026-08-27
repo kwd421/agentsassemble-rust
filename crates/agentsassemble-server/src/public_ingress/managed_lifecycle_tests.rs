@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::{path::Path, sync::Arc, time::Duration};
 
 use axum::http::{HeaderMap, HeaderValue, header};
 use parking_lot::RwLock;
@@ -11,6 +11,12 @@ use super::{
     PublicIngressAuthorization, PublicIngressControlError, PublicIngressKind,
 };
 use crate::product_surface::RouteExposure;
+
+pub(crate) fn started_projection(local_url: &str) -> (ManagedProjection, u64) {
+    let mut projection = ManagedProjection::new(local_url, true);
+    let generation = projection.begin_start();
+    (projection, generation)
+}
 
 #[test]
 fn running_reconnect_replaces_origin_but_stopping_and_terminal_cannot() {
@@ -168,7 +174,7 @@ fn managed(active: Option<ActiveGeneration>) -> PublicIngress {
             config: ManagedIngressConfig {
                 local_url: "http://127.0.0.1:41955".to_owned(),
                 cloudflared: None,
-                stable_entry: crate::stable_entry::StableEntry::new(None),
+                stable_entry: crate::stable_entry::StableEntry::new(None, Path::new(".")),
             },
             lifecycle: Mutex::new(ManagedLifecycle {
                 closed: false,

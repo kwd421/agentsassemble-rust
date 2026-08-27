@@ -6,6 +6,11 @@ use thiserror::Error;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
+#[path = "stable_entry_ownership.rs"]
+mod ownership;
+
+use ownership::{OwnershipFailure, StableOwnership};
+
 use crate::{
     public_ingress::CanonicalPublicOrigin,
     public_ingress_process::{OwnedCommandOutcome, run_owned_command},
@@ -13,27 +18,15 @@ use crate::{
 
 const OPERATION_ATTEMPTS: usize = 3;
 const OPERATION_TIMEOUT: Duration = Duration::from_secs(90);
-#[cfg(not(test))]
 const RETRY_DELAY: Duration = Duration::from_secs(15);
-#[cfg(test)]
-const RETRY_DELAY: Duration = Duration::ZERO;
 const MAX_KV_KEY_BYTES: usize = 128;
-const STABLE_ENVIRONMENT: [&str; 17] = [
+const WRANGLER_ENVIRONMENT: [&str; 8] = [
     "APPDATA",
     "CLOUDFLARE_ACCOUNT_ID",
     "CLOUDFLARE_API_TOKEN",
     "HOME",
-    "HTTP_PROXY",
-    "HTTPS_PROXY",
     "LOCALAPPDATA",
-    "NO_PROXY",
     "PATH",
-    "SSL_CERT_DIR",
-    "SSL_CERT_FILE",
-    "SYSTEMROOT",
-    "TEMP",
-    "TMP",
-    "TMPDIR",
     "USERPROFILE",
     "WRANGLER_SEND_METRICS",
 ];
@@ -56,7 +49,7 @@ pub enum StableEntryConfigError {
     InvalidUrl,
     #[error("stable-entry namespace_id must be exactly 32 hexadecimal characters")]
     InvalidNamespace,
-    #[error("stable-entry kv_key must contain 1-128 visible ASCII bytes")]
+    #[error("stable-entry kv_key must contain 1-128 visible ASCII bytes and not start with '-'")]
     InvalidKey,
 }
 
@@ -79,7 +72,7 @@ impl StableEntryConfig {
         let bytes = std::fs::read(path).map_err(StableEntryConfigError::Read)?;
         let file: StableEntryFile =
             serde_json::from_slice(&bytes).map_err(StableEntryConfigError::Json)?;
-        Self::from_file(&file, which::which("wrangler").ok())
+        Self::from_file(&file, resolve_publisher())
     }
 
     fn from_file(
@@ -94,6 +87,7 @@ impl StableEntryConfig {
         }
         let kv_key = file.kv_key.trim();
         if !(1..=MAX_KV_KEY_BYTES).contains(&kv_key.len())
+            || kv_key.starts_with('-')
             || !kv_key.bytes().all(|byte| byte.is_ascii_graphic())
         {
             return Err(StableEntryConfigError::InvalidKey);
@@ -107,13 +101,38 @@ impl StableEntryConfig {
     }
 }
 
+fn resolve_publisher() -> Option<std::path::PathBuf> {
+    which::which("wrangler")
+        .ok()
+        .filter(|path| is_direct_publisher(path))
+}
+
+fn is_direct_publisher(path: &Path) -> bool {
+    #[cfg(windows)]
+    {
+        return !path.extension().is_some_and(|extension| {
+            extension.eq_ignore_ascii_case("bat") || extension.eq_ignore_ascii_case("cmd")
+        });
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = path;
+        true
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct StableEntry(Arc<StableEntryInner>);
 
 struct StableEntryInner {
     config: Option<StableEntryConfig>,
+    ownership: Option<StableOwnership>,
     projection: RwLock<StableProjection>,
-    operation: Mutex<()>,
+    operation: Mutex<StableOperation>,
+}
+
+struct StableOperation {
+    claimed: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -126,7 +145,7 @@ enum StablePhase {
 
 struct StableProjection {
     phase: StablePhase,
-    published: bool,
+    published_target: Option<String>,
     last_error: Option<String>,
     cleanup_failed: bool,
 }
@@ -134,25 +153,28 @@ struct StableProjection {
 pub(crate) struct StableStatus {
     pub(crate) phase: &'static str,
     pub(crate) url: String,
+    pub(crate) target: Option<String>,
     pub(crate) last_error: Option<String>,
 }
 
 impl StableEntry {
-    pub(crate) fn new(config: Option<StableEntryConfig>) -> Self {
+    pub(crate) fn new(config: Option<StableEntryConfig>, state_root: &Path) -> Self {
         let phase = if config.is_some() {
             StablePhase::Pending
         } else {
             StablePhase::Unconfigured
         };
+        let ownership = config.as_ref().map(|_| StableOwnership::new(state_root));
         Self(Arc::new(StableEntryInner {
             config,
+            ownership,
             projection: RwLock::new(StableProjection {
                 phase,
-                published: false,
+                published_target: None,
                 last_error: None,
                 cleanup_failed: false,
             }),
-            operation: Mutex::new(()),
+            operation: Mutex::new(StableOperation { claimed: false }),
         }))
     }
 
@@ -160,17 +182,32 @@ impl StableEntry {
         self.apply(Some(target), cancellation).await;
     }
 
+    pub(crate) fn begin_generation(&self) {
+        let mut projection = self.0.projection.write();
+        if self.0.config.is_some() && !projection.cleanup_failed {
+            projection.phase = StablePhase::Pending;
+            projection.published_target = None;
+            projection.last_error = None;
+        }
+    }
+
     pub(crate) async fn clear(&self) -> bool {
         if self.clear_confirmed() {
             return true;
         }
-        self.apply(None, &CancellationToken::new()).await;
-        self.clear_confirmed()
+        matches!(
+            self.apply(None, &CancellationToken::new()).await,
+            StableApplyOutcome::Applied
+                | StableApplyOutcome::Superseded
+                | StableApplyOutcome::Unconfigured
+        )
     }
 
     pub(crate) fn status(&self) -> StableStatus {
         let projection = self.0.projection.read();
-        let url = if projection.published && matches!(projection.phase, StablePhase::Ready) {
+        let url = if projection.published_target.is_some()
+            && matches!(projection.phase, StablePhase::Ready)
+        {
             self.0
                 .config
                 .as_ref()
@@ -186,6 +223,7 @@ impl StableEntry {
                 StablePhase::Failed => "failed",
             },
             url,
+            target: projection.published_target.clone(),
             last_error: projection.last_error.clone(),
         }
     }
@@ -193,51 +231,101 @@ impl StableEntry {
     fn clear_confirmed(&self) -> bool {
         let projection = self.0.projection.read();
         self.0.config.is_none()
-            || matches!(projection.phase, StablePhase::Ready) && !projection.published
+            || matches!(projection.phase, StablePhase::Ready)
+                && projection.published_target.is_none()
     }
 
-    async fn apply(&self, target: Option<&str>, cancellation: &CancellationToken) {
+    async fn apply(
+        &self,
+        target: Option<&str>,
+        cancellation: &CancellationToken,
+    ) -> StableApplyOutcome {
         let Some(config) = self.0.config.as_ref() else {
-            return;
+            return StableApplyOutcome::Unconfigured;
         };
-        let _operation = self.0.operation.lock().await;
+        let Some(ownership) = self.0.ownership.as_ref() else {
+            unreachable!("configured stable entry must own publication state");
+        };
+        let mut operation = self.0.operation.lock().await;
         if self.0.projection.read().cleanup_failed {
-            return;
+            return StableApplyOutcome::Failed;
         }
         {
             let mut projection = self.0.projection.write();
             projection.phase = StablePhase::Pending;
-            projection.published = false;
+            projection.published_target = None;
             projection.last_error = None;
         }
-        let result = run_operation(config, target, cancellation).await;
+        let result = run_operation(
+            config,
+            ownership,
+            &mut operation.claimed,
+            target,
+            cancellation,
+        )
+        .await;
         let mut projection = self.0.projection.write();
         match result {
-            Ok(()) => {
+            Ok(StableMutation::Applied) => {
                 projection.phase = StablePhase::Ready;
-                projection.published = target.is_some();
+                projection.published_target = target.map(str::to_owned);
                 projection.last_error = None;
                 projection.cleanup_failed = false;
+                StableApplyOutcome::Applied
+            }
+            Ok(StableMutation::Superseded) => {
+                projection.phase = StablePhase::Failed;
+                projection.published_target = None;
+                projection.last_error = Some("stable-entry ownership was superseded".to_owned());
+                projection.cleanup_failed = false;
+                StableApplyOutcome::Superseded
             }
             Err(failure) => {
                 projection.phase = StablePhase::Failed;
-                projection.published = false;
+                projection.published_target = None;
                 projection.last_error = Some(failure.message);
                 projection.cleanup_failed = failure.cleanup_failed;
+                StableApplyOutcome::Failed
             }
         }
     }
 }
 
+enum StableApplyOutcome {
+    Unconfigured,
+    Applied,
+    Superseded,
+    Failed,
+}
+
+enum StableMutation {
+    Applied,
+    Superseded,
+}
+
 async fn run_operation(
     config: &StableEntryConfig,
+    ownership: &StableOwnership,
+    claimed: &mut bool,
     target: Option<&str>,
     cancellation: &CancellationToken,
-) -> Result<(), StableOperationFailure> {
+) -> Result<StableMutation, StableOperationFailure> {
     let executable = config
         .publisher
         .as_deref()
         .ok_or_else(|| StableOperationFailure::safe("stable-entry publisher is unavailable"))?;
+    if cancellation.is_cancelled() {
+        return Err(StableOperationFailure::safe(
+            "stable-entry publication was cancelled",
+        ));
+    }
+    if !*claimed {
+        ownership
+            .claim(cancellation)
+            .await
+            .map_err(|failure| ownership_failure(failure, target.is_none()))?;
+        *claimed = true;
+    }
     let arguments = wrangler_arguments(config, target);
     for attempt in 0..OPERATION_ATTEMPTS {
         if cancellation.is_cancelled() {
@@ -245,16 +333,25 @@ async fn run_operation(
                 "stable-entry publication was cancelled",
             ));
         }
+        let Some(ownership_guard) = ownership
+            .lock_if_current(cancellation)
+            .await
+            .map_err(|failure| ownership_failure(failure, target.is_none()))?
+        else {
+            return Ok(StableMutation::Superseded);
+        };
         match run_owned_command(
             executable,
             &arguments,
-            &STABLE_ENVIRONMENT,
+            &WRANGLER_ENVIRONMENT,
             cancellation,
             OPERATION_TIMEOUT,
         )
         .await
         {
-            Ok(OwnedCommandOutcome::Exited(status)) if status.success() => return Ok(()),
+            Ok(OwnedCommandOutcome::Exited(status)) if status.success() => {
+                return Ok(StableMutation::Applied);
+            }
             Ok(OwnedCommandOutcome::Cancelled) => {
                 return Err(StableOperationFailure::safe(
                     "stable-entry publication was cancelled",
@@ -266,8 +363,14 @@ async fn run_operation(
                     cleanup_failed: true,
                 });
             }
-            Ok(OwnedCommandOutcome::Exited(_) | OwnedCommandOutcome::TimedOut) | Err(_) => {}
+            Ok(
+                OwnedCommandOutcome::Exited(_)
+                | OwnedCommandOutcome::TimedOut
+                | OwnedCommandOutcome::WaitFailed,
+            )
+            | Err(_) => {}
         }
+        drop(ownership_guard);
         if attempt + 1 < OPERATION_ATTEMPTS {
             tokio::select! {
                 () = cancellation.cancelled() => {
@@ -284,6 +387,18 @@ async fn run_operation(
     } else {
         "stable-entry cleanup failed"
     }))
+}
+
+fn ownership_failure(failure: OwnershipFailure, cleanup: bool) -> StableOperationFailure {
+    match failure {
+        OwnershipFailure::Cancelled => {
+            StableOperationFailure::safe("stable-entry publication was cancelled")
+        }
+        OwnershipFailure::Unavailable => StableOperationFailure {
+            message: "stable-entry ownership could not be verified".to_owned(),
+            cleanup_failed: cleanup,
+        },
+    }
 }
 
 struct StableOperationFailure {

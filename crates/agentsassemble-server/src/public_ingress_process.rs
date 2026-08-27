@@ -84,7 +84,7 @@ pub(crate) async fn spawn_cloudflared(
 pub(crate) async fn run_owned_command(
     executable: &Path,
     arguments: &[OsString],
-    environment: &[&str],
+    additional_environment: &[&str],
     cancellation: &CancellationToken,
     active_timeout: Duration,
 ) -> io::Result<OwnedCommandOutcome> {
@@ -95,10 +95,15 @@ pub(crate) async fn run_owned_command(
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
-    inherit_environment(&mut command, environment);
+    inherit_environment(&mut command, &NETWORK_ENVIRONMENT);
+    inherit_selected_environment(&mut command, additional_environment);
     let mut child = command.spawn()?;
     tokio::select! {
-        result = child.wait() => result.map(OwnedCommandOutcome::Exited),
+        result = child.wait() => Ok(match result {
+            Ok(status) => OwnedCommandOutcome::Exited(status),
+            Err(_) if terminate_now(child.as_mut()).await => OwnedCommandOutcome::WaitFailed,
+            Err(_) => OwnedCommandOutcome::CleanupFailed,
+        }),
         () = cancellation.cancelled() => {
             Ok(if terminate_now(child.as_mut()).await {
                 OwnedCommandOutcome::Cancelled
@@ -118,6 +123,7 @@ pub(crate) async fn run_owned_command(
 
 pub(crate) enum OwnedCommandOutcome {
     Exited(ExitStatus),
+    WaitFailed,
     Cancelled,
     TimedOut,
     CleanupFailed,
@@ -135,6 +141,10 @@ fn owned_command(executable: &Path) -> CommandWrap {
 
 fn inherit_environment(command: &mut CommandWrap, names: &[&str]) {
     command.command_mut().env_clear();
+    inherit_selected_environment(command, names);
+}
+
+fn inherit_selected_environment(command: &mut CommandWrap, names: &[&str]) {
     for name in names {
         if let Some(value) = env::var_os(name) {
             command.command_mut().env(name, value);
@@ -178,8 +188,6 @@ fn request_graceful_stop(child: &mut dyn ChildWrapper) -> io::Result<()> {
 }
 
 async fn terminate_now(child: &mut dyn ChildWrapper) -> bool {
-    if child.start_kill().is_err() {
-        return false;
-    }
+    let _ = child.start_kill();
     matches!(timeout(FORCED_STOP_TIMEOUT, child.wait()).await, Ok(Ok(_)))
 }

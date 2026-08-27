@@ -1,4 +1,9 @@
-use std::{fmt, net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{
+    fmt,
+    net::SocketAddr,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use axum::http::{HeaderMap, header, uri::Authority};
 use parking_lot::RwLock;
@@ -142,10 +147,14 @@ impl PublicIngress {
         ))))
     }
 
-    pub(crate) fn managed(listener: SocketAddr, stable_entry: Option<StableEntryConfig>) -> Self {
+    pub(crate) fn managed(
+        listener: SocketAddr,
+        stable_entry: Option<StableEntryConfig>,
+        state_root: &Path,
+    ) -> Self {
         let local_url = format!("http://{listener}");
         let cloudflared = which::which("cloudflared").ok();
-        let stable_entry = StableEntry::new(stable_entry);
+        let stable_entry = StableEntry::new(stable_entry, state_root);
         let projection = Arc::new(RwLock::new(ManagedProjection::new(
             &local_url,
             cloudflared.is_some(),
@@ -189,7 +198,10 @@ impl PublicIngress {
         }
         if lifecycle.active.is_none() {
             ingress.projection.read().cleanup_result()?;
-            lifecycle.active = start_generation(&ingress.controller.config, &ingress.projection);
+            lifecycle.active = Some(start_generation(
+                &ingress.controller.config,
+                &ingress.projection,
+            ));
         }
         Ok(ingress.status())
     }
@@ -318,10 +330,29 @@ impl ManagedPublicIngress {
     fn status(&self) -> PublicIngressStatus {
         let stable = self.controller.config.stable_entry.status();
         let mut status = self.projection.read().status();
-        status.stable_url = stable.url;
-        status.tunnel.stable_phase = stable.phase;
+        let stable_matches_direct = stable_target_matches_direct(stable.target.as_deref(), &status);
+        status.stable_url = if stable_matches_direct {
+            stable.url
+        } else {
+            String::new()
+        };
+        status.tunnel.stable_phase = if stable.phase == "ready" && !stable_matches_direct {
+            "pending"
+        } else {
+            stable.phase
+        };
         status.tunnel.last_error = status.tunnel.last_error.or(stable.last_error);
         status
+    }
+}
+
+fn stable_target_matches_direct(target: Option<&str>, status: &PublicIngressStatus) -> bool {
+    match target {
+        Some(target) => target == status.public_url,
+        None => {
+            status.public_url.is_empty()
+                && !matches!(status.tunnel.phase, "starting" | "running" | "stopping")
+        }
     }
 }
 
@@ -388,12 +419,13 @@ struct ActiveGeneration {
 fn start_generation(
     config: &ManagedIngressConfig,
     projection: &Arc<RwLock<ManagedProjection>>,
-) -> Option<ActiveGeneration> {
+) -> ActiveGeneration {
     if config.cloudflared.is_none() {
-        projection.write().unavailable();
-        return None;
+        let generation = projection.write().begin_unavailable();
+        return stable_clear_owner(projection, &config.stable_entry, generation);
     }
     let generation = projection.write().begin_start();
+    config.stable_entry.begin_generation();
     let cancellation = CancellationToken::new();
     let task_config = config.clone();
     let task_projection = projection.clone();
@@ -408,11 +440,11 @@ fn start_generation(
         .await;
         task_projection.write().finish(generation, outcome);
     });
-    Some(ActiveGeneration {
+    ActiveGeneration {
         number: generation,
         cancellation,
         owner,
-    })
+    }
 }
 
 async fn stop_active(
@@ -420,24 +452,38 @@ async fn stop_active(
     stable_entry: &StableEntry,
     active: &mut Option<ActiveGeneration>,
 ) {
-    let Some(current) = active.as_mut() else {
+    if active.is_none() {
         projection.write().settle_stopped();
-        if !stable_entry.clear().await {
-            projection
-                .write()
-                .cleanup_failed("stable-entry cleanup failed");
-        }
-        return;
-    };
+        let generation = projection.read().generation;
+        *active = Some(stable_clear_owner(projection, stable_entry, generation));
+    }
+    let current = active.as_mut().unwrap_or_else(|| unreachable!());
     if !current.owner.is_finished() {
         projection.write().begin_stop(current.number);
         current.cancellation.cancel();
     }
     join_active(projection, active).await;
-    if !stable_entry.clear().await {
-        projection
-            .write()
-            .cleanup_failed("stable-entry cleanup failed");
+}
+
+fn stable_clear_owner(
+    projection: &Arc<RwLock<ManagedProjection>>,
+    stable_entry: &StableEntry,
+    generation: u64,
+) -> ActiveGeneration {
+    let task_projection = projection.clone();
+    let task_stable_entry = stable_entry.clone();
+    let cancellation = CancellationToken::new();
+    let owner = tokio::spawn(async move {
+        if !task_stable_entry.clear().await {
+            task_projection
+                .write()
+                .cleanup_failed(generation, "stable-entry cleanup failed");
+        }
+    });
+    ActiveGeneration {
+        number: generation,
+        cancellation,
+        owner,
     }
 }
 
@@ -480,13 +526,6 @@ struct ManagedTrust {
 }
 
 impl ManagedProjection {
-    #[cfg(test)]
-    pub(crate) fn started_for_test(local_url: &str) -> (Self, u64) {
-        let mut projection = Self::new(local_url, true);
-        let generation = projection.begin_start();
-        (projection, generation)
-    }
-
     fn new(local_url: &str, available: bool) -> Self {
         Self {
             generation: 0,
@@ -557,10 +596,13 @@ impl ManagedProjection {
         };
     }
 
-    fn unavailable(&mut self) {
+    fn begin_unavailable(&mut self) -> u64 {
+        self.generation = self.generation.saturating_add(1);
         self.phase = IngressPhase::Stopped;
         self.trust = None;
         self.last_error = Some("cloudflared is not installed".to_owned());
+        self.cleanup_failed = false;
+        self.generation
     }
 
     fn settle_stopped(&mut self) {
@@ -576,11 +618,13 @@ impl ManagedProjection {
             .ok_or(PublicIngressControlError::CleanupFailed)
     }
 
-    fn cleanup_failed(&mut self, message: &str) {
-        self.trust = None;
-        self.last_error = Some(message.to_owned());
-        self.cleanup_failed = true;
-        self.phase = IngressPhase::Error;
+    fn cleanup_failed(&mut self, generation: u64, message: &str) {
+        if self.generation == generation {
+            self.trust = None;
+            self.last_error = Some(message.to_owned());
+            self.cleanup_failed = true;
+            self.phase = IngressPhase::Error;
+        }
     }
 
     fn status(&self) -> PublicIngressStatus {
@@ -672,4 +716,4 @@ pub(crate) fn generated_origin_host() -> String {
 
 #[cfg(test)]
 #[path = "public_ingress/managed_lifecycle_tests.rs"]
-mod managed_lifecycle_tests;
+pub(crate) mod managed_lifecycle_tests;

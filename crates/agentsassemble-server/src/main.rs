@@ -105,7 +105,8 @@ async fn main() -> anyhow::Result<()> {
     if let Some((origin, proxy_secret)) = manual_public_ingress {
         state = state.with_manual_public_ingress(&origin, &proxy_secret)?;
     } else {
-        state = state.with_managed_public_ingress(address, stable_entry);
+        let state_root = database_state_root(&database_path)?;
+        state = state.with_managed_public_ingress(address, stable_entry, state_root);
     }
     if args.desktop_native_registration {
         state = state.with_central_registration();
@@ -153,6 +154,10 @@ async fn main() -> anyhow::Result<()> {
 
 async fn open_store(args: &Args) -> anyhow::Result<SqliteStore> {
     Ok(SqliteStore::open_path(&args.database).await?)
+}
+
+fn database_state_root(database: &Path) -> anyhow::Result<&Path> {
+    database.parent().context("database path has no state root")
 }
 
 async fn run_internal_provider_mode() -> bool {
