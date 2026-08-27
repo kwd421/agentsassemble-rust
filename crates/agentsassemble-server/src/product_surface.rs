@@ -4,6 +4,7 @@ use agentsassemble_protocol::{HttpRouteSurface, ServerProductSurface};
 pub(crate) enum RouteExposure {
     Private,
     SameOriginPublic,
+    IdentityProbePublic,
 }
 
 pub(crate) struct RegisteredHttpRoute {
@@ -51,6 +52,7 @@ fn registered_routes(
         crate::profile_web::HTTP_ROUTES,
         crate::human_invite_web::HTTP_ROUTES,
         crate::human_session_exchange_web::HTTP_ROUTES,
+        crate::server_identity_web::HTTP_ROUTES,
     ]
     .into_iter()
     .flatten()
@@ -103,6 +105,14 @@ mod tests {
         assert_eq!(
             registered_route_exposure(HttpMethod::Post, "/api/room-invite/join"),
             Some(RouteExposure::SameOriginPublic)
+        );
+        assert_eq!(
+            registered_route_exposure(HttpMethod::Get, "/api/server-info"),
+            Some(RouteExposure::IdentityProbePublic)
+        );
+        assert_eq!(
+            registered_route_exposure(HttpMethod::Post, "/api/server-info/challenge"),
+            Some(RouteExposure::IdentityProbePublic)
         );
         assert_eq!(
             registered_route_exposure(HttpMethod::Get, "/api/room-invite/join"),

@@ -4,6 +4,9 @@ use agentsassemble_domain::ProviderCatalog;
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_provider::ProviderCatalogService;
 use agentsassemble_server::{AppState, HostSecret, TicketStore, serve};
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use ring::signature::{ED25519, UnparsedPublicKey};
+use serde_json::{Value, json};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
@@ -73,6 +76,128 @@ async fn tcp_ingress_enforces_peer_host_origin_and_proxy_boundaries() {
     .await;
     assert!(cors_preflight.starts_with("HTTP/1.1 200"));
     server.stop().await;
+}
+
+#[tokio::test]
+async fn identity_probe_uses_the_persistent_key_and_exact_local_origin() {
+    let server = start(None).await;
+    let base_url = format!("http://{}", server.address);
+    let client = reqwest::Client::new();
+
+    let info_response = client
+        .get(format!("{base_url}/api/server-info"))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("request server identity: {error}"));
+    assert_eq!(info_response.status(), reqwest::StatusCode::OK);
+    let info: Value = info_response
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("decode server identity: {error}"));
+    assert_eq!(info["protocol_version"], 1);
+    assert_eq!(info["status"], "ready");
+    assert_eq!(info["central_directory"], json!({"enabled": false}));
+
+    let challenge = "Q2hhbGxlbmdlX2Zvcl9waW5uaW5nXzAx";
+    let proof_response = client
+        .post(format!("{base_url}/api/server-info/challenge"))
+        .json(&json!({"challenge": challenge}))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("request server challenge: {error}"));
+    assert_eq!(proof_response.status(), reqwest::StatusCode::OK);
+    let proof: Value = proof_response
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("decode server challenge: {error}"));
+    assert_eq!(proof["server_id"], info["server_id"]);
+    assert_eq!(proof["host_public_key_jwk"], info["host_public_key_jwk"]);
+    assert_eq!(proof["host_key_fingerprint"], info["host_key_fingerprint"]);
+    assert_eq!(proof["origin"], base_url);
+    assert_eq!(proof["challenge"], challenge);
+    verify_identity_signature(&proof, &base_url, challenge);
+
+    let invalid = client
+        .post(format!("{base_url}/api/server-info/challenge"))
+        .json(&json!({"challenge": "short"}))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("request invalid challenge: {error}"));
+    assert_eq!(invalid.status(), reqwest::StatusCode::BAD_REQUEST);
+
+    let foreign_origin = client
+        .get(format!("{base_url}/api/server-info"))
+        .header("origin", "https://directory.example")
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("request foreign local probe: {error}"));
+    assert_eq!(foreign_origin.status(), reqwest::StatusCode::FORBIDDEN);
+
+    verify_identity_preflight(&client, &base_url).await;
+    server.stop().await;
+}
+
+fn verify_identity_signature(proof: &Value, base_url: &str, challenge: &str) {
+    let issued_at = proof["issued_at"]
+        .as_i64()
+        .unwrap_or_else(|| panic!("challenge issue time is not an integer"));
+    let transcript = format!(
+        "AA-SERVER-CHALLENGE-1\n{}\n{base_url}\n{challenge}\n{issued_at}",
+        proof["server_id"]
+            .as_str()
+            .unwrap_or_else(|| panic!("server id is not a string"))
+    );
+    let public_key = URL_SAFE_NO_PAD
+        .decode(
+            proof["host_public_key_jwk"]["x"]
+                .as_str()
+                .unwrap_or_else(|| panic!("public key is not a string")),
+        )
+        .unwrap_or_else(|error| panic!("decode server public key: {error}"));
+    let signature = URL_SAFE_NO_PAD
+        .decode(
+            proof["signature"]
+                .as_str()
+                .unwrap_or_else(|| panic!("signature is not a string")),
+        )
+        .unwrap_or_else(|error| panic!("decode server signature: {error}"));
+    UnparsedPublicKey::new(&ED25519, public_key)
+        .verify(transcript.as_bytes(), &signature)
+        .unwrap_or_else(|_| panic!("server identity signature did not verify"));
+}
+
+async fn verify_identity_preflight(client: &reqwest::Client, base_url: &str) {
+    let tauri_preflight = client
+        .request(
+            reqwest::Method::OPTIONS,
+            format!("{base_url}/api/server-info/challenge"),
+        )
+        .header("origin", "tauri://localhost")
+        .header("access-control-request-method", "POST")
+        .header("access-control-request-headers", "content-type")
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("request identity preflight: {error}"));
+    assert!(tauri_preflight.status().is_success());
+    assert_eq!(
+        tauri_preflight.headers()["access-control-allow-origin"],
+        "*"
+    );
+    let wrong_method_preflight = client
+        .request(
+            reqwest::Method::OPTIONS,
+            format!("{base_url}/api/server-info"),
+        )
+        .header("origin", "tauri://localhost")
+        .header("access-control-request-method", "POST")
+        .header("access-control-request-headers", "content-type")
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("request mismatched identity preflight: {error}"));
+    assert_eq!(
+        wrong_method_preflight.status(),
+        reqwest::StatusCode::FORBIDDEN
+    );
 }
 
 #[tokio::test]

@@ -185,7 +185,8 @@ disposable output root:
 ## Canonical React behavior not provided at Rust baseline `5aaa04b`
 
 The Rust server currently exposes `GET /healthz`, `GET /api/host-challenge`,
-`POST /api/ws-ticket`, authenticated `GET/POST /api/rooms`, authenticated
+`GET /api/server-info`, `POST /api/server-info/challenge`, `POST /api/ws-ticket`,
+authenticated `GET/POST /api/rooms`, authenticated
 `GET/POST /api/user-profile`, profile-avatar upload/read, static `/app`, and `/ws`.
 Its room command implementation
 at the public comparison commit completes `message.send`, atomic
@@ -197,7 +198,7 @@ implemented; the frontend must not silently substitute Python or local fake data
 | React feature group | Missing Rust surface |
 | --- | --- |
 | Startup identity and accounts | Fresh local desktop bootstrap, central guest creation/recovery, secure browser device identity, and proof-bound local-server registration are implemented. `/api/account`, Google account challenge/connect/delete, and the native Google handoff remain incomplete; the absent `open_central_google_login` host command keeps that button failed closed. |
-| Room lifecycle and settings | Canonical archive/delete lifecycle and public server info remain incomplete. Room-global settings mutation, local-operator preferences, and admitted remote-human preferences are connected. |
+| Room lifecycle and settings | Canonical archive/delete lifecycle and trusted remote activation of public server identity remain incomplete. Local server info and origin-bound identity challenge, room-global settings mutation, local-operator preferences, and admitted remote-human preferences are connected. |
 | Admission and invites | Durable human invite/session create, join, verification, expiry, revoke, leave, restart recovery, the session-derived person-profile exchange, and the authenticated human WebSocket are implemented at their current persistence/server boundaries. Exact `/join`, `/join/`, `/pair`, and `/pair/` production entrances resolve their actual production assets; exact preflight/join response contracts bind request, room, client, server lineage, and product surface before bearer exposure. Real isolated browsers pass one-use/reusable normal and read-only admission, avatar transfer, profile edit, token removal, reload, posting/denial, consumed-link rejection, same-browser reusable recovery, server-restart reconnect, purpose-exchanged preference read/write or read-only denial, and exact leave with durable session revocation. Manager create/revoke controls, trusted public ingress, host claim, companion admission, operator pairing create/redeem, and public-invite status/URL/tunnel controls remain incomplete. |
 | Roster, friends, and channels | The active-room roster, strict participant-role control, copied participant-mute control, canonical event projection, and exact Rust provider-interrupt owner are cut over and packaged-verified. Room friends, room channels, voice presence, and side chat remain incomplete. |
 | Attachments, personas, pins, and search | General-message and room-appearance attachment purposes, persona list/import/thumbnail, message pins, room search/context. Profile-avatar upload/read is implemented. |

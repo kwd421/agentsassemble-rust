@@ -67,10 +67,13 @@ pub(crate) async fn require_trusted_ingress(request: Request, next: Next) -> Res
         .copied()
         .or_else(|| dynamic_exposure(&request));
     let registered = exact_exposure.is_some()
-        || request
-            .extensions()
-            .get::<MatchedPath>()
-            .is_some_and(|path| registered_route_path(path.as_str()));
+        || (!request
+            .headers()
+            .contains_key(header::ACCESS_CONTROL_REQUEST_METHOD)
+            && request
+                .extensions()
+                .get::<MatchedPath>()
+                .is_some_and(|path| registered_route_path(path.as_str())));
     if !local_trusted || !registered {
         return StatusCode::FORBIDDEN.into_response();
     }
@@ -81,6 +84,13 @@ fn dynamic_exposure(request: &Request) -> Option<RouteExposure> {
     let method = match *request.method() {
         Method::GET | Method::HEAD => agentsassemble_protocol::HttpMethod::Get,
         Method::POST => agentsassemble_protocol::HttpMethod::Post,
+        Method::OPTIONS => {
+            match single_header(request.headers(), header::ACCESS_CONTROL_REQUEST_METHOD)? {
+                "GET" => agentsassemble_protocol::HttpMethod::Get,
+                "POST" => agentsassemble_protocol::HttpMethod::Post,
+                _ => return None,
+            }
+        }
         _ => return None,
     };
     let path = request.extensions().get::<MatchedPath>()?.as_str();

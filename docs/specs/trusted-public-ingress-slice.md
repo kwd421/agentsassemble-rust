@@ -1,8 +1,8 @@
 # Trusted Public Ingress Slice
 
-Status: design approved; invite-use, exact local TCP trust, and route-exposure
-prerequisites implemented; managed/manual trust, manager controls, and frontend
-activation remain incomplete
+Status: design approved; invite-use, exact local TCP trust, route exposure, and
+local identity probes implemented; managed/manual trust, manager controls, and
+frontend activation remain incomplete
 
 ## Definition
 
@@ -210,6 +210,49 @@ also passed the architecture and source-growth gates, frontend build and 403 tes
 desktop build and 16 tests, all 171 persistence and 120 provider tests, and
 warning-denied workspace Clippy.
 
+## Local identity-probe increment
+
+`GET /api/server-info` and `POST /api/server-info/challenge` are now mounted and
+advertised in every Rust server composition. Both descriptors alone own the new
+`identity-probe public` exposure meaning. The existing database-bound
+`CentralHostIdentity` remains the only Ed25519, public-JWK, and canonical-fingerprint
+owner; the routes do not load another key, copy private material, or create a second
+identity state.
+
+The GET response preserves the stable server ID, exact public JWK and fingerprint,
+protocol version, ready status, and an honest disabled central-directory publisher
+status. The latter does not claim that the still-absent background publisher is
+enabled merely because desktop registration is available. Challenge POST reads one
+bounded 4 KiB JSON body, validates 22-128 base64url characters, normalizes the exact
+trusted local request authority, and signs
+`AA-SERVER-CHALLENGE-1\n{server_id}\n{origin}\n{challenge}\n{issued_at}`. It returns
+the exact origin, caller challenge, whole Unix issue second, identity projection, and
+raw Ed25519 signature in canonical base64url form.
+
+The route-local CORS policy is credential-free, permits only GET/POST and
+`Content-Type`, and emits the wildcard origin only after the common ingress boundary
+admits the request. Preflight resolves its requested method through the same route
+descriptor, so a module-wide CORS method list cannot authorize a path/method pair that
+is not registered. Local Host, peer, proxy-provenance, and Origin checks are unchanged:
+a foreign Origin against a loopback Host still fails closed. Cross-origin public
+probing will become reachable only when `PublicIngress` can supply and verify the
+current managed or configured-manual origin; this increment adds no permissive proxy
+path or public-origin placeholder.
+
+The concrete security requirement is endpoint-key substitution resistance: the
+caller nonce and exact current origin must be covered by the already durable host key.
+This increment adds no task, cache, process, disk row, secret, retry, fallback, or
+compatibility state. A GET clones the bounded public identity projection. A POST adds
+one bounded body decode, one origin parse, one short transcript allocation, and one
+Ed25519 signature; no throughput improvement is claimed without an observed cost.
+Focused verification used the real TCP server to prove stable GET/POST identity,
+exact local-origin binding, signature verification, invalid-challenge rejection,
+foreign local-Origin denial, the credential-free Tauri preflight, and path/method
+preflight mismatch rejection. All 67 server unit tests and 42 server integration tests passed. Complete repository verification
+also passed the architecture and source-growth gates, frontend build and 403 tests,
+desktop build and 16 tests, all 171 persistence and 120 provider tests, and
+warning-denied workspace Clippy.
+
 ## Verification requirements
 
 - Header tests cover local Host and Origin aliases, Tauri origins, forged forwarded
@@ -265,6 +308,11 @@ warning-denied workspace Clippy.
   allowing cross-alias origins that were not same-origin with the request Host.
 - The first review record still described local Host authority as three fixed
   aliases, contradicting the implemented exact-bound numeric loopback policy.
+- Identity routes could reuse the existing persistent signing projection; a second
+  identity key, cache, or response-specific fingerprint owner was unnecessary.
+- A local challenge must sign the already trusted request authority. Deriving or
+  accepting an HTTPS public origin before `PublicIngress` owns that origin would be a
+  placeholder trust path.
 
 Final plan review: `APPROVE — Critical 0 / High 0 / Medium 0`.
 

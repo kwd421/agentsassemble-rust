@@ -14,6 +14,9 @@ macro_rules! route_exposure {
     (same_origin_public) => {
         crate::product_surface::RouteExposure::SameOriginPublic
     };
+    (identity_probe_public) => {
+        crate::product_surface::RouteExposure::IdentityProbePublic
+    };
 }
 
 macro_rules! registered_routes {
@@ -93,6 +96,7 @@ mod room_socket_session;
 mod runtime_reconciliation;
 mod runtime_reconciliation_cleanup;
 mod security_headers;
+mod server_identity_web;
 mod server_proof;
 mod ticket;
 mod ticket_issuer;

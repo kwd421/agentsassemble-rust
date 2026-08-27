@@ -1,6 +1,7 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use agentsassemble_persistence::PersistentHostIdentity;
+use axum::http::Uri;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::Utc;
 use ring::{
@@ -14,6 +15,7 @@ use thiserror::Error;
 
 const REGISTRATION_CONTEXT: &str = "AA-HOST-REGISTER-1";
 const REGISTRATION_NONCE_BYTES: usize = 18;
+const SERVER_CHALLENGE_CONTEXT: &str = "AA-SERVER-CHALLENGE-1";
 
 #[derive(Debug, Error)]
 pub enum HostIdentityError {
@@ -23,6 +25,14 @@ pub enum HostIdentityError {
     Json(#[source] serde_json::Error),
     #[error("host registration entropy source failed")]
     Entropy,
+}
+
+#[derive(Debug, Error, PartialEq, Eq)]
+pub(crate) enum ServerChallengeError {
+    #[error("challenge must be 22-128 base64url characters")]
+    InvalidChallenge,
+    #[error("server origin must be HTTPS, or loopback HTTP for local use")]
+    InvalidOrigin,
 }
 
 #[derive(Clone, PartialEq, Eq, Serialize)]
@@ -48,6 +58,33 @@ pub struct HostRegistrationEnvelope {
     host_public_key_jwk: HostPublicJwk,
     host_key_fingerprint: String,
     host_registration_proof: HostRegistrationProof,
+}
+
+#[derive(Serialize)]
+pub(crate) struct ServerInfoEnvelope {
+    server_id: String,
+    host_public_key_jwk: HostPublicJwk,
+    host_key_fingerprint: String,
+    protocol_version: u32,
+    status: &'static str,
+    central_directory: CentralDirectoryStatus,
+}
+
+#[derive(Serialize)]
+struct CentralDirectoryStatus {
+    enabled: bool,
+}
+
+#[derive(Serialize)]
+pub(crate) struct ServerChallengeEnvelope {
+    server_id: String,
+    origin: String,
+    host_public_key_jwk: HostPublicJwk,
+    host_key_fingerprint: String,
+    protocol_version: u32,
+    challenge: String,
+    issued_at: i64,
+    signature: String,
 }
 
 #[derive(Clone)]
@@ -96,6 +133,49 @@ impl CentralHostIdentity {
         &self.fingerprint
     }
 
+    pub(crate) fn server_info(&self) -> ServerInfoEnvelope {
+        ServerInfoEnvelope {
+            server_id: self.server_id.to_string(),
+            host_public_key_jwk: self.public_jwk.clone(),
+            host_key_fingerprint: self.fingerprint.to_string(),
+            protocol_version: agentsassemble_protocol::PROTOCOL_VERSION,
+            status: "ready",
+            central_directory: CentralDirectoryStatus { enabled: false },
+        }
+    }
+
+    pub(crate) fn challenge_envelope(
+        &self,
+        challenge: &str,
+        origin: &str,
+    ) -> Result<ServerChallengeEnvelope, ServerChallengeError> {
+        let challenge = challenge.trim();
+        if !(22..=128).contains(&challenge.len())
+            || !challenge
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+        {
+            return Err(ServerChallengeError::InvalidChallenge);
+        }
+        let origin = normalize_server_identity_origin(origin)?;
+        let issued_at = Utc::now().timestamp();
+        let transcript = format!(
+            "{SERVER_CHALLENGE_CONTEXT}\n{}\n{origin}\n{challenge}\n{issued_at}",
+            self.server_id
+        );
+        let signature = URL_SAFE_NO_PAD.encode(self.key_pair.sign(transcript.as_bytes()).as_ref());
+        Ok(ServerChallengeEnvelope {
+            server_id: self.server_id.to_string(),
+            origin,
+            host_public_key_jwk: self.public_jwk.clone(),
+            host_key_fingerprint: self.fingerprint.to_string(),
+            protocol_version: agentsassemble_protocol::PROTOCOL_VERSION,
+            challenge: challenge.to_owned(),
+            issued_at,
+            signature,
+        })
+    }
+
     /// Creates one fresh central-directory registration proof.
     ///
     /// # Errors
@@ -130,6 +210,37 @@ impl CentralHostIdentity {
     }
 }
 
+fn normalize_server_identity_origin(value: &str) -> Result<String, ServerChallengeError> {
+    let clean = value.trim().trim_end_matches('/');
+    let uri = clean
+        .parse::<Uri>()
+        .map_err(|_| ServerChallengeError::InvalidOrigin)?;
+    let scheme = uri
+        .scheme_str()
+        .ok_or(ServerChallengeError::InvalidOrigin)?;
+    let authority = uri.authority().ok_or(ServerChallengeError::InvalidOrigin)?;
+    if authority.as_str().contains('@') || uri.query().is_some() || uri.path() != "/" {
+        return Err(ServerChallengeError::InvalidOrigin);
+    }
+    let host = authority
+        .host()
+        .trim_matches(['[', ']'])
+        .to_ascii_lowercase();
+    let loopback = matches!(host.as_str(), "localhost" | "127.0.0.1" | "::1");
+    if host.is_empty() || (scheme != "https" && !(scheme == "http" && loopback)) {
+        return Err(ServerChallengeError::InvalidOrigin);
+    }
+    let normalized_host = if host.contains(':') {
+        format!("[{host}]")
+    } else {
+        host
+    };
+    Ok(match authority.port_u16() {
+        Some(port) => format!("{scheme}://{normalized_host}:{port}"),
+        None => format!("{scheme}://{normalized_host}"),
+    })
+}
+
 fn canonical_jwk(jwk: &HostPublicJwk) -> Result<Vec<u8>, HostIdentityError> {
     let fields = BTreeMap::<&str, Value>::from([
         ("crv", json!(jwk.crv)),
@@ -148,7 +259,38 @@ mod tests {
     use ring::signature::{ED25519, UnparsedPublicKey};
     use serde_json::Value;
 
-    use super::{CentralHostIdentity, REGISTRATION_CONTEXT};
+    use super::{
+        CentralHostIdentity, REGISTRATION_CONTEXT, ServerChallengeError,
+        normalize_server_identity_origin,
+    };
+
+    #[test]
+    fn challenge_origin_preserves_safe_explicit_authority() {
+        for (input, expected) in [
+            (
+                "https://HOME.trycloudflare.com:443/",
+                "https://home.trycloudflare.com:443",
+            ),
+            ("http://127.0.0.1:8765/", "http://127.0.0.1:8765"),
+            ("http://[::1]:8765", "http://[::1]:8765"),
+        ] {
+            assert_eq!(
+                normalize_server_identity_origin(input),
+                Ok(expected.to_owned())
+            );
+        }
+        for input in [
+            "http://public.example",
+            "https://user:secret@home.trycloudflare.com",
+            "https://home.trycloudflare.com/path",
+            "https://home.trycloudflare.com/?token=secret",
+        ] {
+            assert_eq!(
+                normalize_server_identity_origin(input),
+                Err(ServerChallengeError::InvalidOrigin)
+            );
+        }
+    }
 
     #[tokio::test]
     async fn registration_envelope_matches_the_central_worker_transcript() {

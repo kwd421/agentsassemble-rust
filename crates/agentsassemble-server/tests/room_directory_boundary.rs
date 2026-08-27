@@ -214,12 +214,16 @@ async fn verify_registration_and_zero_room(
         surface["method"] == "POST"
             && surface["path"] == "/api/central-directory/registration-proof"
     }));
-    assert!(!routes.iter().any(|surface| {
-        matches!(
-            surface["path"].as_str(),
-            Some("/api/server-info" | "/api/server-info/challenge")
-        )
-    }));
+    for (method, path) in [
+        ("GET", "/api/server-info"),
+        ("POST", "/api/server-info/challenge"),
+    ] {
+        assert!(
+            routes
+                .iter()
+                .any(|surface| { surface["method"] == method && surface["path"] == path })
+        );
+    }
 }
 
 fn verify_registration_signature(registration: &Value, owner_person_id: &str) {
