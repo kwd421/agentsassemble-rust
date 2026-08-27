@@ -469,8 +469,10 @@ async fn wait_for_managed_ingress(
     client: &reqwest::Client,
 ) -> Value {
     tokio::time::timeout(Duration::from_secs(5), async {
-        for attempt in 0..256 {
+        let mut attempt = 0_u64;
+        loop {
             let request_id = format!("managed-ingress-status-{attempt}");
+            attempt += 1;
             let ticket = operator_ticket(server, &request_id).await;
             let response = client
                 .get(format!("{}/api/public-invite/status", server.address))
@@ -491,9 +493,8 @@ async fn wait_for_managed_ingress(
                 "managed ingress failed: {}",
                 status["tunnel"]["last_error"]
             );
-            tokio::task::yield_now().await;
+            tokio::time::sleep(Duration::from_millis(10)).await;
         }
-        panic!("managed ingress readiness attempt limit reached");
     })
     .await
     .unwrap_or_else(|_| panic!("managed ingress readiness timed out"))
