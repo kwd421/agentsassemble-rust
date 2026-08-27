@@ -16,7 +16,7 @@ use crate::{
     connection_admission::ConnectionAdmission,
     public_ingress::{ManualPublicIngressError, PublicIngress},
     raw_ingress::RawIngressGovernor,
-    stable_entry::StableEntryConfig,
+    stable_entry::{StableEntryActivationError, StableEntryConfig},
 };
 
 #[derive(Debug, Error)]
@@ -140,15 +140,19 @@ impl AppState {
         Ok(self)
     }
 
-    #[must_use]
-    pub fn with_managed_public_ingress(
+    /// Enables the managed ingress and claims configured stable publication ownership.
+    ///
+    /// # Errors
+    ///
+    /// Fails when configured stable-entry ownership cannot be claimed safely.
+    pub async fn with_managed_public_ingress(
         mut self,
         listener: SocketAddr,
         stable_entry: Option<StableEntryConfig>,
         state_root: &Path,
-    ) -> Self {
-        self.public_ingress = PublicIngress::managed(listener, stable_entry, state_root);
-        self
+    ) -> Result<Self, StableEntryActivationError> {
+        self.public_ingress = PublicIngress::managed(listener, stable_entry, state_root).await?;
+        Ok(self)
     }
 
     pub(crate) fn public_ingress(&self) -> PublicIngress {

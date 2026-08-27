@@ -22,7 +22,7 @@ use crate::{
     },
     product_surface::RouteExposure,
     public_ingress_runtime::{GenerationOutcome, run_generation},
-    stable_entry::{StableEntry, StableEntryConfig},
+    stable_entry::{StableEntry, StableEntryActivationError, StableEntryConfig},
 };
 
 pub(crate) const MANUAL_PROXY_TOKEN_HEADER: &str = "x-agentsassemble-proxy-token";
@@ -147,32 +147,34 @@ impl PublicIngress {
         ))))
     }
 
-    pub(crate) fn managed(
+    pub(crate) async fn managed(
         listener: SocketAddr,
         stable_entry: Option<StableEntryConfig>,
         state_root: &Path,
-    ) -> Self {
+    ) -> Result<Self, StableEntryActivationError> {
         let local_url = format!("http://{listener}");
         let cloudflared = which::which("cloudflared").ok();
-        let stable_entry = StableEntry::new(stable_entry, state_root);
+        let stable_entry = StableEntry::new(stable_entry, state_root).await?;
         let projection = Arc::new(RwLock::new(ManagedProjection::new(
             &local_url,
             cloudflared.is_some(),
         )));
-        Self(Arc::new(PublicIngressKind::Managed(ManagedPublicIngress {
-            projection,
-            controller: ManagedController {
-                config: ManagedIngressConfig {
-                    local_url,
-                    cloudflared,
-                    stable_entry,
+        Ok(Self(Arc::new(PublicIngressKind::Managed(
+            ManagedPublicIngress {
+                projection,
+                controller: ManagedController {
+                    config: ManagedIngressConfig {
+                        local_url,
+                        cloudflared,
+                        stable_entry,
+                    },
+                    lifecycle: Mutex::new(ManagedLifecycle {
+                        closed: false,
+                        active: None,
+                    }),
                 },
-                lifecycle: Mutex::new(ManagedLifecycle {
-                    closed: false,
-                    active: None,
-                }),
             },
-        })))
+        ))))
     }
 
     pub(crate) fn status(&self) -> PublicIngressStatus {
@@ -520,6 +522,13 @@ pub(crate) struct ManagedProjection {
     cleanup_failed: bool,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ManagedReadiness {
+    Rejected,
+    Unchanged,
+    Changed,
+}
+
 struct ManagedTrust {
     origin: CanonicalPublicOrigin,
     origin_host_digest: [u8; 32],
@@ -552,19 +561,26 @@ impl ManagedProjection {
         generation: u64,
         origin: CanonicalPublicOrigin,
         origin_host: &str,
-    ) -> bool {
+    ) -> ManagedReadiness {
         if self.generation != generation {
-            return false;
+            return ManagedReadiness::Rejected;
         }
         if !matches!(self.phase, IngressPhase::Starting | IngressPhase::Running) {
-            return false;
+            return ManagedReadiness::Rejected;
+        }
+        if self
+            .trust
+            .as_ref()
+            .is_some_and(|trust| trust.origin.value == origin.value)
+        {
+            return ManagedReadiness::Unchanged;
         }
         self.phase = IngressPhase::Running;
         self.trust = Some(ManagedTrust {
             origin,
             origin_host_digest: Sha256::digest(origin_host.as_bytes()).into(),
         });
-        true
+        ManagedReadiness::Changed
     }
 
     pub(crate) fn begin_stop(&mut self, generation: u64) {

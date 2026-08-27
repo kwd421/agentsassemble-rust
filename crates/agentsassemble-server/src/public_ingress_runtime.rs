@@ -14,7 +14,8 @@ use tokio_util::{
 
 use crate::{
     public_ingress::{
-        CanonicalPublicOrigin, ManagedIngressConfig, ManagedProjection, generated_origin_host,
+        CanonicalPublicOrigin, ManagedIngressConfig, ManagedProjection, ManagedReadiness,
+        generated_origin_host,
     },
     public_ingress_process::{spawn_cloudflared, supervise_child},
 };
@@ -37,6 +38,16 @@ impl GenerationOutcome {
     }
 }
 
+struct GenerationObservation {
+    child_owner: JoinHandle<io::Result<ExitStatus>>,
+    child_result: Option<Result<io::Result<ExitStatus>, JoinError>>,
+    output_closed: Option<bool>,
+    stable_publication: Option<StablePublication>,
+    error: Option<String>,
+    stopped: bool,
+    publication_cleanup_failed: bool,
+}
+
 pub(crate) async fn run_generation(
     generation: u64,
     config: ManagedIngressConfig,
@@ -45,61 +56,43 @@ pub(crate) async fn run_generation(
 ) -> GenerationOutcome {
     let origin_host = generated_origin_host();
     let Some(cloudflared) = config.cloudflared.as_ref() else {
-        return failed("cloudflared is not installed");
+        return failed_with_stable_cleanup(&config, "cloudflared is not installed").await;
     };
     let Ok(spawned) = spawn_cloudflared(cloudflared, &config.local_url, &origin_host).await else {
-        return failed("cloudflared could not be started");
+        return failed_with_stable_cleanup(&config, "cloudflared could not be started").await;
     };
-    let (output, mut output_events) = mpsc::channel(OUTPUT_EVENTS);
+    let (output, output_events) = mpsc::channel(OUTPUT_EVENTS);
     let stdout_owner = spawn_output_reader(spawned.stdout, output.clone());
     let stderr_owner = spawn_output_reader(spawned.stderr, output);
     let child_cancellation = CancellationToken::new();
     let child_token = child_cancellation.clone();
-    let mut child_owner = tokio::spawn(async move {
+    let child_owner = tokio::spawn(async move {
         let mut child = spawned.child;
         supervise_child(child.as_mut(), &child_token).await
     });
-    let mut child_result = None;
-    let mut output_closed = None;
-    let mut error = None;
-    let mut stopped = false;
-    loop {
-        tokio::select! {
-            biased;
-            () = cancellation.cancelled() => {
-                stopped = true;
-                projection.write().begin_stop(generation);
-                break;
-            }
-            event = output_events.recv() => match event {
-                Some(OutputEvent::Origin(origin)) => {
-                    let public_url = origin.value.clone();
-                    if !projection.write().ready_managed(generation, origin, &origin_host) {
-                        stopped = true;
-                        break;
-                    }
-                    config
-                        .stable_entry
-                        .publish(&public_url, &cancellation)
-                        .await;
-                }
-                Some(OutputEvent::Invalid) => {
-                    error = Some("cloudflared output violated its safety limit".to_owned());
-                    break;
-                }
-                None => {
-                    output_closed = Some(child_owner.is_finished());
-                    break;
-                }
-            },
-            result = &mut child_owner => {
-                error = Some(child_failure(&result));
-                child_result = Some(result);
-                break;
-            }
-        }
-    }
+    let observation = observe_generation(
+        generation,
+        &origin_host,
+        &config.stable_entry,
+        &projection,
+        &cancellation,
+        child_owner,
+        output_events,
+    )
+    .await;
+    let GenerationObservation {
+        child_owner,
+        child_result,
+        output_closed,
+        mut stable_publication,
+        mut error,
+        stopped,
+        mut publication_cleanup_failed,
+    } = observation;
     projection.write().revoke(generation);
+    if let Some(publication) = stable_publication.as_ref() {
+        publication.cancellation.cancel();
+    }
     child_cancellation.cancel();
     let child_result = match child_result {
         Some(result) => result,
@@ -115,7 +108,10 @@ pub(crate) async fn run_generation(
     let child_cleanup_failed = !matches!(child_result, Ok(Ok(_)));
     let reader_cleanup_failed =
         !join_reader(stdout_owner).await || !join_reader(stderr_owner).await;
-    let stable_cleanup_failed = !config.stable_entry.clear().await;
+    if !join_publication(&mut stable_publication).await {
+        publication_cleanup_failed = true;
+    }
+    let stable_cleanup_failed = publication_cleanup_failed || !config.stable_entry.clear().await;
     let cleanup_failed = child_cleanup_failed || reader_cleanup_failed || stable_cleanup_failed;
     if stopped && !cleanup_failed {
         error = None;
@@ -126,6 +122,148 @@ pub(crate) async fn run_generation(
         error,
         cleanup_failed,
     }
+}
+
+async fn observe_generation(
+    generation: u64,
+    origin_host: &str,
+    stable_entry: &crate::stable_entry::StableEntry,
+    projection: &Arc<RwLock<ManagedProjection>>,
+    cancellation: &CancellationToken,
+    mut child_owner: JoinHandle<io::Result<ExitStatus>>,
+    mut output_events: mpsc::Receiver<OutputEvent>,
+) -> GenerationObservation {
+    let mut child_result = None;
+    let mut output_closed = None;
+    let mut error = None;
+    let mut stopped = false;
+    let mut stable_publication = None;
+    let mut pending_stable_target = None;
+    let mut publication_cleanup_failed = false;
+    loop {
+        tokio::select! {
+            biased;
+            () = cancellation.cancelled() => {
+                stopped = true;
+                projection.write().begin_stop(generation);
+                break;
+            }
+            event = output_events.recv() => match event {
+                Some(OutputEvent::Origin(origin)) => {
+                    let target = origin.value.clone();
+                    match projection
+                        .write()
+                        .ready_managed(generation, origin, origin_host)
+                    {
+                        ManagedReadiness::Unchanged => {}
+                        ManagedReadiness::Changed => {
+                            queue_publication(
+                                stable_entry,
+                                target,
+                                &mut stable_publication,
+                                &mut pending_stable_target,
+                            );
+                        }
+                        ManagedReadiness::Rejected => {
+                            stopped = true;
+                            projection.write().begin_stop(generation);
+                            break;
+                        }
+                    }
+                }
+                Some(OutputEvent::Invalid) => {
+                    error = Some("cloudflared output violated its safety limit".to_owned());
+                    break;
+                }
+                None => {
+                    output_closed = Some(child_owner.is_finished());
+                    break;
+                }
+            },
+            result = &mut child_owner => {
+                error = Some(child_failure(&result));
+                child_result = Some(result);
+                break;
+            }
+            result = wait_for_publication(&mut stable_publication), if stable_publication.is_some() => {
+                stable_publication.take();
+                if result.is_err() {
+                    publication_cleanup_failed = true;
+                    error = Some("stable-entry publication owner task failed".to_owned());
+                    break;
+                }
+                start_pending_publication(
+                    stable_entry,
+                    &mut stable_publication,
+                    &mut pending_stable_target,
+                );
+            }
+        }
+    }
+    GenerationObservation {
+        child_owner,
+        child_result,
+        output_closed,
+        stable_publication,
+        error,
+        stopped,
+        publication_cleanup_failed,
+    }
+}
+
+struct StablePublication {
+    cancellation: CancellationToken,
+    owner: JoinHandle<()>,
+}
+
+fn queue_publication(
+    stable_entry: &crate::stable_entry::StableEntry,
+    target: String,
+    active: &mut Option<StablePublication>,
+    pending_target: &mut Option<String>,
+) {
+    *pending_target = Some(target);
+    if let Some(publication) = active.as_ref() {
+        publication.cancellation.cancel();
+    } else {
+        start_pending_publication(stable_entry, active, pending_target);
+    }
+}
+
+fn start_pending_publication(
+    stable_entry: &crate::stable_entry::StableEntry,
+    active: &mut Option<StablePublication>,
+    pending_target: &mut Option<String>,
+) {
+    let Some(target) = pending_target.take() else {
+        return;
+    };
+    let cancellation = CancellationToken::new();
+    let task_entry = stable_entry.clone();
+    let task_cancellation = cancellation.clone();
+    let owner = tokio::spawn(async move {
+        task_entry.publish(&target, &task_cancellation).await;
+    });
+    *active = Some(StablePublication {
+        cancellation,
+        owner,
+    });
+}
+
+async fn wait_for_publication(
+    publication: &mut Option<StablePublication>,
+) -> Result<(), JoinError> {
+    let Some(publication) = publication.as_mut() else {
+        std::future::pending().await
+    };
+    (&mut publication.owner).await
+}
+
+async fn join_publication(publication: &mut Option<StablePublication>) -> bool {
+    let Some(mut publication) = publication.take() else {
+        return true;
+    };
+    (&mut publication.owner).await.is_ok()
 }
 
 enum OutputEvent {
@@ -199,10 +337,18 @@ async fn join_reader(mut owner: JoinHandle<()>) -> bool {
     }
 }
 
-fn failed(message: &str) -> GenerationOutcome {
+async fn failed_with_stable_cleanup(
+    config: &ManagedIngressConfig,
+    message: &str,
+) -> GenerationOutcome {
+    let cleanup_failed = !config.stable_entry.clear().await;
     GenerationOutcome {
-        error: Some(message.to_owned()),
-        cleanup_failed: false,
+        error: Some(if cleanup_failed {
+            "managed public ingress cleanup failed".to_owned()
+        } else {
+            message.to_owned()
+        }),
+        cleanup_failed,
     }
 }
 

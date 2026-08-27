@@ -122,7 +122,7 @@ pub use public_ingress::ManualPublicIngressError;
 pub use room_runtime::RoomRuntime;
 pub use room_shutdown::RoomShutdownError;
 pub use runtime_reconciliation::{RuntimeReconciliationSummary, reconcile_runtime_ownership};
-pub use stable_entry::{StableEntryConfig, StableEntryConfigError};
+pub use stable_entry::{StableEntryActivationError, StableEntryConfig, StableEntryConfigError};
 pub use ticket::{
     ConsumedCentralRegistrationTicket, ConsumedHumanSessionSocketTicket, ConsumedProfileTicket,
     ConsumedRoomHttpTicket, ConsumedServerOperatorTicket, ConsumedSettingsDirectoryReadTicket,

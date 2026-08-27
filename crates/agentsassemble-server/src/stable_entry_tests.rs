@@ -58,7 +58,23 @@ fn config_rejects_ambiguous_or_unbounded_authority() {
 #[tokio::test]
 async fn publish_and_clear_use_exact_remote_kv_operations_once() {
     let fixture = publisher_fixture("printf '%s\\n' \"$*\" >> \"$0.calls\"\nexit 0");
-    let entry = StableEntry::new(Some(config(&fixture.publisher)), fixture.directory.path());
+    let config = config(&fixture.publisher);
+    let config_argument = wrangler_config_argument(&config);
+    assert_eq!(
+        std::fs::read_to_string(
+            config
+                .publisher_config
+                .as_ref()
+                .unwrap_or_else(|| panic!("publisher config is unavailable"))
+                .path()
+                .join("wrangler.json")
+        )
+        .unwrap_or_else(|error| panic!("read isolated wrangler config: {error}")),
+        "{}\n"
+    );
+    let entry = StableEntry::new(Some(config), fixture.directory.path())
+        .await
+        .unwrap_or_else(|error| panic!("activate stable entry: {error}"));
     assert_eq!(entry.status().phase, "pending");
 
     entry
@@ -82,12 +98,12 @@ async fn publish_and_clear_use_exact_remote_kv_operations_once() {
             .collect::<Vec<_>>(),
         [
             format!(
-                "kv key put target {DIRECT_ORIGIN} --namespace-id={} --remote",
-                "a".repeat(32)
+                "kv key put target {DIRECT_ORIGIN} --namespace-id={} --remote {config_argument}",
+                "a".repeat(32),
             ),
             format!(
-                "kv key delete target --namespace-id={} --remote",
-                "a".repeat(32)
+                "kv key delete target --namespace-id={} --remote {config_argument}",
+                "a".repeat(32),
             ),
         ]
     );
@@ -103,7 +119,9 @@ async fn failed_clear_is_explicit_and_blocks_tunnel_restart() {
             .unwrap_or_else(|error| panic!("parse listener: {error}")),
         Some(config_without_publisher()),
         fixture.directory.path(),
-    );
+    )
+    .await
+    .unwrap_or_else(|error| panic!("activate stable entry: {error}"));
     let status = ingress
         .stop()
         .await
@@ -124,12 +142,16 @@ async fn failed_clear_is_explicit_and_blocks_tunnel_restart() {
 #[cfg(unix)]
 #[tokio::test]
 async fn managed_generation_publishes_and_clears_stable_target_before_completion() {
-    let publisher = publisher_fixture("printf '%s\\n' \"$*\" >> \"$0.calls\"\nexit 0");
+    let publisher = publisher_fixture(
+        "printf '%s\\n' \"$*\" >> \"$0.calls\"\nif [ \"$3\" = put ]; then exec /bin/sleep 600; fi\nexit 0",
+    );
     let tunnel = tunnel_fixture(&publisher.publisher.with_extension("calls"));
     let stable_entry = StableEntry::new(
         Some(config(&publisher.publisher)),
         publisher.directory.path(),
-    );
+    )
+    .await
+    .unwrap_or_else(|error| panic!("activate stable entry: {error}"));
     let (projection, generation) =
         crate::public_ingress::managed_lifecycle_tests::started_projection(
             "http://127.0.0.1:41955",
@@ -150,19 +172,61 @@ async fn managed_generation_publishes_and_clears_stable_target_before_completion
     assert!(outcome.error.is_some());
     assert_eq!(stable_entry.status().phase, "ready");
     assert!(stable_entry.status().url.is_empty());
-    assert_eq!(attempt_count(&publisher.publisher), 3);
+    assert_eq!(attempt_count(&publisher.publisher), 2);
 }
 
 #[cfg(unix)]
 #[tokio::test]
-async fn superseded_owner_cannot_republish_or_clear_successor_target() {
-    let fixture = publisher_fixture("printf '%s\\n' \"$*\" >> \"$0.calls\"\nexit 0");
-    let first = StableEntry::new(Some(config(&fixture.publisher)), fixture.directory.path());
-    first
-        .publish(DIRECT_ORIGIN, &CancellationToken::new())
-        .await;
+async fn tunnel_spawn_failure_still_clears_the_stable_target() {
+    let publisher = publisher_fixture("printf '%s\\n' \"$*\" >> \"$0.calls\"\nexit 0");
+    let stable_entry = StableEntry::new(
+        Some(config(&publisher.publisher)),
+        publisher.directory.path(),
+    )
+    .await
+    .unwrap_or_else(|error| panic!("activate stable entry: {error}"));
+    let (projection, generation) =
+        crate::public_ingress::managed_lifecycle_tests::started_projection(
+            "http://127.0.0.1:41955",
+        );
+    let outcome = run_generation(
+        generation,
+        ManagedIngressConfig {
+            local_url: "http://127.0.0.1:41955".to_owned(),
+            cloudflared: Some(publisher.directory.path().join("missing-cloudflared")),
+            stable_entry,
+        },
+        Arc::new(RwLock::new(projection)),
+        CancellationToken::new(),
+    )
+    .await;
 
-    let successor = StableEntry::new(Some(config(&fixture.publisher)), fixture.directory.path());
+    assert_eq!(
+        outcome.error.as_deref(),
+        Some("cloudflared could not be started")
+    );
+    assert!(!outcome.cleanup_failed);
+    assert_eq!(attempt_count(&publisher.publisher), 1);
+    assert!(
+        std::fs::read_to_string(publisher.publisher.with_extension("calls"))
+            .unwrap_or_else(|error| panic!("read publisher calls: {error}"))
+            .starts_with("kv key delete target ")
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn predecessor_without_an_operation_cannot_take_back_successor_ownership() {
+    let fixture = publisher_fixture("printf '%s\\n' \"$*\" >> \"$0.calls\"\nexit 0");
+    let first = StableEntry::new(Some(config(&fixture.publisher)), fixture.directory.path())
+        .await
+        .unwrap_or_else(|error| panic!("activate first stable entry: {error}"));
+
+    let successor_config = config(&fixture.publisher);
+    let config_argument = wrangler_config_argument(&successor_config);
+    let successor = StableEntry::new(Some(successor_config), fixture.directory.path())
+        .await
+        .unwrap_or_else(|error| panic!("activate successor stable entry: {error}"));
     successor
         .publish(SUCCESSOR_ORIGIN, &CancellationToken::new())
         .await;
@@ -185,16 +249,12 @@ async fn superseded_owner_cannot_republish_or_clear_successor_target() {
             .collect::<Vec<_>>(),
         [
             format!(
-                "kv key put target {DIRECT_ORIGIN} --namespace-id={} --remote",
-                "a".repeat(32)
+                "kv key put target {SUCCESSOR_ORIGIN} --namespace-id={} --remote {config_argument}",
+                "a".repeat(32),
             ),
             format!(
-                "kv key put target {SUCCESSOR_ORIGIN} --namespace-id={} --remote",
-                "a".repeat(32)
-            ),
-            format!(
-                "kv key delete target --namespace-id={} --remote",
-                "a".repeat(32)
+                "kv key delete target --namespace-id={} --remote {config_argument}",
+                "a".repeat(32),
             ),
         ]
     );
@@ -230,6 +290,20 @@ fn config_without_publisher() -> StableEntryConfig {
         None,
     )
     .unwrap_or_else(|error| panic!("build stable config: {error}"))
+}
+
+#[cfg(unix)]
+fn wrangler_config_argument(config: &StableEntryConfig) -> String {
+    format!(
+        "--config={}",
+        config
+            .publisher_config
+            .as_ref()
+            .unwrap_or_else(|| panic!("publisher config is unavailable"))
+            .path()
+            .join("wrangler.json")
+            .display()
+    )
 }
 
 #[cfg(unix)]

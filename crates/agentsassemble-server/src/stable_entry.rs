@@ -20,10 +20,12 @@ const OPERATION_ATTEMPTS: usize = 3;
 const OPERATION_TIMEOUT: Duration = Duration::from_secs(90);
 const RETRY_DELAY: Duration = Duration::from_secs(15);
 const MAX_KV_KEY_BYTES: usize = 128;
-const WRANGLER_ENVIRONMENT: [&str; 8] = [
+const WRANGLER_ENVIRONMENT: [&str; 10] = [
     "APPDATA",
     "CLOUDFLARE_ACCOUNT_ID",
+    "CLOUDFLARE_API_KEY",
     "CLOUDFLARE_API_TOKEN",
+    "CLOUDFLARE_EMAIL",
     "HOME",
     "LOCALAPPDATA",
     "PATH",
@@ -37,6 +39,7 @@ pub struct StableEntryConfig {
     namespace_id: Arc<str>,
     kv_key: Arc<str>,
     publisher: Option<Arc<Path>>,
+    publisher_config: Option<Arc<tempfile::TempDir>>,
 }
 
 #[derive(Debug, Error)]
@@ -51,7 +54,13 @@ pub enum StableEntryConfigError {
     InvalidNamespace,
     #[error("stable-entry kv_key must contain 1-128 visible ASCII bytes and not start with '-'")]
     InvalidKey,
+    #[error("stable-entry publisher isolation could not be prepared")]
+    PublisherIsolation(#[source] std::io::Error),
 }
+
+#[derive(Debug, Error)]
+#[error("stable-entry ownership could not be claimed")]
+pub struct StableEntryActivationError;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -92,13 +101,26 @@ impl StableEntryConfig {
         {
             return Err(StableEntryConfigError::InvalidKey);
         }
+        let publisher_config = publisher
+            .as_ref()
+            .map(|_| isolated_wrangler_config())
+            .transpose()?
+            .map(Arc::new);
         Ok(Self {
             stable_url: origin.value.into(),
             namespace_id: namespace_id.to_ascii_lowercase().into(),
             kv_key: kv_key.into(),
             publisher: publisher.map(Arc::from),
+            publisher_config,
         })
     }
+}
+
+fn isolated_wrangler_config() -> Result<tempfile::TempDir, StableEntryConfigError> {
+    let directory = tempfile::tempdir().map_err(StableEntryConfigError::PublisherIsolation)?;
+    std::fs::write(directory.path().join("wrangler.json"), b"{}\n")
+        .map_err(StableEntryConfigError::PublisherIsolation)?;
+    Ok(directory)
 }
 
 fn resolve_publisher() -> Option<std::path::PathBuf> {
@@ -128,11 +150,7 @@ struct StableEntryInner {
     config: Option<StableEntryConfig>,
     ownership: Option<StableOwnership>,
     projection: RwLock<StableProjection>,
-    operation: Mutex<StableOperation>,
-}
-
-struct StableOperation {
-    claimed: bool,
+    operation: Mutex<()>,
 }
 
 #[derive(Clone, Copy)]
@@ -158,14 +176,23 @@ pub(crate) struct StableStatus {
 }
 
 impl StableEntry {
-    pub(crate) fn new(config: Option<StableEntryConfig>, state_root: &Path) -> Self {
+    pub(crate) async fn new(
+        config: Option<StableEntryConfig>,
+        state_root: &Path,
+    ) -> Result<Self, StableEntryActivationError> {
         let phase = if config.is_some() {
             StablePhase::Pending
         } else {
             StablePhase::Unconfigured
         };
         let ownership = config.as_ref().map(|_| StableOwnership::new(state_root));
-        Self(Arc::new(StableEntryInner {
+        if let Some(ownership) = ownership.as_ref() {
+            ownership
+                .claim(&CancellationToken::new())
+                .await
+                .map_err(|_| StableEntryActivationError)?;
+        }
+        Ok(Self(Arc::new(StableEntryInner {
             config,
             ownership,
             projection: RwLock::new(StableProjection {
@@ -174,8 +201,8 @@ impl StableEntry {
                 last_error: None,
                 cleanup_failed: false,
             }),
-            operation: Mutex::new(StableOperation { claimed: false }),
-        }))
+            operation: Mutex::new(()),
+        })))
     }
 
     pub(crate) async fn publish(&self, target: &str, cancellation: &CancellationToken) {
@@ -246,7 +273,7 @@ impl StableEntry {
         let Some(ownership) = self.0.ownership.as_ref() else {
             unreachable!("configured stable entry must own publication state");
         };
-        let mut operation = self.0.operation.lock().await;
+        let _operation = self.0.operation.lock().await;
         if self.0.projection.read().cleanup_failed {
             return StableApplyOutcome::Failed;
         }
@@ -256,14 +283,7 @@ impl StableEntry {
             projection.published_target = None;
             projection.last_error = None;
         }
-        let result = run_operation(
-            config,
-            ownership,
-            &mut operation.claimed,
-            target,
-            cancellation,
-        )
-        .await;
+        let result = run_operation(config, ownership, target, cancellation).await;
         let mut projection = self.0.projection.write();
         match result {
             Ok(StableMutation::Applied) => {
@@ -306,7 +326,6 @@ enum StableMutation {
 async fn run_operation(
     config: &StableEntryConfig,
     ownership: &StableOwnership,
-    claimed: &mut bool,
     target: Option<&str>,
     cancellation: &CancellationToken,
 ) -> Result<StableMutation, StableOperationFailure> {
@@ -318,13 +337,6 @@ async fn run_operation(
         return Err(StableOperationFailure::safe(
             "stable-entry publication was cancelled",
         ));
-    }
-    if !*claimed {
-        ownership
-            .claim(cancellation)
-            .await
-            .map_err(|failure| ownership_failure(failure, target.is_none()))?;
-        *claimed = true;
     }
     let arguments = wrangler_arguments(config, target);
     for attempt in 0..OPERATION_ATTEMPTS {
@@ -435,6 +447,13 @@ fn wrangler_arguments(config: &StableEntryConfig, target: Option<&str>) -> Vec<O
         OsString::from(format!("--namespace-id={}", config.namespace_id)),
         OsString::from("--remote"),
     ]);
+    let publisher_config = config
+        .publisher_config
+        .as_ref()
+        .unwrap_or_else(|| unreachable!("available publisher must own isolated config"));
+    let mut config_argument = OsString::from("--config=");
+    config_argument.push(publisher_config.path().join("wrangler.json"));
+    arguments.push(config_argument);
     arguments
 }
 

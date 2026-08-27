@@ -7,8 +7,9 @@ use tokio_util::sync::CancellationToken;
 
 use super::{
     ActiveGeneration, CanonicalPublicOrigin, GenerationOutcome, ManagedController,
-    ManagedIngressConfig, ManagedLifecycle, ManagedProjection, ManagedPublicIngress, PublicIngress,
-    PublicIngressAuthorization, PublicIngressControlError, PublicIngressKind,
+    ManagedIngressConfig, ManagedLifecycle, ManagedProjection, ManagedPublicIngress,
+    ManagedReadiness, PublicIngress, PublicIngressAuthorization, PublicIngressControlError,
+    PublicIngressKind, stable_target_matches_direct,
 };
 use crate::product_surface::RouteExposure;
 
@@ -22,25 +23,42 @@ pub(crate) fn started_projection(local_url: &str) -> (ManagedProjection, u64) {
 fn running_reconnect_replaces_origin_but_stopping_and_terminal_cannot() {
     let mut projection = ManagedProjection::new("http://127.0.0.1:41955", true);
     let generation = projection.begin_start();
-    assert!(projection.ready_managed(
-        generation,
-        origin("https://first.trycloudflare.com"),
-        "secret.origin.invalid",
+    assert!(matches!(
+        projection.ready_managed(
+            generation,
+            origin("https://first.trycloudflare.com"),
+            "secret.origin.invalid",
+        ),
+        ManagedReadiness::Changed
     ));
-    assert!(projection.ready_managed(
-        generation,
-        origin("https://second.trycloudflare.com"),
-        "secret.origin.invalid",
+    assert!(matches!(
+        projection.ready_managed(
+            generation,
+            origin("https://first.trycloudflare.com"),
+            "secret.origin.invalid",
+        ),
+        ManagedReadiness::Unchanged
+    ));
+    assert!(matches!(
+        projection.ready_managed(
+            generation,
+            origin("https://second.trycloudflare.com"),
+            "secret.origin.invalid",
+        ),
+        ManagedReadiness::Changed
     ));
     assert_eq!(
         projection.status().public_url,
         "https://second.trycloudflare.com"
     );
     projection.begin_stop(generation);
-    assert!(!projection.ready_managed(
-        generation,
-        origin("https://third.trycloudflare.com"),
-        "secret.origin.invalid",
+    assert!(matches!(
+        projection.ready_managed(
+            generation,
+            origin("https://third.trycloudflare.com"),
+            "secret.origin.invalid",
+        ),
+        ManagedReadiness::Rejected
     ));
     projection.finish(
         generation,
@@ -50,20 +68,26 @@ fn running_reconnect_replaces_origin_but_stopping_and_terminal_cannot() {
         },
     );
     assert!(projection.status().public_url.is_empty());
-    assert!(!projection.ready_managed(
-        generation,
-        origin("https://error.trycloudflare.com"),
-        "secret.origin.invalid",
+    assert!(matches!(
+        projection.ready_managed(
+            generation,
+            origin("https://error.trycloudflare.com"),
+            "secret.origin.invalid",
+        ),
+        ManagedReadiness::Rejected
     ));
     projection.begin_stop(generation);
     assert_eq!(projection.status().tunnel.phase, "error");
 
     let mut stopped = ManagedProjection::new("http://127.0.0.1:41955", true);
     let stopped_generation = stopped.begin_start();
-    assert!(stopped.ready_managed(
-        stopped_generation,
-        origin("https://before-stop.trycloudflare.com"),
-        "secret.origin.invalid",
+    assert!(matches!(
+        stopped.ready_managed(
+            stopped_generation,
+            origin("https://before-stop.trycloudflare.com"),
+            "secret.origin.invalid",
+        ),
+        ManagedReadiness::Changed
     ));
     stopped.finish(
         stopped_generation,
@@ -73,10 +97,13 @@ fn running_reconnect_replaces_origin_but_stopping_and_terminal_cannot() {
         },
     );
     assert!(stopped.status().public_url.is_empty());
-    assert!(!stopped.ready_managed(
-        stopped_generation,
-        origin("https://stopped.trycloudflare.com"),
-        "secret.origin.invalid",
+    assert!(matches!(
+        stopped.ready_managed(
+            stopped_generation,
+            origin("https://stopped.trycloudflare.com"),
+            "secret.origin.invalid",
+        ),
+        ManagedReadiness::Rejected
     ));
     assert_eq!(stopped.status().tunnel.phase, "stopped");
 }
@@ -85,10 +112,13 @@ fn running_reconnect_replaces_origin_but_stopping_and_terminal_cannot() {
 fn identity_authorization_keeps_the_origin_from_its_trust_snapshot() {
     let mut projection = ManagedProjection::new("http://127.0.0.1:41955", true);
     let generation = projection.begin_start();
-    assert!(projection.ready_managed(
-        generation,
-        origin("https://first.trycloudflare.com"),
-        "secret.origin.invalid",
+    assert!(matches!(
+        projection.ready_managed(
+            generation,
+            origin("https://first.trycloudflare.com"),
+            "secret.origin.invalid",
+        ),
+        ManagedReadiness::Changed
     ));
     let authorization = projection
         .authorize(&trusted_headers(), RouteExposure::IdentityProbePublic)
@@ -101,15 +131,50 @@ fn identity_authorization_keeps_the_origin_from_its_trust_snapshot() {
         },
     );
     let next = projection.begin_start();
-    assert!(projection.ready_managed(
-        next,
-        origin("https://second.trycloudflare.com"),
-        "different.origin.invalid",
+    assert!(matches!(
+        projection.ready_managed(
+            next,
+            origin("https://second.trycloudflare.com"),
+            "different.origin.invalid",
+        ),
+        ManagedReadiness::Changed
     ));
     let PublicIngressAuthorization::Identity(snapshot) = authorization else {
         panic!("identity exposure must carry its verified origin");
     };
     assert_eq!(snapshot.as_str(), "https://first.trycloudflare.com");
+}
+
+#[test]
+fn stable_readiness_requires_the_same_direct_target_and_lifecycle() {
+    let mut projection = ManagedProjection::new("http://127.0.0.1:41955", true);
+    let generation = projection.begin_start();
+    assert!(!stable_target_matches_direct(None, &projection.status()));
+    assert!(matches!(
+        projection.ready_managed(
+            generation,
+            origin("https://current.trycloudflare.com"),
+            "secret.origin.invalid",
+        ),
+        ManagedReadiness::Changed
+    ));
+    let running = projection.status();
+    assert!(stable_target_matches_direct(
+        Some("https://current.trycloudflare.com"),
+        &running
+    ));
+    assert!(!stable_target_matches_direct(
+        Some("https://retired.trycloudflare.com"),
+        &running
+    ));
+    projection.finish(
+        generation,
+        GenerationOutcome {
+            error: Some("child exited".to_owned()),
+            cleanup_failed: false,
+        },
+    );
+    assert!(stable_target_matches_direct(None, &projection.status()));
 }
 
 #[tokio::test]
@@ -120,7 +185,8 @@ async fn cancelled_stop_keeps_the_generation_handle_owned() {
         number: 1,
         cancellation: cancellation.clone(),
         owner,
-    }));
+    }))
+    .await;
     let stop_ingress = ingress.clone();
     let stop = tokio::spawn(async move { stop_ingress.stop().await });
     tokio::time::timeout(Duration::from_secs(1), cancellation.cancelled())
@@ -143,7 +209,7 @@ async fn cancelled_stop_keeps_the_generation_handle_owned() {
 
 #[tokio::test]
 async fn shutdown_closes_start_and_cleanup_failure_blocks_restart() {
-    let closed = managed(None);
+    let closed = managed(None).await;
     closed
         .shutdown()
         .await
@@ -153,7 +219,7 @@ async fn shutdown_closes_start_and_cleanup_failure_blocks_restart() {
         Err(PublicIngressControlError::Closed)
     ));
 
-    let failed = managed(None);
+    let failed = managed(None).await;
     let PublicIngressKind::Managed(managed) = failed.0.as_ref() else {
         unreachable!();
     };
@@ -164,7 +230,10 @@ async fn shutdown_closes_start_and_cleanup_failure_blocks_restart() {
     ));
 }
 
-fn managed(active: Option<ActiveGeneration>) -> PublicIngress {
+async fn managed(active: Option<ActiveGeneration>) -> PublicIngress {
+    let stable_entry = crate::stable_entry::StableEntry::new(None, Path::new("."))
+        .await
+        .unwrap_or_else(|error| panic!("build unconfigured stable entry: {error}"));
     PublicIngress(Arc::new(PublicIngressKind::Managed(ManagedPublicIngress {
         projection: Arc::new(RwLock::new(ManagedProjection::new(
             "http://127.0.0.1:41955",
@@ -174,7 +243,7 @@ fn managed(active: Option<ActiveGeneration>) -> PublicIngress {
             config: ManagedIngressConfig {
                 local_url: "http://127.0.0.1:41955".to_owned(),
                 cloudflared: None,
-                stable_entry: crate::stable_entry::StableEntry::new(None, Path::new(".")),
+                stable_entry,
             },
             lifecycle: Mutex::new(ManagedLifecycle {
                 closed: false,
