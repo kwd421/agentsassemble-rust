@@ -335,8 +335,10 @@ of the production store's 4,096 entries for local/private authority. Grant expir
 the earlier of the store TTL and backing session expiry. Read-only sessions cannot
 mint preference-write grants. Consumption removes a wrong-purpose grant before
 rejecting it; the later target adapter must still revalidate its durable session
-before any read or write. The store contract exists, but no public exchange route is
-claimed reachable until that target revalidation is connected and verified.
+before any read or write. Public WebSocket, own-profile, and preference read/write
+exchange routes are connected and verified with that target revalidation. The room
+attachment exchange remains incomplete and is not claimed reachable until its
+corresponding message behavior and target revalidation are implemented and verified.
 Central server registration is a third, exact-purpose one-use ticket issued only
 through the private desktop control pipe and consumed only by the desktop-mounted
 registration-proof POST. Its Ed25519 private key is a separate owner-only write-once
