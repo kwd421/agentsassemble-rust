@@ -484,6 +484,62 @@ create response's public join URL; a local preview is not presented as admission
 parity. The token is removed from browser history after it is captured, and stored
 session state cannot override a failed durable verification.
 
+The approved activation order is deliberately split at authority and lifecycle
+boundaries:
+
+1. B1a removes operator HTTP dispatch from the mutable runtime-base projection.
+   Every operator request uses only its own validated grant's `http_base_url`.
+   Profile GET/POST acceptance publishes one atomic pair containing the canonical
+   profile and that same request's immutable display-resource base. Canonical
+   profile and upload avatar references remain exact relative writable references;
+   a small shared attachment-reference parser owns the currently used `view` and
+   `download` wire forms, while a pure render resolver may combine a validated
+   reference with the paired base. Presentation provenance never authorizes or
+   retargets a request, and an older response generation cannot replace a newer
+   pair.
+2. B1b makes the native runtime ticket one strictly validated owner before any
+   socket or resource effect. It accepts exactly `ticket`, `ttl_seconds`,
+   `websocket_base_url`, and `server_proof_key`; both secrets are 64 lowercase hex
+   characters, TTL is a positive safe integer, and the URL is exactly
+   `ws://127.0.0.1:<port>` with no credentials, path, query, fragment, or alternate
+   serialization. The derived HTTP display base belongs only to that accepted
+   socket generation. Canonical room and Agent Session avatar references remain
+   relative; stale generations cannot publish state or display provenance.
+3. B2 parses the complete native ingress status before controller publication.
+   Active `starting`, `running`, and `stopping` phases require availability;
+   `error` and stable `failed` require a nonempty error; stable `ready` is equivalent
+   to a nonempty stable URL and also requires a running direct target. Every
+   non-ready stable phase has an empty stable URL. Existing manual, managed,
+   unconfigured, direct-URL, running, and top-level URL relations remain exact.
+4. C1a keeps manager create credential consistency inside the existing persistence
+   transaction. The persistence owner compares the just-issued signed and join-code
+   fingerprints with the decoded inserted row before commit and rolls back on any
+   mismatch. The HTTP route emits only that verified result and does not repeat the
+   policy or create a post-commit orphan check.
+5. C1b is the sole strict create-response, timestamp, URL, and revoke-dispatch
+   parser. It retains the validated join URL, canonical public origin, finite exact
+   server expiry, room/invite tuple, and revoke custody without reconstructing a
+   URL. Native grant failure is `proven_not_dispatched`; once `fetch` is invoked,
+   transport loss, malformed or mismatched response, and every result not proven
+   non-mutating are `outcome_unknown`. Canonical exact success and exact
+   `invite_not_found` are the only terminal revoke results.
+6. C2 owns only retained controller custody and current presentation. Each record's
+   revocation state is `idle`, `in_flight`, `unknown`, or `dead`. Copy requires
+   `idle`, the exact current ingress origin, and current time before expiry.
+   Retired or expired records remain revoke-only. One nearest-expiry timer updates
+   derived presentation and never authority. A revoke attempt captures its `idle`
+   or `unknown` source plus an attempt generation before dispatch; a proven
+   pre-dispatch failure restores that source, while a post-dispatch uncertainty
+   becomes `unknown`. Duplicate `in_flight` and `dead` calls have no effect, there
+   is no automatic retry, and only an explicit retry obtains a fresh one-use grant.
+
+These stages add no durable frontend invite state, second URL/timestamp policy,
+generic resource framework, compatibility path, or fallback. Each independently
+buildable commit remains below 1,000 changed lines, passes the repository gates and
+focused contract tests, is pushed, and receives both manual reviews before the next
+stage. Packaged Computer Use remains the completion test rather than a substitute
+for these authority and failure contracts.
+
 ## Trusted ingress boundary
 
 Managed Cloudflare direct-tunnel custody, configured stable-entry publication, and

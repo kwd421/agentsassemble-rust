@@ -2566,3 +2566,32 @@ architecture, source-growth, policy, formatting, generated-binding, original-CSS
 frontend, desktop, workspace-test, warning-denied Clippy, and diff gates. No product
 code, timeout, persistence state, provider process, or user-owned `.agents/` state
 changed.
+
+Manual review findings for `b67f4a2`: none. Web verdict:
+`APPROVE — Critical 0 / High 0 / Medium 0`. Daybreaker verdict:
+`APPROVE — Critical 0 / High 0 / Medium 0`. Neither review used Deep Scan or another
+automated security scanner.
+
+## Manager invite method correction review: 2026-08-28
+
+Manual review of `e946bbb` found one Medium issue: an explicitly supplied empty HTTP
+method was treated like an omitted method, so the bridge could request one-use native
+authority before accepting the request as POST. Commit `6a0aa2c` defaults only an
+actually omitted method and rejects the empty method before native invocation.
+Final web verdict: `APPROVE — Critical 0 / High 0 / Medium 0`. Final Daybreaker
+verdict: `APPROVE — Critical 0 / High 0 / Medium 0`.
+
+## Frontend invite activation plan review: 2026-08-28
+
+Manual plan review found that: credential consistency belonged before transaction
+commit; retained revoke custody did not imply current-origin shareability; ingress
+status relations were incomplete; a mutable runtime-resource base had last-writer
+races; canonical writable avatar references could not become absolute display URLs;
+the native socket ticket needed one strict validator; expiry had to disable Copy
+without discarding revoke custody; and an in-flight, unknown, or failed retry outcome
+could not reopen Copy. The accepted design assigns those policies once across
+B1a/B1b/B2/C1a/C1b/C2, including restoration of the exact captured revoke-attempt
+source state. Final web Pro verdict: `APPROVE — Critical 0 / High 0 / Medium 0`.
+Final Daybreaker verdict: `APPROVE — Critical 0 / High 0 / Medium 0`. The web session
+was then switched and visibly verified at very-high reasoning for implementation
+reviews. Neither review used Deep Scan or another automated security scanner.
