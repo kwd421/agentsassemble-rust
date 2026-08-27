@@ -64,6 +64,23 @@ test("keeps a one-use entrance when durable credential custody fails", async ({ 
   await expect(page.getByRole("main", { name: "브라우저 신원 사용 불가" })).toBeVisible();
 });
 
+test("keeps a one-use entrance when durable client-id custody fails", async ({ page }) => {
+  await page.addInitScript(() => {
+    const setItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === "agentsassemble.clientId.v1") {
+        throw new Error("storage unavailable");
+      }
+      setItem.call(this, key, value);
+    };
+  });
+
+  await page.goto("/join?token=invite-token");
+
+  await expect(page).toHaveURL(/\/join\?token=invite-token$/);
+  await expect(page.getByRole("main", { name: "브라우저 신원 사용 불가" })).toBeVisible();
+});
+
 test("retains recovery while consuming its URL secret", async ({ page }) => {
   await page.goto(`/?recover=1&room=friend-room#recovery=${RECOVERY_CODE}`);
 

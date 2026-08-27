@@ -10,22 +10,15 @@ const BROWSER_CREDENTIAL_UNAVAILABLE =
   "이 브라우저에서 안전한 입장 자격 증명을 영구 저장할 수 없습니다.";
 const BROWSER_CREDENTIAL_INVALID =
   "저장된 입장 자격 증명이 손상되었습니다. 브라우저 사이트 데이터를 확인해 주세요.";
+const CLIENT_ID_UNAVAILABLE =
+  "이 브라우저에서 입장 요청 식별자를 영구 저장할 수 없습니다.";
+const CLIENT_ID_INVALID =
+  "저장된 입장 요청 식별자가 손상되었습니다. 브라우저 사이트 데이터를 확인해 주세요.";
 
 export type RememberedGuestProfile = {
   displayName: string;
   avatarImage?: string;
 };
-
-function randomClientId(): string {
-  try {
-    if (typeof crypto !== "undefined" && crypto.randomUUID) {
-      return crypto.randomUUID();
-    }
-  } catch {
-    // Fall through to the manual generator on restricted webviews.
-  }
-  return `dev-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
-}
 
 function encodeBase64Url(bytes: Uint8Array): string {
   let binary = "";
@@ -94,14 +87,34 @@ export function getOrCreateBrowserCredential(): string {
 }
 
 export function getOrCreateClientId(): string {
+  if (typeof globalThis.crypto?.randomUUID !== "function") {
+    throw new Error(CLIENT_ID_UNAVAILABLE);
+  }
+  let storage: Storage;
+  let existing: string | null;
   try {
-    const existing = String(window.localStorage.getItem(CLIENT_ID_STORAGE_KEY) || "").trim();
-    if (existing) return existing;
-    const clientId = randomClientId();
-    window.localStorage.setItem(CLIENT_ID_STORAGE_KEY, clientId);
+    storage = window.localStorage;
+    existing = storage.getItem(CLIENT_ID_STORAGE_KEY);
+  } catch {
+    throw new Error(CLIENT_ID_UNAVAILABLE);
+  }
+  if (existing !== null) {
+    const normalized = existing.replace(/[\r\n]/g, " ").trim().slice(0, 128).trim();
+    if (!normalized || normalized !== existing) {
+      throw new Error(CLIENT_ID_INVALID);
+    }
+    return existing;
+  }
+
+  try {
+    const clientId = globalThis.crypto.randomUUID();
+    storage.setItem(CLIENT_ID_STORAGE_KEY, clientId);
+    if (storage.getItem(CLIENT_ID_STORAGE_KEY) !== clientId) {
+      throw new Error(CLIENT_ID_UNAVAILABLE);
+    }
     return clientId;
   } catch {
-    return randomClientId();
+    throw new Error(CLIENT_ID_UNAVAILABLE);
   }
 }
 

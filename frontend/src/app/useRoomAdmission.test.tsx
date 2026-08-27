@@ -10,7 +10,6 @@ import {
 import { useRoomAdmission } from "./useRoomAdmission";
 
 const deviceMocks = vi.hoisted(() => ({
-  getOrCreateClientId: vi.fn(() => "client-1"),
   loadRememberedGuestProfile: vi.fn<() => { displayName: string; avatarImage?: string } | null>(() => null),
   rememberGuestProfile: vi.fn(),
 }));
@@ -60,6 +59,7 @@ const SESSION_SURFACE = {
   server_product_surface: TEST_SERVER_PRODUCT_SURFACE,
 };
 const DEVICE_TOKEN = "aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+const CLIENT_ID = "client-1";
 
 const SESSION: RoomGuestSession = {
   inviteToken: "invite-1",
@@ -123,6 +123,7 @@ describe("useRoomAdmission", () => {
     const { result } = renderHook(() =>
       useRoomAdmission({
         deviceToken: DEVICE_TOKEN,
+        clientId: CLIENT_ID,
         guestInvite: null,
         guestJoinToken: "invite-1",
         operatorPairingToken: "",
@@ -191,6 +192,7 @@ describe("useRoomAdmission", () => {
     const { result } = renderHook(() =>
       useRoomAdmission({
         deviceToken: DEVICE_TOKEN,
+        clientId: CLIENT_ID,
         guestInvite: null,
         guestJoinToken: "invite-1",
         operatorPairingToken: "",
@@ -245,6 +247,7 @@ describe("useRoomAdmission", () => {
       ({ token }) =>
         useRoomAdmission({
           deviceToken: DEVICE_TOKEN,
+          clientId: CLIENT_ID,
           guestInvite: null,
           guestJoinToken: token,
           operatorPairingToken: "",
@@ -270,6 +273,7 @@ describe("useRoomAdmission", () => {
     const { result } = renderHook(() =>
       useRoomAdmission({
         deviceToken: DEVICE_TOKEN,
+        clientId: CLIENT_ID,
         guestInvite: null,
         guestJoinToken: "",
         operatorPairingToken: "",
@@ -325,6 +329,7 @@ describe("useRoomAdmission", () => {
     const { result } = renderHook(() =>
       useRoomAdmission({
         deviceToken: DEVICE_TOKEN,
+        clientId: CLIENT_ID,
         guestInvite: null,
         guestJoinToken: "invite-1",
         operatorPairingToken: "",
@@ -361,6 +366,7 @@ describe("useRoomAdmission", () => {
     const { result } = renderHook(() =>
       useRoomAdmission({
         deviceToken: DEVICE_TOKEN,
+        clientId: CLIENT_ID,
         guestInvite: null,
         guestJoinToken: "agent-invite",
         operatorPairingToken: "",
@@ -398,6 +404,7 @@ describe("useRoomAdmission", () => {
     const { result } = renderHook(() =>
       useRoomAdmission({
         deviceToken: DEVICE_TOKEN,
+        clientId: CLIENT_ID,
         guestInvite: null,
         guestJoinToken: "invite-2",
         operatorPairingToken: "",
@@ -442,6 +449,7 @@ describe("useRoomAdmission", () => {
     const { result } = renderHook(() =>
       useRoomAdmission({
         deviceToken: DEVICE_TOKEN,
+        clientId: CLIENT_ID,
         guestInvite: null,
         guestJoinToken: "invite-2",
         operatorPairingToken: "",
@@ -477,6 +485,7 @@ describe("useRoomAdmission", () => {
     const { result } = renderHook(() =>
       useRoomAdmission({
         deviceToken: DEVICE_TOKEN,
+        clientId: CLIENT_ID,
         guestInvite: null,
         guestJoinToken: "",
         operatorPairingToken: "",
@@ -506,6 +515,7 @@ describe("useRoomAdmission", () => {
     const { result } = renderHook(() =>
       useRoomAdmission({
         deviceToken: DEVICE_TOKEN,
+        clientId: CLIENT_ID,
         guestInvite: null,
         guestJoinToken: "",
         operatorPairingToken: "",
@@ -542,6 +552,7 @@ describe("useRoomAdmission", () => {
     const { result } = renderHook(() =>
       useRoomAdmission({
         deviceToken: DEVICE_TOKEN,
+        clientId: CLIENT_ID,
         guestInvite: null,
         guestJoinToken: "",
         operatorPairingToken: "aap1_pairing-token",
@@ -586,6 +597,7 @@ describe("useRoomAdmission", () => {
     const { result } = renderHook(() =>
       useRoomAdmission({
         deviceToken: DEVICE_TOKEN,
+        clientId: CLIENT_ID,
         guestInvite: null,
         guestJoinToken: "",
         operatorPairingToken: "aap1_pairing-token",
@@ -624,6 +636,7 @@ describe("useRoomAdmission", () => {
     const { result } = renderHook(() =>
       useRoomAdmission({
         deviceToken: DEVICE_TOKEN,
+        clientId: CLIENT_ID,
         guestInvite: null,
         guestJoinToken: "",
         operatorPairingToken: "aap1_pairing-token",
@@ -658,6 +671,7 @@ describe("useRoomAdmission", () => {
     const { result } = renderHook(() =>
       useRoomAdmission({
         deviceToken: DEVICE_TOKEN,
+        clientId: CLIENT_ID,
         guestInvite: null,
         guestJoinToken: "invite-1",
         operatorPairingToken: "",
@@ -705,6 +719,7 @@ describe("useRoomAdmission", () => {
     const { result } = renderHook(() =>
       useRoomAdmission({
         deviceToken: DEVICE_TOKEN,
+        clientId: CLIENT_ID,
         guestInvite: null,
         guestJoinToken: "invite-1",
         operatorPairingToken: "",
@@ -743,6 +758,7 @@ describe("useRoomAdmission", () => {
         void unrelatedError;
         return useRoomAdmission({
           deviceToken: DEVICE_TOKEN,
+          clientId: CLIENT_ID,
           guestInvite: null,
           guestJoinToken: "invite-1",
           operatorPairingToken: "",

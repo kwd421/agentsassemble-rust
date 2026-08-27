@@ -7,6 +7,7 @@ const deviceMocks = vi.hoisted(() => ({
   getOrCreateBrowserCredential: vi.fn(
     () => "aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
   ),
+  getOrCreateClientId: vi.fn(() => "client-1"),
 }));
 const boundaryMocks = vi.hoisted(() => ({ desktop: true }));
 
@@ -15,6 +16,7 @@ vi.mock("../../lib/desktopBridge", () => ({
 }));
 vi.mock("../../lib/deviceIdentity", () => ({
   getOrCreateBrowserCredential: deviceMocks.getOrCreateBrowserCredential,
+  getOrCreateClientId: deviceMocks.getOrCreateClientId,
 }));
 vi.mock("./StartupIdentityGate", () => ({
   default: () => <main aria-label="authoritative startup gate" />,
@@ -26,6 +28,8 @@ afterEach(() => {
   deviceMocks.getOrCreateBrowserCredential.mockReturnValue(
     "aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
   );
+  deviceMocks.getOrCreateClientId.mockReset();
+  deviceMocks.getOrCreateClientId.mockReturnValue("client-1");
   boundaryMocks.desktop = true;
   window.localStorage.clear();
   window.history.replaceState({}, "", "/");
@@ -64,6 +68,7 @@ describe("StartupIdentityBoundary", () => {
     ).toBeNull();
     expect(screen.queryByRole("main", { name: "product" })).toBeNull();
     expect(deviceMocks.getOrCreateBrowserCredential).not.toHaveBeenCalled();
+    expect(deviceMocks.getOrCreateClientId).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -79,7 +84,13 @@ describe("StartupIdentityBoundary", () => {
 
     render(
       <StartupIdentityBoundary>
-        {(deviceToken) => <main aria-label="product" data-device-token={deviceToken} />}
+        {({ deviceToken, clientId }) => (
+          <main
+            aria-label="product"
+            data-device-token={deviceToken}
+            data-client-id={clientId}
+          />
+        )}
       </StartupIdentityBoundary>
     );
 
@@ -88,9 +99,28 @@ describe("StartupIdentityBoundary", () => {
       screen.queryByRole("main", { name: "브라우저 직접 시작 사용 불가" })
     ).toBeNull();
     expect(deviceMocks.getOrCreateBrowserCredential).toHaveBeenCalledOnce();
+    expect(deviceMocks.getOrCreateClientId).toHaveBeenCalledOnce();
     expect(screen.getByRole("main", { name: "product" }).dataset.deviceToken).toBe(
       "aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
     );
+    expect(screen.getByRole("main", { name: "product" }).dataset.clientId).toBe(
+      "client-1"
+    );
+  });
+
+  it("retains a one-use browser entrance until durable client-id custody succeeds", () => {
+    boundaryMocks.desktop = false;
+    window.history.replaceState({}, "", "/join?token=invite-token");
+    deviceMocks.getOrCreateClientId.mockImplementation(() => {
+      throw new Error("입장 요청 식별자를 영구 저장할 수 없습니다.");
+    });
+    const renderProduct = vi.fn(() => <main aria-label="product" />);
+
+    render(<StartupIdentityBoundary>{renderProduct}</StartupIdentityBoundary>);
+
+    expect(screen.getByRole("main", { name: "브라우저 신원 사용 불가" })).toBeTruthy();
+    expect(renderProduct).not.toHaveBeenCalled();
+    expect(window.location.search).toBe("?token=invite-token");
   });
 
   it("retains a one-use browser entrance until durable credential custody succeeds", () => {

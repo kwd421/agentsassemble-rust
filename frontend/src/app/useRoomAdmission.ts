@@ -7,7 +7,6 @@ import {
 } from "../api";
 import { ApiError, GUEST_SESSION_EXPIRED_MESSAGE } from "../lib/apiErrors";
 import {
-  getOrCreateClientId,
   loadRememberedGuestProfile,
   rememberGuestProfile,
 } from "../lib/deviceIdentity";
@@ -24,6 +23,7 @@ import {
 
 type RoomAdmissionOptions = {
   deviceToken: string;
+  clientId: string;
   guestInvite: RoomDockItem | null;
   guestJoinToken: string;
   operatorPairingToken: string;
@@ -200,6 +200,7 @@ function pairingFailureIsRetryable(error: unknown): boolean {
 
 export function useRoomAdmission({
   deviceToken,
+  clientId,
   guestInvite,
   guestJoinToken,
   operatorPairingToken,
@@ -672,7 +673,7 @@ export function useRoomAdmission({
       displayName: pendingGuestDisplayName,
       avatarImage: pendingGuestAvatarImage,
       deviceToken,
-      clientId: getOrCreateClientId(),
+      clientId,
       participantType: "human",
     })
       .then(async (payload) => {
@@ -709,6 +710,7 @@ export function useRoomAdmission({
     applyJoinedSession,
     beginAdmissionAttempt,
     clearInviteUrl,
+    clientId,
     deviceToken,
     guestAlreadyJoinedThisInvite,
     guestJoinToken,

@@ -65,7 +65,7 @@ import {
 import { useRoomSideChat } from "./useRoomSideChat";
 import { useSidebarResize } from "./useSidebarResize";
 
-export function useAppController(deviceToken: string) {
+export function useAppController(deviceToken: string, clientId: string) {
   const [operatorPairingToken, setOperatorPairingToken] = useState(
     consumeOperatorPairingTokenFromUrl
   );
@@ -206,6 +206,7 @@ export function useAppController(deviceToken: string) {
     clearGuestSession,
   } = useRoomAdmission({
     deviceToken,
+    clientId,
     guestInvite,
     guestJoinToken,
     operatorPairingToken,
@@ -742,7 +743,7 @@ export function useAppController(deviceToken: string) {
     configureInvitePublicUrl, copyAgentInviteLink, copyGuestAiPacket,
     copyInviteLink, copyOperatorPairingLink, copyRemoteClientPacket,
     createChannel, createChannelOpen, createCompanionAiPacket, deleteDirectoryFriend,
-    deleteRoom, deviceToken, exitGuestSurface, expireGuestSession,
+    deleteRoom, deviceToken, clientId, exitGuestSurface, expireGuestSession,
     friendAddDraftName, friendListFilter, friendsBusyId, friendsLoading,
     friendsStatus, generateAgentInviteLink, generateInviteLink, generateOperatorPairingLink,
     goToChannel, guestAdmissionBusy, guestAiPacketPreview, guestAiPacketStatus,

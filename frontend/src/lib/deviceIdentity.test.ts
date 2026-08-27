@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { getOrCreateBrowserCredential } from "./deviceIdentity";
+import { getOrCreateBrowserCredential, getOrCreateClientId } from "./deviceIdentity";
 
 const BROWSER_CREDENTIAL_STORAGE_KEY = "agentsassemble.browserCredential.v1";
+const CLIENT_ID_STORAGE_KEY = "agentsassemble.clientId.v1";
 const OLD_DEVICE_TOKEN_STORAGE_KEY = "agentsassemble.deviceToken.v1";
 
 describe("browser admission credential", () => {
@@ -78,5 +79,48 @@ describe("browser admission credential", () => {
 
     expect(() => getOrCreateBrowserCredential()).toThrow(/영구 저장/);
     expect(window.localStorage.getItem(BROWSER_CREDENTIAL_STORAGE_KEY)).toBeNull();
+  });
+});
+
+describe("admission client id", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("creates one durable id and reuses the exact stored value", () => {
+    const random = vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(
+      "11111111-2222-4333-8444-555555555555"
+    );
+
+    expect(getOrCreateClientId()).toBe("11111111-2222-4333-8444-555555555555");
+    expect(getOrCreateClientId()).toBe("11111111-2222-4333-8444-555555555555");
+    expect(window.localStorage.getItem(CLIENT_ID_STORAGE_KEY)).toBe(
+      "11111111-2222-4333-8444-555555555555"
+    );
+    expect(random).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a noncanonical stored id without replacing it", () => {
+    window.localStorage.setItem(CLIENT_ID_STORAGE_KEY, " padded-client ");
+    const random = vi.spyOn(globalThis.crypto, "randomUUID");
+
+    expect(() => getOrCreateClientId()).toThrow(/손상/);
+    expect(window.localStorage.getItem(CLIENT_ID_STORAGE_KEY)).toBe(" padded-client ");
+    expect(random).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when durable storage cannot confirm the id", () => {
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(
+      "11111111-2222-4333-8444-555555555555"
+    );
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => undefined);
+
+    expect(() => getOrCreateClientId()).toThrow(/영구 저장/);
+    expect(window.localStorage.getItem(CLIENT_ID_STORAGE_KEY)).toBeNull();
   });
 });

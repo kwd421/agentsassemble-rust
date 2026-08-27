@@ -7,7 +7,9 @@ import "./index.css";
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <StartupIdentityBoundary>
-      {(deviceToken) => <App deviceToken={deviceToken} />}
+      {({ deviceToken, clientId }) => (
+        <App deviceToken={deviceToken} clientId={clientId} />
+      )}
     </StartupIdentityBoundary>
   </React.StrictMode>
 );

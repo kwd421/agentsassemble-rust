@@ -1,6 +1,9 @@
 import { useState, type ReactNode } from "react";
 
-import { getOrCreateBrowserCredential } from "../../lib/deviceIdentity";
+import {
+  getOrCreateBrowserCredential,
+  getOrCreateClientId,
+} from "../../lib/deviceIdentity";
 import { isDesktopWebview } from "../../lib/desktopBridge";
 import { guestRecoveryRequestFromUrl } from "../../lib/guestRecovery";
 import {
@@ -25,20 +28,27 @@ function browserEntranceHasAuthority(): boolean {
 export default function StartupIdentityBoundary({
   children,
 }: {
-  children: (deviceToken: string) => ReactNode;
+  children: (identity: { deviceToken: string; clientId: string }) => ReactNode;
 }) {
   const [desktop] = useState(isDesktopWebview);
   const [browserEntrance] = useState(
     () => !desktop && browserEntranceHasAuthority()
   );
   const [ready, setReady] = useState(browserEntrance);
-  const [browserCredential] = useState(() => {
-    if (!desktop && !browserEntrance) return { deviceToken: "", error: "" };
+  const [browserIdentity] = useState(() => {
+    if (!desktop && !browserEntrance) {
+      return { deviceToken: "", clientId: "", error: "" };
+    }
     try {
-      return { deviceToken: getOrCreateBrowserCredential(), error: "" };
+      return {
+        deviceToken: getOrCreateBrowserCredential(),
+        clientId: getOrCreateClientId(),
+        error: "",
+      };
     } catch (error) {
       return {
         deviceToken: "",
+        clientId: "",
         error:
           error instanceof Error
             ? error.message
@@ -69,7 +79,7 @@ export default function StartupIdentityBoundary({
     );
   }
 
-  if (browserCredential.error) {
+  if (browserIdentity.error) {
     return (
       <div className="fixed inset-0 z-[400] grid place-items-center bg-[#101114] p-5">
         <main
@@ -83,17 +93,22 @@ export default function StartupIdentityBoundary({
             role="alert"
             className="rounded-md bg-[#3a2526] p-3 text-[11px] font-bold leading-5 text-[#ffb4b5]"
           >
-            {browserCredential.error}
+            {browserIdentity.error}
           </p>
         </main>
       </div>
     );
   }
 
-  if (ready) return <>{children(browserCredential.deviceToken)}</>;
+  if (ready) {
+    return children({
+      deviceToken: browserIdentity.deviceToken,
+      clientId: browserIdentity.clientId,
+    });
+  }
   return (
     <StartupIdentityGate
-      deviceToken={browserCredential.deviceToken}
+      deviceToken={browserIdentity.deviceToken}
       onComplete={() => setReady(true)}
     />
   );
