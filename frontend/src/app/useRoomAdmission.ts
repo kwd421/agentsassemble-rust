@@ -11,6 +11,10 @@ import {
   rememberGuestProfile,
 } from "../lib/deviceIdentity";
 import { roomFromGuestSession, type RoomDockItem } from "../lib/roomDockModel";
+import {
+  clearAdmissionRequestId,
+  loadOrCreateAdmissionRequestId,
+} from "../lib/roomAdmissionRequestId";
 import { verifyAndBindRoomSessionSurface } from "../lib/roomDirectoryContract";
 import {
   persistRoomGuestSession,
@@ -171,27 +175,6 @@ function admissionReducer(state: AdmissionState, action: AdmissionAction): Admis
       if (state.kind === "idle" || state.kind === "expired") return state;
       if (state.kind === "joined") return { kind: "idle", session: null, status: "" };
       return { ...state, session: null };
-  }
-}
-
-const ADMISSION_REQUEST_ID_STORAGE_KEY = "agentsassemble.roomAdmissionRequestId.v1";
-
-function loadOrCreateAdmissionRequestId(): string {
-  const existing = String(window.sessionStorage.getItem(ADMISSION_REQUEST_ID_STORAGE_KEY) || "").trim();
-  if (existing) return existing;
-  if (typeof crypto === "undefined" || typeof crypto.randomUUID !== "function") {
-    throw new Error("이 브라우저에서는 안전한 입장 요청 ID를 만들 수 없습니다.");
-  }
-  const requestId = crypto.randomUUID();
-  window.sessionStorage.setItem(ADMISSION_REQUEST_ID_STORAGE_KEY, requestId);
-  return requestId;
-}
-
-function clearAdmissionRequestId(): void {
-  try {
-    window.sessionStorage.removeItem(ADMISSION_REQUEST_ID_STORAGE_KEY);
-  } catch {
-    // The completed room session is authoritative even if storage cleanup fails.
   }
 }
 

@@ -1,8 +1,9 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TEST_SERVER_PRODUCT_SURFACE } from "../test/serverProductSurface";
 import type { RoomGuestSession } from "../lib/roomGuestSession";
+import { ADMISSION_REQUEST_ID_STORAGE_KEY } from "../lib/roomAdmissionRequestId";
 import { useRoomAdmission } from "./useRoomAdmission";
 
 const deviceMocks = vi.hoisted(() => ({
@@ -99,6 +100,35 @@ describe("room admission retry custody", () => {
     });
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("fails before admission when request-id storage silently refuses the write", async () => {
+    const setItem = Storage.prototype.setItem;
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+      this: Storage,
+      key,
+      value
+    ) {
+      if (key === ADMISSION_REQUEST_ID_STORAGE_KEY) return;
+      setItem.call(this, key, value);
+    });
+    const { result } = renderAdmission();
+
+    await waitFor(() =>
+      expect(result.current.admissionState).toMatchObject({
+        kind: "failed",
+        code: "request_id_unavailable",
+        retryable: true,
+      })
+    );
+
+    expect(apiMocks.joinRoomInvite).not.toHaveBeenCalled();
+    expect(window.location.search).toBe("?token=invite-1");
+    expect(window.sessionStorage.getItem(ADMISSION_REQUEST_ID_STORAGE_KEY)).toBeNull();
+  });
+
   it("does not loop automatic join attempts after a failure", async () => {
     apiMocks.joinRoomInvite.mockRejectedValue(new Error("network unavailable"));
     const { result } = renderAdmission();
@@ -147,9 +177,7 @@ describe("room admission retry custody", () => {
     expect(result.current.guestSession).toBeNull();
     expect(onRoomJoined).not.toHaveBeenCalled();
     expect(window.location.search).toBe("?token=invite-1");
-    expect(window.sessionStorage.getItem("agentsassemble.roomAdmissionRequestId.v1")).toBe(
-      requestId
-    );
+    expect(window.sessionStorage.getItem(ADMISSION_REQUEST_ID_STORAGE_KEY)).toBe(requestId);
 
     sessionStore.writeError = null;
     act(() => result.current.requestGuestJoin());
