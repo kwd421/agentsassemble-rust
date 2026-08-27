@@ -3,9 +3,9 @@ import { ImagePlus, LogIn, RotateCcw } from "lucide-react";
 import { uploadLobbyAttachment } from "../../api";
 import type { OperatorPairingState } from "../../app/useRoomAdmission";
 import ImageCropper from "./ImageCropper";
-import { getOrCreateBrowserCredential } from "../../lib/deviceIdentity";
 
 type GuestJoinProfilePanelProps = {
+  deviceToken: string;
   inviteToken: string;
   displayName: string;
   avatarImage?: string;
@@ -20,6 +20,7 @@ type GuestJoinProfilePanelProps = {
 };
 
 export default function GuestJoinProfilePanel({
+  deviceToken,
   inviteToken,
   displayName,
   avatarImage,
@@ -41,7 +42,7 @@ export default function GuestJoinProfilePanel({
     try {
       const attachment = await uploadLobbyAttachment(file, {
         inviteToken,
-        deviceToken: getOrCreateBrowserCredential(),
+        deviceToken,
         purpose: "profile_avatar",
       });
       onAvatarImageChange(attachment.url);

@@ -23,7 +23,6 @@ import type { RoomMenuState } from "../views/components/RoomRail";
 import { useRoomMessageSearch } from "../views/useRoomMessageSearch";
 import { loadAgentActivityVisibility } from "../lib/agentActivityPreferences";
 import { isDesktopWebview } from "../lib/desktopBridge";
-import { getOrCreateBrowserCredential } from "../lib/deviceIdentity";
 import { consumeGuestRecoveryRequestFromUrl } from "../lib/guestRecovery";
 import { roomAppearanceStyle } from "../lib/roomAppearance";
 import {
@@ -67,7 +66,7 @@ import {
 import { useRoomSideChat } from "./useRoomSideChat";
 import { useSidebarResize } from "./useSidebarResize";
 
-export function useAppController() {
+export function useAppController(deviceToken: string) {
   const [operatorPairingToken, setOperatorPairingToken] = useState(
     consumeOperatorPairingTokenFromUrl
   );
@@ -77,7 +76,6 @@ export function useAppController() {
   const [startupRoute] = useState(() =>
     createStartupRoute({ operatorPairingPending: Boolean(operatorPairingToken) })
   );
-  const [deviceToken] = useState(getOrCreateBrowserCredential);
   const [startupIdentityReady] = useState(isDesktopWebview);
   const guestInvite = startupRoute.guestInvite;
   const guestJoinToken = startupRoute.guestJoinToken;
@@ -208,6 +206,7 @@ export function useAppController() {
     expireGuestSession,
     clearGuestSession,
   } = useRoomAdmission({
+    deviceToken,
     guestInvite,
     guestJoinToken,
     operatorPairingToken,
@@ -339,6 +338,7 @@ export function useAppController() {
   });
   const roomAppearances = roomSettings.appearances;
   const roomInvite = useRoomInviteController({
+    deviceToken,
     guestLocked,
     sessionToken: admittedSessionToken,
   });

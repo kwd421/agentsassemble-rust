@@ -14,7 +14,6 @@ import {
   type PublicInviteStatus,
   type RoomFriend,
 } from "../api";
-import { getOrCreateBrowserCredential } from "../lib/deviceIdentity";
 import {
   remoteClientPacketPreview,
   secureInviteCopyTarget,
@@ -37,6 +36,7 @@ export type HumanInviteOptions = {
 };
 
 type UseRoomInviteControllerOptions = {
+  deviceToken: string;
   guestLocked: boolean;
   sessionToken?: string;
 };
@@ -72,6 +72,7 @@ function inviteErrorLooksLikeHostToken(error: unknown) {
 }
 
 export function useRoomInviteController({
+  deviceToken,
   guestLocked,
   sessionToken = "",
 }: UseRoomInviteControllerOptions) {
@@ -141,7 +142,7 @@ export function useRoomInviteController({
           }
         }
         if (!cancelled && loadHostToken()) {
-          await claimHostDevice({ deviceToken: getOrCreateBrowserCredential() });
+          await claimHostDevice({ deviceToken });
         }
       } catch {
         // Moderation actions report a concrete error if bootstrap did not succeed.
@@ -150,7 +151,7 @@ export function useRoomInviteController({
     return () => {
       cancelled = true;
     };
-  }, [guestLocked]);
+  }, [deviceToken, guestLocked]);
 
   async function refreshPublicInviteState() {
     const status = await fetchPublicInviteStatus();

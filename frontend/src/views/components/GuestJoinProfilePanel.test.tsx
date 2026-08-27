@@ -6,15 +6,6 @@ import GuestJoinProfilePanel from "./GuestJoinProfilePanel";
 const apiMocks = vi.hoisted(() => ({
   uploadLobbyAttachment: vi.fn(),
 }));
-const deviceMocks = vi.hoisted(() => ({
-  getOrCreateBrowserCredential: vi.fn(
-    () => "aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-  ),
-}));
-
-vi.mock("../../lib/deviceIdentity", () => ({
-  getOrCreateBrowserCredential: deviceMocks.getOrCreateBrowserCredential,
-}));
 
 vi.mock("../../api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../api")>();
@@ -41,10 +32,6 @@ vi.mock("./ImageCropper", () => ({
 describe("GuestJoinProfilePanel", () => {
   beforeEach(() => {
     apiMocks.uploadLobbyAttachment.mockReset();
-    deviceMocks.getOrCreateBrowserCredential.mockReset();
-    deviceMocks.getOrCreateBrowserCredential.mockReturnValue(
-      "aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-    );
   });
 
   afterEach(cleanup);
@@ -64,6 +51,7 @@ describe("GuestJoinProfilePanel", () => {
 
     render(
       <GuestJoinProfilePanel
+        deviceToken="aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
         inviteToken="aaj1_valid-invite"
         displayName="Guest"
         onDisplayNameChange={vi.fn()}
@@ -89,28 +77,4 @@ describe("GuestJoinProfilePanel", () => {
     );
   });
 
-  it("stops a pre-join upload before network I/O without durable browser custody", async () => {
-    deviceMocks.getOrCreateBrowserCredential.mockImplementation(() => {
-      throw new Error("브라우저 저장소를 사용할 수 없습니다.");
-    });
-    const croppedFile = new File(["avatar"], "avatar.png", { type: "image/png" });
-
-    render(
-      <GuestJoinProfilePanel
-        inviteToken="aaj1_valid-invite"
-        displayName="Guest"
-        onDisplayNameChange={vi.fn()}
-        onAvatarImageChange={vi.fn()}
-        onJoin={vi.fn()}
-      />
-    );
-
-    fireEvent.change(screen.getByLabelText("프로필 사진"), {
-      target: { files: [croppedFile] },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "테스트 이미지 적용" }));
-
-    await waitFor(() => expect(screen.getByText(/브라우저 저장소/)).toBeTruthy());
-    expect(apiMocks.uploadLobbyAttachment).not.toHaveBeenCalled();
-  });
 });

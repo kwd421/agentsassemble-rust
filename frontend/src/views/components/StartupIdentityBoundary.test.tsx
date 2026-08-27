@@ -37,7 +37,7 @@ describe("StartupIdentityBoundary", () => {
 
     render(
       <StartupIdentityBoundary>
-        <main aria-label="product" />
+        {() => <main aria-label="product" />}
       </StartupIdentityBoundary>
     );
 
@@ -52,7 +52,7 @@ describe("StartupIdentityBoundary", () => {
 
     render(
       <StartupIdentityBoundary>
-        <main aria-label="product" />
+        {() => <main aria-label="product" />}
       </StartupIdentityBoundary>
     );
 
@@ -79,7 +79,7 @@ describe("StartupIdentityBoundary", () => {
 
     render(
       <StartupIdentityBoundary>
-        <main aria-label="product" />
+        {(deviceToken) => <main aria-label="product" data-device-token={deviceToken} />}
       </StartupIdentityBoundary>
     );
 
@@ -87,7 +87,27 @@ describe("StartupIdentityBoundary", () => {
     expect(
       screen.queryByRole("main", { name: "브라우저 직접 시작 사용 불가" })
     ).toBeNull();
-    expect(deviceMocks.getOrCreateBrowserCredential).not.toHaveBeenCalled();
+    expect(deviceMocks.getOrCreateBrowserCredential).toHaveBeenCalledOnce();
+    expect(screen.getByRole("main", { name: "product" }).dataset.deviceToken).toBe(
+      "aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    );
+  });
+
+  it("retains a one-use browser entrance until durable credential custody succeeds", () => {
+    boundaryMocks.desktop = false;
+    window.history.replaceState({}, "", "/pair?token=aap1_pairing-token");
+    deviceMocks.getOrCreateBrowserCredential.mockImplementation(() => {
+      throw new Error("브라우저 저장소를 사용할 수 없습니다.");
+    });
+    const renderProduct = vi.fn(() => <main aria-label="product" />);
+
+    render(
+      <StartupIdentityBoundary>{renderProduct}</StartupIdentityBoundary>
+    );
+
+    expect(screen.getByRole("main", { name: "브라우저 신원 사용 불가" })).toBeTruthy();
+    expect(renderProduct).not.toHaveBeenCalled();
+    expect(window.location.search).toBe("?token=aap1_pairing-token");
   });
 
   it("shows a hard stop instead of rendering identity-bound surfaces without durable custody", () => {
@@ -97,7 +117,7 @@ describe("StartupIdentityBoundary", () => {
 
     render(
       <StartupIdentityBoundary>
-        <main aria-label="product" />
+        {() => <main aria-label="product" />}
       </StartupIdentityBoundary>
     );
 

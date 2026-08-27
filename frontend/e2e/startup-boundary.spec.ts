@@ -37,6 +37,23 @@ test("retains pairing while consuming its URL secret", async ({ page }) => {
   await expect(page.getByRole("region", { name: "운영자 기기 연결" })).toBeVisible();
 });
 
+test("keeps a one-use entrance when durable credential custody fails", async ({ page }) => {
+  await page.addInitScript(() => {
+    const setItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === "agentsassemble.browserCredential.v1") {
+        throw new Error("storage unavailable");
+      }
+      setItem.call(this, key, value);
+    };
+  });
+
+  await page.goto("/pair?token=aap1_pairing-token");
+
+  await expect(page).toHaveURL(/\/pair\?token=aap1_pairing-token$/);
+  await expect(page.getByRole("main", { name: "브라우저 신원 사용 불가" })).toBeVisible();
+});
+
 test("retains recovery while consuming its URL secret", async ({ page }) => {
   await page.goto(`/?recover=1&room=friend-room#recovery=${RECOVERY_CODE}`);
 

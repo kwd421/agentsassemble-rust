@@ -42,6 +42,7 @@ const room: RoomDockItem = {
   createdAt: "2026-07-12T00:00:00Z",
   tone: "fresh",
 };
+const DEVICE_TOKEN = "aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -54,6 +55,7 @@ function deferred<T>() {
 function renderInviteController() {
   return renderHook(() =>
     useRoomInviteController({
+      deviceToken: DEVICE_TOKEN,
       guestLocked: true,
     })
   );

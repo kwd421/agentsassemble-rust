@@ -25,14 +25,15 @@ function browserEntranceHasAuthority(): boolean {
 export default function StartupIdentityBoundary({
   children,
 }: {
-  children: ReactNode;
+  children: (deviceToken: string) => ReactNode;
 }) {
-  const desktop = isDesktopWebview();
-  const [ready, setReady] = useState(
+  const [desktop] = useState(isDesktopWebview);
+  const [browserEntrance] = useState(
     () => !desktop && browserEntranceHasAuthority()
   );
+  const [ready, setReady] = useState(browserEntrance);
   const [browserCredential] = useState(() => {
-    if (!desktop) return { deviceToken: "", error: "" };
+    if (!desktop && !browserEntrance) return { deviceToken: "", error: "" };
     try {
       return { deviceToken: getOrCreateBrowserCredential(), error: "" };
     } catch (error) {
@@ -89,7 +90,7 @@ export default function StartupIdentityBoundary({
     );
   }
 
-  if (ready) return <>{children}</>;
+  if (ready) return <>{children(browserCredential.deviceToken)}</>;
   return (
     <StartupIdentityGate
       deviceToken={browserCredential.deviceToken}

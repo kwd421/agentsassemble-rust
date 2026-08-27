@@ -14,7 +14,7 @@ export default function AppOverlays({ controller }: { controller: AppController 
     acceptRecoveredSession, activeRoom, agentCreateOpen, agentInviteUrl,
     canonicalRoom, closeInviteModal, configureInvitePublicUrl, copyAgentInviteLink,
     copyInviteLink, copyLocalPreviewLink, copyOperatorPairingLink, copyRemoteClientPacket,
-    createChannel, createChannelOpen, deleteRoom, generateAgentInviteLink,
+    createChannel, createChannelOpen, deleteRoom, deviceToken, generateAgentInviteLink,
     generateInviteLink, generateOperatorPairingLink, guestAdmissionBusy, guestExpired,
     guestJoinRequested, guestJoinStatus, guestJoinToken, guestLocked,
     guestRecoveryRequest, guestSession, homeFriendsPayload, hostTokenDraft,
@@ -191,6 +191,7 @@ export default function AppOverlays({ controller }: { controller: AppController 
 
         {guestRecoveryRequest && (
           <GuestIdentityRecoveryPanel
+            deviceToken={deviceToken}
             request={guestRecoveryRequest}
             onRecovered={(payload) => {
               void acceptRecoveredSession(payload).then((accepted) => {
@@ -209,6 +210,7 @@ export default function AppOverlays({ controller }: { controller: AppController 
 
         {(guestJoinToken || operatorPairingPending) && !guestSession && !guestExpired && (
           <GuestJoinProfilePanel
+            deviceToken={deviceToken}
             inviteToken={guestJoinToken}
             pairing={operatorPairingPending}
             pairingState={operatorPairingState}
