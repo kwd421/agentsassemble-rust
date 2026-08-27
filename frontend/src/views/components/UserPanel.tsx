@@ -80,7 +80,11 @@ export default function UserPanel({
   const [profileError, setProfileError] = useState("");
   const [profileHydrated, setProfileHydrated] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const profileGeneration = useRef(0);
+  const profileSnapshotRef = useRef(profileSnapshot);
+  const profileScopeGeneration = useRef(0);
+  const profileWriteGeneration = useRef(0);
+  const profileWriteTail = useRef<Promise<void>>(Promise.resolve());
+  const avatarUploadGeneration = useRef(0);
   const statusClass = profileStatusClass(profile, hasBackendError);
   const hasAvatarImage = Boolean(profile.avatarImage);
   const guestDisplayName = String(guestProfile?.displayName || "게스트").trim() || "게스트";
@@ -93,29 +97,38 @@ export default function UserPanel({
 
   useEffect(() => {
     if (guestProfile?.expired || guestAwaitingAdmission) {
-      profileGeneration.current += 1;
+      profileScopeGeneration.current += 1;
+      profileWriteGeneration.current += 1;
+      avatarUploadGeneration.current += 1;
+      profileWriteTail.current = Promise.resolve();
       setSaving(false);
       return;
     }
-    const generation = ++profileGeneration.current;
+    const generation = ++profileScopeGeneration.current;
+    profileWriteGeneration.current += 1;
+    avatarUploadGeneration.current += 1;
+    profileWriteTail.current = Promise.resolve();
     setSaving(false);
     setProfileHydrated(false);
     setProfileError("");
     fetchUserProfile(profileIdentity)
       .then((loadedSnapshot) => {
-        if (profileGeneration.current !== generation) return;
+        if (profileScopeGeneration.current !== generation) return;
+        profileSnapshotRef.current = loadedSnapshot;
         setProfileSnapshot(loadedSnapshot);
         setDraft(loadedSnapshot.profile);
         setProfileHydrated(true);
       })
       .catch((error: Error) => {
-        if (profileGeneration.current !== generation) return;
+        if (profileScopeGeneration.current !== generation) return;
         setProfileHydrated(false);
         setProfileError(error.message || "프로필을 불러오지 못했습니다.");
       });
     return () => {
-      if (profileGeneration.current === generation) {
-        profileGeneration.current += 1;
+      if (profileScopeGeneration.current === generation) {
+        profileScopeGeneration.current += 1;
+        profileWriteGeneration.current += 1;
+        avatarUploadGeneration.current += 1;
       }
     };
   }, [
@@ -175,48 +188,70 @@ export default function UserPanel({
   }
 
   async function persistProfile(
-    nextProfile: UserProfile
+    applyMutation: (currentProfile: UserProfile) => UserProfile
   ): Promise<"saved" | "stale" | "failed"> {
-    const generation = ++profileGeneration.current;
+    const scopeGeneration = profileScopeGeneration.current;
+    const writeGeneration = ++profileWriteGeneration.current;
     setSaving(true);
-    setProfileError("");
-    try {
-      const savedSnapshot = await saveUserProfile(nextProfile, profileIdentity);
-      if (profileGeneration.current !== generation) return "stale";
-      setProfileSnapshot(savedSnapshot);
-      setDraft(savedSnapshot.profile);
-      return "saved";
-    } catch (error) {
-      if (profileGeneration.current !== generation) return "stale";
-      const message = error instanceof Error ? error.message : "프로필을 저장하지 못했습니다.";
-      setProfileError(message);
-      return "failed";
-    } finally {
-      if (profileGeneration.current === generation) setSaving(false);
-    }
+    const operation = async (): Promise<"saved" | "stale" | "failed"> => {
+      if (profileScopeGeneration.current !== scopeGeneration) return "stale";
+      setProfileError("");
+      try {
+        const nextProfile = applyMutation(profileSnapshotRef.current.profile);
+        const savedSnapshot = await saveUserProfile(nextProfile, profileIdentity);
+        if (profileScopeGeneration.current !== scopeGeneration) return "stale";
+        profileSnapshotRef.current = savedSnapshot;
+        setProfileSnapshot(savedSnapshot);
+        setDraft(savedSnapshot.profile);
+        return "saved";
+      } catch (error) {
+        if (profileScopeGeneration.current !== scopeGeneration) return "stale";
+        const message = error instanceof Error ? error.message : "프로필을 저장하지 못했습니다.";
+        setProfileError(message);
+        return "failed";
+      } finally {
+        if (
+          profileScopeGeneration.current === scopeGeneration &&
+          profileWriteGeneration.current === writeGeneration
+        ) {
+          setSaving(false);
+        }
+      }
+    };
+    const result = profileWriteTail.current.then(operation);
+    profileWriteTail.current = result.then(() => undefined);
+    return result;
   }
 
   function updateProfileFlag(key: "micMuted" | "deafened", value: boolean) {
-    void persistProfile({ ...profile, [key]: value });
+    void persistProfile((currentProfile) => ({ ...currentProfile, [key]: value }));
   }
 
   function setProfileStatus(status: UserProfile["status"]) {
-    void persistProfile({ ...profile, status });
+    void persistProfile((currentProfile) => ({ ...currentProfile, status }));
     setStatusMenuOpen(false);
   }
 
   async function saveDraft() {
-    if ((await persistProfile(draft)) === "saved") setSettingsOpen(false);
+    if ((await persistProfile(() => draft)) === "saved") setSettingsOpen(false);
   }
 
   async function handleAvatarCropped(file: File) {
-    const uploadGeneration = ++profileGeneration.current;
-    setSaving(false);
+    const scopeGeneration = profileScopeGeneration.current;
+    const uploadGeneration = ++avatarUploadGeneration.current;
     setAvatarStatus("프로필 사진 저장 중...");
     try {
       const avatarImage = await uploadUserProfileAvatar(file, profileIdentity);
-      if (profileGeneration.current !== uploadGeneration) return;
-      const result = await persistProfile({ ...profile, avatarImage });
+      if (
+        profileScopeGeneration.current !== scopeGeneration ||
+        avatarUploadGeneration.current !== uploadGeneration
+      ) {
+        return;
+      }
+      const result = await persistProfile((currentProfile) => ({
+        ...currentProfile,
+        avatarImage,
+      }));
       if (result === "stale") return;
       if (result === "failed") {
         setAvatarStatus("프로필 사진을 저장하지 못했습니다.");
@@ -226,7 +261,12 @@ export default function UserPanel({
       setAvatarEditorOpen(false);
       setAvatarStatus("");
     } catch (error) {
-      if (profileGeneration.current !== uploadGeneration) return;
+      if (
+        profileScopeGeneration.current !== scopeGeneration ||
+        avatarUploadGeneration.current !== uploadGeneration
+      ) {
+        return;
+      }
       setAvatarStatus(error instanceof Error ? error.message : "프로필 사진 저장 실패");
     }
   }

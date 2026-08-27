@@ -184,7 +184,7 @@ describe("UserPanel", () => {
     expect(within(view.container).getByLabelText("이미지 선택")).toBeTruthy();
   });
 
-  it("does not let an older profile response replace the newer profile/base pair", async () => {
+  it("serializes profile mutations against the latest committed profile/base pair", async () => {
     const resolvers: Array<(value: UserProfileSnapshot) => void> = [];
     apiMocks.fetchUserProfile.mockResolvedValue(snapshot(DEFAULT_USER_PROFILE));
     apiMocks.saveUserProfile.mockImplementation(
@@ -207,13 +207,38 @@ describe("UserPanel", () => {
     fireEvent.click(
       within(view.container).getByRole("button", { name: "헤드셋 끄기" })
     );
+    await waitFor(() => expect(resolvers).toHaveLength(1));
+    expect(apiMocks.saveUserProfile).toHaveBeenCalledTimes(1);
+    expect(apiMocks.saveUserProfile).toHaveBeenLastCalledWith(
+      expect.objectContaining({ micMuted: false, deafened: false }),
+      { roomId: "general" }
+    );
+
+    resolvers[0](
+      snapshot(
+        {
+          ...DEFAULT_USER_PROFILE,
+          displayName: "First Authority",
+          micMuted: false,
+          avatarImage: "/api/attachments/first_avatar?view=1",
+        },
+        "http://127.0.0.1:49171"
+      )
+    );
     await waitFor(() => expect(resolvers).toHaveLength(2));
+    expect(apiMocks.saveUserProfile).toHaveBeenCalledTimes(2);
+    expect(apiMocks.saveUserProfile).toHaveBeenLastCalledWith(
+      expect.objectContaining({ micMuted: false, deafened: true }),
+      { roomId: "general" }
+    );
 
     resolvers[1](
       snapshot(
         {
           ...DEFAULT_USER_PROFILE,
           displayName: "New Authority",
+          micMuted: false,
+          deafened: true,
           avatarImage: "/api/attachments/new_avatar?view=1",
         },
         "http://127.0.0.1:49172"
@@ -222,19 +247,8 @@ describe("UserPanel", () => {
     await waitFor(() =>
       expect(within(view.container).getByRole("button", { name: /New Authority/ })).toBeTruthy()
     );
-    resolvers[0](
-      snapshot(
-        {
-          ...DEFAULT_USER_PROFILE,
-          displayName: "Old Authority",
-          avatarImage: "/api/attachments/old_avatar?view=1",
-        },
-        "http://127.0.0.1:49171"
-      )
-    );
-    await Promise.resolve();
 
-    expect(within(view.container).queryByText("Old Authority")).toBeNull();
+    expect(within(view.container).queryByText("First Authority")).toBeNull();
     expect(
       (view.container.querySelector(".dc-user-panel") as HTMLElement).style.getPropertyValue(
         "--profile-avatar-image"
