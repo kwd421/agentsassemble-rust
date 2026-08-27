@@ -22,6 +22,18 @@ test("does not admit legacy query or fragment bypass markers", async ({ page }) 
 });
 
 test("retains the server-owned invite entrance", async ({ page }) => {
+  await page.route("**/api/room-invite/admission", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: "profile_required",
+        can_auto_join: false,
+        room_id: "room-1",
+        room_label: "Room One",
+        invite_scope: "room",
+      }),
+    })
+  );
   await page.goto("/join?token=invite-token");
 
   await expect(page.getByRole("region", { name: "입장 프로필" })).toBeVisible();
@@ -41,7 +53,7 @@ test("does not let legacy query state override a server-owned invite", async ({ 
   await expect(page.getByText("legacy-room")).toHaveCount(0);
 });
 
-test("replays one frozen admission intent after a lost join response and reload", async ({
+test("retains one frozen admission intent across response loss and a later invite gate", async ({
   page,
 }) => {
   let preflightCount = 0;
@@ -67,6 +79,14 @@ test("replays one frozen admission intent after a lost join response and reload"
   });
   await page.route("**/api/room-invite/join", async (route) => {
     joinBodies.push(route.request().postDataJSON());
+    if (joinBodies.length === 2) {
+      await route.fulfill({
+        status: 403,
+        contentType: "application/json",
+        body: JSON.stringify({ code: "invite_revoked", error: "Invite was revoked." }),
+      });
+      return;
+    }
     await route.abort("connectionrefused");
   });
 
@@ -75,11 +95,15 @@ test("replays one frozen admission intent after a lost join response and reload"
   await expect.poll(() => joinBodies.length).toBe(1);
 
   await page.reload();
-  await expect(page.getByRole("region", { name: "입장 재시도" })).toBeVisible();
   await expect.poll(() => joinBodies.length).toBe(2);
+
+  await page.reload();
+  await expect(page.getByRole("region", { name: "입장 재시도" })).toBeVisible();
+  await expect.poll(() => joinBodies.length).toBe(3);
 
   expect(preflightCount).toBe(1);
   expect(joinBodies[1]).toEqual(joinBodies[0]);
+  expect(joinBodies[2]).toEqual(joinBodies[0]);
 });
 
 test("retains pairing while consuming its URL secret", async ({ page }) => {

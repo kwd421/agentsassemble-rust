@@ -280,7 +280,13 @@ describe("room admission retry custody", () => {
   });
 
   it("retires the intent only when the server proves a no-commit outcome", async () => {
-    apiMocks.joinRoomInvite.mockRejectedValue(new ApiError(403, "invite_invalid"));
+    apiMocks.joinRoomInvite.mockRejectedValue(
+      new ApiError(
+        403,
+        "The invited identity conflicts with an existing participant.",
+        "participant_identity_conflict"
+      )
+    );
     const { result } = renderAdmission();
 
     await waitFor(() =>
@@ -293,6 +299,34 @@ describe("room admission retry custody", () => {
 
     expect(apiMocks.joinRoomInvite).toHaveBeenCalledOnce();
     expect(window.sessionStorage.getItem(ROOM_ADMISSION_INTENT_STORAGE_KEY)).toBeNull();
+  });
+
+  it("retains reusable retry custody when a later invite gate cannot disprove commit", async () => {
+    apiMocks.joinRoomInvite
+      .mockRejectedValueOnce(new Error("response lost after reusable admission"))
+      .mockRejectedValueOnce(
+        new ApiError(403, "Invite was revoked.", "invite_revoked")
+      );
+    const { result } = renderAdmission();
+
+    await waitFor(() =>
+      expect(result.current.guestJoinStatus).toBe("response lost after reusable admission")
+    );
+    act(() => result.current.requestGuestJoin());
+    await waitFor(() =>
+      expect(result.current.admissionState).toMatchObject({
+        kind: "failed",
+        operation: "join",
+        code: "invite_revoked",
+        retryable: false,
+      })
+    );
+
+    expect(apiMocks.joinRoomInvite).toHaveBeenCalledTimes(2);
+    expect(apiMocks.joinRoomInvite.mock.calls[1][0]).toEqual(
+      apiMocks.joinRoomInvite.mock.calls[0][0]
+    );
+    expect(window.sessionStorage.getItem(ROOM_ADMISSION_INTENT_STORAGE_KEY)).not.toBeNull();
   });
 
   it("replays a pending one-use admission directly after component replacement", async () => {

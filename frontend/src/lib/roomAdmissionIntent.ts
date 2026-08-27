@@ -1,3 +1,5 @@
+import { ApiError } from "./apiErrors";
+
 export const ROOM_ADMISSION_INTENT_STORAGE_KEY =
   "agentsassemble.roomAdmissionIntent.v1";
 
@@ -8,6 +10,18 @@ const NIL_UUID = "00000000-0000-0000-0000-000000000000";
 const MAX_STORED_INTENT_BYTES = 8 * 1024;
 const INTENT_UNAVAILABLE_MESSAGE =
   "이 브라우저에서는 입장 재시도 정보를 안전하게 보관할 수 없습니다.";
+const DEFINITIVE_NO_COMMIT_CODES = new Set([
+  "bad_request",
+  "browser_credential_invalid",
+  "idempotency_conflict",
+  "invite_token_required",
+  "meeting_mismatch",
+  "participant_identity_conflict",
+  "participant_type_invalid",
+  "payload_too_large",
+  "request_id_invalid",
+  "request_id_required",
+]);
 
 export type RoomAdmissionIntent = {
   requestId: string;
@@ -213,4 +227,8 @@ export function clearRoomAdmissionIntent(): void {
   } catch {
     // Verified room-session custody is authoritative after admission completes.
   }
+}
+
+export function roomAdmissionFailureProvesNoCommit(error: unknown): boolean {
+  return error instanceof ApiError && DEFINITIVE_NO_COMMIT_CODES.has(error.code);
 }

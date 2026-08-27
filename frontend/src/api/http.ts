@@ -251,19 +251,24 @@ export async function deleteJson<T>(url: string): Promise<T> {
 }
 
 export async function responseError(res: Response): Promise<ApiError> {
-  return new ApiError(res.status, await responseErrorMessage(res));
-}
-
-async function responseErrorMessage(res: Response): Promise<string> {
   const fallback = `${res.status} ${res.statusText}`;
   const text = await res.text().catch(() => "");
-  if (!text) return fallback;
+  if (!text) return new ApiError(res.status, fallback);
   try {
-    const payload = JSON.parse(text) as { error?: unknown; message?: unknown };
+    const payload = JSON.parse(text) as {
+      code?: unknown;
+      error?: unknown;
+      message?: unknown;
+    };
     const message = payload.error || payload.message;
-    return typeof message === "string" && message.trim() ? message : fallback;
+    const code = typeof payload.code === "string" ? payload.code.trim() : "";
+    return new ApiError(
+      res.status,
+      typeof message === "string" && message.trim() ? message : fallback,
+      code
+    );
   } catch {
-    return text;
+    return new ApiError(res.status, text);
   }
 }
 

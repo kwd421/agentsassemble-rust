@@ -5,6 +5,7 @@ import {
   fetchJsonWithIdentity,
   postJsonServerOperator,
   postJsonWithIdentity,
+  responseError,
 } from "./http";
 import { requestDesktopHostProductSurface } from "../lib/desktopBridge";
 import { getWsTicket } from "./room";
@@ -15,6 +16,21 @@ const HOST_SURFACE = {
   digest: "1".repeat(64),
   commands: ["host_product_surface", "runtime_operator_ticket"],
 };
+
+it("preserves a structured server error code separately from its message", async () => {
+  const error = await responseError(
+    new Response(
+      JSON.stringify({ code: "invite_revoked", error: "Invite was revoked." }),
+      { status: 403, headers: { "Content-Type": "application/json" } }
+    )
+  );
+
+  expect(error).toMatchObject({
+    status: 403,
+    code: "invite_revoked",
+    message: "Invite was revoked.",
+  });
+});
 
 describe("desktop profile HTTP routing", () => {
   afterEach(() => {

@@ -11,7 +11,7 @@ import { roomFromGuestSession, type RoomDockItem } from "../lib/roomDockModel";
 import {
   clearRoomAdmissionIntent,
   loadOrCreateRoomAdmissionIntent,
-  loadRoomAdmissionIntent,
+  loadRoomAdmissionIntent, roomAdmissionFailureProvesNoCommit,
 } from "../lib/roomAdmissionIntent";
 import { verifyAndBindRoomSessionSurface } from "../lib/roomDirectoryContract";
 import {
@@ -509,7 +509,7 @@ export function useRoomAdmission({
         dispatchAdmission({
           type: "failed",
           operation: "pairing",
-          code: error instanceof ApiError ? error.message : "pairing_failed",
+          code: error instanceof ApiError ? error.code || error.message : "pairing_failed",
           message,
           retryable,
           status: retryable
@@ -654,7 +654,7 @@ export function useRoomAdmission({
             : custodyFailure
             ? SESSION_CUSTODY_INVALID_CODE
             : error instanceof ApiError
-            ? error.message
+            ? error.code || error.message
             : "preflight_failed",
           message,
           retryable: custodyFailure || (!surfaceFailure && pairingFailureIsRetryable(error)),
@@ -735,7 +735,7 @@ export function useRoomAdmission({
         const custodyFailure = error instanceof SessionCustodyError;
         const retryable =
           custodyFailure || (!surfaceFailure && pairingFailureIsRetryable(error));
-        if (networkDispatched && !retryable && !surfaceFailure) {
+        if (networkDispatched && roomAdmissionFailureProvesNoCommit(error)) {
           clearRoomAdmissionIntent();
         }
         const message = error instanceof Error ? error.message : "초대 링크 입장 실패";
@@ -749,7 +749,7 @@ export function useRoomAdmission({
             : custodyFailure
               ? SESSION_CUSTODY_INVALID_CODE
               : error instanceof ApiError
-                ? error.message
+                ? error.code || error.message
                 : "join_failed",
           message,
           retryable,
