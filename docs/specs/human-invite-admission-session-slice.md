@@ -467,10 +467,12 @@ The copied frontend's `localPreviewInviteUrlForRoom` query-only guest path and
 `secureInviteCopyTarget` fallback are removed when real invite creation activates.
 The copied external-access modal/controller entry is already mounted, but its legacy
 Host-token/raw-fetch calls cannot satisfy the Rust one-use server-operator-ticket
-boundary and therefore fail closed. Manager invite controls and complete frontend
-activation must use the ready ingress snapshot; a local preview is not presented as
-admission parity. The token is removed from browser history after it is captured,
-and stored session state cannot override a failed durable verification.
+boundary and therefore fail closed. Its legacy public-URL input/configure path is
+removed during activation rather than restored as mutable manual-ingress authority.
+Manager invite controls and complete frontend activation must use the ready ingress
+snapshot; a local preview is not presented as admission parity. The token is removed
+from browser history after it is captured, and stored session state cannot override
+a failed durable verification.
 
 ## Trusted ingress boundary
 

@@ -53,8 +53,9 @@ requires the exact current public HTTPS Host, exact forwarded `https` scheme, ac
 loopback peer, and a startup-only high-entropy secret compared through fixed-size
 digests in constant time. The secret is non-serializable, never enters response or
 frontend state, and cannot be changed at runtime. Without both startup values,
-manual mode is unavailable. The local operator may select or clear only the canonical
-HTTPS public origin after that separate control contract is implemented.
+manual mode is unavailable. The manual origin is immutable for the process lifetime;
+frontend activation removes the legacy public-URL input/configure path instead of
+adding a runtime setter.
 
 Dynamic route registration owns method, path, and one of exactly three exposure
 meanings: private, same-origin public, or identity-probe public. Dynamic requests use
@@ -458,6 +459,10 @@ remain 625, 196, and 798 lines rather than weakening the 800-line gate.
   absent, although the mounted modal/controller still calls the routes through an
   incompatible legacy authority. The final record distinguishes implemented backend,
   partially connected failed-closed UI, and incomplete activation.
+- A later review found a stale planned runtime setter for the configured-manual
+  origin. That would have created a second authority beside the startup-only origin
+  and secret pair, so the plan and frontend inventory now require deleting the legacy
+  public-URL configure path instead.
 
 Final plan review: `APPROVE — Critical 0 / High 0 / Medium 0`.
 
@@ -532,3 +537,7 @@ Commit `82538b2` Daybreaker review: `REVISE — Critical 0 / High 0 / Medium 1`.
 Commit `e04a32d` web review: `REVISE — Critical 0 / High 0 / Medium 1`.
 
 Commit `e04a32d` Daybreaker review: `APPROVE — Critical 0 / High 0 / Medium 0`.
+
+Commit `8920d57` web review: `REVISE — Critical 0 / High 0 / Medium 1`.
+
+Commit `8920d57` Daybreaker review: `APPROVE — Critical 0 / High 0 / Medium 0`.
