@@ -182,10 +182,19 @@ async fn update_profile_in_transaction(
 async fn apply_profile_patch_in_transaction(
     transaction: &mut Transaction<'_, Sqlite>,
     identity: ProfileIdentity<'_>,
-    mut profile: UserProfile,
+    profile: UserProfile,
     expected_revision: i64,
     patch: UserProfilePatch,
 ) -> Result<ProfileUpdateOutcome, PersistenceError> {
+    let mut next = profile.clone();
+    let now = Utc::now();
+    let changed = next.apply_patch(patch, now);
+    if !changed {
+        return Ok(ProfileUpdateOutcome {
+            profile,
+            events: Vec::new(),
+        });
+    }
     if profile.revision != expected_revision {
         return Err(rejected(
             "profile_revision_conflict",
@@ -194,39 +203,34 @@ async fn apply_profile_patch_in_transaction(
     }
     let previous_display_name = profile.display_name.clone();
     let previous_avatar_url = profile.avatar_image_url.clone();
-    let now = Utc::now();
-    let changed = profile.apply_patch(patch, now);
-    if let Some(attachment_id) = avatar_attachment_id(&profile.avatar_image_url) {
+    if let Some(attachment_id) = avatar_attachment_id(&next.avatar_image_url) {
         authorize_profile_avatar(transaction, identity.user_id, attachment_id, now).await?;
     }
-    if !changed {
-        return Ok(ProfileUpdateOutcome {
-            profile,
-            events: Vec::new(),
-        });
-    }
     sqlx::query("UPDATE user_profiles SET profile_json = ? WHERE user_id = ?")
-        .bind(serde_json::to_string(&profile)?)
+        .bind(serde_json::to_string(&next)?)
         .bind(identity.user_id)
         .execute(&mut **transaction)
         .await?;
-    if profile.avatar_image_url != previous_avatar_url {
+    if next.avatar_image_url != previous_avatar_url {
         replace_profile_avatar(
             transaction,
             identity.user_id,
             &previous_avatar_url,
-            &profile.avatar_image_url,
+            &next.avatar_image_url,
         )
         .await?;
     }
-    let events = if profile.display_name != previous_display_name
-        || profile.avatar_image_url != previous_avatar_url
+    let events = if next.display_name != previous_display_name
+        || next.avatar_image_url != previous_avatar_url
     {
-        project_profile_into_rooms(transaction, identity, &profile).await?
+        project_profile_into_rooms(transaction, identity, &next).await?
     } else {
         Vec::new()
     };
-    Ok(ProfileUpdateOutcome { profile, events })
+    Ok(ProfileUpdateOutcome {
+        profile: next,
+        events,
+    })
 }
 
 async fn load_profile(
@@ -507,7 +511,7 @@ mod tests {
         let retry = store
             .update_user_profile(
                 &principal,
-                outcome.profile.revision,
+                1,
                 UserProfilePatch {
                     display_name: Some("Canonical Human".to_owned()),
                     ..UserProfilePatch::default()
