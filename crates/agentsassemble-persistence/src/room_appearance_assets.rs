@@ -114,30 +114,93 @@ impl SqliteStore {
         transaction.commit().await?;
         asset.ok_or_else(asset_missing)
     }
+
+    /// Reads one room-owned PNG only while a current human member can reach its exact reference.
+    ///
+    /// # Errors
+    ///
+    /// Fails closed for malformed IDs, stale membership, cross-room or unreferenced assets, and
+    /// corrupt stored state.
+    pub async fn bound_room_appearance_asset(
+        &self,
+        room_id: &str,
+        user_id: &str,
+        participant_id: &str,
+        asset_id: &str,
+    ) -> Result<RoomAppearanceAsset, PersistenceError> {
+        if !valid_asset_id(asset_id) {
+            return Err(asset_missing());
+        }
+        let mut transaction = self.pool.begin().await?;
+        resolve_room_user_identity(&mut transaction, room_id, user_id, participant_id).await?;
+        let row = sqlx::query(
+            "SELECT asset.filename, asset.content_type, asset.size, length(asset.content) AS content_length, asset.created_at, room.settings_json FROM room_appearance_assets AS asset INNER JOIN rooms AS room ON room.room_id = asset.room_id WHERE asset.asset_id = ? AND asset.room_id = ? AND asset.state = 'bound' AND asset.pending_owner_user_id IS NULL AND asset.expires_at IS NULL",
+        )
+        .bind(asset_id)
+        .bind(room_id)
+        .fetch_optional(&mut *transaction)
+        .await?
+        .ok_or_else(asset_missing)?;
+        let settings: agentsassemble_domain::RoomSettings =
+            serde_json::from_str(row.get::<String, _>("settings_json").as_str())?;
+        let referenced = [
+            &settings.appearance.banner_image_url,
+            &settings.appearance.icon_image_url,
+        ]
+        .into_iter()
+        .filter_map(|url| room_appearance_asset_id(url))
+        .any(|referenced_id| referenced_id == asset_id);
+        if !referenced {
+            return Err(asset_missing());
+        }
+        let (filename, size) = validate_asset_metadata(&row, row.get("content_length"))?;
+        let content = sqlx::query_scalar::<_, Vec<u8>>(
+            "SELECT content FROM room_appearance_assets WHERE asset_id = ? AND room_id = ? AND state = 'bound'",
+        )
+        .bind(asset_id)
+        .bind(room_id)
+        .fetch_one(&mut *transaction)
+        .await?;
+        if content.len() != size {
+            return Err(invalid_asset_state());
+        }
+        let asset = RoomAppearanceAsset {
+            metadata: asset_metadata(asset_id.to_owned(), filename, size),
+            content,
+        };
+        transaction.commit().await?;
+        Ok(asset)
+    }
 }
 
 fn decode_asset(
     asset_id: &str,
     row: &sqlx::sqlite::SqliteRow,
 ) -> Result<RoomAppearanceAsset, PersistenceError> {
-    let content_type = row.get::<String, _>("content_type");
     let content = row.get::<Vec<u8>, _>("content");
-    let size = row.get::<i64, _>("size");
-    validate_stored_raster(
-        &content_type,
-        size,
-        i64::try_from(content.len()).unwrap_or(i64::MAX),
-        row.get::<String, _>("created_at").as_str(),
-    )?;
-    let size = usize::try_from(size).map_err(|_| invalid_asset_state())?;
+    let (filename, size) =
+        validate_asset_metadata(row, i64::try_from(content.len()).unwrap_or(i64::MAX))?;
     Ok(RoomAppearanceAsset {
-        metadata: asset_metadata(
-            asset_id.to_owned(),
-            sanitize_filename(row.get::<String, _>("filename").as_str()),
-            size,
-        ),
+        metadata: asset_metadata(asset_id.to_owned(), filename, size),
         content,
     })
+}
+
+fn validate_asset_metadata(
+    row: &sqlx::sqlite::SqliteRow,
+    content_length: i64,
+) -> Result<(String, usize), PersistenceError> {
+    let size = row.get::<i64, _>("size");
+    validate_stored_raster(
+        row.get::<String, _>("content_type").as_str(),
+        size,
+        content_length,
+        row.get::<String, _>("created_at").as_str(),
+    )?;
+    Ok((
+        sanitize_filename(row.get::<String, _>("filename").as_str()),
+        usize::try_from(size).map_err(|_| invalid_asset_state())?,
+    ))
 }
 
 fn asset_metadata(id: String, filename: String, size: usize) -> RoomAppearanceAssetMetadata {

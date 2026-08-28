@@ -234,6 +234,79 @@ async fn settings_reject_expired_pending_without_partial_reference_or_promotion(
     assert_pending(&store, &expired.id).await;
 }
 
+#[tokio::test]
+async fn bound_read_requires_current_membership_reference_and_integral_bytes() {
+    let (store, authority, principal) = fixture().await;
+    let stored = store
+        .store_pending_room_appearance_asset(&authority, "bound.png", "image/png", valid_png())
+        .await
+        .unwrap_or_else(|error| panic!("store bound-read appearance: {error}"));
+    let revision = public_settings(&RoomSettings::defaults("General"))
+        .unwrap_or_else(|error| panic!("bound-read appearance revision: {error}"))
+        .settings_revision;
+    update_appearance(
+        &store,
+        &principal,
+        "appearance-bound-read",
+        &revision,
+        serde_json::json!({"icon_image_url": stored.url}),
+    )
+    .await
+    .unwrap_or_else(|error| panic!("bind readable appearance: {error}"));
+
+    let asset = store
+        .bound_room_appearance_asset(
+            "general",
+            LOCAL_OPERATOR_USER_ID,
+            LOCAL_OPERATOR_PARTICIPANT_ID,
+            &stored.id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("read bound appearance: {error}"));
+    assert_eq!(&asset.content[..8], b"\x89PNG\r\n\x1a\n");
+
+    sqlx::query("UPDATE room_appearance_assets SET size = size + 1 WHERE asset_id = ?")
+        .bind(&stored.id)
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("corrupt bound appearance size: {error}"));
+    assert_rejected_code(
+        store
+            .bound_room_appearance_asset(
+                "general",
+                LOCAL_OPERATOR_USER_ID,
+                LOCAL_OPERATOR_PARTICIPANT_ID,
+                &stored.id,
+            )
+            .await,
+        "invalid_state",
+    );
+    sqlx::query("UPDATE room_appearance_assets SET size = length(content) WHERE asset_id = ?")
+        .bind(&stored.id)
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("restore bound appearance size: {error}"));
+
+    let defaults = serde_json::to_string(&RoomSettings::defaults("General"))
+        .unwrap_or_else(|error| panic!("encode unreferenced appearance settings: {error}"));
+    sqlx::query("UPDATE rooms SET settings_json = ? WHERE room_id = 'general'")
+        .bind(defaults)
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("orphan bound appearance: {error}"));
+    assert_rejected_code(
+        store
+            .bound_room_appearance_asset(
+                "general",
+                LOCAL_OPERATOR_USER_ID,
+                LOCAL_OPERATOR_PARTICIPANT_ID,
+                &stored.id,
+            )
+            .await,
+        "appearance_asset_missing",
+    );
+}
+
 async fn fixture() -> (
     SqliteStore,
     LocalRoomManagerAuthority,
