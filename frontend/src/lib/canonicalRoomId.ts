@@ -1,3 +1,5 @@
+import { isUnicodeScalarString } from "./unicodeScalarString";
+
 function isRustWhitespace(codePoint: number): boolean {
   // Rust char::is_whitespace follows Unicode White_Space; ECMAScript trim does not.
   return (
@@ -24,13 +26,10 @@ function trimRustWhitespace(scalars: string[]): string[] {
 }
 
 export function canonicalRoomId(value: string): string {
-  const scalars = [...value.replace(/[\r\n]/g, " ")];
-  if (scalars.some((scalar) => {
-    const codePoint = scalar.codePointAt(0)!;
-    return codePoint >= 0xd800 && codePoint <= 0xdfff;
-  })) {
+  if (!isUnicodeScalarString(value)) {
     throw new Error("방 식별자가 정규 형식이 아닙니다.");
   }
+  const scalars = [...value.replace(/[\r\n]/g, " ")];
   const normalized = trimRustWhitespace(
     trimRustWhitespace(scalars).slice(0, 128)
   ).join("");

@@ -251,6 +251,8 @@ describe("lobby message-pin HTTP authority", () => {
       { pins: [{ ...pin(), event_id: "event-\ud800" }] },
       { pins: [{ ...pin(), content: "message \udfff" }] },
       { pins: [{ ...pin(), author: "Operator \ud800" }] },
+      { pins: [{ ...pin(), pinned_at: "2026-01-01 (\ud800)" }] },
+      { pins: [{ ...pin(), created_at: "2026-01-01 (\udfff)" }] },
       { pins: [], ignored: true },
     ];
 

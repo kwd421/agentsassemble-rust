@@ -8,6 +8,7 @@ import {
   requiredString,
   strictRecord,
 } from "../lib/strictJsonContract";
+import { isUnicodeScalarString } from "../lib/unicodeScalarString";
 import {
   MAX_LOBBY_MESSAGE_PINS,
   MAX_MESSAGE_PIN_EVENT_ID_BYTES,
@@ -50,14 +51,6 @@ function invalidResponse(): never {
   throw new Error("로비 메시지 핀 응답 계약이 올바르지 않습니다.");
 }
 
-function isUnicodeScalarString(value: string): boolean {
-  for (const character of value) {
-    const first = character.charCodeAt(0);
-    if (character.length === 1 && first >= 0xd800 && first <= 0xdfff) return false;
-  }
-  return true;
-}
-
 function canonicalEventId(value: unknown): string {
   if (
     typeof value !== "string" ||
@@ -72,7 +65,12 @@ function canonicalEventId(value: unknown): string {
 }
 
 function timestamp(value: unknown): string {
-  if (typeof value !== "string" || !value || Number.isNaN(Date.parse(value))) {
+  if (
+    typeof value !== "string" ||
+    !value ||
+    !isUnicodeScalarString(value) ||
+    Number.isNaN(Date.parse(value))
+  ) {
     invalidResponse();
   }
   return value;
