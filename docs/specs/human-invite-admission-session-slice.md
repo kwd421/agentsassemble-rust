@@ -618,9 +618,13 @@ boundaries:
 These stages add no durable frontend invite state, second URL/timestamp policy,
 generic resource framework, compatibility path, or fallback. Each independently
 buildable commit must remain below 1,000 changed lines, must pass the repository gates
-and focused contract tests, must be pushed, and must receive both manual reviews
-before the next stage. Packaged Computer Use remains the completion test rather than
-a substitute for these authority and failure contracts.
+and focused contract tests, and remains independently rollbackable. Completed feature
+commits accumulate locally until the first of three feature commits or 2,000 aggregate
+insertions plus deletions since the last reviewed baseline; that exact batch is then
+pushed and reviewed by both manual reviewers. A correction needed to close an active
+review may be pushed and re-reviewed immediately as part of that batch. Packaged
+Computer Use remains the completion test rather than a substitute for these authority
+and failure contracts.
 
 B1a/B1b and the browser admission-custody corrections are public through `fdb4e49`,
 fully verified, and approved by both manual reviewers. B2 is public through `2b97a7c`,

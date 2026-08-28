@@ -82,8 +82,13 @@ Never expose credentials, tokens, secrets, or provider-private data through logs
 ## Standing project workflow
 
 The user has explicitly authorized scoped commits and pushes for this reimplementation.
-Commit and push each completed vertical slice before external review; this does not
-authorize unrelated repository changes.
+Commit each independently buildable, verifiable, and rollbackable feature change as its
+own sub-1,000-line commit. Keep completed commits local until either three feature commits
+have accumulated or their aggregate insertions plus deletions since the last reviewed
+baseline reach 2,000 lines, whichever happens first. Then push that batch and request
+external review of the exact pushed range. A correction required to close an already-open
+review remains part of that review batch and may be pushed and re-reviewed immediately.
+This authorization does not cover unrelated repository changes.
 
 Review requests to the designated critical ChatGPT web session are pre-authorized.
 Send each request as one complete message without asking the user again, never use an
@@ -93,8 +98,9 @@ user-authored requirements, decisions, and critical-review role to a new session
 replacement review session with Pro reasoning until its plan is approved, then explicitly
 switch and verify very-high reasoning for subsequent reviews.
 
-Cross-review every pushed slice with that web session and Daybreaker Blue High. Do not run
-Deep Scan or another automated security scan unless the user explicitly requests it.
+Cross-review every pushed batch with that web session and Daybreaker Blue High. Reviewers
+must inspect both the individual commits and their cumulative range. Do not run Deep Scan
+or another automated security scan unless the user explicitly requests it.
 
 Use Computer Use only during active packaged-frontend verification. When verification
 ends, normally quit the exact app and its owned children, reset the Computer Use session,
