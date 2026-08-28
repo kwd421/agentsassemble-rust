@@ -1,8 +1,8 @@
 # Room Settings, Scheduling, Tabletop, Preferences, and Appearance Slice
 
 Status: Stage A verified; Stage B local-operator and remote-session preferences
-production-browser verified; appearance persistence and HTTP boundaries verified,
-desktop/frontend activation pending
+production-browser verified; appearance persistence, HTTP boundaries, and typed
+desktop issuance verified, frontend activation pending
 
 ## Definition
 
@@ -222,9 +222,10 @@ closed grant owns the no-room settings directory read. Grants bind the exact roo
 principal, participant, purpose, and read asset where applicable. Consumption
 removes a grant before checking its variant so wrong-purpose, wrong-room,
 wrong-asset, and replay attempts are consumed and rejected. Implemented issuers use
-typed operations; no path or payload string selects authority. Preference and
-directory issuance are exposed, while private-control and desktop appearance
-issuance remain pending.
+typed operations; no path or payload string selects authority. Preference,
+directory, and private-control appearance issuance are exposed through exact Tauri
+commands and a strict frontend bridge. The copied settings UI does not yet consume
+those grants.
 
 Appearance upload and pending-preview grants retain the resolved
 `LocalRoomManagerAuthority`, including server, authority lineage, and room UID,
@@ -278,14 +279,18 @@ Global mutation and realtime projection remain WebSocket-owned. Preferences and
 binary upload/read remain authenticated HTTP request/response controls. Neither
 transport is a fallback for the other.
 
-The persistence owner, atomic settings transition, existing attachment route, and
-remote human-session exchange are active and TCP-verified. A remote bound read
+The persistence owner, atomic settings transition, existing attachment route,
+remote human-session exchange, private control pipe, and typed desktop bridge are
+active and test-verified. The control-pipe boundary performs a real HTTP upload and
+pending preview after issuance, and rejects changed server, lineage, room UID, and
+malformed asset authority. A remote bound read
 retains its persistence-issued session provenance in the one-use grant and
 revalidates session, membership, profile binding, room reference, metadata, and
 bytes in one SQLite snapshot. Read-only room members may read; the raw session
 credential is rejected by the attachment target. Local desktop issuance and the
-copied frontend's authenticated object-URL lifecycle remain explicitly inactive,
-so the product-surface revision has not advanced and appearance is not yet a
+frontend's strict grant request functions are active, but the copied settings UI's
+authenticated fetch and object-URL lifecycle remain explicitly inactive. The
+product-surface revision therefore has not advanced and appearance is not yet a
 complete product feature.
 
 The remote cutover deliberately pays one additional same-origin exchange request
@@ -296,14 +301,15 @@ purpose separation. Bound appearance reads first load only metadata, stored byte
 length, and room settings; the up-to-10-MiB BLOB is fetched only after current
 authority and reference checks succeed. This deliberately adds one short SQLite
 query on successful reads to avoid the code-path cost of copying a large BLOB for
-rejected requests. It adds no cache, lock, persistent frontend state, trait,
-configuration layer, or background task. Shared ticket decoding, HTTP exchange,
+rejected requests. Local issuance pays one bounded private-pipe exchange and reuses
+the existing manager-resolution query; it adds no cache, lock, persistent frontend
+state, trait, configuration layer, or background task. Shared ticket decoding, HTTP exchange,
 asset-ID grammar, and transactional asset helpers remain the single owners of
 their respective policies; repository-wide duplicate-policy review found no
-competing route, SQL, validation, or state-transition owner. Persistence tests
-passed 178/178 and the server suite passed all 136 unit/integration tests,
-including the real TCP remote-session read, replay, malformed-ID, raw-session, and
-post-leave rejection matrix.
+competing route, SQL, validation, or state-transition owner. The exact typed-
+issuance commit passed `make verify`: persistence 178/178, protocol 6/6, provider
+120/120, server 85 unit tests plus every integration/TCP suite, desktop 20/20, and
+84 frontend files with 518 tests.
 
 ## Failure, acceptance, and review gates
 

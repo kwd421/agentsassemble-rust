@@ -124,6 +124,10 @@ revalidates session, membership, profile binding, room reference, and asset byte
 in one transaction; the raw session credential never authenticates the attachment
 route. Rejected reads validate metadata and `length(content)` without loading the
 bounded BLOB, while successful reads pay one second query for its bytes.
+The desktop private control pipe exposes upload, pending-read, and bound-read as
+three typed commands. Upload and pending-read retain the exact server, authority
+lineage, room UID, manager user, and participant tuple through target revalidation;
+the frontend cannot select authority with a path or generic operation string.
 
 ### Durable commands
 

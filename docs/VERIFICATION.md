@@ -3276,3 +3276,32 @@ The final docs-only corrections additionally passed the architecture, source-gro
 policy, and diff gates. Web and Daybreaker then each returned final
 `APPROVE — Critical 0 / High 0 / Medium 0`. No Computer Use resource, provider, Deep
 Scan, or automated security scanner ran for this backend/review batch.
+
+## Typed desktop appearance issuance candidate: `1d4063c`
+
+Local commit `1d4063c` adds three closed private-control/Tauri/frontend grant
+operations for room-appearance upload, exact pending preview, and exact bound read.
+The local operator supplies the directory-owned server ID, authority lineage, room
+ID, and room UID; upload and pending preview retain that exact manager authority to
+the persistence transaction. Asset reads require the canonical `ra_` identifier and
+no path or generic operation string selects a ticket purpose.
+
+The real control-pipe test creates a room over the production TCP server, rejects
+changed server, lineage, and room UID tuples, uploads a decoded/re-encoded PNG with
+the issued grant, reads it with the exact pending grant, rejects a malformed asset
+ID, and receives the distinct bound-read response. Purpose-response mismatch tests,
+the Tauri permission/command intersection, and the frontend bridge prove that the
+three grants cannot substitute for one another and malformed asset IDs reach no
+native invocation.
+
+Full `make verify` passed: architecture, source-growth, policy, formatting,
+generated bindings, production frontend and original-CSS checks, all 84 frontend
+files with 518 tests, 20 desktop tests, domain 25, persistence 178, protocol 6,
+provider 120, server 85 unit tests and every integration/TCP suite, warning-denied
+Clippy, and the diff check. Issuance adds one bounded private-pipe exchange per
+operation and reuses the existing manager resolver; it adds no durable state,
+cache, background task, fallback, compatibility path, or provider process. The
+copied settings UI's authenticated fetch and object-URL lifecycle remain visibly
+incomplete. No Computer Use resource, provider, Deep Scan, or automated security
+scanner ran. This local candidate remains unpushed pending the configured batch
+threshold.
