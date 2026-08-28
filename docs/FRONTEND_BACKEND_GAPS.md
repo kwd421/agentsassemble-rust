@@ -213,7 +213,7 @@ implemented; the frontend must not silently substitute Python or local fake data
 | Room lifecycle and settings | Canonical archive/delete lifecycle and trusted remote activation of public server identity remain incomplete. Local server info and origin-bound identity challenge, room-global settings mutation, local-operator preferences, and admitted remote-human preferences are connected. |
 | Admission and invites | Durable human invite/session create, join, verification, expiry, revoke, leave, restart recovery, the session-derived person-profile exchange, and the authenticated human WebSocket are implemented at their current persistence/server boundaries. Exact `/join`, `/join/`, `/pair`, and `/pair/` production entrances resolve their actual production assets; exact preflight/join response contracts bind request, room, client, server lineage, and product surface before bearer exposure. The browser's single bounded admission-intent owner now preserves pending retry custody and retires it only through a verified settled write or verified direct removal; a settled marker surviving best-effort deletion remains cleanup-only across reload, RoomGuestSession local-storage expiry/clearing, and later invite navigation. Direct external deletion of the admission-intent session-storage key is outside that guarantee. Real isolated browsers pass one-use/reusable normal and read-only admission, avatar transfer, profile edit, token removal, reload, posting/denial, consumed-link rejection, same-browser reusable recovery, server-restart reconnect, purpose-exchanged preference read/write or read-only denial, and exact leave with durable session revocation. Configured-manual trust, managed quick-tunnel/stable-entry custody, the private no-store status/start/stop controls, backend manager invite create/revoke with exact server/lineage/room-generation tickets and same-transaction revalidation, and the native desktop create/revoke ticket bridge with its exact registered commands, capabilities, and permissions are implemented and tested. The copied modal/controller B2 ingress controls use fresh server-operator tickets, strict status parsing, and generation-owned polling, and their legacy mutable public-URL path is removed. The strict C1b API and C2 controller own exact create/revoke dispatch, current-directory authority, retained custody, safe presentation, UI cutover, and packaged verification. Host claim, companion admission, and operator pairing redeem remain incomplete. |
 | Roster, friends, and channels | The active-room roster, strict participant-role control, copied participant-mute control, canonical event projection, and exact Rust provider-interrupt owner are cut over and packaged-verified. Room friends, room channels, voice presence, and side chat remain incomplete. |
-| Attachments, personas, pins, and search | General-message attachments, persona list/import/thumbnail, message pins, and room search/context remain incomplete. Profile-avatar upload/read is implemented. Room-appearance persistence, upload/read HTTP, atomic bind/replacement/clear, cleanup, and remote-session bound-read exchange are active; typed desktop issuance and frontend object-URL lifecycle remain incomplete. |
+| Attachments, personas, pins, and search | General-message attachments, persona list/import/thumbnail, message pins, and room search/context remain incomplete. Profile-avatar upload/read is implemented. Room-appearance persistence, upload/read HTTP, atomic bind/replacement/clear, cleanup, local typed issuance, remote-session bound-read exchange, copied-frontend upload/read, object-URL lifetime, and restart recovery are implemented and packaged-verified. |
 | Provider settings and diagnostics | Login, catalog refresh HTTP response, credential CRUD, provider usage, local resources, release health, and runtime version. The original `/api/local/workspace-picker` HTTP route is absent, but packaged desktop creation uses the native Tauri directory picker instead. |
 | Games and plugins | Mafia HTTP operations and generic plugin WebSocket hosting remain unimplemented. The copied RimWorld view is an external plugin consumer; its Python plugin package/runtime is intentionally outside the current Rust core-migration scope and is not a core parity exit condition. |
 | Canonical room commands | History, vote summary, edit/delete, re-add, general pause/interrupt, participant kick, room lifecycle, and provider request resolution remain incomplete. Settings and random operations are implemented at the backend boundary; direct human random controls are intentionally absent because the original React client has none. Strict `participant.role.update`, stopped-session `agent.resume`, `agent.configure`, verified `participant.mute`, and exact self `participant.leave` are connected to their existing copied controls. |
@@ -296,9 +296,9 @@ The original React client still has no direct human roll/choose control, so the
 human commands remain a reachable server contract without a fabricated button.
 Local-operator and admitted remote-human preferences are connected through their
 complete purpose-ticketed HTTP owners. Human invite activation is complete. Room
-appearance persistence and local/remote HTTP boundaries are active, while its typed
-desktop issuance and frontend object-URL lifecycle, custom channels, and plugin
-hosting remain incomplete.
+appearance persistence, local/remote HTTP boundaries, typed desktop issuance, and
+the copied frontend's authenticated object-URL lifecycle are active. Custom channels
+and plugin hosting remain incomplete.
 
 ## Stage B local preference exposure delta
 
@@ -313,9 +313,9 @@ fields; room-global settings remain WebSocket-owned. Both server responses and d
 fetches disable caching so a browser cache cannot bypass ticket consumption or current
 membership authorization. The copied settings control and restart flow are packaged-
 verified. Room appearance upload, authenticated preview/read, binding, replacement,
-and cleanup are now server-owned and TCP-verified; typed desktop issuance and the
-frontend object-URL lifecycle remain visibly incomplete and are not implied by
-preference completion.
+and cleanup are server-owned and TCP-verified. Typed desktop issuance and the copied
+frontend object-URL lifecycle are separately connected and packaged-verified; they do
+not reuse preference tickets or make preference completion their authority.
 
 The admitted-human owner now exchanges a raw session credential only at the exact
 read or write purpose endpoint. The room-settings target receives only the derived

@@ -10,8 +10,9 @@ the native desktop manager-invite ticket bridge plus the strict C1b create/revok
 frontend API contract are implemented and test-verified; retained controller custody
 and UI cutover are implemented and manually approved; the complete packaged
 managed-ingress invite matrix is locally verified and published for batched manual
-review; bound room-appearance reads have a typed session exchange, while general
-message attachments and appearance desktop/frontend activation remain incomplete
+review; bound room-appearance reads have a typed session exchange and the desktop/
+frontend appearance path is packaged-verified, while general message attachments
+remain incomplete
 
 ## Definition
 

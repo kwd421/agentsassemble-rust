@@ -1,8 +1,8 @@
 # Room Settings, Scheduling, Tabletop, Preferences, and Appearance Slice
 
 Status: Stage A verified; Stage B local-operator and remote-session preferences
-production-browser verified; appearance persistence, HTTP boundaries, and typed
-desktop issuance verified, frontend activation pending
+production-browser verified; appearance persistence, authenticated HTTP, typed
+desktop issuance, copied-frontend activation, and packaged restart recovery verified
 
 ## Definition
 
@@ -224,8 +224,9 @@ removes a grant before checking its variant so wrong-purpose, wrong-room,
 wrong-asset, and replay attempts are consumed and rejected. Implemented issuers use
 typed operations; no path or payload string selects authority. Preference,
 directory, and private-control appearance issuance are exposed through exact Tauri
-commands and a strict frontend bridge. The copied settings UI does not yet consume
-those grants.
+commands and a strict frontend bridge. The copied settings UI does not consume those
+grants through the preference owner; its separate appearance API consumes only the
+exact upload, pending-preview, or bound-read grant for the requested operation.
 
 Appearance upload and pending-preview grants retain the resolved
 `LocalRoomManagerAuthority`, including server, authority lineage, and room UID,
@@ -287,11 +288,14 @@ malformed asset authority. A remote bound read
 retains its persistence-issued session provenance in the one-use grant and
 revalidates session, membership, profile binding, room reference, metadata, and
 bytes in one SQLite snapshot. Read-only room members may read; the raw session
-credential is rejected by the attachment target. Local desktop issuance and the
-frontend's strict grant request functions are active, but the copied settings UI's
-authenticated fetch and object-URL lifecycle remain explicitly inactive. The
-product-surface revision therefore has not advanced and appearance is not yet a
-complete product feature.
+credential is rejected by the attachment target. Local desktop issuance, the
+frontend's strict grant request functions, and the copied settings UI are active.
+The controller derives current local manager authority for each upload; remote humans
+exchange their live session only for an exact bound-read grant. Canonical private
+references are never placed directly in an image element. The frontend fetches the
+PNG under one-use authority, publishes only an object URL, rejects late generations,
+and revokes the old URL after replacement or on room, authority, reference, or
+component-lifetime change.
 
 The remote cutover deliberately pays one additional same-origin exchange request
 per preference read/write or bound-appearance read, plus bounded session
@@ -309,7 +313,11 @@ their respective policies; repository-wide duplicate-policy review found no
 competing route, SQL, validation, or state-transition owner. The exact typed-
 issuance commit passed `make verify`: persistence 178/178, protocol 6/6, provider
 120/120, server 85 unit tests plus every integration/TCP suite, desktop 20/20, and
-84 frontend files with 518 tests.
+84 frontend files with 518 tests. The completed frontend batch passed 86 frontend
+files with 530 tests and the same complete Rust/TCP/integration gates. Focused request
+and lifecycle tests prove exact response parsing, distinct local/remote issuance,
+same-reference deduplication, inactive-banner suppression, pending-to-bound
+replacement, abort/late-result rejection, explicit retry, and URL revocation.
 
 ## Failure, acceptance, and review gates
 

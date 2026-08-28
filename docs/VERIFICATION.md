@@ -3305,3 +3305,64 @@ copied settings UI's authenticated fetch and object-URL lifecycle remain visibly
 incomplete. No Computer Use resource, provider, Deep Scan, or automated security
 scanner ran. This local candidate remains unpushed pending the configured batch
 threshold.
+
+## Authenticated room-appearance frontend activation: 2026-08-28
+
+Commits `931beda`, `9404a25`, and `2afed29` connect the copied room-settings and room
+shell to the already implemented appearance owners. The strict frontend API accepts
+only canonical `ra_<32 lowercase hex>?view=1` references, obtains a fresh exact local
+grant or remote-session bound-read exchange, validates the complete no-store PNG
+response, and exposes only a browser object URL. It has no unauthenticated direct-image
+request, generic attachment compatibility path, alternate bearer, retry fallback, or
+client-side binding substitute.
+
+One hook owns rendered asset lifetimes. It loads banner and icon only for the active
+room, except for the icon needed by each inactive room-rail entry; deduplicates an
+identical banner/icon reference within a room; keeps a newly uploaded pending preview
+only until the committed bound reference can be read; rejects stale generations; and
+revokes object URLs after their replacement has rendered or when the reference, room,
+authority, or component lifetime ends. The controller derives the exact current local
+manager for every upload instead of retaining a new authority cache. The copied modal
+delegates file and slot only and no longer calls the generic lobby-attachment uploader.
+
+The concrete security defects avoided were private canonical references reaching an
+unauthenticated image request, an upload grant being confused with a read grant, and
+stale object URLs retaining decoded image bytes after their owner changed. The focused
+request and hook tests exercise local upload/pending/bound reads, remote bound exchange,
+strict metadata/body rejection, same-reference deduplication, inactive-banner
+suppression, pending-to-bound replacement, abort and late-result rejection, explicit
+retry, and every URL-revocation boundary. The design adds no durable frontend state,
+cache, timer, task, SQL, transport fallback, compatibility layer, or generic asset
+framework.
+
+Full serial `make verify` passed architecture, source-growth, policy, formatting,
+generated-binding, original-CSS, production-build, every workspace/TCP/integration/
+documentation test, warning-denied Clippy, and the final diff gate: 86 frontend files
+with 530 tests, desktop 20, domain 25, persistence 178, protocol 6, provider 120, and
+server 85. The production main chunk changed from 780.71 kB (234.81 kB gzip) before
+frontend activation to 787.36 kB (237.05 kB gzip). That 6.65 kB raw / 2.24 kB gzip
+increase is the observed code cost; there is no claimed CPU, memory, disk, or latency
+improvement. Request-count reductions are limited to the tested owning boundary:
+inactive banners are not fetched and identical active banner/icon references share one
+read. No real provider, Deep Scan, or automated security scanner ran.
+
+Computer Use drove a fresh isolated release package named
+`AgentsAssemble Appearance Verify`, bundle identifier
+`app.agentsassemble.rust.appearanceverify0828b`, against its own application data and
+an explicitly empty central URL. The real startup UI created profile `Appearance
+Verify` and a canonical room. Native file selection uploaded the repository's
+`deepseek.png` as banner and `cursor.png` as icon; the copied modal displayed both
+saved states, and the room rail, left room banner, and chat introduction rendered the
+authenticated images. After normal application quit, relaunch skipped the identity
+gate, restored the room, and rendered the same rail icon, banner, chat icon, and
+settings preview through fresh bound reads.
+
+Read-only SQLite inspection after restart found exactly two appearance rows, both
+`bound`, with null pending owner and expiry and byte sizes 12,016 and 43,016. The room
+settings retained two distinct canonical `ra_` view references. A final normal quit
+left no packaged app or sidecar process. The Computer Use kernel was reset, and only
+the isolated build, Application Support, cache, and WebKit data were moved to the
+recoverable Trash directory
+`AgentsAssemble-Appearance-Verify-20260828.fKzLaX`; unrelated processes and user data
+were untouched. This threshold batch still requires exact public-diff review by the
+critical web session and Daybreaker Blue High.

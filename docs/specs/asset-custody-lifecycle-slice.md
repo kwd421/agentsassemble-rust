@@ -1,7 +1,7 @@
 # Asset Custody and Lifecycle Correction
 
-Status: storage correction implemented through public commit `ac542de`; copied-
-frontend verification remains pending
+Status: storage correction implemented through public commit `ac542de`; room-
+appearance copied-frontend upload/read and restart lifecycle locally verified
 
 ## Definition
 
