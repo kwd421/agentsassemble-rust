@@ -8,9 +8,9 @@ stable entry plus backend manager invite create/revoke and private-control ticke
 issuance, exact manager-room authority transport and transaction revalidation, and
 the native desktop manager-invite ticket bridge plus the strict C1b create/revoke
 frontend API contract are implemented and test-verified; retained controller custody
-and UI cutover are implemented, fully verified, and manually approved; the packaged
-managed-ingress normal invite path is verified, while its remaining real-client matrix
-and the remaining typed room-attachment exchange are incomplete
+and UI cutover are implemented and manually approved; the complete packaged
+managed-ingress invite matrix is locally verified and queued for batched manual review;
+the remaining typed room-attachment exchange is incomplete
 
 ## Definition
 
@@ -633,9 +633,11 @@ fully verified, and approved by both manual reviewers. C1a is public through
 `e006e0d`, fully verified, and approved by both manual reviewers. C1b now owns one
 strict frontend create/revoke dispatch and response contract. C2 controller/UI custody
 is public and approved through `10c63b4`. Local commit `6a8b5f1` makes the packaged
-sidecar serve the copied frontend and passes the managed-ingress normal invite/message,
-one-use rejection, retained-record replacement, and revoke rejection flows; the rest of
-the packaged completion matrix remains incomplete.
+sidecar serve the copied frontend. Local commit `1aca717` removes the obsolete settings
+guard after admission activation. Together their packaged verification passes normal
+and read-only issuance, one-use and reusable admission, avatar, reload, profile,
+preferences, posting denial, retained replacement, revoke, leave, and restart. This
+local completion remains queued for the next batched manual review.
 
 ## Trusted ingress boundary
 

@@ -70,13 +70,15 @@ Stage A permits mutations only for behavior completed in the same stage:
 
 - label and topic;
 - `conversation_mode`, `tool_mode`, and ordered previous-speaker exclusion;
-- visual `banner_preset` and `icon_label`, which the copied UI already renders.
+- visual `banner_preset` and `icon_label`, which the copied UI already renders;
+- `invite_scope`, now that human invite creation and admission own the complete
+  read/write and read-only contract. A settings change supplies only future invite
+  creation; an already issued invite retains its immutable durable scope.
 
 Stage A rejects, with stable explicit unsupported errors and no write:
 
 - nonempty `channels`, until custom registry plus text/voice behavior exists;
 - `banner_image_url` or `icon_image_url`, until Stage B owns the asset lifecycle;
-- nondefault `invite_scope`, until invite/admission behavior exists;
 - nonempty `activity_plugin`, until plugin hosting exists.
 
 The settings transaction contains an `AssetReferenceTransition` validation/plan
@@ -320,11 +322,12 @@ route, SQL, validation, or state-transition owner.
   or structure gate makes that genuinely impossible. Each implementation change
   carries its focused invariant test; cross-layer, restart, race, packaged-client,
   and verification-record work remain separate.
-- Every implementation commit is pushed before exact-range critical web and the
-  same Daybreak Blue manual-security review. Provider-dependent verification uses
-  persistent Codex Terra, Antigravity Flash, and OpenCode Hy3 free sessions, never
-  print mode, and removes every verification-owned process, window, server, and
-  temporary resource afterward.
+- Completed feature commits accumulate locally until three features or 2,000
+  aggregate changed lines, whichever comes first. That exact batch is then pushed
+  and cross-reviewed by the critical web session and Daybreaker Blue High.
+  Provider-dependent verification uses persistent Codex Terra, Antigravity Flash,
+  and OpenCode Hy3 free sessions, never print mode, and removes every
+  verification-owned process, window, server, and temporary resource afterward.
 
 Room close/archive/delete, operator pairing, external-agent admission, custom
 channel registry and streams, voice, activity-plugin hosting, general message

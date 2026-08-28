@@ -3199,3 +3199,58 @@ incognito windows, isolated application data, and temporary package configuratio
 closed and removed or moved to recoverable Trash. The Computer Use kernel was reset.
 No provider, Deep Scan, or automated security scanner ran. This local feature commit is
 queued for the next three-feature-or-2,000-line manual review batch.
+
+## Packaged invite-scope and completion matrix: 2026-08-28
+
+The next isolated packaged run found one stale Rust settings guard through the real
+host UI: selecting the copied read-only invite option returned
+`Room invite scope is unavailable until invite admission exists.` The original
+comparison commit accepts `invite_scope` as an ordinary strict appearance partial
+update, while current Rust already owned room-manager authorization, durable invite
+scope, admission, read-only capabilities, and the copied control. Commit `1aca717`
+therefore removes only that obsolete unsupported branch and pins the activated update
+with one domain contract test. Canonical `room`/`read_only` validation and the existing
+`room.manage` transaction owner remain unchanged. A room setting supplies future invite
+creation only; an issued invite row retains its captured immutable scope.
+
+The rebuilt `AgentsAssemble C2 Matrix Verify` package then exercised both scopes through
+its managed tunnel and separate private browser identities. A five-use read-only invite
+accepted a pre-join cropped PNG, admitted a fresh guest, removed the invite credential
+from browser history, and recovered the same identity on reload and same-browser link
+reuse. Display-name changes projected to the lower-left profile and roster. Message and
+attachment controls remained disabled, a post-admission avatar upload failed visibly,
+and a channel-notification write did not create preference authority. Switching the
+room setting back to normal affected only a subsequently issued invite.
+
+That five-use normal invite admitted independent Chrome and Safari private identities.
+The Chrome identity published exactly one `C2_NORMAL_REUSABLE_OK` message and saved a
+channel mute. The Safari identity saw the durable message, reused the same link without
+a second profile prompt, changed its display name, uploaded a cropped avatar, saved a
+channel mute, and retained profile, message, roster, and preference state after reload.
+The copied server menu then performed exact leave: the room disappeared, the session
+lost send authority, and the host roster removed that participant while preserving the
+message.
+
+Read-only SQLite inspection matched the UI without reading credential material. The
+two issued rows were `(read_only, max 5, used 1, unrevoked)` and
+`(read_write, max 5, used 2, unrevoked)`; same-browser re-entry did not consume another
+use. Session authority contained one active read-only, one active normal, and the
+leaving normal session in `ended`. The three admitted guests each owned one current
+profile-avatar asset, no pending pre-join asset remained, no read-only preference row
+existed, both normal identities retained their own mute, and exactly one marker message
+remained. Normal application quit removed the exact desktop, supervisor, sidecar, and
+tunnel. Relaunch recovered the room, message, remaining participants, and normal future
+invite scope. A final normal quit removed every owned process; the isolated app, data,
+package config, and generated verification sidecar were moved to one recoverable Trash
+directory, and the Computer Use kernel was reset.
+
+The correction adds no state, SQL, task, process, allocation owner, disk owner, network
+request, or compatibility path; it removes one validation branch, so no measurable CPU,
+memory, disk, or latency improvement is claimed. The security effect is limited to
+making already-authorized strict settings reach the existing invite owner. Full
+`make verify` passed architecture/source-growth/policy gates, generated bindings,
+production frontend and original-CSS verification, all 84 frontend files with 516
+tests, 20 desktop tests, domain 24, persistence 172, protocol 5, provider 120, server
+84, every integration/TCP/documentation test, warning-denied Clippy, and the final diff
+check. No provider, Deep Scan, or automated security scanner ran. The two feature
+commits remain local pending the three-feature-or-2,000-line review threshold.
