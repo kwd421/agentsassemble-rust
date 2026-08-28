@@ -6,7 +6,8 @@ use agentsassemble_domain::{
 };
 use agentsassemble_persistence::{
     HumanAdmissionDecision, HumanAdmissionInput, HumanInviteCredentialEvidence,
-    HumanSessionAuthorization, NewHumanInvite, PreparedHumanAdmission, SqliteStore,
+    HumanSessionAuthorization, LocalRoomManagerAuthority, NewHumanInvite, PreparedHumanAdmission,
+    RoomUserIdentity, SqliteStore,
 };
 use chrono::{Duration as ChronoDuration, Utc};
 
@@ -26,6 +27,20 @@ fn principal() -> AuthenticatedPrincipal {
         invite_scope: InviteScope::ReadWrite,
         is_operator: true,
         capabilities: CapabilitySet::local_operator(ClientKind::Browser, InviteScope::ReadWrite),
+    }
+}
+
+fn manager_authority() -> LocalRoomManagerAuthority {
+    LocalRoomManagerAuthority {
+        server_id: "10000000-0000-4000-8000-000000000001".to_owned(),
+        authority_lineage_id: "20000000-0000-4000-8000-000000000002".to_owned(),
+        room_uid: uuid::Uuid::parse_str("30000000-0000-4000-8000-000000000003")
+            .unwrap_or_else(|error| panic!("parse manager room UID: {error}")),
+        manager: RoomUserIdentity {
+            room_id: "general".to_owned(),
+            user_id: "operator-local-user".to_owned(),
+            participant_id: "operator-local".to_owned(),
+        },
     }
 }
 
@@ -139,9 +154,7 @@ async fn room_http_purposes_and_asset_bindings_are_consumed_on_mismatch() {
 
     let asset = store
         .issue_pending_preview_read(
-            "general".to_owned(),
-            "operator-local-user".to_owned(),
-            "operator-local".to_owned(),
+            manager_authority(),
             "ra_00000000000000000000000000000000".to_owned(),
         )
         .await
@@ -188,18 +201,15 @@ async fn attachment_upload_dispatches_once_without_cross_purpose_fallback() {
         Ok(crate::ticket::ConsumedAttachmentUploadTicket::Profile(_))
     ));
 
+    let expected_manager = manager_authority();
     let appearance = store
-        .issue_appearance_upload(
-            "general".to_owned(),
-            "operator-local-user".to_owned(),
-            "operator-local".to_owned(),
-        )
+        .issue_appearance_upload(expected_manager.clone())
         .await
         .unwrap_or_else(|error| panic!("issue appearance upload ticket: {error}"));
     assert!(matches!(
         store.consume_attachment_upload(&appearance.ticket).await,
         Ok(crate::ticket::ConsumedAttachmentUploadTicket::Appearance(grant))
-            if grant.room_id == "general"
+            if grant == expected_manager
     ));
 
     let wrong_purpose = store

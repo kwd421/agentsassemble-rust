@@ -5,7 +5,7 @@ use agentsassemble_domain::{
     LOCAL_OPERATOR_USER_ID, ParticipantRole, ParticipantStatus, ProviderCatalog, RoomSettings,
     public_settings,
 };
-use agentsassemble_persistence::SqliteStore;
+use agentsassemble_persistence::{LocalRoomManagerAuthority, SqliteStore};
 use agentsassemble_provider::ProviderCatalogService;
 use agentsassemble_server::{AppState, HostSecret, TicketStore, serve};
 use hmac::{Hmac, Mac};
@@ -185,13 +185,21 @@ async fn room_appearance_upload_preview_bind_and_member_read_use_exact_tickets()
         .await
         .unwrap_or_else(|error| panic!("open appearance HTTP store: {error}"));
     bootstrap(&store).await;
+    let manager = store
+        .authorize_local_room_manager(
+            "general",
+            LOCAL_OPERATOR_USER_ID,
+            LOCAL_OPERATOR_PARTICIPANT_ID,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize appearance manager: {error}"));
     let inspection_store = store.clone();
     let tickets = TicketStore::new(Duration::from_secs(30), 32);
     let issuer = tickets.clone();
     let server = start_with_tickets(store, tickets).await;
     let client = Client::new();
 
-    let upload_ticket = issue_appearance_upload(&issuer).await;
+    let upload_ticket = issue_appearance_upload(&issuer, &manager).await;
     let upload = client
         .post(format!("{}/api/attachments", server.base_url))
         .header("authorization", format!("Bearer {upload_ticket}"))
@@ -217,12 +225,7 @@ async fn room_appearance_upload_preview_bind_and_member_read_use_exact_tickets()
     assert_eq!(asset_url, format!("/api/attachments/{asset_id}?view=1"));
 
     let preview_ticket = issuer
-        .issue_pending_preview_read(
-            "general".to_owned(),
-            LOCAL_OPERATOR_USER_ID.to_owned(),
-            LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
-            asset_id.to_owned(),
-        )
+        .issue_pending_preview_read(manager, asset_id.to_owned())
         .await
         .unwrap_or_else(|error| panic!("issue pending appearance preview: {error}"))
         .ticket;
@@ -465,13 +468,12 @@ async fn issue_operator_ticket(tickets: &TicketStore) -> String {
         .ticket
 }
 
-async fn issue_appearance_upload(tickets: &TicketStore) -> String {
+async fn issue_appearance_upload(
+    tickets: &TicketStore,
+    authority: &LocalRoomManagerAuthority,
+) -> String {
     tickets
-        .issue_appearance_upload(
-            "general".to_owned(),
-            LOCAL_OPERATOR_USER_ID.to_owned(),
-            LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
-        )
+        .issue_appearance_upload(authority.clone())
         .await
         .unwrap_or_else(|error| panic!("issue appearance upload: {error}"))
         .ticket

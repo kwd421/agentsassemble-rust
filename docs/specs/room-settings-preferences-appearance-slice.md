@@ -226,6 +226,16 @@ typed operations; no path or payload string selects authority. Preference and
 directory issuance are exposed, while private-control and desktop appearance
 issuance remain pending.
 
+Appearance upload and pending-preview grants retain the resolved
+`LocalRoomManagerAuthority`, including server, authority lineage, and room UID,
+instead of reducing it to room/user/participant strings. Their persistence targets
+revalidate that exact authority in the asset transaction, so a ticket cannot cross
+a delete/recreate generation. Reusing the existing local-manager grant owner also
+removes one redundant standalone manager-authorization transaction from each local
+upload or pending read; the bounded ticket stores one existing authority value and
+adds no query, cache, task, or durable state. Bound reads remain active-room-member
+authority because applied appearance belongs to the room rather than its uploader.
+
 Room appearance uses a separate room-owned table and the exact asset grammar
 `^ra_[0-9a-f]{32}$`, generated as a UUID v4 from the operating-system RNG with
 122 random bits after the fixed version and variant bits. Its only

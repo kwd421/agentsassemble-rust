@@ -32,7 +32,7 @@ struct StoredTicketGrant {
 enum TicketAuthority {
     Room(AuthenticatedPrincipal),
     RoomHttp(RoomHttpGrant),
-    HumanInviteManager(HumanInviteManagerGrant),
+    LocalRoomManager(LocalRoomManagerGrant),
     HumanSession(HumanSessionGrant),
     SettingsDirectoryRead {
         principal_id: String,
@@ -54,23 +54,23 @@ struct RoomHttpGrant {
     purpose: RoomHttpPurpose,
 }
 
-struct HumanInviteManagerGrant {
+pub(super) struct LocalRoomManagerGrant {
     authority: LocalRoomManagerAuthority,
-    purpose: HumanInviteManagerPurpose,
+    purpose: LocalRoomManagerPurpose,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum HumanInviteManagerPurpose {
-    Create,
-    Revoke,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum LocalRoomManagerPurpose {
+    HumanInviteCreate,
+    HumanInviteRevoke,
+    AppearanceUpload,
+    PendingPreviewRead { asset_id: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RoomHttpPurpose {
     PreferencesRead,
     PreferencesWrite,
-    AppearanceUpload,
-    PendingPreviewRead { asset_id: String },
     BoundAppearanceRead { asset_id: String },
 }
 
@@ -115,7 +115,7 @@ pub(crate) enum ConsumedRoomPreferenceTicket {
 }
 
 pub(crate) enum ConsumedAppearanceReadTicket {
-    Pending(ConsumedRoomHttpTicket),
+    Pending(LocalRoomManagerAuthority),
     Bound(ConsumedRoomHttpTicket),
     HumanSession(HumanSessionAuthorization),
 }
@@ -256,7 +256,7 @@ impl TicketStore {
         &self,
         authority: LocalRoomManagerAuthority,
     ) -> Result<IssuedTicket, TicketError> {
-        self.issue_human_invite_manager(authority, HumanInviteManagerPurpose::Create)
+        self.issue_local_room_manager(authority, LocalRoomManagerPurpose::HumanInviteCreate)
             .await
     }
 
@@ -269,18 +269,19 @@ impl TicketStore {
         &self,
         authority: LocalRoomManagerAuthority,
     ) -> Result<IssuedTicket, TicketError> {
-        self.issue_human_invite_manager(authority, HumanInviteManagerPurpose::Revoke)
+        self.issue_local_room_manager(authority, LocalRoomManagerPurpose::HumanInviteRevoke)
             .await
     }
 
-    async fn issue_human_invite_manager(
+    async fn issue_local_room_manager(
         &self,
         authority: LocalRoomManagerAuthority,
-        purpose: HumanInviteManagerPurpose,
+        purpose: LocalRoomManagerPurpose,
     ) -> Result<IssuedTicket, TicketError> {
-        self.issue_authority(TicketAuthority::HumanInviteManager(
-            HumanInviteManagerGrant { authority, purpose },
-        ))
+        self.issue_authority(TicketAuthority::LocalRoomManager(LocalRoomManagerGrant {
+            authority,
+            purpose,
+        }))
         .await
     }
 
@@ -291,17 +292,10 @@ impl TicketStore {
     /// Returns `Invalid` for empty identity fields or exhausted ticket capacity.
     pub async fn issue_appearance_upload(
         &self,
-        room_id: String,
-        principal_id: String,
-        participant_id: String,
+        authority: LocalRoomManagerAuthority,
     ) -> Result<IssuedTicket, TicketError> {
-        self.issue_room_http(
-            room_id,
-            principal_id,
-            participant_id,
-            RoomHttpPurpose::AppearanceUpload,
-        )
-        .await
+        self.issue_local_room_manager(authority, LocalRoomManagerPurpose::AppearanceUpload)
+            .await
     }
 
     /// Issues one pending-preview credential bound to an exact asset.
@@ -311,19 +305,15 @@ impl TicketStore {
     /// Returns `Invalid` for empty identity or asset fields, or exhausted capacity.
     pub async fn issue_pending_preview_read(
         &self,
-        room_id: String,
-        principal_id: String,
-        participant_id: String,
+        authority: LocalRoomManagerAuthority,
         asset_id: String,
     ) -> Result<IssuedTicket, TicketError> {
         if asset_id.is_empty() {
             return Err(TicketError::Invalid);
         }
-        self.issue_room_http(
-            room_id,
-            principal_id,
-            participant_id,
-            RoomHttpPurpose::PendingPreviewRead { asset_id },
+        self.issue_local_room_manager(
+            authority,
+            LocalRoomManagerPurpose::PendingPreviewRead { asset_id },
         )
         .await
     }
@@ -503,7 +493,7 @@ impl TicketStore {
         &self,
         ticket: &str,
     ) -> Result<ConsumedHumanInviteManagerTicket, TicketError> {
-        self.consume_human_invite_manager(ticket, HumanInviteManagerPurpose::Create)
+        self.consume_local_room_manager(ticket, &LocalRoomManagerPurpose::HumanInviteCreate)
             .await
     }
 
@@ -516,7 +506,7 @@ impl TicketStore {
         &self,
         ticket: &str,
     ) -> Result<ConsumedHumanInviteManagerTicket, TicketError> {
-        self.consume_human_invite_manager(ticket, HumanInviteManagerPurpose::Revoke)
+        self.consume_local_room_manager(ticket, &LocalRoomManagerPurpose::HumanInviteRevoke)
             .await
     }
 
@@ -532,16 +522,14 @@ impl TicketStore {
     ) -> Result<ConsumedAppearanceReadTicket, TicketError> {
         let grant = self.consume_grant(ticket).await?;
         match grant.authority {
+            TicketAuthority::LocalRoomManager(manager) => resolve_local_room_manager_authority(
+                manager,
+                &LocalRoomManagerPurpose::PendingPreviewRead {
+                    asset_id: asset_id.to_owned(),
+                },
+            )
+            .map(ConsumedAppearanceReadTicket::Pending),
             TicketAuthority::RoomHttp(room) => match room.purpose.clone() {
-                RoomHttpPurpose::PendingPreviewRead { asset_id: expected }
-                    if expected == asset_id =>
-                {
-                    resolve_room_http_authority(
-                        room,
-                        &RoomHttpPurpose::PendingPreviewRead { asset_id: expected },
-                    )
-                    .map(ConsumedAppearanceReadTicket::Pending)
-                }
                 RoomHttpPurpose::BoundAppearanceRead { asset_id: expected }
                     if expected == asset_id =>
                 {
@@ -562,7 +550,6 @@ impl TicketStore {
             )
             .map(ConsumedAppearanceReadTicket::HumanSession),
             TicketAuthority::Room(_)
-            | TicketAuthority::HumanInviteManager(_)
             | TicketAuthority::SettingsDirectoryRead { .. }
             | TicketAuthority::ServerOperator { .. }
             | TicketAuthority::CentralRegistration { .. } => Err(TicketError::Invalid),
@@ -585,20 +572,17 @@ impl TicketStore {
         Ok(ConsumedSettingsDirectoryReadTicket { principal_id })
     }
 
-    async fn consume_human_invite_manager(
+    async fn consume_local_room_manager(
         &self,
         ticket: &str,
-        expected: HumanInviteManagerPurpose,
+        expected: &LocalRoomManagerPurpose,
     ) -> Result<ConsumedHumanInviteManagerTicket, TicketError> {
         let grant = self.consume_grant(ticket).await?;
-        let TicketAuthority::HumanInviteManager(manager) = grant.authority else {
+        let TicketAuthority::LocalRoomManager(manager) = grant.authority else {
             return Err(TicketError::Invalid);
         };
-        if manager.purpose != expected {
-            return Err(TicketError::Invalid);
-        }
         Ok(ConsumedHumanInviteManagerTicket {
-            authority: manager.authority,
+            authority: resolve_local_room_manager_authority(manager, expected)?,
         })
     }
 
@@ -617,7 +601,7 @@ impl TicketStore {
                     .map(ConsumedRoomPreferenceTicket::HumanSession)
             }
             TicketAuthority::Room(_)
-            | TicketAuthority::HumanInviteManager(_)
+            | TicketAuthority::LocalRoomManager(_)
             | TicketAuthority::SettingsDirectoryRead { .. }
             | TicketAuthority::ServerOperator { .. }
             | TicketAuthority::CentralRegistration { .. } => Err(TicketError::Invalid),
@@ -641,6 +625,16 @@ impl TicketStore {
     pub fn ttl_seconds(&self) -> u64 {
         self.ttl.as_secs()
     }
+}
+
+pub(super) fn resolve_local_room_manager_authority(
+    manager: LocalRoomManagerGrant,
+    expected: &LocalRoomManagerPurpose,
+) -> Result<LocalRoomManagerAuthority, TicketError> {
+    if &manager.purpose != expected {
+        return Err(TicketError::Invalid);
+    }
+    Ok(manager.authority)
 }
 
 fn resolve_room_http_authority(

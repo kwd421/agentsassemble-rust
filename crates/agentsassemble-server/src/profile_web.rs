@@ -307,17 +307,9 @@ async fn read_attachment(
             .map_err(|_| ProfileHttpError::unauthorized())?;
         let attachment = match grant {
             ConsumedAppearanceReadTicket::Pending(grant) => {
-                let manager = state
-                    .store
-                    .authorize_local_room_manager(
-                        &grant.room_id,
-                        &grant.principal_id,
-                        &grant.participant_id,
-                    )
-                    .await?;
                 state
                     .store
-                    .pending_room_appearance_asset(&manager, &attachment_id)
+                    .pending_room_appearance_asset(&grant, &attachment_id)
                     .await?
             }
             ConsumedAppearanceReadTicket::Bound(grant) => {
@@ -415,16 +407,9 @@ async fn consume_attachment_upload_authority(
         ConsumedAttachmentUploadTicket::Profile(profile) => {
             profile_authority(profile).map(AttachmentUploadAuthority::Profile)
         }
-        ConsumedAttachmentUploadTicket::Appearance(grant) => state
-            .store
-            .authorize_local_room_manager(
-                &grant.room_id,
-                &grant.principal_id,
-                &grant.participant_id,
-            )
-            .await
-            .map(AttachmentUploadAuthority::Appearance)
-            .map_err(ProfileHttpError::from),
+        ConsumedAttachmentUploadTicket::Appearance(authority) => {
+            Ok(AttachmentUploadAuthority::Appearance(authority))
+        }
     }
 }
 

@@ -1,11 +1,11 @@
 use agentsassemble_domain::{AuthenticatedPrincipal, InviteScope};
-use agentsassemble_persistence::HumanSessionAuthorization;
+use agentsassemble_persistence::{HumanSessionAuthorization, LocalRoomManagerAuthority};
 use chrono::Utc;
 use tokio::time::Instant;
 
 use super::{
-    ConsumedRoomHttpTicket, ConsumedTicket, IssuedTicket, RoomHttpPurpose, StoredTicketGrant,
-    TicketAuthority, TicketError, TicketStore, insert_grant, resolve_room_http_authority,
+    ConsumedTicket, IssuedTicket, LocalRoomManagerPurpose, StoredTicketGrant, TicketAuthority,
+    TicketError, TicketStore, insert_grant, resolve_local_room_manager_authority,
 };
 
 pub(super) struct HumanSessionGrant {
@@ -63,7 +63,7 @@ pub enum ConsumedProfileTicket {
 
 pub(crate) enum ConsumedAttachmentUploadTicket {
     Profile(ConsumedProfileTicket),
-    Appearance(ConsumedRoomHttpTicket),
+    Appearance(LocalRoomManagerAuthority),
 }
 
 const PUBLIC_SESSION_GRANT_CAPACITY: usize = 1_792;
@@ -217,7 +217,7 @@ impl TicketStore {
                 })
             }
             TicketAuthority::RoomHttp(_)
-            | TicketAuthority::HumanInviteManager(_)
+            | TicketAuthority::LocalRoomManager(_)
             | TicketAuthority::HumanSession(_)
             | TicketAuthority::SettingsDirectoryRead { .. }
             | TicketAuthority::ServerOperator { .. }
@@ -257,7 +257,7 @@ impl TicketStore {
                 ))
             }
             TicketAuthority::RoomHttp(_)
-            | TicketAuthority::HumanInviteManager(_)
+            | TicketAuthority::LocalRoomManager(_)
             | TicketAuthority::SettingsDirectoryRead { .. }
             | TicketAuthority::ServerOperator { .. }
             | TicketAuthority::CentralRegistration { .. } => Err(TicketError::Invalid),
@@ -397,10 +397,13 @@ impl TicketStore {
                     principal_id,
                 })
             }
-            TicketAuthority::RoomHttp(room) => ConsumedAttachmentUploadTicket::Appearance(
-                resolve_room_http_authority(room, &RoomHttpPurpose::AppearanceUpload)?,
-            ),
-            TicketAuthority::HumanInviteManager(_)
+            TicketAuthority::LocalRoomManager(manager) => {
+                ConsumedAttachmentUploadTicket::Appearance(resolve_local_room_manager_authority(
+                    manager,
+                    &LocalRoomManagerPurpose::AppearanceUpload,
+                )?)
+            }
+            TicketAuthority::RoomHttp(_)
             | TicketAuthority::SettingsDirectoryRead { .. }
             | TicketAuthority::CentralRegistration { .. } => return Err(TicketError::Invalid),
         })
