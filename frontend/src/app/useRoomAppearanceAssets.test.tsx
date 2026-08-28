@@ -23,6 +23,7 @@ const manager = {
   room_id: "general",
   room_uid: "30000000-0000-4000-8000-000000000003",
 };
+const resolveLocalManager = vi.fn(() => manager);
 const room: RoomDockItem = {
   id: "general",
   label: "General",
@@ -68,7 +69,7 @@ function renderAssets(
         canonicalAppearanceFor: () => currentAppearance,
         settingsStateFor: () => ({ status: currentStatus }),
         localAuthorityCurrent: currentLocalAuthority,
-        resolveLocalManager: () => manager,
+        resolveLocalManager,
         bindUploadedReference,
       }),
     {
@@ -86,6 +87,7 @@ describe("room appearance object URL lifecycle", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     bindUploadedReference.mockResolvedValue(undefined);
+    resolveLocalManager.mockReturnValue(manager);
     let sequence = 0;
     vi.stubGlobal("URL", {
       ...URL,
@@ -277,7 +279,7 @@ describe("room appearance object URL lifecycle", () => {
     expect(api.fetchBlob).toHaveBeenCalledTimes(2);
   });
 
-  it("revokes installed URLs as soon as local directory authority is unconfirmed", async () => {
+  it("fences local URLs on authority loss and reloads through the stable resolver", async () => {
     api.fetchBlob.mockResolvedValue(new Blob(["png"], { type: "image/png" }));
     const appearance: RoomAppearance = {
       bannerPreset: "custom",
@@ -299,12 +301,50 @@ describe("room appearance object URL lifecycle", () => {
       currentLocalAuthority: false,
     });
 
-    await waitFor(() =>
-      expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:appearance-1")
-    );
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:appearance-1");
     expect(hook.result.current.appearanceFor(room).bannerImage).toBeUndefined();
     expect(hook.result.current.errorFor(room)).toContain("관리자 권위");
     expect(api.fetchBlob).toHaveBeenCalledOnce();
+    resolveLocalManager.mockClear();
+
+    hook.rerender({
+      currentAppearance: appearance,
+      currentStatus: "ready",
+      currentRooms: [room],
+      currentLocalAuthority: true,
+    });
+    await waitFor(() =>
+      expect(hook.result.current.appearanceFor(room).bannerImage).toBe(
+        "blob:appearance-2"
+      )
+    );
+    expect(resolveLocalManager).toHaveBeenCalled();
+    expect(api.fetchBlob).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not publish a deferred local read after authority loss", async () => {
+    const pending = deferred<Blob>();
+    api.fetchBlob.mockReturnValueOnce(pending.promise);
+    const appearance: RoomAppearance = {
+      bannerPreset: "custom",
+      bannerImage: banner,
+      notifications: "mentions",
+      inviteScope: "room",
+    };
+    const hook = renderAssets(appearance);
+    const signal = api.fetchBlob.mock.calls[0]?.[3] as AbortSignal;
+
+    hook.rerender({
+      currentAppearance: appearance,
+      currentStatus: "ready",
+      currentRooms: [room],
+      currentLocalAuthority: false,
+    });
+    expect(signal.aborted).toBe(true);
+    expect(hook.result.current.appearanceFor(room).bannerImage).toBeUndefined();
+
+    await act(async () => pending.resolve(new Blob(["late"], { type: "image/png" })));
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
   });
 
   it("resolves the current manager before every upload", async () => {

@@ -117,7 +117,9 @@ describe("useRoomDirectory", () => {
     const { result } = renderHook(() =>
       useRoomDirectory({ initialRooms: [localRoom], hostEnabled: true })
     );
+    expect(result.current.managerAuthorityCurrent).toBe(false);
     await waitFor(() => expect(result.current.syncIssue).toBeNull());
+    expect(result.current.managerAuthorityCurrent).toBe(true);
 
     const authority = result.current.resolveManagerRoomAuthority(localRoom.id);
     expect(authority).toEqual({
@@ -184,6 +186,8 @@ describe("useRoomDirectory", () => {
       server_id: serverId,
       authority_lineage_id: "50000000-0000-4000-8000-000000000005",
     });
+    local.rerender();
+    expect(local.result.current.managerAuthorityCurrent).toBe(false);
     expect(() =>
       local.result.current.resolveManagerRoomAuthority(localRoom.id)
     ).toThrow("현재 확인된 로컬 방 관리자 권위가 없습니다.");
@@ -191,8 +195,11 @@ describe("useRoomDirectory", () => {
       server_id: serverId,
       authority_lineage_id: lineageId,
     });
+    local.rerender();
+    expect(local.result.current.managerAuthorityCurrent).toBe(true);
     const replacementUid = "40000000-0000-4000-8000-000000000004";
     act(() => local.result.current.updateRoom(localRoom.id, { roomUid: replacementUid }));
+    expect(local.result.current.managerAuthorityCurrent).toBe(true);
     expect(() =>
       local.result.current.resolveManagerRoomAuthority(localRoom.id)
     ).toThrow("현재 확인된 로컬 방 관리자 권위가 없습니다.");

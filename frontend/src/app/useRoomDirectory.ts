@@ -438,22 +438,32 @@ export function useRoomDirectory({
     ]
   );
 
+  const currentManagerAuthoritySnapshot = useCallback(() => {
+    const snapshot = managerSnapshotRef.current;
+    const bound = currentRoomDirectoryAuthority();
+    if (
+      !snapshot ||
+      snapshot.epoch !== publicationEpochRef.current ||
+      !activeRef.current ||
+      !hostEnabledRef.current ||
+      syncIssueRef.current ||
+      !bound ||
+      bound.server_id !== snapshot.authority.server_id ||
+      bound.authority_lineage_id !== snapshot.authority.authority_lineage_id
+    ) {
+      return null;
+    }
+    return snapshot;
+  }, []);
+
   const resolveManagerRoomAuthority = useCallback(
     (roomDockId: string): DesktopManagerRoomAuthority => {
-      const snapshot = managerSnapshotRef.current;
-      const bound = currentRoomDirectoryAuthority();
+      const snapshot = currentManagerAuthoritySnapshot();
       const matches = roomsRef.current.filter((room) => room.id === roomDockId);
       const room = matches.length === 1 ? matches[0] : null;
       const frozen = snapshot?.byDockId.get(roomDockId);
       if (
         !snapshot ||
-        snapshot.epoch !== publicationEpochRef.current ||
-        !activeRef.current ||
-        !hostEnabledRef.current ||
-        syncIssueRef.current ||
-        !bound ||
-        bound.server_id !== snapshot.authority.server_id ||
-        bound.authority_lineage_id !== snapshot.authority.authority_lineage_id ||
         !room ||
         !frozen ||
         room.roomOrigin !== "local" ||
@@ -466,7 +476,7 @@ export function useRoomDirectory({
       }
       return frozen;
     },
-    []
+    [currentManagerAuthoritySnapshot]
   );
 
   useEffect(() => {
@@ -551,6 +561,7 @@ export function useRoomDirectory({
     validateRoomDirectoryContinuity,
     refreshRoomDirectory,
     verifyRoomDirectoryAuthority,
+    managerAuthorityCurrent: currentManagerAuthoritySnapshot() !== null,
     resolveManagerRoomAuthority,
     syncIssue,
   };

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   fetchRoomAppearanceBlob,
   uploadRoomAppearance,
@@ -102,6 +102,10 @@ export function useRoomAppearanceAssets({
   const liveObjectUrlsRef = useRef(new Set<string>());
   const renderedObjectUrlsRef = useRef(new Set<string>());
   const remoteCredentialRef = useRef({ value: remoteSessionToken, revision: 0 });
+  const localAuthorityCurrentRef = useRef(localAuthorityCurrent);
+  useLayoutEffect(() => {
+    localAuthorityCurrentRef.current = localAuthorityCurrent;
+  }, [localAuthorityCurrent]);
   if (remoteCredentialRef.current.value !== remoteSessionToken) {
     remoteCredentialRef.current = {
       value: remoteSessionToken,
@@ -110,7 +114,7 @@ export function useRoomAppearanceAssets({
   }
   const remoteCredentialRevision = remoteCredentialRef.current.revision;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const desired = new Map<string, DesiredAsset>();
     const nextStaticErrors: Record<string, string> = {};
 
@@ -212,7 +216,9 @@ export function useRoomAppearanceAssets({
         .then((blob) => {
           if (
             request.controller.signal.aborted ||
-            requestsRef.current.get(key) !== request
+            requestsRef.current.get(key) !== request ||
+            (request.authority.kind === "local" &&
+              !localAuthorityCurrentRef.current)
           ) {
             return;
           }
@@ -253,7 +259,7 @@ export function useRoomAppearanceAssets({
     settingsStateFor,
   ]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const next = new Set(Object.values(resolvedUrls));
     for (const objectUrl of renderedObjectUrlsRef.current) {
       if (!next.has(objectUrl)) {
@@ -287,18 +293,19 @@ export function useRoomAppearanceAssets({
     (room: RoomDockItem) => {
       const canonical = completeRoomAppearance(canonicalAppearanceFor(room));
       const roomKey = roomSettingsKey(room);
+      const readable = room.roomOrigin === "remote_server" || localAuthorityCurrent;
       return {
         ...canonical,
         bannerImage:
-          room.id === activeRoomId && canonical.bannerImage
+          readable && room.id === activeRoomId && canonical.bannerImage
             ? resolvedUrls[assetKey(roomKey, canonical.bannerImage)]
             : undefined,
-        iconImage: canonical.iconImage
+        iconImage: readable && canonical.iconImage
           ? resolvedUrls[assetKey(roomKey, canonical.iconImage)]
           : undefined,
       };
     },
-    [activeRoomId, canonicalAppearanceFor, resolvedUrls]
+    [activeRoomId, canonicalAppearanceFor, localAuthorityCurrent, resolvedUrls]
   );
 
   const appearances = useMemo(
@@ -312,13 +319,16 @@ export function useRoomAppearanceAssets({
   const errorFor = useCallback(
     (room: RoomDockItem) => {
       const roomKey = roomSettingsKey(room);
+      if (room.roomOrigin !== "remote_server" && !localAuthorityCurrent) {
+        return "현재 확인된 로컬 방 관리자 권위가 없습니다.";
+      }
       if (staticErrors[roomKey]) return staticErrors[roomKey];
       for (const [key, message] of Object.entries(requestErrors)) {
         if (requestsRef.current.get(key)?.roomKey === roomKey) return message;
       }
       return "";
     },
-    [requestErrors, staticErrors]
+    [localAuthorityCurrent, requestErrors, staticErrors]
   );
 
   const retry = useCallback((room: RoomDockItem) => {
