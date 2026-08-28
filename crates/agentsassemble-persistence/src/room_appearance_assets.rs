@@ -9,7 +9,8 @@ use sqlx::{Row, Sqlite, Transaction};
 use uuid::Uuid;
 
 use crate::{
-    LocalRoomManagerAuthority, PersistenceError, SqliteStore,
+    HumanSessionAuthorization, LocalRoomManagerAuthority, PersistenceError, SqliteStore,
+    human_session_authority::revalidate_human_session,
     raster_assets::{
         MAX_RASTER_BYTES, enforce_storage_replacement, prepare_raster, sanitize_filename,
         validate_stored_raster,
@@ -133,44 +134,80 @@ impl SqliteStore {
         }
         let mut transaction = self.pool.begin().await?;
         resolve_room_user_identity(&mut transaction, room_id, user_id, participant_id).await?;
-        let row = sqlx::query(
+        let asset = read_bound_room_appearance_asset(&mut transaction, room_id, asset_id).await?;
+        transaction.commit().await?;
+        Ok(asset)
+    }
+
+    /// Reads one room-owned PNG while retaining exact durable human-session provenance.
+    ///
+    /// # Errors
+    ///
+    /// Fails closed when the issued session authority has expired or changed, the human has left,
+    /// or the requested asset is no longer an intact reference owned by that room.
+    pub async fn bound_human_session_room_appearance_asset(
+        &self,
+        authorization: &HumanSessionAuthorization,
+        asset_id: &str,
+    ) -> Result<RoomAppearanceAsset, PersistenceError> {
+        if !valid_asset_id(asset_id) {
+            return Err(asset_missing());
+        }
+        let mut transaction = self.pool.begin().await?;
+        let (current, _) =
+            revalidate_human_session(&mut transaction, authorization, Utc::now()).await?;
+        let asset = read_bound_room_appearance_asset(
+            &mut transaction,
+            &current.principal().room_id,
+            asset_id,
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(asset)
+    }
+}
+
+async fn read_bound_room_appearance_asset(
+    transaction: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    asset_id: &str,
+) -> Result<RoomAppearanceAsset, PersistenceError> {
+    let row = sqlx::query(
             "SELECT asset.filename, asset.content_type, asset.size, length(asset.content) AS content_length, asset.created_at, room.settings_json FROM room_appearance_assets AS asset INNER JOIN rooms AS room ON room.room_id = asset.room_id WHERE asset.asset_id = ? AND asset.room_id = ? AND asset.state = 'bound' AND asset.pending_owner_user_id IS NULL AND asset.expires_at IS NULL",
         )
         .bind(asset_id)
         .bind(room_id)
-        .fetch_optional(&mut *transaction)
+        .fetch_optional(&mut **transaction)
         .await?
         .ok_or_else(asset_missing)?;
-        let settings: agentsassemble_domain::RoomSettings =
-            serde_json::from_str(row.get::<String, _>("settings_json").as_str())?;
-        let referenced = [
-            &settings.appearance.banner_image_url,
-            &settings.appearance.icon_image_url,
-        ]
-        .into_iter()
-        .filter_map(|url| room_appearance_asset_id(url))
-        .any(|referenced_id| referenced_id == asset_id);
-        if !referenced {
-            return Err(asset_missing());
-        }
-        let (filename, size) = validate_asset_metadata(&row, row.get("content_length"))?;
-        let content = sqlx::query_scalar::<_, Vec<u8>>(
+    let settings: agentsassemble_domain::RoomSettings =
+        serde_json::from_str(row.get::<String, _>("settings_json").as_str())?;
+    let referenced = [
+        &settings.appearance.banner_image_url,
+        &settings.appearance.icon_image_url,
+    ]
+    .into_iter()
+    .filter_map(|url| room_appearance_asset_id(url))
+    .any(|referenced_id| referenced_id == asset_id);
+    if !referenced {
+        return Err(asset_missing());
+    }
+    let (filename, size) = validate_asset_metadata(&row, row.get("content_length"))?;
+    let content = sqlx::query_scalar::<_, Vec<u8>>(
             "SELECT content FROM room_appearance_assets WHERE asset_id = ? AND room_id = ? AND state = 'bound'",
         )
         .bind(asset_id)
         .bind(room_id)
-        .fetch_one(&mut *transaction)
+        .fetch_one(&mut **transaction)
         .await?;
-        if content.len() != size {
-            return Err(invalid_asset_state());
-        }
-        let asset = RoomAppearanceAsset {
-            metadata: asset_metadata(asset_id.to_owned(), filename, size),
-            content,
-        };
-        transaction.commit().await?;
-        Ok(asset)
+    if content.len() != size {
+        return Err(invalid_asset_state());
     }
+    let asset = RoomAppearanceAsset {
+        metadata: asset_metadata(asset_id.to_owned(), filename, size),
+        content,
+    };
+    Ok(asset)
 }
 
 fn decode_asset(

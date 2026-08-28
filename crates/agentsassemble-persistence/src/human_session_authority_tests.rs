@@ -1,6 +1,7 @@
 use agentsassemble_domain::{
-    ClientKind, InviteScope, LOCAL_OPERATOR_USER_ID, Participant, ParticipantStatus,
-    RoomRandomResult, UserProfile, UserProfilePatch,
+    AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID,
+    LOCAL_OPERATOR_USER_ID, Participant, ParticipantStatus, RoomRandomResult, RoomSettings,
+    UserProfile, UserProfilePatch, public_settings,
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use chrono::{DateTime, Duration, Utc};
@@ -174,6 +175,62 @@ async fn human_session_avatar_upload_requires_live_write_scope() {
 }
 
 #[tokio::test]
+async fn bound_appearance_read_revalidates_human_session_in_the_asset_snapshot() {
+    let (store, _) = admitted_fixture(InviteScope::ReadOnly).await;
+    let manager = store
+        .authorize_local_room_manager(
+            "general",
+            LOCAL_OPERATOR_USER_ID,
+            LOCAL_OPERATOR_PARTICIPANT_ID,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize appearance manager: {error}"));
+    let stored = store
+        .store_pending_room_appearance_asset(
+            &manager,
+            "room-icon.png",
+            "image/png",
+            STANDARD
+                .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMQ0bD5DwACRAF4aig0hQAAAABJRU5ErkJggg==")
+                .unwrap_or_else(|error| panic!("decode appearance fixture: {error}")),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("store appearance fixture: {error}"));
+    let revision = public_settings(&RoomSettings::defaults("General"))
+        .unwrap_or_else(|error| panic!("read appearance revision: {error}"))
+        .settings_revision;
+    store
+        .execute_room_settings_update(
+            &local_operator_principal(),
+            "human-session-appearance-bind",
+            &json!({
+                "expected_revision": revision,
+                "appearance": {"icon_image_url": stored.url}
+            }),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("bind appearance fixture: {error}"));
+    let authorization = store
+        .authorize_human_session(&session_fingerprint(&store).await)
+        .await
+        .unwrap_or_else(|error| panic!("authorize appearance reader: {error}"));
+
+    let asset = store
+        .bound_human_session_room_appearance_asset(&authorization, &stored.id)
+        .await
+        .unwrap_or_else(|error| panic!("read session-bound appearance: {error}"));
+    assert_eq!(&asset.content[..8], b"\x89PNG\r\n\x1a\n");
+
+    set_participant_status(&store, ParticipantStatus::Left).await;
+    assert_rejected_code(
+        store
+            .bound_human_session_room_appearance_asset(&authorization, &stored.id)
+            .await,
+        "session_revoked",
+    );
+}
+
+#[tokio::test]
 async fn session_originated_command_units_revalidate_exact_provenance() {
     let (store, _) = admitted_fixture(InviteScope::ReadWrite).await;
     let authorization = store
@@ -231,6 +288,19 @@ async fn session_originated_command_units_revalidate_exact_provenance() {
             .unwrap_or_else(|error| panic!("count rejected command results: {error}")),
         0
     );
+}
+
+fn local_operator_principal() -> AuthenticatedPrincipal {
+    AuthenticatedPrincipal {
+        principal_id: LOCAL_OPERATOR_USER_ID.to_owned(),
+        participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
+        display_name: "Host".to_owned(),
+        room_id: "general".to_owned(),
+        client_kind: ClientKind::Browser,
+        invite_scope: InviteScope::ReadWrite,
+        is_operator: true,
+        capabilities: CapabilitySet::local_operator(ClientKind::Browser, InviteScope::ReadWrite),
+    }
 }
 
 async fn set_session_expiry(store: &SqliteStore, expires_at: DateTime<Utc>) {
