@@ -253,10 +253,10 @@ Pending preview requires the exact same room, uploader, unexpired asset, and
 current local manager. Bound read requires the exact same room, a bound and
 integral asset, a current canonical banner or icon reference, and an active human
 member. Both return static PNG with `Cache-Control: private, no-store` and inherit
-the global `nosniff` and `no-referrer` policy. The frontend performs an
-authenticated ticketed fetch, renders only an object URL, revokes it on reference,
-room, authority, or component-lifetime change, and rejects late results by fetch
-generation.
+the global `nosniff` and `no-referrer` policy. Once activated, the frontend must
+perform an authenticated ticketed fetch, render only an object URL, revoke it on
+reference, room, authority, or component-lifetime change, and reject late results
+by fetch generation.
 
 The settings transaction evaluates banner and icon together, deduplicates new
 references, promotes only an unexpired pending asset uploaded by the current local
