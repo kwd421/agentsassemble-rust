@@ -92,6 +92,19 @@ describe("RoomInviteModal", () => {
     expect(onStopTunnel).toHaveBeenCalledOnce();
   });
 
+  it("keeps Stop available while Start still awaits its first server response", () => {
+    const { onStopTunnel } = renderInviteModal({
+      publicAccess: false,
+      phase: "stopped",
+      requestState: "starting",
+    });
+
+    const stop = screen.getByRole("button", { name: "외부 접속 끄기" });
+    expect((stop as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(stop);
+    expect(onStopTunnel).toHaveBeenCalledOnce();
+  });
+
   it("creates a human invite with the selected use limit and lifetime", () => {
     const { onGenerateSecureInvite } = renderInviteModal();
 
