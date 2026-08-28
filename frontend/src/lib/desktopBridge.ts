@@ -65,6 +65,8 @@ export interface DesktopManagerRoomAuthority {
 type DesktopHttpTicketCommand =
   | "runtime_preferences_read_ticket"
   | "runtime_preferences_write_ticket"
+  | "runtime_message_pins_read_ticket"
+  | "runtime_message_pins_write_ticket"
   | "runtime_human_invite_create_ticket"
   | "runtime_human_invite_revoke_ticket"
   | "runtime_appearance_upload_ticket"
@@ -415,6 +417,26 @@ export function requestDesktopPreferencesWriteTicket(
     "runtime_preferences_write_ticket",
     { roomId },
     "방 preference write 티켓"
+  );
+}
+
+export function requestDesktopMessagePinsReadTicket(
+  roomId: string
+): Promise<DesktopOperatorHttpTicket> {
+  return requestDesktopHttpTicket(
+    "runtime_message_pins_read_ticket",
+    { roomId },
+    "로비 메시지 핀 read 티켓"
+  );
+}
+
+export function requestDesktopMessagePinsWriteTicket(
+  roomId: string
+): Promise<DesktopOperatorHttpTicket> {
+  return requestDesktopHttpTicket(
+    "runtime_message_pins_write_ticket",
+    { roomId },
+    "로비 메시지 핀 write 티켓"
   );
 }
 

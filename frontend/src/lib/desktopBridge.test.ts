@@ -11,6 +11,8 @@ import {
   fetchDesktopOperatorRuntime,
   requestDesktopHumanInviteCreateTicket,
   requestDesktopHostProductSurface,
+  requestDesktopMessagePinsReadTicket,
+  requestDesktopMessagePinsWriteTicket,
 } from "./desktopBridge";
 
 const hostCommands = [
@@ -21,6 +23,8 @@ const hostCommands = [
   "runtime_central_registration_ticket",
   "runtime_human_invite_create_ticket",
   "runtime_human_invite_revoke_ticket",
+  "runtime_message_pins_read_ticket",
+  "runtime_message_pins_write_ticket",
   "runtime_operator_ticket",
 ];
 
@@ -205,6 +209,33 @@ describe("desktop exact-purpose HTTP bridge", () => {
     expect(invoke).toHaveBeenNthCalledWith(4, "runtime_appearance_bound_read_ticket", {
       authority: managerAuthority,
       assetId,
+    });
+  });
+
+  it("keeps message-pin read and write on separate room-bound native grants", async () => {
+    const invoke = vi
+      .fn()
+      .mockResolvedValueOnce({
+        revision: PRODUCT_SURFACE_REVISION,
+        digest: "2".repeat(64),
+        commands: hostCommands,
+      })
+      .mockResolvedValue({
+        ticket: "f".repeat(64),
+        ttl_seconds: 30,
+        http_base_url: "http://127.0.0.1:49154",
+      });
+    Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
+
+    await requestDesktopHostProductSurface();
+    await requestDesktopMessagePinsReadTicket("general");
+    await requestDesktopMessagePinsWriteTicket("general");
+
+    expect(invoke).toHaveBeenNthCalledWith(2, "runtime_message_pins_read_ticket", {
+      roomId: "general",
+    });
+    expect(invoke).toHaveBeenNthCalledWith(3, "runtime_message_pins_write_ticket", {
+      roomId: "general",
     });
   });
 
