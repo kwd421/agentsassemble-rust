@@ -326,13 +326,14 @@ banner and icon through object URLs; normal quit stopped the exact app and sidec
 and only that run's isolated data and regenerable build outputs were moved to
 recoverable Trash.
 
-The installed SQLite schema now admits exactly the domain-owned `ra_` plus 32-character
-lowercase-hex asset-ID language, verified behaviorally against the Rust parser for
-canonical, uppercase, nonhex, short, and wrong-prefix inputs. This stricter durable
-contract creates clean schema 42; schema 41 is rejected without conversion or a
-compatibility path. The directory owner also exposes one current manager-authority
-projection derived from the same live snapshot, epoch, host, sync, and bound-authority
-checks used by its exact room resolver. Local appearance projection hides URLs in the
+The installed SQLite schema now admits exactly the domain-owned `ra_` plus 32-byte
+ASCII lowercase-hex asset-ID language. Its explicit `NOT NULL`, byte-length, and
+fixed-position GLOB checks are verified behaviorally against the Rust parser for
+canonical, uppercase, nonhex, short, wrong-prefix, embedded-NUL, and null inputs. This
+stricter durable contract creates clean schema 43; schema 42 is rejected without
+conversion or a compatibility path. The directory owner also exposes one current
+manager-authority projection derived from the same live snapshot, epoch, host, sync,
+and bound-authority checks used by its exact room resolver. Local appearance projection hides URLs in the
 false render, layout-owned cleanup aborts and removes them before publication, and a
 currentness fence prevents deferred reads from creating a late object URL. Restoration
 re-enters the unchanged exact room resolver and performs a fresh grant/read.

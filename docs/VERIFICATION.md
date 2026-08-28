@@ -3456,3 +3456,24 @@ warning-denied-Clippy/diff gate: frontend 87 files / 539 tests, desktop 20, doma
 persistence 179, protocol 6, provider 120, and server 85. Daybreaker approved the prior
 range with `Critical 0 / High 0 / Medium 0`; final approval of these two new corrections
 remains pending after push. No provider, Deep Scan, or automated security scanner ran.
+
+The final critical-web re-review of `53033b6..9ab84ec` returned
+`REVISE — Critical 0 / High 0 / Medium 1`. The lowercase-hex correction closed the
+reported uppercase/nonhex cases, but SQLite rowid-table `TEXT PRIMARY KEY` still
+accepted null without an explicit constraint, and TEXT length/pattern semantics were
+not a byte-exact proof across embedded NUL. Commit `cc2aebd` advances the clean schema
+from 42 to 43, adds explicit `NOT NULL`, requires the exact 35-byte BLOB length, and
+uses a fixed 32-position lowercase-hex GLOB after the literal `ra_` prefix. The
+installed-schema regression now compares an embedded-NUL candidate to the domain
+predicate and separately proves that null is rejected. Schema 42 is rejected by the
+existing version owner; no migration or compatibility path was added.
+
+This correction changes one existing CHECK and adds no runtime allocation, query,
+cache, task, state, fallback, or abstraction. Its purpose is durable-language equality,
+not a claimed performance improvement. Focused behavior and all 179 persistence tests
+passed. Full serial `make verify` again passed the architecture, source-growth, policy,
+formatting, generated-binding, original-CSS, production-build, frontend 87/539,
+desktop 20, domain 26, persistence 179, protocol 6, provider 120, server 85, every
+TCP/integration/doc test, warning-denied Clippy, and diff gates. Final web and
+Daybreaker approval of this last correction remains pending. No provider, Deep Scan,
+automated security scanner, or Computer Use ran.
