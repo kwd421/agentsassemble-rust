@@ -18,11 +18,6 @@ const MAX_CHANNELS: usize = 50;
 static CHANNEL_ID: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^c[0-9a-f]{12}$").unwrap_or_else(|error| panic!("valid channel regex: {error}"))
 });
-static ASSET_URL: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^/api/attachments/[A-Za-z0-9_-]{8,64}\?(view|download)=1$")
-        .unwrap_or_else(|error| panic!("valid attachment regex: {error}"))
-});
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 pub struct RoomAppearance {
     pub banner_preset: String,
@@ -492,12 +487,26 @@ fn require_canonical_text(value: &str, field: &str, limit: usize) -> Result<(), 
 
 fn require_asset_url(value: &str, field: &str) -> Result<(), RoomSettingsError> {
     require_canonical_text(value, field, IMAGE_URL_LIMIT)?;
-    if !value.is_empty() && !ASSET_URL.is_match(value) {
+    if !value.is_empty() && room_appearance_asset_id(value).is_none() {
         return Err(RoomSettingsError::bad_request(format!(
             "{field} must be empty or a canonical room attachment URL."
         )));
     }
     Ok(())
+}
+
+/// Returns the opaque room-owned asset ID from one exact renderable appearance URL.
+#[must_use]
+pub fn room_appearance_asset_id(value: &str) -> Option<&str> {
+    let asset_id = value
+        .strip_prefix("/api/attachments/")?
+        .strip_suffix("?view=1")?;
+    let hex = asset_id.strip_prefix("ra_")?;
+    (hex.len() == 32
+        && hex
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)))
+    .then_some(asset_id)
 }
 
 fn require_short_label(value: &str) -> Result<(), RoomSettingsError> {
@@ -603,7 +612,7 @@ pub fn public_settings(settings: &RoomSettings) -> Result<PublicRoomSettings, se
 mod tests {
     use serde_json::json;
 
-    use super::{RoomSettings, public_settings};
+    use super::{RoomSettings, public_settings, room_appearance_asset_id};
 
     #[test]
     fn room_settings_revision_matches_current_sorted_json_contract() {
@@ -645,6 +654,22 @@ mod tests {
             .unwrap_or_else(|error| panic!("update invite scope: {error}"));
 
         assert_eq!(next.appearance.invite_scope, "read_only");
+    }
+
+    #[test]
+    fn room_appearance_urls_reserve_the_exact_room_asset_namespace() {
+        let asset_id = "ra_0123456789abcdef0123456789abcdef";
+        let url = format!("/api/attachments/{asset_id}?view=1");
+        assert_eq!(room_appearance_asset_id(&url), Some(asset_id));
+        for rejected in [
+            "/api/attachments/avatar_1234?view=1",
+            "/api/attachments/ra_0123456789abcdef0123456789abcdeg?view=1",
+            "/api/attachments/ra_0123456789ABCDEF0123456789ABCDEF?view=1",
+            "/api/attachments/ra_0123456789abcdef0123456789abcdef?download=1",
+            "/api/attachments/ra_0123456789abcdef0123456789abcdef?view=1&extra=1",
+        ] {
+            assert_eq!(room_appearance_asset_id(rejected), None, "{rejected}");
+        }
     }
 
     #[test]
