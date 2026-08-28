@@ -10,6 +10,7 @@ use tokio::{
 };
 mod control_pipe_invite_tickets;
 #[cfg(unix)]
+#[path = "control_pipe/managed_ingress.rs"]
 mod control_pipe_managed_ingress;
 const HOST_TOKEN: &str = "control-pipe-test-host-token-000000001";
 const PUBLIC_ORIGIN: &str = "https://public.example.test";
