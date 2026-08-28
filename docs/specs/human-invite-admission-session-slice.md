@@ -7,9 +7,10 @@ and production-browser verified; configured-manual and managed public ingress wi
 stable entry plus backend manager invite create/revoke and private-control ticket
 issuance, exact manager-room authority transport and transaction revalidation, and
 the native desktop manager-invite ticket bridge plus the strict C1b create/revoke
-frontend API contract are implemented and test-verified; retained controller custody,
-UI cutover, remaining typed exchanges, and packaged activation remain incomplete and
-unverified
+frontend API contract are implemented and test-verified; retained controller custody
+and UI cutover are implemented, fully verified, and manually approved; the packaged
+managed-ingress normal invite path is verified, while its remaining real-client matrix
+and the remaining typed room-attachment exchange are incomplete
 
 ## Definition
 
@@ -630,9 +631,11 @@ B1a/B1b and the browser admission-custody corrections are public through `fdb4e4
 fully verified, and approved by both manual reviewers. B2 is public through `2b97a7c`,
 fully verified, and approved by both manual reviewers. C1a is public through
 `e006e0d`, fully verified, and approved by both manual reviewers. C1b now owns one
-strict frontend create/revoke dispatch and response contract, but the copied
-controller does not retain or present its custody until C2. C2 controller/UI custody
-and the packaged flow remain incomplete.
+strict frontend create/revoke dispatch and response contract. C2 controller/UI custody
+is public and approved through `10c63b4`. Local commit `6a8b5f1` makes the packaged
+sidecar serve the copied frontend and passes the managed-ingress normal invite/message,
+one-use rejection, retained-record replacement, and revoke rejection flows; the rest of
+the packaged completion matrix remains incomplete.
 
 ## Trusted ingress boundary
 

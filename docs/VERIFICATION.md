@@ -3152,3 +3152,50 @@ test. No Computer Use resource, provider, Deep Scan, or automated scanner ran. T
 resulting C2 foundation through `3cfaf4b` received final web and Daybreaker approval
 with `Critical 0 / High 0 / Medium 0`. Retained invite custody,
 controller/UI activation, and packaged Computer Use verification remain incomplete.
+
+## Packaged public-frontend resource correction: 2026-08-28
+
+The first isolated release-package run reached the copied manager UI, started the
+owned managed tunnel, and durably created a human invite, but a separate real Chrome
+browser received HTTP 404 at the exact `/join` entrance. The direct loopback route was
+also 404. Process evidence showed that the packaged Tauri owner started its sidecar
+without `--frontend`; the WebView's embedded assets did not give the Axum authority a
+filesystem frontend to serve. The UI therefore reported a ready public ingress and
+issued a real credential for an unreachable product entrance.
+
+Commit `6a8b5f1` uses Tauri's existing resource bundler to place the already built
+`frontend/dist` at `Resources/frontend`, and the desktop runtime passes that single
+fixed path to the sidecar. The existing server owner still canonicalizes the path,
+requires `index.html`, mounts the declared static surface, and fails startup when the
+resource is absent. No second server, asset copier, embedded-files framework, runtime
+fallback, compatibility path, cache, task, timer, network request, or policy owner was
+added. The observed disk cost is one 1.2 MiB resource directory in the package; no CPU,
+memory, process, or latency improvement is claimed.
+
+The rebuilt isolated release package contained the exact resource and launched the
+sidecar with its absolute bundled path. A direct request to `/join` changed from the
+missing-route 404 to the expected 403 without trusted proxy evidence. Through the real
+managed tunnel, the packaged UI created a one-use normal invite without rendering its
+bearer, copied it only through the exact-key guarded action, and admitted a fresh Chrome
+incognito guest. Admission removed the token from the browser URL; the guest published
+`C2_PACKAGE_JOIN_OK` over the authenticated room socket and the packaged host received
+it. A fresh browser identity was rejected when it reused the consumed link.
+
+The same packaged UI then selected five uses and created a new retained record. The
+prior record remained visible as `이전 초대` with Copy disabled. Copying and explicitly
+revoking the current reusable record changed it to `폐기됨`, disabled both actions, and
+made its already copied link fail in a fresh browser. Read-only SQLite inspection found
+exactly `(max_uses, use_count, revoked) = (1, 1, 0)` and `(5, 0, 1)`. This proves only
+the managed-ingress normal invite/message, one-use rejection, retained replacement, and
+revoke rejection flows; read-only, avatar, reload, preferences, leave, and restart
+remain required before packaged C2 completion.
+
+Full `make verify` passed all architecture, source-growth, formatting, generated-binding,
+original-CSS, frontend, desktop, workspace, TCP/integration, warning-denied Clippy, and
+diff gates: 84 frontend files with 516 tests, 20 desktop tests, domain 23, persistence
+172, protocol 5, provider 120, server 84, and every integration/documentation test.
+Both exact verification apps, their owned sidecars and managed tunnels, all four
+incognito windows, isolated application data, and temporary package configuration were
+closed and removed or moved to recoverable Trash. The Computer Use kernel was reset.
+No provider, Deep Scan, or automated security scanner ran. This local feature commit is
+queued for the next three-feature-or-2,000-line manual review batch.
