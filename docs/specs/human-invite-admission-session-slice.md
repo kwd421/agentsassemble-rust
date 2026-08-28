@@ -579,7 +579,31 @@ boundaries:
    `fetch` is invoked, transport loss, malformed or mismatched response, and every
    result not proven non-mutating are `outcome_unknown`. Canonical exact success and
    exact `invite_not_found` are the only terminal revoke results.
-6. C2 owns only retained controller custody and current presentation. Each record's
+6. C2 first establishes one directory-owned manager-authority publication. Host
+   eligibility and hook lifetime reserve one monotonic directory epoch during the
+   committed layout transition; the later hydration effect only dispatches that
+   reservation. Every directory GET rechecks the epoch after any native ticket wait
+   and immediately before HTTP dispatch. Only the current epoch may bind the verified
+   server surface, retain directory authority, publish merged docks, or publish a
+   frozen manager map. The strict directory parser rejects duplicate canonical room
+   IDs or room UIDs. Map entries exist only for unique active local/current-server
+   docks whose retained dock ID and complete server/room tuple associate with exactly
+   one strict payload room; archived, closed, remote, and disconnected entries never
+   become manager authority. Mutable dock state may select and exactly compare one
+   frozen entry but cannot supply or replace its tuple.
+
+   One opaque continuity value carries that same owner and epoch across the existing
+   room-create request, authority verification, strict refresh, and final synchronous
+   UI publication. It is evidence, not another mutable authority. Verification and
+   refresh return their current success or failure together with the successor epoch;
+   superseded work returns no successor. Every continuation and both room-create and
+   directory-fetch HTTP dispatch boundaries revalidate continuity. A current ambiguous
+   failure may therefore retain the existing single exact POST replay, while a host
+   transition, unmount, or newer directory operation cannot dispatch, clear retry
+   custody, alert, or publish from the retired chain. Surface integrity, currentness,
+   and the process-global bind remain one contract-owner operation.
+
+   C2 then owns retained controller custody and current presentation. Each record's
    revocation state is `idle`, `in_flight`, `unknown`, or `dead`. Copy requires
    `idle`, the exact current ingress origin, current time before expiry, and a
    currently verified room tuple exactly equal to the retained custody tuple.

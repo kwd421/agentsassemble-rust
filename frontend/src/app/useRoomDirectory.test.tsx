@@ -14,6 +14,7 @@ const persistenceMocks = vi.hoisted(() => ({
 }));
 
 const directoryMocks = vi.hoisted(() => ({
+  bindRoomDirectoryAuthority: vi.fn(),
   currentRoomDirectoryAuthority: vi.fn(),
 }));
 
@@ -34,7 +35,7 @@ vi.mock("../lib/roomDirectoryContract", async () => ({
   ...(await vi.importActual<typeof import("../lib/roomDirectoryContract")>(
     "../lib/roomDirectoryContract"
   )),
-  bindRoomDirectoryAuthority: vi.fn(),
+  bindRoomDirectoryAuthority: directoryMocks.bindRoomDirectoryAuthority,
   currentRoomDirectoryAuthority: directoryMocks.currentRoomDirectoryAuthority,
 }));
 
@@ -101,6 +102,7 @@ function mockHydrationRace() {
 describe("useRoomDirectory", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    directoryMocks.bindRoomDirectoryAuthority.mockResolvedValue(true);
     directoryMocks.currentRoomDirectoryAuthority.mockReturnValue(null);
   });
 
@@ -150,7 +152,7 @@ describe("useRoomDirectory", () => {
     );
   });
 
-  it("rejects a remote room and follows same-id room UID replacement without stale aliases", async () => {
+  it("rejects remote or mutable authority and replaces a UID only through a verified directory", async () => {
     const remoteRoom = makeRoom("remote", {
       meetingId: "general",
       roomOrigin: "remote_server",
@@ -191,6 +193,19 @@ describe("useRoomDirectory", () => {
     });
     const replacementUid = "40000000-0000-4000-8000-000000000004";
     act(() => local.result.current.updateRoom(localRoom.id, { roomUid: replacementUid }));
+    expect(() =>
+      local.result.current.resolveManagerRoomAuthority(localRoom.id)
+    ).toThrow("현재 확인된 로컬 방 관리자 권위가 없습니다.");
+
+    apiMocks.fetchRooms.mockResolvedValueOnce(
+      verifiedDirectory("general", replacementUid)
+    );
+    await act(async () => {
+      const refreshed = await local.result.current.refreshRoomDirectory(
+        local.result.current.captureRoomDirectoryContinuity()
+      );
+      expect(refreshed.ok).toBe(true);
+    });
     const after = local.result.current.resolveManagerRoomAuthority(localRoom.id);
 
     expect(before.room_uid).toBe(roomUid);
@@ -235,7 +250,7 @@ describe("useRoomDirectory", () => {
         "server-meeting",
       ])
     );
-    expect(apiMocks.fetchRooms).toHaveBeenCalledWith(true);
+    expect(apiMocks.fetchRooms).toHaveBeenCalledWith(true, expect.any(Function));
     expect(persistenceMocks.persistRoomDockItems).toHaveBeenCalledWith(
       expect.arrayContaining([
         expect.objectContaining({ meetingId: "local-meeting" }),
@@ -387,6 +402,84 @@ describe("useRoomDirectory", () => {
       await inFlight.promise;
     });
     expect(apiMocks.fetchRooms).toHaveBeenCalledOnce();
+  });
+
+  it("retires the first StrictMode hydration and publishes only the second setup", async () => {
+    const first = deferred<ReturnType<typeof verifiedDirectory>>();
+    const second = deferred<ReturnType<typeof verifiedDirectory>>();
+    apiMocks.fetchRooms
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+    const hook = renderHook(
+      () => useRoomDirectory({
+        initialRooms: [makeRoom("local", { meetingId: "general" })],
+        hostEnabled: true,
+      }),
+      { reactStrictMode: true }
+    );
+    await waitFor(() => expect(apiMocks.fetchRooms).toHaveBeenCalledTimes(2));
+
+    await act(async () => first.resolve(verifiedDirectory("stale")));
+    expect(hook.result.current.syncIssue?.category).toBe("room_directory_unconfirmed");
+    await act(async () => second.resolve(verifiedDirectory("general")));
+    await waitFor(() => expect(hook.result.current.syncIssue).toBeNull());
+    expect(hook.result.current.rooms[0].meetingId).toBe("general");
+    expect(directoryMocks.bindRoomDirectoryAuthority).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a newer explicit refresh when the reserved hydration completes later", async () => {
+    const hydration = deferred<ReturnType<typeof verifiedDirectory>>();
+    const refresh = deferred<ReturnType<typeof verifiedDirectory>>();
+    apiMocks.fetchRooms
+      .mockReturnValueOnce(hydration.promise)
+      .mockReturnValueOnce(refresh.promise);
+    const hook = renderHook(() => useRoomDirectory({
+      initialRooms: [makeRoom("local", { meetingId: "general" })],
+      hostEnabled: true,
+    }));
+    await waitFor(() => expect(apiMocks.fetchRooms).toHaveBeenCalledOnce());
+    const refreshPromise = hook.result.current.refreshRoomDirectory(
+      hook.result.current.captureRoomDirectoryContinuity()
+    );
+    await waitFor(() => expect(apiMocks.fetchRooms).toHaveBeenCalledTimes(2));
+
+    await act(async () => refresh.resolve(verifiedDirectory("current")));
+    await expect(refreshPromise).resolves.toMatchObject({ ok: true });
+    await act(async () => hydration.resolve(verifiedDirectory("stale")));
+    expect(hook.result.current.rooms.map((room) => room.meetingId)).toEqual(["current"]);
+    expect(hook.result.current.syncIssue).toBeNull();
+  });
+
+  it("does not let an older refresh success clear a newer refresh failure", async () => {
+    apiMocks.fetchRooms.mockResolvedValueOnce(verifiedDirectory("general"));
+    const hook = renderHook(() => useRoomDirectory({
+      initialRooms: [makeRoom("local", { meetingId: "general" })],
+      hostEnabled: true,
+    }));
+    await waitFor(() => expect(hook.result.current.syncIssue).toBeNull());
+    const older = deferred<ReturnType<typeof verifiedDirectory>>();
+    const newer = deferred<ReturnType<typeof verifiedDirectory>>();
+    apiMocks.fetchRooms
+      .mockReturnValueOnce(older.promise)
+      .mockReturnValueOnce(newer.promise);
+    const olderPromise = hook.result.current.refreshRoomDirectory(
+      hook.result.current.captureRoomDirectoryContinuity()
+    );
+    const newerPromise = hook.result.current.refreshRoomDirectory(
+      hook.result.current.captureRoomDirectoryContinuity()
+    );
+    const olderOutcome = olderPromise.catch((error) => error);
+    const newerOutcome = newerPromise.then((result) => result);
+
+    await act(async () => newer.reject(new Error("newer unavailable")));
+    expect(await newerOutcome).toMatchObject({ ok: false });
+    await act(async () => older.resolve(verifiedDirectory("stale")));
+    expect(await olderOutcome).toBeInstanceOf(Error);
+    expect(hook.result.current.syncIssue).toMatchObject({
+      category: "room_directory_unavailable",
+      message: "newer unavailable",
+    });
+    expect(hook.result.current.rooms[0].meetingId).toBe("general");
   });
 
   it("discards a stale snapshot after a prepend, retries once, and applies the current retry", async () => {

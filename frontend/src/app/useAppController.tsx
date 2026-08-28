@@ -114,6 +114,8 @@ export function useAppController(deviceToken: string, clientId: string) {
     removeRoom,
     updateRoom,
     updateRoomByMeetingId,
+    captureRoomDirectoryContinuity,
+    validateRoomDirectoryContinuity,
     refreshRoomDirectory,
     verifyRoomDirectoryAuthority,
     syncIssue: roomDirectorySyncIssue,
@@ -232,6 +234,8 @@ export function useAppController(deviceToken: string, clientId: string) {
   );
   const { addFreshRoom } = useRoomCreation({
     guestLocked,
+    captureRoomDirectoryContinuity,
+    validateRoomDirectoryContinuity,
     refreshRoomDirectory,
     verifyRoomDirectoryAuthority,
     onCreated: onRoomCreated,
