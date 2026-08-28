@@ -3607,3 +3607,46 @@ TCP/integration/doc test, warning-denied Clippy, and the final diff gate. No pro
 Computer Use, Deep Scan, or automated security scanner ran. Packaged local and remote
 human verification, restart retention, and manual cross-review remain pending; this
 record does not claim the frontend slice complete.
+
+The first frontend threshold cross-review returned `REVISE`. Daybreaker found two
+Medium issues: pin selection reused the not-yet-implemented search-context request and
+could send a raw remote session to it, and the 128-byte/NUL-free event-ID policy was
+independently hard-coded in the frontend, persistence validator, and DDL. The critical
+web review independently found two Medium issues: a grant delayed across room/session
+replacement could still dispatch its retired operation, and the strict response parser
+accepted invisible message content or two distinct IDs with one canonical sequence.
+
+Four independent correction commits close those boundaries without enabling search or
+adding another history transport. Pin navigation now scrolls only to an exact event in
+the already canonical visible history; an older unloaded pin reports that it is not in
+the current history instead of calling the unavailable context route. The domain owns
+the pin event-ID byte bound and predicate, the protocol generates the frontend bound,
+persistence consumes the predicate, and an installed-SQLite behavior matrix binds the
+remaining DDL constraint to ASCII, multibyte UTF-8, empty, over-bound, NUL, and null
+cases. The pin parser mirrors the domain visible-text categories and rejects duplicate
+canonical sequences.
+
+One view-owned operation record now survives a room/session change in retired state.
+Both local native grant and remote session exchange call its currentness assertion after
+grant acquisition and immediately before the target request; a retired operation cannot
+publish UI state or issue the target request, and no replacement pin operation starts
+until it settles. A request already dispatched before authority replacement retains the
+server-owned outcome contract. Deferred local and remote tests prove zero post-grant
+target dispatch, and the view test proves a replacement room cannot overlap or publish
+the retired result.
+
+These corrections add no durable state, transport, queue, timer, task, cache,
+compatibility path, migration, fallback, or generic lifecycle framework. Moving the two
+pin constants and predicate into their domain owner removes policy drift; the remaining
+runtime cost is one short currentness call before each request and bounded response
+checks over at most 64 pins. The production main chunk is 789.35 kB raw / 237.85 kB
+gzip, an observed +0.46 kB raw / +0.26 kB gzip from the pre-correction 788.89 kB /
+237.59 kB gzip; the API chunk remains 55.85 kB / 15.14 kB gzip. No CPU, memory, disk,
+or latency improvement is claimed.
+
+Full serial `make verify` passed the corrected code: frontend 89 files / 554 tests,
+desktop 20, domain 27, persistence 186, protocol 6, provider 120, server 85, every
+TCP/integration/doc test, warning-denied Clippy, and all architecture, source-growth,
+policy, generated-binding, original-CSS, production-build, and diff gates. No provider,
+Computer Use, Deep Scan, or automated scanner ran. Final correction cross-review and
+packaged local/remote/restart verification remain pending.
