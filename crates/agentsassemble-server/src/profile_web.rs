@@ -294,7 +294,7 @@ async fn read_attachment(
     request: Request,
 ) -> Result<Response, ProfileHttpError> {
     if attachment_id.starts_with(agentsassemble_domain::ROOM_APPEARANCE_ASSET_PREFIX) {
-        if raw_query.as_deref() != Some("view=1") {
+        if raw_query.as_deref() != Some(agentsassemble_domain::ROOM_APPEARANCE_REFERENCE_QUERY) {
             return Err(ProfileHttpError::bad_request(
                 "Room appearance assets require the exact view query.",
             ));

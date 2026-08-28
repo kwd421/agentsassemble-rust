@@ -27,9 +27,9 @@ pub use room_preferences::{
 };
 pub use room_settings::{
     PublicRoomSettings, ROOM_APPEARANCE_ASSET_HEX_LENGTH, ROOM_APPEARANCE_ASSET_PREFIX,
-    ROOM_APPEARANCE_REFERENCE_PREFIX, ROOM_APPEARANCE_REFERENCE_SUFFIX, RoomAppearance,
-    RoomChannel, RoomSettings, RoomSettingsError, RoomSettingsPatch, is_room_appearance_asset_id,
-    public_settings, room_appearance_asset_id,
+    ROOM_APPEARANCE_REFERENCE_PREFIX, ROOM_APPEARANCE_REFERENCE_QUERY,
+    ROOM_APPEARANCE_REFERENCE_SUFFIX, RoomAppearance, RoomChannel, RoomSettings, RoomSettingsError,
+    RoomSettingsPatch, is_room_appearance_asset_id, public_settings, room_appearance_asset_id,
 };
 pub use room_turn::{
     QueuedRoomInput, RoomInputDeliveryKind, RoomRandomError, RoomRandomRequest, RoomRandomResult,

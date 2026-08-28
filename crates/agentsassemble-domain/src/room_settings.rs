@@ -17,6 +17,7 @@ const MAX_CHANNELS: usize = 50;
 pub const ROOM_APPEARANCE_ASSET_PREFIX: &str = "ra_";
 pub const ROOM_APPEARANCE_ASSET_HEX_LENGTH: usize = 32;
 pub const ROOM_APPEARANCE_REFERENCE_PREFIX: &str = "/api/attachments/";
+pub const ROOM_APPEARANCE_REFERENCE_QUERY: &str = "view=1";
 pub const ROOM_APPEARANCE_REFERENCE_SUFFIX: &str = "?view=1";
 
 static CHANNEL_ID: LazyLock<Regex> = LazyLock::new(|| {
@@ -611,7 +612,18 @@ pub fn public_settings(settings: &RoomSettings) -> Result<PublicRoomSettings, se
 mod tests {
     use serde_json::json;
 
-    use super::{RoomSettings, public_settings, room_appearance_asset_id};
+    use super::{
+        ROOM_APPEARANCE_REFERENCE_QUERY, ROOM_APPEARANCE_REFERENCE_SUFFIX, RoomSettings,
+        public_settings, room_appearance_asset_id,
+    };
+
+    #[test]
+    fn room_appearance_reference_query_and_suffix_are_one_contract() {
+        assert_eq!(
+            ROOM_APPEARANCE_REFERENCE_SUFFIX,
+            format!("?{ROOM_APPEARANCE_REFERENCE_QUERY}")
+        );
+    }
 
     #[test]
     fn room_settings_revision_matches_current_sorted_json_contract() {
