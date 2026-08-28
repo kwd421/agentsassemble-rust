@@ -75,6 +75,7 @@ async fn room_appearance_asset_ids_match_the_domain_grammar() {
         format!("ra_{}", "g".repeat(32)),
         format!("ra_{}", "0".repeat(31)),
         format!("rx_{}", "0".repeat(32)),
+        format!("ra_{}\0x", "a".repeat(30)),
     ];
 
     for asset_id in candidates {
@@ -91,6 +92,15 @@ async fn room_appearance_asset_ids_match_the_domain_grammar() {
             "installed schema disagreed with the domain for {asset_id}"
         );
     }
+
+    let null_accepted = sqlx::query(
+        "INSERT INTO room_appearance_assets(asset_id, room_id, pending_owner_user_id, filename, content_type, content, size, created_at, state, expires_at) VALUES (?, 'general', 'user-1', 'avatar.png', 'image/png', X'00', 1, '2026-08-26T00:00:00Z', 'pending', 1)",
+    )
+    .bind(Option::<&str>::None)
+    .execute(&pool)
+    .await
+    .is_ok();
+    assert!(!null_accepted, "installed schema accepted a null asset ID");
 }
 
 #[tokio::test]
