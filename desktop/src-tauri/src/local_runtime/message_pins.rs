@@ -2,8 +2,9 @@ use agentsassemble_domain::validate_room_id;
 use tauri::AppHandle;
 
 use super::{
-    HttpTicketGrant, LocalRuntime, ensure_runtime, handle_ticket_result,
+    HttpTicketGrant, LocalRuntime,
     control::{request_message_pins_read_ticket, request_message_pins_write_ticket},
+    ensure_runtime, handle_ticket_result,
 };
 
 impl LocalRuntime {
@@ -23,8 +24,7 @@ impl LocalRuntime {
             .process
             .lock()
             .map_err(|_| "local runtime state lock is poisoned".to_owned())?;
-        let result =
-            request_message_pins_read_ticket(ensure_runtime(&mut process, app)?, &room_id);
+        let result = request_message_pins_read_ticket(ensure_runtime(&mut process, app)?, &room_id);
         handle_ticket_result(&mut process, result)
     }
 
