@@ -130,7 +130,7 @@ export default function RoomInviteModal({
       invite.maxUses === humanMaxUses &&
       invite.ttlSeconds === humanTtlSeconds
   );
-  const secureInviteUrl = selectedHumanInvite?.copyUrl || "";
+  const secureInviteReady = Boolean(selectedHumanInvite?.copyUrl);
   const publicAccessStarting =
     publicAccessTransition === "starting" || tunnelStatus?.phase === "starting";
   const publicAccessStopping =
@@ -313,11 +313,10 @@ export default function RoomInviteModal({
             <div className="dc-invite-link-row">
               <input
                 className="dc-invite-link-input"
-                value={secureInviteUrl}
+                value={secureInviteReady ? "보안 초대 링크 발급됨" : ""}
                 placeholder="공개 주소를 준비하면 링크가 표시됩니다"
                 readOnly
                 aria-label="사람 초대 링크"
-                onFocus={(event) => event.currentTarget.select()}
               />
               <button
                 type="button"
@@ -331,7 +330,7 @@ export default function RoomInviteModal({
                 type="button"
                 className="dc-invite-copy-button"
                 aria-label="현재 사람 초대 링크 복사"
-                disabled={!secureInviteUrl || !selectedHumanInvite}
+                disabled={!secureInviteReady || !selectedHumanInvite}
                 onClick={() => {
                   if (selectedHumanInvite) onCopyHumanInvite(selectedHumanInvite.key);
                 }}

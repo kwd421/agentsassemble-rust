@@ -165,8 +165,10 @@ describe("RoomInviteModal", () => {
     });
 
     expect((screen.getByLabelText("사람 초대 링크") as HTMLInputElement).value).toBe(
-      current.copyUrl
+      "보안 초대 링크 발급됨"
     );
+    expect(screen.queryByDisplayValue(current.copyUrl)).toBeNull();
+    expect(document.body.innerHTML).not.toContain("aaj1_current");
     expect(screen.getByText(/복사 가능$/)).toBeTruthy();
     expect(screen.getByText(/폐기 결과 미확인$/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "사람 초대 1 링크 복사" }));
