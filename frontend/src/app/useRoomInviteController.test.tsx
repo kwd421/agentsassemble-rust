@@ -170,7 +170,7 @@ describe("useRoomInviteController", () => {
       expect.any(Function)
     );
     expect(apiMocks.createRoomInvite).not.toHaveBeenCalled();
-    expect(hook.result.current.secureInviteUrl).toBe(custody.joinUrl);
+    expect(hook.result.current.humanInvites[0].copyUrl).toBe(custody.joinUrl);
     expect(hook.result.current.humanInvites).toEqual([
       expect.objectContaining({
         key: expect.any(String),
@@ -254,12 +254,12 @@ describe("useRoomInviteController", () => {
       await act(async () => {
         await hook.result.current.generateSecureInvite(room, "room");
       });
-      expect(hook.result.current.secureInviteUrl).not.toBe("");
+      expect(hook.result.current.humanInvites[0].copyUrl).not.toBe("");
       expect(vi.getTimerCount()).toBe(1);
 
       await act(async () => vi.advanceTimersByTimeAsync(1_000));
 
-      expect(hook.result.current.secureInviteUrl).toBe("");
+      expect(hook.result.current.humanInvites[0].copyUrl).toBe("");
       expect(hook.result.current.humanInvites[0]).toEqual(
         expect.objectContaining({ expired: true, revocation: "idle", copyUrl: "" })
       );
@@ -276,6 +276,7 @@ describe("useRoomInviteController", () => {
     act(() => hook.result.current.open(room.id));
     await waitFor(() => expect(hook.result.current.publicInviteStatus).toEqual(publicStatus));
     await act(async () => hook.result.current.generateSecureInvite(room, "room"));
+    const inviteKey = hook.result.current.humanInvites[0].key;
     const clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", {
@@ -285,10 +286,10 @@ describe("useRoomInviteController", () => {
     apiMocks.fetchPublicInviteStatus.mockResolvedValue(stoppedStatus);
 
     try {
-      await act(async () => hook.result.current.copySecureInvite());
+      await act(async () => hook.result.current.copyHumanInvite(inviteKey));
       expect(writeText).not.toHaveBeenCalled();
       expect(hook.result.current.publicInviteStatus).toEqual(stoppedStatus);
-      expect(hook.result.current.secureInviteUrl).toBe("");
+      expect(hook.result.current.humanInvites[0].copyUrl).toBe("");
     } finally {
       if (clipboardDescriptor) {
         Object.defineProperty(navigator, "clipboard", clipboardDescriptor);
@@ -327,7 +328,7 @@ describe("useRoomInviteController", () => {
 
     try {
       act(() => {
-        copy = hook.result.current.copySecureInvite();
+        copy = hook.result.current.copyHumanInvite(inviteKey);
       });
       await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
       act(() => {
@@ -370,6 +371,7 @@ describe("useRoomInviteController", () => {
     act(() => hook.result.current.open(room.id));
     await waitFor(() => expect(hook.result.current.publicInviteStatus).toEqual(publicStatus));
     await act(async () => hook.result.current.generateSecureInvite(room, "room"));
+    const inviteKey = hook.result.current.humanInvites[0].key;
     const clipboardWrite = deferred<void>();
     const clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
     const execDescriptor = Object.getOwnPropertyDescriptor(document, "execCommand");
@@ -388,7 +390,7 @@ describe("useRoomInviteController", () => {
     try {
       const statusFetchesBeforeCopy = apiMocks.fetchPublicInviteStatus.mock.calls.length;
       act(() => {
-        copy = hook.result.current.copySecureInvite();
+        copy = hook.result.current.copyHumanInvite(inviteKey);
       });
       await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
       expect(apiMocks.fetchPublicInviteStatus).toHaveBeenCalledTimes(
@@ -489,7 +491,7 @@ describe("useRoomInviteController", () => {
 
     expect(hook.result.current.remoteClientPacket).toEqual({ friendName: "", preview: "" });
     expect(hook.result.current.friendStatuses).toEqual({});
-    expect(hook.result.current.secureInviteUrl).toBe("");
+    expect(hook.result.current.humanInvites).toEqual([]);
     expect(hook.result.current.agentInviteUrl).toBe("");
     expect(hook.result.current.operatorPairingUrl).toBe("");
   });

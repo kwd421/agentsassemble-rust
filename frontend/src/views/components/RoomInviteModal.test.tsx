@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { HumanInvitePresentation } from "../../app/useManagedHumanInvites";
 import RoomInviteModal from "./RoomInviteModal";
 
 afterEach(cleanup);
@@ -9,21 +10,25 @@ function renderInviteModal({
   activeWithoutUrl = false,
   phase,
   requestState = "idle",
+  humanInvites = [],
 }: {
   publicAccess?: boolean;
   activeWithoutUrl?: boolean;
   phase?: "stopped" | "starting" | "running" | "stopping" | "error";
   requestState?: "idle" | "starting" | "stopping";
+  humanInvites?: HumanInvitePresentation[];
 } = {}) {
   const onGenerateSecureInvite = vi.fn();
   const onGenerateAgentInvite = vi.fn();
   const onStopTunnel = vi.fn();
+  const onCopyHumanInvite = vi.fn();
+  const onRevokeHumanInvite = vi.fn();
   const tunnelPhase = phase || (publicAccess || activeWithoutUrl ? "running" : "stopped");
   const tunnelActive = ["starting", "running", "stopping"].includes(tunnelPhase);
   render(
     <RoomInviteModal
       roomLabel="제품 방"
-      secureInviteUrl=""
+      humanInvites={humanInvites}
       agentInviteUrl=""
       operatorPairingUrl=""
       publicUrl={publicAccess ? "https://room.example.com" : ""}
@@ -39,7 +44,8 @@ function renderInviteModal({
       friends={[]}
       onClose={vi.fn()}
       onGenerateSecureInvite={onGenerateSecureInvite}
-      onCopy={vi.fn()}
+      onCopyHumanInvite={onCopyHumanInvite}
+      onRevokeHumanInvite={onRevokeHumanInvite}
       onGenerateAgentInvite={onGenerateAgentInvite}
       onCopyAgentInvite={vi.fn()}
       onGenerateOperatorPairing={vi.fn()}
@@ -49,7 +55,13 @@ function renderInviteModal({
       onInviteFriend={vi.fn()}
     />
   );
-  return { onGenerateSecureInvite, onGenerateAgentInvite, onStopTunnel };
+  return {
+    onGenerateSecureInvite,
+    onGenerateAgentInvite,
+    onStopTunnel,
+    onCopyHumanInvite,
+    onRevokeHumanInvite,
+  };
 }
 
 describe("RoomInviteModal", () => {
@@ -118,6 +130,65 @@ describe("RoomInviteModal", () => {
       { maxUses: 5, ttlSeconds: 604800 },
       false
     );
+  });
+
+  it("presents retained human invite custody without reopening copy eligibility", () => {
+    const current: HumanInvitePresentation = {
+      key: "current",
+      displayName: "Guest",
+      maxUses: 1,
+      ttlSeconds: 86400,
+      expiresAt: "2026-08-29T00:00:00+00:00",
+      expired: false,
+      retired: false,
+      originCurrent: true,
+      authorityCurrent: true,
+      revocation: "idle",
+      copyUrl: "https://room.example.com/join?token=aaj1_current",
+    };
+    const uncertain: HumanInvitePresentation = {
+      ...current,
+      key: "uncertain",
+      retired: true,
+      revocation: "unknown",
+      copyUrl: "",
+    };
+    const dead: HumanInvitePresentation = {
+      ...current,
+      key: "dead",
+      retired: true,
+      revocation: "dead",
+      copyUrl: "",
+    };
+    const { onCopyHumanInvite, onRevokeHumanInvite } = renderInviteModal({
+      humanInvites: [current, uncertain, dead],
+    });
+
+    expect((screen.getByLabelText("사람 초대 링크") as HTMLInputElement).value).toBe(
+      current.copyUrl
+    );
+    expect(screen.getByText(/복사 가능$/)).toBeTruthy();
+    expect(screen.getByText(/폐기 결과 미확인$/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "사람 초대 1 링크 복사" }));
+    fireEvent.click(screen.getByRole("button", { name: "사람 초대 2 폐기" }));
+    expect(onCopyHumanInvite).toHaveBeenCalledWith("current");
+    expect(onRevokeHumanInvite).toHaveBeenCalledWith("uncertain");
+    expect(
+      (screen.getByRole("button", { name: "사람 초대 2 링크 복사" }) as HTMLButtonElement)
+        .disabled
+    ).toBe(true);
+    const deadRevoke = screen.getByRole("button", { name: "사람 초대 3 폐기" });
+    expect((deadRevoke as HTMLButtonElement).disabled).toBe(true);
+    expect(deadRevoke.textContent).toBe("폐기됨");
+
+    fireEvent.change(screen.getByLabelText("초대 가능 인원"), {
+      target: { value: "5" },
+    });
+    expect((screen.getByLabelText("사람 초대 링크") as HTMLInputElement).value).toBe("");
+    expect(
+      (screen.getByRole("button", { name: "사람 초대 1 링크 복사" }) as HTMLButtonElement)
+        .disabled
+    ).toBe(false);
   });
 
   it("requires an explicit public-access confirmation for an external AI session", () => {

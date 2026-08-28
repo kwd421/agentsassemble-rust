@@ -352,7 +352,6 @@ export function useAppController(deviceToken: string, clientId: string) {
   const {
     modal: inviteModal,
     copyStatus: inviteCopyStatus,
-    secureInviteUrl,
     agentInviteUrl,
     operatorPairingUrl,
     publicInviteStatus,
@@ -368,7 +367,6 @@ export function useAppController(deviceToken: string, clientId: string) {
     generateOperatorPairing: generateOperatorPairingLink,
     copyAgentInvite: copyAgentInviteLink,
     copyOperatorPairing: copyOperatorPairingLink,
-    copySecureInvite: copyInviteLink,
     copyRemoteClientPacket,
     inviteFriend: inviteFriendToRoom,
   } = roomInvite;
@@ -740,7 +738,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     changeAgentActivityVisibility, changeHomeFilter, channel, channelHeaderActions,
     channelMenu, channelSearchNeedle, channelSearchQuery, channelSidebarWidth,
     closeInviteModal, closeMobileRoomInfo, closeMobileSidebar, collapsedChannelSections,
-    copyAgentInviteLink, copyGuestAiPacket, copyInviteLink, copyOperatorPairingLink,
+    copyAgentInviteLink, copyGuestAiPacket, copyOperatorPairingLink,
     copyRemoteClientPacket,
     createChannel, createChannelOpen, createCompanionAiPacket, deleteDirectoryFriend,
     deleteRoom, deviceToken, clientId, exitGuestSurface, expireGuestSession,
@@ -767,7 +765,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     rightPanelSearchQuery, roomAppearances, roomDirectorySyncIssue, roomInvite,
     roomMenu, roomMessageSearch, roomSettings, roomSocket,
     rooms, scopedAgents, scopedMentionables, serverProductSurface,
-    scopedOnlineCount, scopedViewerDisplayName, secureInviteUrl, selectDirectoryFriend,
+    scopedOnlineCount, scopedViewerDisplayName, selectDirectoryFriend,
     selectHomeFriend, selectRoom, selectedHomeFriendId, sendAgentConfigure,
     sendAgentControl, sendParticipantKick, sendParticipantMute, setAdminOpen,
     setAgentCreateOpen, setChannelNotifications, setChannelSearchQuery, setCreateChannelOpen,

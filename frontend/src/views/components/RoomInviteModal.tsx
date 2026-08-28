@@ -5,10 +5,11 @@ import type {
   HumanInviteOptions,
   PublicAccessTransition,
 } from "../../app/useRoomInviteController";
+import type { HumanInvitePresentation } from "../../app/useManagedHumanInvites";
 import { roomFriendMatchesSearch } from "../../lib/friendSearch";
 import { participantTypeMeta } from "../../lib/participantTypes";
 import { isActivePresence, presenceStatusLabel } from "../../lib/presenceStatus";
-import { inviteFriendButtonLabel, isExternalInviteUrl } from "../../lib/roomInviteCopy";
+import { inviteFriendButtonLabel } from "../../lib/roomInviteCopy";
 import type { RoomAppearance } from "../../lib/roomAppearance";
 import "./RoomInviteModal.css";
 
@@ -44,9 +45,24 @@ type PendingPublicAction =
   | { kind: "agent" }
   | { kind: "friend"; friend: RoomFriend };
 
+function humanInviteStatus(invite: HumanInvitePresentation) {
+  if (invite.revocation === "dead") return "폐기됨";
+  if (invite.revocation === "in_flight") return "폐기 중";
+  if (invite.revocation === "unknown") return "폐기 결과 미확인";
+  if (invite.expired) return "만료됨";
+  if (invite.retired) return "이전 초대";
+  if (!invite.originCurrent) return "공개 주소 변경됨";
+  if (!invite.authorityCurrent) return "방 권위 변경됨";
+  return invite.copyUrl ? "복사 가능" : "폐기만 가능";
+}
+
+function humanInviteUseLabel(maxUses: number) {
+  return maxUses === 0 ? "인원 제한 없음" : `${maxUses}명`;
+}
+
 export default function RoomInviteModal({
   roomLabel,
-  secureInviteUrl,
+  humanInvites = [],
   agentInviteUrl,
   operatorPairingUrl,
   publicUrl,
@@ -61,7 +77,8 @@ export default function RoomInviteModal({
   remoteClientPacketFriendName,
   onClose,
   onGenerateSecureInvite,
-  onCopy,
+  onCopyHumanInvite,
+  onRevokeHumanInvite,
   onGenerateAgentInvite,
   onCopyAgentInvite,
   onGenerateOperatorPairing,
@@ -72,7 +89,7 @@ export default function RoomInviteModal({
   onInviteFriend,
 }: {
   roomLabel: string;
-  secureInviteUrl: string;
+  humanInvites?: readonly HumanInvitePresentation[];
   agentInviteUrl: string;
   operatorPairingUrl: string;
   publicUrl?: string;
@@ -87,7 +104,8 @@ export default function RoomInviteModal({
   remoteClientPacketFriendName?: string;
   onClose: () => void;
   onGenerateSecureInvite: (options: HumanInviteOptions, startTunnelIfNeeded: boolean) => void;
-  onCopy: () => void;
+  onCopyHumanInvite: (key: string) => void;
+  onRevokeHumanInvite: (key: string) => void;
   onGenerateAgentInvite: (startTunnelIfNeeded: boolean) => void;
   onCopyAgentInvite: () => void;
   onGenerateOperatorPairing: () => void;
@@ -100,19 +118,19 @@ export default function RoomInviteModal({
   const [query, setQuery] = useState("");
   const [humanMaxUses, setHumanMaxUses] = useState(1);
   const [humanTtlSeconds, setHumanTtlSeconds] = useState(86400);
-  const [generatedHumanOptions, setGeneratedHumanOptions] =
-    useState<HumanInviteOptions | null>(null);
   const [pendingPublicAction, setPendingPublicAction] =
     useState<PendingPublicAction | null>(null);
   const searchQuery = query.trim();
   const searchNeedle = searchQuery.toLowerCase();
   const readOnlyInvite = inviteScope === "read_only";
   const currentHumanOptions = { maxUses: humanMaxUses, ttlSeconds: humanTtlSeconds };
-  const secureInviteReady = Boolean(
-    isExternalInviteUrl(secureInviteUrl) &&
-      generatedHumanOptions?.maxUses === humanMaxUses &&
-      generatedHumanOptions?.ttlSeconds === humanTtlSeconds
+  const selectedHumanInvite = humanInvites.find(
+    (invite) =>
+      !invite.retired &&
+      invite.maxUses === humanMaxUses &&
+      invite.ttlSeconds === humanTtlSeconds
   );
+  const secureInviteUrl = selectedHumanInvite?.copyUrl || "";
   const publicAccessStarting =
     publicAccessTransition === "starting" || tunnelStatus?.phase === "starting";
   const publicAccessStopping =
@@ -124,7 +142,6 @@ export default function RoomInviteModal({
   function requestPublicAction(action: PendingPublicAction) {
     if (publicAccessRunning) {
       if (action.kind === "human") {
-        setGeneratedHumanOptions(action.options);
         onGenerateSecureInvite(action.options, false);
       } else if (action.kind === "agent") {
         onGenerateAgentInvite(false);
@@ -141,7 +158,6 @@ export default function RoomInviteModal({
     setPendingPublicAction(null);
     if (!action) return;
     if (action.kind === "human") {
-      setGeneratedHumanOptions(action.options);
       onGenerateSecureInvite(action.options, true);
     } else if (action.kind === "agent") {
       onGenerateAgentInvite(true);
@@ -275,10 +291,7 @@ export default function RoomInviteModal({
                 <span>초대 가능 인원</span>
                 <select
                   value={humanMaxUses}
-                  onChange={(event) => {
-                    setHumanMaxUses(Number(event.currentTarget.value));
-                    setGeneratedHumanOptions(null);
-                  }}
+                  onChange={(event) => setHumanMaxUses(Number(event.currentTarget.value))}
                 >
                   <option value={1}>1명 (권장)</option>
                   <option value={5}>5명</option>
@@ -289,10 +302,7 @@ export default function RoomInviteModal({
                 <span>링크 유효시간</span>
                 <select
                   value={humanTtlSeconds}
-                  onChange={(event) => {
-                    setHumanTtlSeconds(Number(event.currentTarget.value));
-                    setGeneratedHumanOptions(null);
-                  }}
+                  onChange={(event) => setHumanTtlSeconds(Number(event.currentTarget.value))}
                 >
                   <option value={3600}>1시간</option>
                   <option value={86400}>24시간 (권장)</option>
@@ -303,7 +313,7 @@ export default function RoomInviteModal({
             <div className="dc-invite-link-row">
               <input
                 className="dc-invite-link-input"
-                value={secureInviteReady ? secureInviteUrl : ""}
+                value={secureInviteUrl}
                 placeholder="공개 주소를 준비하면 링크가 표시됩니다"
                 readOnly
                 aria-label="사람 초대 링크"
@@ -320,13 +330,69 @@ export default function RoomInviteModal({
               <button
                 type="button"
                 className="dc-invite-copy-button"
-                disabled={!secureInviteReady}
-                onClick={onCopy}
+                aria-label="현재 사람 초대 링크 복사"
+                disabled={!secureInviteUrl || !selectedHumanInvite}
+                onClick={() => {
+                  if (selectedHumanInvite) onCopyHumanInvite(selectedHumanInvite.key);
+                }}
               >
                 <Copy size={15} />
                 복사
               </button>
             </div>
+            {humanInvites.length > 0 && (
+              <div className="dc-invite-setup" aria-label="발급한 사람 초대">
+                <span className="text-[12px] font-black text-text-secondary">
+                  이 앱에서 발급한 링크
+                </span>
+                <div className="grid gap-2" role="list">
+                  {humanInvites.map((invite, index) => {
+                    const revokeBusy = invite.revocation === "in_flight";
+                    const revokeDead = invite.revocation === "dead";
+                    return (
+                      <div className="dc-invite-friend-row" role="listitem" key={invite.key}>
+                        <span className="min-w-0 flex-1">
+                          <span className="dc-invite-friend-name preserve-words">
+                            {invite.displayName}
+                          </span>
+                          <span className="dc-invite-friend-handle preserve-words">
+                            {humanInviteUseLabel(invite.maxUses)} · 만료 {invite.expiresAt} ·{" "}
+                            {humanInviteStatus(invite)}
+                          </span>
+                        </span>
+                        <span className="flex shrink-0 items-center gap-2">
+                          <button
+                            type="button"
+                            className="dc-invite-copy-button"
+                            aria-label={`사람 초대 ${index + 1} 링크 복사`}
+                            disabled={!invite.copyUrl}
+                            onClick={() => onCopyHumanInvite(invite.key)}
+                          >
+                            <Copy size={14} />
+                            복사
+                          </button>
+                          <button
+                            type="button"
+                            className="dc-invite-copy-button"
+                            aria-label={`사람 초대 ${index + 1} 폐기`}
+                            disabled={revokeBusy || revokeDead}
+                            onClick={() => onRevokeHumanInvite(invite.key)}
+                          >
+                            {revokeBusy
+                              ? "폐기 중"
+                              : revokeDead
+                                ? "폐기됨"
+                                : invite.revocation === "unknown"
+                                  ? "폐기 재시도"
+                                  : "폐기"}
+                          </button>
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </section>
 
           <section className="dc-invite-card" aria-labelledby="ai-invite-heading">

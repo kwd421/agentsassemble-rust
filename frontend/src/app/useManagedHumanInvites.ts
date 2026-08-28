@@ -221,7 +221,6 @@ export function useManagedHumanInvites({
       presentHumanInvite(record, currentAuthority, currentPublicOrigin, clockNow)
     )
     .reverse();
-  const currentInvite = humanInvites.find((invite) => !invite.retired);
 
   function assertCopyEligible(
     expected: ManagedHumanInviteRecord,
@@ -350,10 +349,8 @@ export function useManagedHumanInvites({
 
   return {
     humanInvites,
-    secureInviteUrl: currentInvite?.copyUrl || "",
     retainAccepted,
     copy,
-    copyCurrent: () => (currentInvite ? copy(currentInvite.key) : Promise.resolve()),
     revoke,
   };
 }

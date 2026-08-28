@@ -13,7 +13,7 @@ export default function AppOverlays({ controller }: { controller: AppController 
   const {
     acceptRecoveredSession, activeRoom, agentCreateOpen, agentInviteUrl,
     canonicalRoom, closeInviteModal, copyAgentInviteLink,
-    copyInviteLink, copyOperatorPairingLink, copyRemoteClientPacket,
+    copyOperatorPairingLink, copyRemoteClientPacket,
     createChannel, createChannelOpen, deleteRoom, deviceToken, clientId, generateAgentInviteLink,
     generateInviteLink, generateOperatorPairingLink, guestAdmissionBusy, guestExpired,
     guestJoinRequested, guestJoinStatus, guestJoinToken, guestLocked,
@@ -25,7 +25,7 @@ export default function AppOverlays({ controller }: { controller: AppController 
     operatorPairingPending, operatorPairingState, operatorPairingUrl,
     pendingGuestAvatarImage, pendingGuestDisplayName, publicInviteStatus,
     requestGuestJoin, retryOperatorPairing, roomInvite,
-    roomSettings, roomSocket, secureInviteUrl,
+    roomSettings, roomSocket,
     setAgentCreateOpen, setCreateChannelOpen, setGuestRecoveryRequest,
     setLeaveRoomTargetId, setPendingGuestAvatarImage, setPendingGuestDisplayName,
     setSettingsModal, settingsModalInitialSectionId, settingsModalRoom, startInviteTunnel,
@@ -45,7 +45,7 @@ export default function AppOverlays({ controller }: { controller: AppController 
         {inviteModalRoom && (
           <RoomInviteModal
             roomLabel={inviteModalRoom.label}
-            secureInviteUrl={secureInviteUrl}
+            humanInvites={roomInvite.humanInvites}
             agentInviteUrl={agentInviteUrl}
             operatorPairingUrl={operatorPairingUrl}
             publicUrl={invitePublicUrl}
@@ -67,7 +67,8 @@ export default function AppOverlays({ controller }: { controller: AppController 
                 startTunnelIfNeeded
               )
             }
-            onCopy={() => void copyInviteLink()}
+            onCopyHumanInvite={(key) => void roomInvite.copyHumanInvite(key)}
+            onRevokeHumanInvite={(key) => void roomInvite.revokeHumanInvite(key)}
             onGenerateAgentInvite={(startTunnelIfNeeded) =>
               void generateAgentInviteLink(inviteModalRoom, startTunnelIfNeeded)
             }

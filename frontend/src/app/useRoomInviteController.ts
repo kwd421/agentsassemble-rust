@@ -610,7 +610,6 @@ export function useRoomInviteController({
   return {
     modal,
     copyStatus,
-    secureInviteUrl: managedHumanInvites.secureInviteUrl,
     humanInvites: managedHumanInvites.humanInvites,
     agentInviteUrl,
     operatorPairingUrl,
@@ -630,7 +629,6 @@ export function useRoomInviteController({
     generateOperatorPairing,
     copyAgentInvite,
     copyOperatorPairing,
-    copySecureInvite: managedHumanInvites.copyCurrent,
     copyHumanInvite: managedHumanInvites.copy,
     revokeHumanInvite: managedHumanInvites.revoke,
     copyRemoteClientPacket,
