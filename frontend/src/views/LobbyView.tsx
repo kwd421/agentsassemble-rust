@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Hash } from "lucide-react";
 import {
   type LiveAgent,
@@ -201,7 +201,7 @@ export default function LobbyView({
     });
   }
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setPinnedItems([]);
     setPinsLoading(false);
     setPinsError("");
