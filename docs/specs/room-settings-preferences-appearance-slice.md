@@ -293,9 +293,10 @@ frontend's strict grant request functions, and the copied settings UI are active
 The controller derives current local manager authority for each upload; remote humans
 exchange their live session only for an exact bound-read grant. Canonical private
 references are never placed directly in an image element. The frontend fetches the
-PNG under one-use authority, publishes only an object URL, rejects late generations,
-and revokes the old URL after replacement or on room, authority, reference, or
-component-lifetime change.
+PNG under one-use authority, requires the exact private/no-store metadata and a
+nonempty domain-bounded PNG-signature body, publishes only an object URL, rejects late
+generations, and revokes the old URL after replacement or on room, directory-authority
+currentness, reference, or component-lifetime change.
 
 The remote cutover deliberately pays one additional same-origin exchange request
 per preference read/write or bound-appearance read, plus bounded session
@@ -313,11 +314,17 @@ their respective policies; repository-wide duplicate-policy review found no
 competing route, SQL, validation, or state-transition owner. The exact typed-
 issuance commit passed `make verify`: persistence 178/178, protocol 6/6, provider
 120/120, server 85 unit tests plus every integration/TCP suite, desktop 20/20, and
-84 frontend files with 518 tests. The completed frontend batch passed 86 frontend
-files with 530 tests and the same complete Rust/TCP/integration gates. Focused request
+84 frontend files with 518 tests. The corrected frontend batch passed 87 frontend
+files with 538 tests and the same complete Rust/TCP/integration gates. Focused request
 and lifecycle tests prove exact response parsing, distinct local/remote issuance,
 same-reference deduplication, inactive-banner suppression, pending-to-bound
-replacement, abort/late-result rejection, explicit retry, and URL revocation.
+replacement, latest-only upload binding, abort/late-result rejection, explicit retry,
+directory-currentness cleanup, and URL revocation. A fresh isolated release package
+also uploaded repository PNGs through native file selection after the strict response
+checks landed. The copied modal and the main room view rendered the authenticated
+banner and icon through object URLs; normal quit stopped the exact app and sidecar,
+and only that run's isolated data and regenerable build outputs were moved to
+recoverable Trash.
 
 ## Failure, acceptance, and review gates
 

@@ -3366,3 +3366,63 @@ recoverable Trash directory
 `AgentsAssemble-Appearance-Verify-20260828.fKzLaX`; unrelated processes and user data
 were untouched. This threshold batch still requires exact public-diff review by the
 critical web session and Daybreaker Blue High.
+
+## Authenticated appearance review corrections: 2026-08-29
+
+The first Daybreaker review of `b690604..8ec147a` reported three Medium findings:
+banner preset selection omitted the explicit empty-string clear, concurrent uploads
+had no room-and-slot latest-generation owner, and frontend canonical-reference grammar
+duplicated the Rust domain. Commits `4e69646`, `8feff01`, and `008f935` respectively
+closed those findings. Daybreaker's next review found one remaining Medium: the SQLite
+CHECK and HTTP raw-query boundary were not mechanically bound to that domain grammar.
+Commit `93b036f` adds the schema invariant and makes the route consume the domain-owned
+query contract.
+
+The independent web review of the original batch reported two Medium findings. A local
+directory becoming unconfirmed or unavailable changed the stable manager resolver from
+success to failure without waking the object-URL owner, so an installed URL could remain
+rendered. Commit `72582d9` passes the directory owner's existing currentness projection
+into the hook; loss removes local desired assets, aborts reads, and revokes installed
+URLs, while restoration reuses the exact resolver. The second finding was that the
+frontend accepted `image/png` text without the private/no-store response contract or
+bounded PNG bytes although the record claimed strict body validation. Commit `e747317`
+moves the shared 10-MiB encoded-raster ceiling to the Rust domain owner, exports it to
+the generated frontend wire constants, and makes the appearance HTTP owner require
+exact JSON/PNG media types, semantically exact `private, no-store`, a nonempty bounded
+body, and the PNG signature before object-URL creation. Focused tests reject missing or
+wrong cache policy, invalid signature, oversized bytes, stale upload completion, owner
+unmount, and directory-currentness loss.
+
+These corrections add no durable state, cache, timer, task, SQL transition, fallback,
+compatibility path, or generic asset framework. Authority cleanup reuses the existing
+directory sync state. PNG acceptance already buffered the response blob; the new work is
+one two-directive header parse, bounded-size comparison, and an 8-byte slice/signature
+comparison before publication. Immediately before strict PNG acceptance the production
+main and API chunks totaled 840.60 kB raw / 251.53 kB gzip; afterward they total 840.98
+kB raw / 251.63 kB gzip, an observed +0.38 kB raw / +0.10 kB gzip. No CPU, memory, disk,
+or latency improvement is claimed; the accepted cost closes a concrete private-response
+and decoded-byte retention threat at the owning boundary.
+
+Full serial `make verify` passed architecture, source-growth, policy, formatting,
+generated bindings, original-CSS, production build, all workspace/TCP/integration/doc
+tests, warning-denied Clippy, and the diff gate: frontend 87 files / 538 tests, desktop
+20, domain 26, persistence 179, protocol 6, provider 120, and server 85. No real
+provider, Deep Scan, or automated security scanner ran. Final web and Daybreaker
+approval remains pending until this correction range is pushed and re-reviewed.
+
+Computer Use then drove a fresh isolated release package named
+`AgentsAssemble Appearance Correction Verify`, bundle identifier
+`app.agentsassemble.rust.appearancecorrectionverify0829`, with its own new application
+data and an explicitly empty central URL. Native file selection uploaded the
+repository's `deepseek.png` as the room banner and `cursor.png` as the room icon after
+the strict private/no-store, media-type, size, and PNG-signature checks landed. The
+copied settings preview and the main room rail, room banner, and introduction rendered
+both authenticated object URLs. This proves the tightened response path accepts the
+real Rust server contract rather than only rejecting malformed fixtures.
+
+Normal quit left no verification app or sidecar process. Only the isolated Application
+Support, cache, WebKit, package-build directory, and generated sidecar binary were moved
+to the recoverable Trash directory
+`AgentsAssemble-Appearance-Correction-Verify-20260829.ojQ6vP`; unrelated applications,
+processes, and user data were untouched. The shared browser session remains active only
+for the required critical-web re-review and will be reset after that review completes.
