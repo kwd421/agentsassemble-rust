@@ -1,8 +1,7 @@
 use std::collections::BTreeMap;
 
 use agentsassemble_domain::{
-    Actor, AuthenticatedPrincipal, RoomAppearance, RoomEvent, RoomSettings, RoomSettingsPatch,
-    canonical_payload_hash, public_settings,
+    Actor, AuthenticatedPrincipal, RoomEvent, RoomSettings, canonical_payload_hash, public_settings,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -10,38 +9,9 @@ use uuid::Uuid;
 
 use crate::{
     CommandOutcome, PersistenceError, SqliteStore, authority::active_room_for_principal,
-    command_admission::admit_non_lifecycle_command, room_write_budget::command_size,
+    command_admission::admit_non_lifecycle_command,
+    room_appearance_assets::transition_room_appearance_references, room_write_budget::command_size,
 };
-
-trait AssetReferenceTransition {
-    fn validate_and_plan(
-        &self,
-        current: &RoomAppearance,
-        next: &RoomAppearance,
-        patch: &RoomSettingsPatch,
-    ) -> Result<(), PersistenceError>;
-}
-
-struct StageANoAssetReferences;
-
-impl AssetReferenceTransition for StageANoAssetReferences {
-    fn validate_and_plan(
-        &self,
-        current: &RoomAppearance,
-        next: &RoomAppearance,
-        _patch: &RoomSettingsPatch,
-    ) -> Result<(), PersistenceError> {
-        if current.banner_image_url != next.banner_image_url
-            || current.icon_image_url != next.icon_image_url
-        {
-            return Err(rejected(
-                "room_setting_unsupported",
-                "Room appearance images are unavailable until their asset owner exists.",
-            ));
-        }
-        Ok(())
-    }
-}
 
 impl SqliteStore {
     /// Commits one canonical room-global settings command.
@@ -84,8 +54,8 @@ impl SqliteStore {
                 .fetch_one(&mut *transaction)
                 .await?;
         let current: RoomSettings = serde_json::from_str(&encoded)?;
-        let (expected_revision, next, patch) = current
-            .stage_a_update(payload)
+        let (expected_revision, next) = current
+            .strict_update(payload)
             .map_err(|error| rejected(error.code, error.message))?;
         let current_public = public_settings(&current)?;
         if expected_revision != current_public.settings_revision {
@@ -94,31 +64,24 @@ impl SqliteStore {
                 "Room settings changed before this update was applied.",
             ));
         }
-        StageANoAssetReferences.validate_and_plan(&current.appearance, &next.appearance, &patch)?;
         let now = Utc::now();
+        transition_room_appearance_references(
+            &mut transaction,
+            &principal.room_id,
+            &current.appearance,
+            &next.appearance,
+            now,
+        )
+        .await?;
         room.label.clone_from(&next.label);
         room.updated_at = now;
         let public = public_settings(&next)?;
-        let event = RoomEvent {
-            v: 1,
-            id: Uuid::new_v4().to_string(),
-            seq: next_sequence(&mut transaction, &principal.room_id).await?,
-            created_at: now,
-            room_id: principal.room_id.clone(),
-            event_type: "room_settings_updated".to_owned(),
-            actor: Actor {
-                participant_id: principal.participant_id.clone(),
-                participant_type: "human".to_owned(),
-            },
-            participant_id: Some(principal.participant_id.clone()),
-            participant_type: Some("human".to_owned()),
-            actor_id: Some(principal.participant_id.clone()),
-            actor_type: Some("human".to_owned()),
-            display_name: Some(principal.display_name.clone()),
-            content: None,
-            message_kind: None,
-            extra: BTreeMap::from([("room_settings".to_owned(), json!(public))]),
-        };
+        let event = settings_updated_event(
+            principal,
+            &public,
+            next_sequence(&mut transaction, &principal.room_id).await?,
+            now,
+        );
         let result = json!({"room_settings": public, "event": event});
         sqlx::query("UPDATE rooms SET room_json = ?, settings_json = ? WHERE room_id = ?")
             .bind(serde_json::to_string(&room)?)
@@ -149,6 +112,34 @@ impl SqliteStore {
             events: vec![event],
             deduplicated: false,
         })
+    }
+}
+
+fn settings_updated_event(
+    principal: &AuthenticatedPrincipal,
+    public: &agentsassemble_domain::PublicRoomSettings,
+    sequence: i64,
+    now: chrono::DateTime<Utc>,
+) -> RoomEvent {
+    RoomEvent {
+        v: 1,
+        id: Uuid::new_v4().to_string(),
+        seq: sequence,
+        created_at: now,
+        room_id: principal.room_id.clone(),
+        event_type: "room_settings_updated".to_owned(),
+        actor: Actor {
+            participant_id: principal.participant_id.clone(),
+            participant_type: "human".to_owned(),
+        },
+        participant_id: Some(principal.participant_id.clone()),
+        participant_type: Some("human".to_owned()),
+        actor_id: Some(principal.participant_id.clone()),
+        actor_type: Some("human".to_owned()),
+        display_name: Some(principal.display_name.clone()),
+        content: None,
+        message_kind: None,
+        extra: BTreeMap::from([("room_settings".to_owned(), json!(public))]),
     }
 }
 

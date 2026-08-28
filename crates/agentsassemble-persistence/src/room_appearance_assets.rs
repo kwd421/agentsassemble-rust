@@ -1,7 +1,11 @@
-use agentsassemble_domain::room_appearance_asset_id;
-use chrono::{Duration, Utc};
+use std::collections::BTreeSet;
+
+use agentsassemble_domain::{
+    LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, RoomAppearance, room_appearance_asset_id,
+};
+use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
-use sqlx::Row;
+use sqlx::{Row, Sqlite, Transaction};
 use uuid::Uuid;
 
 use crate::{
@@ -10,7 +14,10 @@ use crate::{
         MAX_RASTER_BYTES, enforce_storage_replacement, prepare_raster, sanitize_filename,
         validate_stored_raster,
     },
-    room_user_identity::require_exact_local_room_manager,
+    room_user_identity::{
+        require_current_local_room_manager, require_exact_local_room_manager,
+        resolve_room_user_identity,
+    },
 };
 
 const PENDING_APPEARANCE_TTL: Duration = Duration::minutes(15);
@@ -146,6 +153,105 @@ fn asset_metadata(id: String, filename: String, size: usize) -> RoomAppearanceAs
 
 fn valid_asset_id(asset_id: &str) -> bool {
     room_appearance_asset_id(&format!("/api/attachments/{asset_id}?view=1")) == Some(asset_id)
+}
+
+pub(crate) async fn transition_room_appearance_references(
+    transaction: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    current: &RoomAppearance,
+    next: &RoomAppearance,
+    now: DateTime<Utc>,
+) -> Result<(), PersistenceError> {
+    let current_ids = appearance_asset_ids(current)?;
+    let next_ids = appearance_asset_ids(next)?;
+    if current.banner_image_url == next.banner_image_url
+        && current.icon_image_url == next.icon_image_url
+    {
+        return Ok(());
+    }
+
+    let mut manager_user_id = None;
+    for asset_id in &next_ids {
+        let row = sqlx::query(
+            "SELECT pending_owner_user_id, content_type, size, length(content) AS content_length, created_at, state, expires_at FROM room_appearance_assets WHERE asset_id = ? AND room_id = ?",
+        )
+        .bind(asset_id)
+        .bind(room_id)
+        .fetch_optional(&mut **transaction)
+        .await?
+        .ok_or_else(asset_missing)?;
+        validate_stored_raster(
+            row.get::<String, _>("content_type").as_str(),
+            row.get::<i64, _>("size"),
+            row.get::<i64, _>("content_length"),
+            row.get::<String, _>("created_at").as_str(),
+        )?;
+        let owner = row.get::<Option<String>, _>("pending_owner_user_id");
+        let expires_at = row.get::<Option<i64>, _>("expires_at");
+        match row.get::<String, _>("state").as_str() {
+            "bound"
+                if owner.is_none() && expires_at.is_none() && current_ids.contains(asset_id) => {}
+            "pending" if !current_ids.contains(asset_id) => {
+                let current_manager = if let Some(user_id) = &manager_user_id {
+                    user_id
+                } else {
+                    let identity = resolve_room_user_identity(
+                        transaction,
+                        room_id,
+                        LOCAL_OPERATOR_USER_ID,
+                        LOCAL_OPERATOR_PARTICIPANT_ID,
+                    )
+                    .await?;
+                    require_current_local_room_manager(transaction, &identity).await?;
+                    manager_user_id.insert(identity.user_id)
+                };
+                if owner.as_deref() != Some(current_manager.as_str())
+                    || expires_at.is_none_or(|expires_at| expires_at <= now.timestamp())
+                {
+                    return Err(asset_missing());
+                }
+                let promoted = sqlx::query(
+                    "UPDATE room_appearance_assets SET state = 'bound', pending_owner_user_id = NULL, expires_at = NULL WHERE asset_id = ? AND room_id = ? AND pending_owner_user_id = ? AND state = 'pending' AND expires_at > ?",
+                )
+                .bind(asset_id)
+                .bind(room_id)
+                .bind(current_manager)
+                .bind(now.timestamp())
+                .execute(&mut **transaction)
+                .await?;
+                if promoted.rows_affected() != 1 {
+                    return Err(asset_missing());
+                }
+            }
+            _ => return Err(invalid_asset_state()),
+        }
+    }
+
+    for asset_id in current_ids.difference(&next_ids) {
+        let deleted = sqlx::query(
+            "DELETE FROM room_appearance_assets WHERE asset_id = ? AND room_id = ? AND state = 'bound'",
+        )
+        .bind(asset_id)
+        .bind(room_id)
+        .execute(&mut **transaction)
+        .await?;
+        if deleted.rows_affected() != 1 {
+            return Err(invalid_asset_state());
+        }
+    }
+    Ok(())
+}
+
+fn appearance_asset_ids(appearance: &RoomAppearance) -> Result<BTreeSet<String>, PersistenceError> {
+    [&appearance.banner_image_url, &appearance.icon_image_url]
+        .into_iter()
+        .filter(|url| !url.is_empty())
+        .map(|url| {
+            room_appearance_asset_id(url)
+                .map(str::to_owned)
+                .ok_or_else(invalid_asset_state)
+        })
+        .collect()
 }
 
 async fn delete_expired_pending(

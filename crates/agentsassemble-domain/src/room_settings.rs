@@ -177,10 +177,7 @@ impl RoomSettings {
     /// # Errors
     ///
     /// Rejects unknown, noncanonical, unavailable, empty, or revisionless updates.
-    pub fn stage_a_update(
-        &self,
-        payload: &Value,
-    ) -> Result<(String, Self, RoomSettingsPatch), RoomSettingsError> {
+    pub fn strict_update(&self, payload: &Value) -> Result<(String, Self), RoomSettingsError> {
         let object = payload
             .as_object()
             .ok_or_else(|| RoomSettingsError::bad_request("payload must be an object."))?;
@@ -213,9 +210,9 @@ impl RoomSettings {
                 "At least one room-global setting is required.",
             ));
         }
-        patch.require_stage_a_available()?;
+        patch.require_available()?;
         let next = patch.apply(self)?;
-        Ok((expected_revision, next, patch))
+        Ok((expected_revision, next))
     }
 }
 
@@ -250,7 +247,7 @@ impl RoomSettingsPatch {
             && self.activity_plugin.is_none()
     }
 
-    fn require_stage_a_available(&self) -> Result<(), RoomSettingsError> {
+    fn require_available(&self) -> Result<(), RoomSettingsError> {
         if self.channels.is_some() {
             return Err(RoomSettingsError::unsupported(
                 "Custom channels are unavailable until their message and voice owners exist.",
@@ -261,7 +258,7 @@ impl RoomSettingsPatch {
                 "Room activity plugins are unavailable.",
             ));
         }
-        self.appearance.require_stage_a_available()
+        Ok(())
     }
 
     fn apply(&self, current: &RoomSettings) -> Result<RoomSettings, RoomSettingsError> {
@@ -329,15 +326,6 @@ impl RoomAppearancePatch {
             && self.icon_image_url.is_none()
             && self.icon_label.is_none()
             && self.invite_scope.is_none()
-    }
-
-    fn require_stage_a_available(&self) -> Result<(), RoomSettingsError> {
-        if self.banner_image_url.is_some() || self.icon_image_url.is_some() {
-            return Err(RoomSettingsError::unsupported(
-                "Room appearance images are unavailable until their asset owner exists.",
-            ));
-        }
-        Ok(())
     }
 
     fn apply(&self, current: &RoomAppearance) -> RoomAppearance {
@@ -626,12 +614,12 @@ mod tests {
     }
 
     #[test]
-    fn stage_a_rejects_storage_only_fields() {
+    fn strict_update_rejects_unimplemented_fields() {
         let current = RoomSettings::defaults("General");
         let revision = public_settings(&current)
             .unwrap_or_else(|error| panic!("settings revision: {error}"))
             .settings_revision;
-        let Err(error) = current.stage_a_update(&json!({
+        let Err(error) = current.strict_update(&json!({
             "expected_revision": revision,
             "channels": []
         })) else {
@@ -646,8 +634,8 @@ mod tests {
         let revision = public_settings(&current)
             .unwrap_or_else(|error| panic!("settings revision: {error}"))
             .settings_revision;
-        let (_, next, _) = current
-            .stage_a_update(&json!({
+        let (_, next) = current
+            .strict_update(&json!({
                 "expected_revision": revision,
                 "appearance": {"invite_scope": "read_only"}
             }))
