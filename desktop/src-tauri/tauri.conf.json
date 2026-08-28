@@ -27,6 +27,9 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "externalBin": ["binaries/agentsassemble-server"]
+    "externalBin": ["binaries/agentsassemble-server"],
+    "resources": {
+      "../../frontend/dist/": "frontend/"
+    }
   }
 }
