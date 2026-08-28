@@ -53,6 +53,13 @@ export interface DesktopOperatorHttpTicket {
   http_base_url: string;
 }
 
+export interface DesktopManagerRoomAuthority {
+  server_id: string;
+  authority_lineage_id: string;
+  room_id: string;
+  room_uid: string;
+}
+
 type DesktopHttpTicketCommand =
   | "runtime_preferences_read_ticket"
   | "runtime_preferences_write_ticket"
@@ -407,23 +414,52 @@ export function requestDesktopPreferencesWriteTicket(
 }
 
 export function requestDesktopHumanInviteCreateTicket(
-  roomId: string
+  authority: DesktopManagerRoomAuthority
 ): Promise<DesktopOperatorHttpTicket> {
+  const verified = validateManagerRoomAuthority(authority);
   return requestDesktopHttpTicket(
     "runtime_human_invite_create_ticket",
-    { roomId },
+    { authority: verified },
     "사람 초대 생성 티켓"
   );
 }
 
 export function requestDesktopHumanInviteRevokeTicket(
-  roomId: string
+  authority: DesktopManagerRoomAuthority
 ): Promise<DesktopOperatorHttpTicket> {
+  const verified = validateManagerRoomAuthority(authority);
   return requestDesktopHttpTicket(
     "runtime_human_invite_revoke_ticket",
-    { roomId },
+    { authority: verified },
     "사람 초대 취소 티켓"
   );
+}
+
+function validateManagerRoomAuthority(
+  value: DesktopManagerRoomAuthority
+): DesktopManagerRoomAuthority {
+  const authority = exactObject(
+    value,
+    ["server_id", "authority_lineage_id", "room_id", "room_uid"],
+    "방 관리자 권위"
+  );
+  if (
+    typeof authority.server_id !== "string" ||
+    !UUID_PATTERN.test(authority.server_id) ||
+    authority.server_id !== authority.server_id.toLowerCase() ||
+    typeof authority.authority_lineage_id !== "string" ||
+    !UUID_PATTERN.test(authority.authority_lineage_id) ||
+    authority.authority_lineage_id !== authority.authority_lineage_id.toLowerCase() ||
+    typeof authority.room_id !== "string" ||
+    !authority.room_id ||
+    authority.room_id !== authority.room_id.trim() ||
+    typeof authority.room_uid !== "string" ||
+    !UUID_PATTERN.test(authority.room_uid) ||
+    authority.room_uid !== authority.room_uid.toLowerCase()
+  ) {
+    throw new Error("방 관리자 권위가 올바르지 않습니다.");
+  }
+  return authority as unknown as DesktopManagerRoomAuthority;
 }
 
 export function requestDesktopSettingsDirectoryReadTicket(): Promise<DesktopOperatorHttpTicket> {
@@ -461,7 +497,7 @@ export async function fetchDesktopRoomPreferences(
 }
 
 async function fetchDesktopHumanInvite(
-  roomId: string,
+  authority: DesktopManagerRoomAuthority,
   operation: "create" | "revoke",
   init: RequestInit
 ): Promise<Response> {
@@ -471,8 +507,8 @@ async function fetchDesktopHumanInvite(
   }
   const issued =
     operation === "create"
-      ? await requestDesktopHumanInviteCreateTicket(roomId)
-      : await requestDesktopHumanInviteRevokeTicket(roomId);
+      ? await requestDesktopHumanInviteCreateTicket(authority)
+      : await requestDesktopHumanInviteRevokeTicket(authority);
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${issued.ticket}`);
   return fetch(`${issued.http_base_url}/api/room-invite/${operation}`, {
@@ -484,17 +520,17 @@ async function fetchDesktopHumanInvite(
 }
 
 export function fetchDesktopHumanInviteCreate(
-  roomId: string,
+  authority: DesktopManagerRoomAuthority,
   init: RequestInit
 ): Promise<Response> {
-  return fetchDesktopHumanInvite(roomId, "create", init);
+  return fetchDesktopHumanInvite(authority, "create", init);
 }
 
 export function fetchDesktopHumanInviteRevoke(
-  roomId: string,
+  authority: DesktopManagerRoomAuthority,
   init: RequestInit
 ): Promise<Response> {
-  return fetchDesktopHumanInvite(roomId, "revoke", init);
+  return fetchDesktopHumanInvite(authority, "revoke", init);
 }
 
 export async function requestDesktopCentralRegistrationTicket(): Promise<DesktopCentralRegistrationTicket> {

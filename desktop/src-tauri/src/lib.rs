@@ -20,6 +20,14 @@ struct DesktopCapability {
     permissions: Vec<String>,
 }
 
+#[derive(Deserialize)]
+struct ManagerRoomAuthorityInput {
+    server_id: String,
+    authority_lineage_id: String,
+    room_id: String,
+    room_uid: String,
+}
+
 macro_rules! desktop_commands {
     ($($command:ident => $permission:literal),+ $(,)?) => {
         const REGISTERED_COMMANDS: &[RegisteredCommand] = &[
@@ -163,14 +171,20 @@ async fn runtime_preferences_write_ticket(
 async fn runtime_human_invite_create_ticket(
     window: WebviewWindow,
     app: tauri::AppHandle,
-    room_id: String,
+    authority: ManagerRoomAuthorityInput,
 ) -> Result<HttpTicketGrant, String> {
     caller_is_bundled_ui(&window)?;
     let runtime_app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         runtime_app
             .state::<LocalRuntime>()
-            .issue_human_invite_create_ticket(&runtime_app, &room_id)
+            .issue_human_invite_create_ticket(
+                &runtime_app,
+                &authority.server_id,
+                &authority.authority_lineage_id,
+                &authority.room_id,
+                &authority.room_uid,
+            )
     })
     .await
     .map_err(|error| format!("runtime human invite create ticket worker failed: {error}"))?
@@ -180,14 +194,20 @@ async fn runtime_human_invite_create_ticket(
 async fn runtime_human_invite_revoke_ticket(
     window: WebviewWindow,
     app: tauri::AppHandle,
-    room_id: String,
+    authority: ManagerRoomAuthorityInput,
 ) -> Result<HttpTicketGrant, String> {
     caller_is_bundled_ui(&window)?;
     let runtime_app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         runtime_app
             .state::<LocalRuntime>()
-            .issue_human_invite_revoke_ticket(&runtime_app, &room_id)
+            .issue_human_invite_revoke_ticket(
+                &runtime_app,
+                &authority.server_id,
+                &authority.authority_lineage_id,
+                &authority.room_id,
+                &authority.room_uid,
+            )
     })
     .await
     .map_err(|error| format!("runtime human invite revoke ticket worker failed: {error}"))?

@@ -2805,3 +2805,40 @@ the unresolved branch was described as always exposing cleanup retry even though
 terminal settlement dispatches that UI operation. The completed-session branch does
 not expose it. This is a documentation correction only; the approved product code is
 unchanged.
+
+## Manager invite authority transport: 2026-08-28
+
+The previous native invite bridge requested manager create/revoke authority with only
+a mutable room ID. A room can be recreated under a stable ID, and a local authority can
+be replaced under a different server or lineage, so that request shape could not bind a
+future ticket or mutation to the exact room-directory authority the user selected.
+
+The first C1a unit adds no new authority source or durable state. The currently verified
+frontend tuple `{server_id, authority_lineage_id, room_id, room_uid}` is one exact input
+object. The frontend rejects unknown fields, noncanonical UUIDs, and a nonexact room ID
+before native invocation. The Tauri owner repeats canonical UUID and domain room-ID
+validation before constructing one in-memory `ManagerRoomAuthority`, and create/revoke
+share that owner when serializing the private control request. The request values are
+unchanged; ticket responses retain their existing shape and contain no tuple echo. The
+controller does not call this bridge yet, and server issuance/transaction revalidation
+remain explicitly incomplete rather than accepting the transported tuple as authority.
+
+The measurable resource change is four bounded strings on the low-frequency manager
+invite request and their existing JSON serialization. There is no database row, disk
+write, cache, timer, process, task, network round trip, fallback, compatibility path, or
+general authority framework. The tuple object also avoids four positional native
+arguments and one duplicate create/revoke validator. This accepts a small per-request
+allocation to preserve exact provenance; no runtime optimization was added without a
+measured bottleneck.
+
+Focused protocol, desktop, and frontend tests prove exact private-control serialization,
+canonical native UUID rejection, no native invocation for malformed frontend authority,
+separate create/revoke grants, and fixed HTTP routes. Final `make verify` passed the
+architecture, source-growth, policy, formatting, generated-binding, original-CSS,
+production-build, workspace-test, warning-denied Clippy, and diff gates. All 82 frontend
+files with 476 tests, all 18 desktop tests, domain 23, persistence 171, protocol 5,
+provider 120, server 83, and every integration and documentation test passed. The first
+full run caught a `similar_names` architecture/lint violation in separate `room_id` and
+`room_uid` native parameters; the final design fixed the cause by making the tuple one
+input object rather than adding a lint exception. No Computer Use resource, provider,
+Deep Scan, or other automated security scanner ran.

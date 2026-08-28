@@ -6,7 +6,10 @@ pub(super) async fn assert_invite_tickets(server: &mut ControlledServer) {
     let create = server
         .send_control(&LocalControlRequest::IssueHumanInviteCreateTicket {
             request_id: "human-invite-create-ticket-1".to_owned(),
+            server_id: "10000000-0000-4000-8000-000000000001".to_owned(),
+            authority_lineage_id: "20000000-0000-4000-8000-000000000002".to_owned(),
             meeting_id: "general".to_owned(),
+            room_uid: "30000000-0000-4000-8000-000000000003".to_owned(),
         })
         .await;
     assert!(matches!(
@@ -23,7 +26,10 @@ pub(super) async fn assert_invite_tickets(server: &mut ControlledServer) {
     let revoke = server
         .send_control(&LocalControlRequest::IssueHumanInviteRevokeTicket {
             request_id: "human-invite-revoke-ticket-1".to_owned(),
+            server_id: "10000000-0000-4000-8000-000000000001".to_owned(),
+            authority_lineage_id: "20000000-0000-4000-8000-000000000002".to_owned(),
             meeting_id: "general".to_owned(),
+            room_uid: "30000000-0000-4000-8000-000000000003".to_owned(),
         })
         .await;
     assert!(matches!(

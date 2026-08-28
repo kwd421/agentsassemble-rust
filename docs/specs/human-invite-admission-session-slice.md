@@ -593,8 +593,11 @@ a substitute for these authority and failure contracts.
 
 B1a/B1b and the browser admission-custody corrections are public through `fdb4e49`,
 fully verified, and approved by both manual reviewers. B2 is public through `2b97a7c`,
-fully verified, and approved by both manual reviewers. C1 manager-invite frontend
-activation, C2 retained custody, and the packaged flow remain incomplete.
+fully verified, and approved by both manual reviewers. The first C1a unit strictly
+validates and carries the exact manager-room authority tuple through the frontend,
+Tauri invocation, and private control request without activating the UI. C1a server
+ticket issuance and transaction revalidation, C1b frontend activation, C2 retained
+custody, and the packaged flow remain incomplete.
 
 ## Trusted ingress boundary
 

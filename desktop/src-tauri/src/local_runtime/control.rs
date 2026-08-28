@@ -4,7 +4,8 @@ use agentsassemble_protocol::{LocalBootstrapGrant, LocalControlRequest, LocalCon
 use uuid::Uuid;
 
 use super::{
-    CentralRegistrationTicketGrant, HttpTicketGrant, RuntimeOutput, RuntimeProcess, TicketGrant,
+    CentralRegistrationTicketGrant, HttpTicketGrant, ManagerRoomAuthority, RuntimeOutput,
+    RuntimeProcess, TicketGrant,
 };
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
@@ -142,16 +143,16 @@ pub(super) fn request_preferences_write_ticket(
 
 pub(super) fn request_human_invite_create_ticket(
     runtime: &mut RuntimeProcess,
-    room_id: &str,
+    authority: &ManagerRoomAuthority,
 ) -> Result<HttpTicketGrant, TicketFailure> {
-    request_http_ticket(runtime, HttpTicketKind::HumanInviteCreate(room_id))
+    request_http_ticket(runtime, HttpTicketKind::HumanInviteCreate(authority))
 }
 
 pub(super) fn request_human_invite_revoke_ticket(
     runtime: &mut RuntimeProcess,
-    room_id: &str,
+    authority: &ManagerRoomAuthority,
 ) -> Result<HttpTicketGrant, TicketFailure> {
-    request_http_ticket(runtime, HttpTicketKind::HumanInviteRevoke(room_id))
+    request_http_ticket(runtime, HttpTicketKind::HumanInviteRevoke(authority))
 }
 
 pub(super) fn request_settings_directory_read_ticket(
@@ -165,8 +166,8 @@ enum HttpTicketKind<'a> {
     Operator,
     PreferencesRead(&'a str),
     PreferencesWrite(&'a str),
-    HumanInviteCreate(&'a str),
-    HumanInviteRevoke(&'a str),
+    HumanInviteCreate(&'a ManagerRoomAuthority),
+    HumanInviteRevoke(&'a ManagerRoomAuthority),
     SettingsDirectoryRead,
 }
 
@@ -191,16 +192,22 @@ fn request_http_ticket(
                 meeting_id: room_id.to_owned(),
             }
         }
-        HttpTicketKind::HumanInviteCreate(room_id) => {
+        HttpTicketKind::HumanInviteCreate(authority) => {
             LocalControlRequest::IssueHumanInviteCreateTicket {
                 request_id: request_id.clone(),
-                meeting_id: room_id.to_owned(),
+                server_id: authority.server_id.clone(),
+                authority_lineage_id: authority.authority_lineage_id.clone(),
+                meeting_id: authority.room_id.clone(),
+                room_uid: authority.room_uid.clone(),
             }
         }
-        HttpTicketKind::HumanInviteRevoke(room_id) => {
+        HttpTicketKind::HumanInviteRevoke(authority) => {
             LocalControlRequest::IssueHumanInviteRevokeTicket {
                 request_id: request_id.clone(),
-                meeting_id: room_id.to_owned(),
+                server_id: authority.server_id.clone(),
+                authority_lineage_id: authority.authority_lineage_id.clone(),
+                meeting_id: authority.room_id.clone(),
+                room_uid: authority.room_uid.clone(),
             }
         }
         HttpTicketKind::SettingsDirectoryRead => {
@@ -434,7 +441,7 @@ fn is_bootstrap_rejection(code: &str) -> bool {
 mod tests {
     use agentsassemble_protocol::LocalControlResponse;
 
-    use super::{HttpTicketKind, TicketFailure, decode_http_ticket_response};
+    use super::{HttpTicketKind, ManagerRoomAuthority, TicketFailure, decode_http_ticket_response};
 
     #[test]
     fn http_ticket_response_variant_must_match_the_exact_request_purpose() {
@@ -459,7 +466,12 @@ mod tests {
         };
         assert!(matches!(
             decode_http_ticket_response(
-                HttpTicketKind::HumanInviteCreate("general"),
+                HttpTicketKind::HumanInviteCreate(&ManagerRoomAuthority {
+                    server_id: "10000000-0000-4000-8000-000000000001".to_owned(),
+                    authority_lineage_id: "20000000-0000-4000-8000-000000000002".to_owned(),
+                    room_id: "general".to_owned(),
+                    room_uid: "30000000-0000-4000-8000-000000000003".to_owned(),
+                }),
                 "request-2",
                 response,
             ),

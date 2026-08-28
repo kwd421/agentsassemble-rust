@@ -70,6 +70,13 @@ struct RuntimeProcess {
     address: Url,
 }
 
+struct ManagerRoomAuthority {
+    server_id: String,
+    authority_lineage_id: String,
+    room_id: String,
+    room_uid: String,
+}
+
 #[derive(Debug, Deserialize)]
 struct StartupRecord {
     status: String,

@@ -377,11 +377,17 @@ pub enum LocalControlRequest {
     },
     IssueHumanInviteCreateTicket {
         request_id: String,
+        server_id: String,
+        authority_lineage_id: String,
         meeting_id: String,
+        room_uid: String,
     },
     IssueHumanInviteRevokeTicket {
         request_id: String,
+        server_id: String,
+        authority_lineage_id: String,
         meeting_id: String,
+        room_uid: String,
     },
     IssueSettingsDirectoryReadTicket {
         request_id: String,
@@ -574,7 +580,8 @@ mod tests {
 
     use super::{
         ClientFrame, CommandAck, CommandResolution, HostProductSurface, HttpMethod,
-        HttpRouteSurface, ProductSurfaceError, ServerFrame, ServerProductSurface,
+        HttpRouteSurface, LocalControlRequest, ProductSurfaceError, ServerFrame,
+        ServerProductSurface,
     };
 
     #[test]
@@ -653,5 +660,29 @@ mod tests {
             ["runtime_bootstrap_status", "runtime_ticket"]
         );
         assert!(HostProductSurface::from_commands(vec!["invalid.name".to_owned()]).is_err());
+    }
+
+    #[test]
+    fn manager_invite_control_request_carries_the_exact_room_authority_tuple() {
+        let request = LocalControlRequest::IssueHumanInviteCreateTicket {
+            request_id: "request-1".to_owned(),
+            server_id: "10000000-0000-4000-8000-000000000001".to_owned(),
+            authority_lineage_id: "20000000-0000-4000-8000-000000000002".to_owned(),
+            meeting_id: "general".to_owned(),
+            room_uid: "30000000-0000-4000-8000-000000000003".to_owned(),
+        };
+        let encoded =
+            serde_json::to_value(request).unwrap_or_else(|error| panic!("encode request: {error}"));
+        assert_eq!(
+            encoded,
+            json!({
+                "op": "issue_human_invite_create_ticket",
+                "request_id": "request-1",
+                "server_id": "10000000-0000-4000-8000-000000000001",
+                "authority_lineage_id": "20000000-0000-4000-8000-000000000002",
+                "meeting_id": "general",
+                "room_uid": "30000000-0000-4000-8000-000000000003"
+            })
+        );
     }
 }

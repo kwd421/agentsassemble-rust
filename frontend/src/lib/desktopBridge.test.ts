@@ -17,6 +17,13 @@ const hostCommands = [
   "runtime_operator_ticket",
 ];
 
+const managerAuthority = {
+  server_id: "10000000-0000-4000-8000-000000000001",
+  authority_lineage_id: "20000000-0000-4000-8000-000000000002",
+  room_id: "general",
+  room_uid: "30000000-0000-4000-8000-0000000000ab",
+};
+
 describe("desktop exact-purpose HTTP bridge", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -123,12 +130,12 @@ describe("desktop exact-purpose HTTP bridge", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await requestDesktopHostProductSurface();
-    await fetchDesktopHumanInviteCreate("general", {
+    await fetchDesktopHumanInviteCreate(managerAuthority, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: '{"meeting_id":"general"}',
     });
-    await fetchDesktopHumanInviteRevoke("general", {
+    await fetchDesktopHumanInviteRevoke(managerAuthority, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: '{"meeting_id":"general","invite_id":"invite-1"}',
@@ -137,12 +144,12 @@ describe("desktop exact-purpose HTTP bridge", () => {
     expect(invoke).toHaveBeenNthCalledWith(
       2,
       "runtime_human_invite_create_ticket",
-      { roomId: "general" }
+      { authority: managerAuthority }
     );
     expect(invoke).toHaveBeenNthCalledWith(
       3,
       "runtime_human_invite_revoke_ticket",
-      { roomId: "general" }
+      { authority: managerAuthority }
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -175,11 +182,30 @@ describe("desktop exact-purpose HTTP bridge", () => {
     Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
 
     await expect(
-      fetchDesktopHumanInviteCreate("general", { method: "GET" })
+      fetchDesktopHumanInviteCreate(managerAuthority, { method: "GET" })
     ).rejects.toThrow("POST");
     await expect(
-      fetchDesktopHumanInviteRevoke("general", { method: "" })
+      fetchDesktopHumanInviteRevoke(managerAuthority, { method: "" })
     ).rejects.toThrow("POST");
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed manager room authority before native invocation", async () => {
+    const invoke = vi.fn();
+    Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
+
+    await expect(
+      fetchDesktopHumanInviteCreate(
+        { ...managerAuthority, room_uid: managerAuthority.room_uid.toUpperCase() },
+        { method: "POST" }
+      )
+    ).rejects.toThrow("관리자 권위");
+    await expect(
+      fetchDesktopHumanInviteRevoke(
+        { ...managerAuthority, room_id: " general" },
+        { method: "POST" }
+      )
+    ).rejects.toThrow("관리자 권위");
     expect(invoke).not.toHaveBeenCalled();
   });
 
