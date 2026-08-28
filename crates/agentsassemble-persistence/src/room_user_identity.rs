@@ -4,8 +4,10 @@ use agentsassemble_domain::{
 use sqlx::{Sqlite, Transaction};
 
 use crate::{
-    PersistenceError, SqliteStore, authority::load_active_participant,
-    bootstrap::require_complete_bootstrap_in_transaction, profile_store::load_profile_for_identity,
+    LocalBootstrapStatus, PersistenceError, SqliteStore,
+    authority::{load_active_participant, load_active_room},
+    bootstrap::require_complete_bootstrap_in_transaction,
+    profile_store::load_profile_for_identity,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -13,6 +15,14 @@ pub struct RoomUserIdentity {
     pub room_id: String,
     pub user_id: String,
     pub participant_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LocalRoomManagerAuthority {
+    pub server_id: String,
+    pub authority_lineage_id: String,
+    pub room_uid: uuid::Uuid,
+    pub manager: RoomUserIdentity,
 }
 
 impl SqliteStore {
@@ -46,13 +56,19 @@ impl SqliteStore {
         room_id: &str,
         user_id: &str,
         participant_id: &str,
-    ) -> Result<RoomUserIdentity, PersistenceError> {
+    ) -> Result<LocalRoomManagerAuthority, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        let identity =
+        let manager =
             resolve_room_user_identity(&mut transaction, room_id, user_id, participant_id).await?;
-        require_current_local_room_manager(&mut transaction, &identity).await?;
+        let bootstrap = require_current_local_room_manager(&mut transaction, &manager).await?;
+        let room = load_active_room(&mut transaction, &manager.room_id).await?;
         transaction.commit().await?;
-        Ok(identity)
+        Ok(LocalRoomManagerAuthority {
+            server_id: bootstrap.server_id,
+            authority_lineage_id: bootstrap.authority_lineage_id,
+            room_uid: room.room_uid,
+            manager,
+        })
     }
 }
 
@@ -80,7 +96,7 @@ pub(crate) async fn resolve_room_user_identity(
 pub(crate) async fn require_current_local_room_manager(
     transaction: &mut Transaction<'_, Sqlite>,
     identity: &RoomUserIdentity,
-) -> Result<(), PersistenceError> {
+) -> Result<LocalBootstrapStatus, PersistenceError> {
     if identity.user_id != LOCAL_OPERATOR_USER_ID
         || identity.participant_id != LOCAL_OPERATOR_PARTICIPANT_ID
     {
@@ -89,8 +105,7 @@ pub(crate) async fn require_current_local_room_manager(
             "Only the current local room manager may manage this room.",
         ));
     }
-    require_complete_bootstrap_in_transaction(transaction).await?;
-    Ok(())
+    require_complete_bootstrap_in_transaction(transaction).await
 }
 
 fn rejected(code: &'static str, message: impl Into<String>) -> PersistenceError {

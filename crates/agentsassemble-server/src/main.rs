@@ -14,8 +14,8 @@ use agentsassemble_protocol::{
 };
 use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService};
 use agentsassemble_server::{
-    AppState, HostSecret, StableEntryConfig, TicketIssueError, TicketStore,
-    issue_central_registration_ticket, issue_human_invite_create_ticket,
+    AppState, HostSecret, ManagerRoomAuthorityRequest, StableEntryConfig, TicketIssueError,
+    TicketStore, issue_central_registration_ticket, issue_human_invite_create_ticket,
     issue_human_invite_revoke_ticket, issue_local_operator_http_ticket, issue_local_ticket,
     issue_preferences_read_ticket, issue_preferences_write_ticket,
     issue_settings_directory_read_ticket, local_bind_is_supported, serve,
@@ -304,21 +304,9 @@ async fn control_response(state: &AppState, line: &[u8]) -> LocalControlResponse
             )
             .await
         }
-        LocalControlRequest::IssueHumanInviteCreateTicket { meeting_id, .. } => {
-            invite_ticket_control_response(
-                state,
-                request_id,
-                InviteTicketRequest::Create(meeting_id),
-            )
-            .await
-        }
-        LocalControlRequest::IssueHumanInviteRevokeTicket { meeting_id, .. } => {
-            invite_ticket_control_response(
-                state,
-                request_id,
-                InviteTicketRequest::Revoke(meeting_id),
-            )
-            .await
+        request @ (LocalControlRequest::IssueHumanInviteCreateTicket { .. }
+        | LocalControlRequest::IssueHumanInviteRevokeTicket { .. }) => {
+            invite_ticket_control_request(state, request_id, request).await
         }
         LocalControlRequest::IssueSettingsDirectoryReadTicket { .. } => {
             settings_ticket_control_response(
@@ -357,8 +345,43 @@ async fn initialize_bootstrap_control_response(
 }
 
 enum InviteTicketRequest {
-    Create(String),
-    Revoke(String),
+    Create(ManagerRoomAuthorityRequest),
+    Revoke(ManagerRoomAuthorityRequest),
+}
+
+async fn invite_ticket_control_request(
+    state: &AppState,
+    request_id: String,
+    request: LocalControlRequest,
+) -> LocalControlResponse {
+    let request = match request {
+        LocalControlRequest::IssueHumanInviteCreateTicket {
+            server_id,
+            authority_lineage_id,
+            meeting_id,
+            room_uid,
+            ..
+        } => InviteTicketRequest::Create(ManagerRoomAuthorityRequest {
+            server_id,
+            authority_lineage_id,
+            room_id: meeting_id,
+            room_uid,
+        }),
+        LocalControlRequest::IssueHumanInviteRevokeTicket {
+            server_id,
+            authority_lineage_id,
+            meeting_id,
+            room_uid,
+            ..
+        } => InviteTicketRequest::Revoke(ManagerRoomAuthorityRequest {
+            server_id,
+            authority_lineage_id,
+            room_id: meeting_id,
+            room_uid,
+        }),
+        _ => unreachable!("invite ticket helper accepts only invite ticket requests"),
+    };
+    invite_ticket_control_response(state, request_id, request).await
 }
 
 async fn invite_ticket_control_response(
@@ -367,13 +390,13 @@ async fn invite_ticket_control_response(
     request: InviteTicketRequest,
 ) -> LocalControlResponse {
     let (create, ticket) = match request {
-        InviteTicketRequest::Create(room_id) => (
+        InviteTicketRequest::Create(authority) => (
             true,
-            issue_human_invite_create_ticket(state, &room_id).await,
+            issue_human_invite_create_ticket(state, &authority).await,
         ),
-        InviteTicketRequest::Revoke(room_id) => (
+        InviteTicketRequest::Revoke(authority) => (
             false,
-            issue_human_invite_revoke_ticket(state, &room_id).await,
+            issue_human_invite_revoke_ticket(state, &authority).await,
         ),
     };
     match (create, ticket) {
@@ -524,6 +547,10 @@ fn control_error(request_id: String, error: TicketIssueError) -> LocalControlRes
         TicketIssueError::BootstrapIncomplete => (
             "bootstrap_required",
             "Local identity bootstrap is not complete.".to_owned(),
+        ),
+        TicketIssueError::AuthorityMismatch => (
+            "room_authority_changed",
+            "The selected room authority is no longer current.".to_owned(),
         ),
         TicketIssueError::Persistence(_) => (
             "persistence_failed",

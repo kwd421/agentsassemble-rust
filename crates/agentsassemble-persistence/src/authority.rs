@@ -52,7 +52,7 @@ pub(crate) async fn load_active_participant(
     Ok(participant)
 }
 
-async fn load_active_room(
+pub(crate) async fn load_active_room(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
 ) -> Result<Room, PersistenceError> {

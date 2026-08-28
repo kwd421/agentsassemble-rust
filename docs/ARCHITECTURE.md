@@ -66,6 +66,14 @@ WebSocket snapshot plus its sequenced participant events. React does not fetch,
 cache, merge, or silently ignore a second HTTP roster. Sequence gaps and stale
 scope are resolved only by the canonical WebSocket resynchronization boundary.
 
+Local manager-invite authority is one exact snapshot of the current server ID,
+bootstrap lineage, stable room UID, canonical room ID, and local manager identity.
+The private control boundary verifies the caller-captured tuple before issuing a
+one-use create- or revoke-only ticket. Ticket consumption transfers that same snapshot
+to persistence, whose owning mutation transaction re-resolves and compares every field
+before changing an invite. A room ID, cached directory row, ingress snapshot, or
+generic room HTTP grant cannot independently authorize invite management.
+
 ### Room settings, preferences, and appearance
 
 SQLite `rooms.settings_json` is the only room-global settings record. One strict

@@ -41,7 +41,7 @@ impl RunningServer {
 async fn manager_create_and_revoke_use_one_ready_ingress_and_current_room_authority() {
     let server = start(true).await;
     let client = reqwest::Client::new();
-    let create_ticket = issue_create(&server.tickets, "general").await;
+    let create_ticket = issue_create(&server, "general").await;
     let created = client
         .post(format!("{}/api/room-invite/create", server.base_url))
         .bearer_auth(create_ticket)
@@ -97,7 +97,7 @@ async fn manager_create_and_revoke_use_one_ready_ingress_and_current_room_author
         .unwrap_or_else(|error| panic!("list created invite: {error}"));
     assert_eq!(stored[0].invite_id, invite_id);
 
-    let revoke_ticket = issue_revoke(&server.tickets, "general").await;
+    let revoke_ticket = issue_revoke(&server, "general").await;
     let revoked = client
         .post(format!("{}/api/room-invite/revoke", server.base_url))
         .bearer_auth(revoke_ticket)
@@ -121,7 +121,7 @@ async fn manager_create_and_revoke_use_one_ready_ingress_and_current_room_author
 async fn create_consumes_exact_ticket_before_body_and_not_ready_writes_nothing() {
     let ready = start(true).await;
     let client = reqwest::Client::new();
-    let crossed_ticket = issue_revoke(&ready.tickets, "general").await;
+    let crossed_ticket = issue_revoke(&ready, "general").await;
     let crossed = client
         .post(format!("{}/api/room-invite/create", ready.base_url))
         .bearer_auth(&crossed_ticket)
@@ -140,7 +140,7 @@ async fn create_consumes_exact_ticket_before_body_and_not_ready_writes_nothing()
         .unwrap_or_else(|error| panic!("replay crossed ticket: {error}"));
     assert_eq!(replay.status(), StatusCode::UNAUTHORIZED);
 
-    let wrong_room_ticket = issue_create(&ready.tickets, "general").await;
+    let wrong_room_ticket = issue_create(&ready, "general").await;
     let wrong_room = client
         .post(format!("{}/api/room-invite/create", ready.base_url))
         .bearer_auth(wrong_room_ticket)
@@ -155,7 +155,7 @@ async fn create_consumes_exact_ticket_before_body_and_not_ready_writes_nothing()
         .unwrap_or_else(|error| panic!("cross create ticket into another room: {error}"));
     assert_eq!(wrong_room.status(), StatusCode::UNAUTHORIZED);
 
-    let client_owned_identity = issue_create(&ready.tickets, "general").await;
+    let client_owned_identity = issue_create(&ready, "general").await;
     let rejected_identity = client
         .post(format!("{}/api/room-invite/create", ready.base_url))
         .bearer_auth(client_owned_identity)
@@ -179,7 +179,7 @@ async fn create_consumes_exact_ticket_before_body_and_not_ready_writes_nothing()
     ready.stop().await;
 
     let unavailable = start(false).await;
-    let ticket = issue_create(&unavailable.tickets, "general").await;
+    let ticket = issue_create(&unavailable, "general").await;
     let rejected = client
         .post(format!("{}/api/room-invite/create", unavailable.base_url))
         .bearer_auth(ticket)
@@ -209,25 +209,37 @@ async fn create_consumes_exact_ticket_before_body_and_not_ready_writes_nothing()
     unavailable.stop().await;
 }
 
-async fn issue_create(tickets: &TicketStore, room_id: &str) -> String {
-    tickets
-        .issue_human_invite_create(
-            room_id.to_owned(),
-            LOCAL_OPERATOR_USER_ID.to_owned(),
-            LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
+async fn issue_create(server: &RunningServer, room_id: &str) -> String {
+    let authority = server
+        .store
+        .authorize_local_room_manager(
+            room_id,
+            LOCAL_OPERATOR_USER_ID,
+            LOCAL_OPERATOR_PARTICIPANT_ID,
         )
+        .await
+        .unwrap_or_else(|error| panic!("authorize invite-create manager: {error}"));
+    server
+        .tickets
+        .issue_human_invite_create(authority)
         .await
         .unwrap_or_else(|error| panic!("issue invite-create ticket: {error}"))
         .ticket
 }
 
-async fn issue_revoke(tickets: &TicketStore, room_id: &str) -> String {
-    tickets
-        .issue_human_invite_revoke(
-            room_id.to_owned(),
-            LOCAL_OPERATOR_USER_ID.to_owned(),
-            LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
+async fn issue_revoke(server: &RunningServer, room_id: &str) -> String {
+    let authority = server
+        .store
+        .authorize_local_room_manager(
+            room_id,
+            LOCAL_OPERATOR_USER_ID,
+            LOCAL_OPERATOR_PARTICIPANT_ID,
         )
+        .await
+        .unwrap_or_else(|error| panic!("authorize invite-revoke manager: {error}"));
+    server
+        .tickets
+        .issue_human_invite_revoke(authority)
         .await
         .unwrap_or_else(|error| panic!("issue invite-revoke ticket: {error}"))
         .ticket

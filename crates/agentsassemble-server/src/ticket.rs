@@ -9,7 +9,7 @@ use std::{
 };
 
 use agentsassemble_domain::AuthenticatedPrincipal;
-use agentsassemble_persistence::HumanSessionAuthorization;
+use agentsassemble_persistence::{HumanSessionAuthorization, LocalRoomManagerAuthority};
 use chrono::Utc;
 use thiserror::Error;
 use tokio::{sync::Mutex, time::Instant};
@@ -30,6 +30,7 @@ struct StoredTicketGrant {
 enum TicketAuthority {
     Room(AuthenticatedPrincipal),
     RoomHttp(RoomHttpGrant),
+    HumanInviteManager(HumanInviteManagerGrant),
     HumanSession(HumanSessionGrant),
     SettingsDirectoryRead {
         principal_id: String,
@@ -51,12 +52,21 @@ struct RoomHttpGrant {
     purpose: RoomHttpPurpose,
 }
 
+struct HumanInviteManagerGrant {
+    authority: LocalRoomManagerAuthority,
+    purpose: HumanInviteManagerPurpose,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HumanInviteManagerPurpose {
+    Create,
+    Revoke,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RoomHttpPurpose {
     PreferencesRead,
     PreferencesWrite,
-    HumanInviteCreate,
-    HumanInviteRevoke,
     AppearanceUpload,
     PendingPreviewRead { asset_id: String },
     BoundAppearanceRead { asset_id: String },
@@ -91,6 +101,10 @@ pub struct ConsumedRoomHttpTicket {
     pub room_id: String,
     pub principal_id: String,
     pub participant_id: String,
+}
+
+pub(crate) struct ConsumedHumanInviteManagerTicket {
+    pub authority: LocalRoomManagerAuthority,
 }
 
 pub(crate) enum ConsumedRoomPreferenceTicket {
@@ -232,17 +246,10 @@ impl TicketStore {
     /// Returns `Invalid` for empty identity fields or exhausted ticket capacity.
     pub async fn issue_human_invite_create(
         &self,
-        room_id: String,
-        principal_id: String,
-        participant_id: String,
+        authority: LocalRoomManagerAuthority,
     ) -> Result<IssuedTicket, TicketError> {
-        self.issue_room_http(
-            room_id,
-            principal_id,
-            participant_id,
-            RoomHttpPurpose::HumanInviteCreate,
-        )
-        .await
+        self.issue_human_invite_manager(authority, HumanInviteManagerPurpose::Create)
+            .await
     }
 
     /// Issues one exact human-invite revocation credential for a resolved room manager.
@@ -252,16 +259,20 @@ impl TicketStore {
     /// Returns `Invalid` for empty identity fields or exhausted ticket capacity.
     pub async fn issue_human_invite_revoke(
         &self,
-        room_id: String,
-        principal_id: String,
-        participant_id: String,
+        authority: LocalRoomManagerAuthority,
     ) -> Result<IssuedTicket, TicketError> {
-        self.issue_room_http(
-            room_id,
-            principal_id,
-            participant_id,
-            RoomHttpPurpose::HumanInviteRevoke,
-        )
+        self.issue_human_invite_manager(authority, HumanInviteManagerPurpose::Revoke)
+            .await
+    }
+
+    async fn issue_human_invite_manager(
+        &self,
+        authority: LocalRoomManagerAuthority,
+        purpose: HumanInviteManagerPurpose,
+    ) -> Result<IssuedTicket, TicketError> {
+        self.issue_authority(TicketAuthority::HumanInviteManager(
+            HumanInviteManagerGrant { authority, purpose },
+        ))
         .await
     }
 
@@ -483,8 +494,8 @@ impl TicketStore {
     pub(crate) async fn consume_human_invite_create(
         &self,
         ticket: &str,
-    ) -> Result<ConsumedRoomHttpTicket, TicketError> {
-        self.consume_room_http(ticket, RoomHttpPurpose::HumanInviteCreate)
+    ) -> Result<ConsumedHumanInviteManagerTicket, TicketError> {
+        self.consume_human_invite_manager(ticket, HumanInviteManagerPurpose::Create)
             .await
     }
 
@@ -496,8 +507,8 @@ impl TicketStore {
     pub(crate) async fn consume_human_invite_revoke(
         &self,
         ticket: &str,
-    ) -> Result<ConsumedRoomHttpTicket, TicketError> {
-        self.consume_room_http(ticket, RoomHttpPurpose::HumanInviteRevoke)
+    ) -> Result<ConsumedHumanInviteManagerTicket, TicketError> {
+        self.consume_human_invite_manager(ticket, HumanInviteManagerPurpose::Revoke)
             .await
     }
 
@@ -580,6 +591,23 @@ impl TicketStore {
         resolve_room_http_authority(room, &expected)
     }
 
+    async fn consume_human_invite_manager(
+        &self,
+        ticket: &str,
+        expected: HumanInviteManagerPurpose,
+    ) -> Result<ConsumedHumanInviteManagerTicket, TicketError> {
+        let grant = self.consume_grant(ticket).await?;
+        let TicketAuthority::HumanInviteManager(manager) = grant.authority else {
+            return Err(TicketError::Invalid);
+        };
+        if manager.purpose != expected {
+            return Err(TicketError::Invalid);
+        }
+        Ok(ConsumedHumanInviteManagerTicket {
+            authority: manager.authority,
+        })
+    }
+
     async fn consume_room_preference(
         &self,
         ticket: &str,
@@ -595,6 +623,7 @@ impl TicketStore {
                     .map(ConsumedRoomPreferenceTicket::HumanSession)
             }
             TicketAuthority::Room(_)
+            | TicketAuthority::HumanInviteManager(_)
             | TicketAuthority::SettingsDirectoryRead { .. }
             | TicketAuthority::ServerOperator { .. }
             | TicketAuthority::CentralRegistration { .. } => Err(TicketError::Invalid),

@@ -338,6 +338,10 @@ async fn owned_control_pipe_issues_exact_settings_tickets_after_authority_exists
         .await
         .unwrap_or_else(|error| panic!("create settings test room: {error}"));
     assert!(created.status().is_success());
+    let created: Value = created
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("decode created settings test room: {error}"));
 
     let read = server
         .send_control(&LocalControlRequest::IssuePreferencesReadTicket {
@@ -373,7 +377,7 @@ async fn owned_control_pipe_issues_exact_settings_tickets_after_authority_exists
             && ttl_seconds > 0
     ));
 
-    control_pipe_invite_tickets::assert_invite_tickets(&mut server).await;
+    control_pipe_invite_tickets::assert_invite_tickets(&mut server, &created).await;
 
     let directory = server
         .send_control(&LocalControlRequest::IssueSettingsDirectoryReadTicket {

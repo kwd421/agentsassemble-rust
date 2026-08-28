@@ -3,7 +3,8 @@ use chrono::{DateTime, Utc};
 use sqlx::{Row, sqlite::SqliteRow};
 
 use crate::{
-    PersistenceError, RoomUserIdentity, SqliteStore,
+    LocalRoomManagerAuthority, PersistenceError, RoomUserIdentity, SqliteStore,
+    authority::load_active_room,
     room_user_identity::{require_current_local_room_manager, resolve_room_user_identity},
 };
 
@@ -60,26 +61,21 @@ impl SqliteStore {
     /// Fails on invalid invite input, stale manager authority, conflicts, or database errors.
     pub async fn create_human_invite_for_local_manager(
         &self,
-        manager: &RoomUserIdentity,
+        authority: &LocalRoomManagerAuthority,
         invite: NewHumanInvite,
     ) -> Result<HumanInvite, PersistenceError> {
         validate_new_human_invite(&invite)?;
         let invite_id = fingerprint_hex_prefix(&invite.signed_token_fingerprint);
+        let signed_token_fingerprint = invite.signed_token_fingerprint;
+        let join_code_fingerprint = invite.join_code_fingerprint;
         let mut transaction = self.pool.begin().await?;
-        let current = resolve_room_user_identity(
-            &mut transaction,
-            &manager.room_id,
-            &manager.user_id,
-            &manager.participant_id,
-        )
-        .await?;
-        require_current_local_room_manager(&mut transaction, &current).await?;
+        let current = require_exact_local_room_manager(&mut transaction, authority).await?;
         let row = sqlx::query(
             "INSERT INTO room_invites(invite_id, signed_token_fingerprint, join_code_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?) RETURNING invite_id, signed_token_fingerprint, join_code_fingerprint, room_id, base_participant_id, display_name, invite_scope, max_uses, use_count, expires_at, revoked, created_by_user_id, created_at",
         )
         .bind(invite_id)
-        .bind(invite.signed_token_fingerprint.as_slice())
-        .bind(invite.join_code_fingerprint.as_slice())
+        .bind(signed_token_fingerprint.as_slice())
+        .bind(join_code_fingerprint.as_slice())
         .bind(&current.room_id)
         .bind(invite.base_participant_id)
         .bind(invite.display_name)
@@ -91,6 +87,11 @@ impl SqliteStore {
         .fetch_one(&mut *transaction)
         .await?;
         let stored = decode_human_invite(&row)?;
+        if stored.signed_token_fingerprint != signed_token_fingerprint
+            || stored.join_code_fingerprint != join_code_fingerprint
+        {
+            return Err(PersistenceError::InvalidHumanInvite);
+        }
         transaction.commit().await?;
         Ok(stored)
     }
@@ -105,7 +106,7 @@ impl SqliteStore {
     /// Fails on an invalid public ID, stale manager authority, or database errors.
     pub async fn revoke_human_invite_for_local_manager(
         &self,
-        manager: &RoomUserIdentity,
+        authority: &LocalRoomManagerAuthority,
         invite_id: &str,
     ) -> Result<bool, PersistenceError> {
         if !is_invite_id(invite_id) {
@@ -115,14 +116,7 @@ impl SqliteStore {
             ));
         }
         let mut transaction = self.pool.begin().await?;
-        let current = resolve_room_user_identity(
-            &mut transaction,
-            &manager.room_id,
-            &manager.user_id,
-            &manager.participant_id,
-        )
-        .await?;
-        require_current_local_room_manager(&mut transaction, &current).await?;
+        let current = require_exact_local_room_manager(&mut transaction, authority).await?;
         let found = sqlx::query_scalar::<_, String>(
             "UPDATE room_invites SET revoked = 1 WHERE invite_id = ? AND room_id = ? RETURNING invite_id",
         )
@@ -188,6 +182,32 @@ impl SqliteStore {
         .map(decode_human_invite)
         .collect()
     }
+}
+
+async fn require_exact_local_room_manager(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    expected: &LocalRoomManagerAuthority,
+) -> Result<RoomUserIdentity, PersistenceError> {
+    let current = resolve_room_user_identity(
+        transaction,
+        &expected.manager.room_id,
+        &expected.manager.user_id,
+        &expected.manager.participant_id,
+    )
+    .await?;
+    let bootstrap = require_current_local_room_manager(transaction, &current).await?;
+    let room = load_active_room(transaction, &current.room_id).await?;
+    if bootstrap.server_id != expected.server_id
+        || bootstrap.authority_lineage_id != expected.authority_lineage_id
+        || room.room_uid != expected.room_uid
+        || current != expected.manager
+    {
+        return Err(rejected(
+            "room_authority_changed",
+            "Room-manager authority changed before the invite mutation.",
+        ));
+    }
+    Ok(current)
 }
 
 fn validate_new_human_invite(invite: &NewHumanInvite) -> Result<(), PersistenceError> {
@@ -316,7 +336,7 @@ fn rejected(code: &'static str, message: impl Into<String>) -> PersistenceError 
 #[cfg(test)]
 mod tests {
     use agentsassemble_domain::{
-        InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, Participant,
+        InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, Participant, Room,
     };
     use chrono::{Duration, TimeZone, Utc};
 
@@ -411,8 +431,8 @@ mod tests {
         assert!(!created.revoked);
 
         sqlx::query("DELETE FROM participants WHERE room_id = ? AND participant_id = ?")
-            .bind(&manager.room_id)
-            .bind(&manager.participant_id)
+            .bind(&manager.manager.room_id)
+            .bind(&manager.manager.participant_id)
             .execute(&store.pool)
             .await
             .unwrap_or_else(|error| panic!("remove manager membership: {error}"));
@@ -428,6 +448,74 @@ mod tests {
                 .await
                 .unwrap_or_else(|error| panic!("count invites: {error}")),
             1
+        );
+    }
+
+    #[tokio::test]
+    async fn recreated_room_rejects_the_predecessor_manager_authority_before_insert() {
+        let store = fixture().await;
+        let manager = store
+            .authorize_local_room_manager(
+                "general",
+                LOCAL_OPERATOR_USER_ID,
+                LOCAL_OPERATOR_PARTICIPANT_ID,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("authorize predecessor manager: {error}"));
+        let predecessor_invite = store
+            .create_human_invite_for_local_manager(&manager, new_invite(0x22, 0x33))
+            .await
+            .unwrap_or_else(|error| panic!("create predecessor invite: {error}"));
+        let encoded = sqlx::query_scalar::<_, String>(
+            "SELECT room_json FROM rooms WHERE room_id = 'general'",
+        )
+        .fetch_one(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("read predecessor room: {error}"));
+        let mut recreated: Room = serde_json::from_str(&encoded)
+            .unwrap_or_else(|error| panic!("decode predecessor room: {error}"));
+        recreated.room_uid = uuid::Uuid::new_v4();
+        sqlx::query("UPDATE rooms SET room_json = ? WHERE room_id = 'general'")
+            .bind(
+                serde_json::to_string(&recreated)
+                    .unwrap_or_else(|error| panic!("encode recreated room: {error}")),
+            )
+            .execute(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("replace room generation: {error}"));
+
+        assert!(matches!(
+            store
+                .create_human_invite_for_local_manager(&manager, new_invite(0x44, 0x55))
+                .await,
+            Err(PersistenceError::CommandRejected {
+                code: "room_authority_changed",
+                ..
+            })
+        ));
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM room_invites")
+                .fetch_one(&store.pool)
+                .await
+                .unwrap_or_else(|error| panic!("count rejected invites: {error}")),
+            1
+        );
+        assert!(matches!(
+            store
+                .revoke_human_invite_for_local_manager(&manager, &predecessor_invite.invite_id,)
+                .await,
+            Err(PersistenceError::CommandRejected {
+                code: "room_authority_changed",
+                ..
+            })
+        ));
+        assert!(
+            !store
+                .human_invite_by_signed_fingerprint(&predecessor_invite.signed_token_fingerprint,)
+                .await
+                .unwrap_or_else(|error| panic!("read predecessor invite: {error}"))
+                .unwrap_or_else(|| panic!("predecessor invite disappeared"))
+                .revoked
         );
     }
 

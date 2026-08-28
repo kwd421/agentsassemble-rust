@@ -593,6 +593,9 @@ impl From<TicketIssueError> for ApiError {
             TicketIssueError::BootstrapIncomplete => {
                 Self::unauthorized("Local identity bootstrap is not complete.")
             }
+            TicketIssueError::AuthorityMismatch => {
+                Self::unauthorized("The selected room authority is no longer current.")
+            }
             TicketIssueError::Persistence(error) => Self::from(error),
             TicketIssueError::Unavailable => Self::unavailable("Ticket capacity is unavailable."),
         }

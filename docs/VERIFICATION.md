@@ -2942,3 +2942,56 @@ UI key and replaces only `meetingId`; it adds no reference-remapping framework o
 state. The serial `make verify` again passed the same complete gate and test inventory;
 the production main chunk is 771.16 kB (232.39 kB gzip). Final approval is withheld
 until this minimal correction is pushed and re-reviewed.
+
+Daybreaker and the independent web reviewer at verified `매우 높음` each approved
+both `8f71bb6..754198d` and cumulative C1a transport scope `5a032db..754198d` with
+`Critical 0 / High 0 / Medium 0`. Their final review found no remaining structure,
+duplicate-policy, overengineering, authority, or lifecycle issue. Neither review used
+Deep Scan or another automated security scanner.
+
+## Manager invite server authority binding: 2026-08-28
+
+The prior server issued manager invite tickets after resolving only a mutable room ID,
+and the HTTP mutation later reconstructed manager identity from that generic grant. A
+same-ID room generation, replaced bootstrap lineage, or different server between
+frontend capture, ticket issuance, and mutation could therefore escape the intended
+exact-directory provenance. C1a now makes persistence the single current-authority
+owner: it resolves the server ID, bootstrap lineage, stable room UID, canonical room
+ID, and local manager together. Private control compares every captured field before
+issuing a separate create- or revoke-only one-use ticket, and ticket consumption moves
+the immutable snapshot into the owning invite transaction. That transaction resolves
+the current authority again and rejects any mismatch before insert or revoke. Create
+also compares both newly issued credential fingerprints with the decoded returned row
+before commit.
+
+The implementation adds no schema, migration, compatibility path, fallback, cache,
+timer, task, tuple echo, post-commit orphan check, or generic authority framework. A
+low-frequency issuance or mutation performs only the existing bounded SQLite
+transactional reads plus one active-room read needed to obtain the stable UID; the
+ticket retains a few bounded strings and one UUID in memory until its existing expiry.
+This small cost closes a concrete stale-authority/TOCTOU threat without changing invite
+scope, expiry, use limits, ready-ingress creation, ingress-independent revoke, one-use
+ticket semantics, or HTTP response shape.
+
+A repository-wide policy search confirmed that the effective invite-use ceiling remains
+owned by `effective_human_invite_use_limit`. The schema deliberately keeps only the
+nonnegative storage-shape CHECK: adding a product-limit upper CHECK would duplicate that
+changeable policy and conflict with the single owner established in `f83707c`. Atomic
+admission already predicates its increment on the computed owner limit, and durable
+decode rejects a count above it, so no concrete additional write or admission threat
+justifies restoring duplicate DDL policy.
+
+Focused persistence tests replace a room UID under the same room ID and prove a stale
+snapshot can neither insert nor revoke, with row count and prior revoke state unchanged.
+The real owned TCP control-pipe test uses the actual created directory tuple, obtains
+both exact grants, and rejects independently changed server, lineage, and room UID with
+`room_authority_changed`. HTTP boundary tests retain consume-before-body, wrong-purpose,
+wrong-room, ready-ingress, credential/result, and exact revoke behavior. Warning-denied
+workspace Clippy and formatting checks pass. Final serial `make verify` passed every
+architecture, source-growth, policy, formatting, generated-binding, original-CSS,
+production-build, workspace-test, TCP/integration, warning-denied Clippy, documentation,
+and diff gate: 83 frontend files with 483 tests, 20 desktop tests, domain 23,
+persistence 172, protocol 5, provider 120, and server 83 all passed. The production
+main chunk remains 771.16 kB (232.39 kB gzip). No Computer Use resource, real provider,
+Deep Scan, or other automated security scanner ran. Manual approval remains withheld
+until the complete candidate is pushed and reviewed.

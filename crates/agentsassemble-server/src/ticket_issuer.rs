@@ -8,6 +8,14 @@ use thiserror::Error;
 
 use crate::AppState;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ManagerRoomAuthorityRequest {
+    pub server_id: String,
+    pub authority_lineage_id: String,
+    pub room_id: String,
+    pub room_uid: String,
+}
+
 #[derive(Debug, Error)]
 pub enum TicketIssueError {
     #[error("{0}")]
@@ -18,6 +26,8 @@ pub enum TicketIssueError {
     ParticipantInactive,
     #[error("local bootstrap is not complete")]
     BootstrapIncomplete,
+    #[error("room-manager authority does not match the current server room")]
+    AuthorityMismatch,
     #[error("persistence operation failed")]
     Persistence(#[source] PersistenceError),
     #[error("ticket capacity is unavailable")]
@@ -143,12 +153,12 @@ pub async fn issue_preferences_write_ticket(
 /// Returns a bounded room, manager, persistence, or ticket-capacity error.
 pub async fn issue_human_invite_create_ticket(
     state: &AppState,
-    requested_room_id: &str,
+    requested: &ManagerRoomAuthorityRequest,
 ) -> Result<OperatorHttpTicketResponse, TicketIssueError> {
-    let identity = resolve_local_room_manager(state, requested_room_id).await?;
+    let authority = resolve_local_room_manager(state, requested).await?;
     let issued = state
         .tickets
-        .issue_human_invite_create(identity.room_id, identity.user_id, identity.participant_id)
+        .issue_human_invite_create(authority)
         .await
         .map_err(|_| TicketIssueError::Unavailable)?;
     Ok(operator_http_response(state, issued))
@@ -161,12 +171,12 @@ pub async fn issue_human_invite_create_ticket(
 /// Returns a bounded room, manager, persistence, or ticket-capacity error.
 pub async fn issue_human_invite_revoke_ticket(
     state: &AppState,
-    requested_room_id: &str,
+    requested: &ManagerRoomAuthorityRequest,
 ) -> Result<OperatorHttpTicketResponse, TicketIssueError> {
-    let identity = resolve_local_room_manager(state, requested_room_id).await?;
+    let authority = resolve_local_room_manager(state, requested).await?;
     let issued = state
         .tickets
-        .issue_human_invite_revoke(identity.room_id, identity.user_id, identity.participant_id)
+        .issue_human_invite_revoke(authority)
         .await
         .map_err(|_| TicketIssueError::Unavailable)?;
     Ok(operator_http_response(state, issued))
@@ -236,11 +246,11 @@ async fn resolve_local_room_user(
 
 async fn resolve_local_room_manager(
     state: &AppState,
-    requested_room_id: &str,
-) -> Result<agentsassemble_persistence::RoomUserIdentity, TicketIssueError> {
-    let room_id = validate_room_id(requested_room_id)
+    requested: &ManagerRoomAuthorityRequest,
+) -> Result<agentsassemble_persistence::LocalRoomManagerAuthority, TicketIssueError> {
+    let room_id = validate_room_id(&requested.room_id)
         .map_err(|error| TicketIssueError::InvalidRoom(error.message))?;
-    state
+    let authority = state
         .store
         .authorize_local_room_manager(
             &room_id,
@@ -248,7 +258,15 @@ async fn resolve_local_room_manager(
             LOCAL_OPERATOR_PARTICIPANT_ID,
         )
         .await
-        .map_err(map_room_identity_error)
+        .map_err(map_room_identity_error)?;
+    if authority.server_id != requested.server_id
+        || authority.authority_lineage_id != requested.authority_lineage_id
+        || authority.manager.room_id != requested.room_id
+        || authority.room_uid.to_string() != requested.room_uid
+    {
+        return Err(TicketIssueError::AuthorityMismatch);
+    }
+    Ok(authority)
 }
 
 fn operator_http_response(

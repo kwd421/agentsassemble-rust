@@ -193,6 +193,7 @@ impl TicketStore {
                 })
             }
             TicketAuthority::RoomHttp(_)
+            | TicketAuthority::HumanInviteManager(_)
             | TicketAuthority::HumanSession(_)
             | TicketAuthority::SettingsDirectoryRead { .. }
             | TicketAuthority::ServerOperator { .. }
@@ -232,6 +233,7 @@ impl TicketStore {
                 ))
             }
             TicketAuthority::RoomHttp(_)
+            | TicketAuthority::HumanInviteManager(_)
             | TicketAuthority::SettingsDirectoryRead { .. }
             | TicketAuthority::ServerOperator { .. }
             | TicketAuthority::CentralRegistration { .. } => Err(TicketError::Invalid),
@@ -346,6 +348,7 @@ impl TicketStore {
                 ConsumedProfileTicket::ServerOperator { principal_id }
             }
             TicketAuthority::RoomHttp(_)
+            | TicketAuthority::HumanInviteManager(_)
             | TicketAuthority::SettingsDirectoryRead { .. }
             | TicketAuthority::CentralRegistration { .. } => return Err(TicketError::Invalid),
         })

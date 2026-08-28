@@ -18,7 +18,7 @@ use crate::{
         BodyDecodeError, PRIVATE_NO_STORE, bearer_ticket, decode_json_body, exact_tauri_cors,
     },
     human_invite_credentials::{HumanInviteCredentialDraft, format_invite_timestamp},
-    ticket::ConsumedRoomHttpTicket,
+    ticket::ConsumedHumanInviteManagerTicket,
 };
 
 const MAX_MANAGER_BODY_BYTES: usize = 8 * 1024;
@@ -115,15 +115,10 @@ async fn create_invite(
             issued_at,
             expires_at,
         })?;
-    let manager = agentsassemble_persistence::RoomUserIdentity {
-        room_id: grant.room_id,
-        user_id: grant.principal_id,
-        participant_id: grant.participant_id,
-    };
     let invite = state
         .store
         .create_human_invite_for_local_manager(
-            &manager,
+            &grant.authority,
             NewHumanInvite {
                 signed_token_fingerprint: *credentials.signed_token_fingerprint(),
                 join_code_fingerprint: *credentials.join_code_fingerprint(),
@@ -168,15 +163,10 @@ async fn revoke_invite(
     let payload: RevokeInviteRequest = decode_json_body(request, MAX_MANAGER_BODY_BYTES)
         .await
         .map_err(InviteManagerHttpError::from_body)?;
-    let room_id = bound_room_id(&grant, &payload.meeting_id)?;
-    let manager = agentsassemble_persistence::RoomUserIdentity {
-        room_id,
-        user_id: grant.principal_id,
-        participant_id: grant.participant_id,
-    };
+    bound_room_id(&grant, &payload.meeting_id)?;
     if !state
         .store
-        .revoke_human_invite_for_local_manager(&manager, &payload.invite_id)
+        .revoke_human_invite_for_local_manager(&grant.authority, &payload.invite_id)
         .await?
     {
         return Err(InviteManagerHttpError::not_found());
@@ -189,7 +179,7 @@ async fn revoke_invite(
 async fn consume_create_ticket(
     state: &AppState,
     headers: &axum::http::HeaderMap,
-) -> Result<ConsumedRoomHttpTicket, InviteManagerHttpError> {
+) -> Result<ConsumedHumanInviteManagerTicket, InviteManagerHttpError> {
     let ticket = bearer_ticket(headers).ok_or_else(InviteManagerHttpError::unauthorized)?;
     state
         .tickets
@@ -201,7 +191,7 @@ async fn consume_create_ticket(
 async fn consume_revoke_ticket(
     state: &AppState,
     headers: &axum::http::HeaderMap,
-) -> Result<ConsumedRoomHttpTicket, InviteManagerHttpError> {
+) -> Result<ConsumedHumanInviteManagerTicket, InviteManagerHttpError> {
     let ticket = bearer_ticket(headers).ok_or_else(InviteManagerHttpError::unauthorized)?;
     state
         .tickets
@@ -211,12 +201,12 @@ async fn consume_revoke_ticket(
 }
 
 fn bound_room_id(
-    grant: &ConsumedRoomHttpTicket,
+    grant: &ConsumedHumanInviteManagerTicket,
     requested: &str,
 ) -> Result<String, InviteManagerHttpError> {
     let room_id = validate_room_id(requested)
         .map_err(|error| InviteManagerHttpError::bad_request(error.message))?;
-    if room_id != grant.room_id {
+    if room_id != grant.authority.manager.room_id {
         return Err(InviteManagerHttpError::unauthorized());
     }
     Ok(room_id)
@@ -341,7 +331,8 @@ impl From<PersistenceError> for InviteManagerHttpError {
                     "session_revoked"
                     | "user_profile_missing"
                     | "profile_authority_mismatch"
-                    | "permission_denied",
+                    | "permission_denied"
+                    | "room_authority_changed",
                 ..
             } => Self {
                 status: StatusCode::FORBIDDEN,

@@ -5,9 +5,10 @@ pre-join avatar flow, fail-closed browser credential custody, the live-session
 profile/preferences/WebSocket exchanges, and exact participant leave are implemented
 and production-browser verified; configured-manual and managed public ingress with
 stable entry plus backend manager invite create/revoke and private-control ticket
-issuance and the native desktop manager-invite ticket bridge are implemented and
-test-verified; frontend API/controller/UI integration, remaining typed exchanges,
-and packaged activation remain incomplete and unverified
+issuance, exact manager-room authority transport and transaction revalidation, and
+the native desktop manager-invite ticket bridge are implemented and test-verified;
+frontend API/controller/UI integration, remaining typed exchanges, and packaged
+activation remain incomplete and unverified
 
 ## Definition
 
@@ -477,12 +478,12 @@ the legacy public-URL input/configure path is removed rather than restored as mu
 manual-ingress authority. A server-internal issuance sequence in those grants orders
 control intent without becoming wire state; the existing ingress lifecycle mutex lets
 only a newer Start or Stop mutate the managed process. Invite creation still uses the
-old moderator helper and cannot
-satisfy the Rust one-use room-bound manager-ticket boundary, and therefore remains
-failed closed until C1. Backend manager invite create already captures one ready
+old moderator helper and therefore does not invoke the implemented Rust one-use
+room-bound manager-ticket boundary; the frontend remains failed closed until C1b.
+Backend manager invite create already captures one ready
 ingress snapshot; revoke uses only its exact room-bound manager grant and remains
 available when ingress is not ready. The native desktop bridge obtains and returns
-the exact operation grant. C1 frontend activation must invoke that bridge and present
+the exact operation grant. C1b frontend activation must invoke that bridge and present
 its ticket to the matching HTTP route, which consumes the ticket before reading the
 body. It copies only the create response's public join URL; a local preview is not
 presented as admission parity. The token is removed from browser history after it is
@@ -596,8 +597,9 @@ fully verified, and approved by both manual reviewers. B2 is public through `2b9
 fully verified, and approved by both manual reviewers. The first C1a unit strictly
 validates and carries the exact manager-room authority tuple through the frontend,
 Tauri invocation, and private control request without activating the UI. C1a server
-ticket issuance and transaction revalidation, C1b frontend activation, C2 retained
-custody, and the packaged flow remain incomplete.
+issuance retains that tuple in a separate exact-purpose ticket, while create and
+revoke revalidate it inside their mutation transaction. C1b frontend activation, C2
+retained custody, and the packaged flow remain incomplete.
 
 ## Trusted ingress boundary
 
