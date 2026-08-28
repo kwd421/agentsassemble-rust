@@ -3128,22 +3128,27 @@ separately retained server authority. That split could mint a native manager req
 from an unconfirmed directory, a remote room, an old authority lineage, or a room UID
 that changed after the caller captured the room object.
 
-The room directory now owns one synchronous resolver. It reads the current dock and
-the bound and retained directory authority inside that owner, requires host eligibility,
-no current sync issue, exactly one local connected dock identity, exact server equality,
-and a present room UID, then delegates canonical tuple validation and freezing to the
-existing desktop manager-authority parser. Its sync-state mirror has one writer with
-the visible state, so an asynchronous caller cannot reuse a stale React closure after
-the directory becomes unconfirmed. Tests prove exact frozen resolution, fail-closed
-unconfirmed and remote states, stale-lineage rejection, and same-dock-ID room-UID
-replacement without mutating the earlier snapshot.
+The room directory now owns one monotonic publication epoch across layout-reserved
+hydration, explicit verification, refresh, and room creation. Actual post-ticket POST
+and GET dispatch, every awaited continuation, retry custody, visible issue publication,
+global authority binding, and final UI publication require the same current continuity.
+Only a strict active payload may create a frozen manager map for one exact eligible
+local dock; mutable dock fields cannot replace its tuple. Superseded work cannot
+dispatch, publish, alert, or clear the retained exact room-create intent.
 
-This is an observed authority-boundary correction, not a generic room abstraction. It
-adds no network request, disk write, timer, task, cache, compatibility path, migration,
-or fallback. The app retains one host-eligibility ref and one reference to the already
-owned sync state; each manager operation performs one linear scan of the current dock
-and creates one four-string frozen tuple. Full `make verify` passed all mandatory gates,
-all 84 frontend files with 499 tests, desktop 20, domain 23, persistence 172, protocol 5,
-provider 120, server 84, and every integration/TCP/doc test. The production main chunk
-is 771.40 kB (232.41 kB gzip). Packaged Computer Use remains deferred until the complete
-C2 controller/UI activation; manual review of this first C2 candidate is pending.
+The first Very High review found one Medium performance issue: the unpaged directory's
+manager-map construction rescanned every active payload row for every eligible dock,
+making valid large publications synchronous O(A²) main-thread work. `3cfaf4b` replaces
+that scan with one strict active-room lookup owner, preserving all duplicate and
+fail-closed association checks while reducing construction to O(payload+docks) time
+and O(active payload) temporary memory. The production main chunk moved from 774.56
+to 774.55 kB; gzip remained 233.37 kB. No network, disk, timer, task, fallback,
+migration, compatibility path, or second policy owner was added.
+
+Focused correction verification passed 42 tests. Final `make verify` passed every
+mandatory gate, all 84 frontend files with 508 tests, desktop 20, domain 23,
+persistence 172, protocol 5, provider 120, server 84, and every integration/TCP/doc
+test. No Computer Use resource, provider, Deep Scan, or automated scanner ran. The
+foundation, continuity correction, and linearization correction received final web
+and Daybreaker approval with `Critical 0 / High 0 / Medium 0`. Retained invite custody,
+controller/UI activation, and packaged Computer Use verification remain incomplete.
