@@ -86,8 +86,11 @@ export function useRoomInviteController({
     settle?.();
   }
 
-  function beginIngressOperation() {
+  function beginIngressOperation(
+    nextState: PublicAccessTransition = "idle"
+  ) {
     retireIngressOperation();
+    setPublicAccessTransition(nextState);
     return ingressGenerationRef.current;
   }
 
@@ -132,6 +135,7 @@ export function useRoomInviteController({
 
   function close() {
     retireIngressOperation();
+    setPublicAccessTransition("idle");
     setModal(null);
   }
 
@@ -146,6 +150,7 @@ export function useRoomInviteController({
     if (!modal) return;
     if (!localOperatorEligible) {
       retireIngressOperation();
+      setPublicAccessTransition("idle");
       setPublicInviteStatus(null);
       setCopyStatus("외부 접속 관리는 패키지 앱의 로컬 운영자만 사용할 수 있습니다.");
       return;
@@ -169,7 +174,9 @@ export function useRoomInviteController({
       throw new Error("외부 접속 관리는 패키지 앱의 로컬 운영자만 사용할 수 있습니다.");
     }
     assertIngressOperation(generation);
-    const status = await fetchPublicInviteStatus();
+    const status = await fetchPublicInviteStatus(() =>
+      assertIngressOperation(generation)
+    );
     assertIngressOperation(generation);
     setPublicInviteStatus(status);
     return status;
@@ -193,7 +200,9 @@ export function useRoomInviteController({
     }
     assertIngressOperation(generation);
     setCopyStatus("공개 터널 준비 중...");
-    status = await startPublicInviteTunnel();
+    status = await startPublicInviteTunnel(() =>
+      assertIngressOperation(generation)
+    );
     assertIngressOperation(generation);
     setPublicInviteStatus(status);
     if (status.public_url && status.tunnel.phase === "running") return status;
@@ -262,12 +271,13 @@ export function useRoomInviteController({
       setCopyStatus("외부 접속 관리는 패키지 앱의 로컬 운영자만 사용할 수 있습니다.");
       return;
     }
-    const generation = beginIngressOperation();
-    setPublicAccessTransition("starting");
+    const generation = beginIngressOperation("starting");
     setCopyStatus("외부 접속 주소를 준비하는 중...");
     try {
       assertIngressOperation(generation);
-      const started = await startPublicInviteTunnel();
+      const started = await startPublicInviteTunnel(() =>
+        assertIngressOperation(generation)
+      );
       assertIngressOperation(generation);
       setPublicInviteStatus(started);
       const latest =
@@ -295,12 +305,13 @@ export function useRoomInviteController({
       setCopyStatus("외부 접속 관리는 패키지 앱의 로컬 운영자만 사용할 수 있습니다.");
       return;
     }
-    const generation = beginIngressOperation();
-    setPublicAccessTransition("stopping");
+    const generation = beginIngressOperation("stopping");
     setCopyStatus("외부 접속을 닫는 중...");
     try {
       assertIngressOperation(generation);
-      const status = await stopPublicInviteTunnel();
+      const status = await stopPublicInviteTunnel(() =>
+        assertIngressOperation(generation)
+      );
       assertIngressOperation(generation);
       setPublicInviteStatus(status);
       setSecureInviteUrl("");

@@ -92,19 +92,30 @@ export async function postJson<T>(url: string, body: object): Promise<T> {
   return res.json();
 }
 
-export async function fetchJsonServerOperator<T>(url: string): Promise<T> {
+export async function fetchJsonServerOperator<T>(
+  url: string,
+  beforeDispatch?: () => void
+): Promise<T> {
   if (isDesktopWebview()) {
-    const res = await fetchDesktopOperatorRuntime(url);
+    const res = await fetchDesktopOperatorRuntime(url, {}, beforeDispatch);
     if (!res.ok) throw await responseError(res);
     return res.json();
   }
+  beforeDispatch?.();
   return fetchJson<T>(url);
 }
 
-export async function postEmptyServerOperator<T>(url: string): Promise<T> {
-  const res = isDesktopWebview()
-    ? await fetchDesktopOperatorRuntime(url, { method: "POST" })
-    : await fetch(url, { method: "POST" });
+export async function postEmptyServerOperator<T>(
+  url: string,
+  beforeDispatch?: () => void
+): Promise<T> {
+  let res: Response;
+  if (isDesktopWebview()) {
+    res = await fetchDesktopOperatorRuntime(url, { method: "POST" }, beforeDispatch);
+  } else {
+    beforeDispatch?.();
+    res = await fetch(url, { method: "POST" });
+  }
   if (!res.ok) throw await responseError(res);
   return res.json();
 }

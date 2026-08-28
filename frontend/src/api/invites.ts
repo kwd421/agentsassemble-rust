@@ -90,22 +90,24 @@ export function createRoomInvite({
   );
 }
 
-export function fetchPublicInviteStatus() {
-  return fetchJsonServerOperator<unknown>("/api/public-invite/status").then(
+export function fetchPublicInviteStatus(beforeDispatch?: () => void) {
+  return fetchJsonServerOperator<unknown>("/api/public-invite/status", beforeDispatch).then(
     parsePublicIngressStatus
   );
 }
 
-export function startPublicInviteTunnel() {
-  return postEmptyServerOperator<unknown>("/api/public-invite/tunnel/start").then(
-    parsePublicIngressStatus
-  );
+export function startPublicInviteTunnel(beforeDispatch?: () => void) {
+  return postEmptyServerOperator<unknown>(
+    "/api/public-invite/tunnel/start",
+    beforeDispatch
+  ).then(parsePublicIngressStatus);
 }
 
-export function stopPublicInviteTunnel() {
-  return postEmptyServerOperator<unknown>("/api/public-invite/tunnel/stop").then(
-    parsePublicIngressStatus
-  );
+export function stopPublicInviteTunnel(beforeDispatch?: () => void) {
+  return postEmptyServerOperator<unknown>(
+    "/api/public-invite/tunnel/stop",
+    beforeDispatch
+  ).then(parsePublicIngressStatus);
 }
 
 export function joinRoomInvite({

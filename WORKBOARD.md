@@ -1,6 +1,6 @@
 # WORKBOARD
 
-Status: Phase 5 — the admitted-human WebSocket exchange, exact session lifetime, bounded command provenance, copied frontend transport, reachable one-use/reusable normal/read-only browser matrix, remote human preferences, exact `participant.leave`, startup-configured manual public trust, the complete managed quick-tunnel/stable-entry lifecycle, backend manager invite create/revoke controls, and the native desktop manager-invite ticket bridge are implemented and test-verified. Frontend API/controller/UI integration and its packaged activation stay explicitly incomplete and unverified.
+Status: Phase 5 — the admitted-human WebSocket exchange, exact session lifetime, bounded command provenance, copied frontend transport, reachable one-use/reusable normal/read-only browser matrix, remote human preferences, exact `participant.leave`, startup-configured manual public trust, the complete managed quick-tunnel/stable-entry lifecycle, B2 frontend ingress controls, backend manager invite create/revoke controls, and the native desktop manager-invite ticket bridge are implemented and test-verified. C1 manager-invite frontend authority, C2 retained invite custody, and packaged activation stay explicitly incomplete and unverified.
 
 Purpose: route the asynchronous Rust reimplementation without duplicating its contracts.
 
@@ -11,8 +11,8 @@ Purpose: route the asynchronous Rust reimplementation without duplicating its co
 - Downstream owner: [`docs/specs/room-settings-preferences-appearance-slice.md`](docs/specs/room-settings-preferences-appearance-slice.md)
 - Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - Real-client verification: [`docs/VERIFICATION.md`](docs/VERIFICATION.md)
-- Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`; verified public Rust implementation baseline `fdb4e49`; pushed and locally verified B2 frontend cutover `e5c9aba`.
-- Active gate: B1a/B1b and their admission-custody corrections are approved. B2 is pushed and locally verified, with manual-review corrections in progress; C1 manager-invite frontend authority and packaged activation remain incomplete. The reviewed B1a/B1b/B2/C1a/C1b/C2 order is recorded in the active owner above.
+- Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`; verified public Rust implementation baseline `fdb4e49`; pushed and locally verified B2 correction baseline `d0b6794`.
+- Active gate: B1a/B1b and their admission-custody corrections are approved. B2 is pushed and locally verified, with second manual-review corrections in progress; C1 manager-invite frontend authority, C2 retained custody, and packaged activation remain incomplete. The reviewed B1a/B1b/B2/C1a/C1b/C2 order is recorded in the active owner above.
 - Required order: connect the copied frontend through the implemented exact desktop manager-invite grants to the create/revoke routes, then complete packaged frontend activation before continuing with appearance. Update the exposure map only after a surface is reachable and verified.
 - Exit: local and remote humans reach preferences through their real authority owner, appearance uses its complete asset lifecycle, incomplete adjacent surfaces remain visibly unavailable, and mandatory gates, packaged frontend flows, cross-reviews, and verification cleanup pass.
 

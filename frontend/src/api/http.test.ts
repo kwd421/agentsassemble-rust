@@ -254,6 +254,41 @@ describe("desktop profile HTTP routing", () => {
     expect(emptyPostHeaders.get("Authorization")).toBe(`Bearer ${"e".repeat(64)}`);
     expect(emptyPostHeaders.get("Content-Type")).toBeNull();
   });
+
+  it("rechecks operation ownership after a delayed operator ticket", async () => {
+    let resolveTicket!: (value: unknown) => void;
+    const ticket = new Promise((resolve) => {
+      resolveTicket = resolve;
+    });
+    const invoke = vi
+      .fn()
+      .mockResolvedValueOnce(HOST_SURFACE)
+      .mockReturnValueOnce(ticket);
+    Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await requestDesktopHostProductSurface();
+    let current = true;
+    const request = postEmptyServerOperator(
+      "/api/public-invite/tunnel/start",
+      () => {
+        if (!current) throw new Error("retired operator request");
+      }
+    );
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledTimes(2));
+    const rejection = expect(request).rejects.toThrow("retired operator request");
+
+    current = false;
+    resolveTicket({
+      ticket: "f".repeat(64),
+      ttl_seconds: 30,
+      http_base_url: "http://127.0.0.1:49154",
+    });
+
+    await rejection;
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 describe("browser session WebSocket ticket routing", () => {

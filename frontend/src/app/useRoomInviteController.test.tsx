@@ -307,4 +307,74 @@ describe("useRoomInviteController", () => {
       vi.useRealTimers();
     }
   });
+
+  it("does not dispatch Start after Stop retires a delayed ticket", async () => {
+    const ticket = deferred<void>();
+    let startDispatched = false;
+    apiMocks.startPublicInviteTunnel.mockImplementation(
+      async (beforeDispatch?: () => void) => {
+        await ticket.promise;
+        beforeDispatch?.();
+        startDispatched = true;
+        return startingStatus;
+      }
+    );
+    apiMocks.stopPublicInviteTunnel.mockResolvedValue(stoppedStatus);
+    const hook = renderInviteController();
+    let startPromise!: Promise<void>;
+
+    act(() => {
+      startPromise = hook.result.current.startTunnel();
+    });
+    await waitFor(() => expect(apiMocks.startPublicInviteTunnel).toHaveBeenCalledOnce());
+    expect(apiMocks.startPublicInviteTunnel).toHaveBeenCalledWith(expect.any(Function));
+
+    await act(async () => {
+      await hook.result.current.stopTunnel();
+      ticket.resolve();
+      await startPromise;
+    });
+
+    expect(startDispatched).toBe(false);
+    expect(hook.result.current.publicInviteStatus).toEqual(stoppedStatus);
+    expect(hook.result.current.publicAccessTransition).toBe("idle");
+  });
+
+  it("gives a superseding invite operation ownership of the access state", async () => {
+    vi.useFakeTimers();
+    try {
+      apiMocks.startPublicInviteTunnel.mockResolvedValue(startingStatus);
+      apiMocks.fetchPublicInviteStatus.mockResolvedValue(startingStatus);
+      apiMocks.createOperatorPairing.mockResolvedValue({
+        status: "created",
+        pairing_id: "pair-superseding",
+        room_id: room.meetingId,
+        target_origin: publicStatus.public_url,
+        expires_at: "2026-07-15T12:02:00Z",
+        pairing_url: `${publicStatus.public_url}/pair?token=aap1_superseding`,
+      });
+      const hook = renderInviteController();
+      let startPromise!: Promise<void>;
+
+      await act(async () => {
+        startPromise = hook.result.current.startTunnel();
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(vi.getTimerCount()).toBe(1);
+
+      apiMocks.fetchPublicInviteStatus.mockResolvedValue(publicStatus);
+      await act(async () => {
+        await hook.result.current.generateOperatorPairing(room);
+        await startPromise;
+      });
+
+      expect(vi.getTimerCount()).toBe(0);
+      expect(hook.result.current.publicAccessTransition).toBe("idle");
+      expect(hook.result.current.operatorPairingUrl).toContain("aap1_superseding");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

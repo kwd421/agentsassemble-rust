@@ -471,18 +471,19 @@ verified session principal and room state, not query flags or local storage.
 
 The copied frontend's `localPreviewInviteUrlForRoom` query-only guest path and
 `secureInviteCopyTarget` fallback are removed when real invite creation activates.
-The copied external-access modal/controller entry is already mounted, but its legacy
-Host-token/raw-fetch calls cannot satisfy the Rust one-use room-bound manager-ticket
-boundary and therefore fail closed. Its legacy public-URL input/configure path is
-removed during activation rather than restored as mutable manual-ingress authority.
-Backend manager invite create already captures one ready ingress snapshot; revoke
-uses only its exact room-bound manager grant and remains available when ingress is not
-ready. The native desktop bridge obtains and returns the exact operation grant.
-Frontend activation must invoke that bridge and present its ticket to the matching
-HTTP route, which consumes the ticket before reading the body. It copies only the
-create response's public join URL; a local preview is not presented as admission
-parity. The token is removed from browser history after it is captured, and stored
-session state cannot override a failed durable verification.
+The copied external-access modal/controller entry is mounted. Its B2 status/start/stop
+controls use fresh one-use server-operator tickets and generation-owned polling, and
+the legacy public-URL input/configure path is removed rather than restored as mutable
+manual-ingress authority. Invite creation still uses the old moderator helper, cannot
+satisfy the Rust one-use room-bound manager-ticket boundary, and therefore remains
+failed closed until C1. Backend manager invite create already captures one ready
+ingress snapshot; revoke uses only its exact room-bound manager grant and remains
+available when ingress is not ready. The native desktop bridge obtains and returns
+the exact operation grant. C1 frontend activation must invoke that bridge and present
+its ticket to the matching HTTP route, which consumes the ticket before reading the
+body. It copies only the create response's public join URL; a local preview is not
+presented as admission parity. The token is removed from browser history after it is
+captured, and stored session state cannot override a failed durable verification.
 
 Browser admission retry custody has one bounded session-storage owner. A request is
 `pending` only while its exact invite credential fingerprint, current browser
@@ -588,9 +589,9 @@ before the next stage. Packaged Computer Use remains the completion test rather 
 a substitute for these authority and failure contracts.
 
 B1a/B1b and the browser admission-custody corrections are public through `fdb4e49`,
-fully verified, and approved by both manual reviewers. B2 is the next incomplete
-stage; manager-invite frontend activation and its packaged flow are not implied by
-the completed foundation.
+fully verified, and approved by both manual reviewers. B2 is implemented, pushed,
+locally verified, and still under manual correction review; C1 manager-invite
+frontend activation, C2 retained custody, and the packaged flow remain incomplete.
 
 ## Trusted ingress boundary
 

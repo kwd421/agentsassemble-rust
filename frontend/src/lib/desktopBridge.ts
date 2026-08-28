@@ -524,7 +524,8 @@ export async function fetchDesktopRuntime(
 
 export async function fetchDesktopOperatorRuntimeWithBase(
   path: string,
-  init: RequestInit = {}
+  init: RequestInit = {},
+  beforeDispatch?: () => void
 ): Promise<DesktopOperatorHttpResponse> {
   if (!path.startsWith("/") || path.startsWith("//")) {
     throw new Error("데스크톱 Rust 런타임 경로가 잘못되었습니다.");
@@ -532,6 +533,7 @@ export async function fetchDesktopOperatorRuntimeWithBase(
   const issued = await requestDesktopOperatorTicket();
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${issued.ticket}`);
+  beforeDispatch?.();
   return {
     response: await fetch(`${issued.http_base_url}${path}`, { ...init, headers }),
     httpBaseUrl: issued.http_base_url,
@@ -540,9 +542,10 @@ export async function fetchDesktopOperatorRuntimeWithBase(
 
 export async function fetchDesktopOperatorRuntime(
   path: string,
-  init: RequestInit = {}
+  init: RequestInit = {},
+  beforeDispatch?: () => void
 ): Promise<Response> {
-  return (await fetchDesktopOperatorRuntimeWithBase(path, init)).response;
+  return (await fetchDesktopOperatorRuntimeWithBase(path, init, beforeDispatch)).response;
 }
 
 export async function fetchDesktopCentralRegistration(
