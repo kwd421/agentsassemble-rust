@@ -3494,3 +3494,42 @@ The final critical-web review independently returned
 automated security scanner, or Computer Use ran. The sole critical-review browser tab
 was closed after reading the completed response, the tab list was empty, and the browser
 connection was reset.
+
+## Lobby message-pin threshold batch: 2026-08-29
+
+The incomplete threshold range `258c365..49f4869` establishes the lobby pin's durable
+and HTTP authority without claiming frontend completion. Schema 44 owns one bounded
+pointer from `(room_id, event_id)` to the exact `(room_id, event_seq)` in `room_events`;
+it copies no message, author, attachment, or participant state. Event or room deletion
+cascades only its owned pins. The persistence unit revalidates the current local manager
+or exact human session, derives `room.history`/`message.modify` from current room
+authority, validates one public non-deleted `message_final`, mutates the pointer, and
+loads the returned canonical projection in one transaction. Read-only humans can list
+but cannot mutate.
+
+The concrete transport threats were cross-purpose/replayed credentials, a ticket bound
+to another room, a revoked identity reaching body allocation, and a non-message pointer
+becoming durable. Separate one-use pin-read and pin-write purposes now span the private
+desktop control pipe and remote session exchange. The real TCP tests prove wrong-purpose
+tickets are consumed, wrong-room tickets cannot be replayed, stale local identity is
+rejected before an 8-KiB body reaches the 4-KiB decoder, and a non-message target returns
+not-found with zero pins. No host token, raw session bearer at the pin route, WebSocket
+pin command/event, compatibility path, migration, fallback, cache, timer, background
+task, generic message repository, or client-owned authority was added.
+
+The owning queries allocate only the returned projection. Listing joins pin pointers to
+events through their composite primary key; mutation's event-ID lookup is currently a
+room-key range scan with a JSON identity predicate. No new event index was added because
+pin mutation is not yet shown to be latency-bound, while such an index would impose
+disk and write amplification on every room event. This batch therefore claims no CPU,
+memory, disk, or latency improvement. The next packaged frontend verification will
+measure the actual flow before any performance structure is considered.
+
+Full serial `make verify` passed architecture, source-growth, policy, both Cargo
+formatters, generated bindings, original-CSS verification, production frontend build,
+frontend 87/539, desktop 20, domain 26, persistence 184, protocol 6, provider 120,
+server 85, every TCP/integration/doc test, warning-denied Clippy, and the final diff
+gate. No real provider, Deep Scan, automated security scanner, or Computer Use ran.
+The copied frontend still uses its old pin transport and the feature remains explicitly
+incomplete pending that cutover and packaged verification. This 2,000-line threshold
+batch requires critical-web and Daybreaker review before implementation continues.
