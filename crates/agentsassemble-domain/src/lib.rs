@@ -1,6 +1,7 @@
 mod command;
 mod diagnostic;
 mod identity;
+mod message_pins;
 mod model;
 mod profile;
 mod projection;
@@ -13,11 +14,14 @@ mod text;
 pub use command::{CommandRejection, MessageSend, canonical_payload_hash, prepare_message_event};
 pub use diagnostic::{redact_persisted_diagnostic, redact_persisted_diagnostic_text};
 pub use identity::{stable_bundle_identity, stable_content_identity, stable_identity_hash};
+pub use message_pins::{
+    MAX_LOBBY_MESSAGE_PINS, MAX_MESSAGE_PIN_EVENT_ID_BYTES, is_message_pin_event_id,
+};
 pub use model::{
     Actor, AgentSession, AgentSessionDraft, AuthenticatedPrincipal,
     CURRENT_RUNTIME_PROFILE_VERSION, CapabilitySet, ClientKind, DurableAgentSession, InviteScope,
-    LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, MAX_LOBBY_MESSAGE_PINS, Participant,
-    ParticipantRole, ParticipantStatus, ProviderAvailability, ProviderCatalog, ProviderControl,
+    LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, Participant, ParticipantRole,
+    ParticipantStatus, ProviderAvailability, ProviderCatalog, ProviderControl,
     ProviderControlOption, Room, RoomEvent, RoomStatus, SnapshotMode,
 };
 pub use profile::{UserProfile, UserProfilePatch, avatar_attachment_id, canonical_avatar_url};

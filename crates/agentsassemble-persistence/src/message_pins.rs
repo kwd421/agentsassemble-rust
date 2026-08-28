@@ -1,6 +1,6 @@
 use agentsassemble_domain::{
     LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, MAX_LOBBY_MESSAGE_PINS, RoomEvent,
-    has_visible_text,
+    has_visible_text, is_message_pin_event_id,
 };
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde_json::Value;
@@ -300,7 +300,7 @@ fn require_message_event(
 }
 
 fn validate_event_id(event_id: &str) -> Result<(), PersistenceError> {
-    if event_id.is_empty() || event_id.len() > 128 || event_id.contains('\0') {
+    if !is_message_pin_event_id(event_id) {
         return Err(rejected("bad_request", "event_id is invalid."));
     }
     Ok(())

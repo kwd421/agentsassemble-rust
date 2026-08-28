@@ -224,6 +224,14 @@ describe("lobby message-pin HTTP authority", () => {
         authority: { kind: "local" },
       })
     ).rejects.toThrow("메시지 식별자");
+    await expect(
+      setLobbyMessagePinned({
+        roomId: "general",
+        eventId: "é".repeat(65),
+        pinned: true,
+        authority: { kind: "local" },
+      })
+    ).rejects.toThrow("메시지 식별자");
     expect(bridge.read).not.toHaveBeenCalled();
     expect(bridge.write).not.toHaveBeenCalled();
   });

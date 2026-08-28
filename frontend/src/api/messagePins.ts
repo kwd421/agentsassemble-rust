@@ -8,7 +8,10 @@ import {
   requiredString,
   strictRecord,
 } from "../lib/strictJsonContract";
-import { MAX_LOBBY_MESSAGE_PINS } from "../types/generated/MESSAGE_PINS_WIRE";
+import {
+  MAX_LOBBY_MESSAGE_PINS,
+  MAX_MESSAGE_PIN_EVENT_ID_BYTES,
+} from "../types/generated/MESSAGE_PINS_WIRE";
 import {
   exchangeSessionHttpTicket,
   queryString,
@@ -52,7 +55,7 @@ function canonicalEventId(value: unknown): string {
     typeof value !== "string" ||
     !value ||
     value.includes("\0") ||
-    new TextEncoder().encode(value).byteLength > 128
+    new TextEncoder().encode(value).byteLength > MAX_MESSAGE_PIN_EVENT_ID_BYTES
   ) {
     throw new Error("메시지 식별자가 올바르지 않습니다.");
   }

@@ -1,4 +1,5 @@
 use super::tests::installed_schema;
+use agentsassemble_domain::{MAX_MESSAGE_PIN_EVENT_ID_BYTES, is_message_pin_event_id};
 
 async fn seed_room_event(pool: &sqlx::SqlitePool, room_id: &str, seq: i64, event_id: &str) {
     sqlx::query("INSERT INTO rooms(room_id, room_json, settings_json) VALUES (?, '{}', '{}')")
@@ -27,18 +28,6 @@ async fn message_pin_schema_owns_bounded_event_pointers() {
     .await
     .unwrap_or_else(|error| panic!("insert valid pin: {error}"));
 
-    for invalid_event_id in ["", &"x".repeat(129), "event\0tail"] {
-        assert!(
-            sqlx::query(
-                "INSERT INTO room_message_pins(room_id, event_id, event_seq, pinned_at) VALUES ('general', ?, 1, 1)",
-            )
-            .bind(invalid_event_id)
-            .execute(&pool)
-            .await
-            .is_err(),
-            "accepted invalid event ID"
-        );
-    }
     assert!(
         sqlx::query(
             "INSERT INTO room_message_pins(room_id, event_id, event_seq, pinned_at) VALUES ('general', 'event-2', 2, 1)",
@@ -57,6 +46,48 @@ async fn message_pin_schema_owns_bounded_event_pointers() {
         .is_err(),
         "accepted a second identity for one event sequence"
     );
+}
+
+#[tokio::test]
+async fn message_pin_event_ids_match_the_domain_policy() {
+    let pool = installed_schema().await;
+    let candidates = [
+        "event-1".to_owned(),
+        String::new(),
+        "x".repeat(MAX_MESSAGE_PIN_EVENT_ID_BYTES),
+        "x".repeat(MAX_MESSAGE_PIN_EVENT_ID_BYTES + 1),
+        "é".repeat(MAX_MESSAGE_PIN_EVENT_ID_BYTES / 2),
+        "é".repeat(MAX_MESSAGE_PIN_EVENT_ID_BYTES / 2 + 1),
+        "event\0tail".to_owned(),
+    ];
+
+    for (index, event_id) in candidates.iter().enumerate() {
+        let room_id = format!("event-id-{index}");
+        seed_room_event(&pool, &room_id, 1, event_id).await;
+        let accepted = sqlx::query(
+            "INSERT INTO room_message_pins(room_id, event_id, event_seq, pinned_at) VALUES (?, ?, 1, 1)",
+        )
+        .bind(&room_id)
+        .bind(event_id)
+        .execute(&pool)
+        .await
+        .is_ok();
+        assert_eq!(
+            accepted,
+            is_message_pin_event_id(event_id),
+            "installed schema disagreed with the domain for candidate {index}"
+        );
+    }
+
+    seed_room_event(&pool, "null-event-id", 1, "event-null").await;
+    let null_accepted = sqlx::query(
+        "INSERT INTO room_message_pins(room_id, event_id, event_seq, pinned_at) VALUES ('null-event-id', ?, 1, 1)",
+    )
+    .bind(Option::<&str>::None)
+    .execute(&pool)
+    .await
+    .is_ok();
+    assert!(!null_accepted, "installed schema accepted a null event ID");
 }
 
 #[tokio::test]
