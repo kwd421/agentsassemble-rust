@@ -4,11 +4,22 @@ import RoomInviteModal from "./RoomInviteModal";
 
 afterEach(cleanup);
 
-function renderInviteModal({ publicAccess = true, activeWithoutUrl = false } = {}) {
+function renderInviteModal({
+  publicAccess = true,
+  activeWithoutUrl = false,
+  phase,
+  requestState = "idle",
+}: {
+  publicAccess?: boolean;
+  activeWithoutUrl?: boolean;
+  phase?: "stopped" | "starting" | "running" | "stopping" | "error";
+  requestState?: "idle" | "starting" | "stopping";
+} = {}) {
   const onGenerateSecureInvite = vi.fn();
   const onGenerateAgentInvite = vi.fn();
   const onStopTunnel = vi.fn();
-  const tunnelActive = publicAccess || activeWithoutUrl;
+  const tunnelPhase = phase || (publicAccess || activeWithoutUrl ? "running" : "stopped");
+  const tunnelActive = ["starting", "running", "stopping"].includes(tunnelPhase);
   render(
     <RoomInviteModal
       roomLabel="제품 방"
@@ -16,10 +27,11 @@ function renderInviteModal({ publicAccess = true, activeWithoutUrl = false } = {
       agentInviteUrl=""
       operatorPairingUrl=""
       publicUrl={publicAccess ? "https://room.example.com" : ""}
+      publicAccessTransition={requestState}
       tunnelStatus={{
         available: true,
         running: tunnelActive,
-        phase: tunnelActive ? "running" : "stopped",
+        phase: tunnelPhase,
         public_url: publicAccess ? "https://room.example.com" : "",
         local_url: "http://127.0.0.1:43123",
         stable_phase: "unconfigured",
@@ -59,6 +71,24 @@ describe("RoomInviteModal", () => {
         .disabled
     ).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "외부 접속 끄기" }));
+    expect(onStopTunnel).toHaveBeenCalledOnce();
+  });
+
+  it("keeps Stop available when the server remains in its starting phase", () => {
+    const { onStopTunnel } = renderInviteModal({
+      publicAccess: false,
+      phase: "starting",
+      requestState: "starting",
+    });
+
+    expect(screen.getByText("공개 준비 중")).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "외부 접속 열기" }) as HTMLButtonElement)
+        .disabled
+    ).toBe(true);
+    const stop = screen.getByRole("button", { name: "외부 접속 끄기" });
+    expect((stop as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(stop);
     expect(onStopTunnel).toHaveBeenCalledOnce();
   });
 

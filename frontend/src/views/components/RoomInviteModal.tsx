@@ -249,7 +249,7 @@ export default function RoomInviteModal({
             <button
               type="button"
               className="dc-invite-copy-button"
-              disabled={publicAccessBusy || !publicTunnelActive || !publicAccessControllable}
+              disabled={publicAccessStopping || !publicTunnelActive || !publicAccessControllable}
               onClick={onStopTunnel}
             >
               외부 접속 끄기
