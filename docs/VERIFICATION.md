@@ -3116,3 +3116,34 @@ reviewer found the code correction sound but returned C/H/M 0/0/1 because WORKBO
 and this verification record had not yet advanced to `cfaf832`; final web approval
 therefore remains pending on this current-state-only correction. No Computer Use,
 provider, Deep Scan, or other automated security scanner ran.
+
+The current-state correction `7ad8f28` then received final web and Daybreaker approval
+for both its docs-only range and exact C1b, each with C/H/M 0/0/0. C1b is therefore
+closed without activating the copied controller.
+
+## Directory-owned manager room authority: 2026-08-28
+
+Before C2, controller code could combine a caller-retained mutable `RoomDockItem` with
+separately retained server authority. That split could mint a native manager request
+from an unconfirmed directory, a remote room, an old authority lineage, or a room UID
+that changed after the caller captured the room object.
+
+The room directory now owns one synchronous resolver. It reads the current dock and
+the bound and retained directory authority inside that owner, requires host eligibility,
+no current sync issue, exactly one local connected dock identity, exact server equality,
+and a present room UID, then delegates canonical tuple validation and freezing to the
+existing desktop manager-authority parser. Its sync-state mirror has one writer with
+the visible state, so an asynchronous caller cannot reuse a stale React closure after
+the directory becomes unconfirmed. Tests prove exact frozen resolution, fail-closed
+unconfirmed and remote states, stale-lineage rejection, and same-dock-ID room-UID
+replacement without mutating the earlier snapshot.
+
+This is an observed authority-boundary correction, not a generic room abstraction. It
+adds no network request, disk write, timer, task, cache, compatibility path, migration,
+or fallback. The app retains one host-eligibility ref and one reference to the already
+owned sync state; each manager operation performs one linear scan of the current dock
+and creates one four-string frozen tuple. Full `make verify` passed all mandatory gates,
+all 84 frontend files with 499 tests, desktop 20, domain 23, persistence 172, protocol 5,
+provider 120, server 84, and every integration/TCP/doc test. The production main chunk
+is 771.40 kB (232.41 kB gzip). Packaged Computer Use remains deferred until the complete
+C2 controller/UI activation; manual review of this first C2 candidate is pending.

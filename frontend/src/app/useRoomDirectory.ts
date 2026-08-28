@@ -19,7 +19,9 @@ import {
 } from "../lib/roomDirectoryContract";
 import {
   isDesktopWebview,
+  parseDesktopManagerRoomAuthority,
   requestDesktopBootstrapStatus,
+  type DesktopManagerRoomAuthority,
 } from "../lib/desktopBridge";
 
 type UseRoomDirectoryOptions = {
@@ -36,22 +38,30 @@ export function useRoomDirectory({
   initialRooms,
   hostEnabled,
 }: UseRoomDirectoryOptions) {
+  const initialSyncIssue: RoomDirectorySyncIssue | null = hostEnabled
+    ? {
+        category: "room_directory_unconfirmed",
+        message: "Room directory is waiting for server confirmation.",
+      }
+    : null;
   const roomsRef = useRef<RoomDockItem[]>(initialRooms);
   const [rooms, setRooms] = useState<RoomDockItem[]>(initialRooms);
-  const [syncIssue, setSyncIssue] = useState<RoomDirectorySyncIssue | null>(() =>
-    hostEnabled
-      ? {
-          category: "room_directory_unconfirmed",
-          message: "Room directory is waiting for server confirmation.",
-        }
-      : null
-  );
+  const hostEnabledRef = useRef(hostEnabled);
+  hostEnabledRef.current = hostEnabled;
+  const syncIssueRef = useRef<RoomDirectorySyncIssue | null>(initialSyncIssue);
+  const [syncIssue, setSyncIssueState] =
+    useState<RoomDirectorySyncIssue | null>(initialSyncIssue);
   const membershipRevisionRef = useRef(0);
   const metadataRevisionRef = useRef(0);
   const hydrationEpochRef = useRef(0);
   const authorityRef = useRef<RoomDirectoryAuthority | null>(
     currentRoomDirectoryAuthority()
   );
+
+  const publishSyncIssue = useCallback((issue: RoomDirectorySyncIssue | null) => {
+    syncIssueRef.current = issue;
+    setSyncIssueState(issue);
+  }, []);
 
   const commit = useCallback((update: (current: RoomDockItem[]) => RoomDockItem[]) => {
     const next = update(roomsRef.current);
@@ -184,9 +194,40 @@ export function useRoomDirectory({
       window.location.origin,
       payload.server_id
     ));
-    setSyncIssue(null);
+    publishSyncIssue(null);
     return synchronized;
-  }, [commit, fetchVerifiedRoomDirectory]);
+  }, [commit, fetchVerifiedRoomDirectory, publishSyncIssue]);
+
+  const resolveManagerRoomAuthority = useCallback(
+    (roomDockId: string): DesktopManagerRoomAuthority => {
+      const bound = currentRoomDirectoryAuthority();
+      const retained = authorityRef.current;
+      const matches = roomsRef.current.filter((room) => room.id === roomDockId);
+      const room = matches.length === 1 ? matches[0] : null;
+      if (
+        !hostEnabledRef.current ||
+        syncIssueRef.current ||
+        !bound ||
+        !retained ||
+        bound.server_id !== retained.server_id ||
+        bound.authority_lineage_id !== retained.authority_lineage_id ||
+        !room ||
+        room.roomOrigin !== "local" ||
+        room.connectionState !== "local" ||
+        room.serverId !== bound.server_id ||
+        !room.roomUid
+      ) {
+        throw new Error("현재 확인된 로컬 방 관리자 권위가 없습니다.");
+      }
+      return parseDesktopManagerRoomAuthority({
+        server_id: bound.server_id,
+        authority_lineage_id: bound.authority_lineage_id,
+        room_id: room.meetingId,
+        room_uid: room.roomUid,
+      });
+    },
+    []
+  );
 
   useEffect(() => {
     const persistedRooms = rooms.map(persistableRoom);
@@ -199,10 +240,10 @@ export function useRoomDirectory({
 
   useEffect(() => {
     if (!hostEnabled) {
-      setSyncIssue(null);
+      publishSyncIssue(null);
       return;
     }
-    setSyncIssue({
+    publishSyncIssue({
       category: "room_directory_unconfirmed",
       message: "Room directory is waiting for server confirmation.",
     });
@@ -238,11 +279,11 @@ export function useRoomDirectory({
               window.location.origin,
               retryPayload.server_id
             ));
-            setSyncIssue(null);
+            publishSyncIssue(null);
           })
           .catch((errorValue) => {
             if (!canPublish()) return;
-            setSyncIssue({
+            publishSyncIssue({
               category: "room_directory_unavailable",
               message:
                 errorValue instanceof Error
@@ -258,7 +299,7 @@ export function useRoomDirectory({
         window.location.origin,
         payload.server_id
       ));
-      setSyncIssue(null);
+      publishSyncIssue(null);
     };
     const capturedMembershipRevision = membershipRevisionRef.current;
     const capturedMetadataRevision = metadataRevisionRef.current;
@@ -272,7 +313,7 @@ export function useRoomDirectory({
       )
       .catch((errorValue) => {
         if (!canPublish()) return;
-        setSyncIssue({
+        publishSyncIssue({
           category: "room_directory_unavailable",
           message:
             errorValue instanceof Error
@@ -284,7 +325,7 @@ export function useRoomDirectory({
       cancelled = true;
       hydrationEpochRef.current += 1;
     };
-  }, [commit, fetchVerifiedRoomDirectory, hostEnabled]);
+  }, [commit, fetchVerifiedRoomDirectory, hostEnabled, publishSyncIssue]);
 
   return {
     rooms,
@@ -297,6 +338,7 @@ export function useRoomDirectory({
     updateRoomByMeetingId,
     refreshRoomDirectory,
     verifyRoomDirectoryAuthority,
+    resolveManagerRoomAuthority,
     syncIssue,
   };
 }

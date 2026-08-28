@@ -13,6 +13,10 @@ const persistenceMocks = vi.hoisted(() => ({
   syncNativeRoomDockItems: vi.fn(),
 }));
 
+const directoryMocks = vi.hoisted(() => ({
+  currentRoomDirectoryAuthority: vi.fn(),
+}));
+
 vi.mock("../api", async () => ({
   ...(await vi.importActual<typeof import("../api")>("../api")),
   fetchRooms: apiMocks.fetchRooms,
@@ -31,6 +35,7 @@ vi.mock("../lib/roomDirectoryContract", async () => ({
     "../lib/roomDirectoryContract"
   )),
   bindRoomDirectoryAuthority: vi.fn(),
+  currentRoomDirectoryAuthority: directoryMocks.currentRoomDirectoryAuthority,
 }));
 
 function makeRoom(id: string, overrides: Partial<RoomDockItem> = {}): RoomDockItem {
@@ -68,6 +73,22 @@ function serverRoom(roomId: string, label = roomId) {
   };
 }
 
+const serverId = "10000000-0000-4000-8000-000000000001";
+const lineageId = "20000000-0000-4000-8000-000000000002";
+const roomUid = "30000000-0000-4000-8000-000000000003";
+
+function verifiedDirectoryRoom(roomId: string, uid = roomUid) {
+  return { ...serverRoom(roomId), room_uid: uid };
+}
+
+function verifiedDirectory(roomId: string, uid = roomUid) {
+  return {
+    server_id: serverId,
+    authority_lineage_id: lineageId,
+    rooms: [verifiedDirectoryRoom(roomId, uid)],
+  };
+}
+
 function mockHydrationRace() {
   const firstFetch = deferred<{ rooms: ReturnType<typeof serverRoom>[] }>();
   const retryFetch = deferred<{ rooms: ReturnType<typeof serverRoom>[] }>();
@@ -80,6 +101,101 @@ function mockHydrationRace() {
 describe("useRoomDirectory", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    directoryMocks.currentRoomDirectoryAuthority.mockReturnValue(null);
+  });
+
+  it("resolves one frozen manager tuple only from the confirmed local directory", async () => {
+    const localRoom = makeRoom("local", { meetingId: "general" });
+    directoryMocks.currentRoomDirectoryAuthority.mockReturnValue({
+      server_id: serverId,
+      authority_lineage_id: lineageId,
+    });
+    apiMocks.fetchRooms.mockResolvedValueOnce(verifiedDirectory("general"));
+
+    const { result } = renderHook(() =>
+      useRoomDirectory({ initialRooms: [localRoom], hostEnabled: true })
+    );
+    await waitFor(() => expect(result.current.syncIssue).toBeNull());
+
+    const authority = result.current.resolveManagerRoomAuthority(localRoom.id);
+    expect(authority).toEqual({
+      server_id: serverId,
+      authority_lineage_id: lineageId,
+      room_id: "general",
+      room_uid: roomUid,
+    });
+    expect(Object.isFrozen(authority)).toBe(true);
+  });
+
+  it("rejects manager authority while the directory is unconfirmed", () => {
+    const localRoom = makeRoom("local", {
+      meetingId: "general",
+      roomUid,
+      serverId,
+      roomOrigin: "local",
+      connectionState: "local",
+    });
+    directoryMocks.currentRoomDirectoryAuthority.mockReturnValue({
+      server_id: serverId,
+      authority_lineage_id: lineageId,
+    });
+    apiMocks.fetchRooms.mockReturnValueOnce(deferred().promise);
+
+    const { result } = renderHook(() =>
+      useRoomDirectory({ initialRooms: [localRoom], hostEnabled: true })
+    );
+
+    expect(() => result.current.resolveManagerRoomAuthority(localRoom.id)).toThrow(
+      "현재 확인된 로컬 방 관리자 권위가 없습니다."
+    );
+  });
+
+  it("rejects a remote room and follows same-id room UID replacement without stale aliases", async () => {
+    const remoteRoom = makeRoom("remote", {
+      meetingId: "general",
+      roomOrigin: "remote_server",
+      serverOrigin: window.location.origin,
+    });
+    directoryMocks.currentRoomDirectoryAuthority.mockReturnValue({
+      server_id: serverId,
+      authority_lineage_id: lineageId,
+    });
+    apiMocks.fetchRooms.mockResolvedValueOnce(verifiedDirectory("general"));
+
+    const remote = renderHook(() =>
+      useRoomDirectory({ initialRooms: [remoteRoom], hostEnabled: true })
+    );
+    await waitFor(() => expect(remote.result.current.syncIssue).toBeNull());
+    expect(() =>
+      remote.result.current.resolveManagerRoomAuthority(remoteRoom.id)
+    ).toThrow("현재 확인된 로컬 방 관리자 권위가 없습니다.");
+    remote.unmount();
+
+    const localRoom = makeRoom("local", { meetingId: "general" });
+    apiMocks.fetchRooms.mockResolvedValueOnce(verifiedDirectory("general"));
+    const local = renderHook(() =>
+      useRoomDirectory({ initialRooms: [localRoom], hostEnabled: true })
+    );
+    await waitFor(() => expect(local.result.current.syncIssue).toBeNull());
+    const before = local.result.current.resolveManagerRoomAuthority(localRoom.id);
+    directoryMocks.currentRoomDirectoryAuthority.mockReturnValue({
+      server_id: serverId,
+      authority_lineage_id: "50000000-0000-4000-8000-000000000005",
+    });
+    expect(() =>
+      local.result.current.resolveManagerRoomAuthority(localRoom.id)
+    ).toThrow("현재 확인된 로컬 방 관리자 권위가 없습니다.");
+    directoryMocks.currentRoomDirectoryAuthority.mockReturnValue({
+      server_id: serverId,
+      authority_lineage_id: lineageId,
+    });
+    const replacementUid = "40000000-0000-4000-8000-000000000004";
+    act(() => local.result.current.updateRoom(localRoom.id, { roomUid: replacementUid }));
+    const after = local.result.current.resolveManagerRoomAuthority(localRoom.id);
+
+    expect(before.room_uid).toBe(roomUid);
+    expect(after.room_uid).toBe(replacementUid);
+    expect(Object.isFrozen(after)).toBe(true);
   });
 
   it("marks cached rooms unconfirmed until the server directory answers", async () => {
