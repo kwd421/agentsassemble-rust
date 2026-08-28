@@ -104,7 +104,7 @@ export function useRoomInviteController({
     currentPublicOrigin: publicInviteStatus?.public_url || "",
     resolveManagerRoomAuthority,
     copyText,
-    refreshCurrentPublicOrigin: refreshCurrentPublicOriginForCopy,
+    captureCurrentPublicOriginRefresh,
     publishStatus: setCopyStatus,
   });
 
@@ -178,19 +178,21 @@ export function useRoomInviteController({
     }
   }
 
-  async function refreshCurrentPublicOriginForCopy() {
+  function captureCurrentPublicOriginRefresh() {
     const generation = ingressGenerationRef.current;
-    try {
-      const status = await refreshPublicInviteState(generation);
-      if (!ingressOperationIsCurrent(generation)) return null;
-      return Object.freeze({
-        publicOrigin: status.public_url,
-        isCurrent: () => ingressOperationIsCurrent(generation),
-      });
-    } catch (error) {
-      if (!ingressOperationIsCurrent(generation)) return null;
-      throw error;
-    }
+    return async () => {
+      try {
+        const status = await refreshPublicInviteState(generation);
+        if (!ingressOperationIsCurrent(generation)) return null;
+        return Object.freeze({
+          publicOrigin: status.public_url,
+          isCurrent: () => ingressOperationIsCurrent(generation),
+        });
+      } catch (error) {
+        if (!ingressOperationIsCurrent(generation)) return null;
+        throw error;
+      }
+    };
   }
 
   function open(roomId: string) {

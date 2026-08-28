@@ -100,7 +100,7 @@ type UseManagedHumanInvitesOptions = {
     value: string,
     prepareDispatch?: () => Promise<() => void>
   ) => Promise<boolean>;
-  refreshCurrentPublicOrigin: () => Promise<HumanInviteOriginProof | null>;
+  captureCurrentPublicOriginRefresh: () => () => Promise<HumanInviteOriginProof | null>;
   publishStatus: (status: string) => void;
 };
 
@@ -116,7 +116,7 @@ export function useManagedHumanInvites({
   currentPublicOrigin,
   resolveManagerRoomAuthority,
   copyText,
-  refreshCurrentPublicOrigin,
+  captureCurrentPublicOriginRefresh,
   publishStatus,
 }: UseManagedHumanInvitesOptions) {
   const [records, setRecords] = useState<ManagedHumanInviteRecord[]>([]);
@@ -258,6 +258,7 @@ export function useManagedHumanInvites({
       publishStatus("현재 확인된 활성 사람 초대만 복사할 수 있습니다.");
       return;
     }
+    const refreshCurrentPublicOrigin = captureCurrentPublicOriginRefresh();
     let latestProof: HumanInviteOriginProof | null = null;
     try {
       const copied = await copyText(presentation.copyUrl, async () => {

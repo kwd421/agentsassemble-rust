@@ -362,6 +362,66 @@ describe("useRoomInviteController", () => {
     }
   });
 
+  it("does not revive clipboard fallback after the initiating modal closes", async () => {
+    apiMocks.createManagedHumanInvite.mockResolvedValue(
+      managedCustody("7777777777777777")
+    );
+    const hook = renderInviteController();
+    act(() => hook.result.current.open(room.id));
+    await waitFor(() => expect(hook.result.current.publicInviteStatus).toEqual(publicStatus));
+    await act(async () => hook.result.current.generateSecureInvite(room, "room"));
+    const clipboardWrite = deferred<void>();
+    const clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+    const execDescriptor = Object.getOwnPropertyDescriptor(document, "execCommand");
+    const writeText = vi.fn(() => clipboardWrite.promise);
+    const execCommand = vi.fn(() => true);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    Object.defineProperty(document, "execCommand", {
+      configurable: true,
+      value: execCommand,
+    });
+    let copy!: Promise<void>;
+
+    try {
+      const statusFetchesBeforeCopy = apiMocks.fetchPublicInviteStatus.mock.calls.length;
+      act(() => {
+        copy = hook.result.current.copySecureInvite();
+      });
+      await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
+      expect(apiMocks.fetchPublicInviteStatus).toHaveBeenCalledTimes(
+        statusFetchesBeforeCopy + 1
+      );
+      act(() => hook.result.current.close());
+      const statusAtClose = hook.result.current.copyStatus;
+
+      await act(async () => {
+        clipboardWrite.reject(new Error("clipboard permission changed"));
+        await copy;
+      });
+
+      expect(apiMocks.fetchPublicInviteStatus).toHaveBeenCalledTimes(
+        statusFetchesBeforeCopy + 1
+      );
+      expect(execCommand).not.toHaveBeenCalled();
+      expect(document.querySelector("textarea")).toBeNull();
+      expect(hook.result.current.copyStatus).toBe(statusAtClose);
+    } finally {
+      if (clipboardDescriptor) {
+        Object.defineProperty(navigator, "clipboard", clipboardDescriptor);
+      } else {
+        Reflect.deleteProperty(navigator, "clipboard");
+      }
+      if (execDescriptor) {
+        Object.defineProperty(document, "execCommand", execDescriptor);
+      } else {
+        Reflect.deleteProperty(document, "execCommand");
+      }
+    }
+  });
+
   it("ignores a stale public-invite status after switching modal rooms", async () => {
     const firstStatus = deferred<PublicInviteStatus>();
     const secondStatus = deferred<PublicInviteStatus>();
