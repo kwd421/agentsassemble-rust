@@ -8,18 +8,6 @@ import RoomSettingsModal from "./RoomSettingsModal";
 
 afterEach(cleanup);
 
-const apiMocks = vi.hoisted(() => ({
-  uploadLobbyAttachment: vi.fn(),
-}));
-
-vi.mock("../../api", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../api")>();
-  return {
-    ...actual,
-    uploadLobbyAttachment: apiMocks.uploadLobbyAttachment,
-  };
-});
-
 const room = {
   id: "server-general",
   label: "General",
@@ -38,12 +26,14 @@ function renderSettings(
   onRetrySettings = vi.fn(),
   onOrderedExcludePreviousSpeakerChange = vi.fn(),
   onAppearanceChange = vi.fn().mockResolvedValue(undefined),
-  onToolModeChange = vi.fn()
+  onToolModeChange = vi.fn(),
+  onAppearanceUpload = vi.fn().mockResolvedValue(undefined)
 ) {
   render(
     <RoomSettingsModal
       room={room}
       appearance={DEFAULT_ROOM_APPEARANCE}
+      appearanceAssetError=""
       channelSettings={{}}
       settingsStatus={settingsStatus}
       settingsError={settingsStatus === "error" ? "offline" : ""}
@@ -57,58 +47,46 @@ function renderSettings(
       onInvite={() => undefined}
       onRoomChange={() => undefined}
       onAppearanceChange={onAppearanceChange}
+      onAppearanceUpload={onAppearanceUpload}
       onChannelSettingChange={async () => undefined}
       onConversationModeChange={onConversationModeChange}
       onToolModeChange={onToolModeChange}
       onOrderedExcludePreviousSpeakerChange={onOrderedExcludePreviousSpeakerChange}
       onRetrySettings={onRetrySettings}
+      onRetryAppearance={() => undefined}
       onDeleteRoom={async () => undefined}
     />
   );
-  return onConversationModeChange;
+  return { onAppearanceUpload, onConversationModeChange };
 }
 
 describe("RoomSettingsModal conversation mode", () => {
-  beforeEach(() => {
-    apiMocks.uploadLobbyAttachment.mockReset();
-  });
+  beforeEach(() => vi.resetAllMocks());
 
   it("binds a banner upload to the room and waits for canonical appearance persistence", async () => {
     const onAppearanceChange = vi.fn().mockResolvedValue(undefined);
-    apiMocks.uploadLobbyAttachment.mockResolvedValue({
-      id: "banner-asset",
-      filename: "banner.png",
-      content_type: "image/png",
-      size: 3,
-      is_image: true,
-      url: "/api/attachments/banner-asset?view=1",
-      download_url: "/api/attachments/banner-asset?download=1",
-    });
+    const onAppearanceUpload = vi.fn().mockResolvedValue(undefined);
     renderSettings(
       "ordered",
       vi.fn(),
       "ready",
       vi.fn(),
       vi.fn(),
-      onAppearanceChange
+      onAppearanceChange,
+      vi.fn(),
+      onAppearanceUpload
     );
 
     const file = new File(["png"], "banner.png", { type: "image/png" });
     await userEvent.upload(screen.getByLabelText("배너 이미지"), file);
 
-    expect(apiMocks.uploadLobbyAttachment).toHaveBeenCalledWith(file, {
-      roomId: "general",
-      purpose: "room_appearance",
-    });
-    expect(onAppearanceChange).toHaveBeenCalledWith({
-      bannerImage: "/api/attachments/banner-asset?view=1",
-      bannerPreset: "custom",
-    });
+    expect(onAppearanceUpload).toHaveBeenCalledWith(file, "banner");
+    expect(onAppearanceChange).not.toHaveBeenCalled();
     expect(await screen.findByText("배너 이미지 저장됨")).toBeTruthy();
   });
 
   it("lets the user activate ambient discussion from the room settings UI", async () => {
-    const onConversationModeChange = renderSettings("ordered");
+    const { onConversationModeChange } = renderSettings("ordered");
 
     await userEvent.click(screen.getByRole("radio", { name: /자유 토론/ }));
 
@@ -165,6 +143,7 @@ describe("RoomSettingsModal conversation mode", () => {
       <RoomSettingsModal
         room={room}
         appearance={DEFAULT_ROOM_APPEARANCE}
+        appearanceAssetError=""
         channelSettings={{}}
         settingsStatus="ready"
         settingsError=""
@@ -178,11 +157,13 @@ describe("RoomSettingsModal conversation mode", () => {
         onInvite={() => undefined}
         onRoomChange={() => undefined}
         onAppearanceChange={async () => undefined}
+        onAppearanceUpload={async () => undefined}
         onChannelSettingChange={onChannelSettingChange}
         onConversationModeChange={() => undefined}
         onToolModeChange={() => undefined}
         onOrderedExcludePreviousSpeakerChange={() => undefined}
         onRetrySettings={() => undefined}
+        onRetryAppearance={() => undefined}
         onDeleteRoom={async () => undefined}
       />
     );
@@ -203,6 +184,7 @@ describe("RoomSettingsModal conversation mode", () => {
       <RoomSettingsModal
         room={room}
         appearance={DEFAULT_ROOM_APPEARANCE}
+        appearanceAssetError=""
         channelSettings={{}}
         settingsStatus="ready"
         settingsError=""
@@ -216,11 +198,13 @@ describe("RoomSettingsModal conversation mode", () => {
         onInvite={() => undefined}
         onRoomChange={() => undefined}
         onAppearanceChange={async () => undefined}
+        onAppearanceUpload={async () => undefined}
         onChannelSettingChange={async () => undefined}
         onConversationModeChange={() => undefined}
         onToolModeChange={() => undefined}
         onOrderedExcludePreviousSpeakerChange={() => undefined}
         onRetrySettings={() => undefined}
+        onRetryAppearance={() => undefined}
         onDeleteRoom={async () => undefined}
       />
     );

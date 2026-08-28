@@ -4,12 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RoomAppearance } from "../lib/roomAppearance";
 import type { RoomDockItem } from "../lib/roomDockModel";
 
-const api = vi.hoisted(() => ({ fetchBlob: vi.fn() }));
+const api = vi.hoisted(() => ({ fetchBlob: vi.fn(), upload: vi.fn() }));
 vi.mock("../api/roomAppearance", async () => ({
   ...(await vi.importActual<typeof import("../api/roomAppearance")>(
     "../api/roomAppearance"
   )),
   fetchRoomAppearanceBlob: api.fetchBlob,
+  uploadRoomAppearance: api.upload,
 }));
 
 import { useRoomAppearanceAssets } from "./useRoomAppearanceAssets";
@@ -58,7 +59,7 @@ function renderAssets(
         activeRemoteRoomId: "",
         remoteSessionToken: "",
         canonicalAppearanceFor: () => currentAppearance,
-        settingsStatusFor: () => currentStatus,
+        settingsStateFor: () => ({ status: currentStatus }),
         resolveLocalManager: () => manager,
       }),
     {
@@ -174,7 +175,7 @@ describe("room appearance object URL lifecycle", () => {
         activeRemoteRoomId: "",
         remoteSessionToken: "",
         canonicalAppearanceFor: () => inactiveAppearance,
-        settingsStatusFor: () => "ready",
+        settingsStateFor: () => ({ status: "ready" }),
         resolveLocalManager: () => ({ ...manager, room_id: "inactive", room_uid: inactive.roomUid! }),
       })
     );
@@ -258,5 +259,19 @@ describe("room appearance object URL lifecycle", () => {
       )
     );
     expect(api.fetchBlob).toHaveBeenCalledTimes(2);
+  });
+
+  it("resolves the current manager before every upload", async () => {
+    api.upload.mockResolvedValue({ reference: { assetId: "asset", url: banner } });
+    const hook = renderAssets({
+      bannerPreset: "default",
+      notifications: "mentions",
+      inviteScope: "room",
+    });
+    const file = new File(["png"], "banner.png", { type: "image/png" });
+
+    await expect(hook.result.current.upload(room, file)).resolves.toBe(banner);
+
+    expect(api.upload).toHaveBeenCalledWith(file, manager);
   });
 });

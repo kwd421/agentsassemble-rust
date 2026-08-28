@@ -24,7 +24,7 @@ export default function AppOverlays({ controller }: { controller: AppController 
     inviteRemoteClientPacket, inviteRoom, leaveRoom, leaveRoomTarget,
     operatorPairingPending, operatorPairingState, operatorPairingUrl,
     pendingGuestAvatarImage, pendingGuestDisplayName, publicInviteStatus,
-    requestGuestJoin, retryOperatorPairing, roomInvite,
+    requestGuestJoin, retryOperatorPairing, roomAppearanceAssets, roomInvite,
     roomSettings, roomSocket,
     setAgentCreateOpen, setCreateChannelOpen, setGuestRecoveryRequest,
     setLeaveRoomTargetId, setPendingGuestAvatarImage, setPendingGuestDisplayName,
@@ -93,7 +93,8 @@ export default function AppOverlays({ controller }: { controller: AppController 
           <RoomSettingsModal
             room={settingsModalRoom}
             initialSectionId={settingsModalInitialSectionId}
-            appearance={roomSettings.appearanceFor(settingsModalRoom)}
+            appearance={roomAppearanceAssets.appearanceFor(settingsModalRoom)}
+            appearanceAssetError={roomAppearanceAssets.errorFor(settingsModalRoom)}
             channelSettings={roomSettings.channelSettingsFor(settingsModalRoom)}
             settingsStatus={roomSettings.settingsStateFor(settingsModalRoom).status}
             settingsError={roomSettings.settingsStateFor(settingsModalRoom).error?.message || ""}
@@ -124,6 +125,15 @@ export default function AppOverlays({ controller }: { controller: AppController 
                 .catch(() => undefined);
             }}
             onAppearanceChange={(updates) => roomSettings.updateAppearance(settingsModalRoom, updates)}
+            onAppearanceUpload={async (file, slot) => {
+              const canonicalUrl = await roomAppearanceAssets.upload(settingsModalRoom, file);
+              await roomSettings.updateAppearance(
+                settingsModalRoom,
+                slot === "banner"
+                  ? { bannerImage: canonicalUrl, bannerPreset: "custom" }
+                  : { iconImage: canonicalUrl }
+              );
+            }}
             onChannelSettingChange={(channelId, updates) =>
               roomSettings.updateChannelSetting(settingsModalRoom, channelId, updates)
             }
@@ -140,6 +150,7 @@ export default function AppOverlays({ controller }: { controller: AppController 
               )
             }
             onRetrySettings={() => roomSettings.refresh(settingsModalRoom)}
+            onRetryAppearance={() => roomAppearanceAssets.retry(settingsModalRoom)}
             onDeleteRoom={(confirmationName) => deleteRoom(settingsModalRoom.id, confirmationName)}
           />
         )}

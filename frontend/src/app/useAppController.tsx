@@ -53,6 +53,7 @@ import { useFriendsDirectory } from "./useFriendsDirectory";
 import { useAgentPresentation } from "./useAgentPresentation";
 import { useDismissMenus } from "./useDismissMenus";
 import { useRoomAdmission } from "./useRoomAdmission";
+import { useRoomAppearanceAssets } from "./useRoomAppearanceAssets";
 import { useRoomChannels } from "./useRoomChannels";
 import { useRoomCreation } from "./useRoomCreation";
 import { useRoomDirectory } from "./useRoomDirectory";
@@ -343,7 +344,14 @@ export function useAppController(deviceToken: string, clientId: string) {
     onRoomMetadataLoaded: updateRoomByMeetingId,
     enabled: startupIdentityResolved && !activeRoomDisconnected,
   });
-  const roomAppearances = roomSettings.appearances;
+  const roomAppearanceAssets = useRoomAppearanceAssets({
+    rooms, activeRoomId: activeRoom.id,
+    activeRemoteRoomId: guestLocked ? activeRoom.id : "", remoteSessionToken: admittedSessionToken,
+    canonicalAppearanceFor: roomSettings.appearanceFor,
+    settingsStateFor: roomSettings.settingsStateFor,
+    resolveLocalManager: resolveManagerRoomAuthority,
+  });
+  const roomAppearances = roomAppearanceAssets.appearances;
   const roomInvite = useRoomInviteController({
     localOperatorEligible: startupHostEnabled,
     resolveManagerRoomAuthority,
@@ -678,7 +686,7 @@ export function useAppController(deviceToken: string, clientId: string) {
   const inviteModalMembers = inviteModalRoom
     ? roomMembers.membersFor(inviteModalRoom)
     : [];
-  const activeAppearance = roomSettings.appearanceFor(activeRoom);
+  const activeAppearance = roomAppearanceAssets.appearanceFor(activeRoom);
   const activeRoomStyle = useMemo(() => roomAppearanceStyle(activeAppearance), [activeAppearance]);
   const shellStyle = useMemo(
     () =>
@@ -762,7 +770,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     operatorPairingUrl, pendingGuestAvatarImage, pendingGuestDisplayName, pendingMessageSearchTarget,
     publicInviteStatus, quotaViewer,
     requestGuestJoin, retryOperatorPairing, rightPanelMode,
-    rightPanelSearchQuery, roomAppearances, roomDirectorySyncIssue, roomInvite,
+    rightPanelSearchQuery, roomAppearanceAssets, roomAppearances, roomDirectorySyncIssue, roomInvite,
     roomMenu, roomMessageSearch, roomSettings, roomSocket,
     rooms, scopedAgents, scopedMentionables, serverProductSurface,
     scopedOnlineCount, scopedViewerDisplayName, selectDirectoryFriend,

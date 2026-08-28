@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   fetchRoomAppearanceBlob,
+  uploadRoomAppearance,
   type RoomAppearanceReadAuthority,
 } from "../api/roomAppearance";
 import {
@@ -19,7 +20,7 @@ type UseRoomAppearanceAssetsOptions = {
   activeRemoteRoomId: string;
   remoteSessionToken: string;
   canonicalAppearanceFor: (room: RoomDockItem) => RoomAppearance;
-  settingsStatusFor: (room: RoomDockItem) => SettingsStatus;
+  settingsStateFor: (room: RoomDockItem) => { status: SettingsStatus };
   resolveLocalManager: (roomDockId: string) => DesktopManagerRoomAuthority;
 };
 
@@ -79,7 +80,7 @@ export function useRoomAppearanceAssets({
   activeRemoteRoomId,
   remoteSessionToken,
   canonicalAppearanceFor,
-  settingsStatusFor,
+  settingsStateFor,
   resolveLocalManager,
 }: UseRoomAppearanceAssetsOptions) {
   const [resolvedUrls, setResolvedUrls] = useState<Record<string, string>>({});
@@ -145,7 +146,7 @@ export function useRoomAppearanceAssets({
             authority,
             authorityKey,
             pendingPreferred:
-              authority.kind === "local" && settingsStatusFor(room) === "saving",
+              authority.kind === "local" && settingsStateFor(room).status === "saving",
           });
         } catch (error) {
           nextStaticErrors[roomKey] =
@@ -234,7 +235,7 @@ export function useRoomAppearanceAssets({
     resolveLocalManager,
     retryRevision,
     rooms,
-    settingsStatusFor,
+    settingsStateFor,
   ]);
 
   useEffect(() => {
@@ -311,5 +312,13 @@ export function useRoomAppearanceAssets({
     setRetryRevision((revision) => revision + 1);
   }, []);
 
-  return { appearances, appearanceFor, errorFor, retry };
+  const upload = useCallback(
+    async (room: RoomDockItem, file: File) => {
+      const manager = resolveLocalManager(room.id);
+      return (await uploadRoomAppearance(file, manager)).reference.url;
+    },
+    [resolveLocalManager]
+  );
+
+  return { appearances, appearanceFor, errorFor, retry, upload };
 }

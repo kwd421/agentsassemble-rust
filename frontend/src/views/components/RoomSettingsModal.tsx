@@ -5,7 +5,6 @@ import {
   type ChannelSettings,
   type ConversationMode,
   type RoomToolMode,
-  uploadLobbyAttachment,
 } from "../../api";
 import {
   roomAppearanceStyle,
@@ -39,6 +38,7 @@ export default function RoomSettingsModal({
   room,
   initialSectionId,
   appearance,
+  appearanceAssetError,
   channelSettings,
   settingsStatus,
   settingsError,
@@ -52,16 +52,19 @@ export default function RoomSettingsModal({
   onInvite,
   onRoomChange,
   onAppearanceChange,
+  onAppearanceUpload,
   onChannelSettingChange,
   onConversationModeChange,
   onToolModeChange,
   onOrderedExcludePreviousSpeakerChange,
   onRetrySettings,
+  onRetryAppearance,
   onDeleteRoom,
 }: {
   room: RoomDockItem;
   initialSectionId?: RoomSettingsSectionId;
   appearance: RoomAppearance;
+  appearanceAssetError: string;
   channelSettings: Record<string, ChannelSettings>;
   settingsStatus: "loading" | "ready" | "saving" | "stale" | "error";
   settingsError: string;
@@ -75,6 +78,7 @@ export default function RoomSettingsModal({
   onInvite: () => void;
   onRoomChange: (updates: Partial<Pick<RoomDockItem, "label" | "topic" | "shortLabel">>) => void;
   onAppearanceChange: (updates: Partial<RoomAppearance>) => Promise<void>;
+  onAppearanceUpload: (file: File, slot: "banner" | "icon") => Promise<void>;
   onChannelSettingChange: (
     channelId: string,
     updates: Partial<ChannelSettings>
@@ -83,6 +87,7 @@ export default function RoomSettingsModal({
   onToolModeChange: (mode: RoomToolMode) => void;
   onOrderedExcludePreviousSpeakerChange: (exclude: boolean) => void;
   onRetrySettings: () => void;
+  onRetryAppearance: () => void;
   onDeleteRoom: (confirmationName: string) => Promise<void>;
 }) {
   const [uploadStatus, setUploadStatus] = useState("");
@@ -135,14 +140,7 @@ export default function RoomSettingsModal({
     if (!file) return;
     setUploadStatus("배너 업로드 중...");
     try {
-      const attachment = await uploadLobbyAttachment(file, {
-        roomId: room.meetingId,
-        purpose: "room_appearance",
-      });
-      await onAppearanceChange({
-        bannerImage: attachment.url,
-        bannerPreset: "custom",
-      });
+      await onAppearanceUpload(file, "banner");
       setUploadStatus("배너 이미지 저장됨");
     } catch (error) {
       setUploadStatus(error instanceof Error ? error.message : "배너 업로드 실패");
@@ -155,11 +153,7 @@ export default function RoomSettingsModal({
     if (!file) return;
     setUploadStatus("아이콘 업로드 중...");
     try {
-      const attachment = await uploadLobbyAttachment(file, {
-        roomId: room.meetingId,
-        purpose: "room_appearance",
-      });
-      await onAppearanceChange({ iconImage: attachment.url });
+      await onAppearanceUpload(file, "icon");
       setUploadStatus("채팅방 아이콘 저장됨");
     } catch (error) {
       setUploadStatus(error instanceof Error ? error.message : "아이콘 업로드 실패");
@@ -368,6 +362,14 @@ export default function RoomSettingsModal({
               </label>
             </div>
             {uploadStatus && <p className="dc-upload-status preserve-words">{uploadStatus}</p>}
+            {appearanceAssetError && (
+              <div className="mt-3 flex items-center justify-between gap-3 text-[13px] text-red-400" role="alert">
+                <span className="preserve-words">{appearanceAssetError}</span>
+                <button type="button" className="dc-upload-button shrink-0" onClick={onRetryAppearance}>
+                  이미지 다시 불러오기
+                </button>
+              </div>
+            )}
           </section>
 
           <section id="settings-channels" className="dc-settings-section">
