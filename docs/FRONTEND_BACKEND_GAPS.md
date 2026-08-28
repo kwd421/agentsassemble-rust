@@ -4,7 +4,7 @@ Status: source-derived reimplementation exposure inventory, 2026-08-28
 
 Comparison baseline: original
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust
-`4959f9b`. The local-authority, surface, connection-admission, subscription, and moderation
+`6d0394d`. The local-authority, surface, connection-admission, subscription, and moderation
 boundary is complete. Central registration, canonical participant roles, participant
 mute, exact provider interruption, and the required packaged provider matrix have
 passed both manual reviews. Room-global settings, local-operator preferences, human
