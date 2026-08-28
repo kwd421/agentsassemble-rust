@@ -75,7 +75,7 @@ async fn room_appearance_asset_ids_match_the_domain_grammar() {
         format!("ra_{}", "g".repeat(32)),
         format!("ra_{}", "0".repeat(31)),
         format!("rx_{}", "0".repeat(32)),
-        format!("ra_{}\0x", "a".repeat(30)),
+        format!("ra_{}\0x", "a".repeat(32)),
     ];
 
     for asset_id in candidates {
