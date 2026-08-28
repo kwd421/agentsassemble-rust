@@ -3254,3 +3254,25 @@ tests, 20 desktop tests, domain 24, persistence 172, protocol 5, provider 120, s
 84, every integration/TCP/documentation test, warning-denied Clippy, and the final diff
 check. No provider, Deep Scan, or automated security scanner ran. The two feature
 commits remain local pending the three-feature-or-2,000-line review threshold.
+
+## Room-appearance persistence and HTTP batch review: 2026-08-28
+
+The pushed batch and corrections through `d82b8e2` received manual cross-review.
+Daybreaker found two Medium ownership/status defects: three unused public appearance
+ticket consumers plus their duplicate internal helper remained beside the production
+single-dispatch consumers, and current-state documentation still described completed
+invite activation or pending appearance activation inconsistently. The web reviewer
+found one further Medium documentation defect: the active appearance specification
+described pending private-control/desktop issuance and frontend object-URL custody as
+already active.
+
+Commits `96f9724`, `c0fe269`, `eef84a8`, and `d82b8e2` removed the duplicate consumers
+and separated active backend behavior from future desktop/frontend acceptance without
+adding state, authority, fallback, compatibility, or migration paths. Full `make
+verify` passed after the code correction: every mandatory gate, all 84 frontend files
+with 516 tests, desktop 20 tests, domain 25, persistence 178, protocol 5, provider 120,
+server unit/integration and real TCP tests, warning-denied Clippy, and the diff check.
+The final docs-only corrections additionally passed the architecture, source-growth,
+policy, and diff gates. Web and Daybreaker then each returned final
+`APPROVE — Critical 0 / High 0 / Medium 0`. No Computer Use resource, provider, Deep
+Scan, or automated security scanner ran for this backend/review batch.
