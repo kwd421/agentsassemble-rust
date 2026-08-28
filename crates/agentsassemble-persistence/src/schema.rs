@@ -216,6 +216,11 @@ const TABLES: &[TableDefinition] = &[
         infrastructure: false,
     },
     TableDefinition {
+        name: "room_message_pins",
+        ddl: "CREATE TABLE IF NOT EXISTS room_message_pins (room_id TEXT NOT NULL, event_id TEXT NOT NULL CHECK(typeof(event_id) = 'text' AND length(CAST(event_id AS BLOB)) BETWEEN 1 AND 128 AND instr(event_id, char(0)) = 0), event_seq INTEGER NOT NULL CHECK(event_seq > 0), pinned_at INTEGER NOT NULL CHECK(pinned_at > 0), PRIMARY KEY(room_id, event_id), UNIQUE(room_id, event_seq), FOREIGN KEY(room_id, event_seq) REFERENCES room_events(room_id, seq) ON DELETE CASCADE)",
+        infrastructure: false,
+    },
+    TableDefinition {
         name: "room_turn_tool_results",
         ddl: "CREATE TABLE IF NOT EXISTS room_turn_tool_results (room_id TEXT NOT NULL, session_id TEXT NOT NULL, turn_id TEXT NOT NULL, result_id TEXT NOT NULL, event_seq INTEGER NOT NULL CHECK(event_seq > 0), PRIMARY KEY(room_id, result_id), FOREIGN KEY(room_id, session_id) REFERENCES agent_sessions(room_id, session_id) ON DELETE CASCADE)",
         infrastructure: false,
@@ -678,3 +683,7 @@ mod human_session_tests;
 #[cfg(test)]
 #[path = "schema_asset_tests.rs"]
 mod asset_tests;
+
+#[cfg(test)]
+#[path = "schema_message_pin_tests.rs"]
+mod message_pin_tests;
