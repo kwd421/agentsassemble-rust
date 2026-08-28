@@ -3424,5 +3424,35 @@ Normal quit left no verification app or sidecar process. Only the isolated Appli
 Support, cache, WebKit, package-build directory, and generated sidecar binary were moved
 to the recoverable Trash directory
 `AgentsAssemble-Appearance-Correction-Verify-20260829.ojQ6vP`; unrelated applications,
-processes, and user data were untouched. The shared browser session remains active only
-for the required critical-web re-review and will be reset after that review completes.
+processes, and user data were untouched. After the required critical-web response
+completed, its tab and the browser/Computer Use connection were closed and reset.
+
+The next critical-web re-review returned `REVISE — Critical 0 / High 0 / Medium 2`.
+First, the installed SQLite CHECK admitted any 32-character suffix after `ra_`, while
+the domain parser admitted only lowercase hex. Commit `5fcc51f` replaces the superficial
+DDL-string assertion with an installed-schema behavior comparison against the domain
+parser, adds the suffix CHECK, and advances the clean schema from 41 to 42 so the older
+weaker schema is rejected without migration or compatibility code. Second, authority
+loss was handled by a passive effect and the controller reconstructed only
+`syncIssue === null`; a deferred read could therefore publish an object URL after the
+loss commit. Commit `4794ca0` makes the directory owner expose currentness from the same
+snapshot, epoch, active-host, sync, and bound-authority checks as its resolver. The
+appearance owner hides local URLs in the false render, performs abort/removal/revocation
+in layout effects, and checks currentness before object-URL creation. Controlled tests
+prove immediate installed-URL revocation, no late URL from a deferred read, and a fresh
+exact resolver/read after authority restoration.
+
+The second correction adds no cache, durable frontend state, timer, task, fallback,
+compatibility path, or generic authority framework. Schema 42 narrows one existing
+durable CHECK; the lifecycle change reuses existing refs and state. The production main
+chunk changed from 785.51 kB / 236.55 kB gzip after strict PNG acceptance to 785.89 kB /
+236.62 kB gzip, an observed +0.38 kB raw / +0.07 kB gzip. No CPU, memory, disk, or
+latency improvement is claimed; the accepted work closes a concrete durable-language
+mismatch and stale decoded-byte publication window.
+
+Full serial `make verify` passed every architecture/source-growth/policy/formatting/
+generated-binding/original-CSS/build/workspace/TCP/integration/documentation/
+warning-denied-Clippy/diff gate: frontend 87 files / 539 tests, desktop 20, domain 26,
+persistence 179, protocol 6, provider 120, and server 85. Daybreaker approved the prior
+range with `Critical 0 / High 0 / Medium 0`; final approval of these two new corrections
+remains pending after push. No provider, Deep Scan, or automated security scanner ran.
