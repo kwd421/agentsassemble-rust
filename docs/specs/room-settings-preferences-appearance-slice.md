@@ -221,9 +221,10 @@ upload, exact pending preview read, and exact bound appearance read. A separate
 closed grant owns the no-room settings directory read. Grants bind the exact room,
 principal, participant, purpose, and read asset where applicable. Consumption
 removes a grant before checking its variant so wrong-purpose, wrong-room,
-wrong-asset, and replay attempts are consumed and rejected. Private-control and
-desktop APIs expose typed issuance operations; no path or payload string selects
-authority.
+wrong-asset, and replay attempts are consumed and rejected. Implemented issuers use
+typed operations; no path or payload string selects authority. Preference and
+directory issuance are exposed, while private-control and desktop appearance
+issuance remain pending.
 
 Room appearance uses a separate room-owned table and the exact asset grammar
 `^ra_[0-9a-f]{32}$`, generated as a UUID v4 from the operating-system RNG with
