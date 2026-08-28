@@ -69,6 +69,12 @@ function timestamp(value: unknown): string {
   return value;
 }
 
+function hasVisibleText(value: string): boolean {
+  return [...value].some(
+    (character) => !/[\p{White_Space}\p{Cc}\p{Cf}]/u.test(character)
+  );
+}
+
 function parsePin(value: unknown): MessagePin {
   const pin = strictRecord(value, "로비 메시지 핀");
   assertExactKeys(pin, PIN_KEYS, "로비 메시지 핀");
@@ -76,6 +82,7 @@ function parsePin(value: unknown): MessagePin {
   const author = requiredString(pin, "author", "로비 메시지 핀");
   const content = requiredString(pin, "content", "로비 메시지 핀");
   if (
+    !hasVisibleText(content) ||
     pin.channel_id !== "lobby" ||
     !Number.isSafeInteger(pin.seq) ||
     Number(pin.seq) < 1 ||
@@ -101,7 +108,10 @@ function parsePins(value: unknown): MessagePin[] {
     invalidResponse();
   }
   const pins = value.map(parsePin);
-  if (new Set(pins.map((pin) => pin.event_id)).size !== pins.length) {
+  if (
+    new Set(pins.map((pin) => pin.event_id)).size !== pins.length ||
+    new Set(pins.map((pin) => pin.seq)).size !== pins.length
+  ) {
     invalidResponse();
   }
   return pins;

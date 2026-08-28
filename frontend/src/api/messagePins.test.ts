@@ -193,8 +193,10 @@ describe("lobby message-pin HTTP authority", () => {
       { pins: [{ ...pin(), channel_id: "side" }] },
       { pins: [{ ...pin(), attachment_filenames: ["not-yet-owned"] }] },
       { pins: [pin(), pin()] },
+      { pins: [pin("event-1"), pin("event-2")] },
       { pins: Array.from({ length: 65 }, (_, index) => pin(`event-${index}`)) },
       { pins: [{ ...pin(), content: "" }] },
+      { pins: [{ ...pin(), content: " \t\n\u200b" }] },
       { pins: [], ignored: true },
     ];
 
