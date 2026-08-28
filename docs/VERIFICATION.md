@@ -3650,3 +3650,31 @@ TCP/integration/doc test, warning-denied Clippy, and all architecture, source-gr
 policy, generated-binding, original-CSS, production-build, and diff gates. No provider,
 Computer Use, Deep Scan, or automated scanner ran. Final correction cross-review and
 packaged local/remote/restart verification remain pending.
+
+The correction re-review remained `REVISE`. Both reviewers found that retiring the
+view-owned operation from a passive React effect left a commit-to-effect interval in
+which a completed grant could still dispatch its target request under replaced room or
+session authority. Daybreaker also found that JavaScript accepted isolated UTF-16
+surrogates: `TextEncoder` would replace them while Rust strings require Unicode scalar
+values, so the two validation boundaries did not describe the same identity or visible
+text.
+
+Two narrow commits close those remaining boundaries. The existing operation owner now
+uses the layout-effect cleanup phase, so authority replacement retires the operation
+before passive request continuations can run; no state, transport, timer, task, queue,
+cache, or lifecycle abstraction was added. The pin parser and input validator reject an
+isolated high or low surrogate while preserving valid non-BMP scalar pairs. Focused
+tests cover delayed local and remote grants, isolated surrogates in identity and visible
+fields, pre-grant input rejection, and valid emoji. The production main chunk measured
+789.42 kB raw / 237.89 kB gzip, an observed +0.07 kB raw / +0.04 kB gzip from the prior
+789.35 kB / 237.85 kB gzip; the API chunk remains 55.85 kB / 15.14 kB gzip. No CPU,
+memory, disk, or latency improvement is claimed.
+
+Full serial `make verify` passed again: frontend 89 files / 555 tests, desktop 20,
+domain 27, persistence 186, protocol 6, provider 120, server 85, every
+TCP/integration/doc test, warning-denied Clippy, and all architecture, source-growth,
+policy, generated-binding, original-CSS, production-build, and diff gates. A Computer
+Use launch was attempted only against the isolated verification package, but the Mac
+was locked and no app was launched; packaged local/remote/restart verification therefore
+remains pending. No provider, Deep Scan, or automated scanner ran. Final cross-review
+of these two corrections also remains pending.
