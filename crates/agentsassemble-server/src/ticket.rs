@@ -520,57 +520,6 @@ impl TicketStore {
             .await
     }
 
-    /// Consumes only an exact room-appearance upload credential.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Invalid` after consuming a wrong-purpose, expired, unknown, or reused ticket.
-    pub async fn consume_appearance_upload(
-        &self,
-        ticket: &str,
-    ) -> Result<ConsumedRoomHttpTicket, TicketError> {
-        self.consume_room_http(ticket, RoomHttpPurpose::AppearanceUpload)
-            .await
-    }
-
-    /// Consumes only a pending-preview credential for the requested asset.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Invalid` after consuming a mismatched, expired, unknown, or reused ticket.
-    pub async fn consume_pending_preview_read(
-        &self,
-        ticket: &str,
-        asset_id: &str,
-    ) -> Result<ConsumedRoomHttpTicket, TicketError> {
-        self.consume_room_http(
-            ticket,
-            RoomHttpPurpose::PendingPreviewRead {
-                asset_id: asset_id.to_owned(),
-            },
-        )
-        .await
-    }
-
-    /// Consumes only a bound-appearance credential for the requested asset.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Invalid` after consuming a mismatched, expired, unknown, or reused ticket.
-    pub async fn consume_bound_appearance_read(
-        &self,
-        ticket: &str,
-        asset_id: &str,
-    ) -> Result<ConsumedRoomHttpTicket, TicketError> {
-        self.consume_room_http(
-            ticket,
-            RoomHttpPurpose::BoundAppearanceRead {
-                asset_id: asset_id.to_owned(),
-            },
-        )
-        .await
-    }
-
     /// Consumes one exact appearance read credential without trying a second purpose.
     ///
     /// # Errors
@@ -634,18 +583,6 @@ impl TicketStore {
             return Err(TicketError::Invalid);
         };
         Ok(ConsumedSettingsDirectoryReadTicket { principal_id })
-    }
-
-    async fn consume_room_http(
-        &self,
-        ticket: &str,
-        expected: RoomHttpPurpose,
-    ) -> Result<ConsumedRoomHttpTicket, TicketError> {
-        let grant = self.consume_grant(ticket).await?;
-        let TicketAuthority::RoomHttp(room) = grant.authority else {
-            return Err(TicketError::Invalid);
-        };
-        resolve_room_http_authority(room, &expected)
     }
 
     async fn consume_human_invite_manager(

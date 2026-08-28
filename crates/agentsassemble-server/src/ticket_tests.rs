@@ -146,18 +146,18 @@ async fn room_http_purposes_and_asset_bindings_are_consumed_on_mismatch() {
         )
         .await
         .unwrap_or_else(|error| panic!("issue pending preview read: {error}"));
-    assert_eq!(
+    assert!(matches!(
         store
-            .consume_pending_preview_read(&asset.ticket, "ra_11111111111111111111111111111111",)
+            .consume_appearance_read(&asset.ticket, "ra_11111111111111111111111111111111")
             .await,
         Err(TicketError::Invalid)
-    );
-    assert_eq!(
+    ));
+    assert!(matches!(
         store
-            .consume_pending_preview_read(&asset.ticket, "ra_00000000000000000000000000000000",)
+            .consume_appearance_read(&asset.ticket, "ra_00000000000000000000000000000000")
             .await,
         Err(TicketError::Invalid)
-    );
+    ));
 
     let bound = store
         .issue_bound_appearance_read(
