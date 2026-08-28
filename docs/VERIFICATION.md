@@ -3717,3 +3717,48 @@ generated sidecar, and generated frontend `dist` were moved to exact recoverable
 paths. Packaged local/remote/restart verification remains the sole uncompleted exit
 evidence for this slice and must use a freshly rebuilt isolated package after the Mac is
 unlocked.
+
+## Lobby message-pin packaged completion: 2026-08-29
+
+The isolated release package built from `0a1bec6` was restored from its recoverable
+Trash location after the Mac was unlocked. Later commits through `4959f9b` contain only
+review corrections already present in that binary or documentation, so the package
+exercised the final lobby-pin code. Its distinct bundle identifier, SQLite state,
+Application Support, caches, WebKit data, sidecar, frontend distribution, and build
+directory remained separate from every installed or development copy.
+
+Computer Use created one real room and published `LOBBY_PIN_E2E_20260829` through the
+packaged copied frontend. The local operator exposed the message action, pinned it,
+opened the complete pin list, selected its list row, and observed the exact timeline
+message receive focus/highlight. Unpin emptied the list and re-pin restored one row.
+After a normal `Cmd-Q` and exact bundle relaunch, the same room, message, and pin were
+loaded from canonical SQLite state. This passes local list/mutation/navigation and exact
+restart retention without fixture, fake authority, compatibility state, or fallback.
+
+The same app opened its owned Cloudflare quick tunnel and created one-use human invites.
+A fresh Chrome incognito browser admitted `Writable Pin Guest`, removed the invite token
+from the address bar, loaded the canonical message and existing pin, unpinned it through
+the remote HTTP authority, observed the empty list, and re-pinned it from the real
+message row. Reopening the host list showed the same restored pin. The host then changed
+the room-owned invite scope to read-only and generated a new one-use invite; the prior
+invite was visibly retired rather than reused. After the writable incognito window was
+closed, a new incognito identity admitted `Read Only Pin Guest`. It could read the exact
+pin and message, while the UI stated that the room was view-only, disabled the composer,
+omitted the list unpin action, and exposed no per-message pin toggle. The earlier real
+TCP contract test supplies the complementary direct-mutation evidence: the same
+read-only authority receives stable `session_read_only` denial with no durable change.
+
+The host's copied custom-channel dialog was also exercised with a non-empty channel
+name. It remained open and reported `Custom channels are unavailable until their
+message and voice owners exist.` No custom channel or custom-channel pin authority was
+created. This is the intended visible incomplete state, not a client-side substitute.
+
+Cleanup followed the owner boundaries used for the run. The app reported public ingress
+off before either browser or host shutdown. Exactly one verification incognito window
+was open at a time and each was closed without closing or inspecting the user's normal
+Chrome window. The exact packaged app exited normally; no matching desktop/server or
+`cloudflared` process remained. Only the verification build directory and the bundle-ID
+specific Application Support, cache, and WebKit directories were moved to distinct
+recoverable Trash paths, alongside the already isolated sidecar and frontend build. The
+Computer Use kernel was reset. No provider, Deep Scan, or automated security scanner
+ran, and this UI-only closure makes no CPU, memory, disk, or latency improvement claim.
