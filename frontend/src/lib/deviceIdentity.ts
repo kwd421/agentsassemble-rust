@@ -1,3 +1,5 @@
+import { decodeCanonicalBase64Url, encodeBase64Url } from "./base64Url";
+
 const BROWSER_CREDENTIAL_STORAGE_KEY = "agentsassemble.browserCredential.v1";
 const CLIENT_ID_STORAGE_KEY = "agentsassemble.clientId.v1";
 const GUEST_PROFILE_STORAGE_KEY = "agentsassemble.guestProfile.v1";
@@ -20,12 +22,6 @@ export type RememberedGuestProfile = {
   avatarImage?: string;
 };
 
-function encodeBase64Url(bytes: Uint8Array): string {
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-
 function isCanonicalBrowserCredential(value: string): boolean {
   if (!value.startsWith(BROWSER_CREDENTIAL_PREFIX)) return false;
   const encoded = value.slice(BROWSER_CREDENTIAL_PREFIX.length);
@@ -35,16 +31,7 @@ function isCanonicalBrowserCredential(value: string): boolean {
   ) {
     return false;
   }
-  try {
-    const binary = atob(encoded.replace(/-/g, "+").replace(/_/g, "/") + "=");
-    const decoded = Uint8Array.from(binary, (character) => character.charCodeAt(0));
-    return (
-      decoded.length === BROWSER_CREDENTIAL_BYTES &&
-      encodeBase64Url(decoded) === encoded
-    );
-  } catch {
-    return false;
-  }
+  return decodeCanonicalBase64Url(encoded)?.length === BROWSER_CREDENTIAL_BYTES;
 }
 
 /**

@@ -1,4 +1,9 @@
 import type { DesktopCentralRegistrationBinding } from "./desktopBridge";
+import {
+  decodeCanonicalBase64Url,
+  encodeBase64Url,
+  isBase64UrlText,
+} from "./base64Url";
 
 const REGISTRATION_CONTEXT = "AA-HOST-REGISTER-1";
 
@@ -42,37 +47,16 @@ function exactObject(
   return object;
 }
 
-function bytesToBase64Url(bytes: Uint8Array): string {
-  let binary = "";
-  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
-  }
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-
 function decodeBase64Url(
   value: unknown,
   expectedBytes: number,
   label: string
 ): Uint8Array<ArrayBuffer> {
-  if (typeof value !== "string" || !/^[A-Za-z0-9_-]+$/.test(value) || value.length % 4 === 1) {
+  if (typeof value !== "string" || !isBase64UrlText(value)) {
     throw new Error(`${label} 인코딩이 올바르지 않습니다.`);
   }
-  let binary: string;
-  try {
-    const padded = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(
-      value.length + ((4 - (value.length % 4)) % 4),
-      "="
-    );
-    binary = atob(padded);
-  } catch {
-    throw new Error(`${label} 인코딩이 올바르지 않습니다.`);
-  }
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-  if (bytes.length !== expectedBytes || bytesToBase64Url(bytes) !== value) {
+  const bytes = decodeCanonicalBase64Url(value);
+  if (!bytes || bytes.length !== expectedBytes) {
     throw new Error(`${label} 길이 또는 정규형이 올바르지 않습니다.`);
   }
   return bytes;
@@ -124,7 +108,7 @@ export async function verifyCentralRegistrationEnvelope(
     kty: jwk.kty,
     x: jwk.x,
   });
-  const fingerprint = bytesToBase64Url(
+  const fingerprint = encodeBase64Url(
     new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonicalJwk)))
   );
   if (fingerprint !== binding.host_key_fingerprint) {
@@ -146,7 +130,7 @@ export async function verifyCentralRegistrationEnvelope(
   const publicKeyBytes = decodeBase64Url(jwk.x, 32, "호스트 공개키");
   const nonce = decodeBase64Url(proof.nonce, 18, "호스트 등록 nonce");
   const signature = decodeBase64Url(proof.signature, 64, "호스트 등록 서명");
-  const transcript = `${REGISTRATION_CONTEXT}\n${binding.server_id}\n${expectedOwnerPersonId}\n${proof.issued_at}\n${bytesToBase64Url(nonce)}`;
+  const transcript = `${REGISTRATION_CONTEXT}\n${binding.server_id}\n${expectedOwnerPersonId}\n${proof.issued_at}\n${encodeBase64Url(nonce)}`;
   const publicKey = await crypto.subtle.importKey(
     "raw",
     publicKeyBytes,

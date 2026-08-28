@@ -4,6 +4,7 @@ import {
   isDesktopWebview,
   openDesktopCentralGoogleLogin,
 } from "./desktopBridge";
+import { encodeBase64Url } from "./base64Url";
 import { verifyCentralRegistrationEnvelope } from "./centralRegistrationProof";
 
 const SESSION_KEY = "agentsassemble.centralSession.v1";
@@ -108,20 +109,11 @@ export function centralIdentityConfigured(): boolean {
 function randomUrlToken(bytes = 18): string {
   const value = new Uint8Array(bytes);
   crypto.getRandomValues(value);
-  return bytesToBase64Url(value);
-}
-
-function bytesToBase64Url(value: ArrayBuffer | Uint8Array): string {
-  const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
-  let binary = "";
-  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
-  }
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  return encodeBase64Url(value);
 }
 
 async function sha256(value: string): Promise<string> {
-  return bytesToBase64Url(
+  return encodeBase64Url(
     await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))
   );
 }
@@ -443,7 +435,7 @@ async function signedRequest<T>(
       "x-aa-device-id": device.deviceId,
       "x-aa-timestamp": String(timestamp),
       "x-aa-nonce": nonce,
-      "x-aa-signature": bytesToBase64Url(signature),
+      "x-aa-signature": encodeBase64Url(signature),
     },
     body: body || undefined,
   });
