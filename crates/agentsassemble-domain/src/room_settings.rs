@@ -342,11 +342,6 @@ impl RoomAppearancePatch {
                 "Room appearance images are unavailable until their asset owner exists.",
             ));
         }
-        if self.invite_scope.is_some() {
-            return Err(RoomSettingsError::unsupported(
-                "Room invite scope is unavailable until invite admission exists.",
-            ));
-        }
         Ok(())
     }
 
@@ -634,6 +629,22 @@ mod tests {
             panic!("channels unexpectedly became available");
         };
         assert_eq!(error.code, "room_setting_unsupported");
+    }
+
+    #[test]
+    fn room_invite_scope_is_mutable_after_admission_activation() {
+        let current = RoomSettings::defaults("General");
+        let revision = public_settings(&current)
+            .unwrap_or_else(|error| panic!("settings revision: {error}"))
+            .settings_revision;
+        let (_, next, _) = current
+            .stage_a_update(&json!({
+                "expected_revision": revision,
+                "appearance": {"invite_scope": "read_only"}
+            }))
+            .unwrap_or_else(|error| panic!("update invite scope: {error}"));
+
+        assert_eq!(next.appearance.invite_scope, "read_only");
     }
 
     #[test]
