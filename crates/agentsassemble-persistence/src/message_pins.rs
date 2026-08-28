@@ -29,9 +29,11 @@ impl SqliteStore {
     pub async fn local_lobby_message_pins(
         &self,
         room_id: &str,
+        user_id: &str,
+        participant_id: &str,
     ) -> Result<Vec<PinnedLobbyMessage>, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        authorize_local_operator(&mut transaction, room_id).await?;
+        authorize_local_operator(&mut transaction, room_id, user_id, participant_id).await?;
         let pins = load_pins(&mut transaction, room_id).await?;
         transaction.commit().await?;
         Ok(pins)
@@ -67,11 +69,13 @@ impl SqliteStore {
     pub async fn set_local_lobby_message_pin(
         &self,
         room_id: &str,
+        user_id: &str,
+        participant_id: &str,
         event_id: &str,
         pinned: bool,
     ) -> Result<Vec<PinnedLobbyMessage>, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        authorize_local_operator(&mut transaction, room_id).await?;
+        authorize_local_operator(&mut transaction, room_id, user_id, participant_id).await?;
         set_pin(&mut transaction, room_id, event_id, pinned, Utc::now()).await?;
         let pins = load_pins(&mut transaction, room_id).await?;
         transaction.commit().await?;
@@ -113,14 +117,17 @@ impl SqliteStore {
 async fn authorize_local_operator(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
+    user_id: &str,
+    participant_id: &str,
 ) -> Result<(), PersistenceError> {
-    let identity = resolve_room_user_identity(
-        transaction,
-        room_id,
-        LOCAL_OPERATOR_USER_ID,
-        LOCAL_OPERATOR_PARTICIPANT_ID,
-    )
-    .await?;
+    if user_id != LOCAL_OPERATOR_USER_ID || participant_id != LOCAL_OPERATOR_PARTICIPANT_ID {
+        return Err(rejected(
+            "permission_denied",
+            "Only the local room operator may use local pin authority.",
+        ));
+    }
+    let identity =
+        resolve_room_user_identity(transaction, room_id, user_id, participant_id).await?;
     require_current_local_room_manager(transaction, &identity).await?;
     Ok(())
 }
@@ -295,7 +302,13 @@ mod tests {
         let second = send(&store, &principal, "message-2", "second").await;
 
         store
-            .set_local_lobby_message_pin("general", &first.id, true)
+            .set_local_lobby_message_pin(
+                "general",
+                LOCAL_OPERATOR_USER_ID,
+                LOCAL_OPERATOR_PARTICIPANT_ID,
+                &first.id,
+                true,
+            )
             .await
             .unwrap_or_else(|error| panic!("pin first: {error}"));
         sqlx::query("UPDATE room_message_pins SET pinned_at = 1 WHERE event_id = ?")
@@ -304,7 +317,13 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("age first pin: {error}"));
         let pins = store
-            .set_local_lobby_message_pin("general", &second.id, true)
+            .set_local_lobby_message_pin(
+                "general",
+                LOCAL_OPERATOR_USER_ID,
+                LOCAL_OPERATOR_PARTICIPANT_ID,
+                &second.id,
+                true,
+            )
             .await
             .unwrap_or_else(|error| panic!("pin second: {error}"));
         assert_eq!(
@@ -322,18 +341,36 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("bound second pin timestamp: {error}"));
         let repinned = store
-            .set_local_lobby_message_pin("general", &first.id, true)
+            .set_local_lobby_message_pin(
+                "general",
+                LOCAL_OPERATOR_USER_ID,
+                LOCAL_OPERATOR_PARTICIPANT_ID,
+                &first.id,
+                true,
+            )
             .await
             .unwrap_or_else(|error| panic!("re-pin first: {error}"));
         assert_eq!(repinned.len(), 2);
         assert_eq!(repinned[0].event_id, first.id);
         let remaining = store
-            .set_local_lobby_message_pin("general", &second.id, false)
+            .set_local_lobby_message_pin(
+                "general",
+                LOCAL_OPERATOR_USER_ID,
+                LOCAL_OPERATOR_PARTICIPANT_ID,
+                &second.id,
+                false,
+            )
             .await
             .unwrap_or_else(|error| panic!("unpin second: {error}"));
         assert_eq!(remaining.len(), 1);
         let unchanged = store
-            .set_local_lobby_message_pin("general", &second.id, false)
+            .set_local_lobby_message_pin(
+                "general",
+                LOCAL_OPERATOR_USER_ID,
+                LOCAL_OPERATOR_PARTICIPANT_ID,
+                &second.id,
+                false,
+            )
             .await
             .unwrap_or_else(|error| panic!("repeat unpin: {error}"));
         assert_eq!(unchanged, remaining);
@@ -354,7 +391,13 @@ mod tests {
         for event_id in ["missing", room_created.id.as_str(), "bad\0id"] {
             assert!(
                 store
-                    .set_local_lobby_message_pin("general", event_id, true)
+                    .set_local_lobby_message_pin(
+                        "general",
+                        LOCAL_OPERATOR_USER_ID,
+                        LOCAL_OPERATOR_PARTICIPANT_ID,
+                        event_id,
+                        true,
+                    )
                     .await
                     .is_err()
             );
@@ -367,7 +410,13 @@ mod tests {
         assert_eq!(before, 0);
 
         store
-            .set_local_lobby_message_pin("general", &valid.id, true)
+            .set_local_lobby_message_pin(
+                "general",
+                LOCAL_OPERATOR_USER_ID,
+                LOCAL_OPERATOR_PARTICIPANT_ID,
+                &valid.id,
+                true,
+            )
             .await
             .unwrap_or_else(|error| panic!("pin valid message: {error}"));
         sqlx::query(
@@ -378,7 +427,13 @@ mod tests {
         .await
         .unwrap_or_else(|error| panic!("corrupt target event: {error}"));
         assert!(matches!(
-            store.local_lobby_message_pins("general").await,
+            store
+                .local_lobby_message_pins(
+                    "general",
+                    LOCAL_OPERATOR_USER_ID,
+                    LOCAL_OPERATOR_PARTICIPANT_ID,
+                )
+                .await,
             Err(PersistenceError::Json(_))
         ));
     }
@@ -388,7 +443,13 @@ mod tests {
         let (read_only_store, local) = admitted_fixture(InviteScope::ReadOnly).await;
         let message = send(&read_only_store, &local, "read-only-target", "target").await;
         read_only_store
-            .set_local_lobby_message_pin("general", &message.id, true)
+            .set_local_lobby_message_pin(
+                "general",
+                LOCAL_OPERATOR_USER_ID,
+                LOCAL_OPERATOR_PARTICIPANT_ID,
+                &message.id,
+                true,
+            )
             .await
             .unwrap_or_else(|error| panic!("seed readable pin: {error}"));
         let read_only = human_authorization(&read_only_store).await;

@@ -72,6 +72,7 @@ mod human_session_bearer;
 mod human_session_exchange_web;
 mod ingress_trust;
 mod lifecycle_command_tracker;
+mod message_pins_web;
 mod participant_mute_runtime;
 mod principal_mutation_admission;
 mod product_surface;

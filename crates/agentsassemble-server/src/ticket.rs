@@ -71,6 +71,8 @@ pub(super) enum LocalRoomManagerPurpose {
 pub enum RoomHttpPurpose {
     PreferencesRead,
     PreferencesWrite,
+    MessagePinsRead,
+    MessagePinsWrite,
     BoundAppearanceRead { asset_id: String },
 }
 
@@ -109,7 +111,7 @@ pub(crate) struct ConsumedHumanInviteManagerTicket {
     pub authority: LocalRoomManagerAuthority,
 }
 
-pub(crate) enum ConsumedRoomPreferenceTicket {
+pub(crate) enum ConsumedRoomHumanTicket {
     Local(ConsumedRoomHttpTicket),
     HumanSession(HumanSessionAuthorization),
 }
@@ -243,6 +245,46 @@ impl TicketStore {
             principal_id,
             participant_id,
             RoomHttpPurpose::PreferencesWrite,
+        )
+        .await
+    }
+
+    /// Issues one exact message-pin read credential for a resolved room human.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` for empty identity fields or exhausted ticket capacity.
+    pub async fn issue_message_pins_read(
+        &self,
+        room_id: String,
+        principal_id: String,
+        participant_id: String,
+    ) -> Result<IssuedTicket, TicketError> {
+        self.issue_room_http(
+            room_id,
+            principal_id,
+            participant_id,
+            RoomHttpPurpose::MessagePinsRead,
+        )
+        .await
+    }
+
+    /// Issues one exact message-pin write credential for a resolved room human.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` for empty identity fields or exhausted ticket capacity.
+    pub async fn issue_message_pins_write(
+        &self,
+        room_id: String,
+        principal_id: String,
+        participant_id: String,
+    ) -> Result<IssuedTicket, TicketError> {
+        self.issue_room_http(
+            room_id,
+            principal_id,
+            participant_id,
+            RoomHttpPurpose::MessagePinsWrite,
         )
         .await
     }
@@ -458,8 +500,8 @@ impl TicketStore {
     pub(crate) async fn consume_preferences_read(
         &self,
         ticket: &str,
-    ) -> Result<ConsumedRoomPreferenceTicket, TicketError> {
-        self.consume_room_preference(
+    ) -> Result<ConsumedRoomHumanTicket, TicketError> {
+        self.consume_room_human(
             ticket,
             RoomHttpPurpose::PreferencesRead,
             HumanSessionGrantPurpose::PreferencesRead,
@@ -475,11 +517,45 @@ impl TicketStore {
     pub(crate) async fn consume_preferences_write(
         &self,
         ticket: &str,
-    ) -> Result<ConsumedRoomPreferenceTicket, TicketError> {
-        self.consume_room_preference(
+    ) -> Result<ConsumedRoomHumanTicket, TicketError> {
+        self.consume_room_human(
             ticket,
             RoomHttpPurpose::PreferencesWrite,
             HumanSessionGrantPurpose::PreferencesWrite,
+        )
+        .await
+    }
+
+    /// Consumes only an exact message-pin read credential.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` after consuming a wrong-purpose, expired, unknown, or reused ticket.
+    pub(crate) async fn consume_message_pins_read(
+        &self,
+        ticket: &str,
+    ) -> Result<ConsumedRoomHumanTicket, TicketError> {
+        self.consume_room_human(
+            ticket,
+            RoomHttpPurpose::MessagePinsRead,
+            HumanSessionGrantPurpose::MessagePinsRead,
+        )
+        .await
+    }
+
+    /// Consumes only an exact message-pin write credential.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` after consuming a wrong-purpose, expired, unknown, or reused ticket.
+    pub(crate) async fn consume_message_pins_write(
+        &self,
+        ticket: &str,
+    ) -> Result<ConsumedRoomHumanTicket, TicketError> {
+        self.consume_room_human(
+            ticket,
+            RoomHttpPurpose::MessagePinsWrite,
+            HumanSessionGrantPurpose::MessagePinsWrite,
         )
         .await
     }
@@ -586,19 +662,20 @@ impl TicketStore {
         })
     }
 
-    async fn consume_room_preference(
+    async fn consume_room_human(
         &self,
         ticket: &str,
         room_purpose: RoomHttpPurpose,
         session_purpose: HumanSessionGrantPurpose,
-    ) -> Result<ConsumedRoomPreferenceTicket, TicketError> {
+    ) -> Result<ConsumedRoomHumanTicket, TicketError> {
         let grant = self.consume_grant(ticket).await?;
         match grant.authority {
-            TicketAuthority::RoomHttp(room) => resolve_room_http_authority(room, &room_purpose)
-                .map(ConsumedRoomPreferenceTicket::Local),
+            TicketAuthority::RoomHttp(room) => {
+                resolve_room_http_authority(room, &room_purpose).map(ConsumedRoomHumanTicket::Local)
+            }
             TicketAuthority::HumanSession(session) => {
                 Self::resolve_human_session_authority(session, &session_purpose, Utc::now())
-                    .map(ConsumedRoomPreferenceTicket::HumanSession)
+                    .map(ConsumedRoomHumanTicket::HumanSession)
             }
             TicketAuthority::Room(_)
             | TicketAuthority::LocalRoomManager(_)

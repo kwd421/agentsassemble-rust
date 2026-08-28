@@ -19,6 +19,8 @@ pub(super) enum HumanSessionGrantPurpose {
     OwnProfile,
     PreferencesRead,
     PreferencesWrite,
+    MessagePinsRead,
+    MessagePinsWrite,
     BoundAppearanceRead { asset_id: String },
 }
 
@@ -127,6 +129,35 @@ impl TicketStore {
             return Err(TicketError::Invalid);
         }
         self.issue_human_session(authorization, HumanSessionGrantPurpose::PreferencesWrite)
+            .await
+    }
+
+    /// Issues an exact message-pin read grant from current durable human-session authority.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` when the session has expired or a grant bound is exhausted.
+    pub async fn issue_human_session_message_pins_read(
+        &self,
+        authorization: HumanSessionAuthorization,
+    ) -> Result<IssuedTicket, TicketError> {
+        self.issue_human_session(authorization, HumanSessionGrantPurpose::MessagePinsRead)
+            .await
+    }
+
+    /// Issues an exact message-pin write grant from current writable human-session authority.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` for read-only/expired sessions or an exhausted grant bound.
+    pub async fn issue_human_session_message_pins_write(
+        &self,
+        authorization: HumanSessionAuthorization,
+    ) -> Result<IssuedTicket, TicketError> {
+        if authorization.principal().invite_scope != InviteScope::ReadWrite {
+            return Err(TicketError::Invalid);
+        }
+        self.issue_human_session(authorization, HumanSessionGrantPurpose::MessagePinsWrite)
             .await
     }
 

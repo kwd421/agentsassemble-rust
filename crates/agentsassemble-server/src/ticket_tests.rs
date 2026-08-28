@@ -152,6 +152,35 @@ async fn room_http_purposes_and_asset_bindings_are_consumed_on_mismatch() {
         Err(TicketError::Invalid)
     ));
 
+    let pin_read = store
+        .issue_message_pins_read(
+            "general".to_owned(),
+            "operator-local-user".to_owned(),
+            "operator-local".to_owned(),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("issue pin read: {error}"));
+    assert!(matches!(
+        store.consume_message_pins_write(&pin_read.ticket).await,
+        Err(TicketError::Invalid)
+    ));
+    assert!(matches!(
+        store.consume_message_pins_read(&pin_read.ticket).await,
+        Err(TicketError::Invalid)
+    ));
+    let pin_write = store
+        .issue_message_pins_write(
+            "general".to_owned(),
+            "operator-local-user".to_owned(),
+            "operator-local".to_owned(),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("issue pin write: {error}"));
+    assert!(matches!(
+        store.consume_message_pins_write(&pin_write.ticket).await,
+        Ok(crate::ticket::ConsumedRoomHumanTicket::Local(_))
+    ));
+
     let asset = store
         .issue_pending_preview_read(
             manager_authority(),
@@ -265,7 +294,21 @@ async fn human_session_grants_are_exact_purpose_and_one_use() {
         .unwrap_or_else(|error| panic!("issue read-only preference grant: {error}"));
     assert!(matches!(
         store.consume_preferences_read(&preferences.ticket).await,
-        Ok(crate::ticket::ConsumedRoomPreferenceTicket::HumanSession(_))
+        Ok(crate::ticket::ConsumedRoomHumanTicket::HumanSession(_))
+    ));
+    assert!(matches!(
+        store
+            .issue_human_session_message_pins_write(fixture.authorize(0).await)
+            .await,
+        Err(TicketError::Invalid)
+    ));
+    let pin_read = store
+        .issue_human_session_message_pins_read(fixture.authorize(0).await)
+        .await
+        .unwrap_or_else(|error| panic!("issue read-only pin grant: {error}"));
+    assert!(matches!(
+        store.consume_message_pins_read(&pin_read.ticket).await,
+        Ok(crate::ticket::ConsumedRoomHumanTicket::HumanSession(_))
     ));
     let profile = store
         .issue_human_session_profile(fixture.authorize(0).await)
