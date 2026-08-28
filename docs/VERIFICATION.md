@@ -3102,3 +3102,17 @@ binding/original-CSS/build/test/Clippy/diff gate: all 84 frontend files with 495
 20 desktop tests, domain 23, persistence 172, protocol 5, provider 120, server 83, and
 every integration/TCP test passed. No Computer Use resource, provider, Deep Scan, or
 other automated security scanner ran. Both final manual approvals remain pending.
+
+The next web re-review found one Medium wire-domain mismatch: JavaScript `Date`
+accepted years outside the pinned Chrono server's `-262143..=262142` domain. Commit
+`cfaf832` makes the protocol own and generate those two bounds, makes the frontend
+consume them before its existing canonical calendar and precision checks, and adds a
+server assertion that the values equal `NaiveDate::MIN/MAX` plus frontend endpoint
+acceptance and adjacent rejection regressions. The complete serial `make verify`
+passed with 496 frontend tests and 84 server tests; all other counts and the unchanged
+770.74 kB / 232.22 kB-gzip production chunk remain as recorded above. Daybreaker
+approved the correction, exact C1b, and cumulative C1 with C/H/M 0/0/0. The web
+reviewer found the code correction sound but returned C/H/M 0/0/1 because WORKBOARD
+and this verification record had not yet advanced to `cfaf832`; final web approval
+therefore remains pending on this current-state-only correction. No Computer Use,
+provider, Deep Scan, or other automated security scanner ran.
