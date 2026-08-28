@@ -3477,3 +3477,20 @@ desktop 20, domain 26, persistence 179, protocol 6, provider 120, server 85, eve
 TCP/integration/doc test, warning-denied Clippy, and diff gates. Final web and
 Daybreaker approval of this last correction remains pending. No provider, Deep Scan,
 automated security scanner, or Computer Use ran.
+
+Daybreaker first re-reviewed the final schema correction as
+`REVISE — Critical 0 / High 0 / Medium 1`: the embedded-NUL fixture used only 30
+lowercase-hex bytes, so schema 42 also rejected it before the NUL and the regression did
+not exercise the reported bypass. Commit `e7312d4` changes the fixture to the actual
+37-byte predecessor bypass, `ra_` plus 32 lowercase-hex bytes plus NUL and trailing
+`x`. Direct SQLite diagnosis confirmed schema 42 observed TEXT length 35 while the BLOB
+length was 37 and admitted the value; schema 43 and the Rust domain predicate reject it.
+The focused test and full serial `make verify` then passed again with the same suite
+counts and all TCP/integration/Clippy/structure gates.
+
+The final Daybreaker review returned `APPROVE — Critical 0 / High 0 / Medium 0`.
+The final critical-web review independently returned
+`APPROVE — Critical 0 / High 0 / Medium 0` with no findings. No provider, Deep Scan,
+automated security scanner, or Computer Use ran. The sole critical-review browser tab
+was closed after reading the completed response, the tab list was empty, and the browser
+connection was reset.
