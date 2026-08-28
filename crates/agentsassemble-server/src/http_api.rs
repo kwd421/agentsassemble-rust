@@ -3,6 +3,7 @@ use axum::{
     extract::Request,
     http::{HeaderMap, HeaderValue, Method, header},
 };
+use std::num::NonZeroU64;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use crate::AppState;
@@ -39,15 +40,18 @@ pub(crate) fn bearer_ticket(headers: &HeaderMap) -> Option<&str> {
         .filter(|value| !value.is_empty() && !value.bytes().any(|byte| byte.is_ascii_whitespace()))
 }
 
-pub(crate) async fn consume_local_operator(state: &AppState, headers: &HeaderMap) -> bool {
-    let Some(ticket) = bearer_ticket(headers) else {
-        return false;
-    };
+pub(crate) async fn consume_local_operator(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Option<NonZeroU64> {
+    let ticket = bearer_ticket(headers)?;
     state
         .tickets
         .consume_server_operator(ticket)
         .await
-        .is_ok_and(|grant| grant.principal_id == agentsassemble_domain::LOCAL_OPERATOR_USER_ID)
+        .ok()
+        .filter(|grant| grant.principal_id == agentsassemble_domain::LOCAL_OPERATOR_USER_ID)
+        .map(|grant| grant.issue_sequence)
 }
 
 pub(crate) async fn consume_central_registration(state: &AppState, headers: &HeaderMap) -> bool {

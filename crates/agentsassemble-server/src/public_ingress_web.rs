@@ -5,6 +5,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde_json::json;
+use std::num::NonZeroU64;
 use tower_http::set_header::SetResponseHeaderLayer;
 
 use crate::{
@@ -47,10 +48,10 @@ async fn start(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<PublicIngressStatus>, ControlApiError> {
-    authorize_empty(&state, request).await?;
+    let issue_sequence = authorize_empty(&state, request).await?;
     state
         .public_ingress
-        .start()
+        .start(issue_sequence)
         .await
         .map(Json)
         .map_err(ControlApiError::from)
@@ -60,22 +61,26 @@ async fn stop(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<PublicIngressStatus>, ControlApiError> {
-    authorize_empty(&state, request).await?;
+    let issue_sequence = authorize_empty(&state, request).await?;
     state
         .public_ingress
-        .stop()
+        .stop(issue_sequence)
         .await
         .map(Json)
         .map_err(ControlApiError::from)
 }
 
-async fn authorize_empty(state: &AppState, request: Request) -> Result<(), ControlApiError> {
-    if !consume_local_operator(state, request.headers()).await {
-        return Err(ControlApiError::unauthorized());
-    }
+async fn authorize_empty(
+    state: &AppState,
+    request: Request,
+) -> Result<NonZeroU64, ControlApiError> {
+    let issue_sequence = consume_local_operator(state, request.headers())
+        .await
+        .ok_or_else(ControlApiError::unauthorized)?;
     ensure_empty_body(request, MAX_CONTROL_BODY_BYTES)
         .await
-        .map_err(ControlApiError::from)
+        .map_err(ControlApiError::from)?;
+    Ok(issue_sequence)
 }
 
 struct ControlApiError {

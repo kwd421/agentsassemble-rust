@@ -110,7 +110,7 @@ async fn consume_operator(
     state: &AppState,
     headers: &axum::http::HeaderMap,
 ) -> Result<(), DirectoryHttpError> {
-    if !consume_local_operator(state, headers).await {
+    if consume_local_operator(state, headers).await.is_none() {
         return Err(DirectoryHttpError::unauthorized());
     }
     Ok(())

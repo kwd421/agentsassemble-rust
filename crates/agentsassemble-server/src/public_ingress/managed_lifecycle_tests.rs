@@ -1,4 +1,4 @@
-use std::{path::Path, sync::Arc, time::Duration};
+use std::{num::NonZeroU64, path::Path, sync::Arc, time::Duration};
 
 use axum::http::{HeaderMap, HeaderValue, header};
 use parking_lot::RwLock;
@@ -194,7 +194,7 @@ async fn cancelled_stop_keeps_the_generation_handle_owned() {
     }))
     .await;
     let stop_ingress = ingress.clone();
-    let stop = tokio::spawn(async move { stop_ingress.stop().await });
+    let stop = tokio::spawn(async move { stop_ingress.stop(sequence(1)).await });
     tokio::time::timeout(Duration::from_secs(1), cancellation.cancelled())
         .await
         .unwrap_or_else(|_| panic!("stop did not cancel the generation"));
@@ -221,7 +221,7 @@ async fn shutdown_closes_start_and_cleanup_failure_blocks_restart() {
         .await
         .unwrap_or_else(|error| panic!("close empty lifecycle: {error}"));
     assert!(matches!(
-        closed.start().await,
+        closed.start(sequence(1)).await,
         Err(PublicIngressControlError::Closed)
     ));
 
@@ -231,7 +231,7 @@ async fn shutdown_closes_start_and_cleanup_failure_blocks_restart() {
     };
     managed.projection.write().cleanup_failed = true;
     assert!(matches!(
-        failed.start().await,
+        failed.start(sequence(1)).await,
         Err(PublicIngressControlError::CleanupFailed)
     ));
 }
@@ -253,10 +253,15 @@ async fn managed(active: Option<ActiveGeneration>) -> PublicIngress {
             },
             lifecycle: Mutex::new(ManagedLifecycle {
                 closed: false,
+                latest_control_sequence: None,
                 active,
             }),
         },
     })))
+}
+
+fn sequence(value: u64) -> NonZeroU64 {
+    NonZeroU64::new(value).unwrap_or_else(|| panic!("control sequence must be nonzero"))
 }
 
 fn origin(value: &str) -> CanonicalPublicOrigin {

@@ -342,7 +342,7 @@ impl TicketStore {
                     Utc::now(),
                 )?)
             }
-            TicketAuthority::ServerOperator { principal_id } => {
+            TicketAuthority::ServerOperator { principal_id, .. } => {
                 ConsumedProfileTicket::ServerOperator { principal_id }
             }
             TicketAuthority::RoomHttp(_)

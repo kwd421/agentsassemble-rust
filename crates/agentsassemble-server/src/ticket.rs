@@ -1,4 +1,12 @@
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    num::NonZeroU64,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
+    time::Duration,
+};
 
 use agentsassemble_domain::AuthenticatedPrincipal;
 use agentsassemble_persistence::HumanSessionAuthorization;
@@ -23,9 +31,16 @@ enum TicketAuthority {
     Room(AuthenticatedPrincipal),
     RoomHttp(RoomHttpGrant),
     HumanSession(HumanSessionGrant),
-    SettingsDirectoryRead { principal_id: String },
-    ServerOperator { principal_id: String },
-    CentralRegistration { principal_id: String },
+    SettingsDirectoryRead {
+        principal_id: String,
+    },
+    ServerOperator {
+        principal_id: String,
+        issue_sequence: NonZeroU64,
+    },
+    CentralRegistration {
+        principal_id: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -63,6 +78,7 @@ pub struct ConsumedTicket {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConsumedServerOperatorTicket {
     pub principal_id: String,
+    pub issue_sequence: NonZeroU64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -96,6 +112,7 @@ pub enum TicketError {
 #[derive(Clone)]
 pub struct TicketStore {
     grants: Arc<Mutex<HashMap<String, StoredTicketGrant>>>,
+    next_server_operator_sequence: Arc<AtomicU64>,
     ttl: Duration,
     capacity: usize,
 }
@@ -105,6 +122,7 @@ impl TicketStore {
     pub fn new(ttl: Duration, capacity: usize) -> Self {
         Self {
             grants: Arc::new(Mutex::new(HashMap::new())),
+            next_server_operator_sequence: Arc::new(AtomicU64::new(0)),
             ttl,
             capacity: capacity.max(1),
         }
@@ -134,8 +152,21 @@ impl TicketStore {
         if principal_id.is_empty() {
             return Err(TicketError::Invalid);
         }
-        self.issue_authority(TicketAuthority::ServerOperator { principal_id })
-            .await
+        let previous = self
+            .next_server_operator_sequence
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+                current.checked_add(1)
+            })
+            .map_err(|_| TicketError::Invalid)?;
+        let issue_sequence = previous
+            .checked_add(1)
+            .and_then(NonZeroU64::new)
+            .ok_or(TicketError::Invalid)?;
+        self.issue_authority(TicketAuthority::ServerOperator {
+            principal_id,
+            issue_sequence,
+        })
+        .await
     }
 
     /// Issues one central-registration-only HTTP credential.
@@ -379,10 +410,17 @@ impl TicketStore {
         ticket: &str,
     ) -> Result<ConsumedServerOperatorTicket, TicketError> {
         let grant = self.consume_grant(ticket).await?;
-        let TicketAuthority::ServerOperator { principal_id } = grant.authority else {
+        let TicketAuthority::ServerOperator {
+            principal_id,
+            issue_sequence,
+        } = grant.authority
+        else {
             return Err(TicketError::Invalid);
         };
-        Ok(ConsumedServerOperatorTicket { principal_id })
+        Ok(ConsumedServerOperatorTicket {
+            principal_id,
+            issue_sequence,
+        })
     }
 
     /// Removes and resolves a central-registration credential exactly once.

@@ -136,7 +136,7 @@ async fn failed_clear_is_explicit_and_blocks_tunnel_restart() {
     .await
     .unwrap_or_else(|error| panic!("activate stable entry: {error}"));
     let status = ingress
-        .stop()
+        .stop(std::num::NonZeroU64::MIN)
         .await
         .unwrap_or_else(|error| panic!("stop managed ingress: {error}"));
     assert_eq!(status.tunnel.phase, "error");
@@ -147,7 +147,9 @@ async fn failed_clear_is_explicit_and_blocks_tunnel_restart() {
         Some("stable-entry cleanup failed")
     );
     assert!(matches!(
-        ingress.start().await,
+        ingress
+            .start(std::num::NonZeroU64::new(2).unwrap_or_else(|| unreachable!()))
+            .await,
         Err(PublicIngressControlError::CleanupFailed)
     ));
 }

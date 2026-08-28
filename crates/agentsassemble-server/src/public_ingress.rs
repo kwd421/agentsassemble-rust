@@ -1,6 +1,7 @@
 use std::{
     fmt,
     net::SocketAddr,
+    num::NonZeroU64,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -80,7 +81,21 @@ struct ManagedController {
 
 struct ManagedLifecycle {
     closed: bool,
+    latest_control_sequence: Option<NonZeroU64>,
     active: Option<ActiveGeneration>,
+}
+
+impl ManagedLifecycle {
+    fn accept_control(&mut self, issue_sequence: NonZeroU64) -> bool {
+        if self
+            .latest_control_sequence
+            .is_some_and(|latest| latest >= issue_sequence)
+        {
+            return false;
+        }
+        self.latest_control_sequence = Some(issue_sequence);
+        true
+    }
 }
 
 impl fmt::Debug for PublicIngress {
@@ -179,6 +194,7 @@ impl PublicIngress {
                     },
                     lifecycle: Mutex::new(ManagedLifecycle {
                         closed: false,
+                        latest_control_sequence: None,
                         active: None,
                     }),
                 },
@@ -205,11 +221,17 @@ impl PublicIngress {
         }
     }
 
-    pub(crate) async fn start(&self) -> Result<PublicIngressStatus, PublicIngressControlError> {
+    pub(crate) async fn start(
+        &self,
+        issue_sequence: NonZeroU64,
+    ) -> Result<PublicIngressStatus, PublicIngressControlError> {
         let ingress = self.managed_ingress()?;
         let mut lifecycle = ingress.controller.lifecycle.lock().await;
         if lifecycle.closed {
             return Err(PublicIngressControlError::Closed);
+        }
+        if !lifecycle.accept_control(issue_sequence) {
+            return Ok(ingress.status());
         }
         if lifecycle
             .active
@@ -228,11 +250,17 @@ impl PublicIngress {
         Ok(ingress.status())
     }
 
-    pub(crate) async fn stop(&self) -> Result<PublicIngressStatus, PublicIngressControlError> {
+    pub(crate) async fn stop(
+        &self,
+        issue_sequence: NonZeroU64,
+    ) -> Result<PublicIngressStatus, PublicIngressControlError> {
         let ingress = self.managed_ingress()?;
         let mut lifecycle = ingress.controller.lifecycle.lock().await;
         if lifecycle.closed {
             return Err(PublicIngressControlError::Closed);
+        }
+        if !lifecycle.accept_control(issue_sequence) {
+            return Ok(ingress.status());
         }
         stop_active(
             &ingress.projection,

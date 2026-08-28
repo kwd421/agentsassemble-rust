@@ -91,7 +91,18 @@ async fn managed_public_ingress_enforces_real_process_tcp_and_revocation_boundar
         assert!(response.starts_with("HTTP/1.1 403"));
     }
 
-    let stop_ticket = operator_ticket(&mut server, "managed-ingress-stop").await;
+    stop_then_reject_stale_start(&mut server, &client, &fixture, &trusted_headers).await;
+    server.close_parent_pipe().await;
+}
+
+async fn stop_then_reject_stale_start(
+    server: &mut ControlledServer,
+    client: &reqwest::Client,
+    fixture: &ManagedIngressFixture,
+    trusted_headers: &str,
+) {
+    let stale_start_ticket = operator_ticket(server, "managed-ingress-stale-start").await;
+    let stop_ticket = operator_ticket(server, "managed-ingress-stop").await;
     let stopped: Value = client
         .post(format!("{}/api/public-invite/tunnel/stop", server.address))
         .bearer_auth(stop_ticket)
@@ -105,9 +116,18 @@ async fn managed_public_ingress_enforces_real_process_tcp_and_revocation_boundar
     assert!(fixture.cloudflared.with_extension("stopped").is_file());
     let descendant = fixture.cloudflared.with_extension("descendant-stopped");
     assert!(descendant.is_file());
-    let revoked = tcp_request(&server.address, "GET /join HTTP/1.1", &trusted_headers).await;
+    let stale_start: Value = client
+        .post(format!("{}/api/public-invite/tunnel/start", server.address))
+        .bearer_auth(stale_start_ticket)
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("send stale managed-ingress Start: {error}"))
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("decode stale managed-ingress Start: {error}"));
+    assert_eq!(stale_start["tunnel"]["phase"], "stopped");
+    let revoked = tcp_request(&server.address, "GET /join HTTP/1.1", trusted_headers).await;
     assert!(revoked.starts_with("HTTP/1.1 403"));
-    server.close_parent_pipe().await;
 }
 
 struct ManagedIngressFixture {
