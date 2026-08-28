@@ -2906,3 +2906,27 @@ TCP/integration, warning-denied Clippy, and diff gate: 83 frontend files with 48
 all integration and documentation tests. The production main chunk is 771.11 kB
 (232.38 kB gzip). Final approval for this last persistence correction is withheld until
 the pushed commit is re-reviewed by both reviewers.
+
+Daybreaker approved `525f754..817ff0d` and `5a032db..817ff0d` with
+`Critical 0 / High 0 / Medium 0`. Web review returned
+`REVISE — Critical 0 / High 0 / Medium 1`: a cached room with the right stable
+`(serverId, roomUid)` but a previously transformed `meetingId` matched the verified
+directory entry, yet reconciliation retained that stale ID. The stale value could then
+be persisted again and used by the active socket or ticket path.
+
+The correction makes verified-directory reconciliation replace both operational room
+identifiers (`id` and `meetingId`) and includes them in its change decision. The native
+derived-cache writer no longer owns a second generic-text room-ID policy: it calls the
+domain `validate_room_id` owner and accepts only an unchanged canonical result. No cache
+version, migration, fallback, or compatibility branch was added. Tests prove that a
+stable-identity cached alias is replaced by the verified directory ID, that U+FEFF and
+128 Unicode scalars reach the native cache unchanged, and that a value normalized by
+the domain owner is rejected instead of rewritten.
+
+The final serial `make verify` passed all repository gates, 83 frontend files with 483
+tests, 20 desktop tests, and the unchanged complete Rust, TCP, integration, Clippy, and
+documentation suites. The production main chunk is 771.18 kB (232.40 kB gzip). This
+correction adds no runtime task, database query, durable policy state, or network round
+trip; it replaces derived fields during an existing O(rooms) merge and removes duplicate
+normalization at the native write boundary. Final approval remains withheld until this
+correction is pushed and both reviewers recheck it.

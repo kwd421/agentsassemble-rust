@@ -4,6 +4,7 @@ use std::{
     path::Path,
 };
 
+use agentsassemble_domain::validate_room_id;
 use serde_json::{Map, Value};
 use tauri::{AppHandle, Manager};
 use url::Url;
@@ -72,8 +73,9 @@ fn sanitize(payload: &str) -> Result<String, String> {
 
 fn sanitize_room(value: &Value) -> Option<Value> {
     let source = value.as_object()?;
-    let meeting_id = bounded_text(source.get("meetingId"), 128);
-    if meeting_id.is_empty() {
+    let source_meeting_id = source.get("meetingId")?.as_str()?;
+    let meeting_id = validate_room_id(source_meeting_id).ok()?;
+    if meeting_id != source_meeting_id {
         return None;
     }
     let server_origin = safe_server_origin(source.get("serverOrigin"));
@@ -170,5 +172,27 @@ mod tests {
         assert!(value[0].get("serverOrigin").is_none());
         assert_eq!(value[0]["appearance"]["bannerPreset"], "forest");
         assert_eq!(value[0]["appearance"]["iconLabel"], "AB");
+    }
+
+    #[test]
+    fn cache_uses_the_domain_room_id_without_rewriting_it() {
+        let exact = format!("\u{feff}{}", "\u{10000}".repeat(127));
+        let payload = serde_json::to_string(&serde_json::json!([{
+            "meetingId": exact,
+            "label": "Exact room"
+        }]))
+        .unwrap_or_else(|error| panic!("encode exact room cache: {error}"));
+        let cached = super::sanitize(&payload)
+            .unwrap_or_else(|error| panic!("sanitize exact room cache: {error}"));
+        let value: serde_json::Value = serde_json::from_str(&cached)
+            .unwrap_or_else(|error| panic!("decode exact room cache: {error}"));
+        assert_eq!(value[0]["meetingId"], exact);
+
+        let invalid = serde_json::to_string(&serde_json::json!([{
+            "meetingId": "\u{85}room",
+            "label": "Invalid room"
+        }]))
+        .unwrap_or_else(|error| panic!("encode invalid room cache: {error}"));
+        assert_eq!(super::sanitize(&invalid).as_deref(), Ok("[]"));
     }
 }

@@ -94,6 +94,26 @@ describe("durable room identity", () => {
     expect(room.meetingId).toBe(exactRoomId);
   });
 
+  it("replaces a stale cached alias with the verified directory room identifier", () => {
+    const exactRoomId = "\ufeffroom";
+    const [canonical] = mergeServerRoomsIntoDock(
+      [],
+      [{ room_id: exactRoomId, room_uid: "room-uid", label: "Exact" }],
+      window.location.origin,
+      "server-id"
+    );
+
+    const [reconciled] = mergeServerRoomsIntoDock(
+      [{ ...canonical, id: "stale-id", meetingId: "room" }],
+      [{ room_id: exactRoomId, room_uid: "room-uid", label: "Exact" }],
+      window.location.origin,
+      "server-id"
+    );
+
+    expect(reconciled.id).toBe(canonical.id);
+    expect(reconciled.meetingId).toBe(exactRoomId);
+  });
+
   it("does not collapse equal room aliases owned by different servers", () => {
     const first = mergeServerRoomsIntoDock(
       [],
