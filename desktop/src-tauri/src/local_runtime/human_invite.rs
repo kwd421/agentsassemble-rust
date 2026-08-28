@@ -19,22 +19,12 @@ impl LocalRuntime {
     /// # Errors
     ///
     /// Returns an error for an invalid room, rejected manager authority, or broken owned runtime.
-    pub fn issue_human_invite_create_ticket(
+    pub(crate) fn issue_human_invite_create_ticket(
         &self,
         app: &AppHandle,
-        server_id: &str,
-        authority_lineage_id: &str,
-        requested_room_id: &str,
-        room_uid: &str,
+        authority: ManagerRoomAuthority,
     ) -> Result<HttpTicketGrant, String> {
-        self.issue_human_invite_ticket(
-            app,
-            server_id,
-            authority_lineage_id,
-            requested_room_id,
-            room_uid,
-            InviteTicketKind::Create,
-        )
+        self.issue_human_invite_ticket(app, authority, InviteTicketKind::Create)
     }
 
     /// Issues an invite-revoke-only HTTP ticket for one validated room manager.
@@ -42,39 +32,21 @@ impl LocalRuntime {
     /// # Errors
     ///
     /// Returns an error for an invalid room, rejected manager authority, or broken owned runtime.
-    pub fn issue_human_invite_revoke_ticket(
+    pub(crate) fn issue_human_invite_revoke_ticket(
         &self,
         app: &AppHandle,
-        server_id: &str,
-        authority_lineage_id: &str,
-        requested_room_id: &str,
-        room_uid: &str,
+        authority: ManagerRoomAuthority,
     ) -> Result<HttpTicketGrant, String> {
-        self.issue_human_invite_ticket(
-            app,
-            server_id,
-            authority_lineage_id,
-            requested_room_id,
-            room_uid,
-            InviteTicketKind::Revoke,
-        )
+        self.issue_human_invite_ticket(app, authority, InviteTicketKind::Revoke)
     }
 
     fn issue_human_invite_ticket(
         &self,
         app: &AppHandle,
-        server_id: &str,
-        authority_lineage_id: &str,
-        requested_room_id: &str,
-        room_uid: &str,
+        authority: ManagerRoomAuthority,
         kind: InviteTicketKind,
     ) -> Result<HttpTicketGrant, String> {
-        let authority = validate_manager_room_authority(
-            server_id,
-            authority_lineage_id,
-            requested_room_id,
-            room_uid,
-        )?;
+        let authority = validate_manager_room_authority(authority)?;
         let mut process = self
             .process
             .lock()
@@ -89,56 +61,64 @@ impl LocalRuntime {
 }
 
 fn validate_manager_room_authority(
-    server_id: &str,
-    lineage_id: &str,
-    requested_room: &str,
-    stable_room_uid: &str,
+    authority: ManagerRoomAuthority,
 ) -> Result<ManagerRoomAuthority, String> {
-    let canonical_room = validate_room_id(requested_room)
+    let canonical_room = validate_room_id(&authority.room_id)
         .map_err(|error| format!("invalid room id: {}", error.message))?;
-    if canonical_room != requested_room {
+    if canonical_room != authority.room_id {
         return Err("room id must be supplied in canonical form".to_owned());
     }
-    Ok(ManagerRoomAuthority {
-        server_id: canonical_uuid(server_id, "server id")?,
-        authority_lineage_id: canonical_uuid(lineage_id, "authority lineage id")?,
-        room_id: canonical_room,
-        room_uid: canonical_uuid(stable_room_uid, "room uid")?,
-    })
+    require_canonical_uuid(&authority.server_id, "server id")?;
+    require_canonical_uuid(&authority.authority_lineage_id, "authority lineage id")?;
+    require_canonical_uuid(&authority.room_uid, "room uid")?;
+    Ok(authority)
 }
 
-fn canonical_uuid(value: &str, label: &str) -> Result<String, String> {
+fn require_canonical_uuid(value: &str, label: &str) -> Result<(), String> {
     let parsed = uuid::Uuid::parse_str(value).map_err(|_| format!("invalid {label}"))?;
     if parsed.to_string() != value {
         return Err(format!("{label} must be supplied in canonical form"));
     }
-    Ok(value.to_owned())
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{canonical_uuid, validate_manager_room_authority};
+    use serde_json::json;
+
+    use super::{ManagerRoomAuthority, require_canonical_uuid, validate_manager_room_authority};
 
     #[test]
     fn manager_authority_uuid_must_be_canonical() {
         let canonical = "10000000-0000-4000-8000-0000000000ab";
-        assert_eq!(
-            canonical_uuid(canonical, "server id").as_deref(),
-            Ok(canonical)
-        );
-        assert!(canonical_uuid(&canonical.to_uppercase(), "server id").is_err());
-        assert!(canonical_uuid("not-a-uuid", "server id").is_err());
+        assert_eq!(require_canonical_uuid(canonical, "server id"), Ok(()));
+        assert!(require_canonical_uuid(&canonical.to_uppercase(), "server id").is_err());
+        assert!(require_canonical_uuid("not-a-uuid", "server id").is_err());
     }
 
     #[test]
     fn manager_authority_room_id_must_be_unchanged() {
         assert!(
-            validate_manager_room_authority(
-                "10000000-0000-4000-8000-000000000001",
-                "20000000-0000-4000-8000-000000000002",
-                " general",
-                "30000000-0000-4000-8000-000000000003",
-            )
+            validate_manager_room_authority(ManagerRoomAuthority {
+                server_id: "10000000-0000-4000-8000-000000000001".to_owned(),
+                authority_lineage_id: "20000000-0000-4000-8000-000000000002".to_owned(),
+                room_id: " general".to_owned(),
+                room_uid: "30000000-0000-4000-8000-000000000003".to_owned(),
+            })
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn manager_authority_rejects_unknown_fields() {
+        assert!(
+            serde_json::from_value::<ManagerRoomAuthority>(json!({
+                "server_id": "10000000-0000-4000-8000-000000000001",
+                "authority_lineage_id": "20000000-0000-4000-8000-000000000002",
+                "room_id": "general",
+                "room_uid": "30000000-0000-4000-8000-000000000003",
+                "extra": true
+            }))
             .is_err()
         );
     }

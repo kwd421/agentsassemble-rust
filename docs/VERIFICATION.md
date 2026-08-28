@@ -2813,13 +2813,14 @@ a mutable room ID. A room can be recreated under a stable ID, and a local author
 be replaced under a different server or lineage, so that request shape could not bind a
 future ticket or mutation to the exact room-directory authority the user selected.
 
-The first C1a unit adds no new authority source or durable state. The currently verified
-frontend tuple `{server_id, authority_lineage_id, room_id, room_uid}` is one exact input
-object. The frontend rejects unknown fields, noncanonical UUIDs, and a nonexact room ID
-before native invocation. The Tauri owner repeats canonical UUID and domain room-ID
-validation before constructing one in-memory `ManagerRoomAuthority`, and create/revoke
-share that owner when serializing the private control request. The request values are
-unchanged; ticket responses retain their existing shape and contain no tuple echo. The
+The first C1a unit adds no new authority source or durable state. A future active caller
+must supply the exact `{server_id, authority_lineage_id, room_id, room_uid}` emitted by
+the currently verified room directory; this transport-only unit does not yet select that
+source or activate the controller. The frontend rejects unknown fields, noncanonical
+UUIDs, and a nonexact room ID before native invocation. Tauri deserializes the same
+strict in-memory `ManagerRoomAuthority` object, repeats canonical UUID and domain room-ID
+validation, and passes that object unchanged to the create/revoke shared private-control
+serializer. Ticket responses retain their existing shape and contain no tuple echo. The
 controller does not call this bridge yet, and server issuance/transaction revalidation
 remain explicitly incomplete rather than accepting the transported tuple as authority.
 
@@ -2836,9 +2837,31 @@ canonical native UUID rejection, no native invocation for malformed frontend aut
 separate create/revoke grants, and fixed HTTP routes. Final `make verify` passed the
 architecture, source-growth, policy, formatting, generated-binding, original-CSS,
 production-build, workspace-test, warning-denied Clippy, and diff gates. All 82 frontend
-files with 476 tests, all 18 desktop tests, domain 23, persistence 171, protocol 5,
+files with 476 tests, all 19 desktop tests, domain 23, persistence 171, protocol 5,
 provider 120, server 83, and every integration and documentation test passed. The first
 full run caught a `similar_names` architecture/lint violation in separate `room_id` and
 `room_uid` native parameters; the final design fixed the cause by making the tuple one
 input object rather than adding a lint exception. No Computer Use resource, provider,
 Deep Scan, or other automated security scanner ran.
+
+The first web review returned `REVISE — Critical 0 / High 0 / Medium 1`, and the first
+Daybreaker review returned `REVISE — Critical 0 / High 0 / Medium 2`. Their findings
+were that the frontend accepted room identifiers that the Rust domain owner rejects,
+while native Serde silently discarded unknown nested
+fields and the Tauri commands decomposed the tuple into four positional strings before
+reconstructing it. The correction gives the frontend one small canonical-room-ID owner
+matching the Rust character and length rules, uses it for both room-directory acceptance
+and invite authority, and makes the one native tuple type reject unknown fields and stay
+owned through validation and serialization. This adds no compatibility path, policy
+option, durable state, or generalized authority framework.
+
+A first correction attempt imported the complete room-directory contract into the hot
+desktop bridge solely to reuse room-ID validation. The production main JavaScript chunk
+grew from 771.09 kB to 843.30 kB and the original lazy CSS chunks no longer matched the
+copied frontend. Moving only the shared 128-code-point canonical-ID calculation to its
+own leaf module restored the 771.09 kB main chunk (232.32 kB gzip) and the original CSS
+chunk set without changing accepted values. Frontend production build and Tauri asset
+embedding must be verified sequentially because the latter consumes the former's output;
+the final serial `make verify` passed every gate and the counts recorded above. Final
+manual approval is intentionally not claimed until this correction commit is pushed and
+both reviewers recheck it.

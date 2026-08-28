@@ -4,6 +4,7 @@ import {
   parseNativeRoomRuntimeTicket,
   type RoomRuntimeTicket,
 } from "./roomRuntimeTicket";
+import { canonicalRoomId } from "./canonicalRoomId";
 
 type TauriInternals = {
   invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>;
@@ -451,12 +452,15 @@ function validateManagerRoomAuthority(
     !UUID_PATTERN.test(authority.authority_lineage_id) ||
     authority.authority_lineage_id !== authority.authority_lineage_id.toLowerCase() ||
     typeof authority.room_id !== "string" ||
-    !authority.room_id ||
-    authority.room_id !== authority.room_id.trim() ||
     typeof authority.room_uid !== "string" ||
     !UUID_PATTERN.test(authority.room_uid) ||
     authority.room_uid !== authority.room_uid.toLowerCase()
   ) {
+    throw new Error("방 관리자 권위가 올바르지 않습니다.");
+  }
+  try {
+    canonicalRoomId(authority.room_id);
+  } catch {
     throw new Error("방 관리자 권위가 올바르지 않습니다.");
   }
   return authority as unknown as DesktopManagerRoomAuthority;

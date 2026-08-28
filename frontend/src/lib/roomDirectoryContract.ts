@@ -7,6 +7,7 @@ import {
   requiredString,
   strictRecord as record,
 } from "./strictJsonContract";
+import { canonicalRoomId } from "./canonicalRoomId";
 
 export type StrictRoomDirectory = {
   server_id: string;
@@ -133,7 +134,7 @@ function validateRoom(value: unknown, index: number): ServerRoomDockSource {
     ],
     label
   );
-  const roomId = requiredString(room, "room_id", label);
+  const roomId = canonicalRoomId(requiredString(room, "room_id", label));
   if (!UUID_PATTERN.test(requiredString(room, "room_uid", label))) {
     throw new Error(`${label}.room_uid가 UUID가 아닙니다.`);
   }
@@ -165,7 +166,7 @@ function validateCreatedRoom(value: unknown): ServerRoomDockSource {
     ],
     "생성된 방"
   );
-  requiredString(room, "room_id", "생성된 방");
+  canonicalRoomId(requiredString(room, "room_id", "생성된 방"));
   if (!UUID_PATTERN.test(requiredString(room, "room_uid", "생성된 방"))) {
     throw new Error("생성된 방.room_uid가 UUID가 아닙니다.");
   }

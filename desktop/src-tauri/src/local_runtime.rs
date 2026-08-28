@@ -70,7 +70,9 @@ struct RuntimeProcess {
     address: Url,
 }
 
-struct ManagerRoomAuthority {
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ManagerRoomAuthority {
     server_id: String,
     authority_lineage_id: String,
     room_id: String,
