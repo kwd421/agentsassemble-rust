@@ -585,7 +585,9 @@ impl From<PersistenceError> for ApiError {
 impl From<TicketIssueError> for ApiError {
     fn from(error: TicketIssueError) -> Self {
         match error {
-            TicketIssueError::InvalidRoom(message) => Self::bad_request(message),
+            TicketIssueError::InvalidRoom(message) | TicketIssueError::InvalidAsset(message) => {
+                Self::bad_request(message)
+            }
             TicketIssueError::RoomMissing => Self::not_found("Room does not exist."),
             TicketIssueError::ParticipantInactive => {
                 Self::unauthorized("The local operator is not an active room participant.")

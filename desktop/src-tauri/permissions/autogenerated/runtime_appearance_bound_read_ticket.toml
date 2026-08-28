@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-runtime-appearance-bound-read-ticket"
+description = "Enables the runtime_appearance_bound_read_ticket command without any pre-configured scope."
+commands.allow = ["runtime_appearance_bound_read_ticket"]
+
+[[permission]]
+identifier = "deny-runtime-appearance-bound-read-ticket"
+description = "Denies the runtime_appearance_bound_read_ticket command without any pre-configured scope."
+commands.deny = ["runtime_appearance_bound_read_ticket"]

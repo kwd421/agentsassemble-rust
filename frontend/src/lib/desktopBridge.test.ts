@@ -5,6 +5,9 @@ import {
   fetchDesktopCentralRegistration,
   fetchDesktopHumanInviteCreate,
   fetchDesktopHumanInviteRevoke,
+  requestDesktopAppearanceBoundReadTicket,
+  requestDesktopAppearancePendingReadTicket,
+  requestDesktopAppearanceUploadTicket,
   fetchDesktopOperatorRuntime,
   requestDesktopHumanInviteCreateTicket,
   requestDesktopHostProductSurface,
@@ -12,6 +15,9 @@ import {
 
 const hostCommands = [
   "host_product_surface",
+  "runtime_appearance_bound_read_ticket",
+  "runtime_appearance_pending_read_ticket",
+  "runtime_appearance_upload_ticket",
   "runtime_central_registration_ticket",
   "runtime_human_invite_create_ticket",
   "runtime_human_invite_revoke_ticket",
@@ -166,6 +172,55 @@ describe("desktop exact-purpose HTTP bridge", () => {
     const revokeHeaders = fetchMock.mock.calls[1]?.[1]?.headers as Headers;
     expect(createHeaders.get("Authorization")).toBe(`Bearer ${"b".repeat(64)}`);
     expect(revokeHeaders.get("Authorization")).toBe(`Bearer ${"c".repeat(64)}`);
+  });
+
+  it("keeps appearance upload and exact reads on separate native grants", async () => {
+    const assetId = `ra_${"a".repeat(32)}`;
+    const invoke = vi
+      .fn()
+      .mockResolvedValueOnce({
+        revision: PRODUCT_SURFACE_REVISION,
+        digest: "2".repeat(64),
+        commands: hostCommands,
+      })
+      .mockResolvedValue({
+        ticket: "b".repeat(64),
+        ttl_seconds: 30,
+        http_base_url: "http://127.0.0.1:49154",
+      });
+    Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
+
+    await requestDesktopHostProductSurface();
+    await requestDesktopAppearanceUploadTicket(managerAuthority);
+    await requestDesktopAppearancePendingReadTicket(managerAuthority, assetId);
+    await requestDesktopAppearanceBoundReadTicket(managerAuthority, assetId);
+
+    expect(invoke).toHaveBeenNthCalledWith(2, "runtime_appearance_upload_ticket", {
+      authority: managerAuthority,
+    });
+    expect(invoke).toHaveBeenNthCalledWith(3, "runtime_appearance_pending_read_ticket", {
+      authority: managerAuthority,
+      assetId,
+    });
+    expect(invoke).toHaveBeenNthCalledWith(4, "runtime_appearance_bound_read_ticket", {
+      authority: managerAuthority,
+      assetId,
+    });
+  });
+
+  it("rejects malformed appearance asset IDs before native invocation", async () => {
+    const invoke = vi.fn();
+    Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
+
+    for (const assetId of ["", "ra_1234", `RA_${"a".repeat(32)}`, `ra_${"g".repeat(32)}`]) {
+      expect(() =>
+        requestDesktopAppearancePendingReadTicket(managerAuthority, assetId)
+      ).toThrow("자산 식별자");
+      expect(() =>
+        requestDesktopAppearanceBoundReadTicket(managerAuthority, assetId)
+      ).toThrow("자산 식별자");
+    }
+    expect(invoke).not.toHaveBeenCalled();
   });
 
   it("rejects a non-POST method before requesting native authority", async () => {

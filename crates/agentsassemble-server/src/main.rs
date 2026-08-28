@@ -26,6 +26,9 @@ use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, Stdin},
     net::TcpListener,
 };
+
+mod appearance_control;
+
 use tokio_util::sync::CancellationToken;
 use tracing_subscriber::EnvFilter;
 
@@ -308,6 +311,11 @@ async fn control_response(state: &AppState, line: &[u8]) -> LocalControlResponse
         | LocalControlRequest::IssueHumanInviteRevokeTicket { .. }) => {
             invite_ticket_control_request(state, request_id, request).await
         }
+        request @ (LocalControlRequest::IssueAppearanceUploadTicket { .. }
+        | LocalControlRequest::IssueAppearancePendingReadTicket { .. }
+        | LocalControlRequest::IssueAppearanceBoundReadTicket { .. }) => {
+            appearance_control::response(state, request_id, request).await
+        }
         LocalControlRequest::IssueSettingsDirectoryReadTicket { .. } => {
             settings_ticket_control_response(
                 state,
@@ -319,6 +327,20 @@ async fn control_response(state: &AppState, line: &[u8]) -> LocalControlResponse
         LocalControlRequest::IssueCentralRegistrationTicket { .. } => {
             central_registration_control_response(state, request_id).await
         }
+    }
+}
+
+fn manager_request(
+    server_id: String,
+    authority_lineage_id: String,
+    room_id: String,
+    expected_room_uid: String,
+) -> ManagerRoomAuthorityRequest {
+    ManagerRoomAuthorityRequest {
+        server_id,
+        authority_lineage_id,
+        room_id,
+        room_uid: expected_room_uid,
     }
 }
 
@@ -469,6 +491,9 @@ fn control_request_id(request: &LocalControlRequest) -> &str {
         | LocalControlRequest::IssuePreferencesWriteTicket { request_id, .. }
         | LocalControlRequest::IssueHumanInviteCreateTicket { request_id, .. }
         | LocalControlRequest::IssueHumanInviteRevokeTicket { request_id, .. }
+        | LocalControlRequest::IssueAppearanceUploadTicket { request_id, .. }
+        | LocalControlRequest::IssueAppearancePendingReadTicket { request_id, .. }
+        | LocalControlRequest::IssueAppearanceBoundReadTicket { request_id, .. }
         | LocalControlRequest::IssueSettingsDirectoryReadTicket { request_id }
         | LocalControlRequest::IssueCentralRegistrationTicket { request_id } => request_id,
     }
@@ -538,7 +563,9 @@ fn bootstrap_control_error(request_id: String, error: PersistenceError) -> Local
 
 fn control_error(request_id: String, error: TicketIssueError) -> LocalControlResponse {
     let (code, message) = match error {
-        TicketIssueError::InvalidRoom(message) => ("bad_request", message),
+        TicketIssueError::InvalidRoom(message) | TicketIssueError::InvalidAsset(message) => {
+            ("bad_request", message)
+        }
         TicketIssueError::RoomMissing => ("room_not_found", "Room does not exist.".to_owned()),
         TicketIssueError::ParticipantInactive => (
             "session_revoked",

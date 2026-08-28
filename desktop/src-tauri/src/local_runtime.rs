@@ -19,6 +19,7 @@ use uuid::Uuid;
 
 use crate::runtime_supervisor;
 
+mod appearance;
 mod control;
 mod human_invite;
 

@@ -60,7 +60,7 @@ impl LocalRuntime {
     }
 }
 
-fn validate_manager_room_authority(
+pub(super) fn validate_manager_room_authority(
     authority: ManagerRoomAuthority,
 ) -> Result<ManagerRoomAuthority, String> {
     let canonical_room = validate_room_id(&authority.room_id)

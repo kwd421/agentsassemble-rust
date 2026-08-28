@@ -1,6 +1,6 @@
 use agentsassemble_domain::{
     AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID,
-    LOCAL_OPERATOR_USER_ID, validate_room_id,
+    LOCAL_OPERATOR_USER_ID, is_room_appearance_asset_id, validate_room_id,
 };
 use agentsassemble_persistence::PersistenceError;
 use agentsassemble_protocol::{OperatorHttpTicketResponse, TicketResponse};
@@ -20,6 +20,8 @@ pub struct ManagerRoomAuthorityRequest {
 pub enum TicketIssueError {
     #[error("{0}")]
     InvalidRoom(String),
+    #[error("{0}")]
+    InvalidAsset(String),
     #[error("room does not exist")]
     RoomMissing,
     #[error("local operator is not an active room participant")]
@@ -182,6 +184,69 @@ pub async fn issue_human_invite_revoke_ticket(
     Ok(operator_http_response(state, issued))
 }
 
+/// Issues an exact appearance-upload credential for the current local room manager.
+///
+/// # Errors
+///
+/// Returns a bounded room, manager, persistence, or ticket-capacity error.
+pub async fn issue_appearance_upload_ticket(
+    state: &AppState,
+    requested: &ManagerRoomAuthorityRequest,
+) -> Result<OperatorHttpTicketResponse, TicketIssueError> {
+    let authority = resolve_local_room_manager(state, requested).await?;
+    let issued = state
+        .tickets
+        .issue_appearance_upload(authority)
+        .await
+        .map_err(|_| TicketIssueError::Unavailable)?;
+    Ok(operator_http_response(state, issued))
+}
+
+/// Issues an exact pending-appearance read credential for the current local room manager.
+///
+/// # Errors
+///
+/// Returns a bounded asset, room, manager, persistence, or ticket-capacity error.
+pub async fn issue_appearance_pending_read_ticket(
+    state: &AppState,
+    requested: &ManagerRoomAuthorityRequest,
+    asset_id: &str,
+) -> Result<OperatorHttpTicketResponse, TicketIssueError> {
+    require_appearance_asset_id(asset_id)?;
+    let authority = resolve_local_room_manager(state, requested).await?;
+    let issued = state
+        .tickets
+        .issue_pending_preview_read(authority, asset_id.to_owned())
+        .await
+        .map_err(|_| TicketIssueError::Unavailable)?;
+    Ok(operator_http_response(state, issued))
+}
+
+/// Issues an exact bound-appearance read credential for the current local room manager.
+///
+/// # Errors
+///
+/// Returns a bounded asset, room, manager, persistence, or ticket-capacity error.
+pub async fn issue_appearance_bound_read_ticket(
+    state: &AppState,
+    requested: &ManagerRoomAuthorityRequest,
+    asset_id: &str,
+) -> Result<OperatorHttpTicketResponse, TicketIssueError> {
+    require_appearance_asset_id(asset_id)?;
+    let authority = resolve_local_room_manager(state, requested).await?;
+    let issued = state
+        .tickets
+        .issue_bound_appearance_read(
+            authority.manager.room_id,
+            authority.manager.user_id,
+            authority.manager.participant_id,
+            asset_id.to_owned(),
+        )
+        .await
+        .map_err(|_| TicketIssueError::Unavailable)?;
+    Ok(operator_http_response(state, issued))
+}
+
 /// Issues the server-wide settings-directory read credential for the local operator.
 ///
 /// # Errors
@@ -276,6 +341,16 @@ fn operator_http_response(
     OperatorHttpTicketResponse {
         ticket: issued.ticket,
         ttl_seconds: state.tickets.ttl_seconds(),
+    }
+}
+
+fn require_appearance_asset_id(asset_id: &str) -> Result<(), TicketIssueError> {
+    if is_room_appearance_asset_id(asset_id) {
+        Ok(())
+    } else {
+        Err(TicketIssueError::InvalidAsset(
+            "A canonical room appearance asset is required.".to_owned(),
+        ))
     }
 }
 

@@ -396,6 +396,29 @@ pub enum LocalControlRequest {
         meeting_id: String,
         room_uid: String,
     },
+    IssueAppearanceUploadTicket {
+        request_id: String,
+        server_id: String,
+        authority_lineage_id: String,
+        meeting_id: String,
+        room_uid: String,
+    },
+    IssueAppearancePendingReadTicket {
+        request_id: String,
+        server_id: String,
+        authority_lineage_id: String,
+        meeting_id: String,
+        room_uid: String,
+        asset_id: String,
+    },
+    IssueAppearanceBoundReadTicket {
+        request_id: String,
+        server_id: String,
+        authority_lineage_id: String,
+        meeting_id: String,
+        room_uid: String,
+        asset_id: String,
+    },
     IssueSettingsDirectoryReadTicket {
         request_id: String,
     },
@@ -459,6 +482,21 @@ pub enum LocalControlResponse {
         ttl_seconds: u64,
     },
     HumanInviteRevokeOk {
+        request_id: String,
+        ticket: String,
+        ttl_seconds: u64,
+    },
+    AppearanceUploadOk {
+        request_id: String,
+        ticket: String,
+        ttl_seconds: u64,
+    },
+    AppearancePendingReadOk {
+        request_id: String,
+        ticket: String,
+        ttl_seconds: u64,
+    },
+    AppearanceBoundReadOk {
         request_id: String,
         ticket: String,
         ttl_seconds: u64,
@@ -691,5 +729,22 @@ mod tests {
                 "room_uid": "30000000-0000-4000-8000-000000000003"
             })
         );
+    }
+
+    #[test]
+    fn appearance_read_control_request_carries_exact_authority_and_asset() {
+        let request = LocalControlRequest::IssueAppearancePendingReadTicket {
+            request_id: "request-2".to_owned(),
+            server_id: "10000000-0000-4000-8000-000000000001".to_owned(),
+            authority_lineage_id: "20000000-0000-4000-8000-000000000002".to_owned(),
+            meeting_id: "general".to_owned(),
+            room_uid: "30000000-0000-4000-8000-000000000003".to_owned(),
+            asset_id: "ra_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
+        };
+        let encoded =
+            serde_json::to_value(request).unwrap_or_else(|error| panic!("encode request: {error}"));
+        assert_eq!(encoded["op"], "issue_appearance_pending_read_ticket");
+        assert_eq!(encoded["meeting_id"], "general");
+        assert_eq!(encoded["asset_id"], "ra_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
     }
 }

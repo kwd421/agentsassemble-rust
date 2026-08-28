@@ -155,6 +155,35 @@ pub(super) fn request_human_invite_revoke_ticket(
     request_http_ticket(runtime, HttpTicketKind::HumanInviteRevoke(authority))
 }
 
+pub(super) fn request_appearance_upload_ticket(
+    runtime: &mut RuntimeProcess,
+    authority: &ManagerRoomAuthority,
+) -> Result<HttpTicketGrant, TicketFailure> {
+    request_http_ticket(runtime, HttpTicketKind::AppearanceUpload(authority))
+}
+
+pub(super) fn request_appearance_pending_read_ticket(
+    runtime: &mut RuntimeProcess,
+    authority: &ManagerRoomAuthority,
+    asset_id: &str,
+) -> Result<HttpTicketGrant, TicketFailure> {
+    request_http_ticket(
+        runtime,
+        HttpTicketKind::AppearancePendingRead(authority, asset_id),
+    )
+}
+
+pub(super) fn request_appearance_bound_read_ticket(
+    runtime: &mut RuntimeProcess,
+    authority: &ManagerRoomAuthority,
+    asset_id: &str,
+) -> Result<HttpTicketGrant, TicketFailure> {
+    request_http_ticket(
+        runtime,
+        HttpTicketKind::AppearanceBoundRead(authority, asset_id),
+    )
+}
+
 pub(super) fn request_settings_directory_read_ticket(
     runtime: &mut RuntimeProcess,
 ) -> Result<HttpTicketGrant, TicketFailure> {
@@ -168,6 +197,9 @@ enum HttpTicketKind<'a> {
     PreferencesWrite(&'a str),
     HumanInviteCreate(&'a ManagerRoomAuthority),
     HumanInviteRevoke(&'a ManagerRoomAuthority),
+    AppearanceUpload(&'a ManagerRoomAuthority),
+    AppearancePendingRead(&'a ManagerRoomAuthority, &'a str),
+    AppearanceBoundRead(&'a ManagerRoomAuthority, &'a str),
     SettingsDirectoryRead,
 }
 
@@ -208,6 +240,35 @@ fn request_http_ticket(
                 authority_lineage_id: authority.authority_lineage_id.clone(),
                 meeting_id: authority.room_id.clone(),
                 room_uid: authority.room_uid.clone(),
+            }
+        }
+        HttpTicketKind::AppearanceUpload(authority) => {
+            LocalControlRequest::IssueAppearanceUploadTicket {
+                request_id: request_id.clone(),
+                server_id: authority.server_id.clone(),
+                authority_lineage_id: authority.authority_lineage_id.clone(),
+                meeting_id: authority.room_id.clone(),
+                room_uid: authority.room_uid.clone(),
+            }
+        }
+        HttpTicketKind::AppearancePendingRead(authority, asset_id) => {
+            LocalControlRequest::IssueAppearancePendingReadTicket {
+                request_id: request_id.clone(),
+                server_id: authority.server_id.clone(),
+                authority_lineage_id: authority.authority_lineage_id.clone(),
+                meeting_id: authority.room_id.clone(),
+                room_uid: authority.room_uid.clone(),
+                asset_id: asset_id.to_owned(),
+            }
+        }
+        HttpTicketKind::AppearanceBoundRead(authority, asset_id) => {
+            LocalControlRequest::IssueAppearanceBoundReadTicket {
+                request_id: request_id.clone(),
+                server_id: authority.server_id.clone(),
+                authority_lineage_id: authority.authority_lineage_id.clone(),
+                meeting_id: authority.room_id.clone(),
+                room_uid: authority.room_uid.clone(),
+                asset_id: asset_id.to_owned(),
             }
         }
         HttpTicketKind::SettingsDirectoryRead => {
@@ -274,6 +335,30 @@ fn decode_http_ticket_response(
         (
             HttpTicketKind::HumanInviteRevoke(_),
             LocalControlResponse::HumanInviteRevokeOk {
+                request_id: response_id,
+                ticket,
+                ttl_seconds,
+            },
+        ) if response_id == request_id => Ok((ticket, ttl_seconds)),
+        (
+            HttpTicketKind::AppearanceUpload(_),
+            LocalControlResponse::AppearanceUploadOk {
+                request_id: response_id,
+                ticket,
+                ttl_seconds,
+            },
+        ) if response_id == request_id => Ok((ticket, ttl_seconds)),
+        (
+            HttpTicketKind::AppearancePendingRead(_, _),
+            LocalControlResponse::AppearancePendingReadOk {
+                request_id: response_id,
+                ticket,
+                ttl_seconds,
+            },
+        ) if response_id == request_id => Ok((ticket, ttl_seconds)),
+        (
+            HttpTicketKind::AppearanceBoundRead(_, _),
+            LocalControlResponse::AppearanceBoundReadOk {
                 request_id: response_id,
                 ticket,
                 ttl_seconds,
@@ -473,6 +558,29 @@ mod tests {
                     room_uid: "30000000-0000-4000-8000-000000000003".to_owned(),
                 }),
                 "request-2",
+                response,
+            ),
+            Err(TicketFailure::Broken(_))
+        ));
+
+        let authority = ManagerRoomAuthority {
+            server_id: "10000000-0000-4000-8000-000000000001".to_owned(),
+            authority_lineage_id: "20000000-0000-4000-8000-000000000002".to_owned(),
+            room_id: "general".to_owned(),
+            room_uid: "30000000-0000-4000-8000-000000000003".to_owned(),
+        };
+        let response = LocalControlResponse::AppearanceBoundReadOk {
+            request_id: "request-3".to_owned(),
+            ticket: "c".repeat(64),
+            ttl_seconds: 30,
+        };
+        assert!(matches!(
+            decode_http_ticket_response(
+                HttpTicketKind::AppearancePendingRead(
+                    &authority,
+                    "ra_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                ),
+                "request-3",
                 response,
             ),
             Err(TicketFailure::Broken(_))

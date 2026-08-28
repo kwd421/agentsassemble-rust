@@ -5,6 +5,7 @@ import {
   type RoomRuntimeTicket,
 } from "./roomRuntimeTicket";
 import { canonicalRoomId } from "./canonicalRoomId";
+import { roomAppearanceAssetId } from "./roomAppearanceAsset";
 
 type TauriInternals = {
   invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>;
@@ -66,6 +67,9 @@ type DesktopHttpTicketCommand =
   | "runtime_preferences_write_ticket"
   | "runtime_human_invite_create_ticket"
   | "runtime_human_invite_revoke_ticket"
+  | "runtime_appearance_upload_ticket"
+  | "runtime_appearance_pending_read_ticket"
+  | "runtime_appearance_bound_read_ticket"
   | "runtime_settings_directory_read_ticket";
 
 export interface DesktopCentralRegistrationBinding {
@@ -433,6 +437,41 @@ export function requestDesktopHumanInviteRevokeTicket(
     "runtime_human_invite_revoke_ticket",
     { authority: verified },
     "사람 초대 취소 티켓"
+  );
+}
+
+export function requestDesktopAppearanceUploadTicket(
+  authority: DesktopManagerRoomAuthority
+): Promise<DesktopOperatorHttpTicket> {
+  const verified = parseDesktopManagerRoomAuthority(authority);
+  return requestDesktopHttpTicket(
+    "runtime_appearance_upload_ticket",
+    { authority: verified },
+    "방 외형 업로드 티켓"
+  );
+}
+
+export function requestDesktopAppearancePendingReadTicket(
+  authority: DesktopManagerRoomAuthority,
+  assetId: string
+): Promise<DesktopOperatorHttpTicket> {
+  const verified = parseDesktopManagerRoomAuthority(authority);
+  return requestDesktopHttpTicket(
+    "runtime_appearance_pending_read_ticket",
+    { authority: verified, assetId: roomAppearanceAssetId(assetId) },
+    "방 외형 pending read 티켓"
+  );
+}
+
+export function requestDesktopAppearanceBoundReadTicket(
+  authority: DesktopManagerRoomAuthority,
+  assetId: string
+): Promise<DesktopOperatorHttpTicket> {
+  const verified = parseDesktopManagerRoomAuthority(authority);
+  return requestDesktopHttpTicket(
+    "runtime_appearance_bound_read_ticket",
+    { authority: verified, assetId: roomAppearanceAssetId(assetId) },
+    "방 외형 bound read 티켓"
   );
 }
 

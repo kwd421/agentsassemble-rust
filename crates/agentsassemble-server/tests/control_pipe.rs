@@ -8,6 +8,7 @@ use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     process::{Child, ChildStdin, ChildStdout, Command},
 };
+mod control_pipe_appearance_tickets;
 mod control_pipe_invite_tickets;
 #[cfg(unix)]
 #[path = "control_pipe/managed_ingress.rs"]
@@ -378,6 +379,7 @@ async fn owned_control_pipe_issues_exact_settings_tickets_after_authority_exists
     ));
 
     let invite_id = control_pipe_invite_tickets::assert_invite_tickets(&mut server, &created).await;
+    control_pipe_appearance_tickets::assert_appearance_tickets(&mut server, &created).await;
 
     let directory = server
         .send_control(&LocalControlRequest::IssueSettingsDirectoryReadTicket {

@@ -130,9 +130,11 @@ pub use ticket::{
     ConsumedTicket, IssuedTicket, RoomHttpPurpose, TicketError, TicketStore,
 };
 pub use ticket_issuer::{
-    ManagerRoomAuthorityRequest, TicketIssueError, issue_central_registration_ticket,
-    issue_human_invite_create_ticket, issue_human_invite_revoke_ticket,
-    issue_local_operator_http_ticket, issue_local_ticket, issue_preferences_read_ticket,
-    issue_preferences_write_ticket, issue_settings_directory_read_ticket,
+    ManagerRoomAuthorityRequest, TicketIssueError, issue_appearance_bound_read_ticket,
+    issue_appearance_pending_read_ticket, issue_appearance_upload_ticket,
+    issue_central_registration_ticket, issue_human_invite_create_ticket,
+    issue_human_invite_revoke_ticket, issue_local_operator_http_ticket, issue_local_ticket,
+    issue_preferences_read_ticket, issue_preferences_write_ticket,
+    issue_settings_directory_read_ticket,
 };
 pub use web::{ServeError, router, serve};

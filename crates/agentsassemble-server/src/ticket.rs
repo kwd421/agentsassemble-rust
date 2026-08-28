@@ -8,7 +8,7 @@ use std::{
     time::Duration,
 };
 
-use agentsassemble_domain::AuthenticatedPrincipal;
+use agentsassemble_domain::{AuthenticatedPrincipal, is_room_appearance_asset_id};
 use agentsassemble_persistence::{HumanSessionAuthorization, LocalRoomManagerAuthority};
 use chrono::Utc;
 use thiserror::Error;
@@ -308,7 +308,7 @@ impl TicketStore {
         authority: LocalRoomManagerAuthority,
         asset_id: String,
     ) -> Result<IssuedTicket, TicketError> {
-        if asset_id.is_empty() {
+        if !is_room_appearance_asset_id(&asset_id) {
             return Err(TicketError::Invalid);
         }
         self.issue_local_room_manager(
@@ -330,7 +330,7 @@ impl TicketStore {
         participant_id: String,
         asset_id: String,
     ) -> Result<IssuedTicket, TicketError> {
-        if asset_id.is_empty() {
+        if !is_room_appearance_asset_id(&asset_id) {
             return Err(TicketError::Invalid);
         }
         self.issue_room_http(
