@@ -2705,14 +2705,18 @@ Computer Use remains deferred to the complete C1/C2 activation and no Deep Scan 
 other automated security scan ran.
 
 Manual review findings across the correction series were: nested Rust error envelopes
-lost their exact code/message; a trailing-dot localhost form escaped the public-origin
-check; retired async generations could retain timers or publish state; a native ticket
-that resolved after retirement could still dispatch HTTP; Stop was unavailable during
-the server starting phase and while Start awaited its first server response; independent
+lost their exact code/message; the frontend rejected Rust-valid `*.localhost` origins;
+the completed B2 cutover left the workboard claiming that B2 was still next; retired
+async generations could retain timers or publish state; a native ticket that resolved
+after retirement could still dispatch HTTP; Stop was unavailable during the server
+starting phase and while Start awaited its first server response; independent
 Start/Stop HTTP requests could mutate Rust in reverse user-intent order; and the first
 test-fixture split placed a child module at Cargo's integration-test root, where
-all-target autodiscovery compiled it as a second crate. The listed commits correct
-each owning boundary. Final web verdict for `2b97a7c` and `e2bd739..2b97a7c`:
+all-target autodiscovery compiled it as a second crate. The same origin-boundary
+correction separately caught a trailing-dot exact localhost form during implementation;
+that was a self-found correction rather than a manual-review finding. The listed
+commits correct each owning boundary. Final web verdict for `2b97a7c` and
+`e2bd739..2b97a7c`:
 `APPROVE — Critical 0 / High 0 / Medium 0`. Final Daybreaker verdict for both scopes:
 `APPROVE — Critical 0 / High 0 / Medium 0`. Neither final review used Deep Scan or
 another automated security scanner.
