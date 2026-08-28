@@ -3,9 +3,8 @@ use chrono::{DateTime, Utc};
 use sqlx::{Row, sqlite::SqliteRow};
 
 use crate::{
-    LocalRoomManagerAuthority, PersistenceError, RoomUserIdentity, SqliteStore,
-    authority::load_active_room,
-    room_user_identity::{require_current_local_room_manager, resolve_room_user_identity},
+    LocalRoomManagerAuthority, PersistenceError, SqliteStore,
+    room_user_identity::require_exact_local_room_manager,
 };
 
 const MAX_EFFECTIVE_INVITE_USES: i64 = 128;
@@ -182,32 +181,6 @@ impl SqliteStore {
         .map(decode_human_invite)
         .collect()
     }
-}
-
-async fn require_exact_local_room_manager(
-    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    expected: &LocalRoomManagerAuthority,
-) -> Result<RoomUserIdentity, PersistenceError> {
-    let current = resolve_room_user_identity(
-        transaction,
-        &expected.manager.room_id,
-        &expected.manager.user_id,
-        &expected.manager.participant_id,
-    )
-    .await?;
-    let bootstrap = require_current_local_room_manager(transaction, &current).await?;
-    let room = load_active_room(transaction, &current.room_id).await?;
-    if bootstrap.server_id != expected.server_id
-        || bootstrap.authority_lineage_id != expected.authority_lineage_id
-        || room.room_uid != expected.room_uid
-        || current != expected.manager
-    {
-        return Err(rejected(
-            "room_authority_changed",
-            "Room-manager authority changed before the invite mutation.",
-        ));
-    }
-    Ok(current)
 }
 
 fn validate_new_human_invite(invite: &NewHumanInvite) -> Result<(), PersistenceError> {

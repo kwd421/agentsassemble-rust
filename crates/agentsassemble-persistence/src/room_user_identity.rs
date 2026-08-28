@@ -108,6 +108,32 @@ pub(crate) async fn require_current_local_room_manager(
     require_complete_bootstrap_in_transaction(transaction).await
 }
 
+pub(crate) async fn require_exact_local_room_manager(
+    transaction: &mut Transaction<'_, Sqlite>,
+    expected: &LocalRoomManagerAuthority,
+) -> Result<RoomUserIdentity, PersistenceError> {
+    let current = resolve_room_user_identity(
+        transaction,
+        &expected.manager.room_id,
+        &expected.manager.user_id,
+        &expected.manager.participant_id,
+    )
+    .await?;
+    let bootstrap = require_current_local_room_manager(transaction, &current).await?;
+    let room = load_active_room(transaction, &current.room_id).await?;
+    if bootstrap.server_id != expected.server_id
+        || bootstrap.authority_lineage_id != expected.authority_lineage_id
+        || room.room_uid != expected.room_uid
+        || current != expected.manager
+    {
+        return Err(rejected(
+            "room_authority_changed",
+            "Room-manager authority changed before the mutation.",
+        ));
+    }
+    Ok(current)
+}
+
 fn rejected(code: &'static str, message: impl Into<String>) -> PersistenceError {
     PersistenceError::CommandRejected {
         code,
