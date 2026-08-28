@@ -11,7 +11,7 @@ Purpose: route the asynchronous Rust reimplementation without duplicating its co
 - Exposure inventory: [`docs/FRONTEND_BACKEND_GAPS.md`](docs/FRONTEND_BACKEND_GAPS.md)
 - Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - Real-client verification: [`docs/VERIFICATION.md`](docs/VERIFICATION.md)
-- Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`; pushed, fully verified, and manually approved Rust appearance baseline `e7312d4`.
+- Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`; pushed, fully verified, and manually approved Rust lobby-pin backend baseline `d940313`. The copied frontend cutover remains active.
 - Active gate: implement the lobby pin contract from its durable pointer through exact local/remote HTTP authority and the copied frontend; adjacent message surfaces remain unavailable.
 - Review cadence: commit each independent change below 1,000 changed lines; push and cross-review at three completed product features or 2,000 aggregate insertions plus deletions, whichever comes first.
 - Required order: follow the active owner from persistence to real frontend flow without adding search/history/channel authority in advance.
