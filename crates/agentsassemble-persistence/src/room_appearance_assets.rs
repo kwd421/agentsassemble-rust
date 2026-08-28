@@ -1,7 +1,8 @@
 use std::collections::BTreeSet;
 
 use agentsassemble_domain::{
-    LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, RoomAppearance, room_appearance_asset_id,
+    LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, RoomAppearance,
+    is_room_appearance_asset_id, room_appearance_asset_id,
 };
 use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
@@ -252,7 +253,7 @@ fn asset_metadata(id: String, filename: String, size: usize) -> RoomAppearanceAs
 }
 
 fn valid_asset_id(asset_id: &str) -> bool {
-    room_appearance_asset_id(&format!("/api/attachments/{asset_id}?view=1")) == Some(asset_id)
+    is_room_appearance_asset_id(asset_id)
 }
 
 pub(crate) async fn transition_room_appearance_references(

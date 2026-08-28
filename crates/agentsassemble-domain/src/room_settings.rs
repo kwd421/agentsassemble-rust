@@ -489,12 +489,19 @@ pub fn room_appearance_asset_id(value: &str) -> Option<&str> {
     let asset_id = value
         .strip_prefix("/api/attachments/")?
         .strip_suffix("?view=1")?;
-    let hex = asset_id.strip_prefix("ra_")?;
-    (hex.len() == 32
+    is_room_appearance_asset_id(asset_id).then_some(asset_id)
+}
+
+/// Reports whether one opaque identifier belongs to the room-appearance namespace.
+#[must_use]
+pub fn is_room_appearance_asset_id(asset_id: &str) -> bool {
+    let Some(hex) = asset_id.strip_prefix("ra_") else {
+        return false;
+    };
+    hex.len() == 32
         && hex
             .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)))
-    .then_some(asset_id)
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
 fn require_short_label(value: &str) -> Result<(), RoomSettingsError> {

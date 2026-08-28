@@ -27,7 +27,7 @@ pub use room_preferences::{
 };
 pub use room_settings::{
     PublicRoomSettings, RoomAppearance, RoomChannel, RoomSettings, RoomSettingsError,
-    RoomSettingsPatch, public_settings, room_appearance_asset_id,
+    RoomSettingsPatch, is_room_appearance_asset_id, public_settings, room_appearance_asset_id,
 };
 pub use room_turn::{
     QueuedRoomInput, RoomInputDeliveryKind, RoomRandomError, RoomRandomRequest, RoomRandomResult,
