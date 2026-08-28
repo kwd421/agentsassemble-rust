@@ -17,8 +17,10 @@ use uuid::Uuid;
 
 mod human_session;
 
+pub(crate) use human_session::{
+    ConsumedAttachmentUploadTicket, ConsumedSocketTicket, SocketTicketHint,
+};
 pub use human_session::{ConsumedHumanSessionSocketTicket, ConsumedProfileTicket};
-pub(crate) use human_session::{ConsumedSocketTicket, SocketTicketHint};
 use human_session::{HumanSessionGrant, HumanSessionGrantPurpose};
 
 struct StoredTicketGrant {
@@ -110,6 +112,11 @@ pub(crate) struct ConsumedHumanInviteManagerTicket {
 pub(crate) enum ConsumedRoomPreferenceTicket {
     Local(ConsumedRoomHttpTicket),
     HumanSession(HumanSessionAuthorization),
+}
+
+pub(crate) enum ConsumedAppearanceReadTicket {
+    Pending(ConsumedRoomHttpTicket),
+    Bound(ConsumedRoomHttpTicket),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -561,6 +568,39 @@ impl TicketStore {
             },
         )
         .await
+    }
+
+    /// Consumes one exact appearance read credential without trying a second purpose.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` after consuming a mismatched, expired, unknown, or reused ticket.
+    pub(crate) async fn consume_appearance_read(
+        &self,
+        ticket: &str,
+        asset_id: &str,
+    ) -> Result<ConsumedAppearanceReadTicket, TicketError> {
+        let grant = self.consume_grant(ticket).await?;
+        let TicketAuthority::RoomHttp(room) = grant.authority else {
+            return Err(TicketError::Invalid);
+        };
+        match room.purpose.clone() {
+            RoomHttpPurpose::PendingPreviewRead { asset_id: expected } if expected == asset_id => {
+                resolve_room_http_authority(
+                    room,
+                    &RoomHttpPurpose::PendingPreviewRead { asset_id: expected },
+                )
+                .map(ConsumedAppearanceReadTicket::Pending)
+            }
+            RoomHttpPurpose::BoundAppearanceRead { asset_id: expected } if expected == asset_id => {
+                resolve_room_http_authority(
+                    room,
+                    &RoomHttpPurpose::BoundAppearanceRead { asset_id: expected },
+                )
+                .map(ConsumedAppearanceReadTicket::Bound)
+            }
+            _ => Err(TicketError::Invalid),
+        }
     }
 
     /// Consumes only the server-wide settings-directory read credential.

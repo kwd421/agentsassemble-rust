@@ -4,8 +4,8 @@ use chrono::Utc;
 use tokio::time::Instant;
 
 use super::{
-    ConsumedTicket, IssuedTicket, StoredTicketGrant, TicketAuthority, TicketError, TicketStore,
-    insert_grant,
+    ConsumedRoomHttpTicket, ConsumedTicket, IssuedTicket, RoomHttpPurpose, StoredTicketGrant,
+    TicketAuthority, TicketError, TicketStore, insert_grant, resolve_room_http_authority,
 };
 
 pub(super) struct HumanSessionGrant {
@@ -58,6 +58,11 @@ pub enum ConsumedProfileTicket {
     Room(AuthenticatedPrincipal),
     HumanSession(HumanSessionAuthorization),
     ServerOperator { principal_id: String },
+}
+
+pub(crate) enum ConsumedAttachmentUploadTicket {
+    Profile(ConsumedProfileTicket),
+    Appearance(ConsumedRoomHttpTicket),
 }
 
 const PUBLIC_SESSION_GRANT_CAPACITY: usize = 1_792;
@@ -335,20 +340,48 @@ impl TicketStore {
         ticket: &str,
     ) -> Result<ConsumedProfileTicket, TicketError> {
         let grant = self.consume_grant(ticket).await?;
-        Ok(match grant.authority {
-            TicketAuthority::Room(principal) => ConsumedProfileTicket::Room(principal),
-            TicketAuthority::HumanSession(public) => {
+        match Self::resolve_attachment_upload_authority(grant.authority)? {
+            ConsumedAttachmentUploadTicket::Profile(profile) => Ok(profile),
+            ConsumedAttachmentUploadTicket::Appearance(_) => Err(TicketError::Invalid),
+        }
+    }
+
+    /// Consumes one authenticated attachment-upload credential and dispatches its exact purpose.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` after consuming a wrong-purpose, expired, unknown, or reused ticket.
+    pub(crate) async fn consume_attachment_upload(
+        &self,
+        ticket: &str,
+    ) -> Result<ConsumedAttachmentUploadTicket, TicketError> {
+        let grant = self.consume_grant(ticket).await?;
+        Self::resolve_attachment_upload_authority(grant.authority)
+    }
+
+    fn resolve_attachment_upload_authority(
+        authority: TicketAuthority,
+    ) -> Result<ConsumedAttachmentUploadTicket, TicketError> {
+        Ok(match authority {
+            TicketAuthority::Room(principal) => {
+                ConsumedAttachmentUploadTicket::Profile(ConsumedProfileTicket::Room(principal))
+            }
+            TicketAuthority::HumanSession(public) => ConsumedAttachmentUploadTicket::Profile(
                 ConsumedProfileTicket::HumanSession(Self::resolve_human_session_authority(
                     public,
                     HumanSessionGrantPurpose::OwnProfile,
                     Utc::now(),
-                )?)
-            }
+                )?),
+            ),
             TicketAuthority::ServerOperator { principal_id, .. } => {
-                ConsumedProfileTicket::ServerOperator { principal_id }
+                ConsumedAttachmentUploadTicket::Profile(ConsumedProfileTicket::ServerOperator {
+                    principal_id,
+                })
             }
-            TicketAuthority::RoomHttp(_)
-            | TicketAuthority::HumanInviteManager(_)
+            TicketAuthority::RoomHttp(room) => ConsumedAttachmentUploadTicket::Appearance(
+                resolve_room_http_authority(room, &RoomHttpPurpose::AppearanceUpload)?,
+            ),
+            TicketAuthority::HumanInviteManager(_)
             | TicketAuthority::SettingsDirectoryRead { .. }
             | TicketAuthority::CentralRegistration { .. } => return Err(TicketError::Invalid),
         })

@@ -158,6 +158,66 @@ async fn room_http_purposes_and_asset_bindings_are_consumed_on_mismatch() {
             .await,
         Err(TicketError::Invalid)
     );
+
+    let bound = store
+        .issue_bound_appearance_read(
+            "general".to_owned(),
+            "operator-local-user".to_owned(),
+            "operator-local".to_owned(),
+            "ra_22222222222222222222222222222222".to_owned(),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("issue bound appearance read: {error}"));
+    assert!(matches!(
+        store
+            .consume_appearance_read(&bound.ticket, "ra_22222222222222222222222222222222")
+            .await,
+        Ok(crate::ticket::ConsumedAppearanceReadTicket::Bound(_))
+    ));
+}
+
+#[tokio::test]
+async fn attachment_upload_dispatches_once_without_cross_purpose_fallback() {
+    let store = TicketStore::new(Duration::from_secs(30), 8);
+    let profile = store
+        .issue(principal())
+        .await
+        .unwrap_or_else(|error| panic!("issue attachment profile ticket: {error}"));
+    assert!(matches!(
+        store.consume_attachment_upload(&profile.ticket).await,
+        Ok(crate::ticket::ConsumedAttachmentUploadTicket::Profile(_))
+    ));
+
+    let appearance = store
+        .issue_appearance_upload(
+            "general".to_owned(),
+            "operator-local-user".to_owned(),
+            "operator-local".to_owned(),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("issue appearance upload ticket: {error}"));
+    assert!(matches!(
+        store.consume_attachment_upload(&appearance.ticket).await,
+        Ok(crate::ticket::ConsumedAttachmentUploadTicket::Appearance(grant))
+            if grant.room_id == "general"
+    ));
+
+    let wrong_purpose = store
+        .issue_preferences_read(
+            "general".to_owned(),
+            "operator-local-user".to_owned(),
+            "operator-local".to_owned(),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("issue wrong attachment purpose: {error}"));
+    assert!(matches!(
+        store.consume_attachment_upload(&wrong_purpose.ticket).await,
+        Err(TicketError::Invalid)
+    ));
+    assert!(matches!(
+        store.consume_preferences_read(&wrong_purpose.ticket).await,
+        Err(TicketError::Invalid)
+    ));
 }
 
 #[tokio::test]

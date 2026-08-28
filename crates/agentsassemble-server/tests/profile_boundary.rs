@@ -1,7 +1,9 @@
 use std::{fmt::Write, time::Duration};
 
 use agentsassemble_domain::{
-    LOCAL_OPERATOR_USER_ID, ParticipantRole, ParticipantStatus, ProviderCatalog,
+    AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID,
+    LOCAL_OPERATOR_USER_ID, ParticipantRole, ParticipantStatus, ProviderCatalog, RoomSettings,
+    public_settings,
 };
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_provider::ProviderCatalogService;
@@ -175,6 +177,105 @@ async fn authenticated_profile_avatar_and_room_projection_survive_restart() {
     assert_eq!(recovered["profile"]["display_name"], "Canonical Human");
     assert_eq!(recovered["profile"]["avatar_image_url"], avatar_url);
     restarted.stop().await;
+}
+
+#[tokio::test]
+async fn room_appearance_upload_preview_bind_and_member_read_use_exact_tickets() {
+    let store = SqliteStore::open("sqlite::memory:")
+        .await
+        .unwrap_or_else(|error| panic!("open appearance HTTP store: {error}"));
+    bootstrap(&store).await;
+    let inspection_store = store.clone();
+    let tickets = TicketStore::new(Duration::from_secs(30), 32);
+    let issuer = tickets.clone();
+    let server = start_with_tickets(store, tickets).await;
+    let client = Client::new();
+
+    let upload_ticket = issue_appearance_upload(&issuer).await;
+    let upload = client
+        .post(format!("{}/api/attachments", server.base_url))
+        .header("authorization", format!("Bearer {upload_ticket}"))
+        .json(&json!({
+            "purpose": "room_appearance", "filename": "../banner.webp",
+            "content_type": "image/png", "data_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMQ0bD5DwACRAF4aig0hQAAAABJRU5ErkJggg=="
+        }))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("upload room appearance: {error}"));
+    assert_eq!(upload.status(), reqwest::StatusCode::OK);
+    let upload: Value = upload
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("decode room appearance upload: {error}"));
+    let asset_id = upload["attachment"]["id"]
+        .as_str()
+        .unwrap_or_else(|| panic!("appearance asset ID is missing"));
+    let asset_url = upload["attachment"]["url"]
+        .as_str()
+        .unwrap_or_else(|| panic!("appearance asset URL is missing"));
+    assert!(asset_id.starts_with("ra_"));
+    assert_eq!(asset_url, format!("/api/attachments/{asset_id}?view=1"));
+
+    let preview_ticket = issuer
+        .issue_pending_preview_read(
+            "general".to_owned(),
+            LOCAL_OPERATOR_USER_ID.to_owned(),
+            LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
+            asset_id.to_owned(),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("issue pending appearance preview: {error}"))
+        .ticket;
+    let preview = client
+        .get(format!("{}{asset_url}", server.base_url))
+        .header("authorization", format!("Bearer {preview_ticket}"))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("preview pending appearance: {error}"));
+    assert_static_private_png(preview).await;
+
+    let principal = local_principal();
+    let revision = public_settings(&RoomSettings::defaults("General"))
+        .unwrap_or_else(|error| panic!("appearance HTTP revision: {error}"))
+        .settings_revision;
+    inspection_store
+        .execute_room_settings_update(
+            &principal,
+            "appearance-http-bind",
+            &json!({
+                "expected_revision": revision,
+                "appearance": {"banner_image_url": asset_url, "banner_preset": "custom"}
+            }),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("bind HTTP appearance: {error}"));
+
+    let exact_query_ticket = issue_bound_read(&issuer, asset_id).await;
+    let wrong_query = client
+        .get(format!(
+            "{}/api/attachments/{asset_id}?download=1",
+            server.base_url
+        ))
+        .header("authorization", format!("Bearer {exact_query_ticket}"))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("reject appearance download query: {error}"));
+    assert_eq!(wrong_query.status(), reqwest::StatusCode::BAD_REQUEST);
+    let bound = client
+        .get(format!("{}{asset_url}", server.base_url))
+        .header("authorization", format!("Bearer {exact_query_ticket}"))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("read bound appearance: {error}"));
+    assert_static_private_png(bound).await;
+
+    let unauthorized = client
+        .get(format!("{}{asset_url}", server.base_url))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("reject public room appearance: {error}"));
+    assert_eq!(unauthorized.status(), reqwest::StatusCode::UNAUTHORIZED);
+    server.stop().await;
 }
 
 async fn assert_profile_auth_and_upload(client: &Client, base_url: &str) -> String {
@@ -362,6 +463,65 @@ async fn issue_operator_ticket(tickets: &TicketStore) -> String {
         .await
         .unwrap_or_else(|error| panic!("issue server operator profile ticket: {error}"))
         .ticket
+}
+
+async fn issue_appearance_upload(tickets: &TicketStore) -> String {
+    tickets
+        .issue_appearance_upload(
+            "general".to_owned(),
+            LOCAL_OPERATOR_USER_ID.to_owned(),
+            LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("issue appearance upload: {error}"))
+        .ticket
+}
+
+async fn issue_bound_read(tickets: &TicketStore, asset_id: &str) -> String {
+    tickets
+        .issue_bound_appearance_read(
+            "general".to_owned(),
+            LOCAL_OPERATOR_USER_ID.to_owned(),
+            LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
+            asset_id.to_owned(),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("issue bound appearance read: {error}"))
+        .ticket
+}
+
+fn local_principal() -> AuthenticatedPrincipal {
+    AuthenticatedPrincipal {
+        principal_id: LOCAL_OPERATOR_USER_ID.to_owned(),
+        participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
+        display_name: "SeiNel".to_owned(),
+        room_id: "general".to_owned(),
+        client_kind: ClientKind::Browser,
+        invite_scope: InviteScope::ReadWrite,
+        is_operator: true,
+        capabilities: CapabilitySet::local_operator(ClientKind::Browser, InviteScope::ReadWrite),
+    }
+}
+
+async fn assert_static_private_png(response: reqwest::Response) {
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    assert_eq!(response.headers()["content-type"], "image/png");
+    assert_eq!(response.headers()["cache-control"], "private, no-store");
+    assert_eq!(response.headers()["x-content-type-options"], "nosniff");
+    assert_eq!(response.headers()["referrer-policy"], "no-referrer");
+    assert!(
+        response.headers()["content-disposition"]
+            .to_str()
+            .unwrap_or_default()
+            .starts_with("inline;")
+    );
+    assert!(
+        response
+            .bytes()
+            .await
+            .unwrap_or_default()
+            .starts_with(b"\x89PNG\r\n\x1a\n")
+    );
 }
 
 async fn connect_room(
