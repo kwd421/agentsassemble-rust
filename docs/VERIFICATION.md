@@ -2883,5 +2883,26 @@ projection. This remains local validation only: no state, task, timer, network o
 work is added. The production main chunk is 771.05 kB (232.32 kB gzip), and the original
 CSS chunks remain exact. The final serial `make verify` passed every repository gate,
 83 frontend files with 480 tests, 19 desktop tests, and the unchanged complete Rust and
-TCP boundary suites. Final approval is still withheld until the pushed correction is
-re-reviewed by both reviewers.
+TCP boundary suites. Web re-review approved both `48eb5bf..525f754` and
+`5a032db..525f754` with `Critical 0 / High 0 / Medium 0`.
+
+Daybreaker re-review of `525f754` found one remaining Medium lifecycle defect outside
+the directory/socket normalization already corrected: room-dock persistence still
+passed a verified room ID through ECMAScript `trim()` and UTF-16 `slice()`. That could
+change U+FEFF after reload and truncate a valid 128-supplementary-scalar identifier to
+64 scalars. Persistence now delegates acceptance to the same canonical room-ID owner
+and stores the accepted string byte-for-byte. Focused tests prove exact storage reload
+for both values and prove U+FEFF reaches the native invite-ticket invocation unchanged.
+No second policy, compatibility path, state, task, or durable owner was introduced.
+
+The first full rerun could not complete because accumulated regenerable Cargo build
+artifacts exhausted the local volume while Vitest was writing its temporary report.
+Only the workspace and desktop `target` artifacts were cleaned; source, settings,
+credentials, and user-owned files were untouched. This reclaimed 51 GiB of available
+space. A cold serial `make verify` then passed every architecture, source-growth,
+policy, formatting, generated-binding, original-CSS, production-build, workspace-test,
+TCP/integration, warning-denied Clippy, and diff gate: 83 frontend files with 482 tests,
+19 desktop tests, domain 23, persistence 171, protocol 5, provider 120, server 83, and
+all integration and documentation tests. The production main chunk is 771.11 kB
+(232.38 kB gzip). Final approval for this last persistence correction is withheld until
+the pushed commit is re-reviewed by both reviewers.

@@ -50,4 +50,25 @@ describe("room dock persistence", () => {
       serverOrigin: "https://rooms.example.test",
     });
   });
+
+  it("round-trips canonical room IDs without ECMAScript trimming or UTF-16 truncation", () => {
+    const meetingIds = ["\ufeffroom", "\u{10000}".repeat(128)];
+    const rooms: RoomDockItem[] = meetingIds.map((meetingId, index) => ({
+      id: `server-room-${index}`,
+      label: `Room ${index}`,
+      meetingId,
+      roomUid: `30000000-0000-4000-8000-00000000000${index}`,
+      serverId: "10000000-0000-4000-8000-000000000001",
+      roomOrigin: "local",
+      topic: "Exact room identity",
+      shortLabel: "R",
+      icon: Hash,
+      createdAt: "2026-08-28T00:00:00Z",
+      tone: "resident",
+    }));
+
+    persistRoomDockItems(rooms.map(persistableRoom));
+
+    expect(loadRoomDockItems().map((room) => room.meetingId)).toEqual(meetingIds);
+  });
 });

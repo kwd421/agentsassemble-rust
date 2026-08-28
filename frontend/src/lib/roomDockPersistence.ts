@@ -1,6 +1,7 @@
 import type { RoomAppearance } from "./roomAppearance";
 import { cacheNativeRoomDirectory } from "./desktopBridge";
 import { parseAttachmentReference } from "./attachmentReference";
+import { canonicalRoomId } from "./canonicalRoomId";
 
 type PersistedRoomAppearance = Omit<RoomAppearance, "notifications">;
 
@@ -70,8 +71,13 @@ function normalizeAppearance(value: unknown): PersistedRoomAppearance | undefine
 export function normalizeRoomDockItem(value: unknown): PersistedRoomDockItem | null {
   if (!value || typeof value !== "object") return null;
   const record = value as Record<string, unknown>;
-  const meetingId = safeText(record.meetingId, "", 128);
-  if (!meetingId) return null;
+  if (typeof record.meetingId !== "string") return null;
+  let meetingId: string;
+  try {
+    meetingId = canonicalRoomId(record.meetingId);
+  } catch {
+    return null;
+  }
   const label = safeText(record.label, meetingId, 80);
   const serverOrigin = safeServerOrigin(record.serverOrigin);
   const roomOrigin = record.roomOrigin === "remote_server" && serverOrigin

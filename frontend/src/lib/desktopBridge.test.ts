@@ -6,6 +6,7 @@ import {
   fetchDesktopHumanInviteCreate,
   fetchDesktopHumanInviteRevoke,
   fetchDesktopOperatorRuntime,
+  requestDesktopHumanInviteCreateTicket,
   requestDesktopHostProductSurface,
 } from "./desktopBridge";
 
@@ -215,6 +216,32 @@ describe("desktop exact-purpose HTTP bridge", () => {
       ).rejects.toThrow("관리자 권위");
     }
     expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("passes a Rust-canonical U+FEFF room ID to native unchanged", async () => {
+    const exactAuthority = { ...managerAuthority, room_id: "\ufeffgeneral" };
+    const invoke = vi
+      .fn()
+      .mockResolvedValueOnce({
+        revision: PRODUCT_SURFACE_REVISION,
+        digest: "2".repeat(64),
+        commands: hostCommands,
+      })
+      .mockResolvedValueOnce({
+        ticket: "d".repeat(64),
+        ttl_seconds: 30,
+        http_base_url: "http://127.0.0.1:49154",
+      });
+    Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
+
+    await requestDesktopHostProductSurface();
+    await requestDesktopHumanInviteCreateTicket(exactAuthority);
+
+    expect(invoke).toHaveBeenNthCalledWith(
+      2,
+      "runtime_human_invite_create_ticket",
+      { authority: exactAuthority }
+    );
   });
 
   it("dispatches concurrent operator requests only to their own grant base", async () => {
