@@ -3,7 +3,7 @@ use agentsassemble_domain::{
     PublicRoomSettings, Room, RoomEvent, SnapshotMode, UserProfile,
 };
 pub use agentsassemble_domain::{
-    ROOM_APPEARANCE_ASSET_HEX_LENGTH, ROOM_APPEARANCE_ASSET_PREFIX,
+    MAX_RASTER_BYTES, ROOM_APPEARANCE_ASSET_HEX_LENGTH, ROOM_APPEARANCE_ASSET_PREFIX,
     ROOM_APPEARANCE_REFERENCE_PREFIX, ROOM_APPEARANCE_REFERENCE_SUFFIX,
 };
 use serde::{Deserialize, Serialize};

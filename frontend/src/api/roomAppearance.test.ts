@@ -19,6 +19,7 @@ import {
   fetchRoomAppearanceBlob,
   uploadRoomAppearance,
 } from "./roomAppearance";
+import { MAX_RASTER_BYTES } from "../types/generated/ROOM_APPEARANCE_WIRE";
 
 const manager = {
   server_id: "10000000-0000-4000-8000-000000000001",
@@ -28,6 +29,12 @@ const manager = {
 };
 const assetId = `ra_${"a".repeat(32)}`;
 const reference = `/api/attachments/${assetId}?view=1`;
+const PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMQ0bD5DwACRAF4aig0hQAAAABJRU5ErkJggg==";
+
+function pngBytes() {
+  return Uint8Array.from(atob(PNG_BASE64), (character) => character.charCodeAt(0));
+}
 
 function grant(ticket: string) {
   return {
@@ -37,10 +44,23 @@ function grant(ticket: string) {
   };
 }
 
-function pngResponse(body: BodyInit = "png") {
+function pngResponse(body: BodyInit = pngBytes()) {
   return new Response(body, {
     status: 200,
-    headers: { "Content-Type": "image/png" },
+    headers: {
+      "Cache-Control": "private, no-store",
+      "Content-Type": "image/png",
+    },
+  });
+}
+
+function jsonResponse(value: unknown) {
+  return new Response(JSON.stringify(value), {
+    status: 200,
+    headers: {
+      "Cache-Control": "private, no-store",
+      "Content-Type": "application/json",
+    },
   });
 }
 
@@ -52,19 +72,16 @@ describe("room appearance HTTP contract", () => {
   it("uploads only the canonical appearance payload through its manager grant", async () => {
     bridge.upload.mockResolvedValue(grant("b".repeat(64)));
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          attachment: {
-            id: assetId,
-            filename: "banner.png",
-            content_type: "image/png",
-            size: 3,
-            is_image: true,
-            url: reference,
-          },
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } }
-      )
+      jsonResponse({
+        attachment: {
+          id: assetId,
+          filename: "banner.png",
+          content_type: "image/png",
+          size: 3,
+          is_image: true,
+          url: reference,
+        },
+      })
     );
     vi.stubGlobal("fetch", fetchMock);
 
@@ -108,12 +125,7 @@ describe("room appearance HTTP contract", () => {
     ]) {
       vi.stubGlobal(
         "fetch",
-        vi.fn().mockResolvedValue(
-          new Response(JSON.stringify({ attachment }), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          })
-        )
+        vi.fn().mockResolvedValue(jsonResponse({ attachment }))
       );
       await expect(
         uploadRoomAppearance(
@@ -122,6 +134,26 @@ describe("room appearance HTTP contract", () => {
         )
       ).rejects.toThrow("응답 계약");
     }
+  });
+
+  it("rejects upload metadata without the private no-store response contract", async () => {
+    bridge.upload.mockResolvedValue(grant("b".repeat(64)));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ attachment: {} }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      )
+    );
+
+    await expect(
+      uploadRoomAppearance(
+        new File(["png"], "banner.png", { type: "image/png" }),
+        manager
+      )
+    ).rejects.toThrow("응답 계약");
   });
 
   it("keeps local pending and bound reads on distinct exact-purpose grants", async () => {
@@ -150,10 +182,7 @@ describe("room appearance HTTP contract", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({ ticket: "e".repeat(64), ttl_seconds: 30 }),
-          { status: 200, headers: { "Content-Type": "application/json" } }
-        )
+        jsonResponse({ ticket: "e".repeat(64), ttl_seconds: 30 })
       )
       .mockResolvedValueOnce(pngResponse());
     vi.stubGlobal("fetch", fetchMock);
@@ -193,7 +222,10 @@ describe("room appearance HTTP contract", () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response("jpeg", {
         status: 200,
-        headers: { "Content-Type": "image/jpeg" },
+        headers: {
+          "Cache-Control": "private, no-store",
+          "Content-Type": "image/jpeg",
+        },
       })
     );
     vi.stubGlobal("fetch", fetchMock);
@@ -207,7 +239,38 @@ describe("room appearance HTTP contract", () => {
     ).rejects.toThrow("참조");
     await expect(
       fetchRoomAppearanceBlob(reference, { kind: "local", manager }, "bound")
-    ).rejects.toThrow("응답 형식");
+    ).rejects.toThrow("응답 계약");
     expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("rejects non-private, invalid-signature, and oversized PNG responses", async () => {
+    bridge.bound.mockResolvedValue(grant("d".repeat(64)));
+    const oversized = new Uint8Array(MAX_RASTER_BYTES + 1);
+    oversized.set(pngBytes().slice(0, 8));
+    const responses = [
+      new Response(pngBytes(), {
+        status: 200,
+        headers: { "Content-Type": "image/png" },
+      }),
+      new Response(pngBytes(), {
+        status: 200,
+        headers: {
+          "Cache-Control": "public, max-age=3600",
+          "Content-Type": "image/png",
+        },
+      }),
+      pngResponse("not-png"),
+      pngResponse(oversized),
+    ];
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    for (const response of responses) {
+      fetchMock.mockResolvedValueOnce(response);
+      await expect(
+        fetchRoomAppearanceBlob(reference, { kind: "local", manager }, "bound")
+      ).rejects.toThrow("응답 계약");
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(responses.length);
   });
 });

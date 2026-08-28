@@ -10,6 +10,7 @@ import {
   roomAppearanceAssetReference,
   type RoomAppearanceAssetReference,
 } from "../lib/roomAppearanceAsset";
+import { MAX_RASTER_BYTES } from "../types/generated/ROOM_APPEARANCE_WIRE";
 
 export type RoomAppearanceReadAuthority =
   | { kind: "local"; manager: DesktopManagerRoomAuthority }
@@ -29,9 +30,41 @@ const ATTACHMENT_KEYS = [
   "is_image",
   "url",
 ] as const;
+const PNG_SIGNATURE = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
 
 function invalidResponse(): never {
   throw new Error("방 외형 자산 응답 계약이 올바르지 않습니다.");
+}
+
+function requireResponseMetadata(response: Response, contentType: string) {
+  const cacheDirectives = response.headers
+    .get("Cache-Control")
+    ?.split(",")
+    .map((directive) => directive.trim().toLowerCase());
+  if (
+    response.headers.get("Content-Type") !== contentType ||
+    cacheDirectives?.length !== 2 ||
+    new Set(cacheDirectives).size !== 2 ||
+    !cacheDirectives.includes("private") ||
+    !cacheDirectives.includes("no-store")
+  ) {
+    invalidResponse();
+  }
+}
+
+async function strictPngBlob(response: Response): Promise<Blob> {
+  requireResponseMetadata(response, "image/png");
+  const blob = await response.blob();
+  if (blob.size < PNG_SIGNATURE.length || blob.size > MAX_RASTER_BYTES) {
+    invalidResponse();
+  }
+  const signature = new Uint8Array(
+    await blob.slice(0, PNG_SIGNATURE.length).arrayBuffer()
+  );
+  if (signature.some((byte, index) => byte !== PNG_SIGNATURE[index])) {
+    invalidResponse();
+  }
+  return blob;
 }
 
 function exactObject(
@@ -140,6 +173,7 @@ async function fetchRemoteAppearance(
     }
   );
   if (!exchange.ok) throw await responseError(exchange);
+  requireResponseMetadata(exchange, "application/json");
   const ticket = exactSessionTicket(await exchange.json());
   return fetch(reference.url, {
     cache: "no-store",
@@ -169,6 +203,7 @@ export async function uploadRoomAppearance(
     }),
   });
   if (!response.ok) throw await responseError(response);
+  requireResponseMetadata(response, "application/json");
   return parseUploadResponse(await response.json());
 }
 
@@ -187,8 +222,5 @@ export async function fetchRoomAppearanceBlob(
       ? await fetchLocalAppearance(reference, authority, mode, signal)
       : await fetchRemoteAppearance(reference, authority, signal);
   if (!response.ok) throw await responseError(response);
-  if (response.headers.get("Content-Type") !== "image/png") {
-    throw new Error("방 외형 자산 응답 형식이 올바르지 않습니다.");
-  }
-  return response.blob();
+  return strictPngBlob(response);
 }

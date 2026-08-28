@@ -77,6 +77,7 @@ pub use agent_reconciliation::{
     RuntimeReconciliationReservation,
 };
 pub use agent_reconciliation_scan::{RuntimeReconciliationCursor, RuntimeReconciliationPage};
+pub use agentsassemble_domain::MAX_RASTER_BYTES;
 pub use bootstrap::{LocalBootstrapCommit, LocalBootstrapPhase, LocalBootstrapStatus};
 pub use host_identity::PersistentHostIdentity;
 pub use human_admission::{
@@ -105,7 +106,6 @@ pub use provider_turn_reconciliation::{
     ProviderTurnReconciliationCandidate, ProviderTurnReconciliationCursor,
     ProviderTurnReconciliationPage,
 };
-pub use raster_assets::MAX_RASTER_BYTES;
 pub use room_appearance_assets::{RoomAppearanceAsset, RoomAppearanceAssetMetadata};
 pub use room_directory::{RoomCreateCommit, StoredRoomSummary};
 pub use room_preferences::{LocalRoomPreferencesDirectoryEntry, RoomPreferencesSnapshot};

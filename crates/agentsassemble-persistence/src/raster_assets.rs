@@ -1,5 +1,6 @@
 use std::{io::Cursor, sync::OnceLock};
 
+pub(crate) use agentsassemble_domain::MAX_RASTER_BYTES;
 use chrono::DateTime;
 use image::{DynamicImage, ImageFormat, ImageReader, Limits};
 use sqlx::{Row, Sqlite, Transaction};
@@ -7,7 +8,6 @@ use tokio::sync::Semaphore;
 
 use crate::PersistenceError;
 
-pub const MAX_RASTER_BYTES: usize = 10 * 1024 * 1024;
 pub(crate) const MAX_LIVE_RASTER_ASSETS: i64 = 4096;
 const MAX_LIVE_RASTER_BYTES: i64 = 8 * 1024 * 1024 * 1024;
 const MAX_IMAGE_DIMENSION: u32 = 4096;
