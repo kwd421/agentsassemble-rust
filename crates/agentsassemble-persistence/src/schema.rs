@@ -187,7 +187,7 @@ const TABLES: &[TableDefinition] = &[
     },
     TableDefinition {
         name: "room_appearance_assets",
-        ddl: "CREATE TABLE IF NOT EXISTS room_appearance_assets (asset_id TEXT PRIMARY KEY CHECK(length(asset_id) = 35 AND substr(asset_id, 1, 3) = 'ra_'), room_id TEXT NOT NULL, pending_owner_user_id TEXT, filename TEXT NOT NULL, content_type TEXT NOT NULL CHECK(content_type = 'image/png'), content BLOB NOT NULL, size INTEGER NOT NULL CHECK(size > 0 AND size <= 10485760), created_at TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('pending', 'bound')), expires_at INTEGER, CHECK((state = 'pending' AND pending_owner_user_id IS NOT NULL AND expires_at IS NOT NULL) OR (state = 'bound' AND pending_owner_user_id IS NULL AND expires_at IS NULL)), FOREIGN KEY(room_id) REFERENCES rooms(room_id) ON DELETE CASCADE, FOREIGN KEY(pending_owner_user_id) REFERENCES user_profiles(user_id) ON DELETE CASCADE)",
+        ddl: "CREATE TABLE IF NOT EXISTS room_appearance_assets (asset_id TEXT PRIMARY KEY CHECK(length(asset_id) = 35 AND substr(asset_id, 1, 3) = 'ra_' AND substr(asset_id, 4) NOT GLOB '*[^0-9a-f]*'), room_id TEXT NOT NULL, pending_owner_user_id TEXT, filename TEXT NOT NULL, content_type TEXT NOT NULL CHECK(content_type = 'image/png'), content BLOB NOT NULL, size INTEGER NOT NULL CHECK(size > 0 AND size <= 10485760), created_at TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('pending', 'bound')), expires_at INTEGER, CHECK((state = 'pending' AND pending_owner_user_id IS NOT NULL AND expires_at IS NOT NULL) OR (state = 'bound' AND pending_owner_user_id IS NULL AND expires_at IS NULL)), FOREIGN KEY(room_id) REFERENCES rooms(room_id) ON DELETE CASCADE, FOREIGN KEY(pending_owner_user_id) REFERENCES user_profiles(user_id) ON DELETE CASCADE)",
         infrastructure: false,
     },
     TableDefinition {
@@ -269,7 +269,6 @@ pub(crate) fn product_tables() -> impl Iterator<Item = &'static TableDefinition>
 mod tests {
     use std::collections::BTreeSet;
 
-    use agentsassemble_domain::{ROOM_APPEARANCE_ASSET_HEX_LENGTH, ROOM_APPEARANCE_ASSET_PREFIX};
     use sqlx::{Row, SqlitePool, sqlite::SqlitePoolOptions};
 
     use super::{TABLES, product_tables, statements};
@@ -327,25 +326,6 @@ mod tests {
                     .unwrap_or_else(|error| panic!("query product table {}: {error}", table.name))
             );
         }
-    }
-
-    #[test]
-    fn room_appearance_schema_check_tracks_the_domain_asset_grammar() {
-        let ddl = match TABLES
-            .iter()
-            .find(|table| table.name == "room_appearance_assets")
-        {
-            Some(table) => table.ddl,
-            None => panic!("room appearance table descriptor is missing"),
-        };
-        let asset_id_length = ROOM_APPEARANCE_ASSET_PREFIX.len() + ROOM_APPEARANCE_ASSET_HEX_LENGTH;
-
-        assert!(ddl.contains(&format!("length(asset_id) = {asset_id_length}")));
-        assert!(ddl.contains(&format!(
-            "substr(asset_id, 1, {}) = '{}'",
-            ROOM_APPEARANCE_ASSET_PREFIX.len(),
-            ROOM_APPEARANCE_ASSET_PREFIX
-        )));
     }
 
     #[tokio::test]

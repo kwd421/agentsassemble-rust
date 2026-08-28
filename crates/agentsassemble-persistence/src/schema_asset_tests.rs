@@ -1,5 +1,6 @@
 use super::tests::installed_schema;
 use crate::raster_assets::MAX_RASTER_BYTES;
+use agentsassemble_domain::is_room_appearance_asset_id;
 
 async fn seed_asset_authority(pool: &sqlx::SqlitePool) {
     sqlx::query(
@@ -60,6 +61,34 @@ async fn schema_item_limits_match_the_runtime_raster_owner() {
                 .await
                 .is_err(),
             "{table} accepted the runtime raster limit plus one"
+        );
+    }
+}
+
+#[tokio::test]
+async fn room_appearance_asset_ids_match_the_domain_grammar() {
+    let pool = installed_schema().await;
+    seed_asset_authority(&pool).await;
+    let candidates = [
+        format!("ra_{}", "a".repeat(32)),
+        format!("ra_{}", "A".repeat(32)),
+        format!("ra_{}", "g".repeat(32)),
+        format!("ra_{}", "0".repeat(31)),
+        format!("rx_{}", "0".repeat(32)),
+    ];
+
+    for asset_id in candidates {
+        let accepted = sqlx::query(
+            "INSERT INTO room_appearance_assets(asset_id, room_id, pending_owner_user_id, filename, content_type, content, size, created_at, state, expires_at) VALUES (?, 'general', 'user-1', 'avatar.png', 'image/png', X'00', 1, '2026-08-26T00:00:00Z', 'pending', 1)",
+        )
+        .bind(&asset_id)
+        .execute(&pool)
+        .await
+        .is_ok();
+        assert_eq!(
+            accepted,
+            is_room_appearance_asset_id(&asset_id),
+            "installed schema disagreed with the domain for {asset_id}"
         );
     }
 }
