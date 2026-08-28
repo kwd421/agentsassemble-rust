@@ -2983,10 +2983,13 @@ justifies restoring duplicate DDL policy.
 
 Focused persistence tests replace a room UID under the same room ID and prove a stale
 snapshot can neither insert nor revoke, with row count and prior revoke state unchanged.
-The real owned TCP control-pipe test uses the actual created directory tuple, obtains
-both exact grants, and rejects independently changed server, lineage, and room UID with
-`room_authority_changed`. HTTP boundary tests retain consume-before-body, wrong-purpose,
-wrong-room, ready-ingress, credential/result, and exact revoke behavior. Warning-denied
+The owned child-process stdin/stdout control-pipe test uses the actual created directory
+tuple and rejects independently changed server, lineage, and room UID with
+`room_authority_changed`. It also obtains both exact grants through that pipe, consumes
+them through the child's real HTTP TCP create/revoke routes, then reopens the database
+after control-pipe EOF and proves the exact invite remains durably revoked. HTTP boundary
+tests retain consume-before-body, wrong-purpose, wrong-room, ready-ingress,
+credential/result, and exact revoke behavior. Warning-denied
 workspace Clippy and formatting checks pass. Final serial `make verify` passed every
 architecture, source-growth, policy, formatting, generated-binding, original-CSS,
 production-build, workspace-test, TCP/integration, warning-denied Clippy, documentation,
@@ -2995,3 +2998,15 @@ persistence 172, protocol 5, provider 120, and server 83 all passed. The product
 main chunk remains 771.16 kB (232.39 kB gzip). No Computer Use resource, real provider,
 Deep Scan, or other automated security scanner ran. Manual approval remains withheld
 until the complete candidate is pushed and reviewed.
+
+Web review of `754198d..904b873` and cumulative `5a032db..904b873` found one Medium
+verification-scope error: the child stdin/stdout control pipe had been mislabeled TCP,
+and the separate TCP manager-route test issued tickets directly. The correction above
+joins real control issuance to real TCP create/revoke and restart persistence without
+adding product state or a test-only authority. The same-ID/new-UID stale transition
+remains proved at the persistence transaction owner. It is intentionally not injected
+into the running child: current product behavior has no room-generation replacement
+operation, while an out-of-band SQLite writer would violate the exclusive single-writer
+contract and a test-only control mutation would be fake authority. Daybreaker's first
+review found no Critical, High, or Medium issue; both final approvals remain withheld
+until this correction is pushed and re-reviewed.

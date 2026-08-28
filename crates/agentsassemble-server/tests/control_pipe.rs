@@ -306,7 +306,7 @@ async fn owned_control_pipe_issues_exact_settings_tickets_after_authority_exists
     let directory =
         tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
     let database = directory.path().join("runtime.sqlite3");
-    let mut server = start_controlled(&database).await;
+    let mut server = start_controlled_with_manual(&database).await;
 
     let before_bootstrap = server
         .send_control(&LocalControlRequest::IssueSettingsDirectoryReadTicket {
@@ -377,7 +377,7 @@ async fn owned_control_pipe_issues_exact_settings_tickets_after_authority_exists
             && ttl_seconds > 0
     ));
 
-    control_pipe_invite_tickets::assert_invite_tickets(&mut server, &created).await;
+    let invite_id = control_pipe_invite_tickets::assert_invite_tickets(&mut server, &created).await;
 
     let directory = server
         .send_control(&LocalControlRequest::IssueSettingsDirectoryReadTicket {
@@ -395,6 +395,7 @@ async fn owned_control_pipe_issues_exact_settings_tickets_after_authority_exists
             && ttl_seconds > 0
     ));
     server.close_parent_pipe().await;
+    control_pipe_invite_tickets::assert_persisted_revocation(&database, &invite_id).await;
 }
 
 #[tokio::test]
