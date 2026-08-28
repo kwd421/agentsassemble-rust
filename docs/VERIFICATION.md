@@ -3703,3 +3703,17 @@ and diff gates. Computer Use remained blocked by the locked Mac; no app was laun
 left running, and its kernel was reset. Packaged local/remote/restart verification and
 final correction approval remain pending. No provider, Deep Scan, or automated scanner
 ran.
+
+Final manual correction review found no actionable issue. Daybreaker and the critical
+web session each approved both `c6c6f41..0a1bec6` and cumulative
+`d940313..0a1bec6` as `APPROVE — Critical 0 / High 0 / Medium 0`. Neither review used
+Deep Scan or another automated security scanner.
+
+The release package was rebuilt from `0a1bec6`, but two Computer Use launch attempts
+stopped at the locked-Mac boundary before the app opened. No exact app, sidecar, or
+server process remained, no application-support/cache/WebKit data was created, and the
+Computer Use kernel was reset after each attempt. The isolated 1.2 GiB build directory,
+generated sidecar, and generated frontend `dist` were moved to exact recoverable Trash
+paths. Packaged local/remote/restart verification remains the sole uncompleted exit
+evidence for this slice and must use a freshly rebuilt isolated package after the Mac is
+unlocked.
