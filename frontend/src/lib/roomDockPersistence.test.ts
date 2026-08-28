@@ -24,9 +24,9 @@ describe("room dock persistence", () => {
       appearance: {
         bannerPreset: index === 0 ? "custom" : "default",
         bannerImage:
-          index === 0 ? "/api/attachments/banner01?view=1" : undefined,
+          index === 0 ? `/api/attachments/ra_${"a".repeat(32)}?view=1` : undefined,
         iconImage:
-          index === 0 ? "/api/attachments/icon0001?view=1" : undefined,
+          index === 0 ? `/api/attachments/ra_${"b".repeat(32)}?view=1` : undefined,
         iconLabel: "R",
         inviteScope: "room",
       },
@@ -42,12 +42,41 @@ describe("room dock persistence", () => {
       rooms.map((room) => room.meetingId)
     );
     expect(restored[0].appearance).toMatchObject({
-      bannerImage: "/api/attachments/banner01?view=1",
-      iconImage: "/api/attachments/icon0001?view=1",
+      bannerImage: `/api/attachments/ra_${"a".repeat(32)}?view=1`,
+      iconImage: `/api/attachments/ra_${"b".repeat(32)}?view=1`,
     });
     expect(restored[1]).toMatchObject({
       roomOrigin: "remote_server",
       serverOrigin: "https://rooms.example.test",
+    });
+  });
+
+  it("drops generic attachment references from persisted room appearance", () => {
+    window.localStorage.setItem(
+      "agentsassemble.discord.rooms.v1",
+      JSON.stringify([
+        {
+          id: "general",
+          meetingId: "general",
+          label: "General",
+          roomOrigin: "local",
+          topic: "",
+          shortLabel: "G",
+          createdAt: "",
+          tone: "resident",
+          appearance: {
+            bannerPreset: "custom",
+            bannerImage: "/api/attachments/legacy001?view=1",
+            iconImage: `/api/attachments/ra_${"c".repeat(32)}?download=1`,
+            inviteScope: "room",
+          },
+        },
+      ])
+    );
+
+    expect(loadRoomDockItems()[0].appearance).toMatchObject({
+      bannerImage: undefined,
+      iconImage: undefined,
     });
   });
 
