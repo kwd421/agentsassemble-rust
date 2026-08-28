@@ -109,10 +109,12 @@ function managedCustody(
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((promiseResolve) => {
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
     resolve = promiseResolve;
+    reject = promiseReject;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 function renderInviteController(
@@ -263,6 +265,100 @@ describe("useRoomInviteController", () => {
       );
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  it("refreshes strict ingress status before authorizing a clipboard write", async () => {
+    apiMocks.createManagedHumanInvite.mockResolvedValue(
+      managedCustody("5555555555555555")
+    );
+    const hook = renderInviteController();
+    act(() => hook.result.current.open(room.id));
+    await waitFor(() => expect(hook.result.current.publicInviteStatus).toEqual(publicStatus));
+    await act(async () => hook.result.current.generateSecureInvite(room, "room"));
+    const clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    apiMocks.fetchPublicInviteStatus.mockResolvedValue(stoppedStatus);
+
+    try {
+      await act(async () => hook.result.current.copySecureInvite());
+      expect(writeText).not.toHaveBeenCalled();
+      expect(hook.result.current.publicInviteStatus).toEqual(stoppedStatus);
+      expect(hook.result.current.secureInviteUrl).toBe("");
+    } finally {
+      if (clipboardDescriptor) {
+        Object.defineProperty(navigator, "clipboard", clipboardDescriptor);
+      } else {
+        Reflect.deleteProperty(navigator, "clipboard");
+      }
+    }
+  });
+
+  it("revalidates after an awaited clipboard rejection before fallback copy", async () => {
+    apiMocks.createManagedHumanInvite.mockResolvedValue(
+      managedCustody("6666666666666666")
+    );
+    const hook = renderInviteController();
+    act(() => hook.result.current.open(room.id));
+    await waitFor(() => expect(hook.result.current.publicInviteStatus).toEqual(publicStatus));
+    await act(async () => hook.result.current.generateSecureInvite(room, "room"));
+    const inviteKey = hook.result.current.humanInvites[0].key;
+    const clipboardWrite = deferred<void>();
+    const revokeResult = deferred<"revoked">();
+    apiMocks.revokeManagedHumanInvite.mockReturnValue(revokeResult.promise);
+    const clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+    const execDescriptor = Object.getOwnPropertyDescriptor(document, "execCommand");
+    const writeText = vi.fn(() => clipboardWrite.promise);
+    const execCommand = vi.fn(() => true);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    Object.defineProperty(document, "execCommand", {
+      configurable: true,
+      value: execCommand,
+    });
+    let copy!: Promise<void>;
+    let revoke!: Promise<void>;
+
+    try {
+      act(() => {
+        copy = hook.result.current.copySecureInvite();
+      });
+      await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
+      act(() => {
+        revoke = hook.result.current.revokeHumanInvite(inviteKey);
+      });
+      await waitFor(() =>
+        expect(hook.result.current.humanInvites[0].revocation).toBe("in_flight")
+      );
+
+      await act(async () => {
+        clipboardWrite.reject(new Error("clipboard permission changed"));
+        await copy;
+      });
+
+      expect(execCommand).not.toHaveBeenCalled();
+      expect(hook.result.current.copyStatus).toBe("사람 초대 폐기 중...");
+      await act(async () => {
+        revokeResult.resolve("revoked");
+        await revoke;
+      });
+    } finally {
+      if (clipboardDescriptor) {
+        Object.defineProperty(navigator, "clipboard", clipboardDescriptor);
+      } else {
+        Reflect.deleteProperty(navigator, "clipboard");
+      }
+      if (execDescriptor) {
+        Object.defineProperty(document, "execCommand", execDescriptor);
+      } else {
+        Reflect.deleteProperty(document, "execCommand");
+      }
     }
   });
 

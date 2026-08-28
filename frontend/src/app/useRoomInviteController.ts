@@ -44,15 +44,24 @@ type UseRoomInviteControllerOptions = {
 
 const RETIRED_INGRESS_OPERATION = Symbol("retired ingress operation");
 
-async function copyText(value: string) {
-  try {
-    if (navigator.clipboard?.writeText) {
+type PrepareClipboardDispatch = () => Promise<() => void>;
+
+async function copyText(
+  value: string,
+  prepareDispatch?: PrepareClipboardDispatch
+) {
+  if (navigator.clipboard?.writeText) {
+    const assertDispatch = await prepareDispatch?.();
+    assertDispatch?.();
+    try {
       await navigator.clipboard.writeText(value);
       return true;
+    } catch {
+      // Browser permission rejection may still permit the synchronous fallback.
     }
-  } catch {
-    // Fall through when browser permissions reject clipboard writes.
   }
+  const assertDispatch = await prepareDispatch?.();
+  assertDispatch?.();
   const textarea = document.createElement("textarea");
   textarea.value = value;
   textarea.setAttribute("readonly", "");
@@ -60,13 +69,16 @@ async function copyText(value: string) {
   textarea.style.left = "-9999px";
   textarea.style.top = "0";
   textarea.style.opacity = "0";
-  document.body.appendChild(textarea);
-  textarea.focus({ preventScroll: true });
-  textarea.select();
-  textarea.setSelectionRange(0, value.length);
-  const copied = document.execCommand("copy");
-  textarea.remove();
-  return copied;
+  try {
+    document.body.appendChild(textarea);
+    textarea.focus({ preventScroll: true });
+    textarea.select();
+    textarea.setSelectionRange(0, value.length);
+    assertDispatch?.();
+    return document.execCommand("copy");
+  } finally {
+    textarea.remove();
+  }
 }
 
 export function useRoomInviteController({
@@ -92,6 +104,7 @@ export function useRoomInviteController({
     currentPublicOrigin: publicInviteStatus?.public_url || "",
     resolveManagerRoomAuthority,
     copyText,
+    refreshCurrentPublicOrigin: refreshCurrentPublicOriginForCopy,
     publishStatus: setCopyStatus,
   });
 
@@ -162,6 +175,21 @@ export function useRoomInviteController({
   ) {
     if (!managerOperationIsCurrent(generation, roomDockId, authority)) {
       throw RETIRED_INGRESS_OPERATION;
+    }
+  }
+
+  async function refreshCurrentPublicOriginForCopy() {
+    const generation = ingressGenerationRef.current;
+    try {
+      const status = await refreshPublicInviteState(generation);
+      if (!ingressOperationIsCurrent(generation)) return null;
+      return Object.freeze({
+        publicOrigin: status.public_url,
+        isCurrent: () => ingressOperationIsCurrent(generation),
+      });
+    } catch (error) {
+      if (!ingressOperationIsCurrent(generation)) return null;
+      throw error;
     }
   }
 

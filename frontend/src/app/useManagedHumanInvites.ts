@@ -96,15 +96,27 @@ type UseManagedHumanInvitesOptions = {
   modalRoomDockId: string;
   currentPublicOrigin: string;
   resolveManagerRoomAuthority: (roomDockId: string) => DesktopManagerRoomAuthority;
-  copyText: (value: string) => Promise<boolean>;
+  copyText: (
+    value: string,
+    prepareDispatch?: () => Promise<() => void>
+  ) => Promise<boolean>;
+  refreshCurrentPublicOrigin: () => Promise<HumanInviteOriginProof | null>;
   publishStatus: (status: string) => void;
 };
+
+type HumanInviteOriginProof = Readonly<{
+  publicOrigin: string;
+  isCurrent: () => boolean;
+}>;
+
+const COPY_NO_LONGER_ELIGIBLE = Symbol("managed human invite copy is no longer eligible");
 
 export function useManagedHumanInvites({
   modalRoomDockId,
   currentPublicOrigin,
   resolveManagerRoomAuthority,
   copyText,
+  refreshCurrentPublicOrigin,
   publishStatus,
 }: UseManagedHumanInvitesOptions) {
   const [records, setRecords] = useState<ManagedHumanInviteRecord[]>([]);
@@ -211,6 +223,28 @@ export function useManagedHumanInvites({
     .reverse();
   const currentInvite = humanInvites.find((invite) => !invite.retired);
 
+  function assertCopyEligible(
+    expected: ManagedHumanInviteRecord,
+    originProof: HumanInviteOriginProof
+  ) {
+    if (!originProof.isCurrent()) throw COPY_NO_LONGER_ELIGIBLE;
+    const latest = recordsRef.current.find(
+      (candidate) =>
+        candidate.key === expected.key && candidate.custody === expected.custody
+    );
+    if (
+      !latest ||
+      presentHumanInvite(
+        latest,
+        resolveExactAuthority(latest.roomDockId),
+        originProof.publicOrigin,
+        Date.now()
+      ).copyUrl !== expected.custody.joinUrl
+    ) {
+      throw COPY_NO_LONGER_ELIGIBLE;
+    }
+  }
+
   async function copy(key: string) {
     const record = recordsRef.current.find((candidate) => candidate.key === key);
     if (!record) return;
@@ -224,8 +258,26 @@ export function useManagedHumanInvites({
       publishStatus("현재 확인된 활성 사람 초대만 복사할 수 있습니다.");
       return;
     }
-    const copied = await copyText(presentation.copyUrl);
-    publishStatus(copied ? "보안 초대 링크 복사됨" : "보안 초대 링크 복사 실패");
+    let latestProof: HumanInviteOriginProof | null = null;
+    try {
+      const copied = await copyText(presentation.copyUrl, async () => {
+        const proof = await refreshCurrentPublicOrigin();
+        if (!proof) throw COPY_NO_LONGER_ELIGIBLE;
+        assertCopyEligible(record, proof);
+        latestProof = proof;
+        return () => assertCopyEligible(record, proof);
+      });
+      if (!latestProof) return;
+      assertCopyEligible(record, latestProof);
+      publishStatus(copied ? "보안 초대 링크 복사됨" : "보안 초대 링크 복사 실패");
+    } catch (error) {
+      if (error === COPY_NO_LONGER_ELIGIBLE) return;
+      publishStatus(
+        error instanceof Error
+          ? error.message
+          : "현재 공개 초대 상태를 확인하지 못했습니다."
+      );
+    }
   }
 
   function revokeAttemptIsCurrent(key: string, generation: number) {
