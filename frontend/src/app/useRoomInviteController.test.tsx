@@ -1,14 +1,22 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { Hash } from "lucide-react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { PublicInviteStatus, RoomFriend } from "../api";
+import {
+  HumanInviteDispatchError,
+  type ManagedHumanInviteCustody,
+  type PublicInviteStatus,
+  type RoomFriend,
+} from "../api";
+import type { DesktopManagerRoomAuthority } from "../lib/desktopBridge";
 import type { RoomDockItem } from "../lib/roomDockModel";
 import { useRoomInviteController } from "./useRoomInviteController";
 
 const apiMocks = vi.hoisted(() => ({
+  createManagedHumanInvite: vi.fn(),
   createOperatorPairing: vi.fn(),
   createRoomInvite: vi.fn(),
   fetchPublicInviteStatus: vi.fn(),
+  revokeManagedHumanInvite: vi.fn(),
   startPublicInviteTunnel: vi.fn(),
   stopPublicInviteTunnel: vi.fn(),
 }));
@@ -71,6 +79,34 @@ const room: RoomDockItem = {
   createdAt: "2026-07-12T00:00:00Z",
   tone: "fresh",
 };
+const managerAuthority: DesktopManagerRoomAuthority = {
+  server_id: "10000000-0000-4000-8000-000000000001",
+  authority_lineage_id: "20000000-0000-4000-8000-000000000002",
+  room_id: room.meetingId,
+  room_uid: "30000000-0000-4000-8000-000000000003",
+};
+
+function managedCustody(
+  inviteId: string,
+  expiresAt = Date.now() + 86_400_000
+): ManagedHumanInviteCustody {
+  const expires = new Date(expiresAt);
+  const isoExpiry = expires.toISOString();
+  const exactExpiry = expires.getUTCMilliseconds()
+    ? isoExpiry.replace(/\.(\d{3})Z$/, ".$1000+00:00")
+    : isoExpiry.replace(".000Z", "+00:00");
+  return Object.freeze({
+    authority: Object.freeze({ ...managerAuthority }),
+    inviteId,
+    joinUrl: `${publicStatus.public_url}/join?token=aaj1_${inviteId.repeat(2)}`,
+    responseOrigin: publicStatus.public_url,
+    expiresAt: Object.freeze({
+      exact: exactExpiry,
+      epochMilliseconds: expiresAt,
+    }),
+  });
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((promiseResolve) => {
@@ -79,10 +115,17 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function renderInviteController(localOperatorEligible = true) {
+function renderInviteController(
+  localOperatorEligible = true,
+  resolveManagerRoomAuthority = (roomDockId: string) => {
+    if (roomDockId !== room.id) throw new Error("room manager authority unavailable");
+    return managerAuthority;
+  }
+) {
   return renderHook(() =>
     useRoomInviteController({
       localOperatorEligible,
+      resolveManagerRoomAuthority,
     })
   );
 }
@@ -91,6 +134,136 @@ describe("useRoomInviteController", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     apiMocks.fetchPublicInviteStatus.mockResolvedValue(publicStatus);
+  });
+
+  it("creates human invites through exact directory authority and retains accepted custody", async () => {
+    const custody = managedCustody("0123456789abcdef");
+    apiMocks.createManagedHumanInvite.mockImplementation(
+      async (_intent, beforeDispatch?: () => void) => {
+        beforeDispatch?.();
+        return custody;
+      }
+    );
+    const hook = renderInviteController();
+    act(() => hook.result.current.open(room.id));
+    await waitFor(() => expect(hook.result.current.publicInviteStatus).toEqual(publicStatus));
+
+    await act(async () => {
+      await hook.result.current.generateSecureInvite(
+        room,
+        "room",
+        { maxUses: 5, ttlSeconds: 604800 },
+        false
+      );
+    });
+
+    expect(apiMocks.createManagedHumanInvite).toHaveBeenCalledWith(
+      {
+        authority: managerAuthority,
+        displayName: "Guest",
+        inviteScope: "room",
+        ttlSeconds: 604800,
+        maxUses: 5,
+      },
+      expect.any(Function)
+    );
+    expect(apiMocks.createRoomInvite).not.toHaveBeenCalled();
+    expect(hook.result.current.secureInviteUrl).toBe(custody.joinUrl);
+    expect(hook.result.current.humanInvites).toEqual([
+      expect.objectContaining({
+        key: expect.any(String),
+        maxUses: 5,
+        ttlSeconds: 604800,
+        retired: false,
+        revocation: "idle",
+        copyUrl: custody.joinUrl,
+      }),
+    ]);
+  });
+
+  it("retains a post-dispatch accepted invite as revoke-only when its operation is superseded", async () => {
+    const accepted = deferred<ManagedHumanInviteCustody>();
+    apiMocks.createManagedHumanInvite.mockReturnValue(accepted.promise);
+    const hook = renderInviteController();
+    act(() => hook.result.current.open(room.id));
+    let create!: Promise<void>;
+
+    act(() => {
+      create = hook.result.current.generateSecureInvite(room, "room");
+    });
+    await waitFor(() => expect(apiMocks.createManagedHumanInvite).toHaveBeenCalledOnce());
+    act(() => hook.result.current.open("room-2"));
+    await act(async () => {
+      accepted.resolve(managedCustody("1111111111111111"));
+      await create;
+    });
+    act(() => hook.result.current.open(room.id));
+
+    await waitFor(() => expect(hook.result.current.humanInvites).toHaveLength(1));
+    expect(hook.result.current.humanInvites[0]).toEqual(
+      expect.objectContaining({ retired: true, revocation: "idle", copyUrl: "" })
+    );
+  });
+
+  it("retires prior custody and preserves explicit revoke uncertainty and retry", async () => {
+    apiMocks.createManagedHumanInvite
+      .mockResolvedValueOnce(managedCustody("2222222222222222"))
+      .mockResolvedValueOnce(managedCustody("3333333333333333"));
+    const hook = renderInviteController();
+    act(() => hook.result.current.open(room.id));
+    await waitFor(() => expect(hook.result.current.publicInviteStatus).toEqual(publicStatus));
+
+    await act(async () => {
+      await hook.result.current.generateSecureInvite(room, "room");
+      await hook.result.current.generateSecureInvite(room, "room");
+    });
+    expect(hook.result.current.humanInvites).toHaveLength(2);
+    expect(hook.result.current.humanInvites.map(({ retired }) => retired)).toEqual([
+      false,
+      true,
+    ]);
+
+    const currentKey = hook.result.current.humanInvites[0].key;
+    apiMocks.revokeManagedHumanInvite
+      .mockRejectedValueOnce(new HumanInviteDispatchError("proven_not_dispatched"))
+      .mockRejectedValueOnce(new HumanInviteDispatchError("outcome_unknown"))
+      .mockResolvedValueOnce("revoked");
+
+    await act(async () => hook.result.current.revokeHumanInvite(currentKey));
+    expect(hook.result.current.humanInvites[0].revocation).toBe("idle");
+    await act(async () => hook.result.current.revokeHumanInvite(currentKey));
+    expect(hook.result.current.humanInvites[0].revocation).toBe("unknown");
+    await act(async () => hook.result.current.revokeHumanInvite(currentKey));
+    expect(hook.result.current.humanInvites[0].revocation).toBe("dead");
+    await act(async () => hook.result.current.revokeHumanInvite(currentKey));
+    expect(apiMocks.revokeManagedHumanInvite).toHaveBeenCalledTimes(3);
+  });
+
+  it("uses the nearest expiry timer only to remove copy eligibility", async () => {
+    const hook = renderInviteController();
+    act(() => hook.result.current.open(room.id));
+    await waitFor(() => expect(hook.result.current.publicInviteStatus).toEqual(publicStatus));
+    vi.useFakeTimers();
+    try {
+      apiMocks.createManagedHumanInvite.mockResolvedValue(
+        managedCustody("4444444444444444", Date.now() + 1_000)
+      );
+
+      await act(async () => {
+        await hook.result.current.generateSecureInvite(room, "room");
+      });
+      expect(hook.result.current.secureInviteUrl).not.toBe("");
+      expect(vi.getTimerCount()).toBe(1);
+
+      await act(async () => vi.advanceTimersByTimeAsync(1_000));
+
+      expect(hook.result.current.secureInviteUrl).toBe("");
+      expect(hook.result.current.humanInvites[0]).toEqual(
+        expect.objectContaining({ expired: true, revocation: "idle", copyUrl: "" })
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("ignores a stale public-invite status after switching modal rooms", async () => {

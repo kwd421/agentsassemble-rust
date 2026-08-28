@@ -118,6 +118,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     validateRoomDirectoryContinuity,
     refreshRoomDirectory,
     verifyRoomDirectoryAuthority,
+    resolveManagerRoomAuthority,
     syncIssue: roomDirectorySyncIssue,
   } = useRoomDirectory({
     initialRooms: startupRoute.startupRooms,
@@ -345,6 +346,7 @@ export function useAppController(deviceToken: string, clientId: string) {
   const roomAppearances = roomSettings.appearances;
   const roomInvite = useRoomInviteController({
     localOperatorEligible: startupHostEnabled,
+    resolveManagerRoomAuthority,
     sessionToken: admittedSessionToken,
   });
   const {

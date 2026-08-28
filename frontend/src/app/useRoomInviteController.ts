@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  createManagedHumanInvite,
   createOperatorPairing,
   createRoomInvite,
   fetchPublicInviteStatus,
   startPublicInviteTunnel,
   stopPublicInviteTunnel,
+  type ManagedHumanInviteCustody,
   type PublicInviteStatus,
   type RoomFriend,
 } from "../api";
@@ -14,6 +16,11 @@ import {
 } from "../lib/roomInviteCopy";
 import type { RoomDockItem } from "../lib/roomDockModel";
 import type { RoomAppearance } from "../lib/roomAppearance";
+import type { DesktopManagerRoomAuthority } from "../lib/desktopBridge";
+import {
+  sameManagerAuthority,
+  useManagedHumanInvites,
+} from "./useManagedHumanInvites";
 
 type InviteModalState = { roomId: string } | null;
 
@@ -31,6 +38,7 @@ export type HumanInviteOptions = {
 
 type UseRoomInviteControllerOptions = {
   localOperatorEligible: boolean;
+  resolveManagerRoomAuthority: (roomDockId: string) => DesktopManagerRoomAuthority;
   sessionToken?: string;
 };
 
@@ -63,11 +71,11 @@ async function copyText(value: string) {
 
 export function useRoomInviteController({
   localOperatorEligible,
+  resolveManagerRoomAuthority,
   sessionToken = "",
 }: UseRoomInviteControllerOptions) {
   const [modal, setModal] = useState<InviteModalState>(null);
   const [copyStatus, setCopyStatus] = useState("");
-  const [secureInviteUrl, setSecureInviteUrl] = useState("");
   const [agentInviteUrl, setAgentInviteUrl] = useState("");
   const [operatorPairingUrl, setOperatorPairingUrl] = useState("");
   const [publicInviteStatus, setPublicInviteStatus] = useState<PublicInviteStatus | null>(null);
@@ -78,6 +86,22 @@ export function useRoomInviteController({
     useState<InviteRemoteClientPacketState>({ friendName: "", preview: "" });
   const ingressGenerationRef = useRef(0);
   const ingressWaitRef = useRef<(() => void) | null>(null);
+
+  const managedHumanInvites = useManagedHumanInvites({
+    modalRoomDockId: modal?.roomId || "",
+    currentPublicOrigin: publicInviteStatus?.public_url || "",
+    resolveManagerRoomAuthority,
+    copyText,
+    publishStatus: setCopyStatus,
+  });
+
+  function resolveExactManagerAuthority(roomDockId: string) {
+    try {
+      return resolveManagerRoomAuthority(roomDockId);
+    } catch {
+      return null;
+    }
+  }
 
   function retireIngressOperation() {
     ingressGenerationRef.current += 1;
@@ -120,11 +144,31 @@ export function useRoomInviteController({
     }).then(() => assertIngressOperation(generation));
   }
 
+  function managerOperationIsCurrent(
+    generation: number,
+    roomDockId: string,
+    authority: DesktopManagerRoomAuthority
+  ) {
+    return (
+      ingressOperationIsCurrent(generation) &&
+      sameManagerAuthority(resolveExactManagerAuthority(roomDockId), authority)
+    );
+  }
+
+  function assertManagerOperation(
+    generation: number,
+    roomDockId: string,
+    authority: DesktopManagerRoomAuthority
+  ) {
+    if (!managerOperationIsCurrent(generation, roomDockId, authority)) {
+      throw RETIRED_INGRESS_OPERATION;
+    }
+  }
+
   function open(roomId: string) {
     retireIngressOperation();
     setModal({ roomId });
     setCopyStatus("");
-    setSecureInviteUrl("");
     setAgentInviteUrl("");
     setOperatorPairingUrl("");
     setPublicInviteStatus(null);
@@ -139,12 +183,7 @@ export function useRoomInviteController({
     setModal(null);
   }
 
-  useEffect(
-    () => () => {
-      retireIngressOperation();
-    },
-    []
-  );
+  useEffect(() => () => retireIngressOperation(), []);
 
   useEffect(() => {
     if (!modal) return;
@@ -156,7 +195,6 @@ export function useRoomInviteController({
       return;
     }
     const generation = beginIngressOperation();
-    setSecureInviteUrl("");
     setCopyStatus("");
     refreshPublicInviteState(generation)
       .catch((error) => {
@@ -227,6 +265,60 @@ export function useRoomInviteController({
     return status;
   }
 
+  async function createManagedHumanInviteForRoom({
+    room,
+    displayName,
+    inviteScope,
+    ttlSeconds,
+    maxUses,
+    startTunnelIfNeeded,
+  }: {
+    room: RoomDockItem;
+    displayName: string;
+    inviteScope: RoomAppearance["inviteScope"];
+    ttlSeconds: number;
+    maxUses: number;
+    startTunnelIfNeeded: boolean;
+  }) {
+    if (!localOperatorEligible) {
+      throw new Error("외부 접속 관리는 패키지 앱의 로컬 운영자만 사용할 수 있습니다.");
+    }
+    const generation = beginIngressOperation();
+    await requirePublicInviteReady(generation, startTunnelIfNeeded);
+    const authority = resolveManagerRoomAuthority(room.id);
+    assertManagerOperation(generation, room.id, authority);
+    let custody: ManagedHumanInviteCustody;
+    try {
+      custody = await createManagedHumanInvite(
+        {
+          authority,
+          displayName,
+          inviteScope,
+          ttlSeconds,
+          maxUses,
+        },
+        () => assertManagerOperation(generation, room.id, authority)
+      );
+    } catch (error) {
+      if (!managerOperationIsCurrent(generation, room.id, authority)) {
+        throw RETIRED_INGRESS_OPERATION;
+      }
+      throw error;
+    }
+    const current = managerOperationIsCurrent(generation, room.id, custody.authority);
+    const record = managedHumanInvites.retainAccepted({
+      roomDockId: room.id,
+      displayName,
+      maxUses,
+      ttlSeconds,
+      operationGeneration: generation,
+      current,
+      custody,
+    });
+    if (record.retired) throw RETIRED_INGRESS_OPERATION;
+    return record;
+  }
+
   async function createSecureInviteForRoom({
     room,
     agentId,
@@ -262,7 +354,6 @@ export function useRoomInviteController({
     assertIngressOperation(generation);
     const target = secureInviteCopyTarget({ joinUrl: invite.join_url || "" });
     if (!target.copyUrl) throw new Error(target.status);
-    setSecureInviteUrl(target.copyUrl);
     return { invite, target };
   }
 
@@ -314,7 +405,6 @@ export function useRoomInviteController({
       );
       assertIngressOperation(generation);
       setPublicInviteStatus(status);
-      setSecureInviteUrl("");
       setAgentInviteUrl("");
       setOperatorPairingUrl("");
       setCopyStatus("외부 접속을 닫았습니다. 룸은 이 컴퓨터에서 계속 작동합니다.");
@@ -334,18 +424,16 @@ export function useRoomInviteController({
     options: HumanInviteOptions = { maxUses: 1, ttlSeconds: 86400 },
     startTunnelIfNeeded = false
   ) {
-    setSecureInviteUrl("");
     setCopyStatus("보안 초대 링크 생성 중...");
     try {
-      const { target } = await createSecureInviteForRoom({
+      await createManagedHumanInviteForRoom({
         room,
-        agentId: "guest",
         displayName: "Guest",
         inviteScope,
         ...options,
         startTunnelIfNeeded,
       });
-      setCopyStatus(target.copyUrl ? "보안 초대 링크 생성됨" : target.status);
+      setCopyStatus("보안 초대 링크 생성됨");
     } catch (error) {
       if (error === RETIRED_INGRESS_OPERATION) return;
       setCopyStatus(error instanceof Error ? error.message : "보안 초대 링크 생성 실패");
@@ -421,18 +509,6 @@ export function useRoomInviteController({
     setCopyStatus(copied ? "운영자 연결 링크 복사됨" : "운영자 연결 링크 복사 실패");
   }
 
-  async function copySecureInvite() {
-    const target = secureInviteCopyTarget({
-      joinUrl: secureInviteUrl,
-    });
-    if (!target.copyUrl) {
-      setCopyStatus(target.status);
-      return;
-    }
-    const copied = await copyText(target.copyUrl);
-    setCopyStatus(copied ? target.status : "보안 초대 링크 복사 실패");
-  }
-
   async function copyRemoteClientPacket() {
     if (!remoteClientPacket.preview) return;
     setCopyStatus("");
@@ -456,6 +532,22 @@ export function useRoomInviteController({
     try {
       const isAiFriend = friend.participant_type !== "human";
       const inviteScope = appearance?.inviteScope || room.inviteScope || "room";
+      if (!isAiFriend) {
+        await createManagedHumanInviteForRoom({
+          room,
+          displayName: friend.display_name,
+          inviteScope,
+          ttlSeconds: 86400,
+          maxUses: 1,
+          startTunnelIfNeeded,
+        });
+        setRemoteClientPacket({ friendName: "", preview: "" });
+        setFriendStatuses((previous) => ({
+          ...previous,
+          [friendId]: "초대 링크 생성됨",
+        }));
+        return;
+      }
       const participantId = friend.source_agent_id || friend.friend_id;
       const { invite } = await createSecureInviteForRoom({
         room,
@@ -464,16 +556,14 @@ export function useRoomInviteController({
         inviteScope,
         startTunnelIfNeeded,
       });
-      const packetPreview = isAiFriend
-        ? remoteClientPacketPreview(invite.remote_client_packet)
-        : "";
+      const packetPreview = remoteClientPacketPreview(invite.remote_client_packet);
       setRemoteClientPacket({
         friendName: packetPreview ? friend.display_name : "",
         preview: packetPreview,
       });
       setFriendStatuses((previous) => ({
         ...previous,
-        [friendId]: isAiFriend ? "입장 패킷 생성됨" : "초대 링크 생성됨",
+        [friendId]: "입장 패킷 생성됨",
       }));
     } catch (error) {
       if (error === RETIRED_INGRESS_OPERATION) return;
@@ -490,7 +580,8 @@ export function useRoomInviteController({
   return {
     modal,
     copyStatus,
-    secureInviteUrl,
+    secureInviteUrl: managedHumanInvites.secureInviteUrl,
+    humanInvites: managedHumanInvites.humanInvites,
     agentInviteUrl,
     operatorPairingUrl,
     publicInviteStatus,
@@ -509,7 +600,9 @@ export function useRoomInviteController({
     generateOperatorPairing,
     copyAgentInvite,
     copyOperatorPairing,
-    copySecureInvite,
+    copySecureInvite: managedHumanInvites.copyCurrent,
+    copyHumanInvite: managedHumanInvites.copy,
+    revokeHumanInvite: managedHumanInvites.revoke,
     copyRemoteClientPacket,
     inviteFriend,
   };
