@@ -3569,3 +3569,41 @@ critical web session and Daybreaker each approved exact correction
 `3b2c47f..d940313` and cumulative `258c365..d940313` with
 `Critical 0 / High 0 / Medium 0`. Neither review used Deep Scan or another automated
 security scanner.
+
+## Lobby message-pin frontend threshold batch: 2026-08-29
+
+The local range `d940313..4a7d8d8` replaces the copied pin client's unauthenticated
+local request and raw remote-session bearer with the backend's final authority. The
+domain-owned 64-pin bound is exported into one generated TypeScript constant. Every
+packaged local list or mutation requests its distinct room-bound native ticket, while
+every remote operation first exchanges the live session for the matching one-use read
+or write ticket. Only that ticket reaches `/api/room-pins`; an absent exact authority
+exposes no lobby mutation. The old generic moderator, host-token, raw-session, and
+arbitrary-channel pin paths were removed rather than retained as fallbacks.
+
+The response parser now requires the exact lobby projection, safe positive sequence,
+valid timestamps, unique bounded event identities, the currently empty attachment
+projection, and a mutation list consistent with the requested pin state. Missing,
+extra, malformed, contradictory, duplicate, or over-limit state fails instead of
+becoming an empty list. One Lobby-owned operation identity permits at most one active
+pin request and discards a delayed response after the room or authority changes. This
+avoids overlapping one-use grants and prevents a previous room's list from becoming
+the next room's UI state without adding a cache, queue, timer, retry, or second authority.
+Custom-channel pin state and per-message controls were removed; its copied header now
+states that the still-unimplemented surface is unavailable.
+
+The production main chunk changed from the preceding 785.89 kB / 236.62 kB gzip to
+788.89 kB / 237.59 kB gzip, an observed +3.00 kB raw / +0.97 kB gzip. The shared API
+chunk changed from 55.47 kB / 15.08 kB gzip to 55.85 kB / 15.14 kB gzip, while removing
+the premature custom-channel client reduced that view from 9.82 kB / 3.48 kB gzip to
+8.78 kB / 3.22 kB gzip. No runtime CPU, memory, latency, or disk improvement is claimed
+before packaged verification; the only runtime bound added in this frontend is the
+single active request per mounted lobby.
+
+Full serial `make verify` passed architecture, source-growth, policy, formatting,
+generated bindings, original-CSS verification, the production build, frontend 89/551,
+desktop 20, domain 26, persistence 185, protocol 6, provider 120, server 85, every
+TCP/integration/doc test, warning-denied Clippy, and the final diff gate. No provider,
+Computer Use, Deep Scan, or automated security scanner ran. Packaged local and remote
+human verification, restart retention, and manual cross-review remain pending; this
+record does not claim the frontend slice complete.
