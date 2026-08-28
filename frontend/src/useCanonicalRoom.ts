@@ -266,7 +266,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     const currentSocket = openSocket(auth, streams, {
       onRoomSnapshot: (snapshot, displayResourceBase) => {
         if (!connectionIsCurrent()) return false;
-        const snapshotRoomId = String(snapshot.room?.room_id || "").trim();
+        const snapshotRoomId = String(snapshot.room?.room_id || "");
         if (snapshotRoomId !== roomId) {
           const error = new RoomSocketSayError(
             "The server returned a snapshot for a different room; reconnecting.",

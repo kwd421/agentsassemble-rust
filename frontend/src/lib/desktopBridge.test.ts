@@ -206,7 +206,7 @@ describe("desktop exact-purpose HTTP bridge", () => {
         { method: "POST" }
       )
     ).rejects.toThrow("관리자 권위");
-    for (const room_id of ["..", "a/b", "a\\b", "a\nb", "a".repeat(129)]) {
+    for (const room_id of ["..", "a/b", "a\\b", "a\nb", "\u0085room", "a".repeat(129)]) {
       await expect(
         fetchDesktopHumanInviteCreate(
           { ...managerAuthority, room_id },

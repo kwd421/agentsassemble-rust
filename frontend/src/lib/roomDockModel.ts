@@ -171,8 +171,8 @@ export function roomFromServerRoom(
   currentServerOrigin = window.location.origin,
   currentServerId = ""
 ): RoomDockItem | null {
-  const meetingId = String(room.room_id || "").trim();
-  const roomUid = String(room.room_uid || "").trim();
+  const meetingId = String(room.room_id || "");
+  const roomUid = String(room.room_uid || "");
   const status = String(room.status || "active").toLowerCase();
   if (!meetingId || room.archived || status === "closed" || status === "archived") return null;
   const settings = normalizeRoomGlobalSettings(room.room_settings, meetingId);
@@ -209,8 +209,8 @@ export function mergeServerRoomsIntoDock(
   const serverRoomsByIdentity = new Map<string, ServerRoomDockSource>();
   const serverRoomsByMeetingId = new Map<string, ServerRoomDockSource>();
   for (const room of serverRooms) {
-    const meetingId = String(room.room_id || "").trim();
-    const roomUid = String(room.room_uid || "").trim();
+    const meetingId = String(room.room_id || "");
+    const roomUid = String(room.room_uid || "");
     if (!meetingId) continue;
     serverRoomsByMeetingId.set(meetingId, room);
     if (currentServerId && roomUid) {

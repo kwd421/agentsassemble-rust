@@ -2865,3 +2865,23 @@ embedding must be verified sequentially because the latter consumes the former's
 the final serial `make verify` passed every gate and the counts recorded above. Final
 manual approval is intentionally not claimed until this correction commit is pushed and
 both reviewers recheck it.
+
+The second web and Daybreaker reviews each returned
+`REVISE — Critical 0 / High 0 / Medium 1`: ECMAScript `trim()` and Rust
+`str::trim()` do not own the same whitespace domain. U+FEFF is preserved by Rust but
+removed by JavaScript, while U+0085 is trimmed by Rust but preserved by JavaScript.
+The first form made a reachable Rust-created room disappear at frontend directory
+acceptance; the second let a Rust-noncanonical authority reach native invocation.
+
+The correction keeps the leaf owner but explicitly implements Rust's Unicode
+`White_Space` boundary and Unicode-scalar count, rejects isolated UTF-16 surrogates
+that a Rust string cannot represent, and removes the later ECMAScript trimming that
+could mutate an already accepted directory or socket room ID. Focused tests pin both
+whitespace divergences, 128 supplementary-plane scalar values, a rejected 129th value,
+an isolated surrogate, the invite pre-effect boundary, and unchanged room-dock
+projection. This remains local validation only: no state, task, timer, network or disk
+work is added. The production main chunk is 771.05 kB (232.32 kB gzip), and the original
+CSS chunks remain exact. The final serial `make verify` passed every repository gate,
+83 frontend files with 480 tests, 19 desktop tests, and the unchanged complete Rust and
+TCP boundary suites. Final approval is still withheld until the pushed correction is
+re-reviewed by both reviewers.

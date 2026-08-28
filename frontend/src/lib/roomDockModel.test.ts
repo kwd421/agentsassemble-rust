@@ -2,7 +2,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { TEST_SERVER_PRODUCT_SURFACE } from "../test/serverProductSurface";
 import { persistRoomGuestSession, type RoomGuestSession } from "./roomGuestSession";
 import { consumeOperatorPairingTokenFromUrl } from "./roomGuestSession";
-import { createStartupRoute, mergeServerRoomsIntoDock, roomDockIdentity } from "./roomDockModel";
+import {
+  createStartupRoute,
+  mergeServerRoomsIntoDock,
+  roomDockIdentity,
+} from "./roomDockModel";
 
 const SESSION: RoomGuestSession = {
   inviteToken: "older-invite",
@@ -78,6 +82,18 @@ describe("createStartupRoute", () => {
 });
 
 describe("durable room identity", () => {
+  it("preserves a directory-owned canonical room identifier unchanged", () => {
+    const exactRoomId = "\ufeffroom";
+    const [room] = mergeServerRoomsIntoDock(
+      [],
+      [{ room_id: exactRoomId, room_uid: "room-uid", label: "Exact" }],
+      window.location.origin,
+      "server-id"
+    );
+
+    expect(room.meetingId).toBe(exactRoomId);
+  });
+
   it("does not collapse equal room aliases owned by different servers", () => {
     const first = mergeServerRoomsIntoDock(
       [],

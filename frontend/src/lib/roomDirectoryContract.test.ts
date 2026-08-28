@@ -69,6 +69,24 @@ describe("room directory contracts", () => {
     ).toThrow(/계약/);
   });
 
+  it("uses Rust whitespace semantics for canonical room identifiers", () => {
+    const rustCanonical = {
+      status: "ready",
+      server_id: serverId,
+      authority_lineage_id: lineageId,
+      room: { ...room(), room_id: "\ufeffgeneral" },
+      deduplicated: false,
+    };
+
+    expect(parseStrictRoomCreateResponse(rustCanonical)).toEqual(rustCanonical);
+    expect(() =>
+      parseStrictRoomCreateResponse({
+        ...rustCanonical,
+        room: { ...room(), room_id: "\u0085general" },
+      })
+    ).toThrow(/정규 형식/);
+  });
+
   it("never rebinds a lifetime pin even when native bootstrap matches the replacement", () => {
     const pinned = { server_id: serverId, authority_lineage_id: lineageId };
     const replacement = {
