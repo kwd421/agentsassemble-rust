@@ -9,15 +9,18 @@ issuance, exact manager-room authority transport and transaction revalidation, a
 the native desktop manager-invite ticket bridge plus the strict C1b create/revoke
 frontend API contract are implemented and test-verified; retained controller custody
 and UI cutover are implemented and manually approved; the complete packaged
-managed-ingress invite matrix is locally verified and queued for batched manual review;
-the remaining typed room-attachment exchange is incomplete
+managed-ingress invite matrix is locally verified and published for batched manual
+review; bound room-appearance reads have a typed session exchange, while general
+message attachments and appearance desktop/frontend activation remain incomplete
 
 ## Definition
 
 This slice establishes one durable authority for a human browser invite, admission,
 profile binding, room membership, and expiring room session. It then lets that live
 session exchange for exact one-use WebSocket, own-profile, and preference read/write
-grants. The room attachment exchange remains incomplete and unclaimed. Invite
+grants. Bound room-appearance reads now use an exact asset-bound exchange and
+same-snapshot durable session revalidation; general message attachments remain
+incomplete and unclaimed. Invite
 management remains local-operator authority. Backend create binds its
 new credentials and URLs to one ready ingress snapshot, while revoke remains
 room-bound and ingress-independent. An external invite is not a completed user flow
@@ -464,7 +467,7 @@ The transport split follows the verified Discord-style ownership rule:
 
 - bounded request/response operations use HTTP: invite creation, preflight,
   admission, pre-join avatar, session-ticket exchange, own profile/preferences,
-  and leave/revoke;
+  room-appearance upload/read, and leave/revoke;
 - canonical snapshot, room events, and room commands use WebSocket.
 
 There is no HTTP-to-WebSocket or WebSocket-to-HTTP fallback. A browser is not shown
@@ -479,18 +482,16 @@ controls use fresh one-use server-operator tickets and generation-owned polling,
 the legacy public-URL input/configure path is removed rather than restored as mutable
 manual-ingress authority. A server-internal issuance sequence in those grants orders
 control intent without becoming wire state; the existing ingress lifecycle mutex lets
-only a newer Start or Stop mutate the managed process. Invite creation still uses the
-old moderator helper and therefore does not invoke the implemented Rust one-use
-room-bound manager-ticket boundary. C1b supplies the stateless exact bridge/HTTP
-exchange, while the copied controller remains failed closed until C2 captures the
-verified directory authority, retains every accepted custody, removes the old copy
-path, and completes UI/package activation.
-Backend manager invite create already captures one ready
+only a newer Start or Stop mutate the managed process. Invite creation uses the
+strict C1b bridge/HTTP exchange and the copied controller's C2 directory-owned
+authority plus retained custody; the old moderator helper and single-URL copy
+projection are no longer active. Backend manager invite create captures one ready
 ingress snapshot; revoke uses only its exact room-bound manager grant and remains
 available when ingress is not ready. The native desktop bridge obtains and returns
 the exact operation grant. The C1b exchange invokes that bridge and presents its ticket
-to the matching HTTP route, which consumes the ticket before reading the body. C2 will
-copy only the create response's public join URL; a local preview is not presented as
+to the matching HTTP route, which consumes the ticket before reading the body. C2
+copies only the retained create response's public join URL after revalidating current
+origin, record, expiry, and directory authority; a local preview is not presented as
 admission parity. The token is removed from browser history after it is captured, and
 stored session state cannot override a failed durable verification.
 
@@ -632,12 +633,12 @@ fully verified, and approved by both manual reviewers. B2 is public through `2b9
 fully verified, and approved by both manual reviewers. C1a is public through
 `e006e0d`, fully verified, and approved by both manual reviewers. C1b now owns one
 strict frontend create/revoke dispatch and response contract. C2 controller/UI custody
-is public and approved through `10c63b4`. Local commit `6a8b5f1` makes the packaged
-sidecar serve the copied frontend. Local commit `1aca717` removes the obsolete settings
-guard after admission activation. Together their packaged verification passes normal
+is public and approved through `10c63b4`. Commit `6a8b5f1` makes the packaged
+sidecar serve the copied frontend. Commit `1aca717` removes the obsolete settings
+guard after admission activation. Both are published in the current review batch;
+their packaged verification passes normal
 and read-only issuance, one-use and reusable admission, avatar, reload, profile,
-preferences, posting denial, retained replacement, revoke, leave, and restart. This
-local completion remains queued for the next batched manual review.
+preferences, posting denial, retained replacement, revoke, leave, and restart.
 
 ## Trusted ingress boundary
 
@@ -645,8 +646,8 @@ Managed Cloudflare direct-tunnel custody, configured stable-entry publication, a
 startup-configured reverse-proxy proof are implemented by the separate ingress slice.
 Backend manager create consumes one exact ready origin/host/protocol snapshot from
 either that process-owned managed tunnel or the configured reverse-proxy owner;
-room-bound revoke does not depend on ingress readiness. Operator pairing and copied
-frontend activation remain incomplete. Forwarding headers or a configured URL
+room-bound revoke does not depend on ingress readiness. Operator pairing remains
+incomplete; manager-invite copied-frontend activation is complete. Forwarding headers or a configured URL
 alone are not ingress authority. No raw legacy host token, local-development bypass,
 query flag, or client-side readiness authority is added.
 

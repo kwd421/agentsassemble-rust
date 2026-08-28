@@ -226,7 +226,8 @@ desktop APIs expose typed issuance operations; no path or payload string selects
 authority.
 
 Room appearance uses a separate room-owned table and the exact asset grammar
-`^ra_[0-9a-f]{32}$`, generated from 16 operating-system-random bytes. Its only
+`^ra_[0-9a-f]{32}$`, generated as a UUID v4 from the operating-system RNG with
+122 random bits after the fixed version and variant bits. Its only
 stored URL is `/api/attachments/<ra-id>?view=1`; missing, download, or extra query
 forms are rejected. The `ra_` prefix is reserved and malformed reserved IDs never
 fall through to public profile attachment lookup. Existing attachment POST and GET
