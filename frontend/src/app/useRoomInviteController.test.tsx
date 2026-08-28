@@ -6,15 +6,9 @@ import type { RoomDockItem } from "../lib/roomDockModel";
 import { useRoomInviteController } from "./useRoomInviteController";
 
 const apiMocks = vi.hoisted(() => ({
-  claimHostDevice: vi.fn(),
-  clearHostToken: vi.fn(),
-  configurePublicInvitePublicUrl: vi.fn(),
   createOperatorPairing: vi.fn(),
   createRoomInvite: vi.fn(),
   fetchPublicInviteStatus: vi.fn(),
-  generatePublicInviteHostToken: vi.fn(),
-  loadHostToken: vi.fn(),
-  saveHostToken: vi.fn(),
   startPublicInviteTunnel: vi.fn(),
   stopPublicInviteTunnel: vi.fn(),
 }));
@@ -25,11 +19,36 @@ vi.mock("../api", async () => ({
 }));
 
 const publicStatus: PublicInviteStatus = {
+  mode: "managed",
   public_url: "https://room.example.com",
-  host_token_configured: true,
-  host_gate_required: true,
-  can_generate_host_token: true,
-  tunnel: { available: true, running: true, phase: "running", public_url: "https://room.example.com" },
+  stable_url: "",
+  tunnel: {
+    available: true,
+    running: true,
+    phase: "running",
+    public_url: "https://room.example.com",
+    local_url: "http://127.0.0.1:43123",
+    stable_phase: "unconfigured",
+  },
+};
+
+function publicStatusAt(publicUrl: string): PublicInviteStatus {
+  return {
+    ...publicStatus,
+    public_url: publicUrl,
+    tunnel: { ...publicStatus.tunnel, public_url: publicUrl },
+  };
+}
+
+const stoppedStatus: PublicInviteStatus = {
+  ...publicStatus,
+  public_url: "",
+  tunnel: {
+    ...publicStatus.tunnel,
+    running: false,
+    phase: "stopped",
+    public_url: "",
+  },
 };
 
 const room: RoomDockItem = {
@@ -42,8 +61,6 @@ const room: RoomDockItem = {
   createdAt: "2026-07-12T00:00:00Z",
   tone: "fresh",
 };
-const DEVICE_TOKEN = "aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
-
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((promiseResolve) => {
@@ -52,11 +69,10 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function renderInviteController() {
+function renderInviteController(localOperatorEligible = true) {
   return renderHook(() =>
     useRoomInviteController({
-      deviceToken: DEVICE_TOKEN,
-      guestLocked: true,
+      localOperatorEligible,
     })
   );
 }
@@ -65,7 +81,6 @@ describe("useRoomInviteController", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     apiMocks.fetchPublicInviteStatus.mockResolvedValue(publicStatus);
-    apiMocks.loadHostToken.mockReturnValue("host-token");
   });
 
   it("ignores a stale public-invite status after switching modal rooms", async () => {
@@ -82,13 +97,13 @@ describe("useRoomInviteController", () => {
     await waitFor(() => expect(apiMocks.fetchPublicInviteStatus).toHaveBeenCalledTimes(2));
 
     await act(async () => {
-      firstStatus.resolve({ ...publicStatus, public_url: "https://stale.example.com" });
+      firstStatus.resolve(publicStatusAt("https://stale.example.com"));
       await firstStatus.promise;
     });
     expect(hook.result.current.publicInviteStatus).toBeNull();
 
     await act(async () => {
-      secondStatus.resolve({ ...publicStatus, public_url: "https://current.example.com" });
+      secondStatus.resolve(publicStatusAt("https://current.example.com"));
       await secondStatus.promise;
     });
     expect(hook.result.current.publicInviteStatus?.public_url).toBe("https://current.example.com");
@@ -202,9 +217,7 @@ describe("useRoomInviteController", () => {
 
   it("does not expose the local server when invite generation lacks explicit consent", async () => {
     apiMocks.fetchPublicInviteStatus.mockResolvedValue({
-      ...publicStatus,
-      public_url: "",
-      tunnel: { available: true, running: false, phase: "stopped" },
+      ...stoppedStatus,
     });
     const hook = renderInviteController();
 
@@ -217,76 +230,26 @@ describe("useRoomInviteController", () => {
     expect(hook.result.current.copyStatus).toContain("외부 접속");
   });
 
-  it("regenerates a stale host token and retries secure invite creation once", async () => {
-    let storedToken = "stale-token";
-    apiMocks.loadHostToken.mockImplementation(() => storedToken);
-    apiMocks.clearHostToken.mockImplementation(() => {
-      storedToken = "";
-    });
-    apiMocks.saveHostToken.mockImplementation((token: string) => {
-      storedToken = token;
-    });
-    apiMocks.generatePublicInviteHostToken.mockResolvedValue({
-      status: "regenerated",
-      host_token: "fresh-token",
-      public_invite: publicStatus,
-    });
-    apiMocks.createRoomInvite
-      .mockRejectedValueOnce(new Error("Forbidden: host token required"))
-      .mockResolvedValueOnce({
-        invite_id: "invite-1",
-        invite_token: "token-1",
-        meeting_id: room.meetingId,
-        agent_id: "guest",
-        display_name: "Guest",
-        invite_scope: "room",
-        expires_at: "2026-07-13T00:00:00Z",
-        room_url: "https://room.example.com",
-        join_url: "https://room.example.com/join?token=token-1",
-      });
-    const hook = renderInviteController();
+  it("makes no ingress or timer call for an ineligible surface", async () => {
+    const hook = renderInviteController(false);
+    const timerSpy = vi.spyOn(window, "setTimeout");
 
+    act(() => hook.result.current.open("room-1"));
     await act(async () => {
-      await hook.result.current.createSecureInviteForRoom({
-        room,
-        agentId: "guest",
-        displayName: "Guest",
-        inviteScope: "room",
-        ttlSeconds: 604800,
-        maxUses: 5,
-      });
+      await hook.result.current.startTunnel();
+      await hook.result.current.stopTunnel();
     });
 
-    expect(apiMocks.createRoomInvite).toHaveBeenCalledTimes(2);
-    expect(apiMocks.clearHostToken).toHaveBeenCalledTimes(1);
-    expect(apiMocks.generatePublicInviteHostToken).toHaveBeenCalledTimes(1);
-    expect(apiMocks.saveHostToken).toHaveBeenCalledWith("fresh-token");
-    expect(apiMocks.createRoomInvite).toHaveBeenLastCalledWith(
-      expect.objectContaining({ ttlSeconds: 604800, maxUses: 5 })
-    );
-    expect(storedToken).toBe("fresh-token");
-    expect(hook.result.current.secureInviteUrl).toBe(
-      "https://room.example.com/join?token=token-1"
-    );
+    expect(apiMocks.fetchPublicInviteStatus).not.toHaveBeenCalled();
+    expect(apiMocks.startPublicInviteTunnel).not.toHaveBeenCalled();
+    expect(apiMocks.stopPublicInviteTunnel).not.toHaveBeenCalled();
+    expect(timerSpy).not.toHaveBeenCalled();
+    expect(hook.result.current.copyStatus).toContain("로컬 운영자");
+    timerSpy.mockRestore();
   });
 
-  it("returns a manually published server to local-only state", async () => {
-    apiMocks.stopPublicInviteTunnel.mockResolvedValue({
-      status: "ok",
-      public_invite: {
-        ...publicStatus,
-        tunnel: { available: true, running: false, phase: "stopped" },
-      },
-    });
-    apiMocks.configurePublicInvitePublicUrl.mockResolvedValue({
-      status: "cleared",
-      public_url: "",
-      public_invite: {
-        ...publicStatus,
-        public_url: "",
-        tunnel: { available: true, running: false, phase: "stopped" },
-      },
-    });
+  it("publishes the exact stopped status returned by the operator route", async () => {
+    apiMocks.stopPublicInviteTunnel.mockResolvedValue(stoppedStatus);
     const hook = renderInviteController();
 
     await act(async () => {
@@ -295,6 +258,7 @@ describe("useRoomInviteController", () => {
 
     expect(hook.result.current.publicAccessTransition).toBe("idle");
     expect(hook.result.current.publicInviteStatus?.public_url).toBe("");
+    expect(apiMocks.fetchPublicInviteStatus).not.toHaveBeenCalled();
     expect(hook.result.current.copyStatus).toContain("이 컴퓨터에서 계속 작동");
   });
 });

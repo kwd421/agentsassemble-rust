@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@source inline("h-px bg-white/10 tracking-wider sm:grid-cols-[minmax(0,1fr)_132px]");
+@source inline("h-px bg-white/10 tracking-wider sm:grid-cols-[minmax(0,1fr)_112px] sm:grid-cols-[minmax(0,1fr)_132px]");
 @import "./styles/original/segment-01.css";
 @import "./styles/original/segment-02.css";
 @import "./styles/original/segment-03.css";

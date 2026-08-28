@@ -12,22 +12,22 @@ import RoomSettingsModal from "../views/components/RoomSettingsModal";
 export default function AppOverlays({ controller }: { controller: AppController }) {
   const {
     acceptRecoveredSession, activeRoom, agentCreateOpen, agentInviteUrl,
-    canonicalRoom, closeInviteModal, configureInvitePublicUrl, copyAgentInviteLink,
+    canonicalRoom, closeInviteModal, copyAgentInviteLink,
     copyInviteLink, copyOperatorPairingLink, copyRemoteClientPacket,
     createChannel, createChannelOpen, deleteRoom, deviceToken, clientId, generateAgentInviteLink,
     generateInviteLink, generateOperatorPairingLink, guestAdmissionBusy, guestExpired,
     guestJoinRequested, guestJoinStatus, guestJoinToken, guestLocked,
     guestPreflightRetryable, guestJoinRetryable,
-    guestRecoveryRequest, guestSession, homeFriendsPayload, hostTokenDraft,
-    inviteCopyStatus, inviteFriendStatuses, inviteFriendToRoom, inviteHostTokenRequired,
+    guestRecoveryRequest, guestSession, homeFriendsPayload,
+    inviteCopyStatus, inviteFriendStatuses, inviteFriendToRoom,
     inviteModalAppearance, inviteModalMembers, inviteModalRoom, invitePublicUrl,
     inviteRemoteClientPacket, inviteRoom, leaveRoom, leaveRoomTarget,
     operatorPairingPending, operatorPairingState, operatorPairingUrl,
-    pendingGuestAvatarImage, pendingGuestDisplayName, publicInviteStatus, publicInviteUrlDraft,
+    pendingGuestAvatarImage, pendingGuestDisplayName, publicInviteStatus,
     requestGuestJoin, retryOperatorPairing, roomInvite,
-    roomSettings, roomSocket, saveHostTokenFromDraft, secureInviteUrl,
-    setAgentCreateOpen, setCreateChannelOpen, setGuestRecoveryRequest, setHostTokenDraft,
-    setLeaveRoomTargetId, setPendingGuestAvatarImage, setPendingGuestDisplayName, setPublicInviteUrlDraft,
+    roomSettings, roomSocket, secureInviteUrl,
+    setAgentCreateOpen, setCreateChannelOpen, setGuestRecoveryRequest,
+    setLeaveRoomTargetId, setPendingGuestAvatarImage, setPendingGuestDisplayName,
     setSettingsModal, settingsModalInitialSectionId, settingsModalRoom, startInviteTunnel,
     stopInviteTunnel, updateRoom,
   } = controller;
@@ -49,9 +49,6 @@ export default function AppOverlays({ controller }: { controller: AppController 
             agentInviteUrl={agentInviteUrl}
             operatorPairingUrl={operatorPairingUrl}
             publicUrl={invitePublicUrl}
-            publicUrlDraft={publicInviteUrlDraft}
-            hostTokenDraft={hostTokenDraft}
-            hostTokenRequired={inviteHostTokenRequired}
             publicAccessTransition={roomInvite.publicAccessTransition}
             tunnelStatus={publicInviteStatus?.tunnel}
             inviteScope={inviteModalAppearance?.inviteScope || inviteModalRoom.inviteScope || "room"}
@@ -77,10 +74,6 @@ export default function AppOverlays({ controller }: { controller: AppController 
             onCopyAgentInvite={() => void copyAgentInviteLink()}
             onGenerateOperatorPairing={() => void generateOperatorPairingLink(inviteModalRoom)}
             onCopyOperatorPairing={() => void copyOperatorPairingLink()}
-            onPublicUrlDraftChange={setPublicInviteUrlDraft}
-            onConfigurePublicUrl={() => void configureInvitePublicUrl()}
-            onHostTokenDraftChange={setHostTokenDraft}
-            onSaveHostToken={() => void saveHostTokenFromDraft()}
             onStartTunnel={() => void startInviteTunnel()}
             onStopTunnel={() => void stopInviteTunnel()}
             onCopyRemoteClientPacket={() => void copyRemoteClientPacket()}

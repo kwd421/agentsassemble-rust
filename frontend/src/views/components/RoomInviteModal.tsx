@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Copy, Globe2, LoaderCircle, LockKeyhole, Search, X } from "lucide-react";
-import type { RoomFriend, RoomMember } from "../../api";
+import type { PublicInviteStatus, RoomFriend, RoomMember } from "../../api";
 import type {
   HumanInviteOptions,
   PublicAccessTransition,
@@ -50,9 +50,6 @@ export default function RoomInviteModal({
   agentInviteUrl,
   operatorPairingUrl,
   publicUrl,
-  publicUrlDraft,
-  hostTokenDraft,
-  hostTokenRequired = false,
   publicAccessTransition = "idle",
   tunnelStatus,
   inviteScope = "room",
@@ -69,10 +66,6 @@ export default function RoomInviteModal({
   onCopyAgentInvite,
   onGenerateOperatorPairing,
   onCopyOperatorPairing,
-  onPublicUrlDraftChange,
-  onConfigurePublicUrl,
-  onHostTokenDraftChange,
-  onSaveHostToken,
   onStartTunnel,
   onStopTunnel,
   onCopyRemoteClientPacket,
@@ -83,17 +76,8 @@ export default function RoomInviteModal({
   agentInviteUrl: string;
   operatorPairingUrl: string;
   publicUrl?: string;
-  publicUrlDraft?: string;
-  hostTokenDraft?: string;
-  hostTokenRequired?: boolean;
   publicAccessTransition?: PublicAccessTransition;
-  tunnelStatus?: {
-    phase?: string;
-    running?: boolean;
-    public_url?: string;
-    local_url?: string;
-    last_error?: string;
-  };
+  tunnelStatus?: PublicInviteStatus["tunnel"];
   inviteScope?: RoomAppearance["inviteScope"];
   friends: RoomFriend[];
   members?: RoomMember[];
@@ -108,10 +92,6 @@ export default function RoomInviteModal({
   onCopyAgentInvite: () => void;
   onGenerateOperatorPairing: () => void;
   onCopyOperatorPairing: () => void;
-  onPublicUrlDraftChange: (value: string) => void;
-  onConfigurePublicUrl: () => void;
-  onHostTokenDraftChange: (value: string) => void;
-  onSaveHostToken: () => void;
   onStartTunnel: () => void;
   onStopTunnel: () => void;
   onCopyRemoteClientPacket?: () => void;
@@ -135,10 +115,11 @@ export default function RoomInviteModal({
   );
   const publicAccessStarting =
     publicAccessTransition === "starting" || tunnelStatus?.phase === "starting";
-  const publicAccessStopping = publicAccessTransition === "stopping";
-  const publicAccessRunning = Boolean(
-    publicUrl || tunnelStatus?.public_url || tunnelStatus?.phase === "running"
-  );
+  const publicAccessStopping =
+    publicAccessTransition === "stopping" || tunnelStatus?.phase === "stopping";
+  const publicAccessRunning = Boolean(publicUrl || tunnelStatus?.public_url);
+  const publicTunnelActive = Boolean(tunnelStatus?.running);
+  const publicAccessControllable = Boolean(tunnelStatus?.available);
   const publicAccessBusy = publicAccessStarting || publicAccessStopping;
   function requestPublicAction(action: PendingPublicAction) {
     if (publicAccessRunning) {
@@ -245,12 +226,22 @@ export default function RoomInviteModal({
                 ? publicUrl || tunnelStatus?.public_url || "외부 주소가 연결되어 있습니다."
                 : "서버를 공개하지 않아도 이 컴퓨터의 룸과 에이전트는 그대로 작동합니다."}
             </p>
+            {tunnelStatus?.last_error && (
+              <span className="mt-1 text-[12px] font-bold text-offline preserve-words">
+                {tunnelStatus.last_error}
+              </span>
+            )}
           </div>
           <div className="dc-invite-hosting-actions">
             <button
               type="button"
               className="dc-invite-copy-button"
-              disabled={publicAccessBusy || publicAccessRunning}
+              disabled={
+                publicAccessBusy ||
+                publicAccessRunning ||
+                publicTunnelActive ||
+                !publicAccessControllable
+              }
               onClick={onStartTunnel}
             >
               외부 접속 열기
@@ -258,7 +249,7 @@ export default function RoomInviteModal({
             <button
               type="button"
               className="dc-invite-copy-button"
-              disabled={publicAccessBusy || !publicAccessRunning}
+              disabled={publicAccessBusy || !publicTunnelActive || !publicAccessControllable}
               onClick={onStopTunnel}
             >
               외부 접속 끄기
@@ -496,41 +487,6 @@ export default function RoomInviteModal({
                 </button>
               </div>
             </label>
-        <div className="dc-invite-link-label">
-          <span>공개 URL</span>
-          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_112px]">
-            <input
-              className="dc-invite-link-input"
-              value={publicUrlDraft || publicUrl || ""}
-              placeholder="https://random-words.trycloudflare.com"
-              onChange={(event) => onPublicUrlDraftChange(event.currentTarget.value)}
-            />
-            <button type="button" className="dc-invite-copy-button" onClick={onConfigurePublicUrl}>
-              설정
-            </button>
-          </div>
-          {tunnelStatus?.last_error && (
-            <span className="mt-2 text-[12px] font-bold text-offline preserve-words">
-              {tunnelStatus.last_error}
-            </span>
-          )}
-        </div>
-        {hostTokenRequired && (
-          <label className="dc-invite-link-label">
-            Host token required
-            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_112px]">
-              <input
-                className="dc-invite-link-input"
-                value={hostTokenDraft || ""}
-                placeholder="Host token"
-                onChange={(event) => onHostTokenDraftChange(event.currentTarget.value)}
-              />
-              <button type="button" className="dc-invite-copy-button" onClick={onSaveHostToken}>
-                저장
-              </button>
-            </div>
-          </label>
-        )}
         {remoteClientPacketPreview && (
           <label className="dc-invite-link-label">
             선택한 AI 친구 연결 정보
@@ -559,7 +515,7 @@ export default function RoomInviteModal({
         <p className="mt-3 text-[12px] text-text-muted preserve-words">
           {copyStatus ||
             (readOnlyInvite
-              ? "이 미리보기 링크는 로컬/dev 확인용입니다. 외부 공유에는 공개 URL 기반 보안 초대 링크가 필요합니다."
+              ? "이 방의 사람 초대는 읽기 전용 권한으로 발급됩니다."
               : "사람은 보안 /join?token=... 링크로 입장합니다. 오프라인 AI는 provider/CLI 세션을 먼저 시작하거나 resume해야 합니다.")}
         </p>
         {pendingPublicAction && (

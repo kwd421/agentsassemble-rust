@@ -1,14 +1,8 @@
 import { useEffect, useState } from "react";
 import {
-  claimHostDevice,
-  clearHostToken,
-  configurePublicInvitePublicUrl,
   createOperatorPairing,
   createRoomInvite,
   fetchPublicInviteStatus,
-  generatePublicInviteHostToken,
-  loadHostToken,
-  saveHostToken,
   startPublicInviteTunnel,
   stopPublicInviteTunnel,
   type PublicInviteStatus,
@@ -36,8 +30,7 @@ export type HumanInviteOptions = {
 };
 
 type UseRoomInviteControllerOptions = {
-  deviceToken: string;
-  guestLocked: boolean;
+  localOperatorEligible: boolean;
   sessionToken?: string;
 };
 
@@ -66,14 +59,8 @@ async function copyText(value: string) {
   return copied;
 }
 
-function inviteErrorLooksLikeHostToken(error: unknown) {
-  const message = error instanceof Error ? error.message.toLowerCase() : "";
-  return message.includes("host token") || message.includes("forbidden");
-}
-
 export function useRoomInviteController({
-  deviceToken,
-  guestLocked,
+  localOperatorEligible,
   sessionToken = "",
 }: UseRoomInviteControllerOptions) {
   const [modal, setModal] = useState<InviteModalState>(null);
@@ -82,8 +69,6 @@ export function useRoomInviteController({
   const [agentInviteUrl, setAgentInviteUrl] = useState("");
   const [operatorPairingUrl, setOperatorPairingUrl] = useState("");
   const [publicInviteStatus, setPublicInviteStatus] = useState<PublicInviteStatus | null>(null);
-  const [publicUrlDraft, setPublicUrlDraft] = useState("");
-  const [hostTokenDraft, setHostTokenDraft] = useState("");
   const [publicAccessTransition, setPublicAccessTransition] =
     useState<PublicAccessTransition>("idle");
   const [friendStatuses, setFriendStatuses] = useState<Record<string, string>>({});
@@ -96,7 +81,7 @@ export function useRoomInviteController({
     setSecureInviteUrl("");
     setAgentInviteUrl("");
     setOperatorPairingUrl("");
-    setHostTokenDraft(loadHostToken());
+    setPublicInviteStatus(null);
     setPublicAccessTransition("idle");
     setFriendStatuses({});
     setRemoteClientPacket({ friendName: "", preview: "" });
@@ -108,15 +93,18 @@ export function useRoomInviteController({
 
   useEffect(() => {
     if (!modal) return;
+    if (!localOperatorEligible) {
+      setPublicInviteStatus(null);
+      setCopyStatus("외부 접속 관리는 패키지 앱의 로컬 운영자만 사용할 수 있습니다.");
+      return;
+    }
     let cancelled = false;
     setSecureInviteUrl("");
     setCopyStatus("");
-    setHostTokenDraft(loadHostToken());
     fetchPublicInviteStatus()
       .then((status) => {
         if (cancelled) return;
         setPublicInviteStatus(status);
-        setPublicUrlDraft(status.public_url || status.tunnel?.public_url || "");
       })
       .catch((error) => {
         if (!cancelled) {
@@ -126,82 +114,22 @@ export function useRoomInviteController({
     return () => {
       cancelled = true;
     };
-  }, [modal?.roomId]);
-
-  useEffect(() => {
-    if (guestLocked) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        if (!loadHostToken()) {
-          const status = await fetchPublicInviteStatus();
-          if (cancelled) return;
-          setPublicInviteStatus(status);
-          if (status.host_token_configured || status.can_generate_host_token) {
-            await ensureHostToken(status);
-          }
-        }
-        if (!cancelled && loadHostToken()) {
-          await claimHostDevice({ deviceToken });
-        }
-      } catch {
-        // Moderation actions report a concrete error if bootstrap did not succeed.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [deviceToken, guestLocked]);
+  }, [localOperatorEligible, modal?.roomId]);
 
   async function refreshPublicInviteState() {
+    if (!localOperatorEligible) {
+      throw new Error("외부 접속 관리는 패키지 앱의 로컬 운영자만 사용할 수 있습니다.");
+    }
     const status = await fetchPublicInviteStatus();
     setPublicInviteStatus(status);
-    if (status.public_url || status.tunnel?.public_url) {
-      setPublicUrlDraft(status.public_url || status.tunnel?.public_url || "");
-    }
     return status;
-  }
-
-  async function ensureHostToken(status: PublicInviteStatus | null) {
-    const existingToken = loadHostToken();
-    if (existingToken) return existingToken;
-    if (status && (!status.host_token_configured || status.can_generate_host_token)) {
-      const payload = await generatePublicInviteHostToken();
-      if (payload.host_token) {
-        saveHostToken(payload.host_token);
-        setHostTokenDraft(payload.host_token);
-      }
-      if (payload.public_invite) setPublicInviteStatus(payload.public_invite);
-      return payload.host_token || "";
-    }
-    try {
-      const payload = await generatePublicInviteHostToken();
-      if (payload.host_token) {
-        saveHostToken(payload.host_token);
-        setHostTokenDraft(payload.host_token);
-        if (payload.public_invite) setPublicInviteStatus(payload.public_invite);
-        return payload.host_token;
-      }
-    } catch {
-      // Existing operator-provided host tokens still require manual entry.
-    }
-    throw new Error("Host token required");
-  }
-
-  async function regenerateHostToken() {
-    clearHostToken();
-    setHostTokenDraft("");
-    const status = await refreshPublicInviteState();
-    const token = await ensureHostToken(status);
-    if (!token) throw new Error("Host token required");
-    return token;
   }
 
   async function waitForTunnelReady() {
     for (let attempt = 0; attempt < 18; attempt += 1) {
       const nextStatus = await refreshPublicInviteState();
-      if (nextStatus.public_url && nextStatus.tunnel?.phase === "running") return nextStatus;
-      if (nextStatus.tunnel?.phase === "stopped" || nextStatus.tunnel?.last_error) return nextStatus;
+      if (nextStatus.public_url && nextStatus.tunnel.phase === "running") return nextStatus;
+      if (nextStatus.tunnel.phase === "stopped" || nextStatus.tunnel.last_error) return nextStatus;
       await new Promise((resolve) => window.setTimeout(resolve, 1000));
     }
     return refreshPublicInviteState();
@@ -209,32 +137,18 @@ export function useRoomInviteController({
 
   async function preparePublicInvite() {
     let status = await refreshPublicInviteState();
-    if (!sessionToken) await ensureHostToken(status);
     if (status.public_url) return status;
-    if (sessionToken) {
-      throw new Error("공개 주소 세션에서는 로컬 터널을 시작할 수 없습니다.");
-    }
-    if (!status.tunnel?.available) {
-      throw new Error("공개 URL을 만들 수 없습니다. cloudflared를 설치하거나 공개 URL을 입력하세요.");
+    if (!status.tunnel.available) {
+      throw new Error("공개 URL을 만들 수 없습니다. cloudflared 설치 상태를 확인하세요.");
     }
     setCopyStatus("공개 터널 준비 중...");
-    let started;
-    try {
-      started = await startPublicInviteTunnel();
-    } catch (error) {
-      if (!inviteErrorLooksLikeHostToken(error)) throw error;
-      await regenerateHostToken();
-      started = await startPublicInviteTunnel();
-    }
-    if (started.public_invite) {
-      setPublicInviteStatus(started.public_invite);
-      status = started.public_invite;
-    }
-    if (status.public_url && status.tunnel?.phase === "running") return status;
+    status = await startPublicInviteTunnel();
+    setPublicInviteStatus(status);
+    if (status.public_url && status.tunnel.phase === "running") return status;
     const readyStatus = await waitForTunnelReady();
-    if (readyStatus.public_url && readyStatus.tunnel?.phase === "running") return readyStatus;
+    if (readyStatus.public_url && readyStatus.tunnel.phase === "running") return readyStatus;
     throw new Error(
-      readyStatus.tunnel?.last_error ||
+      readyStatus.tunnel.last_error ||
         "공개 터널이 아직 초대 URL을 보고하지 않았습니다. 잠시 후 다시 눌러 주세요."
     );
   }
@@ -246,10 +160,6 @@ export function useRoomInviteController({
     if (!status.public_url) {
       throw new Error("외부 접속을 먼저 열어 주세요.");
     }
-    if (status.tunnel?.phase === "starting" && !status.tunnel.public_url) {
-      throw new Error("터널 시작 중입니다. 공개 URL이 표시될 때까지 기다려 주세요.");
-    }
-    if (!sessionToken) await ensureHostToken(status);
     return status;
   }
 
@@ -271,101 +181,39 @@ export function useRoomInviteController({
     startTunnelIfNeeded?: boolean;
   }) {
     await requirePublicInviteReady(startTunnelIfNeeded);
-    let invite;
-    try {
-      invite = await createRoomInvite({
-        meetingId: room.meetingId,
-        agentId,
-        displayName,
-        inviteScope,
-        ttlSeconds,
-        maxUses,
-        sessionToken,
-      });
-    } catch (error) {
-      if (!inviteErrorLooksLikeHostToken(error)) throw error;
-      await regenerateHostToken();
-      invite = await createRoomInvite({
-        meetingId: room.meetingId,
-        agentId,
-        displayName,
-        inviteScope,
-        ttlSeconds,
-        maxUses,
-        sessionToken,
-      });
-    }
+    const invite = await createRoomInvite({
+      meetingId: room.meetingId,
+      agentId,
+      displayName,
+      inviteScope,
+      ttlSeconds,
+      maxUses,
+      sessionToken,
+    });
     const target = secureInviteCopyTarget({ joinUrl: invite.join_url || "" });
     if (!target.copyUrl) throw new Error(target.status);
     setSecureInviteUrl(target.copyUrl);
     return { invite, target };
   }
 
-  async function configurePublicUrl() {
-    const publicUrl = publicUrlDraft.trim();
-    if (!publicUrl) {
-      setCopyStatus("공개 URL을 먼저 입력하세요.");
-      return;
-    }
-    setCopyStatus("공개 URL 설정 중...");
-    try {
-      const status = publicInviteStatus || (await refreshPublicInviteState());
-      await ensureHostToken(status);
-      let payload;
-      try {
-        payload = await configurePublicInvitePublicUrl(publicUrl);
-      } catch (error) {
-        if (!inviteErrorLooksLikeHostToken(error)) throw error;
-        await regenerateHostToken();
-        payload = await configurePublicInvitePublicUrl(publicUrl);
-      }
-      if (payload.public_invite) setPublicInviteStatus(payload.public_invite);
-      else await refreshPublicInviteState();
-      setCopyStatus("공개 URL 설정됨");
-    } catch (error) {
-      setCopyStatus(error instanceof Error ? error.message : "공개 URL 설정 실패");
-    }
-  }
-
-  async function saveHostTokenFromDraft() {
-    const token = hostTokenDraft.trim();
-    if (!token) {
-      setCopyStatus("Host token required");
-      return;
-    }
-    saveHostToken(token);
-    setCopyStatus("Host token saved");
-    try {
-      await refreshPublicInviteState();
-    } catch {
-      // The saved credential remains useful when the status request is transiently unavailable.
-    }
-  }
-
   async function startTunnel() {
+    if (!localOperatorEligible) {
+      setCopyStatus("외부 접속 관리는 패키지 앱의 로컬 운영자만 사용할 수 있습니다.");
+      return;
+    }
     setPublicAccessTransition("starting");
     setCopyStatus("외부 접속 주소를 준비하는 중...");
     try {
-      const status = publicInviteStatus || (await refreshPublicInviteState());
-      await ensureHostToken(status);
-      let started;
-      try {
-        started = await startPublicInviteTunnel();
-      } catch (error) {
-        if (!inviteErrorLooksLikeHostToken(error)) throw error;
-        await regenerateHostToken();
-        started = await startPublicInviteTunnel();
-      }
-      if (started.host_token) {
-        saveHostToken(started.host_token);
-        setHostTokenDraft(started.host_token);
-      }
-      if (started.public_invite) setPublicInviteStatus(started.public_invite);
-      const latest = await waitForTunnelReady();
+      const started = await startPublicInviteTunnel();
+      setPublicInviteStatus(started);
+      const latest =
+        started.public_url && started.tunnel.phase === "running"
+          ? started
+          : await waitForTunnelReady();
       setCopyStatus(
         latest.public_url
           ? "서버가 공개되었습니다. 이제 외부 초대 링크를 만들 수 있습니다."
-          : latest.tunnel?.last_error || "외부 접속 주소가 아직 준비되지 않았습니다."
+          : latest.tunnel.last_error || "외부 접속 주소가 아직 준비되지 않았습니다."
       );
     } catch (error) {
       setCopyStatus(error instanceof Error ? error.message : "서버 공개 실패");
@@ -375,17 +223,15 @@ export function useRoomInviteController({
   }
 
   async function stopTunnel() {
+    if (!localOperatorEligible) {
+      setCopyStatus("외부 접속 관리는 패키지 앱의 로컬 운영자만 사용할 수 있습니다.");
+      return;
+    }
     setPublicAccessTransition("stopping");
     setCopyStatus("외부 접속을 닫는 중...");
     try {
-      let payload = await stopPublicInviteTunnel();
-      if (payload.public_invite) setPublicInviteStatus(payload.public_invite);
-      if (payload.public_invite?.public_url) {
-        payload = await configurePublicInvitePublicUrl("");
-        if (payload.public_invite) setPublicInviteStatus(payload.public_invite);
-      }
-      if (!payload.public_invite) await refreshPublicInviteState();
-      setPublicUrlDraft("");
+      const status = await stopPublicInviteTunnel();
+      setPublicInviteStatus(status);
       setSecureInviteUrl("");
       setAgentInviteUrl("");
       setOperatorPairingUrl("");
@@ -535,7 +381,7 @@ export function useRoomInviteController({
         [friendId]:
           error instanceof Error
             ? error.message
-            : "초대 실패. 공개 URL과 host 권한 설정을 확인하세요.",
+            : "초대에 실패했습니다.",
       }));
     }
   }
@@ -548,19 +394,13 @@ export function useRoomInviteController({
     operatorPairingUrl,
     publicInviteStatus,
     publicAccessTransition,
-    publicUrlDraft,
-    hostTokenDraft,
     friendStatuses,
     remoteClientPacket,
-    invitePublicUrl: publicInviteStatus?.public_url || publicInviteStatus?.tunnel?.public_url || "",
-    hostTokenRequired: Boolean(publicInviteStatus?.host_token_configured && !loadHostToken()),
+    invitePublicUrl:
+      publicInviteStatus?.stable_url || publicInviteStatus?.public_url || "",
     open,
     close,
-    setPublicUrlDraft,
-    setHostTokenDraft,
     createSecureInviteForRoom,
-    configurePublicUrl,
-    saveHostTokenFromDraft,
     startTunnel,
     stopTunnel,
     generateSecureInvite,

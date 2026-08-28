@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   fetchJsonServerOperator,
   fetchJsonWithIdentity,
+  postEmptyServerOperator,
   postJsonServerOperator,
   postJsonWithIdentity,
   responseError,
@@ -175,6 +176,11 @@ describe("desktop profile HTTP routing", () => {
         ticket: "d".repeat(64),
         ttl_seconds: 30,
         http_base_url: "http://127.0.0.1:49153",
+      })
+      .mockResolvedValueOnce({
+        ticket: "e".repeat(64),
+        ttl_seconds: 30,
+        http_base_url: "http://127.0.0.1:49153",
       });
     Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
     const fetchMock = vi
@@ -190,6 +196,12 @@ describe("desktop profile HTTP routing", () => {
           status: 200,
           headers: { "Content-Type": "application/json" },
         })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ mode: "managed" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
       );
     vi.stubGlobal("fetch", fetchMock);
 
@@ -199,10 +211,12 @@ describe("desktop profile HTTP routing", () => {
       room_id: "project-room",
       label: "Project Room",
     });
+    await postEmptyServerOperator("/api/public-invite/tunnel/start");
 
     expect(invoke).toHaveBeenNthCalledWith(1, "host_product_surface");
     expect(invoke).toHaveBeenNthCalledWith(2, "runtime_operator_ticket");
     expect(invoke).toHaveBeenNthCalledWith(3, "runtime_operator_ticket");
+    expect(invoke).toHaveBeenNthCalledWith(4, "runtime_operator_ticket");
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       "http://127.0.0.1:49153/api/rooms?include_archived=true",
@@ -210,9 +224,15 @@ describe("desktop profile HTTP routing", () => {
     );
     const listHeaders = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
     const createHeaders = fetchMock.mock.calls[1]?.[1]?.headers as Headers;
+    const emptyPost = fetchMock.mock.calls[2]?.[1] as RequestInit;
+    const emptyPostHeaders = emptyPost.headers as Headers;
     expect(listHeaders.get("Authorization")).toBe(`Bearer ${"c".repeat(64)}`);
     expect(createHeaders.get("Authorization")).toBe(`Bearer ${"d".repeat(64)}`);
     expect(createHeaders.get("Content-Type")).toBe("application/json");
+    expect(emptyPost.method).toBe("POST");
+    expect(emptyPost.body).toBeUndefined();
+    expect(emptyPostHeaders.get("Authorization")).toBe(`Bearer ${"e".repeat(64)}`);
+    expect(emptyPostHeaders.get("Content-Type")).toBeNull();
   });
 });
 

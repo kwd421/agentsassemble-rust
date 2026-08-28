@@ -8,13 +8,17 @@ import {
   type RoomInviteJoinResponse,
 } from "../lib/roomAdmissionContract";
 import {
-  fetchJson,
+  fetchJsonServerOperator,
   postJson,
-  postJsonHost,
   postJsonModerator,
+  postEmptyServerOperator,
   postJsonWithIdentity,
   postJsonWithToken,
 } from "./http";
+import {
+  parsePublicIngressStatus,
+  type PublicIngressStatus,
+} from "../lib/publicIngressStatus";
 
 export interface RoomInviteCreateResponse {
   invite_id: string;
@@ -35,31 +39,7 @@ export type { OperatorPairingRedeemResponse, RoomInviteJoinResponse };
 
 export type { RoomInviteAdmissionResponse };
 
-export interface PublicInviteStatus {
-  public_url: string;
-  host_token_configured: boolean;
-  host_gate_required: boolean;
-  can_generate_host_token: boolean;
-  tunnel?: {
-    available?: boolean;
-    running?: boolean;
-    phase?: "stopped" | "starting" | "running" | string;
-    public_url?: string;
-    local_url?: string;
-    last_error?: string;
-    recent_log?: string[];
-  };
-}
-
-export interface PublicInviteStatusResponse extends PublicInviteStatus {}
-
-export interface PublicInviteActionResponse {
-  status: string;
-  host_token?: string;
-  host_token_configured?: boolean;
-  public_url?: string;
-  public_invite?: PublicInviteStatus;
-}
+export type PublicInviteStatus = PublicIngressStatus;
 
 export interface OperatorPairingCreateResponse {
   status: "created";
@@ -111,25 +91,21 @@ export function createRoomInvite({
 }
 
 export function fetchPublicInviteStatus() {
-  return fetchJson<PublicInviteStatusResponse>("/api/public-invite/status");
-}
-
-export function generatePublicInviteHostToken() {
-  return postJsonHost<PublicInviteActionResponse>("/api/public-invite/host-token", {});
-}
-
-export function configurePublicInvitePublicUrl(publicUrl: string) {
-  return postJsonHost<PublicInviteActionResponse>("/api/public-invite/public-url", {
-    public_url: publicUrl,
-  });
+  return fetchJsonServerOperator<unknown>("/api/public-invite/status").then(
+    parsePublicIngressStatus
+  );
 }
 
 export function startPublicInviteTunnel() {
-  return postJsonHost<PublicInviteActionResponse>("/api/public-invite/tunnel/start", {});
+  return postEmptyServerOperator<unknown>("/api/public-invite/tunnel/start").then(
+    parsePublicIngressStatus
+  );
 }
 
 export function stopPublicInviteTunnel() {
-  return postJsonHost<PublicInviteActionResponse>("/api/public-invite/tunnel/stop", {});
+  return postEmptyServerOperator<unknown>("/api/public-invite/tunnel/stop").then(
+    parsePublicIngressStatus
+  );
 }
 
 export function joinRoomInvite({

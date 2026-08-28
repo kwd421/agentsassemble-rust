@@ -4,9 +4,11 @@ import RoomInviteModal from "./RoomInviteModal";
 
 afterEach(cleanup);
 
-function renderInviteModal({ publicAccess = true } = {}) {
+function renderInviteModal({ publicAccess = true, activeWithoutUrl = false } = {}) {
   const onGenerateSecureInvite = vi.fn();
   const onGenerateAgentInvite = vi.fn();
+  const onStopTunnel = vi.fn();
+  const tunnelActive = publicAccess || activeWithoutUrl;
   render(
     <RoomInviteModal
       roomLabel="제품 방"
@@ -14,11 +16,13 @@ function renderInviteModal({ publicAccess = true } = {}) {
       agentInviteUrl=""
       operatorPairingUrl=""
       publicUrl={publicAccess ? "https://room.example.com" : ""}
-      publicUrlDraft=""
       tunnelStatus={{
-        running: publicAccess,
-        phase: publicAccess ? "running" : "stopped",
+        available: true,
+        running: tunnelActive,
+        phase: tunnelActive ? "running" : "stopped",
         public_url: publicAccess ? "https://room.example.com" : "",
+        local_url: "http://127.0.0.1:43123",
+        stable_phase: "unconfigured",
       }}
       friends={[]}
       onClose={vi.fn()}
@@ -28,16 +32,12 @@ function renderInviteModal({ publicAccess = true } = {}) {
       onCopyAgentInvite={vi.fn()}
       onGenerateOperatorPairing={vi.fn()}
       onCopyOperatorPairing={vi.fn()}
-      onPublicUrlDraftChange={vi.fn()}
-      onConfigurePublicUrl={vi.fn()}
-      onHostTokenDraftChange={vi.fn()}
-      onSaveHostToken={vi.fn()}
       onStartTunnel={vi.fn()}
-      onStopTunnel={vi.fn()}
+      onStopTunnel={onStopTunnel}
       onInviteFriend={vi.fn()}
     />
   );
-  return { onGenerateSecureInvite, onGenerateAgentInvite };
+  return { onGenerateSecureInvite, onGenerateAgentInvite, onStopTunnel };
 }
 
 describe("RoomInviteModal", () => {
@@ -45,6 +45,21 @@ describe("RoomInviteModal", () => {
     renderInviteModal();
 
     expect(screen.queryByText(/로컬\/dev 미리보기/)).toBeNull();
+  });
+
+  it("does not present an active tunnel without a trusted public URL as open", () => {
+    const { onStopTunnel } = renderInviteModal({
+      publicAccess: false,
+      activeWithoutUrl: true,
+    });
+
+    expect(screen.getByText("외부 접속 꺼짐")).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "외부 접속 열기" }) as HTMLButtonElement)
+        .disabled
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "외부 접속 끄기" }));
+    expect(onStopTunnel).toHaveBeenCalledOnce();
   });
 
   it("creates a human invite with the selected use limit and lifetime", () => {
