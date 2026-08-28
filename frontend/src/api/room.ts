@@ -577,20 +577,29 @@ export function fetchRoomFriends() {
   return fetchJson<RoomFriendsResponse>("/api/room-friends");
 }
 
-export function createRoom(requestId: string, roomId: string, label = "") {
+export function createRoom(
+  requestId: string,
+  roomId: string,
+  label = "",
+  beforeDispatch?: () => void
+) {
   return postJsonServerOperator<unknown>("/api/rooms", {
     request_id: requestId,
     room_id: roomId,
     label,
-  }).then(parseStrictRoomCreateResponse);
+  }, beforeDispatch).then(parseStrictRoomCreateResponse);
 }
 
-export function fetchRooms(includeArchived = false) {
+export function fetchRooms(includeArchived = false, beforeDispatch?: () => void) {
   if (includeArchived) {
-    return fetchJsonServerOperator<unknown>("/api/rooms?include_archived=true")
+    return fetchJsonServerOperator<unknown>(
+      "/api/rooms?include_archived=true",
+      beforeDispatch
+    )
       .then(parseStrictRoomDirectory);
   }
-  return fetchJsonServerOperator<unknown>("/api/rooms").then(parseStrictRoomDirectory);
+  return fetchJsonServerOperator<unknown>("/api/rooms", beforeDispatch)
+    .then(parseStrictRoomDirectory);
 }
 
 export function addRoomFriend(friend: Partial<RoomFriend>) {

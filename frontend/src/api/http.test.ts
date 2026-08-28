@@ -289,6 +289,57 @@ describe("desktop profile HTTP routing", () => {
     await rejection;
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("rechecks directory GET and JSON POST ownership at post-ticket dispatch", async () => {
+    let resolvePostTicket!: (value: unknown) => void;
+    let resolveGetTicket!: (value: unknown) => void;
+    const postTicket = new Promise((resolve) => {
+      resolvePostTicket = resolve;
+    });
+    const getTicket = new Promise((resolve) => {
+      resolveGetTicket = resolve;
+    });
+    const invoke = vi
+      .fn()
+      .mockResolvedValueOnce(HOST_SURFACE)
+      .mockReturnValueOnce(postTicket)
+      .mockReturnValueOnce(getTicket);
+    Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await requestDesktopHostProductSurface();
+    let postCurrent = true;
+    const post = postJsonServerOperator(
+      "/api/rooms",
+      { room_id: "project-room" },
+      () => {
+        if (!postCurrent) throw new Error("retired room create");
+      }
+    );
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledTimes(2));
+    postCurrent = false;
+    resolvePostTicket({
+      ticket: "1".repeat(64),
+      ttl_seconds: 30,
+      http_base_url: "http://127.0.0.1:49155",
+    });
+    await expect(post).rejects.toThrow("retired room create");
+
+    let getCurrent = true;
+    const get = fetchJsonServerOperator("/api/rooms", () => {
+      if (!getCurrent) throw new Error("retired room directory");
+    });
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledTimes(3));
+    getCurrent = false;
+    resolveGetTicket({
+      ticket: "2".repeat(64),
+      ttl_seconds: 30,
+      http_base_url: "http://127.0.0.1:49155",
+    });
+    await expect(get).rejects.toThrow("retired room directory");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 describe("browser session WebSocket ticket routing", () => {

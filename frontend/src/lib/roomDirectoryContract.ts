@@ -304,10 +304,22 @@ export function parseStrictRoomDirectory(value: unknown): StrictRoomDirectory {
   if (!Array.isArray(payload.rooms)) {
     throw new Error("방 목록 rooms가 배열이 아닙니다.");
   }
+  const rooms = payload.rooms.map(validateRoom);
+  const roomIds = new Set<string>();
+  const roomUids = new Set<string>();
+  for (const room of rooms) {
+    const roomId = canonicalRoomId(room.room_id);
+    const roomUid = String(room.room_uid).toLowerCase();
+    if (roomIds.has(roomId) || roomUids.has(roomUid)) {
+      throw new Error("방 목록에 중복된 방 식별자 또는 UID가 있습니다.");
+    }
+    roomIds.add(roomId);
+    roomUids.add(roomUid);
+  }
   return {
     ...authority,
     server_product_surface: validateServerProductSurface(payload.server_product_surface),
-    rooms: payload.rooms.map(validateRoom),
+    rooms,
   };
 }
 
@@ -367,13 +379,16 @@ export function retainRoomDirectoryAuthority(
 export async function bindRoomDirectoryAuthority(
   authority: RoomSessionSurface,
   trustedSurface: TrustedServerProductSurface | null = null,
-  origin = window.location.origin
-) {
+  origin = window.location.origin,
+  isCurrent: () => boolean = () => true
+): Promise<boolean> {
   await assertServerProductSurfaceIntegrity(
     authority.server_product_surface,
     trustedSurface
   );
+  if (!isCurrent()) return false;
   bindVerifiedRoomDirectoryAuthority(authority, origin);
+  return true;
 }
 
 function bindVerifiedRoomDirectoryAuthority(
@@ -406,10 +421,7 @@ export async function verifyAndBindRoomSessionSurface(
   isCurrent: () => boolean,
   origin = window.location.origin
 ): Promise<boolean> {
-  await assertServerProductSurfaceIntegrity(authority.server_product_surface, null);
-  if (!isCurrent()) return false;
-  bindVerifiedRoomDirectoryAuthority(authority, origin);
-  return true;
+  return bindRoomDirectoryAuthority(authority, null, origin, isCurrent);
 }
 
 export function currentRoomDirectoryAuthority(

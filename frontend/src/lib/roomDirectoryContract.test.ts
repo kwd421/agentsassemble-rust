@@ -4,6 +4,7 @@ import { PRODUCT_SURFACE_REVISION } from "../types/generated/PRODUCT_SURFACE_REV
 import {
   bindRoomDirectoryAuthority,
   currentRoomDirectoryAuthority,
+  currentServerProductSurface,
   parseStrictRoomCreateResponse,
   parseStrictRoomDirectory,
   retainRoomDirectoryAuthority,
@@ -47,6 +48,44 @@ function room() {
   };
 }
 
+function directoryRoom(
+  roomId: string,
+  uid: string = roomUid
+) {
+  return {
+    ...room(),
+    room_id: roomId,
+    room_uid: uid,
+    room_settings: {
+      room_id: roomId,
+      settings_revision: `settings-${roomId}`,
+      label: roomId,
+      topic: roomId,
+      appearance: {
+        banner_preset: "default",
+        banner_image_url: "",
+        icon_image_url: "",
+        icon_label: "R",
+        invite_scope: "room",
+      },
+      conversation_mode: "ordered",
+      tool_mode: "chat",
+      ordered_exclude_previous_speaker: true,
+      channels: [],
+      activity_plugin: "",
+    },
+  };
+}
+
+function directory(rooms: ReturnType<typeof directoryRoom>[]) {
+  return {
+    server_id: serverId,
+    authority_lineage_id: lineageId,
+    server_product_surface: surface,
+    rooms,
+  };
+}
+
 describe("room directory contracts", () => {
   it("rejects a loose or lineage-free follow-up directory", () => {
     expect(() => parseStrictRoomDirectory({})).toThrow(/계약/);
@@ -67,6 +106,26 @@ describe("room directory contracts", () => {
     expect(() =>
       parseStrictRoomCreateResponse({ ...payload, ignored: true })
     ).toThrow(/계약/);
+  });
+
+  it("rejects duplicate canonical room IDs or room UIDs", () => {
+    const secondUid = "40000000-0000-4000-8000-000000000004";
+    expect(() =>
+      parseStrictRoomDirectory(
+        directory([
+          directoryRoom("general"),
+          directoryRoom("general", secondUid),
+        ])
+      )
+    ).toThrow(/중복/);
+    expect(() =>
+      parseStrictRoomDirectory(
+        directory([
+          directoryRoom("general"),
+          directoryRoom("other", roomUid),
+        ])
+      )
+    ).toThrow(/중복/);
   });
 
   it("uses Rust whitespace semantics for canonical room identifiers", () => {
@@ -159,5 +218,21 @@ describe("room directory contracts", () => {
       )
     ).resolves.toBe(false);
     expect(currentRoomDirectoryAuthority(origin)).toBeNull();
+  });
+
+  it("does not bind global authority or surface after guarded integrity work becomes stale", async () => {
+    const origin = "https://stale-directory.example";
+    let current = true;
+    const binding = bindRoomDirectoryAuthority(
+      parseStrictRoomDirectory(directory([])),
+      surface,
+      origin,
+      () => current
+    );
+    current = false;
+
+    await expect(binding).resolves.toBe(false);
+    expect(currentRoomDirectoryAuthority(origin)).toBeNull();
+    expect(currentServerProductSurface(origin)).toBeNull();
   });
 });
