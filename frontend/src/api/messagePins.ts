@@ -50,10 +50,19 @@ function invalidResponse(): never {
   throw new Error("로비 메시지 핀 응답 계약이 올바르지 않습니다.");
 }
 
+function isUnicodeScalarString(value: string): boolean {
+  for (const character of value) {
+    const first = character.charCodeAt(0);
+    if (character.length === 1 && first >= 0xd800 && first <= 0xdfff) return false;
+  }
+  return true;
+}
+
 function canonicalEventId(value: unknown): string {
   if (
     typeof value !== "string" ||
     !value ||
+    !isUnicodeScalarString(value) ||
     value.includes("\0") ||
     new TextEncoder().encode(value).byteLength > MAX_MESSAGE_PIN_EVENT_ID_BYTES
   ) {
@@ -82,6 +91,8 @@ function parsePin(value: unknown): MessagePin {
   const author = requiredString(pin, "author", "로비 메시지 핀");
   const content = requiredString(pin, "content", "로비 메시지 핀");
   if (
+    !isUnicodeScalarString(author) ||
+    !isUnicodeScalarString(content) ||
     !hasVisibleText(content) ||
     pin.channel_id !== "lobby" ||
     !Number.isSafeInteger(pin.seq) ||

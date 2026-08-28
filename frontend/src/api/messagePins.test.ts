@@ -248,6 +248,9 @@ describe("lobby message-pin HTTP authority", () => {
       { pins: Array.from({ length: 65 }, (_, index) => pin(`event-${index}`)) },
       { pins: [{ ...pin(), content: "" }] },
       { pins: [{ ...pin(), content: " \t\n\u200b" }] },
+      { pins: [{ ...pin(), event_id: "event-\ud800" }] },
+      { pins: [{ ...pin(), content: "message \udfff" }] },
+      { pins: [{ ...pin(), author: "Operator \ud800" }] },
       { pins: [], ignored: true },
     ];
 
@@ -260,6 +263,26 @@ describe("lobby message-pin HTTP authority", () => {
         })
       ).rejects.toThrow();
     }
+  });
+
+  it("accepts valid non-BMP Unicode scalars in canonical pin strings", async () => {
+    bridge.read.mockResolvedValue(grant("a".repeat(64)));
+    const scalarPin = {
+      ...pin("event-😀"),
+      author: "Operator 😀",
+      content: "canonical 😀 message",
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse({ pins: [scalarPin] }))
+    );
+
+    await expect(
+      fetchLobbyMessagePins({
+        roomId: "general",
+        authority: { kind: "local" },
+      })
+    ).resolves.toEqual([scalarPin]);
   });
 
   it("rejects invalid identities before consuming a native grant", async () => {
@@ -281,6 +304,14 @@ describe("lobby message-pin HTTP authority", () => {
       setLobbyMessagePinned({
         roomId: "general",
         eventId: "é".repeat(65),
+        pinned: true,
+        authority: { kind: "local" },
+      })
+    ).rejects.toThrow("메시지 식별자");
+    await expect(
+      setLobbyMessagePinned({
+        roomId: "general",
+        eventId: "event-\ud800",
         pinned: true,
         authority: { kind: "local" },
       })
