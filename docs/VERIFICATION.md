@@ -3010,3 +3010,48 @@ operation, while an out-of-band SQLite writer would violate the exclusive single
 contract and a test-only control mutation would be fake authority. Daybreaker's first
 review found no Critical, High, or Medium issue; both final approvals remain withheld
 until this correction is pushed and re-reviewed.
+
+Final correction review found no further issue. Web and Daybreaker each approved
+`904b873..e006e0d`, exact `754198d..e006e0d`, and cumulative
+`5a032db..e006e0d` with `Critical 0 / High 0 / Medium 0`. Neither review used Deep
+Scan or another automated security scanner.
+
+## Strict frontend manager-invite exchange: 2026-08-28
+
+Before C1b, the copied controller's human create path still used the unchecked generic
+moderator helper, while the implemented Rust authority required a create-only native
+grant. A delayed grant could not be distinguished from a request already sent, and
+typed JSON alone did not bind a returned room, credential, public URL, invite ID, or
+expiry to the exact request. Retrying or copying after such ambiguity could duplicate
+an invite or expose a substituted credential.
+
+One frontend API owner now validates the captured manager tuple and canonical outbound
+human intent, obtains the exact native create or revoke grant, marks the instant before
+`fetch`, and parses the complete response. Create acceptance requires exact fixed and
+echoed fields, a lowercase 16-hex invite ID equal to the SHA-256 prefix of the exact
+signed token, an independent canonical join code, one canonical non-loopback HTTPS
+`/join` URL whose only query is that join code, the existing exact loopback room origin,
+and a finite canonical server timestamp. It retains only immutable authority,
+invite ID, validated URL/origin, and exact-plus-derived expiry; raw signed and join-code
+fields get no second storage owner. Revoke accepts only exact success or exact
+`invite_not_found` as terminal. A grant or operation guard failure before `fetch` is
+`proven_not_dispatched`; transport, HTTP, JSON, or binding failure after dispatch is
+`outcome_unknown`.
+
+This closes an observed authority and ambiguity gap without another network round
+trip, database write, disk artifact, cache, timer, task, compatibility path, or
+fallback. The low-frequency accepted create adds one WebCrypto SHA-256 calculation
+over the server-issued token plus exact object-key, URL, and timestamp validation. Exact
+microsecond text remains custody authority; the derived millisecond value rounds down
+sub-millisecond precision so later presentation cannot outlive the server instant.
+The trade-off is deliberate fail-closed uncertainty after any dispatched request;
+C2 must retain and present that state rather than retry automatically.
+
+Focused manager-contract, native dispatch-guard, and ingress-origin tests passed 30
+tests. The complete `make verify` passed architecture/source-growth/policy gates,
+formatting, generated bindings, original-CSS verification, production build, all 84
+frontend files with 489 tests, 20 desktop tests, domain 23, persistence 172, protocol
+5, provider 120, server 83, every integration/TCP/doc test, and warning-denied Clippy.
+The production main chunk remained 771.16 kB (232.39 kB gzip). No Computer Use
+resource, provider, Deep Scan, or other automated security scanner ran. Manual review
+is withheld until this independently buildable candidate is committed and pushed.

@@ -9,6 +9,7 @@ import { loadHostToken } from "./api/http";
 import { chooseDesktopWorkspace, isDesktopWebview } from "./lib/desktopBridge";
 
 export * from "./api/agentSessions";
+export * from "./api/humanInviteManager";
 export * from "./api/invites";
 export * from "./api/identity";
 export * from "./api/messagePins";

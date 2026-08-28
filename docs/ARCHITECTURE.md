@@ -74,6 +74,16 @@ to persistence, whose owning mutation transaction re-resolves and compares every
 before changing an invite. A room ID, cached directory row, ingress snapshot, or
 generic room HTTP grant cannot independently authorize invite management.
 
+The frontend manager-invite API is the single create-response and revoke-result
+boundary. It sends only the canonical human invite intent through the exact desktop
+grant, validates the returned signed-token digest, independent join credential,
+canonical public HTTPS join URL, exact room echoes, and finite server timestamp, then
+returns one immutable room/invite custody value. A native or guard failure before
+`fetch` is proven not dispatched; every failure after `fetch` begins is unknown except
+the exact terminal revoke success and `invite_not_found` results. It does not consult
+live ingress while accepting a committed response, reconstruct a URL, retain a second
+raw credential, or own controller/UI lifecycle state.
+
 ### Room settings, preferences, and appearance
 
 SQLite `rooms.settings_json` is the only room-global settings record. One strict

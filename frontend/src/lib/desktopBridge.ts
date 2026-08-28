@@ -240,7 +240,7 @@ function validateDesktopBootstrapGrant(value: unknown): DesktopBootstrapGrant {
   return grant as unknown as DesktopBootstrapGrant;
 }
 
-function validatedDesktopHttpBase(value: string): string {
+export function parseDesktopLoopbackHttpBase(value: string): string {
   const endpoint = new URL(value);
   if (
     endpoint.protocol !== "http:" ||
@@ -282,7 +282,7 @@ function validateDesktopHttpTicket(
   return {
     ticket: grant.ticket,
     ttl_seconds: grant.ttl_seconds as number,
-    http_base_url: validatedDesktopHttpBase(grant.http_base_url),
+    http_base_url: parseDesktopLoopbackHttpBase(grant.http_base_url),
   };
 }
 
@@ -335,7 +335,7 @@ function validateDesktopCentralRegistrationTicket(
   return {
     ticket: grant.ticket,
     ttl_seconds: grant.ttl_seconds as number,
-    http_base_url: validatedDesktopHttpBase(grant.http_base_url),
+    http_base_url: parseDesktopLoopbackHttpBase(grant.http_base_url),
     server_id: grant.server_id,
     host_public_key_x: grant.host_public_key_x,
     host_key_fingerprint: grant.host_key_fingerprint,
@@ -417,7 +417,7 @@ export function requestDesktopPreferencesWriteTicket(
 export function requestDesktopHumanInviteCreateTicket(
   authority: DesktopManagerRoomAuthority
 ): Promise<DesktopOperatorHttpTicket> {
-  const verified = validateManagerRoomAuthority(authority);
+  const verified = parseDesktopManagerRoomAuthority(authority);
   return requestDesktopHttpTicket(
     "runtime_human_invite_create_ticket",
     { authority: verified },
@@ -428,7 +428,7 @@ export function requestDesktopHumanInviteCreateTicket(
 export function requestDesktopHumanInviteRevokeTicket(
   authority: DesktopManagerRoomAuthority
 ): Promise<DesktopOperatorHttpTicket> {
-  const verified = validateManagerRoomAuthority(authority);
+  const verified = parseDesktopManagerRoomAuthority(authority);
   return requestDesktopHttpTicket(
     "runtime_human_invite_revoke_ticket",
     { authority: verified },
@@ -436,7 +436,7 @@ export function requestDesktopHumanInviteRevokeTicket(
   );
 }
 
-function validateManagerRoomAuthority(
+export function parseDesktopManagerRoomAuthority(
   value: DesktopManagerRoomAuthority
 ): DesktopManagerRoomAuthority {
   const authority = exactObject(
@@ -503,7 +503,8 @@ export async function fetchDesktopRoomPreferences(
 async function fetchDesktopHumanInvite(
   authority: DesktopManagerRoomAuthority,
   operation: "create" | "revoke",
-  init: RequestInit
+  init: RequestInit,
+  beforeDispatch?: () => void
 ): Promise<Response> {
   const method = init.method === undefined ? "POST" : String(init.method).toUpperCase();
   if (method !== "POST") {
@@ -515,6 +516,7 @@ async function fetchDesktopHumanInvite(
       : await requestDesktopHumanInviteRevokeTicket(authority);
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${issued.ticket}`);
+  beforeDispatch?.();
   return fetch(`${issued.http_base_url}/api/room-invite/${operation}`, {
     ...init,
     cache: "no-store",
@@ -525,16 +527,18 @@ async function fetchDesktopHumanInvite(
 
 export function fetchDesktopHumanInviteCreate(
   authority: DesktopManagerRoomAuthority,
-  init: RequestInit
+  init: RequestInit,
+  beforeDispatch?: () => void
 ): Promise<Response> {
-  return fetchDesktopHumanInvite(authority, "create", init);
+  return fetchDesktopHumanInvite(authority, "create", init, beforeDispatch);
 }
 
 export function fetchDesktopHumanInviteRevoke(
   authority: DesktopManagerRoomAuthority,
-  init: RequestInit
+  init: RequestInit,
+  beforeDispatch?: () => void
 ): Promise<Response> {
-  return fetchDesktopHumanInvite(authority, "revoke", init);
+  return fetchDesktopHumanInvite(authority, "revoke", init, beforeDispatch);
 }
 
 export async function requestDesktopCentralRegistrationTicket(): Promise<DesktopCentralRegistrationTicket> {

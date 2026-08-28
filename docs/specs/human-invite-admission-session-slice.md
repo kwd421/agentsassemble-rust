@@ -6,9 +6,10 @@ profile/preferences/WebSocket exchanges, and exact participant leave are impleme
 and production-browser verified; configured-manual and managed public ingress with
 stable entry plus backend manager invite create/revoke and private-control ticket
 issuance, exact manager-room authority transport and transaction revalidation, and
-the native desktop manager-invite ticket bridge are implemented and test-verified;
-frontend API/controller/UI integration, remaining typed exchanges, and packaged
-activation remain incomplete and unverified
+the native desktop manager-invite ticket bridge plus the strict C1b create/revoke
+frontend API contract are implemented and test-verified; retained controller custody,
+UI cutover, remaining typed exchanges, and packaged activation remain incomplete and
+unverified
 
 ## Definition
 
@@ -594,12 +595,11 @@ a substitute for these authority and failure contracts.
 
 B1a/B1b and the browser admission-custody corrections are public through `fdb4e49`,
 fully verified, and approved by both manual reviewers. B2 is public through `2b97a7c`,
-fully verified, and approved by both manual reviewers. The first C1a unit strictly
-validates and carries the exact manager-room authority tuple through the frontend,
-Tauri invocation, and private control request without activating the UI. C1a server
-issuance retains that tuple in a separate exact-purpose ticket, while create and
-revoke revalidate it inside their mutation transaction. C1b frontend activation, C2
-retained custody, and the packaged flow remain incomplete.
+fully verified, and approved by both manual reviewers. C1a is public through
+`e006e0d`, fully verified, and approved by both manual reviewers. C1b now owns one
+strict frontend create/revoke dispatch and response contract, but the copied
+controller does not retain or present its custody until C2. C2 controller/UI custody
+and the packaged flow remain incomplete.
 
 ## Trusted ingress boundary
 

@@ -191,6 +191,39 @@ describe("desktop exact-purpose HTTP bridge", () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 
+  it("runs the invite dispatch guard after grant issuance and before fetch", async () => {
+    const invoke = vi
+      .fn()
+      .mockResolvedValueOnce({
+        revision: PRODUCT_SURFACE_REVISION,
+        digest: "2".repeat(64),
+        commands: hostCommands,
+      })
+      .mockResolvedValueOnce({
+        ticket: "b".repeat(64),
+        ttl_seconds: 30,
+        http_base_url: "http://127.0.0.1:49154",
+      });
+    Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await requestDesktopHostProductSurface();
+    const retired = new Error("retired before fetch");
+    await expect(
+      fetchDesktopHumanInviteCreate(
+        managerAuthority,
+        { method: "POST" },
+        () => {
+          expect(invoke).toHaveBeenCalledTimes(2);
+          expect(fetchMock).not.toHaveBeenCalled();
+          throw retired;
+        }
+      )
+    ).rejects.toBe(retired);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("rejects malformed manager room authority before native invocation", async () => {
     const invoke = vi.fn();
     Object.assign(window, { __TAURI_INTERNALS__: { invoke } });

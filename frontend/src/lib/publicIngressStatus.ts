@@ -95,8 +95,7 @@ function exactOrigin(value: string, protocol: "http:" | "https:"): URL {
   return url;
 }
 
-function publicOrigin(value: string): string {
-  if (!value) return "";
+export function parsePublicIngressOrigin(value: string): string {
   const url = exactOrigin(value, "https:");
   const host = url.hostname.toLowerCase();
   const comparisonHost = host.replace(/\.+$/, "");
@@ -110,6 +109,10 @@ function publicOrigin(value: string): string {
     invalid();
   }
   return value;
+}
+
+function optionalPublicOrigin(value: string): string {
+  return value ? parsePublicIngressOrigin(value) : "";
 }
 
 function localOrigin(value: string): string {
@@ -170,13 +173,13 @@ export function parsePublicIngressStatus(value: unknown): PublicIngressStatus {
   }
   const status: PublicIngressStatus = {
     mode: unionValue(source.mode, MODES),
-    public_url: publicOrigin(exactString(source.public_url)),
-    stable_url: publicOrigin(exactString(source.stable_url)),
+    public_url: optionalPublicOrigin(exactString(source.public_url)),
+    stable_url: optionalPublicOrigin(exactString(source.stable_url)),
     tunnel: {
       available: tunnelSource.available,
       running: tunnelSource.running,
       phase: unionValue(tunnelSource.phase, PHASES),
-      public_url: publicOrigin(exactString(tunnelSource.public_url)),
+      public_url: optionalPublicOrigin(exactString(tunnelSource.public_url)),
       local_url: localOrigin(exactString(tunnelSource.local_url)),
       stable_phase: unionValue(tunnelSource.stable_phase, STABLE_PHASES),
       ...(lastError === undefined ? {} : { last_error: lastError }),
