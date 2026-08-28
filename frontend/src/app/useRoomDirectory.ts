@@ -89,9 +89,15 @@ function managerAuthoritySnapshot(
   for (const room of rooms) {
     dockIdCounts.set(room.id, (dockIdCounts.get(room.id) || 0) + 1);
   }
-  const activePayloadRooms = payload.rooms.filter(
-    (room) => !room.archived && room.status !== "closed" && room.status !== "archived"
-  );
+  const activePayloadByRoomId = new Map<
+    string,
+    StrictRoomDirectory["rooms"][number]
+  >();
+  for (const room of payload.rooms) {
+    if (!room.archived && room.status !== "closed" && room.status !== "archived") {
+      activePayloadByRoomId.set(room.room_id, room);
+    }
+  }
   const associatedPayloads = new Set<string>();
   const byDockId = new Map<string, DesktopManagerRoomAuthority>();
   for (const room of rooms) {
@@ -106,14 +112,11 @@ function managerAuthoritySnapshot(
     if (dockIdCounts.get(room.id) !== 1) {
       throw new Error("확인된 로컬 방 dock 식별자가 중복되었습니다.");
     }
-    const matches = activePayloadRooms.filter(
-      (candidate) =>
-        candidate.room_id === room.meetingId && candidate.room_uid === room.roomUid
-    );
-    if (matches.length !== 1) {
+    const matched = activePayloadByRoomId.get(room.meetingId);
+    if (!matched || matched.room_uid !== room.roomUid) {
       throw new Error("로컬 방 dock과 권위 있는 방 목록의 연결이 모호합니다.");
     }
-    const payloadKey = `${matches[0].room_id}\0${matches[0].room_uid}`;
+    const payloadKey = `${matched.room_id}\0${matched.room_uid}`;
     if (associatedPayloads.has(payloadKey) || byDockId.has(room.id)) {
       throw new Error("하나의 방 권위가 여러 로컬 dock에 연결되었습니다.");
     }
@@ -123,8 +126,8 @@ function managerAuthoritySnapshot(
       parseDesktopManagerRoomAuthority({
         server_id: payload.server_id,
         authority_lineage_id: payload.authority_lineage_id,
-        room_id: matches[0].room_id,
-        room_uid: matches[0].room_uid || "",
+        room_id: matched.room_id,
+        room_uid: matched.room_uid || "",
       })
     );
   }
