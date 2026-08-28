@@ -89,9 +89,9 @@ raw credential, or own controller/UI lifecycle state.
 SQLite `rooms.settings_json` is the only room-global settings record. One strict
 domain validator owns its complete shape and sorted-key compact-JSON revision, but
 field recognition does not imply mutation availability. A settings command may
-change only behavior whose server authority and reachable UI effect are complete;
-channels, invite scope, activity hosting, and asset URLs fail explicitly until
-their owning slices exist. The settings, synchronized room label/time, one event,
+change only behavior whose server authority exists; channels and activity hosting
+still fail explicitly, while invite scope and room-owned asset URLs use their
+completed server owners. The settings, synchronized room label/time, one event,
 and command replay result commit atomically. Scheduler reconciliation runs after
 one fresh commit, cannot rewrite its ACK as a NACK, and is retried from later
 lifecycle triggers when progression fails. An exact command replay returns only
@@ -117,6 +117,13 @@ decoder and one global decode-admission semaphore; accepted raster input is
 bounded and re-encoded to static PNG. Pending preview and bound reads are
 non-cacheable, `nosniff`, and `no-referrer`; active content, arbitrary URLs,
 cross-room references, and cross-owner binding fail closed.
+Pending preview uses an exact current-local-manager ticket. A bound read accepts
+either an exact current local member ticket or an admitted human's purpose- and
+asset-bound one-use ticket. The latter retains durable session provenance and
+revalidates session, membership, profile binding, room reference, and asset bytes
+in one transaction; the raw session credential never authenticates the attachment
+route. Rejected reads validate metadata and `length(content)` without loading the
+bounded BLOB, while successful reads pay one second query for its bytes.
 
 ### Durable commands
 

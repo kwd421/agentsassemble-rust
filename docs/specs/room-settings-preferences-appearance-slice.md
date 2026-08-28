@@ -1,7 +1,8 @@
 # Room Settings, Scheduling, Tabletop, Preferences, and Appearance Slice
 
 Status: Stage A verified; Stage B local-operator and remote-session preferences
-production-browser verified; appearance assets inactive
+production-browser verified; appearance persistence and HTTP boundaries verified,
+desktop/frontend activation pending
 
 ## Definition
 
@@ -66,7 +67,8 @@ snapshot/directory projection, revision generation, and mutation all use the sam
 domain validator. The record is not equivalent to the set of mutations currently
 available.
 
-Stage A permits mutations only for behavior completed in the same stage:
+Before Stage B asset activation, Stage A permitted mutations only for behavior
+completed in that stage:
 
 - label and topic;
 - `conversation_mode`, `tool_mode`, and ordered previous-speaker exclusion;
@@ -75,16 +77,15 @@ Stage A permits mutations only for behavior completed in the same stage:
   read/write and read-only contract. A settings change supplies only future invite
   creation; an already issued invite retains its immutable durable scope.
 
-Stage A rejects, with stable explicit unsupported errors and no write:
+The current validator still rejects, with stable explicit unsupported errors and
+no write:
 
 - nonempty `channels`, until custom registry plus text/voice behavior exists;
-- `banner_image_url` or `icon_image_url`, until Stage B owns the asset lifecycle;
 - nonempty `activity_plugin`, until plugin hosting exists.
 
-The settings transaction contains an `AssetReferenceTransition` validation/plan
-boundary from the start. Stage A's implementation rejects every URL transition;
-Stage B activates this same boundary. No route keeps a second allowlist, and no
-unsupported field is silently preserved as a successful mutation.
+Stage B activates `banner_image_url` and `icon_image_url` only through the owning
+settings transaction. No route keeps a second allowlist, and no unsupported field
+is silently preserved as a successful mutation.
 
 The active reimplementation does not import or convert an older Rust/Python room,
 settings, queue, participant, or Agent Session record. A database that does not
@@ -265,25 +266,32 @@ Global mutation and realtime projection remain WebSocket-owned. Preferences and
 binary upload/read remain authenticated HTTP request/response controls. Neither
 transport is a fallback for the other.
 
-Inactive Stage B appearance support remains unreachable until its owner is complete. Ticket,
-private-control, persistence, decoder, and transaction-hook commits may land
-without registering a Tauri command or mounting a route. Preference activation
-for the local operator added its exact native commands, permissions, route, and
-product declaration together. Remote preference activation uses the complete
-admission/session owner and the provenance-bound exchanges above.
-Appearance activation occurs only after that admission dependency and the existing
-attachment routes have one owner and upload, read, bind, cleanup, exact issuance, and settings-hook
-behavior are complete; it also advances the product-surface revision. The copied
-frontend is connected only after each backend surface is complete.
+The persistence owner, atomic settings transition, existing attachment route, and
+remote human-session exchange are active and TCP-verified. A remote bound read
+retains its persistence-issued session provenance in the one-use grant and
+revalidates session, membership, profile binding, room reference, metadata, and
+bytes in one SQLite snapshot. Read-only room members may read; the raw session
+credential is rejected by the attachment target. Local desktop issuance and the
+copied frontend's authenticated object-URL lifecycle remain explicitly inactive,
+so the product-surface revision has not advanced and appearance is not yet a
+complete product feature.
 
 The remote cutover deliberately pays one additional same-origin exchange request
-per preference read or write plus bounded session revalidation. That cost keeps the
+per preference read/write or bound-appearance read, plus bounded session
+revalidation. That cost keeps the
 longer-lived session credential out of the target route and preserves one-use
-purpose separation. It adds no cache, lock, persistent frontend state, trait,
+purpose separation. Bound appearance reads first load only metadata, stored byte
+length, and room settings; the up-to-10-MiB BLOB is fetched only after current
+authority and reference checks succeed. This deliberately adds one short SQLite
+query on successful reads to avoid the code-path cost of copying a large BLOB for
+rejected requests. It adds no cache, lock, persistent frontend state, trait,
 configuration layer, or background task. Shared ticket decoding, HTTP exchange,
-and transactional preference-update helpers remain the single owners of their
-respective policies; repository-wide duplicate-policy review found no competing
-route, SQL, validation, or state-transition owner.
+asset-ID grammar, and transactional asset helpers remain the single owners of
+their respective policies; repository-wide duplicate-policy review found no
+competing route, SQL, validation, or state-transition owner. Persistence tests
+passed 178/178 and the server suite passed all 136 unit/integration tests,
+including the real TCP remote-session read, replay, malformed-ID, raw-session, and
+post-leave rejection matrix.
 
 ## Failure, acceptance, and review gates
 
