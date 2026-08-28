@@ -1,17 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Hash, Mic, MicOff, PhoneOff, Pin, Send, Volume2 } from "lucide-react";
+import { Hash, Mic, MicOff, PhoneOff, Send, Volume2 } from "lucide-react";
 import {
   fetchChannelLobby,
-  fetchMessagePins,
   fetchRoomMessageContext,
   fetchVoicePresence,
   joinVoiceChannel,
   leaveVoiceChannel,
   mergeLobbyEventsByCreatedAt,
   postChannelSay,
-  setMessagePinned,
   type LobbyEvent,
-  type MessagePin,
   type RoomSearchResult,
   type RoomChannel,
   type VoiceParticipant,
@@ -151,10 +148,6 @@ function TextChannelBody({
   const [draft, setDraft] = useState("");
   const [sendError, setSendError] = useState("");
   const [sending, setSending] = useState(false);
-  const [pinnedItems, setPinnedItems] = useState<MessagePin[]>([]);
-  const [pinsLoading, setPinsLoading] = useState(false);
-  const [pinsError, setPinsError] = useState("");
-  const [pinBusyIds, setPinBusyIds] = useState<Set<string>>(() => new Set());
   const [contextEvents, setContextEvents] = useState<LobbyEvent[]>([]);
   const [pendingMessageTarget, setPendingMessageTarget] = useState("");
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -171,7 +164,6 @@ function TextChannelBody({
   );
   const [events, , error, refresh] = usePoll<LobbyEvent[]>(fetcher, 2500);
   const messages = mergeLobbyEventsByCreatedAt(events || [], contextEvents);
-  const pinnedEventIds = new Set(pinnedItems.map((pin) => pin.event_id));
   const channelSearchItems = messageSearch.results.map((result) => {
     const date = new Date(result.created_at);
     const timeLabel = date.toLocaleString("ko-KR", {
@@ -286,67 +278,15 @@ function TextChannelBody({
     }
   }
 
-  async function reloadPins() {
-    setPinsLoading(true);
-    setPinsError("");
-    try {
-      setPinnedItems(
-        await fetchMessagePins({
-          roomId: meetingId,
-          channelId: channel.id,
-          sessionToken,
-        })
-      );
-    } catch (err) {
-      setPinsError(err instanceof Error ? err.message : "고정 메시지를 불러오지 못했습니다.");
-    } finally {
-      setPinsLoading(false);
-    }
-  }
-
-  async function setPinned(eventId: string, pinned: boolean) {
-    if (!eventId || pinBusyIds.has(eventId)) return;
-    setPinBusyIds((current) => new Set(current).add(eventId));
-    setPinsError("");
-    try {
-      setPinnedItems(
-        await setMessagePinned({
-          roomId: meetingId,
-          channelId: channel.id,
-          eventId,
-          pinned,
-          sessionToken,
-        })
-      );
-    } catch (err) {
-      setPinsError(err instanceof Error ? err.message : "고정 상태를 바꾸지 못했습니다.");
-    } finally {
-      setPinBusyIds((current) => {
-        const next = new Set(current);
-        next.delete(eventId);
-        return next;
-      });
-    }
-  }
-
-  function selectPin(pin: MessagePin) {
-    setPinsError("");
-    void navigateToMessage(pin.event_id).catch((reason) => {
-      setPendingMessageTarget("");
-      setPinsError(reason instanceof Error ? reason.message : "고정 메시지로 이동하지 못했습니다.");
-    });
-  }
-
   const effectiveHeaderActions = {
     ...(headerActions || {}),
-    pinnedItems,
-    pinsLoading,
-    pinsError,
-    onOpenPins: () => void reloadPins(),
-    onSelectPin: selectPin,
-    onUnpin: canPost
-      ? (pin: MessagePin) => void setPinned(pin.event_id, false)
-      : undefined,
+    pinnedSummary: "커스텀 채널 메시지 핀은 아직 사용할 수 없습니다.",
+    pinnedItems: undefined,
+    pinsLoading: false,
+    pinsError: "",
+    onOpenPins: undefined,
+    onSelectPin: undefined,
+    onUnpin: undefined,
   };
 
   return (
@@ -392,18 +332,6 @@ function TextChannelBody({
                   <span className="dc-channel-message-author preserve-words">
                     {event.name || "익명"}
                   </span>
-                  {canPost && (
-                    <button
-                      type="button"
-                      className="dc-channel-message-pin"
-                      data-pinned={pinnedEventIds.has(event.id)}
-                      disabled={pinBusyIds.has(event.id)}
-                      aria-label={pinnedEventIds.has(event.id) ? "메시지 고정 해제" : "메시지 고정"}
-                      onClick={() => void setPinned(event.id, !pinnedEventIds.has(event.id))}
-                    >
-                      <Pin size={13} fill={pinnedEventIds.has(event.id) ? "currentColor" : "none"} />
-                    </button>
-                  )}
                 </span>
                 <span className="dc-channel-message-body preserve-words">{event.message}</span>
               </li>

@@ -31,6 +31,7 @@ import SideChatDock from "../views/components/SideChatDock";
 import UserPanel from "../views/components/UserPanel";
 import { SIDEBAR_WIDTH_MAX, SIDEBAR_WIDTH_MIN } from "../lib/sidebarResizeModel";
 import { GUEST_SESSION_EXPIRED_MESSAGE } from "../lib/apiErrors";
+import { isDesktopWebview } from "../lib/desktopBridge";
 
 const AdminPanel = lazy(() => import("../views/AdminPanel"));
 const FriendsView = lazy(() => import("../views/FriendsView"));
@@ -433,6 +434,16 @@ export default function AppView({ controller }: { controller: AppController }) {
               mentionables={scopedMentionables}
               bindLobbyStream={bindLobbyStream}
               roomSessionToken={lobbyPostingState.sessionToken}
+              messagePinsAuthority={
+                lobbyPostingState.sessionToken
+                  ? {
+                      kind: "remote",
+                      sessionToken: lobbyPostingState.sessionToken,
+                    }
+                  : !guestLocked && isDesktopWebview()
+                    ? { kind: "local" }
+                    : undefined
+              }
               viewerParticipantId={guestSession?.agentId || "operator-local"}
               canManageRoom={!guestLocked && !activeRoomDisconnected}
               canPostMessages={lobbyPostingState.canPost}

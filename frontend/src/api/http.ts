@@ -14,7 +14,13 @@ function isServerWideProfileRoute(url: string): boolean {
 }
 
 export async function exchangeSessionTicket(
-  purpose: "profile" | "socket" | "preferences-read" | "preferences-write",
+  purpose:
+    | "profile"
+    | "socket"
+    | "preferences-read"
+    | "preferences-write"
+    | "message-pins-read"
+    | "message-pins-write",
   sessionToken: string
 ): Promise<Record<string, unknown>> {
   const res = await fetch(`/api/session-tickets/${purpose}`, {
@@ -31,15 +37,28 @@ export async function exchangeSessionTicket(
 }
 
 export async function exchangeSessionHttpTicket(
-  purpose: "profile" | "preferences-read" | "preferences-write",
+  purpose:
+    | "profile"
+    | "preferences-read"
+    | "preferences-write"
+    | "message-pins-read"
+    | "message-pins-write",
   sessionToken: string
 ): Promise<string> {
   const payload = await exchangeSessionTicket(purpose, sessionToken);
-  const ticket = typeof payload.ticket === "string" ? payload.ticket : "";
-  if (!/^[0-9a-f]{64}$/.test(ticket)) {
+  const keys = Object.keys(payload).sort();
+  if (
+    keys.length !== 2 ||
+    keys[0] !== "ticket" ||
+    keys[1] !== "ttl_seconds" ||
+    typeof payload.ticket !== "string" ||
+    !/^[0-9a-f]{64}$/.test(payload.ticket) ||
+    !Number.isSafeInteger(payload.ttl_seconds) ||
+    Number(payload.ttl_seconds) < 1
+  ) {
     throw new Error("Session HTTP ticket response is invalid.");
   }
-  return ticket;
+  return payload.ticket;
 }
 
 async function profileTargetToken(url: string, sessionToken: string): Promise<string> {

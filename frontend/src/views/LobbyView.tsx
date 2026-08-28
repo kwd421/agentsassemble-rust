@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Hash } from "lucide-react";
 import {
   type LiveAgent,
   type LobbyEvent,
   type RoomEvent,
   fetchRoomMessageContext,
-  fetchMessagePins,
-  setMessagePinned,
+  fetchLobbyMessagePins,
+  setLobbyMessagePinned,
   type MessagePin,
+  type MessagePinsAuthority,
   type RoomSearchResult,
 } from "../api";
 import type { RoomDockItem } from "../lib/roomDockModel";
@@ -58,6 +59,7 @@ export default function LobbyView({
   appearance,
   onGuestSessionExpired,
   roomSessionToken = "",
+  messagePinsAuthority,
   viewerParticipantId = "",
   typingIndicators = [],
   bindLobbyStream,
@@ -93,6 +95,7 @@ export default function LobbyView({
   appearance?: RoomAppearance;
   onGuestSessionExpired?: () => void;
   roomSessionToken?: string;
+  messagePinsAuthority?: MessagePinsAuthority;
   viewerParticipantId?: string;
   bindLobbyStream?: (receive: (events: LobbyEvent[]) => void) => () => void;
   submitMessage?: (message: string) => Promise<LobbyEvent[]>;
@@ -149,6 +152,7 @@ export default function LobbyView({
   const [pinsLoading, setPinsLoading] = useState(false);
   const [pinsError, setPinsError] = useState("");
   const [pinBusyIds, setPinBusyIds] = useState<Set<string>>(() => new Set());
+  const activePinOperation = useRef<object | null>(null);
   const [pendingMessageTarget, setPendingMessageTarget] = useState("");
   const localMessageSearch = useRoomMessageSearch({
     roomId: activeRoom.meetingId,
@@ -186,23 +190,48 @@ export default function LobbyView({
     });
   }
 
+  useEffect(() => {
+    activePinOperation.current = null;
+    setPinnedItems([]);
+    setPinsLoading(false);
+    setPinsError("");
+    setPinBusyIds(new Set());
+    return () => {
+      activePinOperation.current = null;
+    };
+  }, [
+    activeRoom.meetingId,
+    messagePinsAuthority?.kind,
+    messagePinsAuthority?.kind === "remote"
+      ? messagePinsAuthority.sessionToken
+      : "",
+  ]);
+
   const reloadPins = useCallback(async () => {
+    if (!messagePinsAuthority || activePinOperation.current) return;
+    const operation = {};
+    activePinOperation.current = operation;
     setPinsLoading(true);
     setPinsError("");
     try {
-      setPinnedItems(
-        await fetchMessagePins({
-          roomId: activeRoom.meetingId,
-          channelId: "lobby",
-          sessionToken: roomSessionToken,
-        })
-      );
+      const pins = await fetchLobbyMessagePins({
+        roomId: activeRoom.meetingId,
+        authority: messagePinsAuthority,
+      });
+      if (activePinOperation.current === operation) setPinnedItems(pins);
     } catch (error) {
-      setPinsError(error instanceof Error ? error.message : "고정 메시지를 불러오지 못했습니다.");
+      if (activePinOperation.current === operation) {
+        setPinsError(
+          error instanceof Error ? error.message : "고정 메시지를 불러오지 못했습니다."
+        );
+      }
     } finally {
-      setPinsLoading(false);
+      if (activePinOperation.current === operation) {
+        activePinOperation.current = null;
+        setPinsLoading(false);
+      }
     }
-  }, [activeRoom.meetingId, roomSessionToken]);
+  }, [activeRoom.meetingId, messagePinsAuthority]);
 
   const mentionables = useMemo(
     () =>
@@ -380,27 +409,30 @@ export default function LobbyView({
   }
 
   async function setPinned(eventId: string, pinned: boolean) {
-    if (!eventId || pinBusyIds.has(eventId)) return;
-    setPinBusyIds((current) => new Set(current).add(eventId));
+    if (!eventId || !messagePinsAuthority || activePinOperation.current) return;
+    const operation = {};
+    activePinOperation.current = operation;
+    setPinBusyIds(new Set([eventId]));
     setPinsError("");
     try {
-      setPinnedItems(
-        await setMessagePinned({
-          roomId: activeRoom.meetingId,
-          channelId: "lobby",
-          eventId,
-          pinned,
-          sessionToken: roomSessionToken,
-        })
-      );
-    } catch (error) {
-      setPinsError(error instanceof Error ? error.message : "고정 상태를 바꾸지 못했습니다.");
-    } finally {
-      setPinBusyIds((current) => {
-        const next = new Set(current);
-        next.delete(eventId);
-        return next;
+      const pins = await setLobbyMessagePinned({
+        roomId: activeRoom.meetingId,
+        eventId,
+        pinned,
+        authority: messagePinsAuthority,
       });
+      if (activePinOperation.current === operation) setPinnedItems(pins);
+    } catch (error) {
+      if (activePinOperation.current === operation) {
+        setPinsError(
+          error instanceof Error ? error.message : "고정 상태를 바꾸지 못했습니다."
+        );
+      }
+    } finally {
+      if (activePinOperation.current === operation) {
+        activePinOperation.current = null;
+        setPinBusyIds(new Set());
+      }
     }
   }
 
@@ -414,9 +446,12 @@ export default function LobbyView({
     pinnedItems,
     pinsLoading,
     pinsError,
+    pinnedSummary: messagePinsAuthority
+      ? undefined
+      : "이 환경에서는 로비 메시지 핀을 사용할 수 없습니다.",
     onSelectPin: (pin: MessagePin) => void selectPin(pin),
-    onOpenPins: () => void reloadPins(),
-    onUnpin: canPostMessages
+    onOpenPins: messagePinsAuthority ? () => void reloadPins() : undefined,
+    onUnpin: canPostMessages && messagePinsAuthority
       ? (pin: MessagePin) => void setPinned(pin.event_id, false)
       : undefined,
   };
@@ -619,8 +654,9 @@ export default function LobbyView({
                 pinned={pinnedEventIds.has(event.record_id || event.id)}
                 canPin={
                   canPostMessages &&
+                  Boolean(messagePinsAuthority) &&
                   !event.message_deleted &&
-                  !pinBusyIds.has(event.record_id || event.id)
+                  pinBusyIds.size === 0
                 }
                 onTogglePin={() => {
                   const eventId = event.record_id || event.id;
