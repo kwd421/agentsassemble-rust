@@ -549,13 +549,16 @@ fn fingerprint(value: &[u8]) -> [u8; 32] {
 
 #[cfg(test)]
 mod tests {
-    use chrono::{TimeZone, Utc};
+    use chrono::{Datelike, NaiveDate, TimeZone, Utc};
 
     use super::{
         HumanInviteCredentialAuthority, HumanInviteCredentialDraft, HumanInviteCredentialError,
         VerifiedHumanInviteCredential,
     };
     use agentsassemble_domain::InviteScope;
+    use agentsassemble_protocol::{
+        HUMAN_INVITE_TIMESTAMP_MAX_YEAR, HUMAN_INVITE_TIMESTAMP_MIN_YEAR,
+    };
 
     fn authority() -> HumanInviteCredentialAuthority {
         HumanInviteCredentialAuthority {
@@ -580,6 +583,12 @@ mod tests {
                 .single()
                 .unwrap_or_else(|| panic!("fixed expires_at")),
         }
+    }
+
+    #[test]
+    fn timestamp_wire_years_match_the_pinned_chrono_domain() {
+        assert_eq!(NaiveDate::MIN.year(), HUMAN_INVITE_TIMESTAMP_MIN_YEAR);
+        assert_eq!(NaiveDate::MAX.year(), HUMAN_INVITE_TIMESTAMP_MAX_YEAR);
     }
 
     #[test]

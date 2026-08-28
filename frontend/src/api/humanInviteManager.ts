@@ -15,6 +15,8 @@ import {
   HUMAN_INVITE_SIGNATURE_BYTES,
   HUMAN_INVITE_SIGNED_TOKEN_MAX_BYTES,
   HUMAN_INVITE_SIGNED_TOKEN_PREFIX,
+  HUMAN_INVITE_TIMESTAMP_MAX_YEAR,
+  HUMAN_INVITE_TIMESTAMP_MIN_YEAR,
 } from "../types/generated/HUMAN_INVITE_WIRE";
 
 export type HumanInviteDispatchOutcome =
@@ -110,6 +112,12 @@ function parseServerExpiry(value: unknown) {
   const [yearText, monthText, dayText, hourText, minuteText, secondText, microsText] =
     match.slice(1);
   const year = Number(yearText);
+  if (
+    year < HUMAN_INVITE_TIMESTAMP_MIN_YEAR ||
+    year > HUMAN_INVITE_TIMESTAMP_MAX_YEAR
+  ) {
+    invalidResponse();
+  }
   const canonicalYear =
     year < 0
       ? `-${String(-year).padStart(4, "0")}`

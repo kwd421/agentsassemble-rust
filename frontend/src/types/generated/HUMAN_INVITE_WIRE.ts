@@ -4,3 +4,5 @@ export const HUMAN_INVITE_JOIN_CODE_PREFIX = "aaj1_" as const;
 export const HUMAN_INVITE_SIGNED_TOKEN_MAX_BYTES = 4096 as const;
 export const HUMAN_INVITE_SIGNATURE_BYTES = 32 as const;
 export const HUMAN_INVITE_JOIN_CODE_BYTES = 24 as const;
+export const HUMAN_INVITE_TIMESTAMP_MIN_YEAR = -262143 as const;
+export const HUMAN_INVITE_TIMESTAMP_MAX_YEAR = 262142 as const;

@@ -95,20 +95,31 @@ describe("managed human invite contract", () => {
   });
 
   it("accepts the complete canonical server year domain without extending expiry", async () => {
-    const custody = await parseManagedHumanInviteCreateResponse(
-      {
-        ...(await exactResponse()),
-        expires_at: "+10000-01-01T00:00:00.000001+00:00",
-      },
-      intent
-    );
+    for (const expiresAt of [
+      "-262143-01-01T00:00:00.000001+00:00",
+      "+262142-12-31T23:59:59.999999+00:00",
+    ]) {
+      const custody = await parseManagedHumanInviteCreateResponse(
+        { ...(await exactResponse()), expires_at: expiresAt },
+        intent
+      );
 
-    expect(custody.expiresAt.exact).toBe(
-      "+10000-01-01T00:00:00.000001+00:00"
-    );
-    expect(new Date(custody.expiresAt.epochMilliseconds).getUTCFullYear()).toBe(
-      10000
-    );
+      expect(custody.expiresAt.exact).toBe(expiresAt);
+    }
+  });
+
+  it("rejects years outside the server timestamp domain", async () => {
+    for (const expiresAt of [
+      "-262144-01-01T00:00:00+00:00",
+      "+262143-01-01T00:00:00+00:00",
+    ]) {
+      await expect(
+        parseManagedHumanInviteCreateResponse(
+          { ...(await exactResponse()), expires_at: expiresAt },
+          intent
+        )
+      ).rejects.toThrow("응답 계약");
+    }
   });
 
   it("rejects response substitution before exposing a join credential", async () => {

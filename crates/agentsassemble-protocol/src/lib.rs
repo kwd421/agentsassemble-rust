@@ -15,6 +15,8 @@ pub const HUMAN_INVITE_JOIN_CODE_PREFIX: &str = "aaj1_";
 pub const HUMAN_INVITE_SIGNED_TOKEN_MAX_BYTES: usize = 4 * 1024;
 pub const HUMAN_INVITE_SIGNATURE_BYTES: usize = 32;
 pub const HUMAN_INVITE_JOIN_CODE_BYTES: usize = 24;
+pub const HUMAN_INVITE_TIMESTAMP_MIN_YEAR: i32 = -262_143;
+pub const HUMAN_INVITE_TIMESTAMP_MAX_YEAR: i32 = 262_142;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, TS)]
 #[serde(rename_all = "UPPERCASE")]
