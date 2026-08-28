@@ -47,21 +47,6 @@ describe("parsePublicIngressStatus", () => {
         },
       }).mode
     ).toBe("manual");
-    expect(
-      parsePublicIngressStatus({
-        mode: "manual",
-        public_url: "https://foo.localhost",
-        stable_url: "",
-        tunnel: {
-          available: false,
-          running: false,
-          phase: "stopped",
-          public_url: "https://foo.localhost",
-          local_url: "",
-          stable_phase: "unconfigured",
-        },
-      }).public_url
-    ).toBe("https://foo.localhost");
     expect(parsePublicIngressStatus(managed)).toEqual(managed);
     expect(
       parsePublicIngressStatus({
@@ -133,6 +118,50 @@ describe("parsePublicIngressStatus", () => {
           public_url: "https://localhost.",
           local_url: "",
           stable_phase: "unconfigured",
+        },
+      },
+    ],
+    [
+      "localhost subdomain origin",
+      {
+        mode: "manual",
+        public_url: "https://foo.localhost",
+        stable_url: "",
+        tunnel: {
+          available: false,
+          running: false,
+          phase: "stopped",
+          public_url: "https://foo.localhost",
+          local_url: "",
+          stable_phase: "unconfigured",
+        },
+      },
+    ],
+    [
+      "IPv4-mapped loopback origin",
+      {
+        ...managed,
+        mode: "manual",
+        public_url: "https://[::ffff:7f00:1]",
+        tunnel: {
+          ...managed.tunnel,
+          available: false,
+          public_url: "https://[::ffff:7f00:1]",
+          local_url: "",
+        },
+      },
+    ],
+    [
+      "IPv4-mapped unspecified origin",
+      {
+        ...managed,
+        mode: "manual",
+        public_url: "https://[::ffff:0:0]",
+        tunnel: {
+          ...managed.tunnel,
+          available: false,
+          public_url: "https://[::ffff:0:0]",
+          local_url: "",
         },
       },
     ],

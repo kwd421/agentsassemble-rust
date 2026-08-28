@@ -101,14 +101,24 @@ export function parsePublicIngressOrigin(value: string): string {
   const comparisonHost = host.replace(/\.+$/, "");
   if (
     comparisonHost === "localhost" ||
+    comparisonHost.endsWith(".localhost") ||
     host === "0.0.0.0" ||
     host === "[::]" ||
     host === "[::1]" ||
-    /^127(?:\.|$)/.test(host)
+    /^127(?:\.|$)/.test(host) ||
+    isMappedLocalIpv6Host(host)
   ) {
     invalid();
   }
   return value;
+}
+
+function isMappedLocalIpv6Host(host: string): boolean {
+  const match = /^\[::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})\]$/.exec(host);
+  if (!match) return false;
+  const high = Number.parseInt(match[1], 16);
+  const low = Number.parseInt(match[2], 16);
+  return (high === 0 && low === 0) || (high >> 8) === 127;
 }
 
 function optionalPublicOrigin(value: string): string {

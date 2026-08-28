@@ -2,6 +2,10 @@ use std::sync::Arc;
 
 use agentsassemble_domain::InviteScope;
 use agentsassemble_persistence::PersistentHostIdentity;
+use agentsassemble_protocol::{
+    HUMAN_INVITE_JOIN_CODE_BYTES, HUMAN_INVITE_JOIN_CODE_PREFIX, HUMAN_INVITE_SIGNATURE_BYTES,
+    HUMAN_INVITE_SIGNED_TOKEN_MAX_BYTES, HUMAN_INVITE_SIGNED_TOKEN_PREFIX,
+};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, SecondsFormat, Utc};
 use hmac::{Hmac, Mac};
@@ -14,15 +18,11 @@ use url::{Host, Url};
 
 use crate::ingress_trust::is_loopback_http_host;
 
-const SIGNED_TOKEN_PREFIX: &str = "aai1";
-const JOIN_CODE_PREFIX: &str = "aaj1_";
 const CLAIM_SCHEMA: &str = "agentsassemble.lan_invite.v1";
 const CLAIM_MODE: &str = "lan_invite_token";
 const CLAIM_CLIENT_KIND: &str = "native_remote_room_client";
 const HUMAN_PROVIDER_KIND: &str = "manual";
 const SIGNED_NONCE_BYTES: usize = 18;
-const JOIN_CODE_BYTES: usize = 24;
-const MAX_SIGNED_TOKEN_BYTES: usize = 4 * 1024;
 const MAX_PUBLIC_ROOM_URL_CHARS: usize = 200;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
@@ -106,7 +106,7 @@ impl HumanInviteCredentialAuthority {
         draft: &HumanInviteCredentialDraft,
     ) -> Result<IssuedHumanInviteCredentials, HumanInviteCredentialError> {
         let mut signed_nonce = [0_u8; SIGNED_NONCE_BYTES];
-        let mut join_code = [0_u8; JOIN_CODE_BYTES];
+        let mut join_code = [0_u8; HUMAN_INVITE_JOIN_CODE_BYTES];
         let random = SystemRandom::new();
         random
             .fill(&mut signed_nonce)
@@ -134,7 +134,7 @@ impl HumanInviteCredentialAuthority {
         if credential.is_empty() {
             return Err(HumanInviteCredentialError::Missing);
         }
-        if credential.starts_with(JOIN_CODE_PREFIX) {
+        if credential.starts_with(HUMAN_INVITE_JOIN_CODE_PREFIX) {
             return verify_join_code(credential);
         }
         self.authenticate_signed_token(credential)
@@ -144,16 +144,16 @@ impl HumanInviteCredentialAuthority {
         &self,
         draft: &HumanInviteCredentialDraft,
         signed_nonce: [u8; SIGNED_NONCE_BYTES],
-        join_material: [u8; JOIN_CODE_BYTES],
+        join_material: [u8; HUMAN_INVITE_JOIN_CODE_BYTES],
     ) -> Result<IssuedHumanInviteCredentials, HumanInviteCredentialError> {
         let claims = InviteClaims::from_draft(draft, signed_nonce)?;
         let payload = serde_json::to_vec(&claims).map_err(|_| HumanInviteCredentialError::Json)?;
         let encoded_payload = URL_SAFE_NO_PAD.encode(payload);
-        let signing_input = format!("{SIGNED_TOKEN_PREFIX}.{encoded_payload}");
+        let signing_input = format!("{HUMAN_INVITE_SIGNED_TOKEN_PREFIX}.{encoded_payload}");
         let signature = sign(&self.key, signing_input.as_bytes());
         let invite_token = format!("{signing_input}.{}", URL_SAFE_NO_PAD.encode(signature));
         let join_code = format!(
-            "{JOIN_CODE_PREFIX}{}",
+            "{HUMAN_INVITE_JOIN_CODE_PREFIX}{}",
             URL_SAFE_NO_PAD.encode(join_material)
         );
         Ok(IssuedHumanInviteCredentials {
@@ -168,7 +168,7 @@ impl HumanInviteCredentialAuthority {
         &self,
         credential: &str,
     ) -> Result<VerifiedHumanInviteCredential, HumanInviteCredentialError> {
-        if credential.len() > MAX_SIGNED_TOKEN_BYTES || !credential.is_ascii() {
+        if credential.len() > HUMAN_INVITE_SIGNED_TOKEN_MAX_BYTES || !credential.is_ascii() {
             return Err(HumanInviteCredentialError::Malformed);
         }
         let mut segments = credential.split('.');
@@ -176,7 +176,7 @@ impl HumanInviteCredentialAuthority {
         let encoded_payload = segments.next().unwrap_or_default();
         let encoded_signature = segments.next().unwrap_or_default();
         if segments.next().is_some()
-            || prefix != SIGNED_TOKEN_PREFIX
+            || prefix != HUMAN_INVITE_SIGNED_TOKEN_PREFIX
             || encoded_payload.is_empty()
             || encoded_signature.is_empty()
             || !is_base64url(encoded_payload)
@@ -185,7 +185,7 @@ impl HumanInviteCredentialAuthority {
             return Err(HumanInviteCredentialError::Malformed);
         }
         let signature = decode_canonical(encoded_signature)?;
-        let signature: [u8; 32] = signature
+        let signature: [u8; HUMAN_INVITE_SIGNATURE_BYTES] = signature
             .try_into()
             .map_err(|_| HumanInviteCredentialError::Malformed)?;
         let signing_input = format!("{prefix}.{encoded_payload}");
@@ -403,12 +403,14 @@ fn admission_is_current(claims: &AdmissionClaims) -> bool {
 fn verify_join_code(
     credential: &str,
 ) -> Result<VerifiedHumanInviteCredential, HumanInviteCredentialError> {
-    if credential.len() != JOIN_CODE_PREFIX.len() + 32 {
+    if credential.len()
+        != HUMAN_INVITE_JOIN_CODE_PREFIX.len() + HUMAN_INVITE_JOIN_CODE_BYTES * 4 / 3
+    {
         return Err(HumanInviteCredentialError::Malformed);
     }
-    let encoded = &credential[JOIN_CODE_PREFIX.len()..];
+    let encoded = &credential[HUMAN_INVITE_JOIN_CODE_PREFIX.len()..];
     let material = decode_canonical(encoded)?;
-    if material.len() != JOIN_CODE_BYTES {
+    if material.len() != HUMAN_INVITE_JOIN_CODE_BYTES {
         return Err(HumanInviteCredentialError::Malformed);
     }
     Ok(VerifiedHumanInviteCredential::JoinCode {

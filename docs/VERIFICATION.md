@@ -3030,10 +3030,12 @@ human intent, obtains the exact native create or revoke grant, marks the instant
 `fetch`, and parses the complete response. Create acceptance requires exact fixed and
 echoed fields, a lowercase 16-hex invite ID equal to the SHA-256 prefix of the exact
 signed token, an independent canonical join code, one canonical non-loopback HTTPS
-`/join` URL whose only query is that join code, the existing exact loopback room origin,
-and a finite canonical server timestamp. It retains only immutable authority,
-invite ID, validated URL/origin, and exact-plus-derived expiry; raw signed and join-code
-fields get no second storage owner. Revoke accepts only exact success or exact
+`/join` URL
+accepted by the existing shared ingress-origin owner whose only query is that join code,
+the existing exact loopback room origin, and a finite canonical server timestamp. It
+retains only immutable authority, invite ID, validated URL/origin, and
+exact-plus-derived expiry; raw signed and join-code fields get no second storage owner.
+Revoke accepts only exact success or exact
 `invite_not_found` as terminal. A grant or operation guard failure before `fetch` is
 `proven_not_dispatched`; transport, HTTP, JSON, or binding failure after dispatch is
 `outcome_unknown`.
@@ -3055,3 +3057,48 @@ frontend files with 489 tests, 20 desktop tests, domain 23, persistence 172, pro
 The production main chunk remained 771.16 kB (232.39 kB gzip). No Computer Use
 resource, provider, Deep Scan, or other automated security scanner ran. Manual review
 is withheld until this independently buildable candidate is committed and pushed.
+
+Daybreaker's first review of `e006e0d..80b4f50` and cumulative
+`5a032db..80b4f50` found three Medium contract mismatches. The C1b parser had added a
+second `.localhost` suffix rejection that the shared frontend and Rust ingress owners
+did not impose, accepted only four-digit years although the server can emit Chrono's
+signed expanded years, and treated a shape regex as proof of the signed credential
+although the credential owner also requires a 4-KiB maximum, canonical Base64URL, and
+an exact 32-byte signature. Web review of the same ranges also returned
+`Critical 0 / High 0 / Medium 3`: it independently found the incomplete ingress owner,
+found that caller-owned manager authority remained a mutable alias across grant and
+dispatch, and found stale prose assigning controller activation to C1b instead of C2.
+All findings were reproduced. Final approval remains withheld until the correction is
+pushed and re-reviewed.
+
+The correction removes the second C1b host policy and completes non-loopback validation
+at the existing Rust and frontend ingress-origin owners, including `.localhost`
+subdomains and IPv4-mapped IPv6 loopback or unspecified addresses. One response parser
+now recognizes the complete canonical server year form, validates the calendar by round
+trip, and still rounds positive sub-millisecond expiry down. The shared desktop parser
+now returns one frozen value snapshot, so native grant issuance, dispatch, response
+validation, and retained custody cannot observe different caller-owned authority tuples.
+The active spec now assigns only the stateless exchange to C1b and controller/UI custody
+to C2.
+
+The rejected host forms were not harmless public aliases: a shared URL under
+`.localhost` or a mapped local address resolves at the recipient's machine and can send
+the exact join credential in its query to a recipient-local HTTPS endpoint instead of
+the host. The accepted trade-off is to reject those previously representable but
+non-public manual configurations before ingress readiness and invite insertion; ordinary
+public DNS and nonlocal numeric origins preserve their existing contract. The Rust owner
+lives with the existing host/IP normalization in `ingress_trust`, while
+`CanonicalPublicOrigin` and the frontend status/parser consume it rather than owning
+another invitation-specific rule.
+
+Current invite prefix, byte-length, and maximum-size wire values move from server-local
+constants to the protocol-generated frontend binding, and one frontend Base64URL
+mechanism replaces three production copies while product owners retain their own sizes
+and error semantics. This adds no network request, persistent state, cache, timer, task,
+compatibility path, or fallback. The consolidated mechanism also reduced the production
+main chunk from 771.16 kB (232.39 kB gzip) to 770.74 kB (232.22 kB gzip). Final serial
+`make verify` passed every mandatory architecture/source-growth/policy/format/generated
+binding/original-CSS/build/test/Clippy/diff gate: all 84 frontend files with 495 tests,
+20 desktop tests, domain 23, persistence 172, protocol 5, provider 120, server 83, and
+every integration/TCP test passed. No Computer Use resource, provider, Deep Scan, or
+other automated security scanner ran. Both final manual approvals remain pending.

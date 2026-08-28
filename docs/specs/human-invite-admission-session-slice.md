@@ -480,15 +480,18 @@ manual-ingress authority. A server-internal issuance sequence in those grants or
 control intent without becoming wire state; the existing ingress lifecycle mutex lets
 only a newer Start or Stop mutate the managed process. Invite creation still uses the
 old moderator helper and therefore does not invoke the implemented Rust one-use
-room-bound manager-ticket boundary; the frontend remains failed closed until C1b.
+room-bound manager-ticket boundary. C1b supplies the stateless exact bridge/HTTP
+exchange, while the copied controller remains failed closed until C2 captures the
+verified directory authority, retains every accepted custody, removes the old copy
+path, and completes UI/package activation.
 Backend manager invite create already captures one ready
 ingress snapshot; revoke uses only its exact room-bound manager grant and remains
 available when ingress is not ready. The native desktop bridge obtains and returns
-the exact operation grant. C1b frontend activation must invoke that bridge and present
-its ticket to the matching HTTP route, which consumes the ticket before reading the
-body. It copies only the create response's public join URL; a local preview is not
-presented as admission parity. The token is removed from browser history after it is
-captured, and stored session state cannot override a failed durable verification.
+the exact operation grant. The C1b exchange invokes that bridge and presents its ticket
+to the matching HTTP route, which consumes the ticket before reading the body. C2 will
+copy only the create response's public join URL; a local preview is not presented as
+admission parity. The token is removed from browser history after it is captured, and
+stored session state cannot override a failed durable verification.
 
 Browser admission retry custody has one bounded session-storage owner. A request is
 `pending` only while its exact invite credential fingerprint, current browser
@@ -564,9 +567,11 @@ boundaries:
    parser. It receives the captured authority tuple as operation and custody context,
    but binds the response only to fields that the existing HTTP contract actually
    echoes from the canonical outbound request. The join URL is intrinsically a
-   canonical non-loopback HTTPS URL with exact `/join`, no userinfo or fragment, and
-   the sole `token` query value equal to the exact returned join-code credential. Its
-   lowercase 16-hex `invite_id` must equal the first 16 hex characters of SHA-256
+   canonical non-loopback HTTPS URL accepted by the existing shared ingress-origin
+   owner, with
+   exact `/join`, no userinfo or fragment, and the sole `token` query value equal to
+   the exact returned join-code credential. Its lowercase 16-hex `invite_id` must
+   equal the first 16 hex characters of SHA-256
    over the exact returned signed invite token. Acceptance does not compare the URL
    with live ingress status: it retains the validated join URL and its response
    origin, finite exact server expiry, room/invite tuple, and revoke custody without

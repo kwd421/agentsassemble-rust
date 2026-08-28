@@ -206,6 +206,25 @@ pub(crate) fn authority_host_ip(host: &str) -> Option<IpAddr> {
     normalized_host(host).parse().ok()
 }
 
+pub(crate) fn is_non_public_origin_host(host: &str) -> bool {
+    let domain = normalized_host(host)
+        .trim_end_matches('.')
+        .to_ascii_lowercase();
+    if domain == "localhost" || domain.ends_with(".localhost") {
+        return true;
+    }
+    authority_host_ip(host).is_some_and(|address| match address {
+        IpAddr::V4(address) => address.is_loopback() || address.is_unspecified(),
+        IpAddr::V6(address) => {
+            address.is_loopback()
+                || address.is_unspecified()
+                || address
+                    .to_ipv4_mapped()
+                    .is_some_and(|mapped| mapped.is_loopback() || mapped.is_unspecified())
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
@@ -318,6 +337,9 @@ mod tests {
             "http://public.example.test",
             "https://127.0.0.2",
             "https://localhost.",
+            "https://foo.localhost",
+            "https://[::ffff:127.0.0.1]",
+            "https://[::ffff:0.0.0.0]",
             "https://public.example.test/path",
         ] {
             assert!(matches!(

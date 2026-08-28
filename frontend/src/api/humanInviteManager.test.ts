@@ -94,6 +94,23 @@ describe("managed human invite contract", () => {
     expect(Object.isFrozen(custody.expiresAt)).toBe(true);
   });
 
+  it("accepts the complete canonical server year domain without extending expiry", async () => {
+    const custody = await parseManagedHumanInviteCreateResponse(
+      {
+        ...(await exactResponse()),
+        expires_at: "+10000-01-01T00:00:00.000001+00:00",
+      },
+      intent
+    );
+
+    expect(custody.expiresAt.exact).toBe(
+      "+10000-01-01T00:00:00.000001+00:00"
+    );
+    expect(new Date(custody.expiresAt.epochMilliseconds).getUTCFullYear()).toBe(
+      10000
+    );
+  });
+
   it("rejects response substitution before exposing a join credential", async () => {
     const canonical = await exactResponse();
     const malformed = [
@@ -102,7 +119,14 @@ describe("managed human invite contract", () => {
       { ...canonical, display_name: "Substituted" },
       { ...canonical, max_uses: 5 },
       { ...canonical, ignored: true },
+      {
+        ...canonical,
+        join_code: `aaj1_${"B".repeat(31)}`,
+        join_url: `https://public.example.test/join?token=aaj1_${"B".repeat(31)}`,
+      },
       { ...canonical, expires_at: "2099-01-01T00:00:00Z" },
+      { ...canonical, expires_at: "2099-01-01T00:00:00.000000+00:00" },
+      { ...canonical, expires_at: "+09999-01-01T00:00:00+00:00" },
       { ...canonical, expires_at: "2099-02-30T00:00:00+00:00" },
       {
         ...canonical,
@@ -111,6 +135,10 @@ describe("managed human invite contract", () => {
       {
         ...canonical,
         join_url: `https://foo.localhost/join?token=${joinCode}`,
+      },
+      {
+        ...canonical,
+        join_url: `https://[::ffff:7f00:1]/join?token=${joinCode}`,
       },
       {
         ...canonical,
@@ -125,6 +153,29 @@ describe("managed human invite contract", () => {
     for (const candidate of malformed) {
       await expect(
         parseManagedHumanInviteCreateResponse(candidate, intent)
+      ).rejects.toThrow("응답 계약");
+    }
+  });
+
+  it("rejects signed credentials outside the canonical bounded wire contract", async () => {
+    const noncanonicalPayload = `aai1.AB.${"A".repeat(43)}`;
+    const noncanonicalSignature = `aai1.Y2xhaW1z.${"A".repeat(42)}B`;
+    const oversized = `aai1.${"A".repeat(4096)}.${"A".repeat(43)}`;
+
+    for (const candidate of [
+      noncanonicalPayload,
+      noncanonicalSignature,
+      oversized,
+    ]) {
+      await expect(
+        parseManagedHumanInviteCreateResponse(
+          {
+            ...(await exactResponse()),
+            invite_token: candidate,
+            invite_id: (await sha256Hex(utf8(candidate))).slice(0, 16),
+          },
+          intent
+        )
       ).rejects.toThrow("응답 계약");
     }
   });
@@ -157,6 +208,33 @@ describe("managed human invite contract", () => {
       }),
       expect.any(Function)
     );
+  });
+
+  it("captures manager authority before the grant and dispatch boundary", async () => {
+    const callerAuthority = { ...authority };
+    const payload = await exactResponse();
+    bridgeMocks.create.mockImplementation(
+      async (capturedAuthority, _init, beforeDispatch?: () => void) => {
+        expect(capturedAuthority).toEqual(authority);
+        expect(capturedAuthority).not.toBe(callerAuthority);
+        expect(Object.isFrozen(capturedAuthority)).toBe(true);
+        beforeDispatch?.();
+        return response(200, payload);
+      }
+    );
+
+    const custody = await createManagedHumanInvite(
+      { ...intent, authority: callerAuthority },
+      () => {
+        callerAuthority.server_id = "40000000-0000-4000-8000-000000000004";
+        callerAuthority.authority_lineage_id =
+          "50000000-0000-4000-8000-000000000005";
+        callerAuthority.room_uid = "60000000-0000-4000-8000-000000000006";
+      }
+    );
+
+    expect(custody.authority).toEqual(authority);
+    expect(custody.authority).not.toBe(callerAuthority);
   });
 
   it("distinguishes native or retired pre-dispatch failure from uncertain dispatch", async () => {

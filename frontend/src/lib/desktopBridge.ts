@@ -463,7 +463,12 @@ export function parseDesktopManagerRoomAuthority(
   } catch {
     throw new Error("방 관리자 권위가 올바르지 않습니다.");
   }
-  return authority as unknown as DesktopManagerRoomAuthority;
+  return Object.freeze({
+    server_id: authority.server_id,
+    authority_lineage_id: authority.authority_lineage_id,
+    room_id: authority.room_id,
+    room_uid: authority.room_uid,
+  }) as DesktopManagerRoomAuthority;
 }
 
 export function requestDesktopSettingsDirectoryReadTicket(): Promise<DesktopOperatorHttpTicket> {

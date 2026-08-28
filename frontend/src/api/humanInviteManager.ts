@@ -1,4 +1,5 @@
 import type { RoomAppearance } from "../lib/roomAppearance";
+import { decodeCanonicalBase64Url } from "../lib/base64Url";
 import {
   fetchDesktopHumanInviteCreate,
   fetchDesktopHumanInviteRevoke,
@@ -8,6 +9,13 @@ import {
 } from "../lib/desktopBridge";
 import { sha256Hex, utf8 } from "../lib/lengthDelimitedCrypto";
 import { parsePublicIngressOrigin } from "../lib/publicIngressStatus";
+import {
+  HUMAN_INVITE_JOIN_CODE_BYTES,
+  HUMAN_INVITE_JOIN_CODE_PREFIX,
+  HUMAN_INVITE_SIGNATURE_BYTES,
+  HUMAN_INVITE_SIGNED_TOKEN_MAX_BYTES,
+  HUMAN_INVITE_SIGNED_TOKEN_PREFIX,
+} from "../types/generated/HUMAN_INVITE_WIRE";
 
 export type HumanInviteDispatchOutcome =
   | "proven_not_dispatched"
@@ -67,7 +75,7 @@ const CREATE_RESPONSE_KEYS = [
 ] as const;
 
 const CANONICAL_TIMESTAMP =
-  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{6}))?\+00:00$/;
+  /^(\d{4}|[+-]\d{4,6})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{6}))?\+00:00$/;
 
 function invalidResponse(): never {
   throw new Error("사람 초대 응답 계약이 올바르지 않습니다.");
@@ -98,18 +106,42 @@ function exactString(value: unknown): string {
 function parseServerExpiry(value: unknown) {
   const exact = exactString(value);
   const match = CANONICAL_TIMESTAMP.exec(exact);
-  const epochMilliseconds = Date.parse(exact);
-  if (!match || !Number.isFinite(epochMilliseconds)) invalidResponse();
-  const parsed = new Date(epochMilliseconds);
-  const components = match.slice(1, 7).map(Number);
+  if (!match) invalidResponse();
+  const [yearText, monthText, dayText, hourText, minuteText, secondText, microsText] =
+    match.slice(1);
+  const year = Number(yearText);
+  const canonicalYear =
+    year < 0
+      ? `-${String(-year).padStart(4, "0")}`
+      : year > 9999
+        ? `+${year}`
+        : String(year).padStart(4, "0");
+  const micros = Number(microsText || 0);
+  if (yearText !== canonicalYear || (microsText !== undefined && micros === 0)) {
+    invalidResponse();
+  }
+  const components = [
+    year,
+    Number(monthText),
+    Number(dayText),
+    Number(hourText),
+    Number(minuteText),
+    Number(secondText),
+    Math.floor(micros / 1000),
+  ];
+  const parsed = new Date(0);
+  parsed.setUTCFullYear(components[0], components[1] - 1, components[2]);
+  parsed.setUTCHours(components[3], components[4], components[5], components[6]);
+  const epochMilliseconds = parsed.getTime();
   if (
+    !Number.isFinite(epochMilliseconds) ||
     parsed.getUTCFullYear() !== components[0] ||
     parsed.getUTCMonth() + 1 !== components[1] ||
     parsed.getUTCDate() !== components[2] ||
     parsed.getUTCHours() !== components[3] ||
     parsed.getUTCMinutes() !== components[4] ||
     parsed.getUTCSeconds() !== components[5] ||
-    parsed.getUTCMilliseconds() !== Math.floor(Number(match[7] || 0) / 1000)
+    parsed.getUTCMilliseconds() !== components[6]
   ) {
     invalidResponse();
   }
@@ -125,19 +157,37 @@ function parseJoinUrl(value: unknown, joinCode: string) {
   } catch {
     invalidResponse();
   }
-  const host = url.hostname.toLowerCase().replace(/\.+$/, "");
   if (
     exact !== url.toString() ||
     url.pathname !== "/join" ||
     url.username ||
     url.password ||
     url.hash ||
-    url.search !== `?token=${joinCode}` ||
-    host.endsWith(".localhost")
+    url.search !== `?token=${joinCode}`
   ) {
     invalidResponse();
   }
   return { exact, origin: url.origin };
+}
+
+function isCanonicalSignedInviteToken(value: string): boolean {
+  if (value.length > HUMAN_INVITE_SIGNED_TOKEN_MAX_BYTES) return false;
+  const segments = value.split(".");
+  if (segments.length !== 3 || segments[0] !== HUMAN_INVITE_SIGNED_TOKEN_PREFIX) {
+    return false;
+  }
+  const payload = decodeCanonicalBase64Url(segments[1]);
+  const signature = decodeCanonicalBase64Url(segments[2]);
+  return payload !== null && signature?.length === HUMAN_INVITE_SIGNATURE_BYTES;
+}
+
+function isCanonicalJoinCode(value: string): boolean {
+  if (!value.startsWith(HUMAN_INVITE_JOIN_CODE_PREFIX)) return false;
+  const encoded = value.slice(HUMAN_INVITE_JOIN_CODE_PREFIX.length);
+  if (encoded.length !== (HUMAN_INVITE_JOIN_CODE_BYTES * 4) / 3) return false;
+  return (
+    decodeCanonicalBase64Url(encoded)?.length === HUMAN_INVITE_JOIN_CODE_BYTES
+  );
 }
 
 function validateCreateIntent(intent: ManagedHumanInviteCreateIntent) {
@@ -179,8 +229,8 @@ export async function parseManagedHumanInviteCreateResponse(
   const joinCode = exactString(response.join_code);
   const inviteId = exactString(response.invite_id);
   if (
-    !/^aai1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/.test(inviteToken) ||
-    !/^aaj1_[A-Za-z0-9_-]{32}$/.test(joinCode) ||
+    !isCanonicalSignedInviteToken(inviteToken) ||
+    !isCanonicalJoinCode(joinCode) ||
     !/^[0-9a-f]{16}$/.test(inviteId) ||
     inviteId !== (await sha256Hex(utf8(inviteToken))).slice(0, 16) ||
     response.meeting_id !== request.authority.room_id ||
@@ -203,7 +253,7 @@ export async function parseManagedHumanInviteCreateResponse(
   }
   const join = parseJoinUrl(response.join_url, joinCode);
   return Object.freeze({
-    authority: Object.freeze({ ...request.authority }),
+    authority: request.authority,
     inviteId,
     joinUrl: join.exact,
     responseOrigin: join.origin,

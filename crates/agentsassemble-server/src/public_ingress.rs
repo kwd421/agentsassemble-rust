@@ -18,7 +18,7 @@ use url::Url;
 
 use crate::{
     ingress_trust::{
-        PeerAddr, TrustedIdentityOrigin, authority_host_ip, normalized_host, single_header,
+        PeerAddr, TrustedIdentityOrigin, is_non_public_origin_host, normalized_host, single_header,
         single_optional_header,
     },
     product_surface::RouteExposure,
@@ -429,10 +429,7 @@ impl CanonicalPublicOrigin {
             .map(normalized_host)
             .filter(|host| !host.is_empty())
             .ok_or(ManualPublicIngressError::InvalidOrigin)?;
-        let numeric_host = authority_host_ip(host);
-        if host.trim_end_matches('.').eq_ignore_ascii_case("localhost")
-            || numeric_host.is_some_and(|address| address.is_loopback() || address.is_unspecified())
-        {
+        if is_non_public_origin_host(host) {
             return Err(ManualPublicIngressError::InvalidOrigin);
         }
         Ok(Self {
