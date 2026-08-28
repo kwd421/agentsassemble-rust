@@ -349,6 +349,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     activeRemoteRoomId: guestLocked ? activeRoom.id : "", remoteSessionToken: admittedSessionToken,
     canonicalAppearanceFor: roomSettings.appearanceFor,
     settingsStateFor: roomSettings.settingsStateFor,
+    localAuthorityCurrent: roomDirectorySyncIssue === null,
     resolveLocalManager: resolveManagerRoomAuthority,
     bindUploadedReference: (room, slot, url) => roomSettings.updateAppearance(room,
       slot === "banner" ? { bannerImage: url, bannerPreset: "custom" } : { iconImage: url }),

@@ -54,7 +54,12 @@ function renderAssets(
   rooms = [room]
 ) {
   return renderHook(
-    ({ currentAppearance, currentStatus, currentRooms }) =>
+    ({
+      currentAppearance,
+      currentStatus,
+      currentRooms,
+      currentLocalAuthority,
+    }) =>
       useRoomAppearanceAssets({
         rooms: currentRooms,
         activeRoomId: room.id,
@@ -62,6 +67,7 @@ function renderAssets(
         remoteSessionToken: "",
         canonicalAppearanceFor: () => currentAppearance,
         settingsStateFor: () => ({ status: currentStatus }),
+        localAuthorityCurrent: currentLocalAuthority,
         resolveLocalManager: () => manager,
         bindUploadedReference,
       }),
@@ -70,6 +76,7 @@ function renderAssets(
         currentAppearance: appearance,
         currentStatus: status,
         currentRooms: rooms,
+        currentLocalAuthority: true,
       },
     }
   );
@@ -118,6 +125,7 @@ describe("room appearance object URL lifecycle", () => {
       currentAppearance: appearance,
       currentStatus: "ready",
       currentRooms: [room],
+      currentLocalAuthority: true,
     });
     await waitFor(() =>
       expect(hook.result.current.appearanceFor(room).bannerImage).toBe(
@@ -180,6 +188,7 @@ describe("room appearance object URL lifecycle", () => {
         remoteSessionToken: "",
         canonicalAppearanceFor: () => inactiveAppearance,
         settingsStateFor: () => ({ status: "ready" }),
+        localAuthorityCurrent: true,
         resolveLocalManager: () => ({ ...manager, room_id: "inactive", room_uid: inactive.roomUid! }),
         bindUploadedReference,
       })
@@ -218,6 +227,7 @@ describe("room appearance object URL lifecycle", () => {
       currentAppearance: { ...first, bannerImage: icon },
       currentStatus: "ready",
       currentRooms: [room],
+      currentLocalAuthority: true,
     });
     expect(firstSignal.aborted).toBe(true);
     await act(async () => pending.resolve(new Blob(["old"], { type: "image/png" })));
@@ -232,6 +242,7 @@ describe("room appearance object URL lifecycle", () => {
       currentAppearance: { ...first, bannerImage: undefined },
       currentStatus: "ready",
       currentRooms: [room],
+      currentLocalAuthority: true,
     });
     await waitFor(() =>
       expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:appearance-1")
@@ -264,6 +275,36 @@ describe("room appearance object URL lifecycle", () => {
       )
     );
     expect(api.fetchBlob).toHaveBeenCalledTimes(2);
+  });
+
+  it("revokes installed URLs as soon as local directory authority is unconfirmed", async () => {
+    api.fetchBlob.mockResolvedValue(new Blob(["png"], { type: "image/png" }));
+    const appearance: RoomAppearance = {
+      bannerPreset: "custom",
+      bannerImage: banner,
+      notifications: "mentions",
+      inviteScope: "room",
+    };
+    const hook = renderAssets(appearance);
+
+    await waitFor(() =>
+      expect(hook.result.current.appearanceFor(room).bannerImage).toBe(
+        "blob:appearance-1"
+      )
+    );
+    hook.rerender({
+      currentAppearance: appearance,
+      currentStatus: "ready",
+      currentRooms: [room],
+      currentLocalAuthority: false,
+    });
+
+    await waitFor(() =>
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:appearance-1")
+    );
+    expect(hook.result.current.appearanceFor(room).bannerImage).toBeUndefined();
+    expect(hook.result.current.errorFor(room)).toContain("관리자 권위");
+    expect(api.fetchBlob).toHaveBeenCalledOnce();
   });
 
   it("resolves the current manager before every upload", async () => {

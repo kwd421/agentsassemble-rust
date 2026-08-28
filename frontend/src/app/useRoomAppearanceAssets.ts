@@ -21,6 +21,7 @@ type UseRoomAppearanceAssetsOptions = {
   remoteSessionToken: string;
   canonicalAppearanceFor: (room: RoomDockItem) => RoomAppearance;
   settingsStateFor: (room: RoomDockItem) => { status: SettingsStatus };
+  localAuthorityCurrent: boolean;
   resolveLocalManager: (roomDockId: string) => DesktopManagerRoomAuthority;
   bindUploadedReference: (
     room: RoomDockItem,
@@ -86,6 +87,7 @@ export function useRoomAppearanceAssets({
   remoteSessionToken,
   canonicalAppearanceFor,
   settingsStateFor,
+  localAuthorityCurrent,
   resolveLocalManager,
   bindUploadedReference,
 }: UseRoomAppearanceAssetsOptions) {
@@ -132,6 +134,9 @@ export function useRoomAppearanceAssets({
           authority = { kind: "remote", sessionToken: remoteSessionToken };
           authorityKey = `remote:${roomKey}:${remoteCredentialRevision}`;
         } else if (room.roomOrigin !== "remote_server") {
+          if (!localAuthorityCurrent) {
+            throw new Error("현재 확인된 로컬 방 관리자 권위가 없습니다.");
+          }
           const manager = resolveLocalManager(room.id);
           authority = { kind: "local", manager };
           authorityKey = localAuthorityKey(manager);
@@ -239,6 +244,7 @@ export function useRoomAppearanceAssets({
     activeRemoteRoomId,
     activeRoomId,
     canonicalAppearanceFor,
+    localAuthorityCurrent,
     remoteCredentialRevision,
     remoteSessionToken,
     resolveLocalManager,
