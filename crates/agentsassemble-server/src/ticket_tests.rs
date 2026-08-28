@@ -270,6 +270,33 @@ async fn human_session_grants_are_exact_purpose_and_one_use() {
         Err(TicketError::Invalid)
     ));
 
+    let wrong_asset = store
+        .issue_human_session_bound_appearance_read(
+            fixture.authorize(0).await,
+            "ra_00000000000000000000000000000000".to_owned(),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("issue session appearance grant: {error}"));
+    assert!(matches!(
+        store
+            .consume_appearance_read(&wrong_asset.ticket, "ra_11111111111111111111111111111111",)
+            .await,
+        Err(TicketError::Invalid)
+    ));
+    let appearance = store
+        .issue_human_session_bound_appearance_read(
+            fixture.authorize(0).await,
+            "ra_00000000000000000000000000000000".to_owned(),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("issue exact session appearance grant: {error}"));
+    assert!(matches!(
+        store
+            .consume_appearance_read(&appearance.ticket, "ra_00000000000000000000000000000000",)
+            .await,
+        Ok(crate::ticket::ConsumedAppearanceReadTicket::HumanSession(_))
+    ));
+
     let socket = store
         .issue_human_session_socket(fixture.authorize(0).await)
         .await

@@ -331,6 +331,12 @@ async fn read_attachment(
                     )
                     .await?
             }
+            ConsumedAppearanceReadTicket::HumanSession(authorization) => {
+                state
+                    .store
+                    .bound_human_session_room_appearance_asset(&authorization, &attachment_id)
+                    .await?
+            }
         };
         return attachment_response(
             &attachment.metadata.filename,

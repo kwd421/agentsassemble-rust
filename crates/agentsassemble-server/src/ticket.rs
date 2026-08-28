@@ -117,6 +117,7 @@ pub(crate) enum ConsumedRoomPreferenceTicket {
 pub(crate) enum ConsumedAppearanceReadTicket {
     Pending(ConsumedRoomHttpTicket),
     Bound(ConsumedRoomHttpTicket),
+    HumanSession(HumanSessionAuthorization),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -581,25 +582,41 @@ impl TicketStore {
         asset_id: &str,
     ) -> Result<ConsumedAppearanceReadTicket, TicketError> {
         let grant = self.consume_grant(ticket).await?;
-        let TicketAuthority::RoomHttp(room) = grant.authority else {
-            return Err(TicketError::Invalid);
-        };
-        match room.purpose.clone() {
-            RoomHttpPurpose::PendingPreviewRead { asset_id: expected } if expected == asset_id => {
-                resolve_room_http_authority(
-                    room,
-                    &RoomHttpPurpose::PendingPreviewRead { asset_id: expected },
-                )
-                .map(ConsumedAppearanceReadTicket::Pending)
-            }
-            RoomHttpPurpose::BoundAppearanceRead { asset_id: expected } if expected == asset_id => {
-                resolve_room_http_authority(
-                    room,
-                    &RoomHttpPurpose::BoundAppearanceRead { asset_id: expected },
-                )
-                .map(ConsumedAppearanceReadTicket::Bound)
-            }
-            _ => Err(TicketError::Invalid),
+        match grant.authority {
+            TicketAuthority::RoomHttp(room) => match room.purpose.clone() {
+                RoomHttpPurpose::PendingPreviewRead { asset_id: expected }
+                    if expected == asset_id =>
+                {
+                    resolve_room_http_authority(
+                        room,
+                        &RoomHttpPurpose::PendingPreviewRead { asset_id: expected },
+                    )
+                    .map(ConsumedAppearanceReadTicket::Pending)
+                }
+                RoomHttpPurpose::BoundAppearanceRead { asset_id: expected }
+                    if expected == asset_id =>
+                {
+                    resolve_room_http_authority(
+                        room,
+                        &RoomHttpPurpose::BoundAppearanceRead { asset_id: expected },
+                    )
+                    .map(ConsumedAppearanceReadTicket::Bound)
+                }
+                _ => Err(TicketError::Invalid),
+            },
+            TicketAuthority::HumanSession(session) => Self::resolve_human_session_authority(
+                session,
+                &HumanSessionGrantPurpose::BoundAppearanceRead {
+                    asset_id: asset_id.to_owned(),
+                },
+                Utc::now(),
+            )
+            .map(ConsumedAppearanceReadTicket::HumanSession),
+            TicketAuthority::Room(_)
+            | TicketAuthority::HumanInviteManager(_)
+            | TicketAuthority::SettingsDirectoryRead { .. }
+            | TicketAuthority::ServerOperator { .. }
+            | TicketAuthority::CentralRegistration { .. } => Err(TicketError::Invalid),
         }
     }
 
@@ -659,7 +676,7 @@ impl TicketStore {
             TicketAuthority::RoomHttp(room) => resolve_room_http_authority(room, &room_purpose)
                 .map(ConsumedRoomPreferenceTicket::Local),
             TicketAuthority::HumanSession(session) => {
-                Self::resolve_human_session_authority(session, session_purpose, Utc::now())
+                Self::resolve_human_session_authority(session, &session_purpose, Utc::now())
                     .map(ConsumedRoomPreferenceTicket::HumanSession)
             }
             TicketAuthority::Room(_)

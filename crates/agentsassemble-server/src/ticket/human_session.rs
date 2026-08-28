@@ -13,12 +13,13 @@ pub(super) struct HumanSessionGrant {
     pub(super) purpose: HumanSessionGrantPurpose,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub(super) enum HumanSessionGrantPurpose {
     WebSocketConnect,
     OwnProfile,
     PreferencesRead,
     PreferencesWrite,
+    BoundAppearanceRead { asset_id: String },
 }
 
 pub struct ConsumedHumanSessionSocketTicket {
@@ -129,6 +130,24 @@ impl TicketStore {
             .await
     }
 
+    /// Issues an exact bound-appearance grant while preserving durable session provenance.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` when the session has expired or a global, public, or per-session
+    /// grant bound is exhausted.
+    pub async fn issue_human_session_bound_appearance_read(
+        &self,
+        authorization: HumanSessionAuthorization,
+        asset_id: String,
+    ) -> Result<IssuedTicket, TicketError> {
+        self.issue_human_session(
+            authorization,
+            HumanSessionGrantPurpose::BoundAppearanceRead { asset_id },
+        )
+        .await
+    }
+
     async fn issue_human_session(
         &self,
         authorization: HumanSessionAuthorization,
@@ -226,7 +245,7 @@ impl TicketStore {
             TicketAuthority::HumanSession(public) => {
                 let authorization = Self::resolve_human_session_authority(
                     public,
-                    HumanSessionGrantPurpose::WebSocketConnect,
+                    &HumanSessionGrantPurpose::WebSocketConnect,
                     Utc::now(),
                 )?;
                 Ok(ConsumedSocketTicket::HumanSession(
@@ -255,7 +274,7 @@ impl TicketStore {
         ticket: &str,
     ) -> Result<ConsumedHumanSessionSocketTicket, TicketError> {
         let grant = self
-            .consume_human_session(ticket, HumanSessionGrantPurpose::WebSocketConnect)
+            .consume_human_session(ticket, &HumanSessionGrantPurpose::WebSocketConnect)
             .await?;
         Ok(ConsumedHumanSessionSocketTicket {
             authorization: grant.authorization,
@@ -274,7 +293,7 @@ impl TicketStore {
         ticket: &str,
     ) -> Result<HumanSessionAuthorization, TicketError> {
         Ok(self
-            .consume_human_session(ticket, HumanSessionGrantPurpose::OwnProfile)
+            .consume_human_session(ticket, &HumanSessionGrantPurpose::OwnProfile)
             .await?
             .authorization)
     }
@@ -282,7 +301,7 @@ impl TicketStore {
     async fn consume_human_session(
         &self,
         ticket: &str,
-        expected: HumanSessionGrantPurpose,
+        expected: &HumanSessionGrantPurpose,
     ) -> Result<ConsumedHumanSessionGrant, TicketError> {
         let grant = self.consume_grant(ticket).await?;
         Self::resolve_human_session_at(grant, expected, Utc::now())
@@ -290,7 +309,7 @@ impl TicketStore {
 
     fn resolve_human_session_at(
         grant: StoredTicketGrant,
-        expected: HumanSessionGrantPurpose,
+        expected: &HumanSessionGrantPurpose,
         now: chrono::DateTime<Utc>,
     ) -> Result<ConsumedHumanSessionGrant, TicketError> {
         let TicketAuthority::HumanSession(public) = grant.authority else {
@@ -305,10 +324,10 @@ impl TicketStore {
 
     pub(super) fn resolve_human_session_authority(
         public: HumanSessionGrant,
-        expected: HumanSessionGrantPurpose,
+        expected: &HumanSessionGrantPurpose,
         now: chrono::DateTime<Utc>,
     ) -> Result<HumanSessionAuthorization, TicketError> {
-        if public.purpose != expected || public.authorization.expires_at() <= now {
+        if &public.purpose != expected || public.authorization.expires_at() <= now {
             return Err(TicketError::Invalid);
         }
         Ok(public.authorization)
@@ -322,7 +341,7 @@ impl TicketStore {
     ) -> Result<HumanSessionAuthorization, TicketError> {
         let grant = self.consume_grant(ticket).await?;
         Ok(
-            Self::resolve_human_session_at(grant, HumanSessionGrantPurpose::OwnProfile, now)?
+            Self::resolve_human_session_at(grant, &HumanSessionGrantPurpose::OwnProfile, now)?
                 .authorization,
         )
     }
@@ -369,7 +388,7 @@ impl TicketStore {
             TicketAuthority::HumanSession(public) => ConsumedAttachmentUploadTicket::Profile(
                 ConsumedProfileTicket::HumanSession(Self::resolve_human_session_authority(
                     public,
-                    HumanSessionGrantPurpose::OwnProfile,
+                    &HumanSessionGrantPurpose::OwnProfile,
                     Utc::now(),
                 )?),
             ),
