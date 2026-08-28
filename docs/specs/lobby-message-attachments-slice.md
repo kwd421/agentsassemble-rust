@@ -31,14 +31,18 @@ Rust-owned upload, message-binding, authorized-read, and provider-read lifecycle
   routes turns. Any failure rolls back all of those changes. A replay of the same
   request returns the committed event; a different request cannot bind the same
   pending object.
-- Upload and human reads use fresh one-use operation-, room-, principal-, and asset-
-  bound HTTP grants. Local grants originate only at the typed desktop control boundary;
-  admitted humans exchange their live session credential before the attachment route.
-  Raw host secrets, raw reusable session credentials at the target, cross-purpose
-  grants, read-only or muted uploaders, expired grants, and revoked/left/kicked
-  sessions fail closed. A joined member with `room.history` may still read while muted
-  or read-only. Authentication and current-authority revalidation happen before the
-  bounded body or attachment BLOB is read.
+- Uploads use fresh one-use operation-, room-, and principal-bound HTTP grants; the
+  server creates the opaque attachment ID only inside the insertion transaction. Human
+  reads additionally bind the grant to the exact asset. Local grants originate only at
+  the typed desktop control boundary; admitted humans exchange their live session
+  credential before the attachment route. Raw host secrets, raw reusable session
+  credentials at the target, cross-purpose grants, read-only or muted uploaders,
+  expired grants, and revoked/left/kicked sessions fail closed. A joined member with
+  `room.history` may still read while muted or read-only. Grant authentication happens
+  before the bounded body or attachment BLOB is read; after body processing, exact
+  current room/session/participant authority is revalidated again in the same SQLite
+  transaction as storage accounting and insertion. Bound reads perform their target
+  revalidation and metadata check before loading the BLOB.
 - A bound attachment read additionally proves that the requested ID is referenced by
   a current visible lobby message in that exact room. Provider reads use the current
   Agent Session's room portal and apply the same canonical-message reference check;
