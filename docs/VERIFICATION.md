@@ -3132,11 +3132,11 @@ The room directory now owns one monotonic publication epoch across layout-reserv
 hydration, explicit verification, refresh, and room creation. Actual post-ticket POST
 and GET dispatch, every awaited continuation, retry custody, visible issue publication,
 global authority binding, and final UI publication require the same current continuity.
-Only a strict active payload may create a frozen manager map for one exact eligible
-local dock; mutable dock fields cannot replace its tuple. Superseded work cannot
-dispatch, publish, alert, or clear the retained exact room-create intent.
+Only a strict active payload may create frozen manager-map entries, one per exact
+eligible local dock; mutable dock fields cannot replace their tuples. Superseded work
+cannot dispatch, publish, alert, or clear the retained exact room-create intent.
 
-The first Very High review found one Medium performance issue: the unpaged directory's
+The Very High review of `26bf183` found one Medium performance issue: the unpaged directory's
 manager-map construction rescanned every active payload row for every eligible dock,
 making valid large publications synchronous O(A²) main-thread work. `3cfaf4b` replaces
 that scan with one strict active-room lookup owner, preserving all duplicate and
@@ -3149,6 +3149,6 @@ Focused correction verification passed 42 tests. Final `make verify` passed ever
 mandatory gate, all 84 frontend files with 508 tests, desktop 20, domain 23,
 persistence 172, protocol 5, provider 120, server 84, and every integration/TCP/doc
 test. No Computer Use resource, provider, Deep Scan, or automated scanner ran. The
-foundation, continuity correction, and linearization correction received final web
-and Daybreaker approval with `Critical 0 / High 0 / Medium 0`. Retained invite custody,
+resulting C2 foundation through `3cfaf4b` received final web and Daybreaker approval
+with `Critical 0 / High 0 / Medium 0`. Retained invite custody,
 controller/UI activation, and packaged Computer Use verification remain incomplete.
