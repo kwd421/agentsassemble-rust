@@ -3678,3 +3678,28 @@ Use launch was attempted only against the isolated verification package, but the
 was locked and no app was launched; packaged local/remote/restart verification therefore
 remains pending. No provider, Deep Scan, or automated scanner ran. Final cross-review
 of these two corrections also remains pending.
+
+The next manual cross-review returned the same single Medium finding from both
+reviewers: `pinned_at` and `created_at` still reached permissive JavaScript date parsing
+without the Unicode-scalar fence, and the scalar predicate duplicated the equivalent
+room-ID check. The authority lifecycle correction was approved. One independent
+correction now gives valid-Unicode-scalar text a seven-line frontend owner, reuses it for
+canonical room IDs and every pin string, and checks both timestamps before `Date.parse`.
+Malformed-response regressions cover isolated high and low surrogates in the two
+timestamp fields; the existing non-BMP regression continues to prove valid scalar pairs.
+
+The correction removes the duplicate validator and adds no state, authority, transport,
+retry, compatibility path, or generic string framework. A `for...of` scan exits at the
+first invalid scalar and avoids allocating a scalar array. The observed production main
+chunk is 789.39 kB raw / 237.85 kB gzip, versus 789.42 kB / 237.89 kB before the shared
+owner; the API chunk is 55.90 kB / 15.17 kB gzip, versus 55.85 kB / 15.14 kB. No runtime
+CPU, memory, disk, or latency improvement is claimed from these build-size movements.
+
+Focused pin and room-ID tests passed 12/12, and full serial `make verify` passed with
+frontend 89 files / 555 tests, desktop 20, domain 27, persistence 186, protocol 6,
+provider 120, server 85, every TCP/integration/doc test, warning-denied Clippy, and all
+architecture, source-growth, policy, generated-binding, original-CSS, production-build,
+and diff gates. Computer Use remained blocked by the locked Mac; no app was launched or
+left running, and its kernel was reset. Packaged local/remote/restart verification and
+final correction approval remain pending. No provider, Deep Scan, or automated scanner
+ran.
