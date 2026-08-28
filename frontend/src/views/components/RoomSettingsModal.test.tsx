@@ -19,6 +19,14 @@ const room = {
   tone: "resident" as const,
 };
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 function renderSettings(
   conversationMode: "ordered" | "ambient" | null,
   onConversationModeChange = vi.fn(),
@@ -27,7 +35,7 @@ function renderSettings(
   onOrderedExcludePreviousSpeakerChange = vi.fn(),
   onAppearanceChange = vi.fn().mockResolvedValue(undefined),
   onToolModeChange = vi.fn(),
-  onAppearanceUpload = vi.fn().mockResolvedValue(undefined)
+  onAppearanceUpload = vi.fn().mockResolvedValue(true)
 ) {
   render(
     <RoomSettingsModal
@@ -65,7 +73,7 @@ describe("RoomSettingsModal conversation mode", () => {
 
   it("binds a banner upload to the room and waits for canonical appearance persistence", async () => {
     const onAppearanceChange = vi.fn().mockResolvedValue(undefined);
-    const onAppearanceUpload = vi.fn().mockResolvedValue(undefined);
+    const onAppearanceUpload = vi.fn().mockResolvedValue(true);
     renderSettings(
       "ordered",
       vi.fn(),
@@ -95,6 +103,40 @@ describe("RoomSettingsModal conversation mode", () => {
       bannerPreset: "forest",
       bannerImage: "",
     });
+  });
+
+  it("does not let a superseded upload completion overwrite current status", async () => {
+    const first = deferred<boolean>();
+    const second = deferred<boolean>();
+    const onAppearanceUpload = vi
+      .fn()
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+    renderSettings(
+      "ordered",
+      vi.fn(),
+      "ready",
+      vi.fn(),
+      vi.fn(),
+      vi.fn().mockResolvedValue(undefined),
+      vi.fn(),
+      onAppearanceUpload
+    );
+
+    await userEvent.upload(
+      screen.getByLabelText("배너 이미지"),
+      new File(["first"], "first.png", { type: "image/png" })
+    );
+    await userEvent.upload(
+      screen.getByLabelText("배너 이미지"),
+      new File(["second"], "second.png", { type: "image/png" })
+    );
+    second.resolve(true);
+    expect(await screen.findByText("배너 이미지 저장됨")).toBeTruthy();
+    first.resolve(false);
+    await Promise.resolve();
+
+    expect(screen.getByText("배너 이미지 저장됨")).toBeTruthy();
   });
 
   it("lets the user activate ambient discussion from the room settings UI", async () => {
@@ -169,7 +211,7 @@ describe("RoomSettingsModal conversation mode", () => {
         onInvite={() => undefined}
         onRoomChange={() => undefined}
         onAppearanceChange={async () => undefined}
-        onAppearanceUpload={async () => undefined}
+        onAppearanceUpload={async () => true}
         onChannelSettingChange={onChannelSettingChange}
         onConversationModeChange={() => undefined}
         onToolModeChange={() => undefined}
@@ -210,7 +252,7 @@ describe("RoomSettingsModal conversation mode", () => {
         onInvite={() => undefined}
         onRoomChange={() => undefined}
         onAppearanceChange={async () => undefined}
-        onAppearanceUpload={async () => undefined}
+        onAppearanceUpload={async () => true}
         onChannelSettingChange={async () => undefined}
         onConversationModeChange={() => undefined}
         onToolModeChange={() => undefined}

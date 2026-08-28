@@ -15,6 +15,8 @@ vi.mock("../api/roomAppearance", async () => ({
 
 import { useRoomAppearanceAssets } from "./useRoomAppearanceAssets";
 
+const bindUploadedReference = vi.fn();
+
 const manager = {
   server_id: "10000000-0000-4000-8000-000000000001",
   authority_lineage_id: "20000000-0000-4000-8000-000000000002",
@@ -61,6 +63,7 @@ function renderAssets(
         canonicalAppearanceFor: () => currentAppearance,
         settingsStateFor: () => ({ status: currentStatus }),
         resolveLocalManager: () => manager,
+        bindUploadedReference,
       }),
     {
       initialProps: {
@@ -75,6 +78,7 @@ function renderAssets(
 describe("room appearance object URL lifecycle", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    bindUploadedReference.mockResolvedValue(undefined);
     let sequence = 0;
     vi.stubGlobal("URL", {
       ...URL,
@@ -177,6 +181,7 @@ describe("room appearance object URL lifecycle", () => {
         canonicalAppearanceFor: () => inactiveAppearance,
         settingsStateFor: () => ({ status: "ready" }),
         resolveLocalManager: () => ({ ...manager, room_id: "inactive", room_uid: inactive.roomUid! }),
+        bindUploadedReference,
       })
     );
 
@@ -270,8 +275,53 @@ describe("room appearance object URL lifecycle", () => {
     });
     const file = new File(["png"], "banner.png", { type: "image/png" });
 
-    await expect(hook.result.current.upload(room, file)).resolves.toBe(banner);
+    await expect(hook.result.current.upload(room, file, "banner")).resolves.toBe(true);
 
     expect(api.upload).toHaveBeenCalledWith(file, manager);
+    expect(bindUploadedReference).toHaveBeenCalledWith(room, "banner", banner);
+  });
+
+  it("lets only the latest upload for one room slot bind and publish completion", async () => {
+    const first = deferred<{ reference: { assetId: string; url: string } }>();
+    const second = deferred<{ reference: { assetId: string; url: string } }>();
+    api.upload.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const hook = renderAssets({
+      bannerPreset: "default",
+      notifications: "mentions",
+      inviteScope: "room",
+    });
+    const firstFile = new File(["first"], "first.png", { type: "image/png" });
+    const secondFile = new File(["second"], "second.png", { type: "image/png" });
+
+    const firstUpload = hook.result.current.upload(room, firstFile, "banner");
+    const secondUpload = hook.result.current.upload(room, secondFile, "banner");
+    second.resolve({ reference: { assetId: "second", url: icon } });
+    await expect(secondUpload).resolves.toBe(true);
+    first.resolve({ reference: { assetId: "first", url: banner } });
+    await expect(firstUpload).resolves.toBe(false);
+
+    expect(bindUploadedReference).toHaveBeenCalledOnce();
+    expect(bindUploadedReference).toHaveBeenCalledWith(room, "banner", icon);
+  });
+
+  it("does not bind an upload after its appearance owner unmounts", async () => {
+    const pending = deferred<{ reference: { assetId: string; url: string } }>();
+    api.upload.mockReturnValueOnce(pending.promise);
+    const hook = renderAssets({
+      bannerPreset: "default",
+      notifications: "mentions",
+      inviteScope: "room",
+    });
+
+    const upload = hook.result.current.upload(
+      room,
+      new File(["png"], "banner.png", { type: "image/png" }),
+      "banner"
+    );
+    hook.unmount();
+    pending.resolve({ reference: { assetId: "pending", url: banner } });
+
+    await expect(upload).resolves.toBe(false);
+    expect(bindUploadedReference).not.toHaveBeenCalled();
   });
 });

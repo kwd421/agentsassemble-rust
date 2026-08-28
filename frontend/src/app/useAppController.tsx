@@ -350,6 +350,8 @@ export function useAppController(deviceToken: string, clientId: string) {
     canonicalAppearanceFor: roomSettings.appearanceFor,
     settingsStateFor: roomSettings.settingsStateFor,
     resolveLocalManager: resolveManagerRoomAuthority,
+    bindUploadedReference: (room, slot, url) => roomSettings.updateAppearance(room,
+      slot === "banner" ? { bannerImage: url, bannerPreset: "custom" } : { iconImage: url }),
   });
   const roomAppearances = roomAppearanceAssets.appearances;
   const roomInvite = useRoomInviteController({

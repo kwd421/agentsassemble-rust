@@ -125,15 +125,9 @@ export default function AppOverlays({ controller }: { controller: AppController 
                 .catch(() => undefined);
             }}
             onAppearanceChange={(updates) => roomSettings.updateAppearance(settingsModalRoom, updates)}
-            onAppearanceUpload={async (file, slot) => {
-              const canonicalUrl = await roomAppearanceAssets.upload(settingsModalRoom, file);
-              await roomSettings.updateAppearance(
-                settingsModalRoom,
-                slot === "banner"
-                  ? { bannerImage: canonicalUrl, bannerPreset: "custom" }
-                  : { iconImage: canonicalUrl }
-              );
-            }}
+            onAppearanceUpload={(file, slot) =>
+              roomAppearanceAssets.upload(settingsModalRoom, file, slot)
+            }
             onChannelSettingChange={(channelId, updates) =>
               roomSettings.updateChannelSetting(settingsModalRoom, channelId, updates)
             }

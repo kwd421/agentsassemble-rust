@@ -78,7 +78,7 @@ export default function RoomSettingsModal({
   onInvite: () => void;
   onRoomChange: (updates: Partial<Pick<RoomDockItem, "label" | "topic" | "shortLabel">>) => void;
   onAppearanceChange: (updates: Partial<RoomAppearance>) => Promise<void>;
-  onAppearanceUpload: (file: File, slot: "banner" | "icon") => Promise<void>;
+  onAppearanceUpload: (file: File, slot: "banner" | "icon") => Promise<boolean>;
   onChannelSettingChange: (
     channelId: string,
     updates: Partial<ChannelSettings>
@@ -140,8 +140,9 @@ export default function RoomSettingsModal({
     if (!file) return;
     setUploadStatus("배너 업로드 중...");
     try {
-      await onAppearanceUpload(file, "banner");
-      setUploadStatus("배너 이미지 저장됨");
+      if (await onAppearanceUpload(file, "banner")) {
+        setUploadStatus("배너 이미지 저장됨");
+      }
     } catch (error) {
       setUploadStatus(error instanceof Error ? error.message : "배너 업로드 실패");
     }
@@ -153,8 +154,9 @@ export default function RoomSettingsModal({
     if (!file) return;
     setUploadStatus("아이콘 업로드 중...");
     try {
-      await onAppearanceUpload(file, "icon");
-      setUploadStatus("채팅방 아이콘 저장됨");
+      if (await onAppearanceUpload(file, "icon")) {
+        setUploadStatus("채팅방 아이콘 저장됨");
+      }
     } catch (error) {
       setUploadStatus(error instanceof Error ? error.message : "아이콘 업로드 실패");
     }

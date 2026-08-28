@@ -22,6 +22,11 @@ type UseRoomAppearanceAssetsOptions = {
   canonicalAppearanceFor: (room: RoomDockItem) => RoomAppearance;
   settingsStateFor: (room: RoomDockItem) => { status: SettingsStatus };
   resolveLocalManager: (roomDockId: string) => DesktopManagerRoomAuthority;
+  bindUploadedReference: (
+    room: RoomDockItem,
+    slot: "banner" | "icon",
+    canonicalUrl: string
+  ) => Promise<void>;
 };
 
 type DesiredAsset = {
@@ -82,12 +87,16 @@ export function useRoomAppearanceAssets({
   canonicalAppearanceFor,
   settingsStateFor,
   resolveLocalManager,
+  bindUploadedReference,
 }: UseRoomAppearanceAssetsOptions) {
   const [resolvedUrls, setResolvedUrls] = useState<Record<string, string>>({});
   const [requestErrors, setRequestErrors] = useState<Record<string, string>>({});
   const [staticErrors, setStaticErrors] = useState<Record<string, string>>({});
   const [retryRevision, setRetryRevision] = useState(0);
   const requestsRef = useRef(new Map<string, AssetRequest>());
+  const uploadGenerationsRef = useRef(new Map<string, number>());
+  const nextUploadGenerationRef = useRef(0);
+  const uploadOwnerActiveRef = useRef(true);
   const liveObjectUrlsRef = useRef(new Set<string>());
   const renderedObjectUrlsRef = useRef(new Set<string>());
   const remoteCredentialRef = useRef({ value: remoteSessionToken, revision: 0 });
@@ -250,15 +259,20 @@ export function useRoomAppearanceAssets({
   }, [resolvedUrls]);
 
   useEffect(
-    () => () => {
-      for (const request of requestsRef.current.values()) {
-        request.controller.abort();
-      }
-      requestsRef.current.clear();
-      for (const objectUrl of liveObjectUrlsRef.current) {
-        URL.revokeObjectURL(objectUrl);
-      }
-      liveObjectUrlsRef.current.clear();
+    () => {
+      uploadOwnerActiveRef.current = true;
+      return () => {
+        uploadOwnerActiveRef.current = false;
+        uploadGenerationsRef.current.clear();
+        for (const request of requestsRef.current.values()) {
+          request.controller.abort();
+        }
+        requestsRef.current.clear();
+        for (const objectUrl of liveObjectUrlsRef.current) {
+          URL.revokeObjectURL(objectUrl);
+        }
+        liveObjectUrlsRef.current.clear();
+      };
     },
     []
   );
@@ -313,11 +327,27 @@ export function useRoomAppearanceAssets({
   }, []);
 
   const upload = useCallback(
-    async (room: RoomDockItem, file: File) => {
+    async (room: RoomDockItem, file: File, slot: "banner" | "icon") => {
+      const key = `${roomSettingsKey(room)}\0${slot}`;
+      const generation = ++nextUploadGenerationRef.current;
+      uploadGenerationsRef.current.set(key, generation);
+      const isCurrent = () =>
+        uploadOwnerActiveRef.current &&
+        uploadGenerationsRef.current.get(key) === generation;
       const manager = resolveLocalManager(room.id);
-      return (await uploadRoomAppearance(file, manager)).reference.url;
+      try {
+        const canonicalUrl = (await uploadRoomAppearance(file, manager)).reference.url;
+        if (!isCurrent()) return false;
+        await bindUploadedReference(room, slot, canonicalUrl);
+        return isCurrent();
+      } catch (error) {
+        if (!isCurrent()) return false;
+        throw error;
+      } finally {
+        if (isCurrent()) uploadGenerationsRef.current.delete(key);
+      }
     },
-    [resolveLocalManager]
+    [bindUploadedReference, resolveLocalManager]
   );
 
   return { appearances, appearanceFor, errorFor, retry, upload };
