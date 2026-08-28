@@ -268,11 +268,28 @@ export async function responseError(res: Response): Promise<ApiError> {
       error?: unknown;
       message?: unknown;
     };
-    const message = payload.error || payload.message;
-    const code = typeof payload.code === "string" ? payload.code.trim() : "";
+    const nestedError =
+      typeof payload.error === "object" &&
+      payload.error !== null &&
+      !Array.isArray(payload.error)
+        ? (payload.error as { code?: unknown; message?: unknown })
+        : null;
+    const nestedMessage =
+      typeof nestedError?.message === "string" && nestedError.message.trim()
+        ? nestedError.message
+        : "";
+    const message =
+      nestedMessage ||
+      (typeof payload.error === "string" && payload.error.trim()
+        ? payload.error
+        : typeof payload.message === "string" && payload.message.trim()
+          ? payload.message
+          : fallback);
+    const codeSource = nestedMessage ? nestedError?.code : payload.code;
+    const code = typeof codeSource === "string" ? codeSource.trim() : "";
     return new ApiError(
       res.status,
-      typeof message === "string" && message.trim() ? message : fallback,
+      message,
       code
     );
   } catch {

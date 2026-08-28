@@ -47,6 +47,21 @@ describe("parsePublicIngressStatus", () => {
         },
       }).mode
     ).toBe("manual");
+    expect(
+      parsePublicIngressStatus({
+        mode: "manual",
+        public_url: "https://foo.localhost",
+        stable_url: "",
+        tunnel: {
+          available: false,
+          running: false,
+          phase: "stopped",
+          public_url: "https://foo.localhost",
+          local_url: "",
+          stable_phase: "unconfigured",
+        },
+      }).public_url
+    ).toBe("https://foo.localhost");
     expect(parsePublicIngressStatus(managed)).toEqual(managed);
     expect(
       parsePublicIngressStatus({
@@ -105,6 +120,22 @@ describe("parsePublicIngressStatus", () => {
     ],
     ["error without message", { ...managed, tunnel: { ...managed.tunnel, phase: "error" } }],
     ["stable failure without message", { ...managed, tunnel: { ...managed.tunnel, stable_phase: "failed" } }],
+    [
+      "trailing-dot localhost origin",
+      {
+        mode: "manual",
+        public_url: "https://localhost.",
+        stable_url: "",
+        tunnel: {
+          available: false,
+          running: false,
+          phase: "stopped",
+          public_url: "https://localhost.",
+          local_url: "",
+          stable_phase: "unconfigured",
+        },
+      },
+    ],
     [
       "noncanonical public URL",
       { ...managed, public_url: "https://public.example.com/", tunnel: { ...managed.tunnel, running: true, phase: "running", public_url: "https://public.example.com/" } },

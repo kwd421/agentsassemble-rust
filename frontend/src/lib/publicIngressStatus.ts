@@ -99,9 +99,9 @@ function publicOrigin(value: string): string {
   if (!value) return "";
   const url = exactOrigin(value, "https:");
   const host = url.hostname.toLowerCase();
+  const comparisonHost = host.replace(/\.+$/, "");
   if (
-    host === "localhost" ||
-    host.endsWith(".localhost") ||
+    comparisonHost === "localhost" ||
     host === "0.0.0.0" ||
     host === "[::]" ||
     host === "[::1]" ||

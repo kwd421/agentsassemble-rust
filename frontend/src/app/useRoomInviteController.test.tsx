@@ -51,6 +51,16 @@ const stoppedStatus: PublicInviteStatus = {
   },
 };
 
+const startingStatus: PublicInviteStatus = {
+  ...publicStatus,
+  public_url: "",
+  tunnel: {
+    ...publicStatus.tunnel,
+    phase: "starting",
+    public_url: "",
+  },
+};
+
 const room: RoomDockItem = {
   id: "room-1",
   label: "Room One",
@@ -260,5 +270,41 @@ describe("useRoomInviteController", () => {
     expect(hook.result.current.publicInviteStatus?.public_url).toBe("");
     expect(apiMocks.fetchPublicInviteStatus).not.toHaveBeenCalled();
     expect(hook.result.current.copyStatus).toContain("이 컴퓨터에서 계속 작동");
+  });
+
+  it("retires readiness polling when Stop supersedes Start", async () => {
+    vi.useFakeTimers();
+    try {
+      apiMocks.startPublicInviteTunnel.mockResolvedValue(startingStatus);
+      apiMocks.fetchPublicInviteStatus.mockResolvedValue(startingStatus);
+      apiMocks.stopPublicInviteTunnel.mockResolvedValue(stoppedStatus);
+      const hook = renderInviteController();
+      let startPromise!: Promise<void>;
+
+      await act(async () => {
+        startPromise = hook.result.current.startTunnel();
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(apiMocks.fetchPublicInviteStatus).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(1);
+
+      await act(async () => {
+        await hook.result.current.stopTunnel();
+        await startPromise;
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(20_000);
+      });
+
+      expect(apiMocks.fetchPublicInviteStatus).toHaveBeenCalledTimes(1);
+      expect(hook.result.current.publicInviteStatus).toEqual(stoppedStatus);
+      expect(hook.result.current.publicAccessTransition).toBe("idle");
+      expect(hook.result.current.copyStatus).toContain("이 컴퓨터에서 계속 작동");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

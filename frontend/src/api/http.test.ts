@@ -33,6 +33,26 @@ it("preserves a structured server error code separately from its message", async
   });
 });
 
+it("preserves the nested error contract used by ingress controls", async () => {
+  const error = await responseError(
+    new Response(
+      JSON.stringify({
+        error: {
+          code: "ingress_cleanup_failed",
+          message: "Managed public ingress cleanup failed.",
+        },
+      }),
+      { status: 503, headers: { "Content-Type": "application/json" } }
+    )
+  );
+
+  expect(error).toMatchObject({
+    status: 503,
+    code: "ingress_cleanup_failed",
+    message: "Managed public ingress cleanup failed.",
+  });
+});
+
 describe("desktop profile HTTP routing", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
