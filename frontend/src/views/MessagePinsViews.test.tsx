@@ -6,6 +6,7 @@ const api = vi.hoisted(() => ({
   fetchLobbyPins: vi.fn(),
   setLobbyPin: vi.fn(),
   fetchChannelLobby: vi.fn(),
+  fetchRoomContext: vi.fn(),
 }));
 
 vi.mock("../api", async () => ({
@@ -13,6 +14,7 @@ vi.mock("../api", async () => ({
   fetchLobbyMessagePins: api.fetchLobbyPins,
   setLobbyMessagePinned: api.setLobbyPin,
   fetchChannelLobby: api.fetchChannelLobby,
+  fetchRoomMessageContext: api.fetchRoomContext,
 }));
 
 import type { LobbyEvent, RoomChannel } from "../api";
@@ -67,6 +69,8 @@ describe("message-pin view ownership", () => {
   afterEach(cleanup);
 
   it("connects the lobby header and message action only through explicit authority", async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
     render(
       <LobbyView
         activeRoom={room}
@@ -96,6 +100,31 @@ describe("message-pin view ownership", () => {
       })
     );
     await waitFor(() => expect(screen.getAllByText("pin this message")).toHaveLength(2));
+    fireEvent.click(screen.getByRole("button", { name: /Operator.*pin this message/ }));
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "center" });
+    expect(api.fetchRoomContext).not.toHaveBeenCalled();
+  });
+
+  it("does not send pin navigation through an unavailable search-context route", async () => {
+    api.fetchLobbyPins.mockResolvedValue([{ ...pin, event_id: "older-event", seq: 1 }]);
+    render(
+      <LobbyView
+        activeRoom={room}
+        agents={[]}
+        messagePinsAuthority={{ kind: "remote", sessionToken: "aas1.session" }}
+        canonicalEvents={[{ ...event, id: "current-event", record_id: "current-event", seq: 2 }]}
+        canonicalHasMoreHistory
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "고정 메시지" }));
+    await waitFor(() => expect(api.fetchLobbyPins).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole("button", { name: /Operator.*pin this message/ }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "현재 불러온 기록에 없는 고정 메시지입니다."
+    );
+    expect(api.fetchRoomContext).not.toHaveBeenCalled();
   });
 
   it("does not expose a lobby mutation when no exact authority exists", () => {

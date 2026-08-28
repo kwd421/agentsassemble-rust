@@ -281,7 +281,7 @@ export default function LobbyView({
               onOpenCrossChannelSearchResult(result);
               return;
             }
-            void navigateToMessage(result.event_id).catch((reason) => {
+            void navigateToSearchResult(result.event_id).catch((reason) => {
               setPendingMessageTarget("");
               messageSearch.setError(
                 reason instanceof Error ? reason.message : "검색한 메시지로 이동하지 못했습니다."
@@ -366,7 +366,7 @@ export default function LobbyView({
     setPendingMessageTarget("");
   }, [pendingMessageTarget, visibleEvents]);
 
-  async function navigateToMessage(eventId: string) {
+  async function navigateToSearchResult(eventId: string) {
     suppressAutomaticHistoryLoad();
     setPendingMessageTarget(eventId);
     const context = await fetchRoomMessageContext({
@@ -383,7 +383,7 @@ export default function LobbyView({
   useEffect(() => {
     if (!pendingSearchTargetEventId) return;
     let active = true;
-    void navigateToMessage(pendingSearchTargetEventId)
+    void navigateToSearchResult(pendingSearchTargetEventId)
       .catch((reason) => {
         setPendingMessageTarget("");
         messageSearch.setError(
@@ -398,14 +398,16 @@ export default function LobbyView({
     };
   }, [pendingSearchTargetEventId]);
 
-  async function selectPin(pin: MessagePin) {
+  function selectPin(pin: MessagePin) {
     setPinsError("");
-    try {
-      await navigateToMessage(pin.event_id);
-    } catch (error) {
-      setPendingMessageTarget("");
-      setPinsError(error instanceof Error ? error.message : "고정 메시지로 이동하지 못했습니다.");
+    const event = visibleEvents.find(
+      (candidate) => candidate.record_id === pin.event_id || candidate.id === pin.event_id
+    );
+    if (!event) {
+      setPinsError("현재 불러온 기록에 없는 고정 메시지입니다.");
+      return;
     }
+    jumpToEvent(event.id);
   }
 
   async function setPinned(eventId: string, pinned: boolean) {
@@ -449,7 +451,7 @@ export default function LobbyView({
     pinnedSummary: messagePinsAuthority
       ? undefined
       : "이 환경에서는 로비 메시지 핀을 사용할 수 없습니다.",
-    onSelectPin: (pin: MessagePin) => void selectPin(pin),
+    onSelectPin: selectPin,
     onOpenPins: messagePinsAuthority ? () => void reloadPins() : undefined,
     onUnpin: canPostMessages && messagePinsAuthority
       ? (pin: MessagePin) => void setPinned(pin.event_id, false)
