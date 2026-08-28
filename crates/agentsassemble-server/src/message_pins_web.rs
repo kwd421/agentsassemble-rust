@@ -282,6 +282,14 @@ impl MessagePinsHttpError {
         }
     }
 
+    fn conflict(code: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::CONFLICT,
+            code,
+            message: message.into(),
+        }
+    }
+
     fn internal() -> Self {
         Self {
             status: StatusCode::SERVICE_UNAVAILABLE,
@@ -335,6 +343,10 @@ impl From<PersistenceError> for MessagePinsHttpError {
                 code: "bad_request",
                 message,
             } => Self::bad_request(message),
+            PersistenceError::CommandRejected {
+                code: "pin_limit_reached",
+                message,
+            } => Self::conflict("pin_limit_reached", message),
             error => {
                 tracing::error!(error = ?error, "message-pin HTTP persistence failed");
                 Self::internal()

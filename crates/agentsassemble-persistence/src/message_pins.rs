@@ -1,4 +1,7 @@
-use agentsassemble_domain::{LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, RoomEvent};
+use agentsassemble_domain::{
+    LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, MAX_LOBBY_MESSAGE_PINS, RoomEvent,
+    has_visible_text,
+};
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde_json::Value;
 use sqlx::{Row, Sqlite, Transaction};
@@ -148,6 +151,7 @@ async fn set_pin(
     now: DateTime<Utc>,
 ) -> Result<(), PersistenceError> {
     validate_event_id(event_id)?;
+    let event = load_target_message(transaction, room_id, event_id).await?;
     if !pinned {
         sqlx::query("DELETE FROM room_message_pins WHERE room_id = ? AND event_id = ?")
             .bind(room_id)
@@ -156,7 +160,7 @@ async fn set_pin(
             .await?;
         return Ok(());
     }
-    let event = load_target_message(transaction, room_id, event_id).await?;
+    ensure_pin_capacity(transaction, room_id, event_id).await?;
     sqlx::query(
         "INSERT INTO room_message_pins(room_id, event_id, event_seq, pinned_at) VALUES (?, ?, ?, ?) ON CONFLICT(room_id, event_id) DO UPDATE SET event_seq = excluded.event_seq, pinned_at = excluded.pinned_at",
     )
@@ -166,6 +170,27 @@ async fn set_pin(
     .bind(now.timestamp_micros())
     .execute(&mut **transaction)
     .await?;
+    Ok(())
+}
+
+async fn ensure_pin_capacity(
+    transaction: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    event_id: &str,
+) -> Result<(), PersistenceError> {
+    let other_pins = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM room_message_pins WHERE room_id = ? AND event_id != ?",
+    )
+    .bind(room_id)
+    .bind(event_id)
+    .fetch_one(&mut **transaction)
+    .await?;
+    if other_pins >= MAX_LOBBY_MESSAGE_PINS {
+        return Err(rejected(
+            "pin_limit_reached",
+            "This room has reached the message pin limit.",
+        ));
+    }
     Ok(())
 }
 
@@ -200,11 +225,18 @@ async fn load_pins(
     room_id: &str,
 ) -> Result<Vec<PinnedLobbyMessage>, PersistenceError> {
     let rows = sqlx::query(
-        "SELECT pins.event_id, pins.event_seq, pins.pinned_at, events.event_json FROM room_message_pins AS pins JOIN room_events AS events ON events.room_id = pins.room_id AND events.seq = pins.event_seq WHERE pins.room_id = ? ORDER BY pins.pinned_at DESC, pins.event_id ASC",
+        "SELECT pins.event_id, pins.event_seq, pins.pinned_at, events.event_json FROM room_message_pins AS pins JOIN room_events AS events ON events.room_id = pins.room_id AND events.seq = pins.event_seq WHERE pins.room_id = ? ORDER BY pins.pinned_at DESC, pins.event_id ASC LIMIT ?",
     )
     .bind(room_id)
+    .bind(MAX_LOBBY_MESSAGE_PINS + 1)
     .fetch_all(&mut **transaction)
     .await?;
+    if i64::try_from(rows.len())
+        .map_err(|_| invalid_state("Stored message pin count is invalid."))?
+        > MAX_LOBBY_MESSAGE_PINS
+    {
+        return Err(invalid_state("Stored message pin count exceeds its limit."));
+    }
     rows.into_iter()
         .map(|row| {
             let event_id = row.get::<String, _>("event_id");
@@ -229,12 +261,15 @@ fn project_pin(
         .filter(|name| !name.is_empty())
         .or_else(|| (!event.actor.participant_id.is_empty()).then_some(event.actor.participant_id))
         .unwrap_or_else(|| "Room".to_owned());
+    let content = event
+        .content
+        .ok_or_else(|| invalid_state("Stored message pin target has no content."))?;
     Ok(PinnedLobbyMessage {
         event_id: event.id,
         pinned_at: pinned_at.to_rfc3339_opts(SecondsFormat::AutoSi, true),
         seq: event.seq,
         author,
-        content: event.content.unwrap_or_default(),
+        content,
         created_at: event
             .created_at
             .to_rfc3339_opts(SecondsFormat::AutoSi, true),
@@ -255,6 +290,11 @@ fn require_message_event(
         || event.extra.get("message_deleted") == Some(&Value::Bool(true))
     {
         return Err(rejected("message_missing", "The message was not found."));
+    }
+    if !event.content.as_deref().is_some_and(has_visible_text) {
+        return Err(invalid_state(
+            "Stored message pin target has invalid content.",
+        ));
     }
     Ok(())
 }
@@ -281,7 +321,7 @@ fn invalid_state(message: impl Into<String>) -> PersistenceError {
 mod tests {
     use agentsassemble_domain::{
         AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope,
-        LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID,
+        LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, MAX_LOBBY_MESSAGE_PINS,
     };
     use chrono::{Duration, Utc};
     use serde_json::json;
@@ -388,19 +428,21 @@ mod tests {
             .find(|event| event.event_type == "room_created")
             .unwrap_or_else(|| panic!("room-created event missing"));
 
-        for event_id in ["missing", room_created.id.as_str(), "bad\0id"] {
-            assert!(
-                store
-                    .set_local_lobby_message_pin(
-                        "general",
-                        LOCAL_OPERATOR_USER_ID,
-                        LOCAL_OPERATOR_PARTICIPANT_ID,
-                        event_id,
-                        true,
-                    )
-                    .await
-                    .is_err()
-            );
+        for pinned in [true, false] {
+            for event_id in ["missing", room_created.id.as_str(), "bad\0id"] {
+                assert!(
+                    store
+                        .set_local_lobby_message_pin(
+                            "general",
+                            LOCAL_OPERATOR_USER_ID,
+                            LOCAL_OPERATOR_PARTICIPANT_ID,
+                            event_id,
+                            pinned,
+                        )
+                        .await
+                        .is_err()
+                );
+            }
         }
         let valid = send(&store, &principal, "message-valid", "valid").await;
         let before = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM room_message_pins")
@@ -419,6 +461,40 @@ mod tests {
             )
             .await
             .unwrap_or_else(|error| panic!("pin valid message: {error}"));
+        let mut missing_content = valid.clone();
+        missing_content.content = None;
+        sqlx::query("UPDATE room_events SET event_json = ? WHERE room_id = 'general' AND seq = ?")
+            .bind(
+                serde_json::to_string(&missing_content)
+                    .unwrap_or_else(|error| panic!("encode missing-content event: {error}")),
+            )
+            .bind(valid.seq)
+            .execute(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("remove target content: {error}"));
+        assert_rejection_code(
+            store
+                .set_local_lobby_message_pin(
+                    "general",
+                    LOCAL_OPERATOR_USER_ID,
+                    LOCAL_OPERATOR_PARTICIPANT_ID,
+                    &valid.id,
+                    false,
+                )
+                .await,
+            "invalid_state",
+        );
+        assert_eq!(pin_count(&store).await, 1);
+        assert_rejection_code(
+            store
+                .local_lobby_message_pins(
+                    "general",
+                    LOCAL_OPERATOR_USER_ID,
+                    LOCAL_OPERATOR_PARTICIPANT_ID,
+                )
+                .await,
+            "invalid_state",
+        );
         sqlx::query(
             "UPDATE room_events SET event_json = '{}' WHERE room_id = 'general' AND seq = ?",
         )
@@ -436,6 +512,88 @@ mod tests {
                 .await,
             Err(PersistenceError::Json(_))
         ));
+    }
+
+    #[tokio::test]
+    async fn pin_limit_bounds_complete_list_without_blocking_repin_or_unpin() {
+        let (store, principal) = fixture().await;
+        let pin_limit = usize::try_from(MAX_LOBBY_MESSAGE_PINS)
+            .unwrap_or_else(|error| panic!("convert pin limit: {error}"));
+        let mut messages = Vec::new();
+        for index in 0..=MAX_LOBBY_MESSAGE_PINS {
+            messages.push(
+                send(
+                    &store,
+                    &principal,
+                    &format!("message-limit-{index}"),
+                    &format!("bounded pin {index}"),
+                )
+                .await,
+            );
+        }
+        for message in messages.iter().take(pin_limit) {
+            store
+                .set_local_lobby_message_pin(
+                    "general",
+                    LOCAL_OPERATOR_USER_ID,
+                    LOCAL_OPERATOR_PARTICIPANT_ID,
+                    &message.id,
+                    true,
+                )
+                .await
+                .unwrap_or_else(|error| panic!("fill pin capacity: {error}"));
+        }
+        assert_eq!(pin_count(&store).await, MAX_LOBBY_MESSAGE_PINS);
+        assert_rejection_code(
+            store
+                .set_local_lobby_message_pin(
+                    "general",
+                    LOCAL_OPERATOR_USER_ID,
+                    LOCAL_OPERATOR_PARTICIPANT_ID,
+                    &messages
+                        .last()
+                        .unwrap_or_else(|| panic!("extra message missing"))
+                        .id,
+                    true,
+                )
+                .await,
+            "pin_limit_reached",
+        );
+        let repinned = store
+            .set_local_lobby_message_pin(
+                "general",
+                LOCAL_OPERATOR_USER_ID,
+                LOCAL_OPERATOR_PARTICIPANT_ID,
+                &messages[0].id,
+                true,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("re-pin at capacity: {error}"));
+        assert_eq!(repinned.len(), pin_limit);
+        store
+            .set_local_lobby_message_pin(
+                "general",
+                LOCAL_OPERATOR_USER_ID,
+                LOCAL_OPERATOR_PARTICIPANT_ID,
+                &messages[0].id,
+                false,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("unpin at capacity: {error}"));
+        let refilled = store
+            .set_local_lobby_message_pin(
+                "general",
+                LOCAL_OPERATOR_USER_ID,
+                LOCAL_OPERATOR_PARTICIPANT_ID,
+                &messages
+                    .last()
+                    .unwrap_or_else(|| panic!("extra message missing"))
+                    .id,
+                true,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("refill pin capacity: {error}"));
+        assert_eq!(refilled.len(), pin_limit);
     }
 
     #[tokio::test]

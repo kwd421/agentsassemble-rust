@@ -182,6 +182,13 @@ async fn tcp_boundary_consumes_crossed_authority_and_authorizes_before_body() {
         .unwrap_or_else(|error| panic!("send unauthorized oversized body: {error}"));
     assert_eq!(unauthorized_oversized.status(), StatusCode::UNAUTHORIZED);
 
+    server.stop().await;
+}
+
+#[tokio::test]
+async fn tcp_boundary_rejects_missing_message_targets_for_pin_and_unpin() {
+    let server = start().await;
+    let client = reqwest::Client::new();
     let room_created = server
         .store
         .snapshot("general", 0, 100)
@@ -191,19 +198,25 @@ async fn tcp_boundary_consumes_crossed_authority_and_authorizes_before_body() {
         .into_iter()
         .find(|event| event.event_type == "room_created")
         .unwrap_or_else(|| panic!("room-created event missing"));
-    let nonmessage = client
-        .post(format!("{}/api/room-pins", server.base_url))
-        .bearer_auth(issue_write(&server.tickets, "general").await)
-        .json(&json!({
-            "room_id": "general",
-            "channel_id": "lobby",
-            "event_id": room_created.id,
-            "pinned": true
-        }))
-        .send()
-        .await
-        .unwrap_or_else(|error| panic!("pin non-message event: {error}"));
-    assert_eq!(nonmessage.status(), StatusCode::NOT_FOUND);
+    for (event_id, pinned) in [
+        (room_created.id.as_str(), true),
+        (room_created.id.as_str(), false),
+        ("missing-event", false),
+    ] {
+        let missing_message = client
+            .post(format!("{}/api/room-pins", server.base_url))
+            .bearer_auth(issue_write(&server.tickets, "general").await)
+            .json(&json!({
+                "room_id": "general",
+                "channel_id": "lobby",
+                "event_id": event_id,
+                "pinned": pinned
+            }))
+            .send()
+            .await
+            .unwrap_or_else(|error| panic!("mutate missing message: {error}"));
+        assert_eq!(missing_message.status(), StatusCode::NOT_FOUND);
+    }
     assert_eq!(pin_count(&server.store).await, 0);
     server.stop().await;
 }
