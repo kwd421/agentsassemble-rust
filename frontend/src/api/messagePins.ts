@@ -171,9 +171,11 @@ function bearer(ticket: string, json = false): Headers {
 export async function fetchLobbyMessagePins({
   roomId,
   authority,
+  beforeDispatch,
 }: {
   roomId: string;
   authority: MessagePinsAuthority;
+  beforeDispatch?: () => void;
 }): Promise<MessagePin[]> {
   const canonicalRoom = canonicalRoomId(roomId);
   const grant = await operationGrant(canonicalRoom, authority, "read");
@@ -181,6 +183,7 @@ export async function fetchLobbyMessagePins({
     room_id: canonicalRoom,
     channel_id: "lobby",
   })}`;
+  beforeDispatch?.();
   const response = await fetch(`${grant.baseUrl}${path}`, {
     cache: "no-store",
     headers: bearer(grant.ticket),
@@ -194,15 +197,18 @@ export async function setLobbyMessagePinned({
   eventId,
   pinned,
   authority,
+  beforeDispatch,
 }: {
   roomId: string;
   eventId: string;
   pinned: boolean;
   authority: MessagePinsAuthority;
+  beforeDispatch?: () => void;
 }): Promise<MessagePin[]> {
   const canonicalRoom = canonicalRoomId(roomId);
   const canonicalEvent = canonicalEventId(eventId);
   const grant = await operationGrant(canonicalRoom, authority, "write");
+  beforeDispatch?.();
   const response = await fetch(`${grant.baseUrl}/api/room-pins`, {
     cache: "no-store",
     method: "POST",

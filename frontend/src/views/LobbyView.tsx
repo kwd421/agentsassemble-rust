@@ -43,6 +43,17 @@ import {
   type RoomMessageSearchController,
 } from "./useRoomMessageSearch";
 
+type PinOperation = { retired: boolean };
+
+function requireCurrentPinOperation(
+  operation: PinOperation,
+  current: PinOperation | null
+) {
+  if (operation.retired || current !== operation) {
+    throw new Error("로비 메시지 핀 요청 권위가 변경되었습니다.");
+  }
+}
+
 export default function LobbyView({
   activeRoom,
   agents,
@@ -152,7 +163,7 @@ export default function LobbyView({
   const [pinsLoading, setPinsLoading] = useState(false);
   const [pinsError, setPinsError] = useState("");
   const [pinBusyIds, setPinBusyIds] = useState<Set<string>>(() => new Set());
-  const activePinOperation = useRef<object | null>(null);
+  const activePinOperation = useRef<PinOperation | null>(null);
   const [pendingMessageTarget, setPendingMessageTarget] = useState("");
   const localMessageSearch = useRoomMessageSearch({
     roomId: activeRoom.meetingId,
@@ -191,13 +202,12 @@ export default function LobbyView({
   }
 
   useEffect(() => {
-    activePinOperation.current = null;
     setPinnedItems([]);
     setPinsLoading(false);
     setPinsError("");
     setPinBusyIds(new Set());
     return () => {
-      activePinOperation.current = null;
+      if (activePinOperation.current) activePinOperation.current.retired = true;
     };
   }, [
     activeRoom.meetingId,
@@ -209,7 +219,7 @@ export default function LobbyView({
 
   const reloadPins = useCallback(async () => {
     if (!messagePinsAuthority || activePinOperation.current) return;
-    const operation = {};
+    const operation: PinOperation = { retired: false };
     activePinOperation.current = operation;
     setPinsLoading(true);
     setPinsError("");
@@ -217,10 +227,11 @@ export default function LobbyView({
       const pins = await fetchLobbyMessagePins({
         roomId: activeRoom.meetingId,
         authority: messagePinsAuthority,
+        beforeDispatch: () => requireCurrentPinOperation(operation, activePinOperation.current),
       });
-      if (activePinOperation.current === operation) setPinnedItems(pins);
+      if (!operation.retired && activePinOperation.current === operation) setPinnedItems(pins);
     } catch (error) {
-      if (activePinOperation.current === operation) {
+      if (!operation.retired && activePinOperation.current === operation) {
         setPinsError(
           error instanceof Error ? error.message : "고정 메시지를 불러오지 못했습니다."
         );
@@ -228,7 +239,7 @@ export default function LobbyView({
     } finally {
       if (activePinOperation.current === operation) {
         activePinOperation.current = null;
-        setPinsLoading(false);
+        if (!operation.retired) setPinsLoading(false);
       }
     }
   }, [activeRoom.meetingId, messagePinsAuthority]);
@@ -412,7 +423,7 @@ export default function LobbyView({
 
   async function setPinned(eventId: string, pinned: boolean) {
     if (!eventId || !messagePinsAuthority || activePinOperation.current) return;
-    const operation = {};
+    const operation: PinOperation = { retired: false };
     activePinOperation.current = operation;
     setPinBusyIds(new Set([eventId]));
     setPinsError("");
@@ -422,10 +433,11 @@ export default function LobbyView({
         eventId,
         pinned,
         authority: messagePinsAuthority,
+        beforeDispatch: () => requireCurrentPinOperation(operation, activePinOperation.current),
       });
-      if (activePinOperation.current === operation) setPinnedItems(pins);
+      if (!operation.retired && activePinOperation.current === operation) setPinnedItems(pins);
     } catch (error) {
-      if (activePinOperation.current === operation) {
+      if (!operation.retired && activePinOperation.current === operation) {
         setPinsError(
           error instanceof Error ? error.message : "고정 상태를 바꾸지 못했습니다."
         );
@@ -433,7 +445,7 @@ export default function LobbyView({
     } finally {
       if (activePinOperation.current === operation) {
         activePinOperation.current = null;
-        setPinBusyIds(new Set());
+        if (!operation.retired) setPinBusyIds(new Set());
       }
     }
   }

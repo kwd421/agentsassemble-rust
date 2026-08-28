@@ -187,6 +187,57 @@ describe("lobby message-pin HTTP authority", () => {
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
+  it("checks local operation currentness after a deferred grant and before dispatch", async () => {
+    let resolveGrant: ((value: ReturnType<typeof grant>) => void) | undefined;
+    bridge.read.mockReturnValueOnce(
+      new Promise<ReturnType<typeof grant>>((resolve) => {
+        resolveGrant = resolve;
+      })
+    );
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    let current = true;
+    const request = fetchLobbyMessagePins({
+      roomId: "general",
+      authority: { kind: "local" },
+      beforeDispatch: () => {
+        if (!current) throw new Error("retired");
+      },
+    });
+
+    current = false;
+    resolveGrant?.(grant("a".repeat(64)));
+
+    await expect(request).rejects.toThrow("retired");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("checks remote operation currentness after exchange and before target dispatch", async () => {
+    let resolveExchange: ((value: Response) => void) | undefined;
+    const fetchMock = vi.fn().mockReturnValueOnce(
+      new Promise<Response>((resolve) => {
+        resolveExchange = resolve;
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    let current = true;
+    const request = setLobbyMessagePinned({
+      roomId: "general",
+      eventId: "event-1",
+      pinned: true,
+      authority: { kind: "remote", sessionToken: "aas1.session" },
+      beforeDispatch: () => {
+        if (!current) throw new Error("retired");
+      },
+    });
+
+    current = false;
+    resolveExchange?.(jsonResponse({ ticket: "c".repeat(64), ttl_seconds: 30 }));
+
+    await expect(request).rejects.toThrow("retired");
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
   it("rejects malformed complete-list state instead of projecting defaults", async () => {
     bridge.read.mockResolvedValue(grant("a".repeat(64)));
     const malformed = [

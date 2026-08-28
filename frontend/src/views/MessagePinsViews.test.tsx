@@ -89,6 +89,7 @@ describe("message-pin view ownership", () => {
         eventId: "event-1",
         pinned: true,
         authority: { kind: "local" },
+        beforeDispatch: expect.any(Function),
       })
     );
 
@@ -97,6 +98,7 @@ describe("message-pin view ownership", () => {
       expect(api.fetchLobbyPins).toHaveBeenCalledWith({
         roomId: "general",
         authority: { kind: "local" },
+        beforeDispatch: expect.any(Function),
       })
     );
     await waitFor(() => expect(screen.getAllByText("pin this message")).toHaveLength(2));
@@ -147,11 +149,15 @@ describe("message-pin view ownership", () => {
   });
 
   it("does not project an old room's delayed pin response into the next room", async () => {
-    let resolvePins: ((pins: typeof pin[]) => void) | undefined;
-    api.fetchLobbyPins.mockReturnValueOnce(
-      new Promise<typeof pin[]>((resolve) => {
-        resolvePins = resolve;
-      })
+    let releaseGrant: (() => void) | undefined;
+    api.fetchLobbyPins.mockImplementationOnce(
+      ({ beforeDispatch }: { beforeDispatch?: () => void }) =>
+        new Promise<void>((resolve) => {
+          releaseGrant = resolve;
+        }).then(() => {
+          beforeDispatch?.();
+          return [pin];
+        })
     );
     const { rerender } = render(
       <LobbyView
@@ -174,7 +180,10 @@ describe("message-pin view ownership", () => {
         canonicalHasMoreHistory={false}
       />
     );
-    await act(async () => resolvePins?.([pin]));
+    fireEvent.click(screen.getByRole("button", { name: "고정 메시지" }));
+    fireEvent.click(screen.getByRole("button", { name: "고정 메시지" }));
+    expect(api.fetchLobbyPins).toHaveBeenCalledOnce();
+    await act(async () => releaseGrant?.());
 
     expect(screen.queryByRole("list", { name: "고정 메시지 목록" })).toBeNull();
     expect(screen.getByText("아직 고정된 메시지가 없습니다.")).toBeTruthy();
