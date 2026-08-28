@@ -474,7 +474,10 @@ The copied frontend's `localPreviewInviteUrlForRoom` query-only guest path and
 The copied external-access modal/controller entry is mounted. Its B2 status/start/stop
 controls use fresh one-use server-operator tickets and generation-owned polling, and
 the legacy public-URL input/configure path is removed rather than restored as mutable
-manual-ingress authority. Invite creation still uses the old moderator helper, cannot
+manual-ingress authority. A server-internal issuance sequence in those grants orders
+control intent without becoming wire state; the existing ingress lifecycle mutex lets
+only a newer Start or Stop mutate the managed process. Invite creation still uses the
+old moderator helper and cannot
 satisfy the Rust one-use room-bound manager-ticket boundary, and therefore remains
 failed closed until C1. Backend manager invite create already captures one ready
 ingress snapshot; revoke uses only its exact room-bound manager grant and remains
@@ -589,9 +592,9 @@ before the next stage. Packaged Computer Use remains the completion test rather 
 a substitute for these authority and failure contracts.
 
 B1a/B1b and the browser admission-custody corrections are public through `fdb4e49`,
-fully verified, and approved by both manual reviewers. B2 is implemented, pushed,
-locally verified, and still under manual correction review; C1 manager-invite
-frontend activation, C2 retained custody, and the packaged flow remain incomplete.
+fully verified, and approved by both manual reviewers. B2 is public through `2b97a7c`,
+fully verified, and approved by both manual reviewers. C1 manager-invite frontend
+activation, C2 retained custody, and the packaged flow remain incomplete.
 
 ## Trusted ingress boundary
 

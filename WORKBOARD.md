@@ -11,8 +11,8 @@ Purpose: route the asynchronous Rust reimplementation without duplicating its co
 - Downstream owner: [`docs/specs/room-settings-preferences-appearance-slice.md`](docs/specs/room-settings-preferences-appearance-slice.md)
 - Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - Real-client verification: [`docs/VERIFICATION.md`](docs/VERIFICATION.md)
-- Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`; verified public Rust implementation baseline `fdb4e49`; pushed and locally verified B2 correction baseline `d0b6794`.
-- Active gate: B1a/B1b and their admission-custody corrections are approved. B2 is pushed and locally verified, with second manual-review corrections in progress; C1 manager-invite frontend authority, C2 retained custody, and packaged activation remain incomplete. The reviewed B1a/B1b/B2/C1a/C1b/C2 order is recorded in the active owner above.
+- Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`; verified public Rust implementation baseline `fdb4e49`; pushed, fully verified, and manually approved B2 baseline `2b97a7c`.
+- Active gate: B1a/B1b, their admission-custody corrections, and B2 are approved. C1a manager-invite authority is next; C1b response/revoke dispatch, C2 retained custody, and packaged activation remain incomplete. The reviewed B1a/B1b/B2/C1a/C1b/C2 order is recorded in the active owner above.
 - Required order: connect the copied frontend through the implemented exact desktop manager-invite grants to the create/revoke routes, then complete packaged frontend activation before continuing with appearance. Update the exposure map only after a surface is reachable and verified.
 - Exit: local and remote humans reach preferences through their real authority owner, appearance uses its complete asset lifecycle, incomplete adjacent surfaces remain visibly unavailable, and mandatory gates, packaged frontend flows, cross-reviews, and verification cleanup pass.
 

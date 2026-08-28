@@ -2662,6 +2662,61 @@ integration, and documentation test, warning-denied Clippy, and diff validation.
 production main bundle remained one existing large chunk at 768.01 kB; no speculative
 code-splitting change was added without a measured runtime bottleneck.
 
+## Frontend public-ingress control activation: 2026-08-28
+
+The B2 series from `e5c9aba` through `2b97a7c` replaces the copied Host-token and
+mutable public-URL controls with the existing private-control-issued, one-use
+server-operator tickets and the implemented no-store status/Start/Stop routes. One
+strict parser owns the complete ingress status relations. Packaged-Tauri plus
+non-guest local-operator eligibility is checked before the controller mounts any
+native request, network request, poll timer, or mutation handler. One controller
+generation owns status publication and its single cancellable wait; closing,
+reopening, Start, Stop, or a superseding invite operation retires older work. No
+manual-origin compatibility path, retry, background task, durable browser state, or
+second ingress authority was added.
+
+The final ordering correction addresses an observed mutation race rather than a
+speculative optimization. Once an older Start HTTP request had been dispatched, a
+newer Stop could reach Rust first and observe no active generation; the delayed Start
+could then create a tunnel after the UI had published `stopped`. Each in-memory
+server-operator grant now carries an internal nonzero issuance sequence. The existing
+`ManagedLifecycle` mutex is the sole applied-order owner and permits mutation only
+for a greater sequence; an older or equal Start/Stop returns the current status. The
+sequence is not exposed on either wire, resets with the same process-local ticket
+store and lifecycle after restart, and fails closed rather than wrapping.
+
+The accepted cost is one 8-byte atomic counter per `TicketStore`, one bounded
+`Option<NonZeroU64>` in the managed lifecycle, and eight bytes in each live
+server-operator ticket. The relaxed atomic establishes only unique monotonic issuance;
+the existing lifecycle mutex still serializes mutations. There is no added disk I/O,
+network round trip, process, timer, or long-lived task. The frontend production main
+bundle at final verification was 771.09 kB; the existing large-chunk warning remains
+without speculative code splitting.
+
+The final `make verify` passed architecture, source-growth, policy, formatting,
+generated-binding, original-CSS, build, workspace-test, warning-denied Clippy, and
+diff gates. All 82 frontend files with 475 tests, all 16 desktop tests, domain 23,
+persistence 171, protocol 4, provider 120, server 83, and every integration and
+documentation test passed. The `control_pipe` suite passed 9/9 and proves the actual
+process/TCP ordering boundary by issuing an older Start grant and a newer Stop grant,
+sending Stop before Start, observing the managed child and descendant stop, retaining
+`stopped`, and rejecting the public `/join`; `ingress_boundary` passed 5/5. Packaged
+Computer Use remains deferred to the complete C1/C2 activation and no Deep Scan or
+other automated security scan ran.
+
+Manual review findings across the correction series were: nested Rust error envelopes
+lost their exact code/message; a trailing-dot localhost form escaped the public-origin
+check; retired async generations could retain timers or publish state; a native ticket
+that resolved after retirement could still dispatch HTTP; Stop was unavailable during
+the server starting phase and while Start awaited its first server response; independent
+Start/Stop HTTP requests could mutate Rust in reverse user-intent order; and the first
+test-fixture split placed a child module at Cargo's integration-test root, where
+all-target autodiscovery compiled it as a second crate. The listed commits correct
+each owning boundary. Final web verdict for `2b97a7c` and `e2bd739..2b97a7c`:
+`APPROVE — Critical 0 / High 0 / Medium 0`. Final Daybreaker verdict for both scopes:
+`APPROVE — Critical 0 / High 0 / Medium 0`. Neither final review used Deep Scan or
+another automated security scanner.
+
 ## Frontend admission intent custody correction: 2026-08-28
 
 The browser entrance and admission-custody series from `8a8b47d` through `fdb4e49`
