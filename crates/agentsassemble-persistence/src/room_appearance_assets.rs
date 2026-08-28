@@ -1,7 +1,8 @@
 use std::collections::BTreeSet;
 
 use agentsassemble_domain::{
-    LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, RoomAppearance,
+    LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, ROOM_APPEARANCE_ASSET_PREFIX,
+    ROOM_APPEARANCE_REFERENCE_PREFIX, ROOM_APPEARANCE_REFERENCE_SUFFIX, RoomAppearance,
     is_room_appearance_asset_id, room_appearance_asset_id,
 };
 use chrono::{DateTime, Duration, Utc};
@@ -60,7 +61,7 @@ impl SqliteStore {
         let manager = require_exact_local_room_manager(&mut transaction, authority).await?;
         delete_expired_pending(&mut transaction, now.timestamp()).await?;
         enforce_storage_replacement(&mut transaction, None, size, now.timestamp()).await?;
-        let asset_id = format!("ra_{}", Uuid::new_v4().simple());
+        let asset_id = format!("{ROOM_APPEARANCE_ASSET_PREFIX}{}", Uuid::new_v4().simple());
         sqlx::query(
             "INSERT INTO room_appearance_assets(asset_id, room_id, pending_owner_user_id, filename, content_type, content, size, created_at, state, expires_at) VALUES (?, ?, ?, ?, 'image/png', ?, ?, ?, 'pending', ?)",
         )
@@ -243,7 +244,7 @@ fn validate_asset_metadata(
 
 fn asset_metadata(id: String, filename: String, size: usize) -> RoomAppearanceAssetMetadata {
     RoomAppearanceAssetMetadata {
-        url: format!("/api/attachments/{id}?view=1"),
+        url: format!("{ROOM_APPEARANCE_REFERENCE_PREFIX}{id}{ROOM_APPEARANCE_REFERENCE_SUFFIX}"),
         id,
         filename,
         content_type: "image/png".to_owned(),

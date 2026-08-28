@@ -14,6 +14,10 @@ const ROOM_TOPIC_LIMIT: usize = 160;
 const IMAGE_URL_LIMIT: usize = 240;
 const CHANNEL_NAME_LIMIT: usize = 60;
 const MAX_CHANNELS: usize = 50;
+pub const ROOM_APPEARANCE_ASSET_PREFIX: &str = "ra_";
+pub const ROOM_APPEARANCE_ASSET_HEX_LENGTH: usize = 32;
+pub const ROOM_APPEARANCE_REFERENCE_PREFIX: &str = "/api/attachments/";
+pub const ROOM_APPEARANCE_REFERENCE_SUFFIX: &str = "?view=1";
 
 static CHANNEL_ID: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^c[0-9a-f]{12}$").unwrap_or_else(|error| panic!("valid channel regex: {error}"))
@@ -487,18 +491,18 @@ fn require_asset_url(value: &str, field: &str) -> Result<(), RoomSettingsError> 
 #[must_use]
 pub fn room_appearance_asset_id(value: &str) -> Option<&str> {
     let asset_id = value
-        .strip_prefix("/api/attachments/")?
-        .strip_suffix("?view=1")?;
+        .strip_prefix(ROOM_APPEARANCE_REFERENCE_PREFIX)?
+        .strip_suffix(ROOM_APPEARANCE_REFERENCE_SUFFIX)?;
     is_room_appearance_asset_id(asset_id).then_some(asset_id)
 }
 
 /// Reports whether one opaque identifier belongs to the room-appearance namespace.
 #[must_use]
 pub fn is_room_appearance_asset_id(asset_id: &str) -> bool {
-    let Some(hex) = asset_id.strip_prefix("ra_") else {
+    let Some(hex) = asset_id.strip_prefix(ROOM_APPEARANCE_ASSET_PREFIX) else {
         return false;
     };
-    hex.len() == 32
+    hex.len() == ROOM_APPEARANCE_ASSET_HEX_LENGTH
         && hex
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))

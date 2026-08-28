@@ -2,6 +2,10 @@ use agentsassemble_domain::{
     AgentSession, CapabilitySet, Participant, ProviderAvailability, ProviderCatalog,
     PublicRoomSettings, Room, RoomEvent, SnapshotMode, UserProfile,
 };
+pub use agentsassemble_domain::{
+    ROOM_APPEARANCE_ASSET_HEX_LENGTH, ROOM_APPEARANCE_ASSET_PREFIX,
+    ROOM_APPEARANCE_REFERENCE_PREFIX, ROOM_APPEARANCE_REFERENCE_SUFFIX,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
