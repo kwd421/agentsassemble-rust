@@ -28,6 +28,7 @@ use tokio::{
 };
 
 mod appearance_control;
+mod message_pins_control;
 
 use tokio_util::sync::CancellationToken;
 use tracing_subscriber::EnvFilter;
@@ -307,6 +308,10 @@ async fn control_response(state: &AppState, line: &[u8]) -> LocalControlResponse
             )
             .await
         }
+        request @ (LocalControlRequest::IssueMessagePinsReadTicket { .. }
+        | LocalControlRequest::IssueMessagePinsWriteTicket { .. }) => {
+            message_pins_control::response(state, request_id, request).await
+        }
         request @ (LocalControlRequest::IssueHumanInviteCreateTicket { .. }
         | LocalControlRequest::IssueHumanInviteRevokeTicket { .. }) => {
             invite_ticket_control_request(state, request_id, request).await
@@ -489,6 +494,8 @@ fn control_request_id(request: &LocalControlRequest) -> &str {
         | LocalControlRequest::IssueOperatorHttpTicket { request_id }
         | LocalControlRequest::IssuePreferencesReadTicket { request_id, .. }
         | LocalControlRequest::IssuePreferencesWriteTicket { request_id, .. }
+        | LocalControlRequest::IssueMessagePinsReadTicket { request_id, .. }
+        | LocalControlRequest::IssueMessagePinsWriteTicket { request_id, .. }
         | LocalControlRequest::IssueHumanInviteCreateTicket { request_id, .. }
         | LocalControlRequest::IssueHumanInviteRevokeTicket { request_id, .. }
         | LocalControlRequest::IssueAppearanceUploadTicket { request_id, .. }

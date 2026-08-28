@@ -141,6 +141,20 @@ pub(super) fn request_preferences_write_ticket(
     request_http_ticket(runtime, HttpTicketKind::PreferencesWrite(room_id))
 }
 
+pub(super) fn request_message_pins_read_ticket(
+    runtime: &mut RuntimeProcess,
+    room_id: &str,
+) -> Result<HttpTicketGrant, TicketFailure> {
+    request_http_ticket(runtime, HttpTicketKind::MessagePinsRead(room_id))
+}
+
+pub(super) fn request_message_pins_write_ticket(
+    runtime: &mut RuntimeProcess,
+    room_id: &str,
+) -> Result<HttpTicketGrant, TicketFailure> {
+    request_http_ticket(runtime, HttpTicketKind::MessagePinsWrite(room_id))
+}
+
 pub(super) fn request_human_invite_create_ticket(
     runtime: &mut RuntimeProcess,
     authority: &ManagerRoomAuthority,
@@ -195,6 +209,8 @@ enum HttpTicketKind<'a> {
     Operator,
     PreferencesRead(&'a str),
     PreferencesWrite(&'a str),
+    MessagePinsRead(&'a str),
+    MessagePinsWrite(&'a str),
     HumanInviteCreate(&'a ManagerRoomAuthority),
     HumanInviteRevoke(&'a ManagerRoomAuthority),
     AppearanceUpload(&'a ManagerRoomAuthority),
@@ -220,6 +236,18 @@ fn request_http_ticket(
         }
         HttpTicketKind::PreferencesWrite(room_id) => {
             LocalControlRequest::IssuePreferencesWriteTicket {
+                request_id: request_id.clone(),
+                meeting_id: room_id.to_owned(),
+            }
+        }
+        HttpTicketKind::MessagePinsRead(room_id) => {
+            LocalControlRequest::IssueMessagePinsReadTicket {
+                request_id: request_id.clone(),
+                meeting_id: room_id.to_owned(),
+            }
+        }
+        HttpTicketKind::MessagePinsWrite(room_id) => {
+            LocalControlRequest::IssueMessagePinsWriteTicket {
                 request_id: request_id.clone(),
                 meeting_id: room_id.to_owned(),
             }
@@ -299,6 +327,12 @@ fn decode_http_ticket_response(
     request_id: &str,
     response: LocalControlResponse,
 ) -> Result<(String, u64), TicketFailure> {
+    if matches!(
+        kind,
+        HttpTicketKind::MessagePinsRead(_) | HttpTicketKind::MessagePinsWrite(_)
+    ) {
+        return decode_message_pin_ticket_response(kind, request_id, response);
+    }
     match (kind, response) {
         (
             HttpTicketKind::Operator,
@@ -379,16 +413,54 @@ fn decode_http_ticket_response(
                 code,
                 message,
             },
-        ) if response_id == request_id => {
-            if is_application_rejection(&code) {
-                Err(TicketFailure::Rejected(message))
-            } else {
-                Err(TicketFailure::Broken(message))
-            }
-        }
+        ) if response_id == request_id => Err(control_ticket_failure(&code, message)),
         _ => Err(TicketFailure::Broken(
             "local runtime HTTP ticket response did not match the request".to_owned(),
         )),
+    }
+}
+
+fn decode_message_pin_ticket_response(
+    kind: HttpTicketKind<'_>,
+    request_id: &str,
+    response: LocalControlResponse,
+) -> Result<(String, u64), TicketFailure> {
+    match (kind, response) {
+        (
+            HttpTicketKind::MessagePinsRead(_),
+            LocalControlResponse::MessagePinsReadOk {
+                request_id: response_id,
+                ticket,
+                ttl_seconds,
+            },
+        )
+        | (
+            HttpTicketKind::MessagePinsWrite(_),
+            LocalControlResponse::MessagePinsWriteOk {
+                request_id: response_id,
+                ticket,
+                ttl_seconds,
+            },
+        ) if response_id == request_id => Ok((ticket, ttl_seconds)),
+        (
+            _,
+            LocalControlResponse::Error {
+                request_id: response_id,
+                code,
+                message,
+            },
+        ) if response_id == request_id => Err(control_ticket_failure(&code, message)),
+        _ => Err(TicketFailure::Broken(
+            "local runtime message-pin ticket response did not match the request".to_owned(),
+        )),
+    }
+}
+
+fn control_ticket_failure(code: &str, message: String) -> TicketFailure {
+    if is_application_rejection(code) {
+        TicketFailure::Rejected(message)
+    } else {
+        TicketFailure::Broken(message)
     }
 }
 
@@ -539,6 +611,20 @@ mod tests {
             decode_http_ticket_response(
                 HttpTicketKind::PreferencesRead("general"),
                 "request-1",
+                response,
+            ),
+            Err(TicketFailure::Broken(_))
+        ));
+
+        let response = LocalControlResponse::MessagePinsWriteOk {
+            request_id: "request-pin".to_owned(),
+            ticket: "d".repeat(64),
+            ttl_seconds: 30,
+        };
+        assert!(matches!(
+            decode_http_ticket_response(
+                HttpTicketKind::MessagePinsRead("general"),
+                "request-pin",
                 response,
             ),
             Err(TicketFailure::Broken(_))

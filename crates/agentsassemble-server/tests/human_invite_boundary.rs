@@ -224,13 +224,8 @@ async fn assert_writable_remote_preferences(client: &Client) {
     .await;
     let session_token = canonical_session_token(&admitted);
 
-    let write_ticket = issue_session_preference_ticket(
-        client,
-        &server.base_url,
-        session_token,
-        "preferences-write",
-    )
-    .await;
+    let write_ticket =
+        issue_session_ticket(client, &server.base_url, session_token, "preferences-write").await;
     let updated = client
         .post(format!("{}/api/room-settings", server.base_url))
         .bearer_auth(&write_ticket)
@@ -256,13 +251,8 @@ async fn assert_writable_remote_preferences(client: &Client) {
         .unwrap_or_else(|error| panic!("replay remote preference write: {error}"));
     assert_eq!(replay.status(), reqwest::StatusCode::UNAUTHORIZED);
 
-    let read_ticket = issue_session_preference_ticket(
-        client,
-        &server.base_url,
-        session_token,
-        "preferences-read",
-    )
-    .await;
+    let read_ticket =
+        issue_session_ticket(client, &server.base_url, session_token, "preferences-read").await;
     let cross_room = client
         .get(format!(
             "{}/api/room-settings?room_id=other",
@@ -303,7 +293,7 @@ async fn assert_replaced_session_preference_fails(
     browser_credential: &str,
 ) {
     let stale_ticket =
-        issue_session_preference_ticket(client, base_url, session_token, "preferences-read").await;
+        issue_session_ticket(client, base_url, session_token, "preferences-read").await;
     join(
         client,
         base_url,
@@ -337,7 +327,7 @@ async fn assert_read_only_remote_preferences(client: &Client) {
     )
     .await;
     let read_only_session = canonical_session_token(&read_only);
-    let read_ticket = issue_session_preference_ticket(
+    let read_ticket = issue_session_ticket(
         client,
         &read_only_server.base_url,
         read_only_session,
@@ -376,6 +366,39 @@ async fn assert_read_only_remote_preferences(client: &Client) {
         .json()
         .await
         .unwrap_or_else(|error| panic!("decode read-only preference denial: {error}"));
+    assert_eq!(denied["code"], "session_read_only");
+
+    let pin_read_ticket = issue_session_ticket(
+        client,
+        &read_only_server.base_url,
+        read_only_session,
+        "message-pins-read",
+    )
+    .await;
+    let pins = client
+        .get(format!(
+            "{}/api/room-pins?room_id=general&channel_id=lobby",
+            read_only_server.base_url
+        ))
+        .bearer_auth(pin_read_ticket)
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("read pins through read-only session: {error}"));
+    assert_eq!(pins.status(), reqwest::StatusCode::OK);
+    let denied = client
+        .post(format!(
+            "{}/api/session-tickets/message-pins-write",
+            read_only_server.base_url
+        ))
+        .bearer_auth(read_only_session)
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("deny read-only pin exchange: {error}"));
+    assert_eq!(denied.status(), reqwest::StatusCode::FORBIDDEN);
+    let denied: Value = denied
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("decode read-only pin denial: {error}"));
     assert_eq!(denied["code"], "session_read_only");
     read_only_server.stop().await;
 }
@@ -461,7 +484,7 @@ async fn assert_session_socket_boundary(client: &Client, base_url: &str, session
     socket.close().await;
 }
 
-async fn issue_session_preference_ticket(
+async fn issue_session_ticket(
     client: &Client,
     base_url: &str,
     session_token: &str,
@@ -472,16 +495,16 @@ async fn issue_session_preference_ticket(
         .bearer_auth(session_token)
         .send()
         .await
-        .unwrap_or_else(|error| panic!("exchange human preference ticket: {error}"));
+        .unwrap_or_else(|error| panic!("exchange human session ticket: {error}"));
     assert_eq!(response.status(), reqwest::StatusCode::OK);
     assert_eq!(response.headers()["cache-control"], "private, no-store");
     let grant: Value = response
         .json()
         .await
-        .unwrap_or_else(|error| panic!("decode human preference ticket: {error}"));
+        .unwrap_or_else(|error| panic!("decode human session ticket: {error}"));
     let ticket = grant["ticket"]
         .as_str()
-        .unwrap_or_else(|| panic!("human preference ticket is missing"));
+        .unwrap_or_else(|| panic!("human session ticket is missing"));
     assert_eq!(ticket.len(), 64);
     assert!(ticket.bytes().all(|byte| byte.is_ascii_hexdigit()));
     ticket.to_owned()

@@ -386,6 +386,14 @@ pub enum LocalControlRequest {
         request_id: String,
         meeting_id: String,
     },
+    IssueMessagePinsReadTicket {
+        request_id: String,
+        meeting_id: String,
+    },
+    IssueMessagePinsWriteTicket {
+        request_id: String,
+        meeting_id: String,
+    },
     IssueHumanInviteCreateTicket {
         request_id: String,
         server_id: String,
@@ -476,6 +484,16 @@ pub enum LocalControlResponse {
         ttl_seconds: u64,
     },
     PreferencesWriteOk {
+        request_id: String,
+        ticket: String,
+        ttl_seconds: u64,
+    },
+    MessagePinsReadOk {
+        request_id: String,
+        ticket: String,
+        ttl_seconds: u64,
+    },
+    MessagePinsWriteOk {
         request_id: String,
         ticket: String,
         ttl_seconds: u64,

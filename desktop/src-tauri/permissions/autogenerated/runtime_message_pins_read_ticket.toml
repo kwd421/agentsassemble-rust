@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-runtime-message-pins-read-ticket"
+description = "Enables the runtime_message_pins_read_ticket command without any pre-configured scope."
+commands.allow = ["runtime_message_pins_read_ticket"]
+
+[[permission]]
+identifier = "deny-runtime-message-pins-read-ticket"
+description = "Denies the runtime_message_pins_read_ticket command without any pre-configured scope."
+commands.deny = ["runtime_message_pins_read_ticket"]

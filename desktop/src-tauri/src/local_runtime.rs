@@ -22,6 +22,7 @@ use crate::runtime_supervisor;
 mod appearance;
 mod control;
 mod human_invite;
+mod message_pins;
 
 use control::{
     TicketFailure, request_bootstrap_initialize, request_bootstrap_status,

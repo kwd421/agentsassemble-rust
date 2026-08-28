@@ -5,6 +5,8 @@ desktop_commands! {
     runtime_operator_ticket => "allow-runtime-operator-ticket",
     runtime_preferences_read_ticket => "allow-runtime-preferences-read-ticket",
     runtime_preferences_write_ticket => "allow-runtime-preferences-write-ticket",
+    runtime_message_pins_read_ticket => "allow-runtime-message-pins-read-ticket",
+    runtime_message_pins_write_ticket => "allow-runtime-message-pins-write-ticket",
     runtime_human_invite_create_ticket => "allow-runtime-human-invite-create-ticket",
     runtime_human_invite_revoke_ticket => "allow-runtime-human-invite-revoke-ticket",
     runtime_appearance_upload_ticket => "allow-runtime-appearance-upload-ticket",

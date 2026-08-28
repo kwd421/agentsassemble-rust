@@ -59,6 +59,8 @@ registered_routes! {
         same_origin_public "/api/session-tickets/socket" => post(issue_socket_ticket),
         same_origin_public "/api/session-tickets/preferences-read" => post(issue_preferences_read_ticket),
         same_origin_public "/api/session-tickets/preferences-write" => post(issue_preferences_write_ticket),
+        same_origin_public "/api/session-tickets/message-pins-read" => post(issue_message_pins_read_ticket),
+        same_origin_public "/api/session-tickets/message-pins-write" => post(issue_message_pins_write_ticket),
         same_origin_public "/api/session-tickets/room-appearance/{asset_id}" => post(issue_room_appearance_ticket),
         same_origin_public "/api/room-invite/leave" => post(leave_room),
     }
@@ -150,12 +152,51 @@ async fn issue_preferences_write_ticket(
 ) -> Result<Response, SessionExchangeError> {
     let authorization = authorize_exchange(&state, request).await?;
     if authorization.principal().invite_scope != InviteScope::ReadWrite {
-        return Err(SessionExchangeError::read_only());
+        return Err(SessionExchangeError::read_only_preferences());
     }
     let ttl_seconds = session_ticket_ttl(&state, &authorization);
     let issued = state
         .tickets
         .issue_human_session_preferences_write(authorization)
+        .await
+        .map_err(|_| SessionExchangeError::capacity())?;
+    Ok(Json(SessionTicketResponse {
+        ticket: issued.ticket,
+        ttl_seconds,
+    })
+    .into_response())
+}
+
+async fn issue_message_pins_read_ticket(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Response, SessionExchangeError> {
+    let authorization = authorize_exchange(&state, request).await?;
+    let ttl_seconds = session_ticket_ttl(&state, &authorization);
+    let issued = state
+        .tickets
+        .issue_human_session_message_pins_read(authorization)
+        .await
+        .map_err(|_| SessionExchangeError::capacity())?;
+    Ok(Json(SessionTicketResponse {
+        ticket: issued.ticket,
+        ttl_seconds,
+    })
+    .into_response())
+}
+
+async fn issue_message_pins_write_ticket(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Response, SessionExchangeError> {
+    let authorization = authorize_exchange(&state, request).await?;
+    if authorization.principal().invite_scope != InviteScope::ReadWrite {
+        return Err(SessionExchangeError::read_only_message_pins());
+    }
+    let ttl_seconds = session_ticket_ttl(&state, &authorization);
+    let issued = state
+        .tickets
+        .issue_human_session_message_pins_write(authorization)
         .await
         .map_err(|_| SessionExchangeError::capacity())?;
     Ok(Json(SessionTicketResponse {
@@ -251,11 +292,19 @@ impl SessionExchangeError {
         }
     }
 
-    fn read_only() -> Self {
+    fn read_only_preferences() -> Self {
         Self {
             status: StatusCode::FORBIDDEN,
             code: "session_read_only".to_owned(),
             message: "Read-only room sessions cannot change preferences.".to_owned(),
+        }
+    }
+
+    fn read_only_message_pins() -> Self {
+        Self {
+            status: StatusCode::FORBIDDEN,
+            code: "session_read_only".to_owned(),
+            message: "Read-only room sessions cannot change pinned messages.".to_owned(),
         }
     }
 
