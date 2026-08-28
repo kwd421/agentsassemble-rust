@@ -1,9 +1,9 @@
-use agentsassemble_domain::InviteScope;
+use agentsassemble_domain::{InviteScope, is_room_appearance_asset_id};
 use agentsassemble_persistence::PersistenceError;
 use agentsassemble_protocol::{CommandResolution, RoomAction};
 use axum::{
     Json, Router,
-    extract::{Request, State},
+    extract::{Path, Request, State},
     http::{Method, StatusCode, header},
     response::{IntoResponse, Response},
 };
@@ -59,6 +59,7 @@ registered_routes! {
         same_origin_public "/api/session-tickets/socket" => post(issue_socket_ticket),
         same_origin_public "/api/session-tickets/preferences-read" => post(issue_preferences_read_ticket),
         same_origin_public "/api/session-tickets/preferences-write" => post(issue_preferences_write_ticket),
+        same_origin_public "/api/session-tickets/room-appearance/{asset_id}" => post(issue_room_appearance_ticket),
         same_origin_public "/api/room-invite/leave" => post(leave_room),
     }
 }
@@ -164,6 +165,28 @@ async fn issue_preferences_write_ticket(
     .into_response())
 }
 
+async fn issue_room_appearance_ticket(
+    State(state): State<AppState>,
+    Path(asset_id): Path<String>,
+    request: Request,
+) -> Result<Response, SessionExchangeError> {
+    let authorization = authorize_exchange(&state, request).await?;
+    if !is_room_appearance_asset_id(&asset_id) {
+        return Err(SessionExchangeError::invalid_appearance_asset());
+    }
+    let ttl_seconds = session_ticket_ttl(&state, &authorization);
+    let issued = state
+        .tickets
+        .issue_human_session_bound_appearance_read(authorization, asset_id)
+        .await
+        .map_err(|_| SessionExchangeError::capacity())?;
+    Ok(Json(SessionTicketResponse {
+        ticket: issued.ticket,
+        ttl_seconds,
+    })
+    .into_response())
+}
+
 async fn authorize_exchange(
     state: &AppState,
     request: Request,
@@ -233,6 +256,14 @@ impl SessionExchangeError {
             status: StatusCode::FORBIDDEN,
             code: "session_read_only".to_owned(),
             message: "Read-only room sessions cannot change preferences.".to_owned(),
+        }
+    }
+
+    fn invalid_appearance_asset() -> Self {
+        Self {
+            status: StatusCode::BAD_REQUEST,
+            code: "appearance_asset_invalid".to_owned(),
+            message: "A canonical room appearance asset is required.".to_owned(),
         }
     }
 
