@@ -36,8 +36,14 @@ canonical Rust room events through bounded-purpose HTTP authority.
   an empty list. Results are newest pin first with event identity as the stable tie-break.
 - `POST /api/room-pins` accepts exactly `room_id`, `channel_id`, `event_id`, and
   `pinned`. Re-pinning refreshes the existing pointer's timestamp; unpinning an absent
-  pointer remains an idempotent no-op. The response returns the complete current list as
-  the copied UI expects.
+  pointer to a valid message remains an idempotent no-op. Missing, non-message, deleted,
+  or corrupt targets fail before either branch mutates state. The response returns the
+  complete current list as the copied UI expects.
+- A room owns at most 64 lobby pins. This absolute response-safety bound keeps the
+  complete-list contract finite; a new pin at capacity fails without writing, while an
+  existing pin may be refreshed and any valid target may be unpinned. Listing reads at
+  most one sentinel row beyond the bound and rejects excess durable state instead of
+  allocating an unbounded projection.
 - HTTP owns this bounded request/response state operation; the room WebSocket continues
   to own live room events. No WebSocket pin event or client-side pin authority is added.
 
@@ -45,7 +51,8 @@ canonical Rust room events through bounded-purpose HTTP authority.
 
 - No custom-channel implementation, generic message-record framework, derived search
   index, pin notification event, audit subsystem, pagination redesign, compatibility
-  path, fallback transport, or speculative quota.
+  path, fallback transport, or configurable quota layer beyond the absolute response
+  safety bound.
 - No recreation of the excluded scripted-meeting runner or its artifacts/models.
 
 ## Acceptance criteria
@@ -57,7 +64,9 @@ canonical Rust room events through bounded-purpose HTTP authority.
 3. Wrong room/purpose, replayed/expired ticket, revoked membership/session, malformed or
    oversized body, absent target, and non-message target leave durable state unchanged.
 4. Re-pinning one event produces one row at the newest position; unpin is exact and
-   deletion of a room removes only that room's pins through room ownership.
+   deletion of a room removes only that room's pins through room ownership. A 65th
+   distinct pin fails without changing the complete 64-item list; re-pin and unpin remain
+   available at the bound.
 5. No legacy host-token, raw-session, placeholder, fake-authority, migration, or fallback
    path becomes reachable. Existing architecture, source-growth, and 800-line gates pass.
 

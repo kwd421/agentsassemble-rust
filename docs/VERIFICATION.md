@@ -3497,7 +3497,7 @@ connection was reset.
 
 ## Lobby message-pin threshold batch: 2026-08-29
 
-The incomplete threshold range `258c365..49f4869` establishes the lobby pin's durable
+The incomplete threshold range `258c365..3b2c47f` establishes the lobby pin's durable
 and HTTP authority without claiming frontend completion. Schema 44 owns one bounded
 pointer from `(room_id, event_id)` to the exact `(room_id, event_seq)` in `room_events`;
 it copies no message, author, attachment, or participant state. Event or room deletion
@@ -3533,3 +3533,35 @@ gate. No real provider, Deep Scan, automated security scanner, or Computer Use r
 The copied frontend still uses its old pin transport and the feature remains explicitly
 incomplete pending that cutover and packaged verification. This 2,000-line threshold
 batch requires critical-web and Daybreaker review before implementation continues.
+
+The first threshold cross-review returned `REVISE`. Daybreaker reported one Medium:
+unpin deleted before validating the canonical target, so missing and non-message targets
+could succeed as no-ops. The critical web review reported that same issue and two related
+Medium defects: a structurally decoded `message_final` with missing content was projected
+as an empty normal message, and the complete pin list had no total bound, allowing one
+authenticated room member to amplify later GET and POST responses without limit.
+
+Commit `b72a6b0` moves the existing target validator before both mutation branches,
+requires visible message content rather than defaulting corruption to empty text, and
+adds persistence plus real-TCP regressions for missing/non-message unpin and corrupt
+target rollback. One domain-owned absolute limit now permits 64 lobby pins per room. A
+new pin checks the other-pointer count in the same mutation transaction; re-pin and
+valid-message unpin remain available at capacity. Complete-list SQL reads at most 65
+joined rows and rejects excess durable state before event deserialization, so a bad
+database cannot restore the unbounded `fetch_all` allocation.
+
+The bound addresses a concrete availability cost rather than claiming a speedup. At the
+12,000-character message limit, even worst-case JSON escaping keeps 64 returned contents
+to roughly 4.6 MiB before the small projection envelope, while 10,000 near-limit pins
+could otherwise exceed 120 MiB before row JSON, allocation, and serialization overhead.
+The accepted trade-off is one short indexed count on pin/re-pin; unpin pays no count and
+all successful operations preserve the copied complete-list response. No index, cache,
+pagination framework, configuration layer, task, timer, fallback, compatibility path,
+or migration was added.
+
+Focused persistence tests passed all four pin contracts and the real TCP suite passed
+all three pin boundaries. Full serial `make verify` passed again: frontend 87/539,
+desktop 20, domain 26, persistence 185, protocol 6, provider 120, server 85, every
+TCP/integration/doc test, warning-denied Clippy, architecture/source-growth/original-CSS,
+and diff gates. No real provider, Deep Scan, automated scanner, or Computer Use ran.
+Final critical-web and Daybreaker approval of `3b2c47f..b72a6b0` remains pending.
