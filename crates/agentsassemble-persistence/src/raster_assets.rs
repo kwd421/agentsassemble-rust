@@ -27,7 +27,7 @@ pub(crate) async fn prepare_raster(
     if content.is_empty() || content.len() > MAX_RASTER_BYTES {
         return Err(rejected(
             "attachment_too_large",
-            "Profile avatar must be between 1 byte and 10 MiB.",
+            "Raster attachment must be between 1 byte and 10 MiB.",
         ));
     }
     let declared_format = declared_image_format(content_type)?;
@@ -36,7 +36,7 @@ pub(crate) async fn prepare_raster(
     let size = i64::try_from(canonical.content.len()).map_err(|_| {
         rejected(
             "attachment_too_large",
-            "Canonical profile avatar exceeds the supported size.",
+            "Canonical raster attachment exceeds the supported size.",
         )
     })?;
     Ok((canonical, size))
@@ -55,7 +55,7 @@ pub(crate) fn validate_stored_raster(
     {
         return Err(rejected(
             "invalid_state",
-            "Stored profile avatar metadata is invalid.",
+            "Stored raster attachment metadata is invalid.",
         ));
     }
     Ok(())
@@ -129,7 +129,7 @@ fn canonicalize_blocking(
     if detected_format != declared_format {
         return Err(rejected(
             "attachment_type_mismatch",
-            "Profile avatar bytes do not match the declared image type.",
+            "Raster attachment bytes do not match the declared image type.",
         ));
     }
     let mut limits = Limits::default();
@@ -147,7 +147,7 @@ fn canonicalize_blocking(
     if content.len() > MAX_RASTER_BYTES {
         return Err(rejected(
             "attachment_too_large",
-            "Canonical profile avatar exceeds the 10 MiB item limit.",
+            "Canonical raster attachment exceeds the 10 MiB item limit.",
         ));
     }
     Ok(CanonicalRaster {
@@ -166,7 +166,7 @@ fn validate_pixels(image: &DynamicImage) -> Result<(), PersistenceError> {
     {
         return Err(rejected(
             "attachment_image_limits",
-            "Profile avatar dimensions exceed the decode limits.",
+            "Raster attachment dimensions exceed the decode limits.",
         ));
     }
     Ok(())
@@ -231,7 +231,7 @@ fn canonical_png_filename(filename: &str) -> String {
 fn invalid_image() -> PersistenceError {
     rejected(
         "attachment_invalid_image",
-        "Profile avatar bytes are not a valid bounded image.",
+        "Raster attachment bytes are not a valid bounded image.",
     )
 }
 

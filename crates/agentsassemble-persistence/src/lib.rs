@@ -32,6 +32,7 @@ mod private_fs;
 mod profile_attachments;
 mod profile_store;
 mod raster_assets;
+mod room_appearance_assets;
 mod room_directory;
 mod room_event_publication;
 mod room_preferences;
@@ -62,6 +63,8 @@ mod provider_turn_effect_finalize;
 mod provider_turn_execution;
 mod provider_turn_reconciliation;
 mod provider_turn_stop;
+#[cfg(test)]
+mod room_appearance_asset_tests;
 
 pub use agent_create_start::{
     AgentCreateStartCommit, AgentCreateStartEffect, AgentCreateStartPlan,
@@ -103,6 +106,7 @@ pub use provider_turn_reconciliation::{
     ProviderTurnReconciliationPage,
 };
 pub use raster_assets::MAX_RASTER_BYTES;
+pub use room_appearance_assets::{RoomAppearanceAsset, RoomAppearanceAssetMetadata};
 pub use room_directory::{RoomCreateCommit, StoredRoomSummary};
 pub use room_preferences::{LocalRoomPreferencesDirectoryEntry, RoomPreferencesSnapshot};
 pub use room_random::{ProviderRoomRandomCommit, RoomRandomCommit};
