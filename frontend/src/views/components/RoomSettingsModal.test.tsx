@@ -85,6 +85,18 @@ describe("RoomSettingsModal conversation mode", () => {
     expect(await screen.findByText("배너 이미지 저장됨")).toBeTruthy();
   });
 
+  it("sends an explicit empty banner reference when a preset clears the image", async () => {
+    const onAppearanceChange = vi.fn().mockResolvedValue(undefined);
+    renderSettings("ordered", vi.fn(), "ready", vi.fn(), vi.fn(), onAppearanceChange);
+
+    await userEvent.click(screen.getByRole("button", { name: "그린" }));
+
+    expect(onAppearanceChange).toHaveBeenCalledWith({
+      bannerPreset: "forest",
+      bannerImage: "",
+    });
+  });
+
   it("lets the user activate ambient discussion from the room settings UI", async () => {
     const { onConversationModeChange } = renderSettings("ordered");
 

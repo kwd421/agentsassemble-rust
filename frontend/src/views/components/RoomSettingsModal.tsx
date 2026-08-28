@@ -327,7 +327,7 @@ export default function RoomSettingsModal({
                     onClick={() => {
                       void onAppearanceChange({
                         bannerPreset: preset,
-                        bannerImage: undefined,
+                        bannerImage: "",
                       }).catch(() => undefined);
                     }}
                   >
