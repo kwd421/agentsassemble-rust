@@ -243,7 +243,6 @@ export function mergeServerRoomsIntoDock(
     }
     const reconciledRoom = {
       ...room,
-      id: canonicalRoom.id,
       label: canonicalRoom.label,
       meetingId: canonicalRoom.meetingId,
       topic: canonicalRoom.topic,
@@ -260,7 +259,6 @@ export function mergeServerRoomsIntoDock(
       connectionState: canonicalRoom.connectionState,
     };
     if (
-      room.id !== reconciledRoom.id ||
       room.label !== reconciledRoom.label ||
       room.meetingId !== reconciledRoom.meetingId ||
       room.topic !== reconciledRoom.topic ||

@@ -2914,8 +2914,9 @@ Daybreaker approved `525f754..817ff0d` and `5a032db..817ff0d` with
 directory entry, yet reconciliation retained that stale ID. The stale value could then
 be persisted again and used by the active socket or ticket path.
 
-The correction makes verified-directory reconciliation replace both operational room
-identifiers (`id` and `meetingId`) and includes them in its change decision. The native
+The correction makes verified-directory reconciliation replace the operational
+`meetingId` and includes it in its change decision. The local dock `id` remains stable
+so active selection references are not invalidated during hydration. The native
 derived-cache writer no longer owns a second generic-text room-ID policy: it calls the
 domain `validate_room_id` owner and accepts only an unchanged canonical result. No cache
 version, migration, fallback, or compatibility branch was added. Tests prove that a
@@ -2930,3 +2931,14 @@ correction adds no runtime task, database query, durable policy state, or networ
 trip; it replaces derived fields during an existing O(rooms) merge and removes duplicate
 normalization at the native write boundary. Final approval remains withheld until this
 correction is pushed and both reviewers recheck it.
+
+Daybreaker approved `817ff0d..8f71bb6` and `5a032db..8f71bb6` with
+`Critical 0 / High 0 / Medium 0`. Web review returned
+`REVISE — Critical 0 / High 0 / Medium 1`: replacing the local dock `id` together with
+`meetingId` could orphan the separately held active-room/menu references during deferred
+hydration and select another room. That extra replacement was not required to correct
+the operational room authority. The correction therefore preserves the stable local
+UI key and replaces only `meetingId`; it adds no reference-remapping framework or new
+state. The serial `make verify` again passed the same complete gate and test inventory;
+the production main chunk is 771.16 kB (232.39 kB gzip). Final approval is withheld
+until this minimal correction is pushed and re-reviewed.

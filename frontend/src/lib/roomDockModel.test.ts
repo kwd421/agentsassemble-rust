@@ -104,13 +104,12 @@ describe("durable room identity", () => {
     );
 
     const [reconciled] = mergeServerRoomsIntoDock(
-      [{ ...canonical, id: "stale-id", meetingId: "room" }],
+      [{ ...canonical, meetingId: "room" }],
       [{ room_id: exactRoomId, room_uid: "room-uid", label: "Exact" }],
       window.location.origin,
       "server-id"
     );
 
-    expect(reconciled.id).toBe(canonical.id);
     expect(reconciled.meetingId).toBe(exactRoomId);
   });
 
