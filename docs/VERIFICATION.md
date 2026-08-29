@@ -3848,3 +3848,43 @@ the final diff gate. This completes the unexposed pending-storage boundary only;
 message binding, HTTP grants and reads, Agent Session reads, copied-frontend connection,
 packaged Computer Use, and real providers remain pending. No provider, Computer Use,
 Deep Scan, or automated security scanner ran for this persistence-only boundary.
+
+## Message-attachment atomic binding: 2026-08-29
+
+Commit `292cb06` makes the existing `message.send` transaction the sole binding owner.
+The command accepts visible text, one to eight distinct canonical pending IDs, or an
+attachment-only message. After idempotency admission and current participant loading,
+the transaction verifies every ID against the exact room, principal, unbound pending
+state, and one-hour expiry. It then places only bounded public metadata in the canonical
+`message_final` event, inserts that event, promotes every row to the event sequence,
+routes ordered/ambient work, records the command result, and commits once. Replay returns
+the stored event without rebinding. A missing, foreign, expired, or already-bound row,
+payload conflict, or later routing failure leaves the event, attachment custody, turn
+queue, and command result unchanged. Failed expiry checks deliberately do not perform
+cleanup; only the upload owner's bounded write path commits that lifecycle operation.
+
+The concrete threat was split durable authority: accepting client metadata, binding
+outside event insertion, or committing attachment state before turn routing could leave
+bytes referenced by no canonical message or a message referring to bytes still owned by
+the composer. The implementation adds no binding table, repository trait, fallback,
+compatibility state, cleanup transaction, or client orchestration. The existing event
+sequence is the foreign-key owner, and the existing command transaction is the smallest
+boundary that preserves replay and routing semantics.
+
+At most eight indexed point reads and eight exact conditional updates occur in the one
+SQLite write transaction. This fixed bound was retained instead of adding dynamic SQL,
+a cache, or a bulk-binding abstraction without measured need. Event and provider queues
+carry metadata and opaque IDs only, never attachment BLOBs. The focused real-SQLite
+binding tests completed in 0.06 seconds on a warm development build; this is a harness
+measurement, not a per-message latency claim. No CPU, memory, disk, or latency
+improvement is claimed.
+
+The serial verification run passed the production frontend build and original-CSS
+check, frontend 89 files / 555 tests, desktop 20, domain 29, persistence 197, protocol
+6, provider 120, server 85, and every TCP/integration/doc test. Its final Clippy step
+first rejected a 104-line test function; the assertions were split at their bound-row
+verification responsibility rather than suppressing the gate. The focused tests,
+warning-denied workspace Clippy, architecture gate, 800-line source gate, and diff gate
+then passed. No provider, Computer Use, Deep Scan, or automated security scanner ran for
+this persistence-only boundary. Pin projection, HTTP grants/reads, Agent Session reads,
+copied-frontend connection, packaged verification, and real providers remain pending.
