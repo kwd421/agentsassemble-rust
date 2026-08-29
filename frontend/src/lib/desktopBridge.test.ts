@@ -15,6 +15,7 @@ import {
   requestDesktopMessagePinsWriteTicket,
   requestDesktopMessageAttachmentReadTicket,
   requestDesktopMessageAttachmentUploadTicket,
+  saveDesktopMessageAttachment,
 } from "./desktopBridge";
 
 const hostCommands = [
@@ -30,6 +31,7 @@ const hostCommands = [
   "runtime_message_pins_read_ticket",
   "runtime_message_pins_write_ticket",
   "runtime_operator_ticket",
+  "save_message_attachment",
 ];
 
 const managerAuthority = {
@@ -43,6 +45,34 @@ describe("desktop exact-purpose HTTP bridge", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+  });
+
+  it("sends attachment bytes through raw IPC with only the canonical filename header", async () => {
+    const invoke = vi
+      .fn()
+      .mockResolvedValueOnce({
+        revision: PRODUCT_SURFACE_REVISION,
+        digest: "2".repeat(64),
+        commands: hostCommands,
+      })
+      .mockResolvedValueOnce(true);
+    Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
+
+    await requestDesktopHostProductSurface();
+    await expect(
+      saveDesktopMessageAttachment(new Blob(["file"]), "검증 자료.txt")
+    ).resolves.toBe(true);
+
+    expect(invoke).toHaveBeenNthCalledWith(
+      2,
+      "save_message_attachment",
+      new Uint8Array([102, 105, 108, 101]),
+      {
+        headers: {
+          "x-agentsassemble-filename": encodeURIComponent("검증 자료.txt"),
+        },
+      }
+    );
   });
 
   it("binds its purpose ticket to the exact registration endpoint", async () => {

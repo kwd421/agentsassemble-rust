@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-message-attachment"
+description = "Enables the save_message_attachment command without any pre-configured scope."
+commands.allow = ["save_message_attachment"]
+
+[[permission]]
+identifier = "deny-save-message-attachment"
+description = "Denies the save_message_attachment command without any pre-configured scope."
+commands.deny = ["save_message_attachment"]

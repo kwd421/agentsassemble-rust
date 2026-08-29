@@ -9,7 +9,11 @@ import { roomAppearanceAssetId } from "./roomAppearanceAsset";
 import { messageAttachmentId } from "./messageAttachmentId";
 
 type TauriInternals = {
-  invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>;
+  invoke<T>(
+    command: string,
+    args?: Record<string, unknown> | Uint8Array,
+    options?: { headers: Record<string, string> }
+  ): Promise<T>;
 };
 
 function tauriInternals(): TauriInternals | undefined {
@@ -462,6 +466,26 @@ export function requestDesktopMessageAttachmentReadTicket(
     { roomId, attachmentId: messageAttachmentId(attachmentId) },
     "로비 메시지 첨부 read 티켓"
   );
+}
+
+export async function saveDesktopMessageAttachment(
+  blob: Blob,
+  filename: string
+): Promise<boolean> {
+  const tauri = tauriInternals();
+  if (!tauri) {
+    throw new Error("데스크톱 첨부 저장 경계를 사용할 수 없습니다.");
+  }
+  requireDesktopHostCommand("save_message_attachment");
+  const saved = await tauri.invoke<unknown>(
+    "save_message_attachment",
+    new Uint8Array(await blob.arrayBuffer()),
+    { headers: { "x-agentsassemble-filename": encodeURIComponent(filename) } }
+  );
+  if (typeof saved !== "boolean") {
+    throw new Error("데스크톱 첨부 저장 응답 계약이 올바르지 않습니다.");
+  }
+  return saved;
 }
 
 export function requestDesktopHumanInviteCreateTicket(

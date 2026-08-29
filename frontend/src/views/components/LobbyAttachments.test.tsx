@@ -92,7 +92,8 @@ describe("LobbyAttachments", () => {
     const file = attachment("b", false);
     createObjectURL
       .mockReturnValueOnce("blob:image")
-      .mockReturnValueOnce("blob:file");
+      .mockReturnValueOnce("blob:file")
+      .mockReturnValueOnce("blob:image-download");
     transfer.read.mockImplementation(
       async (value: LobbyAttachmentRef, ...args: unknown[]) => {
         const beforeDispatch = args[4] as (() => void) | undefined;
@@ -136,6 +137,9 @@ describe("LobbyAttachments", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "a.png 크게 보기" }));
     expect(screen.getByRole("dialog", { name: "a.png 이미지 미리보기" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "a.png 다운로드" }));
+    await waitFor(() => expect(anchorClick).toHaveBeenCalledTimes(2));
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:image-download");
   });
 
   it("keeps reads available after the production StrictMode effect reconnect", async () => {

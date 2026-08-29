@@ -1,4 +1,5 @@
 mod local_runtime;
+mod message_attachment_save;
 #[cfg(windows)]
 mod private_fs;
 mod room_directory_cache;
@@ -7,6 +8,7 @@ mod runtime_supervisor;
 use agentsassemble_protocol::{HostProductSurface, LocalBootstrapGrant};
 use local_runtime::{CentralRegistrationTicketGrant, ManagerRoomAuthority, TicketGrant};
 pub use local_runtime::{HttpTicketGrant, LocalRuntime};
+use message_attachment_save::save_message_attachment;
 use serde::{Deserialize, Serialize};
 use tauri::{Manager, RunEvent, WebviewWindow};
 
@@ -472,7 +474,7 @@ mod tests {
     #[test]
     fn host_surface_is_the_registered_permission_intersection() {
         let surface = registered_host_product_surface();
-        assert_eq!(surface.commands.len(), 20);
+        assert_eq!(surface.commands.len(), 21);
         assert!(
             surface
                 .commands
@@ -484,6 +486,7 @@ mod tests {
             "runtime_message_pins_write_ticket",
             "runtime_message_attachment_upload_ticket",
             "runtime_message_attachment_read_ticket",
+            "save_message_attachment",
             "runtime_appearance_upload_ticket",
             "runtime_appearance_pending_read_ticket",
             "runtime_appearance_bound_read_ticket",

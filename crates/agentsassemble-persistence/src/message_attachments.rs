@@ -3,9 +3,9 @@ use std::collections::BTreeSet;
 use agentsassemble_domain::{
     AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID,
     LOCAL_OPERATOR_USER_ID, MAX_ATTACHMENT_BYTES, MAX_MESSAGE_ATTACHMENT_CONTENT_TYPE_BYTES,
-    MAX_MESSAGE_ATTACHMENT_FILENAME_CHARACTERS, MAX_MESSAGE_ATTACHMENTS_PER_EVENT,
-    MESSAGE_ATTACHMENT_DOWNLOAD_SUFFIX, MESSAGE_ATTACHMENT_ID_PREFIX,
-    MESSAGE_ATTACHMENT_REFERENCE_PREFIX, MESSAGE_ATTACHMENT_VIEW_SUFFIX, RoomEvent,
+    MAX_MESSAGE_ATTACHMENTS_PER_EVENT, MESSAGE_ATTACHMENT_DOWNLOAD_SUFFIX,
+    MESSAGE_ATTACHMENT_ID_PREFIX, MESSAGE_ATTACHMENT_REFERENCE_PREFIX,
+    MESSAGE_ATTACHMENT_VIEW_SUFFIX, RoomEvent, canonical_message_attachment_filename,
     is_message_attachment_id, require_message_write_authority,
 };
 use chrono::{Duration, Utc};
@@ -512,7 +512,7 @@ async fn prepare_message_attachment(
             "Message attachment must be between 1 byte and 10 MiB.",
         ));
     }
-    let filename = sanitize_message_filename(filename);
+    let filename = canonical_message_attachment_filename(filename);
     let content_type = normalize_content_type(content_type, &filename);
     let (content, is_safe_image) = validate_preserved_safe_raster(&content_type, content).await?;
     let size = i64::try_from(content.len()).map_err(|_| {
@@ -583,25 +583,6 @@ async fn store_pending_in_transaction(
     ))
 }
 
-fn sanitize_message_filename(value: &str) -> String {
-    let normalized = value.replace('\\', "/");
-    let name = normalized.rsplit('/').next().unwrap_or_default();
-    let truncated: String = name
-        .chars()
-        .filter(|character| !character.is_control() && !matches!(character, '/' | '\\'))
-        .collect::<String>()
-        .trim()
-        .chars()
-        .take(MAX_MESSAGE_ATTACHMENT_FILENAME_CHARACTERS)
-        .collect();
-    let name = truncated.trim();
-    if name.is_empty() || matches!(name, "." | "..") {
-        "attachment.bin".to_owned()
-    } else {
-        name.to_owned()
-    }
-}
-
 fn normalize_content_type(value: &str, filename: &str) -> String {
     let candidate = value
         .split(';')
@@ -654,7 +635,7 @@ fn metadata(
 
 fn canonical_metadata(attachment: &MessageAttachmentMetadata) -> bool {
     is_message_attachment_id(&attachment.id)
-        && sanitize_message_filename(&attachment.filename) == attachment.filename
+        && canonical_message_attachment_filename(&attachment.filename) == attachment.filename
         && attachment.content_type.len() <= MAX_MESSAGE_ATTACHMENT_CONTENT_TYPE_BYTES
         && valid_content_type(&attachment.content_type)
         && (1..=MAX_ATTACHMENT_BYTES).contains(&attachment.size)

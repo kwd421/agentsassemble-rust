@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "desktop",
-  "description": "Allow the bundled room UI to request one-use runtime tickets and choose a local workspace.",
+  "description": "Allow the bundled room UI to request one-use runtime tickets, save a verified attachment, and choose a local workspace.",
   "windows": ["main"],
   "local": true,
   "permissions": [
@@ -15,6 +15,7 @@
     "allow-runtime-message-pins-write-ticket",
     "allow-runtime-message-attachment-upload-ticket",
     "allow-runtime-message-attachment-read-ticket",
+    "allow-save-message-attachment",
     "allow-runtime-human-invite-create-ticket",
     "allow-runtime-human-invite-revoke-ticket",
     "allow-runtime-appearance-upload-ticket",

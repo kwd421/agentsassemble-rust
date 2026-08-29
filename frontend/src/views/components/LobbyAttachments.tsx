@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { createPortal } from "react-dom";
 import { FileDown, X } from "lucide-react";
 import type { LobbyAttachmentRef } from "../../api/messageAttachments";
+import { startMessageAttachmentDownload } from "../../lib/messageAttachmentDownload";
 import type { MessageAttachmentReadScheduler } from "../../lib/messageAttachmentReadScheduler";
 
 function formatAttachmentSize(size: number) {
@@ -37,15 +38,7 @@ function LobbyFileAttachment({
     try {
       const blob = await scheduler.read(attachment, "download", controller.signal);
       controller.signal.throwIfAborted();
-      const objectUrl = URL.createObjectURL(blob);
-      try {
-        const anchor = document.createElement("a");
-        anchor.href = objectUrl;
-        anchor.download = attachment.filename;
-        anchor.click();
-      } finally {
-        URL.revokeObjectURL(objectUrl);
-      }
+      await startMessageAttachmentDownload(blob, attachment.filename);
     } catch (errorValue) {
       if (!controller.signal.aborted && activeRead.current === controller) {
         setError(errorValue instanceof Error ? errorValue.message : "첨부 다운로드 실패");
@@ -84,11 +77,13 @@ function LobbyImageAttachment({
 }) {
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const previewDialogRef = useRef<HTMLDivElement | null>(null);
+  const previewBlobRef = useRef<Blob | null>(null);
   const [intersecting, setIntersecting] = useState(false);
   const [objectUrl, setObjectUrl] = useState("");
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   const [open, setOpen] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     const element = triggerRef.current;
@@ -113,6 +108,7 @@ function LobbyImageAttachment({
     void scheduler.read(attachment, "view", controller.signal).then(
       (blob) => {
         controller.signal.throwIfAborted();
+        previewBlobRef.current = blob;
         createdUrl = URL.createObjectURL(blob);
         setObjectUrl(createdUrl);
       },
@@ -124,9 +120,23 @@ function LobbyImageAttachment({
     );
     return () => {
       controller.abort();
+      previewBlobRef.current = null;
       if (createdUrl) URL.revokeObjectURL(createdUrl);
     };
   }, [attachment.id, intersecting, retry, scheduler]);
+
+  async function downloadPreview() {
+    const blob = previewBlobRef.current;
+    if (!blob || downloading) return;
+    setDownloading(true);
+    try {
+      await startMessageAttachmentDownload(blob, attachment.filename);
+    } catch (errorValue) {
+      setError(errorValue instanceof Error ? errorValue.message : "첨부 다운로드 실패");
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   const closePreview = useCallback(() => {
     setOpen(false);
@@ -214,14 +224,16 @@ function LobbyImageAttachment({
                 {attachment.filename}
               </p>
               <div className="flex shrink-0 items-center gap-2">
-                <a
-                  href={objectUrl}
-                  download={attachment.filename}
+                <button
+                  type="button"
+                  onClick={downloadPreview}
+                  disabled={downloading}
                   className="ops-button grid h-9 w-9 place-items-center rounded-lg"
                   aria-label={`${attachment.filename} 다운로드`}
+                  aria-busy={downloading}
                 >
                   <FileDown size={16} />
-                </a>
+                </button>
                 <button
                   data-preview-close
                   type="button"
