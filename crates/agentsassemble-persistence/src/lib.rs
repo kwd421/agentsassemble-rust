@@ -64,6 +64,7 @@ mod participant_roles;
 #[cfg(test)]
 mod persistence_security_tests;
 mod persona_import;
+mod persona_risu;
 mod provider_turn_effect;
 mod provider_turn_effect_finalize;
 mod provider_turn_execution;
@@ -106,6 +107,7 @@ pub use participant_mute::ParticipantMuteMutation;
 pub use persona_import::{
     ImportedPersonaAsset, PersonaImportError, PersonaThumbnail, import_ccv3_asset,
 };
+pub use persona_risu::import_risum_asset;
 pub use private_fs::secure_private_directory;
 pub use profile_attachments::{ProfileAttachment, ProfileAttachmentMetadata};
 pub use profile_store::ProfileUpdateOutcome;

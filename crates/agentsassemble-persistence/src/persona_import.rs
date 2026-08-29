@@ -30,6 +30,8 @@ pub enum PersonaImportError {
     UnsupportedFormat,
     #[error("persona card is malformed: {0}")]
     InvalidCard(&'static str),
+    #[error("Risu module is malformed: {0}")]
+    InvalidModule(&'static str),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -223,7 +225,7 @@ fn normalize_ccv3(payload: &Value, source_name: &str) -> Result<PersonaCard, Per
     })
 }
 
-fn normalize_lore(value: &Value) -> Option<PersonaLoreEntry> {
+pub(super) fn normalize_lore(value: &Value) -> Option<PersonaLoreEntry> {
     let entry = value.as_object()?;
     let extensions = entry.get("extensions").and_then(Value::as_object);
     let insert_order = integer(
@@ -421,7 +423,7 @@ fn object(value: &Value) -> Result<&Map<String, Value>, PersonaImportError> {
     ))
 }
 
-fn text(value: Option<&Value>) -> String {
+pub(super) fn text(value: Option<&Value>) -> String {
     value
         .and_then(Value::as_str)
         .unwrap_or_default()
@@ -429,12 +431,12 @@ fn text(value: Option<&Value>) -> String {
         .to_owned()
 }
 
-fn nonempty_text(value: Option<&Value>) -> Option<String> {
+pub(super) fn nonempty_text(value: Option<&Value>) -> Option<String> {
     let value = text(value);
     (!value.is_empty()).then_some(value)
 }
 
-fn raw_text(value: Option<&Value>) -> String {
+pub(super) fn raw_text(value: Option<&Value>) -> String {
     value.and_then(Value::as_str).unwrap_or_default().to_owned()
 }
 
@@ -451,11 +453,11 @@ fn joined_strings(value: Option<&Value>) -> String {
         .unwrap_or_default()
 }
 
-fn boolean(value: Option<&Value>) -> bool {
+pub(super) fn boolean(value: Option<&Value>) -> bool {
     value.and_then(Value::as_bool).unwrap_or(false)
 }
 
-fn truthy(value: &Value) -> bool {
+pub(super) fn truthy(value: &Value) -> bool {
     match value {
         Value::Null => false,
         Value::Bool(value) => *value,
@@ -466,13 +468,13 @@ fn truthy(value: &Value) -> bool {
     }
 }
 
-fn integer(value: Option<&Value>) -> i64 {
+pub(super) fn integer(value: Option<&Value>) -> i64 {
     value
         .and_then(|value| value.as_i64().or_else(|| value.as_str()?.parse().ok()))
         .unwrap_or_default()
 }
 
-fn add_count(counts: &mut BTreeMap<String, u32>, name: &str, count: usize) {
+pub(super) fn add_count(counts: &mut BTreeMap<String, u32>, name: &str, count: usize) {
     if count == 0 {
         return;
     }

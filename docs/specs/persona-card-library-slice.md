@@ -108,6 +108,18 @@ regex and imported runtime declarations remain counted but unexecuted. A malform
 thumbnail is counted and omitted rather than turning the otherwise valid card into an
 executable or unverified image; malformed card/container data still rejects the import.
 
+Standalone `.risum` parsing owns the RPack v0 byte permutation as fixed wire-format data,
+verified against the official 512-byte encode/decode map hash, instead of searching operator
+home folders, `/tmp`, or an environment-selected RisuAI checkout as the Python path did. The
+10-MiB upload, 5-MiB decoded main body, 8-MiB aggregate asset-record body, 256-record, exact
+length, marker, and terminal-EOF bounds are enforced before normalization. Since the current
+product uses module text and lore but does not expose its arbitrary media bundle, asset record
+bodies are range-checked without a second decoded copy or durable write; only the larger of
+declared and present asset counts remains in the safe summary. This removes hidden runtime
+configuration and unused memory/disk custody while preserving module selection, literal lore,
+and ignored-feature counts. A real encoded module fixture verifies the format boundary and
+that regex, trigger, CJS, MCP, and regex-lore declarations remain inert.
+
 ## Non-goals
 
 - No v0 research, agenda, forced rounds, moderator synthesis, decisions, tasks,
