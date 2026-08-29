@@ -16,12 +16,20 @@ pub(crate) fn secure_directory(path: &Path) -> io::Result<()> {
 }
 
 pub(crate) fn secure_file(file: &File) -> io::Result<()> {
+    secure_handle(file, false)
+}
+
+pub(crate) fn secure_directory_handle(file: &File) -> io::Result<()> {
+    secure_handle(file, true)
+}
+
+fn secure_handle(file: &File, inheritable: bool) -> io::Result<()> {
     use std::os::windows::io::AsRawHandle;
 
     harden(
         ACL::from_file_handle(file.as_raw_handle().cast::<winapi::ctypes::c_void>(), false)
             .map_err(windows_error)?,
-        false,
+        inheritable,
     )
 }
 

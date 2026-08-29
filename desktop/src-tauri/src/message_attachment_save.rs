@@ -1,14 +1,11 @@
-use std::{
-    fs,
-    io::{self, Write},
-    path::Path,
-};
-
 use agentsassemble_domain::{MAX_ATTACHMENT_BYTES, canonical_message_attachment_filename};
 use tauri::{WebviewWindow, ipc::InvokeBody};
-use tempfile::NamedTempFile;
 
 use crate::caller_is_bundled_ui;
+
+mod secure_replace;
+
+use secure_replace::save_atomically;
 
 fn save_request(
     body: &InvokeBody,
@@ -31,30 +28,6 @@ fn save_request(
         return Err("message attachment save filename is not canonical".to_owned());
     }
     Ok((filename, content))
-}
-
-fn save_atomically(path: &Path, content: &[u8]) -> io::Result<()> {
-    let parent = path
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "save path has no parent"))?;
-    match fs::symlink_metadata(path) {
-        Ok(metadata) if !metadata.file_type().is_file() => {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "save target is not a regular file",
-            ));
-        }
-        Ok(_) => {}
-        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-        Err(error) => return Err(error),
-    }
-
-    let mut temporary = NamedTempFile::new_in(parent)?;
-    temporary.write_all(content)?;
-    temporary.as_file().sync_all()?;
-    temporary.persist(path).map_err(|error| error.error)?;
-    Ok(())
 }
 
 #[tauri::command]
@@ -114,7 +87,9 @@ mod tests {
     #[test]
     fn atomic_save_replaces_only_the_selected_regular_path() {
         let directory = tempdir().unwrap_or_else(|error| panic!("create save directory: {error}"));
-        let target = directory.path().join("evidence.txt");
+        let directory = fs::canonicalize(directory.path())
+            .unwrap_or_else(|error| panic!("resolve save directory: {error}"));
+        let target = directory.join("evidence.txt");
         fs::write(&target, b"previous")
             .unwrap_or_else(|error| panic!("write previous target: {error}"));
 
@@ -133,8 +108,10 @@ mod tests {
         use std::os::unix::fs::symlink;
 
         let directory = tempdir().unwrap_or_else(|error| panic!("create save directory: {error}"));
-        let protected = directory.path().join("protected.txt");
-        let selected = directory.path().join("selected.txt");
+        let directory = fs::canonicalize(directory.path())
+            .unwrap_or_else(|error| panic!("resolve save directory: {error}"));
+        let protected = directory.join("protected.txt");
+        let selected = directory.join("selected.txt");
         fs::write(&protected, b"protected")
             .unwrap_or_else(|error| panic!("write protected target: {error}"));
         symlink(&protected, &selected)
@@ -151,5 +128,37 @@ mod tests {
                 .file_type()
                 .is_symlink()
         );
+
+        let linked = directory.join("linked.txt");
+        fs::hard_link(&protected, &linked)
+            .unwrap_or_else(|error| panic!("create selected hard link: {error}"));
+        save_atomically(&linked, b"new entry")
+            .unwrap_or_else(|error| panic!("replace selected hard link: {error}"));
+        assert_eq!(
+            fs::read(&protected).unwrap_or_else(|error| panic!("read hard-link target: {error}")),
+            b"protected"
+        );
+        assert_eq!(
+            fs::read(&linked).unwrap_or_else(|error| panic!("read hard-link replacement: {error}")),
+            b"new entry"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn atomic_save_rejects_a_symlinked_parent_component() {
+        use std::os::unix::fs::symlink;
+
+        let directory = tempdir().unwrap_or_else(|error| panic!("create save directory: {error}"));
+        let directory = fs::canonicalize(directory.path())
+            .unwrap_or_else(|error| panic!("resolve save directory: {error}"));
+        let real_parent = directory.join("real");
+        let selected_parent = directory.join("selected");
+        fs::create_dir(&real_parent).unwrap_or_else(|error| panic!("create real parent: {error}"));
+        symlink(&real_parent, &selected_parent)
+            .unwrap_or_else(|error| panic!("create parent symlink: {error}"));
+
+        assert!(save_atomically(&selected_parent.join("evidence.txt"), b"content").is_err());
+        assert!(!real_parent.join("evidence.txt").exists());
     }
 }
