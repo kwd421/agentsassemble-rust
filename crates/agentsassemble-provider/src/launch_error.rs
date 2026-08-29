@@ -1,4 +1,4 @@
-use crate::runtime::DriverError;
+use crate::driver::DriverError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct DriverLaunchError {

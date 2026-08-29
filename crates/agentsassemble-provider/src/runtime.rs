@@ -1,6 +1,6 @@
 #[cfg(unix)]
 use std::path::Path;
-use std::{collections::HashMap, future::Future, pin::Pin, sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use agentsassemble_domain::DurableAgentSession;
 use thiserror::Error;
@@ -12,81 +12,17 @@ use uuid::Uuid;
 use crate::antigravity::AntigravityDriver;
 #[cfg(unix)]
 use crate::guardian::GuardianLaunch;
+pub(crate) use crate::driver::{
+    DriverError, DriverFuture, ProviderDriver, ProviderSessionAttachment,
+};
+pub use crate::driver::{ProviderRoomObservation, ProviderTurnCompleted, ProviderTurnRequest};
 use crate::{
     codex::CodexDriver, launch_error::DriverLaunchError, opencode::OpenCodeDriver,
-    room_portal::ProviderTurnOutcome, runtime_authority::revalidate_runtime_authority,
+    runtime_authority::revalidate_runtime_authority,
     runtime_lease::HeldRuntimeLease,
 };
 
 const DRIVER_STOP_TIMEOUT: Duration = Duration::from_secs(5);
-pub(crate) type DriverFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
-pub(crate) trait ProviderDriver: Send {
-    fn attach_session<'a>(
-        &'a mut self,
-        session: &'a DurableAgentSession,
-    ) -> DriverFuture<'a, Result<ProviderSessionAttachment, DriverError>>;
-    fn send_turn<'a>(
-        &'a mut self,
-        session: &'a DurableAgentSession,
-        request: &'a ProviderTurnRequest,
-    ) -> DriverFuture<'a, Result<ProviderTurnCompleted, DriverError>>;
-    fn interrupt_turn<'a>(
-        &'a mut self,
-        _session: &'a DurableAgentSession,
-        _request: &'a ProviderTurnRequest,
-    ) -> DriverFuture<'a, Result<(), DriverError>> {
-        Box::pin(async {
-            Err(DriverError::new(
-                "provider_turn_interrupt_unsupported",
-                "The provider does not support exact-turn interruption.",
-            ))
-        })
-    }
-    fn is_alive(&mut self) -> DriverFuture<'_, Result<bool, DriverError>>;
-    fn stop(&mut self) -> DriverFuture<'_, Result<(), DriverError>>;
-    fn begin_room_observation(
-        &mut self,
-        _request: &ProviderTurnRequest,
-    ) -> Result<(), DriverError> {
-        Err(DriverError::new(
-            "room_portal_unavailable",
-            "The provider runtime has no server-owned room portal.",
-        ))
-    }
-    fn finish_room_observation(
-        &mut self,
-        _request: &ProviderTurnRequest,
-    ) -> Result<ProviderTurnOutcome, DriverError> {
-        Err(DriverError::new(
-            "room_portal_unavailable",
-            "The provider runtime has no server-owned room portal.",
-        ))
-    }
-    fn abort_room_observation(&mut self) {}
-    fn requires_restart(&self) -> bool {
-        false
-    }
-    fn attachment_replay_is_safe(&self) -> bool {
-        true
-    }
-}
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ProviderSessionAttachment {
-    pub(crate) provider_session_id: String,
-    pub(crate) reused: bool,
-    pub(crate) observed_model_id: Option<String>,
-}
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
-#[error("{message}")]
-pub(crate) struct DriverError {
-    pub code: &'static str,
-    pub message: &'static str,
-}
-impl DriverError {
-    pub(crate) const fn new(code: &'static str, message: &'static str) -> Self {
-        Self { code, message }
-    }
-}
 trait DriverFactory: Send + Sync {
     fn launch<'a>(
         &'a self,
@@ -770,4 +706,3 @@ pub use runtime_exact_turn::{
     ProviderExactTurnAuthority, ProviderPreparedTurn, ProviderTurnControl,
     ProviderTurnInterruptDisposition, ProviderTurnNotStartedProof, ProviderTurnQuiescence,
 };
-pub use turn::{ProviderRoomObservation, ProviderTurnCompleted, ProviderTurnRequest};

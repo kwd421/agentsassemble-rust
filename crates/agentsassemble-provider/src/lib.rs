@@ -18,6 +18,7 @@ mod catalog;
 mod codex;
 mod codex_identity;
 mod configuration;
+mod driver;
 mod filesystem;
 #[cfg(unix)]
 mod guardian;

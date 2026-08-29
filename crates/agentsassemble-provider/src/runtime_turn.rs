@@ -13,41 +13,13 @@ use super::{
     DriverError, ProviderAdapter, ProviderAdapterError, ProviderDriver, ProviderPreparedTurn,
     RuntimeState, revalidate_runtime_authority, validate_owned_runtime,
 };
-use crate::room_portal::ProviderTurnOutcome;
+use crate::driver::{ProviderTurnCompleted, ProviderTurnRequest};
 
 const MAX_TURN_ID_BYTES: usize = 128;
 const MAX_PROVIDER_INPUT_CHARS: usize = 20_000;
 const MAX_ROOM_VIEW_CHARS: usize = 20_000;
 const MAX_ROOM_VIEW_BYTES: usize = 96 * 1024;
 const MAX_ROOM_AGENT_IDS: usize = 64;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ProviderTurnRequest {
-    pub turn_id: String,
-    pub turn_generation: u64,
-    pub execution_id: String,
-    pub input: String,
-    pub room_observation: Option<ProviderRoomObservation>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ProviderRoomObservation {
-    pub session_id: String,
-    pub input_up_to_seq: i64,
-    pub view: String,
-    pub attachment_ids: Vec<String>,
-    pub attachment_ingress: Option<crate::ProviderAttachmentReadIngress>,
-    pub allowed_agent_ids: Vec<String>,
-    pub room_tool_ingress: Option<crate::ProviderRoomToolIngress>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ProviderTurnCompleted {
-    pub turn_id: String,
-    pub provider_turn_id: String,
-    pub provider_session_id: Option<String>,
-    pub outcome: ProviderTurnOutcome,
-}
 
 impl ProviderAdapter {
     /// Runs one durable assigned turn through the exact owned provider session.
