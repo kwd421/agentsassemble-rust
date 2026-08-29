@@ -18,6 +18,8 @@ const SPEAKER_AGENT_ID: &str = "codex-00000000-0000-5000-8000-000000000003";
 
 #[path = "message_attachment_binding_tests.rs"]
 mod message_attachment_binding_tests;
+#[path = "persona_turn_tests.rs"]
+mod persona_turn_tests;
 #[path = "provider_turn_mute_tests.rs"]
 mod provider_turn_mute_tests;
 #[path = "provider_turn_stop_race_tests.rs"]

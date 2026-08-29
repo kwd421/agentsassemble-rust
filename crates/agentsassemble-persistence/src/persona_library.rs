@@ -120,6 +120,26 @@ pub(crate) async fn resolve_persona_selection(
     if persona_id.is_empty() {
         return Ok(None);
     }
+    let (card, has_thumbnail) = load_persona_row(transaction, persona_id).await?;
+    Ok(Some(Box::new(card.summary(has_thumbnail))))
+}
+
+pub(crate) async fn selected_persona_card(
+    transaction: &mut Transaction<'_, Sqlite>,
+    persona_id: &str,
+) -> Result<Option<PersonaCard>, PersistenceError> {
+    if persona_id.is_empty() {
+        return Ok(None);
+    }
+    load_persona_row(transaction, persona_id)
+        .await
+        .map(|(card, _)| Some(card))
+}
+
+async fn load_persona_row(
+    transaction: &mut Transaction<'_, Sqlite>,
+    persona_id: &str,
+) -> Result<(PersonaCard, bool), PersistenceError> {
     if !valid_persona_id(persona_id) {
         return Err(persona_not_found());
     }
@@ -134,7 +154,7 @@ pub(crate) async fn resolve_persona_selection(
         .map_err(|_| persona_not_found())?;
     let has_thumbnail = row.get::<bool, _>("has_thumbnail");
     validate_thumbnail_kind(&card, has_thumbnail).map_err(|_| persona_not_found())?;
-    Ok(Some(Box::new(card.summary(has_thumbnail))))
+    Ok((card, has_thumbnail))
 }
 
 fn decode_card(persona_id: &str, card_json: &str) -> Result<PersonaCard, PersistenceError> {

@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashSet};
 
 use agentsassemble_domain::{
     DurableAgentSession, QueuedRoomInput, Room, RoomEvent, RoomInputDeliveryKind, clean_message,
-    has_visible_text,
+    has_visible_text, render_persona_context,
 };
 use sqlx::{Row, Sqlite, Transaction};
 
@@ -13,6 +13,7 @@ use crate::{
         message_attachment_ids_from_events, message_attachments_from_event,
         message_has_visible_payload,
     },
+    persona_library::selected_persona_card,
 };
 
 const MAX_CONTEXT_MESSAGES: usize = 50;
@@ -63,13 +64,20 @@ pub(super) async fn prepare_room_input(
     let attachment_ids =
         message_attachment_ids_from_events(inflight.iter().map(|pending| &pending.event))?;
     let rendered_context = render_room_view(room, session, &room_agent_ids, &context)?;
+    let persona_context = if let Some(card) =
+        selected_persona_card(transaction, session.public.persona_card_id.as_ref()).await?
+    {
+        render_persona_context(&card, &render_recent_messages(&context))
+    } else {
+        String::new()
+    };
     let (provider_input, room_view) = match delivery_kind {
         RoomInputDeliveryKind::OrderedObservation => (
-            render_observation_input(room, session, "Ordered", tabletop_tools),
+            render_observation_input(room, session, "Ordered", tabletop_tools, &persona_context),
             rendered_context,
         ),
         RoomInputDeliveryKind::AmbientObservation => (
-            render_observation_input(room, session, "Ambient", tabletop_tools),
+            render_observation_input(room, session, "Ambient", tabletop_tools, &persona_context),
             rendered_context,
         ),
     };
@@ -311,11 +319,31 @@ fn render_room_view(
     Ok(lines.join("\n"))
 }
 
+fn render_recent_messages(context: &[RoomEvent]) -> String {
+    context
+        .iter()
+        .filter_map(|event| {
+            let message_text = clean_message(event.content.as_deref().unwrap_or_default(), 12_000);
+            has_visible_text(&message_text).then(|| {
+                format!(
+                    "- {}: {message_text}",
+                    event
+                        .display_name
+                        .as_deref()
+                        .unwrap_or(&event.actor.participant_id)
+                )
+            })
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 fn render_observation_input(
     room: &Room,
     session: &DurableAgentSession,
     mode: &str,
     tabletop_tools: bool,
+    persona_context: &str,
 ) -> String {
     let mut sections = vec![
         format!("[{mode} shared-room observation]"),
@@ -328,6 +356,11 @@ fn render_observation_input(
         } else {
             "For official game randomness, use the `roll_dice` or `choose_random` room tool; do not invent a result yourself.".to_owned()
         });
+    }
+    if !persona_context.is_empty() {
+        sections.push(format!(
+            "[Applied bot card or Risu module]\n{persona_context}"
+        ));
     }
     sections.join("\n\n")
 }
