@@ -89,12 +89,15 @@ The authority baseline is reachable code at original commit
   It cannot broaden Room Portal tools, filesystem access, network access, permissions,
   or participant authority.
 
-The provider-neutral scanner case-folds the bounded search context once per recursive
-round. A per-keyword fold would allocate and traverse that whole context once for every
-case-insensitive lore key; keeping the copy at the scan owner removes that multiplicative
-work without changing literal matching, lore order, prompt bounds, or ignored executable
-features. Domain tests verify literal, recursive, substitution, and inert-regex behavior;
-no wall-time or CPU reduction is claimed without a real-turn measurement.
+The provider-neutral scanner uses maintained Unicode default case folding on the bounded
+search context once per recursive round. The earlier `lowercase` implementation could not
+preserve the reachable Python `casefold()` contract (`Straße` did not match `STRASSE`) and
+its invalid Unicode-property spelling also made whole-word patterns fail closed. Folding at
+the scan owner avoids traversing the whole context once per case-insensitive key; escaped
+keyword regex remains responsible only for the whole-word boundary. Domain tests verify
+partial and whole-word Unicode matches alongside literal, recursive, substitution, and
+inert-regex behavior. No wall-time or CPU reduction is claimed without a real-turn
+measurement.
 
 The `CCv3` import boundary now parses PNG text chunks through the maintained PNG decoder
 instead of owning chunk framing or CRC handling. The reachable upload is bounded to 10 MiB,
@@ -126,12 +129,30 @@ the archive owner rejects more than 512 entries, unsafe or duplicate normalized 
 encryption, overlapping compressed ranges, entries above 10 MiB, aggregate expansion above
 80 MiB, and ratios above 200:1. Only card-declared embedded assets are read and no archive
 path is ever resolved onto the host filesystem; the shared card owner still selects and
-canonicalizes one preferred thumbnail. A readable `module.risum` replaces the card lore as
-the original flow does, while its non-executable feature counts are merged once rather than
-double-counting regex lore at both container and module boundaries. An unreadable optional
-module is counted and remains inert without discarding an otherwise valid card. Real ZIP,
+canonicalizes one preferred thumbnail while continuing to validate and count every later
+resolved asset without retaining it. A readable `module.risum` replaces the card lore only
+when that module actually carries a lorebook array, as the original flow does; its
+non-executable feature counts are merged once rather than double-counting regex lore at both
+container and module boundaries. An unreadable optional module is counted and remains inert
+without discarding an otherwise valid card. Real ZIP,
 PNG, and RPack fixtures verify the combined path, and a traversal archive verifies rejection
 before `card.json` is read.
+
+## Manual-review findings
+
+- Daybreaker Blue High returned five Medium findings for the first pushed importer range:
+  absent module lore erased card lore; thumbnail selection stopped validating/counting later
+  assets; Unicode case-insensitive matching used lowercase rather than casefold; the CCv3
+  JSON size/root policy had two owners; and the persona-ID bound was duplicated in provider
+  input validation. Commits `f57ec60`, `6e12ee8`, `6cc4980`, `0d859f3`, and `937492f`
+  correct those owners without adding compatibility or fallback paths.
+- The critical web review returned one Medium candidate requesting a durable recent-message
+  count. It was not accepted: the actual ordinary-room caller at the fixed original baseline
+  passes one rendered string, and the original `_recent_message_count(str)` contract is
+  exactly empty/non-empty (0/1). Adding a count would change reachable behavior rather than
+  preserve it.
+- Final cross-review approval of the correction range is pending. No automated security
+  scan was used.
 
 ## Non-goals
 
