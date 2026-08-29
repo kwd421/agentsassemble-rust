@@ -241,6 +241,10 @@ not inferred from the source test.
 
 ## Manual-review findings
 
+- The critical web session and Daybreaker Blue High manually reviewed pushed range
+  `087ba1a..45c8302`. Both found no Critical, High, Medium, or Low findings and
+  returned `APPROVE`. Neither reviewer ran Deep Scan or another automated security
+  scan.
 - Daybreaker Blue High returned five Medium findings for the first pushed importer range:
   absent module lore erased card lore; thumbnail selection stopped validating/counting later
   assets; Unicode case-insensitive matching used lowercase rather than casefold; the CCv3
