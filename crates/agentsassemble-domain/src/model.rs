@@ -10,7 +10,7 @@ use crate::{QueuedRoomInput, persona::PersonaAssetSummary};
 
 pub const LOCAL_OPERATOR_USER_ID: &str = "operator-local-user";
 pub const LOCAL_OPERATOR_PARTICIPANT_ID: &str = "operator-local";
-pub const CURRENT_RUNTIME_PROFILE_VERSION: u32 = 3;
+pub const CURRENT_RUNTIME_PROFILE_VERSION: u32 = 4;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
@@ -445,6 +445,7 @@ pub struct AgentSessionDraft {
     pub permission_mode: String,
     pub max_output_tokens: u32,
     pub catalog_revision: String,
+    pub persona_card_id: String,
     pub runtime_profile_key: String,
     pub transport: String,
 }

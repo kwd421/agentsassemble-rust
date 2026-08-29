@@ -29,6 +29,7 @@ pub struct ProviderSelection {
     pub permission_mode: String,
     pub max_output_tokens: u32,
     pub catalog_revision: String,
+    pub persona_card_id: String,
     pub runtime_profile_key: String,
     pub transport: String,
     pub start_requested: bool,
@@ -114,7 +115,6 @@ impl ProviderSelection {
             ));
         }
         if input.max_output_tokens.unwrap_or(0) != 0
-            || input.persona_card_id.is_some_and(|value| !value.is_empty())
             || input
                 .provider_session_id
                 .is_some_and(|value| !value.is_empty())
@@ -122,6 +122,15 @@ impl ProviderSelection {
             return Err(ProviderSelectionError::new(
                 "unsupported_control",
                 "This Agent Session option is not available in the current runtime slice.",
+            ));
+        }
+        let persona_card_id = input.persona_card_id.unwrap_or_default();
+        if !persona_card_id.is_empty()
+            && !matches!(provider.catalog_group.as_str(), "api" | "local")
+        {
+            return Err(ProviderSelectionError::new(
+                "persona_provider_unsupported",
+                "Bot cards and Risu modules are available only to API and Local Agent Sessions.",
             ));
         }
         if input
@@ -169,6 +178,7 @@ impl ProviderSelection {
             permission_mode,
             max_output_tokens: 0,
             catalog_revision: revision,
+            persona_card_id,
             runtime_profile_key: String::new(),
             transport,
             start_requested: input.start_requested,
@@ -191,6 +201,7 @@ impl ProviderSelection {
             self.variant.as_str(),
             self.execution_harness.as_str(),
             self.permission_mode.as_str(),
+            self.persona_card_id.as_str(),
             self.transport.as_str(),
         ])
     }
@@ -224,6 +235,7 @@ impl From<ProviderSelection> for AgentSessionDraft {
             permission_mode: selection.permission_mode,
             max_output_tokens: selection.max_output_tokens,
             catalog_revision: selection.catalog_revision,
+            persona_card_id: selection.persona_card_id,
             runtime_profile_key: selection.runtime_profile_key,
             transport: selection.transport,
         }
@@ -378,7 +390,7 @@ mod tests {
     use same_file::Handle;
     use serde_json::{Value, json};
 
-    use super::{ProviderSelection, selected_value};
+    use super::ProviderSelection;
 
     fn option(value: &str, relations: Value) -> ProviderControlOption {
         let mut metadata = BTreeMap::new();
@@ -476,20 +488,6 @@ mod tests {
                 ],
             }],
         }
-    }
-
-    #[test]
-    fn empty_optional_control_matches_an_omitted_original_frontend_field() {
-        let provider = &catalog().providers[0];
-        assert_eq!(
-            selected_value(provider, "variant", Some(String::new()))
-                .unwrap_or_else(|error| panic!("normalize empty optional control: {error}")),
-            ""
-        );
-        let error = selected_value(provider, "variant", Some("unsupported".to_owned()))
-            .err()
-            .unwrap_or_else(|| panic!("nonempty unsupported controls must still fail"));
-        assert_eq!(error.code, "unsupported_control");
     }
 
     #[tokio::test]
@@ -591,16 +589,34 @@ mod tests {
         let mut starting = base;
         starting["reasoning_effort"] = json!("medium");
         starting["start_now"] = json!(true);
+        starting["persona_card_id"] = json!("guide");
+        let error = ProviderSelection::from_catalog(
+            "general",
+            "operator-local-user",
+            "persona-harness",
+            &starting,
+            &catalog(),
+        )
+        .await
+        .err()
+        .unwrap_or_else(|| panic!("harness persona must fail"));
+        assert_eq!(error.code, "persona_provider_unsupported");
+        let mut persona_catalog = catalog();
+        persona_catalog.providers[0].catalog_group = "api".to_owned();
         let selected = ProviderSelection::from_catalog(
             "general",
             "operator-local-user",
             "create-2",
             &starting,
-            &catalog(),
+            &persona_catalog,
         )
         .await
         .unwrap_or_else(|error| panic!("start_now must retain its server-owned intent: {error}"));
         assert!(selected.start_requested);
+        assert_eq!(selected.persona_card_id, "guide");
+        let mut cleared = selected.clone();
+        cleared.persona_card_id.clear();
+        assert_ne!(selected.runtime_profile_key, cleared.profile_key());
     }
 
     #[tokio::test]

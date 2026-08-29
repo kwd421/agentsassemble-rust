@@ -792,6 +792,7 @@ fn session(
         session.public.variant.as_str(),
         session.public.execution_harness.as_str(),
         session.public.permission_mode.as_str(),
+        session.public.persona_card_id.as_ref(),
         session.public.transport.as_str(),
     ]);
     session

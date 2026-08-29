@@ -59,6 +59,7 @@ mod unix_process_tree;
 pub use catalog::ProviderCatalogService;
 #[cfg(unix)]
 pub use guardian::run_process_helper_if_requested;
+pub use profile::runtime_profile_key;
 pub use room_attachment::{
     ProviderAttachment, ProviderAttachmentReadCommand, ProviderAttachmentReadError,
     ProviderAttachmentReadIngress,

@@ -118,7 +118,9 @@ fn is_alias_separator(character: char) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use agentsassemble_domain::{AgentSession, DurableAgentSession};
+    use agentsassemble_domain::{
+        AgentSession, CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession,
+    };
     use chrono::Utc;
 
     use super::last_direct_target;
@@ -196,7 +198,7 @@ mod tests {
             workspace: "/test".to_owned(),
             workspace_identity: "test-workspace".to_owned(),
             runtime_profile_key: "test".to_owned(),
-            runtime_profile_version: 3,
+            runtime_profile_version: CURRENT_RUNTIME_PROFILE_VERSION,
             provider_session_id: "test-session".to_owned(),
             runtime_handle_id: "test-handle".to_owned(),
             runtime_owner_id: "test-owner".to_owned(),

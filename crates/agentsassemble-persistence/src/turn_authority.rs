@@ -42,7 +42,9 @@ pub(crate) fn active_turn_authority(
 
 #[cfg(test)]
 mod tests {
-    use agentsassemble_domain::{AgentSession, DurableAgentSession};
+    use agentsassemble_domain::{
+        AgentSession, CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession,
+    };
     use chrono::Utc;
 
     use super::active_turn_authority;
@@ -96,7 +98,7 @@ mod tests {
             workspace: "/test".to_owned(),
             workspace_identity: "test-workspace".to_owned(),
             runtime_profile_key: "test".to_owned(),
-            runtime_profile_version: 3,
+            runtime_profile_version: CURRENT_RUNTIME_PROFILE_VERSION,
             provider_session_id: "test-session".to_owned(),
             runtime_handle_id: "test-handle".to_owned(),
             runtime_owner_id: "test-owner".to_owned(),

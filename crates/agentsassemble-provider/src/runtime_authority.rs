@@ -28,6 +28,7 @@ pub(crate) async fn revalidate_runtime_authority(
         session.public.variant.as_str(),
         session.public.execution_harness.as_str(),
         session.public.permission_mode.as_str(),
+        session.public.persona_card_id.as_ref(),
         session.public.transport.as_str(),
     ]);
     if expected_profile_key != session.runtime_profile_key {

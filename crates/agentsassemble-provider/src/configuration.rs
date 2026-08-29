@@ -16,6 +16,7 @@ const CONFIGURE_FIELDS: &[&str] = &[
     "execution_harness",
     "permission_mode",
     "max_output_tokens",
+    "persona_card_id",
 ];
 
 impl ProviderCatalogService {
@@ -144,6 +145,7 @@ fn merged_configuration(
             current.public.execution_harness.as_str(),
         ),
         ("permission_mode", current.public.permission_mode.as_str()),
+        ("persona_card_id", current.public.persona_card_id.as_ref()),
     ] {
         copy_or_current(&mut merged, values, key, value);
     }

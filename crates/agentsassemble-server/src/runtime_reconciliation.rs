@@ -357,10 +357,9 @@ pub(crate) mod tests {
     use agentsassemble_persistence::{
         AgentStartPlan, LiveRuntimeReconciliation, RuntimeReconciliationObservation, SqliteStore,
     };
-    use agentsassemble_provider::ProviderAdapter;
+    use agentsassemble_provider::{ProviderAdapter, runtime_profile_key};
     use same_file::Handle;
     use serde_json::json;
-    use sha2::{Digest, Sha256};
 
     use super::{RUNTIME_RECONCILIATION_TEST_LOCK, recover_exact_lifecycle_command};
     use crate::runtime_reconciliation_cleanup::commit_dynamic_gone;
@@ -622,28 +621,23 @@ pub(crate) mod tests {
         let execution_harness = "builtin";
         let permission_mode = "meeting_read_only";
         let transport = "http";
-        let runtime_profile_key = format!(
-            "provider-profile-v1-{:x}",
-            Sha256::digest(
-                [
-                    provider_kind,
-                    runtime_kind,
-                    executable.as_str(),
-                    executable_identity.as_str(),
-                    workspace.as_str(),
-                    workspace_identity.as_str(),
-                    model,
-                    reasoning_effort,
-                    service_tier,
-                    variant,
-                    execution_harness,
-                    permission_mode,
-                    transport,
-                ]
-                .join("\0")
-                .as_bytes(),
-            )
-        );
+        let persona_card_id = "";
+        let runtime_profile_key = runtime_profile_key([
+            provider_kind,
+            runtime_kind,
+            executable.as_str(),
+            executable_identity.as_str(),
+            workspace.as_str(),
+            workspace_identity.as_str(),
+            model,
+            reasoning_effort,
+            service_tier,
+            variant,
+            execution_harness,
+            permission_mode,
+            persona_card_id,
+            transport,
+        ]);
         AgentSessionDraft {
             agent_id: agent_id.to_owned(),
             display_name: "Terra".to_owned(),
@@ -661,34 +655,29 @@ pub(crate) mod tests {
             permission_mode: permission_mode.to_owned(),
             max_output_tokens: 0,
             catalog_revision: "catalog-recovery-1".to_owned(),
+            persona_card_id: persona_card_id.to_owned(),
             runtime_profile_key,
             transport: transport.to_owned(),
         }
     }
 
     pub(super) fn draft_profile_key(draft: &AgentSessionDraft) -> String {
-        format!(
-            "provider-profile-v1-{:x}",
-            Sha256::digest(
-                [
-                    draft.provider_kind.as_str(),
-                    draft.runtime_kind.as_str(),
-                    draft.executable.as_str(),
-                    draft.executable_identity.as_str(),
-                    draft.workspace.as_str(),
-                    draft.workspace_identity.as_str(),
-                    draft.model.as_str(),
-                    draft.reasoning_effort.as_str(),
-                    draft.service_tier.as_str(),
-                    draft.variant.as_str(),
-                    draft.execution_harness.as_str(),
-                    draft.permission_mode.as_str(),
-                    draft.transport.as_str(),
-                ]
-                .join("\0")
-                .as_bytes(),
-            )
-        )
+        runtime_profile_key([
+            draft.provider_kind.as_str(),
+            draft.runtime_kind.as_str(),
+            draft.executable.as_str(),
+            draft.executable_identity.as_str(),
+            draft.workspace.as_str(),
+            draft.workspace_identity.as_str(),
+            draft.model.as_str(),
+            draft.reasoning_effort.as_str(),
+            draft.service_tier.as_str(),
+            draft.variant.as_str(),
+            draft.execution_harness.as_str(),
+            draft.permission_mode.as_str(),
+            draft.persona_card_id.as_str(),
+            draft.transport.as_str(),
+        ])
     }
 }
 

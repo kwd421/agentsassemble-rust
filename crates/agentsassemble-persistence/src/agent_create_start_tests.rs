@@ -79,6 +79,7 @@ fn draft(workspace: &Path) -> AgentSessionDraft {
         permission_mode: "meeting_read_only".to_owned(),
         max_output_tokens: 0,
         catalog_revision: "catalog-1".to_owned(),
+        persona_card_id: String::new(),
         runtime_profile_key: "profile-create-start-1".to_owned(),
         transport: "stdio_jsonl".to_owned(),
     }
