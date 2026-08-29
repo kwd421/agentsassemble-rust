@@ -157,7 +157,8 @@ pub fn render_persona_context(card: &PersonaCard, recent_room_context: &str) -> 
     append_card_line(&mut lines, "Scenario/world", &card.scenario, card);
     if !selected_lore.is_empty() {
         lines.push("Active persona lore snippets:".to_owned());
-        for entry in selected_lore {
+        for selected in selected_lore {
+            let entry = selected.entry;
             let label = prompt_text(
                 if entry.comment.is_empty() {
                     if entry.key.is_empty() {
@@ -172,10 +173,7 @@ pub fn render_persona_context(card: &PersonaCard, recent_room_context: &str) -> 
             );
             lines.push(format!(
                 "- {label}: {}",
-                prompt_text(
-                    &replace_variables(&visible_lore_content(entry), card),
-                    1_200
-                )
+                prompt_text(&replace_variables(&selected.content, card), 1_200)
             ));
         }
     }
@@ -247,11 +245,16 @@ fn prompt_text(value: &str, limit: usize) -> String {
         .collect()
 }
 
+struct VisibleLore<'a> {
+    entry: &'a PersonaLoreEntry,
+    content: String,
+}
+
 fn active_lore<'a>(
     card: &'a PersonaCard,
     recent_room_context: &str,
     char_budget: usize,
-) -> Vec<&'a PersonaLoreEntry> {
+) -> Vec<VisibleLore<'a>> {
     let rounds = if card.lore_settings.recursive_scanning {
         card.lore_settings
             .scan_depth
@@ -290,47 +293,61 @@ fn active_lore<'a>(
     }
     let mut ordered = selected.into_iter().collect::<Vec<_>>();
     ordered.sort_by_key(|index| (card.lorebook[*index].insert_order, *index));
-    fit_lore_budget(card, &ordered, char_budget)
+    let visible = ordered
+        .into_iter()
+        .map(|index| VisibleLore {
+            entry: &card.lorebook[index],
+            content: visible_lore_content(&card.lorebook[index]),
+        })
+        .collect();
+    fit_lore_budget(visible, char_budget)
 }
 
-fn fit_lore_budget<'a>(
-    card: &'a PersonaCard,
-    ordered: &[usize],
-    char_budget: usize,
-) -> Vec<&'a PersonaLoreEntry> {
+fn fit_lore_budget(entries: Vec<VisibleLore<'_>>, char_budget: usize) -> Vec<VisibleLore<'_>> {
     if char_budget == 0 {
         return Vec::new();
     }
-    let mut by_priority = ordered.iter().copied().enumerate().collect::<Vec<_>>();
-    by_priority.sort_by_key(|(position, index)| {
+    let mut by_priority = (0..entries.len()).collect::<Vec<_>>();
+    by_priority.sort_by_key(|position| {
         (
-            std::cmp::Reverse(card.lorebook[*index].priority),
-            card.lorebook[*index].insert_order,
+            std::cmp::Reverse(entries[*position].entry.priority),
+            entries[*position].entry.insert_order,
             *position,
         )
     });
     let mut accepted_positions = BTreeSet::new();
     let mut used = 0_usize;
     let mut fallback = None;
-    for (position, index) in by_priority {
-        let length = card.lorebook[index].content.chars().count();
+    for position in by_priority {
+        let length = entries[position].content.chars().count();
         if used.saturating_add(length) <= char_budget {
             accepted_positions.insert(position);
             used += length;
         } else if fallback.is_none() {
-            fallback = Some(index);
+            fallback = Some(position);
         }
     }
     if accepted_positions.is_empty() {
-        return fallback
-            .map(|index| vec![&card.lorebook[index]])
-            .unwrap_or_default();
+        let Some(fallback) = fallback else {
+            return Vec::new();
+        };
+        return entries
+            .into_iter()
+            .enumerate()
+            .filter_map(|(position, mut entry)| {
+                if position != fallback {
+                    return None;
+                }
+                entry.content = entry.content.chars().take(char_budget).collect();
+                Some(entry)
+            })
+            .collect();
     }
-    ordered
-        .iter()
+    entries
+        .into_iter()
         .enumerate()
         .filter(|(position, _)| accepted_positions.contains(position))
-        .map(|(_, index)| &card.lorebook[*index])
+        .map(|(_, entry)| entry)
         .collect()
 }
 
@@ -551,8 +568,8 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::{
-        PersonaAssetKind, PersonaCard, PersonaLoreEntry, PersonaLoreSettings, canonical_persona_id,
-        render_persona_context,
+        MAX_PERSONA_LORE_CHARACTERS, PersonaAssetKind, PersonaCard, PersonaLoreEntry,
+        PersonaLoreSettings, canonical_persona_id, render_persona_context,
     };
 
     #[test]
@@ -646,6 +663,33 @@ mod tests {
         let context = render_persona_context(&card(vec![partial, full_word]), "\u{131}");
         assert!(!context.contains("The partial dotless-i match activates."));
         assert!(context.contains("The full-word dotless-i match activates."));
+    }
+
+    #[test]
+    fn lore_budget_counts_only_the_visible_content() {
+        let mut high_priority = lore(
+            "harbor",
+            &format!(
+                "@@match_full_word{}\nHIGH_PRIORITY_VISIBLE",
+                " ".repeat(MAX_PERSONA_LORE_CHARACTERS)
+            ),
+        );
+        high_priority.priority = 10;
+        let low_priority = lore("harbor", "LOW_PRIORITY_VISIBLE");
+
+        let context = render_persona_context(
+            &card(vec![high_priority, low_priority]),
+            "The harbor opens.",
+        );
+        assert!(context.contains("HIGH_PRIORITY_VISIBLE"));
+        assert!(context.contains("LOW_PRIORITY_VISIBLE"));
+    }
+
+    #[test]
+    fn oversized_lore_fallback_truncates_before_variable_replacement() {
+        let lore_body = format!("{}OUTSIDE_BUDGET", "{{persona}}".repeat(400));
+        let rendered = render_persona_context(&card(vec![lore("harbor", &lore_body)]), "harbor");
+        assert!(!rendered.contains("OUTSIDE_BUDGET"));
     }
 
     fn card(lorebook: Vec<PersonaLoreEntry>) -> PersonaCard {

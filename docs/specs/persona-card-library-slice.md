@@ -162,6 +162,11 @@ before `card.json` is read.
   `re.IGNORECASE` step: after full casefold, CPython's remaining unequal equivalence is
   ASCII `i` with dotless `ı`. The full-word comparison preserves that pair while partial
   matching intentionally remains plain casefolded substring search.
+- The critical web cumulative review found one further Medium in the same prompt owner:
+  Rust budgeted raw lore text while the original first removed leading `@@` decorator
+  lines, allowing decorator length to displace higher-priority visible lore. Budgeting now
+  owns the visible body used by rendering, and the sole oversized fallback is truncated
+  before variable replacement, matching the original observable ordering and bound.
 - Daybreaker also found that the first casefold dependency commit omitted the desktop's
   nested lockfile and therefore was not independently gate-clean. Commit `557f3fd` repaired
   the published HEAD. The already-public history was not force-rewritten; future dependency
