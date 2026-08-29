@@ -3,8 +3,8 @@ use agentsassemble_domain::{
     require_message_write_authority,
 };
 use chrono::{Duration, Utc};
-use serde::Serialize;
-use sqlx::{Sqlite, Transaction};
+use serde::{Deserialize, Serialize};
+use sqlx::{Row, Sqlite, Transaction};
 use uuid::Uuid;
 
 use crate::{
@@ -17,7 +17,8 @@ use crate::{
 const PENDING_ATTACHMENT_TTL: Duration = Duration::hours(1);
 const MAX_CONTENT_TYPE_BYTES: usize = 127;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct MessageAttachmentMetadata {
     pub id: String,
     pub filename: String,
@@ -26,6 +27,70 @@ pub struct MessageAttachmentMetadata {
     pub is_image: bool,
     pub url: String,
     pub download_url: String,
+}
+
+pub(crate) async fn prepare_message_attachment_bindings(
+    transaction: &mut Transaction<'_, Sqlite>,
+    principal: &AuthenticatedPrincipal,
+    attachment_ids: &[String],
+    now: i64,
+) -> Result<Vec<MessageAttachmentMetadata>, PersistenceError> {
+    let mut attachments = Vec::with_capacity(attachment_ids.len());
+    for attachment_id in attachment_ids {
+        let row = sqlx::query(
+            "SELECT room_id, pending_owner_user_id, event_seq, filename, content_type, size, is_safe_image, state, expires_at FROM room_message_attachments WHERE attachment_id = ?",
+        )
+        .bind(attachment_id)
+        .fetch_optional(&mut **transaction)
+        .await?
+        .ok_or_else(attachment_unavailable)?;
+        if row.get::<String, _>("room_id") != principal.room_id
+            || row.get::<Option<String>, _>("pending_owner_user_id")
+                != Some(principal.principal_id.clone())
+            || row.get::<Option<i64>, _>("event_seq").is_some()
+            || row.get::<String, _>("state") != "pending"
+            || row
+                .get::<Option<i64>, _>("expires_at")
+                .is_none_or(|expires_at| expires_at <= now)
+        {
+            return Err(attachment_unavailable());
+        }
+        let size =
+            usize::try_from(row.get::<i64, _>("size")).map_err(|_| invalid_attachment_state())?;
+        attachments.push(metadata(
+            attachment_id.clone(),
+            row.get("filename"),
+            row.get("content_type"),
+            size,
+            row.get("is_safe_image"),
+        ));
+    }
+    Ok(attachments)
+}
+
+pub(crate) async fn bind_message_attachments(
+    transaction: &mut Transaction<'_, Sqlite>,
+    principal: &AuthenticatedPrincipal,
+    attachment_ids: &[String],
+    event_seq: i64,
+    now: i64,
+) -> Result<(), PersistenceError> {
+    for attachment_id in attachment_ids {
+        let result = sqlx::query(
+            "UPDATE room_message_attachments SET pending_owner_user_id = NULL, event_seq = ?, state = 'bound', expires_at = NULL WHERE attachment_id = ? AND room_id = ? AND pending_owner_user_id = ? AND event_seq IS NULL AND state = 'pending' AND expires_at > ?",
+        )
+        .bind(event_seq)
+        .bind(attachment_id)
+        .bind(&principal.room_id)
+        .bind(&principal.principal_id)
+        .bind(now)
+        .execute(&mut **transaction)
+        .await?;
+        if result.rows_affected() != 1 {
+            return Err(attachment_unavailable());
+        }
+    }
+    Ok(())
 }
 
 struct PreparedMessageAttachment {
@@ -237,4 +302,18 @@ fn rejected(code: &'static str, message: &str) -> PersistenceError {
         code,
         message: message.to_owned(),
     }
+}
+
+fn attachment_unavailable() -> PersistenceError {
+    rejected(
+        "attachment_unavailable",
+        "A message attachment is unavailable or no longer pending.",
+    )
+}
+
+fn invalid_attachment_state() -> PersistenceError {
+    rejected(
+        "invalid_state",
+        "Stored message attachment metadata is invalid.",
+    )
 }

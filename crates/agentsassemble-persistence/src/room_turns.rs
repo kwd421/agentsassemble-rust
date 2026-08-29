@@ -13,6 +13,7 @@ use crate::{
     agent_lifecycle::{load_session, save_session},
     command_admission::admit_non_lifecycle_command,
     human_session_authority::revalidate_human_session,
+    message_attachments::{bind_message_attachments, prepare_message_attachment_bindings},
     room_write_budget::command_size,
     turn_queue::merge_room_inputs,
 };
@@ -488,9 +489,30 @@ async fn execute_message_in(
     let participant =
         load_participant(transaction, &principal.room_id, &principal.participant_id).await?;
     let sequence = next_sequence(transaction, &principal.room_id).await?;
-    let event = prepare_message_event(principal, &participant, &command, sequence, Utc::now())
+    let now = Utc::now();
+    let attachments = prepare_message_attachment_bindings(
+        transaction,
+        principal,
+        &command.attachment_ids,
+        now.timestamp(),
+    )
+    .await?;
+    let mut event = prepare_message_event(principal, &participant, &command, sequence, now)
         .map_err(rejection)?;
+    if !attachments.is_empty() {
+        event
+            .extra
+            .insert("attachments".to_owned(), serde_json::to_value(attachments)?);
+    }
     insert_event(transaction, &event).await?;
+    bind_message_attachments(
+        transaction,
+        principal,
+        &command.attachment_ids,
+        sequence,
+        now.timestamp(),
+    )
+    .await?;
     route_message(transaction, &settings, &event).await?;
     let prepared = assign_available_pending(transaction, &room, &settings).await?;
     let mut events = vec![event.clone()];

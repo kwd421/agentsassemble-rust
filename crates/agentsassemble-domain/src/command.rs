@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -8,7 +8,10 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::text::{clean_message, has_visible_text};
-use crate::{Actor, AuthenticatedPrincipal, ClientKind, Participant, ParticipantStatus, RoomEvent};
+use crate::{
+    Actor, AuthenticatedPrincipal, ClientKind, MAX_MESSAGE_ATTACHMENTS_PER_EVENT, Participant,
+    ParticipantStatus, RoomEvent, is_message_attachment_id,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 #[error("{message}")]
@@ -30,36 +33,81 @@ impl CommandRejection {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MessageSend {
     pub content: String,
+    pub attachment_ids: Vec<String>,
 }
 
 impl MessageSend {
-    /// Parses and normalizes the canonical content-only `message.send` payload.
+    /// Parses and normalizes the canonical lobby `message.send` payload.
     ///
     /// # Errors
     ///
-    /// Returns a rejection when the payload is not an object or has no visible text.
+    /// Returns a rejection when the payload shape, content, or attachment identifiers are invalid.
     pub fn from_payload(payload: &Value) -> Result<Self, CommandRejection> {
         let object = payload
             .as_object()
             .ok_or_else(|| CommandRejection::new("bad_request", "payload must be an object."))?;
-        if object.len() != 1 || !object.contains_key("content") {
+        if !object.contains_key("content")
+            || object
+                .keys()
+                .any(|key| !matches!(key.as_str(), "content" | "attachment_ids"))
+        {
             return Err(CommandRejection::new(
                 "bad_request",
-                "message.send accepts exactly one content field.",
+                "message.send accepts exactly content and optional attachment_ids fields.",
             ));
         }
         let raw = object["content"].as_str().ok_or_else(|| {
             CommandRejection::new("bad_request", "message.send content must be a string.")
         })?;
         let content = clean_message(raw, 12_000);
-        if !has_visible_text(&content) {
+        let attachment_ids = parse_attachment_ids(object.get("attachment_ids"))?;
+        if !has_visible_text(&content) && attachment_ids.is_empty() {
             return Err(CommandRejection::new(
                 "empty",
-                "Message content is required.",
+                "Message content or an attachment is required.",
             ));
         }
-        Ok(Self { content })
+        Ok(Self {
+            content,
+            attachment_ids,
+        })
     }
+}
+
+fn parse_attachment_ids(value: Option<&Value>) -> Result<Vec<String>, CommandRejection> {
+    let Some(value) = value else {
+        return Ok(Vec::new());
+    };
+    let values = value
+        .as_array()
+        .ok_or_else(|| CommandRejection::new("bad_request", "attachment_ids must be an array."))?;
+    if values.len() > MAX_MESSAGE_ATTACHMENTS_PER_EVENT {
+        return Err(CommandRejection::new(
+            "bad_request",
+            format!("At most {MAX_MESSAGE_ATTACHMENTS_PER_EVENT} attachments are allowed."),
+        ));
+    }
+    let mut seen = BTreeSet::new();
+    let mut attachment_ids = Vec::with_capacity(values.len());
+    for value in values {
+        let attachment_id = value.as_str().ok_or_else(|| {
+            CommandRejection::new("bad_request", "attachment_ids entries must be strings.")
+        })?;
+        if !is_message_attachment_id(attachment_id) {
+            return Err(CommandRejection::new(
+                "bad_request",
+                "Message attachment id is invalid.",
+            ));
+        }
+        if !seen.insert(attachment_id) {
+            return Err(CommandRejection::new(
+                "bad_request",
+                "Message attachment ids must be distinct.",
+            ));
+        }
+        attachment_ids.push(attachment_id.to_owned());
+    }
+    Ok(attachment_ids)
 }
 
 #[must_use]
@@ -214,5 +262,33 @@ mod tests {
                 .content,
             "hello"
         );
+    }
+
+    #[test]
+    fn message_send_accepts_attachment_only_and_rejects_noncanonical_ids() {
+        let first = "ma_0123456789abcdef0123456789abcdef";
+        let second = "ma_fedcba9876543210fedcba9876543210";
+        let command = MessageSend::from_payload(&json!({
+            "content": "  ",
+            "attachment_ids": [first, second]
+        }))
+        .unwrap_or_else(|error| panic!("attachment-only message: {error}"));
+        assert_eq!(command.content, "");
+        assert_eq!(command.attachment_ids, [first, second]);
+
+        for payload in [
+            json!({"content": "", "attachment_ids": []}),
+            json!({"content": "ok", "attachment_ids": [first, first]}),
+            json!({"content": "ok", "attachment_ids": ["ma_invalid"]}),
+            json!({"content": "ok", "attachment_ids": [first], "attachments": []}),
+            json!({"content": "ok", "attachment_ids": [
+                first, second, first, second, first, second, first, second, first
+            ]}),
+        ] {
+            assert!(
+                MessageSend::from_payload(&payload).is_err(),
+                "accepted {payload}"
+            );
+        }
     }
 }
