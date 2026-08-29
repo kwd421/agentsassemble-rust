@@ -3,6 +3,7 @@ import { Hash } from "lucide-react";
 import {
   type LiveAgent,
   type LobbyEvent,
+  type MessageAttachmentAuthority,
   type RoomEvent,
   fetchRoomMessageContext,
   fetchLobbyMessagePins,
@@ -171,6 +172,13 @@ export default function LobbyView({
     sessionToken: roomSessionToken,
   });
   const messageSearch = sharedMessageSearch || localMessageSearch;
+  const messageAttachmentAuthority = useMemo<MessageAttachmentAuthority>(
+    () =>
+      postingMode === "guest"
+        ? { kind: "remote", sessionToken: roomSessionToken }
+        : { kind: "local" },
+    [postingMode, roomSessionToken]
+  );
 
   const agentOwnerIds = useMemo(
     () => new Map(
@@ -664,7 +672,8 @@ export default function LobbyView({
                     />
                   ) : undefined
                 }
-                roomSessionToken={roomSessionToken}
+                roomId={activeRoom.meetingId}
+                messageAttachmentAuthority={messageAttachmentAuthority}
                 pinned={pinnedEventIds.has(event.record_id || event.id)}
                 canPin={
                   canPostMessages &&

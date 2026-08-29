@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { FileDown, X } from "lucide-react";
-import type { LobbyAttachmentRef } from "../../api";
+import {
+  fetchMessageAttachmentBlob,
+  type LobbyAttachmentRef,
+  type MessageAttachmentAuthority,
+} from "../../api/messageAttachments";
 
 function formatAttachmentSize(size: number) {
   if (!Number.isFinite(size) || size <= 0) return "";
@@ -11,45 +15,60 @@ function formatAttachmentSize(size: number) {
 
 export default function LobbyAttachments({
   attachments,
-  sessionToken = "",
+  roomId,
+  authority,
 }: {
   attachments?: LobbyAttachmentRef[];
-  sessionToken?: string;
+  roomId: string;
+  authority: MessageAttachmentAuthority;
 }) {
   const [selectedImage, setSelectedImage] = useState<LobbyAttachmentRef | null>(null);
   const openerRef = useRef<HTMLElement | null>(null);
   const previewDialogRef = useRef<HTMLDivElement | null>(null);
   const visibleAttachments = (attachments || []).filter((attachment) => attachment.id);
   const [authorizedUrls, setAuthorizedUrls] = useState<Record<string, string>>({});
+  const attachmentKey = JSON.stringify(visibleAttachments);
+  const authoritySession = authority.kind === "remote" ? authority.sessionToken : "";
 
   useEffect(() => {
-    if (!sessionToken || visibleAttachments.length === 0) {
-      setAuthorizedUrls({});
-      return undefined;
-    }
+    setAuthorizedUrls({});
+    setSelectedImage(null);
+    openerRef.current = null;
+    if (visibleAttachments.length === 0) return undefined;
     const controller = new AbortController();
     const objectUrls: string[] = [];
+    let retired = false;
+    const releaseObjectUrls = () => {
+      objectUrls.splice(0).forEach((url) => URL.revokeObjectURL(url));
+    };
     void Promise.all(
       visibleAttachments.map(async (attachment) => {
-        const response = await fetch(attachment.url, {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-          signal: controller.signal,
-        });
-        if (!response.ok) throw new Error(`attachment fetch failed (${response.status})`);
-        const objectUrl = URL.createObjectURL(await response.blob());
+        const blob = await fetchMessageAttachmentBlob(
+          attachment,
+          roomId,
+          authority,
+          attachment.is_image ? "view" : "download",
+          controller.signal,
+          () => controller.signal.throwIfAborted()
+        );
+        controller.signal.throwIfAborted();
+        const objectUrl = URL.createObjectURL(blob);
         objectUrls.push(objectUrl);
         return [attachment.id, objectUrl] as const;
       })
     ).then((entries) => {
       if (!controller.signal.aborted) setAuthorizedUrls(Object.fromEntries(entries));
     }).catch(() => {
-      if (!controller.signal.aborted) setAuthorizedUrls({});
+      controller.abort();
+      releaseObjectUrls();
+      if (!retired) setAuthorizedUrls({});
     });
     return () => {
+      retired = true;
       controller.abort();
-      objectUrls.forEach((url) => URL.revokeObjectURL(url));
+      releaseObjectUrls();
     };
-  }, [sessionToken, visibleAttachments.map((attachment) => attachment.id).join("|")]);
+  }, [attachmentKey, authority.kind, authoritySession, roomId]);
 
   const closeImagePreview = useCallback(() => {
     setSelectedImage(null);
@@ -96,13 +115,18 @@ export default function LobbyAttachments({
   }, [closeImagePreview, selectedImage]);
 
   if (visibleAttachments.length === 0) return null;
+  const selectedUrl = selectedImage && visibleAttachments.some(
+    (attachment) => attachment.id === selectedImage.id
+  )
+    ? authorizedUrls[selectedImage.id]
+    : "";
 
   return (
     <>
       <div className="dc-attachment-list">
         {visibleAttachments.map((attachment) => {
           const sizeLabel = formatAttachmentSize(attachment.size);
-          const authorizedUrl = sessionToken ? authorizedUrls[attachment.id] : attachment.url;
+          const authorizedUrl = authorizedUrls[attachment.id];
           if (attachment.is_image && authorizedUrl) {
             return (
               <button
@@ -142,7 +166,7 @@ export default function LobbyAttachments({
         })}
       </div>
 
-      {selectedImage && createPortal(
+      {selectedImage && selectedUrl && createPortal(
         <div
           role="dialog"
           aria-modal="true"
@@ -161,7 +185,7 @@ export default function LobbyAttachments({
               </p>
               <div className="flex shrink-0 items-center gap-2">
                 <a
-                  href={sessionToken ? authorizedUrls[selectedImage.id] : selectedImage.download_url || selectedImage.url}
+                  href={selectedUrl}
                   download={selectedImage.filename}
                   className="ops-button grid h-9 w-9 place-items-center rounded-lg"
                   aria-label={`${selectedImage.filename} 다운로드`}
@@ -181,7 +205,7 @@ export default function LobbyAttachments({
             </div>
             <div className="max-h-[calc(90vh-58px)] overflow-auto bg-black/32 p-3">
               <img
-                src={sessionToken ? authorizedUrls[selectedImage.id] : selectedImage.url}
+                src={selectedUrl}
                 alt={selectedImage.filename}
                 className="mx-auto max-h-[calc(90vh-90px)] max-w-full rounded-lg object-contain"
               />

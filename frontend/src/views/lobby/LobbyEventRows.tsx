@@ -17,7 +17,10 @@ import {
   Zap,
 } from "lucide-react";
 
-import type { LobbyEvent } from "../../api";
+import type {
+  LobbyEvent,
+  MessageAttachmentAuthority,
+} from "../../api";
 import type { RoomTypingIndicator } from "../../lib/roomTypingIndicators";
 import DiscordText, { type MentionLabels } from "../components/DiscordText";
 import LobbyAttachments from "../components/LobbyAttachments";
@@ -349,7 +352,8 @@ export function LobbyMessageRow({
   voteCard,
   showHeader = true,
   mentionLabels,
-  roomSessionToken = "",
+  roomId,
+  messageAttachmentAuthority,
   pinned = false,
   canPin = false,
   onTogglePin,
@@ -363,7 +367,8 @@ export function LobbyMessageRow({
   voteCard?: ReactNode;
   showHeader?: boolean;
   mentionLabels: MentionLabels;
-  roomSessionToken?: string;
+  roomId: string;
+  messageAttachmentAuthority: MessageAttachmentAuthority;
   pinned?: boolean;
   canPin?: boolean;
   onTogglePin?: () => void;
@@ -440,7 +445,11 @@ export function LobbyMessageRow({
           </div>
         )}
         {!event.message_deleted && (
-          <LobbyAttachments attachments={event.attachments} sessionToken={roomSessionToken} />
+          <LobbyAttachments
+            attachments={event.attachments}
+            roomId={roomId}
+            authority={messageAttachmentAuthority}
+          />
         )}
       </div>
     </div>
