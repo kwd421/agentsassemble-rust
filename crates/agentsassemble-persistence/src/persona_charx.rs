@@ -3,7 +3,9 @@ use std::{
     io::{Cursor, Read},
 };
 
-use agentsassemble_domain::{MAX_ATTACHMENT_BYTES, PersonaLoreSettings};
+use agentsassemble_domain::{
+    MAX_ATTACHMENT_BYTES, PersonaLoreEntry, PersonaLoreSettings, trim_persona_card_text,
+};
 use serde_json::Value;
 use zip::ZipArchive;
 
@@ -60,7 +62,7 @@ pub async fn import_charx_asset(
         match module {
             Ok(module) => {
                 if module.lorebook_present {
-                    imported.card.lorebook = module.card.lorebook;
+                    imported.card.lorebook = project_embedded_lore(module.card.lorebook);
                     imported.card.lore_settings = PersonaLoreSettings::default();
                     imported
                         .card
@@ -84,6 +86,31 @@ pub async fn import_charx_asset(
         }
     }
     Ok(imported)
+}
+
+fn project_embedded_lore(mut entries: Vec<PersonaLoreEntry>) -> Vec<PersonaLoreEntry> {
+    for entry in &mut entries {
+        entry.key = projected_keywords(&entry.key);
+        entry.secondary_key = projected_keywords(&entry.secondary_key);
+        entry.priority = 0;
+        entry.case_sensitive = false;
+    }
+    entries
+}
+
+fn projected_keywords(value: &str) -> String {
+    let mut output = String::new();
+    for keyword in value
+        .split([',', ';', '\n'])
+        .map(trim_persona_card_text)
+        .filter(|keyword| !keyword.is_empty())
+    {
+        if !output.is_empty() {
+            output.push_str(", ");
+        }
+        output.push_str(keyword);
+    }
+    output
 }
 
 fn validate_archive(archive: &mut ZipArchive<Cursor<&[u8]>>) -> Result<(), PersonaImportError> {
@@ -191,6 +218,8 @@ mod tests {
     use serde_json::json;
     use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
 
+    use agentsassemble_domain::render_persona_context;
+
     use super::import_charx_asset;
     use crate::persona_risu::RPACK_DECODE;
 
@@ -259,6 +288,56 @@ mod tests {
         assert_eq!(imported.card.lorebook[0].content, "card lore");
         assert_eq!(imported.card.ignored_features["lorebook_regex_matching"], 1);
         assert_eq!(imported.card.ignored_features["regex"], 1);
+    }
+
+    #[tokio::test]
+    async fn embedded_module_uses_the_charx_lore_projection() {
+        let card = json!({
+            "spec": "chara_card_v3",
+            "spec_version": "3.0",
+            "data": {"name": "Archive Guide"}
+        });
+        let high = format!("HIGH {}", "a".repeat(2_990));
+        let low = format!("LOW {}", "b".repeat(2_990));
+        let module = risu_module_from(&json!({
+            "type": "risuModule",
+            "module": {
+                "name": "module",
+                "lorebook": [
+                    {
+                        "key": "harbor",
+                        "content": high,
+                        "alwaysActive": true,
+                        "insertorder": 100
+                    },
+                    {
+                        "key": " HARBOR ; dock ",
+                        "content": low,
+                        "case_sensitive": true,
+                        "insertorder": 1
+                    }
+                ]
+            }
+        }));
+        let archive = zip(&[
+            ("card.json", card.to_string().as_bytes()),
+            ("module.risum", &module),
+        ]);
+
+        let imported = import_charx_asset("guide.charx", &archive)
+            .await
+            .unwrap_or_else(|error| panic!("import CHARX: {error}"));
+        assert_eq!(imported.card.lorebook[1].key, "HARBOR, dock");
+        assert!(
+            imported
+                .card
+                .lorebook
+                .iter()
+                .all(|entry| entry.priority == 0 && !entry.case_sensitive)
+        );
+        let rendered = render_persona_context(&imported.card, "harbor");
+        assert!(rendered.contains("LOW bbb"));
+        assert!(!rendered.contains("HIGH aaa"));
     }
 
     fn zip(entries: &[(&str, &[u8])]) -> Vec<u8> {
