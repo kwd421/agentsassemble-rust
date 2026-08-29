@@ -165,6 +165,50 @@ describe("LobbyAttachments", () => {
     expect(transfer.read).toHaveBeenCalledTimes(2);
   });
 
+  it("shares capacity across attachment-view unmount and re-entry", async () => {
+    const firstAttachments = ["a", "b", "c", "d"].map((hex) =>
+      attachment(hex, true)
+    );
+    const nextAttachment = attachment("e", true);
+    const pending: Array<{ resolve: (blob: Blob) => void }> = [];
+    createObjectURL.mockReturnValue("blob:replacement");
+    transfer.read.mockImplementation(
+      () => new Promise<Blob>((resolve) => pending.push({ resolve }))
+    );
+    function AppLifetime({ roomId, visible }: { roomId: string; visible: boolean }) {
+      const [owner] = useState(() => createMessageAttachmentReadOwner(transfer.read));
+      const reader = useMemo(
+        () => owner.forAuthority(roomId, { kind: "local" }),
+        [owner, roomId]
+      );
+      if (!visible) return null;
+      return (
+        <LobbyAttachments
+          attachments={roomId === "room-a" ? firstAttachments : [nextAttachment]}
+          scheduler={reader}
+        />
+      );
+    }
+    const view = render(<AppLifetime roomId="room-a" visible />);
+    act(() => {
+      intersectionObservers.slice(-4).forEach((observer) => observer.emit(true));
+    });
+    await waitFor(() => expect(transfer.read).toHaveBeenCalledTimes(4));
+
+    view.rerender(<AppLifetime roomId="room-a" visible={false} />);
+    view.rerender(<AppLifetime roomId="room-b" visible />);
+    act(() => intersectionObservers.at(-1)?.emit(true));
+    await Promise.resolve();
+    expect(transfer.read).toHaveBeenCalledTimes(4);
+
+    pending[0]?.resolve(new Blob(["released"], { type: "image/png" }));
+    await waitFor(() => expect(transfer.read).toHaveBeenCalledTimes(5));
+    pending.slice(1).forEach(({ resolve }) =>
+      resolve(new Blob(["done"], { type: "image/png" }))
+    );
+    expect(await screen.findByRole("img", { name: "e.png" })).toBeTruthy();
+  });
+
   it("aborts and revokes an image as soon as it leaves the viewport", async () => {
     const image = attachment();
     createObjectURL.mockReturnValue("blob:image");

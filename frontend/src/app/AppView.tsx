@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useState } from "react";
 import {
   Bell,
   CalendarDays,
@@ -32,12 +32,16 @@ import UserPanel from "../views/components/UserPanel";
 import { SIDEBAR_WIDTH_MAX, SIDEBAR_WIDTH_MIN } from "../lib/sidebarResizeModel";
 import { GUEST_SESSION_EXPIRED_MESSAGE } from "../lib/apiErrors";
 import { isDesktopWebview } from "../lib/desktopBridge";
+import { createMessageAttachmentReadOwner } from "../lib/messageAttachmentReadScheduler";
 
 const AdminPanel = lazy(() => import("../views/AdminPanel"));
 const FriendsView = lazy(() => import("../views/FriendsView"));
 const CustomChannelView = lazy(() => import("../views/CustomChannelView"));
 
 export default function AppView({ controller }: { controller: AppController }) {
+  const [messageAttachmentReadOwner] = useState(
+    () => createMessageAttachmentReadOwner()
+  );
   const {
     activateRightPanelMode, activateRightPanelModeFromPointer, activeAppearance, activeChannelDisplay,
     activeChannelSettings, activeCustomChannel, activeCustomChannels,
@@ -431,6 +435,7 @@ export default function AppView({ controller }: { controller: AppController }) {
             <LobbyView
               activeRoom={activeRoom}
               agents={scopedAgents}
+              messageAttachmentReadOwner={messageAttachmentReadOwner}
               mentionables={scopedMentionables}
               bindLobbyStream={bindLobbyStream}
               roomSessionToken={lobbyPostingState.sessionToken}

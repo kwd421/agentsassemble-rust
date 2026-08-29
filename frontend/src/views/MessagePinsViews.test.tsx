@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Hash } from "lucide-react";
+import { useState, type ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
@@ -19,8 +20,16 @@ vi.mock("../api", async () => ({
 
 import type { LobbyEvent, RoomChannel } from "../api";
 import type { RoomDockItem } from "../lib/roomDockModel";
+import { createMessageAttachmentReadOwner } from "../lib/messageAttachmentReadScheduler";
 import CustomChannelView from "./CustomChannelView";
-import LobbyView from "./LobbyView";
+import ProductionLobbyView from "./LobbyView";
+
+function LobbyView(
+  props: Omit<ComponentProps<typeof ProductionLobbyView>, "messageAttachmentReadOwner">
+) {
+  const [owner] = useState(() => createMessageAttachmentReadOwner());
+  return <ProductionLobbyView {...props} messageAttachmentReadOwner={owner} />;
+}
 
 const room: RoomDockItem = {
   id: "general",

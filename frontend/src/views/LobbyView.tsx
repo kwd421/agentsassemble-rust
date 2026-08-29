@@ -43,7 +43,7 @@ import {
   useRoomMessageSearch,
   type RoomMessageSearchController,
 } from "./useRoomMessageSearch";
-import { createMessageAttachmentReadOwner } from "../lib/messageAttachmentReadScheduler";
+import type { MessageAttachmentReadOwner } from "../lib/messageAttachmentReadScheduler";
 
 type PinOperation = { retired: boolean };
 
@@ -59,6 +59,7 @@ function requireCurrentPinOperation(
 export default function LobbyView({
   activeRoom,
   agents,
+  messageAttachmentReadOwner,
   mentionables: roomMentionables,
   canManageRoom = true,
   canPostMessages = true,
@@ -94,6 +95,7 @@ export default function LobbyView({
 }: {
   activeRoom: RoomDockItem;
   agents: LiveAgent[];
+  messageAttachmentReadOwner: MessageAttachmentReadOwner;
   typingIndicators?: RoomTypingIndicator[];
   mentionables?: Mentionable[];
   canManageRoom?: boolean;
@@ -179,9 +181,6 @@ export default function LobbyView({
         ? { kind: "remote", sessionToken: roomSessionToken }
         : { kind: "local" },
     [postingMode, roomSessionToken]
-  );
-  const [messageAttachmentReadOwner] = useState(
-    () => createMessageAttachmentReadOwner()
   );
   const messageAttachmentReadScheduler = useMemo(
     () => messageAttachmentReadOwner.forAuthority(

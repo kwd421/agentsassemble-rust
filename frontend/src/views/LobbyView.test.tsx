@@ -1,10 +1,19 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Hash } from "lucide-react";
+import { useState, type ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LobbyEvent } from "../api";
 import type { RoomDockItem } from "../lib/roomDockModel";
 import type { RoomTypingIndicator } from "../lib/roomTypingIndicators";
-import LobbyView from "./LobbyView";
+import { createMessageAttachmentReadOwner } from "../lib/messageAttachmentReadScheduler";
+import ProductionLobbyView from "./LobbyView";
+
+function LobbyView(
+  props: Omit<ComponentProps<typeof ProductionLobbyView>, "messageAttachmentReadOwner">
+) {
+  const [owner] = useState(() => createMessageAttachmentReadOwner());
+  return <ProductionLobbyView {...props} messageAttachmentReadOwner={owner} />;
+}
 
 afterEach(cleanup);
 
