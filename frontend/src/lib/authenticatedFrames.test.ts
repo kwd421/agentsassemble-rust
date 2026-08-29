@@ -68,7 +68,10 @@ describe("authenticated WebSocket frames", () => {
       op: "command",
       request_id: "same-id",
       action: "message.send",
-      payload: { content: "real" },
+      payload: {
+        content: "real",
+        attachment_ids: [`ma_${"a".repeat(32)}`],
+      },
     });
     const envelope = await encodeAuthenticatedFrame(
       key,
@@ -82,7 +85,10 @@ describe("authenticated WebSocket frames", () => {
       op: "command",
       request_id: "same-id",
       action: "message.send",
-      payload: { content: "forged" },
+      payload: {
+        content: "real",
+        attachment_ids: [`ma_${"b".repeat(32)}`],
+      },
     }));
     await expect(decodeAuthenticatedFrame(
       key,

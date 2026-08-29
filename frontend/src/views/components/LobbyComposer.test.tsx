@@ -9,7 +9,10 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RoomSocketProvider } from "../../RoomSocketContext";
-import type { RoomSocketHandle } from "../../roomSocketClient";
+import {
+  RoomSocketSayError,
+  type RoomSocketHandle,
+} from "../../roomSocketClient";
 import LobbyComposer from "./LobbyComposer";
 
 const apiMocks = vi.hoisted(() => ({
@@ -162,6 +165,48 @@ describe("LobbyComposer", () => {
       "room A draft"
     );
     expect(screen.getByText("map.png")).toBeTruthy();
+  });
+
+  it("keeps text and attachments after the canonical socket rejects the send", async () => {
+    const id = `ma_${"a".repeat(32)}`;
+    const uploaded = {
+      id,
+      filename: "map.png",
+      content_type: "image/png",
+      size: 3,
+      is_image: true,
+      url: `/api/attachments/${id}?view=1`,
+      download_url: `/api/attachments/${id}?download=1`,
+    };
+    apiMocks.uploadLobbyAttachment.mockResolvedValue(uploaded);
+    const say = vi.fn().mockRejectedValue(
+      new RoomSocketSayError("attachment unavailable", "attachment_unavailable")
+    );
+    const socket = { ready: () => true, say } as unknown as RoomSocketHandle;
+    render(
+      <RoomSocketProvider socket={socket}>
+        <LobbyComposer meetingId="room-a" onPosted={vi.fn()} />
+      </RoomSocketProvider>
+    );
+
+    fireEvent.change(screen.getByLabelText("채팅 입력"), {
+      target: { value: "keep this draft" },
+    });
+    fireEvent.change(screen.getByLabelText("채팅 첨부 선택"), {
+      target: { files: [new File(["map"], "map.png", { type: "image/png" })] },
+    });
+    await screen.findByText("map.png");
+    fireEvent.click(screen.getByLabelText("채팅 메시지 보내기"));
+
+    expect(await screen.findByText("attachment unavailable")).toBeTruthy();
+    expect((screen.getByLabelText("채팅 입력") as HTMLTextAreaElement).value).toBe(
+      "keep this draft"
+    );
+    expect(screen.getByText("map.png")).toBeTruthy();
+    expect(say).toHaveBeenCalledWith(expect.objectContaining({
+      message: "keep this draft",
+      attachments: [uploaded],
+    }));
   });
 
   it("keeps attachment upload blocked for a read-only public room session", () => {

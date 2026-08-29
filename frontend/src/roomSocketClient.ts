@@ -26,6 +26,7 @@ import {
   RoomSocketSayError,
   type ProviderCatalogSnapshot,
   type RoomCommandAck,
+  type RoomSayRequest,
   type RoomSocketClientDependencies,
   type RoomSocketHandle,
   type RoomSocketHandlers,
@@ -33,6 +34,8 @@ import {
 } from "./roomSocketTypes";
 import { PRODUCT_SURFACE_REVISION } from "./types/generated/PRODUCT_SURFACE_REVISION";
 import { requireAcceptedRoomRuntimeTicket } from "./lib/roomRuntimeTicket";
+import { messageAttachmentId } from "./lib/messageAttachmentId";
+import { MAX_MESSAGE_ATTACHMENTS_PER_EVENT } from "./types/generated/MESSAGE_ATTACHMENTS_WIRE";
 
 export type { RoomSocketAuth } from "./api";
 export type { PluginEnvelope } from "./pluginSocketProtocol";
@@ -67,6 +70,32 @@ interface PendingRoomCommand {
   retryAttempt: number;
   retryNotBefore: number;
   everSent: boolean;
+}
+
+function messageAttachmentIds(request: RoomSayRequest): string[] {
+  const attachments = request.attachments || [];
+  if (attachments.length > MAX_MESSAGE_ATTACHMENTS_PER_EVENT) {
+    throw new RoomSocketSayError(
+      "A room message cannot contain more than eight attachments.",
+      "bad_request"
+    );
+  }
+  let ids: string[];
+  try {
+    ids = attachments.map((attachment) => messageAttachmentId(attachment.id));
+  } catch {
+    throw new RoomSocketSayError(
+      "A room message contains an invalid attachment identifier.",
+      "bad_request"
+    );
+  }
+  if (new Set(ids).size !== ids.length) {
+    throw new RoomSocketSayError(
+      "A room message cannot contain duplicate attachments.",
+      "bad_request"
+    );
+  }
+  return ids;
 }
 
 function validateClientAuthority(
@@ -668,7 +697,11 @@ export function openRoomSocket(
       };
     },
     say: async (request) => {
-      await command("message.send", { content: request.message });
+      const attachmentIds = messageAttachmentIds(request);
+      await command("message.send", {
+        content: request.message,
+        ...(attachmentIds.length ? { attachment_ids: attachmentIds } : {}),
+      });
       return { events: [] };
     },
   };
