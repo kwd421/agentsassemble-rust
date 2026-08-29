@@ -11,7 +11,7 @@ use crate::{
     persona_import::{
         ImportedPersonaAsset, PersonaImportError, add_count, finish_ccv3_import, safe_embedded_path,
     },
-    persona_risu::decode_risum_card,
+    persona_risu::decode_risum_module,
 };
 
 const MAX_ENTRY_COUNT: usize = 512;
@@ -56,7 +56,7 @@ pub async fn import_charx_asset(
     let module = if archive.index_for_name("module.risum").is_some() {
         Some(
             read_member(&mut archive, "module.risum", MAX_ATTACHMENT_BYTES)
-                .and_then(|bytes| decode_risum_card("module.risum", &bytes)),
+                .and_then(|bytes| decode_risum_module("module.risum", &bytes)),
         )
     } else {
         None
@@ -65,13 +65,15 @@ pub async fn import_charx_asset(
     if let Some(module) = module {
         match module {
             Ok(module) => {
-                imported.card.lorebook = module.lorebook;
-                imported.card.lore_settings = PersonaLoreSettings::default();
-                imported
-                    .card
-                    .ignored_features
-                    .remove("lorebook_regex_matching");
-                for (name, count) in module.ignored_features {
+                if module.lorebook_present {
+                    imported.card.lorebook = module.card.lorebook;
+                    imported.card.lore_settings = PersonaLoreSettings::default();
+                    imported
+                        .card
+                        .ignored_features
+                        .remove("lorebook_regex_matching");
+                }
+                for (name, count) in module.card.ignored_features {
                     imported
                         .card
                         .ignored_features
@@ -235,6 +237,36 @@ mod tests {
         assert!(error.to_string().contains("entry path is unsafe"));
     }
 
+    #[tokio::test]
+    async fn embedded_module_without_lore_keeps_card_lore() {
+        let card = json!({
+            "spec": "chara_card_v3",
+            "spec_version": "3.0",
+            "data": {
+                "name": "Archive Guide",
+                "character_book": {"entries": [
+                    {"key": ".*", "content": "card lore", "use_regex": true}
+                ]}
+            }
+        });
+        let module = risu_module_from(&json!({
+            "type": "risuModule",
+            "module": {"name": "module", "regex": [{"in": ".*"}]}
+        }));
+        let archive = zip(&[
+            ("card.json", card.to_string().as_bytes()),
+            ("module.risum", &module),
+        ]);
+
+        let imported = import_charx_asset("guide.charx", &archive)
+            .await
+            .unwrap_or_else(|error| panic!("import CHARX: {error}"));
+
+        assert_eq!(imported.card.lorebook[0].content, "card lore");
+        assert_eq!(imported.card.ignored_features["lorebook_regex_matching"], 1);
+        assert_eq!(imported.card.ignored_features["regex"], 1);
+    }
+
     fn zip(entries: &[(&str, &[u8])]) -> Vec<u8> {
         let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
         let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
@@ -269,15 +301,18 @@ mod tests {
     }
 
     fn risu_module() -> Vec<u8> {
-        let payload = json!({
+        risu_module_from(&json!({
             "type": "risuModule",
             "module": {
                 "name": "module",
                 "lorebook": [{"key": "harbor", "content": "module lore"}],
                 "regex": [{"in": ".*"}]
             }
-        });
-        let json = serde_json::to_vec(&payload)
+        }))
+    }
+
+    fn risu_module_from(payload: &serde_json::Value) -> Vec<u8> {
+        let json = serde_json::to_vec(payload)
             .unwrap_or_else(|error| panic!("serialize Risu fixture: {error}"));
         let encoded = rpack_encode(&json);
         let length = u32::try_from(encoded.len())

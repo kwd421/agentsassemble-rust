@@ -40,6 +40,11 @@ pub(super) const RPACK_DECODE: [u8; 256] = [
     0xf6, 0xcc, 0x6e, 0xb9, 0x5b, 0x0b, 0x96, 0xed, 0xd5, 0xe9, 0xc5, 0xcb, 0x08, 0xa6, 0x80, 0x40,
 ];
 
+pub(super) struct DecodedRisuModule {
+    pub card: PersonaCard,
+    pub lorebook_present: bool,
+}
+
 /// Parses a standalone Risu module without filesystem or environment lookups.
 ///
 /// # Errors
@@ -49,17 +54,17 @@ pub fn import_risum_asset(
     filename: &str,
     content: &[u8],
 ) -> Result<ImportedPersonaAsset, PersonaImportError> {
-    let card = decode_risum_card(filename, content)?;
+    let card = decode_risum_module(filename, content)?.card;
     Ok(ImportedPersonaAsset {
         card,
         thumbnail: None,
     })
 }
 
-pub(super) fn decode_risum_card(
+pub(super) fn decode_risum_module(
     source_name: &str,
     content: &[u8],
-) -> Result<PersonaCard, PersonaImportError> {
+) -> Result<DecodedRisuModule, PersonaImportError> {
     if content.is_empty() || content.len() > MAX_ATTACHMENT_BYTES {
         return Err(PersonaImportError::InvalidSize);
     }
@@ -91,7 +96,10 @@ pub(super) fn decode_risum_card(
         .and_then(Value::as_object)
         .ok_or_else(|| invalid("module must be an object"))?;
     let asset_records = validate_asset_records(content, &mut offset)?;
-    Ok(normalize_module(module, source_name, asset_records))
+    Ok(DecodedRisuModule {
+        card: normalize_module(module, source_name, asset_records),
+        lorebook_present: module.get("lorebook").is_some_and(Value::is_array),
+    })
 }
 
 fn validate_asset_records(content: &[u8], offset: &mut usize) -> Result<usize, PersonaImportError> {
