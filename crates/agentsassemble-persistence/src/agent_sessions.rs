@@ -116,15 +116,17 @@ impl SqliteStore {
 
 #[cfg(test)]
 mod tests {
+    use std::{collections::BTreeMap, fs::File, path::Path};
+
     use agentsassemble_domain::{
-        AgentSessionDraft, AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope,
-        LOCAL_OPERATOR_PARTICIPANT_ID, stable_content_identity, stable_identity_hash,
+        AgentSessionDraft, AuthenticatedPrincipal, CapabilitySet, ClientKind, DurableAgentSession,
+        InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID, PersonaAssetKind, PersonaCard,
+        PersonaLoreSettings, stable_content_identity, stable_identity_hash,
     };
     use same_file::Handle;
     use serde_json::json;
-    use std::{fs::File, path::Path};
 
-    use crate::{PersistenceError, SqliteStore};
+    use crate::{ImportedPersonaAsset, PersistenceError, SqliteStore};
 
     async fn fixture() -> (SqliteStore, AuthenticatedPrincipal, tempfile::TempDir) {
         let directory =
@@ -323,6 +325,91 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn persona_selection_create_failure_and_clear_share_session_custody() {
+        let (store, principal, directory) = fixture().await;
+        store
+            .replace_persona_asset(ImportedPersonaAsset {
+                card: persona_card("guide", "Guide"),
+                thumbnail: None,
+            })
+            .await
+            .unwrap_or_else(|error| panic!("store persona: {error}"));
+        let workspace = directory
+            .path()
+            .to_str()
+            .unwrap_or_else(|| panic!("test workspace path must be UTF-8"));
+        let mut selected = draft(workspace);
+        selected.persona_card_id = "guide".to_owned();
+        selected.runtime_profile_key = "profile-guide".to_owned();
+        let created = store
+            .execute_agent_create(
+                &principal,
+                "create-persona",
+                &json!({"provider_id": "api", "persona_card_id": "guide"}),
+                &selected,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("create selected session: {error}"));
+        let projection = &created.result["agent_session"];
+        assert_eq!(projection["persona_card_id"], "guide");
+        assert_eq!(projection["persona_card"]["display_name"], "Guide");
+        assert!(projection["persona_card"].get("description").is_none());
+
+        let mut missing = selected.clone();
+        missing.persona_card_id = "missing".to_owned();
+        missing.runtime_profile_key = "profile-missing".to_owned();
+        let error = store
+            .execute_agent_configuration(
+                &principal,
+                "configure-missing-persona",
+                &json!({"agent_id": selected.agent_id.as_str(), "persona_card_id": "missing"}),
+                &selected.runtime_profile_key,
+                &missing,
+            )
+            .await
+            .err()
+            .unwrap_or_else(|| panic!("missing persona must fail"));
+        assert!(matches!(
+            error,
+            PersistenceError::CommandRejected {
+                code: "persona_not_found",
+                ..
+            }
+        ));
+        let retained = store
+            .snapshot("general", 0, 200)
+            .await
+            .unwrap_or_else(|error| panic!("snapshot retained persona: {error}"));
+        assert_eq!(retained.agent_sessions[0].persona_card_id.as_ref(), "guide");
+        let encoded = sqlx::query_scalar::<_, String>(
+            "SELECT session_json FROM agent_sessions WHERE room_id = 'general' LIMIT 1",
+        )
+        .fetch_one(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("read selected session: {error}"));
+        let mut inconsistent: serde_json::Value = serde_json::from_str(&encoded)
+            .unwrap_or_else(|error| panic!("decode selected session: {error}"));
+        inconsistent["persona_card"] = serde_json::Value::Null;
+        assert!(serde_json::from_value::<DurableAgentSession>(inconsistent).is_err());
+
+        let mut cleared = selected.clone();
+        cleared.persona_card_id.clear();
+        cleared.runtime_profile_key = "profile-clear".to_owned();
+        let outcome = store
+            .execute_agent_configuration(
+                &principal,
+                "configure-clear-persona",
+                &json!({"agent_id": selected.agent_id.as_str(), "persona_card_id": ""}),
+                &selected.runtime_profile_key,
+                &cleared,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("clear persona: {error}"));
+        assert_eq!(outcome.result["agent_session"]["persona_card_id"], "");
+        assert!(outcome.result["agent_session"]["persona_card"].is_null());
+    }
+
+    #[tokio::test]
     async fn command_result_failure_rolls_back_session_participant_and_event() {
         let (store, principal, directory) = fixture().await;
         sqlx::query(
@@ -509,5 +596,26 @@ mod tests {
         assert_eq!(snapshot.participants.len(), 1);
         assert_eq!(snapshot.events.len(), 1);
         assert_eq!(snapshot.events[0].event_type, "room_created");
+    }
+
+    fn persona_card(id: &str, display_name: &str) -> PersonaCard {
+        PersonaCard {
+            id: id.to_owned(),
+            display_name: display_name.to_owned(),
+            description: "private description".to_owned(),
+            system_prompt: "private system prompt".to_owned(),
+            personality: String::new(),
+            scenario: String::new(),
+            first_message: String::new(),
+            example_messages: String::new(),
+            post_history_instructions: String::new(),
+            lorebook: Vec::new(),
+            lore_settings: PersonaLoreSettings::default(),
+            asset_kind: PersonaAssetKind::Card,
+            source_kind: "fixture".to_owned(),
+            asset_count: 0,
+            ignored_features: BTreeMap::new(),
+            tag_count: 0,
+        }
     }
 }

@@ -394,6 +394,19 @@ impl<'de> Deserialize<'de> for DurableAgentSession {
                 "unknown Agent Session field `{field}`"
             )));
         }
+        let persona_is_valid = match (
+            raw.public.persona_card_id.as_ref(),
+            raw.public.persona_card.as_deref(),
+        ) {
+            ("", None) => true,
+            (persona_id, Some(summary)) => persona_id == summary.id,
+            _ => false,
+        };
+        if !persona_is_valid {
+            return Err(serde::de::Error::custom(
+                "Agent Session persona selection is inconsistent",
+            ));
+        }
         Ok(Self {
             public: raw.public,
             executable: raw.executable,

@@ -3,7 +3,7 @@ use agentsassemble_domain::{
     PersonaCard, canonical_persona_id,
 };
 use caseless::default_case_fold_str;
-use sqlx::Row;
+use sqlx::{Row, Sqlite, Transaction};
 
 use crate::{ImportedPersonaAsset, PersistenceError, SqliteStore, raster_assets::PNG_SIGNATURE};
 
@@ -113,6 +113,30 @@ impl SqliteStore {
     }
 }
 
+pub(crate) async fn resolve_persona_selection(
+    transaction: &mut Transaction<'_, Sqlite>,
+    persona_id: &str,
+) -> Result<Option<Box<PersonaAssetSummary>>, PersistenceError> {
+    if persona_id.is_empty() {
+        return Ok(None);
+    }
+    if !valid_persona_id(persona_id) {
+        return Err(persona_not_found());
+    }
+    let row = sqlx::query(
+        "SELECT card_json, thumbnail_png IS NOT NULL AS has_thumbnail FROM persona_assets WHERE persona_id = ?",
+    )
+    .bind(persona_id)
+    .fetch_optional(&mut **transaction)
+    .await?
+    .ok_or_else(persona_not_found)?;
+    let card = decode_card(persona_id, row.get::<String, _>("card_json").as_str())
+        .map_err(|_| persona_not_found())?;
+    let has_thumbnail = row.get::<bool, _>("has_thumbnail");
+    validate_thumbnail_kind(&card, has_thumbnail).map_err(|_| persona_not_found())?;
+    Ok(Some(Box::new(card.summary(has_thumbnail))))
+}
+
 fn decode_card(persona_id: &str, card_json: &str) -> Result<PersonaCard, PersistenceError> {
     let card: PersonaCard =
         serde_json::from_str(card_json).map_err(|_| PersistenceError::InvalidPersonaAsset)?;
@@ -162,6 +186,13 @@ fn valid_png(content: &[u8]) -> bool {
 fn valid_persona_id(persona_id: &str) -> bool {
     persona_id.chars().count() <= MAX_PERSONA_ID_CHARACTERS
         && canonical_persona_id(persona_id) == persona_id
+}
+
+fn persona_not_found() -> PersistenceError {
+    PersistenceError::CommandRejected {
+        code: "persona_not_found",
+        message: "The selected bot card or module is unavailable.".to_owned(),
+    }
 }
 
 const fn asset_order(kind: PersonaAssetKind) -> u8 {

@@ -10,7 +10,10 @@ use serde_json::{Value, json};
 use sqlx::{Sqlite, Transaction};
 use uuid::Uuid;
 
-use crate::{PersistenceError, sqlite::MAX_AGENT_SESSIONS_PER_ROOM};
+use crate::{
+    PersistenceError, persona_library::resolve_persona_selection,
+    sqlite::MAX_AGENT_SESSIONS_PER_ROOM,
+};
 
 pub(crate) struct AgentCreationRecords {
     pub session: DurableAgentSession,
@@ -99,6 +102,7 @@ async fn create_agent_records(
     };
     let (last_message_id, last_message_seq) =
         latest_message_cursor(transaction, &principal.room_id).await?;
+    let persona_card = resolve_persona_selection(transaction, &draft.persona_card_id).await?;
     let public_session = AgentSession {
         room_id: principal.room_id.clone(),
         session_id: draft.agent_id.clone(),
@@ -120,8 +124,8 @@ async fn create_agent_records(
         permission_mode: draft.permission_mode.clone(),
         max_output_tokens: draft.max_output_tokens,
         catalog_revision: draft.catalog_revision.clone(),
-        persona_card_id: Box::default(),
-        persona_card: None,
+        persona_card_id: draft.persona_card_id.clone().into_boxed_str(),
+        persona_card,
         transport: draft.transport.clone(),
         last_seen_event_id: last_message_id.clone(),
         last_seen_seq: last_message_seq,

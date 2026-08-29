@@ -12,6 +12,7 @@ use crate::{
     authority::active_room_for_principal,
     command_admission::admit_non_lifecycle_command,
     filesystem_authority::revalidate_runtime_authority,
+    persona_library::resolve_persona_selection,
     room_write_budget::command_size,
 };
 
@@ -88,7 +89,9 @@ impl SqliteStore {
             ));
         }
 
-        apply_draft(&mut session, draft);
+        let persona_card =
+            resolve_persona_selection(&mut transaction, &draft.persona_card_id).await?;
+        apply_draft(&mut session, draft, persona_card);
         save_session(&mut transaction, &session).await?;
         let participant = load_participant(
             &mut transaction,
@@ -120,7 +123,11 @@ impl SqliteStore {
     }
 }
 
-fn apply_draft(session: &mut DurableAgentSession, draft: &AgentSessionDraft) {
+fn apply_draft(
+    session: &mut DurableAgentSession,
+    draft: &AgentSessionDraft,
+    persona_card: Option<Box<agentsassemble_domain::PersonaAssetSummary>>,
+) {
     "available".clone_into(&mut session.public.status);
     "stopped".clone_into(&mut session.public.runtime_status);
     session.public.enabled = false;
@@ -144,6 +151,8 @@ fn apply_draft(session: &mut DurableAgentSession, draft: &AgentSessionDraft) {
         .public
         .catalog_revision
         .clone_from(&draft.catalog_revision);
+    session.public.persona_card_id = draft.persona_card_id.clone().into_boxed_str();
+    session.public.persona_card = persona_card;
     session.public.transport.clone_from(&draft.transport);
     session.public.last_error.clear();
     session.public.last_error_code.clear();
