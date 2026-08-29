@@ -6,6 +6,7 @@ mod message_attachments;
 mod message_pins;
 mod model;
 mod persona;
+mod persona_text;
 mod profile;
 mod projection;
 mod room_preferences;

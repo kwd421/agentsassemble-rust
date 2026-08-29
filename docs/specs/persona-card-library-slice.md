@@ -167,6 +167,13 @@ before `card.json` is read.
   lines, allowing decorator length to displace higher-priority visible lore. Budgeting now
   owns the visible body used by rendering, and the sole oversized fallback is truncated
   before variable replacement, matching the original observable ordering and bound.
+- Both reviewers then found that Rust `str::lines()` recognizes fewer boundaries than the
+  original Python `splitlines()`, so a reachable CR-only, NEL, or Unicode-separated card
+  could fail to parse a decorator and erase its visible body. One allocation-free iterator
+  now owns Python-compatible line boundaries for both parsing and display extraction. This
+  also avoids the prior temporary `Vec<&str>` whose memory grew with attacker-controlled
+  line count; the bounded content string remains the only output allocation. A regression
+  exercises every Python boundary, including CRLF as one separator.
 - Daybreaker also found that the first casefold dependency commit omitted the desktop's
   nested lockfile and therefore was not independently gate-clean. Commit `557f3fd` repaired
   the published HEAD. The already-public history was not force-rewritten; future dependency

@@ -6,6 +6,8 @@ use sha2::{Digest, Sha256};
 use ts_rs::TS;
 use unicode_general_category::{GeneralCategory, get_general_category};
 
+use crate::persona_text::card_lines;
+
 pub const MAX_PERSONA_ID_CHARACTERS: usize = 80;
 pub const MAX_PERSONA_CONTEXT_CHARACTERS: usize = 8_000;
 pub const MAX_PERSONA_LORE_CHARACTERS: usize = 3_600;
@@ -518,12 +520,16 @@ fn keywords(value: &str) -> Vec<&str> {
 }
 
 fn visible_lore_content(entry: &PersonaLoreEntry) -> String {
-    entry
-        .content
-        .lines()
-        .skip_while(|line| line.trim().starts_with("@@"))
-        .collect::<Vec<_>>()
-        .join("\n")
+    let mut content = String::new();
+    let mut first = true;
+    for line in card_lines(&entry.content).skip_while(|line| line.trim().starts_with("@@")) {
+        if !first {
+            content.push('\n');
+        }
+        first = false;
+        content.push_str(line);
+    }
+    content
 }
 
 #[derive(Default)]
@@ -538,7 +544,7 @@ struct LoreDecorators {
 impl LoreDecorators {
     fn parse(content: &str) -> Self {
         let mut result = Self::default();
-        for line in content.lines() {
+        for line in card_lines(content) {
             let line = line.trim();
             let Some(body) = line.strip_prefix("@@") else {
                 break;
@@ -690,6 +696,30 @@ mod tests {
         let lore_body = format!("{}OUTSIDE_BUDGET", "{{persona}}".repeat(400));
         let rendered = render_persona_context(&card(vec![lore("harbor", &lore_body)]), "harbor");
         assert!(!rendered.contains("OUTSIDE_BUDGET"));
+    }
+
+    #[test]
+    fn lore_decorators_use_python_line_boundaries() {
+        let separators = [
+            "\n", "\r", "\r\n", "\u{000B}", "\u{000C}", "\u{001C}", "\u{001D}", "\u{001E}",
+            "\u{0085}", "\u{2028}", "\u{2029}",
+        ];
+        for separator in separators {
+            let mut persona = card(vec![lore(
+                "har",
+                &format!("@@match_partial_word{separator}VISIBLE"),
+            )]);
+            persona.lore_settings.full_word_matching = true;
+            let context = render_persona_context(&persona, "harbor");
+            assert!(
+                context.contains("VISIBLE"),
+                "separator {separator:?} did not split the decorator from its visible body"
+            );
+        }
+        assert_eq!(
+            super::visible_lore_content(&lore("", "@@match_full_word\n\nVISIBLE")),
+            "\nVISIBLE"
+        );
     }
 
     fn card(lorebook: Vec<PersonaLoreEntry>) -> PersonaCard {
