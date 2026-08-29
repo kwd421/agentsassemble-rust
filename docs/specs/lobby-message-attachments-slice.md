@@ -18,8 +18,10 @@ Rust-owned upload, message-binding, authorized-read, and provider-read lifecycle
   canonical view/download paths. It never embeds bytes or storage authority.
 - One upload is at most 10 MiB and one message references at most eight distinct
   attachments. These are request and response safety bounds, not operating quotas.
-  The old generic per-uploader `64 items / 128 MiB` and per-room `512 items / 1 GiB`
-  policies are not product semantics and are not transplanted.
+  The original's reachable per-uploader `64 items / 128 MiB` and per-room `512 items /
+  1 GiB` policies are intentionally not transplanted as fixed security constants. The
+  product decision is to keep operating quotas configurable later while code owns only
+  absolute safety ceilings; this slice adds no configuration system in advance.
 - A pending upload is bound to the exact room and current human principal that created
   it and expires after a bounded hour. Upload and expiry never evict another principal's
   or a referenced attachment. Removing a staged item from the composer leaves it
@@ -70,6 +72,14 @@ Rust-owned upload, message-binding, authorized-read, and provider-read lifecycle
   message attachments. The future message-delete owner must remove its exact bound
   attachments in the same transaction that tombstones the event; this slice does not
   expose that still-absent command.
+
+Residual availability threat: a writable participant can retain bound message files
+until the process-wide 4,096-item/8-GiB ceiling is reached. Existing ingress and command
+budgets bound rate and per-request work but do not prevent eventual occupancy; at the
+ceiling, uploads fail closed for every room. That accepted limitation is recorded rather
+than hidden behind hard-coded old operating quotas or eviction of referenced data. A
+later user-selected configurable operating policy may add fairness at the same accounting
+owner without changing attachment custody; this slice does not speculate about it.
 
 ## Non-goals
 
