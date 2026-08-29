@@ -10,6 +10,12 @@ use std::{
 #[cfg(target_os = "macos")]
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
+#[cfg(target_os = "macos")]
+#[path = "runtime_executable_staging.rs"]
+mod executable_staging;
+#[cfg(target_os = "macos")]
+use executable_staging::RuntimeExecutableStaging;
+
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 #[cfg(unix)]
@@ -143,7 +149,7 @@ fn supervise(executable: &std::path::Path, arguments: &[std::ffi::OsString]) -> 
 #[cfg(target_os = "macos")]
 struct BoundSidecar {
     launch_path: PathBuf,
-    _staging: tempfile::TempDir,
+    _staging: RuntimeExecutableStaging,
 }
 
 #[cfg(target_os = "macos")]
@@ -181,10 +187,7 @@ impl BoundSidecar {
         let expected_identity = stable_content_identity(&source_handle, &mut source)?;
         source.rewind()?;
 
-        let staging = tempfile::Builder::new()
-            .prefix("agentsassemble-server-exec-")
-            .permissions(std::fs::Permissions::from_mode(0o700))
-            .tempdir()?;
+        let staging = RuntimeExecutableStaging::create()?;
         let staging_metadata = std::fs::symlink_metadata(staging.path())?;
         if !staging_metadata.is_dir()
             || staging_metadata.uid() != nix::unistd::geteuid().as_raw()
