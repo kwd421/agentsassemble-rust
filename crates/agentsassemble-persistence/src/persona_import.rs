@@ -34,6 +34,8 @@ pub enum PersonaImportError {
     InvalidModule(&'static str),
     #[error("CHARX archive is malformed: {0}")]
     InvalidArchive(&'static str),
+    #[error("persona import worker failed")]
+    ProcessingUnavailable,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,40 +53,49 @@ pub async fn import_ccv3_asset(
     filename: &str,
     content: Vec<u8>,
 ) -> Result<ImportedPersonaAsset, PersonaImportError> {
-    if content.is_empty() || content.len() > MAX_ATTACHMENT_BYTES {
-        return Err(PersonaImportError::InvalidSize);
-    }
-    let extension = filename
-        .rsplit_once('.')
-        .map(|(_, extension)| extension.to_ascii_lowercase())
-        .unwrap_or_default();
-    let (payload, embedded, source_thumbnail) = match extension.as_str() {
-        "json" => (parse_ccv3_json_object(&content)?, BTreeMap::new(), None),
-        "png" | "apng" => {
-            let (payload, embedded) = parse_png_card(&content)?;
-            (payload, embedded, Some(content))
+    let filename = filename.to_owned();
+    let parsing_filename = filename.clone();
+    let (payload, embedded, source_thumbnail) = blocking_import(move || {
+        if content.is_empty() || content.len() > MAX_ATTACHMENT_BYTES {
+            return Err(PersonaImportError::InvalidSize);
         }
-        _ => return Err(PersonaImportError::UnsupportedFormat),
-    };
-    finish_ccv3_import(filename, &payload, embedded, source_thumbnail).await
+        let extension = parsing_filename
+            .rsplit_once('.')
+            .map(|(_, extension)| extension.to_ascii_lowercase())
+            .unwrap_or_default();
+        match extension.as_str() {
+            "json" => Ok((parse_ccv3_json_object(&content)?, BTreeMap::new(), None)),
+            "png" | "apng" => {
+                let (payload, embedded) = parse_png_card(&content)?;
+                Ok((payload, embedded, Some(content)))
+            }
+            _ => Err(PersonaImportError::UnsupportedFormat),
+        }
+    })
+    .await?;
+    finish_ccv3_import(filename, payload, embedded, source_thumbnail).await
 }
 
 pub(super) async fn finish_ccv3_import(
-    filename: &str,
-    payload: &Value,
+    filename: String,
+    payload: Value,
     embedded: BTreeMap<String, Vec<u8>>,
     source_thumbnail: Option<Vec<u8>>,
 ) -> Result<ImportedPersonaAsset, PersonaImportError> {
-    let mut normalized = normalize_ccv3(payload, filename)?;
-    let assets = asset_specs(payload)?;
-    let mut ignored = normalized.ignored_features.clone();
-    let (candidate, asset_count) = select_thumbnail(
-        &assets.items,
-        assets.use_default_source,
-        &embedded,
-        source_thumbnail.as_deref(),
-        &mut ignored,
-    );
+    let (mut normalized, candidate, asset_count, mut ignored) = blocking_import(move || {
+        let normalized = normalize_ccv3(&payload, &filename)?;
+        let assets = asset_specs(&payload)?;
+        let mut ignored = normalized.ignored_features.clone();
+        let (candidate, asset_count) = select_thumbnail(
+            &assets.items,
+            assets.use_default_source,
+            &embedded,
+            source_thumbnail.as_deref(),
+            &mut ignored,
+        );
+        Ok((normalized, candidate, asset_count, ignored))
+    })
+    .await?;
     let thumbnail = if let Some((candidate_name, content_type, content)) = candidate {
         if let Ok((canonical, _)) = prepare_raster(&candidate_name, content_type, content).await {
             Some(canonical.content)
@@ -101,6 +112,17 @@ pub(super) async fn finish_ccv3_import(
         card: normalized,
         thumbnail,
     })
+}
+
+pub(super) async fn blocking_import<T>(
+    work: impl FnOnce() -> Result<T, PersonaImportError> + Send + 'static,
+) -> Result<T, PersonaImportError>
+where
+    T: Send + 'static,
+{
+    tokio::task::spawn_blocking(work)
+        .await
+        .map_err(|_| PersonaImportError::ProcessingUnavailable)?
 }
 
 pub(super) fn parse_ccv3_json_object(content: &[u8]) -> Result<Value, PersonaImportError> {

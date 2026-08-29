@@ -11,8 +11,8 @@ use zip::ZipArchive;
 
 use crate::{
     persona_import::{
-        ImportedPersonaAsset, MAX_CARD_JSON_BYTES, PersonaImportError, add_count, boolean,
-        finish_ccv3_import, integer, nonempty_text, parse_ccv3_json_object, raw_text,
+        ImportedPersonaAsset, MAX_CARD_JSON_BYTES, PersonaImportError, add_count, blocking_import,
+        boolean, finish_ccv3_import, integer, nonempty_text, parse_ccv3_json_object, raw_text,
         safe_embedded_path, text,
     },
     persona_risu::{decode_risum_payload, ignored_module_features},
@@ -30,8 +30,61 @@ const MAX_COMPRESSION_RATIO: u64 = 200;
 /// expansion violations. A malformed optional Risu module remains inert on a valid card.
 pub async fn import_charx_asset(
     filename: &str,
-    content: &[u8],
+    content: Vec<u8>,
 ) -> Result<ImportedPersonaAsset, PersonaImportError> {
+    let prepared = blocking_import(move || prepare_charx(content)).await?;
+    let mut imported = finish_ccv3_import(
+        filename.to_owned(),
+        prepared.payload,
+        prepared.embedded,
+        None,
+    )
+    .await?;
+    match prepared.module {
+        PreparedModule::Absent => {}
+        PreparedModule::Ready { lorebook, ignored } => {
+            if let Some(lorebook) = lorebook {
+                imported.card.lorebook = lorebook;
+                imported.card.lore_settings = PersonaLoreSettings::default();
+                imported
+                    .card
+                    .ignored_features
+                    .remove("lorebook_regex_matching");
+            }
+            for (name, count) in ignored {
+                imported
+                    .card
+                    .ignored_features
+                    .entry(name)
+                    .and_modify(|value| *value = value.saturating_add(count))
+                    .or_insert(count);
+            }
+        }
+        PreparedModule::Unreadable => add_count(
+            &mut imported.card.ignored_features,
+            "embedded_module_unreadable",
+            1,
+        ),
+    }
+    Ok(imported)
+}
+
+enum PreparedModule {
+    Absent,
+    Unreadable,
+    Ready {
+        lorebook: Option<Vec<PersonaLoreEntry>>,
+        ignored: BTreeMap<String, u32>,
+    },
+}
+
+struct PreparedCharx {
+    payload: Value,
+    embedded: BTreeMap<String, Vec<u8>>,
+    module: PreparedModule,
+}
+
+fn prepare_charx(content: Vec<u8>) -> Result<PreparedCharx, PersonaImportError> {
     if content.is_empty() || content.len() > MAX_ATTACHMENT_BYTES {
         return Err(PersonaImportError::InvalidSize);
     }
@@ -50,48 +103,28 @@ pub async fn import_charx_asset(
             );
         }
     }
-    let module = if archive.index_for_name("module.risum").is_some() {
-        Some(
-            read_member(&mut archive, "module.risum", MAX_ATTACHMENT_BYTES)
-                .and_then(|bytes| decode_risum_payload(&bytes)),
-        )
+    let module = if archive.index_for_name("module.risum").is_none() {
+        PreparedModule::Absent
     } else {
-        None
-    };
-    let mut imported = finish_ccv3_import(filename, &payload, embedded, None).await?;
-    if let Some(module) = module {
-        match module {
+        match read_member(&mut archive, "module.risum", MAX_ATTACHMENT_BYTES)
+            .and_then(|bytes| decode_risum_payload(&bytes))
+        {
             Ok(module) => {
                 let lorebook = project_embedded_lore(&module.module);
                 let ignored = ignored_module_features(
                     &module.module,
                     lorebook.as_deref().unwrap_or_default(),
                 );
-                if let Some(lorebook) = lorebook {
-                    imported.card.lorebook = lorebook;
-                    imported.card.lore_settings = PersonaLoreSettings::default();
-                    imported
-                        .card
-                        .ignored_features
-                        .remove("lorebook_regex_matching");
-                }
-                for (name, count) in ignored {
-                    imported
-                        .card
-                        .ignored_features
-                        .entry(name)
-                        .and_modify(|value| *value = value.saturating_add(count))
-                        .or_insert(count);
-                }
+                PreparedModule::Ready { lorebook, ignored }
             }
-            Err(_) => add_count(
-                &mut imported.card.ignored_features,
-                "embedded_module_unreadable",
-                1,
-            ),
+            Err(_) => PreparedModule::Unreadable,
         }
-    }
-    Ok(imported)
+    };
+    Ok(PreparedCharx {
+        payload,
+        embedded,
+        module,
+    })
 }
 
 fn project_embedded_lore(module: &Map<String, Value>) -> Option<Vec<PersonaLoreEntry>> {
@@ -145,7 +178,7 @@ fn projected_keywords(value: &str) -> String {
     output
 }
 
-fn validate_archive(archive: &mut ZipArchive<Cursor<&[u8]>>) -> Result<(), PersonaImportError> {
+fn validate_archive(archive: &mut ZipArchive<Cursor<Vec<u8>>>) -> Result<(), PersonaImportError> {
     if archive.len() > MAX_ENTRY_COUNT {
         return Err(invalid("archive contains too many entries"));
     }
@@ -201,7 +234,7 @@ fn validate_archive(archive: &mut ZipArchive<Cursor<&[u8]>>) -> Result<(), Perso
 }
 
 fn read_member(
-    archive: &mut ZipArchive<Cursor<&[u8]>>,
+    archive: &mut ZipArchive<Cursor<Vec<u8>>>,
     name: &str,
     limit: usize,
 ) -> Result<Vec<u8>, PersonaImportError> {
@@ -273,7 +306,7 @@ mod tests {
             ("assets/icon.png", &icon),
             ("module.risum", &module),
         ]);
-        let imported = import_charx_asset("guide.charx", &archive)
+        let imported = import_charx_asset("guide.charx", archive)
             .await
             .unwrap_or_else(|error| panic!("import CHARX: {error}"));
         assert_eq!(imported.card.id, "Archive-Guide");
@@ -286,7 +319,7 @@ mod tests {
     #[tokio::test]
     async fn rejects_archive_traversal_before_reading_card() {
         let archive = zip(&[("../card.json", b"{}")]);
-        let Err(error) = import_charx_asset("unsafe.charx", &archive).await else {
+        let Err(error) = import_charx_asset("unsafe.charx", archive).await else {
             panic!("unsafe archive path must fail");
         };
         assert!(error.to_string().contains("entry path is unsafe"));
@@ -313,7 +346,7 @@ mod tests {
             ("module.risum", &module),
         ]);
 
-        let imported = import_charx_asset("guide.charx", &archive)
+        let imported = import_charx_asset("guide.charx", archive)
             .await
             .unwrap_or_else(|error| panic!("import CHARX: {error}"));
 
@@ -363,7 +396,7 @@ mod tests {
             ("module.risum", &module),
         ]);
 
-        let imported = import_charx_asset("guide.charx", &archive)
+        let imported = import_charx_asset("guide.charx", archive)
             .await
             .unwrap_or_else(|error| panic!("import CHARX: {error}"));
         assert_eq!(imported.card.lorebook[1].key, "HARBOR, dock");

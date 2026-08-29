@@ -7,8 +7,8 @@ use agentsassemble_domain::{
 use serde_json::{Map, Value};
 
 use crate::persona_import::{
-    ImportedPersonaAsset, PersonaImportError, add_count, boolean, integer, nonempty_text,
-    normalize_lore, raw_text, text, truthy,
+    ImportedPersonaAsset, PersonaImportError, add_count, blocking_import, boolean, integer,
+    nonempty_text, normalize_lore, raw_text, text, truthy,
 };
 
 const RISU_MAGIC: u8 = 111;
@@ -50,16 +50,20 @@ pub(super) struct DecodedRisuPayload {
 /// # Errors
 ///
 /// Rejects unsupported, malformed, oversized, or ambiguously terminated modules.
-pub fn import_risum_asset(
+pub async fn import_risum_asset(
     filename: &str,
-    content: &[u8],
+    content: Vec<u8>,
 ) -> Result<ImportedPersonaAsset, PersonaImportError> {
-    let decoded = decode_risum_payload(content)?;
-    let card = normalize_module(&decoded.module, filename, decoded.asset_records);
-    Ok(ImportedPersonaAsset {
-        card,
-        thumbnail: None,
+    let filename = filename.to_owned();
+    blocking_import(move || {
+        let decoded = decode_risum_payload(&content)?;
+        let card = normalize_module(&decoded.module, &filename, decoded.asset_records);
+        Ok(ImportedPersonaAsset {
+            card,
+            thumbnail: None,
+        })
     })
+    .await
 }
 
 pub(super) fn decode_risum_payload(
@@ -269,8 +273,8 @@ mod tests {
 
     use super::{RPACK_DECODE, import_risum_asset};
 
-    #[test]
-    fn imports_bounded_risu_module_without_executing_runtime_features() {
+    #[tokio::test]
+    async fn imports_bounded_risu_module_without_executing_runtime_features() {
         let payload = json!({
             "type": "risuModule",
             "module": {
@@ -307,7 +311,8 @@ mod tests {
         module.extend_from_slice(&encode(&[1, 2, 3]));
         module.push(0);
 
-        let imported = import_risum_asset("guide.risum", &module)
+        let imported = import_risum_asset("guide.risum", module)
+            .await
             .unwrap_or_else(|error| panic!("import Risu module: {error}"));
         assert_eq!(imported.card.id, "guide-module");
         assert_eq!(imported.card.asset_count, 1);
