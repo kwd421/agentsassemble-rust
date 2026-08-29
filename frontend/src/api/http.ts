@@ -357,14 +357,33 @@ export async function responseError(res: Response): Promise<ApiError> {
   }
 }
 
-export function fileToBase64(file: File): Promise<string> {
+export function fileToBase64(file: File, signal?: AbortSignal): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
+    let settled = false;
+    const finish = (result: string | Error | unknown, failed: boolean) => {
+      if (settled) return;
+      settled = true;
+      signal?.removeEventListener("abort", abort);
+      if (failed) reject(result);
+      else resolve(result as string);
+    };
+    const abort = () => {
+      finish(signal?.reason || new DOMException("File read aborted.", "AbortError"), true);
+      reader.abort();
+    };
     reader.addEventListener("load", () => {
       const result = String(reader.result || "");
-      resolve(result.includes(",") ? result.split(",", 2)[1] : result);
+      finish(result.includes(",") ? result.split(",", 2)[1] : result, false);
     });
-    reader.addEventListener("error", () => reject(reader.error || new Error("file read failed")));
+    reader.addEventListener("error", () =>
+      finish(reader.error || new Error("file read failed"), true)
+    );
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) {
+      abort();
+      return;
+    }
     reader.readAsDataURL(file);
   });
 }

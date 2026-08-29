@@ -51,6 +51,20 @@ type LobbyComposerDraft = {
   pendingAttachments: LobbyAttachmentRef[];
 };
 
+type AttachmentUploadOperation = {
+  controller: AbortController;
+};
+
+function requireCurrentAttachmentUpload(
+  operation: AttachmentUploadOperation,
+  current: AttachmentUploadOperation | null
+) {
+  operation.controller.signal.throwIfAborted();
+  if (operation !== current) {
+    throw new DOMException("Attachment upload retired.", "AbortError");
+  }
+}
+
 const EMPTY_LOBBY_COMPOSER_DRAFT: LobbyComposerDraft = {
   message: "",
   pendingAttachments: [],
@@ -91,6 +105,7 @@ export default function LobbyComposer({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const restoreFocusAfterSubmitRef = useRef(false);
+  const activeUploadOperation = useRef<AttachmentUploadOperation | null>(null);
   const commandListId = useId();
   const emojiListId = useId();
   const [draftsByRoom, setDraftsByRoom] = useState<Record<string, LobbyComposerDraft>>({});
@@ -171,6 +186,15 @@ export default function LobbyComposer({
   }, [meetingId]);
 
   useEffect(() => {
+    setUploading(false);
+    return () => {
+      const operation = activeUploadOperation.current;
+      activeUploadOperation.current = null;
+      operation?.controller.abort();
+    };
+  }, [disabledReason, meetingId, postingMode, roomSessionToken]);
+
+  useEffect(() => {
     if (busy || !restoreFocusAfterSubmitRef.current) return;
     restoreFocusAfterSubmitRef.current = false;
     inputRef.current?.focus();
@@ -211,6 +235,10 @@ export default function LobbyComposer({
     }
     setError(selectionError);
 
+    const operation: AttachmentUploadOperation = {
+      controller: new AbortController(),
+    };
+    activeUploadOperation.current = operation;
     setUploading(true);
     try {
       const uploaded: LobbyAttachmentRef[] = [];
@@ -219,16 +247,28 @@ export default function LobbyComposer({
           await uploadLobbyAttachment(file, {
             roomId: meetingId,
             sessionToken: roomSessionToken,
+            signal: operation.controller.signal,
+            beforeDispatch: () =>
+              requireCurrentAttachmentUpload(operation, activeUploadOperation.current),
           })
         );
       }
+      requireCurrentAttachmentUpload(operation, activeUploadOperation.current);
       setPendingAttachments((current) =>
         [...current, ...uploaded].slice(0, MAX_ATTACHMENTS_PER_EVENT)
       );
     } catch (errorValue) {
-      setError(errorValue instanceof Error ? errorValue.message : "첨부 업로드 실패");
+      if (
+        activeUploadOperation.current === operation &&
+        !operation.controller.signal.aborted
+      ) {
+        setError(errorValue instanceof Error ? errorValue.message : "첨부 업로드 실패");
+      }
     } finally {
-      setUploading(false);
+      if (activeUploadOperation.current === operation) {
+        activeUploadOperation.current = null;
+        setUploading(false);
+      }
     }
   }
 

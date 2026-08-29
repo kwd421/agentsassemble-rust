@@ -156,16 +156,22 @@ async function remoteGrant(
 
 async function uploadGrant(
   roomId: string,
-  authority: MessageAttachmentAuthority
+  authority: MessageAttachmentAuthority,
+  signal?: AbortSignal
 ): Promise<TransferGrant> {
+  signal?.throwIfAborted();
   if (authority.kind === "local") {
     const grant = await requestDesktopMessageAttachmentUploadTicket(roomId);
+    signal?.throwIfAborted();
     return { baseUrl: grant.http_base_url, ticket: grant.ticket };
   }
-  return remoteGrant(
+  const grant = await remoteGrant(
     "/api/session-tickets/message-attachment-upload",
-    authority.sessionToken
+    authority.sessionToken,
+    signal
   );
+  signal?.throwIfAborted();
+  return grant;
 }
 
 async function readGrant(
@@ -192,14 +198,16 @@ export async function uploadMessageAttachment(
   file: File,
   roomId: string,
   authority: MessageAttachmentAuthority,
-  beforeDispatch?: () => void
+  beforeDispatch?: () => void,
+  signal?: AbortSignal
 ): Promise<LobbyAttachmentRef> {
   const canonicalRoom = canonicalRoomId(roomId);
   if (!Number.isSafeInteger(file.size) || file.size < 1 || file.size > MAX_ATTACHMENT_BYTES) {
     throw new Error("메시지 첨부는 1바이트 이상 10MiB 이하여야 합니다.");
   }
-  const grant = await uploadGrant(canonicalRoom, authority);
-  const dataBase64 = await fileToBase64(file);
+  const grant = await uploadGrant(canonicalRoom, authority, signal);
+  const dataBase64 = await fileToBase64(file, signal);
+  signal?.throwIfAborted();
   beforeDispatch?.();
   const response = await fetch(`${grant.baseUrl}/api/attachments`, {
     cache: "no-store",
@@ -211,6 +219,7 @@ export async function uploadMessageAttachment(
       content_type: file.type || "application/octet-stream",
       data_base64: dataBase64,
     }),
+    signal,
   });
   if (!response.ok) throw await responseError(response);
   if (!isPrivateNoStoreResponse(response, "application/json")) invalidResponse();

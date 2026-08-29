@@ -21,6 +21,8 @@ export type LobbyAttachmentUploadOptions = {
   inviteToken?: string;
   deviceToken?: string;
   purpose?: "room_attachment" | "profile_avatar" | "room_appearance";
+  signal?: AbortSignal;
+  beforeDispatch?: () => void;
 };
 
 export interface LobbyEvent {
@@ -115,7 +117,9 @@ export function uploadLobbyAttachment(
       resolved.roomId || "",
       resolved.sessionToken
         ? { kind: "remote", sessionToken: resolved.sessionToken }
-        : { kind: "local" }
+        : { kind: "local" },
+      resolved.beforeDispatch,
+      resolved.signal
     );
   }
   return fileToBase64(file).then((dataBase64) => {

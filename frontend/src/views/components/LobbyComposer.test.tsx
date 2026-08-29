@@ -117,12 +117,62 @@ describe("LobbyComposer", () => {
     });
 
     await waitFor(() =>
-      expect(apiMocks.uploadLobbyAttachment).toHaveBeenCalledWith(file, {
-        roomId: "room-a",
-        sessionToken: "aas1.public-session",
-      })
+      expect(apiMocks.uploadLobbyAttachment).toHaveBeenCalledWith(
+        file,
+        expect.objectContaining({
+          roomId: "room-a",
+          sessionToken: "aas1.public-session",
+          signal: expect.any(AbortSignal),
+          beforeDispatch: expect.any(Function),
+        })
+      )
     );
     expect(await screen.findByText("map.png")).toBeTruthy();
+  });
+
+  it.each([
+    ["room", { meetingId: "room-b", postingMode: "guest" as const, roomSessionToken: "aas1.session-a" }],
+    ["session", { meetingId: "room-a", postingMode: "guest" as const, roomSessionToken: "aas1.session-b" }],
+    ["authority", { meetingId: "room-a", postingMode: "host" as const, roomSessionToken: "aas1.session-a" }],
+    ["role", { meetingId: "room-a", postingMode: "guest" as const, roomSessionToken: "aas1.session-a", disabledReason: "읽기 전용" }],
+    ["unmount", null],
+  ])("retires a delayed attachment upload on %s change", async (_label, nextProps) => {
+    apiMocks.uploadLobbyAttachment.mockImplementation(
+      (_file, options: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          options.signal.addEventListener(
+            "abort",
+            () => reject(options.signal.reason),
+            { once: true }
+          );
+        })
+    );
+    const view = render(
+      <LobbyComposer
+        meetingId="room-a"
+        onPosted={vi.fn()}
+        postingMode="guest"
+        roomSessionToken="aas1.session-a"
+      />
+    );
+    fireEvent.change(screen.getByLabelText("채팅 첨부 선택"), {
+      target: { files: [new File(["map"], "map.png", { type: "image/png" })] },
+    });
+    await waitFor(() => expect(apiMocks.uploadLobbyAttachment).toHaveBeenCalledOnce());
+    const options = apiMocks.uploadLobbyAttachment.mock.calls[0]?.[1] as {
+      signal: AbortSignal;
+      beforeDispatch: () => void;
+    };
+
+    if (nextProps) {
+      view.rerender(<LobbyComposer {...nextProps} onPosted={vi.fn()} />);
+    } else {
+      view.unmount();
+    }
+
+    await waitFor(() => expect(options.signal.aborted).toBe(true));
+    expect(options.beforeDispatch).toThrow();
+    if (nextProps) expect(screen.queryByText("map.png")).toBeNull();
   });
 
   it("keeps message and attachment drafts owned by their room", async () => {

@@ -66,7 +66,18 @@ Rust-owned upload, message-binding, authorized-read, and provider-read lifecycle
   not maintain a second MIME allowlist.
 - The copied composer keeps drafts scoped to their room, retains text and staged
   attachments after a failed send, and clears them only after the committed ACK. The
-  renderer obtains authorized blobs, creates generation-owned object URLs, and revokes
+  active upload is owned by one browser operation generation spanning the exact room,
+  session, posting authority, role state, and component lifetime. Retiring any of those
+  aborts grant exchange, file conversion, and target transfer; currentness is checked
+  again after grant issuance and immediately before target dispatch, and a late result
+  cannot enter another room's draft. The server has no attachment-grant revoke command,
+  so the client does not invent one: an issued but undispatched purpose-bound one-use
+  grant remains unusable to the retired client and expires at its existing short TTL.
+  The prior unowned path could continue converting one 10-MiB file into a roughly
+  13.3-MiB base64 request and dispatch it after authority replacement. Deterministic
+  delayed-grant and component-lifecycle tests now prove zero target dispatch and zero UI
+  commit after retirement; no claim of measured heap reduction is made.
+- The renderer obtains authorized blobs, creates generation-owned object URLs, and revokes
   them on replacement, room change, abort, or unmount. Read-only clients expose neither
   upload nor send controls.
 - The existing pin row remains only an event pointer. Once attachments are active, its

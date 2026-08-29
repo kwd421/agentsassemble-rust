@@ -188,6 +188,32 @@ describe("lobby message-attachment HTTP authority", () => {
     expect(readFetch).not.toHaveBeenCalled();
   });
 
+  it("does not dispatch a target upload after a delayed grant is retired", async () => {
+    let resolveExchange!: (response: Response) => void;
+    const exchange = new Promise<Response>((resolve) => {
+      resolveExchange = resolve;
+    });
+    const fetchMock = vi.fn().mockReturnValueOnce(exchange);
+    vi.stubGlobal("fetch", fetchMock);
+    const controller = new AbortController();
+    const beforeDispatch = vi.fn();
+    const request = uploadMessageAttachment(
+      new File(["notes"], "notes.txt", { type: "text/plain" }),
+      "general",
+      { kind: "remote", sessionToken: "aas1.session" },
+      beforeDispatch,
+      controller.signal
+    );
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+
+    controller.abort();
+    resolveExchange(jsonResponse({ ticket: "b".repeat(64), ttl_seconds: 30 }));
+
+    await expect(request).rejects.toMatchObject({ name: "AbortError" });
+    expect(beforeDispatch).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
   it("rejects substituted upload metadata instead of accepting a generic attachment", async () => {
     bridge.upload.mockResolvedValue(grant("a".repeat(64)));
     const malformed = [
