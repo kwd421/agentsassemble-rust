@@ -5,6 +5,11 @@ use serde::Serialize;
 use thiserror::Error;
 use tokio::sync::Semaphore;
 
+#[cfg(target_os = "macos")]
+use security_framework::item::{ItemClass, ItemSearchOptions};
+#[cfg(target_os = "macos")]
+use security_framework_sys::base::errSecItemNotFound;
+
 const SERVICE_NAME: &str = "AgentsAssemble";
 const DEEPSEEK_ACCOUNT: &str = "deepseek";
 const DEEPSEEK_ENVIRONMENT: &str = "DEEPSEEK_API_KEY";
@@ -57,17 +62,26 @@ struct NativeCredentialBackend;
 
 impl CredentialBackend for NativeCredentialBackend {
     fn configured(&self) -> Result<BackendAvailability<bool>, ProviderCredentialError> {
-        let BackendAvailability::Available(entry) = native_entry()? else {
-            return Ok(BackendAvailability::Absent);
-        };
         #[cfg(target_os = "macos")]
-        let result = entry.inner.get_credential().map(|_| true);
+        {
+            let BackendAvailability::Available(()) = native_store_available()? else {
+                return Ok(BackendAvailability::Absent);
+            };
+            match macos_keyring_item_exists(SERVICE_NAME, DEEPSEEK_ACCOUNT) {
+                Ok(configured) => Ok(BackendAvailability::Available(configured)),
+                Err(_) => Err(ProviderCredentialError::SecureStoreUnavailable),
+            }
+        }
         #[cfg(not(target_os = "macos"))]
-        let result = entry.get_password().map(|secret| !secret.is_empty());
-        match result {
-            Ok(configured) => Ok(BackendAvailability::Available(configured)),
-            Err(KeyringError::NoEntry) => Ok(BackendAvailability::Available(false)),
-            Err(_) => Err(ProviderCredentialError::SecureStoreUnavailable),
+        {
+            let BackendAvailability::Available(entry) = native_entry()? else {
+                return Ok(BackendAvailability::Absent);
+            };
+            match entry.get_password() {
+                Ok(secret) => Ok(BackendAvailability::Available(!secret.is_empty())),
+                Err(KeyringError::NoEntry) => Ok(BackendAvailability::Available(false)),
+                Err(_) => Err(ProviderCredentialError::SecureStoreUnavailable),
+            }
         }
     }
 
@@ -92,16 +106,39 @@ impl CredentialBackend for NativeCredentialBackend {
     }
 }
 
-fn native_entry() -> Result<BackendAvailability<Entry>, ProviderCredentialError> {
-    match Entry::store_status() {
-        Ok(()) => {}
-        Err(KeyringError::Invalid(name, _)) if name == "platform" => {
-            return Ok(BackendAvailability::Absent);
-        }
-        Err(_) => return Err(ProviderCredentialError::SecureStoreUnavailable),
+#[cfg(target_os = "macos")]
+fn macos_keyring_item_exists(
+    service: &str,
+    account: &str,
+) -> security_framework::base::Result<bool> {
+    let mut query = ItemSearchOptions::new();
+    query
+        .class(ItemClass::generic_password())
+        .service(service)
+        .account(account);
+    match query.search() {
+        Ok(_) => Ok(true),
+        Err(error) if error.code() == errSecItemNotFound => Ok(false),
+        Err(error) => Err(error),
     }
+}
+
+fn native_entry() -> Result<BackendAvailability<Entry>, ProviderCredentialError> {
+    let BackendAvailability::Available(()) = native_store_available()? else {
+        return Ok(BackendAvailability::Absent);
+    };
     match Entry::new(SERVICE_NAME, DEEPSEEK_ACCOUNT) {
         Ok(entry) => Ok(BackendAvailability::Available(entry)),
+        Err(_) => Err(ProviderCredentialError::SecureStoreUnavailable),
+    }
+}
+
+fn native_store_available() -> Result<BackendAvailability<()>, ProviderCredentialError> {
+    match Entry::store_status() {
+        Ok(()) => Ok(BackendAvailability::Available(())),
+        Err(KeyringError::Invalid(name, _)) if name == "platform" => {
+            Ok(BackendAvailability::Absent)
+        }
         Err(_) => Err(ProviderCredentialError::SecureStoreUnavailable),
     }
 }
@@ -218,6 +255,8 @@ fn validated_secret(value: &str) -> Result<String, ProviderCredentialError> {
 mod tests {
     use std::sync::{Arc, Mutex};
 
+    #[cfg(target_os = "macos")]
+    use super::macos_keyring_item_exists;
     use super::{
         BackendAvailability, CredentialBackend, ProviderCredentialError, ProviderCredentialSource,
         ProviderCredentialStore,
@@ -363,5 +402,15 @@ mod tests {
             store.set_deepseek(&"x".repeat(8_193)).await,
             Err(ProviderCredentialError::InvalidSecret)
         );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_status_query_handles_absence_without_secret_material() {
+        let service = format!("AgentsAssemble-metadata-probe-{}", uuid::Uuid::new_v4());
+        assert!(matches!(
+            macos_keyring_item_exists(&service, "missing"),
+            Ok(false)
+        ));
     }
 }
