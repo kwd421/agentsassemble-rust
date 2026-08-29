@@ -104,4 +104,24 @@ describe("room socket message attachments", () => {
     expect(sockets[0].sent).toHaveLength(1);
     handle.close();
   });
+
+  it("rejects unavailable message kinds before signing or sending a command", async () => {
+    const { handle, sockets, tickets } = openHarness();
+    await flushPromises();
+    sockets[0].open();
+    const frames = await handshakeFrames(sockets[0], tickets[0], 0, 0);
+    sockets[0].receive(frames.receipt);
+    sockets[0].receiveRaw(frames.rawSnapshot);
+    await vi.waitFor(() => expect(handle.ready()).toBe(true));
+
+    await expect(handle.say({
+      message: "",
+      attachments: [attachment("a")],
+      kind: "vote",
+      voteQuestion: "unsupported",
+      voteOptions: ["yes", "no"],
+    })).rejects.toMatchObject({ category: "surface_action_unavailable" });
+    expect(sockets[0].sent).toHaveLength(1);
+    handle.close();
+  });
 });

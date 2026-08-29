@@ -98,6 +98,15 @@ function messageAttachmentIds(request: RoomSayRequest): string[] {
   return ids;
 }
 
+function requireOrdinaryMessage(request: RoomSayRequest) {
+  if (request.kind && request.kind !== "message") {
+    throw new RoomSocketSayError(
+      `Room message kind ${request.kind} is not present in the bound server product surface.`,
+      "surface_action_unavailable"
+    );
+  }
+}
+
 function validateClientAuthority(
   streams: readonly string[],
   dependencies: RoomSocketClientDependencies
@@ -697,6 +706,7 @@ export function openRoomSocket(
       };
     },
     say: async (request) => {
+      requireOrdinaryMessage(request);
       const attachmentIds = messageAttachmentIds(request);
       await command("message.send", {
         content: request.message,

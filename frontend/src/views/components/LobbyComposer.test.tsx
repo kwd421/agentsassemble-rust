@@ -314,8 +314,24 @@ describe("LobbyComposer", () => {
     expect(say).not.toHaveBeenCalled();
   });
 
-  it("requires two named choices and submits the dialog through the canonical vote path", async () => {
-    const say = vi.fn().mockResolvedValue({ events: [] });
+  it("retains the vote dialog and staged attachment when the canonical path is unavailable", async () => {
+    const id = `ma_${"a".repeat(32)}`;
+    const uploaded = {
+      id,
+      filename: "map.png",
+      content_type: "image/png",
+      size: 3,
+      is_image: true,
+      url: `/api/attachments/${id}?view=1`,
+      download_url: `/api/attachments/${id}?download=1`,
+    };
+    apiMocks.uploadLobbyAttachment.mockResolvedValue(uploaded);
+    const say = vi.fn().mockRejectedValue(
+      new RoomSocketSayError(
+        "Room message kind vote is not present in the bound server product surface.",
+        "surface_action_unavailable"
+      )
+    );
     const onPosted = vi.fn();
     const socket = {
       ready: () => true,
@@ -326,6 +342,11 @@ describe("LobbyComposer", () => {
         <LobbyComposer meetingId="room-a" onPosted={onPosted} />
       </RoomSocketProvider>
     );
+
+    fireEvent.change(screen.getByLabelText("채팅 첨부 선택"), {
+      target: { files: [new File(["map"], "map.png", { type: "image/png" })] },
+    });
+    await screen.findByText("map.png");
 
     fireEvent.change(screen.getByLabelText("채팅 입력"), {
       target: { value: "/vote" },
@@ -367,16 +388,18 @@ describe("LobbyComposer", () => {
     await waitFor(() =>
       expect(say).toHaveBeenCalledWith({
         message: "",
-        attachments: [],
+        attachments: [uploaded],
         kind: "vote",
         voteQuestion: "어느 길로 갈까요?",
         voteOptions: ["북쪽", "남쪽"],
         voteDurationSeconds: 900,
       })
     );
-    await waitFor(() =>
-      expect(screen.queryByRole("dialog", { name: "투표 만들기" })).toBeNull()
+    expect((await within(dialog).findByRole("alert")).textContent).toContain(
+      "Room message kind vote is not present in the bound server product surface."
     );
-    expect(onPosted).toHaveBeenCalledWith([]);
+    expect(screen.getByRole("dialog", { name: "투표 만들기" })).toBeTruthy();
+    expect(screen.getByText("map.png")).toBeTruthy();
+    expect(onPosted).not.toHaveBeenCalled();
   });
 });
