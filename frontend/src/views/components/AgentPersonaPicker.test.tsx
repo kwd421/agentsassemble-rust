@@ -7,11 +7,13 @@ import AgentPersonaPicker from "./AgentPersonaPicker";
 const personaApi = vi.hoisted(() => ({
   fetchPersonaAssets: vi.fn(),
   importPersonaAsset: vi.fn(),
+  fetchPersonaThumbnail: vi.fn(),
 }));
 
 vi.mock("../../api/personas", () => ({
   fetchPersonaAssets: personaApi.fetchPersonaAssets,
   importPersonaAsset: personaApi.importPersonaAsset,
+  fetchPersonaThumbnail: personaApi.fetchPersonaThumbnail,
 }));
 
 afterEach(cleanup);
@@ -19,6 +21,19 @@ afterEach(cleanup);
 beforeEach(() => {
   personaApi.fetchPersonaAssets.mockReset();
   personaApi.importPersonaAsset.mockReset();
+  personaApi.fetchPersonaThumbnail.mockReset();
+  personaApi.fetchPersonaThumbnail.mockResolvedValue(new Blob(["png"]));
+  Object.defineProperty(URL, "createObjectURL", {
+    configurable: true,
+    value: vi
+      .fn()
+      .mockReturnValueOnce("blob:persona-thumbnail-1")
+      .mockReturnValue("blob:persona-thumbnail-2"),
+  });
+  Object.defineProperty(URL, "revokeObjectURL", {
+    configurable: true,
+    value: vi.fn(),
+  });
   personaApi.fetchPersonaAssets.mockResolvedValue([
     {
       id: "guide",
@@ -46,6 +61,70 @@ beforeEach(() => {
 });
 
 describe("AgentPersonaPicker", () => {
+  it("owns authenticated thumbnail object URLs only while they are rendered", async () => {
+    const onChange = vi.fn();
+    const { container, unmount } = render(
+      <AgentPersonaPicker
+        value="guide"
+        applied={{
+          id: "guide",
+          display_name: "Night Guide",
+          asset_kind: "card",
+          source_kind: "ccv3",
+          lorebook_count: 2,
+          asset_count: 1,
+          ignored_feature_count: 0,
+          tag_count: 0,
+          thumbnail_url: "/api/personas/guide/thumbnail",
+        }}
+        onChange={onChange}
+      />,
+      { reactStrictMode: true }
+    );
+
+    await waitFor(() =>
+      expect(personaApi.fetchPersonaThumbnail).toHaveBeenCalledWith(
+        "guide",
+        expect.any(AbortSignal)
+      )
+    );
+    await waitFor(() =>
+      expect(container.querySelector("img")?.getAttribute("src")).toBe(
+        "blob:persona-thumbnail-1"
+      )
+    );
+    expect(URL.createObjectURL).toHaveBeenCalledOnce();
+
+    unmount();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:persona-thumbnail-1");
+  });
+
+  it("makes an advertised thumbnail read failure visible", async () => {
+    personaApi.fetchPersonaThumbnail.mockRejectedValueOnce(new Error("missing"));
+
+    render(
+      <AgentPersonaPicker
+        value="guide"
+        applied={{
+          id: "guide",
+          display_name: "Night Guide",
+          asset_kind: "card",
+          source_kind: "ccv3",
+          lorebook_count: 2,
+          asset_count: 1,
+          ignored_feature_count: 0,
+          tag_count: 0,
+          thumbnail_url: "/api/personas/guide/thumbnail",
+        }}
+        onChange={vi.fn()}
+      />
+    );
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "봇카드 썸네일을 불러오지 못했습니다."
+    );
+  });
+
   it("distinguishes cards from modules and reports the applied selection", async () => {
     const onChange = vi.fn();
     render(
@@ -100,6 +179,51 @@ describe("AgentPersonaPicker", () => {
 
     await waitFor(() => expect(onChange).toHaveBeenCalledWith("new-module"));
     expect(screen.getByText(/New Module 가져오기 완료/)).toBeTruthy();
+  });
+
+  it("replaces the rendered thumbnail after reimporting the same persona", async () => {
+    personaApi.importPersonaAsset.mockResolvedValue({
+      id: "guide",
+      display_name: "Updated Guide",
+      asset_kind: "card",
+      source_kind: "ccv3",
+      lorebook_count: 3,
+      asset_count: 1,
+      ignored_feature_count: 0,
+      tag_count: 0,
+      thumbnail_url: "/api/personas/guide/thumbnail",
+    });
+    const applied = {
+      id: "guide",
+      display_name: "Night Guide",
+      asset_kind: "card" as const,
+      source_kind: "ccv3" as const,
+      lorebook_count: 2,
+      asset_count: 1,
+      ignored_feature_count: 0,
+      tag_count: 0,
+      thumbnail_url: "/api/personas/guide/thumbnail",
+    };
+    const { container } = render(
+      <AgentPersonaPicker value="guide" applied={applied} onChange={vi.fn()} />
+    );
+    await waitFor(() =>
+      expect(container.querySelector("img")?.getAttribute("src")).toBe(
+        "blob:persona-thumbnail-1"
+      )
+    );
+
+    const input = screen.getByLabelText("파일 가져오기").querySelector("input") ||
+      screen.getByLabelText("파일 가져오기");
+    await userEvent.upload(input as HTMLInputElement, new File(["card"], "guide.png"));
+
+    await waitFor(() => expect(personaApi.fetchPersonaThumbnail).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(container.querySelector("img")?.getAttribute("src")).toBe(
+        "blob:persona-thumbnail-2"
+      )
+    );
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:persona-thumbnail-1");
   });
 
   it("bounds a large library and finds a card through search", async () => {

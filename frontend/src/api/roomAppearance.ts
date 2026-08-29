@@ -15,7 +15,7 @@ import {
   roomAppearanceAssetReference,
   type RoomAppearanceAssetReference,
 } from "../lib/roomAppearanceAsset";
-import { MAX_ATTACHMENT_BYTES } from "../types/generated/ASSET_SAFETY_WIRE";
+import { strictPrivatePngBlob } from "./safeRaster";
 
 export type RoomAppearanceReadAuthority =
   | { kind: "local"; manager: DesktopManagerRoomAuthority }
@@ -35,8 +35,6 @@ const ATTACHMENT_KEYS = [
   "is_image",
   "url",
 ] as const;
-const PNG_SIGNATURE = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
-
 function invalidResponse(): never {
   throw new Error("방 외형 자산 응답 계약이 올바르지 않습니다.");
 }
@@ -46,18 +44,7 @@ function requireResponseMetadata(response: Response, contentType: string) {
 }
 
 async function strictPngBlob(response: Response): Promise<Blob> {
-  requireResponseMetadata(response, "image/png");
-  const blob = await response.blob();
-  if (blob.size < PNG_SIGNATURE.length || blob.size > MAX_ATTACHMENT_BYTES) {
-    invalidResponse();
-  }
-  const signature = new Uint8Array(
-    await blob.slice(0, PNG_SIGNATURE.length).arrayBuffer()
-  );
-  if (signature.some((byte, index) => byte !== PNG_SIGNATURE[index])) {
-    invalidResponse();
-  }
-  return blob;
+  return strictPrivatePngBlob(response, "방 외형 자산 응답 계약이 올바르지 않습니다.");
 }
 
 function exactObject(

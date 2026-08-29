@@ -5,6 +5,7 @@ import {
   importPersonaAsset,
   type PersonaAssetSummary,
 } from "../../api/personas";
+import { usePersonaThumbnails } from "./usePersonaThumbnails";
 import "./AgentPersonaPicker.css";
 
 const VISIBLE_RESULT_LIMIT = 8;
@@ -26,6 +27,7 @@ export default function AgentPersonaPicker({
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [query, setQuery] = useState("");
+  const [importGeneration, setImportGeneration] = useState(0);
 
   useEffect(() => {
     if (!libraryOpen || loaded) return;
@@ -68,6 +70,14 @@ export default function AgentPersonaPicker({
     );
   }, [libraryItems, query]);
   const visibleItems = matchingItems.slice(0, VISIBLE_RESULT_LIMIT);
+  const thumbnailIds = [
+    ...(selectedItem?.thumbnail_url ? [selectedItem.id] : []),
+    ...(libraryOpen
+      ? visibleItems.filter((item) => item.thumbnail_url).map((item) => item.id)
+      : []),
+  ];
+  const { urls: thumbnailUrls, failedIds: failedThumbnailIds } =
+    usePersonaThumbnails(thumbnailIds, importGeneration);
   const searching = Boolean(query.trim());
   // With nothing imported there is only one thing to choose, and it is already
   // named on the trigger. Showing a search field, a repeat of that one row and
@@ -81,6 +91,7 @@ export default function AgentPersonaPicker({
       const imported = await importPersonaAsset(file);
       setItems((current) => [imported, ...current.filter((item) => item.id !== imported.id)]);
       setLoaded(true);
+      setImportGeneration((current) => current + 1);
       onChange(imported.id);
       setLibraryOpen(false);
       setQuery("");
@@ -127,8 +138,8 @@ export default function AgentPersonaPicker({
         }}
       >
         <span className="dc-persona-symbol" data-kind={selectedItem?.asset_kind || "none"}>
-          {selectedItem?.thumbnail_url ? (
-            <img src={selectedItem.thumbnail_url} alt="" />
+          {selectedItem?.thumbnail_url && thumbnailUrls[selectedItem.id] ? (
+            <img src={thumbnailUrls[selectedItem.id]} alt="" />
           ) : selectedItem?.asset_kind === "module" ? (
             <PackageOpen size={19} aria-hidden="true" />
           ) : selectedItem ? (
@@ -210,8 +221,8 @@ export default function AgentPersonaPicker({
                       }}
                     >
                       <span className="dc-persona-symbol" data-kind={item.asset_kind}>
-                        {item.thumbnail_url ? (
-                          <img src={item.thumbnail_url} alt="" />
+                        {item.thumbnail_url && thumbnailUrls[item.id] ? (
+                          <img src={thumbnailUrls[item.id]} alt="" />
                         ) : (
                           <Icon size={19} aria-hidden="true" />
                         )}
@@ -244,6 +255,11 @@ export default function AgentPersonaPicker({
         </div>
       )}
       {status && <p className="dc-persona-status preserve-words">{status}</p>}
+      {failedThumbnailIds.size > 0 && (
+        <p className="dc-persona-status preserve-words" role="alert">
+          봇카드 썸네일을 불러오지 못했습니다.
+        </p>
+      )}
       <p className="dc-persona-safety preserve-words">
         실행형 스크립트·정규식·트리거는 보관만 하며 실행하지 않습니다.
       </p>
