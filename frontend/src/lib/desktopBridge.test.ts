@@ -13,6 +13,8 @@ import {
   requestDesktopHostProductSurface,
   requestDesktopMessagePinsReadTicket,
   requestDesktopMessagePinsWriteTicket,
+  requestDesktopMessageAttachmentReadTicket,
+  requestDesktopMessageAttachmentUploadTicket,
 } from "./desktopBridge";
 
 const hostCommands = [
@@ -23,6 +25,8 @@ const hostCommands = [
   "runtime_central_registration_ticket",
   "runtime_human_invite_create_ticket",
   "runtime_human_invite_revoke_ticket",
+  "runtime_message_attachment_read_ticket",
+  "runtime_message_attachment_upload_ticket",
   "runtime_message_pins_read_ticket",
   "runtime_message_pins_write_ticket",
   "runtime_operator_ticket",
@@ -237,6 +241,55 @@ describe("desktop exact-purpose HTTP bridge", () => {
     expect(invoke).toHaveBeenNthCalledWith(3, "runtime_message_pins_write_ticket", {
       roomId: "general",
     });
+  });
+
+  it("keeps message-attachment upload and exact read on separate native grants", async () => {
+    const attachmentId = `ma_${"a".repeat(32)}`;
+    const invoke = vi
+      .fn()
+      .mockResolvedValueOnce({
+        revision: PRODUCT_SURFACE_REVISION,
+        digest: "2".repeat(64),
+        commands: hostCommands,
+      })
+      .mockResolvedValue({
+        ticket: "f".repeat(64),
+        ttl_seconds: 30,
+        http_base_url: "http://127.0.0.1:49154",
+      });
+    Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
+
+    await requestDesktopHostProductSurface();
+    await requestDesktopMessageAttachmentUploadTicket("general");
+    await requestDesktopMessageAttachmentReadTicket("general", attachmentId);
+
+    expect(invoke).toHaveBeenNthCalledWith(
+      2,
+      "runtime_message_attachment_upload_ticket",
+      { roomId: "general" }
+    );
+    expect(invoke).toHaveBeenNthCalledWith(
+      3,
+      "runtime_message_attachment_read_ticket",
+      { roomId: "general", attachmentId }
+    );
+  });
+
+  it("rejects malformed message-attachment IDs before native invocation", async () => {
+    const invoke = vi.fn();
+    Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
+
+    for (const attachmentId of [
+      "",
+      "ma_1234",
+      `MA_${"a".repeat(32)}`,
+      `ma_${"g".repeat(32)}`,
+    ]) {
+      expect(() =>
+        requestDesktopMessageAttachmentReadTicket("general", attachmentId)
+      ).toThrow("첨부 식별자");
+    }
+    expect(invoke).not.toHaveBeenCalled();
   });
 
   it("rejects malformed appearance asset IDs before native invocation", async () => {

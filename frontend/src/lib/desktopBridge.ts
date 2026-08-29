@@ -6,6 +6,7 @@ import {
 } from "./roomRuntimeTicket";
 import { canonicalRoomId } from "./canonicalRoomId";
 import { roomAppearanceAssetId } from "./roomAppearanceAsset";
+import { messageAttachmentId } from "./messageAttachmentId";
 
 type TauriInternals = {
   invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>;
@@ -67,6 +68,8 @@ type DesktopHttpTicketCommand =
   | "runtime_preferences_write_ticket"
   | "runtime_message_pins_read_ticket"
   | "runtime_message_pins_write_ticket"
+  | "runtime_message_attachment_upload_ticket"
+  | "runtime_message_attachment_read_ticket"
   | "runtime_human_invite_create_ticket"
   | "runtime_human_invite_revoke_ticket"
   | "runtime_appearance_upload_ticket"
@@ -437,6 +440,27 @@ export function requestDesktopMessagePinsWriteTicket(
     "runtime_message_pins_write_ticket",
     { roomId },
     "로비 메시지 핀 write 티켓"
+  );
+}
+
+export function requestDesktopMessageAttachmentUploadTicket(
+  roomId: string
+): Promise<DesktopOperatorHttpTicket> {
+  return requestDesktopHttpTicket(
+    "runtime_message_attachment_upload_ticket",
+    { roomId },
+    "로비 메시지 첨부 upload 티켓"
+  );
+}
+
+export function requestDesktopMessageAttachmentReadTicket(
+  roomId: string,
+  attachmentId: string
+): Promise<DesktopOperatorHttpTicket> {
+  return requestDesktopHttpTicket(
+    "runtime_message_attachment_read_ticket",
+    { roomId, attachmentId: messageAttachmentId(attachmentId) },
+    "로비 메시지 첨부 read 티켓"
   );
 }
 
