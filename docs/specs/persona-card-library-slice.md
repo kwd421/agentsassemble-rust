@@ -260,6 +260,35 @@ source-growth gates. The independently staged driver-contract commit additionall
 provider tests, warning-denied provider Clippy, and the architecture gates. No real provider,
 Computer Use resource, Deep Scan, or other automated security scan ran for this structural change.
 
+The first remote-API prerequisite owns only the currently required `DeepSeek` credential rather
+than introducing a generic credential/provider framework. The verified original status contract
+prefers the `AgentsAssemble`/`deepseek` platform-keyring item, reports only
+`keyring | environment | missing`, permits `DEEPSEEK_API_KEY` only when no secure item exists, and
+never falls back to the environment after an installed secure store fails. Set validates a trimmed
+8--8,192-character secret, and delete removes only the secure item so an environment credential may
+become visible again. The Rust boundary exposes no secret read or serialization API yet; HTTP, copied
+UI, runtime injection, and remote-host authority remain explicitly incomplete.
+
+The implementation uses maintained `keyring` 4.1.6 with its v1 platform stores instead of owning
+Keychain, Credential Manager, Secret Service, encryption, or persistence code. Inspection of the
+dependency showed that `Entry::new` collapses every store-initialization error into
+`NoDefaultStore`; treating that result as an absent backend would silently turn a locked or failed
+installed store into an environment fallback. The owner therefore checks `Entry::store_status`
+first and accepts only its documented `Invalid("platform", ...)` result as platform absence; every
+other initialization or access error is the stable `secure_store_unavailable` failure. On macOS,
+status uses credential metadata rather than reading the secret, preserving the original no-ACL-prompt
+status path.
+
+Platform keyring operations are potentially blocking OS calls. One store-owned semaphore and
+Tokio's maintained blocking pool serialize them; the permit moves into the blocking closure so
+caller cancellation cannot admit an overlapping operation while the first OS call still runs. The
+accepted cost is one blocking task and one semaphore acquisition per status/set/delete operation,
+plus target-specific lockfile dependencies from the maintained cross-platform crate. No production
+CPU, memory, disk, or latency improvement is claimed. Fake-backend tests prove precedence, deletion,
+unsupported-store behavior, validation bounds, and fail-closed installed-store errors without
+reading or writing a real credential. All 136 provider tests, warning-denied provider Clippy,
+formatting, whitespace, architecture, and source-growth gates passed.
+
 ## Manual-review findings
 
 - The critical web session and Daybreaker Blue High manually reviewed pushed range
