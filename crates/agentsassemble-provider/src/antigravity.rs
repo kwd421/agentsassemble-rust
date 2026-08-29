@@ -578,6 +578,11 @@ impl ProviderDriver for AntigravityDriver {
             .room_observation
             .as_ref()
             .ok_or_else(portal_missing)?;
+        self.terminal_helper
+            .as_ref()
+            .ok_or_else(portal_missing)?
+            .reset_media()
+            .map_err(portal_driver_error)?;
         self.room_portal
             .begin_observation(RoomObservationStart {
                 session_id: &observation.session_id,
@@ -602,13 +607,23 @@ impl ProviderDriver for AntigravityDriver {
             .room_observation
             .as_ref()
             .ok_or_else(portal_missing)?;
+        self.terminal_helper
+            .as_ref()
+            .ok_or_else(portal_missing)?
+            .reset_media()
+            .map_err(portal_driver_error)?;
         self.room_portal
             .finish_observation(&request.turn_id, observation.input_up_to_seq)
             .map_err(portal_driver_error)
     }
 
     fn abort_room_observation(&mut self) {
-        let _ = self.room_portal.end_observation();
+        let portal_failed = self.room_portal.end_observation().is_err();
+        let media_failed = self
+            .terminal_helper
+            .as_ref()
+            .is_none_or(|helper| helper.reset_media().is_err());
+        self.poisoned |= portal_failed || media_failed;
     }
 
     fn requires_restart(&self) -> bool {

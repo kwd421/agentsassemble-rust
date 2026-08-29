@@ -2,7 +2,7 @@ use std::{
     env,
     ffi::OsStr,
     fs::{File, OpenOptions},
-    io::{Read, Write},
+    io::{ErrorKind, Read, Write},
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
@@ -18,17 +18,27 @@ use rmcp::{
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
+#[path = "room_portal_terminal_command.rs"]
+mod command;
+
 #[cfg(windows)]
 use crate::filesystem::BoundExecutable;
 #[cfg(unix)]
 use crate::guardian::GuardianLaunch;
-use crate::{filesystem::PrivateExecutable, room_portal::RoomPortalError};
+use crate::{
+    filesystem::PrivateExecutable,
+    room_attachment::{ProviderAttachment, attachment_from_tool_result},
+    room_portal::RoomPortalError,
+};
+use command::helper_tool;
+pub(crate) use command::safe_room_command;
 
 #[cfg(unix)]
 const HELPER_FILE_NAME: &str = "agentsassemble-room";
 #[cfg(windows)]
 const HELPER_FILE_NAME: &str = "agentsassemble-room.exe";
 const AUTHORITY_FILE: &str = "room-portal.json";
+const MEDIA_DIRECTORY: &str = "room-media";
 const MAX_AUTHORITY_BYTES: u64 = 4 * 1024;
 const MAX_HOOK_INPUT_BYTES: u64 = 64 * 1024;
 const HELPER_TIMEOUT: Duration = Duration::from_secs(10);
@@ -85,6 +95,7 @@ impl RoomPortalTerminalHelper {
                 bearer_token: bearer_token.to_owned(),
             },
         )?;
+        reset_media_directory(executable.directory())?;
         let command_prefix = absolute_helper_command(executable.path())?;
         let hook_command = format!("{command_prefix} hook");
         let current_path = env::var_os("PATH").unwrap_or_default();
@@ -123,6 +134,10 @@ impl RoomPortalTerminalHelper {
             ("PATH".to_owned(), self.path_environment.clone()),
             (HELPER_COMMAND_ENV.to_owned(), self.command_prefix.clone()),
         ]
+    }
+
+    pub(crate) fn reset_media(&self) -> Result<(), RoomPortalError> {
+        reset_media_directory(self.executable.directory())
     }
 }
 
@@ -216,14 +231,13 @@ async fn run_helper(executable: PathBuf) -> Result<(), &'static str> {
             .ok_or("room helper invocation is unavailable")?;
         return run_hook(&helper);
     }
-    let authority = read_authority(
-        executable
-            .parent()
-            .ok_or("room helper authority is unavailable")?,
-    )?;
+    let directory = executable
+        .parent()
+        .ok_or("room helper authority is unavailable")?;
+    let authority = read_authority(directory)?;
     let (tool, payload) = helper_tool(&action, arguments)?;
     let result = call_tool(&authority, tool, payload).await?;
-    render_helper_result(tool, &result)
+    render_helper_result(directory, tool, &result)
 }
 
 fn print_helper_help(
@@ -236,89 +250,28 @@ fn print_helper_help(
     let helper =
         absolute_helper_command(executable).map_err(|_| "room helper invocation is unavailable")?;
     println!(
-        "{helper} read | speak <message> | speak-to <agent-id> <message> | decline <reason> | roll <NdS+M> | choose <json-options>"
+        "{helper} read | media <attachment-id> | speak <message> | speak-to <agent-id> <message> | decline <reason> | roll <NdS+M> | choose <json-options>"
     );
     Ok(())
 }
 
-fn helper_tool(
-    action: &str,
-    mut arguments: impl Iterator<Item = String>,
-) -> Result<(&'static str, Value), &'static str> {
-    let (tool, payload) = match action {
-        "read" if arguments.next().is_none() => ("read_discussion", json!({})),
-        "speak" => {
-            let content = arguments.collect::<Vec<_>>().join(" ").trim().to_owned();
-            if content.is_empty() {
-                return Err("usage: agentsassemble-room speak <message>");
-            }
-            (
-                "publish_message",
-                json!({"content": content, "next_agent_id": ""}),
-            )
-        }
-        "speak-to" => {
-            let target = arguments
-                .next()
-                .filter(|value| valid_agent_id(value))
-                .ok_or("usage: agentsassemble-room speak-to <agent-id> <message>")?;
-            let content = arguments.collect::<Vec<_>>().join(" ").trim().to_owned();
-            if content.is_empty() {
-                return Err("usage: agentsassemble-room speak-to <agent-id> <message>");
-            }
-            (
-                "publish_message",
-                json!({"content": content, "next_agent_id": target}),
-            )
-        }
-        "decline" => {
-            let reason = arguments
-                .next()
-                .filter(|value| {
-                    matches!(
-                        value.as_str(),
-                        "nothing_useful_to_add" | "not_addressed" | "duplicate"
-                    )
-                })
-                .ok_or("usage: agentsassemble-room decline <reason>")?;
-            if arguments.next().is_some() {
-                return Err("usage: agentsassemble-room decline <reason>");
-            }
-            ("decline_to_speak", json!({"reason_code": reason}))
-        }
-        "roll" => {
-            let notation = arguments
-                .next()
-                .ok_or("usage: agentsassemble-room roll <NdS+M>")?;
-            if arguments.next().is_some() {
-                return Err("usage: agentsassemble-room roll <NdS+M>");
-            }
-            ("roll_dice", json!({"notation": notation, "reason": ""}))
-        }
-        "choose" => {
-            let encoded = arguments
-                .next()
-                .ok_or("usage: agentsassemble-room choose <json-options>")?;
-            if arguments.next().is_some() {
-                return Err("usage: agentsassemble-room choose <json-options>");
-            }
-            let options: Value = serde_json::from_str(&encoded)
-                .map_err(|_| "random options must be a JSON array")?;
-            ("choose_random", json!({"options": options, "reason": ""}))
-        }
-        _ => return Err("unsupported room helper command"),
-    };
-    Ok((tool, payload))
-}
-
 fn render_helper_result(
+    directory: &Path,
     tool: &str,
     result: &rmcp::model::CallToolResult,
 ) -> Result<(), &'static str> {
     if result.is_error == Some(true) {
         return Err("room helper action was rejected");
     }
-    if tool == "read_discussion" {
+    if tool == "read_attachment" {
+        let attachment = attachment_from_tool_result(result)?;
+        let path = stage_attachment(directory, &attachment)?;
+        println!(
+            "{}",
+            path.to_str()
+                .ok_or("room helper media path is unavailable")?
+        );
+    } else if tool == "read_discussion" {
         let content = result
             .content
             .first()
@@ -338,6 +291,75 @@ fn render_helper_result(
         println!("{content}");
     } else {
         println!("room message staged");
+    }
+    Ok(())
+}
+
+fn reset_media_directory(directory: &Path) -> Result<(), RoomPortalError> {
+    recreate_private_directory(&directory.join(MEDIA_DIRECTORY))
+        .map_err(|_| RoomPortalError::Authority)
+}
+
+fn stage_attachment(
+    directory: &Path,
+    attachment: &ProviderAttachment,
+) -> Result<PathBuf, &'static str> {
+    if !attachment.is_valid() {
+        return Err("room helper returned an invalid attachment");
+    }
+    let media = directory.join(MEDIA_DIRECTORY);
+    require_private_directory(&media).map_err(|_| "room helper media directory is invalid")?;
+    let attachment_directory = media.join(&attachment.id);
+    recreate_private_directory(&attachment_directory)
+        .map_err(|_| "room helper could not stage attachment")?;
+    let target = attachment_directory.join(&attachment.filename);
+    let temporary = attachment_directory.join(format!(".{}.tmp", uuid::Uuid::new_v4().simple()));
+    let mut options = OpenOptions::new();
+    options.create_new(true).write(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options
+        .open(&temporary)
+        .map_err(|_| "room helper could not stage attachment")?;
+    if file.write_all(&attachment.content).is_err() || file.sync_all().is_err() {
+        drop(file);
+        let _ = std::fs::remove_file(&temporary);
+        return Err("room helper could not stage attachment");
+    }
+    drop(file);
+    if std::fs::rename(&temporary, &target).is_err() {
+        let _ = std::fs::remove_file(&temporary);
+        return Err("room helper could not stage attachment");
+    }
+    Ok(target)
+}
+
+fn recreate_private_directory(path: &Path) -> std::io::Result<()> {
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {
+            std::fs::remove_dir_all(path)?;
+        }
+        Ok(_) => return Err(std::io::Error::other("private path is not a directory")),
+        Err(error) if error.kind() == ErrorKind::NotFound => {}
+        Err(error) => return Err(error),
+    }
+    std::fs::create_dir(path)?;
+    #[cfg(unix)]
+    std::fs::set_permissions(path, std::os::unix::fs::PermissionsExt::from_mode(0o700))?;
+    Ok(())
+}
+
+fn require_private_directory(path: &Path) -> std::io::Result<()> {
+    let metadata = std::fs::symlink_metadata(path)?;
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
+        return Err(std::io::Error::other("private path is not a directory"));
+    }
+    #[cfg(unix)]
+    if std::os::unix::fs::PermissionsExt::mode(&metadata.permissions()) & 0o077 != 0 {
+        return Err(std::io::Error::other("private directory is not private"));
     }
     Ok(())
 }
@@ -466,108 +488,16 @@ fn valid_helper_command_prefix(value: &str) -> bool {
         && absolute_helper_command(&path).is_ok_and(|canonical| canonical == value)
 }
 
-pub(crate) fn safe_room_command(command: &str, command_prefix: &str) -> bool {
-    let Some(arguments) = command
-        .strip_prefix(command_prefix)
-        .and_then(|suffix| suffix.strip_prefix(' '))
-    else {
-        return false;
-    };
-    if arguments.contains(['\r', '\n']) || shell_metacharacter_outside_single_quotes(arguments) {
-        return false;
-    }
-    let Some(parts) = shlex::split(arguments) else {
-        return false;
-    };
-    if parts.is_empty() {
-        return false;
-    }
-    match parts[0].as_str() {
-        "help" | "read" => parts.len() == 1,
-        "decline" => {
-            parts.len() == 2
-                && matches!(
-                    parts[1].as_str(),
-                    "nothing_useful_to_add" | "not_addressed" | "duplicate"
-                )
-        }
-        "speak" => parts.len() >= 2 && parts[1..].iter().all(|part| !part.starts_with('~')),
-        "speak-to" => {
-            parts.len() >= 3
-                && valid_agent_id(&parts[1])
-                && parts[2..].iter().all(|part| !part.starts_with('~'))
-        }
-        "roll" => {
-            parts.len() == 2
-                && agentsassemble_domain::RoomRandomRequest::parse(
-                    "room.random.roll",
-                    &json!({"notation": parts[1], "reason": ""}),
-                )
-                .is_ok()
-        }
-        "choose" => {
-            parts.len() == 2
-                && serde_json::from_str::<Value>(&parts[1]).is_ok_and(|options| {
-                    agentsassemble_domain::RoomRandomRequest::parse(
-                        "room.random.choose",
-                        &json!({"options": options, "reason": ""}),
-                    )
-                    .is_ok()
-                })
-        }
-        _ => false,
-    }
-}
-
-fn shell_metacharacter_outside_single_quotes(command: &str) -> bool {
-    let mut single = false;
-    let mut double = false;
-    let mut escaped = false;
-    for character in command.chars() {
-        if escaped {
-            escaped = false;
-            continue;
-        }
-        if character == '\\' && !single {
-            escaped = true;
-            continue;
-        }
-        if character == '\'' && !double {
-            single = !single;
-            continue;
-        }
-        if character == '"' && !single {
-            double = !double;
-            continue;
-        }
-        if !single
-            && matches!(
-                character,
-                '$' | '`' | ';' | '&' | '|' | '<' | '>' | '(' | ')'
-            )
-        {
-            return true;
-        }
-    }
-    single || double || escaped
-}
-
-fn valid_agent_id(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= 128
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'-'))
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
-        absolute_helper_command, decode_antigravity_string_argument, safe_room_command,
-        valid_helper_command_prefix,
+        absolute_helper_command, decode_antigravity_string_argument, reset_media_directory,
+        safe_room_command, stage_attachment, valid_helper_command_prefix,
     };
+    use crate::ProviderAttachment;
 
     const HELPER: &str = "'/private/helper path/agentsassemble-room'";
+    const ATTACHMENT_ID: &str = "ma_11111111111111111111111111111111";
 
     #[cfg(unix)]
     #[test]
@@ -740,6 +670,7 @@ mod tests {
         for command in [
             format!("{HELPER} help"),
             format!("{HELPER} read"),
+            format!("{HELPER} media {ATTACHMENT_ID}"),
             format!("{HELPER} speak 'hello room'"),
             format!("{HELPER} speak-to agent-2 'your turn'"),
             format!("{HELPER} decline duplicate"),
@@ -753,6 +684,8 @@ mod tests {
         }
         for command in [
             format!("{HELPER} read && env"),
+            format!("{HELPER} media ma_1111111111111111111111111111111Z"),
+            format!("{HELPER} media {ATTACHMENT_ID} extra"),
             format!("{HELPER} speak \"$HOME\""),
             format!("{HELPER} read\nuname"),
             "agentsassemble-room read".to_owned(),
@@ -762,6 +695,66 @@ mod tests {
                 !safe_room_command(&command, HELPER),
                 "unsafe command allowed: {command}"
             );
+        }
+    }
+
+    #[test]
+    fn media_command_stages_one_private_file_and_reset_removes_it() {
+        let (tool, payload) =
+            super::command::helper_tool("media", [ATTACHMENT_ID.to_owned()].into_iter())
+                .unwrap_or_else(|error| panic!("parse media helper command: {error}"));
+        assert_eq!(tool, "read_attachment");
+        assert_eq!(payload["attachment_id"], ATTACHMENT_ID);
+
+        let root = tempfile::tempdir()
+            .unwrap_or_else(|error| panic!("create media staging root: {error}"));
+        reset_media_directory(root.path())
+            .unwrap_or_else(|error| panic!("create private media directory: {error}"));
+        let path = stage_attachment(
+            root.path(),
+            &ProviderAttachment {
+                id: ATTACHMENT_ID.to_owned(),
+                filename: "diagram.png".to_owned(),
+                content_type: "image/png".to_owned(),
+                size: 4,
+                is_image: true,
+                content: vec![1, 2, 3, 4],
+            },
+        )
+        .unwrap_or_else(|error| panic!("stage exact media: {error}"));
+        assert_eq!(
+            std::fs::read(&path).unwrap_or_else(|error| panic!("read staged media: {error}")),
+            [1, 2, 3, 4]
+        );
+        assert!(path.starts_with(root.path().join(super::MEDIA_DIRECTORY)));
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&path)
+                .unwrap_or_else(|error| panic!("read staged media mode: {error}"))
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o077, 0);
+        }
+
+        reset_media_directory(root.path())
+            .unwrap_or_else(|error| panic!("reset private media directory: {error}"));
+        assert!(!path.exists());
+        #[cfg(unix)]
+        {
+            let media = root.path().join(super::MEDIA_DIRECTORY);
+            std::fs::remove_dir(&media)
+                .unwrap_or_else(|error| panic!("remove empty media directory: {error}"));
+            let outside = root.path().join("outside");
+            std::fs::create_dir(&outside)
+                .unwrap_or_else(|error| panic!("create outside directory: {error}"));
+            let marker = outside.join("keep");
+            std::fs::write(&marker, b"owned elsewhere")
+                .unwrap_or_else(|error| panic!("write outside marker: {error}"));
+            std::os::unix::fs::symlink(&outside, &media)
+                .unwrap_or_else(|error| panic!("create media symlink: {error}"));
+            assert!(reset_media_directory(root.path()).is_err());
+            assert!(marker.exists(), "media reset followed an unowned symlink");
         }
     }
 

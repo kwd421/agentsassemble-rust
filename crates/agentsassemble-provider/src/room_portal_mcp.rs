@@ -6,7 +6,6 @@ use std::{
 };
 
 use agentsassemble_domain::RoomRandomRequest;
-use base64::{Engine as _, engine::general_purpose::STANDARD};
 use bytes::Bytes;
 use futures_util::future::{AbortHandle, Abortable};
 use http_body_util::{BodyExt, Empty, combinators::BoxBody};
@@ -37,6 +36,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
+use crate::room_attachment::attachment_tool_result;
 use crate::room_portal::{
     PortalState, RoomPortalError, StagedOutcome, attachment_read_authority, canonical_message,
     reserve_room_tool, valid_decline_reason,
@@ -430,21 +430,13 @@ impl RoomPortalMcp {
     async fn read_attachment(
         &self,
         Parameters(input): Parameters<ReadAttachment>,
-    ) -> Result<String, String> {
+    ) -> Result<rmcp::model::CallToolResult, String> {
         let (authority, ingress) = attachment_read_authority(&self.state, &input.attachment_id)?;
         let attachment = ingress
             .read(authority, input.attachment_id.clone())
             .await
             .map_err(|error| error.message)?;
-        serde_json::to_string(&json!({
-            "id": attachment.id,
-            "filename": attachment.filename,
-            "content_type": attachment.content_type,
-            "size": attachment.size,
-            "is_image": attachment.is_image,
-            "data_base64": STANDARD.encode(attachment.content),
-        }))
-        .map_err(|_| "The room attachment response could not be encoded.".to_owned())
+        attachment_tool_result(&attachment)
     }
 
     #[tool(

@@ -1,6 +1,5 @@
 use std::{collections::BTreeSet, sync::Arc};
 
-use base64::{Engine as _, engine::general_purpose::STANDARD};
 use rmcp::{
     ServiceExt,
     model::CallToolRequestParams,
@@ -11,10 +10,12 @@ use rmcp::{
 use serde_json::{Map, Value, json};
 
 use super::{RoomObservationStart, RoomPortal};
-use crate::{ProviderAttachment, ProviderAttachmentReadIngress};
+use crate::room_attachment::attachment_from_tool_result;
+use crate::{ProviderAttachment, ProviderAttachmentReadCommand, ProviderAttachmentReadIngress};
 
 const ATTACHMENT_ID: &str = "ma_11111111111111111111111111111111";
 const SECOND_ATTACHMENT_ID: &str = "ma_22222222222222222222222222222222";
+type RoomClient = rmcp::service::RunningService<rmcp::RoleClient, ()>;
 
 #[tokio::test]
 async fn exact_turn_mcp_read_returns_one_bounded_attachment() {
@@ -65,12 +66,30 @@ async fn exact_turn_mcp_read_returns_one_bounded_attachment() {
         .await
         .unwrap_or_else(|error| panic!("join attachment tool: {error}"));
     assert_ne!(result.is_error, Some(true));
-    let payload: Value = serde_json::from_str(result_text(&result))
+    let attachment = attachment_from_tool_result(&result)
         .unwrap_or_else(|error| panic!("decode attachment tool result: {error}"));
-    assert_eq!(payload["id"], ATTACHMENT_ID);
-    assert_eq!(payload["filename"], "diagram.png");
-    assert_eq!(payload["data_base64"], STANDARD.encode([1, 2, 3, 4]));
+    assert_eq!(attachment.id, ATTACHMENT_ID);
+    assert_eq!(attachment.filename, "diagram.png");
+    assert_eq!(attachment.content, [1, 2, 3, 4]);
 
+    assert_response_validation_and_generic_resource(&client, &mut commands).await;
+    let missing = call_tool(
+        client.clone(),
+        "read_attachment",
+        json!({"attachment_id": "ma_33333333333333333333333333333333"}),
+    )
+    .await;
+    assert_eq!(missing.is_error, Some(true));
+    assert!(commands.try_recv().is_err());
+    let client = Arc::try_unwrap(client)
+        .unwrap_or_else(|_| panic!("attachment client references must be released"));
+    let _ = client.cancel().await;
+}
+
+async fn assert_response_validation_and_generic_resource(
+    client: &Arc<RoomClient>,
+    commands: &mut tokio::sync::mpsc::Receiver<ProviderAttachmentReadCommand>,
+) {
     let mismatched = tokio::spawn(call_tool(
         client.clone(),
         "read_attachment",
@@ -93,20 +112,33 @@ async fn exact_turn_mcp_read_returns_one_bounded_attachment() {
         .unwrap_or_else(|error| panic!("join mismatched attachment tool: {error}"));
     assert_eq!(mismatched.is_error, Some(true));
 
-    let missing = call_tool(
+    let generic = tokio::spawn(call_tool(
         client.clone(),
         "read_attachment",
-        json!({"attachment_id": "ma_33333333333333333333333333333333"}),
-    )
-    .await;
-    assert_eq!(missing.is_error, Some(true));
-    assert!(commands.try_recv().is_err());
-    let client = Arc::try_unwrap(client)
-        .unwrap_or_else(|_| panic!("attachment client references must be released"));
-    let _ = client.cancel().await;
+        json!({"attachment_id": SECOND_ATTACHMENT_ID}),
+    ));
+    let command = commands
+        .recv()
+        .await
+        .unwrap_or_else(|| panic!("receive retried attachment command"));
+    command.complete(Ok(ProviderAttachment {
+        id: SECOND_ATTACHMENT_ID.to_owned(),
+        filename: "notes.txt".to_owned(),
+        content_type: "text/plain".to_owned(),
+        size: 5,
+        is_image: false,
+        content: b"notes".to_vec(),
+    }));
+    let generic = generic
+        .await
+        .unwrap_or_else(|error| panic!("join generic attachment tool: {error}"));
+    let attachment = attachment_from_tool_result(&generic)
+        .unwrap_or_else(|error| panic!("decode generic attachment resource: {error}"));
+    assert_eq!(attachment.id, SECOND_ATTACHMENT_ID);
+    assert_eq!(attachment.content, b"notes");
 }
 
-async fn connect(portal: &RoomPortal) -> rmcp::service::RunningService<rmcp::RoleClient, ()> {
+async fn connect(portal: &RoomPortal) -> RoomClient {
     let client = ()
         .serve(StreamableHttpClientTransport::from_config(
             StreamableHttpClientTransportConfig::with_uri(portal.endpoint())
@@ -126,7 +158,7 @@ async fn connect(portal: &RoomPortal) -> rmcp::service::RunningService<rmcp::Rol
 }
 
 async fn call_tool(
-    client: Arc<rmcp::service::RunningService<rmcp::RoleClient, ()>>,
+    client: Arc<RoomClient>,
     name: &'static str,
     arguments: Value,
 ) -> rmcp::model::CallToolResult {
@@ -136,15 +168,4 @@ async fn call_tool(
         .call_tool(CallToolRequestParams::new(name).with_arguments(arguments))
         .await
         .unwrap_or_else(|error| panic!("call {name}: {error}"))
-}
-
-fn result_text(result: &rmcp::model::CallToolResult) -> &str {
-    result
-        .content
-        .first()
-        .and_then(|content| content.as_text())
-        .map_or_else(
-            || panic!("attachment tool must return text"),
-            |content| content.text.as_str(),
-        )
 }

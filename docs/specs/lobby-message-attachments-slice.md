@@ -65,10 +65,16 @@ Rust-owned upload, message-binding, authorized-read, and provider-read lifecycle
   per-room channel carries the session, turn, generation, execution, input cursor, and
   requested ID back to the room owner. SQLite recomputes the inflight ID set and checks
   the current joined, unmuted participant and `start_dispatching` execution before it
-  loads one BLOB. The portal then validates the returned metadata/size and base64-encodes
-  only that requested item at the provider transport boundary. This avoids preloading
-  up to eight 10-MiB items or retaining a second media cache while preserving the
-  original provider-visible bytes; no unmeasured latency or resident-memory reduction
+  loads one BLOB. The portal validates the returned metadata/size and base64-encodes
+  only that requested item at the standard MCP content boundary: verified images are
+  image blocks and other files are embedded blob resources. Antigravity's original
+  `agentsassemble-room media <id>` behavior remains a private file path rather than
+  terminal base64. Its helper lazily writes only the requested item as a `0600` file in
+  the runtime-owned directory and clears that turn projection on normal completion,
+  abort, and the next turn. This choice is required by an observed bound: one 10-MiB
+  item encodes to 13,981,016 bytes while the Antigravity terminal tail retains only
+  64 KiB. It avoids preloading up to eight 10-MiB items and bounds temporary disk to
+  items the agent actually requests; no unmeasured latency or resident-memory reduction
   is claimed.
 - Arbitrary files retain their original bytes and are served download-only. Inline
   preview is limited to decoded, bounded PNG/JPEG/GIF/WebP whose declared and detected
@@ -205,3 +211,9 @@ speculate about it.
   changed lines. Push at three completed features or 2,000 aggregate changed lines,
   then obtain manual web-session and Daybreaker reviews for security, structure,
   duplicated policy, overimplementation, SSoT, lifecycle cleanup, and removable state.
+
+Observed follow-up: an interrupted macOS provider/server test run left 159
+`agentsassemble-*-exec-*` executable-staging directories (more than 10 GiB total),
+causing a later guardian-readiness test to fail with `ENOSPC`. The exact stale test
+directories were unreferenced and removed; executable staging cleanup remains a
+separate lifecycle-owner fix and is not hidden inside this attachment change.
