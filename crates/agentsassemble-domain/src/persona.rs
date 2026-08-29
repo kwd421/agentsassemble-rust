@@ -428,17 +428,28 @@ fn literal_match(
     if !full_word {
         return haystack.contains(needle);
     }
-    haystack.match_indices(needle).any(|(start, matched)| {
-        let end = start + matched.len();
-        haystack[..start]
+    let mut search_from = 0;
+    while let Some(relative_start) = haystack[search_from..].find(needle) {
+        let start = search_from + relative_start;
+        let end = start + needle.len();
+        let starts_at_boundary = haystack[..start]
             .chars()
             .next_back()
-            .is_none_or(|value| !is_python_word_character(value))
-            && haystack[end..]
+            .is_none_or(|value| !is_python_word_character(value));
+        let ends_at_boundary = haystack[end..]
+            .chars()
+            .next()
+            .is_none_or(|value| !is_python_word_character(value));
+        if starts_at_boundary && ends_at_boundary {
+            return true;
+        }
+        search_from = start
+            + haystack[start..]
                 .chars()
                 .next()
-                .is_none_or(|value| !is_python_word_character(value))
-    })
+                .map_or(needle.len(), char::len_utf8);
+    }
+    false
 }
 
 fn is_python_word_character(value: char) -> bool {
@@ -591,6 +602,13 @@ mod tests {
         );
         let context = render_persona_context(&card(vec![entry]), "cafe\u{301}");
         assert!(context.contains("The combining-mark match activates."));
+    }
+
+    #[test]
+    fn full_word_lore_checks_overlapping_literal_occurrences() {
+        let entry = lore("..", "@@match_full_word\nThe overlapping match activates.");
+        let context = render_persona_context(&card(vec![entry]), "a...");
+        assert!(context.contains("The overlapping match activates."));
     }
 
     fn card(lorebook: Vec<PersonaLoreEntry>) -> PersonaCard {

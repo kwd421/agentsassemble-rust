@@ -155,7 +155,9 @@ before `card.json` is read.
 - Both manual reviewers found one further Medium: Rust regex `\w` includes combining marks
   that original Python whole-word matching excludes. The correction now owns the original
   Unicode letter/number-or-underscore predicate directly and tests a combining-mark-adjacent
-  match rather than depending on an engine-specific word class.
+  match rather than depending on an engine-specific word class. Both reviewers then found
+  that non-overlapping substring iteration could skip a later overlapping candidate; the
+  same owner now advances one Unicode scalar after a failed candidate and tests that path.
 - Daybreaker also found that the first casefold dependency commit omitted the desktop's
   nested lockfile and therefore was not independently gate-clean. Commit `557f3fd` repaired
   the published HEAD. The already-public history was not force-rewritten; future dependency
