@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 use ts_rs::TS;
 use unicode_general_category::{GeneralCategory, get_general_category};
 
-use crate::persona_text::{card_lines, prompt_card_text, trim_persona_card_text};
+use crate::persona_text::{card_lines, card_words, prompt_card_text, trim_persona_card_text};
 
 pub const MAX_PERSONA_ID_CHARACTERS: usize = 80;
 pub const MAX_PERSONA_CONTEXT_CHARACTERS: usize = 8_000;
@@ -544,7 +544,7 @@ impl LoreDecorators {
             let Some(body) = line.strip_prefix("@@") else {
                 break;
             };
-            let mut parts = body.split_whitespace();
+            let mut parts = card_words(body);
             match parts.next().unwrap_or_default() {
                 "activate_only_after" => {
                     result.activate_only_after = parts.next().and_then(|value| value.parse().ok());
@@ -719,13 +719,17 @@ mod tests {
 
     #[test]
     fn persona_text_uses_the_source_whitespace_set() {
-        let mut persona = card(vec![lore(
-            "\u{001F}har\u{001F}",
-            "\u{001F}@@match_partial_word\u{001F}\nVISIBLE\u{001F}TEXT",
-        )]);
+        let mut persona = card(vec![
+            lore(
+                "\u{001F}har\u{001F}",
+                "\u{001F}@@match_partial_word\u{001F}\nVISIBLE\u{001F}TEXT",
+            ),
+            lore("har", "@@probability\u{001F}0\nBLOCKED"),
+        ]);
         persona.lore_settings.full_word_matching = true;
         let context = render_persona_context(&persona, "harbor");
         assert!(context.contains("VISIBLE TEXT"));
+        assert!(!context.contains("BLOCKED"));
         assert!(!context.contains('\u{001F}'));
     }
 

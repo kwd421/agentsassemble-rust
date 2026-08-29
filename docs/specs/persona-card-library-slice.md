@@ -177,9 +177,10 @@ before `card.json` is read.
 - A post-approval local audit found the adjacent source-whitespace difference: Python card
   normalization treats U+001C through U+001F as whitespace while Rust's standard predicate
   does not. The same card-text owner now trims imported fields, lore keywords, and decorator
-  lines with the exact set and bounds prompt normalization while scanning instead of first
-  allocating every word from an input that can reach the 5 MiB card limit. Reachable import,
-  partial-match, decorator, and visible prompt behavior are covered without new durable state.
+  lines and tokenizes decorator arguments with the exact set. It also bounds prompt
+  normalization while scanning instead of first allocating every word from an input that can
+  reach the 5 MiB card limit. Reachable import, partial-match, probability-decorator, and
+  visible prompt behavior are covered without new durable state.
 - Daybreaker also found that the first casefold dependency commit omitted the desktop's
   nested lockfile and therefore was not independently gate-clean. Commit `557f3fd` repaired
   the published HEAD. The already-public history was not force-rewritten; future dependency

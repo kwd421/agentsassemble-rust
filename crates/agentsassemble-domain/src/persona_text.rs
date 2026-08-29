@@ -25,13 +25,16 @@ pub fn trim_persona_card_text(value: &str) -> &str {
     value.trim_matches(is_persona_card_whitespace)
 }
 
+pub(super) fn card_words(value: &str) -> impl Iterator<Item = &str> {
+    value
+        .split(is_persona_card_whitespace)
+        .filter(|word| !word.is_empty())
+}
+
 pub(super) fn prompt_card_text(value: &str, limit: usize) -> String {
     let mut output = String::new();
     let mut used = 0;
-    for word in value
-        .split(is_persona_card_whitespace)
-        .filter(|word| !word.is_empty())
-    {
+    for word in card_words(value) {
         if used == limit {
             break;
         }
