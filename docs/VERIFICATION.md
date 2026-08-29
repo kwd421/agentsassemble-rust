@@ -3888,3 +3888,18 @@ warning-denied workspace Clippy, architecture gate, 800-line source gate, and di
 then passed. No provider, Computer Use, Deep Scan, or automated security scanner ran for
 this persistence-only boundary. Pin projection, HTTP grants/reads, Agent Session reads,
 copied-frontend connection, packaged verification, and real providers remain pending.
+
+## Retained/message-storage threshold cross-review: 2026-08-29
+
+- Web and Daybreaker each found one Medium in `6bd791b..7ddf858`: the installed
+  `room_message_attachments.attachment_id` CHECK accepted an exact-length embedded-NUL
+  value that the domain-owned lowercase-hex grammar rejected. All other reviewed
+  accounting, schema, pending-storage, authority, structure, duplication,
+  overimplementation, and lifecycle criteria were approved.
+- Commit `5e324b8` replaced the terminating-text predicate with an exact fixed-position
+  32-lowercase-hex grammar, added the 35-byte NUL regression, and advanced the clean
+  schema version without compatibility or migration code.
+- Web final verdict: `7ddf858..5e324b8` APPROVE C0/H0/M0;
+  `6bd791b..5e324b8` APPROVE C0/H0/M0.
+- Daybreaker final verdict: `7ddf858..5e324b8` APPROVE C0/H0/M0;
+  `6bd791b..5e324b8` APPROVE C0/H0/M0.
