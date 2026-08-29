@@ -73,6 +73,8 @@ Rust-owned upload, message-binding, authorized-read, and provider-read lifecycle
   cannot enter another room's draft. The server has no attachment-grant revoke command,
   so the client does not invent one: an issued but undispatched purpose-bound one-use
   grant remains unusable to the retired client and expires at its existing short TTL.
+  Authority-generation retirement runs in the commit layout phase, before any new
+  layout observer can release or commit work under the replaced principal.
   The prior unowned path could continue converting one 10-MiB file into a roughly
   13.3-MiB base64 request and dispatch it after authority replacement. Deterministic
   delayed-grant and component-lifecycle tests now prove zero target dispatch and zero UI

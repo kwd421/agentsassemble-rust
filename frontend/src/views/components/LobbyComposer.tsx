@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   type ChangeEvent,
@@ -185,7 +186,7 @@ export default function LobbyComposer({
     setEmojiOpen(false);
   }, [meetingId]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setUploading(false);
     return () => {
       const operation = activeUploadOperation.current;

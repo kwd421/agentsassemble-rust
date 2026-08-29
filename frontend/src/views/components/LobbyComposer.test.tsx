@@ -6,6 +6,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import { useLayoutEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RoomSocketProvider } from "../../RoomSocketContext";
@@ -173,6 +174,48 @@ describe("LobbyComposer", () => {
     await waitFor(() => expect(options.signal.aborted).toBe(true));
     expect(options.beforeDispatch).toThrow();
     if (nextProps) expect(screen.queryByText("map.png")).toBeNull();
+  });
+
+  it("retires the previous upload before authority-change layout observers run", async () => {
+    apiMocks.uploadLobbyAttachment.mockImplementation(
+      (_file, options: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          options.signal.addEventListener(
+            "abort",
+            () => reject(options.signal.reason),
+            { once: true }
+          );
+        })
+    );
+    function LayoutProbe({
+      meetingId,
+      inspect,
+    }: {
+      meetingId: string;
+      inspect: () => void;
+    }) {
+      useLayoutEffect(inspect, [inspect, meetingId]);
+      return <LobbyComposer meetingId={meetingId} onPosted={vi.fn()} />;
+    }
+    const view = render(
+      <LayoutProbe meetingId="room-a" inspect={() => {}} />
+    );
+    fireEvent.change(screen.getByLabelText("채팅 첨부 선택"), {
+      target: { files: [new File(["map"], "map.png", { type: "image/png" })] },
+    });
+    await waitFor(() => expect(apiMocks.uploadLobbyAttachment).toHaveBeenCalledOnce());
+    const options = apiMocks.uploadLobbyAttachment.mock.calls[0]?.[1] as {
+      signal: AbortSignal;
+      beforeDispatch: () => void;
+    };
+    const inspect = vi.fn(() => {
+      expect(options.signal.aborted).toBe(true);
+      expect(options.beforeDispatch).toThrow();
+    });
+
+    view.rerender(<LayoutProbe meetingId="room-b" inspect={inspect} />);
+
+    expect(inspect).toHaveBeenCalledOnce();
   });
 
   it("keeps message and attachment drafts owned by their room", async () => {
