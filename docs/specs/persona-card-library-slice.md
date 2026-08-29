@@ -174,6 +174,12 @@ before `card.json` is read.
   also avoids the prior temporary `Vec<&str>` whose memory grew with attacker-controlled
   line count; the bounded content string remains the only output allocation. A regression
   exercises every Python boundary, including CRLF as one separator.
+- A post-approval local audit found the adjacent source-whitespace difference: Python card
+  normalization treats U+001C through U+001F as whitespace while Rust's standard predicate
+  does not. The same card-text owner now trims imported fields, lore keywords, and decorator
+  lines with the exact set and bounds prompt normalization while scanning instead of first
+  allocating every word from an input that can reach the 5 MiB card limit. Reachable import,
+  partial-match, decorator, and visible prompt behavior are covered without new durable state.
 - Daybreaker also found that the first casefold dependency commit omitted the desktop's
   nested lockfile and therefore was not independently gate-clean. Commit `557f3fd` repaired
   the published HEAD. The already-public history was not force-rewritten; future dependency

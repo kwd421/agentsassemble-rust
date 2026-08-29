@@ -43,6 +43,7 @@ pub use persona::{
     PersonaAssetKind, PersonaAssetSummary, PersonaCard, PersonaLoreEntry, PersonaLoreSettings,
     canonical_persona_id, render_persona_context,
 };
+pub use persona_text::trim_persona_card_text;
 pub use profile::{UserProfile, UserProfilePatch, avatar_attachment_id, canonical_avatar_url};
 pub use projection::{public_event_for_principal, public_value_for_principal};
 pub use room_preferences::{

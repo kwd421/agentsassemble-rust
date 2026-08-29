@@ -5,7 +5,7 @@ use std::{
 
 use agentsassemble_domain::{
     MAX_ATTACHMENT_BYTES, PersonaAssetKind, PersonaCard, PersonaLoreEntry, PersonaLoreSettings,
-    canonical_persona_id,
+    canonical_persona_id, trim_persona_card_text,
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde_json::{Map, Value};
@@ -464,11 +464,7 @@ fn object(value: &Value) -> Result<&Map<String, Value>, PersonaImportError> {
 }
 
 pub(super) fn text(value: Option<&Value>) -> String {
-    value
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .trim()
-        .to_owned()
+    trim_persona_card_text(value.and_then(Value::as_str).unwrap_or_default()).to_owned()
 }
 
 pub(super) fn nonempty_text(value: Option<&Value>) -> Option<String> {
@@ -540,7 +536,7 @@ mod tests {
             "spec": "chara_card_v3",
             "spec_version": "3.0",
             "data": {
-                "name": "Harbor Guide",
+                "name": "\u{001F}Harbor Guide\u{001F}",
                 "description": "Keeps watch.",
                 "first_mes": "Hello {{char}}",
                 "tags": ["guide"],
@@ -570,6 +566,7 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("import PNG card: {error}"));
         assert_eq!(imported.card.id, "Harbor-Guide");
+        assert_eq!(imported.card.display_name, "Harbor Guide");
         assert_eq!(imported.card.lorebook.len(), 2);
         assert_eq!(imported.card.ignored_features["customScripts"], 1);
         assert_eq!(imported.card.ignored_features["mcp"], 1);

@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 use ts_rs::TS;
 use unicode_general_category::{GeneralCategory, get_general_category};
 
-use crate::persona_text::card_lines;
+use crate::persona_text::{card_lines, prompt_card_text, trim_persona_card_text};
 
 pub const MAX_PERSONA_ID_CHARACTERS: usize = 80;
 pub const MAX_PERSONA_CONTEXT_CHARACTERS: usize = 8_000;
@@ -119,7 +119,7 @@ impl PersonaCard {
 pub fn canonical_persona_id(value: &str) -> String {
     let mut normalized = String::new();
     let mut replacing = false;
-    for character in value.trim().chars() {
+    for character in trim_persona_card_text(value).chars() {
         if character.is_ascii_alphanumeric() || matches!(character, '_' | '.' | '-') {
             normalized.push(character);
             replacing = false;
@@ -145,8 +145,11 @@ pub fn render_persona_context(card: &PersonaCard, recent_room_context: &str) -> 
     let selected_lore = active_lore(card, recent_room_context, MAX_PERSONA_LORE_CHARACTERS);
     let mut lines = vec![
         "Play Mode persona card (agent-owned character/world/speech context; lower priority than room rules):".to_owned(),
-        format!("- Persona id: {}", prompt_text(&card.id, 120)),
-        format!("- Character name: {}", prompt_text(&card.display_name, 160)),
+        format!("- Persona id: {}", prompt_card_text(&card.id, 120)),
+        format!(
+            "- Character name: {}",
+            prompt_card_text(&card.display_name, 160)
+        ),
     ];
     append_card_line(
         &mut lines,
@@ -161,7 +164,7 @@ pub fn render_persona_context(card: &PersonaCard, recent_room_context: &str) -> 
         lines.push("Active persona lore snippets:".to_owned());
         for selected in selected_lore {
             let entry = selected.entry;
-            let label = prompt_text(
+            let label = prompt_card_text(
                 if entry.comment.is_empty() {
                     if entry.key.is_empty() {
                         "lore"
@@ -175,13 +178,13 @@ pub fn render_persona_context(card: &PersonaCard, recent_room_context: &str) -> 
             );
             lines.push(format!(
                 "- {label}: {}",
-                prompt_text(&replace_variables(&selected.content, card), 1_200)
+                prompt_card_text(&replace_variables(&selected.content, card), 1_200)
             ));
         }
     }
     append_card_line(&mut lines, "Example dialogue", &card.example_messages, card);
     append_card_line(&mut lines, "First-message style", &card.first_message, card);
-    let recent = prompt_text(recent_room_context, 1_200);
+    let recent = prompt_card_text(recent_room_context, 1_200);
     if !recent.is_empty() {
         lines.push(format!("- Recent room context: {recent}"));
     }
@@ -222,7 +225,7 @@ pub fn render_persona_context(card: &PersonaCard, recent_room_context: &str) -> 
 }
 
 fn append_card_line(lines: &mut Vec<String>, label: &str, value: &str, card: &PersonaCard) {
-    let value = prompt_text(&replace_variables(value, card), 900);
+    let value = prompt_card_text(&replace_variables(value, card), 900);
     if !value.is_empty() {
         lines.push(format!("- {label}: {value}"));
     }
@@ -235,16 +238,6 @@ fn replace_variables(value: &str, card: &PersonaCard) -> String {
         .replace("<bot>", &card.display_name)
         .replace("{{user}}", "user")
         .replace("{{persona}}", "")
-}
-
-fn prompt_text(value: &str, limit: usize) -> String {
-    value
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .chars()
-        .take(limit)
-        .collect()
 }
 
 struct VisibleLore<'a> {
@@ -514,7 +507,7 @@ fn is_python_word_character(value: char) -> bool {
 fn keywords(value: &str) -> Vec<&str> {
     value
         .split([',', ';', '\n'])
-        .map(str::trim)
+        .map(trim_persona_card_text)
         .filter(|value| !value.is_empty())
         .collect()
 }
@@ -522,7 +515,9 @@ fn keywords(value: &str) -> Vec<&str> {
 fn visible_lore_content(entry: &PersonaLoreEntry) -> String {
     let mut content = String::new();
     let mut first = true;
-    for line in card_lines(&entry.content).skip_while(|line| line.trim().starts_with("@@")) {
+    for line in
+        card_lines(&entry.content).skip_while(|line| trim_persona_card_text(line).starts_with("@@"))
+    {
         if !first {
             content.push('\n');
         }
@@ -545,7 +540,7 @@ impl LoreDecorators {
     fn parse(content: &str) -> Self {
         let mut result = Self::default();
         for line in card_lines(content) {
-            let line = line.trim();
+            let line = trim_persona_card_text(line);
             let Some(body) = line.strip_prefix("@@") else {
                 break;
             };
@@ -720,6 +715,18 @@ mod tests {
             super::visible_lore_content(&lore("", "@@match_full_word\n\nVISIBLE")),
             "\nVISIBLE"
         );
+    }
+
+    #[test]
+    fn persona_text_uses_the_source_whitespace_set() {
+        let mut persona = card(vec![lore(
+            "\u{001F}har\u{001F}",
+            "\u{001F}@@match_partial_word\u{001F}\nVISIBLE\u{001F}TEXT",
+        )]);
+        persona.lore_settings.full_word_matching = true;
+        let context = render_persona_context(&persona, "harbor");
+        assert!(context.contains("VISIBLE TEXT"));
+        assert!(!context.contains('\u{001F}'));
     }
 
     fn card(lorebook: Vec<PersonaLoreEntry>) -> PersonaCard {
