@@ -485,7 +485,7 @@ async fn store_pending_in_transaction(
 fn sanitize_message_filename(value: &str) -> String {
     let normalized = value.replace('\\', "/");
     let name = normalized.rsplit('/').next().unwrap_or_default();
-    let name: String = name
+    let truncated: String = name
         .chars()
         .filter(|character| !character.is_control() && !matches!(character, '/' | '\\'))
         .collect::<String>()
@@ -493,10 +493,11 @@ fn sanitize_message_filename(value: &str) -> String {
         .chars()
         .take(MAX_MESSAGE_ATTACHMENT_FILENAME_CHARACTERS)
         .collect();
-    if name.is_empty() || matches!(name.as_str(), "." | "..") {
+    let name = truncated.trim();
+    if name.is_empty() || matches!(name, "." | "..") {
         "attachment.bin".to_owned()
     } else {
-        name
+        name.to_owned()
     }
 }
 

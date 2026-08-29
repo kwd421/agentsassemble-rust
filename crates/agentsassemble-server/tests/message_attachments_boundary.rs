@@ -46,6 +46,9 @@ async fn local_tcp_upload_and_bound_read_use_exact_one_use_authority() {
     let client = Client::new();
     assert_crossed_upload_rejected_before_body(&client, &server).await;
     let text = upload_local(&client, &server, "../notes.txt", "text/plain", b"notes").await;
+    let boundary_name = format!("{} b", "a".repeat(119));
+    let boundary = upload_local(&client, &server, &boundary_name, "text/plain", b"boundary").await;
+    assert_eq!(boundary["filename"], "a".repeat(119));
     let png = upload_local(
         &client,
         &server,
