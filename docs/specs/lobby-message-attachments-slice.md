@@ -418,3 +418,29 @@ The full `make verify` gate then passed: repository architecture and source-grow
 policy, formatting, generated type parity, the production frontend build and original
 CSS check, 591 frontend tests, 26 desktop tests, every workspace and TCP-boundary test,
 and warning-denied desktop/workspace Clippy.
+
+That packaged run also exposed a copied-frontend projection defect: durable
+`turn_started` and `turn_state` events are authored by the server's `room-system`
+actor but name the affected Agent Session in `participant_id`. Timeline authorship
+correctly remains actor-owned, while transient progress now uses that explicit subject
+identity. This prevents a second `room-system` typing row without changing the durable
+event, session authority, or typing lifecycle and adds no new state or polling.
+
+Computer Use then drove a fresh isolated release package named
+`AgentsAssemble Typing Verify`, bundle identifier
+`app.agentsassemble.rust.typingverify0829`. The accepted Agent Session was verified in
+both durable state and its live process arguments as exact `gpt-5.6-terra`, Low effort,
+and room-read-only permission. During a real turn, the copied chat rendered exactly one
+`Codex · GPT-5.6-Terra` / `입력중...` row and the right panel showed that same Session as
+responding; no `room-system` progress row appeared. The model published
+`TYPING_ROW_TERRA_OK`, the transient row disappeared, and the Session returned to idle.
+An earlier native model-menu attempt that resolved to default Sol was stopped and
+excluded from the evidence. The accepted Terra Session was stopped through the product
+UI, its exact process was absent, the package and owned server quit, Computer Use was
+reset, and only the isolated app data, cache, WebKit state, package, and discarded
+verification capture were moved to recoverable Trash at
+`AgentsAssemble-Typing-Verify-0829.bJxZw3`.
+The focused projection/typing/socket tests passed 36 cases, the complete frontend
+suite passed 592, and the final `make verify` passed every architecture, source-growth,
+formatting, generated-binding, original-CSS, desktop, workspace, TCP/integration,
+documentation, warning-denied Clippy, and diff gate.

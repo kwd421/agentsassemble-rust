@@ -173,6 +173,24 @@ describe("projectRoomEventsToTimeline", () => {
     expect(projectRoomEventProgress(event({ type: "message_final", turn_id: "turn-1" }))).toBeNull();
   });
 
+  it("attributes system-owned turn progress to the subject Agent Session", () => {
+    const progress = projectRoomEventProgress(event({
+      type: "turn_state",
+      phase: "thinking",
+      turn_id: "turn-terra",
+      actor: { participant_id: "room-system", participant_type: "system" },
+      participant_id: "terra",
+      participant_type: "agent",
+    }));
+
+    expect(progress).toMatchObject({
+      participantId: "terra",
+      displayName: "terra",
+      turnId: "turn-terra",
+      activity: "typing",
+    });
+  });
+
   it("keeps the canonical poll id when a provider turn groups the visible card", () => {
     const timeline = projectRoomEventsToTimeline([
       event({

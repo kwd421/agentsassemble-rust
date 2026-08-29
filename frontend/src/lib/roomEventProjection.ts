@@ -30,6 +30,10 @@ function actor(event: RoomEvent) {
   };
 }
 
+function progressParticipantId(event: RoomEvent) {
+  return String(event.participant_id || actor(event).id);
+}
+
 function timelineKey(event: RoomEvent, actorId: string) {
   if (event.turn_id) return String(event.turn_id);
   const sourceEventId = String(event.source_event_id || event.metadata?.source_event_id || "");
@@ -257,9 +261,10 @@ export function projectRoomEventProgress(
   const phase = String(event.phase || "");
   if (event.type === "activity_delta" && event.category === "compaction") {
     if (event.status === "completed") return null;
+    const participantId = progressParticipantId(event);
     return {
-      participantId: actor(event).id,
-      displayName: actor(event).id || "Agent Session",
+      participantId,
+      displayName: participantId || "Agent Session",
       message: "압축 중...",
       turnId: String(event.turn_id || ""),
       activity: "compacting",
@@ -272,7 +277,7 @@ export function projectRoomEventProgress(
     event.type === "message_delta" ||
     (event.type === "turn_state" && ["thinking", "streaming"].includes(phase))
   ) {
-    const participantId = actor(event).id;
+    const participantId = progressParticipantId(event);
     return {
       participantId,
       displayName: participantId || "Agent Session",
