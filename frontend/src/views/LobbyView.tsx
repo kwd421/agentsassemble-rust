@@ -188,7 +188,7 @@ export default function LobbyView({
     [activeRoom.meetingId, messageAttachmentAuthority]
   );
 
-  useEffect(
+  useLayoutEffect(
     () => () => messageAttachmentReadScheduler.retire(),
     [messageAttachmentReadScheduler]
   );

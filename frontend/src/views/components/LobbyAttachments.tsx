@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { FileDown, X } from "lucide-react";
 import type { LobbyAttachmentRef } from "../../api/messageAttachments";
@@ -22,7 +22,7 @@ function LobbyFileAttachment({
   const [error, setError] = useState("");
   const sizeLabel = formatAttachmentSize(attachment.size);
 
-  useEffect(() => () => {
+  useLayoutEffect(() => () => {
     activeRead.current?.abort();
     activeRead.current = null;
   }, [attachment.id, scheduler]);
@@ -103,7 +103,7 @@ function LobbyImageAttachment({
     return () => observer.disconnect();
   }, [attachment.id]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setObjectUrl("");
     setOpen(false);
     if (!intersecting) return undefined;

@@ -86,7 +86,9 @@ Rust-owned upload, message-binding, authorized-read, and provider-read lifecycle
   caller has already aborted, and retirement before deferred transport entry performs
   no transfer. Intersecting images retain only
   their own generation-owned object URL and revoke it on viewport exit, replacement,
-  room or authority change, abort, or unmount. Arbitrary files read only after an
+  room or authority change, abort, or unmount. Authority replacement retires the
+  scheduler and revokes its object URLs during layout cleanup, before the new principal
+  can paint. Arbitrary files read only after an
   explicit click, trigger one programmatic download, and revoke the temporary URL
   immediately. One item failure leaves other successful items intact and retry schedules
   only that item. The replaced `Promise.all` path could mount up to 1,600 simultaneous

@@ -7,6 +7,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useLayoutEffect } from "react";
 
 const transfer = vi.hoisted(() => ({ read: vi.fn() }));
 
@@ -164,6 +165,48 @@ describe("LobbyAttachments", () => {
     await screen.findByRole("img", { name: "a.png" });
     view.unmount();
     expect(revokeObjectURL).toHaveBeenCalledTimes(2);
+  });
+
+  it("revokes the previous authority image before layout observers run", async () => {
+    const image = attachment();
+    const firstScheduler = scheduler();
+    const secondScheduler = scheduler();
+    createObjectURL.mockReturnValueOnce("blob:first-authority");
+    transfer.read
+      .mockResolvedValueOnce(new Blob(["image"], { type: "image/png" }))
+      .mockReturnValueOnce(new Promise<Blob>(() => {}));
+    function LayoutProbe({
+      activeScheduler,
+      inspect,
+    }: {
+      activeScheduler: ReturnType<typeof scheduler>;
+      inspect: () => void;
+    }) {
+      useLayoutEffect(inspect, [activeScheduler, inspect]);
+      return (
+        <LobbyAttachments
+          attachments={[image]}
+          scheduler={activeScheduler}
+        />
+      );
+    }
+    const view = render(
+      <LayoutProbe activeScheduler={firstScheduler} inspect={() => {}} />
+    );
+    act(() => intersectionObservers[0]?.emit(true));
+    await screen.findByRole("img", { name: "a.png" });
+    const inspect = vi.fn(() => {
+      expect(revokeObjectURL).toHaveBeenCalledWith("blob:first-authority");
+    });
+
+    view.rerender(
+      <LayoutProbe activeScheduler={secondScheduler} inspect={inspect} />
+    );
+
+    expect(inspect).toHaveBeenCalledOnce();
+    await waitFor(() =>
+      expect(screen.queryByRole("img", { name: "a.png" })).toBeNull()
+    );
   });
 
   it("isolates one image failure and retries only that item", async () => {
