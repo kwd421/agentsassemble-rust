@@ -1,4 +1,4 @@
-use agentsassemble_domain::MAX_RASTER_BYTES;
+use agentsassemble_domain::MAX_ATTACHMENT_BYTES;
 use sqlx::{Row, Sqlite, Transaction};
 
 use crate::PersistenceError;
@@ -11,7 +11,7 @@ pub(crate) async fn enforce_storage_replacement(
     previous_size: Option<i64>,
     new_size: i64,
 ) -> Result<(), PersistenceError> {
-    if !(1..=i64::try_from(MAX_RASTER_BYTES).unwrap_or(i64::MAX)).contains(&new_size)
+    if !(1..=i64::try_from(MAX_ATTACHMENT_BYTES).unwrap_or(i64::MAX)).contains(&new_size)
         || previous_size.is_some_and(|size| size <= 0)
     {
         return Err(invalid_storage_usage());

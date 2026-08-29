@@ -2,9 +2,11 @@ use std::collections::BTreeSet;
 
 use agentsassemble_domain::{
     AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID,
-    LOCAL_OPERATOR_USER_ID, MAX_MESSAGE_ATTACHMENTS_PER_EVENT, MAX_RASTER_BYTES,
-    MESSAGE_ATTACHMENT_ID_PREFIX, RoomEvent, is_message_attachment_id,
-    require_message_write_authority,
+    LOCAL_OPERATOR_USER_ID, MAX_ATTACHMENT_BYTES, MAX_MESSAGE_ATTACHMENT_CONTENT_TYPE_BYTES,
+    MAX_MESSAGE_ATTACHMENT_FILENAME_CHARACTERS, MAX_MESSAGE_ATTACHMENTS_PER_EVENT,
+    MESSAGE_ATTACHMENT_DOWNLOAD_SUFFIX, MESSAGE_ATTACHMENT_ID_PREFIX,
+    MESSAGE_ATTACHMENT_REFERENCE_PREFIX, MESSAGE_ATTACHMENT_VIEW_SUFFIX, RoomEvent,
+    is_message_attachment_id, require_message_write_authority,
 };
 use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -22,8 +24,6 @@ use crate::{
 };
 
 const PENDING_ATTACHMENT_TTL: Duration = Duration::hours(1);
-const MAX_CONTENT_TYPE_BYTES: usize = 127;
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MessageAttachmentMetadata {
@@ -405,7 +405,7 @@ async fn prepare_message_attachment(
     content_type: &str,
     content: Vec<u8>,
 ) -> Result<PreparedMessageAttachment, PersistenceError> {
-    if content.is_empty() || content.len() > MAX_RASTER_BYTES {
+    if content.is_empty() || content.len() > MAX_ATTACHMENT_BYTES {
         return Err(rejected(
             "attachment_too_large",
             "Message attachment must be between 1 byte and 10 MiB.",
@@ -477,7 +477,7 @@ async fn store_pending_in_transaction(
         attachment_id,
         prepared.filename,
         prepared.content_type,
-        usize::try_from(prepared.size).unwrap_or(MAX_RASTER_BYTES),
+        usize::try_from(prepared.size).unwrap_or(MAX_ATTACHMENT_BYTES),
         prepared.is_safe_image,
     ))
 }
@@ -491,7 +491,7 @@ fn sanitize_message_filename(value: &str) -> String {
         .collect::<String>()
         .trim()
         .chars()
-        .take(120)
+        .take(MAX_MESSAGE_ATTACHMENT_FILENAME_CHARACTERS)
         .collect();
     if name.is_empty() || matches!(name.as_str(), "." | "..") {
         "attachment.bin".to_owned()
@@ -507,7 +507,9 @@ fn normalize_content_type(value: &str, filename: &str) -> String {
         .unwrap_or_default()
         .trim()
         .to_ascii_lowercase();
-    if candidate.len() <= MAX_CONTENT_TYPE_BYTES && valid_content_type(&candidate) {
+    if candidate.len() <= MAX_MESSAGE_ATTACHMENT_CONTENT_TYPE_BYTES
+        && valid_content_type(&candidate)
+    {
         candidate
     } else {
         mime_guess::from_path(filename)
@@ -536,8 +538,10 @@ fn metadata(
     is_image: bool,
 ) -> MessageAttachmentMetadata {
     MessageAttachmentMetadata {
-        url: format!("/api/attachments/{id}?view=1"),
-        download_url: format!("/api/attachments/{id}?download=1"),
+        url: format!("{MESSAGE_ATTACHMENT_REFERENCE_PREFIX}{id}{MESSAGE_ATTACHMENT_VIEW_SUFFIX}"),
+        download_url: format!(
+            "{MESSAGE_ATTACHMENT_REFERENCE_PREFIX}{id}{MESSAGE_ATTACHMENT_DOWNLOAD_SUFFIX}"
+        ),
         id,
         filename,
         content_type,
@@ -549,12 +553,20 @@ fn metadata(
 fn canonical_metadata(attachment: &MessageAttachmentMetadata) -> bool {
     is_message_attachment_id(&attachment.id)
         && sanitize_message_filename(&attachment.filename) == attachment.filename
-        && attachment.content_type.len() <= MAX_CONTENT_TYPE_BYTES
+        && attachment.content_type.len() <= MAX_MESSAGE_ATTACHMENT_CONTENT_TYPE_BYTES
         && valid_content_type(&attachment.content_type)
-        && (1..=MAX_RASTER_BYTES).contains(&attachment.size)
+        && (1..=MAX_ATTACHMENT_BYTES).contains(&attachment.size)
         && attachment.is_image == is_safe_raster_content_type(&attachment.content_type)
-        && attachment.url == format!("/api/attachments/{}?view=1", attachment.id)
-        && attachment.download_url == format!("/api/attachments/{}?download=1", attachment.id)
+        && attachment.url
+            == format!(
+                "{MESSAGE_ATTACHMENT_REFERENCE_PREFIX}{}{MESSAGE_ATTACHMENT_VIEW_SUFFIX}",
+                attachment.id
+            )
+        && attachment.download_url
+            == format!(
+                "{MESSAGE_ATTACHMENT_REFERENCE_PREFIX}{}{MESSAGE_ATTACHMENT_DOWNLOAD_SUFFIX}",
+                attachment.id
+            )
 }
 
 fn rejected(code: &'static str, message: &str) -> PersistenceError {

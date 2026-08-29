@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use agentsassemble_domain::{
-    LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, MAX_RASTER_BYTES,
+    LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, MAX_ATTACHMENT_BYTES,
     ROOM_APPEARANCE_ASSET_PREFIX, ROOM_APPEARANCE_REFERENCE_PREFIX,
     ROOM_APPEARANCE_REFERENCE_SUFFIX, RoomAppearance, is_room_appearance_asset_id,
     room_appearance_asset_id,
@@ -78,7 +78,7 @@ impl SqliteStore {
         Ok(asset_metadata(
             asset_id,
             canonical.filename,
-            usize::try_from(size).unwrap_or(MAX_RASTER_BYTES),
+            usize::try_from(size).unwrap_or(MAX_ATTACHMENT_BYTES),
         ))
     }
 

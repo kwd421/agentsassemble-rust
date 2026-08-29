@@ -1,5 +1,7 @@
-export const MAX_ATTACHMENTS_PER_EVENT = 8;
-export const MAX_ATTACHMENTS_MESSAGE = "첨부는 한 메시지에 8개까지 가능합니다.";
+import { MAX_MESSAGE_ATTACHMENTS_PER_EVENT } from "../types/generated/MESSAGE_ATTACHMENTS_WIRE";
+
+export const MAX_ATTACHMENTS_PER_EVENT = MAX_MESSAGE_ATTACHMENTS_PER_EVENT;
+export const MAX_ATTACHMENTS_MESSAGE = `첨부는 한 메시지에 ${MAX_ATTACHMENTS_PER_EVENT}개까지 가능합니다.`;
 
 export function selectLobbyAttachmentFiles<T>(currentCount: number, selectedItems: T[]) {
   const remainingSlots = MAX_ATTACHMENTS_PER_EVENT - currentCount;

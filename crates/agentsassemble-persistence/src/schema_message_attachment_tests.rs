@@ -1,4 +1,4 @@
-use agentsassemble_domain::{MAX_RASTER_BYTES, is_message_attachment_id};
+use agentsassemble_domain::{MAX_ATTACHMENT_BYTES, is_message_attachment_id};
 
 use super::tests::installed_schema;
 
@@ -148,7 +148,7 @@ async fn pending_and_bound_message_custody_have_one_exact_owner() {
 async fn message_attachment_bytes_and_event_reference_are_integral() {
     let pool = installed_schema().await;
     seed_message_authority(&pool).await;
-    let byte_limit = i64::try_from(MAX_RASTER_BYTES)
+    let byte_limit = i64::try_from(MAX_ATTACHMENT_BYTES)
         .unwrap_or_else(|error| panic!("attachment byte limit: {error}"));
     let at_limit_id = "ma_30000000000000000000000000000000";
     sqlx::query(

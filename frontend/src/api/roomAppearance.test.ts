@@ -19,7 +19,7 @@ import {
   fetchRoomAppearanceBlob,
   uploadRoomAppearance,
 } from "./roomAppearance";
-import { MAX_RASTER_BYTES } from "../types/generated/ROOM_APPEARANCE_WIRE";
+import { MAX_ATTACHMENT_BYTES } from "../types/generated/ASSET_SAFETY_WIRE";
 
 const manager = {
   server_id: "10000000-0000-4000-8000-000000000001",
@@ -245,7 +245,7 @@ describe("room appearance HTTP contract", () => {
 
   it("rejects non-private, invalid-signature, and oversized PNG responses", async () => {
     bridge.bound.mockResolvedValue(grant("d".repeat(64)));
-    const oversized = new Uint8Array(MAX_RASTER_BYTES + 1);
+    const oversized = new Uint8Array(MAX_ATTACHMENT_BYTES + 1);
     oversized.set(pngBytes().slice(0, 8));
     const responses = [
       new Response(pngBytes(), {

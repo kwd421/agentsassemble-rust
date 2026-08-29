@@ -10,7 +10,7 @@ import {
   roomAppearanceAssetReference,
   type RoomAppearanceAssetReference,
 } from "../lib/roomAppearanceAsset";
-import { MAX_RASTER_BYTES } from "../types/generated/ROOM_APPEARANCE_WIRE";
+import { MAX_ATTACHMENT_BYTES } from "../types/generated/ASSET_SAFETY_WIRE";
 
 export type RoomAppearanceReadAuthority =
   | { kind: "local"; manager: DesktopManagerRoomAuthority }
@@ -55,7 +55,7 @@ function requireResponseMetadata(response: Response, contentType: string) {
 async function strictPngBlob(response: Response): Promise<Blob> {
   requireResponseMetadata(response, "image/png");
   const blob = await response.blob();
-  if (blob.size < PNG_SIGNATURE.length || blob.size > MAX_RASTER_BYTES) {
+  if (blob.size < PNG_SIGNATURE.length || blob.size > MAX_ATTACHMENT_BYTES) {
     invalidResponse();
   }
   const signature = new Uint8Array(

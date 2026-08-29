@@ -1,5 +1,5 @@
 use agentsassemble_domain::{
-    AuthenticatedPrincipal, InviteScope, MAX_RASTER_BYTES, avatar_attachment_id,
+    AuthenticatedPrincipal, InviteScope, MAX_ATTACHMENT_BYTES, avatar_attachment_id,
 };
 use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
@@ -235,7 +235,7 @@ async fn store_profile_attachment_in_transaction(
     Ok(attachment_metadata(
         attachment_id,
         canonical.filename,
-        usize::try_from(size).unwrap_or(MAX_RASTER_BYTES),
+        usize::try_from(size).unwrap_or(MAX_ATTACHMENT_BYTES),
     ))
 }
 

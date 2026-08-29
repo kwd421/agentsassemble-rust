@@ -82,7 +82,7 @@ pub use agent_reconciliation::{
     RuntimeReconciliationReservation,
 };
 pub use agent_reconciliation_scan::{RuntimeReconciliationCursor, RuntimeReconciliationPage};
-pub use agentsassemble_domain::MAX_RASTER_BYTES;
+pub use agentsassemble_domain::MAX_ATTACHMENT_BYTES;
 pub use bootstrap::{LocalBootstrapCommit, LocalBootstrapPhase, LocalBootstrapStatus};
 pub use host_identity::PersistentHostIdentity;
 pub use human_admission::{

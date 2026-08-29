@@ -2,7 +2,8 @@ use agentsassemble_domain::{
     AuthenticatedPrincipal, InviteScope, LOCAL_OPERATOR_USER_ID, UserProfilePatch,
 };
 use agentsassemble_persistence::{
-    HumanPrejoinAvatarAuthorization, HumanSessionAuthorization, MAX_RASTER_BYTES, PersistenceError,
+    HumanPrejoinAvatarAuthorization, HumanSessionAuthorization, MAX_ATTACHMENT_BYTES,
+    PersistenceError,
 };
 use axum::{
     Json, Router, body,
@@ -30,7 +31,7 @@ use crate::{
 };
 
 const MAX_PROFILE_BODY_BYTES: usize = 16 * 1024;
-const MAX_ATTACHMENT_BODY_BYTES: usize = MAX_RASTER_BYTES.div_ceil(3) * 4 + (64 * 1024);
+const MAX_ATTACHMENT_BODY_BYTES: usize = MAX_ATTACHMENT_BYTES.div_ceil(3) * 4 + (64 * 1024);
 
 #[derive(Deserialize)]
 struct AttachmentUpload {

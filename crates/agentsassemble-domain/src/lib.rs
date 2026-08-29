@@ -1,3 +1,4 @@
+mod asset;
 mod command;
 mod diagnostic;
 mod identity;
@@ -6,12 +7,12 @@ mod message_pins;
 mod model;
 mod profile;
 mod projection;
-mod raster;
 mod room_preferences;
 mod room_settings;
 mod room_turn;
 mod text;
 
+pub use asset::MAX_ATTACHMENT_BYTES;
 pub use command::{
     CommandRejection, MessageSend, canonical_payload_hash, prepare_message_event,
     require_message_write_authority,
@@ -19,8 +20,10 @@ pub use command::{
 pub use diagnostic::{redact_persisted_diagnostic, redact_persisted_diagnostic_text};
 pub use identity::{stable_bundle_identity, stable_content_identity, stable_identity_hash};
 pub use message_attachments::{
-    MAX_MESSAGE_ATTACHMENTS_PER_EVENT, MESSAGE_ATTACHMENT_ID_HEX_LENGTH,
-    MESSAGE_ATTACHMENT_ID_PREFIX, is_message_attachment_id,
+    MAX_MESSAGE_ATTACHMENT_CONTENT_TYPE_BYTES, MAX_MESSAGE_ATTACHMENT_FILENAME_CHARACTERS,
+    MAX_MESSAGE_ATTACHMENTS_PER_EVENT, MESSAGE_ATTACHMENT_DOWNLOAD_SUFFIX,
+    MESSAGE_ATTACHMENT_ID_HEX_LENGTH, MESSAGE_ATTACHMENT_ID_PREFIX,
+    MESSAGE_ATTACHMENT_REFERENCE_PREFIX, MESSAGE_ATTACHMENT_VIEW_SUFFIX, is_message_attachment_id,
 };
 pub use message_pins::{
     MAX_LOBBY_MESSAGE_PINS, MAX_MESSAGE_PIN_EVENT_ID_BYTES, is_message_pin_event_id,
@@ -34,7 +37,6 @@ pub use model::{
 };
 pub use profile::{UserProfile, UserProfilePatch, avatar_attachment_id, canonical_avatar_url};
 pub use projection::{public_event_for_principal, public_value_for_principal};
-pub use raster::MAX_RASTER_BYTES;
 pub use room_preferences::{
     ChannelNotificationMode, ChannelPreference, MAX_PREFERENCE_CHANNELS, READ_CURSOR_LIMIT,
     RoomNotificationMode, RoomPreferencesError, RoomUserPreferences, RoomUserPreferencesPatch,

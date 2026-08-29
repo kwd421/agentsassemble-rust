@@ -2,3 +2,8 @@
 export const MESSAGE_ATTACHMENT_ID_PREFIX = "ma_" as const;
 export const MESSAGE_ATTACHMENT_ID_HEX_LENGTH = 32 as const;
 export const MAX_MESSAGE_ATTACHMENTS_PER_EVENT = 8 as const;
+export const MAX_MESSAGE_ATTACHMENT_FILENAME_CHARACTERS = 120 as const;
+export const MAX_MESSAGE_ATTACHMENT_CONTENT_TYPE_BYTES = 127 as const;
+export const MESSAGE_ATTACHMENT_REFERENCE_PREFIX = "/api/attachments/" as const;
+export const MESSAGE_ATTACHMENT_VIEW_SUFFIX = "?view=1" as const;
+export const MESSAGE_ATTACHMENT_DOWNLOAD_SUFFIX = "?download=1" as const;

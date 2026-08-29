@@ -1,5 +1,5 @@
 use super::tests::installed_schema;
-use agentsassemble_domain::{MAX_RASTER_BYTES, is_room_appearance_asset_id};
+use agentsassemble_domain::{MAX_ATTACHMENT_BYTES, is_room_appearance_asset_id};
 
 async fn seed_asset_authority(pool: &sqlx::SqlitePool) {
     sqlx::query(
@@ -20,8 +20,8 @@ async fn seed_asset_authority(pool: &sqlx::SqlitePool) {
 async fn schema_item_limits_match_the_runtime_raster_owner() {
     let pool = installed_schema().await;
     seed_asset_authority(&pool).await;
-    let limit =
-        i64::try_from(MAX_RASTER_BYTES).unwrap_or_else(|error| panic!("raster limit: {error}"));
+    let limit = i64::try_from(MAX_ATTACHMENT_BYTES)
+        .unwrap_or_else(|error| panic!("attachment limit: {error}"));
 
     sqlx::query(
         "INSERT INTO profile_avatar_assets(attachment_id, owner_user_id, filename, content_type, content, size, created_at, state, expires_at) VALUES ('profile-limit', 'user-1', 'avatar.png', 'image/png', X'00', ?, '2026-08-26T00:00:00Z', 'pending', 1)",

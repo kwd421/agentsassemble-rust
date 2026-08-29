@@ -1,6 +1,6 @@
 use std::{io::Cursor, sync::OnceLock};
 
-use agentsassemble_domain::MAX_RASTER_BYTES;
+use agentsassemble_domain::MAX_ATTACHMENT_BYTES;
 use chrono::DateTime;
 use image::{DynamicImage, ImageFormat, ImageReader, Limits};
 use tokio::sync::Semaphore;
@@ -21,7 +21,7 @@ pub(crate) async fn prepare_raster(
     content_type: &str,
     content: Vec<u8>,
 ) -> Result<(CanonicalRaster, i64), PersistenceError> {
-    if content.is_empty() || content.len() > MAX_RASTER_BYTES {
+    if content.is_empty() || content.len() > MAX_ATTACHMENT_BYTES {
         return Err(rejected(
             "attachment_too_large",
             "Raster attachment must be between 1 byte and 10 MiB.",
@@ -46,7 +46,7 @@ pub(crate) fn validate_stored_raster(
     created_at: &str,
 ) -> Result<(), PersistenceError> {
     if content_type != "image/png"
-        || !(1..=i64::try_from(MAX_RASTER_BYTES).unwrap_or(i64::MAX)).contains(&size)
+        || !(1..=i64::try_from(MAX_ATTACHMENT_BYTES).unwrap_or(i64::MAX)).contains(&size)
         || size != content_length
         || DateTime::parse_from_rfc3339(created_at).is_err()
     {
@@ -115,7 +115,7 @@ fn canonicalize_blocking(
         .write_to(&mut encoded, ImageFormat::Png)
         .map_err(|_| invalid_image())?;
     let content = encoded.into_inner();
-    if content.len() > MAX_RASTER_BYTES {
+    if content.len() > MAX_ATTACHMENT_BYTES {
         return Err(rejected(
             "attachment_too_large",
             "Canonical raster attachment exceeds the 10 MiB item limit.",
