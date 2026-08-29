@@ -1,5 +1,8 @@
+use std::collections::BTreeSet;
+
 use agentsassemble_domain::{
-    AuthenticatedPrincipal, MAX_RASTER_BYTES, MESSAGE_ATTACHMENT_ID_PREFIX,
+    AuthenticatedPrincipal, MAX_MESSAGE_ATTACHMENTS_PER_EVENT, MAX_RASTER_BYTES,
+    MESSAGE_ATTACHMENT_ID_PREFIX, RoomEvent, is_message_attachment_id,
     require_message_write_authority,
 };
 use chrono::{Duration, Utc};
@@ -9,9 +12,10 @@ use uuid::Uuid;
 
 use crate::{
     HumanSessionAuthorization, PersistenceError, SqliteStore,
-    asset_storage::enforce_storage_replacement, authority::load_active_participant,
+    asset_storage::enforce_storage_replacement,
+    authority::load_active_participant,
     human_session_authority::revalidate_human_session,
-    raster_assets::validate_preserved_safe_raster,
+    raster_assets::{is_safe_raster_content_type, validate_preserved_safe_raster},
 };
 
 const PENDING_ATTACHMENT_TTL: Duration = Duration::hours(1);
@@ -27,6 +31,26 @@ pub struct MessageAttachmentMetadata {
     pub is_image: bool,
     pub url: String,
     pub download_url: String,
+}
+
+pub(crate) fn message_attachments_from_event(
+    event: &RoomEvent,
+) -> Result<Vec<MessageAttachmentMetadata>, PersistenceError> {
+    let Some(value) = event.extra.get("attachments") else {
+        return Ok(Vec::new());
+    };
+    let attachments = Vec::<MessageAttachmentMetadata>::deserialize(value)
+        .map_err(|_| invalid_attachment_state())?;
+    if attachments.len() > MAX_MESSAGE_ATTACHMENTS_PER_EVENT {
+        return Err(invalid_attachment_state());
+    }
+    let mut ids = BTreeSet::new();
+    for attachment in &attachments {
+        if !ids.insert(attachment.id.as_str()) || !canonical_metadata(attachment) {
+            return Err(invalid_attachment_state());
+        }
+    }
+    Ok(attachments)
 }
 
 pub(crate) async fn prepare_message_attachment_bindings(
@@ -295,6 +319,17 @@ fn metadata(
         size,
         is_image,
     }
+}
+
+fn canonical_metadata(attachment: &MessageAttachmentMetadata) -> bool {
+    is_message_attachment_id(&attachment.id)
+        && sanitize_message_filename(&attachment.filename) == attachment.filename
+        && attachment.content_type.len() <= MAX_CONTENT_TYPE_BYTES
+        && valid_content_type(&attachment.content_type)
+        && (1..=MAX_RASTER_BYTES).contains(&attachment.size)
+        && attachment.is_image == is_safe_raster_content_type(&attachment.content_type)
+        && attachment.url == format!("/api/attachments/{}?view=1", attachment.id)
+        && attachment.download_url == format!("/api/attachments/{}?download=1", attachment.id)
 }
 
 fn rejected(code: &'static str, message: &str) -> PersistenceError {

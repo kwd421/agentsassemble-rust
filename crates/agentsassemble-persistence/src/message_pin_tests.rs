@@ -96,6 +96,73 @@ async fn local_pin_lifecycle_projects_only_canonical_messages() {
 }
 
 #[tokio::test]
+async fn attachment_only_pin_projects_canonical_filenames() {
+    let (store, principal) = fixture().await;
+    let first = store
+        .store_message_attachment(&principal, "first.txt", "text/plain", b"first".to_vec())
+        .await
+        .unwrap_or_else(|error| panic!("store first pin attachment: {error}"));
+    let second = store
+        .store_message_attachment(
+            &principal,
+            "second.bin",
+            "application/octet-stream",
+            b"second".to_vec(),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("store second pin attachment: {error}"));
+    let event = store
+        .execute_message(
+            &principal,
+            "attachment-pin-target",
+            "message.send",
+            &json!({"content": "", "attachment_ids": [second.id, first.id]}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("send attachment-only pin target: {error}"))
+        .event;
+
+    let pins = store
+        .set_local_lobby_message_pin(
+            "general",
+            LOCAL_OPERATOR_USER_ID,
+            LOCAL_OPERATOR_PARTICIPANT_ID,
+            &event.id,
+            true,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("pin attachment-only message: {error}"));
+    assert_eq!(pins.len(), 1);
+    assert_eq!(pins[0].content, "");
+    assert_eq!(pins[0].attachment_filenames, ["second.bin", "first.txt"]);
+
+    let mut corrupt = event;
+    corrupt
+        .extra
+        .get_mut("attachments")
+        .unwrap_or_else(|| panic!("attachment metadata missing"))[0]["url"] = json!("/wrong");
+    sqlx::query("UPDATE room_events SET event_json = ? WHERE room_id = 'general' AND seq = ?")
+        .bind(
+            serde_json::to_string(&corrupt)
+                .unwrap_or_else(|error| panic!("encode corrupt attachment event: {error}")),
+        )
+        .bind(corrupt.seq)
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("store corrupt attachment event: {error}"));
+    assert_rejection_code(
+        store
+            .local_lobby_message_pins(
+                "general",
+                LOCAL_OPERATOR_USER_ID,
+                LOCAL_OPERATOR_PARTICIPANT_ID,
+            )
+            .await,
+        "invalid_state",
+    );
+}
+
+#[tokio::test]
 async fn missing_nonmessage_and_invalid_targets_leave_no_pin() {
     let (store, principal) = fixture().await;
     let room_created = store

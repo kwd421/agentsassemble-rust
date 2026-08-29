@@ -205,6 +205,10 @@ fn safe_image_format(content_type: &str) -> Option<ImageFormat> {
     }
 }
 
+pub(crate) fn is_safe_raster_content_type(content_type: &str) -> bool {
+    safe_image_format(content_type).is_some()
+}
+
 pub(crate) fn sanitize_filename(value: &str) -> String {
     let normalized = value.replace('\\', "/");
     let name = normalized.rsplit('/').next().unwrap_or_default();

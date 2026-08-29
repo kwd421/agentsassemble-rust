@@ -9,6 +9,7 @@ use sqlx::{Row, Sqlite, Transaction};
 use crate::{
     HumanSessionAuthorization, PersistenceError, SqliteStore,
     human_session_authority::revalidate_human_session,
+    message_attachments::{MessageAttachmentMetadata, message_attachments_from_event},
     room_user_identity::{require_current_local_room_manager, resolve_room_user_identity},
 };
 
@@ -216,7 +217,7 @@ async fn load_target_message(
     let row = &rows[0];
     let seq = row.get::<i64, _>("seq");
     let event: RoomEvent = serde_json::from_str(row.get::<String, _>("event_json").as_str())?;
-    require_message_event(&event, room_id, event_id, seq)?;
+    let _ = require_message_event(&event, room_id, event_id, seq)?;
     Ok(event)
 }
 
@@ -244,8 +245,8 @@ async fn load_pins(
             let pinned_at = row.get::<i64, _>("pinned_at");
             let event: RoomEvent =
                 serde_json::from_str(row.get::<String, _>("event_json").as_str())?;
-            require_message_event(&event, room_id, &event_id, event_seq)?;
-            project_pin(event, pinned_at)
+            let attachments = require_message_event(&event, room_id, &event_id, event_seq)?;
+            project_pin(event, pinned_at, attachments)
         })
         .collect()
 }
@@ -253,6 +254,7 @@ async fn load_pins(
 fn project_pin(
     event: RoomEvent,
     pinned_at_micros: i64,
+    attachments: Vec<MessageAttachmentMetadata>,
 ) -> Result<PinnedLobbyMessage, PersistenceError> {
     let pinned_at = DateTime::from_timestamp_micros(pinned_at_micros)
         .ok_or_else(|| invalid_state("Stored message pin timestamp is invalid."))?;
@@ -261,9 +263,7 @@ fn project_pin(
         .filter(|name| !name.is_empty())
         .or_else(|| (!event.actor.participant_id.is_empty()).then_some(event.actor.participant_id))
         .unwrap_or_else(|| "Room".to_owned());
-    let content = event
-        .content
-        .ok_or_else(|| invalid_state("Stored message pin target has no content."))?;
+    let content = event.content.unwrap_or_default();
     Ok(PinnedLobbyMessage {
         event_id: event.id,
         pinned_at: pinned_at.to_rfc3339_opts(SecondsFormat::AutoSi, true),
@@ -273,7 +273,10 @@ fn project_pin(
         created_at: event
             .created_at
             .to_rfc3339_opts(SecondsFormat::AutoSi, true),
-        attachment_filenames: Vec::new(),
+        attachment_filenames: attachments
+            .into_iter()
+            .map(|attachment| attachment.filename)
+            .collect(),
     })
 }
 
@@ -282,7 +285,7 @@ fn require_message_event(
     room_id: &str,
     event_id: &str,
     seq: i64,
-) -> Result<(), PersistenceError> {
+) -> Result<Vec<MessageAttachmentMetadata>, PersistenceError> {
     if event.room_id != room_id || event.id != event_id || event.seq != seq {
         return Err(invalid_state("Stored message pin target is inconsistent."));
     }
@@ -291,12 +294,13 @@ fn require_message_event(
     {
         return Err(rejected("message_missing", "The message was not found."));
     }
-    if !event.content.as_deref().is_some_and(has_visible_text) {
+    let attachments = message_attachments_from_event(event)?;
+    if !event.content.as_deref().is_some_and(has_visible_text) && attachments.is_empty() {
         return Err(invalid_state(
             "Stored message pin target has invalid content.",
         ));
     }
-    Ok(())
+    Ok(attachments)
 }
 
 fn validate_event_id(event_id: &str) -> Result<(), PersistenceError> {
