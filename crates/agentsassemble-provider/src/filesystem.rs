@@ -13,10 +13,15 @@ use tokio::sync::{Semaphore, oneshot};
 
 #[path = "codex_executable.rs"]
 mod codex_executable;
+#[cfg(unix)]
+#[path = "filesystem_executable_staging.rs"]
+mod executable_staging;
 
 pub(crate) use codex_executable::{
     bind_codex_executable, codex_executable_identity, resolve_codex_executable,
 };
+#[cfg(unix)]
+use executable_staging::ExecutableStaging;
 
 const FILESYSTEM_TIMEOUT: Duration = Duration::from_secs(10);
 const FILESYSTEM_WORKERS: usize = 4;
@@ -35,7 +40,7 @@ pub(crate) struct BoundExecutable {
     companion_files: Vec<File>,
     allows_child_processes: bool,
     #[cfg(unix)]
-    _staging: Option<tempfile::TempDir>,
+    _staging: Option<ExecutableStaging>,
     #[cfg(any(target_os = "linux", target_os = "android"))]
     inherited_executable_fd: bool,
 }
@@ -452,13 +457,10 @@ fn stage_private_executable(
     source: &mut File,
     source_handle: &Handle,
     expected_identity: &str,
-) -> io::Result<(File, String, tempfile::TempDir)> {
+) -> io::Result<(File, String, ExecutableStaging)> {
     use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
-    let staging = tempfile::Builder::new()
-        .prefix("agentsassemble-provider-exec-")
-        .permissions(std::fs::Permissions::from_mode(0o700))
-        .tempdir()?;
+    let staging = ExecutableStaging::create()?;
     let staging_metadata = std::fs::symlink_metadata(staging.path())?;
     if !staging_metadata.is_dir()
         || staging_metadata.uid() != rustix::process::geteuid().as_raw()
