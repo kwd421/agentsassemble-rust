@@ -7,7 +7,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useLayoutEffect } from "react";
+import { useLayoutEffect, useMemo, useState } from "react";
 
 const transfer = vi.hoisted(() => ({ read: vi.fn() }));
 
@@ -17,7 +17,7 @@ vi.mock("../../api/messageAttachments", async (importOriginal) => ({
 }));
 
 import type { LobbyAttachmentRef } from "../../api/messageAttachments";
-import { createMessageAttachmentReadScheduler } from "../../lib/messageAttachmentReadScheduler";
+import { createMessageAttachmentReadOwner } from "../../lib/messageAttachmentReadScheduler";
 import LobbyAttachments from "./LobbyAttachments";
 
 const intersectionObservers: TestIntersectionObserver[] = [];
@@ -62,10 +62,9 @@ function attachment(hex = "a", image = true): LobbyAttachmentRef {
 }
 
 function scheduler() {
-  return createMessageAttachmentReadScheduler(
+  return createMessageAttachmentReadOwner(transfer.read).forAuthority(
     "general",
-    { kind: "local" },
-    transfer.read
+    { kind: "local" }
   );
 }
 
@@ -139,6 +138,33 @@ describe("LobbyAttachments", () => {
     expect(screen.getByRole("dialog", { name: "a.png 이미지 미리보기" })).toBeTruthy();
   });
 
+  it("keeps reads available after the production StrictMode effect reconnect", async () => {
+    const image = attachment("a", true);
+    const file = attachment("b", false);
+    createObjectURL
+      .mockReturnValueOnce("blob:strict-image")
+      .mockReturnValueOnce("blob:strict-file");
+    transfer.read.mockImplementation(
+      async (value: LobbyAttachmentRef) =>
+        new Blob([value.filename], { type: value.content_type })
+    );
+    function StrictReader() {
+      const [owner] = useState(() => createMessageAttachmentReadOwner(transfer.read));
+      const reader = useMemo(
+        () => owner.forAuthority("general", { kind: "local" }),
+        [owner]
+      );
+      return <LobbyAttachments attachments={[image, file]} scheduler={reader} />;
+    }
+    render(<StrictReader />, { reactStrictMode: true });
+
+    act(() => intersectionObservers.at(-1)?.emit(true));
+    expect(await screen.findByRole("img", { name: "a.png" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "b.txt 다운로드" }));
+    await waitFor(() => expect(anchorClick).toHaveBeenCalledOnce());
+    expect(transfer.read).toHaveBeenCalledTimes(2);
+  });
+
   it("aborts and revokes an image as soon as it leaves the viewport", async () => {
     const image = attachment();
     createObjectURL.mockReturnValue("blob:image");
@@ -169,8 +195,12 @@ describe("LobbyAttachments", () => {
 
   it("revokes the previous authority image before layout observers run", async () => {
     const image = attachment();
-    const firstScheduler = scheduler();
-    const secondScheduler = scheduler();
+    const owner = createMessageAttachmentReadOwner(transfer.read);
+    const firstScheduler = owner.forAuthority("room-a", { kind: "local" });
+    const secondScheduler = owner.forAuthority(
+      "room-b",
+      { kind: "remote", sessionToken: "aas1.next" }
+    );
     createObjectURL.mockReturnValueOnce("blob:first-authority");
     transfer.read
       .mockResolvedValueOnce(new Blob(["image"], { type: "image/png" }))

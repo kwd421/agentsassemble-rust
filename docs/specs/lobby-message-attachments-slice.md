@@ -80,22 +80,26 @@ Rust-owned upload, message-binding, authorized-read, and provider-read lifecycle
   delayed-grant and component-lifecycle tests now prove zero target dispatch and zero UI
   commit after retirement; no claim of measured heap reduction is made.
 - The renderer does no transfer work for download-only files at mount and no transfer
-  work for images outside the viewport. One room-and-authority-owned scheduler admits at
-  most four local or remote reads, below the server's eight concurrent grant ceiling;
+  work for images outside the viewport. One LobbyView-lifetime scheduler owns the
+  capacity used by every exact room-and-authority reader and admits at most four local
+  or remote reads, below the server's eight concurrent grant ceiling;
   the fifth remains queued until an active transport actually settles, even when its
-  caller has already aborted, and retirement before deferred transport entry performs
+  caller has already aborted, and cancellation before deferred transport entry performs
   no transfer. Intersecting images retain only
   their own generation-owned object URL and revoke it on viewport exit, replacement,
-  room or authority change, abort, or unmount. Authority replacement retires the
-  scheduler and revokes its object URLs during layout cleanup, before the new principal
-  can paint. Arbitrary files read only after an
+  room or authority change, abort, or unmount. Authority replacement layout-aborts the
+  old readers and revokes their object URLs before the new principal can paint, while
+  any abort-ignoring transport retains its shared slot until actual settlement. The
+  stable capacity owner is not retired by React StrictMode's effect reconnect. Arbitrary
+  files read only after an
   explicit click, trigger one programmatic download, and revoke the temporary URL
   immediately. One item failure leaves other successful items intact and retry schedules
   only that item. The replaced `Promise.all` path could mount up to 1,600 simultaneous
   requests and theoretically demand 16 GiB of response bodies for 200 events with eight
   10-MiB files each. Deterministic mount, intersection, click, failure, queue-barrier,
-  and retirement tests now prove zero offscreen/download-only starts, a four-read peak,
-  no fifth dispatch before release, and no retained URL after retirement; CPU and wall
+  cancellation, cross-generation, and StrictMode tests now prove zero
+  offscreen/download-only starts, a four-read peak, no fifth dispatch before actual
+  release, and no retained URL after authority replacement; CPU and wall
   time are not assigned speculative benchmark numbers. Read-only clients expose neither
   upload nor send controls.
 - The existing pin row remains only an event pointer. Once attachments are active, its

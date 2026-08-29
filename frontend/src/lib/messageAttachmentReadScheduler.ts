@@ -19,6 +19,8 @@ type TaskState = "queued" | "active" | "settled";
 
 type ReadTask = {
   attachment: LobbyAttachmentRef;
+  roomId: string;
+  authority: MessageAttachmentAuthority;
   mode: ReadMode;
   controller: AbortController;
   state: TaskState;
@@ -35,19 +37,22 @@ export type MessageAttachmentReadScheduler = Readonly<{
     mode: ReadMode,
     signal: AbortSignal
   ) => Promise<Blob>;
-  retire: () => void;
+}>;
+
+export type MessageAttachmentReadOwner = Readonly<{
+  forAuthority: (
+    roomId: string,
+    authority: MessageAttachmentAuthority
+  ) => MessageAttachmentReadScheduler;
 }>;
 
 function aborted(signal: AbortSignal) {
   return signal.reason || new DOMException("Attachment read aborted.", "AbortError");
 }
 
-export function createMessageAttachmentReadScheduler(
-  roomId: string,
-  authority: MessageAttachmentAuthority,
+export function createMessageAttachmentReadOwner(
   transport: ReadTransport = fetchMessageAttachmentBlob
-): MessageAttachmentReadScheduler {
-  let retired = false;
+): MessageAttachmentReadOwner {
   let queue: ReadTask[] = [];
   const active = new Set<ReadTask>();
 
@@ -87,8 +92,8 @@ export function createMessageAttachmentReadScheduler(
       try {
         const blob = await transport(
           task.attachment,
-          roomId,
-          authority,
+          task.roomId,
+          task.authority,
           task.mode,
           task.controller.signal,
           () => task.controller.signal.throwIfAborted()
@@ -103,7 +108,6 @@ export function createMessageAttachmentReadScheduler(
   }
 
   function pump() {
-    if (retired) return;
     while (active.size < MESSAGE_ATTACHMENT_READ_CONCURRENCY && queue.length) {
       const task = queue.shift();
       if (!task || task.state !== "queued") continue;
@@ -117,42 +121,31 @@ export function createMessageAttachmentReadScheduler(
   }
 
   return {
-    read: (attachment, mode, signal) => {
-      if (retired || signal.aborted) {
-        return Promise.reject(
-          signal.aborted ? aborted(signal) : new DOMException(
-            "Attachment read generation retired.",
-            "AbortError"
-          )
-        );
-      }
-      return new Promise<Blob>((resolve, reject) => {
-        const controller = new AbortController();
-        let task: ReadTask;
-        const cancelFromCaller = () => cancel(task, aborted(signal));
-        task = {
-          attachment,
-          mode,
-          controller,
-          state: "queued",
-          transportStarted: false,
-          callerSettled: false,
-          resolve,
-          reject,
-          detachCaller: () => signal.removeEventListener("abort", cancelFromCaller),
-        };
-        signal.addEventListener("abort", cancelFromCaller, { once: true });
-        queue.push(task);
-        pump();
-      });
-    },
-    retire: () => {
-      if (retired) return;
-      retired = true;
-      [...queue, ...active].forEach((task) =>
-        cancel(task, new DOMException("Attachment read generation retired.", "AbortError"))
-      );
-      queue = [];
-    },
+    forAuthority: (roomId, authority) => ({
+      read: (attachment, mode, signal) => {
+        if (signal.aborted) return Promise.reject(aborted(signal));
+        return new Promise<Blob>((resolve, reject) => {
+          const controller = new AbortController();
+          let task: ReadTask;
+          const cancelFromCaller = () => cancel(task, aborted(signal));
+          task = {
+            attachment,
+            roomId,
+            authority,
+            mode,
+            controller,
+            state: "queued",
+            transportStarted: false,
+            callerSettled: false,
+            resolve,
+            reject,
+            detachCaller: () => signal.removeEventListener("abort", cancelFromCaller),
+          };
+          signal.addEventListener("abort", cancelFromCaller, { once: true });
+          queue.push(task);
+          pump();
+        });
+      },
+    }),
   };
 }

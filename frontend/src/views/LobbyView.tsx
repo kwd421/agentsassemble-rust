@@ -43,7 +43,7 @@ import {
   useRoomMessageSearch,
   type RoomMessageSearchController,
 } from "./useRoomMessageSearch";
-import { createMessageAttachmentReadScheduler } from "../lib/messageAttachmentReadScheduler";
+import { createMessageAttachmentReadOwner } from "../lib/messageAttachmentReadScheduler";
 
 type PinOperation = { retired: boolean };
 
@@ -180,17 +180,15 @@ export default function LobbyView({
         : { kind: "local" },
     [postingMode, roomSessionToken]
   );
+  const [messageAttachmentReadOwner] = useState(
+    () => createMessageAttachmentReadOwner()
+  );
   const messageAttachmentReadScheduler = useMemo(
-    () => createMessageAttachmentReadScheduler(
+    () => messageAttachmentReadOwner.forAuthority(
       activeRoom.meetingId,
       messageAttachmentAuthority
     ),
-    [activeRoom.meetingId, messageAttachmentAuthority]
-  );
-
-  useLayoutEffect(
-    () => () => messageAttachmentReadScheduler.retire(),
-    [messageAttachmentReadScheduler]
+    [activeRoom.meetingId, messageAttachmentAuthority, messageAttachmentReadOwner]
   );
 
   const agentOwnerIds = useMemo(
