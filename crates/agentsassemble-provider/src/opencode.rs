@@ -18,7 +18,7 @@ mod session_creation;
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 use crate::filesystem::BoundExecutable;
 #[cfg(not(unix))]
-use crate::opencode_protocol::{health_error, stop_error};
+use crate::opencode_protocol::{health_error, spawn_error, stop_error};
 #[cfg(not(unix))]
 use crate::process::sanitize_environment;
 use crate::{
