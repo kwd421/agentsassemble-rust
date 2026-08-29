@@ -13,6 +13,11 @@ mod control_pipe_invite_tickets;
 #[cfg(unix)]
 #[path = "control_pipe/managed_ingress.rs"]
 mod control_pipe_managed_ingress;
+mod control_pipe_message_attachments;
+mod support {
+    #[path = "../support/subscription_proof.rs"]
+    pub mod subscription_proof;
+}
 const HOST_TOKEN: &str = "control-pipe-test-host-token-000000001";
 const PUBLIC_ORIGIN: &str = "https://public.example.test";
 const PROXY_SECRET: &str = "manual-ingress-control-secret-000000001";
@@ -303,7 +308,7 @@ async fn public_ingress_status_requires_one_exact_operator_ticket() {
 }
 
 #[tokio::test]
-async fn owned_control_pipe_issues_exact_settings_tickets_after_authority_exists() {
+async fn owned_control_pipe_issues_exact_room_http_tickets_after_authority_exists() {
     let directory =
         tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
     let database = directory.path().join("runtime.sqlite3");
@@ -380,6 +385,7 @@ async fn owned_control_pipe_issues_exact_settings_tickets_after_authority_exists
 
     let invite_id = control_pipe_invite_tickets::assert_invite_tickets(&mut server, &created).await;
     control_pipe_appearance_tickets::assert_appearance_tickets(&mut server, &created).await;
+    control_pipe_message_attachments::assert_message_attachment_tickets(&mut server).await;
 
     let directory = server
         .send_control(&LocalControlRequest::IssueSettingsDirectoryReadTicket {

@@ -34,6 +34,15 @@ pub enum LocalControlRequest {
         request_id: String,
         meeting_id: String,
     },
+    IssueMessageAttachmentUploadTicket {
+        request_id: String,
+        meeting_id: String,
+    },
+    IssueMessageAttachmentReadTicket {
+        request_id: String,
+        meeting_id: String,
+        attachment_id: String,
+    },
     IssueHumanInviteCreateTicket {
         request_id: String,
         server_id: String,
@@ -134,6 +143,16 @@ pub enum LocalControlResponse {
         ttl_seconds: u64,
     },
     MessagePinsWriteOk {
+        request_id: String,
+        ticket: String,
+        ttl_seconds: u64,
+    },
+    MessageAttachmentUploadOk {
+        request_id: String,
+        ticket: String,
+        ttl_seconds: u64,
+    },
+    MessageAttachmentReadOk {
         request_id: String,
         ticket: String,
         ttl_seconds: u64,
