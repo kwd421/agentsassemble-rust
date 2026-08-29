@@ -9,7 +9,8 @@ use zip::ZipArchive;
 
 use crate::{
     persona_import::{
-        ImportedPersonaAsset, PersonaImportError, add_count, finish_ccv3_import, safe_embedded_path,
+        ImportedPersonaAsset, MAX_CARD_JSON_BYTES, PersonaImportError, add_count,
+        finish_ccv3_import, parse_ccv3_json_object, safe_embedded_path,
     },
     persona_risu::decode_risum_module,
 };
@@ -17,7 +18,6 @@ use crate::{
 const MAX_ENTRY_COUNT: usize = 512;
 const MAX_TOTAL_EXPANDED_BYTES: u64 = 80 * 1024 * 1024;
 const MAX_COMPRESSION_RATIO: u64 = 200;
-const MAX_CARD_BYTES: usize = 5 * 1024 * 1024;
 
 /// Parses one bounded `CHARX` archive without extracting paths onto the host filesystem.
 ///
@@ -35,14 +35,8 @@ pub async fn import_charx_asset(
     let mut archive =
         ZipArchive::new(Cursor::new(content)).map_err(|_| invalid("ZIP is invalid"))?;
     validate_archive(&mut archive)?;
-    let card_bytes = read_member(&mut archive, "card.json", MAX_CARD_BYTES)?;
-    let payload: Value = serde_json::from_slice(&card_bytes)
-        .map_err(|_| PersonaImportError::InvalidCard("card JSON is invalid"))?;
-    if !payload.is_object() {
-        return Err(PersonaImportError::InvalidCard(
-            "card root must be an object",
-        ));
-    }
+    let card_bytes = read_member(&mut archive, "card.json", MAX_CARD_JSON_BYTES)?;
+    let payload = parse_ccv3_json_object(&card_bytes)?;
     let referenced = referenced_asset_paths(&payload);
     let mut embedded = BTreeMap::new();
     for path in referenced {

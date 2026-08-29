@@ -13,7 +13,7 @@ use thiserror::Error;
 
 use crate::raster_assets::prepare_raster;
 
-const MAX_CARD_JSON_BYTES: usize = 5 * 1024 * 1024;
+pub(super) const MAX_CARD_JSON_BYTES: usize = 5 * 1024 * 1024;
 const MAX_PNG_TEXT_BYTES: usize = 5 * 1024 * 1024;
 type ThumbnailCandidate = (String, &'static str, Vec<u8>);
 
@@ -65,7 +65,7 @@ pub async fn import_ccv3_asset(
         .map(|(_, extension)| extension.to_ascii_lowercase())
         .unwrap_or_default();
     let (payload, embedded, source_thumbnail) = match extension.as_str() {
-        "json" => (parse_json_object(&content)?, BTreeMap::new(), None),
+        "json" => (parse_ccv3_json_object(&content)?, BTreeMap::new(), None),
         "png" | "apng" => {
             let (payload, embedded) = parse_png_card(&content)?;
             (payload, embedded, Some(content))
@@ -112,7 +112,7 @@ pub(super) async fn finish_ccv3_import(
     })
 }
 
-fn parse_json_object(content: &[u8]) -> Result<Value, PersonaImportError> {
+pub(super) fn parse_ccv3_json_object(content: &[u8]) -> Result<Value, PersonaImportError> {
     if content.len() > MAX_CARD_JSON_BYTES {
         return Err(PersonaImportError::InvalidCard("card JSON exceeds 5 MiB"));
     }
@@ -162,7 +162,7 @@ fn parse_png_card(
                 "PNG is missing a ccv3 or chara text chunk",
             ))?;
     let card_bytes = decode_base64_bounded(encoded)?;
-    Ok((parse_json_object(&card_bytes)?, assets))
+    Ok((parse_ccv3_json_object(&card_bytes)?, assets))
 }
 
 fn png_asset_index(keyword: &str) -> Option<&str> {
