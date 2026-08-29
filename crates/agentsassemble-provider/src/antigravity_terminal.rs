@@ -1,97 +1,54 @@
-use std::{collections::HashSet, sync::OnceLock};
-
-use regex::Regex;
-
-use crate::room_portal_terminal::safe_room_command;
+use crate::room_portal_terminal::HookApproval;
 
 const APPROVE_CONVERSATION: &[u8] = b"\x1b[B\r";
+const APPROVE_FILE_ONCE: &[u8] = b"\r";
+const SANDBOX_APPROVAL_PROMPT: &str = "Allow sandbox bypass for command execution?";
+const FILE_APPROVAL_PROMPT: &str = "Allow access to this file?";
 const MAX_SCREEN_ROWS: usize = 400;
 const MAX_SCREEN_COLUMNS: usize = 400;
 
 pub(crate) struct AntigravityRoomPermissionPolicy {
-    command_prefix: String,
-    handled_commands: HashSet<String>,
+    visible_approval: Option<HookApproval>,
 }
 
 impl AntigravityRoomPermissionPolicy {
-    pub(crate) fn new(command_prefix: String) -> Self {
+    pub(crate) const fn new() -> Self {
         Self {
-            command_prefix,
-            handled_commands: HashSet::new(),
+            visible_approval: None,
         }
     }
 
     pub(crate) fn begin_turn(&mut self) {
-        self.handled_commands.clear();
+        self.visible_approval = None;
     }
 
-    pub(crate) fn response_for(&mut self, output: &[u8]) -> Result<Option<&'static [u8]>, ()> {
-        let command = [render_terminal_screen(output), strip_terminal_ansi(output)]
-            .into_iter()
-            .find_map(|candidate| latest_permission_command(&candidate));
-        let Some(command) = command else {
-            return Ok(None);
+    pub(crate) fn request_pending(&mut self, output: &[u8]) -> Option<HookApproval> {
+        let screen = render_terminal_screen(output);
+        let approval = if screen.contains(SANDBOX_APPROVAL_PROMPT) {
+            Some(HookApproval::RunCommand)
+        } else if screen.contains("File access")
+            && screen.contains("Read:")
+            && screen.contains(FILE_APPROVAL_PROMPT)
+        {
+            Some(HookApproval::ViewFile)
+        } else {
+            None
         };
-        if self.handled_commands.contains(&command) {
-            return Ok(None);
+        if approval.is_none() {
+            self.visible_approval = None;
         }
-        if !safe_room_command(&command, &self.command_prefix) {
-            return Err(());
-        }
-        self.handled_commands.insert(command);
-        Ok(Some(APPROVE_CONVERSATION))
+        (approval != self.visible_approval)
+            .then_some(approval)
+            .flatten()
     }
-}
 
-fn latest_permission_command(text: &str) -> Option<String> {
-    static PERMISSION: OnceLock<Regex> = OnceLock::new();
-    let expression = PERMISSION.get_or_init(|| {
-        Regex::new(
-            r"(?is)Requesting permission for:\s*(?P<command>.+?)\s*(?:Do you want to proceed\?|(?:🔓\s*)?Allow sandbox bypass for command execution\?)",
-        )
-        .unwrap_or_else(|error| panic!("static Antigravity permission regex is invalid: {error}"))
-    });
-    let command = expression
-        .captures_iter(text)
-        .last()?
-        .name("command")?
-        .as_str()
-        .trim();
-    Some(command.to_owned())
-}
-
-fn strip_terminal_ansi(raw: &[u8]) -> String {
-    let text = String::from_utf8_lossy(raw);
-    let mut output = String::with_capacity(text.len());
-    let mut characters = text.chars().peekable();
-    while let Some(character) = characters.next() {
-        if character != '\u{1b}' {
-            if character != '\u{7}' {
-                output.push(if character == '\r' { '\n' } else { character });
-            }
-            continue;
-        }
-        match characters.next() {
-            Some('[') => {
-                for next in characters.by_ref() {
-                    if ('@'..='~').contains(&next) {
-                        break;
-                    }
-                }
-            }
-            Some(']') => {
-                let mut escape = false;
-                for next in characters.by_ref() {
-                    if next == '\u{7}' || (escape && next == '\\') {
-                        break;
-                    }
-                    escape = next == '\u{1b}';
-                }
-            }
-            Some(_) | None => {}
+    pub(crate) fn approve(&mut self, approval: HookApproval) -> &'static [u8] {
+        self.visible_approval = Some(approval);
+        match approval {
+            HookApproval::RunCommand => APPROVE_CONVERSATION,
+            HookApproval::ViewFile => APPROVE_FILE_ONCE,
         }
     }
-    output
 }
 
 fn render_terminal_screen(raw: &[u8]) -> String {
@@ -213,44 +170,53 @@ fn erase_line(line: &mut Vec<char>, column: usize, mode: usize) {
 
 #[cfg(test)]
 mod tests {
-    use super::{APPROVE_CONVERSATION, AntigravityRoomPermissionPolicy};
+    use super::{APPROVE_CONVERSATION, APPROVE_FILE_ONCE, AntigravityRoomPermissionPolicy};
+    use crate::room_portal_terminal::HookApproval;
 
     #[test]
-    fn approves_an_exact_room_command_once() {
-        let mut policy =
-            AntigravityRoomPermissionPolicy::new("/private/agentsassemble-room".to_owned());
+    fn recognizes_the_current_sandbox_card_once_without_parsing_wrapped_commands() {
+        let mut policy = AntigravityRoomPermissionPolicy::new();
         let prompt = b"Requesting permission for:\r\n /private/agentsassemble-room read\r\n\
             \xf0\x9f\x94\x93 Allow sandbox bypass for command execution?";
         assert_eq!(
-            policy.response_for(prompt).unwrap_or_default(),
-            Some(APPROVE_CONVERSATION)
+            policy.request_pending(prompt),
+            Some(HookApproval::RunCommand)
         );
-        assert_eq!(policy.response_for(prompt).unwrap_or_default(), None);
-    }
-
-    #[test]
-    fn rejects_shell_chaining_and_hidden_continuation_lines() {
-        let mut policy =
-            AntigravityRoomPermissionPolicy::new("/private/agentsassemble-room".to_owned());
-        for prompt in [
-            b"Requesting permission for: /private/agentsassemble-room read && env\nDo you want to proceed?"
-                .as_slice(),
-            b"Requesting permission for:\n /private/agentsassemble-room speak 'safe'\n whoami\nDo you want to proceed?"
-                .as_slice(),
-        ] {
-            assert!(policy.response_for(prompt).is_err());
-            policy.begin_turn();
-        }
-    }
-
-    #[test]
-    fn reconstructs_a_cursor_positioned_permission_card() {
-        let mut policy =
-            AntigravityRoomPermissionPolicy::new("/private/agentsassemble-room".to_owned());
-        let prompt = b"\x1b[2J\x1b[1;1HRequesting permission for:\x1b[2;4H/private/agentsassemble-room help\x1b[3;1HDo you want to proceed?";
         assert_eq!(
-            policy.response_for(prompt).unwrap_or_default(),
-            Some(APPROVE_CONVERSATION)
+            policy.approve(HookApproval::RunCommand),
+            APPROVE_CONVERSATION
         );
+        assert_eq!(policy.request_pending(prompt), None);
+    }
+
+    #[test]
+    fn ignores_generic_confirmation_text() {
+        let mut policy = AntigravityRoomPermissionPolicy::new();
+        assert_eq!(
+            policy
+                .request_pending(b"Requesting permission for: git status\nDo you want to proceed?"),
+            None
+        );
+    }
+
+    #[test]
+    fn reconstructs_a_cursor_positioned_wrapped_permission_card() {
+        let mut policy = AntigravityRoomPermissionPolicy::new();
+        let prompt = b"\x1b[2J\x1b[1;1HRequesting permission for:\x1b[3;1H/private/very-long-helper-\x1b[4;1Hpath/agentsassemble-room\x1b[5;1Hhelp\x1b[7;1HAllow sandbox bypass for command execution?";
+        assert_eq!(
+            policy.request_pending(prompt),
+            Some(HookApproval::RunCommand)
+        );
+    }
+
+    #[test]
+    fn approves_each_private_file_card_once_without_persistent_access() {
+        let mut policy = AntigravityRoomPermissionPolicy::new();
+        let prompt = b"File access\r\nRead: /private/room-media/id/proof.txt\r\nReason: outside workspace\r\nAllow access to this file?";
+        assert_eq!(policy.request_pending(prompt), Some(HookApproval::ViewFile));
+        assert_eq!(policy.approve(HookApproval::ViewFile), APPROVE_FILE_ONCE);
+        assert_eq!(policy.request_pending(prompt), None);
+        assert_eq!(policy.request_pending(b"Reading file..."), None);
+        assert_eq!(policy.request_pending(prompt), Some(HookApproval::ViewFile));
     }
 }

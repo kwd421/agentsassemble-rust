@@ -380,3 +380,41 @@ stopped, the package was quit normally, and no owned desktop, server, or provide
 process remained. The stop finalized as the existing fail-closed recoverable
 `disconnected` state because runtime authority could not be confirmed; that separate
 lifecycle behavior is not claimed as part of this attachment correction.
+
+The same provider-visible boundary was then exercised by exact OpenCode catalog model
+`opencode/hy3-free`; its packaged reply was
+`OPENCODE_PORTAL_PROOF | PORTAL-OPENCODE-0829-a8e4d2 | 57`, again proving the unknown
+first line and byte count came from the canonical attachment rather than the prompt.
+
+Antigravity CLI 1.1.22 exposed two additional native-PTY permission boundaries. Its
+current `PreToolUse` contract uses `decision` rather than the obsolete `overwrite`
+field, and a user-level ask hook takes precedence over a project allow. The first real
+run also showed that the long private helper path wraps inside the terminal permission
+card, so independently parsing the rendered command in both the hook and PTY rejected a
+command that the hook had already validated. The managed hook is now the single policy
+owner: it accepts only one exact private-helper command or a `view_file` whose
+`AbsolutePath` resolves to a current regular owner-only file exactly two components
+under that turn's private `room-media` root. It writes a typed, one-use, owner-only
+receipt of at most 12 bytes. The PTY classifies only the two observed native cards and
+responds when that card type matches the consumed receipt; helper commands retain the
+conversation-scoped exact-prefix choice, while staged files select one-time access and
+never the provider's persistent non-workspace grant. Invalid pre-hooks and matching
+post-hooks clear the receipt, and observation begin, finish, abort, or final private
+runtime-directory removal clears both approval and media state. This removes the
+duplicate terminal command parser and adds only one bounded file write, read, and unlink
+per prompted approved operation; the receipt is not synced because it coordinates a
+live process and makes no crash-durability claim. No background task, cache, generic
+permission framework, model substitution, print mode, or fallback was added.
+
+A fresh packaged release then ran the copied UI with exact model
+`gemini-3.6-flash`, Medium effort, and room-read-only permission. The model invoked the
+private helper, opened its staged non-workspace file through native `ViewFile`, and
+published `AGY_VIEW_FINAL | AGY-VIEWFILE-0829-7cb9e4 | 106`; neither the first line nor
+byte count appeared in the prompt. The provider returned to idle, its exact Agent
+Session and `agy` process were stopped, the package and server quit normally, Computer
+Use was reset, and only isolated verification data and the regenerable package were
+moved to recoverable Trash. Focused hook/card tests and all 132 provider tests passed.
+The full `make verify` gate then passed: repository architecture and source-growth
+policy, formatting, generated type parity, the production frontend build and original
+CSS check, 591 frontend tests, 26 desktop tests, every workspace and TCP-boundary test,
+and warning-denied desktop/workspace Clippy.

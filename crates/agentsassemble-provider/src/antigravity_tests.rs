@@ -276,7 +276,7 @@ async fn failing_write_driver() -> (tempfile::TempDir, AntigravityDriver) {
         attached_reused: false,
         startup_drained: true,
         terminal_query_tail: Vec::new(),
-        permission_policy: AntigravityRoomPermissionPolicy::new("test-prefix".to_owned()),
+        permission_policy: AntigravityRoomPermissionPolicy::new(),
         transcript_nonce: Uuid::new_v4(),
         active_turn: None,
         completed_turn: None,

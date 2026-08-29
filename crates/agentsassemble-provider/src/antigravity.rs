@@ -219,8 +219,7 @@ impl AntigravityDriver {
         terminal_helper: RoomPortalTerminalHelper,
         hook: AntigravityHookRegistration,
     ) -> Self {
-        let permission_policy =
-            AntigravityRoomPermissionPolicy::new(terminal_helper.command_prefix().to_owned());
+        let permission_policy = AntigravityRoomPermissionPolicy::new();
         Self {
             terminal,
             transcript,
@@ -393,12 +392,19 @@ impl AntigravityDriver {
                 if !chunk.is_empty() {
                     self.record_terminal(&chunk);
                     self.answer_terminal_queries(&chunk).await?;
-                    let Ok(permission_response) =
-                        self.permission_policy.response_for(&self.terminal_tail)
-                    else {
-                        return self.poison(unexpected_permission());
-                    };
-                    if let Some(response) = permission_response {
+                    if let Some(requested) =
+                        self.permission_policy.request_pending(&self.terminal_tail)
+                    {
+                        let approved = self
+                            .terminal_helper
+                            .as_ref()
+                            .ok_or_else(portal_missing)?
+                            .take_hook_approval()
+                            .map_err(portal_driver_error)?;
+                        if approved != Some(requested) {
+                            return self.poison(unexpected_permission());
+                        }
+                        let response = self.permission_policy.approve(requested);
                         self.write_terminal(response).await?;
                     }
                     if let Some(active) = self.active_turn.as_mut() {
@@ -581,7 +587,7 @@ impl ProviderDriver for AntigravityDriver {
         self.terminal_helper
             .as_ref()
             .ok_or_else(portal_missing)?
-            .reset_media()
+            .reset_turn_state()
             .map_err(portal_driver_error)?;
         self.room_portal
             .begin_observation(RoomObservationStart {
@@ -610,7 +616,7 @@ impl ProviderDriver for AntigravityDriver {
         self.terminal_helper
             .as_ref()
             .ok_or_else(portal_missing)?
-            .reset_media()
+            .reset_turn_state()
             .map_err(portal_driver_error)?;
         self.room_portal
             .finish_observation(&request.turn_id, observation.input_up_to_seq)
@@ -622,7 +628,7 @@ impl ProviderDriver for AntigravityDriver {
         let media_failed = self
             .terminal_helper
             .as_ref()
-            .is_none_or(|helper| helper.reset_media().is_err());
+            .is_none_or(|helper| helper.reset_turn_state().is_err());
         self.poisoned |= portal_failed || media_failed;
     }
 

@@ -26,7 +26,7 @@ pub(super) fn terminal_prompt(
             )
         });
     format!(
-        "{}\n\n<agentsassemble-transport turn=\"{}\" launch=\"{transcript_nonce}\">Antigravity room transport: first run `{helper} help`, then run `{helper} read`.{media_instruction}{random_instruction} Finish with exactly one `{helper} speak 'message'`, `{helper} speak-to agent-id 'message'`, or `{helper} decline reason`. Run one helper command per terminal tool call. Ordinary assistant final text is not a room publication.</agentsassemble-transport>",
+        "{}\n\n<agentsassemble-transport turn=\"{}\" launch=\"{transcript_nonce}\">Antigravity room transport: first run `{helper} help`, then run `{helper} read`.{media_instruction}{random_instruction} Finish with exactly one `{helper} speak 'message'`, `{helper} speak-to agent-id 'message'`, or `{helper} decline reason`. Run one helper command per terminal tool call and set `BypassSandbox` to `true`; the managed PreToolUse hook allows that only for this exact private helper prefix. Ordinary assistant final text is not a room publication.</agentsassemble-transport>",
         request.input, request.turn_id,
     )
 }
@@ -89,5 +89,6 @@ mod tests {
         let prompt = terminal_prompt(&request, Uuid::nil(), "agentsassemble-room");
         assert!(prompt.contains("agentsassemble-room media <attachment-id>"));
         assert!(prompt.contains("returned private path"));
+        assert!(prompt.contains("set `BypassSandbox` to `true`"));
     }
 }

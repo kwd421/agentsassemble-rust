@@ -16,10 +16,12 @@ use rmcp::{
     },
 };
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 #[path = "room_portal_terminal_command.rs"]
 mod command;
+#[path = "room_portal_terminal_hook.rs"]
+mod hook;
 
 #[cfg(windows)]
 use crate::filesystem::BoundExecutable;
@@ -32,6 +34,7 @@ use crate::{
 };
 use command::helper_tool;
 pub(crate) use command::safe_room_command;
+pub(crate) use hook::HookApproval;
 
 #[cfg(unix)]
 const HELPER_FILE_NAME: &str = "agentsassemble-room";
@@ -40,7 +43,6 @@ const HELPER_FILE_NAME: &str = "agentsassemble-room.exe";
 const AUTHORITY_FILE: &str = "room-portal.json";
 const MEDIA_DIRECTORY: &str = "room-media";
 const MAX_AUTHORITY_BYTES: u64 = 4 * 1024;
-const MAX_HOOK_INPUT_BYTES: u64 = 64 * 1024;
 const HELPER_TIMEOUT: Duration = Duration::from_secs(10);
 const HELPER_COMMAND_ENV: &str = "AGENTSASSEMBLE_ROOM_HELPER_COMMAND";
 
@@ -96,6 +98,7 @@ impl RoomPortalTerminalHelper {
             },
         )?;
         reset_media_directory(executable.directory())?;
+        hook::reset_approval(executable.directory()).map_err(|_| RoomPortalError::Authority)?;
         let command_prefix = absolute_helper_command(executable.path())?;
         let hook_command = format!("{command_prefix} hook");
         let current_path = env::var_os("PATH").unwrap_or_default();
@@ -136,8 +139,14 @@ impl RoomPortalTerminalHelper {
         ]
     }
 
-    pub(crate) fn reset_media(&self) -> Result<(), RoomPortalError> {
+    pub(crate) fn reset_turn_state(&self) -> Result<(), RoomPortalError> {
+        hook::reset_approval(self.executable.directory())
+            .map_err(|_| RoomPortalError::Authority)?;
         reset_media_directory(self.executable.directory())
+    }
+
+    pub(crate) fn take_hook_approval(&self) -> Result<Option<HookApproval>, RoomPortalError> {
+        hook::take_approval(self.executable.directory()).map_err(|_| RoomPortalError::Authority)
     }
 }
 
@@ -222,14 +231,18 @@ async fn run_helper(executable: PathBuf) -> Result<(), &'static str> {
         return print_helper_help(&executable, &mut arguments);
     }
     if action == "hook" {
-        if arguments.next().is_some() {
-            return Err("usage: agentsassemble-room hook");
-        }
         let helper = env::var(HELPER_COMMAND_ENV)
             .ok()
             .filter(|value| valid_helper_command_prefix(value))
             .ok_or("room helper invocation is unavailable")?;
-        return run_hook(&helper);
+        let directory = executable
+            .parent()
+            .ok_or("room helper authority is unavailable")?;
+        return match arguments.next().as_deref() {
+            Some("pre") if arguments.next().is_none() => hook::run_pre_hook(directory, &helper),
+            Some("post") if arguments.next().is_none() => hook::run_post_hook(directory),
+            _ => Err("usage: agentsassemble-room hook <pre|post>"),
+        };
     }
     let directory = executable
         .parent()
@@ -427,45 +440,6 @@ fn valid_authority(authority: &HelperAuthority) -> bool {
         })
 }
 
-fn run_hook(command_prefix: &str) -> Result<(), &'static str> {
-    let mut encoded = String::new();
-    std::io::stdin()
-        .take(MAX_HOOK_INPUT_BYTES + 1)
-        .read_to_string(&mut encoded)
-        .map_err(|_| "hook request could not be read")?;
-    if encoded.len() as u64 > MAX_HOOK_INPUT_BYTES {
-        return Err("hook request exceeded its bound");
-    }
-    let payload: Value = serde_json::from_str(&encoded).map_err(|_| "hook request is invalid")?;
-    let name = payload.pointer("/toolCall/name").and_then(Value::as_str);
-    let raw_command = payload
-        .pointer("/toolCall/args/CommandLine")
-        .and_then(Value::as_str);
-    let decoded_command = raw_command.and_then(decode_antigravity_string_argument);
-    let command = decoded_command.as_deref().or(raw_command);
-    let response = if name == Some("run_command")
-        && command.is_some_and(|command| safe_room_command(command, command_prefix))
-    {
-        json!({
-            "decision": "allow",
-            "reason": "AgentsAssemble room tool command.",
-            "overwrite": {"BypassSandbox": true}
-        })
-    } else {
-        json!({"decision": "deny", "reason": "AgentsAssemble did not approve this request."})
-    };
-    serde_json::to_writer(std::io::stdout(), &response)
-        .map_err(|_| "hook response could not be written")?;
-    Ok(())
-}
-
-fn decode_antigravity_string_argument(value: &str) -> Option<String> {
-    if !(value.starts_with('"') && value.ends_with('"')) {
-        return None;
-    }
-    serde_json::from_str::<String>(value).ok()
-}
-
 fn valid_helper_command_prefix(value: &str) -> bool {
     if value.is_empty() || value.len() > 4096 {
         return false;
@@ -491,8 +465,8 @@ fn valid_helper_command_prefix(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        absolute_helper_command, decode_antigravity_string_argument, reset_media_directory,
-        safe_room_command, stage_attachment, valid_helper_command_prefix,
+        absolute_helper_command, reset_media_directory, safe_room_command, stage_attachment,
+        valid_helper_command_prefix,
     };
     use crate::ProviderAttachment;
 
@@ -756,20 +730,5 @@ mod tests {
             assert!(reset_media_directory(root.path()).is_err());
             assert!(marker.exists(), "media reset followed an unowned symlink");
         }
-    }
-
-    #[test]
-    fn hook_decodes_antigravity_double_serialized_string_arguments() {
-        assert_eq!(
-            decode_antigravity_string_argument("\"agentsassemble-room help\"").as_deref(),
-            Some("agentsassemble-room help")
-        );
-        assert_eq!(
-            decode_antigravity_string_argument("\"agentsassemble-room read\\nprintenv\"")
-                .as_deref(),
-            Some("agentsassemble-room read\nprintenv")
-        );
-        assert!(decode_antigravity_string_argument("agentsassemble-room help").is_none());
-        assert!(decode_antigravity_string_argument("\"unterminated").is_none());
     }
 }

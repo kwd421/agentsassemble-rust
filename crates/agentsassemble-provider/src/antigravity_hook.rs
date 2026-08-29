@@ -103,10 +103,18 @@ impl Drop for AntigravityHookRegistration {
 fn hook_definition(command: &str) -> Value {
     json!({
         "PreToolUse": [{
-            "matcher": "run_command|ask_permission|ask_question",
+            "matcher": "run_command|view_file|ask_permission|ask_question",
             "hooks": [{
                 "type": "command",
-                "command": command,
+                "command": format!("{command} pre"),
+                "timeout": 900
+            }]
+        }],
+        "PostToolUse": [{
+            "matcher": "run_command|view_file",
+            "hooks": [{
+                "type": "command",
+                "command": format!("{command} post"),
                 "timeout": 900
             }]
         }]
@@ -409,8 +417,20 @@ mod tests {
             )
             .unwrap_or_else(|error| panic!("decode installed hook: {error}"));
             assert_eq!(
+                installed[HOOK_NAME]["PreToolUse"][0]["matcher"],
+                "run_command|view_file|ask_permission|ask_question"
+            );
+            assert_eq!(
                 installed[HOOK_NAME]["PreToolUse"][0]["hooks"][0]["command"],
-                HOOK_COMMAND
+                format!("{HOOK_COMMAND} pre")
+            );
+            assert_eq!(
+                installed[HOOK_NAME]["PostToolUse"][0]["matcher"],
+                "run_command|view_file"
+            );
+            assert_eq!(
+                installed[HOOK_NAME]["PostToolUse"][0]["hooks"][0]["command"],
+                format!("{HOOK_COMMAND} post")
             );
             drop(second);
         }
