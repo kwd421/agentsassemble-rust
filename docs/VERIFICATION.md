@@ -3903,3 +3903,28 @@ copied-frontend connection, packaged verification, and real providers remain pen
   `6bd791b..5e324b8` APPROVE C0/H0/M0.
 - Daybreaker final verdict: `7ddf858..5e324b8` APPROVE C0/H0/M0;
   `6bd791b..5e324b8` APPROVE C0/H0/M0.
+
+## Attachment-aware message-pin projection: 2026-08-29
+
+Commit `185edeb` keeps `room_message_pins` as an event pointer and derives attachment
+filenames only while projecting the canonical `message_final`. A target is now valid
+when it has visible text or at least one attachment. Attachment-only pins therefore
+retain empty message content and the event-defined filename order without copying IDs,
+metadata, bytes, or lifecycle authority into pin storage.
+
+The concrete integrity threat was treating arbitrary flattened event JSON as trusted
+pin metadata. The message-attachment owner now strictly decodes at most eight entries
+and rechecks the canonical ID, distinctness, sanitized filename, MIME grammar, item
+size, safe-raster classification, and exact view/download paths. Pin reads and writes
+fail closed on corrupt metadata. The safe-raster MIME decision reuses the raster owner;
+no second MIME allowlist, attachment repository, cache, or pin-owned state was added.
+
+Decoding is bounded by the existing eight-item event ceiling and does not read BLOBs.
+The focused real-SQLite pin suite, including attachment-only projection and corrupt-URL
+rejection, completed in 0.13 seconds on a warm development build; no CPU, memory, disk,
+or latency improvement is claimed. Full serial `make verify` passed architecture and
+800-line gates, policy tests, formatting, generated bindings, original-CSS verification,
+the production frontend build, frontend 89 files / 555 tests, desktop 20, domain 29,
+persistence 198, protocol 6, provider 120, server 85, every TCP/integration/doc test,
+warning-denied Clippy, and the final diff gate. No provider, Computer Use, Deep Scan, or
+automated security scanner ran for this persistence projection.
