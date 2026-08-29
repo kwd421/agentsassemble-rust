@@ -177,6 +177,24 @@ local import. The real TCP suite verifies purpose separation, authorization-befo
 tickets, CORS, private caching, canonical PNG delivery, missing-thumbnail failure, and an untouched
 library after rejected requests; its two tests completed in 0.07 seconds during full verification.
 
+The copied picker now obtains list, import, and thumbnail access through fresh native
+local-operator exchanges. It treats the summary thumbnail URL only as a presence signal and
+constructs the fixed persona-ID route itself, so private server output cannot select a different
+authority target. One shared frontend safe-raster owner checks exact private/no-store PNG responses
+for both persona thumbnails and room appearance rather than maintaining two signature and size
+policies.
+
+Thumbnail Blob URLs have an explicit React lifecycle owner. It requests only the selected item and
+the at most eight visible library rows, aborts reads that leave that set, and revokes each Blob URL
+only after React no longer renders it. Reimporting the same canonical ID explicitly invalidates the
+old request and rendered Blob instead of retaining a stale thumbnail across the server's atomic
+replacement. An advertised thumbnail read failure remains visible; it is not silently converted to
+a successful icon-only read. StrictMode, failure, exact-ID replacement, and unmount regressions prove
+request and Blob custody. The focused frontend boundary completed 16 tests in 0.69 seconds and the
+complete frontend suite completed 599 tests in 10.78 seconds on the development host. These are
+harness results, not production latency claims. Packaged-picker verification remains pending and is
+not inferred from the source test.
+
 ## Manual-review findings
 
 - Daybreaker Blue High returned five Medium findings for the first pushed importer range:
