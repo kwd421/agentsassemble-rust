@@ -30,8 +30,8 @@ Rust-owned upload, message-binding, authorized-read, and provider-read lifecycle
   it and expires after a bounded hour. Upload and expiry never evict another principal's
   or a referenced attachment. Removing a staged item from the composer leaves it
   eligible only for exact expiry cleanup. The message-attachment owner removes expired
-  pending rows on its bounded upload write path before accounting and removes an exact
-  expired target encountered during binding; it adds no background sweeper.
+  pending rows on its bounded upload write path before accounting. A failed bind commits
+  no cleanup, and the owner adds no background sweeper.
 - `message.send` accepts exactly `content` and optional attachment IDs. The persistence
   transaction revalidates the active room, joined and unmuted participant, writable
   session, distinct count, exact pending owner, room, expiry, and unbound state before
