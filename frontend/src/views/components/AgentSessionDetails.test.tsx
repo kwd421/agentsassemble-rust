@@ -24,10 +24,12 @@ beforeEach(() => {
       id: "new-guide",
       display_name: "New Guide",
       asset_kind: "card",
+      source_kind: "ccv3",
       lorebook_count: 1,
       asset_count: 0,
       ignored_feature_count: 0,
       tag_count: 0,
+      thumbnail_url: "",
     },
   ]);
 });
@@ -89,10 +91,12 @@ describe("AgentSessionDetails diagnostics", () => {
         id: "old-guide",
         display_name: "Old Guide",
         asset_kind: "card",
+        source_kind: "ccv3",
         lorebook_count: 1,
         asset_count: 0,
         ignored_feature_count: 0,
         tag_count: 0,
+        thumbnail_url: "",
       },
     };
 

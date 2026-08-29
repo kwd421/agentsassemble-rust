@@ -24,6 +24,7 @@ beforeEach(() => {
       id: "guide",
       display_name: "Night Guide",
       asset_kind: "card",
+      source_kind: "ccv3",
       lorebook_count: 2,
       asset_count: 1,
       ignored_feature_count: 0,
@@ -34,10 +35,12 @@ beforeEach(() => {
       id: "weather-module",
       display_name: "Weather Module",
       asset_kind: "module",
+      source_kind: "risu_module",
       lorebook_count: 4,
       asset_count: 0,
       ignored_feature_count: 3,
       tag_count: 0,
+      thumbnail_url: "",
     },
   ]);
 });
@@ -52,10 +55,12 @@ describe("AgentPersonaPicker", () => {
           id: "guide",
           display_name: "Night Guide",
           asset_kind: "card",
+          source_kind: "ccv3",
           lorebook_count: 2,
           asset_count: 1,
           ignored_feature_count: 0,
           tag_count: 0,
+          thumbnail_url: "/api/personas/guide/thumbnail",
         }}
         onChange={onChange}
       />
@@ -80,10 +85,12 @@ describe("AgentPersonaPicker", () => {
       id: "new-module",
       display_name: "New Module",
       asset_kind: "module",
+      source_kind: "risu_module",
       lorebook_count: 1,
       asset_count: 0,
       ignored_feature_count: 0,
       tag_count: 0,
+      thumbnail_url: "",
     });
     render(<AgentPersonaPicker value="" onChange={onChange} />);
 
@@ -102,10 +109,12 @@ describe("AgentPersonaPicker", () => {
         id: `persona-${index}`,
         display_name: `Persona ${index}`,
         asset_kind: "card",
+        source_kind: "ccv3",
         lorebook_count: 0,
         asset_count: 0,
         ignored_feature_count: 0,
         tag_count: 0,
+        thumbnail_url: "",
       }))
     );
     render(<AgentPersonaPicker value="" onChange={onChange} />);

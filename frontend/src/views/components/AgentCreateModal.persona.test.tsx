@@ -32,10 +32,12 @@ beforeEach(() => {
       id: "night-guide",
       display_name: "Night Guide",
       asset_kind: "card",
+      source_kind: "ccv3",
       lorebook_count: 2,
       asset_count: 1,
       ignored_feature_count: 0,
       tag_count: 0,
+      thumbnail_url: "",
     },
   ]);
 });

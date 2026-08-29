@@ -89,6 +89,13 @@ The authority baseline is reachable code at original commit
   It cannot broaden Room Portal tools, filesystem access, network access, permissions,
   or participant authority.
 
+The provider-neutral scanner case-folds the bounded search context once per recursive
+round. A per-keyword fold would allocate and traverse that whole context once for every
+case-insensitive lore key; keeping the copy at the scan owner removes that multiplicative
+work without changing literal matching, lore order, prompt bounds, or ignored executable
+features. Domain tests verify literal, recursive, substitution, and inert-regex behavior;
+no wall-time or CPU reduction is claimed without a real-turn measurement.
+
 ## Non-goals
 
 - No v0 research, agenda, forced rounds, moderator synthesis, decisions, tasks,

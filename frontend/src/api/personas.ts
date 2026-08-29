@@ -1,16 +1,7 @@
 import { fetchJson, fileToBase64, postJson } from "./http";
+import type { PersonaAssetSummary } from "../types/generated/PersonaAssetSummary";
 
-export type PersonaAssetSummary = {
-  id: string;
-  display_name: string;
-  asset_kind: "card" | "module";
-  source_kind?: string;
-  lorebook_count: number;
-  asset_count: number;
-  ignored_feature_count: number;
-  tag_count: number;
-  thumbnail_url?: string;
-};
+export type { PersonaAssetSummary };
 
 export async function fetchPersonaAssets(): Promise<PersonaAssetSummary[]> {
   const payload = await fetchJson<{ items?: PersonaAssetSummary[] }>("/api/personas");

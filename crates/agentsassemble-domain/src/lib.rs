@@ -5,6 +5,7 @@ mod identity;
 mod message_attachments;
 mod message_pins;
 mod model;
+mod persona;
 mod profile;
 mod projection;
 mod room_preferences;
@@ -35,6 +36,11 @@ pub use model::{
     LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, Participant, ParticipantRole,
     ParticipantStatus, ProviderAvailability, ProviderCatalog, ProviderControl,
     ProviderControlOption, Room, RoomEvent, RoomStatus, SnapshotMode,
+};
+pub use persona::{
+    MAX_PERSONA_CONTEXT_CHARACTERS, MAX_PERSONA_ID_CHARACTERS, MAX_PERSONA_LORE_CHARACTERS,
+    PersonaAssetKind, PersonaAssetSummary, PersonaCard, PersonaLoreEntry, PersonaLoreSettings,
+    canonical_persona_id, render_persona_context,
 };
 pub use profile::{UserProfile, UserProfilePatch, avatar_attachment_id, canonical_avatar_url};
 pub use projection::{public_event_for_principal, public_value_for_principal};

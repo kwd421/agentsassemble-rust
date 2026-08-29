@@ -1,5 +1,6 @@
 use std::{fs, path::PathBuf};
 
+use agentsassemble_domain::PersonaAssetSummary;
 use agentsassemble_protocol::{
     CommandAck, HUMAN_INVITE_JOIN_CODE_BYTES, HUMAN_INVITE_JOIN_CODE_PREFIX,
     HUMAN_INVITE_SIGNATURE_BYTES, HUMAN_INVITE_SIGNED_TOKEN_MAX_BYTES,
@@ -25,6 +26,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_large_int("number")
         .with_import_extension(Some("js"));
     RoomSnapshot::export_all(&config)?;
+    PersonaAssetSummary::export_all(&config)?;
     Subscribed::export_all(&config)?;
     CommandAck::export_all(&config)?;
     TicketResponse::export_all(&config)?;
