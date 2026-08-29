@@ -32,6 +32,8 @@ pub enum PersonaImportError {
     InvalidCard(&'static str),
     #[error("Risu module is malformed: {0}")]
     InvalidModule(&'static str),
+    #[error("CHARX archive is malformed: {0}")]
+    InvalidArchive(&'static str),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -70,8 +72,17 @@ pub async fn import_ccv3_asset(
         }
         _ => return Err(PersonaImportError::UnsupportedFormat),
     };
-    let mut normalized = normalize_ccv3(&payload, filename)?;
-    let assets = asset_specs(&payload)?;
+    finish_ccv3_import(filename, &payload, embedded, source_thumbnail).await
+}
+
+pub(super) async fn finish_ccv3_import(
+    filename: &str,
+    payload: &Value,
+    embedded: BTreeMap<String, Vec<u8>>,
+    source_thumbnail: Option<Vec<u8>>,
+) -> Result<ImportedPersonaAsset, PersonaImportError> {
+    let mut normalized = normalize_ccv3(payload, filename)?;
+    let assets = asset_specs(payload)?;
     let mut ignored = normalized.ignored_features.clone();
     let (candidate, asset_count) = select_thumbnail(
         &assets.items,
@@ -378,6 +389,12 @@ fn asset_payload(
         (source.map(<[u8]>::to_vec), "missing_asset")
     } else if let Some(index) = uri.strip_prefix("__asset:") {
         (embedded.get(index).cloned(), "missing_asset")
+    } else if let Some(path) = uri.strip_prefix("embeded://") {
+        let Some(path) = safe_embedded_path(path) else {
+            add_count(ignored, "unsafe_asset_uri", 1);
+            return None;
+        };
+        (embedded.get(&path).cloned(), "missing_asset")
     } else if uri.starts_with("data:") {
         let payload = uri
             .split_once(',')
@@ -401,6 +418,30 @@ fn asset_payload(
         add_count(ignored, reason, 1);
     }
     payload
+}
+
+pub(super) fn safe_embedded_path(value: &str) -> Option<String> {
+    if value.is_empty()
+        || value.starts_with('/')
+        || value.ends_with('/')
+        || value.contains('\0')
+        || value.contains('\\')
+        || value.contains("//")
+    {
+        return None;
+    }
+    let mut parts = value.split('/');
+    let first = parts.next()?;
+    if first.is_empty() || first.contains(':') || matches!(first, "." | "..") {
+        return None;
+    }
+    if parts
+        .clone()
+        .any(|part| part.is_empty() || matches!(part, "." | ".."))
+    {
+        return None;
+    }
+    Some(value.to_owned())
 }
 
 fn raster_content_type(content: &[u8]) -> Option<&'static str> {

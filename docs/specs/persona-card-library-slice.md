@@ -120,6 +120,19 @@ configuration and unused memory/disk custody while preserving module selection, 
 and ignored-feature counts. A real encoded module fixture verifies the format boundary and
 that regex, trigger, CJS, MCP, and regex-lore declarations remain inert.
 
+`CHARX` uses the maintained ZIP reader with only the stored/deflate/Bzip2/LZMA methods
+reachable in the original standard-library reader. Before any selected member is expanded,
+the archive owner rejects more than 512 entries, unsafe or duplicate normalized paths,
+encryption, overlapping compressed ranges, entries above 10 MiB, aggregate expansion above
+80 MiB, and ratios above 200:1. Only card-declared embedded assets are read and no archive
+path is ever resolved onto the host filesystem; the shared card owner still selects and
+canonicalizes one preferred thumbnail. A readable `module.risum` replaces the card lore as
+the original flow does, while its non-executable feature counts are merged once rather than
+double-counting regex lore at both container and module boundaries. An unreadable optional
+module is counted and remains inert without discarding an otherwise valid card. Real ZIP,
+PNG, and RPack fixtures verify the combined path, and a traversal archive verifies rejection
+before `card.json` is read.
+
 ## Non-goals
 
 - No v0 research, agenda, forced rounds, moderator synthesis, decisions, tasks,

@@ -65,6 +65,7 @@ tempfile = "3.27.0"
 toml = "0.9.12"
 windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem"] }
 which = "8.0.6"
+zip = { version = "8.0.0", default-features = false, features = ["bzip2", "deflate-flate2-zlib-rs", "lzma"] }
 
 # Full executable identities must hash 100+ MiB CLIs inside the validation deadline.
 [profile.dev.package.sha2]

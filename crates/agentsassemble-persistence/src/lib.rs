@@ -63,6 +63,7 @@ mod participant_mute;
 mod participant_roles;
 #[cfg(test)]
 mod persistence_security_tests;
+mod persona_charx;
 mod persona_import;
 mod persona_risu;
 mod provider_turn_effect;
@@ -104,6 +105,7 @@ pub use message_attachments::{
 pub use message_pins::PinnedLobbyMessage;
 pub use participant_leave::ParticipantLeaveMutation;
 pub use participant_mute::ParticipantMuteMutation;
+pub use persona_charx::import_charx_asset;
 pub use persona_import::{
     ImportedPersonaAsset, PersonaImportError, PersonaThumbnail, import_ccv3_asset,
 };

@@ -24,6 +24,7 @@ thiserror.workspace = true
 tokio.workspace = true
 url.workspace = true
 uuid.workspace = true
+zip.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3.9", features = ["winnt"] }
