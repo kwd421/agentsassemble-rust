@@ -241,6 +241,21 @@ async fn attachment_upload_dispatches_once_without_cross_purpose_fallback() {
             if grant == expected_manager
     ));
 
+    let message = store
+        .issue_message_attachment_upload(
+            "general".to_owned(),
+            "operator-local-user".to_owned(),
+            "operator-local".to_owned(),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("issue message attachment upload: {error}"));
+    assert!(matches!(
+        store.consume_attachment_upload(&message.ticket).await,
+        Ok(crate::ticket::ConsumedAttachmentUploadTicket::Message(
+            crate::ticket::ConsumedRoomHumanTicket::Local(_)
+        ))
+    ));
+
     let wrong_purpose = store
         .issue_preferences_read(
             "general".to_owned(),
@@ -374,6 +389,43 @@ async fn human_session_grants_are_exact_purpose_and_one_use() {
     assert_eq!(connection_nonce.len(), 64);
     assert!(matches!(
         store.consume_human_session_socket(&socket.ticket).await,
+        Err(TicketError::Invalid)
+    ));
+}
+
+#[tokio::test]
+async fn human_session_message_attachment_grants_are_exact_and_read_only_upload_is_denied() {
+    let fixture = HumanSessionFixture::new(1).await;
+    let store = TicketStore::new(Duration::from_secs(30), 4_096);
+    assert!(matches!(
+        store
+            .issue_human_session_message_attachment_upload(fixture.authorize(0).await)
+            .await,
+        Err(TicketError::Invalid)
+    ));
+    let message_read = store
+        .issue_human_session_bound_message_attachment_read(
+            fixture.authorize(0).await,
+            "ma_00000000000000000000000000000000".to_owned(),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("issue session message attachment read: {error}"));
+    assert!(matches!(
+        store
+            .consume_message_attachment_read(
+                &message_read.ticket,
+                "ma_11111111111111111111111111111111",
+            )
+            .await,
+        Err(TicketError::Invalid)
+    ));
+    assert!(matches!(
+        store
+            .consume_message_attachment_read(
+                &message_read.ticket,
+                "ma_00000000000000000000000000000000",
+            )
+            .await,
         Err(TicketError::Invalid)
     ));
 }

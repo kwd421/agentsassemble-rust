@@ -23,7 +23,10 @@ use crate::{
     },
     human_browser_credential::fingerprint_browser_credential,
     human_invite_preflight::authenticated_invite_evidence,
-    ticket::{ConsumedAppearanceReadTicket, ConsumedAttachmentUploadTicket},
+    ticket::{
+        ConsumedAppearanceReadTicket, ConsumedAttachmentUploadTicket,
+        ConsumedMessageAttachmentReadTicket, ConsumedRoomHumanTicket,
+    },
 };
 
 const MAX_PROFILE_BODY_BYTES: usize = 16 * 1024;
@@ -150,6 +153,7 @@ async fn upload_attachment(
         .map_err(ProfileHttpError::from_body)?;
     match (&authority, payload.purpose.trim()) {
         (Some(AttachmentUploadAuthority::Appearance(_)), "room_appearance")
+        | (Some(AttachmentUploadAuthority::Message(_)), "room_attachment")
         | (Some(AttachmentUploadAuthority::Profile(_)) | None, "profile_avatar") => {}
         (Some(_), _) => {
             return Err(ProfileHttpError::bad_request(
@@ -176,7 +180,19 @@ async fn upload_attachment(
     let content = STANDARD
         .decode(encoded)
         .map_err(|_| ProfileHttpError::bad_request("data_base64 is invalid."))?;
-    let attachment = match (authority, prejoin_authority) {
+    let attachment =
+        store_uploaded_attachment(&state, authority, prejoin_authority, &payload, content).await?;
+    Ok(Json(json!({"attachment": attachment})))
+}
+
+async fn store_uploaded_attachment(
+    state: &AppState,
+    authority: Option<AttachmentUploadAuthority>,
+    prejoin_authority: Option<HumanPrejoinAvatarAuthorization>,
+    payload: &AttachmentUpload,
+    content: Vec<u8>,
+) -> Result<serde_json::Value, ProfileHttpError> {
+    Ok(match (authority, prejoin_authority) {
         (Some(AttachmentUploadAuthority::Appearance(manager)), None) => json!(
             state
                 .store
@@ -189,8 +205,34 @@ async fn upload_attachment(
                 .await?
         ),
         (Some(AttachmentUploadAuthority::Profile(profile)), None) => {
-            json!(store_profile_attachment(&state, profile, &payload, content).await?)
+            json!(store_profile_attachment(state, profile, payload, content).await?)
         }
+        (Some(AttachmentUploadAuthority::Message(message)), None) => json!(match message {
+            ConsumedRoomHumanTicket::Local(grant) => {
+                state
+                    .store
+                    .store_local_message_attachment(
+                        &grant.room_id,
+                        &grant.principal_id,
+                        &grant.participant_id,
+                        &payload.filename,
+                        &payload.content_type,
+                        content,
+                    )
+                    .await?
+            }
+            ConsumedRoomHumanTicket::HumanSession(authorization) => {
+                state
+                    .store
+                    .store_human_session_message_attachment(
+                        &authorization,
+                        &payload.filename,
+                        &payload.content_type,
+                        content,
+                    )
+                    .await?
+            }
+        }),
         (None, Some(prejoin_authorization)) => {
             json!(
                 state
@@ -205,8 +247,7 @@ async fn upload_attachment(
             )
         }
         _ => return Err(ProfileHttpError::internal()),
-    };
-    Ok(Json(json!({"attachment": attachment})))
+    })
 }
 
 async fn store_profile_attachment(
@@ -293,6 +334,49 @@ async fn read_attachment(
     RawQuery(raw_query): RawQuery,
     request: Request,
 ) -> Result<Response, ProfileHttpError> {
+    if attachment_id.starts_with(agentsassemble_domain::MESSAGE_ATTACHMENT_ID_PREFIX) {
+        let inline_requested = match raw_query.as_deref() {
+            Some("view=1") => true,
+            Some("download=1") => false,
+            _ => {
+                return Err(ProfileHttpError::bad_request(
+                    "Message attachments require the exact view or download query.",
+                ));
+            }
+        };
+        let ticket = bearer_ticket(request.headers()).ok_or_else(ProfileHttpError::unauthorized)?;
+        let grant = state
+            .tickets
+            .consume_message_attachment_read(ticket, &attachment_id)
+            .await
+            .map_err(|_| ProfileHttpError::unauthorized())?;
+        let attachment = match grant {
+            ConsumedMessageAttachmentReadTicket::Local(grant) => {
+                state
+                    .store
+                    .bound_message_attachment(
+                        &grant.room_id,
+                        &grant.principal_id,
+                        &grant.participant_id,
+                        &attachment_id,
+                    )
+                    .await?
+            }
+            ConsumedMessageAttachmentReadTicket::HumanSession(authorization) => {
+                state
+                    .store
+                    .bound_human_session_message_attachment(&authorization, &attachment_id)
+                    .await?
+            }
+        };
+        let inline = inline_requested && attachment.metadata.is_image;
+        return attachment_response(
+            &attachment.metadata.filename,
+            &attachment.metadata.content_type,
+            attachment.content,
+            inline,
+        );
+    }
     if attachment_id.starts_with(agentsassemble_domain::ROOM_APPEARANCE_ASSET_PREFIX) {
         if raw_query.as_deref() != Some(agentsassemble_domain::ROOM_APPEARANCE_REFERENCE_QUERY) {
             return Err(ProfileHttpError::bad_request(
@@ -391,6 +475,7 @@ enum ProfileAuthority {
 enum AttachmentUploadAuthority {
     Profile(ProfileAuthority),
     Appearance(agentsassemble_persistence::LocalRoomManagerAuthority),
+    Message(ConsumedRoomHumanTicket),
 }
 
 async fn consume_attachment_upload_authority(
@@ -409,6 +494,9 @@ async fn consume_attachment_upload_authority(
         }
         ConsumedAttachmentUploadTicket::Appearance(authority) => {
             Ok(AttachmentUploadAuthority::Appearance(authority))
+        }
+        ConsumedAttachmentUploadTicket::Message(authority) => {
+            Ok(AttachmentUploadAuthority::Message(authority))
         }
     }
 }
@@ -511,9 +599,10 @@ impl From<PersistenceError> for ProfileHttpError {
             PersistenceError::CommandRejected { code, message } => {
                 let status = match code {
                     "session_revoked" => StatusCode::UNAUTHORIZED,
-                    "attachment_missing" | "appearance_asset_missing" | "user_profile_missing" => {
-                        StatusCode::NOT_FOUND
-                    }
+                    "attachment_missing"
+                    | "appearance_asset_missing"
+                    | "message_attachment_missing"
+                    | "user_profile_missing" => StatusCode::NOT_FOUND,
                     "invite_invalid"
                     | "invite_revoked"
                     | "token_expired"

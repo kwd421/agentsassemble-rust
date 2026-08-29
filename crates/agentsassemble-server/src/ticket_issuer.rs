@@ -1,6 +1,7 @@
 use agentsassemble_domain::{
     AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID,
-    LOCAL_OPERATOR_USER_ID, is_room_appearance_asset_id, validate_room_id,
+    LOCAL_OPERATOR_USER_ID, is_message_attachment_id, is_room_appearance_asset_id,
+    validate_room_id,
 };
 use agentsassemble_persistence::PersistenceError;
 use agentsassemble_protocol::{OperatorHttpTicketResponse, TicketResponse};
@@ -179,6 +180,66 @@ pub async fn issue_message_pins_write_ticket(
     let issued = state
         .tickets
         .issue_message_pins_write(identity.room_id, identity.user_id, identity.participant_id)
+        .await
+        .map_err(|_| TicketIssueError::Unavailable)?;
+    Ok(operator_http_response(state, issued))
+}
+
+/// Issues an exact message-attachment upload credential for the current local room human.
+///
+/// # Errors
+///
+/// Returns a bounded room, write-authority, persistence, or ticket-capacity error.
+pub async fn issue_message_attachment_upload_ticket(
+    state: &AppState,
+    requested_room_id: &str,
+) -> Result<OperatorHttpTicketResponse, TicketIssueError> {
+    let identity = resolve_local_room_user(state, requested_room_id).await?;
+    state
+        .store
+        .authorize_local_message_attachment_upload(
+            &identity.room_id,
+            &identity.user_id,
+            &identity.participant_id,
+        )
+        .await
+        .map_err(TicketIssueError::Persistence)?;
+    let issued = state
+        .tickets
+        .issue_message_attachment_upload(
+            identity.room_id,
+            identity.user_id,
+            identity.participant_id,
+        )
+        .await
+        .map_err(|_| TicketIssueError::Unavailable)?;
+    Ok(operator_http_response(state, issued))
+}
+
+/// Issues one asset-bound message-attachment read credential for the current local room human.
+///
+/// # Errors
+///
+/// Returns a bounded asset, room, identity, persistence, or ticket-capacity error.
+pub async fn issue_message_attachment_read_ticket(
+    state: &AppState,
+    requested_room_id: &str,
+    attachment_id: &str,
+) -> Result<OperatorHttpTicketResponse, TicketIssueError> {
+    if !is_message_attachment_id(attachment_id) {
+        return Err(TicketIssueError::InvalidAsset(
+            "invalid message attachment id".to_owned(),
+        ));
+    }
+    let identity = resolve_local_room_user(state, requested_room_id).await?;
+    let issued = state
+        .tickets
+        .issue_bound_message_attachment_read(
+            identity.room_id,
+            identity.user_id,
+            identity.participant_id,
+            attachment_id.to_owned(),
+        )
         .await
         .map_err(|_| TicketIssueError::Unavailable)?;
     Ok(operator_http_response(state, issued))

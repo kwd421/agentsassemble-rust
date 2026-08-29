@@ -1,4 +1,4 @@
-use agentsassemble_domain::{InviteScope, is_room_appearance_asset_id};
+use agentsassemble_domain::{InviteScope, is_message_attachment_id, is_room_appearance_asset_id};
 use agentsassemble_persistence::PersistenceError;
 use agentsassemble_protocol::{CommandResolution, RoomAction};
 use axum::{
@@ -61,6 +61,8 @@ registered_routes! {
         same_origin_public "/api/session-tickets/preferences-write" => post(issue_preferences_write_ticket),
         same_origin_public "/api/session-tickets/message-pins-read" => post(issue_message_pins_read_ticket),
         same_origin_public "/api/session-tickets/message-pins-write" => post(issue_message_pins_write_ticket),
+        same_origin_public "/api/session-tickets/message-attachment-upload" => post(issue_message_attachment_upload_ticket),
+        same_origin_public "/api/session-tickets/message-attachment/{attachment_id}" => post(issue_message_attachment_read_ticket),
         same_origin_public "/api/session-tickets/room-appearance/{asset_id}" => post(issue_room_appearance_ticket),
         same_origin_public "/api/room-invite/leave" => post(leave_room),
     }
@@ -206,6 +208,50 @@ async fn issue_message_pins_write_ticket(
     .into_response())
 }
 
+async fn issue_message_attachment_upload_ticket(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Response, SessionExchangeError> {
+    let authorization = authorize_exchange(&state, request).await?;
+    state
+        .store
+        .authorize_human_session_message_attachment_upload(&authorization)
+        .await?;
+    let ttl_seconds = session_ticket_ttl(&state, &authorization);
+    let issued = state
+        .tickets
+        .issue_human_session_message_attachment_upload(authorization)
+        .await
+        .map_err(|_| SessionExchangeError::capacity())?;
+    Ok(Json(SessionTicketResponse {
+        ticket: issued.ticket,
+        ttl_seconds,
+    })
+    .into_response())
+}
+
+async fn issue_message_attachment_read_ticket(
+    State(state): State<AppState>,
+    Path(attachment_id): Path<String>,
+    request: Request,
+) -> Result<Response, SessionExchangeError> {
+    let authorization = authorize_exchange(&state, request).await?;
+    if !is_message_attachment_id(&attachment_id) {
+        return Err(SessionExchangeError::invalid_message_attachment());
+    }
+    let ttl_seconds = session_ticket_ttl(&state, &authorization);
+    let issued = state
+        .tickets
+        .issue_human_session_bound_message_attachment_read(authorization, attachment_id)
+        .await
+        .map_err(|_| SessionExchangeError::capacity())?;
+    Ok(Json(SessionTicketResponse {
+        ticket: issued.ticket,
+        ttl_seconds,
+    })
+    .into_response())
+}
+
 async fn issue_room_appearance_ticket(
     State(state): State<AppState>,
     Path(asset_id): Path<String>,
@@ -316,6 +362,14 @@ impl SessionExchangeError {
         }
     }
 
+    fn invalid_message_attachment() -> Self {
+        Self {
+            status: StatusCode::BAD_REQUEST,
+            code: "message_attachment_invalid".to_owned(),
+            message: "A canonical message attachment is required.".to_owned(),
+        }
+    }
+
     fn from_body(error: BodyDecodeError) -> Self {
         match error {
             BodyDecodeError::RequestTimeout => Self {
@@ -401,6 +455,14 @@ impl SessionExchangeError {
 impl From<PersistenceError> for SessionExchangeError {
     fn from(error: PersistenceError) -> Self {
         match error {
+            PersistenceError::CommandRejected {
+                code: code @ ("permission_denied" | "muted"),
+                message,
+            } => Self {
+                status: StatusCode::FORBIDDEN,
+                code: code.to_owned(),
+                message,
+            },
             PersistenceError::CommandRejected {
                 code: "session_revoked",
                 ..

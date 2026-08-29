@@ -16,12 +16,14 @@ use tokio::{sync::Mutex, time::Instant};
 use uuid::Uuid;
 
 mod human_session;
+mod message_attachments;
 
 pub(crate) use human_session::{
     ConsumedAttachmentUploadTicket, ConsumedSocketTicket, SocketTicketHint,
 };
 pub use human_session::{ConsumedHumanSessionSocketTicket, ConsumedProfileTicket};
 use human_session::{HumanSessionGrant, HumanSessionGrantPurpose};
+pub(crate) use message_attachments::ConsumedMessageAttachmentReadTicket;
 
 struct StoredTicketGrant {
     authority: TicketAuthority,
@@ -73,6 +75,8 @@ pub enum RoomHttpPurpose {
     PreferencesWrite,
     MessagePinsRead,
     MessagePinsWrite,
+    MessageAttachmentUpload,
+    BoundMessageAttachmentRead { attachment_id: String },
     BoundAppearanceRead { asset_id: String },
 }
 

@@ -1,7 +1,8 @@
 use std::collections::BTreeSet;
 
 use agentsassemble_domain::{
-    AuthenticatedPrincipal, MAX_MESSAGE_ATTACHMENTS_PER_EVENT, MAX_RASTER_BYTES,
+    AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID,
+    LOCAL_OPERATOR_USER_ID, MAX_MESSAGE_ATTACHMENTS_PER_EVENT, MAX_RASTER_BYTES,
     MESSAGE_ATTACHMENT_ID_PREFIX, RoomEvent, is_message_attachment_id,
     require_message_write_authority,
 };
@@ -134,6 +135,40 @@ struct PreparedMessageAttachment {
 }
 
 impl SqliteStore {
+    /// Proves that the canonical local room human may currently upload a message attachment.
+    ///
+    /// # Errors
+    ///
+    /// Fails closed for stale, non-local, muted, or otherwise non-writable authority.
+    pub async fn authorize_local_message_attachment_upload(
+        &self,
+        room_id: &str,
+        user_id: &str,
+        participant_id: &str,
+    ) -> Result<(), PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        current_local_message_principal(&mut transaction, room_id, user_id, participant_id).await?;
+        transaction.commit().await?;
+        Ok(())
+    }
+
+    /// Proves that a durable human session may currently upload a message attachment.
+    ///
+    /// # Errors
+    ///
+    /// Fails closed for expired, replaced, read-only, muted, or otherwise stale authority.
+    pub async fn authorize_human_session_message_attachment_upload(
+        &self,
+        authorization: &HumanSessionAuthorization,
+    ) -> Result<(), PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        let (current, _) =
+            revalidate_human_session(&mut transaction, authorization, Utc::now()).await?;
+        require_current_message_writer(&mut transaction, current.principal()).await?;
+        transaction.commit().await?;
+        Ok(())
+    }
+
     /// Stores one pending message attachment for the current writable room principal.
     ///
     /// Arbitrary files retain their exact bytes. Only bounded decoded safe raster formats are
@@ -154,6 +189,31 @@ impl SqliteStore {
         let mut transaction = self.pool.begin().await?;
         require_current_message_writer(&mut transaction, principal).await?;
         let metadata = store_pending_in_transaction(&mut transaction, principal, prepared).await?;
+        transaction.commit().await?;
+        Ok(metadata)
+    }
+
+    /// Stores one pending message attachment for the canonical local room human.
+    ///
+    /// # Errors
+    ///
+    /// Fails closed when the consumed grant identity is stale, non-local, muted, or otherwise
+    /// cannot write the room, or when attachment validation and storage fail.
+    pub async fn store_local_message_attachment(
+        &self,
+        room_id: &str,
+        user_id: &str,
+        participant_id: &str,
+        filename: &str,
+        content_type: &str,
+        content: Vec<u8>,
+    ) -> Result<MessageAttachmentMetadata, PersistenceError> {
+        let prepared = prepare_message_attachment(filename, content_type, content).await?;
+        let mut transaction = self.pool.begin().await?;
+        let principal =
+            current_local_message_principal(&mut transaction, room_id, user_id, participant_id)
+                .await?;
+        let metadata = store_pending_in_transaction(&mut transaction, &principal, prepared).await?;
         transaction.commit().await?;
         Ok(metadata)
     }
@@ -237,6 +297,43 @@ impl SqliteStore {
         transaction.commit().await?;
         Ok(attachment)
     }
+}
+
+async fn current_local_message_principal(
+    transaction: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    user_id: &str,
+    participant_id: &str,
+) -> Result<AuthenticatedPrincipal, PersistenceError> {
+    let identity =
+        resolve_room_user_identity(transaction, room_id, user_id, participant_id).await?;
+    if identity.user_id != LOCAL_OPERATOR_USER_ID
+        || identity.participant_id != LOCAL_OPERATOR_PARTICIPANT_ID
+    {
+        return Err(rejected(
+            "permission_denied",
+            "Only the canonical local room human may use a local attachment grant.",
+        ));
+    }
+    let participant =
+        load_active_participant(transaction, &identity.room_id, &identity.participant_id).await?;
+    let principal = AuthenticatedPrincipal {
+        principal_id: identity.user_id,
+        participant_id: identity.participant_id,
+        display_name: participant.display_name.clone(),
+        room_id: identity.room_id,
+        client_kind: ClientKind::Browser,
+        invite_scope: InviteScope::ReadWrite,
+        is_operator: true,
+        capabilities: CapabilitySet::local_operator(ClientKind::Browser, InviteScope::ReadWrite),
+    };
+    require_message_write_authority(&principal, &participant).map_err(|error| {
+        PersistenceError::CommandRejected {
+            code: error.code,
+            message: error.message,
+        }
+    })?;
+    Ok(principal)
 }
 
 async fn read_bound_message_attachment(
