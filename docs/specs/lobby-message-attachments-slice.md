@@ -158,13 +158,23 @@ Rust-owned upload, message-binding, authorized-read, and provider-read lifecycle
   maintained capability filesystem rather than implementing path traversal or Windows
   reparse handling. It opens every absolute parent component without following links and
   then performs target inspection, staging creation, and rename relative to that retained
-  directory handle. The staging directory is `0700` and current-user-owned on Unix; on
-  Windows the first retained staging handle denies sharing. A process that acquired a
-  conflicting handle in the post-create interval therefore makes the save fail before the
-  existing owner-only inheritable DACL policy is applied and verified; after that exclusive
-  open, another handle cannot enter the directory during hardening or payload creation. Its
-  payload is likewise `0600` or owner-only, is fully written and synced, and moves from the
-  retained private directory into the retained destination. Before that rename the desktop
+  directory handle. The staging directory is `0700` and current-user-owned on Unix. On
+  Windows, the named parent must still have the same file identity as the retained parent
+  handle before the safe native create call installs a protected, current-owner-only,
+  inheritable DACL at creation time. The unpredictable staging name is then opened without
+  following reparse points relative to the retained parent, with read/write/delete sharing
+  denied, and its current owner plus exact inheritable DACL are verified through that
+  retained handle before payload creation. Share denial alone does not cover `WRITE_DAC`;
+  creation-time ownership and DACL placement prevent a different parent-authorized
+  principal from substituting an object it owns and using the owner's implicit `WRITE_DAC`
+  during payload creation. If the parent path is redirected after the identity check, the
+  relative open or owner/DACL validation fails closed; the implementation does not delete
+  an object it could not validate, so an adversarial race may leave one empty private
+  directory outside the retained parent. Safe Win32 wrappers currently require the selected
+  Windows path to be valid Unicode, and an unrepresentable path is rejected rather than
+  falling back to a racy creation path. Its payload is likewise `0600` or owner-only, is
+  fully written and synced, and moves from the retained private directory into the retained
+  destination. Before that rename the desktop
   owner also writes the platform download-origin marker: macOS `com.apple.quarantine` with
   the observed browser-download `0083` flags, or Windows `Zone.Identifier` with `ZoneId=3`.
   Marker storage failure rejects the save instead of producing an unmarked fallback. Other
@@ -323,6 +333,16 @@ runtime state and package returned to the recoverable verification root. Focused
 tests, the full `make verify`, warning-denied Clippy, and a Windows all-target/all-feature
 cross-check passed. The Windows exclusive-handle test is compiled for its native target,
 but packaged Windows execution remains explicitly unverified without a Windows host.
+
+The subsequent Windows `WRITE_DAC` correction was verified by a warning-denied Windows
+all-target/all-feature cross-build and the full host `make verify`: architecture and
+800-line gates, copied production frontend and original-CSS verification, 93 frontend
+files with 591 tests, 26 desktop tests, every Rust/TCP/integration/doc test, Clippy, and
+the diff gate passed. Windows-only native tests now cover creation and retained access to
+the private staging directory plus the existing-handle/later-handle sharing boundary.
+They compile but cannot run on the available macOS host, so Windows packaged execution
+and cross-principal runtime behavior remain explicitly unverified until a Windows host is
+available.
 
 Observed follow-up: an interrupted macOS provider/server test run left 159
 `agentsassemble-*-exec-*` executable-staging directories (more than 10 GiB total),

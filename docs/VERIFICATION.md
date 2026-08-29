@@ -4067,3 +4067,32 @@ root contained only its zero-byte root lock.
   `47c75d1..afd3997` APPROVE C0/H0/M0. Final Daybreaker Blue High verdict:
   `11fa808..afd3997` and `47c75d1..afd3997` APPROVE C0/H0/M0. Neither review used
   Deep Scan or another automated security scanner.
+
+## Windows attachment-save creation security: 2026-08-29
+
+- The critical web review found one Medium in `5b7f8e4..1fe8ff2`, and Daybreaker Blue
+  High independently confirmed it: Windows share mode zero blocks later read, write, and
+  delete categories but not `WRITE_DAC`. Because the post-create hardening verified only
+  the DACL, a principal able to replace the staging name with a directory it owned could
+  retain the owner's implicit `WRITE_DAC` and relax that DACL during payload creation.
+- Commit `77624ca` moved the owner-only protected inheritable DACL to directory creation,
+  verifies the named parent against the already retained parent handle, reopens the random
+  staging name relative to that handle without following reparse points, and validates both
+  current owner and exact inheritable DACL through the retained staging handle before any
+  payload exists. The Windows filesystem policy remains in `private_fs`; the save module
+  owns only path/handle identity and relative access. No fallback, compatibility path,
+  timer, background cleanup, or reusable security framework was added.
+- The concrete extra cost is two Windows-only parent identity handles, one security
+  descriptor construction, and one owner query per explicit save. A hostile parent-path
+  replacement can leave one empty private directory outside the retained parent because
+  unvalidated objects are not deleted. Windows paths not representable as Rust UTF-8 are
+  rejected because the safe creation wrapper accepts `str`; the code does not trade the
+  fixed race for a lossy path conversion. No CPU, memory, disk, or latency improvement is
+  claimed.
+- Warning-denied Windows all-target/all-feature cross-compilation passed. Full
+  `make verify` passed architecture and 800-line gates, copied-frontend/original-CSS
+  verification, frontend 93 files / 591 tests, desktop 26 tests, all Rust/TCP/integration
+  and doc tests, Clippy, and the diff gate. Windows-only private-creation and exclusive
+  handle tests compile but could not run on the available macOS host; packaged Windows and
+  cross-principal runtime verification remain pending. No Deep Scan or automated security
+  scanner ran.
