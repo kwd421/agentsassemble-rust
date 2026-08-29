@@ -99,8 +99,10 @@ replacement review session with Pro reasoning until its plan is approved, then e
 switch and verify very-high reasoning for subsequent reviews.
 
 Cross-review every pushed batch with that web session and Daybreaker Blue High. Reviewers
-must inspect both the individual commits and their cumulative range. Do not run Deep Scan
-or another automated security scan unless the user explicitly requests it.
+must inspect both the individual commits and their cumulative range. The user has standing-
+approved Codex Security Standard Scan for the Daybreaker review; use that single-pass scan
+instead of a manual Daybreaker review. Never use Deep Scan. Other automated security scans
+still require explicit user approval.
 
 Use Computer Use only during active packaged-frontend verification. When verification
 ends, normally quit the exact app and its owned children, reset the Computer Use session,

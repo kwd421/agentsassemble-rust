@@ -283,8 +283,9 @@ speculate about it.
   add a cache or transport abstraction from intuition alone.
 - Commit each buildable, independently verifiable and rollbackable change below 1,000
   changed lines. Push at three completed features or 2,000 aggregate changed lines,
-  then obtain manual web-session and Daybreaker reviews for security, structure,
-  duplicated policy, overimplementation, SSoT, lifecycle cleanup, and removable state.
+  then obtain a manual web-session review and a Daybreaker Blue High Codex Security
+  Standard Scan for security, structure, duplicated policy, overimplementation, SSoT,
+  lifecycle cleanup, and removable state. Deep Scan is not part of this workflow.
 
 Observed packaged download verification on 2026-08-29 used an isolated release bundle
 and authority. The local desktop file card saved the 3,307-byte `README.md` with SHA-256
@@ -405,6 +406,29 @@ duplicate terminal command parser and adds only one bounded file write, read, an
 per prompted approved operation; the receipt is not synced because it coordinates a
 live process and makes no crash-durability claim. No background task, cache, generic
 permission framework, model substitution, print mode, or fallback was added.
+
+Cross-review of that correction found a same-workspace multi-session ownership defect.
+The shared workspace hook intentionally keeps the first live helper executable as its
+stable dispatcher, but the hook had also used that dispatcher's parent for the one-use
+approval receipt and staged-media state. A second Agent Session therefore validated and
+consumed state in its own private directory while the shared hook wrote into the first
+Session's directory. Hook state now resolves from the exact process-local absolute helper
+command belonging to the current Session. The owner rejects a noncanonical command,
+symlink, non-file helper, non-private Unix helper, or non-private parent before reading or
+writing state. A deterministic two-Session regression keeps one shared workspace hook,
+routes the second Session's approval into its own directory, consumes it there, and proves
+the first directory remains untouched. The accepted steady-state cost is one local helper
+and parent metadata validation per pre/post hook; no task, cache, durable state, generic
+registry, retry, or fallback was added. All 133 provider tests and the complete repository
+verification passed.
+
+The same verification exposed a pre-existing Windows-only OpenCode compile error: its
+non-Unix spawn path called the existing protocol-owned `spawn_error` constructor without
+importing it. Importing that owner is the whole correction and adds no new error policy or
+compatibility path. A Windows all-target/all-feature source cross-check then passed. The
+warning-denied Windows Clippy invocation still reports unrelated existing Windows-only
+lint debt, and native Windows execution remains unverified without a Windows host; neither
+is represented as passing evidence for this change.
 
 A fresh packaged release then ran the copied UI with exact model
 `gemini-3.6-flash`, Medium effort, and room-read-only permission. The model invoked the
