@@ -3958,3 +3958,24 @@ build, frontend 89 files / 555 tests, desktop 20, domain 29, persistence 199, pr
 the final diff gate. No CPU, memory, disk, or latency improvement beyond avoiding the
 premature BLOB copy is claimed. HTTP grants/routes, Agent Session reads,
 copied-frontend connection, packaged verification, and real providers remain pending.
+
+## Message-attachment transfer bridge threshold review: 2026-08-29
+
+- The critical web reviewer approved the initial pushed bridge range
+  `bbf5b0f..c74e268` with C0/H0/M0. Daybreaker found one Medium omitted normal-error
+  classification: `muted` and `permission_denied` upload-ticket rejections became
+  `TicketFailure::Broken`, so the desktop could stop a healthy owned runtime for a
+  valid application denial.
+- Commit `46e3a4e` aligned the desktop classifier with the server-owned normal control
+  codes, including `room_authority_changed`, and added an owned-process preservation
+  regression. Daybreaker approved that correction and cumulative range with C0/H0/M0.
+- The web re-review found one Medium in the first regression: it used a fixed sleep and
+  compared only the retained PID handle, so it did not deterministically prove that the
+  child remained alive and conflicted with the repository's barrier/event test rule.
+- Commit `9c3bbb5` replaced the sleep with an exact child-ready/stdin-release barrier,
+  checks the same PID and `try_wait() == None` after every normal denial, and joins the
+  released child successfully. No production state or abstraction was added.
+- Final web verdict: `46e3a4e..9c3bbb5` and `bbf5b0f..9c3bbb5`
+  `APPROVE — Critical 0 / High 0 / Medium 0`. Final Daybreaker verdict for both ranges:
+  `APPROVE — Critical 0 / High 0 / Medium 0`. Neither review used Deep Scan or another
+  automated security scanner.
