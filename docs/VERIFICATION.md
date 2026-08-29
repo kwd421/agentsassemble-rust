@@ -4096,7 +4096,12 @@ root contained only its zero-byte root lock.
   inaccurate. Commit `d8f4aa3` removed that extension path and calls the dependency's
   explicit safe wrapper with `SE_FILE_OBJECT`; the retained-handle owner and DACL
   validation contract is otherwise unchanged.
-- After `d8f4aa3`, warning-denied Windows all-target/all-feature cross-compilation and full
+- The critical web review found a second Medium in `77624ca..60d8a97`: cap-std maps a
+  write-only Windows payload open to `GENERIC_WRITE`, while the following handle-based
+  DACL update requires `WRITE_DAC`. Commit `0369d6d` gives that one create-new payload
+  handle exactly `GENERIC_WRITE | WRITE_DAC`; the existing private-file policy still owns
+  the DACL update and validation, with no new abstraction or dependency.
+- After `0369d6d`, warning-denied Windows all-target/all-feature cross-compilation and full
   `make verify` passed architecture and 800-line gates, copied-frontend/original-CSS
   verification, frontend 93 files / 591 tests, desktop 26 tests, all Rust/TCP/integration
   and doc tests, Clippy, and the diff gate. Windows-only private-creation and exclusive
