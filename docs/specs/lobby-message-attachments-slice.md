@@ -509,3 +509,19 @@ unmeasured limiter, ticket store, retry, or compatibility path. A real TCP regre
 declares a 14-MiB body, sends no body bytes, and receives the invalid-invite rejection
 within two seconds; focused invite/profile tests, the exact frontend request test, and
 the production frontend build pass.
+
+The second Standard Scan Medium is a valid availability observation but its proposed
+fixed participant/room quotas are not accepted for this slice. A repository-wide policy
+search confirms that current code has one physical-retention owner only:
+`asset_storage.rs` applies the 4,096-item/8-GiB absolute ceiling across all four asset
+tables, while `message_attachments.rs` alone deletes expired message-pending rows on its
+write path and schema foreign keys alone delete event- or room-owned bound rows. No active
+per-uploader or per-room count/byte policy remains. Limiting only pending rows would not
+close the reported outcome because the same writable participant can bind eight files to
+successive ordinary messages and continue retaining them; choosing a fairness threshold
+therefore remains an operating-product decision, not an absolute security constant. The
+accepted residual process-wide occupancy threat above remains explicit until the user
+selects a configurable policy at that same accounting owner. No eviction, speculative
+rate state, background cleanup, or replacement of a referenced asset was added. Focused
+tests confirm exact pending expiry, canonical bound ownership, cross-owner retained-row
+accounting, and the deliberate absence of the removed generic uploader/invite quotas.
