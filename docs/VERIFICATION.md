@@ -4112,3 +4112,24 @@ root contained only its zero-byte root lock.
   `77624ca..fb03430` APPROVE C0/H0/M0. After receiving the web finding explicitly,
   Daybreaker Blue High re-reviewed `1175969..fb03430` and `77624ca..fb03430` and also
   returned APPROVE C0/H0/M0.
+
+## Persona library schema and atomic repository candidate: 2026-08-30
+
+Commits `33cd4f6` and `fc47a37` give normalized persona assets one SQLite custody owner.
+The fresh-only schema has exactly the canonical ID, private card JSON, and optional thumbnail
+PNG; it retains no raw import, filesystem path, migration state, quota ledger, or duplicate safe
+summary. One upsert replaces the card and thumbnail atomically. The real-SQLite regression proves
+that an invalid same-ID replacement preserves the prior card, a valid thumbnail-free replacement
+removes the prior thumbnail, the original summary ordering is retained, and the replacement
+survives close/reopen with no extra row.
+
+The list query does not materialize thumbnail BLOBs and computes each casefolded sort key once.
+The focused warm test body completed in 0.04 seconds (`real 0.26` seconds including Cargo process
+startup). No broader CPU, memory, disk, or production-latency improvement is claimed. Full
+`make verify` passed the architecture and 800-line gates, workspace and desktop checks, copied-CSS
+verification, frontend 94 files / 593 tests, persistence 210 tests, every Rust/TCP/integration/doc
+test, warning-denied Clippy, and the diff gate. The build initially stopped with `ENOSPC`; removing
+only this repository's regenerable Cargo outputs recovered about 40 GiB, after which the unchanged
+verification completed. User-owned files and `.agents/` were untouched. No provider, Computer Use,
+Deep Scan, or automated security scanner ran. These commits remain local until the configured
+three-feature-or-2,000-line push threshold, so manual cross-review is not yet claimed.

@@ -139,6 +139,25 @@ without discarding an otherwise valid card. Real ZIP,
 PNG, and RPack fixtures verify the combined path, and a traversal archive verifies rejection
 before `card.json` is read.
 
+The SQLite library repository owns one row per canonical persona ID: normalized private card
+JSON and, for cards only, one optional canonical PNG. A single upsert replaces both values, so
+validation or statement failure retains the prior exact row and a thumbnail cannot outlive the
+card that selected it. Reimport without a thumbnail removes the prior thumbnail in that same
+statement. No raw upload, source path, timestamp, pending state, quota ledger, cleanup task, or
+generic repository layer was added. This is the smallest durable owner for the reachable picker
+contract and keeps persona custody separate from profile, pre-join, room-appearance, and message
+attachments.
+
+The concrete avoidable cost was loading a thumbnail BLOB of up to 10 MiB while listing summaries.
+The list query projects only the ID, normalized card JSON, and a SQLite presence bit; card reads and
+thumbnail reads are separate indexed operations. Sorting computes the original default-casefolded
+name key once per item. This preserves fail-closed corrupt-row handling, card-before-module ordering,
+private-body exclusion, and exact replacement semantics. The accepted trade-off is decoding each
+bounded card JSON on a library list instead of introducing a second summary copy or cache that could
+drift from the private owner. A warm real-SQLite replacement/list/read/reopen regression completed its
+test body in 0.04 seconds on the development host; that is harness evidence, not a production latency
+claim.
+
 ## Manual-review findings
 
 - Daybreaker Blue High returned five Medium findings for the first pushed importer range:
