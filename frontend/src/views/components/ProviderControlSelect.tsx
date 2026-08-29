@@ -68,6 +68,7 @@ export default function ProviderControlSelect({
   const activeOptionGroup = showGroupLabels
     ? optionGroups.find((group) => group.label === activeGroup)
     : undefined;
+  const portalRoot = controlRef.current?.closest('[role="dialog"]') ?? document.body;
 
   useEffect(() => {
     if (!open) return;
@@ -407,7 +408,7 @@ export default function ProviderControlSelect({
                 })}
               </div>
           </div>,
-          document.body
+          portalRoot
         )}
       {modelDetails.popover}
     </div>
