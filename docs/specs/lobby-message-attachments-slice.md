@@ -283,9 +283,10 @@ speculate about it.
   add a cache or transport abstraction from intuition alone.
 - Commit each buildable, independently verifiable and rollbackable change below 1,000
   changed lines. Push at three completed features or 2,000 aggregate changed lines,
-  then obtain a manual web-session review and a Daybreaker Blue High Codex Security
-  Standard Scan for security, structure, duplicated policy, overimplementation, SSoT,
-  lifecycle cleanup, and removable state. Deep Scan is not part of this workflow.
+  then obtain manual web-session and Daybreaker Blue High source reviews for security,
+  structure, duplicated policy, overimplementation, SSoT, lifecycle cleanup, and removable
+  state. The Standard Scan already started for pushed HEAD `b46aa02` is a one-time review;
+  Deep Scan and later automated scans are not part of this workflow.
 
 Observed packaged download verification on 2026-08-29 used an isolated release bundle
 and authority. The local desktop file card saved the 3,307-byte `README.md` with SHA-256
@@ -468,3 +469,15 @@ The focused projection/typing/socket tests passed 36 cases, the complete fronten
 suite passed 592, and the final `make verify` passed every architecture, source-growth,
 formatting, generated-binding, original-CSS, desktop, workspace, TCP/integration,
 documentation, warning-denied Clippy, and diff gate.
+
+Manual critical-web review of pushed range `c6cf861..b46aa02` returned `APPROVE`
+with Critical 0 / High 0 / Medium 0 / Low 0 and confirmed that the shared-workspace
+Antigravity Session-state defect is closed. One authorized Codex Security Standard
+Scan (`dd07d7d4-3762-4d15-8ca3-7ea0ed8d4529`) returned `REVISE` with Critical 0 /
+High 1 / Medium 2 / Low 0. Its findings are: Windows helper approval applies POSIX
+single-quote semantics to a command executed by `cmd.exe`; unauthenticated pre-join
+avatar upload reads the bounded JSON body before validating invite and browser
+credentials; and one writable participant can retain pending attachments until the
+process-wide asset ceiling is exhausted. The first two require corrections at their
+current owners. The third must be resolved against the explicit no-fixed-operating-quota
+contract above rather than restoring the original per-uploader or per-room constants.
