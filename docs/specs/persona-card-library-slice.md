@@ -270,7 +270,9 @@ become visible again. The Rust boundary exposes no secret read or serialization 
 UI, runtime injection, and remote-host authority remain explicitly incomplete.
 
 The implementation uses maintained `keyring` 4.1.6 with its v1 platform stores instead of owning
-Keychain, Credential Manager, Secret Service, encryption, or persistence code. Inspection of the
+Keychain, Credential Manager, Secret Service, encryption, or persistence code. The macOS status
+path uses maintained `security-framework` 3.7.0 item search without requesting data, attributes, or
+references. Inspection of the
 dependency showed that `Entry::new` collapses every store-initialization error into
 `NoDefaultStore`; treating that result as an absent backend would silently turn a locked or failed
 installed store into an environment fallback. The owner therefore checks `Entry::store_status`
@@ -291,6 +293,12 @@ formatting, whitespace, architecture, and source-growth gates passed.
 
 ## Manual-review findings
 
+- Daybreaker Blue High found one Medium in the first pushed registration/credential range:
+  `keyring`'s macOS `get_credential()` materialized password bytes despite its name, so the status
+  path could request secret ACL access and the metadata-only documentation was false. Commit
+  `0906e4d` replaces it with a `security-framework` generic-password existence query that requests
+  no data, attributes, or references, keeps every non-not-found error fail-closed, and verifies a
+  real missing-item metadata lookup without creating or deleting a Keychain item.
 - The critical web session and Daybreaker Blue High manually reviewed pushed range
   `087ba1a..45c8302`. Both found no Critical, High, Medium, or Low findings and
   returned `APPROVE`. Neither reviewer ran Deep Scan or another automated security
