@@ -46,19 +46,44 @@ export async function exchangeSessionHttpTicket(
   sessionToken: string
 ): Promise<string> {
   const payload = await exchangeSessionTicket(purpose, sessionToken);
-  const keys = Object.keys(payload).sort();
+  return parseSessionHttpTicket(payload);
+}
+
+export function parseSessionHttpTicket(payload: unknown): string {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new Error("Session HTTP ticket response is invalid.");
+  }
+  const record = payload as Record<string, unknown>;
+  const keys = Object.keys(record).sort();
   if (
     keys.length !== 2 ||
     keys[0] !== "ticket" ||
     keys[1] !== "ttl_seconds" ||
-    typeof payload.ticket !== "string" ||
-    !/^[0-9a-f]{64}$/.test(payload.ticket) ||
-    !Number.isSafeInteger(payload.ttl_seconds) ||
-    Number(payload.ttl_seconds) < 1
+    typeof record.ticket !== "string" ||
+    !/^[0-9a-f]{64}$/.test(record.ticket) ||
+    !Number.isSafeInteger(record.ttl_seconds) ||
+    Number(record.ttl_seconds) < 1
   ) {
     throw new Error("Session HTTP ticket response is invalid.");
   }
-  return payload.ticket;
+  return record.ticket;
+}
+
+export function isPrivateNoStoreResponse(
+  response: Response,
+  contentType: string
+): boolean {
+  const cacheDirectives = response.headers
+    .get("Cache-Control")
+    ?.split(",")
+    .map((directive) => directive.trim().toLowerCase());
+  return Boolean(
+    response.headers.get("Content-Type") === contentType &&
+      cacheDirectives?.length === 2 &&
+      new Set(cacheDirectives).size === 2 &&
+      cacheDirectives.includes("private") &&
+      cacheDirectives.includes("no-store")
+  );
 }
 
 async function profileTargetToken(url: string, sessionToken: string): Promise<string> {

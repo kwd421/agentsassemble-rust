@@ -1,4 +1,9 @@
-import { fileToBase64, responseError } from "./http";
+import {
+  fileToBase64,
+  isPrivateNoStoreResponse,
+  parseSessionHttpTicket,
+  responseError,
+} from "./http";
 import {
   requestDesktopAppearanceBoundReadTicket,
   requestDesktopAppearancePendingReadTicket,
@@ -37,19 +42,7 @@ function invalidResponse(): never {
 }
 
 function requireResponseMetadata(response: Response, contentType: string) {
-  const cacheDirectives = response.headers
-    .get("Cache-Control")
-    ?.split(",")
-    .map((directive) => directive.trim().toLowerCase());
-  if (
-    response.headers.get("Content-Type") !== contentType ||
-    cacheDirectives?.length !== 2 ||
-    new Set(cacheDirectives).size !== 2 ||
-    !cacheDirectives.includes("private") ||
-    !cacheDirectives.includes("no-store")
-  ) {
-    invalidResponse();
-  }
+  if (!isPrivateNoStoreResponse(response, contentType)) invalidResponse();
 }
 
 async function strictPngBlob(response: Response): Promise<Blob> {
@@ -119,19 +112,6 @@ function bearer(ticket: string): Headers {
   return headers;
 }
 
-function exactSessionTicket(value: unknown): string {
-  const grant = exactObject(value, ["ticket", "ttl_seconds"]);
-  if (
-    typeof grant.ticket !== "string" ||
-    !/^[0-9a-f]{64}$/.test(grant.ticket) ||
-    !Number.isSafeInteger(grant.ttl_seconds) ||
-    Number(grant.ttl_seconds) < 1
-  ) {
-    invalidResponse();
-  }
-  return grant.ticket;
-}
-
 async function fetchLocalAppearance(
   reference: RoomAppearanceAssetReference,
   authority: Extract<RoomAppearanceReadAuthority, { kind: "local" }>,
@@ -174,7 +154,12 @@ async function fetchRemoteAppearance(
   );
   if (!exchange.ok) throw await responseError(exchange);
   requireResponseMetadata(exchange, "application/json");
-  const ticket = exactSessionTicket(await exchange.json());
+  let ticket: string;
+  try {
+    ticket = parseSessionHttpTicket(await exchange.json());
+  } catch {
+    invalidResponse();
+  }
   return fetch(reference.url, {
     cache: "no-store",
     headers: bearer(ticket),

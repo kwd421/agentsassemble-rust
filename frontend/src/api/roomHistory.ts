@@ -1,6 +1,10 @@
 import type { VoiceParticipant } from "./room";
 import type { RoomEvent as GeneratedRoomEvent } from "../types/generatedRoomEvent";
 import {
+  uploadMessageAttachment,
+  type LobbyAttachmentRef,
+} from "./messageAttachments";
+import {
   fetchJson,
   fetchJsonWithToken,
   fileToBase64,
@@ -10,16 +14,6 @@ import {
   postJsonWithToken,
   queryString,
 } from "./http";
-
-export interface LobbyAttachmentRef {
-  id: string;
-  filename: string;
-  content_type: string;
-  size: number;
-  is_image: boolean;
-  url: string;
-  download_url: string;
-}
 
 export type LobbyAttachmentUploadOptions = {
   roomId?: string;
@@ -115,10 +109,19 @@ export function uploadLobbyAttachment(
   options: LobbyAttachmentUploadOptions | string = {}
 ): Promise<LobbyAttachmentRef> {
   const resolved = typeof options === "string" ? { roomId: options } : options;
+  if (!resolved.purpose || resolved.purpose === "room_attachment") {
+    return uploadMessageAttachment(
+      file,
+      resolved.roomId || "",
+      resolved.sessionToken
+        ? { kind: "remote", sessionToken: resolved.sessionToken }
+        : { kind: "local" }
+    );
+  }
   return fileToBase64(file).then((dataBase64) => {
     const body = {
       room_id: resolved.roomId || "",
-      purpose: resolved.purpose || "room_attachment",
+      purpose: resolved.purpose,
       invite_token: resolved.inviteToken || "",
       device_token: resolved.deviceToken || "",
       filename: file.name || "attachment.bin",
