@@ -75,11 +75,12 @@ impl BoundExecutable {
         if name.is_empty() || name.contains(['/', '\\', '\0']) {
             return Err(io::Error::other("companion executable name is invalid"));
         }
-        let mut staging_builder = tempfile::Builder::new();
-        staging_builder.prefix("agentsassemble-companion-");
         #[cfg(unix)]
-        staging_builder.permissions(std::fs::Permissions::from_mode(0o700));
-        let staging = staging_builder.tempdir()?;
+        let staging = ExecutableStaging::create()?;
+        #[cfg(not(unix))]
+        let staging = tempfile::Builder::new()
+            .prefix("agentsassemble-companion-")
+            .tempdir()?;
         let staged_path = staging.path().join(name);
         let mut source = self.file.try_clone()?;
         source.rewind()?;
@@ -192,6 +193,9 @@ impl BoundExecutable {
 pub(crate) struct PrivateExecutable {
     file: File,
     path: PathBuf,
+    #[cfg(unix)]
+    staging: ExecutableStaging,
+    #[cfg(not(unix))]
     staging: tempfile::TempDir,
 }
 
