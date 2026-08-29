@@ -74,6 +74,7 @@ mod ingress_trust;
 mod lifecycle_command_tracker;
 mod message_pins_web;
 mod participant_mute_runtime;
+mod persona_web;
 mod principal_mutation_admission;
 mod product_surface;
 mod profile_web;

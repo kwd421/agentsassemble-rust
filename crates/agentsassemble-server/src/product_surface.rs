@@ -50,6 +50,7 @@ fn registered_routes(
         crate::room_directory_web::HTTP_ROUTES,
         crate::room_preferences_web::HTTP_ROUTES,
         crate::message_pins_web::HTTP_ROUTES,
+        crate::persona_web::HTTP_ROUTES,
         crate::profile_web::HTTP_ROUTES,
         crate::public_ingress_web::HTTP_ROUTES,
         crate::human_invite_manager_web::HTTP_ROUTES,

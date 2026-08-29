@@ -141,6 +141,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::room_directory_web::routes())
         .merge(crate::room_preferences_web::routes())
         .merge(crate::message_pins_web::routes())
+        .merge(crate::persona_web::routes())
         .merge(crate::profile_web::routes())
         .merge(crate::server_identity_web::routes())
         .merge(crate::public_ingress_web::routes())
