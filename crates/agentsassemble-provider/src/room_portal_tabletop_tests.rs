@@ -29,6 +29,8 @@ async fn reservation_first_orders_random_tool_before_terminal_action() {
             durable_turn_generation: 1,
             execution_id: EXECUTION_ID,
             room_view: "Room: General\n#9 Human: roll",
+            attachment_ids: &[],
+            attachment_ingress: None,
             allowed_agent_ids: &[],
             tool_ingress: Some(ingress),
         })
@@ -48,6 +50,7 @@ async fn reservation_first_orders_random_tool_before_terminal_action() {
             "choose_random".to_owned(),
             "decline_to_speak".to_owned(),
             "publish_message".to_owned(),
+            "read_attachment".to_owned(),
             "read_discussion".to_owned(),
             "roll_dice".to_owned(),
         ])
@@ -128,6 +131,8 @@ async fn terminal_first_rejects_late_random_tool() {
             durable_turn_generation: 1,
             execution_id: EXECUTION_ID,
             room_view: "Room: General\n#10 Human: decide",
+            attachment_ids: &[],
+            attachment_ingress: None,
             allowed_agent_ids: &[],
             tool_ingress: Some(ingress),
         })
@@ -166,6 +171,8 @@ async fn closing_observation_retains_a_committing_tool_until_resolution() {
             durable_turn_generation: 1,
             execution_id: EXECUTION_ID,
             room_view: "Room: General\n#11 Human: roll",
+            attachment_ids: &[],
+            attachment_ingress: None,
             allowed_agent_ids: &[],
             tool_ingress: Some(ingress.clone()),
         })
@@ -200,6 +207,8 @@ async fn closing_observation_retains_a_committing_tool_until_resolution() {
                 durable_turn_generation: 2,
                 execution_id: "00000000-0000-4000-8000-000000000002",
                 room_view: "Room: General\n#12 Human: wait",
+                attachment_ids: &[],
+                attachment_ingress: None,
                 allowed_agent_ids: &[],
                 tool_ingress: Some(ingress.clone()),
             })
@@ -223,6 +232,8 @@ async fn closing_observation_retains_a_committing_tool_until_resolution() {
             durable_turn_generation: 2,
             execution_id: "00000000-0000-4000-8000-000000000002",
             room_view: "Room: General\n#12 Human: continue",
+            attachment_ids: &[],
+            attachment_ingress: None,
             allowed_agent_ids: &[],
             tool_ingress: Some(ingress),
         })

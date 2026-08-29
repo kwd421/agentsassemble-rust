@@ -16,11 +16,15 @@ use uuid::Uuid;
 
 use crate::{
     HumanSessionAuthorization, PersistenceError, SqliteStore,
+    agent_lifecycle::load_session,
     asset_storage::enforce_storage_replacement,
     authority::load_active_participant,
     human_session_authority::revalidate_human_session,
+    provider_turn_execution::load_execution_in,
     raster_assets::{is_safe_raster_content_type, validate_preserved_safe_raster},
+    room_turns::support::{load_event, load_participant},
     room_user_identity::resolve_room_user_identity,
+    turn_authority::active_turn_authority,
 };
 
 const PENDING_ATTACHMENT_TTL: Duration = Duration::hours(1);
@@ -40,6 +44,16 @@ pub struct MessageAttachmentMetadata {
 pub struct MessageAttachment {
     pub metadata: MessageAttachmentMetadata,
     pub content: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ProviderAttachmentReadAuthority<'a> {
+    pub room_id: &'a str,
+    pub session_id: &'a str,
+    pub turn_id: &'a str,
+    pub input_up_to_seq: i64,
+    pub turn_generation: u64,
+    pub execution_id: &'a str,
 }
 
 pub(crate) fn message_attachments_from_event(
@@ -318,6 +332,69 @@ impl SqliteStore {
             attachment_id,
         )
         .await?;
+        transaction.commit().await?;
+        Ok(attachment)
+    }
+
+    /// Reads one attachment through the exact active Agent Session turn authority.
+    ///
+    /// # Errors
+    ///
+    /// Fails closed for stale turns or IDs outside the canonical inflight messages.
+    pub async fn bound_provider_message_attachment(
+        &self,
+        authority: ProviderAttachmentReadAuthority<'_>,
+        attachment_id: &str,
+    ) -> Result<MessageAttachment, PersistenceError> {
+        if !is_message_attachment_id(attachment_id) {
+            return Err(message_attachment_missing());
+        }
+        let mut transaction = self.pool.begin().await?;
+        let session =
+            load_session(&mut transaction, authority.room_id, authority.session_id).await?;
+        let participant = load_participant(
+            &mut transaction,
+            authority.room_id,
+            &session.public.participant_id,
+        )
+        .await?;
+        let execution = load_execution_in(
+            &mut transaction,
+            authority.room_id,
+            authority.session_id,
+            authority.turn_generation,
+        )
+        .await?;
+        if participant.status != agentsassemble_domain::ParticipantStatus::Joined
+            || participant.muted
+            || session.public.active_turn_id != authority.turn_id
+            || session.input_up_to_seq != authority.input_up_to_seq
+            || session.turn_generation != authority.turn_generation
+            || !active_turn_authority(&session).map_err(|_| stale_provider_turn())?
+            || execution.execution_id != authority.execution_id
+            || execution.turn_id != authority.turn_id
+            || execution.participant_id != session.public.participant_id
+            || execution.phase != crate::ProviderTurnExecutionPhase::StartDispatching
+        {
+            return Err(stale_provider_turn());
+        }
+        let mut inflight_events = Vec::with_capacity(session.inflight_inputs.len());
+        for input in &session.inflight_inputs {
+            inflight_events.push(
+                load_event(&mut transaction, authority.room_id, &input.event_id)
+                    .await?
+                    .ok_or_else(message_attachment_missing)?,
+            );
+        }
+        if !message_attachment_ids_from_events(inflight_events.iter())?
+            .iter()
+            .any(|candidate| candidate == attachment_id)
+        {
+            return Err(message_attachment_missing());
+        }
+        let attachment =
+            read_bound_message_attachment(&mut transaction, authority.room_id, attachment_id)
+                .await?;
         transaction.commit().await?;
         Ok(attachment)
     }
@@ -619,5 +696,12 @@ fn message_attachment_missing() -> PersistenceError {
     rejected(
         "message_attachment_missing",
         "Message attachment was not found.",
+    )
+}
+
+fn stale_provider_turn() -> PersistenceError {
+    rejected(
+        "stale_provider_turn",
+        "The Agent Session attachment read no longer owns the active turn.",
     )
 }

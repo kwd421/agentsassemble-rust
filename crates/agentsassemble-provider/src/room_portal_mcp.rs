@@ -6,6 +6,7 @@ use std::{
 };
 
 use agentsassemble_domain::RoomRandomRequest;
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use bytes::Bytes;
 use futures_util::future::{AbortHandle, Abortable};
 use http_body_util::{BodyExt, Empty, combinators::BoxBody};
@@ -37,10 +38,12 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::room_portal::{
-    PortalState, RoomPortalError, StagedOutcome, canonical_message, reserve_room_tool,
-    valid_decline_reason,
+    PortalState, RoomPortalError, StagedOutcome, attachment_read_authority, canonical_message,
+    reserve_room_tool, valid_decline_reason,
 };
-use crate::room_portal_tool_contract::{ChooseRandom, DeclineToSpeak, PublishMessage, RollDice};
+use crate::room_portal_tool_contract::{
+    ChooseRandom, DeclineToSpeak, PublishMessage, ReadAttachment, RollDice,
+};
 
 const MAX_MCP_REQUEST_BYTES: usize = 64 * 1024;
 const MAX_PORTAL_CONNECTIONS: usize = 8;
@@ -423,6 +426,27 @@ impl RoomPortalMcp {
         Ok(active.room_view.clone())
     }
 
+    #[tool(description = "Read one attachment listed in this exact room turn.")]
+    async fn read_attachment(
+        &self,
+        Parameters(input): Parameters<ReadAttachment>,
+    ) -> Result<String, String> {
+        let (authority, ingress) = attachment_read_authority(&self.state, &input.attachment_id)?;
+        let attachment = ingress
+            .read(authority, input.attachment_id.clone())
+            .await
+            .map_err(|error| error.message)?;
+        serde_json::to_string(&json!({
+            "id": attachment.id,
+            "filename": attachment.filename,
+            "content_type": attachment.content_type,
+            "size": attachment.size,
+            "is_image": attachment.is_image,
+            "data_base64": STANDARD.encode(attachment.content),
+        }))
+        .map_err(|_| "The room attachment response could not be encoded.".to_owned())
+    }
+
     #[tool(
         description = "Publish one substantive message to the shared room, optionally handing the floor to one exact agent ID. Read the discussion first."
     )]
@@ -612,6 +636,8 @@ mod tests {
                 durable_turn_generation: 1,
                 execution_id: "00000000-0000-4000-8000-000000000001",
                 room_view: "Room: General\n#7 Human: hello",
+                attachment_ids: &[],
+                attachment_ingress: None,
                 allowed_agent_ids: &["agent-2".to_owned()],
                 tool_ingress: None,
             })
@@ -636,6 +662,7 @@ mod tests {
                 "choose_random".to_owned(),
                 "decline_to_speak".to_owned(),
                 "publish_message".to_owned(),
+                "read_attachment".to_owned(),
                 "read_discussion".to_owned(),
                 "roll_dice".to_owned(),
             ])

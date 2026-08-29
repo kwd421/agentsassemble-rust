@@ -61,7 +61,15 @@ Rust-owned upload, message-binding, authorized-read, and provider-read lifecycle
   envelope, and recomputes the exact list from the session's inflight event authority
   before restart recovery. Attachment-only messages remain routable and their room
   view names each opaque ID, filename, content type, and byte size without loading or
-  copying the BLOB.
+  copying the BLOB. `read_attachment` is an exact active-turn Room Portal tool: its
+  per-room channel carries the session, turn, generation, execution, input cursor, and
+  requested ID back to the room owner. SQLite recomputes the inflight ID set and checks
+  the current joined, unmuted participant and `start_dispatching` execution before it
+  loads one BLOB. The portal then validates the returned metadata/size and base64-encodes
+  only that requested item at the provider transport boundary. This avoids preloading
+  up to eight 10-MiB items or retaining a second media cache while preserving the
+  original provider-visible bytes; no unmeasured latency or resident-memory reduction
+  is claimed.
 - Arbitrary files retain their original bytes and are served download-only. Inline
   preview is limited to decoded, bounded PNG/JPEG/GIF/WebP whose declared and detected
   formats agree; active or ambiguous content is never classified inline. Every read is

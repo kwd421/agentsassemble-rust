@@ -586,6 +586,8 @@ impl ProviderDriver for AntigravityDriver {
                 durable_turn_generation: request.turn_generation,
                 execution_id: &request.execution_id,
                 room_view: &observation.view,
+                attachment_ids: &observation.attachment_ids,
+                attachment_ingress: observation.attachment_ingress.clone(),
                 allowed_agent_ids: &observation.allowed_agent_ids,
                 tool_ingress: observation.room_tool_ingress.clone(),
             })

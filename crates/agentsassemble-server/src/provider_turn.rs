@@ -4,8 +4,9 @@ use agentsassemble_persistence::{
     ProviderTurnEffectPhase, ProviderTurnInterruptEffect, ProviderTurnStartAuthority, SqliteStore,
 };
 use agentsassemble_provider::{
-    ProviderAdapter, ProviderAdapterError, ProviderExactTurnAuthority, ProviderRoomObservation,
-    ProviderRoomToolIngress, ProviderTurnCompleted, ProviderTurnOutcome, ProviderTurnRequest,
+    ProviderAdapter, ProviderAdapterError, ProviderAttachmentReadIngress,
+    ProviderExactTurnAuthority, ProviderRoomObservation, ProviderRoomToolIngress,
+    ProviderTurnCompleted, ProviderTurnOutcome, ProviderTurnRequest,
 };
 use futures_util::FutureExt;
 use std::panic::AssertUnwindSafe;
@@ -26,12 +27,14 @@ pub(crate) fn spawn_provider_turn(
     provider_adapter: ProviderAdapter,
     assignment: AgentTurnAssignment,
     room_tool_ingress: ProviderRoomToolIngress,
+    attachment_ingress: ProviderAttachmentReadIngress,
 ) {
     tasks.spawn(run_provider_turn_task(
         store,
         provider_adapter,
         assignment,
         room_tool_ingress,
+        attachment_ingress,
         None,
     ));
 }
@@ -42,6 +45,7 @@ pub(crate) fn spawn_recovered_provider_turn(
     provider_adapter: ProviderAdapter,
     assignment: AgentTurnAssignment,
     room_tool_ingress: ProviderRoomToolIngress,
+    attachment_ingress: ProviderAttachmentReadIngress,
     recovery_guard: ProviderRecoveryGuard,
 ) {
     tasks.spawn(run_provider_turn_task(
@@ -49,6 +53,7 @@ pub(crate) fn spawn_recovered_provider_turn(
         provider_adapter,
         assignment,
         room_tool_ingress,
+        attachment_ingress,
         Some(recovery_guard),
     ));
 }
@@ -58,9 +63,10 @@ async fn run_provider_turn_task(
     provider_adapter: ProviderAdapter,
     assignment: AgentTurnAssignment,
     room_tool_ingress: ProviderRoomToolIngress,
+    attachment_ingress: ProviderAttachmentReadIngress,
     recovery_guard: Option<ProviderRecoveryGuard>,
 ) -> ProviderTurnTaskResult {
-    let request = provider_request(&assignment, room_tool_ingress);
+    let request = provider_request(&assignment, room_tool_ingress, attachment_ingress);
     let Ok(prepared) = provider_adapter
         .prepare_turn(&assignment.session, &request)
         .await
@@ -134,6 +140,7 @@ async fn run_prepared_provider_turn(
 fn provider_request(
     assignment: &AgentTurnAssignment,
     room_tool_ingress: ProviderRoomToolIngress,
+    attachment_ingress: ProviderAttachmentReadIngress,
 ) -> ProviderTurnRequest {
     let room_observation = matches!(
         assignment.delivery_kind,
@@ -143,6 +150,8 @@ fn provider_request(
         session_id: assignment.session.public.session_id.clone(),
         input_up_to_seq: assignment.session.input_up_to_seq,
         view: assignment.room_view.clone(),
+        attachment_ids: assignment.attachment_ids.clone(),
+        attachment_ingress: (!assignment.attachment_ids.is_empty()).then_some(attachment_ingress),
         allowed_agent_ids: assignment.room_agent_ids.clone(),
         room_tool_ingress: assignment.tabletop_tools.then_some(room_tool_ingress),
     });
@@ -422,6 +431,7 @@ async fn publish_turn_commit(
     tasks: &mut JoinSet<ProviderTurnTaskResult>,
     provider_adapter: ProviderAdapter,
     room_tool_ingress: ProviderRoomToolIngress,
+    attachment_ingress: ProviderAttachmentReadIngress,
     commit: AgentTurnCommit,
 ) {
     let room_id = commit
@@ -451,6 +461,7 @@ async fn publish_turn_commit(
             provider_adapter.clone(),
             assignment,
             room_tool_ingress.clone(),
+            attachment_ingress.clone(),
         );
     }
 }
@@ -462,6 +473,7 @@ pub(crate) async fn handle_provider_result(
     turn_tasks: &mut JoinSet<ProviderTurnTaskResult>,
     result: Result<ProviderTurnTaskResult, tokio::task::JoinError>,
     room_tool_ingress: &ProviderRoomToolIngress,
+    attachment_ingress: &ProviderAttachmentReadIngress,
 ) {
     let result = match result {
         Ok(result) => result,
@@ -494,6 +506,7 @@ pub(crate) async fn handle_provider_result(
                 turn_tasks,
                 provider_adapter.clone(),
                 room_tool_ingress.clone(),
+                attachment_ingress.clone(),
                 commit,
             )
             .await;

@@ -33,6 +33,7 @@ mod opencode_sse;
 mod opencode_startup;
 mod process;
 mod profile;
+mod room_attachment;
 mod room_portal;
 mod room_portal_mcp;
 #[cfg(any(unix, windows))]
@@ -58,6 +59,10 @@ mod unix_process_tree;
 pub use catalog::ProviderCatalogService;
 #[cfg(unix)]
 pub use guardian::run_process_helper_if_requested;
+pub use room_attachment::{
+    ProviderAttachment, ProviderAttachmentReadCommand, ProviderAttachmentReadError,
+    ProviderAttachmentReadIngress,
+};
 pub use room_portal::{
     ProviderRoomToolCommand, ProviderRoomToolError, ProviderRoomToolIngress, ProviderTurnOutcome,
 };

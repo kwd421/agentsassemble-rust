@@ -11,7 +11,8 @@ use agentsassemble_persistence::{
 };
 use agentsassemble_protocol::RoomAction;
 use agentsassemble_provider::{
-    ProviderAdapter, ProviderCatalogService, ProviderRoomToolCommand, ProviderRoomToolIngress,
+    ProviderAdapter, ProviderAttachmentReadCommand, ProviderAttachmentReadIngress,
+    ProviderCatalogService, ProviderRoomToolCommand, ProviderRoomToolIngress,
 };
 use serde_json::Value;
 use tokio::{
@@ -32,7 +33,7 @@ use crate::{
         AdmittedHumanCommand, admit_human_command, admit_human_session_command,
     },
     room_command_result::{CommandFailure, public_command_outcome},
-    room_recovery_runtime::{RecoveredAssignment, RecoveredAssignments, publish_then_resume},
+    room_recovery_runtime::{RecoveredAssignment, RecoveredAssignments, RecoveryRuntime},
     room_shutdown::{RoomShutdownError, join_room_tasks},
 };
 
@@ -73,6 +74,7 @@ struct RoomTaskContext {
     event_tx: broadcast::Sender<RoomEvent>,
     human_session_revocation_tx: broadcast::Sender<[u8; 32]>,
     room_tool_ingress: ProviderRoomToolIngress,
+    attachment_ingress: ProviderAttachmentReadIngress,
     lifecycle_commands: LifecycleCommandTracker,
 }
 
@@ -83,6 +85,7 @@ struct RoomCommandOwners<'a> {
     event_tx: &'a broadcast::Sender<RoomEvent>,
     turn_tasks: &'a mut JoinSet<ProviderTurnTaskResult>,
     room_tool_ingress: &'a ProviderRoomToolIngress,
+    attachment_ingress: &'a ProviderAttachmentReadIngress,
     lifecycle_commands: &'a LifecycleCommandTracker,
 }
 
@@ -404,6 +407,8 @@ impl RoomRuntime {
         let (provider_recovery_tx, provider_recovery_rx) = mpsc::channel(ROOM_TOOL_QUEUE_CAPACITY);
         let (room_tool_ingress, room_tool_rx) =
             ProviderRoomToolIngress::channel(ROOM_TOOL_QUEUE_CAPACITY);
+        let (attachment_ingress, attachment_rx) =
+            ProviderAttachmentReadIngress::channel(ROOM_TOOL_QUEUE_CAPACITY);
         let handle = RoomHandle {
             mutations: mutation_tx,
             events: event_tx.clone(),
@@ -426,11 +431,13 @@ impl RoomRuntime {
                 event_tx,
                 human_session_revocation_tx,
                 room_tool_ingress,
+                attachment_ingress,
                 lifecycle_commands: self.lifecycle_commands.clone(),
             },
             mutation_rx,
             publication_rx,
             room_tool_rx,
+            attachment_rx,
             provider_recovery_rx,
         );
         self.tasks.lock().await.push(task);
@@ -443,26 +450,17 @@ fn spawn_room_task(
     mut mutation_rx: mpsc::Receiver<RoomMutation>,
     mut publication_rx: mpsc::Receiver<()>,
     mut room_tool_rx: mpsc::Receiver<ProviderRoomToolCommand>,
+    mut attachment_rx: mpsc::Receiver<ProviderAttachmentReadCommand>,
     mut provider_recovery_rx: mpsc::Receiver<RecoveredAssignments>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
-        let RoomTaskContext {
-            room_id,
-            store,
-            provider_catalog,
-            provider_adapter,
-            cancellation,
-            event_tx,
-            human_session_revocation_tx,
-            room_tool_ingress,
-            lifecycle_commands,
-        } = context;
         let mut turn_tasks = JoinSet::new();
-        let mut publication_retry = start_publication_owner(&store, &event_tx, &room_id).await;
+        let mut publication_retry =
+            start_publication_owner(&context.store, &context.event_tx, &context.room_id).await;
         let mut provider_write_budget = ProviderWriteBudget::new();
         loop {
             let input = tokio::select! {
-                () = cancellation.cancelled() => {
+                () = context.cancellation.cancelled() => {
                     abort_provider_turns(&mut turn_tasks).await;
                     break;
                 }
@@ -483,68 +481,92 @@ fn spawn_room_task(
                     let Some(tool) = tool else { break; };
                     RoomInput::Tool(tool)
                 }
+                attachment = attachment_rx.recv() => {
+                    let Some(attachment) = attachment else { break; };
+                    RoomInput::Attachment(attachment)
+                }
                 recovery = provider_recovery_rx.recv() => {
                     let Some(assignment) = recovery else { break; };
                     RoomInput::ProviderRecovery(Box::new(assignment))
                 }
             };
-            match input {
-                RoomInput::Mutation(mutation) => {
-                    handle_room_mutation(
-                        RoomCommandOwners {
-                            store: &store,
-                            provider_catalog: &provider_catalog,
-                            provider_adapter: &provider_adapter,
-                            event_tx: &event_tx,
-                            turn_tasks: &mut turn_tasks,
-                            room_tool_ingress: &room_tool_ingress,
-                            lifecycle_commands: &lifecycle_commands,
-                        },
-                        &room_id,
-                        &human_session_revocation_tx,
-                        mutation,
-                    )
-                    .await;
-                }
-                RoomInput::Provider(result) => {
-                    Box::pin(handle_provider_result(
-                        &store,
-                        &provider_adapter,
-                        &event_tx,
-                        &mut turn_tasks,
-                        *result,
-                        &room_tool_ingress,
-                    ))
-                    .await;
-                }
-                RoomInput::Tool(command) => {
-                    crate::room_random_runtime::handle_provider_room_tool(
-                        &store,
-                        &event_tx,
-                        &room_id,
-                        command,
-                        &mut provider_write_budget,
-                    )
-                    .await;
-                }
-                RoomInput::ProviderRecovery(assignment) => {
-                    publish_then_resume(
-                        &store,
-                        &event_tx,
-                        &room_id,
-                        &mut turn_tasks,
-                        &provider_adapter,
-                        &room_tool_ingress,
-                        *assignment,
-                    )
-                    .await;
-                }
-                RoomInput::Publication => {
-                    publish_durable_room_events(&store, &event_tx, &room_id).await;
-                }
-            }
+            handle_room_input(&context, &mut turn_tasks, &mut provider_write_budget, input).await;
         }
     })
+}
+
+async fn handle_room_input(
+    context: &RoomTaskContext,
+    turn_tasks: &mut JoinSet<ProviderTurnTaskResult>,
+    provider_write_budget: &mut ProviderWriteBudget,
+    input: RoomInput,
+) {
+    match input {
+        RoomInput::Mutation(mutation) => {
+            handle_room_mutation(
+                RoomCommandOwners {
+                    store: &context.store,
+                    provider_catalog: &context.provider_catalog,
+                    provider_adapter: &context.provider_adapter,
+                    event_tx: &context.event_tx,
+                    turn_tasks,
+                    room_tool_ingress: &context.room_tool_ingress,
+                    attachment_ingress: &context.attachment_ingress,
+                    lifecycle_commands: &context.lifecycle_commands,
+                },
+                &context.room_id,
+                &context.human_session_revocation_tx,
+                mutation,
+            )
+            .await;
+        }
+        RoomInput::Provider(result) => {
+            Box::pin(handle_provider_result(
+                &context.store,
+                &context.provider_adapter,
+                &context.event_tx,
+                turn_tasks,
+                *result,
+                &context.room_tool_ingress,
+                &context.attachment_ingress,
+            ))
+            .await;
+        }
+        RoomInput::Tool(command) => {
+            crate::room_random_runtime::handle_provider_room_tool(
+                &context.store,
+                &context.event_tx,
+                &context.room_id,
+                command,
+                provider_write_budget,
+            )
+            .await;
+        }
+        RoomInput::Attachment(command) => {
+            crate::provider_attachment_runtime::handle_provider_attachment_read(
+                &context.store,
+                &context.room_id,
+                command,
+            )
+            .await;
+        }
+        RoomInput::ProviderRecovery(recovery) => {
+            RecoveryRuntime {
+                store: &context.store,
+                event_tx: &context.event_tx,
+                room_id: &context.room_id,
+                turn_tasks,
+                provider_adapter: &context.provider_adapter,
+                room_tool_ingress: &context.room_tool_ingress,
+                attachment_ingress: &context.attachment_ingress,
+            }
+            .publish_then_resume(*recovery)
+            .await;
+        }
+        RoomInput::Publication => {
+            publish_durable_room_events(&context.store, &context.event_tx, &context.room_id).await;
+        }
+    }
 }
 
 async fn abort_provider_turns(turn_tasks: &mut JoinSet<ProviderTurnTaskResult>) {
@@ -587,6 +609,7 @@ async fn handle_room_command(
         event_tx,
         turn_tasks,
         room_tool_ingress,
+        attachment_ingress,
         lifecycle_commands,
     } = owners;
     let lifecycle_guard = lifecycle_commands.try_claim(
@@ -632,6 +655,7 @@ async fn handle_room_command(
             provider_adapter.clone(),
             assignment,
             room_tool_ingress.clone(),
+            attachment_ingress.clone(),
         );
     }
     for fingerprint in revoked_human_sessions {
@@ -651,6 +675,7 @@ enum RoomInput {
     Provider(Box<Result<ProviderTurnTaskResult, tokio::task::JoinError>>),
     Publication,
     Tool(ProviderRoomToolCommand),
+    Attachment(ProviderAttachmentReadCommand),
     ProviderRecovery(Box<RecoveredAssignments>),
 }
 

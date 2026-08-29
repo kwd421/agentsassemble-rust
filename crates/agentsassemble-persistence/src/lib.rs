@@ -96,7 +96,9 @@ pub use human_invite_preflight::{
 pub use human_invites::{HumanInvite, NewHumanInvite};
 pub use human_prejoin_attachments::HumanPrejoinAvatarAuthorization;
 pub use human_session_authority::HumanSessionAuthorization;
-pub use message_attachments::{MessageAttachment, MessageAttachmentMetadata};
+pub use message_attachments::{
+    MessageAttachment, MessageAttachmentMetadata, ProviderAttachmentReadAuthority,
+};
 pub use message_pins::PinnedLobbyMessage;
 pub use participant_leave::ParticipantLeaveMutation;
 pub use participant_mute::ParticipantMuteMutation;

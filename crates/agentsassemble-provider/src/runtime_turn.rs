@@ -5,6 +5,8 @@ use futures_util::FutureExt;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
+use crate::room_attachment::valid_observation_attachments;
+
 #[cfg(test)]
 use super::ProviderExactTurnAuthority;
 use super::{
@@ -33,6 +35,8 @@ pub struct ProviderRoomObservation {
     pub session_id: String,
     pub input_up_to_seq: i64,
     pub view: String,
+    pub attachment_ids: Vec<String>,
+    pub attachment_ingress: Option<crate::ProviderAttachmentReadIngress>,
     pub allowed_agent_ids: Vec<String>,
     pub room_tool_ingress: Option<crate::ProviderRoomToolIngress>,
 }
@@ -467,6 +471,11 @@ pub(super) fn validate_request(
             || observation.view.len() > MAX_ROOM_VIEW_BYTES
             || observation.view.contains('\0')
             || !has_visible_text(&observation.view)
+            || !valid_observation_attachments(
+                &observation.view,
+                &observation.attachment_ids,
+                observation.attachment_ingress.is_some(),
+            )
             || observation.allowed_agent_ids.len() > MAX_ROOM_AGENT_IDS
             || unique_ids.len() != observation.allowed_agent_ids.len()
             || observation.allowed_agent_ids.iter().any(|agent_id| {

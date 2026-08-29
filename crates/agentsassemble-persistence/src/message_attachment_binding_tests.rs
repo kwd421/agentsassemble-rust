@@ -4,7 +4,7 @@ use agentsassemble_domain::{
 use serde_json::json;
 use sqlx::Row;
 
-use crate::{PersistenceError, RoomCommandMutation};
+use crate::{PersistenceError, ProviderAttachmentReadAuthority, RoomCommandMutation};
 
 #[tokio::test]
 async fn attachment_only_send_binds_ordered_metadata_and_replays_once() {
@@ -125,6 +125,72 @@ fn assert_provider_attachment_assignment(
     for attachment_id in expected_ids {
         assert!(assignment.room_view.contains(attachment_id));
     }
+}
+
+#[tokio::test]
+async fn provider_read_revalidates_exact_turn_and_inflight_reference() {
+    let (store, principal, _directory) = super::fixture().await;
+    let attachment = store
+        .store_message_attachment(&principal, "agent.txt", "text/plain", b"agent".to_vec())
+        .await
+        .unwrap_or_else(|error| panic!("store provider attachment: {error}"));
+    let committed = store
+        .execute_message_with_turn(
+            &principal,
+            "provider-attachment",
+            "message.send",
+            &json!({"content": "@Terra inspect", "attachment_ids": [attachment.id]}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("assign provider attachment: {error}"));
+    let assignment = committed
+        .assignments
+        .first()
+        .unwrap_or_else(|| panic!("provider attachment must assign a turn"));
+    store
+        .authorize_provider_turn_start(
+            &assignment.session.public.room_id,
+            &assignment.session.public.session_id,
+            assignment.turn_generation,
+            &assignment.turn_id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize provider attachment turn: {error}"));
+    let authority = ProviderAttachmentReadAuthority {
+        room_id: &assignment.session.public.room_id,
+        session_id: &assignment.session.public.session_id,
+        turn_id: &assignment.turn_id,
+        input_up_to_seq: assignment.session.input_up_to_seq,
+        turn_generation: assignment.turn_generation,
+        execution_id: &assignment.execution_id,
+    };
+    let read = store
+        .bound_provider_message_attachment(authority, &attachment.id)
+        .await
+        .unwrap_or_else(|error| panic!("read provider attachment: {error}"));
+    assert_eq!(read.metadata.id, attachment.id);
+    assert_eq!(read.content, b"agent");
+
+    let pending = store
+        .store_message_attachment(&principal, "pending.txt", "text/plain", b"pending".to_vec())
+        .await
+        .unwrap_or_else(|error| panic!("store unreferenced attachment: {error}"));
+    assert_rejected_code(
+        store
+            .bound_provider_message_attachment(authority, &pending.id)
+            .await,
+        "message_attachment_missing",
+    );
+    let stale = ProviderAttachmentReadAuthority {
+        input_up_to_seq: authority.input_up_to_seq + 1,
+        ..authority
+    };
+    assert_rejected_code(
+        store
+            .bound_provider_message_attachment(stale, &attachment.id)
+            .await,
+        "stale_provider_turn",
+    );
 }
 
 #[tokio::test]

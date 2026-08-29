@@ -77,6 +77,7 @@ mod participant_mute_runtime;
 mod principal_mutation_admission;
 mod product_surface;
 mod profile_web;
+mod provider_attachment_runtime;
 mod provider_recovery_tracker;
 mod provider_turn;
 mod provider_turn_reconciliation_runtime;

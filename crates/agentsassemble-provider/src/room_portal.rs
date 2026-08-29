@@ -12,6 +12,9 @@ use uuid::Uuid;
 use crate::filesystem::BoundExecutable;
 #[cfg(unix)]
 use crate::guardian::GuardianLaunch;
+use crate::room_attachment::{
+    ProviderAttachmentReadAuthority, ProviderAttachmentReadIngress, valid_observation_attachments,
+};
 use crate::room_portal_mcp::PortalServer;
 #[cfg(any(unix, windows))]
 use crate::room_portal_terminal::RoomPortalTerminalHelper;
@@ -70,6 +73,8 @@ pub(crate) struct RoomObservationStart<'a> {
     pub durable_turn_generation: u64,
     pub execution_id: &'a str,
     pub room_view: &'a str,
+    pub attachment_ids: &'a [String],
+    pub attachment_ingress: Option<ProviderAttachmentReadIngress>,
     pub allowed_agent_ids: &'a [String],
     pub tool_ingress: Option<ProviderRoomToolIngress>,
 }
@@ -225,6 +230,8 @@ pub(super) enum StagedOutcome {
 pub(super) struct ActiveObservation {
     pub(super) authority: TurnAuthority,
     pub(super) room_view: String,
+    pub(super) attachment_ids: HashSet<String>,
+    pub(super) attachment_ingress: Option<ProviderAttachmentReadIngress>,
     pub(super) turn_generation: Uuid,
     pub(super) receipt_generation: Option<Uuid>,
     pub(super) outcome: Option<StagedOutcome>,
@@ -417,6 +424,8 @@ impl RoomPortal {
             durable_turn_generation,
             execution_id,
             room_view,
+            attachment_ids,
+            attachment_ingress,
             allowed_agent_ids,
             tool_ingress,
         } = observation;
@@ -430,12 +439,18 @@ impl RoomPortal {
             || Uuid::parse_str(execution_id).is_err()
             || room_view.is_empty()
             || room_view.len() > MAX_ROOM_VIEW_BYTES
+            || !valid_observation_attachments(
+                room_view,
+                attachment_ids,
+                attachment_ingress.is_some(),
+            )
             || allowed_agent_ids.len() > MAX_AGENT_IDS
             || unique_agent_ids.len() != allowed_agent_ids.len()
             || allowed_agent_ids.iter().any(|value| !valid_agent_id(value))
         {
             return Err(RoomPortalError::Observation);
         }
+        let unique_attachment_ids = attachment_ids.iter().cloned().collect::<HashSet<_>>();
         let authority = TurnAuthority {
             session_id: session_id.to_owned(),
             turn_id: turn_id.to_owned(),
@@ -447,7 +462,11 @@ impl RoomPortal {
         let mut state = self.lock_state()?;
         match state.active.as_ref() {
             Some(active)
-                if active.authority == authority && active.room_view.as_str() == room_view =>
+                if active.authority == authority
+                    && active.room_view.as_str() == room_view
+                    && active.attachment_ids == unique_attachment_ids
+                    && active.attachment_ingress == attachment_ingress
+                    && active.tool_ingress == tool_ingress =>
             {
                 Ok(())
             }
@@ -456,6 +475,8 @@ impl RoomPortal {
                 state.active = Some(ActiveObservation {
                     authority,
                     room_view: room_view.to_owned(),
+                    attachment_ids: unique_attachment_ids,
+                    attachment_ingress,
                     turn_generation: Uuid::new_v4(),
                     receipt_generation: None,
                     outcome: None,
@@ -622,6 +643,42 @@ pub(super) fn reserve_room_tool(
     ))
 }
 
+pub(super) fn attachment_read_authority(
+    state: &Arc<Mutex<PortalState>>,
+    attachment_id: &str,
+) -> Result<
+    (
+        ProviderAttachmentReadAuthority,
+        ProviderAttachmentReadIngress,
+    ),
+    String,
+> {
+    let portal = state
+        .lock()
+        .map_err(|_| "The shared room authority is unavailable.".to_owned())?;
+    let active = portal
+        .active
+        .as_ref()
+        .ok_or_else(|| "No active room observation.".to_owned())?;
+    if active.closing || !active.attachment_ids.contains(attachment_id) {
+        return Err("The attachment is not available to this room turn.".to_owned());
+    }
+    let ingress = active
+        .attachment_ingress
+        .clone()
+        .ok_or_else(|| "The room attachment owner is unavailable.".to_owned())?;
+    Ok((
+        ProviderAttachmentReadAuthority {
+            session_id: active.authority.session_id.clone(),
+            turn_id: active.authority.turn_id.clone(),
+            input_up_to_seq: active.authority.input_up_to_seq,
+            turn_generation: active.authority.durable_turn_generation,
+            execution_id: active.authority.execution_id.clone(),
+        },
+        ingress,
+    ))
+}
+
 #[derive(Debug)]
 pub(super) struct RoomToolAuthority {
     session_id: String,
@@ -679,3 +736,7 @@ pub(super) fn valid_decline_reason(value: &str) -> bool {
 #[cfg(test)]
 #[path = "room_portal_tabletop_tests.rs"]
 mod tabletop_tests;
+
+#[cfg(test)]
+#[path = "room_portal_attachment_tests.rs"]
+mod attachment_tests;

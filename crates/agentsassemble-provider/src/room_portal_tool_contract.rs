@@ -17,6 +17,12 @@ pub(super) struct DeclineToSpeak {
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub(super) struct ReadAttachment {
+    pub(super) attachment_id: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub(super) struct RollDice {
     pub(super) notation: String,
     #[serde(default)]

@@ -1,6 +1,8 @@
 use agentsassemble_domain::RoomEvent;
 use agentsassemble_persistence::{AgentTurnAssignment, PersistenceError, SqliteStore};
-use agentsassemble_provider::{ProviderAdapter, ProviderRoomToolIngress};
+use agentsassemble_provider::{
+    ProviderAdapter, ProviderAttachmentReadIngress, ProviderRoomToolIngress,
+};
 use tokio::{
     sync::{broadcast, oneshot},
     task::JoinSet,
@@ -21,28 +23,39 @@ pub(super) struct RecoveredAssignments {
     pub(super) reply: oneshot::Sender<Result<(), PersistenceError>>,
 }
 
-pub(super) async fn publish_then_resume(
-    store: &SqliteStore,
-    event_tx: &broadcast::Sender<RoomEvent>,
-    room_id: &str,
-    turn_tasks: &mut JoinSet<ProviderTurnTaskResult>,
-    provider_adapter: &ProviderAdapter,
-    room_tool_ingress: &ProviderRoomToolIngress,
-    recovery: RecoveredAssignments,
-) {
-    publish_before_recovery_entry(store, event_tx, room_id, recovery, |assignments| {
-        for recovered in assignments {
-            spawn_recovered_provider_turn(
-                turn_tasks,
-                store.clone(),
-                provider_adapter.clone(),
-                recovered.assignment,
-                room_tool_ingress.clone(),
-                recovered.guard,
-            );
-        }
-    })
-    .await;
+pub(super) struct RecoveryRuntime<'a> {
+    pub(super) store: &'a SqliteStore,
+    pub(super) event_tx: &'a broadcast::Sender<RoomEvent>,
+    pub(super) room_id: &'a str,
+    pub(super) turn_tasks: &'a mut JoinSet<ProviderTurnTaskResult>,
+    pub(super) provider_adapter: &'a ProviderAdapter,
+    pub(super) room_tool_ingress: &'a ProviderRoomToolIngress,
+    pub(super) attachment_ingress: &'a ProviderAttachmentReadIngress,
+}
+
+impl RecoveryRuntime<'_> {
+    pub(super) async fn publish_then_resume(self, recovery: RecoveredAssignments) {
+        publish_before_recovery_entry(
+            self.store,
+            self.event_tx,
+            self.room_id,
+            recovery,
+            |assignments| {
+                for recovered in assignments {
+                    spawn_recovered_provider_turn(
+                        self.turn_tasks,
+                        self.store.clone(),
+                        self.provider_adapter.clone(),
+                        recovered.assignment,
+                        self.room_tool_ingress.clone(),
+                        self.attachment_ingress.clone(),
+                        recovered.guard,
+                    );
+                }
+            },
+        )
+        .await;
+    }
 }
 
 async fn publish_before_recovery_entry(
