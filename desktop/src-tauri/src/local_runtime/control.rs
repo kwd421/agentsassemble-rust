@@ -672,7 +672,13 @@ fn request_control(
 pub(super) fn is_application_rejection(code: &str) -> bool {
     matches!(
         code,
-        "bad_request" | "room_not_found" | "session_revoked" | "bootstrap_required"
+        "bad_request"
+            | "room_not_found"
+            | "session_revoked"
+            | "bootstrap_required"
+            | "room_authority_changed"
+            | "muted"
+            | "permission_denied"
     )
 }
 
@@ -688,95 +694,5 @@ fn is_bootstrap_rejection(code: &str) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use agentsassemble_protocol::LocalControlResponse;
-
-    use super::{HttpTicketKind, ManagerRoomAuthority, TicketFailure, decode_http_ticket_response};
-
-    #[test]
-    fn http_ticket_response_variant_must_match_the_exact_request_purpose() {
-        let response = LocalControlResponse::PreferencesWriteOk {
-            request_id: "request-1".to_owned(),
-            ticket: "a".repeat(64),
-            ttl_seconds: 30,
-        };
-        assert!(matches!(
-            decode_http_ticket_response(
-                HttpTicketKind::PreferencesRead("general"),
-                "request-1",
-                response,
-            ),
-            Err(TicketFailure::Broken(_))
-        ));
-
-        let response = LocalControlResponse::MessagePinsWriteOk {
-            request_id: "request-pin".to_owned(),
-            ticket: "d".repeat(64),
-            ttl_seconds: 30,
-        };
-        assert!(matches!(
-            decode_http_ticket_response(
-                HttpTicketKind::MessagePinsRead("general"),
-                "request-pin",
-                response,
-            ),
-            Err(TicketFailure::Broken(_))
-        ));
-
-        let response = LocalControlResponse::MessageAttachmentReadOk {
-            request_id: "request-attachment".to_owned(),
-            ticket: "e".repeat(64),
-            ttl_seconds: 30,
-        };
-        assert!(matches!(
-            decode_http_ticket_response(
-                HttpTicketKind::MessageAttachmentUpload("general"),
-                "request-attachment",
-                response,
-            ),
-            Err(TicketFailure::Broken(_))
-        ));
-
-        let response = LocalControlResponse::HumanInviteRevokeOk {
-            request_id: "request-2".to_owned(),
-            ticket: "b".repeat(64),
-            ttl_seconds: 30,
-        };
-        assert!(matches!(
-            decode_http_ticket_response(
-                HttpTicketKind::HumanInviteCreate(&ManagerRoomAuthority {
-                    server_id: "10000000-0000-4000-8000-000000000001".to_owned(),
-                    authority_lineage_id: "20000000-0000-4000-8000-000000000002".to_owned(),
-                    room_id: "general".to_owned(),
-                    room_uid: "30000000-0000-4000-8000-000000000003".to_owned(),
-                }),
-                "request-2",
-                response,
-            ),
-            Err(TicketFailure::Broken(_))
-        ));
-
-        let authority = ManagerRoomAuthority {
-            server_id: "10000000-0000-4000-8000-000000000001".to_owned(),
-            authority_lineage_id: "20000000-0000-4000-8000-000000000002".to_owned(),
-            room_id: "general".to_owned(),
-            room_uid: "30000000-0000-4000-8000-000000000003".to_owned(),
-        };
-        let response = LocalControlResponse::AppearanceBoundReadOk {
-            request_id: "request-3".to_owned(),
-            ticket: "c".repeat(64),
-            ttl_seconds: 30,
-        };
-        assert!(matches!(
-            decode_http_ticket_response(
-                HttpTicketKind::AppearancePendingRead(
-                    &authority,
-                    "ra_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                ),
-                "request-3",
-                response,
-            ),
-            Err(TicketFailure::Broken(_))
-        ));
-    }
-}
+#[path = "control_tests.rs"]
+mod tests;

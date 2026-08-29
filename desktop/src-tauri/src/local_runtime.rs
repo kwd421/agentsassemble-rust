@@ -708,16 +708,6 @@ mod tests {
     }
 
     #[test]
-    fn only_normal_client_rejections_preserve_the_runtime() {
-        assert!(super::control::is_application_rejection("bad_request"));
-        assert!(super::control::is_application_rejection("room_not_found"));
-        assert!(!super::control::is_application_rejection(
-            "persistence_failed"
-        ));
-        assert!(!super::control::is_application_rejection("unavailable"));
-    }
-
-    #[test]
     fn runtime_log_writer_drains_but_caps_persisted_bytes() {
         let input = vec![b'x'; usize::try_from(RUNTIME_LOG_LIMIT_BYTES + 4096).unwrap_or(0)];
         let mut reader = Cursor::new(input);
