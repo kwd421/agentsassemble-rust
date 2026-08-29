@@ -1,4 +1,6 @@
-use agentsassemble_domain::QueuedRoomInput;
+use agentsassemble_domain::{
+    LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, QueuedRoomInput,
+};
 use serde_json::json;
 use sqlx::Row;
 
@@ -140,6 +142,72 @@ async fn expired_attachment_rejects_without_cleanup_or_message() {
         .await
         .unwrap_or_else(|error| panic!("expired attachment remains owned: {error}")),
         "pending"
+    );
+}
+
+#[tokio::test]
+async fn bound_read_requires_the_canonical_message_reference() {
+    let (store, principal, _directory) = super::fixture().await;
+    let bytes = b"durable attachment bytes".to_vec();
+    let attachment = store
+        .store_message_attachment(&principal, "evidence.txt", "text/plain", bytes.clone())
+        .await
+        .unwrap_or_else(|error| panic!("store readable attachment: {error}"));
+    assert_rejected_code(
+        store
+            .bound_message_attachment(
+                "general",
+                LOCAL_OPERATOR_USER_ID,
+                LOCAL_OPERATOR_PARTICIPANT_ID,
+                &attachment.id,
+            )
+            .await,
+        "message_attachment_missing",
+    );
+
+    let mut event = store
+        .execute_message(
+            &principal,
+            "readable-attachment",
+            "message.send",
+            &json!({"content": "evidence", "attachment_ids": [attachment.id]}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("bind readable attachment: {error}"))
+        .event;
+    let read = store
+        .bound_message_attachment(
+            "general",
+            LOCAL_OPERATOR_USER_ID,
+            LOCAL_OPERATOR_PARTICIPANT_ID,
+            &attachment.id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("read bound attachment: {error}"));
+    assert_eq!(read.content, bytes);
+    assert_eq!(read.metadata.id, attachment.id);
+    assert_eq!(read.metadata.filename, "evidence.txt");
+
+    event.extra.remove("attachments");
+    sqlx::query("UPDATE room_events SET event_json = ? WHERE room_id = 'general' AND seq = ?")
+        .bind(
+            serde_json::to_string(&event)
+                .unwrap_or_else(|error| panic!("encode unreferenced event: {error}")),
+        )
+        .bind(event.seq)
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("remove canonical reference: {error}"));
+    assert_rejected_code(
+        store
+            .bound_message_attachment(
+                "general",
+                LOCAL_OPERATOR_USER_ID,
+                LOCAL_OPERATOR_PARTICIPANT_ID,
+                &attachment.id,
+            )
+            .await,
+        "message_attachment_missing",
     );
 }
 

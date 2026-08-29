@@ -7,6 +7,7 @@ use agentsassemble_domain::{
 };
 use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sqlx::{Row, Sqlite, Transaction};
 use uuid::Uuid;
 
@@ -16,6 +17,7 @@ use crate::{
     authority::load_active_participant,
     human_session_authority::revalidate_human_session,
     raster_assets::{is_safe_raster_content_type, validate_preserved_safe_raster},
+    room_user_identity::resolve_room_user_identity,
 };
 
 const PENDING_ATTACHMENT_TTL: Duration = Duration::hours(1);
@@ -31,6 +33,12 @@ pub struct MessageAttachmentMetadata {
     pub is_image: bool,
     pub url: String,
     pub download_url: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MessageAttachment {
+    pub metadata: MessageAttachmentMetadata,
+    pub content: Vec<u8>,
 }
 
 pub(crate) fn message_attachments_from_event(
@@ -173,6 +181,126 @@ impl SqliteStore {
         transaction.commit().await?;
         Ok(metadata)
     }
+
+    /// Reads one bound attachment only while the canonical local human can reach its message.
+    ///
+    /// # Errors
+    ///
+    /// Fails closed for stale membership, malformed IDs, unreferenced bytes, or corrupt state.
+    pub async fn bound_message_attachment(
+        &self,
+        room_id: &str,
+        user_id: &str,
+        participant_id: &str,
+        attachment_id: &str,
+    ) -> Result<MessageAttachment, PersistenceError> {
+        if !is_message_attachment_id(attachment_id) {
+            return Err(message_attachment_missing());
+        }
+        let mut transaction = self.pool.begin().await?;
+        resolve_room_user_identity(&mut transaction, room_id, user_id, participant_id).await?;
+        let attachment =
+            read_bound_message_attachment(&mut transaction, room_id, attachment_id).await?;
+        transaction.commit().await?;
+        Ok(attachment)
+    }
+
+    /// Reads one bound attachment through exact current human-session provenance.
+    ///
+    /// # Errors
+    ///
+    /// Fails closed for expired or changed session authority, absent history permission,
+    /// unreferenced bytes, or corrupt state.
+    pub async fn bound_human_session_message_attachment(
+        &self,
+        authorization: &HumanSessionAuthorization,
+        attachment_id: &str,
+    ) -> Result<MessageAttachment, PersistenceError> {
+        if !is_message_attachment_id(attachment_id) {
+            return Err(message_attachment_missing());
+        }
+        let mut transaction = self.pool.begin().await?;
+        let (current, _) =
+            revalidate_human_session(&mut transaction, authorization, Utc::now()).await?;
+        if !current.principal().capabilities.room_history {
+            return Err(rejected(
+                "permission_denied",
+                "This room session cannot read message history.",
+            ));
+        }
+        let attachment = read_bound_message_attachment(
+            &mut transaction,
+            &current.principal().room_id,
+            attachment_id,
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(attachment)
+    }
+}
+
+async fn read_bound_message_attachment(
+    transaction: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    attachment_id: &str,
+) -> Result<MessageAttachment, PersistenceError> {
+    let row = sqlx::query(
+        "SELECT attachment.event_seq, attachment.filename, attachment.content_type, attachment.size, attachment.is_safe_image, length(attachment.content) AS content_length, event.event_json FROM room_message_attachments AS attachment INNER JOIN room_events AS event ON event.room_id = attachment.room_id AND event.seq = attachment.event_seq WHERE attachment.attachment_id = ? AND attachment.room_id = ? AND attachment.state = 'bound' AND attachment.pending_owner_user_id IS NULL AND attachment.expires_at IS NULL",
+    )
+    .bind(attachment_id)
+    .bind(room_id)
+    .fetch_optional(&mut **transaction)
+    .await?
+    .ok_or_else(message_attachment_missing)?;
+    let stored = stored_metadata(attachment_id, &row)?;
+    let event_seq = row.get::<i64, _>("event_seq");
+    let event: RoomEvent = serde_json::from_str(row.get::<String, _>("event_json").as_str())?;
+    let event_attachments = message_attachments_from_event(&event)?;
+    if event.room_id != room_id
+        || event.seq != event_seq
+        || event.event_type != "message_final"
+        || event.extra.get("message_deleted") == Some(&Value::Bool(true))
+        || !event_attachments.contains(&stored)
+    {
+        return Err(message_attachment_missing());
+    }
+    let content = sqlx::query_scalar::<_, Vec<u8>>(
+        "SELECT content FROM room_message_attachments WHERE attachment_id = ? AND room_id = ? AND event_seq = ? AND state = 'bound'",
+    )
+    .bind(attachment_id)
+    .bind(room_id)
+    .bind(event_seq)
+    .fetch_one(&mut **transaction)
+    .await?;
+    if content.len() != stored.size {
+        return Err(invalid_attachment_state());
+    }
+    Ok(MessageAttachment {
+        metadata: stored,
+        content,
+    })
+}
+
+fn stored_metadata(
+    attachment_id: &str,
+    row: &sqlx::sqlite::SqliteRow,
+) -> Result<MessageAttachmentMetadata, PersistenceError> {
+    let size =
+        usize::try_from(row.get::<i64, _>("size")).map_err(|_| invalid_attachment_state())?;
+    if row.get::<i64, _>("content_length") != i64::try_from(size).unwrap_or(i64::MAX) {
+        return Err(invalid_attachment_state());
+    }
+    let metadata = metadata(
+        attachment_id.to_owned(),
+        row.get("filename"),
+        row.get("content_type"),
+        size,
+        row.get::<i64, _>("is_safe_image") == 1,
+    );
+    if !canonical_metadata(&metadata) {
+        return Err(invalid_attachment_state());
+    }
+    Ok(metadata)
 }
 
 async fn prepare_message_attachment(
@@ -350,5 +478,12 @@ fn invalid_attachment_state() -> PersistenceError {
     rejected(
         "invalid_state",
         "Stored message attachment metadata is invalid.",
+    )
+}
+
+fn message_attachment_missing() -> PersistenceError {
+    rejected(
+        "message_attachment_missing",
+        "Message attachment was not found.",
     )
 }
