@@ -18,6 +18,7 @@ mod catalog;
 mod codex;
 mod codex_identity;
 mod configuration;
+mod credentials;
 mod driver;
 mod filesystem;
 #[cfg(unix)]
@@ -58,6 +59,10 @@ mod unix_custody;
 #[cfg(unix)]
 mod unix_process_tree;
 
+pub use credentials::{
+    ProviderCredentialError, ProviderCredentialSource, ProviderCredentialStatus,
+    ProviderCredentialStore,
+};
 #[cfg(unix)]
 pub use guardian::run_process_helper_if_requested;
 pub use profile::runtime_profile_key;
