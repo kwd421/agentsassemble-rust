@@ -1,3 +1,4 @@
+use agentsassemble_domain::MAX_PERSONA_ID_CHARACTERS;
 use serde_json::{Map, Value};
 
 use crate::ProviderSelectionError;
@@ -48,7 +49,11 @@ impl SelectionInput {
             display_name: required_display_name(values)?,
             workspace: required_workspace(values)?,
             provider_endpoint: optional_identifier(values, &["provider_endpoint"], 1000)?,
-            persona_card_id: optional_identifier(values, &["persona_card_id"], 80)?,
+            persona_card_id: optional_identifier(
+                values,
+                &["persona_card_id"],
+                MAX_PERSONA_ID_CHARACTERS,
+            )?,
             provider_session_id: optional_identifier(values, &["session_id"], 128)?,
             max_output_tokens: optional_u64(values, "max_output_tokens")?,
             start_requested: start.unwrap_or(false),
