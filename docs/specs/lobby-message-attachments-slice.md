@@ -230,8 +230,10 @@ Observed follow-up: an interrupted macOS provider/server test run left 159
 causing a later guardian-readiness test to fail with `ENOSPC`; one deterministic
 guardian-death run reproduced a 64-MiB orphan. Commits `af6297d`, `11fa808`, and
 `afd3997` fixed that separate lifecycle owner rather than hiding cleanup inside the
-attachment path. Provider executable and Unix companion copies now share one provider
-lease root, while the running desktop image and server sidecar share one distinct
-desktop lease root. Active leases are retained and only unlocked crash directories are
-reclaimed by the next creation or owner drop. The final forced-death/full-verification
-run left no old executable directories and only a zero-byte lock in each managed root.
+attachment path. Filesystem-staged provider images and Unix private companion copies
+now share one provider lease root, while the running desktop image and server sidecar
+share one distinct desktop lease root. Linux and Android provider images retain their
+sealed `memfd` execution path. Active leases are retained and only unlocked crash
+directories are reclaimed by the next creation or owner drop. The final
+forced-death/full-verification run left no old executable directories and only a
+zero-byte lock in each managed root.

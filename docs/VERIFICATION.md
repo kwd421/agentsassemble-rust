@@ -4027,12 +4027,14 @@ copied-frontend connection, packaged verification, and real providers remain pen
 The prior concrete cost was a reproducible 64-MiB provider executable orphan after one
 forced guardian-death test and 159 historical macOS staging directories exceeding 10
 GiB, eventually producing `ENOSPC`. Commits `af6297d`, `11fa808`, and `afd3997` put
-that cleanup at its process-custody owners. Provider executables and Unix companions
-share one provider lease root; desktop-image re-exec and server-sidecar copies share a
-separate desktop lease root. Both retain active locked directories and reclaim only
-unlocked crash directories on the next create or owner drop. Root and child locks are
-private, owner-validated, opened without symlink following, and serialized for create
-and reclaim. Scans stop at 1,024 entries and unsafe or unknown state fails closed.
+that cleanup at its process-custody owners. Filesystem-staged provider images and Unix
+private companions share one provider lease root; Linux and Android provider images
+retain their sealed `memfd` path. Desktop-image re-exec and server-sidecar copies share
+a separate desktop lease root. Both filesystem owners retain active locked directories
+and reclaim only unlocked crash directories on the next create or owner drop. Root and
+child locks are private, owner-validated, opened without symlink following, and
+serialized for create and reclaim. Scans stop at 1,024 entries and unsafe or unknown
+state fails closed.
 
 This preserves the opened-source identity, staged-byte hash, `0500` executable,
 `0700` directory, active process custody, and existing launch proof. It adds no timer,
@@ -4040,8 +4042,10 @@ background sweeper, configuration layer, fallback, legacy migration, or generic
 workspace crate. The provider and desktop implementations remain separate because
 their process lifetimes and architecture owners are separate; maintained `fs2` and
 `tempfile` provide the shared solved mechanisms. An initial nonblocking create lock
-failed under normal parallel Codex staging, so only the short create critical section
-was changed to a blocking lock; drop cleanup remains nonblocking.
+failed under normal parallel Codex staging, so create now waits for the root lock.
+Owner drop acquires that lock nonblocking, but after either acquisition the owner runs a
+bounded synchronous scan and may recursively delete up to 1,024 unlocked directories.
+Worst-case cleanup latency was not measured; no latency improvement is claimed.
 
 The active-versus-abandoned regressions, running-image and source-replacement binding
 tests, forced guardian-death test, and full `make verify` passed: frontend 92 files /
