@@ -50,12 +50,6 @@ const ATTACHMENT_KEYS = [
   "url",
   "download_url",
 ] as const;
-const SAFE_IMAGE_TYPES = new Set([
-  "image/png",
-  "image/jpeg",
-  "image/gif",
-  "image/webp",
-]);
 
 function invalidResponse(): never {
   throw new Error("로비 메시지 첨부 응답 계약이 올바르지 않습니다.");
@@ -109,7 +103,6 @@ export function parseMessageAttachment(value: unknown): LobbyAttachmentRef {
     Number(size) < 1 ||
     Number(size) > MAX_ATTACHMENT_BYTES ||
     typeof attachment.is_image !== "boolean" ||
-    attachment.is_image !== SAFE_IMAGE_TYPES.has(contentType) ||
     attachment.url !== messageAttachmentReference(id, "view") ||
     attachment.download_url !== messageAttachmentReference(id, "download")
   ) {

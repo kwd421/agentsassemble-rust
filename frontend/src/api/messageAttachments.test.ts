@@ -195,7 +195,7 @@ describe("lobby message-attachment HTTP authority", () => {
       { ...attachment, url: `${attachment.url}&extra=1` },
       { ...attachment, content_type: "Text/Plain" },
       { ...attachment, filename: " ../notes.txt" },
-      { ...attachment, is_image: true },
+      { ...attachment, is_image: "yes" },
       { ...attachment, size: 0 },
       { ...attachment, ignored: true },
     ];
@@ -212,6 +212,23 @@ describe("lobby message-attachment HTTP authority", () => {
         )
       ).rejects.toThrow("응답 계약");
     }
+  });
+
+  it("consumes the server-owned safe-image classification without a MIME mirror", async () => {
+    bridge.upload.mockResolvedValue(grant("a".repeat(64)));
+    const classified = { ...attachment, is_image: true };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse({ attachment: classified }))
+    );
+
+    await expect(
+      uploadMessageAttachment(
+        new File(["notes"], "notes.txt", { type: "text/plain" }),
+        "general",
+        { kind: "local" }
+      )
+    ).resolves.toEqual(classified);
   });
 
   it("uses exact local and remote read grants bound to the canonical attachment", async () => {

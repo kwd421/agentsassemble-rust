@@ -60,7 +60,10 @@ Rust-owned upload, message-binding, authorized-read, and provider-read lifecycle
   preview is limited to decoded, bounded PNG/JPEG/GIF/WebP whose declared and detected
   formats agree; active or ambiguous content is never classified inline. Every read is
   private, `no-store`, `nosniff`, and uses a safe content disposition. Provider base64
-  output is bounded by the same item limit and is never logged or placed in events.
+  output is bounded by the same item limit and is never logged or placed in events. The
+  Rust decode boundary owns that classification and validates it again when loading
+  stored metadata; the frontend consumes the canonical `is_image` projection and does
+  not maintain a second MIME allowlist.
 - The copied composer keeps drafts scoped to their room, retains text and staged
   attachments after a failed send, and clears them only after the committed ACK. The
   renderer obtains authorized blobs, creates generation-owned object URLs, and revokes
