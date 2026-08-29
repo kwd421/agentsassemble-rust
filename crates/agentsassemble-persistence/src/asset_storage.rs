@@ -17,7 +17,7 @@ pub(crate) async fn enforce_storage_replacement(
         return Err(invalid_storage_usage());
     }
     let row = sqlx::query(
-        "SELECT COUNT(*) AS asset_count, COALESCE(SUM(size), 0) AS asset_bytes FROM (SELECT size FROM profile_avatar_assets UNION ALL SELECT size FROM prejoin_avatar_assets UNION ALL SELECT size FROM room_appearance_assets)",
+        "SELECT COUNT(*) AS asset_count, COALESCE(SUM(size), 0) AS asset_bytes FROM (SELECT size FROM profile_avatar_assets UNION ALL SELECT size FROM prejoin_avatar_assets UNION ALL SELECT size FROM room_appearance_assets UNION ALL SELECT size FROM room_message_attachments)",
     )
     .fetch_one(&mut **transaction)
     .await?;

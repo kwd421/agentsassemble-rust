@@ -216,6 +216,36 @@ const TABLES: &[TableDefinition] = &[
         infrastructure: false,
     },
     TableDefinition {
+        name: "room_message_attachments",
+        ddl: concat!(
+            "CREATE TABLE IF NOT EXISTS room_message_attachments (",
+            "attachment_id TEXT PRIMARY KEY CHECK(",
+            "typeof(attachment_id) = 'text' AND length(CAST(attachment_id AS BLOB)) = 35 ",
+            "AND substr(attachment_id, 1, 3) = 'ma_' ",
+            "AND substr(attachment_id, 4) = lower(substr(attachment_id, 4)) ",
+            "AND substr(attachment_id, 4) NOT GLOB '*[^0-9a-f]*'), ",
+            "room_id TEXT NOT NULL, ",
+            "pending_owner_user_id TEXT, ",
+            "event_seq INTEGER CHECK(event_seq IS NULL OR event_seq > 0), ",
+            "filename TEXT NOT NULL, ",
+            "content_type TEXT NOT NULL, ",
+            "content BLOB NOT NULL CHECK(typeof(content) = 'blob'), ",
+            "size INTEGER NOT NULL CHECK(size > 0 AND size <= 10485760 AND length(content) = size), ",
+            "is_safe_image INTEGER NOT NULL CHECK(is_safe_image IN (0, 1)), ",
+            "created_at INTEGER NOT NULL CHECK(created_at > 0), ",
+            "state TEXT NOT NULL CHECK(state IN ('pending', 'bound')), ",
+            "expires_at INTEGER, ",
+            "CHECK((state = 'pending' AND pending_owner_user_id IS NOT NULL ",
+            "AND event_seq IS NULL AND expires_at IS NOT NULL AND expires_at > created_at) OR ",
+            "(state = 'bound' AND pending_owner_user_id IS NULL ",
+            "AND event_seq IS NOT NULL AND expires_at IS NULL)), ",
+            "FOREIGN KEY(room_id) REFERENCES rooms(room_id) ON DELETE CASCADE, ",
+            "FOREIGN KEY(pending_owner_user_id) REFERENCES user_profiles(user_id) ON DELETE CASCADE, ",
+            "FOREIGN KEY(room_id, event_seq) REFERENCES room_events(room_id, seq) ON DELETE CASCADE)",
+        ),
+        infrastructure: false,
+    },
+    TableDefinition {
         name: "room_message_pins",
         ddl: "CREATE TABLE IF NOT EXISTS room_message_pins (room_id TEXT NOT NULL, event_id TEXT NOT NULL CHECK(typeof(event_id) = 'text' AND length(CAST(event_id AS BLOB)) BETWEEN 1 AND 128 AND instr(event_id, char(0)) = 0), event_seq INTEGER NOT NULL CHECK(event_seq > 0), pinned_at INTEGER NOT NULL CHECK(pinned_at > 0), PRIMARY KEY(room_id, event_id), UNIQUE(room_id, event_seq), FOREIGN KEY(room_id, event_seq) REFERENCES room_events(room_id, seq) ON DELETE CASCADE)",
         infrastructure: false,
@@ -254,6 +284,8 @@ const INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS human_room_sessions_invite_state_idx ON human_room_sessions(invite_id, key_kind, state)",
     "CREATE INDEX IF NOT EXISTS room_appearance_assets_pending_idx ON room_appearance_assets(pending_owner_user_id, expires_at) WHERE state = 'pending'",
     "CREATE INDEX IF NOT EXISTS room_appearance_assets_room_idx ON room_appearance_assets(room_id, state)",
+    "CREATE INDEX IF NOT EXISTS room_message_attachments_pending_expiry_idx ON room_message_attachments(expires_at) WHERE state = 'pending'",
+    "CREATE INDEX IF NOT EXISTS room_message_attachments_event_idx ON room_message_attachments(room_id, event_seq) WHERE state = 'bound'",
     "CREATE INDEX IF NOT EXISTS room_write_budgets_window_idx ON room_write_budgets(window_started_at)",
     "CREATE UNIQUE INDEX IF NOT EXISTS provider_turn_executions_blocking_session_idx ON provider_turn_executions(room_id, session_id) WHERE phase IN ('assigned', 'start_dispatching', 'running', 'interrupt_pending', 'quiescing', 'start_ambiguous', 'interrupt_ambiguous', 'recovery_required')",
     "CREATE UNIQUE INDEX IF NOT EXISTS provider_turn_executions_blocking_runtime_idx ON provider_turn_executions(runtime_handle_id) WHERE phase IN ('assigned', 'start_dispatching', 'running', 'interrupt_pending', 'quiescing', 'start_ambiguous', 'interrupt_ambiguous', 'recovery_required')",
@@ -687,3 +719,7 @@ mod asset_tests;
 #[cfg(test)]
 #[path = "schema_message_pin_tests.rs"]
 mod message_pin_tests;
+
+#[cfg(test)]
+#[path = "schema_message_attachment_tests.rs"]
+mod message_attachment_tests;

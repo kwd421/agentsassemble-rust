@@ -549,15 +549,24 @@ mod tests {
     async fn expired_foreign_lifecycle_rows_remain_charged_until_owner_cleanup() {
         let (store, principal) = fixture().await;
         let now = Utc::now();
+        let foreign_rows = crate::asset_storage::MAX_RETAINED_ASSETS / 2;
         sqlx::query(
             "WITH digits(value) AS (VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9),(10),(11),(12),(13),(14),(15)), sequence(value) AS (SELECT first.value * 256 + second.value * 16 + third.value FROM digits AS first CROSS JOIN digits AS second CROSS JOIN digits AS third) INSERT INTO prejoin_avatar_assets(attachment_id, room_id, custody_fingerprint, invite_fingerprint, filename, content_type, content, size, created_at, expires_at) SELECT printf('expired-prejoin-%018d', value), 'general', CAST(printf('%032d', value) AS BLOB), ?, 'stored.png', 'image/png', X'00', 1, ?, 0 FROM sequence WHERE value < ?",
         )
         .bind([0x44_u8; 32].as_slice())
         .bind(now.to_rfc3339())
-        .bind(crate::asset_storage::MAX_RETAINED_ASSETS)
+        .bind(foreign_rows)
         .execute(&store.pool)
         .await
         .unwrap_or_else(|error| panic!("seed expired prejoin avatars: {error}"));
+        sqlx::query(
+            "WITH digits(value) AS (VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9),(10),(11),(12),(13),(14),(15)), sequence(value) AS (SELECT first.value * 256 + second.value * 16 + third.value FROM digits AS first CROSS JOIN digits AS second CROSS JOIN digits AS third) INSERT INTO room_message_attachments(attachment_id, room_id, pending_owner_user_id, event_seq, filename, content_type, content, size, is_safe_image, created_at, state, expires_at) SELECT printf('ma_%032x', value), 'general', ?, NULL, 'stored.bin', 'application/octet-stream', X'00', 1, 0, 1, 'pending', 2 FROM sequence WHERE value < ?",
+        )
+        .bind(&principal.principal_id)
+        .bind(foreign_rows)
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("seed expired message attachments: {error}"));
 
         assert_rejected_code(
             store
@@ -566,7 +575,7 @@ mod tests {
             "attachment_quota_reached",
         );
         let retained = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM prejoin_avatar_assets WHERE expires_at = 0",
+            "SELECT (SELECT COUNT(*) FROM prejoin_avatar_assets WHERE expires_at = 0) + (SELECT COUNT(*) FROM room_message_attachments WHERE expires_at = 2)",
         )
         .fetch_one(&store.pool)
         .await
