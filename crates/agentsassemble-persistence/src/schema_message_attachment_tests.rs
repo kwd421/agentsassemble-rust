@@ -36,6 +36,7 @@ async fn message_attachment_ids_match_the_domain_namespace() {
         format!("ma_{}", "0".repeat(31)),
         format!("mx_{}", "0".repeat(32)),
         format!("ma_{}\0x", "a".repeat(32)),
+        format!("ma_{}\0", "a".repeat(31)),
     ];
 
     for (index, attachment_id) in candidates.into_iter().enumerate() {
