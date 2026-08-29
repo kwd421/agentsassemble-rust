@@ -53,6 +53,10 @@ pub enum PersistenceError {
     RoomMissing,
     #[error("participant does not exist")]
     ParticipantMissing,
+    #[error("persona asset does not exist")]
+    PersonaAssetMissing,
+    #[error("stored persona asset is invalid")]
+    InvalidPersonaAsset,
     #[error("request id was reused with a different action or payload")]
     CommandConflict,
     #[error("snapshot cursor is ahead of durable room history at {durable_last_seq}")]

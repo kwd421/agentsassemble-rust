@@ -7,6 +7,7 @@ license.workspace = true
 [dependencies]
 agentsassemble-domain = { path = "../agentsassemble-domain" }
 base64.workspace = true
+caseless.workspace = true
 chrono.workspace = true
 fs2.workspace = true
 hex.workspace = true

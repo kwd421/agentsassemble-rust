@@ -11,7 +11,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde_json::{Map, Value};
 use thiserror::Error;
 
-use crate::raster_assets::prepare_raster;
+use crate::raster_assets::{PNG_SIGNATURE, prepare_raster};
 
 pub(super) const MAX_CARD_JSON_BYTES: usize = 5 * 1024 * 1024;
 const MAX_PNG_TEXT_BYTES: usize = 5 * 1024 * 1024;
@@ -37,15 +37,9 @@ pub enum PersonaImportError {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PersonaThumbnail {
-    pub filename: String,
-    pub content: Vec<u8>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImportedPersonaAsset {
-    pub card: PersonaCard,
-    pub thumbnail: Option<PersonaThumbnail>,
+    pub(crate) card: PersonaCard,
+    pub(crate) thumbnail: Option<Vec<u8>>,
 }
 
 /// Parses one `CCv3` JSON, PNG, or APNG upload and canonicalizes only the UI thumbnail.
@@ -93,10 +87,7 @@ pub(super) async fn finish_ccv3_import(
     );
     let thumbnail = if let Some((candidate_name, content_type, content)) = candidate {
         if let Ok((canonical, _)) = prepare_raster(&candidate_name, content_type, content).await {
-            Some(PersonaThumbnail {
-                filename: canonical.filename,
-                content: canonical.content,
-            })
+            Some(canonical.content)
         } else {
             add_count(&mut ignored, "invalid_thumbnail", 1);
             None
@@ -444,7 +435,7 @@ pub(super) fn safe_embedded_path(value: &str) -> Option<String> {
 }
 
 fn raster_content_type(content: &[u8]) -> Option<&'static str> {
-    if content.starts_with(b"\x89PNG\r\n\x1a\n") {
+    if content.starts_with(PNG_SIGNATURE) {
         Some("image/png")
     } else if content.starts_with(b"\xff\xd8\xff") {
         Some("image/jpeg")

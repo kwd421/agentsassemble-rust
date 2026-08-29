@@ -30,6 +30,7 @@ version = "0.1.0"
 dependencies = [
  "agentsassemble-domain",
  "base64 0.22.1",
+ "caseless",
  "chrono",
  "fs2",
  "hex",

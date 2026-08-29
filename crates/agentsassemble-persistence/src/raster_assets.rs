@@ -10,6 +10,7 @@ use crate::PersistenceError;
 const MAX_IMAGE_DIMENSION: u32 = 4096;
 const MAX_IMAGE_PIXELS: u64 = 16 * 1024 * 1024;
 const MAX_DECODE_ALLOC_BYTES: u64 = 72 * 1024 * 1024;
+pub(crate) const PNG_SIGNATURE: &[u8; 8] = b"\x89PNG\r\n\x1a\n";
 
 pub(crate) struct CanonicalRaster {
     pub(crate) filename: String,

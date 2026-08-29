@@ -636,6 +636,8 @@ pub(crate) fn persistence_error(error: &PersistenceError) -> (String, String) {
         ),
         PersistenceError::Database(_)
         | PersistenceError::Json(_)
+        | PersistenceError::PersonaAssetMissing
+        | PersistenceError::InvalidPersonaAsset
         | PersistenceError::RuntimeAuthorityTask(_)
         | PersistenceError::AuthorityConflict(_)
         | PersistenceError::UnownedDatabase
@@ -664,6 +666,8 @@ pub(crate) fn persistence_error_is_internal(error: &PersistenceError) -> bool {
         error,
         PersistenceError::Database(_)
             | PersistenceError::Json(_)
+            | PersistenceError::PersonaAssetMissing
+            | PersistenceError::InvalidPersonaAsset
             | PersistenceError::RuntimeAuthorityTask(_)
             | PersistenceError::AuthorityConflict(_)
             | PersistenceError::UnownedDatabase

@@ -65,6 +65,7 @@ mod participant_roles;
 mod persistence_security_tests;
 mod persona_charx;
 mod persona_import;
+mod persona_library;
 mod persona_risu;
 mod provider_turn_effect;
 mod provider_turn_effect_finalize;
@@ -106,9 +107,7 @@ pub use message_pins::PinnedLobbyMessage;
 pub use participant_leave::ParticipantLeaveMutation;
 pub use participant_mute::ParticipantMuteMutation;
 pub use persona_charx::import_charx_asset;
-pub use persona_import::{
-    ImportedPersonaAsset, PersonaImportError, PersonaThumbnail, import_ccv3_asset,
-};
+pub use persona_import::{ImportedPersonaAsset, PersonaImportError, import_ccv3_asset};
 pub use persona_risu::import_risum_asset;
 pub use private_fs::secure_private_directory;
 pub use profile_attachments::{ProfileAttachment, ProfileAttachmentMetadata};
