@@ -347,6 +347,7 @@ fn select_thumbnail(
     ignored: &mut BTreeMap<String, u32>,
 ) -> (Option<ThumbnailCandidate>, usize) {
     let mut selected = None;
+    let mut selected_preferred = false;
     let mut count = 0;
     let default_asset = Map::from_iter([
         ("type".to_owned(), Value::String("icon".to_owned())),
@@ -369,11 +370,9 @@ fn select_thumbnail(
             text(asset.get("type")).to_ascii_lowercase().as_str(),
             "icon" | "avatar" | "portrait"
         );
-        if selected.is_none() || preferred {
+        if selected.is_none() || (preferred && !selected_preferred) {
             selected = Some(("persona-thumbnail".to_owned(), content_type, payload));
-            if preferred {
-                break;
-            }
+            selected_preferred = preferred;
         }
     }
     (selected, count)
@@ -585,5 +584,48 @@ mod tests {
             panic!("non-CCv3 JSON must fail");
         };
         assert!(error.to_string().contains("spec must be chara_card_v3"));
+    }
+
+    #[tokio::test]
+    async fn counts_resolved_assets_after_the_first_preferred_thumbnail() {
+        let icon = png_data_uri([0, 0, 0, 255]);
+        let background = png_data_uri([255, 255, 255, 255]);
+        let card = json!({
+            "spec": "chara_card_v3",
+            "spec_version": "3.0",
+            "data": {
+                "name": "Asset Guide",
+                "assets": [
+                    {"type": "icon", "uri": icon},
+                    {"type": "background", "uri": background}
+                ]
+            }
+        });
+
+        let imported = import_ccv3_asset("assets.json", card.to_string().into_bytes())
+            .await
+            .unwrap_or_else(|error| panic!("import card: {error}"));
+
+        assert_eq!(imported.card.asset_count, 2);
+        assert!(imported.thumbnail.is_some());
+    }
+
+    fn png_data_uri(pixel: [u8; 4]) -> String {
+        let mut png_bytes = Cursor::new(Vec::new());
+        {
+            let mut png_encoder = png::Encoder::new(&mut png_bytes, 1, 1);
+            png_encoder.set_color(png::ColorType::Rgba);
+            png_encoder.set_depth(png::BitDepth::Eight);
+            let mut writer = png_encoder
+                .write_header()
+                .unwrap_or_else(|error| panic!("write PNG header: {error}"));
+            writer
+                .write_image_data(&pixel)
+                .unwrap_or_else(|error| panic!("write PNG pixel: {error}"));
+        }
+        format!(
+            "data:image/png;base64,{}",
+            STANDARD.encode(png_bytes.into_inner())
+        )
     }
 }
