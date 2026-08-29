@@ -27,6 +27,8 @@ pub(super) fn attached_session(now: DateTime<Utc>) -> DurableAgentSession {
             permission_mode: "meeting_read_only".to_owned(),
             max_output_tokens: 0,
             catalog_revision: "catalog-1".to_owned(),
+            persona_card_id: Box::default(),
+            persona_card: None,
             transport: "stdio_jsonl".to_owned(),
             last_seen_event_id: String::new(),
             last_seen_seq: 0,

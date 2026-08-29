@@ -120,6 +120,8 @@ async fn create_agent_records(
         permission_mode: draft.permission_mode.clone(),
         max_output_tokens: draft.max_output_tokens,
         catalog_revision: draft.catalog_revision.clone(),
+        persona_card_id: Box::default(),
+        persona_card: None,
         transport: draft.transport.clone(),
         last_seen_event_id: last_message_id.clone(),
         last_seen_seq: last_message_seq,

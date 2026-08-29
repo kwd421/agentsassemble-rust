@@ -97,11 +97,11 @@ pub(crate) async fn execute_command(
                 let effect = mutation.interrupt_effect.clone();
                 let mut execution = CommandExecution::participant_mute(mutation);
                 if let Some(effect) = effect {
-                    match crate::participant_mute_runtime::apply_exact_interrupt(
+                    match Box::pin(crate::participant_mute_runtime::apply_exact_interrupt(
                         store,
                         provider_adapter,
                         &effect,
-                    )
+                    ))
                     .await
                     {
                         Ok(commit) => execution.extend_turn_commit(commit),

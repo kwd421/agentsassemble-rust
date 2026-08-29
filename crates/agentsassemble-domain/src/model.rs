@@ -6,7 +6,7 @@ use serde_json::Value;
 use ts_rs::TS;
 use uuid::Uuid;
 
-use crate::QueuedRoomInput;
+use crate::{QueuedRoomInput, persona::PersonaAssetSummary};
 
 pub const LOCAL_OPERATOR_USER_ID: &str = "operator-local-user";
 pub const LOCAL_OPERATOR_PARTICIPANT_ID: &str = "operator-local";
@@ -309,6 +309,8 @@ pub struct AgentSession {
     pub permission_mode: String,
     pub max_output_tokens: u32,
     pub catalog_revision: String,
+    pub persona_card_id: Box<str>,
+    pub persona_card: Option<Box<PersonaAssetSummary>>,
     pub transport: String,
     pub last_seen_event_id: String,
     pub last_seen_seq: i64,

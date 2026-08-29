@@ -172,6 +172,8 @@ mod tests {
                 permission_mode: "meeting_read_only".to_owned(),
                 max_output_tokens: 0,
                 catalog_revision: "test".to_owned(),
+                persona_card_id: Box::default(),
+                persona_card: None,
                 transport: "test".to_owned(),
                 last_seen_event_id: String::new(),
                 last_seen_seq: 0,

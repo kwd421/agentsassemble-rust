@@ -79,6 +79,8 @@ async fn seed_agent(store: &SqliteStore, now: chrono::DateTime<Utc>) {
             permission_mode: "meeting_read_only".to_owned(),
             max_output_tokens: 0,
             catalog_revision: "catalog-1".to_owned(),
+            persona_card_id: Box::default(),
+            persona_card: None,
             transport: "stdio_jsonl".to_owned(),
             last_seen_event_id: String::new(),
             last_seen_seq: 0,
@@ -125,22 +127,21 @@ async fn seed_agent(store: &SqliteStore, now: chrono::DateTime<Utc>) {
     )
     .bind("general")
     .bind(AGENT_ID)
-    .bind(
-        serde_json::to_string(&participant).unwrap_or_else(|error| panic!("encode agent: {error}")),
-    )
+    .bind(encoded(&participant))
     .execute(&store.pool)
     .await
     .unwrap_or_else(|error| panic!("insert agent: {error}"));
     sqlx::query("INSERT INTO agent_sessions(room_id, session_id, session_json) VALUES (?, ?, ?)")
         .bind("general")
         .bind(AGENT_ID)
-        .bind(
-            serde_json::to_string(&session)
-                .unwrap_or_else(|error| panic!("encode session: {error}")),
-        )
+        .bind(encoded(&session))
         .execute(&store.pool)
         .await
         .unwrap_or_else(|error| panic!("insert session: {error}"));
+}
+
+fn encoded(value: &impl serde::Serialize) -> String {
+    serde_json::to_string(value).unwrap_or_else(|error| panic!("encode fixture: {error}"))
 }
 
 #[tokio::test]
