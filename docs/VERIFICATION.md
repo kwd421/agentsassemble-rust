@@ -3762,3 +3762,38 @@ specific Application Support, cache, and WebKit directories were moved to distin
 recoverable Trash paths, alongside the already isolated sidecar and frontend build. The
 Computer Use kernel was reset. No provider, Deep Scan, or automated security scanner
 ran, and this UI-only closure makes no CPU, memory, disk, or latency improvement claim.
+
+## Retained-asset accounting correction: 2026-08-29
+
+Commit `1552b14` corrects the absolute local-storage owner before message attachments
+join it. The prior query omitted expired pending rows even though their BLOBs still
+occupied SQLite. An expired row in one lifecycle could therefore stop contributing to
+the 4,096-item / 8-GiB ceiling before that lifecycle owner deleted it, allowing another
+lifecycle to admit additional physical storage. The correction moves only the shared
+checked replacement arithmetic and three-table retained-row aggregate from the raster
+decoder into `asset_storage`; profile, pre-join, and room-appearance modules retain
+their own authority, expiry cleanup, exact replacement, and state transitions.
+
+Accounting now includes every physically retained row and still computes exact
+replacement as `current - predecessor + new`. Limit failure preserves the existing
+error code and message, deletes no row, and leaves each lifecycle able to collect only
+its own expired pending rows. A cross-owner regression seeds 4,096 expired pre-join
+rows, proves a profile upload is rejected, and proves all pre-join rows remain for their
+owner to collect. The existing boundary regression continues to prove replacement at
+the exact ceiling succeeds while net growth fails.
+
+The aggregate reads only `size` from the three current asset tables. A healthy store is
+bounded to 4,096 retained rows, and the focused 4,096-row regression completed in 0.03
+seconds on the development machine. Removing the expiry predicates also removes three
+timestamp comparisons and binds, but no CPU, memory, latency, or disk-performance
+improvement is claimed. A cache, counter table, background sweeper, generic repository,
+or cross-owner garbage collector would add split authority without observed need, so
+none was introduced.
+
+Full serial `make verify` passed architecture and 800-line source gates, policy tests,
+formatting, generated bindings, original-CSS verification, the production frontend
+build, frontend 89 files / 555 tests, desktop 20, domain 27, persistence 187, protocol
+6, provider 120, server 85, every TCP/integration/doc test, warning-denied Clippy, and
+the final diff gate. Repository-wide searches found one owner for the 4,096/8-GiB asset
+policy and one call path from each implemented lifecycle. No provider, Computer Use,
+Deep Scan, or automated security scanner ran for this persistence-only correction.
