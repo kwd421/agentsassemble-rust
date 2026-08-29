@@ -2,6 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { TEST_SERVER_PRODUCT_SURFACE } from "../../test/serverProductSurface";
 import { PRODUCT_SURFACE_REVISION } from "../../types/generated/PRODUCT_SURFACE_REVISION";
 import StartupIdentityGate from "./StartupIdentityGate";
 
@@ -17,26 +18,7 @@ const desktopMocks = vi.hoisted(() => ({
 }));
 const SERVER_ID = "30000000-0000-4000-8000-000000000001";
 const LINEAGE_ID = "30000000-0000-4000-8000-000000000002";
-const SERVER_SURFACE = {
-  revision: PRODUCT_SURFACE_REVISION,
-  digest: "fa9f15121b05ce4e2687d6f36187aa333c1c2f387c2fb42047aad91d5097ada6",
-  http_routes: [],
-  websocket_streams: ["room_events"],
-  websocket_actions: [
-    "agent.configure",
-    "agent.create",
-    "agent.resume",
-    "agent.start",
-    "agent.stop",
-    "message.send",
-    "participant.leave",
-    "participant.mute",
-    "participant.role.update",
-    "room.random.choose",
-    "room.random.roll",
-    "room.settings.update",
-  ],
-};
+const SERVER_SURFACE = TEST_SERVER_PRODUCT_SURFACE;
 const directory = (authority_lineage_id = LINEAGE_ID) => ({
   server_id: SERVER_ID,
   authority_lineage_id,

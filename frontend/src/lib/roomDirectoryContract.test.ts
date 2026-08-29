@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PRODUCT_SURFACE_REVISION } from "../types/generated/PRODUCT_SURFACE_REVISION";
+import { TEST_SERVER_PRODUCT_SURFACE } from "../test/serverProductSurface";
 
 import {
   bindRoomDirectoryAuthority,
@@ -14,27 +14,7 @@ import {
 const serverId = "10000000-0000-4000-8000-000000000001";
 const lineageId = "20000000-0000-4000-8000-000000000002";
 const roomUid = "30000000-0000-4000-8000-000000000003";
-const actions = [
-  "agent.configure",
-  "agent.create",
-  "agent.resume",
-  "agent.start",
-  "agent.stop",
-  "message.send",
-  "participant.leave",
-  "participant.mute",
-  "participant.role.update",
-  "room.random.choose",
-  "room.random.roll",
-  "room.settings.update",
-] as const;
-const surface = {
-  revision: PRODUCT_SURFACE_REVISION,
-  digest: "fa9f15121b05ce4e2687d6f36187aa333c1c2f387c2fb42047aad91d5097ada6",
-  http_routes: [],
-  websocket_streams: ["room_events"],
-  websocket_actions: [...actions],
-} as const;
+const surface = TEST_SERVER_PRODUCT_SURFACE;
 
 function room() {
   return {
@@ -189,7 +169,7 @@ describe("room directory contracts", () => {
           ...authority,
           server_product_surface: {
             ...surface,
-            digest: "44d854d6b59b454049bbbd062b0d01ea479d28b4ef9c0ede666141f5fa4d878c",
+            digest: "907399f4f53bb9de6c5f30f2ad9f85f8f55146d6557592f7186bfe8d8b665b5a",
             websocket_streams: [],
           },
         }),
