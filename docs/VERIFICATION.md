@@ -4021,3 +4021,45 @@ copied-frontend connection, packaged verification, and real providers remain pen
 - The web review recorded executable-staging orphan cleanup as a nonblocking, separate
   lifecycle-owner finding. Neither final review used Deep Scan or another automated
   security scan.
+
+## Executable-staging crash lifecycle: 2026-08-29
+
+The prior concrete cost was a reproducible 64-MiB provider executable orphan after one
+forced guardian-death test and 159 historical macOS staging directories exceeding 10
+GiB, eventually producing `ENOSPC`. Commits `af6297d`, `11fa808`, and `afd3997` put
+that cleanup at its process-custody owners. Provider executables and Unix companions
+share one provider lease root; desktop-image re-exec and server-sidecar copies share a
+separate desktop lease root. Both retain active locked directories and reclaim only
+unlocked crash directories on the next create or owner drop. Root and child locks are
+private, owner-validated, opened without symlink following, and serialized for create
+and reclaim. Scans stop at 1,024 entries and unsafe or unknown state fails closed.
+
+This preserves the opened-source identity, staged-byte hash, `0500` executable,
+`0700` directory, active process custody, and existing launch proof. It adds no timer,
+background sweeper, configuration layer, fallback, legacy migration, or generic
+workspace crate. The provider and desktop implementations remain separate because
+their process lifetimes and architecture owners are separate; maintained `fs2` and
+`tempfile` provide the shared solved mechanisms. An initial nonblocking create lock
+failed under normal parallel Codex staging, so only the short create critical section
+was changed to a blocking lock; drop cleanup remains nonblocking.
+
+The active-versus-abandoned regressions, running-image and source-replacement binding
+tests, forced guardian-death test, and full `make verify` passed: frontend 92 files /
+588 tests, persistence 200, provider 128, server 86, desktop 22, every TCP/integration
+and doc test, warning-denied Clippy, and architecture/source/diff gates. No old macOS
+provider, companion, or server executable-staging directory remained; each managed
+root contained only its zero-byte root lock.
+
+- The initial web and Daybreaker reviews each found one Medium: Unix companion staging
+  remained outside the provider lifecycle owner. Commit `11fa808` moved that reachable
+  path under the same provider lease owner without changing byte or Room Portal
+  authority.
+- Daybreaker found one additional Medium: both macOS `BoundSidecar` entry points still
+  used desktop-owned raw temporary directories. Commit `afd3997` gave those paths one
+  desktop lifecycle owner. The web reviewer independently confirmed that the separate
+  provider and desktop roots are required custody boundaries, not approval-blocking
+  policy duplication.
+- Final web verdict: `11fa808`, `afd3997`, `af6297d..afd3997`, and
+  `47c75d1..afd3997` APPROVE C0/H0/M0. Final Daybreaker Blue High verdict:
+  `11fa808..afd3997` and `47c75d1..afd3997` APPROVE C0/H0/M0. Neither review used
+  Deep Scan or another automated security scanner.

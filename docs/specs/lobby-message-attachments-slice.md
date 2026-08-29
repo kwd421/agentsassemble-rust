@@ -227,6 +227,11 @@ speculate about it.
 
 Observed follow-up: an interrupted macOS provider/server test run left 159
 `agentsassemble-*-exec-*` executable-staging directories (more than 10 GiB total),
-causing a later guardian-readiness test to fail with `ENOSPC`. The exact stale test
-directories were unreferenced and removed; executable staging cleanup remains a
-separate lifecycle-owner fix and is not hidden inside this attachment change.
+causing a later guardian-readiness test to fail with `ENOSPC`; one deterministic
+guardian-death run reproduced a 64-MiB orphan. Commits `af6297d`, `11fa808`, and
+`afd3997` fixed that separate lifecycle owner rather than hiding cleanup inside the
+attachment path. Provider executable and Unix companion copies now share one provider
+lease root, while the running desktop image and server sidecar share one distinct
+desktop lease root. Active leases are retained and only unlocked crash directories are
+reclaimed by the next creation or owner drop. The final forced-death/full-verification
+run left no old executable directories and only a zero-byte lock in each managed root.
