@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use caseless::default_case_fold_str;
 use regex::{RegexBuilder, escape};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -261,7 +262,7 @@ fn active_lore<'a>(
     let mut selected = BTreeSet::new();
     let mut search_text = recent_room_context.to_owned();
     for _ in 0..rounds {
-        let folded_search_text = search_text.to_lowercase();
+        let folded_search_text = default_case_fold_str(&search_text);
         let mut added = false;
         for (index, entry) in card.lorebook.iter().enumerate() {
             if !selected.contains(&index)
@@ -417,20 +418,19 @@ fn literal_match(
     if keyword.is_empty() {
         return false;
     }
+    let folded_keyword;
+    let (haystack, needle) = if case_sensitive {
+        (context, keyword)
+    } else {
+        folded_keyword = default_case_fold_str(keyword);
+        (folded_context, folded_keyword.as_str())
+    };
     if !full_word {
-        return if case_sensitive {
-            context.contains(keyword)
-        } else {
-            folded_context.contains(&keyword.to_lowercase())
-        };
+        return haystack.contains(needle);
     }
-    RegexBuilder::new(&format!(
-        r"(?u)(?:^|[^\p{{word}}]){}(?:$|[^\p{{word}}])",
-        escape(keyword)
-    ))
-    .case_insensitive(!case_sensitive)
-    .build()
-    .is_ok_and(|pattern| pattern.is_match(context))
+    RegexBuilder::new(&format!(r"(?u)(?:^|[^\w]){}(?:$|[^\w])", escape(needle)))
+        .build()
+        .is_ok_and(|pattern| pattern.is_match(haystack))
 }
 
 fn keywords(value: &str) -> Vec<&str> {
@@ -544,6 +544,20 @@ mod tests {
         let context = render_persona_context(&card, "harbor");
         assert!(context.contains("A silver key is visible."));
         assert!(context.contains("The vault opens."));
+    }
+
+    #[test]
+    fn case_insensitive_lore_uses_full_unicode_case_folding() {
+        let mut partial = lore("STRASSE", "The partial match activates.");
+        partial.insert_order = 1;
+        let mut full_word = lore(
+            "STRASSE",
+            "@@match_full_word\nThe full-word match activates.",
+        );
+        full_word.insert_order = 2;
+        let context = render_persona_context(&card(vec![partial, full_word]), "Die Straße endet.");
+        assert!(context.contains("The partial match activates."));
+        assert!(context.contains("The full-word match activates."));
     }
 
     fn card(lorebook: Vec<PersonaLoreEntry>) -> PersonaCard {

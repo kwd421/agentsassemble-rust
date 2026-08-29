@@ -19,6 +19,7 @@ anyhow = "1.0.100"
 axum = { version = "0.8.9", features = ["ws"] }
 base64 = "0.22.1"
 bytes = "1.11.1"
+caseless = "0.2.2"
 chrono = { version = "0.4.45", features = ["serde"] }
 clap = { version = "4.5.48", features = ["derive", "env"] }
 command-fds = { version = "0.3.3", features = ["tokio"] }
