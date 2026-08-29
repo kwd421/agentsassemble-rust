@@ -4089,7 +4089,14 @@ root contained only its zero-byte root lock.
   rejected because the safe creation wrapper accepts `str`; the code does not trade the
   fixed race for a lossy path conversion. No CPU, memory, disk, or latency improvement is
   claimed.
-- Warning-denied Windows all-target/all-feature cross-compilation passed. Full
+- Daybreaker Blue High found one Medium in `77624ca..60d8a97`: the dependency's blanket
+  handle extension queried `GetSecurityInfo` with `SE_UNKNOWN_OBJECT_TYPE`, which Windows
+  rejects for a file or directory handle. That made every native Windows save fail after
+  creating its staging directory and made the earlier successful-validation claim
+  inaccurate. Commit `d8f4aa3` removed that extension path and calls the dependency's
+  explicit safe wrapper with `SE_FILE_OBJECT`; the retained-handle owner and DACL
+  validation contract is otherwise unchanged.
+- After `d8f4aa3`, warning-denied Windows all-target/all-feature cross-compilation and full
   `make verify` passed architecture and 800-line gates, copied-frontend/original-CSS
   verification, frontend 93 files / 591 tests, desktop 26 tests, all Rust/TCP/integration
   and doc tests, Clippy, and the diff gate. Windows-only private-creation and exclusive
