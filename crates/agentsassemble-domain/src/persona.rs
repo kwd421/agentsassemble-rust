@@ -1,10 +1,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use caseless::default_case_fold_str;
-use regex::{RegexBuilder, escape};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use ts_rs::TS;
+use unicode_general_category::{GeneralCategory, get_general_category};
 
 pub const MAX_PERSONA_ID_CHARACTERS: usize = 80;
 pub const MAX_PERSONA_CONTEXT_CHARACTERS: usize = 8_000;
@@ -428,9 +428,32 @@ fn literal_match(
     if !full_word {
         return haystack.contains(needle);
     }
-    RegexBuilder::new(&format!(r"(?u)(?:^|[^\w]){}(?:$|[^\w])", escape(needle)))
-        .build()
-        .is_ok_and(|pattern| pattern.is_match(haystack))
+    haystack.match_indices(needle).any(|(start, matched)| {
+        let end = start + matched.len();
+        haystack[..start]
+            .chars()
+            .next_back()
+            .is_none_or(|value| !is_python_word_character(value))
+            && haystack[end..]
+                .chars()
+                .next()
+                .is_none_or(|value| !is_python_word_character(value))
+    })
+}
+
+fn is_python_word_character(value: char) -> bool {
+    value == '_'
+        || matches!(
+            get_general_category(value),
+            GeneralCategory::UppercaseLetter
+                | GeneralCategory::LowercaseLetter
+                | GeneralCategory::TitlecaseLetter
+                | GeneralCategory::ModifierLetter
+                | GeneralCategory::OtherLetter
+                | GeneralCategory::DecimalNumber
+                | GeneralCategory::LetterNumber
+                | GeneralCategory::OtherNumber
+        )
 }
 
 fn keywords(value: &str) -> Vec<&str> {
@@ -558,6 +581,16 @@ mod tests {
         let context = render_persona_context(&card(vec![partial, full_word]), "Die Straße endet.");
         assert!(context.contains("The partial match activates."));
         assert!(context.contains("The full-word match activates."));
+    }
+
+    #[test]
+    fn full_word_lore_uses_the_original_python_word_set() {
+        let entry = lore(
+            "cafe",
+            "@@match_full_word\nThe combining-mark match activates.",
+        );
+        let context = render_persona_context(&card(vec![entry]), "cafe\u{301}");
+        assert!(context.contains("The combining-mark match activates."));
     }
 
     fn card(lorebook: Vec<PersonaLoreEntry>) -> PersonaCard {

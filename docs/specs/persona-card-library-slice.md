@@ -91,13 +91,14 @@ The authority baseline is reachable code at original commit
 
 The provider-neutral scanner uses maintained Unicode default case folding on the bounded
 search context once per recursive round. The earlier `lowercase` implementation could not
-preserve the reachable Python `casefold()` contract (`Straße` did not match `STRASSE`) and
-its invalid Unicode-property spelling also made whole-word patterns fail closed. Folding at
-the scan owner avoids traversing the whole context once per case-insensitive key; escaped
-keyword regex remains responsible only for the whole-word boundary. Domain tests verify
-partial and whole-word Unicode matches alongside literal, recursive, substitution, and
-inert-regex behavior. No wall-time or CPU reduction is claimed without a real-turn
-measurement.
+preserve the reachable Python `casefold()` contract (`Straße` did not match `STRASSE`).
+Whole-word matching checks only the adjacent folded characters against the original Python
+word set (Unicode letter/number or ASCII underscore), avoiding incompatible engine-specific
+`\w` definitions and per-keyword regex compilation. Folding at the scan owner avoids
+traversing the whole context once per case-insensitive key. Domain tests verify partial,
+whole-word, and combining-mark-adjacent Unicode matches alongside literal, recursive,
+substitution, and inert-regex behavior. No wall-time or CPU reduction is claimed without a
+real-turn measurement.
 
 The `CCv3` import boundary now parses PNG text chunks through the maintained PNG decoder
 instead of owning chunk framing or CRC handling. The reachable upload is bounded to 10 MiB,
@@ -151,6 +152,14 @@ before `card.json` is read.
   passes one rendered string, and the original `_recent_message_count(str)` contract is
   exactly empty/non-empty (0/1). Adding a count would change reachable behavior rather than
   preserve it.
+- Both manual reviewers found one further Medium: Rust regex `\w` includes combining marks
+  that original Python whole-word matching excludes. The correction now owns the original
+  Unicode letter/number-or-underscore predicate directly and tests a combining-mark-adjacent
+  match rather than depending on an engine-specific word class.
+- Daybreaker also found that the first casefold dependency commit omitted the desktop's
+  nested lockfile and therefore was not independently gate-clean. Commit `557f3fd` repaired
+  the published HEAD. The already-public history was not force-rewritten; future dependency
+  changes must update both lockfiles in their owning commit.
 - Final cross-review approval of the correction range is pending. No automated security
   scan was used.
 
