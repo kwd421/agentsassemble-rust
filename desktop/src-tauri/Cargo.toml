@@ -36,10 +36,13 @@ tempfile = "3.27.0"
 xattr = "1.6.1"
 
 [target.'cfg(windows)'.dependencies]
+same-file = "1.0.6"
 win32job = "2.0.3"
 winapi = { version = "0.3.9", features = ["winnt"] }
 windows-acl = "0.3.0"
+windows-permissions = "0.2.4"
 windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem"] }
+winsafe = { version = "0.0.28", features = ["advapi"] }
 
 [dev-dependencies]
 tempfile = "3.27.0"

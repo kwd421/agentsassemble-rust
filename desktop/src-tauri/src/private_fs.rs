@@ -2,8 +2,36 @@
 
 use std::{fs::File, io, path::Path};
 
-use winapi::um::winnt::{FILE_ALL_ACCESS, PSID};
+use winapi::um::winnt::{CONTAINER_INHERIT_ACE, FILE_ALL_ACCESS, OBJECT_INHERIT_ACE, PSID};
 use windows_acl::acl::{ACL, AceType};
+use windows_permissions::{
+    LocalBox, SecurityDescriptor, WindowsSecure, constants::SecurityInformation,
+};
+
+pub(crate) fn create_private_directory(path: &Path) -> io::Result<()> {
+    let path = path
+        .to_str()
+        .ok_or_else(|| io::Error::other("path is not valid Unicode"))?;
+    let (_, current) = current_sid()?;
+    let descriptor: LocalBox<SecurityDescriptor> =
+        format!("O:{current}D:P(A;OICI;FA;;;{current})").parse()?;
+    let owner = descriptor
+        .owner()
+        .ok_or_else(|| io::Error::other("private descriptor has no owner"))?;
+    let dacl = descriptor
+        .dacl()
+        .ok_or_else(|| io::Error::other("private descriptor has no DACL"))?;
+    let mut native = winsafe::InitializeSecurityDescriptor().map_err(winsafe_error)?;
+    native.Owner = std::ptr::from_ref(owner).cast_mut().cast();
+    native.Dacl = std::ptr::from_ref(dacl).cast_mut().cast::<winsafe::ACL>();
+    native.Control = winsafe::co::SE::DACL_PRESENT | winsafe::co::SE::DACL_PROTECTED;
+    if !winsafe::IsValidSecurityDescriptor(&native) {
+        return Err(io::Error::other("private security descriptor is invalid"));
+    }
+    let mut attributes = winsafe::SECURITY_ATTRIBUTES::default();
+    attributes.set_lpSecurityDescriptor(Some(&mut native));
+    winsafe::CreateDirectory(path, Some(&attributes)).map_err(winsafe_error)
+}
 
 pub(crate) fn secure_directory(path: &Path) -> io::Result<()> {
     let path = path
@@ -19,18 +47,32 @@ pub(crate) fn secure_file(file: &File) -> io::Result<()> {
     secure_handle(file, false)
 }
 
-pub(crate) fn secure_directory_handle(file: &File) -> io::Result<()> {
-    secure_handle(file, true)
+pub(crate) fn validate_private_directory_handle(file: &File) -> io::Result<()> {
+    let descriptor = file.security_descriptor(SecurityInformation::Owner)?;
+    let (_, current) = current_sid()?;
+    let owned_by_current_user = descriptor
+        .owner()
+        .is_some_and(|owner| owner.to_string() == current);
+    let acl = acl_from_handle(file)?;
+    if owned_by_current_user && validate(&acl, true)? {
+        Ok(())
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "Windows directory is not owner-only",
+        ))
+    }
 }
 
 fn secure_handle(file: &File, inheritable: bool) -> io::Result<()> {
+    harden(acl_from_handle(file)?, inheritable)
+}
+
+fn acl_from_handle(file: &File) -> io::Result<ACL> {
     use std::os::windows::io::AsRawHandle;
 
-    harden(
-        ACL::from_file_handle(file.as_raw_handle().cast::<winapi::ctypes::c_void>(), false)
-            .map_err(windows_error)?,
-        inheritable,
-    )
+    ACL::from_file_handle(file.as_raw_handle().cast::<winapi::ctypes::c_void>(), false)
+        .map_err(windows_error)
 }
 
 fn harden(mut acl: ACL, inheritable: bool) -> io::Result<()> {
@@ -48,19 +90,25 @@ fn harden(mut acl: ACL, inheritable: bool) -> io::Result<()> {
     let (sid, _) = current_sid()?;
     acl.allow(sid.as_ptr() as PSID, inheritable, FILE_ALL_ACCESS)
         .map_err(windows_error)?;
-    if validate(&acl)? {
+    if validate(&acl, inheritable)? {
         Ok(())
     } else {
         Err(io::Error::other("Windows DACL did not become owner-only"))
     }
 }
 
-fn validate(acl: &ACL) -> io::Result<bool> {
+fn validate(acl: &ACL, inheritable: bool) -> io::Result<bool> {
     let (_, current) = current_sid()?;
     let entries = acl.all().map_err(windows_error)?;
+    let required_flags = if inheritable {
+        CONTAINER_INHERIT_ACE | OBJECT_INHERIT_ACE
+    } else {
+        0
+    };
     Ok(entries.len() == 1
         && entries[0].entry_type == AceType::AccessAllow
         && entries[0].string_sid == current
+        && entries[0].flags & required_flags == required_flags
         && entries[0].mask & FILE_ALL_ACCESS == FILE_ALL_ACCESS)
 }
 
@@ -74,4 +122,8 @@ fn current_sid() -> io::Result<(Vec<u8>, String)> {
 
 fn windows_error(code: u32) -> io::Error {
     io::Error::from_raw_os_error(i32::try_from(code).unwrap_or(i32::MAX))
+}
+
+fn winsafe_error(error: winsafe::co::ERROR) -> io::Error {
+    windows_error(error.raw())
 }

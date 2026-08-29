@@ -8,6 +8,9 @@ use cap_fs_ext::DirExt;
 use cap_std::{ambient_authority, fs::Dir};
 use uuid::Uuid;
 
+#[cfg(windows)]
+mod windows;
+
 pub(super) fn save_atomically(path: &Path, content: &[u8]) -> io::Result<()> {
     let parent = path
         .parent()
@@ -26,7 +29,7 @@ pub(super) fn save_atomically(path: &Path, content: &[u8]) -> io::Result<()> {
         Err(error) if error.kind() == io::ErrorKind::NotFound => {}
         Err(error) => return Err(error),
     }
-    replace_in_directory(&directory, filename, content)
+    replace_in_directory(&directory, parent, filename, content)
 }
 
 fn open_absolute_directory(path: &Path) -> io::Result<Dir> {
@@ -60,24 +63,16 @@ fn open_absolute_directory(path: &Path) -> io::Result<Dir> {
     Ok(directory)
 }
 
-fn replace_in_directory(directory: &Dir, filename: &OsStr, content: &[u8]) -> io::Result<()> {
-    use cap_std::fs::{DirBuilder, OpenOptions};
+fn replace_in_directory(
+    directory: &Dir,
+    parent: &Path,
+    filename: &OsStr,
+    content: &[u8],
+) -> io::Result<()> {
+    use cap_std::fs::OpenOptions;
 
     let staging_name = format!(".agentsassemble-save-{}", Uuid::new_v4().simple());
-    let mut builder = DirBuilder::new();
-    configure_private_directory(&mut builder);
-    directory.create_dir_with(&staging_name, &builder)?;
-    let staging = match open_staging_directory(directory, &staging_name) {
-        Ok(staging) => staging,
-        Err(error) => {
-            let _ = directory.remove_dir(&staging_name);
-            return Err(error);
-        }
-    };
-    if let Err(error) = secure_staging_directory(&staging) {
-        let _ = staging.remove_open_dir();
-        return Err(error);
-    }
+    let staging = create_staging_directory(directory, parent, &staging_name)?;
 
     let result = (|| {
         let mut options = OpenOptions::new();
@@ -97,28 +92,34 @@ fn replace_in_directory(directory: &Dir, filename: &OsStr, content: &[u8]) -> io
 }
 
 #[cfg(not(windows))]
-fn open_staging_directory(directory: &Dir, name: &str) -> io::Result<Dir> {
-    directory.open_dir_nofollow(name)
+fn create_staging_directory(directory: &Dir, _parent: &Path, name: &str) -> io::Result<Dir> {
+    use cap_std::fs::DirBuilder;
+
+    let mut builder = DirBuilder::new();
+    configure_private_directory(&mut builder);
+    directory.create_dir_with(name, &builder)?;
+    let staging = match open_staging_directory(directory, name) {
+        Ok(staging) => staging,
+        Err(error) => {
+            let _ = directory.remove_dir(name);
+            return Err(error);
+        }
+    };
+    if let Err(error) = secure_staging_directory(&staging) {
+        let _ = staging.remove_open_dir();
+        return Err(error);
+    }
+    Ok(staging)
 }
 
 #[cfg(windows)]
-fn open_staging_directory(directory: &Dir, name: &str) -> io::Result<Dir> {
-    use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt, OpenOptionsMaybeDirExt};
-    use cap_std::fs::{OpenOptions, OpenOptionsExt};
-    use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_BACKUP_SEMANTICS;
+fn create_staging_directory(directory: &Dir, parent: &Path, name: &str) -> io::Result<Dir> {
+    windows::create_staging_directory(directory, parent, name)
+}
 
-    let mut options = OpenOptions::new();
-    options.read(true);
-    options.maybe_dir(true);
-    options.follow(FollowSymlinks::No);
-    options.share_mode(0);
-    options.custom_flags(FILE_FLAG_BACKUP_SEMANTICS);
-    let handle = directory.open_with(name, &options)?;
-    let metadata = handle.metadata()?;
-    if !metadata.is_dir() || metadata.file_type().is_symlink() {
-        return Err(invalid_path("save staging entry is not a directory"));
-    }
-    Ok(Dir::from_std_file(handle.into_std()))
+#[cfg(not(windows))]
+fn open_staging_directory(directory: &Dir, name: &str) -> io::Result<Dir> {
+    directory.open_dir_nofollow(name)
 }
 
 #[cfg(unix)]
@@ -127,9 +128,6 @@ fn configure_private_directory(builder: &mut cap_std::fs::DirBuilder) {
 
     builder.mode(0o700);
 }
-
-#[cfg(windows)]
-fn configure_private_directory(_builder: &mut cap_std::fs::DirBuilder) {}
 
 #[cfg(unix)]
 fn configure_private_file(options: &mut cap_std::fs::OpenOptions) {
@@ -154,12 +152,6 @@ fn secure_staging_directory(directory: &Dir) -> io::Result<()> {
             "save staging directory is not private",
         ))
     }
-}
-
-#[cfg(windows)]
-fn secure_staging_directory(directory: &Dir) -> io::Result<()> {
-    let handle = directory.try_clone()?.into_std_file();
-    crate::private_fs::secure_directory_handle(&handle)
 }
 
 #[cfg(windows)]
@@ -202,40 +194,4 @@ fn apply_download_origin(_directory: &Dir, _file: &cap_std::fs::File) -> io::Res
 
 fn invalid_path(message: &'static str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidInput, message)
-}
-
-#[cfg(all(test, windows))]
-mod windows_tests {
-    use std::fs;
-
-    use cap_fs_ext::DirExt;
-    use tempfile::tempdir;
-
-    use super::{open_absolute_directory, open_staging_directory};
-
-    #[test]
-    fn staging_open_fails_closed_around_an_existing_or_later_handle() {
-        let root = tempdir().unwrap_or_else(|error| panic!("create save directory: {error}"));
-        let root = fs::canonicalize(root.path())
-            .unwrap_or_else(|error| panic!("resolve save directory: {error}"));
-        let staging_path = root.join("staging");
-        fs::create_dir(&staging_path)
-            .unwrap_or_else(|error| panic!("create staging directory: {error}"));
-        let directory = open_absolute_directory(&root)
-            .unwrap_or_else(|error| panic!("open save directory: {error}"));
-
-        let existing = directory
-            .open_dir_nofollow("staging")
-            .unwrap_or_else(|error| panic!("open competing handle: {error}"));
-        assert!(open_staging_directory(&directory, "staging").is_err());
-        drop(existing);
-
-        let exclusive = open_staging_directory(&directory, "staging")
-            .unwrap_or_else(|error| panic!("open exclusive staging directory: {error}"));
-        assert!(directory.open_dir_nofollow("staging").is_err());
-        drop(exclusive);
-        directory
-            .open_dir_nofollow("staging")
-            .unwrap_or_else(|error| panic!("reopen released staging directory: {error}"));
-    }
 }
