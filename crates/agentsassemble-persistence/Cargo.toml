@@ -12,6 +12,7 @@ fs2.workspace = true
 hex.workspace = true
 hmac.workspace = true
 image.workspace = true
+mime_guess.workspace = true
 ring.workspace = true
 same-file.workspace = true
 serde.workspace = true

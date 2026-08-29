@@ -35,14 +35,14 @@ pub(crate) async fn enforce_storage_replacement(
     if next_count > MAX_RETAINED_ASSETS || next_bytes > MAX_RETAINED_ASSET_BYTES {
         return Err(rejected(
             "attachment_quota_reached",
-            "Absolute raster storage limit reached.",
+            "Absolute attachment storage limit reached.",
         ));
     }
     Ok(())
 }
 
 fn invalid_storage_usage() -> PersistenceError {
-    rejected("invalid_state", "Stored raster usage is invalid.")
+    rejected("invalid_state", "Stored attachment usage is invalid.")
 }
 
 fn rejected(code: &'static str, message: &str) -> PersistenceError {

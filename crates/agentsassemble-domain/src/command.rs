@@ -81,24 +81,7 @@ pub fn prepare_message_event(
     sequence: i64,
     now: DateTime<Utc>,
 ) -> Result<RoomEvent, CommandRejection> {
-    if principal.client_kind == ClientKind::AgentBridge || !principal.capabilities.message_send {
-        return Err(CommandRejection::new(
-            "permission_denied",
-            "This room session cannot send messages.",
-        ));
-    }
-    if principal.room_id != participant.room_id
-        || principal.participant_id != participant.participant_id
-        || participant.status != ParticipantStatus::Joined
-    {
-        return Err(CommandRejection::new(
-            "session_revoked",
-            "This room session has ended.",
-        ));
-    }
-    if participant.muted {
-        return Err(CommandRejection::new("muted", "This participant is muted."));
-    }
+    require_message_write_authority(principal, participant)?;
     if sequence <= 0 {
         return Err(CommandRejection::new(
             "invalid_state",
@@ -127,6 +110,37 @@ pub fn prepare_message_event(
         message_kind: Some("message".to_owned()),
         extra: BTreeMap::new(),
     })
+}
+
+/// Applies the room-owned write policy shared by messages and their pending uploads.
+///
+/// # Errors
+///
+/// Returns a rejection for non-human clients, read-only authority, stale membership,
+/// or a currently muted participant.
+pub fn require_message_write_authority(
+    principal: &AuthenticatedPrincipal,
+    participant: &Participant,
+) -> Result<(), CommandRejection> {
+    if principal.client_kind == ClientKind::AgentBridge || !principal.capabilities.message_send {
+        return Err(CommandRejection::new(
+            "permission_denied",
+            "This room session cannot send messages.",
+        ));
+    }
+    if principal.room_id != participant.room_id
+        || principal.participant_id != participant.participant_id
+        || participant.status != ParticipantStatus::Joined
+    {
+        return Err(CommandRejection::new(
+            "session_revoked",
+            "This room session has ended.",
+        ));
+    }
+    if participant.muted {
+        return Err(CommandRejection::new("muted", "This participant is muted."));
+    }
+    Ok(())
 }
 
 fn canonical_json(value: &Value) -> String {

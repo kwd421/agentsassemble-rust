@@ -29,6 +29,7 @@ mod human_invite_preflight;
 mod human_invites;
 mod human_prejoin_attachments;
 mod human_session_authority;
+mod message_attachments;
 mod message_pins;
 mod private_fs;
 mod profile_attachments;
@@ -55,6 +56,8 @@ mod turn_queue;
 mod human_invite_preflight_tests;
 #[cfg(test)]
 mod human_session_authority_tests;
+#[cfg(test)]
+mod message_attachment_tests;
 mod participant_leave;
 mod participant_mute;
 mod participant_roles;
@@ -93,6 +96,7 @@ pub use human_invite_preflight::{
 pub use human_invites::{HumanInvite, NewHumanInvite};
 pub use human_prejoin_attachments::HumanPrejoinAvatarAuthorization;
 pub use human_session_authority::HumanSessionAuthorization;
+pub use message_attachments::MessageAttachmentMetadata;
 pub use message_pins::PinnedLobbyMessage;
 pub use participant_leave::ParticipantLeaveMutation;
 pub use participant_mute::ParticipantMuteMutation;

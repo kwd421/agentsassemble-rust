@@ -58,6 +58,26 @@ pub(crate) fn validate_stored_raster(
     Ok(())
 }
 
+pub(crate) async fn validate_preserved_safe_raster(
+    content_type: &str,
+    content: Vec<u8>,
+) -> Result<(Vec<u8>, bool), PersistenceError> {
+    let Some(declared_format) = safe_image_format(content_type) else {
+        return Ok((content, false));
+    };
+    let permit = decode_admission()
+        .acquire()
+        .await
+        .map_err(|_| decode_task_failed())?;
+    let content = tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        validate_preserved_blocking(declared_format, content)
+    })
+    .await
+    .map_err(|_| decode_task_failed())??;
+    Ok((content, true))
+}
+
 async fn canonicalize(
     filename: String,
     declared_format: ImageFormat,
@@ -80,9 +100,7 @@ fn canonicalize_blocking(
     declared_format: ImageFormat,
     content: Vec<u8>,
 ) -> Result<CanonicalRaster, PersistenceError> {
-    let mut reader = ImageReader::new(Cursor::new(content))
-        .with_guessed_format()
-        .map_err(|_| invalid_image())?;
+    let reader = bounded_reader(Cursor::new(content))?;
     let detected_format = reader.format().ok_or_else(invalid_image)?;
     if detected_format != declared_format {
         return Err(rejected(
@@ -90,11 +108,6 @@ fn canonicalize_blocking(
             "Raster attachment bytes do not match the declared image type.",
         ));
     }
-    let mut limits = Limits::default();
-    limits.max_image_width = Some(MAX_IMAGE_DIMENSION);
-    limits.max_image_height = Some(MAX_IMAGE_DIMENSION);
-    limits.max_alloc = Some(MAX_DECODE_ALLOC_BYTES);
-    reader.limits(limits);
     let decoded = reader.decode().map_err(|_| invalid_image())?;
     validate_pixels(&decoded)?;
     let mut encoded = Cursor::new(Vec::new());
@@ -112,6 +125,37 @@ fn canonicalize_blocking(
         filename: canonical_png_filename(filename),
         content,
     })
+}
+
+fn validate_preserved_blocking(
+    declared_format: ImageFormat,
+    content: Vec<u8>,
+) -> Result<Vec<u8>, PersistenceError> {
+    let reader = bounded_reader(Cursor::new(content.as_slice()))?;
+    let detected_format = reader.format().ok_or_else(invalid_image)?;
+    if detected_format != declared_format {
+        return Err(rejected(
+            "attachment_type_mismatch",
+            "Raster attachment bytes do not match the declared image type.",
+        ));
+    }
+    let decoded = reader.decode().map_err(|_| invalid_image())?;
+    validate_pixels(&decoded)?;
+    Ok(content)
+}
+
+fn bounded_reader<R: std::io::BufRead + std::io::Seek>(
+    source: R,
+) -> Result<ImageReader<R>, PersistenceError> {
+    let mut reader = ImageReader::new(source)
+        .with_guessed_format()
+        .map_err(|_| invalid_image())?;
+    let mut limits = Limits::default();
+    limits.max_image_width = Some(MAX_IMAGE_DIMENSION);
+    limits.max_image_height = Some(MAX_IMAGE_DIMENSION);
+    limits.max_alloc = Some(MAX_DECODE_ALLOC_BYTES);
+    reader.limits(limits);
+    Ok(reader)
 }
 
 fn validate_pixels(image: &DynamicImage) -> Result<(), PersistenceError> {
@@ -136,6 +180,15 @@ fn decode_admission() -> &'static Semaphore {
 }
 
 fn declared_image_format(content_type: &str) -> Result<ImageFormat, PersistenceError> {
+    safe_image_format(content_type).ok_or_else(|| {
+        rejected(
+            "attachment_type_unsupported",
+            "Profile avatars must be PNG, JPEG, GIF, or WebP.",
+        )
+    })
+}
+
+fn safe_image_format(content_type: &str) -> Option<ImageFormat> {
     match content_type
         .split(';')
         .next()
@@ -144,14 +197,11 @@ fn declared_image_format(content_type: &str) -> Result<ImageFormat, PersistenceE
         .to_ascii_lowercase()
         .as_str()
     {
-        "image/png" => Ok(ImageFormat::Png),
-        "image/jpeg" => Ok(ImageFormat::Jpeg),
-        "image/gif" => Ok(ImageFormat::Gif),
-        "image/webp" => Ok(ImageFormat::WebP),
-        _ => Err(rejected(
-            "attachment_type_unsupported",
-            "Profile avatars must be PNG, JPEG, GIF, or WebP.",
-        )),
+        "image/png" => Some(ImageFormat::Png),
+        "image/jpeg" => Some(ImageFormat::Jpeg),
+        "image/gif" => Some(ImageFormat::Gif),
+        "image/webp" => Some(ImageFormat::WebP),
+        _ => None,
     }
 }
 
@@ -194,7 +244,7 @@ fn invalid_image() -> PersistenceError {
 }
 
 fn decode_task_failed() -> PersistenceError {
-    PersistenceError::RuntimeAuthorityTask("profile avatar validation task failed".to_owned())
+    PersistenceError::RuntimeAuthorityTask("raster validation task failed".to_owned())
 }
 
 fn rejected(code: &'static str, message: &str) -> PersistenceError {

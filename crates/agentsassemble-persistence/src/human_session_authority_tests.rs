@@ -175,6 +175,63 @@ async fn human_session_avatar_upload_requires_live_write_scope() {
 }
 
 #[tokio::test]
+async fn human_session_message_upload_revalidates_write_scope_and_mute_state() {
+    let (read_only_store, _) = admitted_fixture(InviteScope::ReadOnly).await;
+    let read_only = read_only_store
+        .authorize_human_session(&session_fingerprint(&read_only_store).await)
+        .await
+        .unwrap_or_else(|error| panic!("authorize read-only message upload: {error}"));
+    assert_rejected_code(
+        read_only_store
+            .store_human_session_message_attachment(
+                &read_only,
+                "denied.txt",
+                "text/plain",
+                b"denied".to_vec(),
+            )
+            .await,
+        "permission_denied",
+    );
+
+    let (store, _) = admitted_fixture(InviteScope::ReadWrite).await;
+    let authorization = store
+        .authorize_human_session(&session_fingerprint(&store).await)
+        .await
+        .unwrap_or_else(|error| panic!("authorize writable message upload: {error}"));
+    let stored = store
+        .store_human_session_message_attachment(
+            &authorization,
+            "guest.txt",
+            "text/plain",
+            b"guest attachment".to_vec(),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("store writable message upload: {error}"));
+    set_participant_muted(&store, true).await;
+    assert_rejected_code(
+        store
+            .store_human_session_message_attachment(
+                &authorization,
+                "muted.txt",
+                "text/plain",
+                b"muted".to_vec(),
+            )
+            .await,
+        "muted",
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, String>(
+            "SELECT attachment_id FROM room_message_attachments WHERE pending_owner_user_id = ?",
+        )
+        .bind(&authorization.principal().principal_id)
+        .fetch_one(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("read retained message upload: {error}")),
+        stored.id
+    );
+}
+
+#[tokio::test]
 async fn bound_appearance_read_revalidates_human_session_in_the_asset_snapshot() {
     let (store, _) = admitted_fixture(InviteScope::ReadOnly).await;
     let manager = store
@@ -430,6 +487,28 @@ async fn set_participant_status(store: &SqliteStore, status: ParticipantStatus) 
     .execute(&store.pool)
     .await
     .unwrap_or_else(|error| panic!("update session participant: {error}"));
+}
+
+async fn set_participant_muted(store: &SqliteStore, muted: bool) {
+    let encoded = sqlx::query_scalar::<_, String>(
+        "SELECT participant_json FROM participants WHERE room_id = 'general' AND participant_id = 'session-guest'",
+    )
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("read session participant: {error}"));
+    let mut participant: Participant = serde_json::from_str(&encoded)
+        .unwrap_or_else(|error| panic!("decode session participant: {error}"));
+    participant.muted = muted;
+    sqlx::query(
+        "UPDATE participants SET participant_json = ? WHERE room_id = 'general' AND participant_id = 'session-guest'",
+    )
+    .bind(
+        serde_json::to_string(&participant)
+            .unwrap_or_else(|error| panic!("encode session participant: {error}")),
+    )
+    .execute(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("update session participant mute state: {error}"));
 }
 
 async fn set_profile_revision(store: &SqliteStore, user_id: &str, revision: i64) {
