@@ -19,17 +19,17 @@ use tower_http::{cors::CorsLayer, set_header::SetResponseHeaderLayer};
 use crate::{
     AppState,
     http_api::{
-        BodyDecodeError, PRIVATE_NO_STORE, bearer_ticket, decode_json_body, exact_tauri_cors,
+        BodyDecodeError, DEVICE_CREDENTIAL_HEADER, PRIVATE_NO_STORE, bearer_ticket,
+        decode_json_body, exact_tauri_cors,
     },
     human_browser_credential::fingerprint_browser_credential,
     human_invite_preflight::{
         HumanInvitePreflightError, authenticated_invite_evidence, preflight_human_invite,
     },
+    ingress_trust::single_header,
 };
 
 const MAX_ADMISSION_BODY_BYTES: usize = 16 * 1024;
-const DEVICE_CREDENTIAL_HEADER: HeaderName = HeaderName::from_static("x-device-token");
-
 #[derive(Deserialize)]
 struct PreflightRequest {
     invite_token: String,
@@ -208,9 +208,7 @@ fn required_header<'a>(
     headers: &'a HeaderMap,
     name: &HeaderName,
 ) -> Result<&'a str, HumanInviteHttpError> {
-    headers
-        .get(name)
-        .and_then(|value| value.to_str().ok())
+    single_header(headers, name.clone())
         .filter(|value| !value.is_empty())
         .ok_or_else(|| {
             HumanInviteHttpError::bad_request(

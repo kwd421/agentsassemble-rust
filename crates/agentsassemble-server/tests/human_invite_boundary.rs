@@ -1,11 +1,14 @@
+use std::time::Duration;
+
 use agentsassemble_domain::InviteScope;
 use agentsassemble_persistence::SqliteStore;
-use base64::{
-    Engine as _,
-    engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
-};
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use reqwest::Client;
 use serde_json::{Value, json};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpStream,
+};
 
 mod support {
     pub mod human_invite;
@@ -542,26 +545,15 @@ async fn prepare_prejoin_avatar_flow(
     assert_eq!(invalid_ticket.status(), reqwest::StatusCode::UNAUTHORIZED);
 
     let unknown_join_code = format!("aaj1_{}", URL_SAFE_NO_PAD.encode([0xE1; 24]));
-    let large_valid_base64 = STANDARD.encode(vec![0_u8; 10 * 1024 * 1024]);
-    let unknown_invite = client
-        .post(format!("{base_url}/api/attachments"))
-        .json(&json!({
-            "purpose": "profile_avatar",
-            "invite_token": unknown_join_code,
-            "device_token": browser_credential,
-            "filename": "unknown.png",
-            "content_type": "image/png",
-            "data_base64": large_valid_base64,
-        }))
-        .send()
-        .await
-        .unwrap_or_else(|error| panic!("request unknown-invite prejoin upload: {error}"));
-    assert_eq!(unknown_invite.status(), reqwest::StatusCode::FORBIDDEN);
-    let unknown_invite: Value = unknown_invite
-        .json()
-        .await
-        .unwrap_or_else(|error| panic!("decode unknown-invite prejoin rejection: {error}"));
-    assert_eq!(unknown_invite["code"], "invite_invalid");
+    let unknown_invite = header_only_prejoin_upload(
+        base_url,
+        &unknown_join_code,
+        browser_credential,
+        14 * 1024 * 1024,
+    )
+    .await;
+    assert!(unknown_invite.starts_with("HTTP/1.1 403"));
+    assert!(unknown_invite.contains("invite_invalid"));
 
     let other_browser_avatar =
         upload_prejoin_avatar(client, base_url, invite_token, other_browser_credential).await;
@@ -719,10 +711,10 @@ async fn upload_prejoin_avatar(
 ) -> String {
     let response = client
         .post(format!("{base_url}/api/attachments"))
+        .header("x-invite-token", invite_token)
+        .header("x-device-token", browser_credential)
         .json(&json!({
             "purpose": "profile_avatar",
-            "invite_token": invite_token,
-            "device_token": browser_credential,
             "filename": "../guest.webp",
             "content_type": "image/png",
             "data_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMQ0bD5DwACRAF4aig0hQAAAABJRU5ErkJggg=="
@@ -741,4 +733,34 @@ async fn upload_prejoin_avatar(
         .as_str()
         .unwrap_or_else(|| panic!("prejoin avatar URL is missing"))
         .to_owned()
+}
+
+async fn header_only_prejoin_upload(
+    base_url: &str,
+    invite_token: &str,
+    browser_credential: &str,
+    content_length: usize,
+) -> String {
+    let authority = base_url
+        .strip_prefix("http://")
+        .unwrap_or_else(|| panic!("test server is not loopback HTTP"));
+    let mut socket = TcpStream::connect(authority)
+        .await
+        .unwrap_or_else(|error| panic!("connect prejoin header-only client: {error}"));
+    socket
+        .write_all(
+            format!(
+                "POST /api/attachments HTTP/1.1\r\nHost: {authority}\r\nX-Invite-Token: {invite_token}\r\nX-Device-Token: {browser_credential}\r\nContent-Type: application/json\r\nContent-Length: {content_length}\r\nConnection: close\r\n\r\n"
+            )
+            .as_bytes(),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("write prejoin header-only request: {error}"));
+    let mut response = Vec::new();
+    tokio::time::timeout(Duration::from_secs(2), socket.read_to_end(&mut response))
+        .await
+        .unwrap_or_else(|_| panic!("prejoin rejection waited for the declared request body"))
+        .unwrap_or_else(|error| panic!("read prejoin header-only response: {error}"));
+    String::from_utf8(response)
+        .unwrap_or_else(|error| panic!("prejoin header-only response is not UTF-8: {error}"))
 }

@@ -8,7 +8,7 @@ use agentsassemble_persistence::{
 use axum::{
     Json, Router, body,
     extract::{Path, Query, RawQuery, Request, State},
-    http::{HeaderValue, Method, StatusCode, header},
+    http::{HeaderMap, HeaderValue, Method, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD};
@@ -19,11 +19,12 @@ use tower_http::{cors::CorsLayer, set_header::SetResponseHeaderLayer};
 use crate::{
     AppState, ConsumedProfileTicket,
     http_api::{
-        BodyDecodeError, PRIVATE_NO_STORE, bearer_ticket, decode_json_body, ensure_empty_body,
-        exact_tauri_cors,
+        BodyDecodeError, DEVICE_CREDENTIAL_HEADER, INVITE_CREDENTIAL_HEADER, PRIVATE_NO_STORE,
+        bearer_ticket, decode_json_body, ensure_empty_body, exact_tauri_cors,
     },
     human_browser_credential::fingerprint_browser_credential,
     human_invite_preflight::authenticated_invite_evidence,
+    ingress_trust::single_header,
     ticket::{
         ConsumedAppearanceReadTicket, ConsumedAttachmentUploadTicket,
         ConsumedMessageAttachmentReadTicket, ConsumedRoomHumanTicket,
@@ -36,10 +37,6 @@ const MAX_ATTACHMENT_BODY_BYTES: usize = MAX_ATTACHMENT_BYTES.div_ceil(3) * 4 + 
 #[derive(Deserialize)]
 struct AttachmentUpload {
     purpose: String,
-    #[serde(default)]
-    invite_token: String,
-    #[serde(default)]
-    device_token: String,
     filename: String,
     content_type: String,
     data_base64: String,
@@ -70,7 +67,12 @@ registered_routes! {
 }
 
 fn profile_cors() -> CorsLayer {
-    exact_tauri_cors([Method::GET, Method::POST])
+    exact_tauri_cors([Method::GET, Method::POST]).allow_headers([
+        header::AUTHORIZATION,
+        header::CONTENT_TYPE,
+        DEVICE_CREDENTIAL_HEADER,
+        INVITE_CREDENTIAL_HEADER,
+    ])
 }
 
 async fn read_profile(
@@ -131,10 +133,16 @@ async fn upload_attachment(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<serde_json::Value>, ProfileHttpError> {
-    let authority = if request.headers().contains_key(header::AUTHORIZATION) {
-        Some(consume_attachment_upload_authority(&state, request.headers()).await?)
+    let (authority, prejoin_authority) = if request.headers().contains_key(header::AUTHORIZATION) {
+        (
+            Some(consume_attachment_upload_authority(&state, request.headers()).await?),
+            None,
+        )
     } else {
-        None
+        (
+            None,
+            Some(authorize_prejoin_avatar_upload(&state, request.headers()).await?),
+        )
     };
     if authority.as_ref().is_some_and(|authority| {
         matches!(
@@ -169,11 +177,6 @@ async fn upload_attachment(
             ));
         }
     }
-    let prejoin_authority = if authority.is_none() {
-        Some(authorize_prejoin_avatar_upload(&state, &payload).await?)
-    } else {
-        None
-    };
     let encoded = payload.data_base64.trim();
     if encoded.is_empty() {
         return Err(ProfileHttpError::bad_request("data_base64 is required."));
@@ -295,26 +298,32 @@ async fn store_profile_attachment(
 
 async fn authorize_prejoin_avatar_upload(
     state: &AppState,
-    payload: &AttachmentUpload,
+    headers: &HeaderMap,
 ) -> Result<HumanPrejoinAvatarAuthorization, ProfileHttpError> {
-    if payload.invite_token.trim().is_empty() {
-        return Err(ProfileHttpError::new(
+    let invite = required_prejoin_header(headers, &INVITE_CREDENTIAL_HEADER).ok_or_else(|| {
+        ProfileHttpError::new(
             StatusCode::UNAUTHORIZED,
             "invite_token_required",
-            "invite_token is required for a pre-join profile upload.",
-        ));
-    }
-    let credential =
-        authenticated_invite_evidence(&state.human_invite_credentials, payload.invite_token.trim())
-            .map_err(|_| {
-                ProfileHttpError::new(
-                    StatusCode::FORBIDDEN,
-                    "invite_invalid",
-                    "Invite is invalid.",
-                )
-            })?;
+            "x-invite-token is required for a pre-join profile upload.",
+        )
+    })?;
+    let credential = authenticated_invite_evidence(&state.human_invite_credentials, invite)
+        .map_err(|_| {
+            ProfileHttpError::new(
+                StatusCode::FORBIDDEN,
+                "invite_invalid",
+                "Invite is invalid.",
+            )
+        })?;
+    let device = required_prejoin_header(headers, &DEVICE_CREDENTIAL_HEADER).ok_or_else(|| {
+        ProfileHttpError::new(
+            StatusCode::BAD_REQUEST,
+            "browser_credential_invalid",
+            "A canonical browser credential is required.",
+        )
+    })?;
     let browser_credential_fingerprint =
-        fingerprint_browser_credential(payload.device_token.trim()).ok_or_else(|| {
+        fingerprint_browser_credential(device).ok_or_else(|| {
             ProfileHttpError::new(
                 StatusCode::BAD_REQUEST,
                 "browser_credential_invalid",
@@ -326,6 +335,15 @@ async fn authorize_prejoin_avatar_upload(
         .authorize_human_prejoin_avatar(&credential, &browser_credential_fingerprint)
         .await
         .map_err(ProfileHttpError::from)
+}
+
+fn required_prejoin_header<'a>(
+    headers: &'a HeaderMap,
+    name: &header::HeaderName,
+) -> Option<&'a str> {
+    single_header(headers, name.clone())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
 }
 
 async fn read_attachment(

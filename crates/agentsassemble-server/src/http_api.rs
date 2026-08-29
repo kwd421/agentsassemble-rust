@@ -1,7 +1,7 @@
 use axum::{
     body,
     extract::Request,
-    http::{HeaderMap, HeaderValue, Method, header},
+    http::{HeaderMap, HeaderName, HeaderValue, Method, header},
 };
 use std::num::NonZeroU64;
 use tower_http::cors::{AllowOrigin, CorsLayer};
@@ -9,6 +9,8 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 use crate::AppState;
 
 pub(crate) const PRIVATE_NO_STORE: HeaderValue = HeaderValue::from_static("private, no-store");
+pub(crate) const DEVICE_CREDENTIAL_HEADER: HeaderName = HeaderName::from_static("x-device-token");
+pub(crate) const INVITE_CREDENTIAL_HEADER: HeaderName = HeaderName::from_static("x-invite-token");
 pub(crate) const TAURI_ORIGINS: [&str; 3] = [
     "tauri://localhost",
     "http://tauri.localhost",

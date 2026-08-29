@@ -13,6 +13,7 @@ import {
   postJsonModerator,
   postJsonWithToken,
   queryString,
+  responseError,
 } from "./http";
 
 export type LobbyAttachmentUploadOptions = {
@@ -124,14 +125,25 @@ export function uploadLobbyAttachment(
   }
   return fileToBase64(file).then((dataBase64) => {
     const body = {
-      room_id: resolved.roomId || "",
       purpose: resolved.purpose,
-      invite_token: resolved.inviteToken || "",
-      device_token: resolved.deviceToken || "",
       filename: file.name || "attachment.bin",
       content_type: file.type || "application/octet-stream",
       data_base64: dataBase64,
     };
+    if (resolved.purpose === "profile_avatar" && !resolved.roomId && !resolved.sessionToken) {
+      return fetch("/api/attachments", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Invite-Token": resolved.inviteToken || "",
+          "X-Device-Token": resolved.deviceToken || "",
+        },
+        body: JSON.stringify(body),
+      }).then(async (response) => {
+        if (!response.ok) throw await responseError(response);
+        return response.json() as Promise<{ attachment: LobbyAttachmentRef }>;
+      });
+    }
     if (resolved.purpose === "profile_avatar" && resolved.roomId) {
       return postJsonWithIdentity<{ attachment: LobbyAttachmentRef }>(
         "/api/attachments",

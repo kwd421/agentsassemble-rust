@@ -494,3 +494,18 @@ there is no task, state, fallback, generic parser, or provider-specific duplicat
 policy. Host tests exercise the exact reported injection and expansion cases, and the
 Windows all-target/all-feature source cross-check passes. Native Windows execution remains
 unverified until a Windows host is available.
+
+The first Standard Scan Medium was also confirmed. The public pre-join avatar path
+previously needed invite and browser credentials from the JSON payload, so one invalid
+request could make the server retain and parse up to the existing roughly 13.4-MiB
+base64 request bound before rejection. The upload transport now carries those two
+canonical credentials in single-valued bounded headers, authenticates the invite and
+current durable pre-join custody before body admission, and then preserves the existing
+second durable revalidation in the final image-storage transaction. Other attachment
+purposes continue to consume their one-use authorization before reading the body. The
+frontend no longer duplicates room or credential authority in that upload body. This
+uses the existing 128-connection and 30-second HTTP bounds rather than adding an
+unmeasured limiter, ticket store, retry, or compatibility path. A real TCP regression
+declares a 14-MiB body, sends no body bytes, and receives the invalid-invite rejection
+within two seconds; focused invite/profile tests, the exact frontend request test, and
+the production frontend build pass.
