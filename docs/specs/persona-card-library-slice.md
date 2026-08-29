@@ -181,12 +181,21 @@ before `card.json` is read.
   normalization while scanning instead of first allocating every word from an input that can
   reach the 5 MiB card limit. Reachable import, partial-match, probability-decorator, and
   visible prompt behavior are covered without new durable state.
+- The critical web review found one Medium in CHARX embedded-Risu lore projection: normalizing
+  the module as a standalone `.risum` before projection leaked standalone-only aliases and
+  priority/case state across the narrower CHARX boundary. It also changed which large lore
+  entry won the ordinary 3,600-character budget. Daybreaker found one Medium in the correction:
+  CHARX and the ordinary matcher separately owned the same keyword grammar. Commit `f5fc9f9`
+  now decodes the bounded raw module once, projects only the original CHARX field set, preserves
+  standalone normalization unchanged, and shares one domain keyword iterator. Opposing CHARX
+  and standalone regressions pin both contracts through the ordinary renderer.
 - Daybreaker also found that the first casefold dependency commit omitted the desktop's
   nested lockfile and therefore was not independently gate-clean. Commit `557f3fd` repaired
   the published HEAD. The already-public history was not force-rewritten; future dependency
   changes must update both lockfiles in their owning commit.
-- Final cross-review approval of the correction range is pending. No automated security
-  scan was used.
+- The critical web session and Daybreaker Blue High both approved exact
+  `296f298..f5fc9f9` and cumulative `4fa167c..f5fc9f9` with C0/H0/M0/L0. No automated
+  security scan was used.
 
 ## Non-goals
 
