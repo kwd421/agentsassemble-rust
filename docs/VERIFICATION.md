@@ -3979,3 +3979,26 @@ copied-frontend connection, packaged verification, and real providers remain pen
   `APPROVE — Critical 0 / High 0 / Medium 0`. Final Daybreaker verdict for both ranges:
   `APPROVE — Critical 0 / High 0 / Medium 0`. Neither review used Deep Scan or another
   automated security scanner.
+
+## Message-attachment copied-frontend threshold review: 2026-08-29
+
+- The first web and Daybreaker reviews found Medium lifecycle and resource-boundary
+  gaps: passive-effect cleanup left commit windows for replaced upload/read authority
+  and object URLs; caller cancellation could release a read slot before an
+  abort-ignoring transport actually settled; deferred dispatch and the local ticket
+  boundary needed current abort checks.
+- Commits `8f3f504`, `fd176e6`, and `2c19b1c` moved authority retirement to layout
+  cleanup, separated caller settlement from actual transport-slot release, rechecked
+  deferred and local grant boundaries, and added deterministic cancellation and URL
+  lifetime regressions.
+- The next reviews found two Medium ownership gaps: per-authority schedulers allowed
+  unresolved transports to accumulate across generations, while retiring a memoized
+  scheduler broke React StrictMode effect reconnection. Commit `dcdb550` introduced one
+  non-global shared capacity owner with task-local exact room/authority capture.
+- Both reviewers then found one Medium at the real `LobbyView` unmount/re-entry edge:
+  the owner still ended with that view. Commit `de0a8d8` moved the owner to `AppView`
+  lifetime and added an actual child unmount/remount barrier proving replacement work
+  waits for an old abort-ignoring transport to settle.
+- Final web verdict: `de0a8d8`, `dcdb550..de0a8d8`, and `791ecd0..de0a8d8`
+  APPROVE C0/H0/M0. Final Daybreaker Blue High verdict for the same three ranges:
+  APPROVE C0/H0/M0. Neither review used Deep Scan or another automated security scan.
