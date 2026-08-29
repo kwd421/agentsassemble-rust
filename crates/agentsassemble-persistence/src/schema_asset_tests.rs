@@ -46,6 +46,13 @@ async fn schema_item_limits_match_the_runtime_raster_owner() {
     .execute(&pool)
     .await
     .unwrap_or_else(|error| panic!("insert room item at limit: {error}"));
+    sqlx::query(
+        "INSERT INTO persona_assets(persona_id, card_json, thumbnail_png) VALUES ('persona-limit', '{}', zeroblob(?))",
+    )
+    .bind(limit)
+    .execute(&pool)
+    .await
+    .unwrap_or_else(|error| panic!("insert persona thumbnail at limit: {error}"));
 
     for table in [
         "profile_avatar_assets",
@@ -62,6 +69,53 @@ async fn schema_item_limits_match_the_runtime_raster_owner() {
             "{table} accepted the runtime raster limit plus one"
         );
     }
+    assert!(
+        sqlx::query(
+            "UPDATE persona_assets SET thumbnail_png = zeroblob(?) WHERE persona_id = 'persona-limit'",
+        )
+        .bind(limit + 1)
+        .execute(&pool)
+        .await
+        .is_err(),
+        "persona thumbnail accepted the runtime raster limit plus one"
+    );
+}
+
+#[tokio::test]
+async fn persona_library_schema_has_one_atomic_card_and_thumbnail_owner() {
+    let pool = installed_schema().await;
+    let columns = sqlx::query_scalar::<_, String>(
+        "SELECT name FROM pragma_table_info('persona_assets') ORDER BY cid",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap_or_else(|error| panic!("read persona asset columns: {error}"));
+    assert_eq!(columns, ["persona_id", "card_json", "thumbnail_png"]);
+
+    sqlx::query(
+        "INSERT INTO persona_assets(persona_id, card_json, thumbnail_png) VALUES ('guide', '{}', X'00')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap_or_else(|error| panic!("insert persona asset: {error}"));
+    assert!(
+        sqlx::query(
+            "INSERT INTO persona_assets(persona_id, card_json, thumbnail_png) VALUES ('guide', '{}', NULL)",
+        )
+        .execute(&pool)
+        .await
+        .is_err(),
+        "persona ID did not own exactly one row"
+    );
+    assert!(
+        sqlx::query(
+            "INSERT INTO persona_assets(persona_id, card_json, thumbnail_png) VALUES ('empty-thumbnail', '{}', X'')",
+        )
+        .execute(&pool)
+        .await
+        .is_err(),
+        "persona schema accepted an empty thumbnail"
+    );
 }
 
 #[tokio::test]

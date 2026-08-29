@@ -48,6 +48,21 @@ const TABLES: &[TableDefinition] = &[
         infrastructure: false,
     },
     TableDefinition {
+        name: "persona_assets",
+        ddl: concat!(
+            "CREATE TABLE IF NOT EXISTS persona_assets (",
+            "persona_id TEXT PRIMARY KEY CHECK(typeof(persona_id) = 'text' ",
+            "AND length(CAST(persona_id AS BLOB)) BETWEEN 1 AND 80 ",
+            "AND instr(persona_id, char(0)) = 0), ",
+            "card_json TEXT NOT NULL CHECK(typeof(card_json) = 'text' ",
+            "AND length(CAST(card_json AS BLOB)) BETWEEN 2 AND 10485760), ",
+            "thumbnail_png BLOB CHECK(thumbnail_png IS NULL OR ",
+            "(typeof(thumbnail_png) = 'blob' ",
+            "AND length(thumbnail_png) BETWEEN 1 AND 10485760)))",
+        ),
+        infrastructure: false,
+    },
+    TableDefinition {
         name: "profile_avatar_assets",
         ddl: concat!(
             "CREATE TABLE IF NOT EXISTS profile_avatar_assets (",
