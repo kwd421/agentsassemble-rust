@@ -158,6 +158,10 @@ before `card.json` is read.
   match rather than depending on an engine-specific word class. Both reviewers then found
   that non-overlapping substring iteration could skip a later overlapping candidate; the
   same owner now advances one Unicode scalar after a failed candidate and tests that path.
+  The critical web review then found the original full-word path's second
+  `re.IGNORECASE` step: after full casefold, CPython's remaining unequal equivalence is
+  ASCII `i` with dotless `ı`. The full-word comparison preserves that pair while partial
+  matching intentionally remains plain casefolded substring search.
 - Daybreaker also found that the first casefold dependency commit omitted the desktop's
   nested lockfile and therefore was not independently gate-clean. Commit `557f3fd` repaired
   the published HEAD. The already-public history was not force-rewritten; future dependency

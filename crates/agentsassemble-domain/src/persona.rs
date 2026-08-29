@@ -428,19 +428,19 @@ fn literal_match(
     if !full_word {
         return haystack.contains(needle);
     }
+    if !case_sensitive {
+        return haystack.char_indices().any(|(start, _)| {
+            let Some(matched_len) = python_ignorecase_prefix_len(&haystack[start..], needle) else {
+                return false;
+            };
+            has_python_word_boundaries(haystack, start, start + matched_len)
+        });
+    }
     let mut search_from = 0;
     while let Some(relative_start) = haystack[search_from..].find(needle) {
         let start = search_from + relative_start;
         let end = start + needle.len();
-        let starts_at_boundary = haystack[..start]
-            .chars()
-            .next_back()
-            .is_none_or(|value| !is_python_word_character(value));
-        let ends_at_boundary = haystack[end..]
-            .chars()
-            .next()
-            .is_none_or(|value| !is_python_word_character(value));
-        if starts_at_boundary && ends_at_boundary {
+        if has_python_word_boundaries(haystack, start, end) {
             return true;
         }
         search_from = start
@@ -450,6 +450,31 @@ fn literal_match(
                 .map_or(needle.len(), char::len_utf8);
     }
     false
+}
+
+fn python_ignorecase_prefix_len(haystack: &str, needle: &str) -> Option<usize> {
+    let mut consumed = 0;
+    let mut haystack_chars = haystack.chars();
+    for expected in needle.chars() {
+        let actual = haystack_chars.next()?;
+        if actual != expected && !matches!((actual, expected), ('i', '\u{131}') | ('\u{131}', 'i'))
+        {
+            return None;
+        }
+        consumed += actual.len_utf8();
+    }
+    Some(consumed)
+}
+
+fn has_python_word_boundaries(haystack: &str, start: usize, end: usize) -> bool {
+    haystack[..start]
+        .chars()
+        .next_back()
+        .is_none_or(|value| !is_python_word_character(value))
+        && haystack[end..]
+            .chars()
+            .next()
+            .is_none_or(|value| !is_python_word_character(value))
 }
 
 fn is_python_word_character(value: char) -> bool {
@@ -609,6 +634,18 @@ mod tests {
         let entry = lore("..", "@@match_full_word\nThe overlapping match activates.");
         let context = render_persona_context(&card(vec![entry]), "a...");
         assert!(context.contains("The overlapping match activates."));
+    }
+
+    #[test]
+    fn full_word_lore_preserves_python_ignorecase_after_casefold() {
+        let partial = lore("i", "The partial dotless-i match activates.");
+        let full_word = lore(
+            "i",
+            "@@match_full_word\nThe full-word dotless-i match activates.",
+        );
+        let context = render_persona_context(&card(vec![partial, full_word]), "\u{131}");
+        assert!(!context.contains("The partial dotless-i match activates."));
+        assert!(context.contains("The full-word dotless-i match activates."));
     }
 
     fn card(lorebook: Vec<PersonaLoreEntry>) -> PersonaCard {
