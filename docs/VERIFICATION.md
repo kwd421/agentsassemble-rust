@@ -3797,3 +3797,54 @@ build, frontend 89 files / 555 tests, desktop 20, domain 27, persistence 187, pr
 the final diff gate. Repository-wide searches found one owner for the 4,096/8-GiB asset
 policy and one call path from each implemented lifecycle. No provider, Computer Use,
 Deep Scan, or automated security scanner ran for this persistence-only correction.
+
+## Message-attachment pending storage: 2026-08-29
+
+The message-attachment persistence owner now accepts one real 1-byte-to-10-MiB file
+only for the current writable, joined, unmuted human room principal. Local authority
+loads the current room participant inside the insertion transaction. Remote authority
+first revalidates the exact persistence-issued human session and then applies the same
+domain-owned message-write policy. Read-only, Agent Bridge, stale, left, and muted
+authority therefore cannot create pending bytes. The opaque `ma_` identifier is created
+inside that transaction and is bound to the exact room and uploader until the later
+message transaction promotes it.
+
+The original reachable filename and MIME normalization were retained at the message
+owner: path components and control characters are removed, names are bounded to 120
+characters, invalid MIME declarations use maintained `mime_guess` data, and unknown
+types become `application/octet-stream`. Normalized MIME metadata is additionally
+bounded to 127 bytes before it can later enter an event projection. Arbitrary files
+retain their exact bytes and remain download-only. Only declared PNG, JPEG, GIF, or
+WebP whose detected format agrees is marked inline-safe; the existing two-permit raster
+decoder, 4,096-dimension, 16-Mpixel, and 72-MiB decode-allocation bounds are reused.
+Message images are decoded for safety but are not re-encoded, because byte preservation
+is a product contract rather than an optimization opportunity.
+
+The concrete threats were active-content preview, declared/detected type confusion,
+decode resource exhaustion, stale upload authority, and one lifecycle deleting another
+lifecycle's retained bytes. The implementation adds no attachment framework, generic
+repository, cache, counter table, background sweeper, fallback, compatibility path, or
+operating-quota configuration. The message owner deletes only its own expired pending
+rows on its upload write path, then calls the shared physically-retained accounting
+owner. Expired profile, pre-join, and room-appearance rows remain untouched. After the
+message table joined accounting, the cross-owner ceiling regression uses 2,048 expired
+pre-join rows plus 2,048 expired message rows; omitting either table would admit the
+rejected net-new profile upload. Shared accounting diagnostics were renamed from
+`raster` to `attachment` without changing their stable error codes.
+
+Focused tests prove exact byte preservation, safe-image classification, declared-type
+mismatch rejection, filename/MIME normalization, read-only and mute denial with no
+partial row, exact human-session revalidation, and message-only expiry cleanup. On a
+warm development build, the combined real SQLite/safe-raster focused test completed in
+0.13 seconds with a 100,728,832-byte maximum test-process resident set; this includes
+the Rust test harness and is not claimed as per-upload cost. No CPU, memory, latency, or
+disk improvement is claimed, and no cache or alternate encoding path was justified.
+
+Full serial `make verify` passed architecture and 800-line source gates, policy tests,
+formatting, generated bindings, original-CSS verification, the production frontend
+build, frontend 89 files / 555 tests, desktop 20, domain 28, persistence 194, protocol
+6, provider 120, server 85, every TCP/integration/doc test, warning-denied Clippy, and
+the final diff gate. This completes the unexposed pending-storage boundary only; atomic
+message binding, HTTP grants and reads, Agent Session reads, copied-frontend connection,
+packaged Computer Use, and real providers remain pending. No provider, Computer Use,
+Deep Scan, or automated security scanner ran for this persistence-only boundary.
