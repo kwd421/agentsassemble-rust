@@ -54,7 +54,7 @@ pub(super) fn run_pre_hook(directory: &Path, command_prefix: &str) -> Result<(),
         .map_err(|_| "hook response could not be written")
 }
 
-fn pre_hook_response(
+pub(super) fn pre_hook_response(
     directory: &Path,
     name: Option<&str>,
     command: Option<&str>,
@@ -314,5 +314,91 @@ mod tests {
         .unwrap_or_else(|error| panic!("deny unstaged file: {error}"));
         assert_eq!(denied["decision"], "deny");
         assert_eq!(take_approval(root.path()).unwrap_or(None), None);
+    }
+
+    #[test]
+    fn shared_workspace_hook_routes_approval_to_the_current_session() {
+        use std::sync::Arc;
+
+        use crate::antigravity_hook::AntigravityHookRegistration;
+
+        let root =
+            tempfile::tempdir().unwrap_or_else(|error| panic!("create shared hook root: {error}"));
+        let workspace = root.path().join("workspace");
+        std::fs::create_dir(&workspace)
+            .unwrap_or_else(|error| panic!("create shared workspace: {error}"));
+        let mut prefixes = Vec::new();
+        for name in ["session-a", "session-b"] {
+            let directory = root.path().join(name);
+            std::fs::create_dir(&directory)
+                .unwrap_or_else(|error| panic!("create session directory: {error}"));
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+
+                std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o700))
+                    .unwrap_or_else(|error| panic!("secure session directory: {error}"));
+            }
+            let executable = directory.join(super::super::HELPER_FILE_NAME);
+            std::fs::write(&executable, b"private helper")
+                .unwrap_or_else(|error| panic!("write session helper: {error}"));
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+
+                std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700))
+                    .unwrap_or_else(|error| panic!("secure session helper: {error}"));
+            }
+            prefixes.push(
+                super::super::absolute_helper_command(&executable)
+                    .unwrap_or_else(|error| panic!("quote session helper: {error}")),
+            );
+        }
+        let first = AntigravityHookRegistration::register(
+            &workspace,
+            &format!("{} hook", prefixes[0]),
+            Arc::new(()),
+        )
+        .unwrap_or_else(|error| panic!("register first session hook: {error}"));
+        let second = AntigravityHookRegistration::register(
+            &workspace,
+            &format!("{} hook", prefixes[1]),
+            Arc::new(()),
+        )
+        .unwrap_or_else(|error| panic!("register second session hook: {error}"));
+
+        let installed: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(workspace.join(".agents/hooks.json"))
+                .unwrap_or_else(|error| panic!("read installed hook: {error}")),
+        )
+        .unwrap_or_else(|error| panic!("decode installed hook: {error}"));
+        assert_eq!(
+            installed["agentsassemble-room-requests"]["PreToolUse"][0]["hooks"][0]["command"],
+            format!("{} hook pre", prefixes[0])
+        );
+        let current = super::super::hook_session_directory(&prefixes[1])
+            .unwrap_or_else(|| panic!("resolve current session hook directory"));
+        assert_eq!(current, root.path().join("session-b"));
+        assert_ne!(current, root.path().join("session-a"));
+        let response = super::pre_hook_response(
+            &current,
+            Some("run_command"),
+            Some(&format!("{} read", prefixes[1])),
+            None,
+            &prefixes[1],
+        )
+        .unwrap_or_else(|error| panic!("approve current session helper: {error}"));
+        assert_eq!(response["decision"], "allow");
+        assert_eq!(
+            super::take_approval(&current).unwrap_or(None),
+            Some(super::HookApproval::RunCommand)
+        );
+        assert_eq!(
+            super::take_approval(&root.path().join("session-a")).unwrap_or(None),
+            None
+        );
+
+        drop(first);
+        drop(second);
     }
 }

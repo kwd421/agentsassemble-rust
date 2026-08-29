@@ -233,14 +233,12 @@ async fn run_helper(executable: PathBuf) -> Result<(), &'static str> {
     if action == "hook" {
         let helper = env::var(HELPER_COMMAND_ENV)
             .ok()
-            .filter(|value| valid_helper_command_prefix(value))
             .ok_or("room helper invocation is unavailable")?;
-        let directory = executable
-            .parent()
-            .ok_or("room helper authority is unavailable")?;
+        let directory =
+            hook_session_directory(&helper).ok_or("room helper authority is unavailable")?;
         return match arguments.next().as_deref() {
-            Some("pre") if arguments.next().is_none() => hook::run_pre_hook(directory, &helper),
-            Some("post") if arguments.next().is_none() => hook::run_post_hook(directory),
+            Some("pre") if arguments.next().is_none() => hook::run_pre_hook(&directory, &helper),
+            Some("post") if arguments.next().is_none() => hook::run_post_hook(&directory),
             _ => Err("usage: agentsassemble-room hook <pre|post>"),
         };
     }
@@ -440,33 +438,47 @@ fn valid_authority(authority: &HelperAuthority) -> bool {
         })
 }
 
-fn valid_helper_command_prefix(value: &str) -> bool {
+fn helper_executable_from_command_prefix(value: &str) -> Option<PathBuf> {
     if value.is_empty() || value.len() > 4096 {
-        return false;
+        return None;
     }
     #[cfg(unix)]
     let path = match shlex::split(value).as_deref() {
         Some([path]) => PathBuf::from(path),
-        _ => return false,
+        _ => return None,
     };
     #[cfg(windows)]
-    let path = match value
-        .strip_prefix('"')
-        .and_then(|value| value.strip_suffix('"'))
-    {
-        Some(path) => PathBuf::from(path),
-        None => return false,
-    };
-    path.is_absolute()
+    let path = PathBuf::from(
+        value
+            .strip_prefix('"')
+            .and_then(|value| value.strip_suffix('"'))?,
+    );
+    (path.is_absolute()
         && path.file_name() == Some(OsStr::new(HELPER_FILE_NAME))
-        && absolute_helper_command(&path).is_ok_and(|canonical| canonical == value)
+        && absolute_helper_command(&path).is_ok_and(|canonical| canonical == value))
+    .then_some(path)
+}
+
+fn hook_session_directory(command_prefix: &str) -> Option<PathBuf> {
+    let executable = helper_executable_from_command_prefix(command_prefix)?;
+    let metadata = std::fs::symlink_metadata(&executable).ok()?;
+    if !metadata.is_file() || metadata.file_type().is_symlink() {
+        return None;
+    }
+    #[cfg(unix)]
+    if std::os::unix::fs::PermissionsExt::mode(&metadata.permissions()) & 0o077 != 0 {
+        return None;
+    }
+    let directory = executable.parent()?;
+    require_private_directory(directory).ok()?;
+    Some(directory.to_path_buf())
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        absolute_helper_command, reset_media_directory, safe_room_command, stage_attachment,
-        valid_helper_command_prefix,
+        absolute_helper_command, helper_executable_from_command_prefix, reset_media_directory,
+        safe_room_command, stage_attachment,
     };
     use crate::ProviderAttachment;
 
@@ -483,8 +495,8 @@ mod tests {
             shlex::split(&command),
             Some(vec![executable.to_string_lossy().into_owned(),])
         );
-        assert!(valid_helper_command_prefix(&command));
-        assert!(!valid_helper_command_prefix("agentsassemble-room"));
+        assert!(helper_executable_from_command_prefix(&command).is_some());
+        assert!(helper_executable_from_command_prefix("agentsassemble-room").is_none());
         assert_ne!(command, "agentsassemble-room");
     }
 
@@ -495,8 +507,8 @@ mod tests {
         let command = absolute_helper_command(executable)
             .unwrap_or_else(|error| panic!("build absolute hook command: {error}"));
         assert_eq!(command, r#""C:\private helper\agentsassemble-room.exe""#);
-        assert!(valid_helper_command_prefix(&command));
-        assert!(!valid_helper_command_prefix("agentsassemble-room"));
+        assert!(helper_executable_from_command_prefix(&command).is_some());
+        assert!(helper_executable_from_command_prefix("agentsassemble-room").is_none());
     }
 
     #[cfg(windows)]
