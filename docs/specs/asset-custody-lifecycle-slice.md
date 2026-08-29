@@ -64,8 +64,10 @@ by implemented raster stores:
 - 10 MiB canonical bytes per image;
 - 4,096 by 4,096 maximum dimensions, 16 Mi-pixels, 72 MiB decoder allocation, and
   the existing two-job decode admission bound;
-- the 4,096-live-asset and 8-GiB absolute SQLite storage ceilings across current
-  profile, pre-join, and room-appearance rows; and
+- the 4,096-retained-asset and 8-GiB absolute SQLite storage ceilings across every
+  profile, pre-join, and room-appearance row that still physically occupies the
+  database, including an expired pending row until its lifecycle owner deletes it;
+  and
 - checked replacement usage `current - exact predecessor + new` for both count and
   bytes.
 
@@ -95,12 +97,13 @@ deletion stay in their product lifecycle modules.
   room-settings authority remain unchanged.
 
 Residual availability threat: a holder of one valid reusable invite can mint many
-browser credentials and occupy the absolute live-asset ceiling with distinct pre-join
-custodies. The 128-connection, two-decode, and request-deadline bounds limit rate, not
-eventual occupancy. The current product decision does not hard-code an invite/room
-operating quota or silently evict another custody, so exhaustion fails closed until
-rows expire. A later configurable operating policy may address fairness; this slice
-does not disguise that policy choice as an absolute safety bound.
+browser credentials and occupy the absolute retained-asset ceiling with distinct
+pre-join custodies. The 128-connection, two-decode, and request-deadline bounds limit
+rate, not eventual occupancy. The current product decision does not hard-code an
+invite/room operating quota or silently evict another custody, so exhaustion fails
+closed until the exact lifecycle owner deletes rows through its bounded expiry path.
+A later configurable operating policy may address fairness; this slice does not
+disguise that policy choice as an absolute safety bound.
 
 ## Non-goals
 

@@ -72,11 +72,13 @@ Rust-owned upload, message-binding, authorized-read, and provider-read lifecycle
   canonical event metadata instead of remaining an unconditional empty array. Pin
   storage never copies attachment IDs, names, bytes, or ownership.
 - Profile avatars, pre-join avatars, room appearance, and message attachments retain
-  separate SQL/state-transition owners. Their only shared owner contains absolute live
-  asset count/byte arithmetic and item-size constants. Adding message storage to the
-  existing 4,096-item/8-GiB absolute ceiling uses checked `current - exact predecessor
-  + new` accounting; it does not create an asset trait, registry, repository framework,
-  generic garbage collector, or configuration layer.
+  separate SQL/state-transition owners. Their only shared owner contains absolute
+  physically retained asset count/byte arithmetic and item-size constants. An expired
+  pending row continues to occupy that ceiling until its exact lifecycle owner deletes
+  it. Adding message storage to the existing 4,096-item/8-GiB absolute ceiling uses
+  checked `current - exact predecessor + new` accounting; it does not create an asset
+  trait, registry, repository framework, generic garbage collector, or configuration
+  layer.
 - Only expired pending objects or deletion of the owning room/event may remove bytes.
   A limit error never deletes current, bound, foreign, referenced, or merely old data.
   Room deletion cascades only that room's message attachments. The future
@@ -120,8 +122,9 @@ speculate about it.
    real attachment path when that provider-visible boundary is complete; no transcript,
    print-mode, fake provider, or alternate attachment fallback is used.
 5. Expiry and room deletion remove only their exact pending/bound rows. Absolute storage
-   accounting spans all four asset owners once, uses checked replacement arithmetic,
-   and never restores the removed generic per-subject or per-room quotas.
+   accounting spans all four asset owners once, counts every physically retained row
+   until its owning lifecycle deletes it, uses checked replacement arithmetic, and
+   never restores the removed generic per-subject or per-room quotas.
 6. Existing pins accept attachment-only messages and project canonical attachment
    filenames without adding pin-owned attachment state. Other message, profile-avatar,
    pre-join-avatar, room-appearance, admission, reconnect, ordered/ambient, and pin
@@ -130,7 +133,8 @@ speculate about it.
 ## Verification path
 
 - Schema and persistence tests cover ownership constraints, exact expiry, checked total
-  accounting, transactional binding/replay/races, attachment-only routing, and room
+  accounting, a cross-owner expired-row regression proving retained bytes remain
+  charged, transactional binding/replay/races, attachment-only routing, and room
   cascade cleanup.
 - Real TCP HTTP tests cover purpose separation, auth-before-body, request bounds,
   current-session revalidation, safe disposition, content-type mismatch, private reads,
