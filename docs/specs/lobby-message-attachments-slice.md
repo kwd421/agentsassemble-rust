@@ -77,8 +77,20 @@ Rust-owned upload, message-binding, authorized-read, and provider-read lifecycle
   13.3-MiB base64 request and dispatch it after authority replacement. Deterministic
   delayed-grant and component-lifecycle tests now prove zero target dispatch and zero UI
   commit after retirement; no claim of measured heap reduction is made.
-- The renderer obtains authorized blobs, creates generation-owned object URLs, and revokes
-  them on replacement, room change, abort, or unmount. Read-only clients expose neither
+- The renderer does no transfer work for download-only files at mount and no transfer
+  work for images outside the viewport. One room-and-authority-owned scheduler admits at
+  most four local or remote reads, below the server's eight concurrent grant ceiling;
+  the fifth remains queued until an active read settles. Intersecting images retain only
+  their own generation-owned object URL and revoke it on viewport exit, replacement,
+  room or authority change, abort, or unmount. Arbitrary files read only after an
+  explicit click, trigger one programmatic download, and revoke the temporary URL
+  immediately. One item failure leaves other successful items intact and retry schedules
+  only that item. The replaced `Promise.all` path could mount up to 1,600 simultaneous
+  requests and theoretically demand 16 GiB of response bodies for 200 events with eight
+  10-MiB files each. Deterministic mount, intersection, click, failure, queue-barrier,
+  and retirement tests now prove zero offscreen/download-only starts, a four-read peak,
+  no fifth dispatch before release, and no retained URL after retirement; CPU and wall
+  time are not assigned speculative benchmark numbers. Read-only clients expose neither
   upload nor send controls.
 - The existing pin row remains only an event pointer. Once attachments are active, its
   target validation accepts a `message_final` with visible text or at least one bound

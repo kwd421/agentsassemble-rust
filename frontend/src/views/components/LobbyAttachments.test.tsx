@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -9,12 +10,42 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const transfer = vi.hoisted(() => ({ read: vi.fn() }));
 
-vi.mock("../../api/messageAttachments", () => ({
+vi.mock("../../api/messageAttachments", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../api/messageAttachments")>()),
   fetchMessageAttachmentBlob: transfer.read,
 }));
 
-import LobbyAttachments from "./LobbyAttachments";
 import type { LobbyAttachmentRef } from "../../api/messageAttachments";
+import { createMessageAttachmentReadScheduler } from "../../lib/messageAttachmentReadScheduler";
+import LobbyAttachments from "./LobbyAttachments";
+
+const intersectionObservers: TestIntersectionObserver[] = [];
+
+class TestIntersectionObserver {
+  private readonly callback: IntersectionObserverCallback;
+  private target: Element | null = null;
+
+  constructor(callback: IntersectionObserverCallback) {
+    this.callback = callback;
+    intersectionObservers.push(this);
+  }
+
+  observe(target: Element) {
+    this.target = target;
+  }
+
+  disconnect() {
+    this.target = null;
+  }
+
+  emit(isIntersecting: boolean) {
+    if (!this.target) throw new Error("observer target is unavailable");
+    this.callback(
+      [{ isIntersecting, target: this.target } as IntersectionObserverEntry],
+      this as unknown as IntersectionObserver
+    );
+  }
+}
 
 function attachment(hex = "a", image = true): LobbyAttachmentRef {
   const id = `ma_${hex.repeat(32)}`;
@@ -29,47 +60,59 @@ function attachment(hex = "a", image = true): LobbyAttachmentRef {
   };
 }
 
+function scheduler() {
+  return createMessageAttachmentReadScheduler(
+    "general",
+    { kind: "local" },
+    transfer.read
+  );
+}
+
 describe("LobbyAttachments", () => {
   const createObjectURL = vi.fn<(blob: Blob) => string>();
   const revokeObjectURL = vi.fn<(url: string) => void>();
+  let anchorClick: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     vi.resetAllMocks();
-    createObjectURL.mockReturnValue("blob:authorized-preview");
+    intersectionObservers.length = 0;
+    vi.stubGlobal("IntersectionObserver", TestIntersectionObserver);
     vi.stubGlobal("URL", { createObjectURL, revokeObjectURL });
+    anchorClick = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
   });
 
   afterEach(() => {
     cleanup();
+    anchorClick.mockRestore();
     vi.unstubAllGlobals();
   });
 
-  it("renders and downloads only an authorized local blob", async () => {
-    const image = attachment();
+  it("reads only an intersecting image or an explicitly downloaded file", async () => {
+    const image = attachment("a", true);
+    const file = attachment("b", false);
+    createObjectURL
+      .mockReturnValueOnce("blob:image")
+      .mockReturnValueOnce("blob:file");
     transfer.read.mockImplementation(
-      async (
-        _attachment,
-        _roomId,
-        _authority,
-        _mode,
-        _signal,
-        beforeDispatch?: () => void
-      ) => {
+      async (value: LobbyAttachmentRef, ...args: unknown[]) => {
+        const beforeDispatch = args[4] as (() => void) | undefined;
         beforeDispatch?.();
-        return new Blob(["image"], { type: "image/png" });
+        return new Blob([value.is_image ? "image" : "file"], {
+          type: value.content_type,
+        });
       }
     );
-
     render(
       <LobbyAttachments
-        roomId="general"
-        authority={{ kind: "local" }}
-        attachments={[image]}
+        attachments={[image, file]}
+        scheduler={scheduler()}
       />
     );
 
+    expect(transfer.read).not.toHaveBeenCalled();
+    act(() => intersectionObservers[0]?.emit(true));
     const preview = await screen.findByRole("img", { name: "a.png" });
-    expect(preview.getAttribute("src")).toBe("blob:authorized-preview");
+    expect(preview.getAttribute("src")).toBe("blob:image");
     expect(transfer.read).toHaveBeenCalledWith(
       image,
       "general",
@@ -79,120 +122,85 @@ describe("LobbyAttachments", () => {
       expect.any(Function)
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "a.png 크게 보기" }));
-    expect(screen.getByRole("dialog", { name: "a.png 이미지 미리보기" })).toBeTruthy();
-    expect(
-      screen.getByRole("link", { name: "a.png 다운로드" }).getAttribute("href")
-    ).toBe("blob:authorized-preview");
-  });
-
-  it("aborts a retired room generation before its delayed transfer dispatch", async () => {
-    const image = attachment();
-    let resolveFirst: ((blob: Blob) => void) | undefined;
-    transfer.read
-      .mockReturnValueOnce(
-        new Promise<Blob>((resolve) => {
-          resolveFirst = resolve;
-        })
-      )
-      .mockResolvedValueOnce(new Blob(["image"], { type: "image/png" }));
-    const view = render(
-      <LobbyAttachments
-        roomId="first"
-        authority={{ kind: "local" }}
-        attachments={[image]}
-      />
-    );
-    await waitFor(() => expect(transfer.read).toHaveBeenCalledOnce());
-    const retiredSignal = transfer.read.mock.calls[0]?.[4] as AbortSignal;
-    const retiredBeforeDispatch = transfer.read.mock.calls[0]?.[5] as () => void;
-
-    view.rerender(
-      <LobbyAttachments
-        roomId="second"
-        authority={{ kind: "remote", sessionToken: "aas1.session" }}
-        attachments={[image]}
-      />
-    );
-
-    expect(retiredSignal.aborted).toBe(true);
-    expect(retiredBeforeDispatch).toThrow();
-    resolveFirst?.(new Blob(["image"], { type: "image/png" }));
-    await screen.findByRole("img", { name: "a.png" });
+    fireEvent.click(screen.getByRole("button", { name: "b.txt 다운로드" }));
+    await waitFor(() => expect(anchorClick).toHaveBeenCalledOnce());
     expect(transfer.read).toHaveBeenLastCalledWith(
-      image,
-      "second",
-      { kind: "remote", sessionToken: "aas1.session" },
-      "view",
+      file,
+      "general",
+      { kind: "local" },
+      "download",
       expect.any(AbortSignal),
       expect.any(Function)
     );
-    expect(createObjectURL).toHaveBeenCalledOnce();
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:file");
+
+    fireEvent.click(screen.getByRole("button", { name: "a.png 크게 보기" }));
+    expect(screen.getByRole("dialog", { name: "a.png 이미지 미리보기" })).toBeTruthy();
   });
 
-  it("revokes generation-owned object URLs on replacement and unmount", async () => {
-    transfer.read.mockResolvedValue(new Blob(["bytes"], { type: "text/plain" }));
-    createObjectURL
-      .mockReturnValueOnce("blob:first")
-      .mockReturnValueOnce("blob:second");
-    const first = attachment("a", false);
-    const second = attachment("b", false);
+  it("aborts and revokes an image as soon as it leaves the viewport", async () => {
+    const image = attachment();
+    createObjectURL.mockReturnValue("blob:image");
+    transfer.read.mockResolvedValue(new Blob(["image"], { type: "image/png" }));
     const view = render(
-      <LobbyAttachments
-        roomId="general"
-        authority={{ kind: "local" }}
-        attachments={[first]}
-      />
+      <LobbyAttachments attachments={[image]} scheduler={scheduler()} />
     );
-    await screen.findByRole("link", { name: /a\.txt/ });
+    act(() => intersectionObservers[0]?.emit(true));
+    await screen.findByRole("img", { name: "a.png" });
 
-    view.rerender(
-      <LobbyAttachments
-        roomId="general"
-        authority={{ kind: "local" }}
-        attachments={[second]}
-      />
-    );
-    await screen.findByRole("link", { name: /b\.txt/ });
-    expect(revokeObjectURL).toHaveBeenCalledWith("blob:first");
+    act(() => intersectionObservers[0]?.emit(false));
+    await waitFor(() => expect(screen.queryByRole("img", { name: "a.png" })).toBeNull());
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:image");
 
+    transfer.read.mockReturnValueOnce(new Promise<Blob>(() => {}));
+    act(() => intersectionObservers[0]?.emit(true));
+    await waitFor(() => expect(transfer.read).toHaveBeenCalledTimes(2));
+    const activeSignal = transfer.read.mock.calls[1]?.[4] as AbortSignal;
+    act(() => intersectionObservers[0]?.emit(false));
+    expect(activeSignal.aborted).toBe(true);
+
+    transfer.read.mockResolvedValueOnce(new Blob(["image"], { type: "image/png" }));
+    act(() => intersectionObservers[0]?.emit(true));
+    await screen.findByRole("img", { name: "a.png" });
     view.unmount();
-    expect(revokeObjectURL).toHaveBeenCalledWith("blob:second");
+    expect(revokeObjectURL).toHaveBeenCalledTimes(2);
   });
 
-  it("releases already-created URLs when any attachment in the generation fails", async () => {
-    const image = attachment("a", true);
-    const file = attachment("b", false);
-    let rejectFile: ((error: Error) => void) | undefined;
-    transfer.read.mockImplementation((value: LobbyAttachmentRef) => {
-      if (value.id === image.id) {
-        return Promise.resolve(new Blob(["image"], { type: "image/png" }));
+  it("isolates one image failure and retries only that item", async () => {
+    const first = attachment("a", true);
+    const second = attachment("b", true);
+    let firstAttempt = true;
+    createObjectURL
+      .mockReturnValueOnce("blob:second")
+      .mockReturnValueOnce("blob:first-retry");
+    transfer.read.mockImplementation(async (value: LobbyAttachmentRef) => {
+      if (value.id === first.id && firstAttempt) {
+        firstAttempt = false;
+        throw new Error("denied");
       }
-      return new Promise<Blob>((_resolve, reject) => {
-        rejectFile = reject;
-      });
+      return new Blob([value.filename], { type: "image/png" });
     });
     render(
-      <LobbyAttachments
-        roomId="general"
-        authority={{ kind: "local" }}
-        attachments={[image, file]}
-      />
+      <LobbyAttachments attachments={[first, second]} scheduler={scheduler()} />
     );
-    await waitFor(() => expect(createObjectURL).toHaveBeenCalledOnce());
-    expect(transfer.read.mock.calls.map((call) => call[3])).toEqual([
-      "view",
-      "download",
-    ]);
 
-    rejectFile?.(new Error("denied"));
-    await waitFor(() =>
-      expect(revokeObjectURL).toHaveBeenCalledWith("blob:authorized-preview")
-    );
-    expect(
-      transfer.read.mock.calls.every((call) => (call[4] as AbortSignal).aborted)
-    ).toBe(true);
-    expect(screen.queryByRole("img", { name: "a.png" })).toBeNull();
-    expect(screen.queryByRole("link", { name: /b\.txt/ })).toBeNull();
+    act(() => {
+      intersectionObservers[0]?.emit(true);
+      intersectionObservers[1]?.emit(true);
+    });
+    await screen.findByRole("img", { name: "b.png" });
+    const retry = await screen.findByRole("button", {
+      name: "a.png 미리보기 다시 시도",
+    });
+    expect(screen.getByRole("img", { name: "b.png" })).toBeTruthy();
+
+    fireEvent.click(retry);
+    await screen.findByRole("img", { name: "a.png" });
+    expect(transfer.read.mock.calls.map((call) => call[0].id)).toEqual([
+      first.id,
+      second.id,
+      first.id,
+    ]);
+    expect(screen.getByRole("img", { name: "b.png" })).toBeTruthy();
   });
 });

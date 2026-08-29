@@ -43,6 +43,7 @@ import {
   useRoomMessageSearch,
   type RoomMessageSearchController,
 } from "./useRoomMessageSearch";
+import { createMessageAttachmentReadScheduler } from "../lib/messageAttachmentReadScheduler";
 
 type PinOperation = { retired: boolean };
 
@@ -178,6 +179,18 @@ export default function LobbyView({
         ? { kind: "remote", sessionToken: roomSessionToken }
         : { kind: "local" },
     [postingMode, roomSessionToken]
+  );
+  const messageAttachmentReadScheduler = useMemo(
+    () => createMessageAttachmentReadScheduler(
+      activeRoom.meetingId,
+      messageAttachmentAuthority
+    ),
+    [activeRoom.meetingId, messageAttachmentAuthority]
+  );
+
+  useEffect(
+    () => () => messageAttachmentReadScheduler.retire(),
+    [messageAttachmentReadScheduler]
   );
 
   const agentOwnerIds = useMemo(
@@ -672,8 +685,7 @@ export default function LobbyView({
                     />
                   ) : undefined
                 }
-                roomId={activeRoom.meetingId}
-                messageAttachmentAuthority={messageAttachmentAuthority}
+                messageAttachmentReadScheduler={messageAttachmentReadScheduler}
                 pinned={pinnedEventIds.has(event.record_id || event.id)}
                 canPin={
                   canPostMessages &&

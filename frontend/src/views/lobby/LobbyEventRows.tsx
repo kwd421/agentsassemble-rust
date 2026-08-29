@@ -17,10 +17,8 @@ import {
   Zap,
 } from "lucide-react";
 
-import type {
-  LobbyEvent,
-  MessageAttachmentAuthority,
-} from "../../api";
+import type { LobbyEvent } from "../../api";
+import type { MessageAttachmentReadScheduler } from "../../lib/messageAttachmentReadScheduler";
 import type { RoomTypingIndicator } from "../../lib/roomTypingIndicators";
 import DiscordText, { type MentionLabels } from "../components/DiscordText";
 import LobbyAttachments from "../components/LobbyAttachments";
@@ -352,8 +350,7 @@ export function LobbyMessageRow({
   voteCard,
   showHeader = true,
   mentionLabels,
-  roomId,
-  messageAttachmentAuthority,
+  messageAttachmentReadScheduler,
   pinned = false,
   canPin = false,
   onTogglePin,
@@ -367,8 +364,7 @@ export function LobbyMessageRow({
   voteCard?: ReactNode;
   showHeader?: boolean;
   mentionLabels: MentionLabels;
-  roomId: string;
-  messageAttachmentAuthority: MessageAttachmentAuthority;
+  messageAttachmentReadScheduler: MessageAttachmentReadScheduler;
   pinned?: boolean;
   canPin?: boolean;
   onTogglePin?: () => void;
@@ -447,8 +443,7 @@ export function LobbyMessageRow({
         {!event.message_deleted && (
           <LobbyAttachments
             attachments={event.attachments}
-            roomId={roomId}
-            authority={messageAttachmentAuthority}
+            scheduler={messageAttachmentReadScheduler}
           />
         )}
       </div>
