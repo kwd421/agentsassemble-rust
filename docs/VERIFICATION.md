@@ -4133,3 +4133,24 @@ only this repository's regenerable Cargo outputs recovered about 40 GiB, after w
 verification completed. User-owned files and `.agents/` were untouched. No provider, Computer Use,
 Deep Scan, or automated security scanner ran. These commits remain local until the configured
 three-feature-or-2,000-line push threshold, so manual cross-review is not yet claimed.
+
+## Persona local-operator HTTP candidate: 2026-08-30
+
+Commits `da407d2` and `54ed384` connect the normalized library to private
+`/api/personas`, `/api/personas/import`, and `/api/personas/{persona_id}/thumbnail`
+routes. The server consumes an exact one-use local-operator ticket before any body, rejects and
+consumes crossed-purpose authority, applies the shared bounded base64 JSON calculation, and exposes
+only safe summaries or canonical PNG bytes. Import parsing and decompression run outside the async
+executor. A process-wide two-import admission is owned through decode, normalization, and the atomic
+store, including after caller cancellation; no fallback, raw-source copy, migration, or cleanup task
+was added.
+
+The real loopback TCP tests import an actual CCv3 PNG, list the exact safe projection, read the
+thumbnail with private/no-store, CORS, disposition, and `nosniff` headers, reject missing thumbnails,
+prove ticket replay failure, prove crossed-ticket consumption before malformed body handling, and
+leave rejected imports absent. The two tests completed in 0.07 seconds during full `make verify`.
+That full run also passed architecture and 800-line gates, copied-CSS verification, frontend 94 files
+/ 593 tests, persistence 210, server 86 plus every TCP/integration test, desktop 26, provider 134,
+warning-denied Clippy, and the diff gate. No provider, Computer Use, Deep Scan, or automated security
+scanner ran. The candidate remains local until the configured push threshold; reviewer approval is
+not claimed.

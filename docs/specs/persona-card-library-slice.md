@@ -158,6 +158,25 @@ drift from the private owner. A warm real-SQLite replacement/list/read/reopen re
 test body in 0.04 seconds on the development host; that is harness evidence, not a production latency
 claim.
 
+The local-operator HTTP owner consumes one exact server-operator ticket before reading any request
+body. List, import, and thumbnail responses are private/no-store; thumbnails are fixed canonical PNG
+responses rather than arbitrary imported content. Import accepts only the original five filename
+suffixes, bounds the JSON/base64 envelope from the shared 10-MiB byte limit, and sends only decoded
+bytes to the format owners. The shared server transport owner now computes that base64 envelope once
+for both persona and existing attachment JSON uploads.
+
+The concrete scheduler threat is that one accepted CHARX may validate up to 80 MiB of expanded entry
+metadata and data. Performing that work on a Tokio executor thread would occupy it and can delay
+unrelated room and HTTP tasks, while many cancelled imports could otherwise release admission before
+their blocking work stopped. Parsing, decompression, normalization, and base64 decoding now run on
+Tokio's maintained blocking pool. The process admits two complete imports at a time, and a detached import task retains
+its permit through the atomic SQLite replacement even if the requesting connection disappears. This
+bounds concurrent expanded custody to the two accepted imports without adding a queue framework,
+retry path, cache, timer, or background cleanup. The accepted trade-off is backpressure on a third
+local import. The real TCP suite verifies purpose separation, authorization-before-body, one-use
+tickets, CORS, private caching, canonical PNG delivery, missing-thumbnail failure, and an untouched
+library after rejected requests; its two tests completed in 0.07 seconds during full verification.
+
 ## Manual-review findings
 
 - Daybreaker Blue High returned five Medium findings for the first pushed importer range:
