@@ -465,8 +465,9 @@ Tauri owns the local sidecar it starts. The package carries the built frontend o
 On macOS, the desktop runtime supervisor is also the lifecycle owner for its private
 executable copies. The running desktop-image re-exec and server-sidecar binding share
 one desktop-only `0700` staging root. A per-directory exclusive lease protects every
-active `BoundSidecar`; root-serialized creation and nonblocking owner-drop cleanup
-reclaim only unlocked crash directories. Unknown entries, unsafe ownership or modes,
+active `BoundSidecar`; root-serialized creation and owner-drop cleanup with nonblocking
+root-lock acquisition reclaim only unlocked crash directories. Unknown entries, unsafe
+ownership or modes,
 and scans beyond the absolute bound fail closed. This root is intentionally distinct
 from provider staging because the desktop and provider supervise different process
 lifetimes.
