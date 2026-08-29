@@ -150,8 +150,17 @@ Rust-owned upload, message-binding, authorized-read, and provider-read lifecycle
   JSON/base64 expansion, but it still incurs one bounded `Blob.arrayBuffer()` conversion
   and one native body clone before the blocking file-dialog/write worker; no CPU, latency,
   or resident-memory improvement is claimed beyond removing the observed deadlock and
-  avoiding base64's known size expansion. The same owner handles file cards and image
-  preview downloads, so WebKit never re-enters the failing path through a second UI.
+  avoiding base64's known size expansion. A manual review then identified that a direct
+  final-path write could follow a selected symlink, truncate an existing file before a
+  later write failure, or leave partial bytes after `ENOSPC`. The desktop owner now writes
+  the complete body to one same-directory temporary file, synchronizes that file, rejects
+  an already selected symlink or other non-regular target, and atomically persists the
+  completed file over a regular target. A target changed to a symlink after the metadata
+  check is replaced as a directory entry rather than followed. The accepted cost is one
+  temporary directory entry, one full write, one file sync, and one rename per explicit
+  save; no directory-sync or crash-durable filename claim is made. The same owner handles
+  file cards and image preview downloads, so WebKit never re-enters the failing path
+  through a second UI.
 - The existing pin row remains only an event pointer. Once attachments are active, its
   target validation accepts a `message_final` with visible text or at least one bound
   attachment, and its existing `attachment_filenames` field is derived from that
@@ -257,10 +266,19 @@ sidecar was restored byte-for-byte, and only the isolated app data, caches, WebK
 and build root were moved to a recoverable Trash folder; no owned app, server, or
 `cloudflared` process remained. The implementation then passed `make verify`, including
 the mandatory architecture/800-line gates, copied production frontend and original-CSS
-check, 93 frontend files with 591 tests, 23 Tauri tests, all Rust tests including the
+check, 93 frontend files with 591 tests, 25 Tauri tests, all Rust tests including the
 real TCP attachment boundary, and warning-denied Clippy. No real provider was started
 for this desktop-only download correction because it does not change the already
 verified canonical Agent Session read boundary.
+
+After the atomic-save correction, the same isolated release package saved the
+3,307-byte README again with the same SHA-256 and exact byte comparison, and the
+packaged UI remained responsive while opening and closing channel search. The regular
+replacement and Unix symlink-rejection tests cover the final-path policy directly.
+The exact app and owned server were then stopped; no public ingress or provider had
+been started, the original ignored sidecar remained byte-identical, and the isolated
+runtime state, caches, WebKit data, package, and output were returned to the same
+recoverable Trash folder.
 
 Observed follow-up: an interrupted macOS provider/server test run left 159
 `agentsassemble-*-exec-*` executable-staging directories (more than 10 GiB total),
