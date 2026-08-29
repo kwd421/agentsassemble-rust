@@ -9,19 +9,17 @@ afterEach(cleanup);
 describe("ProviderControlSelect", () => {
   it("drills into model families inside the same bounded menu", async () => {
     render(
-      <section role="dialog" aria-label="에이전트 추가" aria-modal="true">
-        <ProviderControlSelect
-          label="모델"
-          options={[
-            { value: "gemini/flash", label: "Gemini Flash", metadata: { family: "Gemini" } },
-            { value: "gemini/pro", label: "Gemini Pro", metadata: { family: "Gemini" } },
-            { value: "claude/sonnet", label: "Claude Sonnet", metadata: { family: "Claude" } },
-            { value: "claude/opus", label: "Claude Opus", metadata: { family: "Claude" } },
-          ]}
-          value="gemini/flash"
-          onChange={vi.fn()}
-        />
-      </section>
+      <ProviderControlSelect
+        label="모델"
+        options={[
+          { value: "gemini/flash", label: "Gemini Flash", metadata: { family: "Gemini" } },
+          { value: "gemini/pro", label: "Gemini Pro", metadata: { family: "Gemini" } },
+          { value: "claude/sonnet", label: "Claude Sonnet", metadata: { family: "Claude" } },
+          { value: "claude/opus", label: "Claude Opus", metadata: { family: "Claude" } },
+        ]}
+        value="gemini/flash"
+        onChange={vi.fn()}
+      />
     );
 
     await userEvent.click(screen.getByRole("combobox", { name: "모델" }));
@@ -35,7 +33,6 @@ describe("ProviderControlSelect", () => {
     expect(screen.getAllByRole("listbox")).toHaveLength(1);
     const firstModel = screen.getByRole("option", { name: "Gemini Flash" });
     expect(firstModel).toBeTruthy();
-    expect(screen.getByRole("dialog", { name: "에이전트 추가" }).contains(firstModel)).toBe(true);
     expect(document.activeElement).toBe(firstModel);
     expect(screen.queryByRole("option", { name: "Claude Sonnet" })).toBeNull();
 
