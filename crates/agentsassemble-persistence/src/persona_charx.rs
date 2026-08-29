@@ -4,17 +4,18 @@ use std::{
 };
 
 use agentsassemble_domain::{
-    MAX_ATTACHMENT_BYTES, PersonaLoreEntry, PersonaLoreSettings, trim_persona_card_text,
+    MAX_ATTACHMENT_BYTES, PersonaLoreEntry, PersonaLoreSettings, persona_card_keywords,
 };
-use serde_json::Value;
+use serde_json::{Map, Value};
 use zip::ZipArchive;
 
 use crate::{
     persona_import::{
-        ImportedPersonaAsset, MAX_CARD_JSON_BYTES, PersonaImportError, add_count,
-        finish_ccv3_import, parse_ccv3_json_object, safe_embedded_path,
+        ImportedPersonaAsset, MAX_CARD_JSON_BYTES, PersonaImportError, add_count, boolean,
+        finish_ccv3_import, integer, nonempty_text, parse_ccv3_json_object, raw_text,
+        safe_embedded_path, text,
     },
-    persona_risu::decode_risum_module,
+    persona_risu::{decode_risum_payload, ignored_module_features},
 };
 
 const MAX_ENTRY_COUNT: usize = 512;
@@ -52,7 +53,7 @@ pub async fn import_charx_asset(
     let module = if archive.index_for_name("module.risum").is_some() {
         Some(
             read_member(&mut archive, "module.risum", MAX_ATTACHMENT_BYTES)
-                .and_then(|bytes| decode_risum_module("module.risum", &bytes)),
+                .and_then(|bytes| decode_risum_payload(&bytes)),
         )
     } else {
         None
@@ -61,15 +62,20 @@ pub async fn import_charx_asset(
     if let Some(module) = module {
         match module {
             Ok(module) => {
-                if module.lorebook_present {
-                    imported.card.lorebook = project_embedded_lore(module.card.lorebook);
+                let lorebook = project_embedded_lore(&module.module);
+                let ignored = ignored_module_features(
+                    &module.module,
+                    lorebook.as_deref().unwrap_or_default(),
+                );
+                if let Some(lorebook) = lorebook {
+                    imported.card.lorebook = lorebook;
                     imported.card.lore_settings = PersonaLoreSettings::default();
                     imported
                         .card
                         .ignored_features
                         .remove("lorebook_regex_matching");
                 }
-                for (name, count) in module.card.ignored_features {
+                for (name, count) in ignored {
                     imported
                         .card
                         .ignored_features
@@ -88,23 +94,49 @@ pub async fn import_charx_asset(
     Ok(imported)
 }
 
-fn project_embedded_lore(mut entries: Vec<PersonaLoreEntry>) -> Vec<PersonaLoreEntry> {
-    for entry in &mut entries {
-        entry.key = projected_keywords(&entry.key);
-        entry.secondary_key = projected_keywords(&entry.secondary_key);
-        entry.priority = 0;
-        entry.case_sensitive = false;
-    }
-    entries
+fn project_embedded_lore(module: &Map<String, Value>) -> Option<Vec<PersonaLoreEntry>> {
+    module
+        .get("lorebook")
+        .and_then(Value::as_array)
+        .map(|entries| {
+            entries
+                .iter()
+                .filter_map(project_embedded_lore_entry)
+                .collect()
+        })
+}
+
+fn project_embedded_lore_entry(value: &Value) -> Option<PersonaLoreEntry> {
+    let entry = value.as_object()?;
+    Some(PersonaLoreEntry {
+        key: projected_keywords(entry.get("key").and_then(Value::as_str).unwrap_or_default()),
+        content: raw_text(entry.get("content")),
+        secondary_key: projected_keywords(
+            entry
+                .get("secondkey")
+                .and_then(Value::as_str)
+                .unwrap_or_default(),
+        ),
+        comment: nonempty_text(entry.get("comment")).unwrap_or_else(|| text(entry.get("name"))),
+        always_active: boolean(entry.get("alwaysActive").or_else(|| entry.get("constant"))),
+        selective: boolean(entry.get("selective")),
+        use_regex: boolean(entry.get("useRegex").or_else(|| entry.get("use_regex"))),
+        insert_order: integer(
+            entry
+                .get("insertorder")
+                .or_else(|| entry.get("insertion_order")),
+        ),
+        enabled: entry
+            .get("enabled")
+            .is_none_or(|value| boolean(Some(value))),
+        case_sensitive: false,
+        priority: 0,
+    })
 }
 
 fn projected_keywords(value: &str) -> String {
     let mut output = String::new();
-    for keyword in value
-        .split([',', ';', '\n'])
-        .map(trim_persona_card_text)
-        .filter(|keyword| !keyword.is_empty())
-    {
+    for keyword in persona_card_keywords(value) {
         if !output.is_empty() {
             output.push_str(", ");
         }
@@ -315,6 +347,13 @@ mod tests {
                         "content": low,
                         "case_sensitive": true,
                         "insertorder": 1
+                    },
+                    {
+                        "keys": ["harbor"],
+                        "content": "ALIAS MUST STAY INERT",
+                        "always_active": true,
+                        "insert_order": -500,
+                        "priority": 999
                     }
                 ]
             }
@@ -328,6 +367,9 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("import CHARX: {error}"));
         assert_eq!(imported.card.lorebook[1].key, "HARBOR, dock");
+        assert_eq!(imported.card.lorebook[2].key, "");
+        assert!(!imported.card.lorebook[2].always_active);
+        assert_eq!(imported.card.lorebook[2].insert_order, 0);
         assert!(
             imported
                 .card
@@ -338,6 +380,7 @@ mod tests {
         let rendered = render_persona_context(&imported.card, "harbor");
         assert!(rendered.contains("LOW bbb"));
         assert!(!rendered.contains("HIGH aaa"));
+        assert!(!rendered.contains("ALIAS MUST STAY INERT"));
     }
 
     fn zip(entries: &[(&str, &[u8])]) -> Vec<u8> {

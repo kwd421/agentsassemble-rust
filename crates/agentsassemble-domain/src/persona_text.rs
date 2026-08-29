@@ -25,6 +25,13 @@ pub fn trim_persona_card_text(value: &str) -> &str {
     value.trim_matches(is_persona_card_whitespace)
 }
 
+pub fn persona_card_keywords(value: &str) -> impl Iterator<Item = &str> {
+    value
+        .split([',', ';', '\n'])
+        .map(trim_persona_card_text)
+        .filter(|keyword| !keyword.is_empty())
+}
+
 pub(super) fn card_words(value: &str) -> impl Iterator<Item = &str> {
     value
         .split(is_persona_card_whitespace)

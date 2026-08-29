@@ -40,9 +40,9 @@ pub(super) const RPACK_DECODE: [u8; 256] = [
     0xf6, 0xcc, 0x6e, 0xb9, 0x5b, 0x0b, 0x96, 0xed, 0xd5, 0xe9, 0xc5, 0xcb, 0x08, 0xa6, 0x80, 0x40,
 ];
 
-pub(super) struct DecodedRisuModule {
-    pub card: PersonaCard,
-    pub lorebook_present: bool,
+pub(super) struct DecodedRisuPayload {
+    pub module: Map<String, Value>,
+    pub asset_records: usize,
 }
 
 /// Parses a standalone Risu module without filesystem or environment lookups.
@@ -54,17 +54,17 @@ pub fn import_risum_asset(
     filename: &str,
     content: &[u8],
 ) -> Result<ImportedPersonaAsset, PersonaImportError> {
-    let card = decode_risum_module(filename, content)?.card;
+    let decoded = decode_risum_payload(content)?;
+    let card = normalize_module(&decoded.module, filename, decoded.asset_records);
     Ok(ImportedPersonaAsset {
         card,
         thumbnail: None,
     })
 }
 
-pub(super) fn decode_risum_module(
-    source_name: &str,
+pub(super) fn decode_risum_payload(
     content: &[u8],
-) -> Result<DecodedRisuModule, PersonaImportError> {
+) -> Result<DecodedRisuPayload, PersonaImportError> {
     if content.is_empty() || content.len() > MAX_ATTACHMENT_BYTES {
         return Err(PersonaImportError::InvalidSize);
     }
@@ -84,21 +84,21 @@ pub(super) fn decode_risum_module(
         .iter()
         .map(|byte| RPACK_DECODE[usize::from(*byte)])
         .collect::<Vec<_>>();
-    let root: Value = serde_json::from_slice(&decoded).map_err(|_| invalid("JSON is invalid"))?;
-    let root = root
-        .as_object()
-        .ok_or_else(|| invalid("payload root must be an object"))?;
+    let Value::Object(mut root) =
+        serde_json::from_slice(&decoded).map_err(|_| invalid("JSON is invalid"))?
+    else {
+        return Err(invalid("payload root must be an object"));
+    };
     if text(root.get("type")) != "risuModule" {
         return Err(invalid("payload type must be risuModule"));
     }
-    let module = root
-        .get("module")
-        .and_then(Value::as_object)
-        .ok_or_else(|| invalid("module must be an object"))?;
+    let Some(Value::Object(module)) = root.remove("module") else {
+        return Err(invalid("module must be an object"));
+    };
     let asset_records = validate_asset_records(content, &mut offset)?;
-    Ok(DecodedRisuModule {
-        card: normalize_module(module, source_name, asset_records),
-        lorebook_present: module.get("lorebook").is_some_and(Value::is_array),
+    Ok(DecodedRisuPayload {
+        module,
+        asset_records,
     })
 }
 
@@ -188,7 +188,7 @@ fn module_lore_settings(module: &Map<String, Value>) -> PersonaLoreSettings {
     }
 }
 
-fn ignored_module_features(
+pub(super) fn ignored_module_features(
     module: &Map<String, Value>,
     lorebook: &[PersonaLoreEntry],
 ) -> BTreeMap<String, u32> {
@@ -278,7 +278,13 @@ mod tests {
                 "name": "Risu Guide",
                 "description": "Keeps watch.",
                 "lorebook": [
-                    {"key": "harbor", "content": "The bell rings."},
+                    {
+                        "keys": ["harbor"],
+                        "content": "The bell rings.",
+                        "always_active": true,
+                        "insert_order": 7,
+                        "priority": 9
+                    },
                     {"key": ".*", "content": "must stay inert", "useRegex": true}
                 ],
                 "assets": [["icon", "", "png"]],
@@ -310,6 +316,10 @@ mod tests {
         assert_eq!(imported.card.ignored_features["cjs"], 1);
         assert_eq!(imported.card.ignored_features["mcp"], 1);
         assert_eq!(imported.card.ignored_features["lorebook_regex_matching"], 1);
+        assert_eq!(imported.card.lorebook[0].key, "harbor");
+        assert!(imported.card.lorebook[0].always_active);
+        assert_eq!(imported.card.lorebook[0].insert_order, 7);
+        assert_eq!(imported.card.lorebook[0].priority, 9);
         assert!(imported.thumbnail.is_none());
     }
 

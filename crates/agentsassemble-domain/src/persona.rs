@@ -6,7 +6,9 @@ use sha2::{Digest, Sha256};
 use ts_rs::TS;
 use unicode_general_category::{GeneralCategory, get_general_category};
 
-use crate::persona_text::{card_lines, card_words, prompt_card_text, trim_persona_card_text};
+use crate::persona_text::{
+    card_lines, card_words, persona_card_keywords, prompt_card_text, trim_persona_card_text,
+};
 
 pub const MAX_PERSONA_ID_CHARACTERS: usize = 80;
 pub const MAX_PERSONA_CONTEXT_CHARACTERS: usize = 8_000;
@@ -390,8 +392,8 @@ fn lore_matches(
     } else {
         default_full_word
     };
-    let primary = keywords(&entry.key);
-    let secondary = keywords(&entry.secondary_key);
+    let primary = persona_card_keywords(&entry.key).collect::<Vec<_>>();
+    let secondary = persona_card_keywords(&entry.secondary_key).collect::<Vec<_>>();
     if primary.is_empty() && secondary.is_empty() {
         return false;
     }
@@ -502,14 +504,6 @@ fn is_python_word_character(value: char) -> bool {
                 | GeneralCategory::LetterNumber
                 | GeneralCategory::OtherNumber
         )
-}
-
-fn keywords(value: &str) -> Vec<&str> {
-    value
-        .split([',', ';', '\n'])
-        .map(trim_persona_card_text)
-        .filter(|value| !value.is_empty())
-        .collect()
 }
 
 fn visible_lore_content(entry: &PersonaLoreEntry) -> String {
