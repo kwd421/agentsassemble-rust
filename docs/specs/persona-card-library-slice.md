@@ -177,7 +177,30 @@ clone was rejected after the existing create-and-start regression changed the co
 the replay contract, not avoidable copying. Provider tests completed 133 cases, persistence completed
 211, the real WebSocket stopped-configuration boundary completed its focused case, and full workspace
 Clippy plus structure/source gates passed. These are verification results, not production performance
-claims; packaged-picker and ordinary-turn verification remain pending.
+claims; packaged-picker and authorized real-provider ordinary-turn verification remain pending.
+
+Ordinary ordered and ambient assignments now load the selected private card only while constructing
+the existing durable provider-turn envelope. Lore scans the same at-most-50-message canonical prefix
+used for the bounded room observation; room labels, Agent handles, attachment metadata, and later
+events cannot activate it. The rendered provider input, room view, delivery kind, attachments, and
+room-Agent IDs are committed together in the existing `provider_turn_executions.assignment_json`.
+Recovery therefore does not reread the persona library: replacing the same library ID after assignment
+cannot alter an in-flight turn. No persona cache, second turn model, provider-specific prompt branch,
+or new durable state was added.
+
+The selected path adds one indexed card-JSON read and one bounded provider-neutral render per assigned
+turn; an unselected session returns before querying the library. Input work is bounded by the existing
+50-message/20,000-character room prefix and 8,000-character persona result. The accepted disk cost is
+the rendered private persona text inside the already required exact assignment input, still under the
+existing 20,000-character provider-input ceiling; the complete card and thumbnail are not copied into
+turn custody. Private card bodies remain absent from public room views, events, logs, and snapshots.
+Missing or corrupt selected rows fail the same message/assignment transaction rather than clearing the
+selection or emitting a partial turn. One real-SQLite regression exercised both ordered and ambient
+schedulers, literal-lore activation, same-ID library replacement, and byte-identical recovery in 0.06
+seconds on the development host. The complete workspace test suite, Clippy, formatting, and structure/
+growth gates passed. These bounds and harness results establish custody and regression behavior, not a
+production latency improvement; packaged-client and authorized real-provider verification remain
+pending.
 
 The local-operator HTTP owner consumes one exact server-operator ticket before reading any request
 body. List, import, and thumbnail responses are private/no-store; thumbnails are fixed canonical PNG
