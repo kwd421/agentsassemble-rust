@@ -252,6 +252,9 @@ not inferred from the source test.
 - The critical web session and Daybreaker Blue High both approved exact
   `296f298..f5fc9f9` and cumulative `4fa167c..f5fc9f9` with C0/H0/M0/L0. No automated
   security scan was used.
+- The critical web session and Daybreaker Blue High both approved the pushed atomic
+  library, local-operator HTTP, and copied-picker range `f5fc9f9..087ba1a` with
+  C0/H0/M0/L0. No automated security scan was used.
 
 ## Non-goals
 
