@@ -14,6 +14,7 @@ mod agent_reconciliation_scan;
 mod agent_sessions;
 mod agent_start_failure;
 mod agent_stop_lifecycle;
+mod asset_storage;
 mod authority;
 mod bootstrap;
 mod command_admission;

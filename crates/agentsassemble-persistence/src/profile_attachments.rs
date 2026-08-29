@@ -1,4 +1,6 @@
-use agentsassemble_domain::{AuthenticatedPrincipal, InviteScope, avatar_attachment_id};
+use agentsassemble_domain::{
+    AuthenticatedPrincipal, InviteScope, MAX_RASTER_BYTES, avatar_attachment_id,
+};
 use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
 use sqlx::{Row, Sqlite, Transaction};
@@ -7,12 +9,10 @@ use uuid::Uuid;
 use crate::profile_store::ProfileIdentity;
 use crate::{
     HumanSessionAuthorization, PersistenceError, SqliteStore,
+    asset_storage::enforce_storage_replacement,
     authority::authorize_session,
     human_session_authority::revalidate_human_session,
-    raster_assets::{
-        CanonicalRaster, MAX_RASTER_BYTES, enforce_storage_replacement, prepare_raster,
-        sanitize_filename, validate_stored_raster,
-    },
+    raster_assets::{CanonicalRaster, prepare_raster, sanitize_filename, validate_stored_raster},
 };
 
 const PENDING_ATTACHMENT_TTL: Duration = Duration::minutes(15);
@@ -206,7 +206,7 @@ async fn store_profile_attachment_in_transaction(
         .first()
         .map(|row| row.get::<String, _>("attachment_id"));
     let previous_size = previous.first().map(|row| row.get::<i64, _>("size"));
-    enforce_storage_replacement(transaction, previous_size, size, now.timestamp()).await?;
+    enforce_storage_replacement(transaction, previous_size, size).await?;
     if let Some(previous_id) = previous_id {
         let deleted = sqlx::query(
             "DELETE FROM profile_avatar_assets WHERE attachment_id = ? AND owner_user_id = ? AND state = 'pending'",
@@ -395,6 +395,7 @@ mod tests {
     use agentsassemble_domain::{
         AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, UserProfilePatch,
     };
+    use chrono::Utc;
     use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba};
 
     use crate::{PersistenceError, SqliteStore};
@@ -542,6 +543,35 @@ mod tests {
         .await
         .unwrap_or_else(|error| panic!("read expired row count: {error}"));
         assert_eq!(count, 0);
+    }
+
+    #[tokio::test]
+    async fn expired_foreign_lifecycle_rows_remain_charged_until_owner_cleanup() {
+        let (store, principal) = fixture().await;
+        let now = Utc::now();
+        sqlx::query(
+            "WITH digits(value) AS (VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9),(10),(11),(12),(13),(14),(15)), sequence(value) AS (SELECT first.value * 256 + second.value * 16 + third.value FROM digits AS first CROSS JOIN digits AS second CROSS JOIN digits AS third) INSERT INTO prejoin_avatar_assets(attachment_id, room_id, custody_fingerprint, invite_fingerprint, filename, content_type, content, size, created_at, expires_at) SELECT printf('expired-prejoin-%018d', value), 'general', CAST(printf('%032d', value) AS BLOB), ?, 'stored.png', 'image/png', X'00', 1, ?, 0 FROM sequence WHERE value < ?",
+        )
+        .bind([0x44_u8; 32].as_slice())
+        .bind(now.to_rfc3339())
+        .bind(crate::asset_storage::MAX_RETAINED_ASSETS)
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("seed expired prejoin avatars: {error}"));
+
+        assert_rejected_code(
+            store
+                .store_profile_attachment(&principal, "blocked.png", "image/png", valid_png())
+                .await,
+            "attachment_quota_reached",
+        );
+        let retained = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM prejoin_avatar_assets WHERE expires_at = 0",
+        )
+        .fetch_one(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("read retained prejoin avatars: {error}"));
+        assert_eq!(retained, crate::asset_storage::MAX_RETAINED_ASSETS);
     }
 
     #[tokio::test]

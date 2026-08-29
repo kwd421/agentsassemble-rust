@@ -5,10 +5,11 @@ use uuid::Uuid;
 
 use crate::{
     HumanInviteCredentialEvidence, PersistenceError, ProfileAttachmentMetadata, SqliteStore,
+    asset_storage::enforce_storage_replacement,
     human_admission::prejoin_avatar_custody_fingerprint,
     human_invite_preflight::{load_invite_and_room, require_credential_binding},
     profile_attachments::attachment_metadata,
-    raster_assets::{enforce_storage_replacement, prepare_raster},
+    raster_assets::prepare_raster,
 };
 
 const PREJOIN_ATTACHMENT_TTL: Duration = Duration::hours(1);
@@ -92,7 +93,7 @@ impl SqliteStore {
             .as_ref()
             .map(|row| row.get::<String, _>("attachment_id"));
         let previous_size = previous.as_ref().map(|row| row.get::<i64, _>("size"));
-        enforce_storage_replacement(&mut transaction, previous_size, size, now.timestamp()).await?;
+        enforce_storage_replacement(&mut transaction, previous_size, size).await?;
         if let Some(previous_id) = previous_id {
             let deleted = sqlx::query(
                 "DELETE FROM prejoin_avatar_assets WHERE attachment_id = ? AND custody_fingerprint = ?",
@@ -343,7 +344,7 @@ mod tests {
         .bind(SIGNED.as_slice())
         .bind(now.to_rfc3339())
         .bind((now + Duration::hours(1)).timestamp())
-        .bind(crate::raster_assets::MAX_LIVE_RASTER_ASSETS - 1)
+        .bind(crate::asset_storage::MAX_RETAINED_ASSETS - 1)
         .execute(&store.pool)
         .await
         .unwrap_or_else(|error| panic!("seed absolute-limit avatars: {error}"));

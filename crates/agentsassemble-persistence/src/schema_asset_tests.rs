@@ -1,6 +1,5 @@
 use super::tests::installed_schema;
-use crate::raster_assets::MAX_RASTER_BYTES;
-use agentsassemble_domain::is_room_appearance_asset_id;
+use agentsassemble_domain::{MAX_RASTER_BYTES, is_room_appearance_asset_id};
 
 async fn seed_asset_authority(pool: &sqlx::SqlitePool) {
     sqlx::query(
