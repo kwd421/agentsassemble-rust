@@ -137,6 +137,21 @@ Rust-owned upload, message-binding, authorized-read, and provider-read lifecycle
   release, and no retained URL after authority replacement; CPU and wall
   time are not assigned speculative benchmark numbers. Read-only clients expose neither
   upload nor send controls.
+- The remote browser keeps the standard object-URL anchor download owned by the browser.
+  The packaged macOS WebKit client instead uses one exact native save command after the
+  same authorized scheduler read. This boundary was added only after the release bundle
+  reproduced a main-thread hang on both file-card and image-preview `blob:` downloads:
+  WebKit attempted an invalid main-frame request (`requestURLIsValid=0`), Wry received no
+  completion, and the whole UI stopped responding. The desktop command accepts only the
+  bundled caller, a raw body between one byte and the shared 10-MiB absolute item ceiling,
+  and the domain owner's canonical message filename. JavaScript cannot provide a target
+  path; the native save panel selects it, cancellation is explicit, and a write failure is
+  returned rather than falling back to another transport. Raw IPC avoids an additional
+  JSON/base64 expansion, but it still incurs one bounded `Blob.arrayBuffer()` conversion
+  and one native body clone before the blocking file-dialog/write worker; no CPU, latency,
+  or resident-memory improvement is claimed beyond removing the observed deadlock and
+  avoiding base64's known size expansion. The same owner handles file cards and image
+  preview downloads, so WebKit never re-enters the failing path through a second UI.
 - The existing pin row remains only an event pointer. Once attachments are active, its
   target validation accepts a `message_final` with visible text or at least one bound
   attachment, and its existing `attachment_filenames` field is derived from that
@@ -224,6 +239,28 @@ speculate about it.
   changed lines. Push at three completed features or 2,000 aggregate changed lines,
   then obtain manual web-session and Daybreaker reviews for security, structure,
   duplicated policy, overimplementation, SSoT, lifecycle cleanup, and removable state.
+
+Observed packaged download verification on 2026-08-29 used an isolated release bundle
+and authority. The local desktop file card saved the 3,307-byte `README.md` with SHA-256
+`f67361205428e74aea136e126fc7fdf4ccf66007d6e839a9df4e815e79a9eae1`; the image-preview
+download saved the 6,684-byte `deepseek.png` with SHA-256
+`67686a1ac38f8d1cf6db6949e566d69a7e975ad74c610c0f10872da5c39f4fdf`. Both matched
+their uploaded source bytes and left the packaged UI responsive. A writable remote
+Chrome client then uploaded the real 8,332-byte `grok.png` through the copied composer,
+and both remote and host timelines rendered the committed message. A completely fresh
+read-only invite removed its secret from browser history, projected every referenced
+attachment, exposed no usable composer or upload control, and downloaded the same
+3,307-byte README with the same SHA-256. Normal shutdown and relaunch restored the local
+and remote messages and lazily rendered the remote image again. The UI stopped its owned
+public ingress, the exact incognito window and bundle were closed, the original ignored
+sidecar was restored byte-for-byte, and only the isolated app data, caches, WebKit data,
+and build root were moved to a recoverable Trash folder; no owned app, server, or
+`cloudflared` process remained. The implementation then passed `make verify`, including
+the mandatory architecture/800-line gates, copied production frontend and original-CSS
+check, 93 frontend files with 591 tests, 23 Tauri tests, all Rust tests including the
+real TCP attachment boundary, and warning-denied Clippy. No real provider was started
+for this desktop-only download correction because it does not change the already
+verified canonical Agent Session read boundary.
 
 Observed follow-up: an interrupted macOS provider/server test run left 159
 `agentsassemble-*-exec-*` executable-staging directories (more than 10 GiB total),
