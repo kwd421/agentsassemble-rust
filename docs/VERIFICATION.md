@@ -3928,3 +3928,33 @@ the production frontend build, frontend 89 files / 555 tests, desktop 20, domain
 persistence 198, protocol 6, provider 120, server 85, every TCP/integration/doc test,
 warning-denied Clippy, and the final diff gate. No provider, Computer Use, Deep Scan, or
 automated security scanner ran for this persistence projection.
+
+## Canonical bound message-attachment reads: 2026-08-29
+
+Commit `66fd6c2` adds the persistence read boundary for an attachment only after its
+canonical `message_final` owns it. Local reads resolve the exact current
+room/user/participant identity in the read transaction. Remote human reads revalidate
+the exact durable session and require its current `room_history` capability; read-only
+or muted membership may still read history because message-write authority is a
+separate contract. Pending, expired, foreign-room, unreferenced, deleted-message, stale
+membership, and malformed-ID requests fail closed without returning bytes.
+
+The concrete disclosure threat was reading a same-room pending or orphaned BLOB merely
+because its opaque identifier was known. The read owner first selects bounded metadata,
+stored byte length, and the joined canonical event, then verifies the event type,
+sequence, room, deletion state, and exact strict metadata reference. Only after those
+checks does a second indexed query materialize the BLOB. This avoids copying a
+potentially 10-MiB value before current authority and durable reachability are proven.
+No cache, attachment repository, fallback, compatibility path, background state, or
+second lifecycle owner was introduced.
+
+The fixed event ceiling keeps metadata validation at no more than eight entries. The
+focused real-SQLite binding/read suite completed in 0.06 seconds on a warm development
+build; that is a harness observation rather than a production latency claim. Full
+serial `make verify` passed architecture and 800-line source gates, policy tests,
+formatting, generated bindings, original-CSS verification, the production frontend
+build, frontend 89 files / 555 tests, desktop 20, domain 29, persistence 199, protocol
+6, provider 120, server 85, every TCP/integration/doc test, warning-denied Clippy, and
+the final diff gate. No CPU, memory, disk, or latency improvement beyond avoiding the
+premature BLOB copy is claimed. HTTP grants/routes, Agent Session reads,
+copied-frontend connection, packaged verification, and real providers remain pending.
