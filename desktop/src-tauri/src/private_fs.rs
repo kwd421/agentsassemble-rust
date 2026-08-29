@@ -5,7 +5,8 @@ use std::{fs::File, io, path::Path};
 use winapi::um::winnt::{CONTAINER_INHERIT_ACE, FILE_ALL_ACCESS, OBJECT_INHERIT_ACE, PSID};
 use windows_acl::acl::{ACL, AceType};
 use windows_permissions::{
-    LocalBox, SecurityDescriptor, WindowsSecure, constants::SecurityInformation,
+    LocalBox, SecurityDescriptor,
+    constants::{SeObjectType, SecurityInformation},
 };
 
 pub(crate) fn create_private_directory(path: &Path) -> io::Result<()> {
@@ -48,7 +49,11 @@ pub(crate) fn secure_file(file: &File) -> io::Result<()> {
 }
 
 pub(crate) fn validate_private_directory_handle(file: &File) -> io::Result<()> {
-    let descriptor = file.security_descriptor(SecurityInformation::Owner)?;
+    let descriptor = windows_permissions::wrappers::GetSecurityInfo(
+        file,
+        SeObjectType::SE_FILE_OBJECT,
+        SecurityInformation::Owner,
+    )?;
     let (_, current) = current_sid()?;
     let owned_by_current_user = descriptor
         .owner()
