@@ -75,7 +75,20 @@ Rust-owned upload, message-binding, authorized-read, and provider-read lifecycle
   item encodes to 13,981,016 bytes while the Antigravity terminal tail retains only
   64 KiB. It avoids preloading up to eight 10-MiB items and bounds temporary disk to
   items the agent actually requests; no unmeasured latency or resident-memory reduction
-  is claimed.
+  is claimed. Cross-review then demonstrated that connection concurrency alone left
+  cumulative work unbounded: the same accepted ID could repeatedly cause a 10-MiB
+  SQLite read, 13.3-MiB base64 allocation, and Antigravity file sync while helper output
+  refreshed its inactivity deadline. The active turn now owns the smallest complete
+  ledger: one pending read per ID, at most two attempts (and therefore successes) per
+  listed attachment, and checked successful bytes bounded by twice the canonical
+  eight-item/10-MiB input ceiling. The second attempt preserves one bounded retry when
+  an MCP response or Antigravity's post-response staging is lost.
+  Failed or cancelled reads release only their reservation but consume an attempt;
+  finish and terminal actions wait for pending reads, while abort retains a tombstone
+  only until those reservations release. Deterministic tests cover concurrent duplicate,
+  repeated success, failed-attempt exhaustion, terminal finish, and abort cleanup. This
+  preserves exact-turn authority and bounded retry without a generic
+  rate limiter, cache, background task, or new operating policy.
 - Arbitrary files retain their original bytes and are served download-only. Inline
   preview is limited to decoded, bounded PNG/JPEG/GIF/WebP whose declared and detected
   formats agree; active or ambiguous content is never classified inline. Every read is

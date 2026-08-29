@@ -12,12 +12,14 @@ use uuid::Uuid;
 use crate::filesystem::BoundExecutable;
 #[cfg(unix)]
 use crate::guardian::GuardianLaunch;
-use crate::room_attachment::{
-    ProviderAttachmentReadAuthority, ProviderAttachmentReadIngress, valid_observation_attachments,
-};
+use crate::room_attachment::{ProviderAttachmentReadIngress, valid_observation_attachments};
 use crate::room_portal_mcp::PortalServer;
 #[cfg(any(unix, windows))]
 use crate::room_portal_terminal::RoomPortalTerminalHelper;
+
+#[path = "room_portal_attachment_budget.rs"]
+mod attachment_budget;
+pub(crate) use attachment_budget::{AttachmentReadBudget, reserve_attachment_read};
 
 pub(super) const ROOM_PORTAL_TOKEN_ENV_PREFIX: &str = "AGENTSASSEMBLE_INTERNAL_ROOM_PORTAL_TOKEN_";
 
@@ -232,6 +234,7 @@ pub(super) struct ActiveObservation {
     pub(super) room_view: String,
     pub(super) attachment_ids: HashSet<String>,
     pub(super) attachment_ingress: Option<ProviderAttachmentReadIngress>,
+    pub(super) attachment_reads: AttachmentReadBudget,
     pub(super) turn_generation: Uuid,
     pub(super) receipt_generation: Option<Uuid>,
     pub(super) outcome: Option<StagedOutcome>,
@@ -239,6 +242,12 @@ pub(super) struct ActiveObservation {
     pub(super) tool_reservations: BTreeMap<Uuid, ToolReservationStatus>,
     pub(super) successful_tool_results: usize,
     pub(super) closing: bool,
+}
+
+impl ActiveObservation {
+    pub(super) fn has_pending_operations(&self) -> bool {
+        !self.tool_reservations.is_empty() || self.attachment_reads.has_pending()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -477,6 +486,7 @@ impl RoomPortal {
                     room_view: room_view.to_owned(),
                     attachment_ids: unique_attachment_ids,
                     attachment_ingress,
+                    attachment_reads: AttachmentReadBudget::default(),
                     turn_generation: Uuid::new_v4(),
                     receipt_generation: None,
                     outcome: None,
@@ -501,7 +511,7 @@ impl RoomPortal {
         if active.authority.turn_id != turn_id
             || active.authority.input_up_to_seq != input_up_to_seq
             || active.closing
-            || !active.tool_reservations.is_empty()
+            || active.has_pending_operations()
         {
             return Err(RoomPortalError::Observation);
         }
@@ -553,7 +563,7 @@ impl RoomPortal {
         active
             .tool_reservations
             .retain(|_, status| *status == ToolReservationStatus::Committing);
-        if active.tool_reservations.is_empty() {
+        if !active.has_pending_operations() {
             state.active = None;
         }
         Ok(())
@@ -638,42 +648,6 @@ pub(super) fn reserve_room_tool(
             turn_generation: active.turn_generation,
             reservation_id,
             resolved: false,
-        },
-        ingress,
-    ))
-}
-
-pub(super) fn attachment_read_authority(
-    state: &Arc<Mutex<PortalState>>,
-    attachment_id: &str,
-) -> Result<
-    (
-        ProviderAttachmentReadAuthority,
-        ProviderAttachmentReadIngress,
-    ),
-    String,
-> {
-    let portal = state
-        .lock()
-        .map_err(|_| "The shared room authority is unavailable.".to_owned())?;
-    let active = portal
-        .active
-        .as_ref()
-        .ok_or_else(|| "No active room observation.".to_owned())?;
-    if active.closing || !active.attachment_ids.contains(attachment_id) {
-        return Err("The attachment is not available to this room turn.".to_owned());
-    }
-    let ingress = active
-        .attachment_ingress
-        .clone()
-        .ok_or_else(|| "The room attachment owner is unavailable.".to_owned())?;
-    Ok((
-        ProviderAttachmentReadAuthority {
-            session_id: active.authority.session_id.clone(),
-            turn_id: active.authority.turn_id.clone(),
-            input_up_to_seq: active.authority.input_up_to_seq,
-            turn_generation: active.authority.durable_turn_generation,
-            execution_id: active.authority.execution_id.clone(),
         },
         ingress,
     ))

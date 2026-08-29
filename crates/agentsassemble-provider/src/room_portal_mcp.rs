@@ -38,7 +38,7 @@ use uuid::Uuid;
 
 use crate::room_attachment::attachment_tool_result;
 use crate::room_portal::{
-    PortalState, RoomPortalError, StagedOutcome, attachment_read_authority, canonical_message,
+    PortalState, RoomPortalError, StagedOutcome, canonical_message, reserve_attachment_read,
     reserve_room_tool, valid_decline_reason,
 };
 use crate::room_portal_tool_contract::{
@@ -431,12 +431,15 @@ impl RoomPortalMcp {
         &self,
         Parameters(input): Parameters<ReadAttachment>,
     ) -> Result<rmcp::model::CallToolResult, String> {
-        let (authority, ingress) = attachment_read_authority(&self.state, &input.attachment_id)?;
+        let (authority, ingress, mut reservation) =
+            reserve_attachment_read(&self.state, &input.attachment_id)?;
         let attachment = ingress
             .read(authority, input.attachment_id.clone())
             .await
             .map_err(|error| error.message)?;
-        attachment_tool_result(&attachment)
+        let result = attachment_tool_result(&attachment)?;
+        reservation.complete(attachment.size)?;
+        Ok(result)
     }
 
     #[tool(
@@ -458,7 +461,7 @@ impl RoomPortalMcp {
         if active.closing || active.outcome.is_some() {
             return Err("This turn already has a terminal room action.".to_owned());
         }
-        if !active.tool_reservations.is_empty() {
+        if active.has_pending_operations() {
             return Err("Wait for pending room tools before publishing.".to_owned());
         }
         let content = canonical_message(&input.content)
@@ -499,7 +502,7 @@ impl RoomPortalMcp {
         if active.closing || active.outcome.is_some() {
             return Err("This turn already has a terminal room action.".to_owned());
         }
-        if !active.tool_reservations.is_empty() {
+        if active.has_pending_operations() {
             return Err("Wait for pending room tools before declining.".to_owned());
         }
         if !valid_decline_reason(&input.reason_code) {

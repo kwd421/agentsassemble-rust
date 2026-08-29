@@ -2,7 +2,8 @@ use std::collections::HashSet;
 
 use agentsassemble_domain::{
     MAX_ATTACHMENT_BYTES, MAX_MESSAGE_ATTACHMENT_CONTENT_TYPE_BYTES,
-    MAX_MESSAGE_ATTACHMENT_FILENAME_CHARACTERS, is_message_attachment_id,
+    MAX_MESSAGE_ATTACHMENT_FILENAME_CHARACTERS, MAX_MESSAGE_ATTACHMENTS_PER_EVENT,
+    is_message_attachment_id,
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use rmcp::model::{CallToolResult, ContentBlock, ResourceContents};
@@ -150,7 +151,8 @@ pub(crate) fn valid_observation_attachments(
     has_ingress: bool,
 ) -> bool {
     let unique_ids = attachment_ids.iter().collect::<HashSet<_>>();
-    unique_ids.len() == attachment_ids.len()
+    attachment_ids.len() <= MAX_MESSAGE_ATTACHMENTS_PER_EVENT
+        && unique_ids.len() == attachment_ids.len()
         && attachment_ids.iter().all(|attachment_id| {
             is_message_attachment_id(attachment_id) && room_view.contains(attachment_id)
         })
