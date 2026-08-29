@@ -16,6 +16,10 @@ Rust-owned upload, message-binding, authorized-read, and provider-read lifecycle
   them. Event projection carries only bounded public metadata: opaque ID, sanitized
   filename, normalized content type, byte size, safe-image classification, and the
   canonical view/download paths. It never embeds bytes or storage authority.
+- Message attachments use the distinct `ma_` plus 32 lowercase hexadecimal ID
+  namespace. The shared `/api/attachments/{id}` adapter dispatches that namespace only
+  to the message-attachment owner; it does not probe other tables or treat a failed
+  message read as a profile/pre-join/appearance fallback.
 - One upload is at most 10 MiB and one message references at most eight distinct
   attachments. These are request and response safety bounds, not operating quotas.
   The original's reachable per-uploader `64 items / 128 MiB` and per-room `512 items /
@@ -25,7 +29,9 @@ Rust-owned upload, message-binding, authorized-read, and provider-read lifecycle
 - A pending upload is bound to the exact room and current human principal that created
   it and expires after a bounded hour. Upload and expiry never evict another principal's
   or a referenced attachment. Removing a staged item from the composer leaves it
-  eligible only for exact expiry cleanup.
+  eligible only for exact expiry cleanup. The message-attachment owner removes expired
+  pending rows on its bounded upload write path before accounting and removes an exact
+  expired target encountered during binding; it adds no background sweeper.
 - `message.send` accepts exactly `content` and optional attachment IDs. The persistence
   transaction revalidates the active room, joined and unmuted participant, writable
   session, distinct count, exact pending owner, room, expiry, and unbound state before
@@ -60,26 +66,32 @@ Rust-owned upload, message-binding, authorized-read, and provider-read lifecycle
   renderer obtains authorized blobs, creates generation-owned object URLs, and revokes
   them on replacement, room change, abort, or unmount. Read-only clients expose neither
   upload nor send controls.
+- The existing pin row remains only an event pointer. Once attachments are active, its
+  target validation accepts a `message_final` with visible text or at least one bound
+  attachment, and its existing `attachment_filenames` field is derived from that
+  canonical event metadata instead of remaining an unconditional empty array. Pin
+  storage never copies attachment IDs, names, bytes, or ownership.
 - Profile avatars, pre-join avatars, room appearance, and message attachments retain
   separate SQL/state-transition owners. Their only shared owner contains absolute live
   asset count/byte arithmetic and item-size constants. Adding message storage to the
   existing 4,096-item/8-GiB absolute ceiling uses checked `current - exact predecessor
   + new` accounting; it does not create an asset trait, registry, repository framework,
   generic garbage collector, or configuration layer.
-- Only expired pending objects, an exact superseded reference, or deletion of the
-  owning room/event may remove bytes. A limit error never deletes current, bound,
-  foreign, referenced, or merely old data. Room deletion cascades only that room's
-  message attachments. The future message-delete owner must remove its exact bound
-  attachments in the same transaction that tombstones the event; this slice does not
-  expose that still-absent command.
+- Only expired pending objects or deletion of the owning room/event may remove bytes.
+  A limit error never deletes current, bound, foreign, referenced, or merely old data.
+  Room deletion cascades only that room's message attachments. The future
+  message-delete owner must remove its exact bound attachments in the same transaction
+  that tombstones the event; this slice does not expose that still-absent command.
 
 Residual availability threat: a writable participant can retain bound message files
-until the process-wide 4,096-item/8-GiB ceiling is reached. Existing ingress and command
-budgets bound rate and per-request work but do not prevent eventual occupancy; at the
-ceiling, uploads fail closed for every room. That accepted limitation is recorded rather
-than hidden behind hard-coded old operating quotas or eviction of referenced data. A
-later user-selected configurable operating policy may add fairness at the same accounting
-owner without changing attachment custody; this slice does not speculate about it.
+until the process-wide 4,096-item/8-GiB ceiling is reached. HTTP connection admission,
+body-size, and deadline bounds limit concurrent and per-request work, but there is no
+durable per-principal upload-rate or occupancy policy, so they do not prevent eventual
+occupancy; at the ceiling, uploads fail closed for every room. That accepted limitation
+is recorded rather than hidden behind hard-coded old operating quotas or eviction of
+referenced data. A later user-selected configurable operating policy may add fairness at
+the same accounting owner without changing attachment custody; this slice does not
+speculate about it.
 
 ## Non-goals
 
@@ -110,9 +122,10 @@ owner without changing attachment custody; this slice does not speculate about i
 5. Expiry and room deletion remove only their exact pending/bound rows. Absolute storage
    accounting spans all four asset owners once, uses checked replacement arithmetic,
    and never restores the removed generic per-subject or per-room quotas.
-6. Existing message, profile-avatar, pre-join-avatar, room-appearance, admission,
-   reconnect, ordered/ambient, and pin contracts remain unchanged. Incomplete adjacent
-   controls remain visibly unavailable.
+6. Existing pins accept attachment-only messages and project canonical attachment
+   filenames without adding pin-owned attachment state. Other message, profile-avatar,
+   pre-join-avatar, room-appearance, admission, reconnect, ordered/ambient, and pin
+   contracts remain unchanged. Incomplete adjacent controls remain visibly unavailable.
 
 ## Verification path
 
