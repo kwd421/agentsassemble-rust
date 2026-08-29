@@ -96,6 +96,18 @@ work without changing literal matching, lore order, prompt bounds, or ignored ex
 features. Domain tests verify literal, recursive, substitution, and inert-regex behavior;
 no wall-time or CPU reduction is claimed without a real-turn measurement.
 
+The `CCv3` import boundary now parses PNG text chunks through the maintained PNG decoder
+instead of owning chunk framing or CRC handling. The reachable upload is bounded to 10 MiB,
+card JSON to 5 MiB, and decoder metadata allocation to 20 MiB. Only the one thumbnail needed
+by the copied picker crosses the existing shared raster admission and is re-encoded as PNG;
+the prior Python path copied the source plus every resolved asset into permanent custody.
+This removes the duplicate source copy and arbitrary unused asset disk cost while preserving
+the normalized card, safe asset count, preferred icon/avatar/portrait choice, and inert
+remote/file/executable-feature contract. Tests exercise a real PNG card and prove that its
+regex and imported runtime declarations remain counted but unexecuted. A malformed optional
+thumbnail is counted and omitted rather than turning the otherwise valid card into an
+executable or unverified image; malformed card/container data still rejects the import.
+
 ## Non-goals
 
 - No v0 research, agenda, forced rounds, moderator synthesis, decisions, tasks,
