@@ -159,16 +159,26 @@ Rust-owned upload, message-binding, authorized-read, and provider-read lifecycle
   reparse handling. It opens every absolute parent component without following links and
   then performs target inspection, staging creation, and rename relative to that retained
   directory handle. The staging directory is `0700` and current-user-owned on Unix; on
-  Windows its opened handle receives and verifies the existing owner-only inheritable
-  DACL policy. Its payload is likewise `0600` or owner-only, is fully written and synced,
-  and moves from the retained private directory into the retained destination. An existing
+  Windows the first retained staging handle denies sharing. A process that acquired a
+  conflicting handle in the post-create interval therefore makes the save fail before the
+  existing owner-only inheritable DACL policy is applied and verified; after that exclusive
+  open, another handle cannot enter the directory during hardening or payload creation. Its
+  payload is likewise `0600` or owner-only, is fully written and synced, and moves from the
+  retained private directory into the retained destination. Before that rename the desktop
+  owner also writes the platform download-origin marker: macOS `com.apple.quarantine` with
+  the observed browser-download `0083` flags, or Windows `Zone.Identifier` with `ZoneId=3`.
+  Marker storage failure rejects the save instead of producing an unmarked fallback. Other
+  Unix targets have no common equivalent marker. Existing target metadata is not copied
+  wholesale because the original browser-owned download had no such product contract and
+  copying arbitrary ACLs or extended attributes could preserve unsafe state. An existing
   symlink or other non-regular target is rejected; a hard link or target changed after the
   check is replaced as a directory entry rather than opened. The accepted cost is one
   private directory, one temporary file, component-wise handle opens, one full write, one
-  file sync, and one rename per explicit save, plus two maintained direct capability crates
-  and nine newly locked transitive packages; no directory-sync or crash-durable filename
-  claim is made. The same owner handles file cards and image preview downloads, so WebKit
-  never re-enters the failing path through a second UI.
+  platform marker write, one file sync, and one rename per explicit save, plus the two
+  maintained direct capability crates, one maintained macOS xattr crate, and a direct
+  declaration of the already locked Windows API crate; no directory-sync or crash-durable
+  filename claim is made. The same owner handles file cards and image preview downloads, so
+  WebKit never re-enters the failing path through a second UI.
 - The existing pin row remains only an event pointer. Once attachments are active, its
   target validation accepts a `message_final` with visible text or at least one bound
   attachment, and its existing `attachment_filenames` field is derived from that
@@ -299,6 +309,20 @@ The exact app and owned server were then stopped; no public ingress or provider 
 been started, the original ignored sidecar remained byte-identical, and the isolated
 runtime state, caches, WebKit data, package, and output were returned to the same
 recoverable Trash folder.
+
+After the Windows-handle and download-origin correction, a package built from the final
+source repeated that exact save. The 3,307-byte result again matched SHA-256
+`f67361205428e74aea136e126fc7fdf4ccf66007d6e839a9df4e815e79a9eae1` and an exact byte
+comparison, retained mode `0600`, carried a real `com.apple.quarantine` value beginning
+`0083;`, and left no save-staging entry. Channel search toggled on and off after the save.
+Normal quit stopped the exact desktop, supervisor, and server chain; the sole remaining
+owned executable-staging directory was unopened and removed, the ignored sidecar still
+matched SHA-256
+`9bb26e769cdad1a0c3949b674cb41e845c2a8e78edd652008f70a69963025aea`, and the isolated
+runtime state and package returned to the recoverable verification root. Focused macOS
+tests, the full `make verify`, warning-denied Clippy, and a Windows all-target/all-feature
+cross-check passed. The Windows exclusive-handle test is compiled for its native target,
+but packaged Windows execution remains explicitly unverified without a Windows host.
 
 Observed follow-up: an interrupted macOS provider/server test run left 159
 `agentsassemble-*-exec-*` executable-staging directories (more than 10 GiB total),
