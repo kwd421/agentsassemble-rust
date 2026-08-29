@@ -4002,3 +4002,22 @@ copied-frontend connection, packaged verification, and real providers remain pen
 - Final web verdict: `de0a8d8`, `dcdb550..de0a8d8`, and `791ecd0..de0a8d8`
   APPROVE C0/H0/M0. Final Daybreaker Blue High verdict for the same three ranges:
   APPROVE C0/H0/M0. Neither review used Deep Scan or another automated security scan.
+
+## Message-attachment provider threshold review: 2026-08-29
+
+- The critical web reviewer initially approved `2a04152..24fe2f1` with C0/H0/M0.
+  Daybreaker found one Medium: connection concurrency did not bound repeated reads of
+  the same accepted ID, allowing cumulative SQLite BLOB loads, base64 allocations,
+  Antigravity file syncs, and inactivity-deadline refreshes within one turn.
+- Commit `7a3f0f4` added the active-turn-owned per-ID pending and attempt ledger, the
+  successful-byte ceiling, terminal/finish exclusion, abort tombstone, and deterministic
+  retry/cancellation regressions. The next web and Daybreaker reviews each found one
+  Medium: `RoomToolReservation::resolve` still ignored a pending attachment read and
+  could remove the closing generation after the room tool resolved first.
+- Commit `4ab614e` reused `ActiveObservation::has_pending_operations()` at that final
+  release path and added the mixed room-tool/attachment abort-order regression. Final
+  web verdict: `4ab614e` and `2a04152..4ab614e` APPROVE C0/H0/M0. Final Daybreaker Blue
+  High verdict: `4ab614e` APPROVE C0/H0/M0, with no Low finding.
+- The web review recorded executable-staging orphan cleanup as a nonblocking, separate
+  lifecycle-owner finding. Neither final review used Deep Scan or another automated
+  security scan.
