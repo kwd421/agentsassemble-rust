@@ -137,7 +137,12 @@ fn configure_private_file(options: &mut cap_std::fs::OpenOptions) {
 }
 
 #[cfg(windows)]
-fn configure_private_file(_options: &mut cap_std::fs::OpenOptions) {}
+fn configure_private_file(options: &mut cap_std::fs::OpenOptions) {
+    use cap_std::fs::OpenOptionsExt;
+    use winapi::um::winnt::{GENERIC_WRITE, WRITE_DAC};
+
+    options.access_mode(GENERIC_WRITE | WRITE_DAC);
+}
 
 #[cfg(unix)]
 fn secure_staging_directory(directory: &Dir) -> io::Result<()> {
