@@ -239,6 +239,27 @@ complete frontend suite completed 599 tests in 10.78 seconds on the development 
 harness results, not production latency claims. Packaged-picker verification remains pending and is
 not inferred from the source test.
 
+Before adding a real API or local-model persona path, a repository-wide provider-identity search
+found the same current provider ID, runtime kind, transport, discovery entry point, and launch entry
+point independently selected by the loading catalog, creation selection, and runtime factory. Commit
+`edbf83d` first moved the existing provider-neutral driver and turn contract out of the runtime
+lifecycle owner. Commit `50e9b96` then made one fixed three-entry registration the owner used by
+catalog discovery, creation transport selection, and runtime launch. Provider-specific discovery,
+protocol, custody, and prompt behavior remain in their concrete owners; Antigravity's initial native
+session promotion and transport-specific room-tool instruction, and Codex's executable-bundle
+integrity, were deliberately not generalized into registration metadata.
+
+The change adds no provider, product state, cache, retry, fallback, background worker, or generic
+plugin framework. Catalog discovery still owns one cancellable task and exactly the current three
+concurrent bounded probes. The registration path allocates one boxed future per probe and one bounded
+provider vector, matching the allocations already present at those boundaries; no production CPU,
+memory, disk, or latency improvement is claimed. The accepted benefit is removal of three divergent
+identity branches before the already-required API/local provider work. The final tree passed the
+complete workspace tests, warning-denied workspace Clippy, formatting, whitespace, and architecture/
+source-growth gates. The independently staged driver-contract commit additionally passed all 133
+provider tests, warning-denied provider Clippy, and the architecture gates. No real provider,
+Computer Use resource, Deep Scan, or other automated security scan ran for this structural change.
+
 ## Manual-review findings
 
 - The critical web session and Daybreaker Blue High manually reviewed pushed range
