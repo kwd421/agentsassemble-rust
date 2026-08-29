@@ -2,6 +2,19 @@ use uuid::Uuid;
 
 use crate::runtime::ProviderTurnRequest;
 
+#[cfg(unix)]
+const MESSAGE_ARGUMENT: &str = "'message'";
+#[cfg(windows)]
+const MESSAGE_ARGUMENT: &str = "\"message\"";
+#[cfg(unix)]
+const ROLL_ARGUMENT: &str = "'<NdS±M>'";
+#[cfg(windows)]
+const ROLL_ARGUMENT: &str = "\"<NdS±M>\"";
+#[cfg(unix)]
+const CHOOSE_ARGUMENT: &str = "'<json-options>'";
+#[cfg(windows)]
+const CHOOSE_ARGUMENT: &str = "<compact-json-options>";
+
 pub(super) fn terminal_prompt(
     request: &ProviderTurnRequest,
     transcript_nonce: Uuid,
@@ -13,7 +26,7 @@ pub(super) fn terminal_prompt(
         .and_then(|observation| observation.room_tool_ingress.as_ref())
         .map_or_else(String::new, |_| {
             format!(
-                " For official game randomness, run exactly one `{helper} roll '<NdS±M>'` or `{helper} choose '<json-options>'` command and wait for its result."
+                " For official game randomness, run exactly one `{helper} roll {ROLL_ARGUMENT}` or `{helper} choose {CHOOSE_ARGUMENT}` command and wait for its result."
             )
         });
     let media_instruction = request
@@ -26,7 +39,7 @@ pub(super) fn terminal_prompt(
             )
         });
     format!(
-        "{}\n\n<agentsassemble-transport turn=\"{}\" launch=\"{transcript_nonce}\">Antigravity room transport: first run `{helper} help`, then run `{helper} read`.{media_instruction}{random_instruction} Finish with exactly one `{helper} speak 'message'`, `{helper} speak-to agent-id 'message'`, or `{helper} decline reason`. Run one helper command per terminal tool call and set `BypassSandbox` to `true`; the managed PreToolUse hook allows that only for this exact private helper prefix. Ordinary assistant final text is not a room publication.</agentsassemble-transport>",
+        "{}\n\n<agentsassemble-transport turn=\"{}\" launch=\"{transcript_nonce}\">Antigravity room transport: first run `{helper} help`, then run `{helper} read`.{media_instruction}{random_instruction} Finish with exactly one `{helper} speak {MESSAGE_ARGUMENT}`, `{helper} speak-to agent-id {MESSAGE_ARGUMENT}`, or `{helper} decline reason`. Run one helper command per terminal tool call and set `BypassSandbox` to `true`; the managed PreToolUse hook allows that only for this exact private helper prefix. Ordinary assistant final text is not a room publication.</agentsassemble-transport>",
         request.input, request.turn_id,
     )
 }

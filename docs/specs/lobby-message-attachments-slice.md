@@ -481,3 +481,16 @@ credentials; and one writable participant can retain pending attachments until t
 process-wide asset ceiling is exhausted. The first two require corrections at their
 current owners. The third must be resolved against the explicit no-fixed-operating-quota
 contract above rather than restoring the original per-uploader or per-room constants.
+
+The Standard Scan High was confirmed at the Antigravity hook's command-policy owner:
+POSIX single quotes do not quote `cmd.exe`, so the prior validator could approve a
+Windows command whose hidden `&` started a second process. Windows validation now uses
+only its accepted shell grammar: single quotes, control characters, `%`/`!` expansion,
+and caret escaping are rejected, and command operators are accepted only inside balanced
+double quotes. The shared product-command parser remains unchanged, while the generated
+Windows prompt uses double-quoted examples and the Unix prompt retains its existing
+single-quoted form. The added cost is one bounded character pass in the existing hook;
+there is no task, state, fallback, generic parser, or provider-specific duplicate command
+policy. Host tests exercise the exact reported injection and expansion cases, and the
+Windows all-target/all-feature source cross-check passes. Native Windows execution remains
+unverified until a Windows host is available.

@@ -482,7 +482,10 @@ mod tests {
     };
     use crate::ProviderAttachment;
 
+    #[cfg(unix)]
     const HELPER: &str = "'/private/helper path/agentsassemble-room'";
+    #[cfg(windows)]
+    const HELPER: &str = r#""C:\private helper\agentsassemble-room.exe""#;
     const ATTACHMENT_ID: &str = "ma_11111111111111111111111111111111";
 
     #[cfg(unix)]
@@ -653,15 +656,35 @@ mod tests {
 
     #[test]
     fn hook_allows_only_one_exact_room_helper_command() {
+        let message = if cfg!(windows) {
+            "\"hello room\""
+        } else {
+            "'hello room'"
+        };
+        let targeted_message = if cfg!(windows) {
+            "\"your turn\""
+        } else {
+            "'your turn'"
+        };
+        let roll = if cfg!(windows) {
+            "\"2d6+1\""
+        } else {
+            "'2d6+1'"
+        };
+        let choices = if cfg!(windows) {
+            r#"[\"north\",\"south\"]"#
+        } else {
+            r#"'["north","south"]'"#
+        };
         for command in [
             format!("{HELPER} help"),
             format!("{HELPER} read"),
             format!("{HELPER} media {ATTACHMENT_ID}"),
-            format!("{HELPER} speak 'hello room'"),
-            format!("{HELPER} speak-to agent-2 'your turn'"),
+            format!("{HELPER} speak {message}"),
+            format!("{HELPER} speak-to agent-2 {targeted_message}"),
             format!("{HELPER} decline duplicate"),
-            format!("{HELPER} roll '2d6+1'"),
-            format!(r#"{HELPER} choose '["north","south"]'"#),
+            format!("{HELPER} roll {roll}"),
+            format!("{HELPER} choose {choices}"),
         ] {
             assert!(
                 safe_room_command(&command, HELPER),
@@ -672,7 +695,11 @@ mod tests {
             format!("{HELPER} read && env"),
             format!("{HELPER} media ma_1111111111111111111111111111111Z"),
             format!("{HELPER} media {ATTACHMENT_ID} extra"),
-            format!("{HELPER} speak \"$HOME\""),
+            if cfg!(windows) {
+                format!("{HELPER} speak \"%USERPROFILE%\"")
+            } else {
+                format!("{HELPER} speak \"$HOME\"")
+            },
             format!("{HELPER} read\nuname"),
             "agentsassemble-room read".to_owned(),
             "/tmp/agentsassemble-room read".to_owned(),

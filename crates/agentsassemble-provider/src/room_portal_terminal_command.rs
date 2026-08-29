@@ -88,7 +88,7 @@ pub(crate) fn safe_room_command(command: &str, command_prefix: &str) -> bool {
     else {
         return false;
     };
-    if arguments.contains(['\r', '\n']) || shell_metacharacter_outside_single_quotes(arguments) {
+    if arguments.contains(['\r', '\n']) || unsafe_shell_arguments(arguments) {
         return false;
     }
     let Some(parts) = shlex::split(arguments) else {
@@ -135,6 +135,17 @@ pub(crate) fn safe_room_command(command: &str, command_prefix: &str) -> bool {
     }
 }
 
+#[cfg(unix)]
+fn unsafe_shell_arguments(command: &str) -> bool {
+    shell_metacharacter_outside_single_quotes(command)
+}
+
+#[cfg(windows)]
+fn unsafe_shell_arguments(command: &str) -> bool {
+    windows_shell_metacharacter(command)
+}
+
+#[cfg(unix)]
 fn shell_metacharacter_outside_single_quotes(command: &str) -> bool {
     let mut single = false;
     let mut double = false;
@@ -168,10 +179,44 @@ fn shell_metacharacter_outside_single_quotes(command: &str) -> bool {
     single || double || escaped
 }
 
+#[cfg(any(windows, test))]
+fn windows_shell_metacharacter(command: &str) -> bool {
+    let mut quoted = false;
+    for character in command.chars() {
+        if character.is_control() || matches!(character, '%' | '!' | '^' | '\'') {
+            return true;
+        }
+        if character == '"' {
+            quoted = !quoted;
+            continue;
+        }
+        if !quoted && matches!(character, '&' | '|' | '<' | '>' | '(' | ')') {
+            return true;
+        }
+    }
+    quoted
+}
+
 fn valid_agent_id(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128
         && value
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'-'))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::windows_shell_metacharacter;
+
+    #[test]
+    fn windows_grammar_never_treats_posix_quotes_as_protection() {
+        assert!(windows_shell_metacharacter("speak 'safe & whoami'"));
+        assert!(windows_shell_metacharacter("speak \"%USERPROFILE%\""));
+        assert!(windows_shell_metacharacter("read ^& whoami"));
+        assert!(!windows_shell_metacharacter("speak \"safe & literal\""));
+        assert!(!windows_shell_metacharacter(
+            "choose [\\\"north\\\",\\\"south\\\"]"
+        ));
+    }
 }
