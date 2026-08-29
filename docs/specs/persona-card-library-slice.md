@@ -158,6 +158,27 @@ drift from the private owner. A warm real-SQLite replacement/list/read/reopen re
 test body in 0.04 seconds on the development host; that is harness evidence, not a production latency
 claim.
 
+Agent Session creation and stopped-session configuration resolve the selected canonical ID to its
+current card and safe summary inside the same SQLite transaction that writes the session. Empty IDs
+clear both fields; missing, corrupt, mismatched, or thumbnail-inconsistent assets return the single
+`persona_not_found` product error and preserve the prior session. Durable deserialization also rejects
+an ID/summary mismatch, so neither restart nor a direct corrupt row can expose split selection state.
+The lookup projects card JSON and one thumbnail-presence bit and never reads the thumbnail BLOB. The
+runtime profile key is versioned over the selected ID, so provider catalog revalidation and the final
+persistence write bind the same selection without retaining a second catalog-group field.
+
+Inlining the safe summary enlarged measured async futures to 17,264--17,936 bytes. Boxing the selected
+summary and its ID at the public Agent Session owner brought three affected paths below the 16-KiB
+architecture gate; the remaining 16,576-byte participant-mute interrupt future is boxed only at that
+rare dispatch boundary. The common unselected session therefore retains pointer-sized option state,
+while a selected session pays one summary allocation. A proposed removal of the create-result session
+clone was rejected after the existing create-and-start regression changed the committed result from
+`stopped` to `starting`: that clone deliberately freezes the pre-effect public result and is part of
+the replay contract, not avoidable copying. Provider tests completed 133 cases, persistence completed
+211, the real WebSocket stopped-configuration boundary completed its focused case, and full workspace
+Clippy plus structure/source gates passed. These are verification results, not production performance
+claims; packaged-picker and ordinary-turn verification remain pending.
+
 The local-operator HTTP owner consumes one exact server-operator ticket before reading any request
 body. List, import, and thumbnail responses are private/no-store; thumbnails are fixed canonical PNG
 responses rather than arbitrary imported content. Import accepts only the original five filename
