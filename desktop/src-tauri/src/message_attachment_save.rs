@@ -100,6 +100,22 @@ mod tests {
             fs::read(&target).unwrap_or_else(|error| panic!("read replacement: {error}")),
             b"complete replacement"
         );
+        #[cfg(target_os = "macos")]
+        assert!(
+            xattr::get(&target, "com.apple.quarantine")
+                .unwrap_or_else(|error| panic!("read quarantine marker: {error}"))
+                .unwrap_or_else(|| panic!("saved file has no quarantine marker"))
+                .starts_with(b"0083;")
+        );
+        #[cfg(windows)]
+        {
+            let mut marker = target.as_os_str().to_owned();
+            marker.push(":Zone.Identifier");
+            assert_eq!(
+                fs::read(marker).unwrap_or_else(|error| panic!("read MOTW marker: {error}")),
+                b"[ZoneTransfer]\r\nZoneId=3\r\n"
+            );
+        }
     }
 
     #[cfg(unix)]
