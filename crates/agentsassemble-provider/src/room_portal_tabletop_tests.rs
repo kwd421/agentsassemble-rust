@@ -10,7 +10,11 @@ use rmcp::{
 };
 use serde_json::{Map, json};
 
-use super::{ProviderRoomToolIngress, ProviderTurnOutcome, RoomObservationStart, RoomPortal};
+use super::{
+    ProviderRoomToolIngress, ProviderTurnOutcome, RoomObservationStart, RoomPortal,
+    reserve_attachment_read, reserve_room_tool,
+};
+use crate::room_attachment::ProviderAttachmentReadIngress;
 
 type RoomClient = rmcp::service::RunningService<rmcp::RoleClient, ()>;
 const EXECUTION_ID: &str = "00000000-0000-4000-8000-000000000001";
@@ -240,6 +244,77 @@ async fn closing_observation_retains_a_committing_tool_until_resolution() {
         .unwrap_or_else(|error| panic!("begin after committing tool resolution: {error}"));
     let client = Arc::try_unwrap(client)
         .unwrap_or_else(|_| panic!("closing client references must be released"));
+    let _ = client.cancel().await;
+}
+
+#[tokio::test]
+async fn closing_observation_retains_mixed_operations_until_both_resolve() {
+    let portal = RoomPortal::create()
+        .await
+        .unwrap_or_else(|error| panic!("create mixed-operation portal: {error}"));
+    let attachment_id = "ma_00000000000000000000000000000001".to_owned();
+    let (attachment_ingress, _attachment_commands) = ProviderAttachmentReadIngress::channel(1);
+    let (tool_ingress, _tool_commands) = ProviderRoomToolIngress::channel(1);
+    portal
+        .begin_observation(RoomObservationStart {
+            session_id: "agent-1",
+            turn_id: "turn-mixed-close",
+            input_up_to_seq: 13,
+            durable_turn_generation: 1,
+            execution_id: EXECUTION_ID,
+            room_view: &format!("Room: General\n#13 Human: inspect {attachment_id}"),
+            attachment_ids: std::slice::from_ref(&attachment_id),
+            attachment_ingress: Some(attachment_ingress),
+            allowed_agent_ids: &[],
+            tool_ingress: Some(tool_ingress.clone()),
+        })
+        .unwrap_or_else(|error| panic!("begin mixed-operation observation: {error}"));
+    let client = connect(&portal).await;
+    let read = call_tool(&client, "read_discussion", json!({})).await;
+    assert_ne!(read.is_error, Some(true));
+    let (_, _, attachment_reservation) = reserve_attachment_read(&portal.state, &attachment_id)
+        .unwrap_or_else(|error| panic!("reserve attachment read: {error}"));
+    let (_, mut tool_reservation, _) = reserve_room_tool(&portal.state)
+        .unwrap_or_else(|error| panic!("reserve room tool: {error}"));
+    tool_reservation
+        .begin_commit()
+        .unwrap_or_else(|error| panic!("begin room tool commit: {error}"));
+    portal
+        .end_observation()
+        .unwrap_or_else(|error| panic!("close mixed-operation observation: {error}"));
+
+    drop(tool_reservation);
+    assert!(
+        portal
+            .begin_observation(RoomObservationStart {
+                session_id: "agent-1",
+                turn_id: "turn-mixed-too-early",
+                input_up_to_seq: 14,
+                durable_turn_generation: 2,
+                execution_id: "00000000-0000-4000-8000-000000000002",
+                room_view: "Room: General\n#14 Human: wait",
+                attachment_ids: &[],
+                attachment_ingress: None,
+                allowed_agent_ids: &[],
+                tool_ingress: Some(tool_ingress.clone()),
+            })
+            .is_err()
+    );
+    drop(attachment_reservation);
+    portal
+        .begin_observation(RoomObservationStart {
+            session_id: "agent-1",
+            turn_id: "turn-after-mixed-close",
+            input_up_to_seq: 14,
+            durable_turn_generation: 2,
+            execution_id: "00000000-0000-4000-8000-000000000002",
+            room_view: "Room: General\n#14 Human: continue",
+            attachment_ids: &[],
+            attachment_ingress: None,
+            allowed_agent_ids: &[],
+            tool_ingress: Some(tool_ingress),
+        })
+        .unwrap_or_else(|error| panic!("begin after mixed-operation resolution: {error}"));
     let _ = client.cancel().await;
 }
 

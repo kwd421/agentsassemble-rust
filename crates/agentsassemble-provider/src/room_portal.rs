@@ -306,7 +306,7 @@ impl RoomToolReservation {
             if successful && removed == Some(ToolReservationStatus::Committing) {
                 active.successful_tool_results = active.successful_tool_results.saturating_add(1);
             }
-            active.closing && active.tool_reservations.is_empty()
+            active.closing && !active.has_pending_operations()
         } else {
             false
         };
