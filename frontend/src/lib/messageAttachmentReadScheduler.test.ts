@@ -82,4 +82,56 @@ describe("message attachment read scheduler", () => {
       scheduler.read(attachment(6), "view", new AbortController().signal)
     ).rejects.toMatchObject({ name: "AbortError" });
   });
+
+  it("does not enter transport when retirement wins before the scheduled start", async () => {
+    const transport = vi.fn();
+    const scheduler = createMessageAttachmentReadScheduler(
+      "general",
+      { kind: "local" },
+      transport
+    );
+    const read = scheduler.read(
+      attachment(1),
+      "view",
+      new AbortController().signal
+    );
+
+    scheduler.retire();
+
+    await expect(read).rejects.toMatchObject({ name: "AbortError" });
+    await Promise.resolve();
+    expect(transport).not.toHaveBeenCalled();
+  });
+
+  it("retains an aborted transport slot until that transport actually settles", async () => {
+    const pending: Array<{ resolve: (blob: Blob) => void }> = [];
+    const transport = vi.fn(
+      () => new Promise<Blob>((resolve) => pending.push({ resolve }))
+    );
+    const scheduler = createMessageAttachmentReadScheduler(
+      "general",
+      { kind: "local" },
+      transport
+    );
+    const controllers = Array.from({ length: 5 }, () => new AbortController());
+    const reads = controllers.map((controller, index) =>
+      scheduler.read(attachment(index), "view", controller.signal)
+    );
+    await vi.waitFor(() =>
+      expect(transport).toHaveBeenCalledTimes(MESSAGE_ATTACHMENT_READ_CONCURRENCY)
+    );
+
+    controllers[0]?.abort();
+    await expect(reads[0]).rejects.toMatchObject({ name: "AbortError" });
+    await Promise.resolve();
+    expect(transport).toHaveBeenCalledTimes(4);
+
+    pending[0]?.resolve(new Blob(["settled"], { type: "image/png" }));
+    await vi.waitFor(() => expect(transport).toHaveBeenCalledTimes(5));
+    pending.slice(1).forEach(({ resolve }) =>
+      resolve(new Blob(["done"], { type: "image/png" }))
+    );
+    const remaining = await Promise.all(reads.slice(1));
+    expect(remaining).toHaveLength(4);
+  });
 });

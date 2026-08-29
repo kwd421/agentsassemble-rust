@@ -180,18 +180,22 @@ async function readGrant(
   authority: MessageAttachmentAuthority,
   signal?: AbortSignal
 ): Promise<TransferGrant> {
+  signal?.throwIfAborted();
   if (authority.kind === "local") {
     const grant = await requestDesktopMessageAttachmentReadTicket(
       roomId,
       attachmentId
     );
+    signal?.throwIfAborted();
     return { baseUrl: grant.http_base_url, ticket: grant.ticket };
   }
-  return remoteGrant(
+  const grant = await remoteGrant(
     `/api/session-tickets/message-attachment/${attachmentId}`,
     authority.sessionToken,
     signal
   );
+  signal?.throwIfAborted();
+  return grant;
 }
 
 export async function uploadMessageAttachment(

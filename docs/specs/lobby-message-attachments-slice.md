@@ -82,7 +82,9 @@ Rust-owned upload, message-binding, authorized-read, and provider-read lifecycle
 - The renderer does no transfer work for download-only files at mount and no transfer
   work for images outside the viewport. One room-and-authority-owned scheduler admits at
   most four local or remote reads, below the server's eight concurrent grant ceiling;
-  the fifth remains queued until an active read settles. Intersecting images retain only
+  the fifth remains queued until an active transport actually settles, even when its
+  caller has already aborted, and retirement before deferred transport entry performs
+  no transfer. Intersecting images retain only
   their own generation-owned object URL and revoke it on viewport exit, replacement,
   room or authority change, abort, or unmount. Arbitrary files read only after an
   explicit click, trigger one programmatic download, and revoke the temporary URL

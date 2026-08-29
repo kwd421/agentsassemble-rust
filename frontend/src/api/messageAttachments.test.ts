@@ -214,6 +214,43 @@ describe("lobby message-attachment HTTP authority", () => {
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
+  it("does not request or dispatch a local read after retirement", async () => {
+    const alreadyRetired = new AbortController();
+    alreadyRetired.abort();
+    await expect(
+      fetchMessageAttachmentBlob(
+        attachment,
+        "general",
+        { kind: "local" },
+        "view",
+        alreadyRetired.signal
+      )
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(bridge.read).not.toHaveBeenCalled();
+
+    let resolveGrant!: (value: ReturnType<typeof grant>) => void;
+    bridge.read.mockReturnValueOnce(new Promise((resolve) => {
+      resolveGrant = resolve;
+    }));
+    const targetFetch = vi.fn();
+    vi.stubGlobal("fetch", targetFetch);
+    const controller = new AbortController();
+    const request = fetchMessageAttachmentBlob(
+      attachment,
+      "general",
+      { kind: "local" },
+      "view",
+      controller.signal
+    );
+    await vi.waitFor(() => expect(bridge.read).toHaveBeenCalledOnce());
+
+    controller.abort();
+    resolveGrant(grant("c".repeat(64)));
+
+    await expect(request).rejects.toMatchObject({ name: "AbortError" });
+    expect(targetFetch).not.toHaveBeenCalled();
+  });
+
   it("rejects substituted upload metadata instead of accepting a generic attachment", async () => {
     bridge.upload.mockResolvedValue(grant("a".repeat(64)));
     const malformed = [

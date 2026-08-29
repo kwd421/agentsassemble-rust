@@ -22,6 +22,8 @@ type ReadTask = {
   mode: ReadMode;
   controller: AbortController;
   state: TaskState;
+  transportStarted: boolean;
+  callerSettled: boolean;
   resolve: (blob: Blob) => void;
   reject: (error: unknown) => void;
   detachCaller: () => void;
@@ -49,40 +51,55 @@ export function createMessageAttachmentReadScheduler(
   let queue: ReadTask[] = [];
   const active = new Set<ReadTask>();
 
-  function finish(task: ReadTask, value: Blob | unknown, failed: boolean) {
+  function settleCaller(task: ReadTask, value: Blob | unknown, failed: boolean) {
+    if (task.callerSettled) return;
+    task.callerSettled = true;
+    task.detachCaller();
+    if (failed) task.reject(value);
+    else task.resolve(value as Blob);
+  }
+
+  function release(task: ReadTask) {
     if (task.state === "settled") return;
     task.state = "settled";
     active.delete(task);
     queue = queue.filter((candidate) => candidate !== task);
-    task.detachCaller();
-    if (failed) task.reject(value);
-    else task.resolve(value as Blob);
     pump();
   }
 
   function cancel(task: ReadTask, reason: unknown) {
     if (task.state === "settled") return;
     task.controller.abort(reason);
-    finish(task, reason, true);
+    settleCaller(task, reason, true);
+    if (task.state === "queued" || !task.transportStarted) release(task);
   }
 
   function start(task: ReadTask) {
     if (task.state !== "queued") return;
     task.state = "active";
     active.add(task);
-    void Promise.resolve()
-      .then(() => transport(
-        task.attachment,
-        roomId,
-        authority,
-        task.mode,
-        task.controller.signal,
-        () => task.controller.signal.throwIfAborted()
-      ))
-      .then(
-        (blob) => finish(task, blob, false),
-        (error) => finish(task, error, true)
-      );
+    void Promise.resolve().then(async () => {
+      if (task.state !== "active" || task.controller.signal.aborted) {
+        release(task);
+        return;
+      }
+      task.transportStarted = true;
+      try {
+        const blob = await transport(
+          task.attachment,
+          roomId,
+          authority,
+          task.mode,
+          task.controller.signal,
+          () => task.controller.signal.throwIfAborted()
+        );
+        settleCaller(task, blob, false);
+      } catch (error) {
+        settleCaller(task, error, true);
+      } finally {
+        release(task);
+      }
+    });
   }
 
   function pump() {
@@ -91,7 +108,8 @@ export function createMessageAttachmentReadScheduler(
       const task = queue.shift();
       if (!task || task.state !== "queued") continue;
       if (task.controller.signal.aborted) {
-        finish(task, aborted(task.controller.signal), true);
+        settleCaller(task, aborted(task.controller.signal), true);
+        release(task);
       } else {
         start(task);
       }
@@ -117,6 +135,8 @@ export function createMessageAttachmentReadScheduler(
           mode,
           controller,
           state: "queued",
+          transportStarted: false,
+          callerSettled: false,
           resolve,
           reject,
           detachCaller: () => signal.removeEventListener("abort", cancelFromCaller),
@@ -133,7 +153,6 @@ export function createMessageAttachmentReadScheduler(
         cancel(task, new DOMException("Attachment read generation retired.", "AbortError"))
       );
       queue = [];
-      active.clear();
     },
   };
 }
