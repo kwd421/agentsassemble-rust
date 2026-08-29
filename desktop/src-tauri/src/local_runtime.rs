@@ -22,6 +22,7 @@ use crate::runtime_supervisor;
 mod appearance;
 mod control;
 mod human_invite;
+mod message_attachments;
 mod message_pins;
 
 use control::{

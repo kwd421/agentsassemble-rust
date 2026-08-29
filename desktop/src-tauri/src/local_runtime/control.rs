@@ -155,6 +155,24 @@ pub(super) fn request_message_pins_write_ticket(
     request_http_ticket(runtime, HttpTicketKind::MessagePinsWrite(room_id))
 }
 
+pub(super) fn request_message_attachment_upload_ticket(
+    runtime: &mut RuntimeProcess,
+    room_id: &str,
+) -> Result<HttpTicketGrant, TicketFailure> {
+    request_http_ticket(runtime, HttpTicketKind::MessageAttachmentUpload(room_id))
+}
+
+pub(super) fn request_message_attachment_read_ticket(
+    runtime: &mut RuntimeProcess,
+    room_id: &str,
+    attachment_id: &str,
+) -> Result<HttpTicketGrant, TicketFailure> {
+    request_http_ticket(
+        runtime,
+        HttpTicketKind::MessageAttachmentRead(room_id, attachment_id),
+    )
+}
+
 pub(super) fn request_human_invite_create_ticket(
     runtime: &mut RuntimeProcess,
     authority: &ManagerRoomAuthority,
@@ -211,6 +229,8 @@ enum HttpTicketKind<'a> {
     PreferencesWrite(&'a str),
     MessagePinsRead(&'a str),
     MessagePinsWrite(&'a str),
+    MessageAttachmentUpload(&'a str),
+    MessageAttachmentRead(&'a str, &'a str),
     HumanInviteCreate(&'a ManagerRoomAuthority),
     HumanInviteRevoke(&'a ManagerRoomAuthority),
     AppearanceUpload(&'a ManagerRoomAuthority),
@@ -224,7 +244,7 @@ fn request_http_ticket(
     kind: HttpTicketKind<'_>,
 ) -> Result<HttpTicketGrant, TicketFailure> {
     let request_id = Uuid::new_v4().to_string();
-    let request = match kind {
+    let request = message_attachment_request(kind, &request_id).unwrap_or_else(|| match kind {
         HttpTicketKind::Operator => LocalControlRequest::IssueOperatorHttpTicket {
             request_id: request_id.clone(),
         },
@@ -251,6 +271,10 @@ fn request_http_ticket(
                 request_id: request_id.clone(),
                 meeting_id: room_id.to_owned(),
             }
+        }
+        HttpTicketKind::MessageAttachmentUpload(_)
+        | HttpTicketKind::MessageAttachmentRead(_, _) => {
+            unreachable!("message attachment requests are decoded above")
         }
         HttpTicketKind::HumanInviteCreate(authority) => {
             LocalControlRequest::IssueHumanInviteCreateTicket {
@@ -304,9 +328,18 @@ fn request_http_ticket(
                 request_id: request_id.clone(),
             }
         }
-    };
+    });
     let response = request_control(runtime, &request)?;
     let (ticket, ttl_seconds) = decode_http_ticket_response(kind, &request_id, response)?;
+    validate_http_ticket_grant(&ticket, ttl_seconds)?;
+    Ok(HttpTicketGrant {
+        ticket,
+        ttl_seconds,
+        http_base_url: runtime.address.to_string().trim_end_matches('/').to_owned(),
+    })
+}
+
+fn validate_http_ticket_grant(ticket: &str, ttl_seconds: u64) -> Result<(), TicketFailure> {
     if ticket.len() != 64
         || !ticket.bytes().all(|byte| byte.is_ascii_hexdigit())
         || ttl_seconds == 0
@@ -315,11 +348,29 @@ fn request_http_ticket(
             "local runtime returned an invalid HTTP ticket grant".to_owned(),
         ));
     }
-    Ok(HttpTicketGrant {
-        ticket,
-        ttl_seconds,
-        http_base_url: runtime.address.to_string().trim_end_matches('/').to_owned(),
-    })
+    Ok(())
+}
+
+fn message_attachment_request(
+    kind: HttpTicketKind<'_>,
+    request_id: &str,
+) -> Option<LocalControlRequest> {
+    match kind {
+        HttpTicketKind::MessageAttachmentUpload(room_id) => {
+            Some(LocalControlRequest::IssueMessageAttachmentUploadTicket {
+                request_id: request_id.to_owned(),
+                meeting_id: room_id.to_owned(),
+            })
+        }
+        HttpTicketKind::MessageAttachmentRead(room_id, attachment_id) => {
+            Some(LocalControlRequest::IssueMessageAttachmentReadTicket {
+                request_id: request_id.to_owned(),
+                meeting_id: room_id.to_owned(),
+                attachment_id: attachment_id.to_owned(),
+            })
+        }
+        _ => None,
+    }
 }
 
 fn decode_http_ticket_response(
@@ -332,6 +383,12 @@ fn decode_http_ticket_response(
         HttpTicketKind::MessagePinsRead(_) | HttpTicketKind::MessagePinsWrite(_)
     ) {
         return decode_message_pin_ticket_response(kind, request_id, response);
+    }
+    if matches!(
+        kind,
+        HttpTicketKind::MessageAttachmentUpload(_) | HttpTicketKind::MessageAttachmentRead(_, _)
+    ) {
+        return decode_message_attachment_ticket_response(kind, request_id, response);
     }
     match (kind, response) {
         (
@@ -416,6 +473,42 @@ fn decode_http_ticket_response(
         ) if response_id == request_id => Err(control_ticket_failure(&code, message)),
         _ => Err(TicketFailure::Broken(
             "local runtime HTTP ticket response did not match the request".to_owned(),
+        )),
+    }
+}
+
+fn decode_message_attachment_ticket_response(
+    kind: HttpTicketKind<'_>,
+    request_id: &str,
+    response: LocalControlResponse,
+) -> Result<(String, u64), TicketFailure> {
+    match (kind, response) {
+        (
+            HttpTicketKind::MessageAttachmentUpload(_),
+            LocalControlResponse::MessageAttachmentUploadOk {
+                request_id: response_id,
+                ticket,
+                ttl_seconds,
+            },
+        )
+        | (
+            HttpTicketKind::MessageAttachmentRead(_, _),
+            LocalControlResponse::MessageAttachmentReadOk {
+                request_id: response_id,
+                ticket,
+                ttl_seconds,
+            },
+        ) if response_id == request_id => Ok((ticket, ttl_seconds)),
+        (
+            _,
+            LocalControlResponse::Error {
+                request_id: response_id,
+                code,
+                message,
+            },
+        ) if response_id == request_id => Err(control_ticket_failure(&code, message)),
+        _ => Err(TicketFailure::Broken(
+            "local runtime message-attachment response did not match the request".to_owned(),
         )),
     }
 }
@@ -625,6 +718,20 @@ mod tests {
             decode_http_ticket_response(
                 HttpTicketKind::MessagePinsRead("general"),
                 "request-pin",
+                response,
+            ),
+            Err(TicketFailure::Broken(_))
+        ));
+
+        let response = LocalControlResponse::MessageAttachmentReadOk {
+            request_id: "request-attachment".to_owned(),
+            ticket: "e".repeat(64),
+            ttl_seconds: 30,
+        };
+        assert!(matches!(
+            decode_http_ticket_response(
+                HttpTicketKind::MessageAttachmentUpload("general"),
+                "request-attachment",
                 response,
             ),
             Err(TicketFailure::Broken(_))
