@@ -59,19 +59,30 @@ pub(crate) fn attachment_tool_result(
     let descriptor = ProviderAttachmentDescriptor::from(attachment);
     let metadata = serde_json::to_string(&descriptor)
         .map_err(|_| "The room attachment metadata could not be encoded.".to_owned())?;
-    let encoded = STANDARD.encode(&attachment.content);
+    let metadata = ContentBlock::text(metadata);
+    if !attachment.is_image
+        && let Ok(text) = std::str::from_utf8(&attachment.content)
+    {
+        return Ok(CallToolResult::success(vec![
+            ContentBlock::text(text.to_owned()),
+            metadata,
+        ]));
+    }
     let media = if attachment.is_image {
-        ContentBlock::image(encoded, &attachment.content_type)
+        ContentBlock::image(
+            STANDARD.encode(&attachment.content),
+            &attachment.content_type,
+        )
     } else {
         ContentBlock::resource(
-            ResourceContents::blob(encoded, attachment_uri(&attachment.id))
-                .with_mime_type(&attachment.content_type),
+            ResourceContents::blob(
+                STANDARD.encode(&attachment.content),
+                attachment_uri(&attachment.id),
+            )
+            .with_mime_type(&attachment.content_type),
         )
     };
-    Ok(CallToolResult::success(vec![
-        ContentBlock::text(metadata),
-        media,
-    ]))
+    Ok(CallToolResult::success(vec![metadata, media]))
 }
 
 pub(crate) fn attachment_from_tool_result(
@@ -80,20 +91,26 @@ pub(crate) fn attachment_from_tool_result(
     if result.is_error == Some(true) {
         return Err("room helper action was rejected");
     }
-    let [metadata, media] = result.content.as_slice() else {
+    let [first, second] = result.content.as_slice() else {
         return Err("room helper returned an invalid attachment");
+    };
+    let (metadata, media) = if first.as_text().is_some() && second.as_text().is_some() {
+        (second, first)
+    } else {
+        (first, second)
     };
     let metadata = metadata
         .as_text()
         .ok_or("room helper returned invalid attachment metadata")?;
     let descriptor: ProviderAttachmentDescriptor = serde_json::from_str(&metadata.text)
         .map_err(|_| "room helper returned invalid attachment metadata")?;
-    let encoded = match media {
+    let content = match media {
         ContentBlock::Image(image)
             if descriptor.is_image && image.mime_type == descriptor.content_type =>
         {
-            image.data.as_str()
+            decode_attachment_base64(&image.data)?
         }
+        ContentBlock::Text(text) if !descriptor.is_image => text.text.as_bytes().to_vec(),
         ContentBlock::Resource(resource) if !descriptor.is_image => match &resource.resource {
             ResourceContents::BlobResourceContents {
                 uri,
@@ -103,18 +120,12 @@ pub(crate) fn attachment_from_tool_result(
             } if uri == &attachment_uri(&descriptor.id)
                 && content_type == &descriptor.content_type =>
             {
-                blob.as_str()
+                decode_attachment_base64(blob)?
             }
             _ => return Err("room helper returned invalid attachment content"),
         },
         _ => return Err("room helper returned invalid attachment content"),
     };
-    if encoded.is_empty() || encoded.len() > MAX_ATTACHMENT_BASE64_BYTES {
-        return Err("room helper returned invalid attachment content");
-    }
-    let content = STANDARD
-        .decode(encoded)
-        .map_err(|_| "room helper returned invalid attachment content")?;
     let attachment = ProviderAttachment {
         id: descriptor.id,
         filename: descriptor.filename,
@@ -127,6 +138,15 @@ pub(crate) fn attachment_from_tool_result(
         .is_valid()
         .then_some(attachment)
         .ok_or("room helper returned invalid attachment content")
+}
+
+fn decode_attachment_base64(encoded: &str) -> Result<Vec<u8>, &'static str> {
+    if encoded.is_empty() || encoded.len() > MAX_ATTACHMENT_BASE64_BYTES {
+        return Err("room helper returned invalid attachment content");
+    }
+    STANDARD
+        .decode(encoded)
+        .map_err(|_| "room helper returned invalid attachment content")
 }
 
 impl From<&ProviderAttachment> for ProviderAttachmentDescriptor {

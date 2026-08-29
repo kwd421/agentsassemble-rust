@@ -65,10 +65,19 @@ Rust-owned upload, message-binding, authorized-read, and provider-read lifecycle
   per-room channel carries the session, turn, generation, execution, input cursor, and
   requested ID back to the room owner. SQLite recomputes the inflight ID set and checks
   the current joined, unmuted participant and `start_dispatching` execution before it
-  loads one BLOB. The portal validates the returned metadata/size and base64-encodes
-  only that requested item at the standard MCP content boundary: verified images are
-  image blocks and other files are embedded blob resources. Antigravity's original
-  `agentsassemble-room media <id>` behavior remains a private file path rather than
+  loads one BLOB. The portal validates the returned metadata/size and projects only
+  that requested item at the standard MCP content boundary: verified images are image
+  blocks, byte-valid UTF-8 is the first text block followed by the helper-only metadata
+  block, and remaining binary is an embedded blob resource. The UTF-8 branch was added
+  only after the packaged Codex flow read the exact 59-byte metadata but reported that
+  both the original blob and a later embedded text resource body were unavailable. The
+  first text block is the smallest provider-consumable representation observed at the
+  real boundary; it avoids base64's 4/3 expansion and JSON escaping for text without a
+  MIME allowlist or a change to stored bytes, binary behavior, authority, item limit, or
+  retry budget. The terminal helper still validates the separate descriptor before it
+  stages those exact bytes.
+  Antigravity's original `agentsassemble-room media <id>` behavior remains a private
+  file path rather than
   terminal base64. Its helper lazily writes only the requested item as a `0600` file in
   the runtime-owned directory and clears that turn projection on normal completion,
   abort, and the next turn. This choice is required by an observed bound: one 10-MiB
@@ -356,3 +365,18 @@ sealed `memfd` execution path. Active leases are retained and only unlocked cras
 directories are reclaimed by the next creation or owner drop. The final
 forced-death/full-verification run left no old executable directories and only a
 zero-byte lock in each managed root.
+
+Packaged Codex verification on 2026-08-29 used the exact `gpt-5.6-terra` catalog
+selection and an attachment whose first line was not present in the prompt. The
+original embedded blob and the intermediate embedded text resource each exposed the
+59-byte metadata but not the body. A release bundle built from the final source then
+returned `CODEX_PORTAL_PROOF | PORTAL-CODEX-0829-cf7e3a | 59`, proving the first text
+block carried both the previously unknown first line and the exact byte count through
+the real Room Portal tool call. Focused provider tests and the full `make verify`
+passed, including the architecture/800-line gates, copied production frontend and
+original-CSS check, 93 frontend files with 591 tests, 26 desktop tests, every
+Rust/TCP/integration/doc test, and warning-denied Clippy. The exact Agent Session was
+stopped, the package was quit normally, and no owned desktop, server, or provider
+process remained. The stop finalized as the existing fail-closed recoverable
+`disconnected` state because runtime authority could not be confirmed; that separate
+lifecycle behavior is not claimed as part of this attachment correction.

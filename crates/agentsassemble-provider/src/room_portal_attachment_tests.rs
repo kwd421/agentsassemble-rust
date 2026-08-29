@@ -15,6 +15,7 @@ use crate::{ProviderAttachment, ProviderAttachmentReadCommand, ProviderAttachmen
 
 const ATTACHMENT_ID: &str = "ma_11111111111111111111111111111111";
 const SECOND_ATTACHMENT_ID: &str = "ma_22222222222222222222222222222222";
+const THIRD_ATTACHMENT_ID: &str = "ma_33333333333333333333333333333333";
 type RoomClient = rmcp::service::RunningService<rmcp::RoleClient, ()>;
 
 #[tokio::test]
@@ -31,9 +32,13 @@ async fn exact_turn_mcp_read_returns_one_bounded_attachment() {
             durable_turn_generation: 3,
             execution_id: "00000000-0000-4000-8000-000000000003",
             room_view: &format!(
-                "Room: General\nAttachment `{ATTACHMENT_ID}`\nAttachment `{SECOND_ATTACHMENT_ID}`"
+                "Room: General\nAttachment `{ATTACHMENT_ID}`\nAttachment `{SECOND_ATTACHMENT_ID}`\nAttachment `{THIRD_ATTACHMENT_ID}`"
             ),
-            attachment_ids: &[ATTACHMENT_ID.to_owned(), SECOND_ATTACHMENT_ID.to_owned()],
+            attachment_ids: &[
+                ATTACHMENT_ID.to_owned(),
+                SECOND_ATTACHMENT_ID.to_owned(),
+                THIRD_ATTACHMENT_ID.to_owned(),
+            ],
             attachment_ingress: Some(ingress),
             allowed_agent_ids: &[],
             tool_ingress: None,
@@ -108,7 +113,7 @@ async fn exact_turn_mcp_read_returns_one_bounded_attachment() {
     let missing = call_tool(
         client.clone(),
         "read_attachment",
-        json!({"attachment_id": "ma_33333333333333333333333333333333"}),
+        json!({"attachment_id": "ma_44444444444444444444444444444444"}),
     )
     .await;
     assert_eq!(missing.is_error, Some(true));
@@ -234,10 +239,52 @@ async fn assert_response_validation_and_generic_resource(
     let generic = generic
         .await
         .unwrap_or_else(|error| panic!("join generic attachment tool: {error}"));
+    assert!(
+        generic.content[0]
+            .as_text()
+            .is_some_and(|content| content.text == "notes"),
+        "byte-valid UTF-8 should be the first MCP text block"
+    );
     let attachment = attachment_from_tool_result(&generic)
         .unwrap_or_else(|error| panic!("decode generic attachment resource: {error}"));
     assert_eq!(attachment.id, SECOND_ATTACHMENT_ID);
     assert_eq!(attachment.content, b"notes");
+
+    let binary = tokio::spawn(call_tool(
+        client.clone(),
+        "read_attachment",
+        json!({"attachment_id": THIRD_ATTACHMENT_ID}),
+    ));
+    let command = commands
+        .recv()
+        .await
+        .unwrap_or_else(|| panic!("receive binary attachment command"));
+    command.complete(Ok(ProviderAttachment {
+        id: THIRD_ATTACHMENT_ID.to_owned(),
+        filename: "payload.bin".to_owned(),
+        content_type: "application/octet-stream".to_owned(),
+        size: 2,
+        is_image: false,
+        content: vec![0xff, 0],
+    }));
+    let binary = binary
+        .await
+        .unwrap_or_else(|error| panic!("join binary attachment tool: {error}"));
+    assert!(matches!(
+        &binary.content[1],
+        rmcp::model::ContentBlock::Resource(resource)
+            if matches!(
+                &resource.resource,
+                rmcp::model::ResourceContents::BlobResourceContents { .. }
+            )
+    ));
+    assert_eq!(
+        attachment_from_tool_result(&binary)
+            .unwrap_or_else(|error| panic!("decode binary attachment resource: {error}"))
+            .content,
+        [0xff, 0]
+    );
+
     let duplicate = call_tool(
         client.clone(),
         "read_attachment",
