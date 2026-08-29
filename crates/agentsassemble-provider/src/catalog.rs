@@ -1,228 +1,23 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     future::Future,
-    sync::Arc,
 };
 
-use agentsassemble_domain::{
-    ProviderAvailability, ProviderCatalog, ProviderControl, ProviderControlOption,
-};
-use chrono::Utc;
+use agentsassemble_domain::{ProviderAvailability, ProviderControl, ProviderControlOption};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use tokio::{
-    sync::{Mutex, watch},
-    task::JoinHandle,
-};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    ProviderSelection, ProviderSelectionError,
     filesystem::{FilesystemFailure, resolve_codex_executable, resolve_executable},
     process::{ProbeFailure, probe},
 };
 
-const MAX_PUBLIC_CATALOG_BYTES: usize = 48 * 1024;
 const MAX_PROVIDER_BYTES: usize = 16 * 1024;
 const MAX_PROVIDER_OPTIONS: usize = 256;
 const MAX_OPTION_VALUE_BYTES: usize = 128;
 const MAX_OPTION_LABEL_BYTES: usize = 256;
-
-#[derive(Clone)]
-pub struct ProviderCatalogService {
-    _sender: watch::Sender<ProviderCatalog>,
-    receiver: watch::Receiver<ProviderCatalog>,
-    owner: Arc<CatalogOwner>,
-}
-
-struct CatalogOwner {
-    cancellation: CancellationToken,
-    task: Mutex<Option<JoinHandle<()>>>,
-}
-
-impl Drop for CatalogOwner {
-    fn drop(&mut self) {
-        self.cancellation.cancel();
-    }
-}
-
-impl ProviderCatalogService {
-    #[must_use]
-    pub fn discovering() -> Self {
-        let initial = loading_catalog();
-        let (sender, receiver) = watch::channel(initial);
-        let refresh_sender = sender.clone();
-        let cancellation = CancellationToken::new();
-        let discovery_cancellation = cancellation.clone();
-        let task = tokio::spawn(async move {
-            let catalog = Box::pin(discover_catalog(&discovery_cancellation)).await;
-            if !discovery_cancellation.is_cancelled() {
-                let _ = refresh_sender.send(catalog);
-            }
-        });
-        Self {
-            _sender: sender,
-            receiver,
-            owner: Arc::new(CatalogOwner {
-                cancellation,
-                task: Mutex::new(Some(task)),
-            }),
-        }
-    }
-
-    #[must_use]
-    pub fn fixed(catalog: ProviderCatalog) -> Self {
-        let (sender, receiver) = watch::channel(bound_catalog(catalog));
-        Self {
-            _sender: sender,
-            receiver,
-            owner: Arc::new(CatalogOwner {
-                cancellation: CancellationToken::new(),
-                task: Mutex::new(None),
-            }),
-        }
-    }
-
-    #[must_use]
-    pub fn snapshot(&self) -> ProviderCatalog {
-        self.receiver.borrow().clone()
-    }
-
-    #[must_use]
-    pub fn subscribe(&self) -> watch::Receiver<ProviderCatalog> {
-        self.receiver.clone()
-    }
-
-    /// Cancels provider discovery and waits for its task to exit.
-    ///
-    /// # Errors
-    ///
-    /// Returns the discovery task's join error instead of hiding a panic or cancellation.
-    pub async fn shutdown(&self) -> Result<(), tokio::task::JoinError> {
-        self.owner.cancellation.cancel();
-        if let Some(task) = self.owner.task.lock().await.take() {
-            task.await?;
-        }
-        Ok(())
-    }
-
-    /// Validates a raw `agent.create` request against one exact catalog revision.
-    ///
-    /// # Errors
-    ///
-    /// Returns a stable fail-closed selection error.
-    pub async fn validate_creation(
-        &self,
-        room_id: &str,
-        principal_id: &str,
-        request_id: &str,
-        payload: &Value,
-    ) -> Result<ProviderSelection, ProviderSelectionError> {
-        ProviderSelection::from_catalog(
-            room_id,
-            principal_id,
-            request_id,
-            payload,
-            &self.snapshot(),
-        )
-        .await
-    }
-}
-
-async fn discover_catalog(cancellation: &CancellationToken) -> ProviderCatalog {
-    let (codex, antigravity, opencode) = tokio::join!(
-        Box::pin(discover_codex(cancellation)),
-        Box::pin(discover_antigravity(cancellation)),
-        Box::pin(discover_opencode(cancellation))
-    );
-    let providers = vec![codex, antigravity, opencode];
-    let (status, catalog_revision) = match catalog_revision(&providers) {
-        Ok(revision) => ("ready".to_owned(), revision),
-        Err(_) => ("failed".to_owned(), String::new()),
-    };
-    let catalog = ProviderCatalog {
-        status,
-        catalog_revision,
-        discovered_at: Utc::now().to_rfc3339(),
-        providers,
-    };
-    bound_catalog(catalog)
-}
-
-fn bound_catalog(catalog: ProviderCatalog) -> ProviderCatalog {
-    if serde_json::to_vec(&catalog).map_or(true, |encoded| encoded.len() > MAX_PUBLIC_CATALOG_BYTES)
-    {
-        return ProviderCatalog {
-            status: "failed".to_owned(),
-            catalog_revision: String::new(),
-            discovered_at: catalog.discovered_at,
-            providers: Vec::new(),
-        };
-    }
-    catalog
-}
-
-fn loading_catalog() -> ProviderCatalog {
-    ProviderCatalog {
-        status: "loading".to_owned(),
-        catalog_revision: String::new(),
-        discovered_at: String::new(),
-        providers: vec![
-            loading_provider("codex", "Codex", "codex_live_session", "live_cli", "codex"),
-            loading_provider(
-                "antigravity",
-                "Antigravity",
-                "antigravity_live_session",
-                "live_cli",
-                "agy",
-            ),
-            loading_provider(
-                "opencode",
-                "OpenCode",
-                "opencode_server",
-                "opencode",
-                "opencode",
-            ),
-        ],
-    }
-}
-
-fn loading_provider(
-    id: &str,
-    display_name: &str,
-    provider_kind: &str,
-    runtime_kind: &str,
-    executable: &str,
-) -> ProviderAvailability {
-    ProviderAvailability {
-        id: id.to_owned(),
-        display_name: display_name.to_owned(),
-        provider_kind: provider_kind.to_owned(),
-        runtime_kind: runtime_kind.to_owned(),
-        catalog_group: "harness".to_owned(),
-        workspace_required: true,
-        connection_kind: "native_cli_bridge".to_owned(),
-        executable: executable.to_owned(),
-        executable_identity: String::new(),
-        default_model: String::new(),
-        interactive: true,
-        startable: false,
-        available: false,
-        discovery_status: "loading".to_owned(),
-        catalog_source: "discovered".to_owned(),
-        discovery_error_code: String::new(),
-        discovery_error: String::new(),
-        login_available: true,
-        login_label: "로그인".to_owned(),
-        login_flow: if id == "codex" {
-            "browser_oauth".to_owned()
-        } else {
-            "interactive_terminal".to_owned()
-        },
-        controls: Vec::new(),
-    }
-}
 
 async fn provider_executable(
     program: &str,
@@ -254,8 +49,10 @@ async fn await_filesystem<T>(
     }
 }
 
-async fn discover_codex(cancellation: &CancellationToken) -> ProviderAvailability {
-    let mut provider = loading_provider("codex", "Codex", "codex_live_session", "live_cli", "");
+pub(crate) async fn discover_codex(
+    mut provider: ProviderAvailability,
+    cancellation: &CancellationToken,
+) -> ProviderAvailability {
     let (executable, executable_identity) =
         match await_filesystem(cancellation, resolve_codex_executable()).await {
             Ok(Some(authority)) => authority,
@@ -320,14 +117,10 @@ async fn discover_codex(cancellation: &CancellationToken) -> ProviderAvailabilit
     )
 }
 
-async fn discover_antigravity(cancellation: &CancellationToken) -> ProviderAvailability {
-    let mut provider = loading_provider(
-        "antigravity",
-        "Antigravity",
-        "antigravity_live_session",
-        "live_cli",
-        "",
-    );
+pub(crate) async fn discover_antigravity(
+    mut provider: ProviderAvailability,
+    cancellation: &CancellationToken,
+) -> ProviderAvailability {
     let (executable, executable_identity) = match provider_executable("agy", cancellation).await {
         Ok(authority) => authority,
         Err(failure) => return failed_provider(provider, failure),
@@ -379,8 +172,10 @@ async fn discover_antigravity(cancellation: &CancellationToken) -> ProviderAvail
     )
 }
 
-async fn discover_opencode(cancellation: &CancellationToken) -> ProviderAvailability {
-    let mut provider = loading_provider("opencode", "OpenCode", "opencode_server", "opencode", "");
+pub(crate) async fn discover_opencode(
+    mut provider: ProviderAvailability,
+    cancellation: &CancellationToken,
+) -> ProviderAvailability {
     let (executable, executable_identity) =
         match provider_executable("opencode", cancellation).await {
             Ok(authority) => authority,
@@ -657,7 +452,9 @@ fn controls_are_consistent(default_model: &str, controls: &[ProviderControl]) ->
     })
 }
 
-fn catalog_revision(providers: &[ProviderAvailability]) -> Result<String, serde_json::Error> {
+pub(crate) fn catalog_revision(
+    providers: &[ProviderAvailability],
+) -> Result<String, serde_json::Error> {
     let mut authority = serde_json::to_value(providers)?;
     if let Value::Array(entries) = &mut authority {
         for (entry, provider) in entries.iter_mut().zip(providers) {

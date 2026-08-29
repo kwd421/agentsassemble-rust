@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use crate::filesystem::{FilesystemFailure, canonical_workspace, runtime_executable_identity};
 use crate::profile::runtime_profile_key;
+use crate::registration::provider_registration_by_id;
 use crate::selection_input::SelectionInput;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -145,14 +146,13 @@ impl ProviderSelection {
         let (workspace, workspace_identity) = canonical_workspace(input.workspace)
             .await
             .map_err(|_| invalid_workspace())?;
-        let transport = match provider.id.as_str() {
-            "codex" => "stdio_jsonl",
-            "antigravity" if cfg!(windows) => "conpty",
-            "antigravity" => "pty",
-            "opencode" => "http",
-            _ => return Err(unsupported(&provider.id)),
-        }
-        .to_owned();
+        let registration = provider_registration_by_id(&provider.id)
+            .filter(|registration| {
+                registration.provider_kind == provider.provider_kind
+                    && registration.runtime_kind == provider.runtime_kind
+            })
+            .ok_or_else(|| unsupported(&provider.id))?;
+        let transport = registration.transport.to_owned();
         let operation = format!("{room_id}\0{principal_id}\0{request_id}\0agent.create");
         let operation_hash = format!("{:x}", Sha256::digest(operation.as_bytes()));
         let identity = Uuid::new_v5(

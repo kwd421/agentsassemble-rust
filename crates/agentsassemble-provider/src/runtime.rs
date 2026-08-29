@@ -8,169 +8,17 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-#[cfg(any(unix, windows))]
-use crate::antigravity::AntigravityDriver;
-#[cfg(unix)]
-use crate::guardian::GuardianLaunch;
 pub(crate) use crate::driver::{
     DriverError, DriverFuture, ProviderDriver, ProviderSessionAttachment,
 };
 pub use crate::driver::{ProviderRoomObservation, ProviderTurnCompleted, ProviderTurnRequest};
 use crate::{
-    codex::CodexDriver, launch_error::DriverLaunchError, opencode::OpenCodeDriver,
+    registration::{DriverFactory, ProductionDriverFactory},
     runtime_authority::revalidate_runtime_authority,
     runtime_lease::HeldRuntimeLease,
 };
 
 const DRIVER_STOP_TIMEOUT: Duration = Duration::from_secs(5);
-trait DriverFactory: Send + Sync {
-    fn launch<'a>(
-        &'a self,
-        session: &'a DurableAgentSession,
-        _runtime_lease: &'a HeldRuntimeLease,
-    ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>>;
-}
-struct ProductionDriverFactory {
-    #[cfg(unix)]
-    guardian: Option<GuardianLaunch>,
-    #[cfg(windows)]
-    companion: Option<Arc<crate::filesystem::BoundExecutable>>,
-}
-
-impl ProductionDriverFactory {
-    fn local() -> Self {
-        #[cfg(all(unix, test))]
-        let guardian = GuardianLaunch::test_harness().ok();
-        #[cfg(all(unix, not(test), any(target_os = "linux", target_os = "android")))]
-        let guardian = crate::guardian::reexecution_path()
-            .ok()
-            .and_then(|executable| GuardianLaunch::production(&executable).ok());
-        #[cfg(all(unix, not(test), not(any(target_os = "linux", target_os = "android"))))]
-        let guardian = (std::env::var_os("AGENTSASSEMBLE_INTERNAL_SERVER_STAGED")
-            == Some("v1".into()))
-        .then(crate::guardian::reexecution_path)
-        .and_then(Result::ok)
-        .and_then(|executable| GuardianLaunch::production(&executable).ok());
-        Self {
-            #[cfg(unix)]
-            guardian,
-            #[cfg(windows)]
-            companion: crate::filesystem::bind_current_helper_executable()
-                .ok()
-                .map(Arc::new),
-        }
-    }
-
-    #[cfg(unix)]
-    fn with_guardian(executable: &Path) -> Self {
-        Self {
-            guardian: GuardianLaunch::production(executable).ok(),
-        }
-    }
-}
-
-impl DriverFactory for ProductionDriverFactory {
-    fn launch<'a>(
-        &'a self,
-        session: &'a DurableAgentSession,
-        runtime_lease: &'a HeldRuntimeLease,
-    ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
-        #[cfg(not(unix))]
-        let _ = runtime_lease;
-        Box::pin(async move {
-            match (
-                session.public.provider_kind.as_str(),
-                session.public.transport.as_str(),
-            ) {
-                ("codex_live_session", "stdio_jsonl") => {
-                    #[cfg(unix)]
-                    let driver = CodexDriver::spawn(
-                        session,
-                        runtime_lease,
-                        self.guardian.as_ref().ok_or_else(|| {
-                            DriverError::new(
-                                "provider_custody_unavailable",
-                                "The provider process custody helper is unavailable.",
-                            )
-                        })?,
-                    )
-                    .await?;
-                    #[cfg(not(unix))]
-                    let driver = CodexDriver::spawn(session).await?;
-                    Ok(Box::new(driver) as Box<dyn ProviderDriver>)
-                }
-                ("antigravity_live_session", "pty") => {
-                    #[cfg(unix)]
-                    {
-                        let driver = AntigravityDriver::spawn(
-                            session,
-                            runtime_lease,
-                            self.guardian.as_ref().ok_or_else(|| {
-                                DriverError::new(
-                                    "provider_custody_unavailable",
-                                    "The provider process custody helper is unavailable.",
-                                )
-                            })?,
-                        )
-                        .await?;
-                        Ok(Box::new(driver) as Box<dyn ProviderDriver>)
-                    }
-                    #[cfg(not(unix))]
-                    Err(DriverError::new(
-                        "provider_runtime_unsupported",
-                        "PTY provider sessions are unsupported on this platform.",
-                    )
-                    .into())
-                }
-                ("antigravity_live_session", "conpty") => {
-                    #[cfg(windows)]
-                    {
-                        let driver = AntigravityDriver::spawn(
-                            session,
-                            self.companion.as_deref().ok_or_else(|| {
-                                DriverError::new(
-                                    "provider_custody_unavailable",
-                                    "The private provider companion is unavailable.",
-                                )
-                            })?,
-                        )
-                        .await?;
-                        Ok(Box::new(driver) as Box<dyn ProviderDriver>)
-                    }
-                    #[cfg(not(windows))]
-                    Err(DriverError::new(
-                        "provider_runtime_unsupported",
-                        "ConPTY provider sessions are unsupported on this platform.",
-                    )
-                    .into())
-                }
-                ("opencode_server", "http") => {
-                    #[cfg(unix)]
-                    let driver = OpenCodeDriver::spawn(
-                        session,
-                        runtime_lease,
-                        self.guardian.as_ref().ok_or_else(|| {
-                            DriverError::new(
-                                "provider_custody_unavailable",
-                                "The provider process custody helper is unavailable.",
-                            )
-                        })?,
-                    )
-                    .await?;
-                    #[cfg(not(unix))]
-                    let driver = OpenCodeDriver::spawn(session).await?;
-                    Ok(Box::new(driver) as Box<dyn ProviderDriver>)
-                }
-                _ => Err(DriverError::new(
-                    "invalid_runtime_profile",
-                    "The stored provider runtime profile is unsupported.",
-                )
-                .into()),
-            }
-        })
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProviderRuntimeStarted {
     pub runtime_handle_id: String,

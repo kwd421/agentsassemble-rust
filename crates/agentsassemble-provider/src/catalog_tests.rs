@@ -133,7 +133,7 @@ fn fixed_catalogs_are_bounded_before_publication() {
             .collect(),
         "opencode/model-0",
     ));
-    let snapshot = super::ProviderCatalogService::fixed(ProviderCatalog {
+    let snapshot = crate::ProviderCatalogService::fixed(ProviderCatalog {
         status: "ready".to_owned(),
         catalog_revision: "oversized".to_owned(),
         discovered_at: String::new(),
@@ -146,11 +146,8 @@ fn fixed_catalogs_are_bounded_before_publication() {
 }
 
 fn fixture_provider() -> ProviderAvailability {
-    super::loading_provider(
-        "opencode",
-        "OpenCode",
-        "opencode_server",
-        "opencode",
-        "/bin/true",
-    )
+    let mut provider =
+        crate::registration::loading_provider(&crate::registration::OPENCODE_PROVIDER);
+    "/bin/true".clone_into(&mut provider.executable);
+    provider
 }
