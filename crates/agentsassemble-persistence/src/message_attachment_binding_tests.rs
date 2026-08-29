@@ -4,7 +4,7 @@ use agentsassemble_domain::{
 use serde_json::json;
 use sqlx::Row;
 
-use crate::PersistenceError;
+use crate::{PersistenceError, RoomCommandMutation};
 
 #[tokio::test]
 async fn attachment_only_send_binds_ordered_metadata_and_replays_once() {
@@ -40,6 +40,7 @@ async fn attachment_only_send_binds_ordered_metadata_and_replays_once() {
     );
     assert_eq!(metadata[0]["filename"], "second.bin");
     assert_eq!(metadata[1]["filename"], "first.txt");
+    assert_provider_attachment_assignment(&committed, [&second.id, &first.id]);
 
     for attachment_id in [&first.id, &second.id] {
         assert_bound_attachment(&store, attachment_id, committed.outcome.event.seq).await;
@@ -103,6 +104,27 @@ async fn attachment_only_send_binds_ordered_metadata_and_replays_once() {
         .unwrap_or_else(|error| panic!("foreign attachment remains pending: {error}")),
         "pending"
     );
+}
+
+fn assert_provider_attachment_assignment(
+    committed: &RoomCommandMutation,
+    expected_ids: [&String; 2],
+) {
+    let assignment = committed
+        .assignments
+        .first()
+        .unwrap_or_else(|| panic!("attachment-only message must route to the ordered agent"));
+    assert_eq!(
+        assignment
+            .attachment_ids
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        expected_ids.map(String::as_str)
+    );
+    for attachment_id in expected_ids {
+        assert!(assignment.room_view.contains(attachment_id));
+    }
 }
 
 #[tokio::test]

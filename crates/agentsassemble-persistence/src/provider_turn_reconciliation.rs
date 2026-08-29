@@ -9,6 +9,7 @@ use crate::{
     ProviderTurnExecutionPhase, ProviderTurnInterruptEffect, SqliteStore,
     agent_lifecycle::{load_session, save_session},
     agent_reconciliation::load_candidate as load_lifecycle_candidate,
+    message_attachments::message_attachment_ids_from_events,
     provider_turn_effect::{load_optional_effect_in, require_exact_effect},
     provider_turn_execution::load_execution_in,
     room_turns::assign_pending_in,
@@ -261,7 +262,7 @@ impl SqliteStore {
         let assignment = serde_json::from_str::<
             crate::provider_turn_execution::ProviderTurnAssignmentEnvelope,
         >(&assignment_json)?;
-        validate_assignment_envelope(&session, &assignment)?;
+        validate_assignment_envelope(&mut transaction, &session, &assignment).await?;
         transaction.commit().await?;
         Ok(AgentTurnAssignment {
             session,
@@ -271,6 +272,7 @@ impl SqliteStore {
             delivery_kind: assignment.delivery_kind,
             provider_input: assignment.provider_input,
             room_view: assignment.room_view,
+            attachment_ids: assignment.attachment_ids,
             room_agent_ids: assignment.room_agent_ids,
             tabletop_tools: assignment.tabletop_tools,
         })
@@ -600,10 +602,25 @@ async fn finalize_runtime_gone_session(
     })
 }
 
-fn validate_assignment_envelope(
+async fn validate_assignment_envelope(
+    transaction: &mut Transaction<'_, Sqlite>,
     session: &DurableAgentSession,
     assignment: &crate::provider_turn_execution::ProviderTurnAssignmentEnvelope,
 ) -> Result<(), PersistenceError> {
+    let mut inflight_events = Vec::with_capacity(session.inflight_inputs.len());
+    for input in &session.inflight_inputs {
+        inflight_events.push(
+            crate::room_turns::support::load_event(
+                transaction,
+                &session.public.room_id,
+                &input.event_id,
+            )
+            .await?
+            .ok_or_else(invalid_reconciliation)?,
+        );
+    }
+    let expected_attachment_ids = message_attachment_ids_from_events(inflight_events.iter())
+        .map_err(|_| invalid_reconciliation())?;
     let unique_agent_ids = assignment.room_agent_ids.iter().collect::<HashSet<_>>();
     if session.input_up_to_seq <= 0
         || session.active_source_event_id.is_empty()
@@ -620,6 +637,7 @@ fn validate_assignment_envelope(
         || assignment.room_view.len() > MAX_ROOM_VIEW_BYTES
         || assignment.room_view.contains('\0')
         || !has_visible_text(&assignment.room_view)
+        || assignment.attachment_ids != expected_attachment_ids
         || assignment.room_agent_ids.len() > MAX_ROOM_AGENT_IDS
         || unique_agent_ids.len() != assignment.room_agent_ids.len()
         || assignment.room_agent_ids.iter().any(|agent_id| {

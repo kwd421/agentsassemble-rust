@@ -129,6 +129,7 @@ async fn blocking_provider_execution_owns_restart_before_lifecycle_reconciliatio
     assert_eq!(recovered.execution_id, assignment.execution_id);
     assert_eq!(recovered.provider_input, assignment.provider_input);
     assert_eq!(recovered.room_view, assignment.room_view);
+    assert_eq!(recovered.attachment_ids, assignment.attachment_ids);
     assert_eq!(
         recovered.session.inflight_inputs,
         assignment.session.inflight_inputs

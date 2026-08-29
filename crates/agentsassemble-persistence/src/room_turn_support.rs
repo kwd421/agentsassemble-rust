@@ -99,7 +99,7 @@ pub(crate) async fn load_participant(
     Ok(serde_json::from_str(&value)?)
 }
 
-pub(super) async fn load_event(
+pub(crate) async fn load_event(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
     event_id: &str,

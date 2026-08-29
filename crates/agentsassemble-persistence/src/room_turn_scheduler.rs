@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use agentsassemble_domain::{
     DurableAgentSession, Participant, ParticipantRole, ParticipantStatus, QueuedRoomInput, Room,
-    RoomEvent, RoomInputDeliveryKind, RoomSettings, has_visible_text,
+    RoomEvent, RoomInputDeliveryKind, RoomSettings,
 };
 use chrono::Utc;
 use serde_json::Value;
@@ -19,6 +19,7 @@ use super::{AgentTurnAssignment, PreparedAssignment};
 use crate::{
     PersistenceError,
     agent_lifecycle::{load_session, save_session},
+    message_attachments::message_has_visible_payload,
     turn_authority::active_turn_authority,
     turn_queue::MAX_QUEUED_EVENT_IDS,
 };
@@ -29,7 +30,7 @@ pub(super) async fn route_message(
     settings: &RoomSettings,
     event: &RoomEvent,
 ) -> Result<(), PersistenceError> {
-    if !is_routable_message(event) {
+    if !is_routable_message(event)? {
         return Ok(());
     }
     let sessions = route_sessions(transaction, event).await?;
@@ -114,14 +115,14 @@ pub(super) async fn assign_available_pending(
     Ok(prepared)
 }
 
-fn is_routable_message(event: &RoomEvent) -> bool {
-    event.event_type == "message_final"
+fn is_routable_message(event: &RoomEvent) -> Result<bool, PersistenceError> {
+    Ok(event.event_type == "message_final"
         && event.extra.get("message_source").and_then(Value::as_str) != Some("room_tool_result")
         && !event
             .message_kind
             .as_deref()
             .is_some_and(|kind| matches!(kind, "vote_cast" | "vote_withdraw" | "vote_close"))
-        && event.content.as_deref().is_some_and(has_visible_text)
+        && message_has_visible_payload(event)?)
 }
 
 async fn ordered_targets(
@@ -359,7 +360,7 @@ async fn valid_pending_inputs(
         if event.event_type != "message_final"
             || event.actor.participant_id == session.public.participant_id
             || event.seq <= previous_seq
-            || !event.content.as_deref().is_some_and(has_visible_text)
+            || !message_has_visible_payload(&event)?
         {
             return Err(rejected(
                 "queued_room_event_invalid",
@@ -431,6 +432,7 @@ async fn prepare_assignment(
         delivery_kind,
         provider_input: prepared_input.provider_input,
         room_view: prepared_input.room_view,
+        attachment_ids: prepared_input.attachment_ids,
         room_agent_ids: prepared_input.room_agent_ids,
         tabletop_tools: settings.tool_mode == "tabletop",
     };
@@ -453,6 +455,7 @@ async fn prepare_assignment(
             delivery_kind,
             provider_input: assignment_envelope.provider_input,
             room_view: assignment_envelope.room_view,
+            attachment_ids: assignment_envelope.attachment_ids,
             room_agent_ids: assignment_envelope.room_agent_ids,
             tabletop_tools: assignment_envelope.tabletop_tools,
         },

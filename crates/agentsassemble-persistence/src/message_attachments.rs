@@ -62,6 +62,30 @@ pub(crate) fn message_attachments_from_event(
     Ok(attachments)
 }
 
+pub(crate) fn message_has_visible_payload(event: &RoomEvent) -> Result<bool, PersistenceError> {
+    let attachments = message_attachments_from_event(event)?;
+    Ok(event
+        .content
+        .as_deref()
+        .is_some_and(agentsassemble_domain::has_visible_text)
+        || !attachments.is_empty())
+}
+
+pub(crate) fn message_attachment_ids_from_events<'a>(
+    events: impl IntoIterator<Item = &'a RoomEvent>,
+) -> Result<Vec<String>, PersistenceError> {
+    let mut ids = Vec::new();
+    let mut seen = BTreeSet::new();
+    for event in events {
+        for attachment in message_attachments_from_event(event)? {
+            if seen.insert(attachment.id.clone()) {
+                ids.push(attachment.id);
+            }
+        }
+    }
+    Ok(ids)
+}
+
 pub(crate) async fn prepare_message_attachment_bindings(
     transaction: &mut Transaction<'_, Sqlite>,
     principal: &AuthenticatedPrincipal,

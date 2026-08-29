@@ -7,7 +7,13 @@ use agentsassemble_domain::{
 use sqlx::{Row, Sqlite, Transaction};
 
 use super::support::{load_event, rejected, validate_provider_cursor};
-use crate::PersistenceError;
+use crate::{
+    PersistenceError,
+    message_attachments::{
+        message_attachment_ids_from_events, message_attachments_from_event,
+        message_has_visible_payload,
+    },
+};
 
 const MAX_CONTEXT_MESSAGES: usize = 50;
 const MAX_ROOM_VIEW_CHARS: usize = 20_000;
@@ -15,6 +21,7 @@ const MAX_ROOM_VIEW_CHARS: usize = 20_000;
 pub(super) struct PreparedRoomInput {
     pub(super) provider_input: String,
     pub(super) room_view: String,
+    pub(super) attachment_ids: Vec<String>,
     pub(super) inflight_inputs: Vec<QueuedRoomInput>,
     pub(super) source_event_id: String,
     pub(super) input_up_to_seq: i64,
@@ -53,7 +60,9 @@ pub(super) async fn prepare_room_input(
     )
     .await?;
     let delivery_kind = inflight[0].input.delivery_kind;
-    let rendered_context = render_room_view(room, session, &room_agent_ids, &context);
+    let attachment_ids =
+        message_attachment_ids_from_events(inflight.iter().map(|pending| &pending.event))?;
+    let rendered_context = render_room_view(room, session, &room_agent_ids, &context)?;
     let (provider_input, room_view) = match delivery_kind {
         RoomInputDeliveryKind::OrderedObservation => (
             render_observation_input(room, session, "Ordered", tabletop_tools),
@@ -75,6 +84,7 @@ pub(super) async fn prepare_room_input(
     Ok(PreparedRoomInput {
         provider_input,
         room_view,
+        attachment_ids,
         inflight_inputs: inflight
             .iter()
             .map(|pending| pending.input.clone())
@@ -131,7 +141,7 @@ async fn load_pending_events(
         if event.event_type != "message_final"
             || event.actor.participant_id == session.public.participant_id
             || event.seq <= previous_seq
-            || !event.content.as_deref().is_some_and(has_visible_text)
+            || !message_has_visible_payload(&event)?
         {
             return Err(rejected(
                 "queued_room_event_invalid",
@@ -175,7 +185,7 @@ fn bounded_pending_prefix<'a>(
             .iter()
             .map(|value| value.event.clone())
             .collect::<Vec<_>>();
-        if render_room_view(room, session, room_agent_ids, &candidate_events)
+        if render_room_view(room, session, room_agent_ids, &candidate_events)?
             .chars()
             .count()
             > MAX_ROOM_VIEW_CHARS
@@ -221,14 +231,14 @@ async fn load_context(
         }
         let event: RoomEvent = serde_json::from_str(row.get::<String, _>("event_json").as_str())?;
         if event.actor.participant_id == session.public.participant_id
-            || !event.content.as_deref().is_some_and(has_visible_text)
+            || !message_has_visible_payload(&event)?
         {
             continue;
         }
         let mut candidate = selected.clone();
         candidate.insert(event.seq, event);
         let values = candidate.values().cloned().collect::<Vec<_>>();
-        if render_room_view(room, session, room_agent_ids, &values)
+        if render_room_view(room, session, room_agent_ids, &values)?
             .chars()
             .count()
             <= MAX_ROOM_VIEW_CHARS
@@ -253,7 +263,7 @@ fn render_room_view(
     session: &DurableAgentSession,
     room_agent_ids: &[String],
     context: &[RoomEvent],
-) -> String {
+) -> Result<String, PersistenceError> {
     let mut lines = vec![
         format!("Room: {}", room.label),
         format!("You are: {}", session.public.display_name),
@@ -272,21 +282,33 @@ fn render_room_view(
     {
         lines.push("[Earlier room updates are outside this bounded observation.]".to_owned());
     }
-    lines.extend(context.iter().filter_map(|event| {
+    for event in context {
         let event_text = clean_message(event.content.as_deref().unwrap_or_default(), 12_000);
-        has_visible_text(&event_text).then(|| {
+        let attachments = message_attachments_from_event(event)?;
+        if !has_visible_text(&event_text) && attachments.is_empty() {
+            continue;
+        }
+        lines.push(format!(
+            "#{} {}: {}",
+            event.seq,
+            event
+                .display_name
+                .as_deref()
+                .unwrap_or(&event.actor.participant_id),
+            if has_visible_text(&event_text) {
+                event_text.as_str()
+            } else {
+                "(attachments only)"
+            }
+        ));
+        lines.extend(attachments.into_iter().map(|attachment| {
             format!(
-                "#{} {}: {}",
-                event.seq,
-                event
-                    .display_name
-                    .as_deref()
-                    .unwrap_or(&event.actor.participant_id),
-                event_text
+                "  - Attachment `{}`: {} ({}; {} bytes)",
+                attachment.id, attachment.filename, attachment.content_type, attachment.size
             )
-        })
-    }));
-    lines.join("\n")
+        }));
+    }
+    Ok(lines.join("\n"))
 }
 
 fn render_observation_input(

@@ -55,7 +55,13 @@ Rust-owned upload, message-binding, authorized-read, and provider-read lifecycle
   a current visible lobby message in that exact room. Provider reads use the current
   Agent Session's room portal and apply the same canonical-message reference check;
   a merely uploaded or same-room unreferenced object returns `not_found`. Provider
-  wake/input includes only the referenced IDs from its canonical pending events.
+  wake/input includes only the referenced IDs from its canonical pending events. The
+  persistence assignment derives those IDs from the same strictly decoded events after
+  selecting the bounded inflight prefix, stores them with the durable provider-turn
+  envelope, and recomputes the exact list from the session's inflight event authority
+  before restart recovery. Attachment-only messages remain routable and their room
+  view names each opaque ID, filename, content type, and byte size without loading or
+  copying the BLOB.
 - Arbitrary files retain their original bytes and are served download-only. Inline
   preview is limited to decoded, bounded PNG/JPEG/GIF/WebP whose declared and detected
   formats agree; active or ambiguous content is never classified inline. Every read is

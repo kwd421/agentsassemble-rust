@@ -122,6 +122,7 @@ pub(crate) struct ProviderTurnAssignmentEnvelope {
     pub delivery_kind: RoomInputDeliveryKind,
     pub provider_input: String,
     pub room_view: String,
+    pub attachment_ids: Vec<String>,
     pub room_agent_ids: Vec<String>,
     pub tabletop_tools: bool,
 }
