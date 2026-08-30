@@ -45,7 +45,10 @@ pages), while the request dimension prevents tiny limits from bypassing transact
 event dimension bounds connection- and room-sharding against the single SQLite connection.
 Exceeding either independent read dimension returns a definitive
 `history_read_limited` NACK without closing the socket, consuming mutation budget, or disabling
-ordinary frames; rejected history work remains charged until the fixed window turns over. No retry,
+ordinary frames. The same mutex first preflights all three scopes and commits request/event cost only
+for a read that all three admit. A saturated narrow scope therefore remains saturated until its
+fixed window turns over but cannot debit a broader scope for work that never reaches SQLite. The
+separately owned raw frame attempt remains charged under the existing ingress contract. No retry,
 timer, worker, or alternate read path is introduced.
 
 The product inner-frame ceiling is 256 KiB. The server first preserves the requested newest-near
@@ -114,6 +117,17 @@ while the same socket still answers a ping. The complete `make verify` gate then
 800-line growth, policy, formatting, workspace build and generated types, copied frontend build/CSS
 and 628 tests, desktop checks and 26 tests, all Rust unit/integration/doc tests, and warning-denying
 Clippy.
+
+Daybreaker then found that the first correction charged all three history scopes before combining
+their decisions. After a principal reached its 1,000-event ceiling, 28 more rejected 200-event
+requests could therefore consume the remaining process event budget without another database read
+and temporarily deny unrelated rooms. The corrected owner now resets expired windows, preflights
+principal, room, and process counters under the same mutex, and commits all three only when the read
+is admitted. It retains no reservation or refund state: previously admitted cost remains permanent
+for the fixed window, while rejected parsing/response cost is already bounded by raw ingress.
+A deterministic same-instant regression saturates one principal, repeats more than a complete
+process budget of rejected work, and proves both a peer in that room and another room remain
+admissible. This removes cross-scope availability debit without weakening the original DB-work cap.
 
 ## Verification path
 

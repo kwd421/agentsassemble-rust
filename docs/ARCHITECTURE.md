@@ -143,7 +143,9 @@ principal scope, and rejected over-limit frames stay charged until the window
 turns over. After exact `room.history` parsing, the same owner independently charges
 one read plus its requested event count before persistence. Fixed process/room/principal
 request/event ceilings are `640/6,400`, `320/3,200`, and `10/1,000`; over-limit reads
-fail explicitly without closing the socket or consuming mutation admission.
+fail explicitly without closing the socket or consuming mutation admission. All three
+history scopes are preflighted and committed atomically, so rejected narrow-scope work
+cannot consume a broader history budget; its raw frame remains charged separately.
 
 After strict protocol and implemented-action classification, exact committed
 replays and matching lifecycle resumes are recognized first. Every fresh human

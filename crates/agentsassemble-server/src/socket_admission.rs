@@ -75,9 +75,7 @@ impl WindowCounters {
         control_frame: bool,
         policy: ScopePolicy,
     ) -> bool {
-        if self.expired(now) {
-            *self = Self::new(now);
-        }
+        self.prepare(now);
         self.messages = self.messages.saturating_add(1);
         self.bytes = self.bytes.saturating_add(bytes);
         if control_frame {
@@ -88,14 +86,20 @@ impl WindowCounters {
             && self.control_frames <= policy.control_frames
     }
 
-    fn charge_history(&mut self, now: Instant, events: usize, policy: ScopePolicy) -> bool {
+    fn prepare(&mut self, now: Instant) {
         if self.expired(now) {
             *self = Self::new(now);
         }
+    }
+
+    fn admits_history(&self, events: usize, policy: ScopePolicy) -> bool {
+        self.history_requests.saturating_add(1) <= policy.history_requests
+            && self.history_events.saturating_add(events) <= policy.history_events
+    }
+
+    fn commit_history(&mut self, events: usize) {
         self.history_requests = self.history_requests.saturating_add(1);
         self.history_events = self.history_events.saturating_add(events);
-        self.history_requests <= policy.history_requests
-            && self.history_events <= policy.history_events
     }
 }
 
@@ -109,24 +113,6 @@ struct SocketAdmissionState {
 #[derive(Clone)]
 pub(crate) struct SocketAdmission {
     state: Arc<Mutex<SocketAdmissionState>>,
-}
-
-#[derive(Clone, Copy)]
-enum SocketCharge {
-    Frame { bytes: usize, control_frame: bool },
-    History { events: usize },
-}
-
-impl SocketCharge {
-    fn apply(self, window: &mut WindowCounters, now: Instant, policy: ScopePolicy) -> bool {
-        match self {
-            Self::Frame {
-                bytes,
-                control_frame,
-            } => window.charge_frame(now, bytes, control_frame, policy),
-            Self::History { events } => window.charge_history(now, events, policy),
-        }
-    }
 }
 
 impl SocketAdmission {
@@ -157,15 +143,7 @@ impl SocketAdmission {
         control_frame: bool,
         now: Instant,
     ) -> bool {
-        charge_scopes(
-            &mut self.state.lock(),
-            principal,
-            now,
-            SocketCharge::Frame {
-                bytes,
-                control_frame,
-            },
-        )
+        charge_frame_scopes(&mut self.state.lock(), principal, now, bytes, control_frame)
     }
 
     pub(crate) fn admit_history(
@@ -182,22 +160,49 @@ impl SocketAdmission {
         requested_events: usize,
         now: Instant,
     ) -> bool {
-        charge_scopes(
-            &mut self.state.lock(),
-            principal,
+        let mut state = self.state.lock();
+        if !ensure_capacity(
+            &mut state.principals,
+            &principal.principal_id,
+            MAX_TRACKED_PRINCIPALS,
             now,
-            SocketCharge::History {
-                events: requested_events,
-            },
-        )
+        ) || !ensure_capacity(&mut state.rooms, &principal.room_id, MAX_TRACKED_ROOMS, now)
+        {
+            return false;
+        }
+        let SocketAdmissionState {
+            global,
+            principals,
+            rooms,
+        } = &mut *state;
+        let principal_window = principals
+            .entry(principal.principal_id.clone())
+            .or_insert_with(|| WindowCounters::new(now));
+        let room_window = rooms
+            .entry(principal.room_id.clone())
+            .or_insert_with(|| WindowCounters::new(now));
+        global.prepare(now);
+        principal_window.prepare(now);
+        room_window.prepare(now);
+        if !global.admits_history(requested_events, GLOBAL_POLICY)
+            || !principal_window.admits_history(requested_events, PRINCIPAL_POLICY)
+            || !room_window.admits_history(requested_events, ROOM_POLICY)
+        {
+            return false;
+        }
+        global.commit_history(requested_events);
+        principal_window.commit_history(requested_events);
+        room_window.commit_history(requested_events);
+        true
     }
 }
 
-fn charge_scopes(
+fn charge_frame_scopes(
     state: &mut SocketAdmissionState,
     principal: &AuthenticatedPrincipal,
     now: Instant,
-    charge: SocketCharge,
+    bytes: usize,
+    control_frame: bool,
 ) -> bool {
     let principal_capacity = ensure_capacity(
         &mut state.principals,
@@ -208,53 +213,54 @@ fn charge_scopes(
     let room_capacity =
         ensure_capacity(&mut state.rooms, &principal.room_id, MAX_TRACKED_ROOMS, now);
     if !principal_capacity || !room_capacity {
-        charge.apply(&mut state.global, now, GLOBAL_POLICY);
-        charge_existing(
+        state
+            .global
+            .charge_frame(now, bytes, control_frame, GLOBAL_POLICY);
+        charge_existing_frame(
             &mut state.principals,
             &principal.principal_id,
             now,
-            charge,
+            bytes,
+            control_frame,
             PRINCIPAL_POLICY,
         );
-        charge_existing(
+        charge_existing_frame(
             &mut state.rooms,
             &principal.room_id,
             now,
-            charge,
+            bytes,
+            control_frame,
             ROOM_POLICY,
         );
         return false;
     }
 
-    let global_allowed = charge.apply(&mut state.global, now, GLOBAL_POLICY);
-    let principal_allowed = charge.apply(
-        state
-            .principals
-            .entry(principal.principal_id.clone())
-            .or_insert_with(|| WindowCounters::new(now)),
-        now,
-        PRINCIPAL_POLICY,
-    );
-    let room_allowed = charge.apply(
-        state
-            .rooms
-            .entry(principal.room_id.clone())
-            .or_insert_with(|| WindowCounters::new(now)),
-        now,
-        ROOM_POLICY,
-    );
+    let global_allowed = state
+        .global
+        .charge_frame(now, bytes, control_frame, GLOBAL_POLICY);
+    let principal_allowed = state
+        .principals
+        .entry(principal.principal_id.clone())
+        .or_insert_with(|| WindowCounters::new(now))
+        .charge_frame(now, bytes, control_frame, PRINCIPAL_POLICY);
+    let room_allowed = state
+        .rooms
+        .entry(principal.room_id.clone())
+        .or_insert_with(|| WindowCounters::new(now))
+        .charge_frame(now, bytes, control_frame, ROOM_POLICY);
     global_allowed && principal_allowed && room_allowed
 }
 
-fn charge_existing(
+fn charge_existing_frame(
     windows: &mut HashMap<String, WindowCounters>,
     key: &str,
     now: Instant,
-    charge: SocketCharge,
+    bytes: usize,
+    control_frame: bool,
     policy: ScopePolicy,
 ) {
     if let Some(window) = windows.get_mut(key) {
-        charge.apply(window, now, policy);
+        window.charge_frame(now, bytes, control_frame, policy);
     }
 }
 
@@ -378,6 +384,21 @@ mod tests {
         }
         assert!(!admission.admit_history(&principal, 1));
         assert!(admission.admit_frame(&principal, 0, false));
+    }
+
+    #[test]
+    fn rejected_history_does_not_debit_broader_scopes() {
+        let admission = SocketAdmission::new();
+        let now = std::time::Instant::now();
+        let blocked = principal_for("blocked", "room-a");
+        for _ in 0..PRINCIPAL_POLICY.history_events / 200 {
+            assert!(admission.admit_history_at(&blocked, 200, now));
+        }
+        for _ in 0..=(GLOBAL_POLICY.history_events / 200) {
+            assert!(!admission.admit_history_at(&blocked, 200, now));
+        }
+        assert!(admission.admit_history_at(&principal_for("peer", "room-a"), 200, now));
+        assert!(admission.admit_history_at(&principal_for("other", "room-b"), 200, now));
     }
 
     #[test]
