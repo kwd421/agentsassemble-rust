@@ -10,12 +10,12 @@ crossing the authenticated frame limit.
 
 ## Current contract
 
-The copied client already requests `room.history` while initially backfilling a short snapshot and
-when the reader scrolls to the top. The original reachable server returns an exclusive
-`before_seq` page in chronological order, defaults and caps `limit` at 200, reports the page's
-`oldest_seq`, the transaction's room `last_seq`, and whether an earlier event exists, and writes no
-command-result record. Rust currently advertises the `room.history` capability but omits the action
-from its public product surface, so the copied control fails explicitly.
+The copied client requests `room.history` while initially backfilling a short snapshot and when the
+reader scrolls to the top. Rust now serves that action on the public authenticated WebSocket and the
+copied control consumes its strict page validation. It returns an exclusive `before_seq` page in
+chronological order, defaults and caps `limit` at 200, reports the page's `oldest_seq`, the read
+transaction's room `last_seq`, and whether an earlier event exists, and writes no command-result
+record.
 
 Rust `room_events` remains the only history authority. One persistence read transaction revalidates
 the current principal and `room.history` capability, fixes the room high-water sequence, selects at
