@@ -499,8 +499,9 @@ remain explicitly unverified rather than being replaced with a mock, paid substi
   thinking-tool history could replay nullable assistant content. Commits `2c9f987` and `4cc5c29`
   close those contracts. The Flash-only catalog finding was not accepted because original fixed
   commit `d504647` exposes both DeepSeek V4 Flash and Pro; the user's Flash restriction governs
-  authorized real verification calls, not reachable product model support. The critical web session
-  and Daybreaker Blue High both returned `APPROVE — C0 H0 M0 L0` for the corrections and cumulative
+  authorized real verification calls, not reachable product model support. Daybreaker Blue High
+  returned `APPROVE — C0 H0 M0 L0` for exact correction range `a7f3293..4cc5c29`; the critical web
+  session returned the same verdict after reviewing that correction and cumulative
   `85994a5..4cc5c29`. No automated security scan was used.
 
 ## Non-goals
