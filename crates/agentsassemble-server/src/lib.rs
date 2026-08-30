@@ -5,6 +5,9 @@ macro_rules! http_method {
     (post) => {
         agentsassemble_protocol::HttpMethod::Post
     };
+    (delete) => {
+        agentsassemble_protocol::HttpMethod::Delete
+    };
 }
 
 macro_rules! route_exposure {

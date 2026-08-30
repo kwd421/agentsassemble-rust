@@ -211,7 +211,7 @@ function validateServerProductSurface(value: unknown): ServerProductSurface {
     const route = record(value, `서버 제품 표면 HTTP route[${index}]`);
     exactKeys(route, ["method", "path"], `서버 제품 표면 HTTP route[${index}]`);
     if (
-      !new Set(["GET", "POST"]).has(String(route.method)) ||
+      !new Set(["GET", "POST", "DELETE"]).has(String(route.method)) ||
       typeof route.path !== "string" ||
       !route.path.startsWith("/")
     ) {

@@ -74,6 +74,31 @@ describe("room directory contracts", () => {
     ).toThrow(/계약/);
   });
 
+  it("accepts DELETE and rejects methods outside the registered HTTP schema", () => {
+    expect(() =>
+      parseStrictRoomDirectory({
+        ...directory([]),
+        server_product_surface: {
+          ...surface,
+          http_routes: [
+            { method: "DELETE", path: "/api/provider-credentials/deepseek" },
+          ],
+        },
+      })
+    ).not.toThrow();
+    expect(() =>
+      parseStrictRoomDirectory({
+        ...directory([]),
+        server_product_surface: {
+          ...surface,
+          http_routes: [
+            { method: "PUT", path: "/api/provider-credentials/deepseek" },
+          ],
+        },
+      })
+    ).toThrow(/HTTP route/);
+  });
+
   it("accepts only an exact authority-bound room creation response", () => {
     const payload = {
       status: "ready",
@@ -169,7 +194,7 @@ describe("room directory contracts", () => {
           ...authority,
           server_product_surface: {
             ...surface,
-            digest: "907399f4f53bb9de6c5f30f2ad9f85f8f55146d6557592f7186bfe8d8b665b5a",
+            digest: "eb467b3509cc6a22fb510b83bdc55e5776cc19bd12c3ba0885674839978f490b",
             websocket_streams: [],
           },
         }),

@@ -127,10 +127,12 @@ fn dynamic_exposure(request: &Request) -> Option<RouteExposure> {
     let method = match *request.method() {
         Method::GET | Method::HEAD => agentsassemble_protocol::HttpMethod::Get,
         Method::POST => agentsassemble_protocol::HttpMethod::Post,
+        Method::DELETE => agentsassemble_protocol::HttpMethod::Delete,
         Method::OPTIONS => {
             match single_header(request.headers(), header::ACCESS_CONTROL_REQUEST_METHOD)? {
                 "GET" => agentsassemble_protocol::HttpMethod::Get,
                 "POST" => agentsassemble_protocol::HttpMethod::Post,
+                "DELETE" => agentsassemble_protocol::HttpMethod::Delete,
                 _ => return None,
             }
         }

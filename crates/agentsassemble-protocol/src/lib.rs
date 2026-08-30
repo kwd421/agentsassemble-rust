@@ -24,7 +24,7 @@ pub use local_control::{
 };
 
 pub const PROTOCOL_VERSION: u32 = 1;
-pub const PRODUCT_SURFACE_REVISION: u32 = 6;
+pub const PRODUCT_SURFACE_REVISION: u32 = 7;
 pub const HUMAN_INVITE_SIGNED_TOKEN_PREFIX: &str = "aai1";
 pub const HUMAN_INVITE_JOIN_CODE_PREFIX: &str = "aaj1_";
 pub const HUMAN_INVITE_SIGNED_TOKEN_MAX_BYTES: usize = 4 * 1024;
@@ -36,6 +36,7 @@ pub const HUMAN_INVITE_TIMESTAMP_MAX_YEAR: i32 = 262_142;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, TS)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum HttpMethod {
+    Delete,
     Get,
     Post,
 }
@@ -44,6 +45,7 @@ impl HttpMethod {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
+            Self::Delete => "DELETE",
             Self::Get => "GET",
             Self::Post => "POST",
         }
@@ -516,9 +518,21 @@ mod tests {
         let surface = ServerProductSurface::from_http_routes(vec![
             HttpRouteSurface::new(HttpMethod::Post, "/api/ws-ticket"),
             HttpRouteSurface::new(HttpMethod::Get, "/healthz"),
+            HttpRouteSurface::new(HttpMethod::Delete, "/api/provider-credentials/deepseek"),
         ])
         .unwrap_or_else(|error| panic!("build server surface: {error}"));
-        assert_eq!(surface.http_routes[0].path, "/healthz");
+        assert_eq!(
+            surface
+                .http_routes
+                .iter()
+                .map(|route| format!("{} {}", route.method.as_str(), route.path))
+                .collect::<Vec<_>>(),
+            [
+                "DELETE /api/provider-credentials/deepseek",
+                "GET /healthz",
+                "POST /api/ws-ticket",
+            ]
+        );
         assert!(
             surface
                 .websocket_actions
