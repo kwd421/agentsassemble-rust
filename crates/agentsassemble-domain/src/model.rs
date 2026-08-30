@@ -446,6 +446,7 @@ pub struct AgentSessionDraft {
     pub display_name: String,
     pub provider_kind: String,
     pub runtime_kind: String,
+    pub connection_kind: String,
     pub executable: String,
     pub executable_identity: String,
     pub workspace: String,

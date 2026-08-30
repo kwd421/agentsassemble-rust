@@ -63,6 +63,7 @@ fn draft(workspace: &Path) -> AgentSessionDraft {
         display_name: "Terra".to_owned(),
         provider_kind: "opencode_server".to_owned(),
         runtime_kind: "live_cli".to_owned(),
+        connection_kind: "native_cli_bridge".to_owned(),
         executable: executable.to_string_lossy().into_owned(),
         executable_identity: stable_content_identity(&executable_handle, &mut file)
             .unwrap_or_else(|error| panic!("hash executable: {error}")),

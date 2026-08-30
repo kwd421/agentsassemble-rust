@@ -643,6 +643,7 @@ pub(crate) mod tests {
             display_name: "Terra".to_owned(),
             provider_kind: provider_kind.to_owned(),
             runtime_kind: runtime_kind.to_owned(),
+            connection_kind: "native_cli_bridge".to_owned(),
             executable,
             executable_identity,
             workspace,

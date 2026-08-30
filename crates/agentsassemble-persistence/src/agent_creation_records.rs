@@ -113,7 +113,7 @@ async fn create_agent_records(
         enabled: false,
         provider_kind: draft.provider_kind.clone(),
         runtime_kind: draft.runtime_kind.clone(),
-        connection_kind: "native_cli_bridge".to_owned(),
+        connection_kind: draft.connection_kind.clone(),
         external_owned: false,
         process_ownership: "server".to_owned(),
         model: draft.model.clone(),

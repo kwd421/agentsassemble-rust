@@ -21,6 +21,7 @@ pub struct ProviderSelection {
     pub provider_id: String,
     pub provider_kind: String,
     pub runtime_kind: String,
+    pub connection_kind: String,
     pub executable: String,
     pub executable_identity: String,
     pub workspace: String,
@@ -91,6 +92,7 @@ impl ProviderSelection {
             .filter(|registration| {
                 registration.provider_kind == provider.provider_kind
                     && registration.runtime_kind == provider.runtime_kind
+                    && registration.connection_kind == provider.connection_kind
             })
             .ok_or_else(|| unsupported(&provider.id))?;
         let executable_identity = if registration.executable_required {
@@ -189,6 +191,7 @@ impl ProviderSelection {
             provider_id: provider.id.clone(),
             provider_kind: provider.provider_kind.clone(),
             runtime_kind: provider.runtime_kind.clone(),
+            connection_kind: registration.connection_kind.to_owned(),
             executable: provider.executable.clone(),
             executable_identity,
             workspace,
@@ -249,6 +252,7 @@ impl From<ProviderSelection> for AgentSessionDraft {
             display_name: selection.display_name,
             provider_kind: selection.provider_kind,
             runtime_kind: selection.runtime_kind,
+            connection_kind: selection.connection_kind,
             executable: selection.executable,
             executable_identity: selection.executable_identity,
             workspace: selection.workspace,
@@ -443,6 +447,7 @@ mod tests {
         .unwrap_or_else(|error| panic!("repeat selection: {error}"));
         assert_eq!(first.agent_id, second.agent_id);
         assert_eq!(first.display_name, "Terra");
+        assert_eq!(first.connection_kind, "native_cli_bridge");
         assert_eq!(
             first.workspace,
             workspace

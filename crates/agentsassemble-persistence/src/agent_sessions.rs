@@ -174,6 +174,7 @@ mod tests {
             display_name: "Terra".to_owned(),
             provider_kind: "opencode_server".to_owned(),
             runtime_kind: "live_cli".to_owned(),
+            connection_kind: "native_cli_bridge".to_owned(),
             executable,
             executable_identity,
             workspace: workspace.to_string_lossy().into_owned(),
