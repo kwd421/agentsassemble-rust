@@ -266,8 +266,8 @@ prefers the `AgentsAssemble`/`deepseek` platform-keyring item, reports only
 `keyring | environment | missing`, permits `DEEPSEEK_API_KEY` only when no secure item exists, and
 never falls back to the environment after an installed secure store fails. Set validates a trimmed
 8--8,192-character secret, and delete removes only the secure item so an environment credential may
-become visible again. The Rust boundary exposes no secret read or serialization API yet; HTTP, copied
-UI, runtime injection, and remote-host authority remain explicitly incomplete.
+become visible again. The Rust boundary exposes no secret read or serialization API yet; copied UI,
+runtime injection, and remote-host authority remain explicitly incomplete.
 
 The implementation uses maintained `keyring` 4.1.6 with its v1 platform stores instead of owning
 Keychain, Credential Manager, Secret Service, encryption, or persistence code. The macOS status
@@ -326,6 +326,22 @@ CPU, memory, disk, or latency improvement is claimed. Fake-backend tests prove p
 unsupported-store behavior, validation bounds, and fail-closed installed-store errors without
 reading or writing a real credential. All 136 provider tests, warning-denied provider Clippy,
 formatting, whitespace, architecture, and source-growth gates passed.
+
+The private DeepSeek credential HTTP owner now exposes the reachable metadata-only status,
+secure-store set, and secure-store delete operations through one route. Each request consumes a
+fresh exact local server-operator ticket before reading its body; responses are private/no-store and
+serialize only `configured` plus `source`. The route owns only transport admission and stable HTTP
+error projection. Secret length, trimming, secure-store precedence, deletion, and fail-closed
+backend behavior remain in `ProviderCredentialStore`, with no second provider registry, credential
+trait, cache, retry, or fallback.
+
+The 128-KiB POST ceiling is a transport bound rather than a duplicate secret policy: it admits the
+provider owner's 8,192-Unicode-scalar maximum even when every scalar uses a JSON surrogate-pair
+escape. A real TCP regression completed in 0.04 seconds and proved purpose separation,
+authorization-before-body, one-use consumption, secret-free errors, private CORS/cache headers, and
+registered DELETE preflight. Focused provider tests covered the secure-store owner through its fake
+backend. No real Keychain item was written or deleted because that would mutate user-owned
+credential data; copied-UI and authorized real-provider verification remain pending.
 
 ## Manual-review findings
 
