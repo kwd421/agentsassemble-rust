@@ -31,6 +31,7 @@ const PRIVATE_PUBLIC_KEYS: &[&str] = &[
     "provider_endpoint",
     "provider_observation_kind",
     "provider_session_id",
+    "provider_turn_id",
     "reactivation_operation_id",
     "reported_provider_pid",
     "resolved_executable",
@@ -254,6 +255,7 @@ mod tests {
             message_kind: None,
             extra: BTreeMap::from([
                 ("visibility".to_owned(), json!("owner")),
+                ("provider_turn_id".to_owned(), json!("private-turn")),
                 ("workspace".to_owned(), json!("/private/workspace")),
             ]),
         }
@@ -273,6 +275,7 @@ mod tests {
     fn owner_gets_redacted_event_and_command_result() {
         let projected = public_event_for_principal(&owner_event(), &principal("owner"));
         assert_eq!(projected.event_type, "provider_request_opened");
+        assert!(!projected.extra.contains_key("provider_turn_id"));
         assert!(!projected.extra.contains_key("workspace"));
         let result = public_value_for_principal(
             &json!({
