@@ -58,7 +58,7 @@ describe("VotePollCard", () => {
       say,
       historyBefore: vi.fn(),
     };
-    render(
+    const { rerender } = render(
       <RoomSocketProvider socket={socket}>
         <VotePollCard event={pollEvent()} />
       </RoomSocketProvider>
@@ -81,6 +81,14 @@ describe("VotePollCard", () => {
         voteChoice: "남쪽",
       })
     );
+    expect(command).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <RoomSocketProvider socket={socket}>
+        <VotePollCard event={pollEvent()} revision="vote-1:2" />
+      </RoomSocketProvider>
+    );
+    await waitFor(() => expect(command).toHaveBeenCalledTimes(2));
   });
 
   it("shows an ended vote and does not send another ballot", async () => {
@@ -208,6 +216,7 @@ describe("VotePollCard", () => {
         voteId: "vote-1",
       })
     );
+    expect(command).toHaveBeenCalledTimes(1);
   });
 
   it("does not attempt a vote when the canonical room socket is unavailable", async () => {

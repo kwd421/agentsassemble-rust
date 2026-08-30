@@ -85,7 +85,6 @@ export default function VotePollCard({
         voteId,
         ...(option === myChoice ? {} : { voteChoice: option }),
       });
-      refresh();
     } catch (errorValue) {
       setError(errorValue instanceof Error ? errorValue.message : "투표 실패");
     } finally {
@@ -104,7 +103,6 @@ export default function VotePollCard({
         kind: "vote_close",
         voteId,
       });
-      refresh();
     } catch (errorValue) {
       setError(errorValue instanceof Error ? errorValue.message : "투표 종료 실패");
     } finally {

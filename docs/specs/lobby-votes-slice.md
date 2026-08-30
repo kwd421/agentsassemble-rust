@@ -147,11 +147,15 @@ mount, explicit user refresh, or sequenced vote events—not polling.
   Transition markers are filtered before display and message-count/backfill decisions. This accepts
   one bounded marker per already-received transition instead of a polling task or a second cache.
 - Resource and security result: no HTTP request, interval, heartbeat, retry, task, or deadline worker
-  was added. Summary reads occur only on mount, explicit refresh, or a sequenced transition. Moving
-  payload construction out of the transport reduced `roomSocketClient.ts` from 788 to 746 lines and
-  removed the broad legacy-shaped request assembly. The targeted 58 tests, full 102-file/642-test
-  frontend suite, TypeScript production build, and original-CSS verification passed. Packaged UI and
-  real-provider acceptance remain pending and are not claimed here.
+  was added. A manual review found that a successful local cast, withdrawal, or close initially read
+  the summary once after its ACK and once again after the same durable sequenced event. Each read
+  repeated the current-authority SQLite transaction, so the sequenced transition is now the single
+  post-write refresh owner; mount and explicit user refresh remain separate intentional reads. This
+  removes one direct read per local transition without cache, debounce, timer, or optimistic state.
+  Moving payload construction out of the transport reduced `roomSocketClient.ts` from 788 to 746
+  lines and removed the broad legacy-shaped request assembly. The targeted 58 tests, full
+  103-file/642-test frontend suite, TypeScript production build, and original-CSS verification passed.
+  Packaged UI and real-provider acceptance remain pending and are not claimed here.
 
 ## Manual review record
 
