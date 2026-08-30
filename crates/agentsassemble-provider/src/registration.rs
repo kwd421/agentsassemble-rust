@@ -44,6 +44,10 @@ pub(crate) struct ProviderRegistration {
     pub(crate) provider_kind: &'static str,
     pub(crate) runtime_kind: &'static str,
     pub(crate) transport: &'static str,
+    pub(crate) catalog_group: &'static str,
+    pub(crate) workspace_required: bool,
+    pub(crate) connection_kind: &'static str,
+    pub(crate) executable_required: bool,
     pub(crate) probe_executable: &'static str,
     pub(crate) login_flow: &'static str,
     discover: ProviderDiscovery,
@@ -56,6 +60,10 @@ pub(crate) static CODEX_PROVIDER: ProviderRegistration = ProviderRegistration {
     provider_kind: "codex_live_session",
     runtime_kind: "live_cli",
     transport: "stdio_jsonl",
+    catalog_group: "harness",
+    workspace_required: true,
+    connection_kind: "native_cli_bridge",
+    executable_required: true,
     probe_executable: "codex",
     login_flow: "browser_oauth",
     discover: discover_codex_registered,
@@ -68,6 +76,10 @@ pub(crate) static ANTIGRAVITY_PROVIDER: ProviderRegistration = ProviderRegistrat
     provider_kind: "antigravity_live_session",
     runtime_kind: "live_cli",
     transport: if cfg!(windows) { "conpty" } else { "pty" },
+    catalog_group: "harness",
+    workspace_required: true,
+    connection_kind: "native_cli_bridge",
+    executable_required: true,
     probe_executable: "agy",
     login_flow: "interactive_terminal",
     discover: discover_antigravity_registered,
@@ -80,6 +92,10 @@ pub(crate) static OPENCODE_PROVIDER: ProviderRegistration = ProviderRegistration
     provider_kind: "opencode_server",
     runtime_kind: "opencode",
     transport: "http",
+    catalog_group: "harness",
+    workspace_required: true,
+    connection_kind: "native_cli_bridge",
+    executable_required: true,
     probe_executable: "opencode",
     login_flow: "interactive_terminal",
     discover: discover_opencode_registered,
@@ -100,12 +116,15 @@ pub(crate) fn provider_registration_by_id(id: &str) -> Option<&'static ProviderR
         .find(|registration| registration.id == id)
 }
 
-fn provider_registration_by_profile(
+pub(crate) fn provider_registration_by_profile(
     provider_kind: &str,
+    runtime_kind: &str,
     transport: &str,
 ) -> Option<&'static ProviderRegistration> {
     PROVIDER_REGISTRATIONS.iter().copied().find(|registration| {
-        registration.provider_kind == provider_kind && registration.transport == transport
+        registration.provider_kind == provider_kind
+            && registration.runtime_kind == runtime_kind
+            && registration.transport == transport
     })
 }
 
@@ -288,9 +307,9 @@ pub(crate) fn loading_provider(registration: &ProviderRegistration) -> ProviderA
         display_name: registration.display_name.to_owned(),
         provider_kind: registration.provider_kind.to_owned(),
         runtime_kind: registration.runtime_kind.to_owned(),
-        catalog_group: "harness".to_owned(),
-        workspace_required: true,
-        connection_kind: "native_cli_bridge".to_owned(),
+        catalog_group: registration.catalog_group.to_owned(),
+        workspace_required: registration.workspace_required,
+        connection_kind: registration.connection_kind.to_owned(),
         executable: registration.probe_executable.to_owned(),
         executable_identity: String::new(),
         default_model: String::new(),
@@ -363,6 +382,7 @@ impl DriverFactory for ProductionDriverFactory {
     ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
         let Some(registration) = provider_registration_by_profile(
             &session.public.provider_kind,
+            &session.public.runtime_kind,
             &session.public.transport,
         ) else {
             return Box::pin(async {

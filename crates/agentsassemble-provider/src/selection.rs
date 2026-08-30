@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use agentsassemble_domain::{AgentSessionDraft, ProviderAvailability, ProviderCatalog};
+use agentsassemble_domain::{AgentSessionDraft, ProviderCatalog};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -10,6 +10,10 @@ use crate::filesystem::{FilesystemFailure, canonical_workspace, runtime_executab
 use crate::profile::runtime_profile_key;
 use crate::registration::provider_registration_by_id;
 use crate::selection_input::SelectionInput;
+
+#[path = "selection_controls.rs"]
+mod controls;
+use controls::{selected_value, validate_model_relation};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProviderSelection {
@@ -84,22 +88,38 @@ impl ProviderSelection {
         if !provider.startable || provider.discovery_status != "ready" {
             return Err(unsupported(&provider_id));
         }
-        if !Path::new(&provider.executable).is_absolute() {
+        let registration = provider_registration_by_id(&provider.id)
+            .filter(|registration| {
+                registration.provider_kind == provider.provider_kind
+                    && registration.runtime_kind == provider.runtime_kind
+            })
+            .ok_or_else(|| unsupported(&provider.id))?;
+        let executable_identity = if registration.executable_required {
+            if !Path::new(&provider.executable).is_absolute() {
+                return Err(ProviderSelectionError::new(
+                    "catalog_inconsistent",
+                    "Provider executable authority is not absolute.",
+                ));
+            }
+            let identity =
+                runtime_executable_identity(&provider.provider_kind, provider.executable.clone())
+                    .await
+                    .map_err(executable_validation_error)?;
+            if identity != provider.executable_identity {
+                return Err(ProviderSelectionError::new(
+                    "catalog_changed",
+                    "Provider executable identity changed; refresh discovery.",
+                ));
+            }
+            identity
+        } else if provider.executable.is_empty() && provider.executable_identity.is_empty() {
+            String::new()
+        } else {
             return Err(ProviderSelectionError::new(
                 "catalog_inconsistent",
-                "Provider executable authority is not absolute.",
+                "Provider executable authority is inconsistent.",
             ));
-        }
-        let executable_identity =
-            runtime_executable_identity(&provider.provider_kind, provider.executable.clone())
-                .await
-                .map_err(executable_validation_error)?;
-        if executable_identity != provider.executable_identity {
-            return Err(ProviderSelectionError::new(
-                "catalog_changed",
-                "Provider executable identity changed; refresh discovery.",
-            ));
-        }
+        };
         let model = selected_value(provider, "model", input.model)?;
         let reasoning_effort =
             selected_value(provider, "reasoning_effort", input.reasoning_effort)?;
@@ -143,15 +163,18 @@ impl ProviderSelection {
                 "Custom provider endpoints are not available in this runtime slice.",
             ));
         }
-        let (workspace, workspace_identity) = canonical_workspace(input.workspace)
-            .await
-            .map_err(|_| invalid_workspace())?;
-        let registration = provider_registration_by_id(&provider.id)
-            .filter(|registration| {
-                registration.provider_kind == provider.provider_kind
-                    && registration.runtime_kind == provider.runtime_kind
-            })
-            .ok_or_else(|| unsupported(&provider.id))?;
+        let workspace_required = registration.workspace_required
+            || permission_mode == "workspace_write"
+            || execution_harness != "builtin";
+        let (workspace, workspace_identity) = if workspace_required {
+            canonical_workspace(input.workspace)
+                .await
+                .map_err(|_| invalid_workspace())?
+        } else if input.workspace.is_empty() {
+            (String::new(), String::new())
+        } else {
+            return Err(invalid_workspace());
+        };
         let transport = registration.transport.to_owned();
         let operation = format!("{room_id}\0{principal_id}\0{request_id}\0agent.create");
         let operation_hash = format!("{:x}", Sha256::digest(operation.as_bytes()));
@@ -240,113 +263,6 @@ impl From<ProviderSelection> for AgentSessionDraft {
             transport: selection.transport,
         }
     }
-}
-
-fn selected_value(
-    provider: &ProviderAvailability,
-    key: &str,
-    requested: Option<String>,
-) -> Result<String, ProviderSelectionError> {
-    let Some(control) = provider.controls.iter().find(|control| control.key == key) else {
-        return if requested.as_deref().is_none_or(str::is_empty) {
-            Ok(String::new())
-        } else {
-            Err(ProviderSelectionError::new(
-                "unsupported_control",
-                format!("Provider {} does not support {key}.", provider.id),
-            ))
-        };
-    };
-    let selected = requested.unwrap_or_else(|| control.default_value.clone());
-    control
-        .options
-        .iter()
-        .any(|option| option.value == selected)
-        .then_some(selected)
-        .ok_or_else(|| {
-            ProviderSelectionError::new(
-                "unsupported_control",
-                format!("Provider {} rejected the selected {key}.", provider.id),
-            )
-        })
-}
-
-fn validate_model_relation(
-    provider: &ProviderAvailability,
-    model: &str,
-    relation: &str,
-    selected: &str,
-) -> Result<(), ProviderSelectionError> {
-    if selected == "default" {
-        return Ok(());
-    }
-
-    if selected.is_empty() {
-        let advertises_nonempty_values = provider
-            .controls
-            .iter()
-            .find(|control| control.key == "model")
-            .and_then(|control| control.options.iter().find(|option| option.value == model))
-            .and_then(|option| option.metadata.get(relation))
-            .and_then(Value::as_array)
-            .is_some_and(|allowed| {
-                allowed
-                    .iter()
-                    .any(|value| value.as_str().is_some_and(|value| !value.is_empty()))
-            });
-        return if advertises_nonempty_values {
-            Err(ProviderSelectionError::new(
-                "unsupported_control",
-                format!(
-                    "Provider {} model {model} does not support an empty {relation} value.",
-                    provider.id
-                ),
-            ))
-        } else {
-            Ok(())
-        };
-    }
-
-    let model_option = provider
-        .controls
-        .iter()
-        .find(|control| control.key == "model")
-        .and_then(|control| control.options.iter().find(|option| option.value == model));
-    let Some(model_option) = model_option else {
-        return Err(ProviderSelectionError::new(
-            "catalog_inconsistent",
-            format!("Provider {} has no selected model authority.", provider.id),
-        ));
-    };
-    let relation_scope = model_option
-        .metadata
-        .get("relation_scope")
-        .and_then(Value::as_str);
-    let Some(Value::Array(allowed)) = model_option.metadata.get(relation) else {
-        if relation_scope == Some("per_model") {
-            return Err(ProviderSelectionError::new(
-                "catalog_inconsistent",
-                format!(
-                    "Provider {} has incomplete per-model controls.",
-                    provider.id
-                ),
-            ));
-        }
-        return Ok(());
-    };
-    if selected.is_empty() && allowed.is_empty() {
-        return Ok(());
-    }
-    if allowed.iter().any(|value| value.as_str() == Some(selected)) {
-        return Ok(());
-    }
-    Err(ProviderSelectionError::new(
-        "unsupported_control",
-        format!(
-            "Provider {} model {model} does not support {selected}.",
-            provider.id
-        ),
-    ))
 }
 
 fn unsupported(provider_id: &str) -> ProviderSelectionError {

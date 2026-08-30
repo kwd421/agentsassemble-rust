@@ -3,6 +3,7 @@ use agentsassemble_domain::{CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession
 use crate::{
     filesystem::{canonical_workspace, runtime_executable_identity},
     profile::runtime_profile_key,
+    registration::provider_registration_by_profile,
     runtime::DriverError,
 };
 
@@ -37,33 +38,58 @@ pub(crate) async fn revalidate_runtime_authority(
             "The provider runtime profile no longer matches its durable identity.",
         ));
     }
-    let workspace = canonical_workspace(session.workspace.clone())
-        .await
-        .map_err(|_| {
-            DriverError::new(
-                "workspace_authority_changed",
-                "The provider workspace authority could not be revalidated.",
-            )
-        })?;
-    if workspace.0 != session.workspace || workspace.1 != session.workspace_identity {
-        return Err(DriverError::new(
-            "workspace_authority_changed",
-            "The provider workspace authority changed after selection.",
-        ));
-    }
-    let executable =
-        runtime_executable_identity(&session.public.provider_kind, session.executable.clone())
+    let registration = provider_registration_by_profile(
+        &session.public.provider_kind,
+        &session.public.runtime_kind,
+        &session.public.transport,
+    )
+    .ok_or_else(|| {
+        DriverError::new(
+            "invalid_runtime_profile",
+            "The stored provider runtime profile is unsupported.",
+        )
+    })?;
+    if registration.workspace_required || !session.workspace.is_empty() {
+        let workspace = canonical_workspace(session.workspace.clone())
             .await
             .map_err(|_| {
                 DriverError::new(
-                    "executable_authority_changed",
-                    "The provider executable authority could not be revalidated.",
+                    "workspace_authority_changed",
+                    "The provider workspace authority could not be revalidated.",
                 )
             })?;
-    if executable != session.executable_identity {
+        if workspace.0 != session.workspace || workspace.1 != session.workspace_identity {
+            return Err(DriverError::new(
+                "workspace_authority_changed",
+                "The provider workspace authority changed after selection.",
+            ));
+        }
+    } else if !session.workspace_identity.is_empty() {
+        return Err(DriverError::new(
+            "workspace_authority_changed",
+            "The provider workspace authority is inconsistent.",
+        ));
+    }
+    if registration.executable_required {
+        let executable =
+            runtime_executable_identity(&session.public.provider_kind, session.executable.clone())
+                .await
+                .map_err(|_| {
+                    DriverError::new(
+                        "executable_authority_changed",
+                        "The provider executable authority could not be revalidated.",
+                    )
+                })?;
+        if executable != session.executable_identity {
+            return Err(DriverError::new(
+                "executable_authority_changed",
+                "The provider executable authority changed after selection.",
+            ));
+        }
+    } else if !session.executable.is_empty() || !session.executable_identity.is_empty() {
         return Err(DriverError::new(
             "executable_authority_changed",
-            "The provider executable authority changed after selection.",
+            "The provider executable authority is inconsistent.",
         ));
     }
     Ok(())

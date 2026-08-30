@@ -205,7 +205,7 @@ fn required_workspace(values: &Map<String, Value>) -> Result<String, ProviderSel
         .get("workspace")
         .and_then(Value::as_str)
         .ok_or_else(invalid_workspace)?;
-    if workspace.is_empty() || workspace.len() > 4096 || workspace.chars().any(char::is_control) {
+    if workspace.len() > 4096 || workspace.chars().any(char::is_control) {
         return Err(invalid_workspace());
     }
     Ok(workspace.to_owned())
