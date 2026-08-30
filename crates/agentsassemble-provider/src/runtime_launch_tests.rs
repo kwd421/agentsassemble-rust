@@ -308,7 +308,7 @@ async fn post_spawn_pre_anchor_cancellation_requires_the_guardian_receipt() {
     let pending_adapter = adapter.clone();
     let pending_session = session.clone();
     let task = tokio::spawn(async move { pending_adapter.start(&pending_session).await });
-    wait_for_path(&guardian_spawned).await;
+    super::fixture::wait_for_path(&guardian_spawned).await;
     task.abort();
     let _ = task.await;
     let shutdown = adapter.shutdown_with_observations().await;
@@ -404,14 +404,4 @@ async fn post_ready_failure_is_safe_only_after_exact_guardian_receipt() {
     );
     let _ = std::fs::remove_file(pid_path);
     lease.cleanup_pre_effect();
-}
-
-async fn wait_for_path(path: &std::path::Path) {
-    for _ in 0..500 {
-        if path.exists() {
-            return;
-        }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
-    panic!("test helper did not publish its readiness marker");
 }
