@@ -374,7 +374,9 @@ logical provider binding across turns. Instead of restoring the original private
 store, every API-runtime assignment rebuilds an at-most-50-message, at-most-20,000-character visible
 conversation from canonical room events after that Agent Session's bootstrap cutoff. This includes
 the Agent Session's own durable room publications, so second and post-restart turns retain visible
-conversation context without a second disk authority or provider-private history file.
+conversation context without a second disk authority or provider-private history file. The cutoff is
+fixed when the Agent Session is created; completing a turn cannot move it and erase earlier visible
+room context.
 
 The concrete threats found during manual review were stale runtime credentials, quarantining a
 runtime after a definitive pre-side-effect rejection, accepting a malformed completion envelope,
@@ -390,6 +392,14 @@ network owner adds no retry, fallback endpoint, application-owned connection cac
 or generic remote provider framework. Resolution remains lazy: each new connection attempt performs
 one bounded lookup and validates/pins that attempt's complete address set rather than retaining a
 startup-time DNS vector.
+
+RoomPortal now requires the current turn's discussion receipt before either terminal publication or
+decline can be staged, using the same single receipt owner already required by random room tools. A
+rejected pre-read action leaves no staged outcome for a later read to revive. DeepSeek response
+content remains nullable at ingress, but thinking-plus-tools history normalizes an absent assistant
+content field to an empty string when replayed, preserving `reasoning_content` and the exact executed
+tool calls while satisfying the provider's non-null replay contract. Neither correction adds state,
+retry, fallback, or another policy owner.
 
 Focused selection, credential, protocol, response, random/terminal-effect, and public-address tests
 passed; the persistence Agent Session suite, complete workspace check, warning-denied workspace
@@ -477,6 +487,19 @@ remain explicitly unverified rather than being replaced with a mock, paid substi
 - The critical web session and Daybreaker Blue High both approved the pushed atomic
   library, local-operator HTTP, and copied-picker range `f5fc9f9..087ba1a` with
   C0/H0/M0/L0. No automated security scan was used.
+- Daybreaker Blue High found one Medium in the stateless API context correction: turn completion
+  advanced the creation cutoff, so a second or restarted turn omitted the first user input. Commit
+  `a7f3293` keeps the cutoff immutable and proves the first input, non-overlapping agent reply, and
+  second question survive an actual SQLite close and reopen. Daybreaker then returned
+  `APPROVE — C0 H0 M0 L0` for cumulative range `85994a5..a7f3293`.
+- The critical web session returned three Medium findings for `85994a5..a7f3293`. Two were accepted:
+  terminal RoomPortal actions could be staged before the required discussion read, and DeepSeek
+  thinking-tool history could replay nullable assistant content. Commits `2c9f987` and `4cc5c29`
+  close those contracts. The Flash-only catalog finding was not accepted because original fixed
+  commit `d504647` exposes both DeepSeek V4 Flash and Pro; the user's Flash restriction governs
+  authorized real verification calls, not reachable product model support. The critical web session
+  and Daybreaker Blue High both returned `APPROVE — C0 H0 M0 L0` for the corrections and cumulative
+  `85994a5..4cc5c29`. No automated security scan was used.
 
 ## Non-goals
 
