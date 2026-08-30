@@ -1,6 +1,4 @@
-use agentsassemble_domain::{
-    AuthenticatedPrincipal, CommandRejection, RoomHistoryPage, RoomHistoryRequest,
-};
+use agentsassemble_domain::{AuthenticatedPrincipal, RoomHistoryPage, RoomHistoryRequest};
 use agentsassemble_persistence::{PersistenceError, SqliteStore};
 use agentsassemble_protocol::{CommandAck, CommandResolution, RoomAction, ServerFrame};
 use serde_json::Value;
@@ -19,9 +17,8 @@ pub(crate) async fn read_history_frame(
     payload: &Value,
 ) -> Result<ServerFrame, CommandFailure> {
     validate_command_envelope(request_id).map_err(CommandFailure::rejected)?;
-    let request = RoomHistoryRequest::from_payload(payload)
-        .map_err(rejection_error)
-        .map_err(CommandFailure::rejected)?;
+    let request =
+        RoomHistoryRequest::from_payload(payload).map_err(CommandFailure::domain_rejected)?;
     let requested_events = usize::try_from(request.limit).map_err(|_| {
         CommandFailure::rejected(PersistenceError::CommandRejected {
             code: "bad_request",
@@ -41,13 +38,6 @@ pub(crate) async fn read_history_frame(
         .await
         .map_err(CommandFailure::transactional)?;
     fit_history_ack(request_id, &page)
-}
-
-fn rejection_error(rejection: CommandRejection) -> PersistenceError {
-    PersistenceError::CommandRejected {
-        code: rejection.code,
-        message: rejection.message,
-    }
 }
 
 fn fit_history_ack(

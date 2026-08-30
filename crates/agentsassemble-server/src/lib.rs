@@ -107,6 +107,7 @@ mod room_runtime;
 mod room_shutdown;
 mod room_socket;
 mod room_socket_session;
+mod room_vote_socket;
 mod runtime_reconciliation;
 mod runtime_reconciliation_cleanup;
 mod security_headers;

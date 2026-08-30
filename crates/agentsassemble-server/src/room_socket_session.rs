@@ -18,6 +18,7 @@ use crate::{
         EstablishedSubscription, establish, persistence_error, persistence_error_is_internal,
         refresh_human_session,
     },
+    room_vote_socket::read_vote_summary_frame,
     ticket::ConsumedSocketTicket,
 };
 
@@ -109,6 +110,27 @@ pub(crate) async fn run(
                                 Err(failure) => {
                                     if persistence_error_is_internal(&failure.error) {
                                         tracing::error!(error = ?failure.error, room_id = %principal.room_id, action = %action.as_str(), "room history read failed");
+                                    }
+                                    let (code, message) = persistence_error(&failure.error);
+                                    if send_authorized_nack(&state, &mut principal, &mut human_session, &mut channel, &mut sender, (&request_id, action.as_str(), failure.resolution, ProtocolError::new(code, message))).await.is_none() { return; }
+                                }
+                            }
+                            continue;
+                        }
+                        if action == RoomAction::RoomVoteSummary {
+                            match read_vote_summary_frame(
+                                &state.store,
+                                &principal,
+                                human_session.as_ref(),
+                                &request_id,
+                                &payload,
+                            ).await {
+                                Ok(frame) => {
+                                    if send_authorized_frame(&state, &mut principal, &mut human_session, &mut channel, &mut sender, &frame).await.is_none() { return; }
+                                }
+                                Err(failure) => {
+                                    if persistence_error_is_internal(&failure.error) {
+                                        tracing::error!(error = ?failure.error, room_id = %principal.room_id, action = %action.as_str(), "room vote summary read failed");
                                     }
                                     let (code, message) = persistence_error(&failure.error);
                                     if send_authorized_nack(&state, &mut principal, &mut human_session, &mut channel, &mut sender, (&request_id, action.as_str(), failure.resolution, ProtocolError::new(code, message))).await.is_none() { return; }

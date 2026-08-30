@@ -113,14 +113,16 @@ pub(crate) async fn execute_command(
             Err(error) => CommandExecution::transactional_failure(error),
         },
         RoomAction::ParticipantLeave => execute_participant_leave(store, command).await,
-        RoomAction::RoomHistory => misrouted_history_read(),
+        RoomAction::RoomHistory | RoomAction::RoomVoteSummary => {
+            misrouted_direct_read(command.action)
+        }
     }
 }
 
-fn misrouted_history_read() -> CommandExecution {
+fn misrouted_direct_read(action: RoomAction) -> CommandExecution {
     CommandExecution::transactional_failure(PersistenceError::CommandRejected {
         code: "read_action_misrouted",
-        message: "room.history cannot enter the room mutation owner.".to_owned(),
+        message: format!("{} cannot enter the room mutation owner.", action.as_str()),
     })
 }
 

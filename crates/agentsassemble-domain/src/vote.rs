@@ -101,6 +101,29 @@ impl VoteCommand {
     }
 }
 
+impl VoteReference {
+    /// Parses the exact read-only `room.vote.summary` payload.
+    ///
+    /// # Errors
+    ///
+    /// Rejects non-object payloads, unknown fields, missing identifiers, and aliases that are not
+    /// already canonical vote IDs.
+    pub fn from_summary_payload(payload: &Value) -> Result<Self, CommandRejection> {
+        let object = payload
+            .as_object()
+            .ok_or_else(|| CommandRejection::new("bad_request", "payload must be an object."))?;
+        if object.len() != 1 || !object.contains_key("vote_id") {
+            return Err(CommandRejection::new(
+                "bad_request",
+                "room.vote.summary accepts exactly vote_id.",
+            ));
+        }
+        Ok(Self {
+            vote_id: parse_vote_id(object.get("vote_id"))?,
+        })
+    }
+}
+
 /// Validates one canonical vote identifier without accepting normalized aliases.
 ///
 /// # Errors
@@ -327,7 +350,9 @@ mod tests {
         ParticipantRole, ParticipantStatus,
     };
 
-    use super::{VoteCommand, prepare_vote_event, resolve_vote_choice, validate_vote_id};
+    use super::{
+        VoteCommand, VoteReference, prepare_vote_event, resolve_vote_choice, validate_vote_id,
+    };
 
     #[test]
     fn create_normalizes_one_exact_bounded_definition() {
@@ -390,6 +415,18 @@ mod tests {
                 .unwrap_or_else(|error| panic!("vote close: {error}"))
                 .message_kind(),
             "vote_close"
+        );
+        assert_eq!(
+            VoteReference::from_summary_payload(&json!({"vote_id": "poll-1"}))
+                .map(|reference| reference.vote_id),
+            Ok("poll-1".to_owned())
+        );
+        assert!(
+            VoteReference::from_summary_payload(&json!({
+                "vote_id": "poll-1",
+                "room_id": "other"
+            }))
+            .is_err()
         );
     }
 

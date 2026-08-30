@@ -20,7 +20,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::subscription_proof::AuthenticatedTestSocket;
 
-const HOST_TOKEN: &str = "human-invite-boundary-host-token-0001";
+pub const HOST_TOKEN: &str = "human-invite-boundary-host-token-0001";
 
 pub struct RunningServer {
     pub base_url: String,

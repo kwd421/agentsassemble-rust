@@ -26,7 +26,7 @@ pub use local_control::{
 };
 
 pub const PROTOCOL_VERSION: u32 = 1;
-pub const PRODUCT_SURFACE_REVISION: u32 = 8;
+pub const PRODUCT_SURFACE_REVISION: u32 = 9;
 pub const HUMAN_INVITE_SIGNED_TOKEN_PREFIX: &str = "aai1";
 pub const HUMAN_INVITE_JOIN_CODE_PREFIX: &str = "aaj1_";
 pub const HUMAN_INVITE_SIGNED_TOKEN_MAX_BYTES: usize = 4 * 1024;
@@ -102,6 +102,8 @@ pub enum RoomAction {
     RoomSettingsUpdate,
     #[serde(rename = "room.history")]
     RoomHistory,
+    #[serde(rename = "room.vote.summary")]
+    RoomVoteSummary,
     #[serde(rename = "room.random.roll")]
     RoomRandomRoll,
     #[serde(rename = "room.random.choose")]
@@ -119,7 +121,7 @@ pub enum RoomAction {
 }
 
 impl RoomAction {
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 14] = [
         Self::AgentConfigure,
         Self::AgentCreate,
         Self::AgentResume,
@@ -133,6 +135,7 @@ impl RoomAction {
         Self::RoomRandomChoose,
         Self::RoomRandomRoll,
         Self::RoomSettingsUpdate,
+        Self::RoomVoteSummary,
     ];
 
     #[must_use]
@@ -144,6 +147,7 @@ impl RoomAction {
             Self::ParticipantRoleUpdate => "participant.role.update",
             Self::RoomSettingsUpdate => "room.settings.update",
             Self::RoomHistory => "room.history",
+            Self::RoomVoteSummary => "room.vote.summary",
             Self::RoomRandomRoll => "room.random.roll",
             Self::RoomRandomChoose => "room.random.choose",
             Self::AgentCreate => "agent.create",
@@ -558,6 +562,11 @@ mod tests {
             surface
                 .websocket_actions
                 .contains(&super::RoomAction::RoomHistory)
+        );
+        assert!(
+            surface
+                .websocket_actions
+                .contains(&super::RoomAction::RoomVoteSummary)
         );
         assert_eq!(surface.digest.len(), 64);
         assert!(matches!(

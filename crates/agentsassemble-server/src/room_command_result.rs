@@ -1,5 +1,6 @@
 use agentsassemble_domain::{
-    AuthenticatedPrincipal, public_event_for_principal, public_value_for_principal,
+    AuthenticatedPrincipal, CommandRejection, public_event_for_principal,
+    public_value_for_principal,
 };
 use agentsassemble_persistence::{CommandOutcome, PersistenceError};
 use agentsassemble_protocol::CommandResolution;
@@ -11,6 +12,13 @@ pub(crate) struct CommandFailure {
 }
 
 impl CommandFailure {
+    pub(crate) fn domain_rejected(error: CommandRejection) -> Self {
+        Self::rejected(PersistenceError::CommandRejected {
+            code: error.code,
+            message: error.message,
+        })
+    }
+
     pub(crate) fn rejected(error: PersistenceError) -> Self {
         Self {
             error,
