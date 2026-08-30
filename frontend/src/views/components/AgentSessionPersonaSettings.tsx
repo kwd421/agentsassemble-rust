@@ -47,7 +47,7 @@ export default function AgentSessionPersonaSettings({
     <div className="dc-agent-persona-settings">
       <AgentPersonaPicker
         value={personaCardId}
-        applied={session.persona_card}
+        applied={session.persona_card || undefined}
         disabled={busy || !canConfigure}
         onChange={setPersonaCardId}
       />

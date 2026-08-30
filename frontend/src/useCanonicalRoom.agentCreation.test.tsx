@@ -8,6 +8,7 @@ import type {
   RoomSocketHandlers,
   RoomSocketSnapshot,
 } from "./roomSocketClient";
+import { agentCreationProjectionFromEvent } from "./lib/participantEventContract";
 import { useCanonicalRoom } from "./useCanonicalRoom";
 
 const CREATED_AT = "2026-08-25T00:00:00Z";
@@ -69,6 +70,8 @@ function createdAgentEvent(
       permission_mode: "default",
       max_output_tokens: 0,
       catalog_revision: "catalog-1",
+      persona_card_id: "",
+      persona_card: null,
       transport: "jsonl",
       last_seen_event_id: "",
       last_seen_seq: 0,
@@ -237,6 +240,49 @@ describe("useCanonicalRoom agent creation projection", () => {
         enabled: true,
       }),
     ]);
+  });
+
+  it("accepts the exact persona summary projected by agent creation", async () => {
+    const test = harness();
+    const { result } = renderHook(() =>
+      useCanonicalRoom({
+        serverSurface: TEST_SERVER_PRODUCT_SURFACE,
+        roomId: "general",
+        auth: { kind: "host", meetingId: "general" },
+        openSocket: test.openSocket,
+      })
+    );
+    await waitFor(() => expect(test.openSocket).toHaveBeenCalledOnce());
+    act(() => test.handlers()?.onRoomSnapshot?.(snapshot(), "http://127.0.0.1:43123"));
+    const created = createdAgentEvent();
+    created.agent_session!.persona_card_id = "Archive-Guide";
+    created.agent_session!.persona_card = {
+      id: "Archive-Guide",
+      display_name: "Archive Guide",
+      asset_kind: "card",
+      source_kind: "ccv3",
+      lorebook_count: 1,
+      asset_count: 1,
+      ignored_feature_count: 2,
+      tag_count: 0,
+      thumbnail_url: "/api/personas/Archive-Guide/thumbnail",
+    };
+
+    act(() => test.handlers()?.onRoomEvents?.([created]));
+
+    expect(result.current.agentSessions[0]).toMatchObject({
+      persona_card_id: "Archive-Guide",
+      persona_card: { display_name: "Archive Guide" },
+    });
+  });
+
+  it("rejects a persona summary that does not match its durable selection", () => {
+    const created = createdAgentEvent();
+    created.agent_session!.persona_card_id = "Archive-Guide";
+
+    expect(() => agentCreationProjectionFromEvent(created)).toThrow(
+      "agent_session_created 이벤트의 생성 투영이 올바르지 않습니다."
+    );
   });
 
   it("uses resume snapshot arrays as the sole current roster and session authority", async () => {

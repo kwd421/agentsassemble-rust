@@ -30,6 +30,8 @@ const SESSION: RoomAgentSession = {
   provider_kind: "codex",
   runtime_kind: "codex_app_server",
   connection_kind: "agent_session",
+  persona_card_id: "",
+  persona_card: null,
 };
 
 describe("MobileRoomInfoPanel", () => {

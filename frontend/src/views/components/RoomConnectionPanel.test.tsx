@@ -27,6 +27,8 @@ function agentSession(status: string): RoomAgentSession {
     provider_kind: "codex_live_session",
     runtime_kind: "live_cli",
     connection_kind: "native_cli_bridge",
+    persona_card_id: "",
+    persona_card: null,
   };
 }
 

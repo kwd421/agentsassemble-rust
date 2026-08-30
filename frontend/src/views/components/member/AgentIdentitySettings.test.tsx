@@ -75,6 +75,8 @@ const SESSION: RoomAgentSession = {
   runtime_kind: "codex_app_server",
   connection_kind: "agent_session",
   model: "gpt-5.6-luna",
+  persona_card_id: "",
+  persona_card: null,
 };
 
 describe("AgentIdentitySettings", () => {

@@ -63,8 +63,8 @@ export interface RoomAgentSession {
   provider_call_count?: number;
   context_contract_bytes?: number;
   share_activity?: boolean;
-  persona_card_id?: string;
-  persona_card?: PersonaAssetSummary;
+  persona_card_id: string;
+  persona_card: PersonaAssetSummary | null;
   message_source?: string;
   message_source_strict?: boolean;
   provider_visible_chars?: number;

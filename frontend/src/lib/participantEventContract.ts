@@ -37,6 +37,8 @@ const AGENT_SESSION_KEYS = [
   "permission_mode",
   "max_output_tokens",
   "catalog_revision",
+  "persona_card_id",
+  "persona_card",
   "transport",
   "last_seen_event_id",
   "last_seen_seq",
@@ -70,6 +72,50 @@ const AGENT_SESSION_INTEGER_KEYS = [
   "bootstrap_cutoff_seq",
   "turn_count",
 ] as const;
+
+const PERSONA_SUMMARY_KEYS = [
+  "id",
+  "display_name",
+  "asset_kind",
+  "source_kind",
+  "lorebook_count",
+  "asset_count",
+  "ignored_feature_count",
+  "tag_count",
+  "thumbnail_url",
+] as const;
+
+function personaSummaryMatches(value: unknown, personaCardId: string): boolean {
+  if (value === null) return personaCardId === "";
+  if (!personaCardId) return false;
+  let persona: Record<string, unknown>;
+  try {
+    persona = exactEventRecord(
+      value,
+      PERSONA_SUMMARY_KEYS,
+      "Agent Session 페르소나 투영이 없습니다.",
+      "Agent Session 페르소나 투영이 올바르지 않습니다."
+    );
+  } catch {
+    return false;
+  }
+  const integerKeys = [
+    "lorebook_count",
+    "asset_count",
+    "ignored_feature_count",
+    "tag_count",
+  ] as const;
+  return (
+    persona.id === personaCardId &&
+    ["id", "display_name", "source_kind", "thumbnail_url"].every(
+      (key) => typeof persona[key] === "string"
+    ) &&
+    (persona.asset_kind === "card" || persona.asset_kind === "module") &&
+    integerKeys.every(
+      (key) => Number.isSafeInteger(persona[key]) && Number(persona[key]) >= 0
+    )
+  );
+}
 
 function exactEventRecord(
   value: unknown,
@@ -150,6 +196,7 @@ export function agentCreationProjectionFromEvent(event: RoomEvent): {
   );
   const stringKeys = AGENT_SESSION_KEYS.filter(
     (key) =>
+      key !== "persona_card" &&
       !AGENT_SESSION_BOOLEAN_KEYS.includes(key as (typeof AGENT_SESSION_BOOLEAN_KEYS)[number]) &&
       !AGENT_SESSION_INTEGER_KEYS.includes(key as (typeof AGENT_SESSION_INTEGER_KEYS)[number])
   );
@@ -166,6 +213,7 @@ export function agentCreationProjectionFromEvent(event: RoomEvent): {
     session.participant_id !== event.participant_id ||
     session.participant_id !== participant.participant_id ||
     session.provider_kind !== eventRecord.provider_kind ||
+    !personaSummaryMatches(session.persona_card, session.persona_card_id as string) ||
     session.display_name !== participant.display_name ||
     session.display_name !== event.display_name ||
     event.participant_type !== "agent" ||

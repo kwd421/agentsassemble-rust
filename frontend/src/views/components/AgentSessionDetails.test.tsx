@@ -47,6 +47,8 @@ describe("AgentSessionDetails diagnostics", () => {
       provider_kind: "grok_acp",
       runtime_kind: "acp",
       connection_kind: "agent_session",
+      persona_card_id: "",
+      persona_card: null,
       permission_request_count: 2,
       permission_denied_count: 2,
       denied_permission_names: ["shell.execute", "files.write"],

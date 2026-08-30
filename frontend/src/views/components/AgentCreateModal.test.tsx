@@ -146,6 +146,8 @@ describe("AgentCreateModal", () => {
             model: "gpt-5.6-luna",
             permission_mode: "meeting_read_only",
             runtime_profile_key: "profile-test",
+            persona_card_id: "",
+            persona_card: null,
           },
         ]}
         onClose={() => undefined}
