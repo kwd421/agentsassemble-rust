@@ -611,7 +611,7 @@ fn tool_result_text(result: &CallToolResult) -> Result<String, DriverError> {
 fn assistant_value(message: &AssistantMessage) -> Value {
     json!({
         "role": "assistant",
-        "content": message.content,
+        "content": message.content.as_deref().unwrap_or_default(),
         "reasoning_content": message.reasoning_content,
         "tool_calls": message.tool_calls,
     })

@@ -43,6 +43,7 @@ fn thinking_tool_transaction_preserves_exact_authority() {
     assert!(validate_tool_calls(&message.tool_calls).is_ok());
     let replay = assistant_value(message);
     assert_eq!(replay["role"], "assistant");
+    assert_eq!(replay["content"], "");
     assert_eq!(replay["reasoning_content"], "private reasoning");
     assert!(allowed_tool("read_discussion", false));
     assert!(!allowed_tool("read_attachment", true));
