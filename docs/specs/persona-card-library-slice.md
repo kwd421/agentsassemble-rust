@@ -266,8 +266,8 @@ prefers the `AgentsAssemble`/`deepseek` platform-keyring item, reports only
 `keyring | environment | missing`, permits `DEEPSEEK_API_KEY` only when no secure item exists, and
 never falls back to the environment after an installed secure store fails. Set validates a trimmed
 8--8,192-character secret, and delete removes only the secure item so an environment credential may
-become visible again. The Rust boundary exposes no secret read or serialization API yet; copied UI,
-runtime injection, and remote-host authority remain explicitly incomplete.
+become visible again. The Rust boundary exposes no secret read or serialization API yet; runtime
+injection and remote-host authority remain explicitly incomplete.
 
 The implementation uses maintained `keyring` 4.1.6 with its v1 platform stores instead of owning
 Keychain, Credential Manager, Secret Service, encryption, or persistence code. The macOS status
@@ -341,7 +341,22 @@ escape. A real TCP regression completed in 0.04 seconds and proved purpose separ
 authorization-before-body, one-use consumption, secret-free errors, private CORS/cache headers, and
 registered DELETE preflight. Focused provider tests covered the secure-store owner through its fake
 backend. No real Keychain item was written or deleted because that would mutate user-owned
-credential data; copied-UI and authorized real-provider verification remain pending.
+credential data; packaged copied-UI and authorized real-provider verification remain pending.
+
+The copied DeepSeek credential controls now use a fresh native server-operator exchange for each
+status, set, and delete request. One frontend module owns the single implemented path and accepts
+only the exact `configured`/`source` public projection; an extra response field, including a secret,
+fails before entering UI state. The former three duplicated provider-path maps and credential use of
+the copied host-token transport were removed. Providers without a Rust credential owner fail before
+ticket issuance or network dispatch rather than reaching a legacy endpoint or appearing successful.
+
+One shared local-operator fetch mechanism now carries GET, empty POST, JSON POST, and DELETE while
+preserving the existing desktop GET-init and post-ticket currentness hook contracts. This removes a
+fourth copy of native-vs-browser dispatch without adding provider state or a generic credential
+framework. The complete frontend suite passed 603 tests, the production build and original CSS
+provenance check passed, and the source architecture/growth gates passed. No Computer Use session or
+real credential mutation was needed for this source boundary; the packaged control remains pending
+until the DeepSeek provider itself is reachable.
 
 ## Manual-review findings
 
