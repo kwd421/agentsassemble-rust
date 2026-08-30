@@ -1,16 +1,20 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { searchRoomMessages, type RoomSearchResult } from "../api";
-
+import {
+  fetchRoomMessageContext,
+  searchRoomMessages,
+  type MessageSearchAuthority,
+  type RoomSearchResult,
+} from "../api";
 
 export function useRoomMessageSearch({
   roomId,
   channelId,
-  sessionToken,
+  authority,
 }: {
   roomId: string;
   channelId: string;
-  sessionToken: string;
+  authority?: MessageSearchAuthority;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<RoomSearchResult[]>([]);
@@ -19,13 +23,29 @@ export function useRoomMessageSearch({
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const requestVersionRef = useRef(0);
+  const authorityKind = authority?.kind || "unavailable";
+  const authorityToken = authority?.kind === "remote" ? authority.sessionToken : "";
 
   const updateQuery = useCallback((value: string) => {
+    requestVersionRef.current += 1;
     setQuery(value);
     setResults([]);
     setNextCursor("");
     setError("");
   }, []);
+
+  useLayoutEffect(() => {
+    requestVersionRef.current += 1;
+    setQuery("");
+    setResults([]);
+    setNextCursor("");
+    setLoading(false);
+    setLoadingMore(false);
+    setError("");
+    return () => {
+      requestVersionRef.current += 1;
+    };
+  }, [authorityKind, authorityToken, channelId, roomId]);
 
   useEffect(() => {
     const cleanQuery = query.trim();
@@ -34,13 +54,28 @@ export function useRoomMessageSearch({
       setLoading(false);
       return undefined;
     }
+    if (!authority) {
+      setLoading(false);
+      setError("이 환경에서는 로비 메시지 검색을 사용할 수 없습니다.");
+      return undefined;
+    }
     setLoading(true);
     const timer = window.setTimeout(() => {
-      void searchRoomMessages({ roomId, channelId, query: cleanQuery, sessionToken })
+      void searchRoomMessages({
+        roomId,
+        channelId,
+        query: cleanQuery,
+        authority,
+        beforeDispatch: () => {
+          if (requestVersionRef.current !== version) {
+            throw new Error("메시지 검색 요청 권위가 변경되었습니다.");
+          }
+        },
+      })
         .then((page) => {
           if (requestVersionRef.current !== version) return;
-          setResults(page.results || []);
-          setNextCursor(page.next_cursor || "");
+          setResults(page.results);
+          setNextCursor(page.next_cursor);
           setError("");
         })
         .catch((reason) => {
@@ -54,15 +89,11 @@ export function useRoomMessageSearch({
         });
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [channelId, query, roomId, sessionToken]);
-
-  useEffect(() => {
-    updateQuery("");
-  }, [channelId, roomId, updateQuery]);
+  }, [authorityKind, authorityToken, channelId, query, roomId]);
 
   const loadMore = useCallback(async () => {
     const cleanQuery = query.trim();
-    if (!cleanQuery || !nextCursor || loadingMore) return;
+    if (!cleanQuery || !nextCursor || loadingMore || !authority) return;
     const version = requestVersionRef.current;
     setLoadingMore(true);
     try {
@@ -71,11 +102,16 @@ export function useRoomMessageSearch({
         channelId,
         query: cleanQuery,
         cursor: nextCursor,
-        sessionToken,
+        authority,
+        beforeDispatch: () => {
+          if (requestVersionRef.current !== version) {
+            throw new Error("메시지 검색 요청 권위가 변경되었습니다.");
+          }
+        },
       });
       if (requestVersionRef.current !== version) return;
-      setResults((current) => [...current, ...(page.results || [])]);
-      setNextCursor(page.next_cursor || "");
+      setResults((current) => [...current, ...page.results]);
+      setNextCursor(page.next_cursor);
       setError("");
     } catch (reason) {
       if (requestVersionRef.current !== version) return;
@@ -83,7 +119,25 @@ export function useRoomMessageSearch({
     } finally {
       if (requestVersionRef.current === version) setLoadingMore(false);
     }
-  }, [channelId, loadingMore, nextCursor, query, roomId, sessionToken]);
+  }, [authority, channelId, loadingMore, nextCursor, query, roomId]);
+
+  const readContext = useCallback(async (eventId: string) => {
+    if (!authority) {
+      throw new Error("이 환경에서는 로비 메시지 검색을 사용할 수 없습니다.");
+    }
+    const version = requestVersionRef.current;
+    return fetchRoomMessageContext({
+      roomId,
+      channelId,
+      eventId,
+      authority,
+      beforeDispatch: () => {
+        if (requestVersionRef.current !== version) {
+          throw new Error("메시지 검색 요청 권위가 변경되었습니다.");
+        }
+      },
+    });
+  }, [authority, channelId, roomId]);
 
   return {
     error,
@@ -92,6 +146,7 @@ export function useRoomMessageSearch({
     loadingMore,
     loadMore,
     query,
+    readContext,
     results,
     setError,
     updateQuery,

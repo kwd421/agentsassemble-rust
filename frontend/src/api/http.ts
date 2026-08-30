@@ -19,6 +19,7 @@ export async function exchangeSessionTicket(
     | "socket"
     | "preferences-read"
     | "preferences-write"
+    | "message-search-read"
     | "message-pins-read"
     | "message-pins-write",
   sessionToken: string
@@ -41,6 +42,7 @@ export async function exchangeSessionHttpTicket(
     | "profile"
     | "preferences-read"
     | "preferences-write"
+    | "message-search-read"
     | "message-pins-read"
     | "message-pins-write",
   sessionToken: string

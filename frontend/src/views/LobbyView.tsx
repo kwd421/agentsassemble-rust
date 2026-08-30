@@ -4,8 +4,6 @@ import {
   type LiveAgent,
   type LobbyEvent,
   type MessageAttachmentAuthority,
-  type RoomEvent,
-  fetchRoomMessageContext,
   fetchLobbyMessagePins,
   setLobbyMessagePinned,
   type MessagePin,
@@ -172,7 +170,7 @@ export default function LobbyView({
   const localMessageSearch = useRoomMessageSearch({
     roomId: activeRoom.meetingId,
     channelId: "lobby",
-    sessionToken: roomSessionToken,
+    authority: messagePinsAuthority,
   });
   const messageSearch = sharedMessageSearch || localMessageSearch;
   const messageAttachmentAuthority = useMemo<MessageAttachmentAuthority>(
@@ -319,25 +317,7 @@ export default function LobbyView({
           },
         };
       });
-      if (serverItems.length) return serverItems;
-      const needle = messageSearch.query.trim().toLocaleLowerCase();
-      if (!needle) return [];
-      return visibleEvents
-        .filter((event) => `${event.name}\n${event.message}`.toLocaleLowerCase().includes(needle))
-        .slice()
-        .reverse()
-        .map((event) => ({
-          id: event.id,
-          author: event.name || "Room",
-          body: event.message,
-          meta: new Date(event.created_at).toLocaleString("ko-KR", {
-            month: "numeric",
-            day: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-          onSelect: () => jumpToEvent(event.id),
-        }));
+      return serverItems;
     },
     [
       messageSearch.query,
@@ -345,7 +325,6 @@ export default function LobbyView({
       messageSearchChannelLabels,
       messageSearchScope,
       onOpenCrossChannelSearchResult,
-      visibleEvents,
     ]
   );
   const latestReadSequence = useMemo(
@@ -398,14 +377,9 @@ export default function LobbyView({
   async function navigateToSearchResult(eventId: string) {
     suppressAutomaticHistoryLoad();
     setPendingMessageTarget(eventId);
-    const context = await fetchRoomMessageContext({
-      roomId: activeRoom.meetingId,
-      channelId: "lobby",
-      eventId,
-      sessionToken: roomSessionToken,
-    });
+    const context = await messageSearch.readContext(eventId);
     showHistoryWindow(
-      projectRoomEventsToTimeline(context.events as RoomEvent[], { viewerParticipantId })
+      projectRoomEventsToTimeline(context.events, { viewerParticipantId })
     );
   }
 

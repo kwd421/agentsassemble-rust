@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { Hash } from "lucide-react";
 import { useState, type ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { LobbyEvent } from "../api";
+import type { LobbyEvent, RoomEvent } from "../api";
 import type { RoomDockItem } from "../lib/roomDockModel";
 import type { RoomTypingIndicator } from "../lib/roomTypingIndicators";
 import { createMessageAttachmentReadOwner } from "../lib/messageAttachmentReadScheduler";
@@ -83,6 +83,60 @@ function renderLobby(events: LobbyEvent[], typingIndicators: RoomTypingIndicator
   );
 }
 
+function SearchBackedLobby({ target }: { target: LobbyEvent }) {
+  const [query, setQuery] = useState("");
+  const contextEvent: RoomEvent = {
+    v: 1,
+    id: target.id,
+    seq: 7,
+    created_at: target.created_at,
+    room_id: room.meetingId,
+    type: "message_final",
+    actor: { participant_id: "agent-b", participant_type: "agent" },
+    participant_id: "agent-b",
+    participant_type: "agent",
+    actor_id: "agent-b",
+    actor_type: "agent",
+    display_name: target.name,
+    content: target.message,
+    message_kind: "message",
+  };
+  return (
+    <LobbyView
+      activeRoom={room}
+      agents={[]}
+      canonicalEvents={[target]}
+      canonicalHasMoreHistory={false}
+      sharedMessageSearch={{
+        error: "",
+        hasMore: false,
+        loading: false,
+        loadingMore: false,
+        loadMore: async () => undefined,
+        query,
+        readContext: vi.fn().mockResolvedValue({
+          channel_id: "lobby",
+          event_id: target.id,
+          events: [contextEvent],
+        }),
+        results: query
+          ? [{
+              event_id: target.id,
+              channel_id: "lobby",
+              seq: 7,
+              created_at: target.created_at,
+              author: target.name,
+              content: target.message,
+              attachment_filenames: [],
+            }]
+          : [],
+        setError: vi.fn(),
+        updateQuery: setQuery,
+      }}
+    />
+  );
+}
+
 function voteResult(id: string, voter: string, choice: string): LobbyEvent {
   return {
     id,
@@ -101,9 +155,7 @@ function voteResult(id: string, voter: string, choice: string): LobbyEvent {
 }
 
 describe("LobbyView active provider turn", () => {
-  it("finds a loaded channel message and opens that result", async () => {
-    const scrollIntoView = vi.fn();
-    Element.prototype.scrollIntoView = scrollIntoView;
+  it("does not substitute the loaded timeline when canonical search is unavailable", async () => {
     renderLobby(
       [
         {
@@ -124,21 +176,22 @@ describe("LobbyView active provider turn", () => {
     fireEvent.change(screen.getByRole("searchbox", { name: "general 검색" }), {
       target: { value: "카나리아" },
     });
-    fireEvent.click(
-      await screen.findByRole("button", {
+    expect(
+      await screen.findByText("이 환경에서는 로비 메시지 검색을 사용할 수 없습니다.")
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", {
         name: /Agent B.*배포 전에 카나리아 검증을 진행합니다/,
       })
-    );
-
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: "center" });
+    ).toBeNull();
   });
 
-  it("opens current-channel search with Ctrl+F and selects a result from the keyboard", async () => {
+  it("opens current-channel canonical search with Ctrl+F and selects a result", async () => {
     const scrollIntoView = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;
-    renderLobby(
-      [
-        {
+    render(
+      <SearchBackedLobby
+        target={{
           id: "keyboard-search-target",
           kind: "message",
           name: "Agent B",
@@ -148,9 +201,8 @@ describe("LobbyView active provider turn", () => {
           actor_id: "agent-b",
           flow_meeting_id: "room-a",
           flow_action: "message_final",
-        },
-      ],
-      []
+        }}
+      />
     );
 
     fireEvent.keyDown(window, { key: "f", ctrlKey: true });
@@ -159,7 +211,9 @@ describe("LobbyView active provider turn", () => {
     fireEvent.keyDown(popupSearch, { key: "ArrowDown" });
     fireEvent.keyDown(popupSearch, { key: "Enter" });
 
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: "center" });
+    await waitFor(() =>
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: "center" })
+    );
   });
 
   it("jumps to the first unread message and marks through the current latest without moving", () => {

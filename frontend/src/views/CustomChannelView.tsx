@@ -140,7 +140,6 @@ function TextChannelBody({
   const localMessageSearch = useRoomMessageSearch({
     roomId: meetingId,
     channelId: channel.id,
-    sessionToken,
   });
   const messageSearch = sharedMessageSearch || localMessageSearch;
 

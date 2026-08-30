@@ -20,7 +20,6 @@ import type {
   ChannelSearchScope,
 } from "../views/components/ChannelHeader";
 import type { RoomMenuState } from "../views/components/RoomRail";
-import { useRoomMessageSearch } from "../views/useRoomMessageSearch";
 import { loadAgentActivityVisibility } from "../lib/agentActivityPreferences";
 import { isDesktopWebview } from "../lib/desktopBridge";
 import { consumeGuestRecoveryRequestFromUrl } from "../lib/guestRecovery";
@@ -51,6 +50,7 @@ import {
 import { mobileViewportMatches, useMobilePanels } from "./useMobilePanels";
 import { useFriendsDirectory } from "./useFriendsDirectory";
 import { useAgentPresentation } from "./useAgentPresentation";
+import { useAppMessageSearch } from "./useAppMessageSearch";
 import { useDismissMenus } from "./useDismissMenus";
 import { useRoomAdmission } from "./useRoomAdmission";
 import { useRoomAppearanceAssets } from "./useRoomAppearanceAssets";
@@ -420,15 +420,13 @@ export function useAppController(deviceToken: string, clientId: string) {
   const activeChannelSettings = roomSettings.channelSettingsFor(activeRoom);
   const activeCustomChannels = roomChannels.activeChannels;
   const activeCustomChannel = roomChannels.activeChannelFor(channel);
-  const messageSearchChannelId = messageSearchScope === "all"
-    ? "all"
-    : channel === "lobby" || activeCustomChannel
-      ? channel
-      : "lobby";
-  const roomMessageSearch = useRoomMessageSearch({
+  const { roomHttpAuthority, roomMessageSearch } = useAppMessageSearch({
     roomId: activeOperationalMeetingId,
-    channelId: messageSearchChannelId,
+    selectedChannel: channel,
+    customChannelSelected: Boolean(activeCustomChannel),
+    scope: messageSearchScope,
     sessionToken: admittedSessionToken,
+    localAvailable: !guestLocked && isDesktopWebview(),
   });
   const messageSearchChannelLabels = useMemo(
     () => Object.fromEntries([
@@ -775,7 +773,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     publicInviteStatus, quotaViewer,
     requestGuestJoin, retryOperatorPairing, rightPanelMode,
     rightPanelSearchQuery, roomAppearanceAssets, roomAppearances, roomDirectorySyncIssue, roomInvite,
-    roomMenu, roomMessageSearch, roomSettings, roomSocket,
+    roomHttpAuthority, roomMenu, roomMessageSearch, roomSettings, roomSocket,
     rooms, scopedAgents, scopedMentionables, serverProductSurface,
     scopedOnlineCount, scopedViewerDisplayName, selectDirectoryFriend,
     selectHomeFriend, selectRoom, selectedHomeFriendId, sendAgentConfigure,
