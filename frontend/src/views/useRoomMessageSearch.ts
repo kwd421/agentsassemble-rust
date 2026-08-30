@@ -23,11 +23,13 @@ export function useRoomMessageSearch({
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const requestVersionRef = useRef(0);
+  const contextVersionRef = useRef(0);
   const authorityKind = authority?.kind || "unavailable";
   const authorityToken = authority?.kind === "remote" ? authority.sessionToken : "";
 
   const updateQuery = useCallback((value: string) => {
     requestVersionRef.current += 1;
+    contextVersionRef.current += 1;
     setQuery(value);
     setResults([]);
     setNextCursor("");
@@ -37,6 +39,7 @@ export function useRoomMessageSearch({
 
   useLayoutEffect(() => {
     requestVersionRef.current += 1;
+    contextVersionRef.current += 1;
     setQuery("");
     setResults([]);
     setNextCursor("");
@@ -45,6 +48,7 @@ export function useRoomMessageSearch({
     setError("");
     return () => {
       requestVersionRef.current += 1;
+      contextVersionRef.current += 1;
     };
   }, [authorityKind, authorityToken, channelId, roomId]);
 
@@ -126,7 +130,7 @@ export function useRoomMessageSearch({
     if (!authority) {
       throw new Error("이 환경에서는 로비 메시지 검색을 사용할 수 없습니다.");
     }
-    const version = requestVersionRef.current;
+    const version = ++contextVersionRef.current;
     try {
       const context = await fetchRoomMessageContext({
         roomId,
@@ -134,14 +138,14 @@ export function useRoomMessageSearch({
         eventId,
         authority,
         beforeDispatch: () => {
-          if (requestVersionRef.current !== version) {
+          if (contextVersionRef.current !== version) {
             throw new Error("메시지 검색 요청 권위가 변경되었습니다.");
           }
         },
       });
-      return requestVersionRef.current === version ? context : null;
+      return contextVersionRef.current === version ? context : null;
     } catch (reason) {
-      if (requestVersionRef.current !== version) return null;
+      if (contextVersionRef.current !== version) return null;
       throw reason;
     }
   }, [authority, channelId, roomId]);

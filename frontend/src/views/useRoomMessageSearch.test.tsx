@@ -123,6 +123,52 @@ describe("useRoomMessageSearch authority lifecycle", () => {
     await expect(context).resolves.toBeNull();
   });
 
+  it("keeps the latest context selection when an earlier success arrives last", async () => {
+    const resolvers: Array<(value: RoomMessageContext) => void> = [];
+    api.context.mockImplementation(() => new Promise<RoomMessageContext>((resolve) => {
+      resolvers.push(resolve);
+    }));
+    const hook = renderSearch({ kind: "remote", sessionToken: "session-a" });
+    const first = hook.result.current.readContext("event-1");
+    const second = hook.result.current.readContext("event-2");
+    const secondContext: RoomMessageContext = {
+      channel_id: "lobby",
+      event_id: "event-2",
+      events: [],
+    };
+
+    await act(async () => resolvers[1](secondContext));
+    await act(async () => resolvers[0]({
+      channel_id: "lobby",
+      event_id: "event-1",
+      events: [],
+    }));
+
+    await expect(second).resolves.toEqual(secondContext);
+    await expect(first).resolves.toBeNull();
+  });
+
+  it("discards an earlier context error after a later selection succeeds", async () => {
+    let rejectFirst: (reason: Error) => void = () => undefined;
+    api.context
+      .mockReturnValueOnce(new Promise<RoomMessageContext>((_resolve, reject) => {
+        rejectFirst = reject;
+      }))
+      .mockResolvedValueOnce({
+        channel_id: "lobby",
+        event_id: "event-2",
+        events: [],
+      });
+    const hook = renderSearch({ kind: "remote", sessionToken: "session-a" });
+    const first = hook.result.current.readContext("event-1");
+    const second = hook.result.current.readContext("event-2");
+
+    await expect(second).resolves.toMatchObject({ event_id: "event-2" });
+    await act(async () => rejectFirst(new Error("earlier selection failed")));
+
+    await expect(first).resolves.toBeNull();
+  });
+
   it("releases pagination loading when the query changes", async () => {
     vi.useFakeTimers();
     api.search.mockResolvedValueOnce({ ...page, next_cursor: "cursor-1" });
