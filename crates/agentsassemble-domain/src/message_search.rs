@@ -1,6 +1,10 @@
 use caseless::default_case_fold_str;
+use serde::{Deserialize, Serialize};
 
-use crate::text::{clean_trimmed_crlf_text, is_python_whitespace};
+use crate::{
+    RoomEvent,
+    text::{clean_trimmed_crlf_text, is_python_whitespace},
+};
 
 pub const MESSAGE_SEARCH_PAGE_SIZE: usize = 30;
 pub const MESSAGE_CONTEXT_RADIUS: usize = 15;
@@ -8,6 +12,31 @@ pub const MAX_MESSAGE_SEARCH_QUERY_CHARACTERS: usize = 200;
 pub const MAX_MESSAGE_SEARCH_CURSOR_BYTES: usize = 2_048;
 pub const MAX_MESSAGE_SEARCH_AUTHOR_CHARACTERS: usize = 128;
 pub const MAX_MESSAGE_SEARCH_CONTENT_CHARACTERS: usize = 12_000;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LobbyMessageSearchResult {
+    pub event_id: String,
+    pub seq: i64,
+    pub created_at: String,
+    pub author: String,
+    pub content: String,
+    pub attachment_filenames: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LobbyMessageSearchPage {
+    pub results: Vec<LobbyMessageSearchResult>,
+    pub next_cursor: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LobbyMessageContext {
+    pub event_id: String,
+    pub events: Vec<RoomEvent>,
+}
 
 #[must_use]
 pub fn clean_message_search_query(value: &str) -> String {

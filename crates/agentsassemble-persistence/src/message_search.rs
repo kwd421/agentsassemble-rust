@@ -1,6 +1,7 @@
 use agentsassemble_domain::{
-    AuthenticatedPrincipal, MAX_MESSAGE_SEARCH_CURSOR_BYTES, MESSAGE_CONTEXT_RADIUS,
-    MESSAGE_SEARCH_PAGE_SIZE, RoomEvent, casefold_message_search_text, clean_message_search_query,
+    AuthenticatedPrincipal, LobbyMessageContext, LobbyMessageSearchPage, LobbyMessageSearchResult,
+    MAX_MESSAGE_SEARCH_CURSOR_BYTES, MESSAGE_CONTEXT_RADIUS, MESSAGE_SEARCH_PAGE_SIZE, RoomEvent,
+    casefold_message_search_text, clean_message_search_query,
     compact_casefolded_message_search_text, public_event_for_principal,
 };
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -13,28 +14,6 @@ use crate::{
     message_search_index::{canonical_created_at_nanos, searchable_lobby_message},
     room_user_identity::current_local_room_principal,
 };
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LobbyMessageSearchResult {
-    pub event_id: String,
-    pub seq: i64,
-    pub created_at: String,
-    pub author: String,
-    pub content: String,
-    pub attachment_filenames: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LobbyMessageSearchPage {
-    pub results: Vec<LobbyMessageSearchResult>,
-    pub next_cursor: String,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct LobbyMessageContext {
-    pub event_id: String,
-    pub events: Vec<RoomEvent>,
-}
 
 impl SqliteStore {
     /// Searches canonical lobby history as the current local room manager.

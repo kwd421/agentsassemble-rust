@@ -90,6 +90,9 @@ pub use agent_reconciliation::{
 };
 pub use agent_reconciliation_scan::{RuntimeReconciliationCursor, RuntimeReconciliationPage};
 pub use agentsassemble_domain::MAX_ATTACHMENT_BYTES;
+pub use agentsassemble_domain::{
+    LobbyMessageContext, LobbyMessageSearchPage, LobbyMessageSearchResult,
+};
 pub use bootstrap::{LocalBootstrapCommit, LocalBootstrapPhase, LocalBootstrapStatus};
 pub use host_identity::PersistentHostIdentity;
 pub use human_admission::{
@@ -107,7 +110,6 @@ pub use message_attachments::{
     MessageAttachment, MessageAttachmentMetadata, ProviderAttachmentReadAuthority,
 };
 pub use message_pins::PinnedLobbyMessage;
-pub use message_search::{LobbyMessageContext, LobbyMessageSearchPage, LobbyMessageSearchResult};
 pub use participant_leave::ParticipantLeaveMutation;
 pub use participant_mute::ParticipantMuteMutation;
 pub use persona_charx::import_charx_asset;

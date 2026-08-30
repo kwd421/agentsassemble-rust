@@ -33,6 +33,7 @@ pub use message_pins::{
     MAX_LOBBY_MESSAGE_PINS, MAX_MESSAGE_PIN_EVENT_ID_BYTES, is_message_pin_event_id,
 };
 pub use message_search::{
+    LobbyMessageContext, LobbyMessageSearchPage, LobbyMessageSearchResult,
     MAX_MESSAGE_SEARCH_AUTHOR_CHARACTERS, MAX_MESSAGE_SEARCH_CONTENT_CHARACTERS,
     MAX_MESSAGE_SEARCH_CURSOR_BYTES, MAX_MESSAGE_SEARCH_QUERY_CHARACTERS, MESSAGE_CONTEXT_RADIUS,
     MESSAGE_SEARCH_PAGE_SIZE, casefold_message_search_text, clean_message_search_query,
