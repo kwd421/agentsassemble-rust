@@ -60,14 +60,7 @@ async fn exact_turn_mcp_read_returns_one_bounded_attachment() {
     assert_eq!(command.input_up_to_seq(), 7);
     assert_eq!(command.turn_generation(), 3);
     assert_eq!(command.attachment_id(), ATTACHMENT_ID);
-    command.complete(Ok(ProviderAttachment {
-        id: ATTACHMENT_ID.to_owned(),
-        filename: "diagram.png".to_owned(),
-        content_type: "image/png".to_owned(),
-        size: 4,
-        is_image: true,
-        content: vec![1, 2, 3, 4],
-    }));
+    command.complete(Ok(image_attachment()));
     let result = request
         .await
         .unwrap_or_else(|error| panic!("join attachment tool: {error}"));
@@ -86,14 +79,7 @@ async fn exact_turn_mcp_read_returns_one_bounded_attachment() {
         .recv()
         .await
         .unwrap_or_else(|| panic!("receive bounded attachment retry"));
-    command.complete(Ok(ProviderAttachment {
-        id: ATTACHMENT_ID.to_owned(),
-        filename: "diagram.png".to_owned(),
-        content_type: "image/png".to_owned(),
-        size: 4,
-        is_image: true,
-        content: vec![1, 2, 3, 4],
-    }));
+    command.complete(Ok(image_attachment()));
     assert_ne!(
         retry
             .await
@@ -122,6 +108,17 @@ async fn exact_turn_mcp_read_returns_one_bounded_attachment() {
     let client = Arc::try_unwrap(client)
         .unwrap_or_else(|_| panic!("attachment client references must be released"));
     let _ = client.cancel().await;
+}
+
+fn image_attachment() -> ProviderAttachment {
+    ProviderAttachment {
+        id: ATTACHMENT_ID.to_owned(),
+        filename: "diagram.png".to_owned(),
+        content_type: "image/png".to_owned(),
+        size: 4,
+        is_image: true,
+        content: vec![1, 2, 3, 4],
+    }
 }
 
 #[tokio::test]

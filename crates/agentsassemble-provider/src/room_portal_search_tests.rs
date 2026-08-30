@@ -13,8 +13,8 @@ use rmcp::{
 use serde_json::{Map, json};
 
 use super::{
-    ProviderRoomToolIngress, ProviderRoomToolRequest, ProviderRoomToolResult, ProviderTurnOutcome,
-    RoomObservationStart, RoomPortal,
+    ProviderRoomToolCommand, ProviderRoomToolIngress, ProviderRoomToolRequest,
+    ProviderRoomToolResult, ProviderTurnOutcome, RoomObservationStart, RoomPortal,
 };
 
 type RoomClient = rmcp::service::RunningService<rmcp::RoleClient, ()>;
@@ -25,43 +25,9 @@ async fn search_tools_share_receipt_budget_and_terminal_ordering() {
         .await
         .unwrap_or_else(|error| panic!("create search portal: {error}"));
     let (ingress, mut commands) = ProviderRoomToolIngress::channel(4);
-    portal
-        .begin_observation(RoomObservationStart {
-            session_id: "agent-1",
-            turn_id: "turn-search",
-            input_up_to_seq: 9,
-            durable_turn_generation: 1,
-            execution_id: "00000000-0000-4000-8000-000000000001",
-            room_view: "Room: General\n#9 Human: find ALPHA",
-            attachment_ids: &[],
-            attachment_ingress: None,
-            allowed_agent_ids: &[],
-            tabletop_tools: false,
-            tool_ingress: Some(ingress),
-        })
-        .unwrap_or_else(|error| panic!("begin search observation: {error}"));
+    begin_search_observation(&portal, ingress);
     let client = Arc::new(connect(&portal).await);
-
-    let early = call_tool(
-        client.as_ref(),
-        "search_messages",
-        json!({"query": "ALPHA", "cursor": ""}),
-    )
-    .await;
-    assert_eq!(early.is_error, Some(true));
-    assert!(commands.try_recv().is_err());
-    assert_eq!(
-        call_tool(
-            client.as_ref(),
-            "roll_dice",
-            json!({"notation": "1d6", "reason": ""}),
-        )
-        .await
-        .is_error,
-        Some(true)
-    );
-    let read = call_tool(client.as_ref(), "read_discussion", json!({})).await;
-    assert_ne!(read.is_error, Some(true));
+    establish_search_receipt(client.as_ref(), &mut commands).await;
 
     let search_client = client.clone();
     let pending_search = tokio::spawn(async move {
@@ -150,13 +116,59 @@ async fn search_tools_share_receipt_budget_and_terminal_ordering() {
     let _ = client.cancel().await;
 }
 
+fn begin_search_observation(portal: &RoomPortal, ingress: ProviderRoomToolIngress) {
+    portal
+        .begin_observation(RoomObservationStart {
+            session_id: "agent-1",
+            turn_id: "turn-search",
+            input_up_to_seq: 9,
+            durable_turn_generation: 1,
+            execution_id: "00000000-0000-4000-8000-000000000001",
+            room_view: "Room: General\n#9 Human: find ALPHA",
+            attachment_ids: &[],
+            attachment_ingress: None,
+            allowed_agent_ids: &[],
+            tabletop_tools: false,
+            tool_ingress: Some(ingress),
+        })
+        .unwrap_or_else(|error| panic!("begin search observation: {error}"));
+}
+
+async fn establish_search_receipt(
+    client: &RoomClient,
+    commands: &mut tokio::sync::mpsc::Receiver<ProviderRoomToolCommand>,
+) {
+    let early = call_tool(
+        client,
+        "search_messages",
+        json!({"query": "ALPHA", "cursor": ""}),
+    )
+    .await;
+    assert_eq!(early.is_error, Some(true));
+    assert!(commands.try_recv().is_err());
+    assert_eq!(
+        call_tool(
+            client,
+            "roll_dice",
+            json!({"notation": "1d6", "reason": ""}),
+        )
+        .await
+        .is_error,
+        Some(true)
+    );
+    let read = call_tool(client, "read_discussion", json!({})).await;
+    assert_ne!(read.is_error, Some(true));
+}
+
 fn tool_json<T: serde::de::DeserializeOwned>(result: &rmcp::model::CallToolResult) -> T {
     let text = result
         .content
         .first()
         .and_then(|content| content.as_text())
-        .map(|content| content.text.as_str())
-        .unwrap_or_else(|| panic!("room search tool returned no JSON"));
+        .map_or_else(
+            || panic!("room search tool returned no JSON"),
+            |content| content.text.as_str(),
+        );
     serde_json::from_str(text)
         .unwrap_or_else(|error| panic!("decode room search tool JSON: {error}"))
 }
