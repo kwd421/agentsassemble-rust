@@ -26,6 +26,8 @@ mod provider_turn_mute_tests;
 mod provider_turn_stop_race_tests;
 #[path = "shutdown_scheduler_tests.rs"]
 mod shutdown_scheduler_tests;
+#[path = "stateless_context_tests.rs"]
+mod stateless_context_tests;
 
 #[tokio::test]
 async fn ordered_floor_queue_limit_rejects_the_source_message_atomically() {

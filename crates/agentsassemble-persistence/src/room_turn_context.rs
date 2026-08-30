@@ -220,11 +220,17 @@ async fn load_context(
     mandatory: &[&PendingRoomEvent],
     room_agent_ids: &[String],
 ) -> Result<Vec<RoomEvent>, PersistenceError> {
+    let replay_canonical_context = session.public.runtime_kind == "api";
+    let context_floor = if replay_canonical_context {
+        session.public.bootstrap_cutoff_seq
+    } else {
+        session.public.last_provider_sync_seq
+    };
     let rows = sqlx::query(
         "SELECT event_json FROM room_events WHERE room_id = ? AND seq > ? AND seq <= ? AND json_extract(event_json, '$.type') = 'message_final' ORDER BY seq DESC LIMIT ?",
     )
     .bind(&room.room_id)
-    .bind(session.public.last_provider_sync_seq)
+    .bind(context_floor)
     .bind(up_to_seq)
     .bind(i64::try_from(MAX_CONTEXT_MESSAGES).unwrap_or(i64::MAX))
     .fetch_all(&mut **transaction)
@@ -238,7 +244,8 @@ async fn load_context(
             break;
         }
         let event: RoomEvent = serde_json::from_str(row.get::<String, _>("event_json").as_str())?;
-        if event.actor.participant_id == session.public.participant_id
+        if (!replay_canonical_context
+            && event.actor.participant_id == session.public.participant_id)
             || !message_has_visible_payload(&event)?
         {
             continue;
@@ -284,9 +291,14 @@ fn render_room_view(
             }
         ),
     ];
+    let context_floor = if session.public.runtime_kind == "api" {
+        session.public.bootstrap_cutoff_seq
+    } else {
+        session.public.last_provider_sync_seq
+    };
     if context
         .first()
-        .is_some_and(|event| event.seq > session.public.last_provider_sync_seq.saturating_add(1))
+        .is_some_and(|event| event.seq > context_floor.saturating_add(1))
     {
         lines.push("[Earlier room updates are outside this bounded observation.]".to_owned());
     }
