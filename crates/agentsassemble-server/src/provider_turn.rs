@@ -433,7 +433,7 @@ async fn publish_turn_commit(
     room_tool_ingress: ProviderRoomToolIngress,
     attachment_ingress: ProviderAttachmentReadIngress,
     commit: AgentTurnCommit,
-) {
+) -> Option<crate::event_publication::PublicationAttempt> {
     let room_id = commit
         .events
         .first()
@@ -444,16 +444,11 @@ async fn publish_turn_commit(
                 .first()
                 .map(|assignment| assignment.session.public.room_id.clone())
         });
-    if let Some(room_id) = room_id
-        && let Err(error) =
-            crate::event_publication::drain_room_publications(store, event_tx, &room_id).await
-    {
-        tracing::error!(
-            error = ?error,
-            room_id,
-            "provider-turn events remain durably pending for publication retry"
-        );
-    }
+    let publication = if let Some(room_id) = room_id {
+        Some(crate::event_publication::publish_durable_room_events(store, event_tx, &room_id).await)
+    } else {
+        None
+    };
     for assignment in commit.next_assignments {
         spawn_provider_turn(
             tasks,
@@ -464,6 +459,7 @@ async fn publish_turn_commit(
             attachment_ingress.clone(),
         );
     }
+    publication
 }
 
 pub(crate) async fn handle_provider_result(
@@ -474,7 +470,7 @@ pub(crate) async fn handle_provider_result(
     result: Result<ProviderTurnTaskResult, tokio::task::JoinError>,
     room_tool_ingress: &ProviderRoomToolIngress,
     attachment_ingress: &ProviderAttachmentReadIngress,
-) {
+) -> Option<crate::event_publication::PublicationAttempt> {
     let result = match result {
         Ok(result) => result,
         Err(join_error) => {
@@ -483,7 +479,7 @@ pub(crate) async fn handle_provider_result(
                 panic = join_error.is_panic(),
                 "provider turn task ended without a result; durable restart recovery is required"
             );
-            return;
+            return None;
         }
     };
     let room_id = result.assignment.session.public.room_id.clone();
@@ -496,11 +492,11 @@ pub(crate) async fn handle_provider_result(
             execution_id = result.assignment.execution_id,
             "exact provider owner failed; retained proof remains for the live reconciler"
         );
-        return;
+        return None;
     }
     match commit_provider_result(store, provider_adapter, result).await {
         Ok(commit) => {
-            publish_turn_commit(
+            return publish_turn_commit(
                 store,
                 event_tx,
                 turn_tasks,
@@ -525,4 +521,5 @@ pub(crate) async fn handle_provider_result(
             "provider turn result could not be committed; durable restart recovery is required"
         ),
     }
+    None
 }

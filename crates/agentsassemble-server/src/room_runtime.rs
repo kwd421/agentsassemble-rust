@@ -22,7 +22,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    event_publication::{publish_durable_room_events, start_publication_owner},
+    event_publication::{PublicationAttempt, PublicationRetry, publish_durable_room_events},
     human_admission_runtime::{HumanAdmissionCommand, handle_human_admission},
     lifecycle_command_tracker::LifecycleCommandTracker,
     principal_mutation_admission::{MutationDebit, PrincipalMutationAdmission},
@@ -76,6 +76,7 @@ struct RoomTaskContext {
     room_tool_ingress: ProviderRoomToolIngress,
     attachment_ingress: ProviderAttachmentReadIngress,
     lifecycle_commands: LifecycleCommandTracker,
+    active_rooms: Arc<Mutex<HashMap<String, RoomHandle>>>,
 }
 
 struct RoomCommandOwners<'a> {
@@ -433,6 +434,7 @@ impl RoomRuntime {
                 room_tool_ingress,
                 attachment_ingress,
                 lifecycle_commands: self.lifecycle_commands.clone(),
+                active_rooms: self.rooms.clone(),
             },
             mutation_rx,
             publication_rx,
@@ -455,8 +457,9 @@ fn spawn_room_task(
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
         let mut turn_tasks = JoinSet::new();
-        let mut publication_retry =
-            start_publication_owner(&context.store, &context.event_tx, &context.room_id).await;
+        let startup_publication =
+            publish_durable_room_events(&context.store, &context.event_tx, &context.room_id).await;
+        let mut publication_retry = PublicationRetry::new(startup_publication);
         let mut provider_write_budget = ProviderWriteBudget::new();
         loop {
             let input = tokio::select! {
@@ -472,7 +475,7 @@ fn spawn_room_task(
                     let Some(()) = wake else { break; };
                     RoomInput::Publication
                 }
-                _ = publication_retry.tick() => RoomInput::Publication,
+                () = publication_retry.wait(), if publication_retry.is_armed() => RoomInput::Publication,
                 result = turn_tasks.join_next(), if !turn_tasks.is_empty() => {
                     let Some(result) = result else { continue; };
                     RoomInput::Provider(Box::new(result))
@@ -490,7 +493,12 @@ fn spawn_room_task(
                     RoomInput::ProviderRecovery(Box::new(assignment))
                 }
             };
-            handle_room_input(&context, &mut turn_tasks, &mut provider_write_budget, input).await;
+            if let Some(publication) =
+                handle_room_input(&context, &mut turn_tasks, &mut provider_write_budget, input)
+                    .await
+            {
+                publication_retry.record(publication);
+            }
         }
     })
 }
@@ -500,10 +508,10 @@ async fn handle_room_input(
     turn_tasks: &mut JoinSet<ProviderTurnTaskResult>,
     provider_write_budget: &mut ProviderWriteBudget,
     input: RoomInput,
-) {
+) -> Option<PublicationAttempt> {
     match input {
         RoomInput::Mutation(mutation) => {
-            handle_room_mutation(
+            return handle_room_mutation(
                 RoomCommandOwners {
                     store: &context.store,
                     provider_catalog: &context.provider_catalog,
@@ -516,12 +524,13 @@ async fn handle_room_input(
                 },
                 &context.room_id,
                 &context.human_session_revocation_tx,
+                &context.active_rooms,
                 mutation,
             )
             .await;
         }
         RoomInput::Provider(result) => {
-            Box::pin(handle_provider_result(
+            return Box::pin(handle_provider_result(
                 &context.store,
                 &context.provider_adapter,
                 &context.event_tx,
@@ -533,7 +542,7 @@ async fn handle_room_input(
             .await;
         }
         RoomInput::Tool(command) => {
-            crate::room_random_runtime::handle_provider_room_tool(
+            return crate::room_random_runtime::handle_provider_room_tool(
                 &context.store,
                 &context.event_tx,
                 &context.room_id,
@@ -551,22 +560,28 @@ async fn handle_room_input(
             .await;
         }
         RoomInput::ProviderRecovery(recovery) => {
-            RecoveryRuntime {
-                store: &context.store,
-                event_tx: &context.event_tx,
-                room_id: &context.room_id,
-                turn_tasks,
-                provider_adapter: &context.provider_adapter,
-                room_tool_ingress: &context.room_tool_ingress,
-                attachment_ingress: &context.attachment_ingress,
-            }
-            .publish_then_resume(*recovery)
-            .await;
+            return Some(
+                RecoveryRuntime {
+                    store: &context.store,
+                    event_tx: &context.event_tx,
+                    room_id: &context.room_id,
+                    turn_tasks,
+                    provider_adapter: &context.provider_adapter,
+                    room_tool_ingress: &context.room_tool_ingress,
+                    attachment_ingress: &context.attachment_ingress,
+                }
+                .publish_then_resume(*recovery)
+                .await,
+            );
         }
         RoomInput::Publication => {
-            publish_durable_room_events(&context.store, &context.event_tx, &context.room_id).await;
+            return Some(
+                publish_durable_room_events(&context.store, &context.event_tx, &context.room_id)
+                    .await,
+            );
         }
     }
+    None
 }
 
 async fn abort_provider_turns(turn_tasks: &mut JoinSet<ProviderTurnTaskResult>) {
@@ -578,14 +593,15 @@ async fn handle_room_mutation(
     owners: RoomCommandOwners<'_>,
     room_id: &str,
     session_revocations: &broadcast::Sender<[u8; 32]>,
+    active_rooms: &Mutex<HashMap<String, RoomHandle>>,
     mutation: RoomMutation,
-) {
+) -> Option<PublicationAttempt> {
     match mutation {
         RoomMutation::Command(command) => {
-            Box::pin(handle_room_command(owners, session_revocations, command)).await;
+            Box::pin(handle_room_command(owners, session_revocations, command)).await
         }
         RoomMutation::HumanAdmission(command) => {
-            handle_human_admission(
+            let publication = handle_human_admission(
                 owners.store,
                 room_id,
                 owners.event_tx,
@@ -593,7 +609,29 @@ async fn handle_room_mutation(
                 command,
             )
             .await;
+            notify_active_room_publications(active_rooms, publication.other_active_rooms).await;
+            publication.current
         }
+    }
+}
+
+async fn notify_active_room_publications(
+    active_rooms: &Mutex<HashMap<String, RoomHandle>>,
+    room_ids: HashSet<String>,
+) {
+    let wakes = {
+        let rooms = active_rooms.lock().await;
+        room_ids
+            .into_iter()
+            .filter_map(|room_id| {
+                rooms
+                    .get(&room_id)
+                    .map(|room| room.publication_wake.clone())
+            })
+            .collect::<Vec<_>>()
+    };
+    for wake in wakes {
+        let _ = wake.try_send(());
     }
 }
 
@@ -601,7 +639,7 @@ async fn handle_room_command(
     owners: RoomCommandOwners<'_>,
     session_revocations: &broadcast::Sender<[u8; 32]>,
     command: RoomCommand,
-) {
+) -> Option<PublicationAttempt> {
     let RoomCommandOwners {
         store,
         provider_catalog,
@@ -645,9 +683,11 @@ async fn handle_room_command(
         assignments,
         revoked_human_sessions,
     } = execution;
-    if !committed_events.is_empty() {
-        publish_durable_room_events(store, event_tx, &command.principal.room_id).await;
-    }
+    let publication = if committed_events.is_empty() {
+        None
+    } else {
+        Some(publish_durable_room_events(store, event_tx, &command.principal.room_id).await)
+    };
     for assignment in assignments {
         spawn_provider_turn(
             turn_tasks,
@@ -668,6 +708,7 @@ async fn handle_room_command(
         Err(failure) => Err(failure),
     };
     let _ = command.reply.send(reply);
+    publication
 }
 
 enum RoomInput {

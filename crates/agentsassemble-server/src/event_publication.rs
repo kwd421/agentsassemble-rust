@@ -1,7 +1,55 @@
 use agentsassemble_persistence::{PersistenceError, SqliteStore};
 use tokio::sync::broadcast;
 
-const PUBLICATION_RETRY_INTERVAL: std::time::Duration = std::time::Duration::from_millis(250);
+const RETRY_INITIAL_DELAY: std::time::Duration = std::time::Duration::from_millis(250);
+const RETRY_MAX_DELAY: std::time::Duration = std::time::Duration::from_secs(5);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[must_use]
+pub(crate) enum PublicationAttempt {
+    Drained,
+    Retry,
+}
+
+pub(crate) struct PublicationRetry {
+    deadline: Option<tokio::time::Instant>,
+    next_delay: std::time::Duration,
+}
+
+impl PublicationRetry {
+    pub(crate) fn new(attempt: PublicationAttempt) -> Self {
+        let mut owner = Self {
+            deadline: None,
+            next_delay: RETRY_INITIAL_DELAY,
+        };
+        owner.record(attempt);
+        owner
+    }
+
+    pub(crate) fn record(&mut self, attempt: PublicationAttempt) {
+        match attempt {
+            PublicationAttempt::Drained => {
+                self.deadline = None;
+                self.next_delay = RETRY_INITIAL_DELAY;
+            }
+            PublicationAttempt::Retry => {
+                self.deadline = Some(tokio::time::Instant::now() + self.next_delay);
+                self.next_delay = self.next_delay.saturating_mul(2).min(RETRY_MAX_DELAY);
+            }
+        }
+    }
+
+    pub(crate) const fn is_armed(&self) -> bool {
+        self.deadline.is_some()
+    }
+
+    pub(crate) async fn wait(&self) {
+        match self.deadline {
+            Some(deadline) => tokio::time::sleep_until(deadline).await,
+            None => std::future::pending().await,
+        }
+    }
+}
 
 pub(crate) async fn drain_room_publications(
     store: &SqliteStore,
@@ -27,25 +75,18 @@ pub(crate) async fn publish_durable_room_events(
     store: &SqliteStore,
     events: &broadcast::Sender<agentsassemble_domain::RoomEvent>,
     room_id: &str,
-) {
-    if let Err(error) = drain_room_publications(store, events, room_id).await {
-        tracing::error!(
-            error = ?error,
-            room_id,
-            "durable room-event publication failed; the room owner will retry"
-        );
+) -> PublicationAttempt {
+    match drain_room_publications(store, events, room_id).await {
+        Ok(()) => PublicationAttempt::Drained,
+        Err(error) => {
+            tracing::error!(
+                error = ?error,
+                room_id,
+                "durable room-event publication failed; the room owner will retry"
+            );
+            PublicationAttempt::Retry
+        }
     }
-}
-
-pub(crate) async fn start_publication_owner(
-    store: &SqliteStore,
-    events: &broadcast::Sender<agentsassemble_domain::RoomEvent>,
-    room_id: &str,
-) -> tokio::time::Interval {
-    publish_durable_room_events(store, events, room_id).await;
-    let mut interval = tokio::time::interval(PUBLICATION_RETRY_INTERVAL);
-    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-    interval
 }
 
 #[cfg(test)]
@@ -144,6 +185,35 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("read publication snapshot: {error}"));
         assert_eq!(snapshot.last_seq, second.seq);
+    }
+
+    #[tokio::test]
+    async fn missing_room_publication_requires_retry() {
+        let (store, _) = fixture().await;
+        let (sender, _) = tokio::sync::broadcast::channel(1);
+        assert_eq!(
+            super::publish_durable_room_events(&store, &sender, "missing-room").await,
+            super::PublicationAttempt::Retry
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn publication_retry_is_failure_only_bounded_and_resettable() {
+        let now = tokio::time::Instant::now();
+        let mut retry = super::PublicationRetry::new(super::PublicationAttempt::Drained);
+        assert!(!retry.is_armed());
+        retry.record(super::PublicationAttempt::Retry);
+        assert_eq!(retry.deadline, Some(now + super::RETRY_INITIAL_DELAY));
+        retry.record(super::PublicationAttempt::Retry);
+        assert_eq!(retry.deadline, Some(now + super::RETRY_INITIAL_DELAY * 2));
+        for _ in 0..8 {
+            retry.record(super::PublicationAttempt::Retry);
+        }
+        assert_eq!(retry.deadline, Some(now + super::RETRY_MAX_DELAY));
+        retry.record(super::PublicationAttempt::Drained);
+        assert!(!retry.is_armed());
+        retry.record(super::PublicationAttempt::Retry);
+        assert_eq!(retry.deadline, Some(now + super::RETRY_INITIAL_DELAY));
     }
 
     async fn fixture() -> (SqliteStore, AuthenticatedPrincipal) {

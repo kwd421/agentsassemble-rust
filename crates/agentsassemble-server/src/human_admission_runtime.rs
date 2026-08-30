@@ -1,14 +1,21 @@
+use std::collections::HashSet;
+
 use agentsassemble_domain::RoomEvent;
 use agentsassemble_persistence::{
     HumanAdmissionDecision, PersistenceError, PreparedHumanAdmission, SqliteStore,
 };
 use tokio::sync::{broadcast, oneshot};
 
-use crate::event_publication::publish_durable_room_events;
+use crate::event_publication::{PublicationAttempt, publish_durable_room_events};
 
 pub(crate) struct HumanAdmissionCommand {
     pub(crate) request: PreparedHumanAdmission,
     pub(crate) reply: oneshot::Sender<Result<HumanAdmissionDecision, PersistenceError>>,
+}
+
+pub(crate) struct HumanAdmissionPublication {
+    pub(crate) current: Option<PublicationAttempt>,
+    pub(crate) other_active_rooms: HashSet<String>,
 }
 
 pub(crate) async fn handle_human_admission(
@@ -17,7 +24,11 @@ pub(crate) async fn handle_human_admission(
     events: &broadcast::Sender<RoomEvent>,
     session_revocations: &broadcast::Sender<[u8; 32]>,
     command: HumanAdmissionCommand,
-) {
+) -> HumanAdmissionPublication {
+    let mut publication = HumanAdmissionPublication {
+        current: None,
+        other_active_rooms: HashSet::new(),
+    };
     let decision = store
         .admit_human(&command.request, chrono::Utc::now())
         .await;
@@ -25,11 +36,19 @@ pub(crate) async fn handle_human_admission(
         for fingerprint in commit.replaced_session_fingerprints() {
             let _ = session_revocations.send(*fingerprint);
         }
+        publication.other_active_rooms.extend(
+            commit
+                .events()
+                .iter()
+                .filter(|event| event.room_id != room_id)
+                .map(|event| event.room_id.clone()),
+        );
         if commit.events().iter().any(|event| event.room_id == room_id) {
-            publish_durable_room_events(store, events, room_id).await;
+            publication.current = Some(publish_durable_room_events(store, events, room_id).await);
         }
     }
     let _ = command.reply.send(decision);
+    publication
 }
 
 #[cfg(test)]

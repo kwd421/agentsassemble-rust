@@ -94,10 +94,16 @@ async fn execute_agent_create_start(
             )));
         }
     };
-    if !effect.newly_committed_events.is_empty() {
-        crate::event_publication::drain_room_publications(store, event_tx, &principal.room_id)
-            .await
-            .map_err(CommandFailure::unresolved)?;
+    if !effect.newly_committed_events.is_empty()
+        && let Err(error) =
+            crate::event_publication::drain_room_publications(store, event_tx, &principal.room_id)
+                .await
+    {
+        return Ok(AgentCreateExecution {
+            reply: Err(CommandFailure::unresolved(error)),
+            committed_events: effect.newly_committed_events,
+            advance_ordered_floor: false,
+        });
     }
     let reservation = match provider_adapter.reserve_start(&effect.session).await {
         Ok(reservation) => reservation,

@@ -443,10 +443,15 @@ an Active room where that human membership is still Joined, plus its durable eve
 Ended memberships retain their historical identity instead of receiving later
 profile disclosures. `room_events` plus one durable per-room publication cursor
 form the live outbox for every event producer; only the room actor drains that
-history in sequence order and updates the cursor. HTTP success therefore means the
+history in sequence order and updates the cursor. Startup, the committing room input,
+and external HTTP/reconciliation commit wakes are the normal drain triggers. A successful
+drain owns no timer. Only an observed drain failure arms one room-owned retry deadline;
+repeated failure backs off from 250 milliseconds to a five-second cap, and the first
+successful drain removes the deadline and resets the delay. HTTP success therefore means the
 canonical profile, projections, and publication work are durable, not that every
 receiver consumed them. Handler cancellation, queue pressure, and restart leave a
-cursor backlog that the room owner retries; no profile-only broadcast path exists.
+cursor backlog that the room owner retries without an idle database poll; no profile-only
+broadcast path exists.
 WebSocket delivery suppresses duplicate sequence numbers and requires the next
 exact sequence, otherwise it closes with resynchronization. Retry of the same
 profile mutation reuses the same revision and cannot create duplicate revisions.

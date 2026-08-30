@@ -107,10 +107,10 @@ pub(crate) async fn handle_provider_room_tool(
     room_id: &str,
     mut command: ProviderRoomToolCommand,
     write_budget: &mut ProviderWriteBudget,
-) {
+) -> Option<crate::event_publication::PublicationAttempt> {
     if let Err(error) = command.begin_commit() {
         command.complete(Err(error));
-        return;
+        return None;
     }
     let result_id = format!("result-{}", Uuid::new_v4().simple());
     let payload = command.request().canonical_payload();
@@ -119,12 +119,12 @@ pub(crate) async fn handle_provider_room_tool(
             Ok(payload_bytes) => payload_bytes,
             Err(error) => {
                 command.complete(Err(public_tool_error(error)));
-                return;
+                return None;
             }
         };
     if let Err(error) = write_budget.admit(command.session_id(), payload_bytes) {
         command.complete(Err(public_tool_error(error)));
-        return;
+        return None;
     }
     let result = generate_room_random(command.request());
     let committed = store
@@ -142,18 +142,16 @@ pub(crate) async fn handle_provider_room_tool(
         .await;
     match committed {
         Ok(_) => {
-            if let Err(error) =
-                crate::event_publication::drain_room_publications(store, event_tx, room_id).await
-            {
-                tracing::error!(
-                    error = ?error,
-                    room_id,
-                    "committed room-tool event remains pending for publication retry"
-                );
-            }
+            let publication =
+                crate::event_publication::publish_durable_room_events(store, event_tx, room_id)
+                    .await;
             command.complete(Ok(result));
+            Some(publication)
         }
-        Err(error) => command.complete(Err(public_tool_error(error))),
+        Err(error) => {
+            command.complete(Err(public_tool_error(error)));
+            None
+        }
     }
 }
 

@@ -4299,3 +4299,31 @@ authenticated ping/pong handling. The focused socket run passed 30 tests before 
 validation; the final focused run passed 31 tests, the complete two-worker frontend suite passed
 99 files and 622 tests, and the production build, original CSS check, architecture gate, and
 800-line source-growth gate passed.
+
+## Failure-owned room publication retry: 2026-08-30
+
+Every active room previously queried the durable publication cursor every 250 milliseconds even
+after a successful empty drain. One idle room therefore opened and committed four SQLite read
+transactions per second, or 345,600 per day; each transaction also executed cursor initialization,
+cursor selection, and pending-event selection. The existing bounded wake channel already receives
+normal external commits, while room-owned commands, admissions, provider results, room tools, and
+recovery already drain at their ordering boundary.
+
+The room actor now has no retry deadline after a successful startup or publication. An actual drain
+failure returns one typed `PublicationAttempt::Retry` to that same actor, which schedules a 250 ms
+one-shot retry and exponentially backs persistent failure off to a five-second cap. Success clears
+the deadline and resets the delay. Startup backlog, commit-before-provider ordering, exact durable
+cursor order, wake coalescing, restart recovery, and unresolved create/start publication remain
+preserved; no writer gains a second broadcaster or fallback. Focused tests prove missing-room
+failure classification, failure-only/capped/reset retry state, external profile wake publication,
+and blocked N+1 before N+2 cursor order. The first full server run then exposed one cross-room
+dependency formerly hidden by the interval: admitting the same person to another room committed a
+profile update for the first active room but woke only the admission room. The admission actor now
+wakes every other already-active affected room after commit, even if the HTTP reply owner was
+dropped; inactive rooms create no task and drain on their next real subscription. The exact
+cross-room and dropped-reply regressions pass. On the exact final candidate, warning-denied
+all-target server Clippy passed, as did 88 server unit tests and all 63 real TCP, WebSocket,
+control-pipe, Agent Session, invite, profile, attachment, pin, search, preference, directory, and
+runtime boundary tests. Formatting, architecture, 800-line source-growth, policy, and diff gates
+also passed. The publication retry policy lives in the 258-line publication owner; the room actor
+remains 726 lines and only connects that owner to room inputs.

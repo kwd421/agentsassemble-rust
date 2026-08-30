@@ -34,7 +34,10 @@ pub(super) struct RecoveryRuntime<'a> {
 }
 
 impl RecoveryRuntime<'_> {
-    pub(super) async fn publish_then_resume(self, recovery: RecoveredAssignments) {
+    pub(super) async fn publish_then_resume(
+        self,
+        recovery: RecoveredAssignments,
+    ) -> crate::event_publication::PublicationAttempt {
         publish_before_recovery_entry(
             self.store,
             self.event_tx,
@@ -54,7 +57,7 @@ impl RecoveryRuntime<'_> {
                 }
             },
         )
-        .await;
+        .await
     }
 }
 
@@ -64,12 +67,18 @@ async fn publish_before_recovery_entry(
     room_id: &str,
     recovery: RecoveredAssignments,
     enter_recovery: impl FnOnce(Vec<RecoveredAssignment>),
-) {
+) -> crate::event_publication::PublicationAttempt {
     let result = crate::event_publication::drain_room_publications(store, event_tx, room_id).await;
+    let publication = if result.is_ok() {
+        crate::event_publication::PublicationAttempt::Drained
+    } else {
+        crate::event_publication::PublicationAttempt::Retry
+    };
     if result.is_ok() {
         enter_recovery(recovery.assignments);
     }
     let _ = recovery.reply.send(result);
+    publication
 }
 
 #[cfg(test)]
@@ -113,7 +122,7 @@ mod tests {
         let (event_tx, mut event_rx) = broadcast::channel(32);
         let (reply, response) = tokio::sync::oneshot::channel();
         let mut entered_recovery = false;
-        publish_before_recovery_entry(
+        let _ = publish_before_recovery_entry(
             &fixture.started.store,
             &event_tx,
             "general",
