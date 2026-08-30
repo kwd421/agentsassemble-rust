@@ -15,6 +15,7 @@ mod room_preferences;
 mod room_settings;
 mod room_turn;
 mod text;
+mod vote;
 
 pub use asset::MAX_ATTACHMENT_BYTES;
 pub use command::{
@@ -71,4 +72,9 @@ pub use room_turn::{
 };
 pub use text::{
     clean_identifier, clean_message, clean_single_line, has_visible_text, validate_room_id,
+};
+pub use vote::{
+    MAX_VOTE_DURATION_SECONDS, MAX_VOTE_OPTIONS, MIN_VOTE_DURATION_SECONDS,
+    VOTE_OPTION_CHARACTER_LIMIT, VOTE_QUESTION_CHARACTER_LIMIT, VoteCast, VoteCommand, VoteCreate,
+    VoteReference, VoteSummary, resolve_vote_choice, vote_deadline_at,
 };

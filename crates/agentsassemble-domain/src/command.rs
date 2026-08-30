@@ -74,7 +74,7 @@ impl MessageSend {
     }
 }
 
-fn parse_attachment_ids(value: Option<&Value>) -> Result<Vec<String>, CommandRejection> {
+pub(crate) fn parse_attachment_ids(value: Option<&Value>) -> Result<Vec<String>, CommandRejection> {
     let Some(value) = value else {
         return Ok(Vec::new());
     };
