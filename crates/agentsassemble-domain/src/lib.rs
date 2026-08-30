@@ -76,5 +76,5 @@ pub use text::{
 pub use vote::{
     MAX_VOTE_DURATION_SECONDS, MAX_VOTE_OPTIONS, MIN_VOTE_DURATION_SECONDS,
     VOTE_OPTION_CHARACTER_LIMIT, VOTE_QUESTION_CHARACTER_LIMIT, VoteCast, VoteCommand, VoteCreate,
-    VoteReference, VoteSummary, resolve_vote_choice, vote_deadline_at,
+    VoteReference, VoteSummary, prepare_vote_event, resolve_vote_choice, vote_deadline_at,
 };

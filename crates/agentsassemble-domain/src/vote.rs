@@ -1,13 +1,15 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use caseless::default_case_fold_str;
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::{Map, Value, json};
 use ts_rs::TS;
 
 use crate::{
-    CommandRejection, clean_identifier, clean_message, command::parse_attachment_ids,
+    AuthenticatedPrincipal, CommandRejection, Participant, RoomEvent, clean_identifier,
+    clean_message,
+    command::{parse_attachment_ids, prepare_participant_message_event},
     has_visible_text, is_message_event_id,
 };
 
@@ -123,6 +125,59 @@ pub fn resolve_vote_choice(choice: &str, options: &[String]) -> Option<String> {
 #[must_use]
 pub fn vote_deadline_at(now: DateTime<Utc>, duration_seconds: u32) -> Option<DateTime<Utc>> {
     (duration_seconds > 0).then(|| now + Duration::seconds(i64::from(duration_seconds)))
+}
+
+/// Builds one canonical poll or ballot event after any poll-state checks.
+///
+/// A cast's choice must already be resolved against the stored poll options by
+/// the persistence owner. This function owns only authenticated speech identity
+/// and the public event representation.
+///
+/// # Errors
+///
+/// Rejects stale/read-only/muted speech authority or an invalid room sequence.
+pub fn prepare_vote_event(
+    principal: &AuthenticatedPrincipal,
+    participant: &Participant,
+    command: &VoteCommand,
+    sequence: i64,
+    now: DateTime<Utc>,
+) -> Result<RoomEvent, CommandRejection> {
+    let mut extra = BTreeMap::new();
+    match command {
+        VoteCommand::Create(create) => {
+            extra.insert("vote_question".to_owned(), json!(create.question));
+            extra.insert("vote_options".to_owned(), json!(create.options));
+            extra.insert(
+                "vote_duration_seconds".to_owned(),
+                json!(create.duration_seconds),
+            );
+            extra.insert(
+                "vote_deadline_at".to_owned(),
+                json!(
+                    vote_deadline_at(now, create.duration_seconds)
+                        .map(|deadline| deadline.to_rfc3339())
+                        .unwrap_or_default()
+                ),
+            );
+        }
+        VoteCommand::Cast(cast) => {
+            extra.insert("vote_id".to_owned(), json!(cast.vote_id));
+            extra.insert("vote_choice".to_owned(), json!(cast.choice));
+        }
+        VoteCommand::Withdraw(reference) | VoteCommand::Close(reference) => {
+            extra.insert("vote_id".to_owned(), json!(reference.vote_id));
+        }
+    }
+    prepare_participant_message_event(
+        principal,
+        participant,
+        sequence,
+        now,
+        String::new(),
+        command.message_kind(),
+        extra,
+    )
 }
 
 fn parse_create(object: &Map<String, Value>) -> Result<VoteCreate, CommandRejection> {
@@ -255,9 +310,15 @@ fn invalid_vote_duration() -> CommandRejection {
 
 #[cfg(test)]
 mod tests {
+    use chrono::{TimeZone, Utc};
     use serde_json::json;
 
-    use super::{VoteCommand, resolve_vote_choice};
+    use crate::{
+        AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, Participant,
+        ParticipantRole, ParticipantStatus,
+    };
+
+    use super::{VoteCommand, prepare_vote_event, resolve_vote_choice};
 
     #[test]
     fn create_normalizes_one_exact_bounded_definition() {
@@ -331,5 +392,57 @@ mod tests {
         assert_eq!(resolve_vote_choice("2", &options).as_deref(), Some("North"));
         assert_eq!(resolve_vote_choice("0", &options), None);
         assert_eq!(resolve_vote_choice("unknown", &options), None);
+    }
+
+    #[test]
+    fn vote_event_uses_authenticated_actor_and_canonical_deadline() {
+        let now = Utc
+            .with_ymd_and_hms(2026, 8, 31, 0, 0, 0)
+            .single()
+            .unwrap_or_else(|| panic!("valid fixture time"));
+        let principal = AuthenticatedPrincipal {
+            principal_id: "human-user".to_owned(),
+            participant_id: "human-participant".to_owned(),
+            display_name: "Untrusted Copy".to_owned(),
+            room_id: "general".to_owned(),
+            client_kind: ClientKind::Browser,
+            invite_scope: InviteScope::ReadWrite,
+            is_operator: false,
+            capabilities: CapabilitySet::for_principal(
+                ClientKind::Browser,
+                InviteScope::ReadWrite,
+                false,
+            ),
+        };
+        let participant = Participant {
+            room_id: "general".to_owned(),
+            participant_id: "human-participant".to_owned(),
+            display_name: "Stored Human".to_owned(),
+            avatar_image_url: String::new(),
+            participant_type: "human".to_owned(),
+            status: ParticipantStatus::Joined,
+            role: ParticipantRole::Human,
+            owner_id: "human-user".to_owned(),
+            muted: false,
+            created_at: now,
+            updated_at: now,
+        };
+        let command = VoteCommand::from_payload(&json!({
+            "kind": "vote",
+            "vote_question": "Ship?",
+            "vote_options": ["Yes", "No"],
+            "vote_duration_seconds": 30
+        }))
+        .unwrap_or_else(|error| panic!("vote create: {error}"));
+        let event = prepare_vote_event(&principal, &participant, &command, 7, now)
+            .unwrap_or_else(|error| panic!("vote event: {error}"));
+        assert_eq!(event.actor.participant_id, "human-participant");
+        assert_eq!(event.display_name.as_deref(), Some("Stored Human"));
+        assert_eq!(event.message_kind.as_deref(), Some("vote"));
+        assert_eq!(event.extra["vote_question"], json!("Ship?"));
+        assert_eq!(
+            event.extra["vote_deadline_at"],
+            json!("2026-08-31T00:00:30+00:00")
+        );
     }
 }

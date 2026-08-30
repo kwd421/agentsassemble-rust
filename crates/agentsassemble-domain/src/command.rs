@@ -129,6 +129,26 @@ pub fn prepare_message_event(
     sequence: i64,
     now: DateTime<Utc>,
 ) -> Result<RoomEvent, CommandRejection> {
+    prepare_participant_message_event(
+        principal,
+        participant,
+        sequence,
+        now,
+        command.content.clone(),
+        "message",
+        BTreeMap::new(),
+    )
+}
+
+pub(crate) fn prepare_participant_message_event(
+    principal: &AuthenticatedPrincipal,
+    participant: &Participant,
+    sequence: i64,
+    now: DateTime<Utc>,
+    content: String,
+    message_kind: &str,
+    extra: BTreeMap<String, Value>,
+) -> Result<RoomEvent, CommandRejection> {
     require_message_write_authority(principal, participant)?;
     if sequence <= 0 {
         return Err(CommandRejection::new(
@@ -154,9 +174,9 @@ pub fn prepare_message_event(
         actor_id: Some(participant_id),
         actor_type: Some(participant_type),
         display_name: Some(participant.display_name.clone()),
-        content: Some(command.content.clone()),
-        message_kind: Some("message".to_owned()),
-        extra: BTreeMap::new(),
+        content: Some(content),
+        message_kind: Some(message_kind.to_owned()),
+        extra,
     })
 }
 
