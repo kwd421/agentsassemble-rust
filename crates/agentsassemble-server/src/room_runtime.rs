@@ -493,11 +493,15 @@ fn spawn_room_task(
                     RoomInput::ProviderRecovery(Box::new(assignment))
                 }
             };
-            if let Some(publication) =
+            let retry_exhausted =
                 handle_room_input(&context, &mut turn_tasks, &mut provider_write_budget, input)
                     .await
-            {
-                publication_retry.record(publication);
+                    .is_some_and(|publication| publication_retry.record(publication));
+            if retry_exhausted {
+                tracing::error!(
+                    room_id = %context.room_id,
+                    "automatic durable room-event publication retry exhausted; the durable backlog remains pending until a real room wake or restart"
+                );
             }
         }
     })

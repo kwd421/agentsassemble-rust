@@ -4360,8 +4360,9 @@ excluding each database call's existing 250 ms busy timeout. Pending rows and th
 are not altered or reported as delivered; the next real room input or external commit wake may
 observe recovery, and one successful drain resets the epoch. The accepted trade-off is that a room
 with no later activity waits for restart rather than polling a recovered database forever. The
-focused fake-clock owner test proves the exact schedule, exhaustion, no re-arm after exhaustion, and
-success reset; all four publication-owner tests pass.
+room owner emits one distinct exhaustion error at that terminal transition. The focused fake-clock
+owner test proves the exact schedule, exhaustion transition, no re-arm after exhaustion, and success
+reset; all four publication-owner tests pass.
 
 ## Pending-only lifecycle reconciliation scan: 2026-08-30
 

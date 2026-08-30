@@ -25,18 +25,20 @@ impl PublicationRetry {
             next_delay: RETRY_INITIAL_DELAY,
             consecutive_failures: 0,
         };
-        owner.record(attempt);
+        let _ = owner.record(attempt);
         owner
     }
 
-    pub(crate) fn record(&mut self, attempt: PublicationAttempt) {
+    pub(crate) fn record(&mut self, attempt: PublicationAttempt) -> bool {
         match attempt {
             PublicationAttempt::Drained => {
                 self.deadline = None;
                 self.next_delay = RETRY_INITIAL_DELAY;
                 self.consecutive_failures = 0;
+                false
             }
             PublicationAttempt::Retry => {
+                let was_exhausted = self.consecutive_failures >= RETRY_MAX_CONSECUTIVE_FAILURES;
                 self.consecutive_failures = self.consecutive_failures.saturating_add(1);
                 if self.consecutive_failures < RETRY_MAX_CONSECUTIVE_FAILURES {
                     self.deadline = Some(tokio::time::Instant::now() + self.next_delay);
@@ -44,6 +46,7 @@ impl PublicationRetry {
                 } else {
                     self.deadline = None;
                 }
+                !was_exhausted && self.consecutive_failures >= RETRY_MAX_CONSECUTIVE_FAILURES
             }
         }
     }
@@ -213,24 +216,24 @@ mod tests {
         assert!(!retry.is_armed());
         let expected_delays = [250, 500, 1_000, 2_000, 4_000, 5_000, 5_000];
         for expected_delay_ms in expected_delays {
-            retry.record(super::PublicationAttempt::Retry);
+            assert!(!retry.record(super::PublicationAttempt::Retry));
             assert_eq!(
                 retry.deadline,
                 Some(now + std::time::Duration::from_millis(expected_delay_ms))
             );
         }
-        retry.record(super::PublicationAttempt::Retry);
+        assert!(retry.record(super::PublicationAttempt::Retry));
         assert!(!retry.is_armed());
         assert_eq!(
             retry.consecutive_failures,
             super::RETRY_MAX_CONSECUTIVE_FAILURES
         );
-        retry.record(super::PublicationAttempt::Retry);
+        assert!(!retry.record(super::PublicationAttempt::Retry));
         assert!(!retry.is_armed());
-        retry.record(super::PublicationAttempt::Drained);
+        assert!(!retry.record(super::PublicationAttempt::Drained));
         assert!(!retry.is_armed());
         assert_eq!(retry.consecutive_failures, 0);
-        retry.record(super::PublicationAttempt::Retry);
+        assert!(!retry.record(super::PublicationAttempt::Retry));
         assert_eq!(retry.deadline, Some(now + super::RETRY_INITIAL_DELAY));
     }
 
