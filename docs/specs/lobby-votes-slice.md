@@ -127,3 +127,13 @@ mount, explicit user refresh, or sequenced vote events—not polling.
 - common RoomPortal contract tests plus one real turn on each required provider;
 - isolated packaged local and remote read-only/read-write browser flows, restart, resource cleanup,
   measured costs, `make verify`, and threshold-based critical-web plus Daybreaker manual review.
+
+## Manual review record
+
+- Finding: both independent manual reviews identified the historical `77697b7` Low where deadline
+  expiry and manual close shared `vote_closed`; `aa77058` restored deadline-first `vote_expired`,
+  and both reviewers marked the finding closed with no remaining actionable item.
+- Final approval: critical web (`GPT-5.6 Sol`, verified very-high reasoning) and Daybreaker Blue High
+  independently approved exact `da62f4c..aa77058`, correction `b49d710..aa77058`, and cumulative
+  `b95e128..aa77058` as `APPROVE C0/H0/M0/L0`; cross-review status `MATCHED`. Neither used an
+  automated scan, provider, packaged app, or Computer Use for this source review.
