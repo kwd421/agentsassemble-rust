@@ -16,6 +16,7 @@ export * from "./api/providerCredentials";
 export * from "./api/room";
 export * from "./api/roomAppearance";
 export * from "./api/roomHistory";
+export * from "./api/roomHttpAuthority";
 export * from "./api/userProfile";
 export { clearHostToken, loadHostToken, postJsonHost, saveHostToken } from "./api/http";
 

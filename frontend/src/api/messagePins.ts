@@ -18,6 +18,7 @@ import {
   queryString,
   responseError,
 } from "./http";
+import type { RoomHttpAuthority } from "./roomHttpAuthority";
 
 export type MessagePin = {
   event_id: string;
@@ -30,9 +31,7 @@ export type MessagePin = {
   attachment_filenames: string[];
 };
 
-export type MessagePinsAuthority =
-  | { kind: "local" }
-  | { kind: "remote"; sessionToken: string };
+export type MessagePinsAuthority = RoomHttpAuthority;
 
 type PinOperation = "read" | "write";
 

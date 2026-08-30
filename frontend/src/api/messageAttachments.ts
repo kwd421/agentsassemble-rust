@@ -24,6 +24,7 @@ import {
   parseSessionHttpTicket,
   responseError,
 } from "./http";
+import type { RoomHttpAuthority } from "./roomHttpAuthority";
 
 export type LobbyAttachmentRef = Readonly<{
   id: string;
@@ -35,9 +36,7 @@ export type LobbyAttachmentRef = Readonly<{
   download_url: string;
 }>;
 
-export type MessageAttachmentAuthority =
-  | { kind: "local" }
-  | { kind: "remote"; sessionToken: string };
+export type MessageAttachmentAuthority = RoomHttpAuthority;
 
 type TransferGrant = Readonly<{ baseUrl: string; ticket: string }>;
 
@@ -55,7 +54,7 @@ function invalidResponse(): never {
   throw new Error("로비 메시지 첨부 응답 계약이 올바르지 않습니다.");
 }
 
-function canonicalFilename(value: unknown): string {
+export function parseMessageAttachmentFilename(value: unknown): string {
   if (typeof value !== "string" || !isUnicodeScalarString(value)) invalidResponse();
   const characters = [...value];
   if (
@@ -95,7 +94,7 @@ export function parseMessageAttachment(value: unknown): LobbyAttachmentRef {
   } catch {
     invalidResponse();
   }
-  const filename = canonicalFilename(attachment.filename);
+  const filename = parseMessageAttachmentFilename(attachment.filename);
   const contentType = canonicalContentType(attachment.content_type);
   const size = attachment.size;
   if (
