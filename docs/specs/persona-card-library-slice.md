@@ -361,7 +361,7 @@ fourth copy of native-vs-browser dispatch without adding provider state or a gen
 framework. The complete frontend suite passed 603 tests, the production build and original CSS
 provenance check passed, and the source architecture/growth gates passed. No Computer Use session or
 real credential mutation was needed for this source boundary; the packaged control remains pending
-until the DeepSeek provider itself is reachable.
+until a configured credential permits the copied control and official provider turn to be exercised.
 
 The registered DeepSeek path now completes ordinary `ordered` and `ambient` room turns through the
 existing provider-neutral assignment and `RoomPortal` contracts. The fixed registration owns its
@@ -370,24 +370,36 @@ provider/runtime/transport/connection identity, while exact catalog controls own
 does not match that registration, carries the registered value through the Agent Session draft, and
 persists it without a second storage-layer default. The HTTP API remains stateless:
 `provider_session_reused` is always false even though the durable Agent Session retains its own
-logical provider binding across turns.
+logical provider binding across turns. Instead of restoring the original private transcript/checkpoint
+store, every API-runtime assignment rebuilds an at-most-50-message, at-most-20,000-character visible
+conversation from canonical room events after that Agent Session's bootstrap cutoff. This includes
+the Agent Session's own durable room publications, so second and post-restart turns retain visible
+conversation context without a second disk authority or provider-private history file.
 
 The concrete threats found during manual review were stale runtime credentials, quarantining a
 runtime after a definitive pre-side-effect rejection, accepting a malformed completion envelope,
-and sending a credentialed request through ambient proxy or non-public DNS authority. The driver now
-classifies effect uncertainty only after attempting the terminal room action; validates the exact
-model, single choice index, assistant role, and `stop`/`tool_calls` relationship before any tool side
-effect; and uses a fixed official HTTPS endpoint with redirects and ambient proxies disabled. One
-bounded DNS resolution accepts only an all-public address set and pins those validated socket
-candidates into the maintained `reqwest` client while retaining hostname TLS verification. The new
-network owner adds no retry, fallback endpoint, connection cache, background task, or generic remote
-provider framework.
+losing a committed room-random response before terminal publication, and sending a credentialed
+request through ambient proxy or non-public DNS authority. The driver marks a turn replay-unsafe
+before every random or terminal room action and restores the previous state only after an explicit
+tool rejection; validates the exact model, single choice index, assistant role, and
+`stop`/`tool_calls` relationship before any tool side effect; and uses a fixed official HTTPS
+endpoint with redirects and ambient proxies disabled. Each connection's bounded DNS resolution
+accepts only an all-public address set and pins those validated socket candidates into the maintained
+`reqwest` client while retaining hostname TLS verification. The new
+network owner adds no retry, fallback endpoint, application-owned connection cache, background task,
+or generic remote provider framework. Resolution remains lazy: each new connection attempt performs
+one bounded lookup and validates/pins that attempt's complete address set rather than retaining a
+startup-time DNS vector.
 
-Focused selection, credential, protocol, response, terminal-effect, and public-address tests passed;
-the persistence Agent Session suite, complete workspace check, warning-denied workspace Clippy, and
-architecture/source gates also passed. The transport allocates one resolved-address vector and one
-client at driver launch, while each turn performs the already-required credential read and bounded
-request/response copies; no production latency or resource improvement is claimed. No configured
+Focused selection, credential, protocol, response, random/terminal-effect, and public-address tests
+passed; the persistence Agent Session suite, complete workspace check, warning-denied workspace
+Clippy, and architecture/source gates also passed. The transport allocates one client at driver
+launch and one bounded resolved-address vector per connection lookup, while each turn performs the
+already-required credential read and bounded request/response copies. API context replay changes the
+previous incremental query into one indexed,
+50-row/20,000-character-bounded canonical-event query per assignment and adds no disk writes or new
+state; that bounded read cost is accepted to preserve second-turn and restart-visible context. No
+production latency or resource improvement is claimed. No configured
 DeepSeek credential was present, so an official Flash request and copied packaged-UI provider turn
 remain explicitly unverified rather than being replaced with a mock, paid substitute, or fallback.
 
