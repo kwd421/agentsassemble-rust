@@ -252,7 +252,10 @@ impl DeepSeekDriver {
             call.function.name.as_str(),
             "publish_message" | "decline_to_speak"
         );
-        if terminal_action {
+        let replay_unsafe =
+            terminal_action || matches!(call.function.name.as_str(), "roll_dice" | "choose_random");
+        let previous_effect_uncertain = self.turn_effect_uncertain;
+        if replay_unsafe {
             self.turn_effect_uncertain = true;
         }
         let client = self.portal_client.as_ref().ok_or(PORTAL_UNAVAILABLE)?;
@@ -265,8 +268,8 @@ impl DeepSeekDriver {
                 self.portal_failed = true;
                 PORTAL_UNAVAILABLE
             })?;
-        if terminal_action && result.is_error == Some(true) {
-            self.turn_effect_uncertain = false;
+        if replay_unsafe && result.is_error == Some(true) {
+            self.turn_effect_uncertain = previous_effect_uncertain;
         }
         let terminal = terminal_action && result.is_error != Some(true);
         Ok(ExecutedTool {
@@ -659,83 +662,5 @@ fn http_error(status: StatusCode) -> DriverError {
 }
 
 #[cfg(test)]
-mod tests {
-    use serde_json::json;
-
-    use super::{
-        AssistantMessage, CompletionResponse, allowed_tool, assistant_value, validate_completion,
-        validate_tool_calls,
-    };
-
-    #[test]
-    fn thinking_tool_transaction_preserves_exact_authority() {
-        let response: CompletionResponse = serde_json::from_value(json!({
-            "id": "chatcmpl-1",
-            "model": "deepseek-v4-flash",
-            "choices": [{
-                "index": 0,
-                "finish_reason": "tool_calls",
-                "message": {
-                "role": "assistant",
-                "content": null,
-                "reasoning_content": "private reasoning",
-                "tool_calls": [{
-                    "id": "call-1",
-                    "type": "function",
-                    "function": {"name": "read_discussion", "arguments": "{}"}
-                }]
-            }}]
-        }))
-        .unwrap_or_else(|error| panic!("decode fixture: {error}"));
-        assert!(validate_completion(&response, "deepseek-v4-flash").is_ok());
-        let message: &AssistantMessage = &response.choices[0].message;
-        assert!(validate_tool_calls(&message.tool_calls).is_ok());
-        let replay = assistant_value(message);
-        assert_eq!(replay["role"], "assistant");
-        assert_eq!(replay["reasoning_content"], "private reasoning");
-        assert!(allowed_tool("read_discussion", false));
-        assert!(!allowed_tool("read_attachment", true));
-        assert!(!allowed_tool("roll_dice", false));
-        assert!(allowed_tool("roll_dice", true));
-    }
-
-    #[test]
-    fn incomplete_or_inconsistent_completion_cannot_enter_room_tools() {
-        let fixture = |finish_reason: &str, role: &str, index: u32| {
-            serde_json::from_value::<CompletionResponse>(json!({
-                "id": "chatcmpl-1",
-                "model": "deepseek-v4-flash",
-                "choices": [{
-                    "index": index,
-                    "finish_reason": finish_reason,
-                    "message": {
-                        "role": role,
-                        "content": null,
-                        "reasoning_content": "bounded reasoning",
-                        "tool_calls": [{
-                            "id": "call-1",
-                            "type": "function",
-                            "function": {"name": "read_discussion", "arguments": "{}"}
-                        }]
-                    }
-                }]
-            }))
-            .unwrap_or_else(|error| panic!("decode completion fixture: {error}"))
-        };
-
-        assert!(
-            validate_completion(&fixture("tool_calls", "assistant", 0), "deepseek-v4-flash")
-                .is_ok()
-        );
-        for response in [
-            fixture("length", "assistant", 0),
-            fixture("content_filter", "assistant", 0),
-            fixture("insufficient_system_resource", "assistant", 0),
-            fixture("stop", "assistant", 0),
-            fixture("tool_calls", "user", 0),
-            fixture("tool_calls", "assistant", 1),
-        ] {
-            assert!(validate_completion(&response, "deepseek-v4-flash").is_err());
-        }
-    }
-}
+#[path = "deepseek_tests.rs"]
+mod tests;
