@@ -4154,3 +4154,52 @@ That full run also passed architecture and 800-line gates, copied-CSS verificati
 warning-denied Clippy, and the diff gate. No provider, Computer Use, Deep Scan, or automated security
 scanner ran. The candidate remains local until the configured push threshold; reviewer approval is
 not claimed.
+
+## Persona packaged completion candidate: 2026-08-30
+
+Computer Use drove a release bundle built from the current Rust sidecar and copied frontend under
+the isolated identifier `app.agentsassemble.rust.personaverify0830`, with central hosting disabled
+and a fresh SQLite authority. The copied picker imported representative CCv3 JSON, CCv3 PNG,
+CHARX, and standalone Risu module fixtures. Their SHA-256 digests were, respectively,
+`2deaeedcce7371022f9ed41ed6254aeed4284595a6c6377071f623e1f8eb23e7`,
+`c8ddd2fa7fb0d1edd27781e7e59b2f000d71767b9a70099c10f2d23bc801d394`,
+`b0d5aa070215b3c633f205222eac7cc5e3d0b1e0a1877df3cfd064859017c042`, and
+`1c16558eb011845edb1279e84d54ef978d1e74dd24ef1b76f84231f81b4b4202`.
+The library showed all four exact safe summaries, retained three verified thumbnails, displayed
+the PNG and CHARX thumbnails rather than generic item icons, and restored the same library after a
+normal application restart. Before provider selection, Agent Add exposed no premature nickname
+field. A stopped DeepSeek Agent Session selected CHARX, retained that selection across restart,
+replaced it with the Risu module, cleared it, and reapplied CHARX through the real controls.
+
+That packaged flow found two product defects rather than accepting a partial UI pass. Commit
+`aaacdaa` makes absent filesystem authority a valid complete pair for API providers while retaining
+canonical path and file-identity revalidation for providers that own filesystem authority. An
+identity without a path still fails closed. Commit `1bd2d05` extends the copied frontend's strict
+`agent_session_created` projection with the server-owned persona ID and safe summary, including
+exact ID/null consistency. Before that correction, the valid event was rejected and the room socket
+reconnected; no permissive parser or client-owned persona state was added.
+
+The configured official `deepseek-v4-flash` path then started through the copied controls, moved
+through starting, idle, responding, idle, and stopped states, and completed one authorized ordinary
+room turn. The human message asked about `harbor` using the active persona and lore. The public final
+identified both the archive-guide persona and the embedded Risu lore that the module keeps the
+harbor bell. This proves the selected private CHARX/Risu content reached the existing server-owned
+provider input; it is not inferred from the picker label. No credential, hidden reasoning, private
+provider identifier, mock, substitute model, compatibility path, or fallback was logged or
+committed.
+
+The first `make verify` was intentionally not reported as clean: it was started while the packaged
+verification supervisor and sidecar were still running, and four process-custody tests failed to
+establish their test guardians. After the exact app stopped normally, no matching process or SQLite
+handle remained. The four exact tests then passed serially in 5.36, 5.21, 7.53, and 6.89 seconds,
+and an unchanged second `make verify` passed as a whole. That clean run covered the architecture,
+policy, and 800-line source-growth gates; the production frontend build and original CSS/cascade
+check; 96 frontend files with 606 tests; 26 desktop tests; 42 domain, 214 persistence, 146 provider,
+and 86 server unit tests; every TCP/WebSocket/integration/doc test; warning-denied workspace and
+desktop Clippy; formatting; generated bindings; and `git diff --check`.
+
+The exact test bundle, identifier-specific Application Support, WebKit and cache directories, and
+fixture directory were permanently removed after confirming the Agent Session was stopped. The
+Computer Use kernel was reset. No default application data, user-owned process, Deep Scan, or other
+automated security scan was touched. Manual critical-web and Daybreaker Blue High review remains
+pending until this candidate batch is pushed.

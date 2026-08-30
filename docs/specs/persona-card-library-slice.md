@@ -413,6 +413,20 @@ production latency or resource improvement is claimed. No configured
 DeepSeek credential was present, so an official Flash request and copied packaged-UI provider turn
 remain explicitly unverified rather than being replaced with a mock, paid substitute, or fallback.
 
+## Packaged completion status
+
+The isolated copied-frontend flow now imports representative CCv3 JSON/PNG, CHARX, and standalone
+Risu assets, reads their safe summaries and available thumbnails, survives restart, and supports
+explicit create-time selection plus stopped-session replace, clear, and reapply. One official
+DeepSeek Flash ordinary turn proved that the selected CHARX persona and its embedded Risu lore
+reached the server-owned provider input. The two defects exposed by that flow were fixed at their
+existing owners: API providers may own a completely absent filesystem-authority pair, and the strict
+frontend creation-event projection now accepts and cross-checks the server-owned persona fields.
+Neither correction adds a fallback, compatibility reader, duplicate persona state, or provider
+branch. Exact fixture hashes, state transitions, clean full-suite results, and resource cleanup are
+recorded in `docs/VERIFICATION.md`. External manual review remains the only open exit condition for
+this candidate.
+
 ## Manual-review findings
 
 - Daybreaker Blue High found one Medium in the first pushed registration/credential range:
