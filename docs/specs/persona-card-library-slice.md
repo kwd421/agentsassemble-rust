@@ -543,8 +543,11 @@ this candidate.
   owned a local five-second polling helper even though its child guardian stages the same current
   test executable before publishing readiness. Commit `fc6cf9b` removes that helper and reuses the
   existing test-only readiness owner; the focused path and all 146 provider tests passed. Daybreaker
-  Blue High approved the resulting cumulative range with C0/H0/M0/L0. Final critical-web re-review
-  of the documentation attribution remains pending. No automated security scan was used.
+  Blue High approved the resulting cumulative range with C0/H0/M0/L0. Commit `f6f8636` then corrected
+  the evidence attribution so the shared owner is recorded as the combined result of `4d4b8ed` and
+  `fc6cf9b`. The critical web session approved exact `fc6cf9b..f6f8636` and cumulative
+  `f3c91e9..f6f8636` with C0/H0/M0/L0; Daybreaker Blue High independently returned the same final
+  verdict. No automated security scan was used.
 
 ## Non-goals
 
