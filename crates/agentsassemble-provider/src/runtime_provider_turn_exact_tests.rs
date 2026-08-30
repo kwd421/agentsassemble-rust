@@ -27,6 +27,61 @@ struct PanicAfterIoDriver {
     stops: Arc<AtomicUsize>,
 }
 
+struct DefinitiveFailureFactory;
+
+struct DefinitiveFailureDriver;
+
+impl DriverFactory for DefinitiveFailureFactory {
+    fn launch<'a>(
+        &'a self,
+        _session: &'a agentsassemble_domain::DurableAgentSession,
+        _runtime_lease: &'a HeldRuntimeLease,
+    ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
+        Box::pin(async { Ok(Box::new(DefinitiveFailureDriver) as Box<dyn ProviderDriver>) })
+    }
+}
+
+impl ProviderDriver for DefinitiveFailureDriver {
+    fn attach_session<'a>(
+        &'a mut self,
+        session: &'a agentsassemble_domain::DurableAgentSession,
+    ) -> DriverFuture<'a, Result<ProviderSessionAttachment, DriverError>> {
+        let model = session.public.model.clone();
+        Box::pin(async move {
+            Ok(ProviderSessionAttachment {
+                provider_session_id: "definitive-failure-session".to_owned(),
+                reused: false,
+                observed_model_id: Some(model),
+            })
+        })
+    }
+
+    fn send_turn<'a>(
+        &'a mut self,
+        _session: &'a agentsassemble_domain::DurableAgentSession,
+        _request: &'a ProviderTurnRequest,
+    ) -> DriverFuture<'a, Result<ProviderTurnCompleted, DriverError>> {
+        Box::pin(async {
+            Err(DriverError::new(
+                "provider_credential_rejected",
+                "The provider rejected the configured credential.",
+            ))
+        })
+    }
+
+    fn is_alive(&mut self) -> DriverFuture<'_, Result<bool, DriverError>> {
+        Box::pin(async { Ok(true) })
+    }
+
+    fn stop(&mut self) -> DriverFuture<'_, Result<(), DriverError>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn turn_failure_effect_uncertain(&self) -> bool {
+        false
+    }
+}
+
 impl DriverFactory for PanicAfterIoFactory {
     fn launch<'a>(
         &'a self,
@@ -195,6 +250,40 @@ async fn post_io_panic_returns_driver_before_stopping_the_exact_runtime() {
             &started.runtime_lease_token,
         )
         .await;
+}
+
+#[tokio::test]
+async fn definitive_driver_failure_does_not_quarantine_or_discard_the_runtime() {
+    let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
+    let directory = tempfile::tempdir()
+        .unwrap_or_else(|error| panic!("create definitive-failure fixture: {error}"));
+    let session = fixture_session(directory.path(), "#!/bin/sh\nexit 0\n").await;
+    let adapter = ProviderAdapter::with_factory(Arc::new(DefinitiveFailureFactory));
+    let started = adapter
+        .start(&session)
+        .await
+        .unwrap_or_else(|error| panic!("start definitive-failure fixture: {error}"));
+    let active = active_session(&session, &started, "definitive-room-turn");
+    let request = ProviderTurnRequest {
+        turn_id: "definitive-room-turn".to_owned(),
+        turn_generation: 1,
+        execution_id: "11111111-1111-4111-8111-111111111111".to_owned(),
+        input: "Return one definitive provider failure.".to_owned(),
+        room_observation: None,
+    };
+
+    let Err(error) = adapter.send_turn(&active, &request).await else {
+        panic!("definitive provider failure must remain an error");
+    };
+    assert_eq!(error.code, "provider_credential_rejected");
+    assert!(!error.effect_uncertain);
+    assert!(!error.runtime_stopped);
+    let reused = adapter
+        .start(&active)
+        .await
+        .unwrap_or_else(|error| panic!("reuse runtime after definitive failure: {error}"));
+    assert!(reused.runtime_reused);
+    stop_and_release(&adapter, &active, &reused).await;
 }
 
 #[tokio::test]

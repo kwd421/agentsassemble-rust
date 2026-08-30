@@ -295,8 +295,13 @@ async fn run_driver_turn(
                         Err(ProviderAdapterError::safe(error))
                     }
                     Err(error) => {
+                        let effect_uncertain = driver.turn_failure_effect_uncertain();
                         driver.abort_room_observation();
-                        Err(ProviderAdapterError::uncertain(error, handle_id, owner_id))
+                        Err(if effect_uncertain {
+                            ProviderAdapterError::uncertain(error, handle_id, owner_id)
+                        } else {
+                            ProviderAdapterError::safe(error)
+                        })
                     }
                 }
             }

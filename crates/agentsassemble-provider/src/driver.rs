@@ -59,6 +59,9 @@ pub(crate) trait ProviderDriver: Send {
     fn attachment_replay_is_safe(&self) -> bool {
         true
     }
+    fn turn_failure_effect_uncertain(&self) -> bool {
+        true
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

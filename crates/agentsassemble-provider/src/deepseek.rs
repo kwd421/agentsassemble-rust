@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
 use crate::{
-    credentials::DeepSeekCredential,
+    credentials::{DeepSeekCredential, ProviderCredentialStore, deepseek_credential_error},
     driver::{
         DriverError, DriverFuture, ProviderDriver, ProviderSessionAttachment,
         ProviderTurnCompleted, ProviderTurnRequest,
@@ -54,7 +54,9 @@ pub(crate) struct DeepSeekDriver {
     portal: Option<RoomPortal>,
     portal_client: Option<PortalClient>,
     tools: Vec<Tool>,
+    credentials: ProviderCredentialStore,
     attached_session_id: Option<String>,
+    turn_effect_uncertain: bool,
     stopped: bool,
     portal_failed: bool,
 }
@@ -62,7 +64,6 @@ pub(crate) struct DeepSeekDriver {
 struct DeepSeekApi {
     client: Client,
     endpoint: Url,
-    credential: DeepSeekCredential,
 }
 
 #[derive(Debug, Deserialize)]
@@ -74,11 +75,14 @@ struct CompletionResponse {
 
 #[derive(Debug, Deserialize)]
 struct CompletionChoice {
+    index: u32,
+    finish_reason: String,
     message: AssistantMessage,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct AssistantMessage {
+    role: String,
     #[serde(default)]
     content: Option<String>,
     #[serde(default)]
@@ -108,7 +112,7 @@ struct ExecutedTool {
 }
 
 impl DeepSeekDriver {
-    pub(crate) async fn launch(credential: DeepSeekCredential) -> Result<Self, DriverError> {
+    pub(crate) async fn launch(credentials: ProviderCredentialStore) -> Result<Self, DriverError> {
         let portal = RoomPortal::create().await.map_err(|_| PORTAL_UNAVAILABLE)?;
         let portal_client = ().serve(StreamableHttpClientTransport::from_config(
             StreamableHttpClientTransportConfig::with_uri(portal.endpoint())
@@ -121,11 +125,13 @@ impl DeepSeekDriver {
             .map_err(|_| PORTAL_UNAVAILABLE)?;
         validate_tool_catalog(&tools)?;
         Ok(Self {
-            api: DeepSeekApi::new(credential)?,
+            api: DeepSeekApi::new()?,
             portal: Some(portal),
             portal_client: Some(portal_client),
             tools,
+            credentials,
             attached_session_id: None,
+            turn_effect_uncertain: false,
             stopped: false,
             portal_failed: false,
         })
@@ -136,7 +142,13 @@ impl DeepSeekDriver {
         session: &DurableAgentSession,
         request: &ProviderTurnRequest,
     ) -> Result<ProviderTurnCompleted, DriverError> {
+        self.turn_effect_uncertain = false;
         self.validate_session(session)?;
+        let credential = self
+            .credentials
+            .deepseek_secret()
+            .await
+            .map_err(deepseek_credential_error)?;
         let observation = request.room_observation.as_ref();
         let tools = observation
             .map(|observation| api_tools(&self.tools, observation.room_tool_ingress.is_some()));
@@ -144,7 +156,7 @@ impl DeepSeekDriver {
         for round in 0..=MAX_TOOL_ROUNDS {
             let response = self
                 .api
-                .complete(session, &messages, tools.as_deref())
+                .complete(session, &credential, &messages, tools.as_deref())
                 .await?;
             validate_completion(&response, &session.public.model)?;
             let provider_turn_id = response.id.clone();
@@ -234,6 +246,13 @@ impl DeepSeekDriver {
         }
         let arguments = serde_json::from_str::<Map<String, Value>>(&call.function.arguments)
             .map_err(|_| INVALID_TOOL_CALL)?;
+        let terminal_action = matches!(
+            call.function.name.as_str(),
+            "publish_message" | "decline_to_speak"
+        );
+        if terminal_action {
+            self.turn_effect_uncertain = true;
+        }
         let client = self.portal_client.as_ref().ok_or(PORTAL_UNAVAILABLE)?;
         let result = client
             .call_tool(
@@ -244,10 +263,10 @@ impl DeepSeekDriver {
                 self.portal_failed = true;
                 PORTAL_UNAVAILABLE
             })?;
-        let terminal = matches!(
-            call.function.name.as_str(),
-            "publish_message" | "decline_to_speak"
-        ) && result.is_error != Some(true);
+        if terminal_action && result.is_error == Some(true) {
+            self.turn_effect_uncertain = false;
+        }
+        let terminal = terminal_action && result.is_error != Some(true);
         Ok(ExecutedTool {
             call,
             result: tool_result_text(&result)?,
@@ -290,8 +309,8 @@ impl ProviderDriver for DeepSeekDriver {
                     "DeepSeek session authority changed after attachment.",
                 ));
             }
-            let reused = match self.attached_session_id.as_deref() {
-                Some(attached) if attached == session.public.session_id => true,
+            match self.attached_session_id.as_deref() {
+                Some(attached) if attached == session.public.session_id => {}
                 Some(_) => {
                     return Err(DriverError::new(
                         "provider_session_mismatch",
@@ -300,12 +319,11 @@ impl ProviderDriver for DeepSeekDriver {
                 }
                 None => {
                     self.attached_session_id = Some(session.public.session_id.clone());
-                    !session.provider_session_id.is_empty()
                 }
-            };
+            }
             Ok(ProviderSessionAttachment {
                 provider_session_id,
-                reused,
+                reused: false,
                 observed_model_id: None,
             })
         })
@@ -324,7 +342,16 @@ impl ProviderDriver for DeepSeekDriver {
         _session: &'a DurableAgentSession,
         _request: &'a ProviderTurnRequest,
     ) -> DriverFuture<'a, Result<(), DriverError>> {
-        Box::pin(async { Ok(()) })
+        Box::pin(async move {
+            if self.turn_effect_uncertain {
+                Err(DriverError::new(
+                    "provider_turn_interrupt_uncertain",
+                    "The DeepSeek room action may have completed before interruption.",
+                ))
+            } else {
+                Ok(())
+            }
+        })
     }
 
     fn is_alive(&mut self) -> DriverFuture<'_, Result<bool, DriverError>> {
@@ -396,10 +423,14 @@ impl ProviderDriver for DeepSeekDriver {
     fn requires_restart(&self) -> bool {
         self.stopped || self.portal_failed
     }
+
+    fn turn_failure_effect_uncertain(&self) -> bool {
+        self.turn_effect_uncertain
+    }
 }
 
 impl DeepSeekApi {
-    fn new(credential: DeepSeekCredential) -> Result<Self, DriverError> {
+    fn new() -> Result<Self, DriverError> {
         let client = Client::builder()
             .redirect(Policy::none())
             .connect_timeout(Duration::from_secs(10))
@@ -409,16 +440,13 @@ impl DeepSeekApi {
             .build()
             .map_err(|_| API_UNAVAILABLE)?;
         let endpoint = Url::parse(CHAT_COMPLETIONS_URL).map_err(|_| API_UNAVAILABLE)?;
-        Ok(Self {
-            client,
-            endpoint,
-            credential,
-        })
+        Ok(Self { client, endpoint })
     }
 
     async fn complete(
         &self,
         session: &DurableAgentSession,
+        credential: &DeepSeekCredential,
         messages: &[Value],
         tools: Option<&[Value]>,
     ) -> Result<CompletionResponse, DriverError> {
@@ -443,7 +471,7 @@ impl DeepSeekApi {
         let response = self
             .client
             .post(self.endpoint.clone())
-            .bearer_auth(self.credential.expose())
+            .bearer_auth(credential.expose())
             .header(reqwest::header::CONTENT_TYPE, "application/json")
             .body(encoded)
             .send()
@@ -529,6 +557,15 @@ fn validate_completion(
         || response.id.chars().any(char::is_control)
         || response.model != expected_model
         || response.choices.len() != 1
+    {
+        return Err(INVALID_RESPONSE);
+    }
+    let choice = &response.choices[0];
+    let has_tools = !choice.message.tool_calls.is_empty();
+    if choice.index != 0
+        || choice.message.role != "assistant"
+        || (has_tools && choice.finish_reason != "tool_calls")
+        || (!has_tools && choice.finish_reason != "stop")
     {
         return Err(INVALID_RESPONSE);
     }
@@ -640,7 +677,10 @@ mod tests {
         let response: CompletionResponse = serde_json::from_value(json!({
             "id": "chatcmpl-1",
             "model": "deepseek-v4-flash",
-            "choices": [{"message": {
+            "choices": [{
+                "index": 0,
+                "finish_reason": "tool_calls",
+                "message": {
                 "role": "assistant",
                 "content": null,
                 "reasoning_content": "private reasoning",
@@ -662,5 +702,45 @@ mod tests {
         assert!(!allowed_tool("read_attachment", true));
         assert!(!allowed_tool("roll_dice", false));
         assert!(allowed_tool("roll_dice", true));
+    }
+
+    #[test]
+    fn incomplete_or_inconsistent_completion_cannot_enter_room_tools() {
+        let fixture = |finish_reason: &str, role: &str, index: u32| {
+            serde_json::from_value::<CompletionResponse>(json!({
+                "id": "chatcmpl-1",
+                "model": "deepseek-v4-flash",
+                "choices": [{
+                    "index": index,
+                    "finish_reason": finish_reason,
+                    "message": {
+                        "role": role,
+                        "content": null,
+                        "reasoning_content": "bounded reasoning",
+                        "tool_calls": [{
+                            "id": "call-1",
+                            "type": "function",
+                            "function": {"name": "read_discussion", "arguments": "{}"}
+                        }]
+                    }
+                }]
+            }))
+            .unwrap_or_else(|error| panic!("decode completion fixture: {error}"))
+        };
+
+        assert!(
+            validate_completion(&fixture("tool_calls", "assistant", 0), "deepseek-v4-flash")
+                .is_ok()
+        );
+        for response in [
+            fixture("length", "assistant", 0),
+            fixture("content_filter", "assistant", 0),
+            fixture("insufficient_system_resource", "assistant", 0),
+            fixture("stop", "assistant", 0),
+            fixture("tool_calls", "user", 0),
+            fixture("tool_calls", "assistant", 1),
+        ] {
+            assert!(validate_completion(&response, "deepseek-v4-flash").is_err());
+        }
     }
 }

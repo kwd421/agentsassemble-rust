@@ -21,7 +21,7 @@ use crate::{
         discover_opencode,
     },
     codex::CodexDriver,
-    credentials::{ProviderCredentialError, ProviderCredentialStore},
+    credentials::{ProviderCredentialStore, deepseek_credential_error},
     deepseek::DeepSeekDriver,
     driver::{DriverError, DriverFuture, ProviderDriver},
     launch_error::DriverLaunchError,
@@ -526,32 +526,14 @@ fn launch_deepseek<'a>(
     _runtime_lease: &'a HeldRuntimeLease,
 ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
     Box::pin(async move {
-        let credential = factory
+        factory
             .credentials
             .deepseek_secret()
             .await
-            .map_err(credential_launch_error)?;
-        let driver = DeepSeekDriver::launch(credential).await?;
+            .map_err(|error| DriverLaunchError::safe(deepseek_credential_error(error)))?;
+        let driver = DeepSeekDriver::launch(factory.credentials.clone()).await?;
         Ok(Box::new(driver) as Box<dyn ProviderDriver>)
     })
-}
-
-const fn credential_launch_error(error: ProviderCredentialError) -> DriverLaunchError {
-    let driver = match error {
-        ProviderCredentialError::MissingSecret => DriverError::new(
-            "provider_credential_missing",
-            "A DeepSeek API credential is required.",
-        ),
-        ProviderCredentialError::InvalidSecret => DriverError::new(
-            "provider_credential_invalid",
-            "The configured DeepSeek credential is invalid.",
-        ),
-        ProviderCredentialError::SecureStoreUnavailable => DriverError::new(
-            "secure_store_unavailable",
-            "The secure credential store is unavailable.",
-        ),
-    };
-    DriverLaunchError::safe(driver)
 }
 
 #[cfg(unix)]

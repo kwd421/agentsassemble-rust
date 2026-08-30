@@ -5,6 +5,8 @@ use serde::Serialize;
 use thiserror::Error;
 use tokio::sync::Semaphore;
 
+use crate::driver::DriverError;
+
 #[cfg(target_os = "macos")]
 use security_framework::item::{ItemClass, ItemSearchOptions};
 #[cfg(target_os = "macos")]
@@ -182,6 +184,23 @@ pub(crate) struct DeepSeekCredential(String);
 impl DeepSeekCredential {
     pub(crate) fn expose(&self) -> &str {
         &self.0
+    }
+}
+
+pub(crate) const fn deepseek_credential_error(error: ProviderCredentialError) -> DriverError {
+    match error {
+        ProviderCredentialError::MissingSecret => DriverError::new(
+            "provider_credential_missing",
+            "A DeepSeek API credential is required.",
+        ),
+        ProviderCredentialError::InvalidSecret => DriverError::new(
+            "provider_credential_invalid",
+            "The configured DeepSeek credential is invalid.",
+        ),
+        ProviderCredentialError::SecureStoreUnavailable => DriverError::new(
+            "secure_store_unavailable",
+            "The secure credential store is unavailable.",
+        ),
     }
 }
 
