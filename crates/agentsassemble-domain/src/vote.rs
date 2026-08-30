@@ -101,6 +101,19 @@ impl VoteCommand {
     }
 }
 
+/// Validates one canonical vote identifier without accepting normalized aliases.
+///
+/// # Errors
+///
+/// Rejects empty, oversized, NUL-containing, or non-canonical identifiers.
+pub fn validate_vote_id(value: &str) -> Result<String, CommandRejection> {
+    let canonical = clean_identifier(value, 128);
+    if canonical != value || !is_message_event_id(&canonical) {
+        return Err(CommandRejection::new("invalid_vote", "vote_id is invalid."));
+    }
+    Ok(canonical)
+}
+
 /// Resolves a ballot by case-insensitive option text or one-based option number.
 #[must_use]
 pub fn resolve_vote_choice(choice: &str, options: &[String]) -> Option<String> {
@@ -273,11 +286,7 @@ fn parse_vote_id(value: Option<&Value>) -> Result<String, CommandRejection> {
     let value = value
         .and_then(Value::as_str)
         .ok_or_else(|| CommandRejection::new("invalid_vote", "vote_id must be a string."))?;
-    let canonical = clean_identifier(value, 128);
-    if canonical != value || !is_message_event_id(&canonical) {
-        return Err(CommandRejection::new("invalid_vote", "vote_id is invalid."));
-    }
-    Ok(canonical)
+    validate_vote_id(value)
 }
 
 fn require_exact_keys(
@@ -318,7 +327,7 @@ mod tests {
         ParticipantRole, ParticipantStatus,
     };
 
-    use super::{VoteCommand, prepare_vote_event, resolve_vote_choice};
+    use super::{VoteCommand, prepare_vote_event, resolve_vote_choice, validate_vote_id};
 
     #[test]
     fn create_normalizes_one_exact_bounded_definition() {
@@ -360,6 +369,8 @@ mod tests {
 
     #[test]
     fn cast_and_references_preserve_canonical_ids() {
+        assert_eq!(validate_vote_id("poll-1").as_deref(), Ok("poll-1"));
+        assert!(validate_vote_id(" poll-1 ").is_err());
         assert_eq!(
             VoteCommand::from_payload(
                 &json!({"kind": "vote_cast", "vote_id": "poll-1", "vote_choice": " 2 "})

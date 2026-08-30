@@ -1,29 +1,101 @@
+use std::collections::BTreeMap;
+
 use agentsassemble_domain::{
-    AuthenticatedPrincipal, Participant, RoomEvent, VoteCast, VoteCommand, prepare_vote_event,
-    resolve_vote_choice, vote_deadline_at,
+    AuthenticatedPrincipal, ClientKind, Participant, RoomEvent, VoteCast, VoteCommand, VoteSummary,
+    has_visible_text, prepare_vote_event, resolve_vote_choice, validate_vote_id, vote_deadline_at,
 };
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 use sqlx::{Row, Sqlite, Transaction};
 
 use crate::{
-    PersistenceError,
+    HumanSessionAuthorization, PersistenceError, SqliteStore,
+    human_session_authority::revalidate_human_session,
     message_attachments::{bind_message_attachments, prepare_message_attachment_bindings},
     room_turns::support::insert_event,
+    room_user_identity::current_local_room_principal,
 };
 
 struct StoredVote {
     poll: RoomEvent,
-    options: Vec<String>,
-    deadline_at: Option<DateTime<Utc>>,
+    definition: VoteDefinition,
     tallies: Vec<u64>,
     total_votes: u64,
-    manual_close_seq: Option<i64>,
+    manual_close: Option<(i64, DateTime<Utc>)>,
 }
 
 struct VoteDefinition {
+    question: String,
     options: Vec<String>,
+    duration_seconds: u32,
     deadline_at: Option<DateTime<Utc>>,
+}
+
+impl SqliteStore {
+    /// Reads a canonical vote summary as the current local room manager.
+    ///
+    /// Authority, poll/projection validation, the viewer ballot, and close derivation share one
+    /// `SQLite` read transaction. No event, command result, budget debit, timer, or task is created.
+    ///
+    /// # Errors
+    ///
+    /// Rejects stale local authority, missing permission, invalid identifiers, missing votes,
+    /// malformed projection state, or storage failure without returning a partial summary.
+    pub async fn local_room_vote_summary(
+        &self,
+        room_id: &str,
+        user_id: &str,
+        participant_id: &str,
+        vote_id: &str,
+    ) -> Result<VoteSummary, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        let principal =
+            current_local_room_principal(&mut transaction, room_id, user_id, participant_id)
+                .await?;
+        let summary = read_vote_summary(&mut transaction, &principal, vote_id).await?;
+        transaction.commit().await?;
+        Ok(summary)
+    }
+
+    /// Reads a canonical vote summary while one durable human session remains current.
+    ///
+    /// # Errors
+    ///
+    /// Rejects changed or ended session provenance, missing permission, invalid identifiers,
+    /// missing votes, malformed projection state, or storage failure without a partial summary.
+    pub async fn human_session_room_vote_summary(
+        &self,
+        expected: &HumanSessionAuthorization,
+        vote_id: &str,
+    ) -> Result<VoteSummary, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        let (current, _) = revalidate_human_session(&mut transaction, expected, Utc::now()).await?;
+        let summary = read_vote_summary(&mut transaction, current.principal(), vote_id).await?;
+        transaction.commit().await?;
+        Ok(summary)
+    }
+}
+
+async fn read_vote_summary(
+    transaction: &mut Transaction<'_, Sqlite>,
+    principal: &AuthenticatedPrincipal,
+    vote_id: &str,
+) -> Result<VoteSummary, PersistenceError> {
+    if principal.client_kind == ClientKind::AgentBridge || !principal.capabilities.room_vote_summary
+    {
+        return Err(rejected(
+            "permission_denied",
+            "room.vote.summary permission is required.",
+        ));
+    }
+    let vote_id = validate_vote_id(vote_id).map_err(|error| rejection(&error))?;
+    let stored = load_vote(transaction, &principal.room_id, &vote_id).await?;
+    let own_choice = load_ballot(transaction, &principal.participant_id, &stored)
+        .await?
+        .map_or_else(String::new, |index| {
+            stored.definition.options[index].clone()
+        });
+    build_vote_summary(stored, own_choice, Utc::now())
 }
 
 pub(crate) async fn apply_vote_command(
@@ -67,9 +139,10 @@ pub(crate) async fn apply_vote_command(
         VoteCommand::Cast(cast) => {
             let mut stored = load_vote(transaction, &principal.room_id, &cast.vote_id).await?;
             require_open(&stored, now)?;
-            let choice = resolve_vote_choice(&cast.choice, &stored.options)
+            let choice = resolve_vote_choice(&cast.choice, &stored.definition.options)
                 .ok_or_else(invalid_vote_choice)?;
             let choice_index = stored
+                .definition
                 .options
                 .iter()
                 .position(|option| option == &choice)
@@ -111,7 +184,7 @@ pub(crate) async fn apply_vote_command(
             let event = prepare_vote_event(principal, participant, &command, sequence, now)
                 .map_err(|error| rejection(&error))?;
             insert_event(transaction, &event).await?;
-            stored.manual_close_seq = Some(sequence);
+            stored.manual_close = Some((sequence, now));
             save_vote_state(transaction, &stored).await?;
             Ok(event)
         }
@@ -165,17 +238,19 @@ async fn load_vote(
     {
         return Err(invalid_vote_state());
     }
-    let manual_close_seq = row.get::<Option<i64>, _>("manual_close_seq");
-    if let Some(close_seq) = manual_close_seq {
-        validate_close_event(transaction, room_id, vote_id, poll.seq, close_seq).await?;
-    }
+    let manual_close = match row.get::<Option<i64>, _>("manual_close_seq") {
+        Some(close_seq) => Some((
+            close_seq,
+            validate_close_event(transaction, room_id, vote_id, poll.seq, close_seq).await?,
+        )),
+        None => None,
+    };
     Ok(StoredVote {
         poll,
-        options: definition.options,
-        deadline_at: definition.deadline_at,
+        definition,
         tallies,
         total_votes,
-        manual_close_seq,
+        manual_close,
     })
 }
 
@@ -224,7 +299,9 @@ fn poll_definition(event: &RoomEvent) -> Result<VoteDefinition, PersistenceError
         return Err(invalid_vote_state());
     }
     Ok(VoteDefinition {
+        question: definition.question,
         options: definition.options,
+        duration_seconds: duration,
         deadline_at,
     })
 }
@@ -235,7 +312,7 @@ async fn validate_close_event(
     vote_id: &str,
     poll_seq: i64,
     close_seq: i64,
-) -> Result<(), PersistenceError> {
+) -> Result<DateTime<Utc>, PersistenceError> {
     if close_seq <= poll_seq {
         return Err(invalid_vote_state());
     }
@@ -256,17 +333,79 @@ async fn validate_close_event(
     {
         return Err(invalid_vote_state());
     }
-    Ok(())
+    Ok(event.created_at)
 }
 
 fn require_open(stored: &StoredVote, now: DateTime<Utc>) -> Result<(), PersistenceError> {
-    if stored.deadline_at.is_some_and(|deadline| now >= deadline) {
+    if stored
+        .definition
+        .deadline_at
+        .is_some_and(|deadline| now >= deadline)
+    {
         return Err(rejected("vote_expired", "This vote has ended."));
     }
-    if stored.manual_close_seq.is_some() {
+    if stored.manual_close.is_some() {
         return Err(rejected("vote_closed", "This vote has ended."));
     }
     Ok(())
+}
+
+fn build_vote_summary(
+    stored: StoredVote,
+    own_choice: String,
+    now: DateTime<Utc>,
+) -> Result<VoteSummary, PersistenceError> {
+    let created_by = stored
+        .poll
+        .display_name
+        .clone()
+        .filter(|value| has_visible_text(value))
+        .ok_or_else(invalid_vote_state)?;
+    let tallies = stored
+        .definition
+        .options
+        .iter()
+        .cloned()
+        .zip(stored.tallies)
+        .collect::<BTreeMap<_, _>>();
+    let deadline_closed = stored
+        .definition
+        .deadline_at
+        .filter(|deadline| now >= *deadline);
+    let manual_closed_at = stored
+        .manual_close
+        .map(|(_, closed_at)| closed_at.to_rfc3339());
+    let closed_at = manual_closed_at.clone().unwrap_or_else(|| {
+        deadline_closed.map_or_else(String::new, |closed_at| closed_at.to_rfc3339())
+    });
+    // Preserve the public summary contract: an elapsed deadline owns the reason even when an
+    // earlier manual close continues to own the close timestamp.
+    let close_reason = if deadline_closed.is_some() {
+        "deadline"
+    } else if manual_closed_at.is_some() {
+        "manual"
+    } else {
+        ""
+    }
+    .to_owned();
+    Ok(VoteSummary {
+        vote_id: stored.poll.id,
+        question: stored.definition.question,
+        options: stored.definition.options,
+        vote_duration_seconds: stored.definition.duration_seconds,
+        vote_deadline_at: stored
+            .definition
+            .deadline_at
+            .map_or_else(String::new, |deadline| deadline.to_rfc3339()),
+        created_by,
+        created_at: stored.poll.created_at.to_rfc3339(),
+        tallies,
+        own_choice,
+        total_votes: stored.total_votes,
+        closed: !closed_at.is_empty(),
+        closed_at,
+        close_reason,
+    })
 }
 
 async fn replace_ballot(
@@ -275,7 +414,7 @@ async fn replace_ballot(
     stored: &mut StoredVote,
     choice_index: usize,
 ) -> Result<(), PersistenceError> {
-    let previous = load_ballot(transaction, participant, stored).await?;
+    let previous = load_ballot(transaction, &participant.participant_id, stored).await?;
     if previous == Some(choice_index) {
         return Ok(());
     }
@@ -309,7 +448,8 @@ async fn remove_ballot(
     participant: &Participant,
     stored: &mut StoredVote,
 ) -> Result<(), PersistenceError> {
-    let Some(previous) = load_ballot(transaction, participant, stored).await? else {
+    let Some(previous) = load_ballot(transaction, &participant.participant_id, stored).await?
+    else {
         return Ok(());
     };
     stored.tallies[previous] = stored.tallies[previous]
@@ -332,7 +472,7 @@ async fn remove_ballot(
 
 async fn load_ballot(
     transaction: &mut Transaction<'_, Sqlite>,
-    participant: &Participant,
+    participant_id: &str,
     stored: &StoredVote,
 ) -> Result<Option<usize>, PersistenceError> {
     let value = sqlx::query_scalar::<_, i64>(
@@ -340,14 +480,14 @@ async fn load_ballot(
     )
     .bind(&stored.poll.room_id)
     .bind(&stored.poll.id)
-    .bind(&participant.participant_id)
+    .bind(participant_id)
     .fetch_optional(&mut **transaction)
     .await?;
     value
         .map(|value| {
             usize::try_from(value)
                 .ok()
-                .filter(|index| *index < stored.options.len())
+                .filter(|index| *index < stored.definition.options.len())
                 .ok_or_else(invalid_vote_state)
         })
         .transpose()
@@ -362,7 +502,7 @@ async fn save_vote_state(
     )
     .bind(serde_json::to_string(&stored.tallies)?)
     .bind(i64::try_from(stored.total_votes).map_err(|_| invalid_vote_state())?)
-    .bind(stored.manual_close_seq)
+    .bind(stored.manual_close.map(|(sequence, _)| sequence))
     .bind(&stored.poll.room_id)
     .bind(&stored.poll.id)
     .bind(stored.poll.seq)

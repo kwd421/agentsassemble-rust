@@ -31,7 +31,22 @@ the copied poll card refreshes after each transition. Repeated changes to one lo
 therefore perform a cumulative quadratic scan. The current projection makes a mutation and summary
 cost proportional to at most ten options plus one participant ballot lookup while retaining the
 append-only public history. Exact before/after measurements and the accepted storage cost must be
-recorded with the implementation.
+recorded with the implementation; the controlled result follows.
+
+The persistence read implementation recorded that evidence on 2026-08-31 with a temporary,
+uncommitted debug microbenchmark on Darwin arm64/Apple M5, Rust 1.97.1, and SQLite 3.54.0. One
+two-option in-memory poll had 14,400 appended ballot transitions and one current ballot; twenty
+sequential reads compared the original-shaped ordered JSON transition query plus `RoomEvent`
+decoding with the current authenticated projection summary. The raw path materialized 14,401 rows
+and 6,343,053 encoded bytes per read and took 3,612,597 microseconds total (about 180,630 per read).
+The projection path returned a 323-byte summary and took 8,305 microseconds total (about 415 per
+read). Its one state row plus one current-ballot row held 105 logical text bytes, excluding SQLite
+record and index overhead. This is controlled cost evidence, not a production latency claim; the
+raw measurement also omitted tally aggregation, so it does not overstate that work. The accepted
+trade-off is one bounded state row per poll, one row per current voter, and their indexes in exchange
+for avoiding repeated historical materialization. The append-only public history, anonymous public
+tallies, viewer-only own choice, current authority check, and atomic event/projection write contract
+remain unchanged; the summary adds no write, timer, cache, retry, or background task.
 
 Human vote writes remain the existing `message.send` action with one strict tagged payload:
 

@@ -1,7 +1,7 @@
 use agentsassemble_domain::{
     AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID,
     LOCAL_OPERATOR_USER_ID, Participant, ParticipantRole, ParticipantStatus, RoomEvent,
-    vote_deadline_at,
+    VoteSummary, vote_deadline_at,
 };
 use chrono::{Duration, Utc};
 use serde_json::{Value, json};
@@ -115,6 +115,13 @@ async fn close_authority_and_invalid_projection_fail_without_partial_event() {
         Some("vote_close")
     );
     assert!(closed.assignments.is_empty());
+    let closed_summary = local_summary(&store, &vote_id).await;
+    assert!(closed_summary.closed);
+    assert_eq!(closed_summary.close_reason, "manual");
+    assert_eq!(
+        closed_summary.closed_at,
+        closed.outcome.event.created_at.to_rfc3339()
+    );
     assert_rejected(
         &store
             .execute_message_with_turn(
@@ -126,6 +133,10 @@ async fn close_authority_and_invalid_projection_fail_without_partial_event() {
             .await,
         "vote_closed",
     );
+    expire_vote(&store, &vote_id).await;
+    let elapsed_closed_summary = local_summary(&store, &vote_id).await;
+    assert_eq!(elapsed_closed_summary.close_reason, "deadline");
+    assert_eq!(elapsed_closed_summary.closed_at, closed_summary.closed_at);
 
     let second = command(
         &store,
@@ -190,6 +201,59 @@ async fn expired_vote_keeps_its_distinct_public_rejection() {
         "vote_expired",
     );
     assert_eq!(event_count(&store).await, before_rejection);
+    let summary = local_summary(&store, &created.outcome.event.id).await;
+    assert!(summary.closed);
+    assert_eq!(summary.close_reason, "deadline");
+    assert_eq!(summary.closed_at, summary.vote_deadline_at);
+}
+
+#[tokio::test]
+async fn summary_is_read_only_and_discloses_only_the_current_viewers_ballot() {
+    let (store, operator) = fixture().await;
+    let voter = add_human(&store, "voter", "Voter").await;
+    let created = command(
+        &store,
+        &operator,
+        "22000000-0000-4000-8000-000000000001",
+        json!({
+            "kind": "vote",
+            "vote_question": "Choose?",
+            "vote_options": ["One", "Two"]
+        }),
+    )
+    .await;
+    command(
+        &store,
+        &operator,
+        "22000000-0000-4000-8000-000000000002",
+        json!({
+            "kind": "vote_cast",
+            "vote_id": created.outcome.event.id,
+            "vote_choice": "One"
+        }),
+    )
+    .await;
+    command(
+        &store,
+        &voter,
+        "22000000-0000-4000-8000-000000000003",
+        json!({
+            "kind": "vote_cast",
+            "vote_id": created.outcome.event.id,
+            "vote_choice": "Two"
+        }),
+    )
+    .await;
+    let before = persisted_write_counts(&store).await;
+
+    let mine = local_summary(&store, &created.outcome.event.id).await;
+    assert_eq!(mine.own_choice, "One");
+    assert_eq!(mine.tallies.get("One"), Some(&1));
+    assert_eq!(mine.tallies.get("Two"), Some(&1));
+    assert_eq!(mine.total_votes, 2);
+    assert_eq!(mine.created_by, "Host");
+    assert!(!mine.closed);
+    assert_eq!(persisted_write_counts(&store).await, before);
 }
 
 async fn fixture() -> (SqliteStore, AuthenticatedPrincipal) {
@@ -275,6 +339,18 @@ async fn command(
         .unwrap_or_else(|error| panic!("execute vote command: {error}"))
 }
 
+async fn local_summary(store: &SqliteStore, vote_id: &str) -> VoteSummary {
+    store
+        .local_room_vote_summary(
+            "general",
+            LOCAL_OPERATOR_USER_ID,
+            LOCAL_OPERATOR_PARTICIPANT_ID,
+            vote_id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("read local vote summary: {error}"))
+}
+
 async fn expire_vote(store: &SqliteStore, vote_id: &str) {
     let encoded = sqlx::query_scalar::<_, String>(
         "SELECT event_json FROM room_events WHERE room_id = 'general' AND json_extract(event_json, '$.id') = ?",
@@ -338,6 +414,16 @@ async fn event_count(store: &SqliteStore) -> i64 {
         .fetch_one(&store.pool)
         .await
         .unwrap_or_else(|error| panic!("count events: {error}"))
+}
+
+async fn persisted_write_counts(store: &SqliteStore) -> (i64, i64) {
+    let row = sqlx::query(
+        "SELECT (SELECT COUNT(*) FROM room_events) AS events, (SELECT COUNT(*) FROM command_results) AS commands",
+    )
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("count persisted vote writes: {error}"));
+    (row.get("events"), row.get("commands"))
 }
 
 async fn vote_event_count(store: &SqliteStore) -> i64 {
