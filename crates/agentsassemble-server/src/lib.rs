@@ -85,6 +85,7 @@ mod profile_web;
 mod provider_attachment_runtime;
 mod provider_credentials_web;
 mod provider_recovery_tracker;
+mod provider_room_tool_runtime;
 mod provider_turn;
 mod provider_turn_reconciliation_runtime;
 mod provider_write_budget;

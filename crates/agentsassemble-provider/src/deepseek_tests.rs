@@ -5,7 +5,10 @@ use super::{
     AssistantMessage, CompletionResponse, DeepSeekDriver, RoomObservationStart, ToolCall,
     ToolFunction, allowed_tool, assistant_value, validate_completion, validate_tool_calls,
 };
-use crate::{credentials::ProviderCredentialStore, room_portal::ProviderRoomToolIngress};
+use crate::{
+    credentials::ProviderCredentialStore,
+    room_portal::{ProviderRoomToolIngress, ProviderRoomToolResult},
+};
 
 fn tool_call(id: &str, name: &str, arguments: &serde_json::Value) -> ToolCall {
     ToolCall {
@@ -46,6 +49,8 @@ fn thinking_tool_transaction_preserves_exact_authority() {
     assert_eq!(replay["content"], "");
     assert_eq!(replay["reasoning_content"], "private reasoning");
     assert!(allowed_tool("read_discussion", false));
+    assert!(allowed_tool("search_messages", false));
+    assert!(allowed_tool("read_message_context", false));
     assert!(!allowed_tool("read_attachment", true));
     assert!(!allowed_tool("roll_dice", false));
     assert!(allowed_tool("roll_dice", true));
@@ -71,6 +76,7 @@ async fn committed_random_tool_keeps_the_turn_replay_unsafe() {
             attachment_ids: &[],
             attachment_ingress: None,
             allowed_agent_ids: &[],
+            tabletop_tools: true,
             tool_ingress: Some(ingress),
         })
         .unwrap_or_else(|error| panic!("begin observation: {error}"));
@@ -84,14 +90,16 @@ async fn committed_random_tool_keeps_the_turn_replay_unsafe() {
             .await
             .unwrap_or_else(|| panic!("receive room random command"));
         command
-            .begin_commit()
+            .begin_execution()
             .unwrap_or_else(|error| panic!("begin random commit: {error}"));
-        command.complete(Ok(RoomRandomResult::RollDice {
-            notation: "1d6".to_owned(),
-            rolls: vec![4],
-            modifier: 0,
-            total: 4,
-        }));
+        command.complete(Ok(ProviderRoomToolResult::Random(
+            RoomRandomResult::RollDice {
+                notation: "1d6".to_owned(),
+                rolls: vec![4],
+                modifier: 0,
+                total: 4,
+            },
+        )));
     });
     driver
         .execute_tool(

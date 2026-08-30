@@ -207,6 +207,7 @@ mod tests {
                 turn_generation: Uuid::new_v4(),
                 receipt_generation: None,
                 outcome: None,
+                tabletop_tools: false,
                 tool_ingress: None,
                 tool_reservations: BTreeMap::new(),
                 successful_tool_results: 0,

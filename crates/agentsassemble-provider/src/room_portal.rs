@@ -3,7 +3,9 @@ use std::{
     sync::{Arc, Mutex, MutexGuard},
 };
 
-use agentsassemble_domain::{RoomRandomRequest, RoomRandomResult};
+use agentsassemble_domain::{
+    LobbyMessageContext, LobbyMessageSearchPage, RoomRandomRequest, RoomRandomResult,
+};
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
@@ -27,7 +29,7 @@ const MAX_ROOM_VIEW_BYTES: usize = 96 * 1024;
 const MAX_TURN_ID_BYTES: usize = 128;
 const MAX_AGENT_IDS: usize = 64;
 pub(super) const MAX_MESSAGE_CHARS: usize = 12_000;
-const MAX_ROOM_RANDOM_RESULTS: usize = 32;
+const MAX_ROOM_TOOL_RESULTS: usize = 32;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProviderTurnOutcome {
@@ -78,7 +80,22 @@ pub(crate) struct RoomObservationStart<'a> {
     pub attachment_ids: &'a [String],
     pub attachment_ingress: Option<ProviderAttachmentReadIngress>,
     pub allowed_agent_ids: &'a [String],
+    pub tabletop_tools: bool,
     pub tool_ingress: Option<ProviderRoomToolIngress>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProviderRoomToolRequest {
+    Random(RoomRandomRequest),
+    SearchMessages { query: String, cursor: String },
+    ReadMessageContext { event_id: String },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ProviderRoomToolResult {
+    Random(RoomRandomResult),
+    SearchMessages(LobbyMessageSearchPage),
+    MessageContext(LobbyMessageContext),
 }
 
 impl PartialEq for ProviderRoomToolIngress {
@@ -99,9 +116,9 @@ impl ProviderRoomToolIngress {
     pub(super) async fn submit(
         &self,
         authority: RoomToolAuthority,
-        request: RoomRandomRequest,
+        request: ProviderRoomToolRequest,
         reservation: RoomToolReservation,
-    ) -> Result<RoomRandomResult, ProviderRoomToolError> {
+    ) -> Result<ProviderRoomToolResult, ProviderRoomToolError> {
         let (reply, response) = oneshot::channel();
         let command = ProviderRoomToolCommand {
             authority,
@@ -135,9 +152,9 @@ impl ProviderRoomToolIngress {
 #[derive(Debug)]
 pub struct ProviderRoomToolCommand {
     authority: RoomToolAuthority,
-    request: RoomRandomRequest,
+    request: ProviderRoomToolRequest,
     reservation: RoomToolReservation,
-    reply: Option<oneshot::Sender<Result<RoomRandomResult, ProviderRoomToolError>>>,
+    reply: Option<oneshot::Sender<Result<ProviderRoomToolResult, ProviderRoomToolError>>>,
     resolved: bool,
 }
 
@@ -168,20 +185,30 @@ impl ProviderRoomToolCommand {
     }
 
     #[must_use]
-    pub fn request(&self) -> &RoomRandomRequest {
+    pub fn request(&self) -> &ProviderRoomToolRequest {
         &self.request
     }
 
-    /// Transfers a queued portal reservation to the room actor's commit phase.
+    /// Transfers a queued portal reservation to the room actor's execution phase.
     ///
     /// # Errors
     ///
     /// Rejects stale, closing, missing, or already-consumed turn authority.
-    pub fn begin_commit(&mut self) -> Result<(), ProviderRoomToolError> {
-        self.reservation.begin_commit()
+    pub fn begin_execution(&mut self) -> Result<(), ProviderRoomToolError> {
+        self.reservation.begin_execution()
     }
 
-    pub fn complete(mut self, result: Result<RoomRandomResult, ProviderRoomToolError>) {
+    pub fn complete(mut self, result: Result<ProviderRoomToolResult, ProviderRoomToolError>) {
+        let result = result.and_then(|result| {
+            response_matches(&self.request, &result)
+                .then_some(result)
+                .ok_or_else(|| {
+                    tool_error(
+                        "room_tool_invalid",
+                        "The room tool owner returned a mismatched result.",
+                    )
+                })
+        });
         self.reservation.resolve(result.is_ok());
         self.resolved = true;
         if let Some(reply) = self.reply.take() {
@@ -199,7 +226,7 @@ impl Drop for ProviderRoomToolCommand {
         if let Some(reply) = self.reply.take() {
             let _ = reply.send(Err(tool_error(
                 "room_unavailable",
-                "The room tool command was not committed.",
+                "The room tool command did not complete.",
             )));
         }
     }
@@ -238,6 +265,7 @@ pub(super) struct ActiveObservation {
     pub(super) turn_generation: Uuid,
     pub(super) receipt_generation: Option<Uuid>,
     pub(super) outcome: Option<StagedOutcome>,
+    pub(super) tabletop_tools: bool,
     pub(super) tool_ingress: Option<ProviderRoomToolIngress>,
     pub(super) tool_reservations: BTreeMap<Uuid, ToolReservationStatus>,
     pub(super) successful_tool_results: usize,
@@ -253,7 +281,7 @@ impl ActiveObservation {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum ToolReservationStatus {
     Queued,
-    Committing,
+    Executing,
 }
 
 #[derive(Debug)]
@@ -265,7 +293,7 @@ pub(super) struct RoomToolReservation {
 }
 
 impl RoomToolReservation {
-    fn begin_commit(&mut self) -> Result<(), ProviderRoomToolError> {
+    fn begin_execution(&mut self) -> Result<(), ProviderRoomToolError> {
         let mut state = self
             .state
             .lock()
@@ -285,7 +313,7 @@ impl RoomToolReservation {
                 "The room tool reservation was already consumed.",
             ));
         }
-        *status = ToolReservationStatus::Committing;
+        *status = ToolReservationStatus::Executing;
         Ok(())
     }
 
@@ -303,7 +331,7 @@ impl RoomToolReservation {
             .filter(|active| active.turn_generation == self.turn_generation)
         {
             let removed = active.tool_reservations.remove(&self.reservation_id);
-            if successful && removed == Some(ToolReservationStatus::Committing) {
+            if successful && removed == Some(ToolReservationStatus::Executing) {
                 active.successful_tool_results = active.successful_tool_results.saturating_add(1);
             }
             active.closing && !active.has_pending_operations()
@@ -436,6 +464,7 @@ impl RoomPortal {
             attachment_ids,
             attachment_ingress,
             allowed_agent_ids,
+            tabletop_tools,
             tool_ingress,
         } = observation;
         self.require_server()?;
@@ -475,6 +504,7 @@ impl RoomPortal {
                     && active.room_view.as_str() == room_view
                     && active.attachment_ids == unique_attachment_ids
                     && active.attachment_ingress == attachment_ingress
+                    && active.tabletop_tools == tabletop_tools
                     && active.tool_ingress == tool_ingress =>
             {
                 Ok(())
@@ -490,6 +520,7 @@ impl RoomPortal {
                     turn_generation: Uuid::new_v4(),
                     receipt_generation: None,
                     outcome: None,
+                    tabletop_tools,
                     tool_ingress,
                     tool_reservations: BTreeMap::new(),
                     successful_tool_results: 0,
@@ -562,7 +593,7 @@ impl RoomPortal {
         active.closing = true;
         active
             .tool_reservations
-            .retain(|_, status| *status == ToolReservationStatus::Committing);
+            .retain(|_, status| *status == ToolReservationStatus::Executing);
         if !active.has_pending_operations() {
             state.active = None;
         }
@@ -614,6 +645,33 @@ pub(super) fn reserve_room_tool(
     ),
     String,
 > {
+    reserve_tool(state, false)
+}
+
+pub(super) fn reserve_tabletop_tool(
+    state: &Arc<Mutex<PortalState>>,
+) -> Result<
+    (
+        RoomToolAuthority,
+        RoomToolReservation,
+        ProviderRoomToolIngress,
+    ),
+    String,
+> {
+    reserve_tool(state, true)
+}
+
+fn reserve_tool(
+    state: &Arc<Mutex<PortalState>>,
+    require_tabletop: bool,
+) -> Result<
+    (
+        RoomToolAuthority,
+        RoomToolReservation,
+        ProviderRoomToolIngress,
+    ),
+    String,
+> {
     let mut portal = state
         .lock()
         .map_err(|_| "The shared room authority is unavailable.".to_owned())?;
@@ -625,12 +683,15 @@ pub(super) fn reserve_room_tool(
         return Err("This turn already has a terminal room action.".to_owned());
     }
     require_current_receipt(active)?;
+    if require_tabletop && !active.tabletop_tools {
+        return Err("Room randomness is available only in tabletop mode.".to_owned());
+    }
     let ingress = active
         .tool_ingress
         .clone()
-        .ok_or_else(|| "Room randomness is available only in tabletop mode.".to_owned())?;
-    if active.successful_tool_results + active.tool_reservations.len() >= MAX_ROOM_RANDOM_RESULTS {
-        return Err("This turn reached its room-random result limit.".to_owned());
+        .ok_or_else(|| "The room tool owner is unavailable.".to_owned())?;
+    if active.successful_tool_results + active.tool_reservations.len() >= MAX_ROOM_TOOL_RESULTS {
+        return Err("This turn reached its room-tool result limit.".to_owned());
     }
     let reservation_id = Uuid::new_v4();
     active
@@ -653,6 +714,22 @@ pub(super) fn reserve_room_tool(
         },
         ingress,
     ))
+}
+
+fn response_matches(request: &ProviderRoomToolRequest, result: &ProviderRoomToolResult) -> bool {
+    matches!(
+        (request, result),
+        (
+            ProviderRoomToolRequest::Random(_),
+            ProviderRoomToolResult::Random(_)
+        ) | (
+            ProviderRoomToolRequest::SearchMessages { .. },
+            ProviderRoomToolResult::SearchMessages(_)
+        ) | (
+            ProviderRoomToolRequest::ReadMessageContext { .. },
+            ProviderRoomToolResult::MessageContext(_)
+        )
+    )
 }
 
 pub(super) fn require_current_receipt(active: &ActiveObservation) -> Result<(), String> {
@@ -722,3 +799,7 @@ mod tabletop_tests;
 #[cfg(test)]
 #[path = "room_portal_attachment_tests.rs"]
 mod attachment_tests;
+
+#[cfg(test)]
+#[path = "room_portal_search_tests.rs"]
+mod search_tests;

@@ -152,8 +152,8 @@ impl DeepSeekDriver {
             .await
             .map_err(deepseek_credential_error)?;
         let observation = request.room_observation.as_ref();
-        let tools = observation
-            .map(|observation| api_tools(&self.tools, observation.room_tool_ingress.is_some()));
+        let tools =
+            observation.map(|observation| api_tools(&self.tools, observation.tabletop_tools));
         let mut messages = vec![json!({"role": "user", "content": request.input})];
         for round in 0..=MAX_TOOL_ROUNDS {
             let response = self
@@ -214,10 +214,7 @@ impl DeepSeekDriver {
             let mut executed = Vec::new();
             for call in message.tool_calls.iter().cloned() {
                 let result = self
-                    .execute_tool(
-                        call,
-                        observation.is_some_and(|value| value.room_tool_ingress.is_some()),
-                    )
+                    .execute_tool(call, observation.is_some_and(|value| value.tabletop_tools))
                     .await?;
                 let terminal = result.terminal;
                 executed.push(result);
@@ -402,6 +399,7 @@ impl ProviderDriver for DeepSeekDriver {
                 attachment_ids: &observation.attachment_ids,
                 attachment_ingress: observation.attachment_ingress.clone(),
                 allowed_agent_ids: &observation.allowed_agent_ids,
+                tabletop_tools: observation.tabletop_tools,
                 tool_ingress: observation.room_tool_ingress.clone(),
             })
             .map_err(|_| PORTAL_UNAVAILABLE)
@@ -523,7 +521,11 @@ fn api_tools(tools: &[Tool], random_tools: bool) -> Vec<Value> {
 fn allowed_tool(name: &str, random_tools: bool) -> bool {
     matches!(
         name,
-        "read_discussion" | "publish_message" | "decline_to_speak"
+        "read_discussion"
+            | "search_messages"
+            | "read_message_context"
+            | "publish_message"
+            | "decline_to_speak"
     ) || (random_tools && matches!(name, "roll_dice" | "choose_random"))
 }
 
@@ -534,6 +536,8 @@ fn validate_tool_catalog(tools: &[Tool]) -> Result<(), DriverError> {
         .collect::<HashSet<_>>();
     [
         "read_discussion",
+        "search_messages",
+        "read_message_context",
         "publish_message",
         "decline_to_speak",
         "roll_dice",

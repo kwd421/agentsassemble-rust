@@ -23,7 +23,7 @@ pub(super) fn terminal_prompt(
     let random_instruction = request
         .room_observation
         .as_ref()
-        .and_then(|observation| observation.room_tool_ingress.as_ref())
+        .filter(|observation| observation.tabletop_tools)
         .map_or_else(String::new, |_| {
             format!(
                 " For official game randomness, run exactly one `{helper} roll {ROLL_ARGUMENT}` or `{helper} choose {CHOOSE_ARGUMENT}` command and wait for its result."
@@ -96,6 +96,7 @@ mod tests {
                 attachment_ids: vec!["ma_11111111111111111111111111111111".to_owned()],
                 attachment_ingress: Some(attachment_ingress),
                 allowed_agent_ids: Vec::new(),
+                tabletop_tools: false,
                 room_tool_ingress: None,
             }),
         };

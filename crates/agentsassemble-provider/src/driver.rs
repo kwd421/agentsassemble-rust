@@ -101,6 +101,7 @@ pub struct ProviderRoomObservation {
     pub attachment_ids: Vec<String>,
     pub attachment_ingress: Option<ProviderAttachmentReadIngress>,
     pub allowed_agent_ids: Vec<String>,
+    pub tabletop_tools: bool,
     pub room_tool_ingress: Option<ProviderRoomToolIngress>,
 }
 

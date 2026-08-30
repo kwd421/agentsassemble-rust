@@ -74,7 +74,8 @@ pub use room_attachment::{
     ProviderAttachmentReadIngress,
 };
 pub use room_portal::{
-    ProviderRoomToolCommand, ProviderRoomToolError, ProviderRoomToolIngress, ProviderTurnOutcome,
+    ProviderRoomToolCommand, ProviderRoomToolError, ProviderRoomToolIngress,
+    ProviderRoomToolRequest, ProviderRoomToolResult, ProviderTurnOutcome,
 };
 #[cfg(any(unix, windows))]
 pub use room_portal_terminal::run_room_helper_if_requested;

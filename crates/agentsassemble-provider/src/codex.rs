@@ -543,6 +543,7 @@ impl ProviderDriver for CodexDriver {
                 attachment_ids: &observation.attachment_ids,
                 attachment_ingress: observation.attachment_ingress.clone(),
                 allowed_agent_ids: &observation.allowed_agent_ids,
+                tabletop_tools: observation.tabletop_tools,
                 tool_ingress: observation.room_tool_ingress.clone(),
             })
             .map_err(portal_driver_error)

@@ -542,7 +542,7 @@ async fn handle_room_input(
             .await;
         }
         RoomInput::Tool(command) => {
-            return crate::room_random_runtime::handle_provider_room_tool(
+            return crate::provider_room_tool_runtime::handle_provider_room_tool(
                 &context.store,
                 &context.event_tx,
                 &context.room_id,

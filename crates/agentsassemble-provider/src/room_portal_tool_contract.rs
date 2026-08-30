@@ -23,6 +23,20 @@ pub(super) struct ReadAttachment {
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub(super) struct SearchMessages {
+    pub(super) query: String,
+    #[serde(default)]
+    pub(super) cursor: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub(super) struct ReadMessageContext {
+    pub(super) event_id: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub(super) struct RollDice {
     pub(super) notation: String,
     #[serde(default)]

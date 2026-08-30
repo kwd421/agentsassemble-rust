@@ -11,8 +11,8 @@ use rmcp::{
 use serde_json::{Map, json};
 
 use super::{
-    ProviderRoomToolIngress, ProviderTurnOutcome, RoomObservationStart, RoomPortal,
-    reserve_attachment_read, reserve_room_tool,
+    ProviderRoomToolIngress, ProviderRoomToolResult, ProviderTurnOutcome, RoomObservationStart,
+    RoomPortal, reserve_attachment_read, reserve_tabletop_tool,
 };
 use crate::room_attachment::ProviderAttachmentReadIngress;
 
@@ -36,6 +36,7 @@ async fn reservation_first_orders_random_tool_before_terminal_action() {
             attachment_ids: &[],
             attachment_ingress: None,
             allowed_agent_ids: &[],
+            tabletop_tools: true,
             tool_ingress: Some(ingress),
         })
         .unwrap_or_else(|error| panic!("begin tabletop observation: {error}"));
@@ -56,7 +57,9 @@ async fn reservation_first_orders_random_tool_before_terminal_action() {
             "publish_message".to_owned(),
             "read_attachment".to_owned(),
             "read_discussion".to_owned(),
+            "read_message_context".to_owned(),
             "roll_dice".to_owned(),
+            "search_messages".to_owned(),
         ])
     );
     let read = call_tool(client.as_ref(), "read_discussion", json!({})).await;
@@ -85,14 +88,16 @@ async fn reservation_first_orders_random_tool_before_terminal_action() {
     .await;
     assert_eq!(blocked_terminal.is_error, Some(true));
     command
-        .begin_commit()
+        .begin_execution()
         .unwrap_or_else(|error| panic!("begin room actor commit: {error}"));
-    command.complete(Ok(RoomRandomResult::RollDice {
-        notation: "2d6+1".to_owned(),
-        rolls: vec![2, 5],
-        modifier: 1,
-        total: 8,
-    }));
+    command.complete(Ok(ProviderRoomToolResult::Random(
+        RoomRandomResult::RollDice {
+            notation: "2d6+1".to_owned(),
+            rolls: vec![2, 5],
+            modifier: 1,
+            total: 8,
+        },
+    )));
     let tool_result = pending_tool
         .await
         .unwrap_or_else(|error| panic!("join tabletop tool call: {error}"));
@@ -138,6 +143,7 @@ async fn terminal_first_rejects_late_random_tool() {
             attachment_ids: &[],
             attachment_ingress: None,
             allowed_agent_ids: &[],
+            tabletop_tools: true,
             tool_ingress: Some(ingress),
         })
         .unwrap_or_else(|error| panic!("begin terminal-first observation: {error}"));
@@ -178,6 +184,7 @@ async fn closing_observation_retains_a_committing_tool_until_resolution() {
             attachment_ids: &[],
             attachment_ingress: None,
             allowed_agent_ids: &[],
+            tabletop_tools: true,
             tool_ingress: Some(ingress.clone()),
         })
         .unwrap_or_else(|error| panic!("begin closing observation: {error}"));
@@ -197,7 +204,7 @@ async fn closing_observation_retains_a_committing_tool_until_resolution() {
         .await
         .unwrap_or_else(|| panic!("receive committing room tool"));
     command
-        .begin_commit()
+        .begin_execution()
         .unwrap_or_else(|error| panic!("begin committing room tool: {error}"));
     portal
         .end_observation()
@@ -214,16 +221,19 @@ async fn closing_observation_retains_a_committing_tool_until_resolution() {
                 attachment_ids: &[],
                 attachment_ingress: None,
                 allowed_agent_ids: &[],
+                tabletop_tools: true,
                 tool_ingress: Some(ingress.clone()),
             })
             .is_err()
     );
-    command.complete(Ok(RoomRandomResult::ChooseRandom {
-        choice: "north".to_owned(),
-        index: 0,
-        option_count: 2,
-        options: vec!["north".to_owned(), "south".to_owned()],
-    }));
+    command.complete(Ok(ProviderRoomToolResult::Random(
+        RoomRandomResult::ChooseRandom {
+            choice: "north".to_owned(),
+            index: 0,
+            option_count: 2,
+            options: vec!["north".to_owned(), "south".to_owned()],
+        },
+    )));
     let result = pending_tool
         .await
         .unwrap_or_else(|error| panic!("join committing room tool: {error}"));
@@ -239,6 +249,7 @@ async fn closing_observation_retains_a_committing_tool_until_resolution() {
             attachment_ids: &[],
             attachment_ingress: None,
             allowed_agent_ids: &[],
+            tabletop_tools: true,
             tool_ingress: Some(ingress),
         })
         .unwrap_or_else(|error| panic!("begin after committing tool resolution: {error}"));
@@ -266,6 +277,7 @@ async fn closing_observation_retains_mixed_operations_until_both_resolve() {
             attachment_ids: std::slice::from_ref(&attachment_id),
             attachment_ingress: Some(attachment_ingress),
             allowed_agent_ids: &[],
+            tabletop_tools: true,
             tool_ingress: Some(tool_ingress.clone()),
         })
         .unwrap_or_else(|error| panic!("begin mixed-operation observation: {error}"));
@@ -274,10 +286,10 @@ async fn closing_observation_retains_mixed_operations_until_both_resolve() {
     assert_ne!(read.is_error, Some(true));
     let (_, _, attachment_reservation) = reserve_attachment_read(&portal.state, &attachment_id)
         .unwrap_or_else(|error| panic!("reserve attachment read: {error}"));
-    let (_, mut tool_reservation, _) = reserve_room_tool(&portal.state)
+    let (_, mut tool_reservation, _) = reserve_tabletop_tool(&portal.state)
         .unwrap_or_else(|error| panic!("reserve room tool: {error}"));
     tool_reservation
-        .begin_commit()
+        .begin_execution()
         .unwrap_or_else(|error| panic!("begin room tool commit: {error}"));
     portal
         .end_observation()
@@ -296,6 +308,7 @@ async fn closing_observation_retains_mixed_operations_until_both_resolve() {
                 attachment_ids: &[],
                 attachment_ingress: None,
                 allowed_agent_ids: &[],
+                tabletop_tools: true,
                 tool_ingress: Some(tool_ingress.clone()),
             })
             .is_err()
@@ -312,6 +325,7 @@ async fn closing_observation_retains_mixed_operations_until_both_resolve() {
             attachment_ids: &[],
             attachment_ingress: None,
             allowed_agent_ids: &[],
+            tabletop_tools: true,
             tool_ingress: Some(tool_ingress),
         })
         .unwrap_or_else(|error| panic!("begin after mixed-operation resolution: {error}"));

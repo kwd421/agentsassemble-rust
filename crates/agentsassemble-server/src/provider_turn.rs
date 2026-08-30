@@ -153,7 +153,8 @@ fn provider_request(
         attachment_ids: assignment.attachment_ids.clone(),
         attachment_ingress: (!assignment.attachment_ids.is_empty()).then_some(attachment_ingress),
         allowed_agent_ids: assignment.room_agent_ids.clone(),
-        room_tool_ingress: assignment.tabletop_tools.then_some(room_tool_ingress),
+        tabletop_tools: assignment.tabletop_tools,
+        room_tool_ingress: Some(room_tool_ingress),
     });
     ProviderTurnRequest {
         turn_id: assignment.turn_id.clone(),

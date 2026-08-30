@@ -38,11 +38,13 @@ use uuid::Uuid;
 
 use crate::room_attachment::attachment_tool_result;
 use crate::room_portal::{
-    PortalState, RoomPortalError, StagedOutcome, canonical_message, require_current_receipt,
-    reserve_attachment_read, reserve_room_tool, valid_decline_reason,
+    PortalState, ProviderRoomToolRequest, ProviderRoomToolResult, RoomPortalError, StagedOutcome,
+    canonical_message, require_current_receipt, reserve_attachment_read, reserve_room_tool,
+    reserve_tabletop_tool, valid_decline_reason,
 };
 use crate::room_portal_tool_contract::{
-    ChooseRandom, DeclineToSpeak, PublishMessage, ReadAttachment, RollDice,
+    ChooseRandom, DeclineToSpeak, PublishMessage, ReadAttachment, ReadMessageContext, RollDice,
+    SearchMessages,
 };
 
 const MAX_MCP_REQUEST_BYTES: usize = 64 * 1024;
@@ -400,13 +402,36 @@ impl RoomPortalMcp {
 
 impl RoomPortalMcp {
     async fn execute_room_random(&self, request: RoomRandomRequest) -> Result<String, String> {
+        let (authority, reservation, ingress) = reserve_tabletop_tool(&self.state)?;
+        let result = ingress
+            .submit(
+                authority,
+                ProviderRoomToolRequest::Random(request),
+                reservation,
+            )
+            .await
+            .map_err(|error| error.message)?;
+        let ProviderRoomToolResult::Random(result) = result else {
+            return Err("The room tool owner returned a mismatched result.".to_owned());
+        };
+        serde_json::to_string(&result)
+            .map_err(|_| "The room tool result could not be encoded.".to_owned())
+    }
+
+    async fn execute_room_read(&self, request: ProviderRoomToolRequest) -> Result<String, String> {
         let (authority, reservation, ingress) = reserve_room_tool(&self.state)?;
         let result = ingress
             .submit(authority, request, reservation)
             .await
             .map_err(|error| error.message)?;
-        serde_json::to_string(&result)
-            .map_err(|_| "The room tool result could not be encoded.".to_owned())
+        match result {
+            ProviderRoomToolResult::SearchMessages(page) => serde_json::to_string(&page),
+            ProviderRoomToolResult::MessageContext(context) => serde_json::to_string(&context),
+            ProviderRoomToolResult::Random(_) => {
+                return Err("The room tool owner returned a mismatched result.".to_owned());
+            }
+        }
+        .map_err(|_| "The room tool result could not be encoded.".to_owned())
     }
 }
 
@@ -440,6 +465,33 @@ impl RoomPortalMcp {
         let result = attachment_tool_result(&attachment)?;
         reservation.complete(attachment.size)?;
         Ok(result)
+    }
+
+    #[tool(
+        description = "Search complete canonical lobby-message history for this exact room turn. Read the discussion first."
+    )]
+    async fn search_messages(
+        &self,
+        Parameters(input): Parameters<SearchMessages>,
+    ) -> Result<String, String> {
+        self.execute_room_read(ProviderRoomToolRequest::SearchMessages {
+            query: input.query,
+            cursor: input.cursor,
+        })
+        .await
+    }
+
+    #[tool(
+        description = "Read the bounded chronological lobby context around one search result event. Read the discussion first."
+    )]
+    async fn read_message_context(
+        &self,
+        Parameters(input): Parameters<ReadMessageContext>,
+    ) -> Result<String, String> {
+        self.execute_room_read(ProviderRoomToolRequest::ReadMessageContext {
+            event_id: input.event_id,
+        })
+        .await
     }
 
     #[tool(
@@ -634,6 +686,7 @@ mod tests {
                 attachment_ids: &[],
                 attachment_ingress: None,
                 allowed_agent_ids: &["agent-2".to_owned()],
+                tabletop_tools: false,
                 tool_ingress: None,
             })
             .unwrap_or_else(|error| panic!("begin room observation: {error}"));
@@ -659,7 +712,9 @@ mod tests {
                 "publish_message".to_owned(),
                 "read_attachment".to_owned(),
                 "read_discussion".to_owned(),
+                "read_message_context".to_owned(),
                 "roll_dice".to_owned(),
+                "search_messages".to_owned(),
             ])
         );
         let early = call_tool(

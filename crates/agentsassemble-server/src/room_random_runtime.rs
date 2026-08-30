@@ -3,11 +3,14 @@ use agentsassemble_persistence::{
     CommandOutcome, HumanSessionAuthorization, PersistenceError, ProviderRoomRandomCommit,
     SqliteStore, room_write_command_size,
 };
-use agentsassemble_provider::{ProviderRoomToolCommand, ProviderRoomToolError};
+use agentsassemble_provider::{ProviderRoomToolCommand, ProviderRoomToolResult};
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
-use crate::{provider_write_budget::ProviderWriteBudget, room_runtime::RoomCommand};
+use crate::{
+    provider_room_tool_runtime::public_tool_error, provider_write_budget::ProviderWriteBudget,
+    room_runtime::RoomCommand,
+};
 
 pub(crate) async fn execute_room_random(
     store: &SqliteStore,
@@ -101,32 +104,28 @@ pub(crate) fn generate_room_random(request: &RoomRandomRequest) -> RoomRandomRes
     }
 }
 
-pub(crate) async fn handle_provider_room_tool(
+pub(crate) async fn handle_provider_room_random(
     store: &SqliteStore,
     event_tx: &broadcast::Sender<agentsassemble_domain::RoomEvent>,
     room_id: &str,
-    mut command: ProviderRoomToolCommand,
+    command: ProviderRoomToolCommand,
+    request: RoomRandomRequest,
     write_budget: &mut ProviderWriteBudget,
 ) -> Option<crate::event_publication::PublicationAttempt> {
-    if let Err(error) = command.begin_commit() {
-        command.complete(Err(error));
-        return None;
-    }
     let result_id = format!("result-{}", Uuid::new_v4().simple());
-    let payload = command.request().canonical_payload();
-    let payload_bytes =
-        match room_write_command_size(&result_id, command.request().room_action(), &payload) {
-            Ok(payload_bytes) => payload_bytes,
-            Err(error) => {
-                command.complete(Err(public_tool_error(error)));
-                return None;
-            }
-        };
+    let payload = request.canonical_payload();
+    let payload_bytes = match room_write_command_size(&result_id, request.room_action(), &payload) {
+        Ok(payload_bytes) => payload_bytes,
+        Err(error) => {
+            command.complete(Err(public_tool_error(error)));
+            return None;
+        }
+    };
     if let Err(error) = write_budget.admit(command.session_id(), payload_bytes) {
         command.complete(Err(public_tool_error(error)));
         return None;
     }
-    let result = generate_room_random(command.request());
+    let result = generate_room_random(&request);
     let committed = store
         .commit_provider_room_random(ProviderRoomRandomCommit {
             room_id,
@@ -136,7 +135,7 @@ pub(crate) async fn handle_provider_room_tool(
             turn_generation: command.turn_generation(),
             execution_id: command.execution_id(),
             result_id: &result_id,
-            request: command.request(),
+            request: &request,
             result: &result,
         })
         .await;
@@ -145,24 +144,12 @@ pub(crate) async fn handle_provider_room_tool(
             let publication =
                 crate::event_publication::publish_durable_room_events(store, event_tx, room_id)
                     .await;
-            command.complete(Ok(result));
+            command.complete(Ok(ProviderRoomToolResult::Random(result)));
             Some(publication)
         }
         Err(error) => {
             command.complete(Err(public_tool_error(error)));
             None
         }
-    }
-}
-
-fn public_tool_error(error: PersistenceError) -> ProviderRoomToolError {
-    match error {
-        PersistenceError::CommandRejected { code, message } => {
-            ProviderRoomToolError { code, message }
-        }
-        _ => ProviderRoomToolError {
-            code: "persistence_error",
-            message: "The room tool result could not be committed.".to_owned(),
-        },
     }
 }

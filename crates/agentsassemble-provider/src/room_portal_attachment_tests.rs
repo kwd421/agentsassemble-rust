@@ -41,6 +41,7 @@ async fn exact_turn_mcp_read_returns_one_bounded_attachment() {
             ],
             attachment_ingress: Some(ingress),
             allowed_agent_ids: &[],
+            tabletop_tools: false,
             tool_ingress: None,
         })
         .unwrap_or_else(|error| panic!("begin attachment observation: {error}"));
@@ -140,6 +141,7 @@ async fn pending_attachment_read_blocks_terminal_action_and_finish() {
             attachment_ids: &[ATTACHMENT_ID.to_owned()],
             attachment_ingress: Some(ingress),
             allowed_agent_ids: &[],
+            tabletop_tools: false,
             tool_ingress: None,
         })
         .unwrap_or_else(|error| panic!("begin attachment observation: {error}"));
