@@ -1,6 +1,7 @@
 import type { ServerRoomDockSource } from "./roomDockModel";
 import type { ServerProductSurface } from "../types/generated/ServerProductSurface";
 import { PRODUCT_SURFACE_REVISION } from "../types/generated/PRODUCT_SURFACE_REVISION";
+import { ROOM_ACTIONS } from "../types/generated/ROOM_ACTIONS";
 import { lengthDelimitedTranscript, sha256Hex } from "./lengthDelimitedCrypto";
 import {
   assertExactKeys as exactKeys,
@@ -41,6 +42,7 @@ let boundSurface: { origin: string; surface: ServerProductSurface } | null = nul
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const ROOM_ACTION_SET: ReadonlySet<string> = new Set(ROOM_ACTIONS);
 
 function validateAppearance(value: unknown, label: string) {
   const appearance = record(value, label);
@@ -228,20 +230,7 @@ function validateServerProductSurface(value: unknown): ServerProductSurface {
     actions.some(
       (action) =>
         typeof action !== "string" ||
-        !new Set([
-          "message.send",
-          "participant.leave",
-          "participant.mute",
-          "participant.role.update",
-          "room.settings.update",
-          "room.random.roll",
-          "room.random.choose",
-          "agent.create",
-          "agent.configure",
-          "agent.start",
-          "agent.resume",
-          "agent.stop",
-        ]).has(action)
+        !ROOM_ACTION_SET.has(action)
     )
   ) {
     throw new Error("서버 제품 표면 WebSocket 등록부가 올바르지 않습니다.");
