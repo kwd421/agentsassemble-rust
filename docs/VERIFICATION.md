@@ -4499,3 +4499,50 @@ tests, and 63 serial real TCP/WebSocket/integration tests passed. That includes 
 post-admission discovery, owner-loss recovery, safe replay, exact tombstone release, startup cleanup
 of an active runtime without lifecycle intent, Agent Session restart, control-pipe, invite, profile,
 attachment, pin, search, preferences, directory, and runtime boundaries.
+
+## Lobby history packaged completion candidate: 2026-08-31
+
+The isolated release was built from local Rust `bfb6ccf`, on pushed server correction `b95e128`,
+and compared against original `d5046473010d1353a81ee38337360e6d98f7bd6f`. Its product name was
+`AgentsAssemble History Verify 831A` and its distinct identifier was
+`app.agentsassemble.rust.historyverify0831a`; the central URL was explicitly empty. The exact local
+HEAD passed `make verify` before packaging: architecture, policy, 800-line source-growth,
+generated-binding, formatting, original-CSS, and diff gates; the production frontend build and 101
+files with 639 tests; 26 desktop tests; 45 domain, 220 persistence, six protocol, 150 provider, and
+94 server unit tests; every real TCP/WebSocket/integration/doc test; and warning-denied workspace
+and desktop Clippy.
+
+Computer Use created a fresh local profile and room through the copied packaged UI, then committed
+205 distinct messages through its real composer. Read-only SQLite observation found a contiguous
+room record through sequence 206 including room creation. A normal quit released the exact server
+writer. Relaunching the same package restored the room and latest snapshot; the first message and
+channel introduction were absent before the timeline reached its top, then both became visible
+after the copied top-history interaction.
+
+The host opened the owned quick tunnel, changed the room-owned invite scope to read-only, and
+issued one one-use human invite. A fresh Chrome incognito window completed the production preflight,
+profile, and join flow as `History ReadOnly 831A`. The URL token was removed after admission, the
+read-only reason was visible, and the composer stayed disabled. Its latest snapshot did not expose
+the first fixture message; scrolling to the top made that message and the true channel introduction
+visible. Browser reload retained the admitted session without a token in the URL and reproduced the
+same latest snapshot and top-history read.
+
+Before the final reload/read interaction, the isolated store contained 208 room events and 206
+command results. Both counts were identical afterward. The consumed invite was `read_only` with
+`use_count=1`, `max_uses=1`, and no revocation. This is direct evidence that the observed history
+read created no room event or replay/result state; it is not a general performance claim. No
+provider ran.
+
+The verification-only incognito window closed while the user's normal Chrome window remained. The
+host UI stopped public ingress and the owned `cloudflared` process disappeared before application
+shutdown. Normal quit left no matching packaged app, supervisor, sidecar, server, or SQLite writer.
+Only the exact package and identifier-specific Application Support, cache, and WebKit directories
+were moved to the recoverable
+`~/.Trash/AgentsAssemble-History-Verify-20260831-0415` bundle (50 MiB); shared Cargo caches and user
+data were untouched. Computer Use was reset.
+
+Daybreaker Blue High manually re-reviewed pushed `4cbbdcd..b95e128` and cumulative
+`e1f7cca..b95e128`. It marked the earlier unbounded history-read High and broader-scope debit Medium
+CLOSED and returned APPROVE C0/H0/M0/L0 for both exact correction and cumulative ranges. It ran no
+automated scan, test, provider, or app. The critical web review and review of the local frontend
+threshold batch remain pending, so this section does not claim their approval.

@@ -143,6 +143,39 @@ adds no cache, timer, retry, fallback, or persistent state. Focused history/cont
 original-CSS verification passed. Packaged local and admitted read-only verification remains the
 active acceptance boundary rather than being inferred from these deterministic checks.
 
+## Packaged browser evidence
+
+The isolated macOS release `AgentsAssemble History Verify 831A`
+(`app.agentsassemble.rust.historyverify0831a`) was built from local `bfb6ccf`, whose parent is the
+pushed server correction `b95e128`. The original comparison remains `d5046473010d1353a81ee38337360e6d98f7bd6f`.
+Through the copied composer, the local operator committed 205 distinct messages. The resulting
+durable room record was contiguous through sequence 206 including room creation. After a normal
+application quit and relaunch, the fresh subscription omitted the earliest messages; scrolling the
+copied lobby to the top made the first message and true channel introduction visible. No local
+history source or fabricated page was present.
+
+The host then opened its owned quick tunnel and issued one one-use read-only human invite. A fresh
+Chrome incognito window admitted `History ReadOnly 831A` through the production join flow. The URL
+credential was removed after admission, the composer remained disabled with the read-only reason,
+and the initial snapshot did not contain the first message. One top interaction made the first
+message and channel introduction visible. Reload restored the same admitted session without the
+credential in the URL and repeated the same latest-snapshot then pre-cursor-history behavior.
+
+Immediately before the final read the database contained 208 room events and 206 command results;
+after reload and another complete top-history interaction both counts were unchanged. The invite
+row was `read_only`, `use_count=1`, `max_uses=1`. Thus the observed history path created no room event
+or command result. No provider ran. The incognito window closed without touching the normal Chrome
+window, public ingress stopped through its owning UI, and process inspection found no owned tunnel,
+desktop, supervisor, sidecar, or database writer after normal quit. The exact package and
+identifier-specific Application Support, cache, and WebKit data were moved to the recoverable
+`~/.Trash/AgentsAssemble-History-Verify-20260831-0415` bundle, and Computer Use was reset.
+
+On the pushed correction, Daybreaker Blue High manually re-reviewed `4cbbdcd..b95e128` and
+`e1f7cca..b95e128`, marked the missing pre-read admission High and cross-scope debit Medium closed,
+and returned APPROVE C0/H0/M0/L0. It ran no automated security scan, tests, provider, or app. The
+critical web review and the local frontend commit's threshold batch remain pending and are not
+claimed as approved here.
+
 ## Verification path
 
 - focused parser and persistence tests for cursor edges, 200/remaining pages, current authority,
