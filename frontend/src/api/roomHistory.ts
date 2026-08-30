@@ -15,6 +15,7 @@ import {
   queryString,
   responseError,
 } from "./http";
+export type { VoteSummary } from "../lib/roomVoteSummaryContract";
 
 export type LobbyAttachmentUploadOptions = {
   roomId?: string;
@@ -64,22 +65,6 @@ export interface LobbyEvent {
   vote_deadline_at?: string;
   vote_choice?: string;
   attachments?: LobbyAttachmentRef[];
-}
-
-export interface VoteSummary {
-  vote_id: string;
-  question: string;
-  options: string[];
-  vote_duration_seconds?: number;
-  vote_deadline_at?: string;
-  created_by: string;
-  created_at: string;
-  tallies: Record<string, number>;
-  own_choice: string;
-  total_votes: number;
-  closed?: boolean;
-  closed_at?: string;
-  close_reason?: "deadline" | "manual" | "";
 }
 
 export interface LobbyPostResponse {
@@ -246,10 +231,6 @@ export function leaveVoiceChannel(params: {
     : postJson<{ participants: ApiVoiceParticipant[] }>("/api/room/voice/leave",
         { channel_id: params.channelId, meeting_id: params.meetingId });
   return result.then((payload) => normalizeVoiceParticipants(payload.participants));
-}
-
-export function fetchRoomVote(sessionToken: string, voteId: string) {
-  return fetchJsonWithToken<VoteSummary>(`/api/room/vote${queryString({ vote_id: voteId })}`, sessionToken);
 }
 
 export function fetchSideChat(meetingId = "") {

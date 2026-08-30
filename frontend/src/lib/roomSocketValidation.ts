@@ -6,6 +6,7 @@ import {
   joinedParticipantFromEvent,
 } from "./participantEventContract";
 import { isParticipantRole } from "./participantRole";
+import { voteSummaryResultIsValid } from "./roomVoteSummaryContract";
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -205,11 +206,7 @@ export function commandAckResultIsValid(
   if (action === "agent.readd") return result.status === "readded";
   if (action.startsWith("agent.")) return isRecord(result.agent_session);
   if (action === "room.vote.summary") {
-    return Boolean(
-      typeof result.question === "string" &&
-      isRecord(result.tallies) &&
-      isSequence(result.total_votes)
-    );
+    return voteSummaryResultIsValid(payload, result);
   }
   return true;
 }
