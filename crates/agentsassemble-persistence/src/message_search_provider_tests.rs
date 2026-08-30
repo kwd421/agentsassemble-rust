@@ -52,7 +52,10 @@ async fn provider_search_revalidates_the_exact_active_turn_without_writing() {
         .await
         .unwrap_or_else(|error| panic!("read provider message context: {error}"));
     assert_eq!(context.event_id, committed.outcome.event.id);
-    assert_eq!(context.events, [committed.outcome.event.clone()]);
+    assert_eq!(
+        context.events.as_slice(),
+        std::slice::from_ref(&committed.outcome.event)
+    );
     let events_after =
         sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM room_events WHERE room_id = 'general'")
             .fetch_one(&store.pool)
