@@ -260,9 +260,10 @@ async fn validate_close_event(
 }
 
 fn require_open(stored: &StoredVote, now: DateTime<Utc>) -> Result<(), PersistenceError> {
-    if stored.manual_close_seq.is_some()
-        || stored.deadline_at.is_some_and(|deadline| now >= deadline)
-    {
+    if stored.deadline_at.is_some_and(|deadline| now >= deadline) {
+        return Err(rejected("vote_expired", "This vote has ended."));
+    }
+    if stored.manual_close_seq.is_some() {
         return Err(rejected("vote_closed", "This vote has ended."));
     }
     Ok(())

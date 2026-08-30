@@ -1,8 +1,9 @@
 use agentsassemble_domain::{
     AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID,
-    LOCAL_OPERATOR_USER_ID, Participant, ParticipantRole, ParticipantStatus,
+    LOCAL_OPERATOR_USER_ID, Participant, ParticipantRole, ParticipantStatus, RoomEvent,
+    vote_deadline_at,
 };
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use serde_json::{Value, json};
 use sqlx::Row;
 
@@ -155,6 +156,42 @@ async fn close_authority_and_invalid_projection_fail_without_partial_event() {
     assert_eq!(event_count(&store).await, before_corruption_rejection);
 }
 
+#[tokio::test]
+async fn expired_vote_keeps_its_distinct_public_rejection() {
+    let (store, operator) = fixture().await;
+    let created = command(
+        &store,
+        &operator,
+        "21000000-0000-4000-8000-000000000001",
+        json!({
+            "kind": "vote",
+            "vote_question": "Still open?",
+            "vote_options": ["Yes", "No"],
+            "vote_duration_seconds": 30
+        }),
+    )
+    .await;
+    expire_vote(&store, &created.outcome.event.id).await;
+    let before_rejection = event_count(&store).await;
+
+    assert_rejected(
+        &store
+            .execute_message_with_turn(
+                &operator,
+                "21000000-0000-4000-8000-000000000002",
+                "message.send",
+                &json!({
+                    "kind": "vote_cast",
+                    "vote_id": created.outcome.event.id,
+                    "vote_choice": "Yes"
+                }),
+            )
+            .await,
+        "vote_expired",
+    );
+    assert_eq!(event_count(&store).await, before_rejection);
+}
+
 async fn fixture() -> (SqliteStore, AuthenticatedPrincipal) {
     let store = SqliteStore::open("sqlite::memory:")
         .await
@@ -236,6 +273,37 @@ async fn command(
         .execute_message_with_turn(principal, request_id, "message.send", &payload)
         .await
         .unwrap_or_else(|error| panic!("execute vote command: {error}"))
+}
+
+async fn expire_vote(store: &SqliteStore, vote_id: &str) {
+    let encoded = sqlx::query_scalar::<_, String>(
+        "SELECT event_json FROM room_events WHERE room_id = 'general' AND json_extract(event_json, '$.id') = ?",
+    )
+    .bind(vote_id)
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("read vote event: {error}"));
+    let mut event: RoomEvent =
+        serde_json::from_str(&encoded).unwrap_or_else(|error| panic!("decode vote event: {error}"));
+    event.created_at = Utc::now() - Duration::seconds(31);
+    event.extra.insert(
+        "vote_deadline_at".to_owned(),
+        Value::String(
+            vote_deadline_at(event.created_at, 30)
+                .unwrap_or_else(|| panic!("timed vote must have a deadline"))
+                .to_rfc3339(),
+        ),
+    );
+    sqlx::query("UPDATE room_events SET event_json = ? WHERE room_id = ? AND seq = ?")
+        .bind(
+            serde_json::to_string(&event)
+                .unwrap_or_else(|error| panic!("encode expired vote event: {error}")),
+        )
+        .bind(&event.room_id)
+        .bind(event.seq)
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("expire vote event: {error}"));
 }
 
 async fn assert_vote_state(
