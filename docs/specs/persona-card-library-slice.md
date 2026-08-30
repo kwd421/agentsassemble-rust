@@ -529,8 +529,17 @@ this candidate.
   intentionally the private durable `provider_turn_id`. The evidence now states the actual boundary:
   credentials, hidden reasoning, and provider-private identifiers were not copied from the isolated
   database into screenshots, logs, fixtures, or committed documentation. The required private
-  durable turn identity remains unchanged. Final review of these corrections is pending. No
-  automated security scan was used.
+  durable turn identity remains unchanged. The critical web session then returned
+  `APPROVE — C0 H0 M0 L0` for exact correction range `2457bc1..c65e890` and cumulative
+  `f3c91e9..c65e890`.
+- Daybreaker Blue High confirmed its prior empty-persona-ID and cleanup findings were closed, then
+  found one additional Medium in the cumulative public path: `message_final` and `turn_finished`
+  retained the private durable `provider_turn_id`, and the shared room-event projection did not
+  redact that key before browser delivery. Commit `5c2c998` adds that key to the existing single
+  public-redaction owner and regresses the projected event while retaining the persistence and
+  reconciliation identity. No frontend consumer used the field, no second projection owner was
+  added, and no durable state or provider lifecycle was changed. Final manual review of this
+  correction is pending. No automated security scan was used.
 
 ## Non-goals
 

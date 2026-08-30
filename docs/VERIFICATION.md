@@ -4201,5 +4201,35 @@ desktop Clippy; formatting; generated bindings; and `git diff --check`.
 The exact test bundle, identifier-specific Application Support, WebKit and cache directories, and
 fixture directory were permanently removed after confirming the Agent Session was stopped. The
 Computer Use kernel was reset. No default application data, user-owned process, Deep Scan, or other
-automated security scan was touched. Manual critical-web and Daybreaker Blue High review remains
-pending until this candidate batch is pushed.
+automated security scan was touched.
+
+Manual review of the pushed completion range then exposed one real projection threat after the
+initial persona corrections: the official response ID remained necessary as the private durable
+`provider_turn_id`, but ordinary `message_final` and `turn_finished` events carried it to the shared
+browser projection. Commit `5c2c998` adds only that key to the existing recursive public-redaction
+owner. The focused domain regression proves the value is absent from public events; the existing
+persistence and provider tests continue to prove that the private durable identity is retained for
+exact replay, interruption, and reconciliation. Repository-wide search found no frontend consumer,
+so the correction removes provider-private disclosure without changing a reachable browser action,
+durable lifecycle, event count, or retry behavior.
+
+The post-review validation also established a test-infrastructure cost rather than hiding it as a
+product failure. Under concurrent host load, two unrelated frontend tests alternately exceeded the
+default five-second worker limit; the same 96 files and 606 tests passed with two Vitest workers.
+Provider process fixtures also crossed their old five-second readiness guard. An isolated diagnostic
+root showed each test privately stages and synchronizes the verified current test executable
+(67 MiB) before guardian and provider readiness; the affected marker arrived in 5.04–5.10 seconds,
+and the guardian-death fixture completed in 6.93 seconds. Commit `4d4b8ed` therefore gives these
+test-only readiness events one 20-second owner covering the bounded filesystem-preparation and
+protocol windows. It does not change a product startup, filesystem, protocol, cleanup, or security
+timeout, and a real hang still fails closed at the test boundary.
+
+After that correction, the full provider suite passed with its normal concurrency (146 tests), the
+server unit suite passed (86 tests), the process-heavy Agent Session boundary passed serially (9
+tests in 103.53 seconds), and every remaining server TCP, WebSocket, HTTP, persona, attachment,
+credential, invite, profile, directory, preferences, and runtime boundary passed serially (50
+tests). The two-worker frontend run passed all 606 tests, the desktop suite passed all 26 tests, and
+warning-denied workspace Clippy, formatting, architecture, policy, 800-line source-growth, generated
+binding/build, CSS-cascade, and diff checks passed. The external applications creating the observed
+host load were not stopped or modified. Final critical-web and Daybreaker manual review of the exact
+security and test-harness corrections remains pending; no automated security scan was used.
