@@ -60,12 +60,15 @@ impl AppState {
         host_token: HostSecret,
         provider_catalog: ProviderCatalogService,
     ) -> Result<Self, AppStateBuildError> {
-        Self::local_with_provider_adapter(
+        let provider_credentials = ProviderCredentialStore::production();
+        let provider_adapter = ProviderAdapter::with_credentials(provider_credentials.clone());
+        Self::local_with_provider_dependencies(
             store,
             tickets,
             host_token,
             provider_catalog,
-            ProviderAdapter::new(),
+            provider_adapter,
+            provider_credentials,
         )
         .await
     }
@@ -81,6 +84,25 @@ impl AppState {
         host_token: HostSecret,
         provider_catalog: ProviderCatalogService,
         provider_adapter: ProviderAdapter,
+    ) -> Result<Self, AppStateBuildError> {
+        Self::local_with_provider_dependencies(
+            store,
+            tickets,
+            host_token,
+            provider_catalog,
+            provider_adapter,
+            ProviderCredentialStore::production(),
+        )
+        .await
+    }
+
+    async fn local_with_provider_dependencies(
+        store: SqliteStore,
+        tickets: TicketStore,
+        host_token: HostSecret,
+        provider_catalog: ProviderCatalogService,
+        provider_adapter: ProviderAdapter,
+        provider_credentials: ProviderCredentialStore,
     ) -> Result<Self, AppStateBuildError> {
         let persistent_host_identity = store.host_identity().await?;
         let human_invite_credentials =
@@ -98,7 +120,7 @@ impl AppState {
             host_token,
             provider_catalog,
             provider_adapter,
-            provider_credentials: ProviderCredentialStore::production(),
+            provider_credentials,
             human_invite_credentials,
             central_host_identity,
             shutdown: CancellationToken::new(),

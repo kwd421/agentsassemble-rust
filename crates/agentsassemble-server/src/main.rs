@@ -12,7 +12,7 @@ use agentsassemble_protocol::{
     LocalBootstrapGrant, LocalBootstrapPhase, LocalControlRequest, LocalControlResponse,
     ServerProductSurface,
 };
-use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService};
+use agentsassemble_provider::ProviderCatalogService;
 use agentsassemble_server::{
     AppState, HostSecret, ManagerRoomAuthorityRequest, StableEntryConfig, TicketIssueError,
     TicketStore, issue_central_registration_ticket, issue_human_invite_create_ticket,
@@ -90,8 +90,6 @@ async fn main() -> anyhow::Result<()> {
         .canonicalize()
         .with_context(|| format!("resolve database path {}", args.database.display()))?;
     ensure_parent_alive(&cancellation)?;
-    let provider_adapter = ProviderAdapter::new();
-    ensure_parent_alive(&cancellation)?;
     let listener = TcpListener::bind(args.bind).await?;
     ensure_parent_alive(&cancellation)?;
     let address = listener.local_addr()?;
@@ -101,12 +99,11 @@ async fn main() -> anyhow::Result<()> {
             signal.cancel();
         }
     });
-    let mut state = AppState::local_with_provider_adapter(
+    let mut state = AppState::local(
         store,
         TicketStore::new(Duration::from_secs(30), 4_096),
         host_secret,
         ProviderCatalogService::discovering(),
-        provider_adapter,
     )
     .await?;
     state = configure_startup_surface(

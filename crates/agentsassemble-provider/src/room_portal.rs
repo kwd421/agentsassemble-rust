@@ -573,6 +573,10 @@ impl RoomPortal {
         self.server.endpoint()
     }
 
+    pub(crate) fn is_running(&self) -> bool {
+        self.server.is_running()
+    }
+
     pub(crate) fn bearer_token(&self) -> &str {
         self.server.bearer_token()
     }

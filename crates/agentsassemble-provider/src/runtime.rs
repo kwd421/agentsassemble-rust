@@ -13,6 +13,7 @@ pub(crate) use crate::driver::{
 };
 pub use crate::driver::{ProviderRoomObservation, ProviderTurnCompleted, ProviderTurnRequest};
 use crate::{
+    credentials::ProviderCredentialStore,
     registration::{DriverFactory, ProductionDriverFactory},
     runtime_authority::revalidate_runtime_authority,
     runtime_lease::HeldRuntimeLease,
@@ -191,7 +192,13 @@ struct OwnedRuntime {
 impl ProviderAdapter {
     #[must_use]
     pub fn new() -> Self {
-        Self::with_factory(Arc::new(ProductionDriverFactory::local()))
+        Self::with_credentials(ProviderCredentialStore::production())
+    }
+
+    #[doc(hidden)]
+    #[must_use]
+    pub fn with_credentials(credentials: ProviderCredentialStore) -> Self {
+        Self::with_factory(Arc::new(ProductionDriverFactory::local(credentials)))
     }
 
     /// Builds an adapter whose Unix custody helpers re-execute an exact host binary.

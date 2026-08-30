@@ -138,6 +138,11 @@ impl ProviderCredentialHttpError {
 impl From<ProviderCredentialError> for ProviderCredentialHttpError {
     fn from(error: ProviderCredentialError) -> Self {
         match error {
+            ProviderCredentialError::MissingSecret => Self {
+                status: StatusCode::BAD_REQUEST,
+                code: "provider_credential_missing",
+                message: "Provider credential is missing.",
+            },
             ProviderCredentialError::InvalidSecret => Self {
                 status: StatusCode::BAD_REQUEST,
                 code: "provider_credential_invalid",

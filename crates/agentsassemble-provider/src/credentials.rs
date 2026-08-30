@@ -45,6 +45,8 @@ impl ProviderCredentialStatus {
 pub enum ProviderCredentialError {
     #[error("secure_store_unavailable")]
     SecureStoreUnavailable,
+    #[error("provider_credential_missing")]
+    MissingSecret,
     #[error("provider_credential_invalid")]
     InvalidSecret,
 }
@@ -56,6 +58,7 @@ enum BackendAvailability<T> {
 
 trait CredentialBackend: Send + Sync {
     fn configured(&self) -> Result<BackendAvailability<bool>, ProviderCredentialError>;
+    fn read(&self) -> Result<BackendAvailability<Option<String>>, ProviderCredentialError>;
     fn set(&self, secret: &str) -> Result<BackendAvailability<()>, ProviderCredentialError>;
     fn delete(&self) -> Result<BackendAvailability<()>, ProviderCredentialError>;
 }
@@ -84,6 +87,17 @@ impl CredentialBackend for NativeCredentialBackend {
                 Err(KeyringError::NoEntry) => Ok(BackendAvailability::Available(false)),
                 Err(_) => Err(ProviderCredentialError::SecureStoreUnavailable),
             }
+        }
+    }
+
+    fn read(&self) -> Result<BackendAvailability<Option<String>>, ProviderCredentialError> {
+        let BackendAvailability::Available(entry) = native_entry()? else {
+            return Ok(BackendAvailability::Absent);
+        };
+        match entry.get_password() {
+            Ok(secret) => Ok(BackendAvailability::Available(Some(secret))),
+            Err(KeyringError::NoEntry) => Ok(BackendAvailability::Available(None)),
+            Err(_) => Err(ProviderCredentialError::SecureStoreUnavailable),
         }
     }
 
@@ -163,6 +177,14 @@ pub struct ProviderCredentialStore {
     access: Arc<Semaphore>,
 }
 
+pub(crate) struct DeepSeekCredential(String);
+
+impl DeepSeekCredential {
+    pub(crate) fn expose(&self) -> &str {
+        &self.0
+    }
+}
+
 impl ProviderCredentialStore {
     #[must_use]
     pub fn production() -> Self {
@@ -195,6 +217,30 @@ impl ProviderCredentialStore {
                     ProviderCredentialSource::Environment
                 }),
             ),
+        }
+    }
+
+    /// Resolves one runtime-only `DeepSeek` credential without projecting it publicly.
+    ///
+    /// # Errors
+    ///
+    /// Fails closed when the installed store fails or contains an invalid nonempty secret.
+    pub(crate) async fn deepseek_secret(
+        &self,
+    ) -> Result<DeepSeekCredential, ProviderCredentialError> {
+        let keyring = self.run_backend(|backend| backend.read()).await?;
+        match keyring {
+            BackendAvailability::Available(Some(secret)) => {
+                validated_secret(&secret).map(DeepSeekCredential)
+            }
+            BackendAvailability::Available(None) | BackendAvailability::Absent
+                if self.environment_secret.is_empty() =>
+            {
+                Err(ProviderCredentialError::MissingSecret)
+            }
+            BackendAvailability::Available(None) | BackendAvailability::Absent => {
+                validated_secret(&self.environment_secret).map(DeepSeekCredential)
+            }
         }
     }
 
@@ -310,6 +356,22 @@ mod tests {
             }
         }
 
+        fn read(&self) -> Result<BackendAvailability<Option<String>>, ProviderCredentialError> {
+            let state = self
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if state.fail {
+                return Err(ProviderCredentialError::SecureStoreUnavailable);
+            }
+            if state.absent {
+                return Ok(BackendAvailability::Absent);
+            }
+            Ok(BackendAvailability::Available(
+                state.configured.then(|| state.stored.clone()),
+            ))
+        }
+
         fn set(&self, secret: &str) -> Result<BackendAvailability<()>, ProviderCredentialError> {
             let mut state = self
                 .state
@@ -366,6 +428,13 @@ mod tests {
             .unwrap_or_else(|error| panic!("store secret: {error}"));
         assert_eq!(status.source, ProviderCredentialSource::Keyring);
         assert_eq!(
+            store
+                .deepseek_secret()
+                .await
+                .map(|secret| secret.expose().to_owned()),
+            Ok("secure-secret".to_owned())
+        );
+        assert_eq!(
             backend
                 .state
                 .lock()
@@ -379,6 +448,13 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("delete secret: {error}"));
         assert_eq!(deleted.source, ProviderCredentialSource::Environment);
+        assert_eq!(
+            store
+                .deepseek_secret()
+                .await
+                .map(|secret| secret.expose().to_owned()),
+            Ok("environment-secret".to_owned())
+        );
     }
 
     #[tokio::test]
@@ -413,6 +489,10 @@ mod tests {
             store.deepseek_status().await,
             Err(ProviderCredentialError::SecureStoreUnavailable)
         );
+        assert!(matches!(
+            store.deepseek_secret().await,
+            Err(ProviderCredentialError::SecureStoreUnavailable)
+        ));
         assert_eq!(
             store.set_deepseek("short").await,
             Err(ProviderCredentialError::InvalidSecret)
@@ -421,6 +501,29 @@ mod tests {
             store.set_deepseek(&"x".repeat(8_193)).await,
             Err(ProviderCredentialError::InvalidSecret)
         );
+    }
+
+    #[tokio::test]
+    async fn runtime_secret_distinguishes_missing_and_invalid_authority() {
+        let backend = Arc::new(TestBackend::default());
+        let missing_store = store(Arc::clone(&backend), "");
+        assert!(matches!(
+            missing_store.deepseek_secret().await,
+            Err(ProviderCredentialError::MissingSecret)
+        ));
+        let store = store(Arc::clone(&backend), "environment-secret");
+        {
+            let mut state = backend
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            state.configured = true;
+            state.stored = "short".to_owned();
+        }
+        assert!(matches!(
+            store.deepseek_secret().await,
+            Err(ProviderCredentialError::InvalidSecret)
+        ));
     }
 
     #[cfg(target_os = "macos")]

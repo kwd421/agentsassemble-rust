@@ -16,8 +16,13 @@ use crate::antigravity::AntigravityDriver;
 #[cfg(unix)]
 use crate::guardian::GuardianLaunch;
 use crate::{
-    catalog::{catalog_revision, discover_antigravity, discover_codex, discover_opencode},
+    catalog::{
+        catalog_revision, discover_antigravity, discover_codex, discover_deepseek,
+        discover_opencode,
+    },
     codex::CodexDriver,
+    credentials::{ProviderCredentialError, ProviderCredentialStore},
+    deepseek::DeepSeekDriver,
     driver::{DriverError, DriverFuture, ProviderDriver},
     launch_error::DriverLaunchError,
     opencode::OpenCodeDriver,
@@ -49,6 +54,7 @@ pub(crate) struct ProviderRegistration {
     pub(crate) connection_kind: &'static str,
     pub(crate) executable_required: bool,
     pub(crate) probe_executable: &'static str,
+    pub(crate) login_label: &'static str,
     pub(crate) login_flow: &'static str,
     discover: ProviderDiscovery,
     launch: ProviderLaunch,
@@ -65,6 +71,7 @@ pub(crate) static CODEX_PROVIDER: ProviderRegistration = ProviderRegistration {
     connection_kind: "native_cli_bridge",
     executable_required: true,
     probe_executable: "codex",
+    login_label: "로그인",
     login_flow: "browser_oauth",
     discover: discover_codex_registered,
     launch: launch_codex,
@@ -81,6 +88,7 @@ pub(crate) static ANTIGRAVITY_PROVIDER: ProviderRegistration = ProviderRegistrat
     connection_kind: "native_cli_bridge",
     executable_required: true,
     probe_executable: "agy",
+    login_label: "로그인",
     login_flow: "interactive_terminal",
     discover: discover_antigravity_registered,
     launch: launch_antigravity,
@@ -97,13 +105,35 @@ pub(crate) static OPENCODE_PROVIDER: ProviderRegistration = ProviderRegistration
     connection_kind: "native_cli_bridge",
     executable_required: true,
     probe_executable: "opencode",
+    login_label: "로그인",
     login_flow: "interactive_terminal",
     discover: discover_opencode_registered,
     launch: launch_opencode,
 };
 
-static PROVIDER_REGISTRATIONS: [&ProviderRegistration; 3] =
-    [&CODEX_PROVIDER, &ANTIGRAVITY_PROVIDER, &OPENCODE_PROVIDER];
+pub(crate) static DEEPSEEK_PROVIDER: ProviderRegistration = ProviderRegistration {
+    id: "deepseek",
+    display_name: "DeepSeek",
+    provider_kind: "deepseek_api",
+    runtime_kind: "api",
+    transport: "https",
+    catalog_group: "api",
+    workspace_required: false,
+    connection_kind: "native_cli_bridge",
+    executable_required: false,
+    probe_executable: "",
+    login_label: "API 키",
+    login_flow: "api_key",
+    discover: discover_deepseek_registered,
+    launch: launch_deepseek,
+};
+
+static PROVIDER_REGISTRATIONS: [&ProviderRegistration; 4] = [
+    &CODEX_PROVIDER,
+    &ANTIGRAVITY_PROVIDER,
+    &OPENCODE_PROVIDER,
+    &DEEPSEEK_PROVIDER,
+];
 
 pub(crate) fn provider_registrations() -> &'static [&'static ProviderRegistration] {
     &PROVIDER_REGISTRATIONS
@@ -154,6 +184,13 @@ fn discover_opencode_registered(
     cancellation: &CancellationToken,
 ) -> ProviderDiscoveryFuture<'_> {
     Box::pin(discover_opencode(provider, cancellation))
+}
+
+fn discover_deepseek_registered(
+    provider: ProviderAvailability,
+    cancellation: &CancellationToken,
+) -> ProviderDiscoveryFuture<'_> {
+    Box::pin(discover_deepseek(provider, cancellation))
 }
 
 #[derive(Clone)]
@@ -321,7 +358,7 @@ pub(crate) fn loading_provider(registration: &ProviderRegistration) -> ProviderA
         discovery_error_code: String::new(),
         discovery_error: String::new(),
         login_available: true,
-        login_label: "로그인".to_owned(),
+        login_label: registration.login_label.to_owned(),
         login_flow: registration.login_flow.to_owned(),
         controls: Vec::new(),
     }
@@ -336,6 +373,7 @@ pub(crate) trait DriverFactory: Send + Sync {
 }
 
 pub(crate) struct ProductionDriverFactory {
+    pub(crate) credentials: ProviderCredentialStore,
     #[cfg(unix)]
     pub(crate) guardian: Option<GuardianLaunch>,
     #[cfg(windows)]
@@ -343,7 +381,7 @@ pub(crate) struct ProductionDriverFactory {
 }
 
 impl ProductionDriverFactory {
-    pub(crate) fn local() -> Self {
+    pub(crate) fn local(credentials: ProviderCredentialStore) -> Self {
         #[cfg(all(unix, test))]
         let guardian = GuardianLaunch::test_harness().ok();
         #[cfg(all(unix, not(test), any(target_os = "linux", target_os = "android")))]
@@ -357,6 +395,7 @@ impl ProductionDriverFactory {
         .and_then(Result::ok)
         .and_then(|executable| GuardianLaunch::production(&executable).ok());
         Self {
+            credentials,
             #[cfg(unix)]
             guardian,
             #[cfg(windows)]
@@ -369,6 +408,7 @@ impl ProductionDriverFactory {
     #[cfg(unix)]
     pub(crate) fn with_guardian(executable: &Path) -> Self {
         Self {
+            credentials: ProviderCredentialStore::production(),
             guardian: GuardianLaunch::production(executable).ok(),
         }
     }
@@ -478,6 +518,40 @@ fn launch_opencode<'a>(
         let driver = OpenCodeDriver::spawn(session).await?;
         Ok(Box::new(driver) as Box<dyn ProviderDriver>)
     })
+}
+
+fn launch_deepseek<'a>(
+    factory: &'a ProductionDriverFactory,
+    _session: &'a DurableAgentSession,
+    _runtime_lease: &'a HeldRuntimeLease,
+) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
+    Box::pin(async move {
+        let credential = factory
+            .credentials
+            .deepseek_secret()
+            .await
+            .map_err(credential_launch_error)?;
+        let driver = DeepSeekDriver::launch(credential).await?;
+        Ok(Box::new(driver) as Box<dyn ProviderDriver>)
+    })
+}
+
+const fn credential_launch_error(error: ProviderCredentialError) -> DriverLaunchError {
+    let driver = match error {
+        ProviderCredentialError::MissingSecret => DriverError::new(
+            "provider_credential_missing",
+            "A DeepSeek API credential is required.",
+        ),
+        ProviderCredentialError::InvalidSecret => DriverError::new(
+            "provider_credential_invalid",
+            "The configured DeepSeek credential is invalid.",
+        ),
+        ProviderCredentialError::SecureStoreUnavailable => DriverError::new(
+            "secure_store_unavailable",
+            "The secure credential store is unavailable.",
+        ),
+    };
+    DriverLaunchError::safe(driver)
 }
 
 #[cfg(unix)]

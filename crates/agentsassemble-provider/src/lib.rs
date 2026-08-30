@@ -19,6 +19,7 @@ mod codex;
 mod codex_identity;
 mod configuration;
 mod credentials;
+mod deepseek;
 mod driver;
 mod filesystem;
 #[cfg(unix)]

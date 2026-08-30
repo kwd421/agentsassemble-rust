@@ -112,7 +112,7 @@ pub(crate) async fn discover_codex(
             control("model", "모델", "combobox", models, &default_model),
             control("reasoning_effort", "추론 강도", "select", efforts, "low"),
             control("service_tier", "응답 속도", "select", tiers, "default"),
-            permission_control(),
+            permission_control(true),
         ],
     )
 }
@@ -167,7 +167,7 @@ pub(crate) async fn discover_antigravity(
         vec![
             control("model", "모델", "combobox", models, &default_model),
             control("reasoning_effort", "추론 강도", "select", efforts, "medium"),
-            permission_control(),
+            permission_control(true),
         ],
     )
 }
@@ -205,7 +205,80 @@ pub(crate) async fn discover_opencode(
                 ],
                 "",
             ),
-            permission_control(),
+            permission_control(true),
+        ],
+    )
+}
+
+pub(crate) async fn discover_deepseek(
+    mut provider: ProviderAvailability,
+    cancellation: &CancellationToken,
+) -> ProviderAvailability {
+    if cancellation.is_cancelled() {
+        return failed_provider(provider, ProbeFailure::Cancelled);
+    }
+    let models = [
+        ("deepseek-v4-flash", "DeepSeek V4 Flash", "0.14", "0.28"),
+        ("deepseek-v4-pro", "DeepSeek V4 Pro", "0.435", "0.87"),
+    ]
+    .into_iter()
+    .map(|(value, label, input_price, output_price)| {
+        let metadata = BTreeMap::from([
+            ("relation_scope".to_owned(), json!("global")),
+            ("reasoning_efforts".to_owned(), json!(["high", "max"])),
+            ("context_length".to_owned(), json!(1_000_000)),
+            ("max_output_tokens".to_owned(), json!(384_000)),
+            ("input_price_per_million".to_owned(), json!(input_price)),
+            ("output_price_per_million".to_owned(), json!(output_price)),
+            ("pricing".to_owned(), json!("paid")),
+            ("reasoning".to_owned(), json!(true)),
+            ("tools".to_owned(), json!(true)),
+            (
+                "training_policy".to_owned(),
+                json!("사용될 수 있음 · opt-out 가능"),
+            ),
+        ]);
+        ProviderControlOption {
+            value: value.to_owned(),
+            label: label.to_owned(),
+            metadata,
+        }
+    })
+    .collect();
+    "static_manifest".clone_into(&mut provider.catalog_source);
+    ready_provider(
+        provider,
+        "deepseek-v4-flash".to_owned(),
+        vec![
+            control("model", "모델", "combobox", models, "deepseek-v4-flash"),
+            control(
+                "reasoning_effort",
+                "추론 강도",
+                "select",
+                vec![option("high", "High"), option("max", "Max")],
+                "high",
+            ),
+            control(
+                "variant",
+                "Thinking",
+                "select",
+                vec![
+                    option("thinking", "사용"),
+                    option("non_thinking", "사용 안 함"),
+                ],
+                "thinking",
+            ),
+            control(
+                "max_output_tokens",
+                "최대 응답 길이",
+                "select",
+                [1_024_u32, 2_048, 4_096, 8_192, 16_384]
+                    .into_iter()
+                    .map(|value| option(&value.to_string(), &format!("{value} 토큰")))
+                    .collect(),
+                "4096",
+            ),
+            permission_control(false),
         ],
     )
 }
@@ -298,15 +371,16 @@ fn control(
     }
 }
 
-fn permission_control() -> ProviderControl {
+fn permission_control(workspace_write: bool) -> ProviderControl {
+    let mut options = vec![option("meeting_read_only", "방 읽기 전용")];
+    if workspace_write {
+        options.push(option("workspace_write", "작업 폴더 쓰기"));
+    }
     control(
         "permission_mode",
         "권한",
         "select",
-        vec![
-            option("meeting_read_only", "방 읽기 전용"),
-            option("workspace_write", "작업 폴더 쓰기"),
-        ],
+        options,
         "meeting_read_only",
     )
 }
