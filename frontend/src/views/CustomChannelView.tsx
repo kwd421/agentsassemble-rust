@@ -2,11 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Hash, Mic, MicOff, PhoneOff, Send, Volume2 } from "lucide-react";
 import {
   fetchChannelLobby,
-  fetchRoomMessageContext,
   fetchVoicePresence,
   joinVoiceChannel,
   leaveVoiceChannel,
-  mergeLobbyEventsByCreatedAt,
   postChannelSay,
   type LobbyEvent,
   type RoomSearchResult,
@@ -47,8 +45,6 @@ export default function CustomChannelView({
   messageSearchScope = "channel",
   onMessageSearchScopeChange,
   messageSearchChannelLabels = {},
-  pendingSearchTargetEventId = "",
-  onSearchTargetHandled,
   onOpenCrossChannelSearchResult,
 }: {
   channel: RoomChannel;
@@ -65,8 +61,6 @@ export default function CustomChannelView({
   messageSearchScope?: ChannelSearchScope;
   onMessageSearchScopeChange?: (scope: ChannelSearchScope) => void;
   messageSearchChannelLabels?: Record<string, string>;
-  pendingSearchTargetEventId?: string;
-  onSearchTargetHandled?: () => void;
   onOpenCrossChannelSearchResult?: (result: RoomSearchResult) => void;
 }) {
   if (channel.type === "voice") {
@@ -101,8 +95,6 @@ export default function CustomChannelView({
       messageSearchScope={messageSearchScope}
       onMessageSearchScopeChange={onMessageSearchScopeChange}
       messageSearchChannelLabels={messageSearchChannelLabels}
-      pendingSearchTargetEventId={pendingSearchTargetEventId}
-      onSearchTargetHandled={onSearchTargetHandled}
       onOpenCrossChannelSearchResult={onOpenCrossChannelSearchResult}
     />
   );
@@ -123,8 +115,6 @@ function TextChannelBody({
   messageSearchScope,
   onMessageSearchScopeChange,
   messageSearchChannelLabels,
-  pendingSearchTargetEventId,
-  onSearchTargetHandled,
   onOpenCrossChannelSearchResult,
 }: {
   channel: RoomChannel;
@@ -141,15 +131,11 @@ function TextChannelBody({
   messageSearchScope: ChannelSearchScope;
   onMessageSearchScopeChange?: (scope: ChannelSearchScope) => void;
   messageSearchChannelLabels: Record<string, string>;
-  pendingSearchTargetEventId: string;
-  onSearchTargetHandled?: () => void;
   onOpenCrossChannelSearchResult?: (result: RoomSearchResult) => void;
 }) {
   const [draft, setDraft] = useState("");
   const [sendError, setSendError] = useState("");
   const [sending, setSending] = useState(false);
-  const [contextEvents, setContextEvents] = useState<LobbyEvent[]>([]);
-  const [pendingMessageTarget, setPendingMessageTarget] = useState("");
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const localMessageSearch = useRoomMessageSearch({
     roomId: meetingId,
@@ -163,7 +149,7 @@ function TextChannelBody({
     [channel.id, sessionToken, meetingId]
   );
   const [events, , error, refresh] = usePoll<LobbyEvent[]>(fetcher, 2500);
-  const messages = mergeLobbyEventsByCreatedAt(events || [], contextEvents);
+  const messages = events || [];
   const channelSearchItems = messageSearch.results.map((result) => {
     const date = new Date(result.created_at);
     const timeLabel = date.toLocaleString("ko-KR", {
@@ -192,12 +178,7 @@ function TextChannelBody({
           onOpenCrossChannelSearchResult(result);
           return;
         }
-        void navigateToMessage(result.event_id).catch((reason) => {
-          setPendingMessageTarget("");
-          messageSearch.setError(
-            reason instanceof Error ? reason.message : "검색한 메시지로 이동하지 못했습니다."
-          );
-        });
+        messageSearch.setError("검색 결과의 채널을 열 수 없습니다.");
       },
     };
   });
@@ -206,55 +187,6 @@ function TextChannelBody({
     const node = scrollRef.current;
     if (node) node.scrollTop = node.scrollHeight;
   }, [events]);
-
-  useEffect(() => {
-    setContextEvents([]);
-    setPendingMessageTarget("");
-  }, [channel.id, meetingId]);
-
-  useEffect(() => {
-    if (!pendingMessageTarget) return;
-    const target = Array.from(
-      scrollRef.current?.querySelectorAll<HTMLElement>("[data-channel-event-id]") || []
-    ).find((candidate) => candidate.dataset.channelEventId === pendingMessageTarget);
-    if (!target) return;
-    window.requestAnimationFrame(() => {
-      target.scrollIntoView({ block: "center" });
-      target.focus({ preventScroll: true });
-      target.dataset.searchTarget = "true";
-      window.setTimeout(() => delete target.dataset.searchTarget, 1800);
-    });
-    setPendingMessageTarget("");
-  }, [messages, pendingMessageTarget]);
-
-  async function navigateToMessage(eventId: string) {
-    setPendingMessageTarget(eventId);
-    const context = await fetchRoomMessageContext({
-      roomId: meetingId,
-      channelId: channel.id,
-      eventId,
-      sessionToken,
-    });
-    setContextEvents(context.events as LobbyEvent[]);
-  }
-
-  useEffect(() => {
-    if (!pendingSearchTargetEventId) return;
-    let active = true;
-    void navigateToMessage(pendingSearchTargetEventId)
-      .catch((reason) => {
-        setPendingMessageTarget("");
-        messageSearch.setError(
-          reason instanceof Error ? reason.message : "검색한 메시지로 이동하지 못했습니다."
-        );
-      })
-      .finally(() => {
-        if (active) onSearchTargetHandled?.();
-      });
-    return () => {
-      active = false;
-    };
-  }, [pendingSearchTargetEventId]);
 
   async function send() {
     const message = draft.trim();

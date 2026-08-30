@@ -500,12 +500,6 @@ export default function AppView({ controller }: { controller: AppController }) {
               messageSearchScope={messageSearchScope}
               onMessageSearchScopeChange={setMessageSearchScope}
               messageSearchChannelLabels={messageSearchChannelLabels}
-              pendingSearchTargetEventId={
-                pendingMessageSearchTarget?.channelId === activeCustomChannel.id
-                  ? pendingMessageSearchTarget.eventId
-                  : ""
-              }
-              onSearchTargetHandled={() => setPendingMessageSearchTarget(null)}
               onOpenCrossChannelSearchResult={openCrossChannelSearchResult}
             />
           ) : (
