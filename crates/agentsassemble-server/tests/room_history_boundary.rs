@@ -184,6 +184,48 @@ async fn read_only_human_reads_history_and_revocation_closes_the_socket() {
     server.stop().await;
 }
 
+#[tokio::test]
+async fn local_tcp_history_work_is_bounded_without_disabling_the_socket() {
+    let server = start_local(local_fixture().await).await;
+    let mut socket = connect(&server.base_url, HOST_TOKEN, ROOM_ID).await;
+    assert_eq!(socket.subscribe(0).await["op"], "subscribed");
+    assert_eq!(socket.receive_json().await["op"], "snapshot");
+
+    for index in 0..5 {
+        socket
+            .send_json(&json!({
+                "op": "command",
+                "request_id": format!("history-admitted-{index}"),
+                "action": "room.history",
+                "payload": {"limit": 200},
+            }))
+            .await;
+        assert_eq!(socket.receive_json().await["op"], "ack");
+    }
+    socket
+        .send_json(&json!({
+            "op": "command",
+            "request_id": "history-limited",
+            "action": "room.history",
+            "payload": {"limit": 200},
+        }))
+        .await;
+    let limited = socket.receive_json().await;
+    assert_eq!(limited["op"], "nack");
+    assert_eq!(limited["request_id"], "history-limited");
+    assert_eq!(limited["resolution"], "rejected");
+    assert_eq!(limited["error"]["code"], "history_read_limited");
+
+    socket
+        .send_json(&json!({"op": "ping", "nonce": "still-open"}))
+        .await;
+    let pong = socket.receive_json().await;
+    assert_eq!(pong["op"], "pong");
+    assert_eq!(pong["nonce"], "still-open");
+    socket.close().await;
+    server.stop().await;
+}
+
 async fn local_fixture() -> SqliteStore {
     let store = SqliteStore::open(&format!(
         "sqlite:file:{}?mode=memory&cache=shared",

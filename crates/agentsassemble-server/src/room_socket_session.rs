@@ -73,7 +73,7 @@ pub(crate) async fn run(
                     Message::Ping(raw) | Message::Pong(raw) => (raw.len(), true),
                     Message::Close(_) => return,
                 };
-                if !state.raw_ingress.admit(&principal, frame_bytes, control_frame) {
+                if !state.socket_admission.admit_frame(&principal, frame_bytes, control_frame) {
                     let _ = send_authorized_nack(&state, &mut principal, &mut human_session, &mut channel, &mut sender, ("", "frame", CommandResolution::Unresolved, ProtocolError::new("ingress_limited", "WebSocket ingress budget exceeded."))).await;
                     return;
                 }
@@ -98,6 +98,7 @@ pub(crate) async fn run(
                         if action == RoomAction::RoomHistory {
                             match read_history_frame(
                                 &state.store,
+                                &state.socket_admission,
                                 &principal,
                                 &request_id,
                                 &payload,

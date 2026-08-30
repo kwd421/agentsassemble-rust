@@ -37,6 +37,17 @@ admitted human sessions converge on the same current-principal persistence read.
 not receive browser history pages and continue using their assigned RoomPortal context/search
 contract.
 
+The process socket-admission owner charges both one history read and its requested event count after
+exact payload parsing and before the SQLite read. Fixed ten-second request/event ceilings are
+`10 / 1,000` per principal, `320 / 3,200` per room, and `640 / 6,400` per process. The principal
+ceiling preserves one complete copied-client interaction (its existing maximum is five 200-event
+pages), while the request dimension prevents tiny limits from bypassing transaction cost and the
+event dimension bounds connection- and room-sharding against the single SQLite connection.
+Exceeding either independent read dimension returns a definitive
+`history_read_limited` NACK without closing the socket, consuming mutation budget, or disabling
+ordinary frames; rejected history work remains charged until the fixed window turns over. No retry,
+timer, worker, or alternate read path is introduced.
+
 The product inner-frame ceiling is 256 KiB. The server first preserves the requested newest-near
 cursor subset and then removes only the earliest returned records until the exact correlated ACK
 fits that existing encoder. This cannot skip history: a shortened page reports its actual oldest
@@ -80,6 +91,29 @@ this slice adds no poll, heartbeat, recurring timer, worker, cache, or compatibi
    read-only browser across normal restart or reload.
 7. Focused persistence, protocol, frontend, and real-TCP boundaries plus the complete repository
    gates pass. Query, serialization, memory, and wire-size costs are measured before completion.
+
+## Admission correction evidence
+
+Manual review found that a tiny `room.history` frame could previously cause a worst-case read and
+decode of 201 stored events plus repeated exact ACK encoding without a corresponding workload
+debit. With 12,000-character message content this is roughly 2.4 MiB of stored JSON per maximum
+page; even a one-event page begins the same authorization/high-water/page transaction, while the
+store intentionally owns one SQLite connection. The existing release real-TCP
+large-event case used about 101 MiB peak process memory and 0.09 seconds of test-body time for 51
+events; exact 200-event frame fitting took about 6 milliseconds per release process including test
+startup. These measurements do not justify caching, another connection, or a generic work
+framework, but they establish a reachable CPU/memory/latency amplification boundary.
+
+The correction keeps raw frame, history-request, and requested-event counters as independent
+dimensions inside the one process socket-admission owner. It preserves parser, current authority,
+projection, cursor, exact frame fitting, read-only access, and the copied five-page interaction.
+The accepted trade-off is a visible rejection of additional history work inside the same fixed
+window. Focused owner tests prove principal and room aggregation plus small-limit resistance without
+wall-clock waiting; the authenticated TCP boundary proves the sixth maximum request is rejected
+while the same socket still answers a ping. The complete `make verify` gate then passed: structure,
+800-line growth, policy, formatting, workspace build and generated types, copied frontend build/CSS
+and 628 tests, desktop checks and 26 tests, all Rust unit/integration/doc tests, and warning-denying
+Clippy.
 
 ## Verification path
 

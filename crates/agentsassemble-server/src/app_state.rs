@@ -15,7 +15,7 @@ use crate::{
     RoomRuntime, TicketStore,
     connection_admission::ConnectionAdmission,
     public_ingress::{ManualPublicIngressError, PublicIngress, PublicIngressControlError},
-    raw_ingress::RawIngressGovernor,
+    socket_admission::SocketAdmission,
     stable_entry::{StableEntryActivationError, StableEntryConfig},
 };
 
@@ -41,7 +41,7 @@ pub struct AppState {
     pub shutdown: CancellationToken,
     pub connections: TaskTracker,
     pub(crate) connection_admission: ConnectionAdmission,
-    pub(crate) raw_ingress: RawIngressGovernor,
+    pub(crate) socket_admission: SocketAdmission,
     pub(crate) public_ingress: PublicIngress,
     pub server_product_surface: Arc<ServerProductSurface>,
     pub frontend_root: Option<PathBuf>,
@@ -126,7 +126,7 @@ impl AppState {
             shutdown: CancellationToken::new(),
             connections: TaskTracker::new(),
             connection_admission: ConnectionAdmission::new(),
-            raw_ingress: RawIngressGovernor::new(),
+            socket_admission: SocketAdmission::new(),
             public_ingress: PublicIngress::disabled(),
             server_product_surface: Arc::new(crate::product_surface::server_product_surface(
                 false, false,

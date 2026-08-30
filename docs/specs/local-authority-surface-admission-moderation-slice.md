@@ -205,7 +205,7 @@ The WebSocket codec owns hard byte bounds for frame, reassembled message, and
 write buffer memory. This contract does not claim a fragment-count or rate limit
 unless a separate codec-owned implementation is added.
 
-Before JSON parsing or room queueing, one process-wide raw ingress governor
+Before JSON parsing or room queueing, the process-wide socket admission owner
 atomically charges global, principal, and room byte/rate scopes. The debit is
 permanent and includes unknown or unsupported raw frames. The room actor does not
 retain a sharded transport charge. Keyed windows are bounded and reject new scope

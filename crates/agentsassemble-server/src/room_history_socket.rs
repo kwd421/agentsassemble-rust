@@ -8,10 +8,12 @@ use serde_json::Value;
 use crate::{
     authenticated_channel::encode_server_frame,
     room_command_result::{CommandFailure, validate_command_envelope},
+    socket_admission::SocketAdmission,
 };
 
 pub(crate) async fn read_history_frame(
     store: &SqliteStore,
+    admission: &SocketAdmission,
     principal: &AuthenticatedPrincipal,
     request_id: &str,
     payload: &Value,
@@ -20,6 +22,20 @@ pub(crate) async fn read_history_frame(
     let request = RoomHistoryRequest::from_payload(payload)
         .map_err(rejection_error)
         .map_err(CommandFailure::rejected)?;
+    let requested_events = usize::try_from(request.limit).map_err(|_| {
+        CommandFailure::rejected(PersistenceError::CommandRejected {
+            code: "bad_request",
+            message: "room.history limit is outside the supported range.".to_owned(),
+        })
+    })?;
+    if !admission.admit_history(principal, requested_events) {
+        return Err(CommandFailure::rejected(
+            PersistenceError::CommandRejected {
+                code: "history_read_limited",
+                message: "Room history read budget exceeded.".to_owned(),
+            },
+        ));
+    }
     let page = store
         .room_history_page(principal, request)
         .await

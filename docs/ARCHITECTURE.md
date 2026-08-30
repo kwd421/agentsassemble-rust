@@ -134,13 +134,16 @@ the frontend cannot select authority with a path or generic operation string.
 `(room_id, principal_id, request_id)` identifies a command attempt. Repeating the same action and canonical payload returns its committed result. Reusing the key with a different action or payload is a conflict.
 
 Admission has distinct process, room, human-principal, and provider-session
-owners. Before parsing, the process-wide raw ingress governor charges every first
+owners. Before parsing, the process-wide socket admission owner charges every first
 subscription and later text, binary, ping, or pong frame atomically to fixed
 10-second global, principal, and room windows. The respective message/byte/control
 ceilings are `4,096 / 32 MiB / 1,024`, `256 / 2 MiB / 64`, and
 `2,048 / 16 MiB / 512`. A new ticket, connection, or room cannot reset the
 principal scope, and rejected over-limit frames stay charged until the window
-turns over.
+turns over. After exact `room.history` parsing, the same owner independently charges
+one read plus its requested event count before persistence. Fixed process/room/principal
+request/event ceilings are `640/6,400`, `320/3,200`, and `10/1,000`; over-limit reads
+fail explicitly without closing the socket or consuming mutation admission.
 
 After strict protocol and implemented-action classification, exact committed
 replays and matching lifecycle resumes are recognized first. Every fresh human

@@ -231,8 +231,8 @@ where
         Message::Close(_) => return None,
     };
     if !state
-        .raw_ingress
-        .admit(principal, frame_bytes, control_frame)
+        .socket_admission
+        .admit_frame(principal, frame_bytes, control_frame)
     {
         let _ = send_subscription_nack(
             sender,
