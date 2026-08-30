@@ -343,7 +343,6 @@ export function openRoomSocket(
       let keepaliveTimer = 0;
       let keepaliveSequence = 0;
       let expectedPongNonce: string | null = null;
-      const commandTransmissions = new Map<string, "encoding" | "sent">();
       const ownsConnectionGeneration = () =>
         !closed && generation === connectionGeneration;
       const canUseOpenSocket = () =>
@@ -404,7 +403,7 @@ export function openRoomSocket(
           !frameKey
         ) return;
         pending.forEach((command, requestId) => {
-          if (commandTransmissions.has(requestId)) return;
+          if (command.transmissionGeneration === generation) return;
           const retryDelay = command.retryNotBefore - Date.now();
           if (retryDelay > 0) {
             if (command.retryTimerId !== null) window.clearTimeout(command.retryTimerId);
@@ -418,7 +417,8 @@ export function openRoomSocket(
             window.clearTimeout(command.retryTimerId);
             command.retryTimerId = null;
           }
-          commandTransmissions.set(requestId, "encoding");
+          command.transmissionGeneration = generation;
+          command.transmissionPhase = "encoding";
           outboundQueue = outboundQueue
             .then(async () => {
               if (
@@ -436,7 +436,7 @@ export function openRoomSocket(
               );
               if (!canUseOpenSocket() || pending.get(requestId) !== command) return;
               currentSocket.send(encoded);
-              commandTransmissions.set(requestId, "sent");
+              command.transmissionPhase = "sent";
               nextClientCounter += 1;
               scheduleKeepalive();
               command.everSent = true;
@@ -589,7 +589,6 @@ export function openRoomSocket(
               command.timerId = null;
               const retry = scheduleUncertainCommandRetry(command, generation);
               if (retry === "exhausted") {
-                commandTransmissions.delete(msg.request_id);
                 rejectUnknown(msg.request_id, command);
                 return;
               }
@@ -599,7 +598,6 @@ export function openRoomSocket(
               return;
             }
             pending.delete(msg.request_id);
-            commandTransmissions.delete(msg.request_id);
             if (command.timerId !== null) window.clearTimeout(command.timerId);
             if (command.retryTimerId !== null) window.clearTimeout(command.retryTimerId);
             command.reject(new RoomSocketSayError(
@@ -627,7 +625,6 @@ export function openRoomSocket(
             );
           }
           pending.delete(msg.request_id);
-          commandTransmissions.delete(msg.request_id);
           if (command.timerId !== null) window.clearTimeout(command.timerId);
           if (command.retryTimerId !== null) window.clearTimeout(command.retryTimerId);
           if (command.action === "participant.leave") terminalLeaveCommitted = true;
@@ -696,10 +693,11 @@ export function openRoomSocket(
         handlers.onClose?.();
         if (closed) return;
         void verificationQueue.finally(() => {
-          commandTransmissions.forEach((transmission, requestId) => {
-            if (transmission !== "sent") return;
-            const command = pending.get(requestId);
-            if (!command) return;
+          pending.forEach((command, requestId) => {
+            if (
+              command.transmissionGeneration !== generation ||
+              command.transmissionPhase !== "sent"
+            ) return;
             if (command.timerId !== null) window.clearTimeout(command.timerId);
             command.timerId = null;
             if (scheduleUncertainCommandRetry(command, generation) === "exhausted") {
@@ -749,6 +747,8 @@ export function openRoomSocket(
         retryAttempt: 0,
         retryCountedGeneration: 0,
         retryNotBefore: 0,
+        transmissionGeneration: 0,
+        transmissionPhase: "idle" as const,
         everSent: false,
       };
       pending.set(requestId, waiting);

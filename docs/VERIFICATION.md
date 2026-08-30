@@ -4349,6 +4349,17 @@ and proves the server-terminal result wins. The focused seven tests, complete 10
 frontend run, production TypeScript/Vite and original-CSS build, architecture/source-growth/policy
 gates, and diff check pass. Final correction approval remains pending.
 
+Daybreaker's next review marked those Medium/Low findings closed and found one remaining Low: a
+pre-send timeout could delete `pending` while leaving its separate `encoding` Map entry until the
+connection closed. Rather than add another cleanup branch, the separate Map is removed. Each pending
+command now owns one transmission generation and `idle`/`encoding`/`sent` phase alongside its retry
+lifecycle; terminal pending removal releases all of it, and close scans only commands that still own
+a `sent` phase for that exact generation. This reduces runtime state, leaves the existing pending
+cardinality bound unchanged, and adds no task, timer, polling, fallback, or compatibility behavior.
+The existing gated pre-send-timeout regression, focused seven retry tests, complete 100-file/628-test
+frontend run, production TypeScript/Vite and original-CSS build, architecture/source-growth/policy
+gates, and diff check pass. Final correction approval remains pending.
+
 ## Failure-owned room publication retry: 2026-08-30
 
 Every active room previously queried the durable publication cursor every 250 milliseconds even

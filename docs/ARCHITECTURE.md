@@ -206,12 +206,13 @@ two as server-terminal. While its finite budget remains, an `unresolved` resolut
 socket while preserving the exact private request ID and serialized bytes for fresh authenticated
 replay. Successful socket authentication cannot reset the command-owned reply count or backoff.
 Only a command frame accepted by `WebSocket.send` consumes that connection generation's uncertainty
-budget. The connection owner distinguishes an in-progress frame encoding from an accepted send, and
-the retry-policy owner atomically refuses a second charge for the same generation; a pre-send close
-or competing terminal signal therefore cannot manufacture an extra attempt.
+budget. The pending command owns its current transmission generation and distinguishes in-progress
+frame encoding from an accepted send; removing the pending command removes that state. The retry-policy
+owner atomically refuses a second charge for the same generation, so a pre-send close or competing
+terminal signal cannot manufacture an extra attempt.
 Close-derived accounting waits behind authenticated frames already accepted into that connection's
 verification queue. A valid terminal ACK or NACK settles and removes both pending authority and its
-connection-local transmission entry before close may classify the still-pending sent commands.
+transmission state before close may classify the still-pending sent commands.
 The eighth unresolved reply ends replay, rejects only that local operation as `outcome_unknown`,
 and leaves the otherwise authenticated socket open; it never claims rejection or commitment and
 never creates a replacement request ID. Missing, malformed, or mismatched resolution still closes

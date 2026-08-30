@@ -11,6 +11,8 @@ export interface UncertainCommandRetryState {
 export interface PendingCommandRetryState extends UncertainCommandRetryState {
   timerId: number | null;
   retryTimerId: number | null;
+  transmissionGeneration: number;
+  transmissionPhase: "idle" | "encoding" | "sent";
   everSent: boolean;
 }
 
