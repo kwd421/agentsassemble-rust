@@ -305,6 +305,18 @@ an unrelated arbitrary PID-file readiness poll was exposed as timing-dependent; 
 replaced it with a child-published Unix-datagram readiness event in the process-tree test owner. The
 three affected process lifecycle tests passed without changing production runtime behavior.
 
+The full workspace run then exposed a separate pre-existing server-boundary harness deadline. On
+the development macOS host, launching the large debug helper took about 4.3 seconds to complete the
+guardian lifetime handoff and about 2.3 additional seconds to publish provider readiness. Both
+product-owned helper stages completed inside their separate 5-second fail-closed limits, but the
+shared test WebSocket imposed one unrelated 5-second deadline across the complete create/start
+command and rejected the later valid public result; the same failure reproduced at baseline
+`ec19b4d`. Commit `f902201` removes that wall-clock assertion from ordinary receives and waits for
+the authenticated public ACK/events instead. Tests that explicitly assert no-frame or deadline
+behavior retain their scoped timeout. The exact create/start regression completed in 7.5 seconds,
+and all nine serialized Agent Session TCP/WebSocket boundary scenarios completed in 107.93 seconds;
+no production timeout, retry, provider behavior, or fallback changed.
+
 Platform keyring operations are potentially blocking OS calls. One store-owned semaphore and
 Tokio's maintained blocking pool serialize them; the permit moves into the blocking closure so
 caller cancellation cannot admit an overlapping operation while the first OS call still runs. The
