@@ -8,6 +8,8 @@ use tokio::sync::Semaphore;
 #[cfg(target_os = "macos")]
 use security_framework::item::{ItemClass, ItemSearchOptions};
 #[cfg(target_os = "macos")]
+use security_framework::os::macos::keychain::{SecKeychain, SecPreferencesDomain};
+#[cfg(target_os = "macos")]
 use security_framework_sys::base::errSecItemNotFound;
 
 const SERVICE_NAME: &str = "AgentsAssemble";
@@ -111,13 +113,24 @@ fn macos_keyring_item_exists(
     service: &str,
     account: &str,
 ) -> security_framework::base::Result<bool> {
+    let keychain = SecKeychain::default_for_domain(SecPreferencesDomain::User)?;
+    let keychains = [keychain];
     let mut query = ItemSearchOptions::new();
     query
+        .keychains(&keychains)
         .class(ItemClass::generic_password())
         .service(service)
-        .account(account);
-    match query.search() {
-        Ok(_) => Ok(true),
+        .account(account)
+        .fail_on_authentication_ui(true);
+    macos_item_exists_from_search(query.search().map(|_| ()))
+}
+
+#[cfg(target_os = "macos")]
+fn macos_item_exists_from_search(
+    result: security_framework::base::Result<()>,
+) -> security_framework::base::Result<bool> {
+    match result {
+        Ok(()) => Ok(true),
         Err(error) if error.code() == errSecItemNotFound => Ok(false),
         Err(error) => Err(error),
     }
@@ -255,11 +268,17 @@ fn validated_secret(value: &str) -> Result<String, ProviderCredentialError> {
 mod tests {
     use std::sync::{Arc, Mutex};
 
-    #[cfg(target_os = "macos")]
-    use super::macos_keyring_item_exists;
     use super::{
         BackendAvailability, CredentialBackend, ProviderCredentialError, ProviderCredentialSource,
         ProviderCredentialStore,
+    };
+    #[cfg(target_os = "macos")]
+    use super::{macos_item_exists_from_search, macos_keyring_item_exists};
+    #[cfg(target_os = "macos")]
+    use security_framework::base::Error as SecurityFrameworkError;
+    #[cfg(target_os = "macos")]
+    use security_framework_sys::base::{
+        errSecAuthFailed, errSecInteractionNotAllowed, errSecItemNotFound,
     };
 
     #[derive(Default)]
@@ -412,5 +431,23 @@ mod tests {
             macos_keyring_item_exists(&service, "missing"),
             Ok(false)
         ));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_status_only_treats_item_not_found_as_absent() {
+        assert!(matches!(macos_item_exists_from_search(Ok(())), Ok(true)));
+        assert!(matches!(
+            macos_item_exists_from_search(Err(SecurityFrameworkError::from_code(
+                errSecItemNotFound
+            ))),
+            Ok(false)
+        ));
+        for code in [errSecInteractionNotAllowed, errSecAuthFailed, -1] {
+            assert!(matches!(
+                macos_item_exists_from_search(Err(SecurityFrameworkError::from_code(code))),
+                Err(error) if error.code() == code
+            ));
+        }
     }
 }

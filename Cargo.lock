@@ -101,8 +101,8 @@ dependencies = [
  "rmcp",
  "rustix",
  "same-file",
- "security-framework",
- "security-framework-sys",
+ "security-framework 3.7.0 (git+https://github.com/kwd421/rust-security-framework?rev=85407d113b978b27728e162c8485c11e233c3e3e)",
+ "security-framework-sys 2.17.0 (git+https://github.com/kwd421/rust-security-framework?rev=85407d113b978b27728e162c8485c11e233c3e3e)",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -252,7 +252,7 @@ checksum = "2b350bfd03649e07aa05c0a81b3e15934374e585c98204a57e20b9d49f49bb9a"
 dependencies = [
  "keyring-core",
  "log",
- "security-framework",
+ "security-framework 3.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2609,7 +2609,7 @@ dependencies = [
  "openssl-probe",
  "rustls-pki-types",
  "schannel",
- "security-framework",
+ "security-framework 3.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2637,8 +2637,8 @@ dependencies = [
  "rustls-native-certs",
  "rustls-platform-verifier-android",
  "rustls-webpki",
- "security-framework",
- "security-framework-sys",
+ "security-framework 3.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "security-framework-sys 2.17.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "webpki-root-certs",
  "windows-sys 0.61.2",
 ]
@@ -2752,7 +2752,19 @@ dependencies = [
  "core-foundation",
  "core-foundation-sys",
  "libc",
- "security-framework-sys",
+ "security-framework-sys 2.17.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "security-framework"
+version = "3.7.0"
+source = "git+https://github.com/kwd421/rust-security-framework?rev=85407d113b978b27728e162c8485c11e233c3e3e#85407d113b978b27728e162c8485c11e233c3e3e"
+dependencies = [
+ "bitflags",
+ "core-foundation",
+ "core-foundation-sys",
+ "libc",
+ "security-framework-sys 2.17.0 (git+https://github.com/kwd421/rust-security-framework?rev=85407d113b978b27728e162c8485c11e233c3e3e)",
 ]
 
 [[package]]
@@ -2760,6 +2772,15 @@ name = "security-framework-sys"
 version = "2.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ce2691df843ecc5d231c0b14ece2acc3efb62c0a398c7e1d875f3983ce020e3"
+dependencies = [
+ "core-foundation-sys",
+ "libc",
+]
+
+[[package]]
+name = "security-framework-sys"
+version = "2.17.0"
+source = "git+https://github.com/kwd421/rust-security-framework?rev=85407d113b978b27728e162c8485c11e233c3e3e#85407d113b978b27728e162c8485c11e233c3e3e"
 dependencies = [
  "core-foundation-sys",
  "libc",
