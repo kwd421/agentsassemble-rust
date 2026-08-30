@@ -58,6 +58,33 @@ parsing/casefolding from the single SQLite connection while retaining complete-h
 and whitespace-insensitive behavior. Final-schema CPU, disk, latency, deletion, and concurrent-writer
 impact must be remeasured before the slice exits; no broader performance claim is made.
 
+### Copied-frontend authority cutover evidence
+
+The copied frontend previously sent a durable room-session bearer directly to the search endpoint,
+could issue an unauthenticated local request, substituted only the loaded in-memory timeline after an
+empty canonical result, and cast lobby context into custom-channel events despite the absence of a
+Rust custom-channel message owner. Those paths could cross purpose authority, hide failed canonical
+reads, or present invented history.
+
+The frontend now resolves one local-or-remote `RoomHttpAuthority`, obtains a fresh one-use
+`message-search-read` grant for each search or context read, sends only that grant to the target, and
+validates the complete private/no-store response before exposing it. The parser accepts only the
+three currently emitted public lobby `message_final` variants, rejects unknown or private fields,
+and bounds pages, context windows, strings, attachment metadata, sequence order, and target identity.
+Room, channel, or authority changes synchronously invalidate pending requests and clear their visible
+query/results. Concrete custom channels report the unimplemented owner rather than synthesizing
+context or falling back to loaded events. Message attachments, pins, and search share only the small
+HTTP-authority value; each feature retains its own ticket purpose, parser, and lifecycle owner.
+
+This cutover adds no persistent browser state, worker, process, disk owner, compatibility path, or
+generic provider/search framework. Per response, validation is bounded by the existing 30-result or
+31-event wire limits and existing attachment limits. No runtime latency or bundle-size improvement is
+claimed. `make verify` passed the architecture and 800-line gates, generated bindings, the production
+frontend/original-CSS build, 98 frontend files with 612 tests, 26 desktop tests, every workspace unit,
+integration, and real-TCP boundary test (including search ticket replay/cross-purpose/wrong-room and
+post-exchange revocation), document tests, warning-denied Clippy, formatting, and diff checks. The
+packaged local/read-only restart flow and configured real-Agent matrix remain required before exit.
+
 ## Non-goals
 
 - custom-channel message storage, search, context, attachments, or pins;

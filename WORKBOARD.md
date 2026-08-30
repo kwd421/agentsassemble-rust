@@ -12,9 +12,9 @@ Purpose: route the asynchronous Rust reimplementation without duplicating its co
 - Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - Real-client verification: [`docs/VERIFICATION.md`](docs/VERIFICATION.md)
 - Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`; pushed, fully verified, and manually approved Rust persona baseline `f6f8636`.
-- Active gate: implement complete lobby-message search and bounded context for current humans and Agent Sessions through one canonical persistence owner, purpose-bound HTTP authority, the copied frontend, and RoomPortal; custom-channel search remains unavailable.
-- Review cadence: commit each independent change below 1,000 changed lines; push and cross-review at three completed product features or 2,000 aggregate insertions plus deletions, whichever comes first.
-- Required order: follow the active owner from measured derived-index custody through current-human HTTP reads, copied-frontend cutover, and exact-turn RoomPortal reads without adding a generic search/provider framework.
+- Active gate: finish complete lobby-message search and bounded context through exact-turn RoomPortal reads and real packaged clients. Canonical persistence, purpose-bound current-human HTTP reads, and the copied-frontend source cutover are implemented; custom-channel search remains explicitly unavailable.
+- Review cadence: keep every independent change below 1,000 changed lines. Push and cross-review when the unreviewed aggregate first reaches at least 1,000 changed lines; feature count alone does not trigger review, but a three-feature batch must not grow beyond roughly 2,000 changed lines.
+- Required order: follow the active owner from the implemented current-human/frontend boundary through exact-turn RoomPortal reads, then packaged local/read-only and configured real-Agent verification, without adding a generic search/provider framework.
 - Exit: complete lobby history, strict pagination/context, local/read-only human authority, copied packaged navigation/restart, and the configured real Agent matrix are verified; private event fields and incomplete custom-channel data never cross the boundary.
 
 ## Read routes
