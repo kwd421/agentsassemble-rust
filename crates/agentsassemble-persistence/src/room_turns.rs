@@ -594,9 +594,6 @@ fn complete_session_state(session: &mut DurableAgentSession, input_event_id: &st
     session.public.last_seen_seq = input_seq;
     input_event_id.clone_into(&mut session.public.last_provider_sync_event_id);
     session.public.last_provider_sync_seq = input_seq;
-    if session.public.turn_count == 0 {
-        session.public.bootstrap_cutoff_seq = input_seq;
-    }
     session.public.turn_count = session.public.turn_count.saturating_add(1);
     session.public.last_error.clear();
     session.public.last_error_code.clear();
