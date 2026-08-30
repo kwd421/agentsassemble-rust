@@ -8,6 +8,12 @@ export interface UncertainCommandRetryState {
   retryNotBefore: number;
 }
 
+export interface PendingCommandRetryState extends UncertainCommandRetryState {
+  timerId: number | null;
+  retryTimerId: number | null;
+  everSent: boolean;
+}
+
 export type UncertainRetryDecision = "already_counted" | "retry" | "exhausted";
 
 function uncertainCommandRetryDelay(attemptCount: number): number | null {

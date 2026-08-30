@@ -4337,6 +4337,18 @@ tests and complete 100-file/627-test frontend run passed, as did the production 
 original-CSS verification, architecture/source-growth/policy gates, and diff check. Final correction
 approval remains pending both manual reviewers.
 
+Daybreaker's next correction review marked that attempt-accounting Medium closed, then found one
+separate Medium and one Low: close accounting could exhaust the eighth attempt while an already
+received terminal ACK was still in authenticated-frame verification, and settled transmissions
+remained in the connection map until close. Close accounting now runs after the existing ordered
+verification queue and examines only commands still pending at that barrier. Committed ACK,
+definitive NACK, and healthy-socket unresolved exhaustion remove their exact transmission entry when
+they settle. This changes neither server authority nor retry count and adds no wait, timer, second
+queue, or fallback. A WebCrypto barrier regression holds the eighth ACK verification across close
+and proves the server-terminal result wins. The focused seven tests, complete 100-file/628-test
+frontend run, production TypeScript/Vite and original-CSS build, architecture/source-growth/policy
+gates, and diff check pass. Final correction approval remains pending.
+
 ## Failure-owned room publication retry: 2026-08-30
 
 Every active room previously queried the durable publication cursor every 250 milliseconds even

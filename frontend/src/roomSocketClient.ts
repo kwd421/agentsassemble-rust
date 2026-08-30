@@ -36,7 +36,7 @@ import { PRODUCT_SURFACE_REVISION } from "./types/generated/PRODUCT_SURFACE_REVI
 import { requireAcceptedRoomRuntimeTicket } from "./lib/roomRuntimeTicket";
 import { messageAttachmentId } from "./lib/messageAttachmentId";
 import { MAX_MESSAGE_ATTACHMENTS_PER_EVENT } from "./types/generated/MESSAGE_ATTACHMENTS_WIRE";
-import { scheduleUncertainCommandRetry, type UncertainCommandRetryState } from "./roomSocketRetryPolicy";
+import { scheduleUncertainCommandRetry, type PendingCommandRetryState } from "./roomSocketRetryPolicy";
 
 export type { RoomSocketAuth } from "./api";
 export type { PluginEnvelope } from "./pluginSocketProtocol";
@@ -59,15 +59,12 @@ const ROOM_SOCKET_COMMAND_TIMEOUT_MS = 20_000;
 const ROOM_SOCKET_KEEPALIVE_MS = 3 * 60_000;
 const MAX_ROOM_SOCKET_WIRE_CHARS = 384 * 1024;
 
-interface PendingRoomCommand extends UncertainCommandRetryState {
+interface PendingRoomCommand extends PendingCommandRetryState {
   action: string;
   payload: Record<string, unknown>;
   encoded: string;
   resolve: (value: RoomCommandAck) => void;
   reject: (reason: Error) => void;
-  timerId: number | null;
-  retryTimerId: number | null;
-  everSent: boolean;
 }
 
 function messageAttachmentIds(request: RoomSayRequest): string[] {
@@ -592,6 +589,7 @@ export function openRoomSocket(
               command.timerId = null;
               const retry = scheduleUncertainCommandRetry(command, generation);
               if (retry === "exhausted") {
+                commandTransmissions.delete(msg.request_id);
                 rejectUnknown(msg.request_id, command);
                 return;
               }
@@ -601,6 +599,7 @@ export function openRoomSocket(
               return;
             }
             pending.delete(msg.request_id);
+            commandTransmissions.delete(msg.request_id);
             if (command.timerId !== null) window.clearTimeout(command.timerId);
             if (command.retryTimerId !== null) window.clearTimeout(command.retryTimerId);
             command.reject(new RoomSocketSayError(
@@ -628,6 +627,7 @@ export function openRoomSocket(
             );
           }
           pending.delete(msg.request_id);
+          commandTransmissions.delete(msg.request_id);
           if (command.timerId !== null) window.clearTimeout(command.timerId);
           if (command.retryTimerId !== null) window.clearTimeout(command.retryTimerId);
           if (command.action === "participant.leave") terminalLeaveCommitted = true;
@@ -693,19 +693,19 @@ export function openRoomSocket(
         socket = null;
         sendPendingForConnection = null;
         transportReady = false;
-        commandTransmissions.forEach((transmission, requestId) => {
-          if (transmission !== "sent") return;
-          const command = pending.get(requestId);
-          if (!command) return;
-          if (command.timerId !== null) window.clearTimeout(command.timerId);
-          command.timerId = null;
-          if (scheduleUncertainCommandRetry(command, generation) === "exhausted") {
-            rejectUnknown(requestId, command);
-          }
-        });
         handlers.onClose?.();
         if (closed) return;
         void verificationQueue.finally(() => {
+          commandTransmissions.forEach((transmission, requestId) => {
+            if (transmission !== "sent") return;
+            const command = pending.get(requestId);
+            if (!command) return;
+            if (command.timerId !== null) window.clearTimeout(command.timerId);
+            command.timerId = null;
+            if (scheduleUncertainCommandRetry(command, generation) === "exhausted") {
+              rejectUnknown(requestId, command);
+            }
+          });
           if (terminalLeaveCommitted) return;
           scheduleReconnect(generation);
         });

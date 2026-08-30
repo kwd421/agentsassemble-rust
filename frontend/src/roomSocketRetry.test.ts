@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   event,
   flushPromises,
+  gateNextFrameVerification,
   handshakeFrames,
   openHarness,
   receiveAuthenticated,
@@ -69,6 +70,46 @@ describe("room socket exact-command retry", () => {
       result: { event: event(1), event_seq: 1 },
       deduplicated: true,
     });
+    await expect(pendingCommand).resolves.toMatchObject({ resolution: "committed" });
+    handle.close();
+  });
+
+  it("settles a received terminal ACK before charging its closing connection", async () => {
+    vi.useFakeTimers();
+    const { handle, sockets, tickets } = openHarness();
+    await flushPromises();
+    let frames = await openReadyConnection(0, handle, sockets, tickets);
+    const pendingCommand = handle.command("message.send", { content: "received before close" });
+    void pendingCommand.catch(() => {});
+
+    for (let attempt = 0; attempt < 7; attempt += 1) {
+      await vi.waitFor(() => expect(sockets[attempt].sent).toHaveLength(2));
+      const command = await sentAuthenticatedCommand(sockets[attempt], frames);
+      await receiveAuthenticated(sockets[attempt], frames, unresolved(command));
+      await vi.waitFor(() => expect(sockets[attempt].readyState).toBe(WebSocket.CLOSED));
+      await vi.advanceTimersByTimeAsync(500);
+      frames = await openReadyConnection(attempt + 1, handle, sockets, tickets);
+      await vi.advanceTimersByTimeAsync(Math.max(0, UNRESOLVED_DELAYS_MS[attempt] - 500));
+    }
+
+    await vi.waitFor(() => expect(sockets[7].sent).toHaveLength(2));
+    const finalCommand = await sentAuthenticatedCommand(sockets[7], frames);
+    const verification = gateNextFrameVerification();
+    await receiveAuthenticated(sockets[7], frames, {
+      op: "ack",
+      accepted: true,
+      resolution: "committed",
+      request_id: finalCommand.request_id,
+      action: "message.send",
+      result: { event: event(1), event_seq: 1 },
+      deduplicated: true,
+    });
+    await verification.started;
+    sockets[7].close();
+    verification.release();
+    await verification.completed;
+    await flushPromises();
+
     await expect(pendingCommand).resolves.toMatchObject({ resolution: "committed" });
     handle.close();
   });
