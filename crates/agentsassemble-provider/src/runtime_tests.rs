@@ -118,7 +118,7 @@ async fn guardian_runs_outside_the_server_process_group() {
         .unwrap_or_else(|| panic!("guardian output is unavailable"));
     let (anchor_pid, _) = read_guardian_ready(output, "guardian group", &lease, &mut input).await;
     assert!(anchor_pid > 0);
-    wait_until(Duration::from_secs(5), || {
+    wait_until(super::fixture::FIXTURE_READINESS_TIMEOUT, || {
         std::fs::read(&cwd_report)
             .is_ok_and(|contents| contents == workspace_path.as_os_str().as_encoded_bytes())
     })
@@ -447,7 +447,7 @@ async fn read_guardian_ready(
 ) -> (u32, u32) {
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
-    let ready = tokio::time::timeout(Duration::from_secs(5), async {
+    let ready = tokio::time::timeout(super::fixture::FIXTURE_READINESS_TIMEOUT, async {
         let mut output = BufReader::new(output);
         let mut lifetime_handed_off = false;
         for _ in 0..32 {
