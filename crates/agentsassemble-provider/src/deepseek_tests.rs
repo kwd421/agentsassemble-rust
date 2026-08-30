@@ -7,7 +7,7 @@ use super::{
 };
 use crate::{credentials::ProviderCredentialStore, room_portal::ProviderRoomToolIngress};
 
-fn tool_call(id: &str, name: &str, arguments: serde_json::Value) -> ToolCall {
+fn tool_call(id: &str, name: &str, arguments: &serde_json::Value) -> ToolCall {
     ToolCall {
         id: id.to_owned(),
         kind: "function".to_owned(),
@@ -74,7 +74,7 @@ async fn committed_random_tool_keeps_the_turn_replay_unsafe() {
         })
         .unwrap_or_else(|error| panic!("begin observation: {error}"));
     driver
-        .execute_tool(tool_call("read", "read_discussion", json!({})), false)
+        .execute_tool(tool_call("read", "read_discussion", &json!({})), false)
         .await
         .unwrap_or_else(|error| panic!("read discussion: {error}"));
     let committed = tokio::spawn(async move {
@@ -97,7 +97,7 @@ async fn committed_random_tool_keeps_the_turn_replay_unsafe() {
             tool_call(
                 "roll",
                 "roll_dice",
-                json!({"notation": "1d6", "reason": ""}),
+                &json!({"notation": "1d6", "reason": ""}),
             ),
             true,
         )
@@ -113,7 +113,7 @@ async fn committed_random_tool_keeps_the_turn_replay_unsafe() {
             tool_call(
                 "rejected-after-commit",
                 "roll_dice",
-                json!({"notation": "1d6", "reason": ""}),
+                &json!({"notation": "1d6", "reason": ""}),
             ),
             true,
         )
@@ -127,7 +127,7 @@ async fn committed_random_tool_keeps_the_turn_replay_unsafe() {
             tool_call(
                 "rejected-before-effect",
                 "roll_dice",
-                json!({"notation": "1d6", "reason": ""}),
+                &json!({"notation": "1d6", "reason": ""}),
             ),
             true,
         )
