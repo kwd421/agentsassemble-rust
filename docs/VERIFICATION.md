@@ -4238,3 +4238,20 @@ host load were not stopped or modified. The critical web session approved exact
 `fc6cf9b..f6f8636` and cumulative `f3c91e9..f6f8636` with C0/H0/M0/L0 after the evidence attribution
 was corrected; Daybreaker Blue High independently approved the same final state with C0/H0/M0/L0.
 No automated security scan was used.
+
+## Lobby message-search backend and HTTP review: 2026-08-30
+
+- Daybreaker Blue High found one Medium: long queries used only the compact candidate path and
+  therefore lost the original `unicode61` phrase candidates. Commit `71161a5` combines both paths
+  into one duplicate-free record result. Its follow-up Low found that the active specification still
+  described the index by its old short-token role; commit `31c1a63` names its actual contentless
+  phrase-candidate responsibility.
+- The critical web review found one Low in `f6f8636..31c1a63`: Rust trimming did not include Python's
+  U+001C-U+001F whitespace before the query character limit. Commit `3ba5111` restores the original
+  shared cleaner's limit-before-and-after trim meaning and fixes that exact regression without a
+  search-only shim.
+- Final critical-web verdict for `31c1a63..3ba5111` and `f6f8636..3ba5111`: APPROVE C0/H0/M0/L0.
+  Final Daybreaker Blue High verdict for the same corrected state: APPROVE C0/H0/M0/L0. Neither
+  review used an automated security scan. This approves only the pushed backend/HTTP range; the
+  copied frontend, RoomPortal tools, packaged and real-agent flows, and final measurements remain
+  active work.
