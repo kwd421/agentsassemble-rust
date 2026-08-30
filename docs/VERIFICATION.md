@@ -4185,8 +4185,8 @@ room turn. The human message asked about `harbor` using the active persona and l
 identified both the archive-guide persona and the embedded Risu lore that the module keeps the
 harbor bell. This proves the selected private CHARX/Risu content reached the existing server-owned
 provider input; it is not inferred from the picker label. No credential, hidden reasoning, private
-provider identifier, mock, substitute model, compatibility path, or fallback was logged or
-committed.
+provider identifier was copied from the isolated database into screenshots, logs, fixtures, or
+committed documentation. No mock, substitute model, compatibility path, or fallback was used.
 
 The first `make verify` was intentionally not reported as clean: it was started while the packaged
 verification supervisor and sidecar were still running, and four process-custody tests failed to

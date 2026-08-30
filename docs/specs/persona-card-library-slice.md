@@ -517,6 +517,20 @@ this candidate.
   returned `APPROVE — C0 H0 M0 L0` for exact correction range `a7f3293..4cc5c29`; the critical web
   session returned the same verdict after reviewing that correction and cumulative
   `85994a5..4cc5c29`. No automated security scan was used.
+- Daybreaker Blue High returned one Medium and one Low for pushed completion range
+  `f3c91e9..2457bc1`. The durable decoder allowed an empty persona ID with a non-null summary
+  whose ID was also empty, splitting snapshot display from the provider's empty-ID selection.
+  Commit `0e2c96f` requires every non-null summary to have the same nonempty durable ID and extends
+  the existing corrupt-row regression. The Low identified two identifier-specific macOS temporary
+  WebKit/cache directories missed by cleanup; both exact directories were removed and their absence
+  rechecked without touching another application or identifier.
+- The critical web session returned one Low for the same pushed range: the packaged evidence said a
+  provider-private identifier was not committed even though the official DeepSeek response ID is
+  intentionally the private durable `provider_turn_id`. The evidence now states the actual boundary:
+  credentials, hidden reasoning, and provider-private identifiers were not copied from the isolated
+  database into screenshots, logs, fixtures, or committed documentation. The required private
+  durable turn identity remains unchanged. Final review of these corrections is pending. No
+  automated security scan was used.
 
 ## Non-goals
 
