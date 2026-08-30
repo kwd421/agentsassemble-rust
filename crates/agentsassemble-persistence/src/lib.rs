@@ -51,6 +51,7 @@ mod room_write_budget;
 mod schema;
 mod schema_message_search;
 mod schema_version;
+mod schema_votes;
 mod sqlite;
 mod store_open;
 mod turn_authority;

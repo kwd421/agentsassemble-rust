@@ -320,15 +320,18 @@ const INDEXES: &[&str] = &[
 ];
 
 pub(crate) fn statements() -> impl Iterator<Item = &'static str> {
-    TABLES
-        .iter()
+    tables()
         .map(|table| table.ddl)
         .chain(INDEXES.iter().copied())
         .chain(crate::schema_message_search::AUXILIARY_DDL.iter().copied())
 }
 
 pub(crate) fn product_tables() -> impl Iterator<Item = &'static TableDefinition> {
-    TABLES.iter().filter(|table| !table.infrastructure)
+    tables().filter(|table| !table.infrastructure)
+}
+
+fn tables() -> impl Iterator<Item = &'static TableDefinition> {
+    TABLES.iter().chain(crate::schema_votes::TABLES.iter())
 }
 
 #[cfg(test)]
@@ -337,7 +340,7 @@ pub(crate) mod tests {
 
     use sqlx::{Row, SqlitePool, sqlite::SqlitePoolOptions};
 
-    use super::{TABLES, product_tables, statements};
+    use super::{product_tables, statements, tables};
 
     pub(crate) async fn installed_schema() -> SqlitePool {
         let pool = SqlitePoolOptions::new()
@@ -370,8 +373,7 @@ pub(crate) mod tests {
         .into_iter()
         .map(|row| row.get::<String, _>("name"))
         .collect::<BTreeSet<_>>();
-        let declared = TABLES
-            .iter()
+        let declared = tables()
             .map(|table| table.name.to_owned())
             .chain(
                 crate::schema_message_search::FTS_SHADOW_TABLES
@@ -386,7 +388,7 @@ pub(crate) mod tests {
             .collect::<BTreeSet<_>>();
         assert_eq!(
             product.len(),
-            TABLES.iter().filter(|table| !table.infrastructure).count()
+            tables().filter(|table| !table.infrastructure).count()
         );
         for table in product_tables() {
             let sql = format!("SELECT EXISTS(SELECT 1 FROM {} LIMIT 1)", table.name);
