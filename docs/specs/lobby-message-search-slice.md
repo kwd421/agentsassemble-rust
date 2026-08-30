@@ -53,10 +53,10 @@ about 6.4 MiB; direct deletion was verified. The original-style duplicated resul
 content-storing FTS indexes added about 100 MiB and was rejected.
 
 The accepted trade-off is one bounded normalized string projection per public lobby message plus the
-small short-token index. It removes repeated attacker-triggerable JSON parsing/casefolding from the
-single SQLite connection while retaining complete-history and short-query behavior. Final-schema
-CPU, disk, latency, deletion, and concurrent-writer impact must be remeasured before the slice exits;
-no broader performance claim is made.
+small contentless phrase-candidate index. It removes repeated attacker-triggerable JSON
+parsing/casefolding from the single SQLite connection while retaining complete-history phrase-token
+and whitespace-insensitive behavior. Final-schema CPU, disk, latency, deletion, and concurrent-writer
+impact must be remeasured before the slice exits; no broader performance claim is made.
 
 ## Non-goals
 
