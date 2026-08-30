@@ -111,11 +111,16 @@ where
     }
 
     pub async fn receive_text(&mut self) -> String {
-        self.receive_text_with_timeout(Duration::from_secs(5)).await
+        let raw = receive_wire_text(&mut self.socket).await;
+        self.authenticate_received_text(raw)
     }
 
     async fn receive_text_with_timeout(&mut self, timeout: Duration) -> String {
         let raw = receive_wire_text_with_timeout(&mut self.socket, timeout).await;
+        self.authenticate_received_text(raw)
+    }
+
+    fn authenticate_received_text(&mut self, raw: String) -> String {
         if self.snapshot_pending {
             self.snapshot_pending = false;
             return raw;
@@ -236,7 +241,13 @@ async fn receive_wire_text<S>(socket: &mut WebSocketStream<S>) -> String
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
-    receive_wire_text_with_timeout(socket, Duration::from_secs(5)).await
+    let message = socket
+        .next()
+        .await
+        .unwrap_or_else(|| panic!("WebSocket closed before the expected frame"))
+        .unwrap_or_else(|error| panic!("receive WebSocket frame: {error}"));
+    String::from_utf8(message.into_data().to_vec())
+        .unwrap_or_else(|error| panic!("WebSocket JSON is not UTF-8: {error}"))
 }
 
 async fn receive_wire_text_with_timeout<S>(

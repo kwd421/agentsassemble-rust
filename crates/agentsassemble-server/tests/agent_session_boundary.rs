@@ -597,7 +597,7 @@ where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
     for _ in 0..32 {
-        let frame = receive_json_with_timeout(socket, Duration::from_secs(5)).await;
+        let frame = receive_json(socket).await;
         if frame["op"] == "ack" {
             return frame;
         }
@@ -609,7 +609,7 @@ async fn receive_json<S>(socket: &mut AuthenticatedTestSocket<S>) -> Value
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
-    receive_json_with_timeout(socket, Duration::from_secs(5)).await
+    socket.receive_json().await
 }
 
 async fn receive_json_with_timeout<S>(
