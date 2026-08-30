@@ -5,7 +5,8 @@ use agentsassemble_domain::{
     LOCAL_OPERATOR_USER_ID, MAX_ATTACHMENT_BYTES, MAX_MESSAGE_ATTACHMENT_CONTENT_TYPE_BYTES,
     MAX_MESSAGE_ATTACHMENTS_PER_EVENT, MESSAGE_ATTACHMENT_DOWNLOAD_SUFFIX,
     MESSAGE_ATTACHMENT_ID_PREFIX, MESSAGE_ATTACHMENT_REFERENCE_PREFIX,
-    MESSAGE_ATTACHMENT_VIEW_SUFFIX, RoomEvent, canonical_message_attachment_filename,
+    MESSAGE_ATTACHMENT_VIEW_SUFFIX, RoomEvent, VOTE_QUESTION_CHARACTER_LIMIT,
+    canonical_message_attachment_filename, clean_message, has_visible_text,
     is_message_attachment_id, require_message_write_authority,
 };
 use chrono::{Duration, Utc};
@@ -77,11 +78,27 @@ pub(crate) fn message_attachments_from_event(
 
 pub(crate) fn message_has_visible_payload(event: &RoomEvent) -> Result<bool, PersistenceError> {
     let attachments = message_attachments_from_event(event)?;
-    Ok(event
-        .content
-        .as_deref()
-        .is_some_and(agentsassemble_domain::has_visible_text)
-        || !attachments.is_empty())
+    Ok(has_visible_text(&message_visible_text(event)?) || !attachments.is_empty())
+}
+
+pub(crate) fn message_visible_text(event: &RoomEvent) -> Result<String, PersistenceError> {
+    let content = clean_message(event.content.as_deref().unwrap_or_default(), 12_000);
+    if has_visible_text(&content) {
+        return Ok(content);
+    }
+    if event.message_kind.as_deref() != Some("vote") {
+        return Ok(String::new());
+    }
+    let question = event
+        .extra
+        .get("vote_question")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(invalid_message_state)?;
+    let canonical = clean_message(question, VOTE_QUESTION_CHARACTER_LIMIT);
+    if canonical != question || !has_visible_text(&canonical) {
+        return Err(invalid_message_state());
+    }
+    Ok(canonical)
 }
 
 pub(crate) fn message_attachment_ids_from_events<'a>(
@@ -668,6 +685,13 @@ fn invalid_attachment_state() -> PersistenceError {
     rejected(
         "invalid_state",
         "Stored message attachment metadata is invalid.",
+    )
+}
+
+fn invalid_message_state() -> PersistenceError {
+    rejected(
+        "invalid_state",
+        "Stored room message visible content is invalid.",
     )
 }
 

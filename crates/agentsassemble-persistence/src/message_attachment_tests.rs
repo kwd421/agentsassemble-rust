@@ -9,6 +9,43 @@ use sqlx::Row;
 
 use crate::{PersistenceError, SqliteStore};
 
+#[test]
+fn canonical_vote_question_is_provider_visible_without_body_text() {
+    let mut event = agentsassemble_domain::RoomEvent {
+        v: 1,
+        id: "vote-1".to_owned(),
+        seq: 1,
+        created_at: chrono::Utc::now(),
+        room_id: "general".to_owned(),
+        event_type: "message_final".to_owned(),
+        actor: agentsassemble_domain::Actor {
+            participant_id: "human".to_owned(),
+            participant_type: "human".to_owned(),
+        },
+        participant_id: Some("human".to_owned()),
+        participant_type: Some("human".to_owned()),
+        actor_id: Some("human".to_owned()),
+        actor_type: Some("human".to_owned()),
+        display_name: Some("Human".to_owned()),
+        content: Some(String::new()),
+        message_kind: Some("vote".to_owned()),
+        extra: std::collections::BTreeMap::from([(
+            "vote_question".to_owned(),
+            serde_json::json!("Ship this?"),
+        )]),
+    };
+    assert_eq!(
+        crate::message_attachments::message_visible_text(&event)
+            .unwrap_or_else(|error| panic!("visible vote: {error}")),
+        "Ship this?"
+    );
+    event.extra.insert(
+        "vote_question".to_owned(),
+        serde_json::json!("  noncanonical  "),
+    );
+    assert!(crate::message_attachments::message_visible_text(&event).is_err());
+}
+
 #[tokio::test]
 async fn pending_message_upload_preserves_bytes_and_classifies_only_verified_rasters() {
     let (store, principal) = fixture().await;

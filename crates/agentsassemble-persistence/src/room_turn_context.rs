@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, HashSet};
 
 use agentsassemble_domain::{
-    DurableAgentSession, QueuedRoomInput, Room, RoomEvent, RoomInputDeliveryKind, clean_message,
-    has_visible_text, render_persona_context,
+    DurableAgentSession, QueuedRoomInput, Room, RoomEvent, RoomInputDeliveryKind, has_visible_text,
+    render_persona_context,
 };
 use sqlx::{Row, Sqlite, Transaction};
 
@@ -11,7 +11,7 @@ use crate::{
     PersistenceError,
     message_attachments::{
         message_attachment_ids_from_events, message_attachments_from_event,
-        message_has_visible_payload,
+        message_has_visible_payload, message_visible_text,
     },
     persona_library::selected_persona_card,
 };
@@ -67,7 +67,7 @@ pub(super) async fn prepare_room_input(
     let persona_context = if let Some(card) =
         selected_persona_card(transaction, session.public.persona_card_id.as_ref()).await?
     {
-        render_persona_context(&card, &render_recent_messages(&context))
+        render_persona_context(&card, &render_recent_messages(&context)?)
     } else {
         String::new()
     };
@@ -303,7 +303,7 @@ fn render_room_view(
         lines.push("[Earlier room updates are outside this bounded observation.]".to_owned());
     }
     for event in context {
-        let event_text = clean_message(event.content.as_deref().unwrap_or_default(), 12_000);
+        let event_text = message_visible_text(event)?;
         let attachments = message_attachments_from_event(event)?;
         if !has_visible_text(&event_text) && attachments.is_empty() {
             continue;
@@ -331,23 +331,21 @@ fn render_room_view(
     Ok(lines.join("\n"))
 }
 
-fn render_recent_messages(context: &[RoomEvent]) -> String {
-    context
-        .iter()
-        .filter_map(|event| {
-            let message_text = clean_message(event.content.as_deref().unwrap_or_default(), 12_000);
-            has_visible_text(&message_text).then(|| {
-                format!(
-                    "- {}: {message_text}",
-                    event
-                        .display_name
-                        .as_deref()
-                        .unwrap_or(&event.actor.participant_id)
-                )
-            })
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
+fn render_recent_messages(context: &[RoomEvent]) -> Result<String, PersistenceError> {
+    let mut messages = Vec::new();
+    for event in context {
+        let message_text = message_visible_text(event)?;
+        if has_visible_text(&message_text) {
+            messages.push(format!(
+                "- {}: {message_text}",
+                event
+                    .display_name
+                    .as_deref()
+                    .unwrap_or(&event.actor.participant_id)
+            ));
+        }
+    }
+    Ok(messages.join("\n"))
 }
 
 fn render_observation_input(
