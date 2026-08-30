@@ -22,8 +22,9 @@ pub struct RuntimeReconciliationPage {
 impl SqliteStore {
     /// Scans one bounded page and returns exact durable nonterminal lifecycle candidates.
     ///
-    /// The cursor advances over every Agent Session, including sessions that do not currently
-    /// need reconciliation, so a large inactive prefix cannot starve later work.
+    /// Candidate selection stays at the pending-reservation owner: ordinary Agent Sessions and
+    /// terminal reservation history do not incur periodic reconciliation reads, while every
+    /// selected row still enters exact session/reservation authority validation.
     ///
     /// # Errors
     ///
@@ -36,7 +37,17 @@ impl SqliteStore {
         let room_id = cursor.map(|cursor| cursor.room_id.as_str());
         let session_id = cursor.map(|cursor| cursor.session_id.as_str());
         let rows = sqlx::query(
-            "SELECT room_id, session_id FROM agent_sessions WHERE (? IS NULL OR room_id > ? OR (room_id = ? AND session_id > ?)) ORDER BY room_id, session_id LIMIT ?",
+            "SELECT reservation.room_id, reservation.session_id \
+             FROM lifecycle_command_reservations AS reservation \
+             JOIN agent_sessions AS sessions ON sessions.room_id = reservation.room_id \
+               AND sessions.session_id = reservation.session_id \
+             WHERE reservation.status = 'pending' \
+             AND (? IS NULL OR reservation.room_id > ? OR (reservation.room_id = ? AND reservation.session_id > ?)) \
+             AND NOT EXISTS (SELECT 1 FROM provider_turn_executions AS execution \
+               WHERE execution.room_id = reservation.room_id AND execution.session_id = reservation.session_id \
+               AND execution.phase IN ('assigned', 'start_dispatching', 'running', 'interrupt_pending', \
+                 'quiescing', 'start_ambiguous', 'interrupt_ambiguous', 'recovery_required')) \
+             ORDER BY reservation.room_id, reservation.session_id LIMIT ?",
         )
         .bind(room_id)
         .bind(room_id)
@@ -57,15 +68,6 @@ impl SqliteStore {
         for row in rows {
             let room_id = row.get::<String, _>("room_id");
             let session_id = row.get::<String, _>("session_id");
-            if crate::provider_turn_execution::blocking_execution_exists(
-                &mut transaction,
-                &room_id,
-                &session_id,
-            )
-            .await?
-            {
-                continue;
-            }
             let Some(candidate) = load_candidate(&mut transaction, &room_id, &session_id).await?
             else {
                 continue;

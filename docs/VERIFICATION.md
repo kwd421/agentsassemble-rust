@@ -4327,3 +4327,34 @@ control-pipe, Agent Session, invite, profile, attachment, pin, search, preferenc
 runtime boundary tests. Formatting, architecture, 800-line source-growth, policy, and diff gates
 also passed. The publication retry policy lives in the 258-line publication owner; the room actor
 remains 726 lines and only connects that owner to room inputs.
+
+## Pending-only lifecycle reconciliation scan: 2026-08-30
+
+The live one-second reconciler is retained because it owns a concrete failure contract: a room or
+provider task may end after durable external-effect authority is committed but before that owner
+returns a typed result. Existing owner-loss tests prove recovery without a browser request, while
+startup reconciliation remains the complete pre-admission integrity owner. The interval therefore
+does not justify rescanning unrelated Agent Sessions.
+
+Previously, one lifecycle page selected up to 64 ordinary sessions and issued three additional SQL
+statements per row: blocking provider-turn lookup, session/room load, and pending-reservation load.
+A full inactive page was 193 statements plus its transaction boundaries. Clean schema 50 adds one
+partial `(room_id, session_id)` index containing only `status = 'pending'` lifecycle reservations.
+The page now starts from that exact owner, excludes blocking provider turns in the same query, and
+performs the two complete candidate reads only for selected unresolved work. An isolated
+`EXPLAIN QUERY PLAN` over the exact relevant schema used the covering pending index, the Agent
+Session primary key, and the blocking-turn partial index, with no DISTINCT temporary B-tree. Thus
+an empty lifecycle scan is one candidate statement rather than `1 + 3N` statements for `N`
+ordinary sessions. The index adds no terminal reservation history and only the rare lifecycle
+write/update/delete maintenance cost.
+
+The change preserves the 64-candidate bound, exact in-memory request claim, complete stored
+authority validation, provider-turn precedence, candidate CAS, two-second observation timeout,
+eight-observation concurrency, fail-closed uncertainty, and failure logging. Session JSON and its
+pending reservation are still written atomically by the single process-locked database owner;
+startup still detects corrupt or orphan session authority before network admission. Schema 49 is
+rejected without migration or compatibility behavior. All 217 persistence tests, 88 server unit
+tests, and 63 serial real TCP/WebSocket/integration tests passed. That includes dynamic
+post-admission discovery, owner-loss recovery, safe replay, exact tombstone release, startup cleanup
+of an active runtime without lifecycle intent, Agent Session restart, control-pipe, invite, profile,
+attachment, pin, search, preferences, directory, and runtime boundaries.

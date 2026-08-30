@@ -316,6 +316,7 @@ const INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS room_write_budgets_window_idx ON room_write_budgets(window_started_at)",
     "CREATE UNIQUE INDEX IF NOT EXISTS provider_turn_executions_blocking_session_idx ON provider_turn_executions(room_id, session_id) WHERE phase IN ('assigned', 'start_dispatching', 'running', 'interrupt_pending', 'quiescing', 'start_ambiguous', 'interrupt_ambiguous', 'recovery_required')",
     "CREATE UNIQUE INDEX IF NOT EXISTS provider_turn_executions_blocking_runtime_idx ON provider_turn_executions(runtime_handle_id) WHERE phase IN ('assigned', 'start_dispatching', 'running', 'interrupt_pending', 'quiescing', 'start_ambiguous', 'interrupt_ambiguous', 'recovery_required')",
+    "CREATE INDEX IF NOT EXISTS lifecycle_command_reservations_pending_session_idx ON lifecycle_command_reservations(room_id, session_id) WHERE status = 'pending'",
 ];
 
 pub(crate) fn statements() -> impl Iterator<Item = &'static str> {
