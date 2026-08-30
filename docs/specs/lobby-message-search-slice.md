@@ -1,6 +1,6 @@
 # Lobby Message Search Slice
 
-Status: active implementation owner
+Status: complete and verified
 
 ## Definition
 
@@ -70,8 +70,19 @@ content-storing FTS indexes added about 100 MiB and was rejected.
 The accepted trade-off is one bounded normalized string projection per public lobby message plus the
 small contentless phrase-candidate index. It removes repeated attacker-triggerable JSON
 parsing/casefolding from the single SQLite connection while retaining complete-history phrase-token
-and whitespace-insensitive behavior. Final-schema CPU, disk, latency, deletion, and concurrent-writer
-impact must be remeasured before the slice exits; no broader performance claim is made.
+and whitespace-insensitive behavior.
+
+A removed release probe then measured the final schema with 100,000 representative canonical
+messages. Canonical storage was 54,829,056 bytes, the complete search projection was 46,383,104
+bytes, and the live database was 101,576,704 bytes. After 100 production-path `message.send` writes,
+those values were 54,882,304, 46,428,160, and 101,752,832 bytes. Across 25 reads, a selective query
+had 21.861 ms median, 22.539 ms p95, and 22.723 ms maximum latency; an absent query had 20.732 ms
+median, 21.394 ms p95, and 21.691 ms maximum latency. Across the 100 writes, latency was 0.530 ms
+median, 0.772 ms p95, and 1.245 ms maximum. The release probe reported 16,449,536 bytes maximum RSS
+and a 7,160,288-byte peak memory footprint. Search owns no background task, timer, process, or polling
+loop; page and context allocations remain bounded by 30 and 31 results on the existing single SQLite
+connection. Dataset construction took 4.978 seconds but is not claimed as a production write metric.
+The probe source and generated database were removed after measurement.
 
 ### Copied-frontend authority cutover evidence
 
@@ -98,7 +109,26 @@ claimed. `make verify` passed the architecture and 800-line gates, generated bin
 frontend/original-CSS build, 98 frontend files with 612 tests, 26 desktop tests, every workspace unit,
 integration, and real-TCP boundary test (including search ticket replay/cross-purpose/wrong-room and
 post-exchange revocation), document tests, warning-denied Clippy, formatting, and diff checks. The
-packaged local/read-only restart flow and configured real-Agent matrix remain required before exit.
+final whole-repository gate and packaged evidence are recorded in `docs/VERIFICATION.md`.
+
+### Packaged and real-provider evidence
+
+An isolated copied release client searched an older lobby message, navigated through its bounded
+before/target/after context, and retained both the canonical message record and search result across
+a normal application restart. An admitted read-only browser performed the same search and context
+navigation, remained unable to write, and retained its result across reload. Revoking its reusable
+invite rejected a fresh identity while the already admitted session remained valid under its own
+session authority; this preserves the existing future-admission-only revoke contract rather than
+inventing session revocation.
+
+Actual Codex `gpt-5.6-terra` Low and Antigravity `gemini-3.6-flash` Medium sessions each received only
+the non-inferable target `CTX_TARGET_q4v8n1`, invoked their RoomPortal search and context helpers, and
+returned the withheld adjacent values `CTX_PRE_a7p9m2|CTX_NEXT_z6k3r5`. OpenCode
+`opencode/hy3-free` remained visibly unavailable: the packaged turn entered recovery-required with
+no fabricated result, and the separately authorized installed free-model CLI probe returned an
+external provider error. No mock, alternate model, print mode, transcript path, or fallback was
+used. The exact app, provider children, server, tunnel, isolated data, caches, and regenerated
+measurement artifacts were stopped or moved to Trash after verification; Computer Use was reset.
 
 ## Non-goals
 

@@ -4366,6 +4366,68 @@ verified-reply ordering, completed-command lifecycle, and pre-send-timeout findi
 approved `00c0e8b..e1f7cca`, `0a5e1b3..e1f7cca`, `36e827d..e1f7cca`, and cumulative
 `828d632..e1f7cca` as C0/H0/M0/L0. Neither review used an automated security scan.
 
+## Lobby message-search packaged and measurement evidence: 2026-08-31
+
+The isolated copied release was built from the Rust search candidate at pushed `e1f7cca`; local
+documentation-only commit `0781d9e` changed no executable. The original comparison remains
+`d5046473010d1353a81ee38337360e6d98f7bd6f`. Computer Use launched only `AgentsAssemble Search
+Verify 51` (`app.agentsassemble.rust.searchverify51`) and the isolated admitted browser needed for
+the remote-human path.
+
+The local host committed `SEARCH_E2E_BEFORE_20260831`, `SEARCH_E2E_TARGET_20260831 harbor needle`,
+and `SEARCH_E2E_AFTER_20260831`. Channel search returned one canonical result; selecting it showed
+the preceding, target, and following records rather than the loaded-timeline fallback. A normal
+application quit and relaunch preserved both the messages and search result. A read-only guest
+admitted through the real tunnel repeated search, context navigation, and reload persistence while
+its composer remained disabled. With a reusable five-use invite, one fresh guest was admitted,
+the host revoked the invite, and a second fresh identity was rejected as invalid. The first session
+remained active because invite revoke prevents future admission and does not revoke an independently
+issued room session. The persisted invite recorded `use_count=1` and `revoked=1`.
+
+Real provider verification did not accept an echoed success token as sufficient evidence. Three
+adjacent public messages were committed as `CTX_PRE_a7p9m2`, `CTX_TARGET_q4v8n1`, and
+`CTX_NEXT_z6k3r5`. A fresh Codex `gpt-5.6-terra` Low, room-read-only native app-server session was
+given only the target marker and instructed to call `search_messages` and `read_message_context`.
+It returned `CTX_PRE_a7p9m2|CTX_NEXT_z6k3r5`. The resumed real Antigravity
+`gemini-3.6-flash` Medium PTY session received only the same target marker and used its exact room
+search/context helpers; it returned the same withheld pair. Antigravity remained on the existing
+live CLI path, with no print or transcript mode.
+
+The configured OpenCode `opencode/hy3-free` packaged session became recovery-required and exposed
+no turn event, standard error, or fabricated reply. Its copied UI remained `응답 중` until explicit
+stop, while the interrupt control reported that `agent.interrupt` was absent from the bound server
+product surface. A separately authorized direct installed-free-model probe exited immediately with
+an external provider error. That evidence leaves OpenCode explicitly unavailable for this run and
+records the UI provider-failure/interrupt gap; no credentialed model, alternate model, mock, retry
+loop, or fallback substituted for it.
+
+A temporary release probe measured the final search schema with 100,000 representative canonical
+messages. Initial canonical/search/live-database sizes were 54,829,056, 46,383,104, and 101,576,704
+bytes. After 100 actual `message.send` writes they were 54,882,304, 46,428,160, and 101,752,832
+bytes. Twenty-five selective reads measured 21.861 ms median, 22.539 ms p95, 22.723 ms maximum, and
+21.985 ms mean. Twenty-five absent reads measured 20.732 ms median, 21.394 ms p95, 21.691 ms maximum,
+and 20.859 ms mean. The 100 writes measured 0.530 ms median, 0.772 ms p95, 1.245 ms maximum, and
+0.557 ms mean. Maximum RSS was 16,449,536 bytes and peak memory footprint was 7,160,288 bytes.
+Search owns zero background tasks or recurring timers; result and context allocations remain bounded
+to 30 and 31 records on the existing single SQLite connection. Direct dataset construction took
+4.978 seconds and is recorded only as probe setup, not production write performance.
+
+After the two real helper results, the Antigravity session was stopped through the copied UI and the
+release app exited normally. Process inspection found no verification-owned app, Rust server,
+provider, or tunnel process. Computer Use was reset. The exact app, Application Support, cache, and
+WebKit directories were moved to the recoverable
+`~/.Trash/AgentsAssemble-verification-20260831-0207` bundle. The removed performance database is in
+`~/.Trash/AgentsAssemble-search-measurement-20260831-0213`; the failed first probe and OpenCode probe
+are separately recoverable in Trash. No user application, provider, profile, or uncommitted source
+was stopped, moved, or modified.
+
+The unchanged post-cleanup `make verify` passed the architecture, policy, 800-line source-growth,
+generated-binding, original-CSS, formatting, and diff gates; the production frontend build; 100
+frontend files with 628 tests; 26 desktop tests; 44 domain, 218 persistence, 150 provider, and 88
+server unit tests; nine process-heavy Agent Session boundaries; and every control-pipe, real-TCP,
+WebSocket, HTTP, invite, profile, attachment, pin, search, preference, directory, credential, and
+runtime boundary. Warning-denied workspace and desktop Clippy both passed.
+
 ## Failure-owned room publication retry: 2026-08-30
 
 Every active room previously queried the durable publication cursor every 250 milliseconds even
