@@ -140,26 +140,16 @@ export async function fetchJsonServerOperator<T>(
   url: string,
   beforeDispatch?: () => void
 ): Promise<T> {
-  if (isDesktopWebview()) {
-    const res = await fetchDesktopOperatorRuntime(url, {}, beforeDispatch);
-    if (!res.ok) throw await responseError(res);
-    return res.json();
-  }
-  beforeDispatch?.();
-  return fetchJson<T>(url);
+  const res = await fetchServerOperator(url, undefined, beforeDispatch);
+  if (!res.ok) throw await responseError(res);
+  return res.json();
 }
 
 export async function postEmptyServerOperator<T>(
   url: string,
   beforeDispatch?: () => void
 ): Promise<T> {
-  let res: Response;
-  if (isDesktopWebview()) {
-    res = await fetchDesktopOperatorRuntime(url, { method: "POST" }, beforeDispatch);
-  } else {
-    beforeDispatch?.();
-    res = await fetch(url, { method: "POST" });
-  }
+  const res = await fetchServerOperator(url, { method: "POST" }, beforeDispatch);
   if (!res.ok) throw await responseError(res);
   return res.json();
 }
@@ -169,17 +159,38 @@ export async function postJsonServerOperator<T>(
   body: object,
   beforeDispatch?: () => void
 ): Promise<T> {
-  if (isDesktopWebview()) {
-    const res = await fetchDesktopOperatorRuntime(url, {
+  const res = await fetchServerOperator(
+    url,
+    {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-    }, beforeDispatch);
-    if (!res.ok) throw await responseError(res);
-    return res.json();
+    },
+    beforeDispatch
+  );
+  if (!res.ok) throw await responseError(res);
+  return res.json();
+}
+
+export async function deleteJsonServerOperator<T>(
+  url: string,
+  beforeDispatch?: () => void
+): Promise<T> {
+  const res = await fetchServerOperator(url, { method: "DELETE" }, beforeDispatch);
+  if (!res.ok) throw await responseError(res);
+  return res.json();
+}
+
+async function fetchServerOperator(
+  url: string,
+  init: RequestInit | undefined,
+  beforeDispatch?: () => void
+): Promise<Response> {
+  if (isDesktopWebview()) {
+    return fetchDesktopOperatorRuntime(url, init ?? {}, beforeDispatch);
   }
   beforeDispatch?.();
-  return postJson<T>(url, body);
+  return init ? fetch(url, init) : fetch(url);
 }
 
 export async function postJsonHost<T>(url: string, body: object): Promise<T> {

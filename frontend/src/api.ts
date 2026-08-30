@@ -1,10 +1,5 @@
 // Aggregate exports for the current frontend API client.
-import {
-  fetchJson,
-  postJson,
-  postJsonHost,
-  responseError,
-} from "./api/http";
+import { fetchJson, postJson, responseError } from "./api/http";
 import { loadHostToken } from "./api/http";
 import { chooseDesktopWorkspace, isDesktopWebview } from "./lib/desktopBridge";
 
@@ -17,6 +12,7 @@ export * from "./api/messageAttachments";
 export * from "./api/messageSearch";
 export * from "./api/moderation";
 export * from "./api/personas";
+export * from "./api/providerCredentials";
 export * from "./api/room";
 export * from "./api/roomAppearance";
 export * from "./api/roomHistory";
@@ -263,11 +259,6 @@ export interface MafiaGameResponse {
   game: MafiaGame | null;
 }
 
-export interface ProviderCredentialStatus {
-  configured: boolean;
-  source: "keyring" | "environment" | "missing";
-}
-
 export interface ProviderUsageSnapshot {
   provider_id: string;
   status: "ready" | "stale" | "unavailable";
@@ -309,77 +300,6 @@ export async function fetchProviderUsage(
   if (model.trim()) query.set("model", model.trim());
   const suffix = query.size > 0 ? `?${query.toString()}` : "";
   const response = await fetch(`${providerUsagePaths[providerId]}${suffix}`, { headers });
-  if (!response.ok) throw await responseError(response);
-  return response.json();
-}
-
-export async function fetchProviderCredentialStatus(
-  providerId: string
-): Promise<ProviderCredentialStatus> {
-  const paths: Record<string, string> = {
-    cerebras: "/api/provider-credentials/cerebras",
-    custom_api: "/api/provider-credentials/custom_api",
-    deepseek: "/api/provider-credentials/deepseek",
-    openrouter: "/api/provider-credentials/openrouter",
-    llmgateway: "/api/provider-credentials/llmgateway",
-    opencode: "/api/provider-credentials/opencode",
-    tokenrouter: "/api/provider-credentials/tokenrouter",
-    vercel: "/api/provider-credentials/vercel",
-  };
-  const path = paths[providerId];
-  if (!path) throw new Error(`Unsupported API credential provider: ${providerId}`);
-  const headers: Record<string, string> = {};
-  const hostToken = loadHostToken();
-  if (hostToken) headers["X-Host-Token"] = hostToken;
-  const response = await fetch(path, { headers });
-  if (!response.ok) throw await responseError(response);
-  return response.json();
-}
-
-export async function setProviderCredential(
-  providerId: string,
-  apiKey: string,
-  options: { workspaceId?: string } = {}
-): Promise<ProviderCredentialStatus> {
-  const postCredential = (path: string) =>
-    postJsonHost<ProviderCredentialStatus>(path, {
-      api_key: apiKey,
-      workspace_id: options.workspaceId,
-    });
-  const paths: Record<string, string> = {
-    cerebras: "/api/provider-credentials/cerebras",
-    custom_api: "/api/provider-credentials/custom_api",
-    deepseek: "/api/provider-credentials/deepseek",
-    openrouter: "/api/provider-credentials/openrouter",
-    llmgateway: "/api/provider-credentials/llmgateway",
-    opencode: "/api/provider-credentials/opencode",
-    tokenrouter: "/api/provider-credentials/tokenrouter",
-    vercel: "/api/provider-credentials/vercel",
-  };
-  const path = paths[providerId];
-  if (!path) throw new Error(`Unsupported API credential provider: ${providerId}`);
-  return postCredential(path);
-}
-
-export async function deleteProviderCredential(
-  providerId: string
-): Promise<ProviderCredentialStatus> {
-  const requestInit = { method: "DELETE", headers: {} as Record<string, string> };
-  const paths: Record<string, string> = {
-    cerebras: "/api/provider-credentials/cerebras",
-    custom_api: "/api/provider-credentials/custom_api",
-    deepseek: "/api/provider-credentials/deepseek",
-    openrouter: "/api/provider-credentials/openrouter",
-    llmgateway: "/api/provider-credentials/llmgateway",
-    opencode: "/api/provider-credentials/opencode",
-    tokenrouter: "/api/provider-credentials/tokenrouter",
-    vercel: "/api/provider-credentials/vercel",
-  };
-  const path = paths[providerId];
-  if (!path) throw new Error(`Unsupported API credential provider: ${providerId}`);
-  const hostToken = loadHostToken();
-  if (hostToken) requestInit.headers["X-Host-Token"] = hostToken;
-  const response = await fetch(path, requestInit);
   if (!response.ok) throw await responseError(response);
   return response.json();
 }
