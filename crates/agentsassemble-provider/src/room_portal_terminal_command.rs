@@ -1,4 +1,7 @@
-use agentsassemble_domain::{RoomRandomRequest, is_message_attachment_id};
+use agentsassemble_domain::{
+    MAX_MESSAGE_SEARCH_CURSOR_BYTES, RoomRandomRequest, clean_message_search_query,
+    is_message_attachment_id, is_message_event_id,
+};
 use serde_json::{Value, json};
 
 pub(super) fn helper_tool(
@@ -16,6 +19,28 @@ pub(super) fn helper_tool(
                 return Err("usage: agentsassemble-room media <attachment-id>");
             }
             ("read_attachment", json!({"attachment_id": attachment_id}))
+        }
+        "search" => {
+            let query = arguments
+                .next()
+                .map(|value| clean_message_search_query(&value))
+                .filter(|value| !value.is_empty())
+                .ok_or("usage: agentsassemble-room search <query> [cursor]")?;
+            let cursor = arguments.next().unwrap_or_default();
+            if cursor.len() > MAX_MESSAGE_SEARCH_CURSOR_BYTES || arguments.next().is_some() {
+                return Err("usage: agentsassemble-room search <query> [cursor]");
+            }
+            ("search_messages", json!({"query": query, "cursor": cursor}))
+        }
+        "context" => {
+            let event_id = arguments
+                .next()
+                .filter(|value| is_message_event_id(value))
+                .ok_or("usage: agentsassemble-room context <event-id>")?;
+            if arguments.next().is_some() {
+                return Err("usage: agentsassemble-room context <event-id>");
+            }
+            ("read_message_context", json!({"event_id": event_id}))
         }
         "speak" => {
             let content = arguments.collect::<Vec<_>>().join(" ").trim().to_owned();
@@ -100,6 +125,7 @@ pub(crate) fn safe_room_command(command: &str, command_prefix: &str) -> bool {
     match parts[0].as_str() {
         "help" | "read" => parts.len() == 1,
         "media" => parts.len() == 2 && is_message_attachment_id(&parts[1]),
+        "search" | "context" => helper_tool(parts[0].as_str(), parts[1..].iter().cloned()).is_ok(),
         "decline" => {
             parts.len() == 2
                 && matches!(
@@ -207,7 +233,28 @@ fn valid_agent_id(value: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::windows_shell_metacharacter;
+    use super::{helper_tool, windows_shell_metacharacter};
+
+    #[test]
+    fn history_commands_map_to_the_existing_roomportal_tools() {
+        let (tool, payload) = helper_tool(
+            "search",
+            [
+                "  old\r\ndeployment  ".to_owned(),
+                "WzEyMyw0NTZd".to_owned(),
+            ]
+            .into_iter(),
+        )
+        .unwrap_or_else(|error| panic!("parse search helper command: {error}"));
+        assert_eq!(tool, "search_messages");
+        assert_eq!(payload["query"], "old  deployment");
+        assert_eq!(payload["cursor"], "WzEyMyw0NTZd");
+
+        let (tool, payload) = helper_tool("context", ["event-1".to_owned()].into_iter())
+            .unwrap_or_else(|error| panic!("parse context helper command: {error}"));
+        assert_eq!(tool, "read_message_context");
+        assert_eq!(payload["event_id"], "event-1");
+    }
 
     #[test]
     fn windows_grammar_never_treats_posix_quotes_as_protection() {

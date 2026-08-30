@@ -261,7 +261,7 @@ fn print_helper_help(
     let helper =
         absolute_helper_command(executable).map_err(|_| "room helper invocation is unavailable")?;
     println!(
-        "{helper} read | media <attachment-id> | speak <message> | speak-to <agent-id> <message> | decline <reason> | roll <NdS+M> | choose <json-options>"
+        "{helper} read | media <attachment-id> | search <query> [cursor] | context <event-id> | speak <message> | speak-to <agent-id> <message> | decline <reason> | roll <NdS+M> | choose <json-options>"
     );
     Ok(())
 }
@@ -292,13 +292,16 @@ fn render_helper_result(
         print!("{content}");
     } else if tool == "decline_to_speak" {
         println!("{{\"declined\":true}}");
-    } else if matches!(tool, "roll_dice" | "choose_random") {
+    } else if matches!(
+        tool,
+        "search_messages" | "read_message_context" | "roll_dice" | "choose_random"
+    ) {
         let content = result
             .content
             .first()
             .and_then(|content| content.as_text())
             .map(|content| content.text.as_str())
-            .ok_or("room helper returned no random result")?;
+            .ok_or("room helper returned no result")?;
         println!("{content}");
     } else {
         println!("room message staged");
@@ -676,10 +679,18 @@ mod tests {
         } else {
             r#"'["north","south"]'"#
         };
+        let search_query = if cfg!(windows) {
+            "\"old deployment\""
+        } else {
+            "'old deployment'"
+        };
         for command in [
             format!("{HELPER} help"),
             format!("{HELPER} read"),
             format!("{HELPER} media {ATTACHMENT_ID}"),
+            format!("{HELPER} search {search_query}"),
+            format!("{HELPER} search {search_query} WzEyMyw0NTZd"),
+            format!("{HELPER} context event-1"),
             format!("{HELPER} speak {message}"),
             format!("{HELPER} speak-to agent-2 {targeted_message}"),
             format!("{HELPER} decline duplicate"),
@@ -695,6 +706,10 @@ mod tests {
             format!("{HELPER} read && env"),
             format!("{HELPER} media ma_1111111111111111111111111111111Z"),
             format!("{HELPER} media {ATTACHMENT_ID} extra"),
+            format!("{HELPER} search"),
+            format!("{HELPER} search {search_query} cursor extra"),
+            format!("{HELPER} context {}", "x".repeat(129)),
+            format!("{HELPER} context event-1 extra"),
             if cfg!(windows) {
                 format!("{HELPER} speak \"%USERPROFILE%\"")
             } else {

@@ -7,6 +7,10 @@ const MESSAGE_ARGUMENT: &str = "'message'";
 #[cfg(windows)]
 const MESSAGE_ARGUMENT: &str = "\"message\"";
 #[cfg(unix)]
+const SEARCH_ARGUMENT: &str = "'<query>'";
+#[cfg(windows)]
+const SEARCH_ARGUMENT: &str = "\"<query>\"";
+#[cfg(unix)]
 const ROLL_ARGUMENT: &str = "'<NdS±M>'";
 #[cfg(windows)]
 const ROLL_ARGUMENT: &str = "\"<NdS±M>\"";
@@ -38,8 +42,17 @@ pub(super) fn terminal_prompt(
                 " To inspect a listed attachment, run `{helper} media <attachment-id>` and open the returned private path with the appropriate native viewer or reader."
             )
         });
+    let history_instruction = request
+        .room_observation
+        .as_ref()
+        .filter(|observation| observation.room_tool_ingress.is_some())
+        .map_or_else(String::new, |_| {
+            format!(
+                " To search older room messages, run `{helper} search {SEARCH_ARGUMENT}`; pass the returned `next_cursor` as a second argument for the next page, and run `{helper} context <event-id>` to read one result's bounded context."
+            )
+        });
     format!(
-        "{}\n\n<agentsassemble-transport turn=\"{}\" launch=\"{transcript_nonce}\">Antigravity room transport: first run `{helper} help`, then run `{helper} read`.{media_instruction}{random_instruction} Finish with exactly one `{helper} speak {MESSAGE_ARGUMENT}`, `{helper} speak-to agent-id {MESSAGE_ARGUMENT}`, or `{helper} decline reason`. Run one helper command per terminal tool call and set `BypassSandbox` to `true`; the managed PreToolUse hook allows that only for this exact private helper prefix. Ordinary assistant final text is not a room publication.</agentsassemble-transport>",
+        "{}\n\n<agentsassemble-transport turn=\"{}\" launch=\"{transcript_nonce}\">Antigravity room transport: first run `{helper} help`, then run `{helper} read`.{media_instruction}{history_instruction}{random_instruction} Finish with exactly one `{helper} speak {MESSAGE_ARGUMENT}`, `{helper} speak-to agent-id {MESSAGE_ARGUMENT}`, or `{helper} decline reason`. Run one helper command per terminal tool call and set `BypassSandbox` to `true`; the managed PreToolUse hook allows that only for this exact private helper prefix. Ordinary assistant final text is not a room publication.</agentsassemble-transport>",
         request.input, request.turn_id,
     )
 }
@@ -78,7 +91,8 @@ mod tests {
 
     use super::terminal_prompt;
     use crate::{
-        ProviderAttachmentReadIngress, ProviderRoomObservation, runtime::ProviderTurnRequest,
+        ProviderAttachmentReadIngress, ProviderRoomObservation, ProviderRoomToolIngress,
+        runtime::ProviderTurnRequest,
     };
 
     #[test]
@@ -104,5 +118,30 @@ mod tests {
         assert!(prompt.contains("agentsassemble-room media <attachment-id>"));
         assert!(prompt.contains("returned private path"));
         assert!(prompt.contains("set `BypassSandbox` to `true`"));
+    }
+
+    #[test]
+    fn room_turn_teaches_history_without_enabling_tabletop_tools() {
+        let (room_tool_ingress, _commands) = ProviderRoomToolIngress::channel(1);
+        let request = ProviderTurnRequest {
+            turn_id: "turn-1".to_owned(),
+            turn_generation: 1,
+            execution_id: "00000000-0000-4000-8000-000000000001".to_owned(),
+            input: "room wake".to_owned(),
+            room_observation: Some(ProviderRoomObservation {
+                session_id: "agent-1".to_owned(),
+                input_up_to_seq: 1,
+                view: "#1 Human: find the old deployment".to_owned(),
+                attachment_ids: Vec::new(),
+                attachment_ingress: None,
+                allowed_agent_ids: Vec::new(),
+                tabletop_tools: false,
+                room_tool_ingress: Some(room_tool_ingress),
+            }),
+        };
+        let prompt = terminal_prompt(&request, Uuid::nil(), "agentsassemble-room");
+        assert!(prompt.contains("agentsassemble-room search"));
+        assert!(prompt.contains("agentsassemble-room context <event-id>"));
+        assert!(!prompt.contains("official game randomness"));
     }
 }
