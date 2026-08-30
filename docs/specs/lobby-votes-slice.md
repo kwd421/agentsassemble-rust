@@ -128,6 +128,31 @@ mount, explicit user refresh, or sequenced vote events—not polling.
 - isolated packaged local and remote read-only/read-write browser flows, restart, resource cleanup,
   measured costs, `make verify`, and threshold-based critical-web plus Daybreaker manual review.
 
+## Frontend direct-path implementation record
+
+- Prior symptom and cost: the copied composer and poll card constructed vote requests, but the
+  current socket client rejected every non-ordinary message before signing it. A separate unused
+  `/api/room/vote` helper targeted no Rust route, while ballot/withdraw/close events were discarded
+  before they could trigger a live summary refresh. The only working refresh was therefore the
+  viewer's explicit action; adding polling would have hidden rather than fixed those ownership gaps.
+- Intent and owner: `roomMessagePayload` now owns the one exact copied-request-to-`message.send`
+  mapping for ordinary messages and all four vote transitions. `roomVoteSummaryContract` owns the
+  exact browser result shape and its internal tally/deadline/closure consistency checks. One shared
+  frontend vote-transition predicate replaces the repeated kind lists. The obsolete HTTP helper is
+  removed rather than retained as compatibility or fallback behavior.
+- Preserved contracts and trade-off: all question, option, duration, identity, permission, and
+  mutation authority remains on the Rust server. The UI adds no optimistic ballot state and stores
+  only a privacy-minimized transition marker (vote ID, event ID/sequence, room, and timestamp) long
+  enough to refresh the visible card; voter identity and choice are not copied into that marker.
+  Transition markers are filtered before display and message-count/backfill decisions. This accepts
+  one bounded marker per already-received transition instead of a polling task or a second cache.
+- Resource and security result: no HTTP request, interval, heartbeat, retry, task, or deadline worker
+  was added. Summary reads occur only on mount, explicit refresh, or a sequenced transition. Moving
+  payload construction out of the transport reduced `roomSocketClient.ts` from 788 to 746 lines and
+  removed the broad legacy-shaped request assembly. The targeted 58 tests, full 102-file/642-test
+  frontend suite, TypeScript production build, and original-CSS verification passed. Packaged UI and
+  real-provider acceptance remain pending and are not claimed here.
+
 ## Manual review record
 
 - Finding: both independent manual reviews identified the historical `77697b7` Low where deadline
