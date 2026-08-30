@@ -375,9 +375,10 @@ export default function LobbyView({
   }, [pendingMessageTarget, visibleEvents]);
 
   async function navigateToSearchResult(eventId: string) {
+    const context = await messageSearch.readContext(eventId);
+    if (!context) return;
     suppressAutomaticHistoryLoad();
     setPendingMessageTarget(eventId);
-    const context = await messageSearch.readContext(eventId);
     showHistoryWindow(
       projectRoomEventsToTimeline(context.events, { viewerParticipantId })
     );

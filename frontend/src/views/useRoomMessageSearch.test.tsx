@@ -1,7 +1,11 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { MessageSearchAuthority, RoomSearchPage } from "../api";
+import type {
+  MessageSearchAuthority,
+  RoomMessageContext,
+  RoomSearchPage,
+} from "../api";
 
 const api = vi.hoisted(() => ({
   context: vi.fn(),
@@ -81,5 +85,67 @@ describe("useRoomMessageSearch authority lifecycle", () => {
 
     expect(hook.result.current.query).toBe("");
     expect(hook.result.current.results).toEqual([]);
+  });
+
+  it("does not return delayed context after the authority changes", async () => {
+    let resolveContext: (value: RoomMessageContext) => void = () => undefined;
+    api.context.mockReturnValueOnce(new Promise<RoomMessageContext>((resolve) => {
+      resolveContext = resolve;
+    }));
+    const hook = renderSearch({ kind: "remote", sessionToken: "session-a" });
+    const context = hook.result.current.readContext("event-1");
+
+    hook.rerender({
+      currentAuthority: { kind: "remote", sessionToken: "session-b" },
+    });
+    await act(async () => resolveContext({
+      channel_id: "lobby",
+      event_id: "event-1",
+      events: [],
+    }));
+
+    await expect(context).resolves.toBeNull();
+  });
+
+  it("does not return a delayed context error after the authority changes", async () => {
+    let rejectContext: (reason: Error) => void = () => undefined;
+    api.context.mockReturnValueOnce(new Promise<RoomMessageContext>((_resolve, reject) => {
+      rejectContext = reject;
+    }));
+    const hook = renderSearch({ kind: "remote", sessionToken: "session-a" });
+    const context = hook.result.current.readContext("event-1");
+
+    hook.rerender({
+      currentAuthority: { kind: "remote", sessionToken: "session-b" },
+    });
+    await act(async () => rejectContext(new Error("old authority failed")));
+
+    await expect(context).resolves.toBeNull();
+  });
+
+  it("releases pagination loading when the query changes", async () => {
+    vi.useFakeTimers();
+    api.search.mockResolvedValueOnce({ ...page, next_cursor: "cursor-1" });
+    const hook = renderSearch({ kind: "remote", sessionToken: "session-a" });
+
+    act(() => hook.result.current.updateQuery("history"));
+    await act(() => vi.advanceTimersByTimeAsync(250));
+    let resolveMore: (value: RoomSearchPage) => void = () => undefined;
+    api.search.mockReturnValueOnce(new Promise<RoomSearchPage>((resolve) => {
+      resolveMore = resolve;
+    }));
+    let loadMore: Promise<void> = Promise.resolve();
+    await act(async () => {
+      loadMore = hook.result.current.loadMore();
+      await Promise.resolve();
+    });
+    expect(hook.result.current.loadingMore).toBe(true);
+
+    act(() => hook.result.current.updateQuery("new query"));
+    expect(hook.result.current.loadingMore).toBe(false);
+    await act(async () => resolveMore({ ...page, results: [], next_cursor: "" }));
+    await loadMore;
+
+    expect(hook.result.current.loadingMore).toBe(false);
   });
 });

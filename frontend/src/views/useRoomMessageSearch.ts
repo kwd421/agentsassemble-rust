@@ -31,6 +31,7 @@ export function useRoomMessageSearch({
     setQuery(value);
     setResults([]);
     setNextCursor("");
+    setLoadingMore(false);
     setError("");
   }, []);
 
@@ -126,17 +127,23 @@ export function useRoomMessageSearch({
       throw new Error("이 환경에서는 로비 메시지 검색을 사용할 수 없습니다.");
     }
     const version = requestVersionRef.current;
-    return fetchRoomMessageContext({
-      roomId,
-      channelId,
-      eventId,
-      authority,
-      beforeDispatch: () => {
-        if (requestVersionRef.current !== version) {
-          throw new Error("메시지 검색 요청 권위가 변경되었습니다.");
-        }
-      },
-    });
+    try {
+      const context = await fetchRoomMessageContext({
+        roomId,
+        channelId,
+        eventId,
+        authority,
+        beforeDispatch: () => {
+          if (requestVersionRef.current !== version) {
+            throw new Error("메시지 검색 요청 권위가 변경되었습니다.");
+          }
+        },
+      });
+      return requestVersionRef.current === version ? context : null;
+    } catch (reason) {
+      if (requestVersionRef.current !== version) return null;
+      throw reason;
+    }
   }, [authority, channelId, roomId]);
 
   return {
