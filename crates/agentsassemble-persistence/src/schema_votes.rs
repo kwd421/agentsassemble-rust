@@ -14,13 +14,14 @@ pub(crate) const TABLES: &[TableDefinition] = &[
             "AND length(CAST(tallies_json AS BLOB)) BETWEEN 3 AND 256 ",
             "AND json_valid(tallies_json) AND json_type(tallies_json) = 'array'), ",
             "total_votes INTEGER NOT NULL CHECK(total_votes >= 0), ",
-            "manual_closed_at TEXT CHECK(manual_closed_at IS NULL OR ",
-            "(typeof(manual_closed_at) = 'text' ",
-            "AND length(CAST(manual_closed_at AS BLOB)) BETWEEN 1 AND 64 ",
-            "AND instr(manual_closed_at, char(0)) = 0)), ",
+            "manual_close_seq INTEGER ",
+            "CHECK(manual_close_seq IS NULL OR manual_close_seq > poll_seq), ",
             "PRIMARY KEY(room_id, vote_id), ",
             "UNIQUE(room_id, poll_seq), ",
-            "FOREIGN KEY(room_id, poll_seq) REFERENCES room_events(room_id, seq) ON DELETE CASCADE)",
+            "FOREIGN KEY(room_id, poll_seq) ",
+            "REFERENCES room_events(room_id, seq) ON DELETE CASCADE, ",
+            "FOREIGN KEY(room_id, manual_close_seq) ",
+            "REFERENCES room_events(room_id, seq) ON DELETE CASCADE)",
         ),
         infrastructure: false,
     },
@@ -85,6 +86,14 @@ mod tests {
                 .execute(&pool)
                 .await
                 .is_err()
+        );
+        assert!(
+            sqlx::query(
+                "UPDATE room_vote_states SET manual_close_seq = 2 WHERE room_id = 'general'"
+            )
+            .execute(&pool)
+            .await
+            .is_err()
         );
 
         sqlx::query("DELETE FROM room_events WHERE room_id = 'general' AND seq = 1")
