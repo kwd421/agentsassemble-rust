@@ -52,6 +52,7 @@ fn registered_routes(
         crate::message_pins_web::HTTP_ROUTES,
         crate::persona_web::HTTP_ROUTES,
         crate::profile_web::HTTP_ROUTES,
+        crate::provider_credentials_web::HTTP_ROUTES,
         crate::public_ingress_web::HTTP_ROUTES,
         crate::human_invite_manager_web::HTTP_ROUTES,
         crate::human_invite_web::HTTP_ROUTES,
@@ -121,6 +122,10 @@ mod tests {
         assert_eq!(
             registered_route_exposure(HttpMethod::Get, "/api/room-invite/join"),
             None
+        );
+        assert_eq!(
+            registered_route_exposure(HttpMethod::Delete, "/api/provider-credentials/deepseek"),
+            Some(RouteExposure::Private)
         );
         assert!(registered_route_path("/api/room-invite/join"));
         assert!(!registered_route_path("/api/not-registered"));

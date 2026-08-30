@@ -6,7 +6,7 @@ use std::{
 
 use agentsassemble_persistence::{PersistenceError, SqliteStore};
 use agentsassemble_protocol::ServerProductSurface;
-use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService};
+use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService, ProviderCredentialStore};
 use thiserror::Error;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
@@ -35,6 +35,7 @@ pub struct AppState {
     pub host_token: HostSecret,
     pub provider_catalog: ProviderCatalogService,
     pub provider_adapter: ProviderAdapter,
+    pub(crate) provider_credentials: ProviderCredentialStore,
     pub human_invite_credentials: HumanInviteCredentialAuthority,
     pub(crate) central_host_identity: CentralHostIdentity,
     pub shutdown: CancellationToken,
@@ -97,6 +98,7 @@ impl AppState {
             host_token,
             provider_catalog,
             provider_adapter,
+            provider_credentials: ProviderCredentialStore::production(),
             human_invite_credentials,
             central_host_identity,
             shutdown: CancellationToken::new(),
