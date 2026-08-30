@@ -4255,3 +4255,19 @@ No automated security scan was used.
   review used an automated security scan. This approves only the pushed backend/HTTP range; the
   copied frontend, RoomPortal tools, packaged and real-agent flows, and final measurements remain
   active work.
+
+## Lobby message-search copied-frontend review: 2026-08-30
+
+- The first cumulative review of `3ba5111..3809d08` found two Medium issues: valid empty optional
+  provider provenance was rejected, and an already-dispatched context read could update a later
+  room, channel, query, or authority state. It also found two Low strict-validation gaps in result
+  ordering and context radius. Commits `2d19a11` and `16ffe96` closed those findings without adding
+  a local-history fallback or a second request authority.
+- Daybreaker Blue High then found one remaining Low in the cumulative state: two context selections
+  under the same query shared a generation, so a late first selection could replace the second.
+  Commit `828d632` gives context selection its own latest-intent generation while leaving paginated
+  search ownership independent.
+- Final critical-web and Daybreaker Blue High verdicts for correction-only `16ffe96..828d632` and
+  cumulative `3ba5111..828d632`: APPROVE C0/H0/M0/L0. Neither review used an automated security
+  scan. This approves only the pushed copied-frontend range; packaged local/read-only restart, the
+  configured real-Agent matrix, and final measurements remain active work.
