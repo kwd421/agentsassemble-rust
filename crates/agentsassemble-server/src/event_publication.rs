@@ -3,6 +3,7 @@ use tokio::sync::broadcast;
 
 const RETRY_INITIAL_DELAY: std::time::Duration = std::time::Duration::from_millis(250);
 const RETRY_MAX_DELAY: std::time::Duration = std::time::Duration::from_secs(5);
+const RETRY_MAX_CONSECUTIVE_FAILURES: u8 = 8;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[must_use]
@@ -14,6 +15,7 @@ pub(crate) enum PublicationAttempt {
 pub(crate) struct PublicationRetry {
     deadline: Option<tokio::time::Instant>,
     next_delay: std::time::Duration,
+    consecutive_failures: u8,
 }
 
 impl PublicationRetry {
@@ -21,6 +23,7 @@ impl PublicationRetry {
         let mut owner = Self {
             deadline: None,
             next_delay: RETRY_INITIAL_DELAY,
+            consecutive_failures: 0,
         };
         owner.record(attempt);
         owner
@@ -31,10 +34,16 @@ impl PublicationRetry {
             PublicationAttempt::Drained => {
                 self.deadline = None;
                 self.next_delay = RETRY_INITIAL_DELAY;
+                self.consecutive_failures = 0;
             }
             PublicationAttempt::Retry => {
-                self.deadline = Some(tokio::time::Instant::now() + self.next_delay);
-                self.next_delay = self.next_delay.saturating_mul(2).min(RETRY_MAX_DELAY);
+                self.consecutive_failures = self.consecutive_failures.saturating_add(1);
+                if self.consecutive_failures < RETRY_MAX_CONSECUTIVE_FAILURES {
+                    self.deadline = Some(tokio::time::Instant::now() + self.next_delay);
+                    self.next_delay = self.next_delay.saturating_mul(2).min(RETRY_MAX_DELAY);
+                } else {
+                    self.deadline = None;
+                }
             }
         }
     }
@@ -82,7 +91,7 @@ pub(crate) async fn publish_durable_room_events(
             tracing::error!(
                 error = ?error,
                 room_id,
-                "durable room-event publication failed; the room owner will retry"
+                "durable room-event publication failed"
             );
             PublicationAttempt::Retry
         }
@@ -198,20 +207,29 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
-    async fn publication_retry_is_failure_only_bounded_and_resettable() {
+    async fn publication_retry_is_failure_only_exhaustible_and_resettable() {
         let now = tokio::time::Instant::now();
         let mut retry = super::PublicationRetry::new(super::PublicationAttempt::Drained);
         assert!(!retry.is_armed());
-        retry.record(super::PublicationAttempt::Retry);
-        assert_eq!(retry.deadline, Some(now + super::RETRY_INITIAL_DELAY));
-        retry.record(super::PublicationAttempt::Retry);
-        assert_eq!(retry.deadline, Some(now + super::RETRY_INITIAL_DELAY * 2));
-        for _ in 0..8 {
+        let expected_delays = [250, 500, 1_000, 2_000, 4_000, 5_000, 5_000];
+        for expected_delay_ms in expected_delays {
             retry.record(super::PublicationAttempt::Retry);
+            assert_eq!(
+                retry.deadline,
+                Some(now + std::time::Duration::from_millis(expected_delay_ms))
+            );
         }
-        assert_eq!(retry.deadline, Some(now + super::RETRY_MAX_DELAY));
+        retry.record(super::PublicationAttempt::Retry);
+        assert!(!retry.is_armed());
+        assert_eq!(
+            retry.consecutive_failures,
+            super::RETRY_MAX_CONSECUTIVE_FAILURES
+        );
+        retry.record(super::PublicationAttempt::Retry);
+        assert!(!retry.is_armed());
         retry.record(super::PublicationAttempt::Drained);
         assert!(!retry.is_armed());
+        assert_eq!(retry.consecutive_failures, 0);
         retry.record(super::PublicationAttempt::Retry);
         assert_eq!(retry.deadline, Some(now + super::RETRY_INITIAL_DELAY));
     }

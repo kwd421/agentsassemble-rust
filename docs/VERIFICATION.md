@@ -4328,6 +4328,18 @@ runtime boundary tests. Formatting, architecture, 800-line source-growth, policy
 also passed. The publication retry policy lives in the 258-line publication owner; the room actor
 remains 726 lines and only connects that owner to room inputs.
 
+A later manual whole-repository review found that the five-second delay cap did not bound the
+failure epoch: a permanent database fault still caused one SQLite drain and error log every five
+seconds until process cancellation. The retry owner now permits one initial failed drain plus seven
+timer-owned retries (250 ms, 500 ms, 1 s, 2 s, 4 s, 5 s, and 5 s), then disarms after the eighth
+consecutive failure. That bounds one failure epoch to eight drain attempts over 17.75 seconds,
+excluding each database call's existing 250 ms busy timeout. Pending rows and the canonical cursor
+are not altered or reported as delivered; the next real room input or external commit wake may
+observe recovery, and one successful drain resets the epoch. The accepted trade-off is that a room
+with no later activity waits for restart rather than polling a recovered database forever. The
+focused fake-clock owner test proves the exact schedule, exhaustion, no re-arm after exhaustion, and
+success reset; all four publication-owner tests pass.
+
 ## Pending-only lifecycle reconciliation scan: 2026-08-30
 
 The live one-second reconciler is retained because it owns a concrete failure contract: a room or

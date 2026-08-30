@@ -447,10 +447,13 @@ history in sequence order and updates the cursor. Startup, the committing room i
 and external HTTP/reconciliation commit wakes are the normal drain triggers. A successful
 drain owns no timer. Only an observed drain failure arms one room-owned retry deadline;
 repeated failure backs off from 250 milliseconds to a five-second cap, and the first
-successful drain removes the deadline and resets the delay. HTTP success therefore means the
+successful drain removes the deadline and resets the delay. One failure epoch ends after eight
+consecutive failed drains: no further timer is armed, the durable cursor backlog remains intact,
+and only a later real room input or external commit wake attempts it again. HTTP success therefore means the
 canonical profile, projections, and publication work are durable, not that every
 receiver consumed them. Handler cancellation, queue pressure, and restart leave a
-cursor backlog that the room owner retries without an idle database poll; no profile-only
+cursor backlog that the room owner retries within that finite failure epoch without an idle
+database poll or fallback broadcaster; no profile-only
 broadcast path exists.
 WebSocket delivery suppresses duplicate sequence numbers and requires the next
 exact sequence, otherwise it closes with resynchronization. Retry of the same
