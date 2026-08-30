@@ -368,10 +368,10 @@ session. Desktop mode cannot start with an empty host secret; Tauri generates it
 per owned runtime. Its private control pipe issues either a room WebSocket ticket
 with the validated loopback WebSocket origin or one exact-purpose local HTTP grant
 with the validated loopback HTTP origin. Current HTTP grants separate server-operator,
-room-bound preference and human-invite create/revoke, settings-directory-read, and
-central-registration authority. React receives neither the host secret nor a reusable
-credential. A ticket presented to the wrong transport or scope is consumed and
-rejected rather than interpreted as another authority.
+room-bound preference, message-search-read, and human-invite create/revoke,
+settings-directory-read, and central-registration authority. React receives neither
+the host secret nor a reusable credential. A ticket presented to the wrong transport
+or scope is consumed and rejected rather than interpreted as another authority.
 Public human-session grants reuse this same bounded store but retain the opaque
 durable `HumanSessionAuthorization` and one exact purpose. Issuance is capped at
 1,792 live public grants and eight per session fingerprint, leaving at least 2,304
@@ -383,6 +383,11 @@ before any read or write. Public WebSocket, own-profile, and preference read/wri
 exchange routes are connected and verified with that target revalidation. The room
 attachment exchange remains incomplete and is not claimed reachable until its
 corresponding message behavior and target revalidation are implemented and verified.
+Lobby message search and context consume the same one-use `message-search-read`
+purpose before query or body validation, then revalidate current membership and
+`room.history` permission in the canonical persistence read transaction. Their GET
+responses are private/no-store, and an unavailable custom channel is never replaced
+with lobby data.
 Central server registration is a third, exact-purpose one-use ticket issued only
 through the private desktop control pipe and consumed only by the desktop-mounted
 registration-proof POST. Its Ed25519 private key is a separate owner-only write-once

@@ -75,6 +75,7 @@ pub enum RoomHttpPurpose {
     PreferencesWrite,
     MessagePinsRead,
     MessagePinsWrite,
+    MessageSearchRead,
     MessageAttachmentUpload,
     BoundMessageAttachmentRead { attachment_id: String },
     BoundAppearanceRead { asset_id: String },
@@ -289,6 +290,26 @@ impl TicketStore {
             principal_id,
             participant_id,
             RoomHttpPurpose::MessagePinsWrite,
+        )
+        .await
+    }
+
+    /// Issues one exact lobby-message-search credential for a resolved room human.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` for empty identity fields or exhausted ticket capacity.
+    pub async fn issue_message_search_read(
+        &self,
+        room_id: String,
+        principal_id: String,
+        participant_id: String,
+    ) -> Result<IssuedTicket, TicketError> {
+        self.issue_room_http(
+            room_id,
+            principal_id,
+            participant_id,
+            RoomHttpPurpose::MessageSearchRead,
         )
         .await
     }
@@ -560,6 +581,23 @@ impl TicketStore {
             ticket,
             RoomHttpPurpose::MessagePinsWrite,
             HumanSessionGrantPurpose::MessagePinsWrite,
+        )
+        .await
+    }
+
+    /// Consumes only an exact lobby-message-search credential.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` after consuming a wrong-purpose, expired, unknown, or reused ticket.
+    pub(crate) async fn consume_message_search_read(
+        &self,
+        ticket: &str,
+    ) -> Result<ConsumedRoomHumanTicket, TicketError> {
+        self.consume_room_human(
+            ticket,
+            RoomHttpPurpose::MessageSearchRead,
+            HumanSessionGrantPurpose::MessageSearchRead,
         )
         .await
     }

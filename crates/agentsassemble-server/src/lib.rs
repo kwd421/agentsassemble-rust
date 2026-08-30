@@ -76,6 +76,7 @@ mod human_session_exchange_web;
 mod ingress_trust;
 mod lifecycle_command_tracker;
 mod message_pins_web;
+mod message_search_web;
 mod participant_mute_runtime;
 mod persona_web;
 mod principal_mutation_admission;
@@ -142,7 +143,8 @@ pub use ticket_issuer::{
     issue_central_registration_ticket, issue_human_invite_create_ticket,
     issue_human_invite_revoke_ticket, issue_local_operator_http_ticket, issue_local_ticket,
     issue_message_attachment_read_ticket, issue_message_attachment_upload_ticket,
-    issue_message_pins_read_ticket, issue_message_pins_write_ticket, issue_preferences_read_ticket,
+    issue_message_pins_read_ticket, issue_message_pins_write_ticket,
+    issue_message_search_read_ticket, issue_preferences_read_ticket,
     issue_preferences_write_ticket, issue_settings_directory_read_ticket,
 };
 pub use web::{ServeError, router, serve};

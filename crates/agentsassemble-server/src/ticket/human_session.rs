@@ -22,6 +22,7 @@ pub(super) enum HumanSessionGrantPurpose {
     PreferencesWrite,
     MessagePinsRead,
     MessagePinsWrite,
+    MessageSearchRead,
     MessageAttachmentUpload,
     BoundMessageAttachmentRead { attachment_id: String },
     BoundAppearanceRead { asset_id: String },
@@ -162,6 +163,19 @@ impl TicketStore {
             return Err(TicketError::Invalid);
         }
         self.issue_human_session(authorization, HumanSessionGrantPurpose::MessagePinsWrite)
+            .await
+    }
+
+    /// Issues an exact lobby-message-search grant from current durable session authority.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` when the session expired or a grant bound is exhausted.
+    pub async fn issue_human_session_message_search_read(
+        &self,
+        authorization: HumanSessionAuthorization,
+    ) -> Result<IssuedTicket, TicketError> {
+        self.issue_human_session(authorization, HumanSessionGrantPurpose::MessageSearchRead)
             .await
     }
 
