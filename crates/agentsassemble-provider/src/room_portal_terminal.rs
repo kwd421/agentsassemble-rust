@@ -481,12 +481,13 @@ fn hook_session_directory(command_prefix: &str) -> Option<PathBuf> {
 mod tests {
     use super::{
         absolute_helper_command, helper_executable_from_command_prefix, reset_media_directory,
-        safe_room_command, stage_attachment,
+        stage_attachment,
     };
     use crate::ProviderAttachment;
 
-    #[cfg(unix)]
-    const HELPER: &str = "'/private/helper path/agentsassemble-room'";
+    #[cfg(windows)]
+    use super::safe_room_command;
+
     #[cfg(windows)]
     const HELPER: &str = r#""C:\private helper\agentsassemble-room.exe""#;
     const ATTACHMENT_ID: &str = "ma_11111111111111111111111111111111";
@@ -654,75 +655,6 @@ mod tests {
                 .unwrap_or_else(|error| panic!("read helper marker: {error}"))
                 .lines()
                 .count()
-        }
-    }
-
-    #[test]
-    fn hook_allows_only_one_exact_room_helper_command() {
-        let message = if cfg!(windows) {
-            "\"hello room\""
-        } else {
-            "'hello room'"
-        };
-        let targeted_message = if cfg!(windows) {
-            "\"your turn\""
-        } else {
-            "'your turn'"
-        };
-        let roll = if cfg!(windows) {
-            "\"2d6+1\""
-        } else {
-            "'2d6+1'"
-        };
-        let choices = if cfg!(windows) {
-            r#"[\"north\",\"south\"]"#
-        } else {
-            r#"'["north","south"]'"#
-        };
-        let search_query = if cfg!(windows) {
-            "\"old deployment\""
-        } else {
-            "'old deployment'"
-        };
-        for command in [
-            format!("{HELPER} help"),
-            format!("{HELPER} read"),
-            format!("{HELPER} media {ATTACHMENT_ID}"),
-            format!("{HELPER} search {search_query}"),
-            format!("{HELPER} search {search_query} WzEyMyw0NTZd"),
-            format!("{HELPER} context event-1"),
-            format!("{HELPER} speak {message}"),
-            format!("{HELPER} speak-to agent-2 {targeted_message}"),
-            format!("{HELPER} decline duplicate"),
-            format!("{HELPER} roll {roll}"),
-            format!("{HELPER} choose {choices}"),
-        ] {
-            assert!(
-                safe_room_command(&command, HELPER),
-                "safe command rejected: {command}"
-            );
-        }
-        for command in [
-            format!("{HELPER} read && env"),
-            format!("{HELPER} media ma_1111111111111111111111111111111Z"),
-            format!("{HELPER} media {ATTACHMENT_ID} extra"),
-            format!("{HELPER} search"),
-            format!("{HELPER} search {search_query} cursor extra"),
-            format!("{HELPER} context {}", "x".repeat(129)),
-            format!("{HELPER} context event-1 extra"),
-            if cfg!(windows) {
-                format!("{HELPER} speak \"%USERPROFILE%\"")
-            } else {
-                format!("{HELPER} speak \"$HOME\"")
-            },
-            format!("{HELPER} read\nuname"),
-            "agentsassemble-room read".to_owned(),
-            "/tmp/agentsassemble-room read".to_owned(),
-        ] {
-            assert!(
-                !safe_room_command(&command, HELPER),
-                "unsafe command allowed: {command}"
-            );
         }
     }
 

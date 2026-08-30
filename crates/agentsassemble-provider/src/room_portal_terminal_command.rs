@@ -133,12 +133,8 @@ pub(crate) fn safe_room_command(command: &str, command_prefix: &str) -> bool {
                     "nothing_useful_to_add" | "not_addressed" | "duplicate"
                 )
         }
-        "speak" => parts.len() >= 2 && parts[1..].iter().all(|part| !part.starts_with('~')),
-        "speak-to" => {
-            parts.len() >= 3
-                && valid_agent_id(&parts[1])
-                && parts[2..].iter().all(|part| !part.starts_with('~'))
-        }
+        "speak" => parts.len() >= 2,
+        "speak-to" => parts.len() >= 3 && valid_agent_id(&parts[1]),
         "roll" => {
             parts.len() == 2
                 && RoomRandomRequest::parse(
@@ -163,7 +159,7 @@ pub(crate) fn safe_room_command(command: &str, command_prefix: &str) -> bool {
 
 #[cfg(unix)]
 fn unsafe_shell_arguments(command: &str) -> bool {
-    shell_metacharacter_outside_single_quotes(command)
+    posix_shell_expansion_or_control(command)
 }
 
 #[cfg(windows)]
@@ -172,7 +168,7 @@ fn unsafe_shell_arguments(command: &str) -> bool {
 }
 
 #[cfg(unix)]
-fn shell_metacharacter_outside_single_quotes(command: &str) -> bool {
+fn posix_shell_expansion_or_control(command: &str) -> bool {
     let mut single = false;
     let mut double = false;
     let mut escaped = false;
@@ -193,12 +189,14 @@ fn shell_metacharacter_outside_single_quotes(command: &str) -> bool {
             double = !double;
             continue;
         }
-        if !single
+        let substitution_or_control = !single
             && matches!(
                 character,
                 '$' | '`' | ';' | '&' | '|' | '<' | '>' | '(' | ')'
-            )
-        {
+            );
+        let unquoted_word_expansion =
+            !single && !double && matches!(character, '*' | '?' | '[' | ']' | '{' | '}' | '~');
+        if substitution_or_control || unquoted_word_expansion {
             return true;
         }
     }
@@ -233,7 +231,16 @@ fn valid_agent_id(value: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{helper_tool, windows_shell_metacharacter};
+    use super::{helper_tool, safe_room_command, windows_shell_metacharacter};
+
+    #[cfg(unix)]
+    use super::posix_shell_expansion_or_control;
+
+    #[cfg(unix)]
+    const HELPER: &str = "'/private/helper path/agentsassemble-room'";
+    #[cfg(windows)]
+    const HELPER: &str = r#""C:\private helper\agentsassemble-room.exe""#;
+    const ATTACHMENT_ID: &str = "ma_11111111111111111111111111111111";
 
     #[test]
     fn history_commands_map_to_the_existing_roomportal_tools() {
@@ -257,6 +264,87 @@ mod tests {
     }
 
     #[test]
+    fn hook_allows_only_one_exact_room_helper_command() {
+        let message = if cfg!(windows) {
+            "\"hello room\""
+        } else {
+            "'hello room'"
+        };
+        let targeted_message = if cfg!(windows) {
+            "\"your turn\""
+        } else {
+            "'your turn'"
+        };
+        let roll = if cfg!(windows) {
+            "\"2d6+1\""
+        } else {
+            "'2d6+1'"
+        };
+        let choices = if cfg!(windows) {
+            r#"[\"north\",\"south\"]"#
+        } else {
+            r#"'["north","south"]'"#
+        };
+        let search_query = if cfg!(windows) {
+            "\"old deployment\""
+        } else {
+            "'old deployment'"
+        };
+        let literal_pattern = if cfg!(windows) { "\"*\"" } else { "'*'" };
+        for command in [
+            format!("{HELPER} help"),
+            format!("{HELPER} read"),
+            format!("{HELPER} media {ATTACHMENT_ID}"),
+            format!("{HELPER} search {search_query}"),
+            format!("{HELPER} search {search_query} WzEyMyw0NTZd"),
+            format!("{HELPER} context event-1"),
+            format!("{HELPER} speak {literal_pattern}"),
+            format!("{HELPER} speak {message}"),
+            format!("{HELPER} speak-to agent-2 {targeted_message}"),
+            format!("{HELPER} decline duplicate"),
+            format!("{HELPER} roll {roll}"),
+            format!("{HELPER} choose {choices}"),
+        ] {
+            assert!(
+                safe_room_command(&command, HELPER),
+                "safe command rejected: {command}"
+            );
+        }
+        for command in [
+            format!("{HELPER} read && env"),
+            format!("{HELPER} media ma_1111111111111111111111111111111Z"),
+            format!("{HELPER} media {ATTACHMENT_ID} extra"),
+            format!("{HELPER} search"),
+            format!("{HELPER} search {search_query} cursor extra"),
+            format!("{HELPER} context {}", "x".repeat(129)),
+            format!("{HELPER} context event-1 extra"),
+            if cfg!(windows) {
+                format!("{HELPER} speak ^& whoami")
+            } else {
+                format!("{HELPER} speak *")
+            },
+            if cfg!(windows) {
+                format!("{HELPER} speak !USERPROFILE!")
+            } else {
+                format!("{HELPER} speak ~")
+            },
+            if cfg!(windows) {
+                format!("{HELPER} speak \"%USERPROFILE%\"")
+            } else {
+                format!("{HELPER} speak \"$HOME\"")
+            },
+            format!("{HELPER} read\nuname"),
+            "agentsassemble-room read".to_owned(),
+            "/tmp/agentsassemble-room read".to_owned(),
+        ] {
+            assert!(
+                !safe_room_command(&command, HELPER),
+                "unsafe command allowed: {command}"
+            );
+        }
+    }
+
+    #[test]
     fn windows_grammar_never_treats_posix_quotes_as_protection() {
         assert!(windows_shell_metacharacter("speak 'safe & whoami'"));
         assert!(windows_shell_metacharacter("speak \"%USERPROFILE%\""));
@@ -265,5 +353,21 @@ mod tests {
         assert!(!windows_shell_metacharacter(
             "choose [\\\"north\\\",\\\"south\\\"]"
         ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_grammar_rejects_unquoted_word_expansion() {
+        for command in [
+            "speak *",
+            "speak .??*",
+            "speak {README,AGENTS}.md",
+            "speak ~",
+        ] {
+            assert!(posix_shell_expansion_or_control(command));
+        }
+        for command in ["speak '*'", "speak \"?\"", "speak \\*", "speak '~'"] {
+            assert!(!posix_shell_expansion_or_control(command));
+        }
     }
 }
