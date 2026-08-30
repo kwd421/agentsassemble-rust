@@ -624,9 +624,7 @@ pub(super) fn reserve_room_tool(
     if active.closing || active.outcome.is_some() {
         return Err("This turn already has a terminal room action.".to_owned());
     }
-    if active.receipt_generation != Some(active.turn_generation) {
-        return Err("Read the discussion before using a room tool.".to_owned());
-    }
+    require_current_receipt(active)?;
     let ingress = active
         .tool_ingress
         .clone()
@@ -655,6 +653,12 @@ pub(super) fn reserve_room_tool(
         },
         ingress,
     ))
+}
+
+pub(super) fn require_current_receipt(active: &ActiveObservation) -> Result<(), String> {
+    (active.receipt_generation == Some(active.turn_generation))
+        .then_some(())
+        .ok_or_else(|| "Read the discussion before using a room tool.".to_owned())
 }
 
 #[derive(Debug)]

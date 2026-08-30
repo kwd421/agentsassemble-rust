@@ -38,8 +38,8 @@ use uuid::Uuid;
 
 use crate::room_attachment::attachment_tool_result;
 use crate::room_portal::{
-    PortalState, RoomPortalError, StagedOutcome, canonical_message, reserve_attachment_read,
-    reserve_room_tool, valid_decline_reason,
+    PortalState, RoomPortalError, StagedOutcome, canonical_message, require_current_receipt,
+    reserve_attachment_read, reserve_room_tool, valid_decline_reason,
 };
 use crate::room_portal_tool_contract::{
     ChooseRandom, DeclineToSpeak, PublishMessage, ReadAttachment, RollDice,
@@ -457,7 +457,7 @@ impl RoomPortalMcp {
             .active
             .as_mut()
             .ok_or_else(|| "No active room observation.".to_owned())?;
-        let receipt_generation = active.turn_generation;
+        require_current_receipt(active)?;
         if active.closing || active.outcome.is_some() {
             return Err("This turn already has a terminal room action.".to_owned());
         }
@@ -476,7 +476,7 @@ impl RoomPortalMcp {
             String::new()
         };
         active.outcome = Some(StagedOutcome::Message {
-            receipt_generation,
+            receipt_generation: active.turn_generation,
             content,
             target_agent_id,
         });
@@ -498,7 +498,7 @@ impl RoomPortalMcp {
             .active
             .as_mut()
             .ok_or_else(|| "No active room observation.".to_owned())?;
-        let receipt_generation = active.turn_generation;
+        require_current_receipt(active)?;
         if active.closing || active.outcome.is_some() {
             return Err("This turn already has a terminal room action.".to_owned());
         }
@@ -509,7 +509,7 @@ impl RoomPortalMcp {
             return Err("The decline reason is unsupported.".to_owned());
         }
         active.outcome = Some(StagedOutcome::Declined {
-            receipt_generation,
+            receipt_generation: active.turn_generation,
             reason_code: input.reason_code,
         });
         Ok("Declined this shared-room turn.".to_owned())
@@ -668,7 +668,14 @@ mod tests {
             json!({"content": "  canonical reply  ", "next_agent_id": "unknown"}),
         )
         .await;
-        assert_ne!(early.is_error, Some(true));
+        assert_eq!(early.is_error, Some(true));
+        let early_decline = call_tool(
+            &client,
+            "decline_to_speak",
+            json!({"reason_code": "duplicate"}),
+        )
+        .await;
+        assert_eq!(early_decline.is_error, Some(true));
         assert!(portal.finish_observation("turn-1", 7).is_err());
         let read = call_tool(&client, "read_discussion", json!({})).await;
         let read_text = read
@@ -678,6 +685,14 @@ mod tests {
             .map(|content| content.text.as_str())
             .unwrap_or_default();
         assert!(read_text.contains("Human: hello"));
+        assert!(portal.finish_observation("turn-1", 7).is_err());
+        let published = call_tool(
+            &client,
+            "publish_message",
+            json!({"content": "  canonical reply  ", "next_agent_id": "unknown"}),
+        )
+        .await;
+        assert_ne!(published.is_error, Some(true));
         let duplicate = call_tool(
             &client,
             "decline_to_speak",
