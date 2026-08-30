@@ -20,6 +20,8 @@ const SPEAKER_AGENT_ID: &str = "codex-00000000-0000-5000-8000-000000000003";
 mod message_attachment_binding_tests;
 #[path = "message_search_index_tests.rs"]
 mod message_search_index_tests;
+#[path = "message_search_provider_tests.rs"]
+mod message_search_provider_tests;
 #[path = "persona_turn_tests.rs"]
 mod persona_turn_tests;
 #[path = "provider_turn_mute_tests.rs"]

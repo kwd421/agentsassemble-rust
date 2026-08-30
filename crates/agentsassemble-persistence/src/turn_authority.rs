@@ -1,6 +1,8 @@
 use agentsassemble_domain::DurableAgentSession;
+use sqlx::{Sqlite, Transaction};
+use uuid::Uuid;
 
-use crate::turn_queue::room_input_queue_is_canonical;
+use crate::{PersistenceError, turn_queue::room_input_queue_is_canonical};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct InvalidTurnAuthority;
@@ -37,6 +39,69 @@ pub(crate) fn active_turn_authority(
         (true, false) => Ok(true),
         (false, true) => Ok(false),
         _ => Err(InvalidTurnAuthority),
+    }
+}
+
+pub(crate) async fn require_provider_room_tool_authority(
+    transaction: &mut Transaction<'_, Sqlite>,
+    session: &DurableAgentSession,
+    turn_id: &str,
+    input_up_to_seq: i64,
+    turn_generation: u64,
+    execution_id: &str,
+) -> Result<(), PersistenceError> {
+    if active_turn_authority(session) != Ok(true)
+        || session.public.active_turn_id != turn_id
+        || session.input_up_to_seq != input_up_to_seq
+        || session.turn_generation != turn_generation
+        || turn_generation == 0
+        || Uuid::parse_str(execution_id).is_err()
+        || session.public.status != "attached"
+        || session.public.runtime_status != "busy"
+        || !session.public.enabled
+        || !session.public.provider_session_active
+        || session.public.process_ownership != "server"
+        || session.runtime_handle_id.is_empty()
+        || session.runtime_owner_id.is_empty()
+        || session.runtime_lease_token.is_empty()
+    {
+        return Err(stale_provider_turn());
+    }
+    let generation = i64::try_from(turn_generation).map_err(|_| stale_provider_turn())?;
+    let exact_execution = sqlx::query_scalar::<_, i64>(
+        "SELECT EXISTS(SELECT 1 FROM provider_turn_executions execution \
+         WHERE execution.room_id = ? AND execution.session_id = ? \
+         AND execution.turn_generation = ? AND execution.execution_id = ? \
+         AND execution.turn_id = ? AND execution.phase IN ('start_dispatching', 'running') \
+         AND execution.start_dispatch_nonce != '' AND execution.runtime_handle_id = ? \
+         AND execution.runtime_owner_id = ? AND execution.runtime_lease_token = ? \
+         AND NOT EXISTS (SELECT 1 FROM provider_turn_effects effect \
+           WHERE effect.room_id = execution.room_id \
+           AND effect.session_id = execution.session_id \
+           AND effect.turn_generation = execution.turn_generation \
+           AND effect.phase != 'finalized'))",
+    )
+    .bind(&session.public.room_id)
+    .bind(&session.public.session_id)
+    .bind(generation)
+    .bind(execution_id)
+    .bind(turn_id)
+    .bind(&session.runtime_handle_id)
+    .bind(&session.runtime_owner_id)
+    .bind(&session.runtime_lease_token)
+    .fetch_one(&mut **transaction)
+    .await?
+        != 0;
+    if !exact_execution {
+        return Err(stale_provider_turn());
+    }
+    Ok(())
+}
+
+fn stale_provider_turn() -> PersistenceError {
+    PersistenceError::CommandRejected {
+        code: "stale_provider_turn",
+        message: "Room tool result no longer matches the active provider turn.".to_owned(),
     }
 }
 

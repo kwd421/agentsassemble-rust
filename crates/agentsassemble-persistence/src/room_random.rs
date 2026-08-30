@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use agentsassemble_domain::{
-    Actor, AuthenticatedPrincipal, DurableAgentSession, ParticipantStatus, RoomEvent,
-    RoomRandomRequest, RoomRandomResult, RoomSettings, canonical_payload_hash,
+    Actor, AuthenticatedPrincipal, ParticipantStatus, RoomEvent, RoomRandomRequest,
+    RoomRandomResult, RoomSettings, canonical_payload_hash,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -17,7 +17,7 @@ use crate::{
     human_session_authority::revalidate_human_session,
     room_turns::support::{insert_event, load_active_room, load_participant, next_sequence},
     room_write_budget::{command_size, reserve_room_write_budget},
-    turn_authority::active_turn_authority,
+    turn_authority::require_provider_room_tool_authority,
 };
 
 const MAX_RANDOM_RESULTS_PER_TURN: i64 = 32;
@@ -134,7 +134,7 @@ impl SqliteStore {
             ));
         }
         let session = load_session(&mut transaction, room_id, session_id).await?;
-        require_provider_authority(
+        require_provider_room_tool_authority(
             &mut transaction,
             &session,
             turn_id,
@@ -294,73 +294,6 @@ fn require_participant(status: ParticipantStatus, muted: bool) -> Result<(), Per
         return Err(rejected(
             "participant_muted",
             "Muted participants cannot publish room results.",
-        ));
-    }
-    Ok(())
-}
-
-async fn require_provider_authority(
-    transaction: &mut Transaction<'_, Sqlite>,
-    session: &DurableAgentSession,
-    turn_id: &str,
-    input_up_to_seq: i64,
-    turn_generation: u64,
-    execution_id: &str,
-) -> Result<(), PersistenceError> {
-    if active_turn_authority(session) != Ok(true)
-        || session.public.active_turn_id != turn_id
-        || session.input_up_to_seq != input_up_to_seq
-        || session.turn_generation != turn_generation
-        || turn_generation == 0
-        || Uuid::parse_str(execution_id).is_err()
-        || session.public.status != "attached"
-        || session.public.runtime_status != "busy"
-        || !session.public.enabled
-        || !session.public.provider_session_active
-        || session.public.process_ownership != "server"
-        || session.runtime_handle_id.is_empty()
-        || session.runtime_owner_id.is_empty()
-        || session.runtime_lease_token.is_empty()
-    {
-        return Err(rejected(
-            "stale_provider_turn",
-            "Room tool result no longer matches the active provider turn.",
-        ));
-    }
-    let generation = i64::try_from(turn_generation).map_err(|_| {
-        rejected(
-            "stale_provider_turn",
-            "Room tool result no longer matches the active provider turn.",
-        )
-    })?;
-    let exact_execution = sqlx::query_scalar::<_, i64>(
-        "SELECT EXISTS(SELECT 1 FROM provider_turn_executions execution \
-         WHERE execution.room_id = ? AND execution.session_id = ? \
-         AND execution.turn_generation = ? AND execution.execution_id = ? \
-         AND execution.turn_id = ? AND execution.phase IN ('start_dispatching', 'running') \
-         AND execution.start_dispatch_nonce != '' AND execution.runtime_handle_id = ? \
-         AND execution.runtime_owner_id = ? AND execution.runtime_lease_token = ? \
-         AND NOT EXISTS (SELECT 1 FROM provider_turn_effects effect \
-           WHERE effect.room_id = execution.room_id \
-           AND effect.session_id = execution.session_id \
-           AND effect.turn_generation = execution.turn_generation \
-           AND effect.phase != 'finalized'))",
-    )
-    .bind(&session.public.room_id)
-    .bind(&session.public.session_id)
-    .bind(generation)
-    .bind(execution_id)
-    .bind(turn_id)
-    .bind(&session.runtime_handle_id)
-    .bind(&session.runtime_owner_id)
-    .bind(&session.runtime_lease_token)
-    .fetch_one(&mut **transaction)
-    .await?
-        != 0;
-    if !exact_execution {
-        return Err(rejected(
-            "stale_provider_turn",
-            "Room tool result no longer matches the active provider turn.",
         ));
     }
     Ok(())

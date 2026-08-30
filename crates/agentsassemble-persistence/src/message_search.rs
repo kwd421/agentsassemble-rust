@@ -1,6 +1,7 @@
 use agentsassemble_domain::{
-    AuthenticatedPrincipal, LobbyMessageContext, LobbyMessageSearchPage, LobbyMessageSearchResult,
-    MAX_MESSAGE_SEARCH_CURSOR_BYTES, MESSAGE_CONTEXT_RADIUS, MESSAGE_SEARCH_PAGE_SIZE, RoomEvent,
+    AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, LobbyMessageContext,
+    LobbyMessageSearchPage, LobbyMessageSearchResult, MAX_MESSAGE_SEARCH_CURSOR_BYTES,
+    MESSAGE_CONTEXT_RADIUS, MESSAGE_SEARCH_PAGE_SIZE, ParticipantStatus, RoomEvent,
     casefold_message_search_text, clean_message_search_query,
     compact_casefolded_message_search_text, public_event_for_principal,
 };
@@ -10,10 +11,23 @@ use sqlx::{Row, Sqlite, Transaction, sqlite::SqliteRow};
 
 use crate::{
     HumanSessionAuthorization, PersistenceError, SqliteStore,
+    agent_lifecycle::load_session,
     human_session_authority::revalidate_human_session,
     message_search_index::{canonical_created_at_nanos, searchable_lobby_message},
+    room_turns::support::load_participant,
     room_user_identity::current_local_room_principal,
+    turn_authority::require_provider_room_tool_authority,
 };
+
+#[derive(Debug, Clone, Copy)]
+pub struct ProviderMessageSearchAuthority<'a> {
+    pub room_id: &'a str,
+    pub session_id: &'a str,
+    pub turn_id: &'a str,
+    pub input_up_to_seq: i64,
+    pub turn_generation: u64,
+    pub execution_id: &'a str,
+}
 
 impl SqliteStore {
     /// Searches canonical lobby history as the current local room manager.
@@ -97,6 +111,42 @@ impl SqliteStore {
         transaction.commit().await?;
         Ok(context)
     }
+
+    /// Searches canonical lobby history for one exact active provider turn.
+    ///
+    /// # Errors
+    ///
+    /// Rejects stale turn authority, a revoked room participant, or invalid search input.
+    pub async fn search_provider_lobby_messages(
+        &self,
+        authority: ProviderMessageSearchAuthority<'_>,
+        query: &str,
+        cursor: &str,
+    ) -> Result<LobbyMessageSearchPage, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        let principal = provider_search_principal(&mut transaction, authority).await?;
+        let page =
+            search_authorized_in(&mut transaction, &principal.room_id, query, cursor).await?;
+        transaction.commit().await?;
+        Ok(page)
+    }
+
+    /// Reads bounded canonical lobby context for one exact active provider turn.
+    ///
+    /// # Errors
+    ///
+    /// Rejects stale turn authority, a revoked room participant, or an unknown target.
+    pub async fn provider_lobby_message_context(
+        &self,
+        authority: ProviderMessageSearchAuthority<'_>,
+        event_id: &str,
+    ) -> Result<LobbyMessageContext, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        let principal = provider_search_principal(&mut transaction, authority).await?;
+        let context = context_authorized_in(&mut transaction, &principal, event_id).await?;
+        transaction.commit().await?;
+        Ok(context)
+    }
 }
 
 async fn search_in(
@@ -106,6 +156,15 @@ async fn search_in(
     cursor: &str,
 ) -> Result<LobbyMessageSearchPage, PersistenceError> {
     require_history(principal)?;
+    search_authorized_in(transaction, &principal.room_id, query, cursor).await
+}
+
+async fn search_authorized_in(
+    transaction: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    query: &str,
+    cursor: &str,
+) -> Result<LobbyMessageSearchPage, PersistenceError> {
     let query = clean_message_search_query(query);
     if query.is_empty() {
         return Err(rejected("bad_request", "q is required."));
@@ -116,19 +175,11 @@ async fn search_in(
     let phrase = fts_phrase(&folded);
     let limit = i64::try_from(MESSAGE_SEARCH_PAGE_SIZE + 1).map_err(|_| invalid_state())?;
     let rows = if compact.chars().count() >= 3 {
-        search_long(
-            transaction,
-            &principal.room_id,
-            &compact,
-            &phrase,
-            cursor,
-            limit,
-        )
-        .await?
+        search_long(transaction, room_id, &compact, &phrase, cursor, limit).await?
     } else {
-        search_short(transaction, &principal.room_id, &phrase, cursor, limit).await?
+        search_short(transaction, room_id, &phrase, cursor, limit).await?
     };
-    project_page(principal, rows)
+    project_page(room_id, rows)
 }
 
 async fn search_long(
@@ -190,7 +241,7 @@ async fn search_short(
 }
 
 fn project_page(
-    principal: &AuthenticatedPrincipal,
+    room_id: &str,
     mut rows: Vec<SqliteRow>,
 ) -> Result<LobbyMessageSearchPage, PersistenceError> {
     let has_more = rows.len() > MESSAGE_SEARCH_PAGE_SIZE;
@@ -198,7 +249,7 @@ fn project_page(
     let mut results = Vec::with_capacity(rows.len());
     let mut last_cursor = None;
     for row in rows {
-        let (event, created_at_nanos) = checked_event(&row, &principal.room_id)?;
+        let (event, created_at_nanos) = checked_event(&row, room_id)?;
         let message = searchable_lobby_message(&event)?.ok_or_else(invalid_state)?;
         last_cursor = Some((created_at_nanos, event.seq));
         results.push(LobbyMessageSearchResult {
@@ -229,6 +280,14 @@ async fn context_in(
     event_id: &str,
 ) -> Result<LobbyMessageContext, PersistenceError> {
     require_history(principal)?;
+    context_authorized_in(transaction, principal, event_id).await
+}
+
+async fn context_authorized_in(
+    transaction: &mut Transaction<'_, Sqlite>,
+    principal: &AuthenticatedPrincipal,
+    event_id: &str,
+) -> Result<LobbyMessageContext, PersistenceError> {
     if event_id.is_empty() || event_id.len() > 128 || event_id.contains('\0') {
         return Err(rejected("bad_request", "event_id is invalid."));
     }
@@ -277,6 +336,52 @@ async fn context_in(
     Ok(LobbyMessageContext {
         event_id: target_event.id,
         events,
+    })
+}
+
+async fn provider_search_principal(
+    transaction: &mut Transaction<'_, Sqlite>,
+    authority: ProviderMessageSearchAuthority<'_>,
+) -> Result<AuthenticatedPrincipal, PersistenceError> {
+    let session = load_session(transaction, authority.room_id, authority.session_id).await?;
+    require_provider_room_tool_authority(
+        transaction,
+        &session,
+        authority.turn_id,
+        authority.input_up_to_seq,
+        authority.turn_generation,
+        authority.execution_id,
+    )
+    .await?;
+    let participant = load_participant(
+        transaction,
+        authority.room_id,
+        &session.public.participant_id,
+    )
+    .await?;
+    if participant.status != ParticipantStatus::Joined
+        || participant.muted
+        || participant.participant_type != "agent"
+        || participant.participant_id != session.public.participant_id
+    {
+        return Err(rejected(
+            "stale_provider_turn",
+            "Room search no longer matches an active Agent Session participant.",
+        ));
+    }
+    Ok(AuthenticatedPrincipal {
+        principal_id: session.public.session_id,
+        participant_id: participant.participant_id,
+        display_name: participant.display_name,
+        room_id: authority.room_id.to_owned(),
+        client_kind: ClientKind::AgentBridge,
+        invite_scope: InviteScope::ReadOnly,
+        is_operator: false,
+        capabilities: CapabilitySet::for_principal(
+            ClientKind::AgentBridge,
+            InviteScope::ReadOnly,
+            false,
+        ),
     })
 }
 

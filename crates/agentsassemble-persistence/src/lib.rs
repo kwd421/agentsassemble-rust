@@ -110,6 +110,7 @@ pub use message_attachments::{
     MessageAttachment, MessageAttachmentMetadata, ProviderAttachmentReadAuthority,
 };
 pub use message_pins::PinnedLobbyMessage;
+pub use message_search::ProviderMessageSearchAuthority;
 pub use participant_leave::ParticipantLeaveMutation;
 pub use participant_mute::ParticipantMuteMutation;
 pub use persona_charx::import_charx_asset;
