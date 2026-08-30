@@ -342,8 +342,11 @@ export function useLobbyHistory({
 
   const handleStreamEvents = useCallback((incoming: LobbyEvent[]) => {
     setEvents((previous) => {
-      if (historyWindowActiveRef.current) return previous;
-      const next = mergeLobbyEvents(previous, incoming);
+      const accepted = historyWindowActiveRef.current
+        ? incoming.filter((event) => isVoteTransitionKind(event.kind))
+        : incoming;
+      if (!accepted.length) return previous;
+      const next = mergeLobbyEvents(previous, accepted);
       if (next.length === previous.length) {
         const changed = next.some((event, index) => event !== previous[index]);
         return changed ? next : previous;

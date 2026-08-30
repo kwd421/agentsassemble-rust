@@ -152,6 +152,10 @@ mount, explicit user refresh, or sequenced vote events—not polling.
   repeated the current-authority SQLite transaction, so the sequenced transition is now the single
   post-write refresh owner; mount and explicit user refresh remain separate intentional reads. This
   removes one direct read per local transition without cache, debounce, timer, or optimistic state.
+  A follow-up review found that the fixed message-search history window discarded every live event,
+  including that owner. The stream now keeps ordinary incoming messages out of the fixed window but
+  admits only privacy-minimized vote transition markers, so a poll shown in historical context still
+  refreshes without changing the visible history or retaining voter identity and choice.
   Moving payload construction out of the transport reduced `roomSocketClient.ts` from 788 to 746
   lines and removed the broad legacy-shaped request assembly. The targeted 58 tests, full
   103-file/642-test frontend suite, TypeScript production build, and original-CSS verification passed.
