@@ -266,8 +266,10 @@ prefers the `AgentsAssemble`/`deepseek` platform-keyring item, reports only
 `keyring | environment | missing`, permits `DEEPSEEK_API_KEY` only when no secure item exists, and
 never falls back to the environment after an installed secure store fails. Set validates a trimmed
 8--8,192-character secret, and delete removes only the secure item so an environment credential may
-become visible again. The Rust boundary exposes no secret read or serialization API yet; runtime
-injection and remote-host authority remain explicitly incomplete.
+become visible again. No public route, event, log, fixture, or serialized model exposes the secret.
+The registered DeepSeek driver resolves one stable secret at the start of each assigned turn, so a
+later turn observes an exact secure-item replacement or deletion without retaining credential bytes
+for the runtime lifetime; an already submitted turn keeps its per-turn credential snapshot.
 
 The implementation uses maintained `keyring` 4.1.6 with its v1 platform stores instead of owning
 Keychain, Credential Manager, Secret Service, encryption, or persistence code. The macOS status
@@ -360,6 +362,34 @@ framework. The complete frontend suite passed 603 tests, the production build an
 provenance check passed, and the source architecture/growth gates passed. No Computer Use session or
 real credential mutation was needed for this source boundary; the packaged control remains pending
 until the DeepSeek provider itself is reachable.
+
+The registered DeepSeek path now completes ordinary `ordered` and `ambient` room turns through the
+existing provider-neutral assignment and `RoomPortal` contracts. The fixed registration owns its
+provider/runtime/transport/connection identity, while exact catalog controls own the selected model,
+`meeting_read_only` permission, and output limit. Creation rejects a catalog whose connection value
+does not match that registration, carries the registered value through the Agent Session draft, and
+persists it without a second storage-layer default. The HTTP API remains stateless:
+`provider_session_reused` is always false even though the durable Agent Session retains its own
+logical provider binding across turns.
+
+The concrete threats found during manual review were stale runtime credentials, quarantining a
+runtime after a definitive pre-side-effect rejection, accepting a malformed completion envelope,
+and sending a credentialed request through ambient proxy or non-public DNS authority. The driver now
+classifies effect uncertainty only after attempting the terminal room action; validates the exact
+model, single choice index, assistant role, and `stop`/`tool_calls` relationship before any tool side
+effect; and uses a fixed official HTTPS endpoint with redirects and ambient proxies disabled. One
+bounded DNS resolution accepts only an all-public address set and pins those validated socket
+candidates into the maintained `reqwest` client while retaining hostname TLS verification. The new
+network owner adds no retry, fallback endpoint, connection cache, background task, or generic remote
+provider framework.
+
+Focused selection, credential, protocol, response, terminal-effect, and public-address tests passed;
+the persistence Agent Session suite, complete workspace check, warning-denied workspace Clippy, and
+architecture/source gates also passed. The transport allocates one resolved-address vector and one
+client at driver launch, while each turn performs the already-required credential read and bounded
+request/response copies; no production latency or resource improvement is claimed. No configured
+DeepSeek credential was present, so an official Flash request and copied packaged-UI provider turn
+remain explicitly unverified rather than being replaced with a mock, paid substitute, or fallback.
 
 ## Manual-review findings
 
