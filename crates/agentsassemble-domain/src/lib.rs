@@ -29,9 +29,7 @@ pub use message_attachments::{
     MESSAGE_ATTACHMENT_REFERENCE_PREFIX, MESSAGE_ATTACHMENT_VIEW_SUFFIX,
     canonical_message_attachment_filename, is_message_attachment_id,
 };
-pub use message_pins::{
-    MAX_LOBBY_MESSAGE_PINS, MAX_MESSAGE_PIN_EVENT_ID_BYTES, is_message_pin_event_id,
-};
+pub use message_pins::{MAX_LOBBY_MESSAGE_PINS, MAX_MESSAGE_EVENT_ID_BYTES, is_message_event_id};
 pub use message_search::{
     LobbyMessageContext, LobbyMessageSearchPage, LobbyMessageSearchResult,
     MAX_MESSAGE_SEARCH_AUTHOR_CHARACTERS, MAX_MESSAGE_SEARCH_CONTENT_CHARACTERS,

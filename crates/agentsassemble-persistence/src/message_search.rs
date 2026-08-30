@@ -3,7 +3,7 @@ use agentsassemble_domain::{
     LobbyMessageSearchPage, LobbyMessageSearchResult, MAX_MESSAGE_SEARCH_CURSOR_BYTES,
     MESSAGE_CONTEXT_RADIUS, MESSAGE_SEARCH_PAGE_SIZE, ParticipantStatus, RoomEvent,
     casefold_message_search_text, clean_message_search_query,
-    compact_casefolded_message_search_text, public_event_for_principal,
+    compact_casefolded_message_search_text, is_message_event_id, public_event_for_principal,
 };
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{SecondsFormat, Utc};
@@ -288,7 +288,7 @@ async fn context_authorized_in(
     principal: &AuthenticatedPrincipal,
     event_id: &str,
 ) -> Result<LobbyMessageContext, PersistenceError> {
-    if event_id.is_empty() || event_id.len() > 128 || event_id.contains('\0') {
+    if !is_message_event_id(event_id) {
         return Err(rejected("bad_request", "event_id is invalid."));
     }
     let target = sqlx::query(

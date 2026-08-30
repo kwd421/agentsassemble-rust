@@ -4,7 +4,7 @@ import { assertExactKeys, strictRecord } from "../lib/strictJsonContract";
 import { isUnicodeScalarString } from "../lib/unicodeScalarString";
 import type { RoomEvent } from "../types/generatedRoomEvent";
 import { MAX_MESSAGE_ATTACHMENTS_PER_EVENT } from "../types/generated/MESSAGE_ATTACHMENTS_WIRE";
-import { MAX_MESSAGE_PIN_EVENT_ID_BYTES } from "../types/generated/MESSAGE_PINS_WIRE";
+import { MAX_MESSAGE_EVENT_ID_BYTES } from "../types/generated/MESSAGE_PINS_WIRE";
 import {
   MAX_MESSAGE_SEARCH_AUTHOR_CHARACTERS,
   MAX_MESSAGE_SEARCH_CONTENT_CHARACTERS,
@@ -111,8 +111,8 @@ function boundedString(value: unknown, limit: number, allowEmpty = false): strin
 }
 
 function eventId(value: unknown): string {
-  const result = boundedString(value, MAX_MESSAGE_PIN_EVENT_ID_BYTES);
-  if (new TextEncoder().encode(result).byteLength > MAX_MESSAGE_PIN_EVENT_ID_BYTES) {
+  const result = boundedString(value, MAX_MESSAGE_EVENT_ID_BYTES);
+  if (new TextEncoder().encode(result).byteLength > MAX_MESSAGE_EVENT_ID_BYTES) {
     invalidResponse();
   }
   return result;

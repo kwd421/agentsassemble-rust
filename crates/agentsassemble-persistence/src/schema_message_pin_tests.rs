@@ -1,5 +1,5 @@
 use super::tests::installed_schema;
-use agentsassemble_domain::{MAX_MESSAGE_PIN_EVENT_ID_BYTES, is_message_pin_event_id};
+use agentsassemble_domain::{MAX_MESSAGE_EVENT_ID_BYTES, is_message_event_id};
 
 async fn seed_room_event(pool: &sqlx::SqlitePool, room_id: &str, seq: i64, event_id: &str) {
     sqlx::query("INSERT INTO rooms(room_id, room_json, settings_json) VALUES (?, '{}', '{}')")
@@ -54,10 +54,10 @@ async fn message_pin_event_ids_match_the_domain_policy() {
     let candidates = [
         "event-1".to_owned(),
         String::new(),
-        "x".repeat(MAX_MESSAGE_PIN_EVENT_ID_BYTES),
-        "x".repeat(MAX_MESSAGE_PIN_EVENT_ID_BYTES + 1),
-        "é".repeat(MAX_MESSAGE_PIN_EVENT_ID_BYTES / 2),
-        "é".repeat(MAX_MESSAGE_PIN_EVENT_ID_BYTES / 2 + 1),
+        "x".repeat(MAX_MESSAGE_EVENT_ID_BYTES),
+        "x".repeat(MAX_MESSAGE_EVENT_ID_BYTES + 1),
+        "é".repeat(MAX_MESSAGE_EVENT_ID_BYTES / 2),
+        "é".repeat(MAX_MESSAGE_EVENT_ID_BYTES / 2 + 1),
         "event\0tail".to_owned(),
     ];
 
@@ -74,7 +74,7 @@ async fn message_pin_event_ids_match_the_domain_policy() {
         .is_ok();
         assert_eq!(
             accepted,
-            is_message_pin_event_id(event_id),
+            is_message_event_id(event_id),
             "installed schema disagreed with the domain for candidate {index}"
         );
     }

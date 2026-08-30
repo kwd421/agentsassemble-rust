@@ -11,7 +11,7 @@ import {
 import { isUnicodeScalarString } from "../lib/unicodeScalarString";
 import {
   MAX_LOBBY_MESSAGE_PINS,
-  MAX_MESSAGE_PIN_EVENT_ID_BYTES,
+  MAX_MESSAGE_EVENT_ID_BYTES,
 } from "../types/generated/MESSAGE_PINS_WIRE";
 import {
   exchangeSessionHttpTicket,
@@ -56,7 +56,7 @@ function canonicalEventId(value: unknown): string {
     !value ||
     !isUnicodeScalarString(value) ||
     value.includes("\0") ||
-    new TextEncoder().encode(value).byteLength > MAX_MESSAGE_PIN_EVENT_ID_BYTES
+    new TextEncoder().encode(value).byteLength > MAX_MESSAGE_EVENT_ID_BYTES
   ) {
     throw new Error("메시지 식별자가 올바르지 않습니다.");
   }
