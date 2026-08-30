@@ -12,17 +12,17 @@ receiving private event fields or invented custom-channel data.
 
 The authoritative input remains `room_events`. Search indexes only public, non-deleted
 `message_final` events and matches the casefolded author, visible content, and attachment filenames.
-It preserves the original whitespace-insensitive match when the compact query has at least three
-Unicode scalars and the original SQLite `unicode61` phrase behavior for shorter queries. Results are
-newest-first in pages of 30; context is the selected event with at most 15 earlier and 15 later lobby
-messages in chronological order.
+It preserves the original SQLite `unicode61` phrase behavior for every query and additionally uses
+the original whitespace-insensitive match when the compact query has at least three Unicode scalars.
+Results are newest-first in pages of 30; context is the selected event with at most 15 earlier and 15
+later lobby messages in chronological order.
 
 Search metadata is a derived SQLite projection, not message authority. One minimal record table owns
 the event pointer, canonical creation order, casefolded search text, and compact text. A contentless
-`unicode61` FTS table exists only to preserve the reachable one- and two-scalar token contract. The
-canonical message transaction inserts both projections, and database-owned deletion removes the FTS
-row whenever its record loses its canonical reference. There is no sync-on-read task, second database,
-raw-event copy, compatibility rebuild, or migration path.
+`unicode61` FTS table preserves the phrase candidate path without copying result content. The canonical
+message transaction inserts both projections, and database-owned deletion removes the FTS row whenever
+its record loses its canonical reference. There is no sync-on-read task, second database, raw-event
+copy, compatibility rebuild, or migration path.
 
 Human reads use `GET /api/room-search` and `GET /api/room-search/context` with a fresh, purpose-bound,
 one-use `message-search-read` ticket. Local desktop issuance and remote session exchange converge on

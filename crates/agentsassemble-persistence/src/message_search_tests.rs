@@ -58,6 +58,17 @@ async fn complete_search_paginates_and_preserves_unicode_short_and_attachment_ma
     assert_eq!(unicode.results.len(), 1);
     assert_eq!(unicode.results[0].content, "Straße deployment");
 
+    let accent = send(&store, &principal, "search-accent", "café release").await;
+    assert_eq!(
+        search(&store, "cafe", "").await.results[0].event_id,
+        accent.id
+    );
+    let punctuation = send(&store, &principal, "search-punctuation", "deploy-error").await;
+    assert_eq!(
+        search(&store, "deploy error", "").await.results[0].event_id,
+        punctuation.id
+    );
+
     let attachment = store
         .store_message_attachment(
             &principal,

@@ -134,26 +134,29 @@ async fn search_in(
     let cursor = decode_cursor(cursor)?;
     let folded = casefold_message_search_text(&query);
     let compact = compact_casefolded_message_search_text(&folded);
+    let phrase = fts_phrase(&folded);
     let limit = i64::try_from(MESSAGE_SEARCH_PAGE_SIZE + 1).map_err(|_| invalid_state())?;
     let rows = if compact.chars().count() >= 3 {
-        search_compact(transaction, &principal.room_id, &compact, cursor, limit).await?
-    } else {
-        search_short(
+        search_long(
             transaction,
             &principal.room_id,
-            &fts_phrase(&folded),
+            &compact,
+            &phrase,
             cursor,
             limit,
         )
         .await?
+    } else {
+        search_short(transaction, &principal.room_id, &phrase, cursor, limit).await?
     };
     project_page(principal, rows)
 }
 
-async fn search_compact(
+async fn search_long(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
     compact: &str,
+    phrase: &str,
     cursor: Option<(i64, i64)>,
     limit: i64,
 ) -> Result<Vec<SqliteRow>, PersistenceError> {
@@ -162,12 +165,16 @@ async fn search_compact(
         "SELECT search.event_id, search.event_seq, search.created_at_nanos, events.event_json \
          FROM room_message_search_records AS search \
          JOIN room_events AS events ON events.room_id = search.room_id AND events.seq = search.event_seq \
-         WHERE search.room_id = ? AND instr(search.compact_text, ?) > 0 \
+         WHERE search.room_id = ? AND (instr(search.compact_text, ?) > 0 OR search.id IN (\
+             SELECT rowid FROM room_message_search_phrase \
+             WHERE room_message_search_phrase MATCH ?\
+         )) \
          AND (search.created_at_nanos < ? OR (search.created_at_nanos = ? AND search.event_seq < ?)) \
          ORDER BY search.created_at_nanos DESC, search.event_seq DESC LIMIT ?",
     )
     .bind(room_id)
     .bind(compact)
+    .bind(phrase)
     .bind(created_at)
     .bind(created_at)
     .bind(seq)
