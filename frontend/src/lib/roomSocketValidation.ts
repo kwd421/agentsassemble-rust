@@ -1,5 +1,6 @@
 import type { RoomEvent } from "../api";
 import { RoomSocketSayError } from "../roomSocketTypes";
+import { ROOM_HISTORY_MAX_EVENTS } from "../types/generated/ROOM_HISTORY_WIRE";
 import {
   agentCreationProjectionFromEvent,
   joinedParticipantFromEvent,
@@ -40,6 +41,78 @@ export function participantProjectionIsValid(event: RoomEvent): boolean {
   }
 }
 
+export function publicRoomEventIsValid(value: unknown, expectedRoomId: string): value is RoomEvent {
+  return Boolean(
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    value.id &&
+    value.room_id === expectedRoomId &&
+    typeof value.type === "string" &&
+    value.type &&
+    isSequence(value.seq) &&
+    value.seq > 0 &&
+    participantProjectionIsValid(value as unknown as RoomEvent)
+  );
+}
+
+function roomHistoryResultIsValid(
+  payload: Record<string, unknown>,
+  result: Record<string, unknown>,
+  expectedRoomId: string
+): boolean {
+  const beforeSeq = payload.before_seq;
+  const limit = payload.limit;
+  if (
+    !isSequence(beforeSeq) ||
+    typeof limit !== "number" ||
+    !Number.isSafeInteger(limit) ||
+    limit < 1 ||
+    limit > ROOM_HISTORY_MAX_EVENTS ||
+    !Array.isArray(result.events) ||
+    result.events.length > limit ||
+    !isSequence(result.oldest_seq) ||
+    !isSequence(result.last_seq) ||
+    typeof result.has_more_before !== "boolean"
+  ) {
+    return false;
+  }
+  const sequences: number[] = [];
+  for (const event of result.events) {
+    if (
+      !publicRoomEventIsValid(event, expectedRoomId) ||
+      (beforeSeq > 0 && event.seq >= beforeSeq)
+    ) {
+      return false;
+    }
+    sequences.push(event.seq);
+  }
+  if (
+    sequences.some(
+      (sequence, index) => index > 0 && sequence !== sequences[index - 1] + 1
+    )
+  ) {
+    return false;
+  }
+  if (!sequences.length) {
+    return (
+      result.oldest_seq === 0 &&
+      result.has_more_before === false &&
+      (result.last_seq === 0 || beforeSeq === 1)
+    );
+  }
+  const firstSeq = sequences[0];
+  const finalSeq = sequences[sequences.length - 1];
+  const expectedFinalSeq =
+    beforeSeq === 0
+      ? result.last_seq
+      : Math.min(result.last_seq, beforeSeq - 1);
+  return Boolean(
+    result.oldest_seq === firstSeq &&
+    finalSeq === expectedFinalSeq &&
+    result.has_more_before === (firstSeq > 1)
+  );
+}
+
 export function commandAckResultIsValid(
   action: string,
   payload: Record<string, unknown>,
@@ -69,12 +142,7 @@ export function commandAckResultIsValid(
     );
   }
   if (action === "room.history") {
-    return Boolean(
-      Array.isArray(result.events) &&
-      isSequence(result.oldest_seq) &&
-      isSequence(result.last_seq) &&
-      typeof result.has_more_before === "boolean"
-    );
+    return roomHistoryResultIsValid(payload, result, expectedRoomId);
   }
   if (action === "participant.kick") {
     const participant = isRecord(result.participant) ? result.participant : null;
@@ -198,15 +266,7 @@ export function snapshotValidationError(
   const sequences: number[] = [];
   for (const event of value.events) {
     if (
-      !isRecord(event) ||
-      typeof event.id !== "string" ||
-      !event.id ||
-      event.room_id !== expectedRoomId ||
-      typeof event.type !== "string" ||
-      !event.type ||
-      !isSequence(event.seq) ||
-      event.seq <= 0 ||
-      !participantProjectionIsValid(event as unknown as RoomEvent)
+      !publicRoomEventIsValid(event, expectedRoomId)
     ) {
       return new RoomSocketSayError(
         "Room snapshot contained an invalid canonical event; reconnecting.",

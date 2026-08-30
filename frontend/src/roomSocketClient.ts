@@ -18,7 +18,7 @@ import {
   commandAckResultIsValid,
   isRecord,
   isSequence,
-  participantProjectionIsValid,
+  publicRoomEventIsValid,
   snapshotValidationError,
 } from "./lib/roomSocketValidation";
 import { createServerChallenge, isHex32Bytes } from "./lib/serverProof";
@@ -26,6 +26,7 @@ import {
   RoomSocketSayError,
   type ProviderCatalogSnapshot,
   type RoomCommandAck,
+  type RoomHistoryPage,
   type RoomSayRequest,
   type RoomSocketClientDependencies,
   type RoomSocketHandle,
@@ -36,6 +37,7 @@ import { PRODUCT_SURFACE_REVISION } from "./types/generated/PRODUCT_SURFACE_REVI
 import { requireAcceptedRoomRuntimeTicket } from "./lib/roomRuntimeTicket";
 import { messageAttachmentId } from "./lib/messageAttachmentId";
 import { MAX_MESSAGE_ATTACHMENTS_PER_EVENT } from "./types/generated/MESSAGE_ATTACHMENTS_WIRE";
+import { ROOM_HISTORY_MAX_EVENTS } from "./types/generated/ROOM_HISTORY_WIRE";
 import { scheduleUncertainCommandRetry, type PendingCommandRetryState } from "./roomSocketRetryPolicy";
 
 export type { RoomSocketAuth } from "./api";
@@ -264,15 +266,7 @@ export function openRoomSocket(
     let nextSeq = lastSeq;
     for (const rawEvent of msg.events) {
       if (
-        !isRecord(rawEvent) ||
-        typeof rawEvent.id !== "string" ||
-        !rawEvent.id ||
-        rawEvent.room_id !== dependencies.expectedRoomId ||
-        typeof rawEvent.type !== "string" ||
-        !rawEvent.type ||
-        !isSequence(rawEvent.seq) ||
-        rawEvent.seq <= 0 ||
-        !participantProjectionIsValid(rawEvent as unknown as RoomEvent)
+        !publicRoomEventIsValid(rawEvent, dependencies.expectedRoomId)
       ) {
         throw new RoomSocketSayError(
           "Room event did not match the canonical event schema; reconnecting.",
@@ -777,15 +771,9 @@ export function openRoomSocket(
     resync: () => socket?.close(),
     ready: () => transportReady,
     command,
-    historyBefore: async (beforeSeq, limit = 200) => {
+    historyBefore: async (beforeSeq, limit = ROOM_HISTORY_MAX_EVENTS) => {
       const ack = await command("room.history", { before_seq: beforeSeq, limit });
-      const result = ack.result || {};
-      return {
-        events: Array.isArray(result.events) ? (result.events as RoomEvent[]) : [],
-        oldest_seq: Number(result.oldest_seq || 0),
-        last_seq: Number(result.last_seq || 0),
-        has_more_before: Boolean(result.has_more_before),
-      };
+      return ack.result as unknown as RoomHistoryPage;
     },
     say: async (request) => {
       requireOrdinaryMessage(request);

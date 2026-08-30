@@ -129,6 +129,20 @@ A deterministic same-instant regression saturates one principal, repeats more th
 process budget of rejected work, and proves both a peer in that room and another room remain
 admissible. This removes cross-scope availability debit without weakening the original DB-work cap.
 
+## Strict browser acceptance evidence
+
+The protocol exporter now derives `ROOM_HISTORY_MAX_EVENTS` from the Rust domain owner, so request
+defaults and ACK bounds have no independent TypeScript literal. Snapshot, live-event, and history
+validation share one public-event predicate; history additionally requires no more than the exact
+requested limit, the bound room, a contiguous increasing range below the exclusive cursor, exact
+oldest and high-water anchoring, and `has_more_before` consistent with the first durable sequence.
+Only a fully validated result is returned to the projection, replacing the copied client's numeric,
+boolean, and empty-array coercions. The bounded validation is one pass over at most 200 events and
+adds no cache, timer, retry, fallback, or persistent state. Focused history/controller tests passed
+22 assertions, the complete frontend passed 101 files and 639 tests, and the production build plus
+original-CSS verification passed. Packaged local and admitted read-only verification remains the
+active acceptance boundary rather than being inferred from these deterministic checks.
+
 ## Verification path
 
 - focused parser and persistence tests for cursor edges, 200/remaining pages, current authority,

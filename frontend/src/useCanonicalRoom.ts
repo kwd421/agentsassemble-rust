@@ -497,11 +497,11 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
       let oldestSeq = beforeSeq;
       const events: RoomEvent[] = [];
       for (let pageIndex = 0; pageIndex < 5 && hasMoreBefore; pageIndex += 1) {
-        const page = await operationSocket.historyBefore(cursor, 200);
+        const page = await operationSocket.historyBefore(cursor);
         requireCurrentProjectionSocket();
-        events.push(...(page.events || []));
-        oldestSeq = Number(page.oldest_seq || cursor || 0);
-        hasMoreBefore = Boolean(page.has_more_before);
+        events.push(...page.events);
+        oldestSeq = page.oldest_seq;
+        hasMoreBefore = page.has_more_before;
         if (!page.events.length || oldestSeq >= cursor) break;
         cursor = oldestSeq;
         if (page.events.some((event) => event.type === "message_final")) {

@@ -334,8 +334,8 @@ describe("useCanonicalRoom", () => {
     expect(result.current.events.map((item) => item.seq)).toEqual([1, 2, 3, 4, 5, 6]);
     expect(result.current.history.hasMoreBefore).toBe(false);
     expect(result.current.agentSessionProgress).toBeNull();
-    expect(historyBefore).toHaveBeenNthCalledWith(1, 3, 200);
-    expect(historyBefore).toHaveBeenNthCalledWith(2, 2, 200);
+    expect(historyBefore).toHaveBeenNthCalledWith(1, 3);
+    expect(historyBefore).toHaveBeenNthCalledWith(2, 2);
     expect(command).toHaveBeenCalledWith("agent.stop", { agent_id: "codex" });
     expect(command).toHaveBeenCalledWith("agent.configure", {
       agent_id: "codex",
