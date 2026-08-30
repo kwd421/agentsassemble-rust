@@ -57,6 +57,7 @@ export type {
 const ROOM_SOCKET_COMMAND_TIMEOUT_MS = 20_000;
 const ROOM_SOCKET_UNRESOLVED_RETRY_BASE_MS = 500;
 const ROOM_SOCKET_UNRESOLVED_RETRY_MAX_MS = 30_000;
+const ROOM_SOCKET_KEEPALIVE_MS = 3 * 60_000;
 const MAX_ROOM_SOCKET_WIRE_CHARS = 384 * 1024;
 
 interface PendingRoomCommand {
@@ -154,6 +155,7 @@ export function openRoomSocket(
   let requestCounter = 0;
   let transportReady = false;
   let sendPendingForConnection: (() => void) | null = null;
+  let stopKeepaliveForConnection: (() => void) | null = null;
   let connectionGeneration = 0;
   const requestTicket = dependencies.getTicket || getWsTicket;
   const createSocket = dependencies.createSocket || ((url: string) => new WebSocket(url));
@@ -332,6 +334,9 @@ export function openRoomSocket(
       let frameKey: CryptoKey | null = null;
       let nextServerCounter = 1;
       let nextClientCounter = 1;
+      let keepaliveTimer = 0;
+      let keepaliveSequence = 0;
+      let expectedPongNonce: string | null = null;
       const sentRequestIds = new Set<string>();
       const ownsConnectionGeneration = () =>
         !closed && generation === connectionGeneration;
@@ -344,6 +349,46 @@ export function openRoomSocket(
         connectionFailed = true;
         fail(currentSocket, generation, error);
       };
+      const clearKeepalive = () => {
+        window.clearTimeout(keepaliveTimer);
+        keepaliveTimer = 0;
+      };
+      const scheduleKeepalive = () => {
+        clearKeepalive();
+        if (!canUseOpenSocket() || !transportReady || !frameKey) return;
+        keepaliveTimer = window.setTimeout(() => {
+          keepaliveTimer = 0;
+          if (expectedPongNonce !== null) {
+            failConnection(new RoomSocketSayError(
+              "Room socket did not acknowledge its authenticated keepalive.",
+              "keepalive_response_missing"
+            ));
+            return;
+          }
+          const payload = JSON.stringify({
+            op: "ping",
+            nonce: `keepalive-${++keepaliveSequence}`,
+          });
+          outboundQueue = outboundQueue
+            .then(async () => {
+              if (!canUseOpenSocket() || !transportReady || !frameKey) return;
+              const encoded = await encodeAuthenticatedFrame(
+                frameKey,
+                receipt?.connection_nonce || "",
+                "client",
+                nextClientCounter,
+                payload
+              );
+              if (!canUseOpenSocket() || !transportReady) return;
+              expectedPongNonce = `keepalive-${keepaliveSequence}`;
+              currentSocket.send(encoded);
+              nextClientCounter += 1;
+              scheduleKeepalive();
+            })
+            .catch(failConnection);
+        }, ROOM_SOCKET_KEEPALIVE_MS);
+      };
+      stopKeepaliveForConnection = clearKeepalive;
 
       sendPendingForConnection = () => {
         if (
@@ -386,6 +431,7 @@ export function openRoomSocket(
               if (!canUseOpenSocket() || pending.get(requestId) !== command) return;
               currentSocket.send(encoded);
               nextClientCounter += 1;
+              scheduleKeepalive();
               command.everSent = true;
               armCommandDeadline(requestId, command);
             })
@@ -404,6 +450,7 @@ export function openRoomSocket(
         connectionEstablished = true;
         transportReady = true;
         reconnectAttempt = 0;
+        scheduleKeepalive();
         handlers.onOpen?.();
         sendPending();
       };
@@ -578,7 +625,16 @@ export function openRoomSocket(
           command.resolve(msg as unknown as RoomCommandAck);
           return;
         }
-        if (msg.op === "pong") return;
+        if (msg.op === "pong") {
+          if (msg.nonce !== expectedPongNonce) {
+            throw new RoomSocketSayError(
+              "Room socket returned an unexpected keepalive response.",
+              "keepalive_response_invalid"
+            );
+          }
+          expectedPongNonce = null;
+          return;
+        }
         throw new RoomSocketSayError(
           "Room socket returned a frame outside the bound product protocol.",
           "frame_unexpected"
@@ -620,6 +676,10 @@ export function openRoomSocket(
         }
       };
       currentSocket.onclose = () => {
+        clearKeepalive();
+        if (stopKeepaliveForConnection === clearKeepalive) {
+          stopKeepaliveForConnection = null;
+        }
         if (socket !== currentSocket || generation !== connectionGeneration) return;
         socket = null;
         sendPendingForConnection = null;
@@ -683,6 +743,8 @@ export function openRoomSocket(
     close: () => {
       const closingSocket = socket;
       closed = true;
+      stopKeepaliveForConnection?.();
+      stopKeepaliveForConnection = null;
       connectionGeneration += 1;
       transportReady = false;
       sendPendingForConnection = null;

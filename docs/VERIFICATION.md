@@ -4283,3 +4283,19 @@ preservation list no longer import or mount it. Repository search confirms the r
 inside that unreferenced component. This removes no working Rust behavior and adds no fallback, timer, state,
 or replacement update claim; the missing runtime-version owner remains explicit in the exposure
 inventory.
+
+## Quiet room WebSocket keepalive: 2026-08-30
+
+The server's existing five-minute client-ingress deadline previously had no browser-side ping
+owner, so an otherwise healthy quiet room closed, reacquired a ticket, reconnected, and verified a
+new snapshot every five minutes. The browser now schedules one authenticated protocol ping only
+after three minutes without an authenticated client frame. Any command resets that one-shot timer,
+and the exact connection close cancels it. The three-minute quiet threshold leaves two minutes
+before the server deadline. A continuously connected quiet client sends at most
+480 small keepalive frames per day; the path reads no HTTP route, database row, or filesystem state.
+Focused fake-clock tests prove the authenticated counter sequence, exact pong matching,
+command-based postponement, and close cleanup. The existing real server boundary already proves
+authenticated ping/pong handling. The focused socket run passed 30 tests before exact-pong
+validation; the final focused run passed 31 tests, the complete two-worker frontend suite passed
+99 files and 622 tests, and the production build, original CSS check, architecture gate, and
+800-line source-growth gate passed.
