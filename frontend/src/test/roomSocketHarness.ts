@@ -202,17 +202,21 @@ export async function authenticatedServerFrame(
 export function gateNextFrameVerification() {
   let release = () => {};
   let reportStarted = () => {};
+  let reportCompleted = () => {};
   const started = new Promise<void>((resolve) => { reportStarted = resolve; });
+  const completed = new Promise<void>((resolve) => { reportCompleted = resolve; });
   const gate = new Promise<void>((resolve) => { release = resolve; });
   const realVerify = crypto.subtle.verify.bind(crypto.subtle);
   vi.spyOn(crypto.subtle, "verify").mockImplementationOnce(
     async (algorithm, key, signature, data) => {
       reportStarted();
       await gate;
-      return realVerify(algorithm, key, signature, data);
+      const verified = await realVerify(algorithm, key, signature, data);
+      reportCompleted();
+      return verified;
     }
   );
-  return { release, started };
+  return { release, started, completed };
 }
 
 export async function sentAuthenticatedCommand(
@@ -236,10 +240,18 @@ export function openHarness(handlers: Parameters<typeof openRoomSocket>[2] = {})
   const sockets: FakeWebSocket[] = [];
   let issued = 0;
   const tickets: string[] = [];
+  let reportOpened = () => {};
+  const opened = new Promise<void>((resolve) => { reportOpened = resolve; });
   const handle = openRoomSocket(
     { kind: "host", meetingId: "general" },
     ["room_events"],
-    handlers,
+    {
+      ...handlers,
+      onOpen: () => {
+        handlers.onOpen?.();
+        reportOpened();
+      },
+    },
     {
       getTicket: async () => {
         issued += 1;
@@ -263,7 +275,7 @@ export function openHarness(handlers: Parameters<typeof openRoomSocket>[2] = {})
       expectedParticipantId: "operator-local",
     }
   );
-  return { handle, sockets, tickets };
+  return { handle, opened, sockets, tickets };
 }
 
 export async function flushPromises() {

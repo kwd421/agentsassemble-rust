@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { RoomSocketSayError } from "./roomSocketClient";
 import {
   flushPromises,
+  gateNextFrameVerification,
   handshakeFrames,
   openHarness,
   receiveAuthenticated,
@@ -18,13 +19,14 @@ afterEach(() => {
 describe("canonical room socket quiet keepalive", () => {
   it("sends one authenticated ping after client silence and stops with the connection", async () => {
     vi.useFakeTimers();
-    const { handle, sockets, tickets } = openHarness();
+    const { handle, opened, sockets, tickets } = openHarness();
     await flushPromises();
     sockets[0].open();
     const frames = await handshakeFrames(sockets[0], tickets[0], 0, 0);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
-    await vi.waitFor(() => expect(handle.ready()).toBe(true));
+    await opened;
+    expect(handle.ready()).toBe(true);
 
     await vi.advanceTimersByTimeAsync(QUIET_KEEPALIVE_MS - 1);
     expect(sockets[0].sent).toHaveLength(1);
@@ -33,10 +35,14 @@ describe("canonical room socket quiet keepalive", () => {
     const firstPing = await sentAuthenticatedCommand(sockets[0], frames);
     expect(firstPing).toEqual({ op: "ping", nonce: "keepalive-1" });
 
+    const pongVerification = gateNextFrameVerification();
     await receiveAuthenticated(sockets[0], frames, {
       op: "pong",
       nonce: firstPing.nonce,
     });
+    await pongVerification.started;
+    pongVerification.release();
+    await pongVerification.completed;
     await flushPromises();
     await vi.advanceTimersByTimeAsync(QUIET_KEEPALIVE_MS);
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(3));
@@ -52,13 +58,14 @@ describe("canonical room socket quiet keepalive", () => {
 
   it("measures silence from the most recent authenticated command", async () => {
     vi.useFakeTimers();
-    const { handle, sockets, tickets } = openHarness();
+    const { handle, opened, sockets, tickets } = openHarness();
     await flushPromises();
     sockets[0].open();
     const frames = await handshakeFrames(sockets[0], tickets[0], 0, 0);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
-    await vi.waitFor(() => expect(handle.ready()).toBe(true));
+    await opened;
+    expect(handle.ready()).toBe(true);
 
     await vi.advanceTimersByTimeAsync(QUIET_KEEPALIVE_MS - 10_000);
     const commandIssuedAt = Date.now();
@@ -99,7 +106,7 @@ describe("canonical room socket quiet keepalive", () => {
   it("fails the exact connection on a mismatched authenticated pong", async () => {
     vi.useFakeTimers();
     const errors: RoomSocketSayError[] = [];
-    const { handle, sockets, tickets } = openHarness({
+    const { handle, opened, sockets, tickets } = openHarness({
       onError: (error) => {
         if (error instanceof RoomSocketSayError) errors.push(error);
       },
@@ -109,14 +116,19 @@ describe("canonical room socket quiet keepalive", () => {
     const frames = await handshakeFrames(sockets[0], tickets[0], 0, 0);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
-    await vi.waitFor(() => expect(handle.ready()).toBe(true));
+    await opened;
+    expect(handle.ready()).toBe(true);
     await vi.advanceTimersByTimeAsync(QUIET_KEEPALIVE_MS);
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
 
+    const pongVerification = gateNextFrameVerification();
     await receiveAuthenticated(sockets[0], frames, {
       op: "pong",
       nonce: "not-the-owned-keepalive",
     });
+    await pongVerification.started;
+    pongVerification.release();
+    await pongVerification.completed;
     await vi.waitFor(() =>
       expect(errors.at(-1)?.category).toBe("keepalive_response_invalid")
     );
