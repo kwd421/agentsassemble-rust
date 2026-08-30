@@ -1,6 +1,6 @@
 use agentsassemble_domain::{
-    Actor, AuthenticatedPrincipal, DurableAgentSession, MessageSend, RoomEvent,
-    RoomInputDeliveryKind, canonical_payload_hash, clean_message, has_visible_text,
+    Actor, AuthenticatedPrincipal, DurableAgentSession, MessageSend, Participant, RoomEvent,
+    RoomInputDeliveryKind, VoteCommand, canonical_payload_hash, clean_message, has_visible_text,
     prepare_message_event, redact_persisted_diagnostic_text,
 };
 use chrono::Utc;
@@ -486,36 +486,19 @@ async fn execute_message_in(
             format!("Unsupported room command: {action}"),
         ));
     }
-    let command = MessageSend::from_payload(payload).map_err(rejection)?;
     let participant =
         load_participant(transaction, &principal.room_id, &principal.participant_id).await?;
     let sequence = next_sequence(transaction, &principal.room_id).await?;
     let now = Utc::now();
-    let attachments = prepare_message_attachment_bindings(
-        transaction,
-        principal,
-        &command.attachment_ids,
-        now.timestamp(),
-    )
-    .await?;
-    let mut event = prepare_message_event(principal, &participant, &command, sequence, now)
-        .map_err(rejection)?;
-    if !attachments.is_empty() {
-        event
-            .extra
-            .insert("attachments".to_owned(), serde_json::to_value(attachments)?);
-    }
-    insert_event(transaction, &event).await?;
-    bind_message_attachments(
-        transaction,
-        principal,
-        &command.attachment_ids,
-        sequence,
-        now.timestamp(),
-    )
-    .await?;
-    route_message(transaction, &settings, &event).await?;
-    let prepared = assign_available_pending(transaction, &room, &settings).await?;
+    let (event, route_to_floor) =
+        prepare_human_message_event(transaction, principal, &participant, payload, sequence, now)
+            .await?;
+    let prepared = if route_to_floor {
+        route_message(transaction, &settings, &event).await?;
+        assign_available_pending(transaction, &room, &settings).await?
+    } else {
+        Vec::new()
+    };
     let mut events = vec![event.clone()];
     let mut assignments = Vec::with_capacity(prepared.len());
     for item in prepared {
@@ -543,6 +526,55 @@ async fn execute_message_in(
         },
         assignments,
     })
+}
+
+async fn prepare_human_message_event(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    principal: &AuthenticatedPrincipal,
+    participant: &Participant,
+    payload: &Value,
+    sequence: i64,
+    now: chrono::DateTime<Utc>,
+) -> Result<(RoomEvent, bool), PersistenceError> {
+    if payload.get("kind").is_some() {
+        let command = VoteCommand::from_payload(payload).map_err(rejection)?;
+        let route_to_floor = matches!(command, VoteCommand::Create(_));
+        let event = crate::room_votes::apply_vote_command(
+            transaction,
+            principal,
+            participant,
+            command,
+            sequence,
+            now,
+        )
+        .await?;
+        return Ok((event, route_to_floor));
+    }
+    let command = MessageSend::from_payload(payload).map_err(rejection)?;
+    let attachments = prepare_message_attachment_bindings(
+        transaction,
+        principal,
+        &command.attachment_ids,
+        now.timestamp(),
+    )
+    .await?;
+    let mut event = prepare_message_event(principal, participant, &command, sequence, now)
+        .map_err(rejection)?;
+    if !attachments.is_empty() {
+        event
+            .extra
+            .insert("attachments".to_owned(), serde_json::to_value(attachments)?);
+    }
+    insert_event(transaction, &event).await?;
+    bind_message_attachments(
+        transaction,
+        principal,
+        &command.attachment_ids,
+        sequence,
+        now.timestamp(),
+    )
+    .await?;
+    Ok((event, true))
 }
 
 fn public_assignment_error_code(value: &str) -> &'static str {

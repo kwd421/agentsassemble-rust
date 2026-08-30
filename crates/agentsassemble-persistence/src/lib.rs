@@ -47,6 +47,7 @@ mod room_settings;
 mod room_subscription;
 mod room_turns;
 mod room_user_identity;
+mod room_votes;
 mod room_write_budget;
 mod schema;
 mod schema_message_search;
@@ -79,6 +80,8 @@ mod provider_turn_reconciliation;
 mod provider_turn_stop;
 #[cfg(test)]
 mod room_appearance_asset_tests;
+#[cfg(test)]
+mod room_vote_tests;
 
 pub use agent_create_start::{
     AgentCreateStartCommit, AgentCreateStartEffect, AgentCreateStartPlan,
