@@ -1,0 +1,114 @@
+# Lobby Votes Slice
+
+Status: active design owner
+
+## Definition
+
+A current writable room human or active Agent Session creates and changes one canonical lobby
+poll, while every current human—including read-only viewers—reads its exact current summary through
+the copied room UI without a second provider-specific or client-owned vote implementation.
+
+## Current contract
+
+The original reachable product represents a poll as one `message_final` event whose event ID is the
+vote ID. `vote_cast`, `vote_withdraw`, and `vote_close` are later `message_final` transitions that
+reference it. A cast replaces that participant's prior choice, a withdrawal removes it, and only
+the first close transition ends the poll early. A finite deadline closes the poll at its canonical
+UTC timestamp without a background job; zero or omission means no deadline. The copied composer,
+poll card, refresh, cast/withdraw toggle, creator/host close control, countdown, history projection,
+and restart behavior are already present but currently fail explicitly against Rust.
+
+Rust keeps the durable event sequence as the public transition history and adds one transactionally
+maintained current-vote projection owned by the same persistence mutation. The projection stores the
+poll binding, bounded option tallies, total, close state, and one current ballot per participant.
+It has no independent writer, reconciliation task, cache, or timer. Poll definition and public
+transition content remain in `room_events`; the projection is the single current-summary authority.
+Every mutation validates and updates both before one commit, and any failure writes neither.
+
+This split addresses a reachable cost rather than future scale. The room mutation owner admits up
+to 14,400 commands per minute, the original summary scans every historical ballot transition, and
+the copied poll card refreshes after each transition. Repeated changes to one long-lived poll would
+therefore perform a cumulative quadratic scan. The current projection makes a mutation and summary
+cost proportional to at most ten options plus one participant ballot lookup while retaining the
+append-only public history. Exact before/after measurements and the accepted storage cost must be
+recorded with the implementation.
+
+Human vote writes remain the existing `message.send` action with one strict tagged payload:
+
+- `message` accepts exactly content and optional attachment IDs as today;
+- `vote` accepts an empty content, question, two through ten case-insensitively distinct options,
+  optional zero-or-30-through-86,400-second duration, and optional poll attachments;
+- `vote_cast` accepts exactly one vote ID and a choice matching option text case-insensitively or a
+  one-based option number;
+- `vote_withdraw` and `vote_close` accept exactly one vote ID;
+- identity, actor, deadline, and timestamps always come from current server authority.
+
+Questions are canonical visible text capped at 300 characters; each option is capped at 100.
+Ordinary read/write humans may create, cast, and withdraw while joined and unmuted. Only the poll
+creator or current room operator may close early. Read-only humans cannot mutate but can request
+`room.vote.summary`. Agent Bridges cannot use the browser summary action.
+
+`room.vote.summary` is an exact read-only WebSocket action. It revalidates the current human,
+capability, room, poll binding, deadline, and current viewer ballot in one read transaction; returns
+question, options, duration/deadline, creator, timestamps, tallies, own choice, total, closed state,
+close time, and reason; and creates no command result, event, write-budget debit, task, timer, retry,
+or alternate HTTP read. Invalid, deleted, cross-room, or malformed polls fail explicitly.
+
+A poll creation is provider-visible ordinary room speech and may enter the existing ordered/ambient
+floor once. Ballot and close transitions publish in sequence and refresh poll cards but never queue
+another Agent Session turn. Provider room views expose the canonical current poll summary rather
+than asking each adapter to reconstruct ballots.
+
+The common RoomPortal owns `create_vote`, `cast_vote`, `withdraw_vote`, and `close_vote` for every
+provider transport. A tool call stages one typed terminal outcome; persistence then applies the same
+vote owner with the active Agent Session participant and exact turn receipt. No Codex, Antigravity,
+OpenCode, DeepSeek, terminal-helper, or future adapter may define vote validation, tallying, or
+authority separately. A provider may close only its own poll, and one terminal vote action completes
+the current room turn just like a published message.
+
+The copied countdown's deadline-owned timeout is retained only while a finite open deadline exists;
+it is cancelled on close/unmount and does not fetch or mutate. Summary refreshes are caused by
+mount, explicit user refresh, or sequenced vote events—not polling.
+
+## Non-goals
+
+- message editing/deletion or vote tombstoning, which follows after this owner is complete;
+- custom-channel polls, anonymous/secret ballots, multiple-choice ballots, quorum, scheduled polls,
+  notifications, analytics, or a generic workflow/voting framework;
+- HTTP vote reads, periodic summary polling, deadline workers, Python/legacy compatibility,
+  fallback state, local optimistic authority, or a provider-specific vote implementation;
+- voice, Mafia, plugin hosting, or the excluded scripted-meeting pipeline.
+
+## Acceptance criteria
+
+1. Exact domain parsing and one persistence transaction create a poll or append a cast, replacement,
+   withdrawal, or authorized close while preserving replay identity, room budget, event order, and
+   rollback semantics.
+2. The current-vote projection and public event history have one mutation owner. Duplicate replay
+   changes neither; changed-payload request reuse conflicts; no other SQL, tally, or state-transition
+   implementation exists repository-wide.
+3. Local and admitted writable humans create, vote, change, withdraw, and close through the copied
+   UI. Read-only humans see live totals and deadline state but cannot mutate. Reload and normal
+   restart preserve the exact summary and own choice.
+4. `room.vote.summary` is strict, current-authority-bound, read-only, and returns the same result for
+   local and admitted viewers except their own choice. Deleted, missing, expired-for-write,
+   unauthorized, bridge, revoked, and cross-room paths fail closed without hidden work.
+5. Poll creation routes once through the existing floor; ballot/withdraw/close events never create
+   another queued provider input. Public snapshot, history, and live projection stay cursor-complete.
+6. Codex Terra, Antigravity Flash, and OpenCode Hy3-free receive the same common vote tools and use
+   the same persistence owner; provider failure remains explicit with no print/exec/legacy fallback.
+7. Measured raw-log scan and projection costs, schema/storage trade-off, CPU/memory/disk/latency,
+   security boundaries, complete repository gates, real TCP, copied frontend, packaged human flows,
+   actual provider flows, cleanup, and both manual reviews are recorded without extrapolation.
+
+## Verification path
+
+- deterministic domain and persistence tests for payload limits, identities, replacement tally,
+  deadline/close ordering, exact replay, rollback, read-only summary, and floor-routing separation;
+- authenticated TCP tests for writable/read-only humans, strict summary response, revocation, and
+  sequenced live updates without mutation on reads;
+- copied frontend tests for strict payload/summary acceptance, creator/host controls, countdown
+  cancellation, explicit refresh, and absence of polling;
+- common RoomPortal contract tests plus one real turn on each required provider;
+- isolated packaged local and remote read-only/read-write browser flows, restart, resource cleanup,
+  measured costs, `make verify`, and threshold-based critical-web plus Daybreaker manual review.

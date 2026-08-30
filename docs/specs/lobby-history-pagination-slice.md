@@ -1,6 +1,6 @@
 # Lobby History Pagination Slice
 
-Status: active design owner
+Status: packaged-verified implementation owner; local threshold review pending
 
 ## Definition
 
