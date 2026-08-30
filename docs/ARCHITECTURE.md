@@ -205,6 +205,10 @@ or public-projection ambiguity is `unresolved`. The client accepts only the firs
 two as server-terminal. While its finite budget remains, an `unresolved` resolution closes the
 socket while preserving the exact private request ID and serialized bytes for fresh authenticated
 replay. Successful socket authentication cannot reset the command-owned reply count or backoff.
+Only a command frame accepted by `WebSocket.send` consumes that connection generation's uncertainty
+budget. The connection owner distinguishes an in-progress frame encoding from an accepted send, and
+the retry-policy owner atomically refuses a second charge for the same generation; a pre-send close
+or competing terminal signal therefore cannot manufacture an extra attempt.
 The eighth unresolved reply ends replay, rejects only that local operation as `outcome_unknown`,
 and leaves the otherwise authenticated socket open; it never claims rejection or commitment and
 never creates a replacement request ID. Missing, malformed, or mismatched resolution still closes

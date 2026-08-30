@@ -4323,6 +4323,20 @@ exposure, no ninth command replay, and the healthy retained or restored room con
 files passed 28 tests, and the production TypeScript/Vite build plus the original-CSS verification
 passed. The complete frontend run passed 100 files and 625 tests.
 
+The first manual correction review found one remaining Medium: the per-connection set reserved a
+request before asynchronous authenticated-frame signing and `WebSocket.send`, so a close during
+signing could consume one of the eight attempts without sending a command. Retry charging also did
+not itself reject a duplicate signal from the same connection generation. The connection-local
+transmission owner now records `encoding` separately from `sent`, promotes only after `send` returns,
+and close handling charges only `sent`. The retry-policy owner returns `already_counted`, `retry`, or
+`exhausted` and alone claims each generation. This replaces the prior set rather than adding a
+parallel authority, timer, worker, persistence, or fallback; its bounded memory remains one entry per
+pending command. A gated-signature regression proves that a pre-send close does not alter the first
+real send's 500 ms retry, and a policy regression proves one charge per generation. The focused six
+tests and complete 100-file/627-test frontend run passed, as did the production TypeScript/Vite build,
+original-CSS verification, architecture/source-growth/policy gates, and diff check. Final correction
+approval remains pending both manual reviewers.
+
 ## Failure-owned room publication retry: 2026-08-30
 
 Every active room previously queried the durable publication cursor every 250 milliseconds even

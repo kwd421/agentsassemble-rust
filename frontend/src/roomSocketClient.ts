@@ -36,7 +36,7 @@ import { PRODUCT_SURFACE_REVISION } from "./types/generated/PRODUCT_SURFACE_REVI
 import { requireAcceptedRoomRuntimeTicket } from "./lib/roomRuntimeTicket";
 import { messageAttachmentId } from "./lib/messageAttachmentId";
 import { MAX_MESSAGE_ATTACHMENTS_PER_EVENT } from "./types/generated/MESSAGE_ATTACHMENTS_WIRE";
-import { scheduleUncertainCommandRetry } from "./roomSocketRetryPolicy";
+import { scheduleUncertainCommandRetry, type UncertainCommandRetryState } from "./roomSocketRetryPolicy";
 
 export type { RoomSocketAuth } from "./api";
 export type { PluginEnvelope } from "./pluginSocketProtocol";
@@ -59,7 +59,7 @@ const ROOM_SOCKET_COMMAND_TIMEOUT_MS = 20_000;
 const ROOM_SOCKET_KEEPALIVE_MS = 3 * 60_000;
 const MAX_ROOM_SOCKET_WIRE_CHARS = 384 * 1024;
 
-interface PendingRoomCommand {
+interface PendingRoomCommand extends UncertainCommandRetryState {
   action: string;
   payload: Record<string, unknown>;
   encoded: string;
@@ -67,9 +67,6 @@ interface PendingRoomCommand {
   reject: (reason: Error) => void;
   timerId: number | null;
   retryTimerId: number | null;
-  retryAttempt: number;
-  retryCountedGeneration: number;
-  retryNotBefore: number;
   everSent: boolean;
 }
 
@@ -212,7 +209,7 @@ export function openRoomSocket(
       if (pending.get(requestId) !== command) return;
       command.timerId = null;
       if (command.everSent) {
-        if (!scheduleUncertainCommandRetry(command, connectionGeneration)) {
+        if (scheduleUncertainCommandRetry(command, connectionGeneration) === "exhausted") {
           rejectUnknown(requestId, command);
         }
         const currentSocket = socket;
@@ -349,7 +346,7 @@ export function openRoomSocket(
       let keepaliveTimer = 0;
       let keepaliveSequence = 0;
       let expectedPongNonce: string | null = null;
-      const sentRequestIds = new Set<string>();
+      const commandTransmissions = new Map<string, "encoding" | "sent">();
       const ownsConnectionGeneration = () =>
         !closed && generation === connectionGeneration;
       const canUseOpenSocket = () =>
@@ -410,7 +407,7 @@ export function openRoomSocket(
           !frameKey
         ) return;
         pending.forEach((command, requestId) => {
-          if (sentRequestIds.has(requestId)) return;
+          if (commandTransmissions.has(requestId)) return;
           const retryDelay = command.retryNotBefore - Date.now();
           if (retryDelay > 0) {
             if (command.retryTimerId !== null) window.clearTimeout(command.retryTimerId);
@@ -424,7 +421,7 @@ export function openRoomSocket(
             window.clearTimeout(command.retryTimerId);
             command.retryTimerId = null;
           }
-          sentRequestIds.add(requestId);
+          commandTransmissions.set(requestId, "encoding");
           outboundQueue = outboundQueue
             .then(async () => {
               if (
@@ -442,6 +439,7 @@ export function openRoomSocket(
               );
               if (!canUseOpenSocket() || pending.get(requestId) !== command) return;
               currentSocket.send(encoded);
+              commandTransmissions.set(requestId, "sent");
               nextClientCounter += 1;
               scheduleKeepalive();
               command.everSent = true;
@@ -592,10 +590,12 @@ export function openRoomSocket(
             if (msg.resolution === "unresolved") {
               if (command.timerId !== null) window.clearTimeout(command.timerId);
               command.timerId = null;
-              if (!scheduleUncertainCommandRetry(command, generation)) {
+              const retry = scheduleUncertainCommandRetry(command, generation);
+              if (retry === "exhausted") {
                 rejectUnknown(msg.request_id, command);
                 return;
               }
+              if (retry === "already_counted") return;
               connectionFailed = true;
               currentSocket.close();
               return;
@@ -693,12 +693,13 @@ export function openRoomSocket(
         socket = null;
         sendPendingForConnection = null;
         transportReady = false;
-        sentRequestIds.forEach((requestId) => {
+        commandTransmissions.forEach((transmission, requestId) => {
+          if (transmission !== "sent") return;
           const command = pending.get(requestId);
-          if (!command || command.retryCountedGeneration === generation) return;
+          if (!command) return;
           if (command.timerId !== null) window.clearTimeout(command.timerId);
           command.timerId = null;
-          if (!scheduleUncertainCommandRetry(command, generation)) {
+          if (scheduleUncertainCommandRetry(command, generation) === "exhausted") {
             rejectUnknown(requestId, command);
           }
         });

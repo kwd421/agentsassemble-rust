@@ -2,11 +2,13 @@ const UNCERTAIN_RETRY_BASE_MS = 500;
 const UNCERTAIN_RETRY_MAX_MS = 30_000;
 const UNCERTAIN_ATTEMPT_LIMIT = 8;
 
-interface UncertainCommandRetry {
+export interface UncertainCommandRetryState {
   retryAttempt: number;
   retryCountedGeneration: number;
   retryNotBefore: number;
 }
+
+export type UncertainRetryDecision = "already_counted" | "retry" | "exhausted";
 
 function uncertainCommandRetryDelay(attemptCount: number): number | null {
   if (attemptCount >= UNCERTAIN_ATTEMPT_LIMIT) return null;
@@ -17,12 +19,13 @@ function uncertainCommandRetryDelay(attemptCount: number): number | null {
 }
 
 export function scheduleUncertainCommandRetry(
-  command: UncertainCommandRetry,
+  command: UncertainCommandRetryState,
   generation: number
-) {
+): UncertainRetryDecision {
+  if (command.retryCountedGeneration === generation) return "already_counted";
   command.retryAttempt += 1;
   command.retryCountedGeneration = generation;
   const retryDelay = uncertainCommandRetryDelay(command.retryAttempt);
   if (retryDelay !== null) command.retryNotBefore = Date.now() + retryDelay;
-  return retryDelay !== null;
+  return retryDelay === null ? "exhausted" : "retry";
 }
