@@ -16,14 +16,7 @@ pub fn clean_single_line(value: &str, limit: usize) -> String {
 
 #[must_use]
 pub fn clean_identifier(value: &str, limit: usize) -> String {
-    value
-        .replace(['\r', '\n'], " ")
-        .trim()
-        .chars()
-        .take(limit)
-        .collect::<String>()
-        .trim()
-        .to_owned()
+    clean_trimmed_crlf_text(value, limit)
 }
 
 /// Normalizes and validates a room identifier at the transport boundary.
@@ -61,4 +54,19 @@ pub fn has_visible_text(value: &str) -> bool {
                 GeneralCategory::Control | GeneralCategory::Format
             )
     })
+}
+
+pub(crate) fn is_python_whitespace(character: char) -> bool {
+    character.is_whitespace() || matches!(character, '\u{001C}'..='\u{001F}')
+}
+
+pub(crate) fn clean_trimmed_crlf_text(value: &str, limit: usize) -> String {
+    value
+        .replace(['\r', '\n'], " ")
+        .trim()
+        .chars()
+        .take(limit)
+        .collect::<String>()
+        .trim()
+        .to_owned()
 }

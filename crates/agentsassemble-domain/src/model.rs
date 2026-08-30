@@ -207,6 +207,15 @@ pub struct RoomEvent {
     pub extra: BTreeMap<String, Value>,
 }
 
+impl RoomEvent {
+    /// Returns whether this event is a current, non-deleted lobby-message record.
+    #[must_use]
+    pub fn is_current_lobby_message(&self) -> bool {
+        self.event_type == "message_final"
+            && self.extra.get("message_deleted") != Some(&Value::Bool(true))
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum SnapshotMode {

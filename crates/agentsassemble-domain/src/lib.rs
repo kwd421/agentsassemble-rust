@@ -4,6 +4,7 @@ mod diagnostic;
 mod identity;
 mod message_attachments;
 mod message_pins;
+mod message_search;
 mod model;
 mod persona;
 mod persona_text;
@@ -31,6 +32,12 @@ pub use message_attachments::{
 pub use message_pins::{
     MAX_LOBBY_MESSAGE_PINS, MAX_MESSAGE_PIN_EVENT_ID_BYTES, is_message_pin_event_id,
 };
+pub use message_search::{
+    MAX_MESSAGE_SEARCH_AUTHOR_CHARACTERS, MAX_MESSAGE_SEARCH_CONTENT_CHARACTERS,
+    MAX_MESSAGE_SEARCH_CURSOR_BYTES, MAX_MESSAGE_SEARCH_QUERY_CHARACTERS, MESSAGE_CONTEXT_RADIUS,
+    MESSAGE_SEARCH_PAGE_SIZE, casefold_message_search_text, clean_message_search_query,
+    clean_message_search_value, compact_casefolded_message_search_text,
+};
 pub use model::{
     Actor, AgentSession, AgentSessionDraft, AuthenticatedPrincipal,
     CURRENT_RUNTIME_PROFILE_VERSION, CapabilitySet, ClientKind, DurableAgentSession, InviteScope,
@@ -45,7 +52,9 @@ pub use persona::{
 };
 pub use persona_text::{persona_card_keywords, trim_persona_card_text};
 pub use profile::{UserProfile, UserProfilePatch, avatar_attachment_id, canonical_avatar_url};
-pub use projection::{public_event_for_principal, public_value_for_principal};
+pub use projection::{
+    public_event_for_principal, public_value_for_principal, room_event_is_owner_only,
+};
 pub use room_preferences::{
     ChannelNotificationMode, ChannelPreference, MAX_PREFERENCE_CHANNELS, READ_CURSOR_LIMIT,
     RoomNotificationMode, RoomPreferencesError, RoomUserPreferences, RoomUserPreferencesPatch,

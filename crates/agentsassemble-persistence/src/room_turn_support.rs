@@ -8,7 +8,10 @@ use serde_json::{Value, json};
 use sqlx::{Row, Sqlite, Transaction};
 use uuid::Uuid;
 
-use crate::{PersistenceError, turn_authority::active_turn_authority};
+use crate::{
+    PersistenceError, message_search_index::index_lobby_message,
+    turn_authority::active_turn_authority,
+};
 
 const MAX_PROVIDER_TURN_ID_BYTES: usize = 128;
 
@@ -138,6 +141,7 @@ pub(crate) async fn insert_event(
         .bind(serde_json::to_string(event)?)
         .execute(&mut **transaction)
         .await?;
+    index_lobby_message(transaction, event).await?;
     Ok(())
 }
 

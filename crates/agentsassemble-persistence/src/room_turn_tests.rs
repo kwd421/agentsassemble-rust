@@ -18,6 +18,8 @@ const SPEAKER_AGENT_ID: &str = "codex-00000000-0000-5000-8000-000000000003";
 
 #[path = "message_attachment_binding_tests.rs"]
 mod message_attachment_binding_tests;
+#[path = "message_search_index_tests.rs"]
+mod message_search_index_tests;
 #[path = "persona_turn_tests.rs"]
 mod persona_turn_tests;
 #[path = "provider_turn_mute_tests.rs"]
@@ -158,6 +160,7 @@ async fn ordered_assignment_and_finalization_are_durable_and_exact() {
             "agent_session_state",
         ]
     );
+    message_search_index_tests::assert_projection(&store, &first, &second, &committed).await;
     let next = committed
         .next_assignments
         .first()

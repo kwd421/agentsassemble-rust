@@ -1,3 +1,5 @@
+use crate::text::is_python_whitespace;
+
 pub(super) fn card_lines(mut remainder: &str) -> impl Iterator<Item = &str> {
     std::iter::from_fn(move || {
         if remainder.is_empty() {
@@ -22,7 +24,7 @@ pub(super) fn card_lines(mut remainder: &str) -> impl Iterator<Item = &str> {
 }
 
 pub fn trim_persona_card_text(value: &str) -> &str {
-    value.trim_matches(is_persona_card_whitespace)
+    value.trim_matches(is_python_whitespace)
 }
 
 pub fn persona_card_keywords(value: &str) -> impl Iterator<Item = &str> {
@@ -34,7 +36,7 @@ pub fn persona_card_keywords(value: &str) -> impl Iterator<Item = &str> {
 
 pub(super) fn card_words(value: &str) -> impl Iterator<Item = &str> {
     value
-        .split(is_persona_card_whitespace)
+        .split(is_python_whitespace)
         .filter(|word| !word.is_empty())
 }
 
@@ -73,8 +75,4 @@ fn is_card_line_boundary(character: char) -> bool {
             | '\u{2028}'
             | '\u{2029}'
     )
-}
-
-fn is_persona_card_whitespace(character: char) -> bool {
-    character.is_whitespace() || matches!(character, '\u{001C}'..='\u{001F}')
 }

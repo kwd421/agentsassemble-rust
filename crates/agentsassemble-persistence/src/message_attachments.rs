@@ -10,7 +10,6 @@ use agentsassemble_domain::{
 };
 use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use sqlx::{Row, Sqlite, Transaction};
 use uuid::Uuid;
 
@@ -456,8 +455,7 @@ async fn read_bound_message_attachment(
     let event_attachments = message_attachments_from_event(&event)?;
     if event.room_id != room_id
         || event.seq != event_seq
-        || event.event_type != "message_final"
-        || event.extra.get("message_deleted") == Some(&Value::Bool(true))
+        || !event.is_current_lobby_message()
         || !event_attachments.contains(&stored)
     {
         return Err(message_attachment_missing());

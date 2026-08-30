@@ -3,7 +3,6 @@ use agentsassemble_domain::{
     has_visible_text, is_message_pin_event_id,
 };
 use chrono::{DateTime, SecondsFormat, Utc};
-use serde_json::Value;
 use sqlx::{Row, Sqlite, Transaction};
 
 use crate::{
@@ -289,9 +288,7 @@ fn require_message_event(
     if event.room_id != room_id || event.id != event_id || event.seq != seq {
         return Err(invalid_state("Stored message pin target is inconsistent."));
     }
-    if event.event_type != "message_final"
-        || event.extra.get("message_deleted") == Some(&Value::Bool(true))
-    {
+    if !event.is_current_lobby_message() {
         return Err(rejected("message_missing", "The message was not found."));
     }
     let attachments = message_attachments_from_event(event)?;

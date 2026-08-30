@@ -268,6 +268,16 @@ const TABLES: &[TableDefinition] = &[
         infrastructure: false,
     },
     TableDefinition {
+        name: "room_message_search_records",
+        ddl: crate::schema_message_search::RECORDS_DDL,
+        infrastructure: false,
+    },
+    TableDefinition {
+        name: "room_message_search_phrase",
+        ddl: crate::schema_message_search::PHRASE_DDL,
+        infrastructure: false,
+    },
+    TableDefinition {
         name: "room_turn_tool_results",
         ddl: "CREATE TABLE IF NOT EXISTS room_turn_tool_results (room_id TEXT NOT NULL, session_id TEXT NOT NULL, turn_id TEXT NOT NULL, result_id TEXT NOT NULL, event_seq INTEGER NOT NULL CHECK(event_seq > 0), PRIMARY KEY(room_id, result_id), FOREIGN KEY(room_id, session_id) REFERENCES agent_sessions(room_id, session_id) ON DELETE CASCADE)",
         infrastructure: false,
@@ -313,6 +323,7 @@ pub(crate) fn statements() -> impl Iterator<Item = &'static str> {
         .iter()
         .map(|table| table.ddl)
         .chain(INDEXES.iter().copied())
+        .chain(crate::schema_message_search::AUXILIARY_DDL.iter().copied())
 }
 
 pub(crate) fn product_tables() -> impl Iterator<Item = &'static TableDefinition> {
@@ -320,14 +331,14 @@ pub(crate) fn product_tables() -> impl Iterator<Item = &'static TableDefinition>
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use std::collections::BTreeSet;
 
     use sqlx::{Row, SqlitePool, sqlite::SqlitePoolOptions};
 
     use super::{TABLES, product_tables, statements};
 
-    pub(super) async fn installed_schema() -> SqlitePool {
+    pub(crate) async fn installed_schema() -> SqlitePool {
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
             .connect("sqlite::memory:")
@@ -361,6 +372,11 @@ mod tests {
         let declared = TABLES
             .iter()
             .map(|table| table.name.to_owned())
+            .chain(
+                crate::schema_message_search::FTS_SHADOW_TABLES
+                    .iter()
+                    .map(|name| (*name).to_owned()),
+            )
             .collect::<BTreeSet<_>>();
         assert_eq!(actual, declared);
 

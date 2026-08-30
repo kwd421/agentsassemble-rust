@@ -77,8 +77,8 @@ pub fn public_event_for_principal(
     let mut projected = event.clone();
     projected.extra = project_map(&event.extra);
     anonymize_private_vote(&mut projected, principal);
-    if !is_owner_only(&projected) || event_is_visible_to(&projected, principal) {
-        if is_owner_only(&projected) {
+    if !room_event_is_owner_only(&projected) || event_is_visible_to(&projected, principal) {
+        if room_event_is_owner_only(&projected) {
             projected.extra.remove("audience");
             projected
                 .extra
@@ -164,7 +164,9 @@ fn is_private_key(key: &str) -> bool {
     PRIVATE_PUBLIC_KEYS.contains(&key)
 }
 
-fn is_owner_only(event: &RoomEvent) -> bool {
+/// Returns whether an event is restricted to its owning principal.
+#[must_use]
+pub fn room_event_is_owner_only(event: &RoomEvent) -> bool {
     ["visibility", "audience"].iter().any(|key| {
         event
             .extra
