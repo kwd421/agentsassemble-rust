@@ -10,6 +10,7 @@ mod persona;
 mod persona_text;
 mod profile;
 mod projection;
+mod room_history;
 mod room_preferences;
 mod room_settings;
 mod room_turn;
@@ -54,6 +55,7 @@ pub use profile::{UserProfile, UserProfilePatch, avatar_attachment_id, canonical
 pub use projection::{
     public_event_for_principal, public_value_for_principal, room_event_is_owner_only,
 };
+pub use room_history::{ROOM_HISTORY_MAX_EVENTS, RoomHistoryPage, RoomHistoryRequest};
 pub use room_preferences::{
     ChannelNotificationMode, ChannelPreference, MAX_PREFERENCE_CHANNELS, READ_CURSOR_LIMIT,
     RoomNotificationMode, RoomPreferencesError, RoomUserPreferences, RoomUserPreferencesPatch,
