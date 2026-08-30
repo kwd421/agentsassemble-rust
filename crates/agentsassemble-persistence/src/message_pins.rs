@@ -9,7 +9,7 @@ use crate::{
     HumanSessionAuthorization, PersistenceError, SqliteStore,
     human_session_authority::revalidate_human_session,
     message_attachments::{MessageAttachmentMetadata, message_attachments_from_event},
-    room_user_identity::{require_current_local_room_manager, resolve_room_user_identity},
+    room_user_identity::current_local_room_principal,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -129,9 +129,7 @@ async fn authorize_local_operator(
             "Only the local room operator may use local pin authority.",
         ));
     }
-    let identity =
-        resolve_room_user_identity(transaction, room_id, user_id, participant_id).await?;
-    require_current_local_room_manager(transaction, &identity).await?;
+    current_local_room_principal(transaction, room_id, user_id, participant_id).await?;
     Ok(())
 }
 

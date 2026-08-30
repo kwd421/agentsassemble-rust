@@ -31,6 +31,7 @@ mod human_prejoin_attachments;
 mod human_session_authority;
 mod message_attachments;
 mod message_pins;
+mod message_search;
 mod message_search_index;
 mod private_fs;
 mod profile_attachments;
@@ -106,6 +107,7 @@ pub use message_attachments::{
     MessageAttachment, MessageAttachmentMetadata, ProviderAttachmentReadAuthority,
 };
 pub use message_pins::PinnedLobbyMessage;
+pub use message_search::{LobbyMessageContext, LobbyMessageSearchPage, LobbyMessageSearchResult};
 pub use participant_leave::ParticipantLeaveMutation;
 pub use participant_mute::ParticipantMuteMutation;
 pub use persona_charx::import_charx_asset;

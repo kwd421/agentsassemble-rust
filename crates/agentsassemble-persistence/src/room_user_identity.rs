@@ -1,5 +1,6 @@
 use agentsassemble_domain::{
-    LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, ParticipantStatus,
+    AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID,
+    LOCAL_OPERATOR_USER_ID, ParticipantStatus,
 };
 use sqlx::{Sqlite, Transaction};
 
@@ -106,6 +107,28 @@ pub(crate) async fn require_current_local_room_manager(
         ));
     }
     require_complete_bootstrap_in_transaction(transaction).await
+}
+
+pub(crate) async fn current_local_room_principal(
+    transaction: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    user_id: &str,
+    participant_id: &str,
+) -> Result<AuthenticatedPrincipal, PersistenceError> {
+    let identity =
+        resolve_room_user_identity(transaction, room_id, user_id, participant_id).await?;
+    require_current_local_room_manager(transaction, &identity).await?;
+    let participant = load_active_participant(transaction, room_id, participant_id).await?;
+    Ok(AuthenticatedPrincipal {
+        principal_id: identity.user_id,
+        participant_id: identity.participant_id,
+        display_name: participant.display_name,
+        room_id: identity.room_id,
+        client_kind: ClientKind::Browser,
+        invite_scope: InviteScope::ReadWrite,
+        is_operator: true,
+        capabilities: CapabilitySet::local_operator(ClientKind::Browser, InviteScope::ReadWrite),
+    })
 }
 
 pub(crate) async fn require_exact_local_room_manager(
