@@ -49,6 +49,10 @@ mod tests {
             clean_message_search_query(&format!("{} tail", "가".repeat(200))),
             "가".repeat(200)
         );
+        assert_eq!(
+            clean_message_search_query(&format!("{}old", "\u{001c}".repeat(200))),
+            "old"
+        );
     }
 
     #[test]

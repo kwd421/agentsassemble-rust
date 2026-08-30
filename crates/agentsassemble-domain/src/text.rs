@@ -63,10 +63,10 @@ pub(crate) fn is_python_whitespace(character: char) -> bool {
 pub(crate) fn clean_trimmed_crlf_text(value: &str, limit: usize) -> String {
     value
         .replace(['\r', '\n'], " ")
-        .trim()
+        .trim_matches(is_python_whitespace)
         .chars()
         .take(limit)
         .collect::<String>()
-        .trim()
+        .trim_matches(is_python_whitespace)
         .to_owned()
 }
