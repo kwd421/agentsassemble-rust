@@ -271,15 +271,39 @@ UI, runtime injection, and remote-host authority remain explicitly incomplete.
 
 The implementation uses maintained `keyring` 4.1.6 with its v1 platform stores instead of owning
 Keychain, Credential Manager, Secret Service, encryption, or persistence code. The macOS status
-path uses maintained `security-framework` 3.7.0 item search without requesting data, attributes, or
-references. Inspection of the
+path uses `security-framework` 3.7.0 item search without requesting data, attributes, or references.
+Inspection of the
 dependency showed that `Entry::new` collapses every store-initialization error into
 `NoDefaultStore`; treating that result as an absent backend would silently turn a locked or failed
 installed store into an environment fallback. The owner therefore checks `Entry::store_status`
 first and accepts only its documented `Invalid("platform", ...)` result as platform absence; every
 other initialization or access error is the stable `secure_store_unavailable` failure. On macOS,
-status uses credential metadata rather than reading the secret, preserving the original no-ACL-prompt
-status path.
+the exact search is restricted to the same User/login keychain selected by the v1 store.
+
+The metadata-only query still had a concrete interaction threat: Security.framework's default item
+search policy permits authentication UI, so a protected matching item could display a prompt during
+status. Skipping protected items was rejected because that would misclassify a present secure item as
+absent and activate the environment fallback. Process-global interaction disabling was also rejected
+because concurrent keychain users could observe the temporary global state. The query now requests
+fail-on-authentication-UI through a safe `security-framework` method pinned at exact public fork
+commit `85407d113b978b27728e162c8485c11e233c3e3e`, based on release 3.7.0. Only
+`errSecItemNotFound` means absent; interaction-required, authentication, keychain, and all other
+errors fail closed. Apple's underlying value is deprecated in favor of an `LAContext` with
+`interactionNotAllowed`, but the maintained crate has no safe compatible context bridge; the pinned
+release patch is the smaller auditable boundary until one exists.
+
+The direct pin leaves the registry copy used by `keyring` and TLS alongside the patched direct copy.
+That duplication increased the measured debug server binary from 118,258,392 to 118,263,160 bytes
+(4,768 bytes) and added about 6.5 MiB of debug intermediate artifacts; it added no product state,
+runtime task, network request, or disk custody. This build cost was accepted over raw local FFI or a
+process-global policy. The fork's complete library suite passed 113 tests with one ignored, and its
+dictionary-boundary regression proves the default, fail, and skip policies remain mutually
+exclusive. The application regression verifies a real missing-item lookup without secret material
+and proves that only not-found maps to absence. All 139 provider tests, warning-denied provider
+Clippy, formatting, whitespace, architecture, and source-growth gates passed. During that full run,
+an unrelated arbitrary PID-file readiness poll was exposed as timing-dependent; commit `e74815f`
+replaced it with a child-published Unix-datagram readiness event in the process-tree test owner. The
+three affected process lifecycle tests passed without changing production runtime behavior.
 
 Platform keyring operations are potentially blocking OS calls. One store-owned semaphore and
 Tokio's maintained blocking pool serialize them; the permit moves into the blocking closure so
@@ -299,6 +323,10 @@ formatting, whitespace, architecture, and source-growth gates passed.
   `0906e4d` replaces it with a `security-framework` generic-password existence query that requests
   no data, attributes, or references, keeps every non-not-found error fail-closed, and verifies a
   real missing-item metadata lookup without creating or deleting a Keychain item.
+- A later manual source review found that this metadata query still inherited Security.framework's
+  UI-allowed default. Commit `2492ccc` makes noninteraction explicit without treating a protected
+  item as absent or changing the environment fallback contract. External re-review of this
+  correction is pending.
 - The critical web session and Daybreaker Blue High manually reviewed pushed range
   `087ba1a..45c8302`. Both found no Critical, High, Medium, or Low findings and
   returned `APPROVE`. Neither reviewer ran Deep Scan or another automated security
