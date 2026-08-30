@@ -28,7 +28,6 @@ import "../views/components/RoomInviteModal";
 import "../views/components/MobileRoomInfoPanel";
 import "../views/components/RoomRail";
 import "../views/components/RoomSyncNotice";
-import "../views/components/FrontendUpdateNotice";
 import "../views/components/RoomSettingsModal";
 import "../views/components/SideChatDock";
 import "../views/components/UserPanel";

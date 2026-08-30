@@ -26,7 +26,6 @@ import DisconnectedRoomView from "../views/components/DisconnectedRoomView";
 import MobileRoomInfoPanel from "../views/components/MobileRoomInfoPanel";
 import RoomRail from "../views/components/RoomRail";
 import RoomSyncNotice from "../views/components/RoomSyncNotice";
-import FrontendUpdateNotice from "../views/components/FrontendUpdateNotice";
 import SideChatDock from "../views/components/SideChatDock";
 import UserPanel from "../views/components/UserPanel";
 import { SIDEBAR_WIDTH_MAX, SIDEBAR_WIDTH_MIN } from "../lib/sidebarResizeModel";
@@ -79,7 +78,6 @@ export default function AppView({ controller }: { controller: AppController }) {
   } = controller;
   return (
     <RoomSocketProvider socket={roomSocket}>
-    <FrontendUpdateNotice />
     <div
       className="dc-shell flex h-screen max-h-screen overflow-hidden text-text-primary"
       style={shellStyle}

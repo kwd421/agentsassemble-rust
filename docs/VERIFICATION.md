@@ -4271,3 +4271,15 @@ No automated security scan was used.
   cumulative `3ba5111..828d632`: APPROVE C0/H0/M0/L0. Neither review used an automated security
   scan. This approves only the pushed copied-frontend range; packaged local/read-only restart, the
   configured real-Agent matrix, and final measurements remain active work.
+
+## Missing runtime-version poll deactivation: 2026-08-30
+
+The copied `FrontendUpdateNotice` called the absent Rust `/api/runtime/version` route immediately,
+every 15 seconds, and again on focus or visibility restoration, while swallowing every permanent
+failure. That was at least 5,760 known-failing requests per continuously mounted client per day and
+could not detect an update because no Rust route or generation owner exists. The component remains
+copied source for the future rolling-restart slice, but the current Rust entry point and its cascade
+preservation list no longer import or mount it. Repository search confirms the request remains only
+inside that unreferenced component. This removes no working Rust behavior and adds no fallback, timer, state,
+or replacement update claim; the missing runtime-version owner remains explicit in the exposure
+inventory.
