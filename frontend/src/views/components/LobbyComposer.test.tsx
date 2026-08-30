@@ -407,7 +407,7 @@ describe("LobbyComposer", () => {
     expect(say).not.toHaveBeenCalled();
   });
 
-  it("retains the vote dialog and staged attachment when the canonical path is unavailable", async () => {
+  it("submits the validated vote and clears its staged attachment", async () => {
     const id = `ma_${"a".repeat(32)}`;
     const uploaded = {
       id,
@@ -419,12 +419,7 @@ describe("LobbyComposer", () => {
       download_url: `/api/attachments/${id}?download=1`,
     };
     apiMocks.uploadLobbyAttachment.mockResolvedValue(uploaded);
-    const say = vi.fn().mockRejectedValue(
-      new RoomSocketSayError(
-        "Room message kind vote is not present in the bound server product surface.",
-        "surface_action_unavailable"
-      )
-    );
+    const say = vi.fn().mockResolvedValue({ events: [] });
     const onPosted = vi.fn();
     const socket = {
       ready: () => true,
@@ -488,11 +483,10 @@ describe("LobbyComposer", () => {
         voteDurationSeconds: 900,
       })
     );
-    expect((await within(dialog).findByRole("alert")).textContent).toContain(
-      "Room message kind vote is not present in the bound server product surface."
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "투표 만들기" })).toBeNull()
     );
-    expect(screen.getByRole("dialog", { name: "투표 만들기" })).toBeTruthy();
-    expect(screen.getByText("map.png")).toBeTruthy();
-    expect(onPosted).not.toHaveBeenCalled();
+    expect(screen.queryByText("map.png")).toBeNull();
+    expect(onPosted).toHaveBeenCalledWith([]);
   });
 });

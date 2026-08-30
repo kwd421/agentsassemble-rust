@@ -27,7 +27,6 @@ import {
   type ProviderCatalogSnapshot,
   type RoomCommandAck,
   type RoomHistoryPage,
-  type RoomSayRequest,
   type RoomSocketClientDependencies,
   type RoomSocketHandle,
   type RoomSocketHandlers,
@@ -35,8 +34,7 @@ import {
 } from "./roomSocketTypes";
 import { PRODUCT_SURFACE_REVISION } from "./types/generated/PRODUCT_SURFACE_REVISION";
 import { requireAcceptedRoomRuntimeTicket } from "./lib/roomRuntimeTicket";
-import { messageAttachmentId } from "./lib/messageAttachmentId";
-import { MAX_MESSAGE_ATTACHMENTS_PER_EVENT } from "./types/generated/MESSAGE_ATTACHMENTS_WIRE";
+import { roomMessagePayload } from "./lib/roomMessagePayload";
 import { ROOM_HISTORY_MAX_EVENTS } from "./types/generated/ROOM_HISTORY_WIRE";
 import { scheduleUncertainCommandRetry, type PendingCommandRetryState } from "./roomSocketRetryPolicy";
 
@@ -67,41 +65,6 @@ interface PendingRoomCommand extends PendingCommandRetryState {
   encoded: string;
   resolve: (value: RoomCommandAck) => void;
   reject: (reason: Error) => void;
-}
-
-function messageAttachmentIds(request: RoomSayRequest): string[] {
-  const attachments = request.attachments || [];
-  if (attachments.length > MAX_MESSAGE_ATTACHMENTS_PER_EVENT) {
-    throw new RoomSocketSayError(
-      "A room message cannot contain more than eight attachments.",
-      "bad_request"
-    );
-  }
-  let ids: string[];
-  try {
-    ids = attachments.map((attachment) => messageAttachmentId(attachment.id));
-  } catch {
-    throw new RoomSocketSayError(
-      "A room message contains an invalid attachment identifier.",
-      "bad_request"
-    );
-  }
-  if (new Set(ids).size !== ids.length) {
-    throw new RoomSocketSayError(
-      "A room message cannot contain duplicate attachments.",
-      "bad_request"
-    );
-  }
-  return ids;
-}
-
-function requireOrdinaryMessage(request: RoomSayRequest) {
-  if (request.kind && request.kind !== "message") {
-    throw new RoomSocketSayError(
-      `Room message kind ${request.kind} is not present in the bound server product surface.`,
-      "surface_action_unavailable"
-    );
-  }
 }
 
 function validateClientAuthority(
@@ -776,12 +739,7 @@ export function openRoomSocket(
       return ack.result as unknown as RoomHistoryPage;
     },
     say: async (request) => {
-      requireOrdinaryMessage(request);
-      const attachmentIds = messageAttachmentIds(request);
-      await command("message.send", {
-        content: request.message,
-        ...(attachmentIds.length ? { attachment_ids: attachmentIds } : {}),
-      });
+      await command("message.send", roomMessagePayload(request));
       return { events: [] };
     },
   };

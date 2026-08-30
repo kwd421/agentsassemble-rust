@@ -105,7 +105,7 @@ describe("room socket message attachments", () => {
     handle.close();
   });
 
-  it("rejects unavailable message kinds before signing or sending a command", async () => {
+  it("signs each vote operation with its exact Rust-owned payload", async () => {
     const { handle, sockets, tickets } = openHarness();
     await flushPromises();
     sockets[0].open();
@@ -114,14 +114,73 @@ describe("room socket message attachments", () => {
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
 
-    await expect(handle.say({
+    const create = handle.say({
       message: "",
       attachments: [attachment("a")],
       kind: "vote",
-      voteQuestion: "unsupported",
-      voteOptions: ["yes", "no"],
-    })).rejects.toMatchObject({ category: "surface_action_unavailable" });
-    expect(sockets[0].sent).toHaveLength(1);
+      voteQuestion: "Ship it?",
+      voteOptions: ["Yes", "No"],
+      voteDurationSeconds: 300,
+    });
+    await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
+    const createCommand = await sentAuthenticatedCommand(sockets[0], frames);
+    expect(createCommand.payload).toEqual({
+      kind: "vote",
+      vote_question: "Ship it?",
+      vote_options: ["Yes", "No"],
+      vote_duration_seconds: 300,
+      attachment_ids: [attachment("a").id],
+    });
+    await receiveAuthenticated(sockets[0], frames, {
+      op: "ack",
+      accepted: true,
+      resolution: "committed",
+      request_id: createCommand.request_id,
+      action: "message.send",
+      result: { event: event(1), event_seq: 1 },
+    });
+    await expect(create).resolves.toEqual({ events: [] });
+
+    const operations = [
+      {
+        request: {
+          message: "",
+          kind: "vote_cast" as const,
+          voteId: "evt-1",
+          voteChoice: "Yes",
+        },
+        payload: { kind: "vote_cast", vote_id: "evt-1", vote_choice: "Yes" },
+      },
+      {
+        request: { message: "", kind: "vote_withdraw" as const, voteId: "evt-1" },
+        payload: { kind: "vote_withdraw", vote_id: "evt-1" },
+      },
+      {
+        request: { message: "", kind: "vote_close" as const, voteId: "evt-1" },
+        payload: { kind: "vote_close", vote_id: "evt-1" },
+      },
+    ];
+    for (const [index, operation] of operations.entries()) {
+      const pending = handle.say(operation.request);
+      const wireIndex = index + 2;
+      await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(wireIndex + 1));
+      const command = await sentAuthenticatedCommand(
+        sockets[0],
+        frames,
+        wireIndex,
+        wireIndex
+      );
+      expect(command.payload).toEqual(operation.payload);
+      await receiveAuthenticated(sockets[0], frames, {
+        op: "ack",
+        accepted: true,
+        resolution: "committed",
+        request_id: command.request_id,
+        action: "message.send",
+        result: { event: event(wireIndex), event_seq: wireIndex },
+      });
+      await expect(pending).resolves.toEqual({ events: [] });
+    }
     handle.close();
   });
 });
