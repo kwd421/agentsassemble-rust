@@ -392,6 +392,11 @@ mod tests {
             .unwrap_or_else(|error| panic!("decode selected session: {error}"));
         inconsistent["persona_card"] = serde_json::Value::Null;
         assert!(serde_json::from_value::<DurableAgentSession>(inconsistent).is_err());
+        let mut empty_id_with_summary: serde_json::Value = serde_json::from_str(&encoded)
+            .unwrap_or_else(|error| panic!("decode selected session: {error}"));
+        empty_id_with_summary["persona_card_id"] = json!("");
+        empty_id_with_summary["persona_card"]["id"] = json!("");
+        assert!(serde_json::from_value::<DurableAgentSession>(empty_id_with_summary).is_err());
 
         let mut cleared = selected.clone();
         cleared.persona_card_id.clear();

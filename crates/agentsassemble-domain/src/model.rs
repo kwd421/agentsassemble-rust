@@ -399,7 +399,7 @@ impl<'de> Deserialize<'de> for DurableAgentSession {
             raw.public.persona_card.as_deref(),
         ) {
             ("", None) => true,
-            (persona_id, Some(summary)) => persona_id == summary.id,
+            (persona_id, Some(summary)) => !persona_id.is_empty() && persona_id == summary.id,
             _ => false,
         };
         if !persona_is_valid {
