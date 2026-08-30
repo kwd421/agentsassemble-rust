@@ -41,6 +41,21 @@ same bounded public projections. They are read-only: they neither publish a mess
 meeting decision. Existing per-turn tool admission remains the resource owner; tabletop random
 availability remains separately gated.
 
+Codex, Antigravity, OpenCode, and the common API adapter receive that same provider-neutral ingress.
+Antigravity maps `search` and `context` through its existing private helper and exact PreToolUse hook;
+it adds no transcript, printed-result authority, request file, second queue, process, timer, polling,
+or fallback. Query cleaning, cursor size, and message-target identity reuse their domain owners, and
+the helper prints only the canonical MCP JSON returned by the same RoomPortal tools.
+
+The hook previously rejected command substitution and shell control operators but admitted unquoted
+POSIX pathname, brace, and tilde expansion. A room instruction could therefore induce a command such
+as `speak *` and publish workspace filenames after the shell expanded the otherwise allowlisted
+argument. The POSIX grammar owner now rejects those unquoted expansions while preserving explicitly
+quoted or escaped literals; the distinct Windows `cmd.exe` grammar remains unchanged. Focused hook
+tests cover both the exact helper commands and expansion denials. This correction adds no runtime
+state or background cost and preserves the existing private-helper, one-command, turn-budget, and
+terminal-outcome contracts.
+
 ### Measured design evidence
 
 A temporary release probe used 100,000 representative canonical messages and was removed with its
