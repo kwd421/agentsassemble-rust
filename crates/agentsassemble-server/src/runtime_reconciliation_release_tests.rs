@@ -7,9 +7,7 @@ use serde_json::{Value, json};
 use super::{
     RUNTIME_RECONCILIATION_TEST_LOCK, reconcile_runtime_ownership, recover_exact_lifecycle_command,
 };
-use crate::runtime_reconciliation::tests::{
-    draft, draft_profile_key, dynamic_recovery_store, local_principal,
-};
+use crate::runtime_reconciliation::tests::{draft, dynamic_recovery_store, local_principal};
 
 struct ConfirmedAbsenceFixture {
     _directory: tempfile::TempDir,
@@ -138,18 +136,15 @@ async fn confirmed_absence_fixture(id_suffix: &str) -> ConfirmedAbsenceFixture {
         tempfile::tempdir().unwrap_or_else(|error| panic!("create absence fixture: {error}"));
     let store = dynamic_recovery_store(directory.path()).await;
     let principal = local_principal();
-    let mut failed_draft = draft(
+    let failed_draft = draft(
         directory.path(),
         &format!("codex-00000000-0000-5000-8000-{id_suffix}"),
     );
-    failed_draft.provider_kind = "unsupported_test_provider".to_owned();
-    failed_draft.transport = "unsupported_test_transport".to_owned();
-    failed_draft.runtime_profile_key = draft_profile_key(&failed_draft);
     let created = store
         .execute_agent_create(
             &principal,
             &format!("create-confirmed-absence-{id_suffix}"),
-            &json!({"provider_id": "unsupported_test_provider"}),
+            &json!({"provider_id": "opencode"}),
             &failed_draft,
         )
         .await
@@ -186,7 +181,7 @@ async fn confirmed_absence_fixture(id_suffix: &str) -> ConfirmedAbsenceFixture {
         .await
         .unwrap_or_else(|error| panic!("authorize confirmed absence: {error}"));
     let Err(failure) = provider_adapter.start_reserved(&authorized.session).await else {
-        panic!("unsupported provider tuple must create confirmed absence");
+        panic!("non-provider fixture executable must create confirmed absence");
     };
     assert!(failure.runtime_stopped);
     store

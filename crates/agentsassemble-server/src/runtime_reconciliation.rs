@@ -371,18 +371,15 @@ pub(crate) mod tests {
             tempfile::tempdir().unwrap_or_else(|error| panic!("create fixture: {error}"));
         let store = dynamic_recovery_store(directory.path()).await;
         let principal = local_principal();
-        let mut failed_draft = draft(
+        let failed_draft = draft(
             directory.path(),
             "codex-00000000-0000-5000-8000-000000000204",
         );
-        failed_draft.provider_kind = "unsupported_test_provider".to_owned();
-        failed_draft.transport = "unsupported_test_transport".to_owned();
-        failed_draft.runtime_profile_key = draft_profile_key(&failed_draft);
         let created = store
             .execute_agent_create(
                 &principal,
                 "create-safe-failure-agent",
-                &json!({"provider_id": "unsupported_test_provider"}),
+                &json!({"provider_id": "opencode"}),
                 &failed_draft,
             )
             .await
@@ -417,7 +414,7 @@ pub(crate) mod tests {
             .await
             .unwrap_or_else(|error| panic!("authorize failed generation: {error}"));
         let Err(failure) = provider_adapter.start_reserved(&authorized.session).await else {
-            panic!("unsupported provider tuple must fail safely");
+            panic!("non-provider fixture executable must fail safely");
         };
         assert!(failure.runtime_stopped);
 
@@ -605,7 +602,7 @@ pub(crate) mod tests {
             .canonicalize()
             .unwrap_or_else(|error| panic!("canonical workspace: {error}"));
         let provider_kind = "opencode_server";
-        let runtime_kind = "live_cli";
+        let runtime_kind = "opencode";
         let executable = executable.to_string_lossy().into_owned();
         let executable_identity = stable_content_identity(&executable_handle, &mut file)
             .unwrap_or_else(|error| panic!("hash executable: {error}"));
@@ -660,25 +657,6 @@ pub(crate) mod tests {
             runtime_profile_key,
             transport: transport.to_owned(),
         }
-    }
-
-    pub(super) fn draft_profile_key(draft: &AgentSessionDraft) -> String {
-        runtime_profile_key([
-            draft.provider_kind.as_str(),
-            draft.runtime_kind.as_str(),
-            draft.executable.as_str(),
-            draft.executable_identity.as_str(),
-            draft.workspace.as_str(),
-            draft.workspace_identity.as_str(),
-            draft.model.as_str(),
-            draft.reasoning_effort.as_str(),
-            draft.service_tier.as_str(),
-            draft.variant.as_str(),
-            draft.execution_harness.as_str(),
-            draft.permission_mode.as_str(),
-            draft.persona_card_id.as_str(),
-            draft.transport.as_str(),
-        ])
     }
 }
 
