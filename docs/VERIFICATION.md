@@ -4300,6 +4300,29 @@ validation; the final focused run passed 31 tests, the complete two-worker front
 99 files and 622 tests, and the production build, original CSS check, architecture gate, and
 800-line source-growth gate passed.
 
+## Bounded unresolved command replay: 2026-08-31
+
+The copied browser retained one exact command ID and serialized payload after authenticated ACK
+silence, a post-send connection loss, or an `unresolved` NACK, but only its delay was capped. A permanent persistence or external-effect
+uncertainty therefore kept acquiring tickets, authenticating sockets, reading snapshots, and
+replaying forever; at the 30-second delay cap that was up to 2,880 connection cycles per day for one
+pending command. Fresh IDs or an inferred result would violate at-most-once and authority contracts,
+so the exact replay remains unchanged and gains only a terminal local budget.
+
+One small browser-owned policy now permits eight total sends of the same bytes. The seven replay
+delays are 500 ms, 1 s, 2 s, 4 s, 8 s, 16 s, and 30 s, totaling 61.5 seconds before the eighth
+server reply, excluding connection and server latency. An eighth `unresolved` reply removes the
+pending command, rejects its caller as `outcome_unknown`, and keeps the valid authenticated socket
+open. An eighth ACK deadline does the same before replacing the unresponsive connection once without
+replaying the command. Neither path reports a server rejection, erases durable authority, retries
+under a new ID, or adds a fallback. The policy has no persistent state, worker, or independent timer;
+the pending command continues to own its one existing retry timer and close cleanup. Focused
+fake-clock tests prove exact byte replay after ACK silence, growing per-command delay across
+successful handshakes, committed deduplication, both eight-attempt exhaustion paths, local failure
+exposure, no ninth command replay, and the healthy retained or restored room connection. Both focused
+files passed 28 tests, and the production TypeScript/Vite build plus the original-CSS verification
+passed. The complete frontend run passed 100 files and 625 tests.
+
 ## Failure-owned room publication retry: 2026-08-30
 
 Every active room previously queried the durable publication cursor every 250 milliseconds even

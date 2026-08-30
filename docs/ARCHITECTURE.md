@@ -201,12 +201,14 @@ into a fresh-ID retry. Explicit shutdown reports that unresolved state as
 `outcome_unknown`. Every command response carries a server-owned resolution:
 an ACK is `committed`, a NACK is `rejected` only when the command owner can prove
 a definitive rejection, and queue, transport, principal-resolution, persistence,
-or public-projection ambiguity is `unresolved`. The client settles only the first
-two. An `unresolved`, missing, malformed, or mismatched resolution closes the
-socket while preserving the exact private request ID and serialized bytes for a
-fresh authenticated replay. Repeated unresolved replies increase a bounded,
-per-request retry delay; successful socket authentication cannot reset that
-command-owned backoff.
+or public-projection ambiguity is `unresolved`. The client accepts only the first
+two as server-terminal. While its finite budget remains, an `unresolved` resolution closes the
+socket while preserving the exact private request ID and serialized bytes for fresh authenticated
+replay. Successful socket authentication cannot reset the command-owned reply count or backoff.
+The eighth unresolved reply ends replay, rejects only that local operation as `outcome_unknown`,
+and leaves the otherwise authenticated socket open; it never claims rejection or commitment and
+never creates a replacement request ID. Missing, malformed, or mismatched resolution still closes
+the connection as a protocol failure.
 
 Resolution is owned at each action's effect boundary, not inferred globally from
 an error enum. A deterministic failure inside a transaction that cannot have

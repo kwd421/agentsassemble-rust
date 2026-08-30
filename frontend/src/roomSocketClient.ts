@@ -36,6 +36,7 @@ import { PRODUCT_SURFACE_REVISION } from "./types/generated/PRODUCT_SURFACE_REVI
 import { requireAcceptedRoomRuntimeTicket } from "./lib/roomRuntimeTicket";
 import { messageAttachmentId } from "./lib/messageAttachmentId";
 import { MAX_MESSAGE_ATTACHMENTS_PER_EVENT } from "./types/generated/MESSAGE_ATTACHMENTS_WIRE";
+import { scheduleUncertainCommandRetry } from "./roomSocketRetryPolicy";
 
 export type { RoomSocketAuth } from "./api";
 export type { PluginEnvelope } from "./pluginSocketProtocol";
@@ -55,8 +56,6 @@ export type {
 } from "./roomSocketTypes";
 
 const ROOM_SOCKET_COMMAND_TIMEOUT_MS = 20_000;
-const ROOM_SOCKET_UNRESOLVED_RETRY_BASE_MS = 500;
-const ROOM_SOCKET_UNRESOLVED_RETRY_MAX_MS = 30_000;
 const ROOM_SOCKET_KEEPALIVE_MS = 3 * 60_000;
 const MAX_ROOM_SOCKET_WIRE_CHARS = 384 * 1024;
 
@@ -69,6 +68,7 @@ interface PendingRoomCommand {
   timerId: number | null;
   retryTimerId: number | null;
   retryAttempt: number;
+  retryCountedGeneration: number;
   retryNotBefore: number;
   everSent: boolean;
 }
@@ -194,6 +194,15 @@ export function openRoomSocket(
     pending.clear();
   }
 
+  function rejectUnknown(requestId: string, command: PendingRoomCommand) {
+    pending.delete(requestId);
+    if (command.retryTimerId !== null) window.clearTimeout(command.retryTimerId);
+    command.reject(new RoomSocketSayError(
+      "The room command outcome remained unresolved after bounded exact replay.",
+      "outcome_unknown"
+    ));
+  }
+
   function armCommandDeadline(
     requestId: string,
     command: PendingRoomCommand
@@ -203,6 +212,9 @@ export function openRoomSocket(
       if (pending.get(requestId) !== command) return;
       command.timerId = null;
       if (command.everSent) {
+        if (!scheduleUncertainCommandRetry(command, connectionGeneration)) {
+          rejectUnknown(requestId, command);
+        }
         const currentSocket = socket;
         if (currentSocket && currentSocket.readyState !== WebSocket.CLOSED) {
           currentSocket.close();
@@ -580,13 +592,10 @@ export function openRoomSocket(
             if (msg.resolution === "unresolved") {
               if (command.timerId !== null) window.clearTimeout(command.timerId);
               command.timerId = null;
-              command.retryAttempt += 1;
-              const retryDelay = Math.min(
-                ROOM_SOCKET_UNRESOLVED_RETRY_MAX_MS,
-                ROOM_SOCKET_UNRESOLVED_RETRY_BASE_MS *
-                  2 ** Math.min(command.retryAttempt - 1, 6)
-              );
-              command.retryNotBefore = Date.now() + retryDelay;
+              if (!scheduleUncertainCommandRetry(command, generation)) {
+                rejectUnknown(msg.request_id, command);
+                return;
+              }
               connectionFailed = true;
               currentSocket.close();
               return;
@@ -684,6 +693,15 @@ export function openRoomSocket(
         socket = null;
         sendPendingForConnection = null;
         transportReady = false;
+        sentRequestIds.forEach((requestId) => {
+          const command = pending.get(requestId);
+          if (!command || command.retryCountedGeneration === generation) return;
+          if (command.timerId !== null) window.clearTimeout(command.timerId);
+          command.timerId = null;
+          if (!scheduleUncertainCommandRetry(command, generation)) {
+            rejectUnknown(requestId, command);
+          }
+        });
         handlers.onClose?.();
         if (closed) return;
         void verificationQueue.finally(() => {
@@ -728,6 +746,7 @@ export function openRoomSocket(
         timerId: null,
         retryTimerId: null,
         retryAttempt: 0,
+        retryCountedGeneration: 0,
         retryNotBefore: 0,
         everSent: false,
       };
