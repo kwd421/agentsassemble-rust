@@ -3,6 +3,7 @@ import {
   fetchJsonServerOperator,
   postJsonServerOperator,
 } from "./http";
+import { isDesktopWebview } from "../lib/desktopBridge";
 
 export interface ProviderCredentialStatus {
   configured: boolean;
@@ -14,6 +15,9 @@ const DEEPSEEK_CREDENTIAL_PATH = "/api/provider-credentials/deepseek";
 function credentialPath(providerId: string): string {
   if (providerId !== "deepseek") {
     throw new Error(`Unsupported API credential provider: ${providerId}`);
+  }
+  if (!isDesktopWebview()) {
+    throw new Error("Provider credential controls require the desktop Rust runtime.");
   }
   return DEEPSEEK_CREDENTIAL_PATH;
 }

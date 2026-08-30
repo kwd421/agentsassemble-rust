@@ -349,6 +349,9 @@ only the exact `configured`/`source` public projection; an extra response field,
 fails before entering UI state. The former three duplicated provider-path maps and credential use of
 the copied host-token transport were removed. Providers without a Rust credential owner fail before
 ticket issuance or network dispatch rather than reaching a legacy endpoint or appearing successful.
+Because no browser-side server-operator authority exists, non-Tauri credential operations likewise
+fail before network dispatch instead of sending an unauthenticated request or restoring a host-token
+fallback.
 
 One shared local-operator fetch mechanism now carries GET, empty POST, JSON POST, and DELETE while
 preserving the existing desktop GET-init and post-ticket currentness hook contracts. This removes a

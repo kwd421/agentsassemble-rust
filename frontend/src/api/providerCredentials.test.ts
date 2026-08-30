@@ -105,6 +105,24 @@ describe("DeepSeek credential HTTP authority", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("rejects browser credential operations before network dispatch", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchProviderCredentialStatus("deepseek")).rejects.toThrow(
+      "Provider credential controls require the desktop Rust runtime."
+    );
+    await expect(
+      setProviderCredential("deepseek", "sentinel-provider-value")
+    ).rejects.toThrow(
+      "Provider credential controls require the desktop Rust runtime."
+    );
+    await expect(deleteProviderCredential("deepseek")).rejects.toThrow(
+      "Provider credential controls require the desktop Rust runtime."
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("rejects response fields outside the public metadata contract", async () => {
     const invoke = vi
       .fn()
