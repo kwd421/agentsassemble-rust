@@ -13,6 +13,7 @@ import {
   requestDesktopHostProductSurface,
   requestDesktopMessagePinsReadTicket,
   requestDesktopMessagePinsWriteTicket,
+  requestDesktopMessageSearchReadTicket,
   requestDesktopMessageAttachmentReadTicket,
   requestDesktopMessageAttachmentUploadTicket,
   saveDesktopMessageAttachment,
@@ -30,6 +31,7 @@ const hostCommands = [
   "runtime_message_attachment_upload_ticket",
   "runtime_message_pins_read_ticket",
   "runtime_message_pins_write_ticket",
+  "runtime_message_search_read_ticket",
   "runtime_operator_ticket",
   "save_message_attachment",
 ];
@@ -246,7 +248,7 @@ describe("desktop exact-purpose HTTP bridge", () => {
     });
   });
 
-  it("keeps message-pin read and write on separate room-bound native grants", async () => {
+  it("keeps message reads and writes on exact room-bound native grants", async () => {
     const invoke = vi
       .fn()
       .mockResolvedValueOnce({
@@ -264,11 +266,15 @@ describe("desktop exact-purpose HTTP bridge", () => {
     await requestDesktopHostProductSurface();
     await requestDesktopMessagePinsReadTicket("general");
     await requestDesktopMessagePinsWriteTicket("general");
+    await requestDesktopMessageSearchReadTicket("general");
 
     expect(invoke).toHaveBeenNthCalledWith(2, "runtime_message_pins_read_ticket", {
       roomId: "general",
     });
     expect(invoke).toHaveBeenNthCalledWith(3, "runtime_message_pins_write_ticket", {
+      roomId: "general",
+    });
+    expect(invoke).toHaveBeenNthCalledWith(4, "runtime_message_search_read_ticket", {
       roomId: "general",
     });
   });

@@ -30,6 +30,7 @@ use tokio::{
 mod appearance_control;
 mod message_attachments_control;
 mod message_pins_control;
+mod message_search_control;
 
 use tokio_util::sync::CancellationToken;
 use tracing_subscriber::EnvFilter;
@@ -237,21 +238,16 @@ async fn run_control_pipe<R, W>(
 }
 
 async fn control_response(state: &AppState, line: &[u8]) -> LocalControlResponse {
-    let Ok(request) = serde_json::from_slice::<LocalControlRequest>(line) else {
-        return LocalControlResponse::Error {
-            request_id: String::new(),
-            code: "control_request_invalid".to_owned(),
-            message: "Control request JSON is invalid.".to_owned(),
-        };
+    let (request_id, request) = match parse_control_request(line) {
+        Ok(request) => request,
+        Err((request_id, code, message)) => {
+            return LocalControlResponse::Error {
+                request_id,
+                code: code.to_owned(),
+                message: message.to_owned(),
+            };
+        }
     };
-    let request_id = control_request_id(&request).to_owned();
-    if !valid_control_request_id(&request_id) {
-        return LocalControlResponse::Error {
-            request_id,
-            code: "request_id_invalid".to_owned(),
-            message: "Control request id is invalid.".to_owned(),
-        };
-    }
     match request {
         LocalControlRequest::InspectBootstrap { .. } => {
             match state.store.local_bootstrap_status().await {
@@ -310,6 +306,9 @@ async fn control_response(state: &AppState, line: &[u8]) -> LocalControlResponse
         | LocalControlRequest::IssueMessagePinsWriteTicket { .. }) => {
             message_pins_control::response(state, request_id, request).await
         }
+        request @ LocalControlRequest::IssueMessageSearchReadTicket { .. } => {
+            message_search_control::response(state, request_id, request).await
+        }
         request @ (LocalControlRequest::IssueMessageAttachmentUploadTicket { .. }
         | LocalControlRequest::IssueMessageAttachmentReadTicket { .. }) => {
             message_attachments_control::response(state, request_id, request).await
@@ -334,6 +333,28 @@ async fn control_response(state: &AppState, line: &[u8]) -> LocalControlResponse
         LocalControlRequest::IssueCentralRegistrationTicket { .. } => {
             central_registration_control_response(state, request_id).await
         }
+    }
+}
+
+fn parse_control_request(
+    line: &[u8],
+) -> Result<(String, LocalControlRequest), (String, &'static str, &'static str)> {
+    let request = serde_json::from_slice::<LocalControlRequest>(line).map_err(|_| {
+        (
+            String::new(),
+            "control_request_invalid",
+            "Control request JSON is invalid.",
+        )
+    })?;
+    let request_id = control_request_id(&request).to_owned();
+    if valid_control_request_id(&request_id) {
+        Ok((request_id, request))
+    } else {
+        Err((
+            request_id,
+            "request_id_invalid",
+            "Control request id is invalid.",
+        ))
     }
 }
 
@@ -498,6 +519,7 @@ fn control_request_id(request: &LocalControlRequest) -> &str {
         | LocalControlRequest::IssuePreferencesWriteTicket { request_id, .. }
         | LocalControlRequest::IssueMessagePinsReadTicket { request_id, .. }
         | LocalControlRequest::IssueMessagePinsWriteTicket { request_id, .. }
+        | LocalControlRequest::IssueMessageSearchReadTicket { request_id, .. }
         | LocalControlRequest::IssueMessageAttachmentUploadTicket { request_id, .. }
         | LocalControlRequest::IssueMessageAttachmentReadTicket { request_id, .. }
         | LocalControlRequest::IssueHumanInviteCreateTicket { request_id, .. }

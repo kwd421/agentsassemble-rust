@@ -47,6 +47,20 @@ fn http_ticket_response_variant_must_match_the_exact_request_purpose() {
         Err(TicketFailure::Broken(_))
     ));
 
+    let response = LocalControlResponse::MessagePinsReadOk {
+        request_id: "request-search".to_owned(),
+        ticket: "e".repeat(64),
+        ttl_seconds: 30,
+    };
+    assert!(matches!(
+        decode_http_ticket_response(
+            HttpTicketKind::MessageSearchRead("general"),
+            "request-search",
+            response,
+        ),
+        Err(TicketFailure::Broken(_))
+    ));
+
     let response = LocalControlResponse::MessageAttachmentReadOk {
         request_id: "request-attachment".to_owned(),
         ticket: "e".repeat(64),

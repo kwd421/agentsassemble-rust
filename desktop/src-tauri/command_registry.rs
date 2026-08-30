@@ -7,6 +7,7 @@ desktop_commands! {
     runtime_preferences_write_ticket => "allow-runtime-preferences-write-ticket",
     runtime_message_pins_read_ticket => "allow-runtime-message-pins-read-ticket",
     runtime_message_pins_write_ticket => "allow-runtime-message-pins-write-ticket",
+    runtime_message_search_read_ticket => "allow-runtime-message-search-read-ticket",
     runtime_message_attachment_upload_ticket => "allow-runtime-message-attachment-upload-ticket",
     runtime_message_attachment_read_ticket => "allow-runtime-message-attachment-read-ticket",
     save_message_attachment => "allow-save-message-attachment",

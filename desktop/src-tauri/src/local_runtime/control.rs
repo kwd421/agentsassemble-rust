@@ -155,6 +155,13 @@ pub(super) fn request_message_pins_write_ticket(
     request_http_ticket(runtime, HttpTicketKind::MessagePinsWrite(room_id))
 }
 
+pub(super) fn request_message_search_read_ticket(
+    runtime: &mut RuntimeProcess,
+    room_id: &str,
+) -> Result<HttpTicketGrant, TicketFailure> {
+    request_http_ticket(runtime, HttpTicketKind::MessageSearchRead(room_id))
+}
+
 pub(super) fn request_message_attachment_upload_ticket(
     runtime: &mut RuntimeProcess,
     room_id: &str,
@@ -229,6 +236,7 @@ enum HttpTicketKind<'a> {
     PreferencesWrite(&'a str),
     MessagePinsRead(&'a str),
     MessagePinsWrite(&'a str),
+    MessageSearchRead(&'a str),
     MessageAttachmentUpload(&'a str),
     MessageAttachmentRead(&'a str, &'a str),
     HumanInviteCreate(&'a ManagerRoomAuthority),
@@ -268,6 +276,12 @@ fn request_http_ticket(
         }
         HttpTicketKind::MessagePinsWrite(room_id) => {
             LocalControlRequest::IssueMessagePinsWriteTicket {
+                request_id: request_id.clone(),
+                meeting_id: room_id.to_owned(),
+            }
+        }
+        HttpTicketKind::MessageSearchRead(room_id) => {
+            LocalControlRequest::IssueMessageSearchReadTicket {
                 request_id: request_id.clone(),
                 meeting_id: room_id.to_owned(),
             }
@@ -378,6 +392,9 @@ fn decode_http_ticket_response(
     request_id: &str,
     response: LocalControlResponse,
 ) -> Result<(String, u64), TicketFailure> {
+    if matches!(kind, HttpTicketKind::MessageSearchRead(_)) {
+        return decode_message_search_ticket_response(request_id, response);
+    }
     if matches!(
         kind,
         HttpTicketKind::MessagePinsRead(_) | HttpTicketKind::MessagePinsWrite(_)
@@ -509,6 +526,27 @@ fn decode_message_attachment_ticket_response(
         ) if response_id == request_id => Err(control_ticket_failure(&code, message)),
         _ => Err(TicketFailure::Broken(
             "local runtime message-attachment response did not match the request".to_owned(),
+        )),
+    }
+}
+
+fn decode_message_search_ticket_response(
+    request_id: &str,
+    response: LocalControlResponse,
+) -> Result<(String, u64), TicketFailure> {
+    match response {
+        LocalControlResponse::MessageSearchReadOk {
+            request_id: response_id,
+            ticket,
+            ttl_seconds,
+        } if response_id == request_id => Ok((ticket, ttl_seconds)),
+        LocalControlResponse::Error {
+            request_id: response_id,
+            code,
+            message,
+        } if response_id == request_id => Err(control_ticket_failure(&code, message)),
+        _ => Err(TicketFailure::Broken(
+            "local runtime message-search response did not match the request".to_owned(),
         )),
     }
 }

@@ -24,6 +24,7 @@ mod control;
 mod human_invite;
 mod message_attachments;
 mod message_pins;
+mod message_search;
 
 use control::{
     TicketFailure, request_bootstrap_initialize, request_bootstrap_status,

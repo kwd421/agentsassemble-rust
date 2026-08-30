@@ -13,6 +13,7 @@
     "allow-runtime-preferences-write-ticket",
     "allow-runtime-message-pins-read-ticket",
     "allow-runtime-message-pins-write-ticket",
+    "allow-runtime-message-search-read-ticket",
     "allow-runtime-message-attachment-upload-ticket",
     "allow-runtime-message-attachment-read-ticket",
     "allow-save-message-attachment",

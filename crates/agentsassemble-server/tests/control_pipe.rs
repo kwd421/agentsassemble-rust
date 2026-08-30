@@ -383,6 +383,8 @@ async fn owned_control_pipe_issues_exact_room_http_tickets_after_authority_exist
             && ttl_seconds > 0
     ));
 
+    assert_message_search_ticket(&mut server).await;
+
     let invite_id = control_pipe_invite_tickets::assert_invite_tickets(&mut server, &created).await;
     control_pipe_appearance_tickets::assert_appearance_tickets(&mut server, &created).await;
     control_pipe_message_attachments::assert_message_attachment_tickets(&mut server).await;
@@ -404,6 +406,25 @@ async fn owned_control_pipe_issues_exact_room_http_tickets_after_authority_exist
     ));
     server.close_parent_pipe().await;
     control_pipe_invite_tickets::assert_persisted_revocation(&database, &invite_id).await;
+}
+
+async fn assert_message_search_ticket(server: &mut ControlledServer) {
+    let response = server
+        .send_control(&LocalControlRequest::IssueMessageSearchReadTicket {
+            request_id: "message-search-read-ticket-1".to_owned(),
+            meeting_id: "general".to_owned(),
+        })
+        .await;
+    assert!(matches!(
+        response,
+        LocalControlResponse::MessageSearchReadOk {
+            request_id,
+            ticket,
+            ttl_seconds,
+        } if request_id == "message-search-read-ticket-1"
+            && ticket.len() == 64
+            && ttl_seconds > 0
+    ));
 }
 
 #[tokio::test]
