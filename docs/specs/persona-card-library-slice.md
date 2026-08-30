@@ -538,8 +538,13 @@ this candidate.
   redact that key before browser delivery. Commit `5c2c998` adds that key to the existing single
   public-redaction owner and regresses the projected event while retaining the persistence and
   reconciliation identity. No frontend consumer used the field, no second projection owner was
-  added, and no durable state or provider lifecycle was changed. Final manual review of this
-  correction is pending. No automated security scan was used.
+  added, and no durable state or provider lifecycle was changed.
+- The critical web review found one Low in the adjacent test evidence: one pre-anchor fixture still
+  owned a local five-second polling helper even though its child guardian stages the same current
+  test executable before publishing readiness. Commit `fc6cf9b` removes that helper and reuses the
+  existing test-only readiness owner; the focused path and all 146 provider tests passed. Daybreaker
+  Blue High approved the resulting cumulative range with C0/H0/M0/L0. Final critical-web re-review
+  of the documentation attribution remains pending. No automated security scan was used.
 
 ## Non-goals
 

@@ -4219,10 +4219,13 @@ default five-second worker limit; the same 96 files and 606 tests passed with tw
 Provider process fixtures also crossed their old five-second readiness guard. An isolated diagnostic
 root showed each test privately stages and synchronizes the verified current test executable
 (67 MiB) before guardian and provider readiness; the affected marker arrived in 5.04–5.10 seconds,
-and the guardian-death fixture completed in 6.93 seconds. Commit `4d4b8ed` therefore gives these
-test-only readiness events one 20-second owner covering the bounded filesystem-preparation and
-protocol windows. It does not change a product startup, filesystem, protocol, cleanup, or security
-timeout, and a real hang still fails closed at the test boundary.
+and the guardian-death fixture completed in 6.93 seconds. Commit `4d4b8ed` first gives the shared
+fixture marker, guardian readiness, and working-directory readiness one test-only 20-second owner.
+Manual review then found one remaining pre-anchor marker whose child guardian performs the same
+test-executable staging before publishing readiness. Commit `fc6cf9b` removes that local five-second
+poll and reuses the shared owner. Together they cover the bounded filesystem-preparation and
+protocol windows without changing a product startup, filesystem, protocol, cleanup, or security
+timeout; a real hang still fails closed at the test boundary.
 
 After that correction, the full provider suite passed with its normal concurrency (146 tests), the
 server unit suite passed (86 tests), the process-heavy Agent Session boundary passed serially (9
