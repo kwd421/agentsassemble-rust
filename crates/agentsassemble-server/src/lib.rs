@@ -100,6 +100,7 @@ mod room_command_dispatch;
 mod room_command_execution;
 mod room_command_result;
 mod room_directory_web;
+mod room_history_socket;
 mod room_preferences_web;
 mod room_random_runtime;
 mod room_recovery_runtime;

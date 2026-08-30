@@ -3,7 +3,7 @@ import { PRODUCT_SURFACE_REVISION } from "../types/generated/PRODUCT_SURFACE_REV
 
 export const TEST_SERVER_PRODUCT_SURFACE: ServerProductSurface = {
   revision: PRODUCT_SURFACE_REVISION,
-  digest: "cbbd2013b624826ada20de5a9247147821ff7c53e8923bea5d94dfaa3923aec2",
+  digest: "8bfd95d6d36e605ebf91989f444fb81b2f7b4f1787e551c29f853b880cc46737",
   http_routes: [],
   websocket_streams: ["room_events"],
   websocket_actions: [
@@ -16,6 +16,7 @@ export const TEST_SERVER_PRODUCT_SURFACE: ServerProductSurface = {
     "participant.leave",
     "participant.mute",
     "participant.role.update",
+    "room.history",
     "room.random.choose",
     "room.random.roll",
     "room.settings.update",

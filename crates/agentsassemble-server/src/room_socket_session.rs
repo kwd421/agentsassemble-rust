@@ -3,7 +3,7 @@ use std::time::Duration;
 use agentsassemble_domain::public_event_for_principal;
 use agentsassemble_persistence::HumanSessionAuthorization;
 use agentsassemble_protocol::{
-    ClientFrame, CommandAck, CommandResolution, ProtocolError, ServerFrame,
+    ClientFrame, CommandAck, CommandResolution, ProtocolError, RoomAction, ServerFrame,
 };
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::StreamExt;
@@ -13,6 +13,7 @@ use crate::{
     AppState,
     authenticated_channel::AuthenticatedChannel,
     connection_admission::ConnectionLease,
+    room_history_socket::read_history_frame,
     room_socket::{
         EstablishedSubscription, establish, persistence_error, persistence_error_is_internal,
         refresh_human_session,
@@ -94,8 +95,28 @@ pub(crate) async fn run(
                 }
                 match client_frame {
                     ClientFrame::Command { request_id, action, payload } => {
+                        if action == RoomAction::RoomHistory {
+                            match read_history_frame(
+                                &state.store,
+                                &principal,
+                                &request_id,
+                                &payload,
+                            ).await {
+                                Ok(frame) => {
+                                    if send_authorized_frame(&state, &mut principal, &mut human_session, &mut channel, &mut sender, &frame).await.is_none() { return; }
+                                }
+                                Err(failure) => {
+                                    if persistence_error_is_internal(&failure.error) {
+                                        tracing::error!(error = ?failure.error, room_id = %principal.room_id, action = %action.as_str(), "room history read failed");
+                                    }
+                                    let (code, message) = persistence_error(&failure.error);
+                                    if send_authorized_nack(&state, &mut principal, &mut human_session, &mut channel, &mut sender, (&request_id, action.as_str(), failure.resolution, ProtocolError::new(code, message))).await.is_none() { return; }
+                                }
+                            }
+                            continue;
+                        }
                         let closes_human_session =
-                            action == agentsassemble_protocol::RoomAction::ParticipantLeave
+                            action == RoomAction::ParticipantLeave
                                 && human_session.is_some();
                         let action_name = action.as_str().to_owned();
                         let outcome = if let Some(authorization) = &human_session {
