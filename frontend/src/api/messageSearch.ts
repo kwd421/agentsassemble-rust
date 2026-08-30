@@ -124,6 +124,13 @@ function timestamp(value: unknown): string {
   return result;
 }
 
+function timestampNanosKey(value: string): string {
+  const body = value.slice(0, -1);
+  const separator = body.indexOf(".");
+  if (separator < 0) return `${body}.000000000`;
+  return `${body.slice(0, separator)}.${body.slice(separator + 1).padEnd(9, "0")}`;
+}
+
 function positiveSequence(value: unknown): number {
   if (!Number.isSafeInteger(value) || Number(value) < 1) invalidResponse();
   return Number(value);
@@ -175,7 +182,15 @@ function parseSearchPage(value: unknown): RoomSearchPage {
     (cursor && (!CURSOR.test(cursor) || results.length !== MESSAGE_SEARCH_PAGE_SIZE)) ||
     new TextEncoder().encode(cursor).byteLength > MAX_MESSAGE_SEARCH_CURSOR_BYTES ||
     new Set(results.map((result) => result.event_id)).size !== results.length ||
-    new Set(results.map((result) => result.seq)).size !== results.length
+    new Set(results.map((result) => result.seq)).size !== results.length ||
+    results.some((result, index) => {
+      if (index === 0) return false;
+      const previous = results[index - 1];
+      const previousTime = timestampNanosKey(previous.created_at);
+      const currentTime = timestampNanosKey(result.created_at);
+      return previousTime < currentTime ||
+        (previousTime === currentTime && previous.seq <= result.seq);
+    })
   ) {
     invalidResponse();
   }
@@ -268,7 +283,10 @@ function parseContextEvent(value: unknown, roomId: string): RoomEvent {
   if (source === undefined && messageKind !== "message") invalidResponse();
   if (source === "room_portal") {
     if (participantType !== "agent" || messageKind !== "message" || attachments.length) invalidResponse();
-    ROOM_PORTAL_KEYS.slice(0, -1).forEach((key) => boundedString(event[key], 256));
+    ["session_id", "turn_id", "source_event_id"].forEach((key) =>
+      boundedString(event[key], 256)
+    );
+    boundedString(event.target_agent_id, 256, true);
   }
   let details: Readonly<Record<string, unknown>> | undefined;
   if (source === "room_tool_result") {
@@ -281,7 +299,7 @@ function parseContextEvent(value: unknown, roomId: string): RoomEvent {
     ) {
       invalidResponse();
     }
-    boundedString(event.source_turn_id, 256);
+    boundedString(event.source_turn_id, 256, true);
     boundedString(event.source_participant_id, 256);
     details = parseRoomToolDetails(event);
   }
@@ -318,10 +336,13 @@ function parseContext(value: unknown, roomId: string, expectedEventId: string): 
     invalidResponse();
   }
   const events = context.events.map((event) => parseContextEvent(event, roomId));
+  const targetIndex = events.findIndex((event) => event.id === expectedEventId);
   if (
     events.filter((event) => event.id === expectedEventId).length !== 1 ||
     new Set(events.map((event) => event.id)).size !== events.length ||
-    events.some((event, index) => index > 0 && event.seq <= events[index - 1].seq)
+    events.some((event, index) => index > 0 && event.seq <= events[index - 1].seq) ||
+    targetIndex > MESSAGE_CONTEXT_RADIUS ||
+    events.length - targetIndex - 1 > MESSAGE_CONTEXT_RADIUS
   ) {
     invalidResponse();
   }

@@ -221,12 +221,51 @@ describe("lobby message-search HTTP authority", () => {
     expect(JSON.stringify(fetchMock.mock.calls[3]?.[1])).not.toContain("aas1.session");
   });
 
+  it("accepts empty optional provenance emitted by current message producers", async () => {
+    const context = await localContextResponse({
+      channel_id: "lobby",
+      event_id: "event-1",
+      events: [
+        contextEvent(),
+        { ...agentContextEvent(), target_agent_id: "" },
+        { ...roomToolContextEvent(), source_turn_id: "" },
+      ],
+    });
+
+    expect(context.events.map((event) => event.id)).toEqual([
+      "event-1",
+      "event-agent",
+      "event-tool",
+    ]);
+  });
+
+  it("accepts canonical newest-first nanosecond ordering", async () => {
+    const results = [
+      { ...result("event-3", 9), created_at: "2026-08-29T01:00:01.000000001Z" },
+      { ...result("event-2", 8), created_at: "2026-08-29T01:00:01Z" },
+      { ...result("event-1", 7), created_at: "2026-08-29T01:00:00.999999999Z" },
+    ];
+
+    await expect(localSearchResponse({ results, next_cursor: "" })).resolves.toEqual({
+      results,
+      next_cursor: "",
+    });
+  });
+
   it("rejects malformed complete pages rather than projecting permissive defaults", async () => {
     const malformed = [
       { results: [result()], next_cursor: "", ignored: true },
       { results: Array.from({ length: 31 }, (_, index) => result(`event-${index}`, index + 1)), next_cursor: "" },
       { results: [result()], next_cursor: "cursor" },
       { results: [result(), result()], next_cursor: "" },
+      { results: [result("event-1", 7), result("event-2", 8)], next_cursor: "" },
+      {
+        results: [
+          result("event-1", 8),
+          { ...result("event-2", 7), created_at: "2026-08-29T02:00:00Z" },
+        ],
+        next_cursor: "",
+      },
       { results: [{ ...result(), attachment_filenames: ["../unsafe"] }], next_cursor: "" },
       { results: [{ ...result(), content: "\ud800" }], next_cursor: "" },
     ];
@@ -249,6 +288,11 @@ describe("lobby message-search HTTP authority", () => {
         channel_id: "lobby",
         event_id: "event-1",
         events: Array.from({ length: 32 }, (_, index) => contextEvent(index === 0 ? "event-1" : `event-${index}`, index + 1)),
+      },
+      {
+        channel_id: "lobby",
+        event_id: "event-1",
+        events: Array.from({ length: 31 }, (_, index) => contextEvent(index === 0 ? "event-1" : `event-${index}`, index + 1)),
       },
     ];
     for (const payload of malformed) {
