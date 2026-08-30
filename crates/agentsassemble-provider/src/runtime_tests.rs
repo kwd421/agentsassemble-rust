@@ -10,6 +10,9 @@ use crate::test_support::durable_session;
 
 pub(super) static RUNTIME_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
+#[path = "runtime_process_tree_tests.rs"]
+mod process_tree_tests;
+
 #[test]
 fn provider_guardian_entry() {
     if let Some(code) = crate::guardian::run_test_helper_if_requested() {
@@ -231,40 +234,6 @@ async fn guardian_death_without_a_cleanup_receipt_never_proves_gone() {
     lease.cleanup_pre_effect();
 }
 
-#[test]
-#[allow(clippy::zombie_processes)] // The first fixture child must exit without reaping its child.
-fn escaped_descendant_entry() {
-    let Some(pid_path) = std::env::var_os("AGENTSASSEMBLE_ESCAPE_FIXTURE_PID") else {
-        return;
-    };
-    if std::env::var_os("AGENTSASSEMBLE_ESCAPE_FIXTURE_CHILD").is_some() {
-        std::fs::write(pid_path, rustix::process::getpid().as_raw_pid().to_string())
-            .unwrap_or_else(|error| panic!("publish escaped descendant pid: {error}"));
-        loop {
-            std::thread::sleep(Duration::from_secs(1));
-        }
-    }
-    rustix::process::setsid()
-        .unwrap_or_else(|error| panic!("create escaped descendant session: {error}"));
-    std::process::Command::new("/bin/sh")
-        .args([
-            "-c",
-            "exec 198>&-; exec \"$1\" --exact runtime::tests::escaped_descendant_entry --nocapture",
-            "escaped-descendant",
-            &std::env::current_exe()
-                .unwrap_or_else(|error| panic!("resolve escaped descendant binary: {error}"))
-                .to_string_lossy(),
-        ])
-        .env_clear()
-        .env("AGENTSASSEMBLE_ESCAPE_FIXTURE_PID", pid_path)
-        .env("AGENTSASSEMBLE_ESCAPE_FIXTURE_CHILD", "1")
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .unwrap_or_else(|error| panic!("spawn reparented descendant: {error}"));
-}
-
 #[tokio::test]
 async fn codex_runtime_is_initialized_reused_and_stopped_by_exact_owner() {
     let _serial = RUNTIME_TEST_LOCK.lock().await;
@@ -398,150 +367,6 @@ async fn assert_executable_lease_uncertain(
 }
 
 #[tokio::test]
-async fn stop_kills_descendants_after_the_codex_leader_exits() {
-    let _serial = RUNTIME_TEST_LOCK.lock().await;
-    let directory =
-        tempfile::tempdir().unwrap_or_else(|error| panic!("create descendant fixture: {error}"));
-    let descendant_pid = directory.path().join("descendant.pid");
-    let script = format!(
-        "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nIFS= read -r thread\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{{\"thread\":{{\"id\":\"thread-1\"}}}}}}'\n(while :; do sleep 1; done) </dev/null >/dev/null 2>&1 &\nprintf '%s' \"$!\" > {}\nsleep 1\nexit 0\n",
-        shell_quote(&descendant_pid)
-    );
-    let session = fixture_session(directory.path(), &script).await;
-    let adapter = ProviderAdapter::new();
-    let started = adapter
-        .start(&session)
-        .await
-        .unwrap_or_else(|error| panic!("start descendant fixture: {error}"));
-    let pid = wait_for_pid(&descendant_pid).await;
-    let mut cleanup = ExactProcessCleanup::new(pid);
-    tokio::time::timeout(Duration::from_secs(2), async {
-        while leader_is_alive(&adapter, &session).await {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .unwrap_or_else(|_| panic!("provider leader did not exit before timeout"));
-    assert!(process_exists(pid));
-    let stopped = adapter
-        .stop(
-            &session.public.room_id,
-            &session.public.session_id,
-            &started.runtime_handle_id,
-            &started.runtime_owner_id,
-            &started.runtime_lease_token,
-        )
-        .await;
-    #[cfg(not(target_os = "macos"))]
-    stopped.unwrap_or_else(|error| panic!("stop exited leader and descendants: {error}"));
-    #[cfg(target_os = "macos")]
-    {
-        let Err(error) = stopped else {
-            panic!("macOS must fail closed when the provider forked before its leader exited");
-        };
-        assert_eq!(error.code, "provider_stop_unconfirmed");
-    }
-    #[cfg(not(target_os = "macos"))]
-    adapter
-        .release_confirmed_stop(
-            &session.public.room_id,
-            &session.public.session_id,
-            &started.runtime_handle_id,
-            &started.runtime_owner_id,
-            &started.runtime_lease_token,
-        )
-        .await;
-    #[cfg(target_os = "macos")]
-    {
-        cleanup.kill_now();
-    }
-    wait_until(Duration::from_secs(2), || !process_exists(pid)).await;
-    cleanup.disarm();
-    #[cfg(target_os = "macos")]
-    crate::runtime_lease::cleanup_stale_runtime_lease(
-        &session.public.room_id,
-        &session.public.session_id,
-    );
-}
-
-#[tokio::test]
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
-async fn stop_captures_a_reparented_descendant_from_a_new_session() {
-    let _serial = RUNTIME_TEST_LOCK.lock().await;
-    let directory =
-        tempfile::tempdir().unwrap_or_else(|error| panic!("create escape fixture: {error}"));
-    let descendant_pid = directory.path().join("escaped-descendant.pid");
-    let test_binary = std::env::current_exe()
-        .unwrap_or_else(|error| panic!("resolve provider test binary: {error}"));
-    let script = format!(
-        "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nIFS= read -r thread\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{{\"thread\":{{\"id\":\"thread-1\"}}}}}}'\nAGENTSASSEMBLE_ESCAPE_FIXTURE_PID={} {} --exact runtime::tests::escaped_descendant_entry --nocapture </dev/null >/dev/null 2>&1 &\nIFS= read -r forever\n",
-        shell_quote(&descendant_pid),
-        shell_quote(&test_binary),
-    );
-    let session = fixture_session(directory.path(), &script).await;
-    let adapter = ProviderAdapter::new();
-    let started = adapter
-        .start(&session)
-        .await
-        .unwrap_or_else(|error| panic!("start escaped descendant fixture: {error}"));
-    let pid = wait_for_pid(&descendant_pid).await;
-    let mut cleanup = ExactProcessCleanup::new(pid);
-    assert!(process_exists(pid));
-    let stopped = adapter
-        .stop(
-            &session.public.room_id,
-            &session.public.session_id,
-            &started.runtime_handle_id,
-            &started.runtime_owner_id,
-            &started.runtime_lease_token,
-        )
-        .await;
-    #[cfg(target_os = "linux")]
-    stopped.unwrap_or_else(|error| panic!("stop escaped descendant fixture: {error}"));
-    #[cfg(any(target_os = "android", target_os = "macos"))]
-    {
-        let Err(error) = stopped else {
-            panic!("a platform without stable process handles must fail closed");
-        };
-        assert_eq!(error.code, "provider_stop_unconfirmed");
-        assert!(process_exists(pid));
-        let mut durable_session = session.clone();
-        durable_session.runtime_handle_id = started.runtime_handle_id.clone();
-        durable_session.runtime_owner_id = started.runtime_owner_id.clone();
-        durable_session.runtime_lease_token = started.runtime_lease_token.clone();
-        let fresh = ProviderAdapter::new();
-        assert!(matches!(
-            fresh.observe(&durable_session).await,
-            ProviderRuntimeObservation::Ambiguous { .. }
-        ));
-        cleanup.kill_now();
-        wait_until(Duration::from_secs(2), || !process_exists(pid)).await;
-        assert!(matches!(
-            fresh.observe(&durable_session).await,
-            ProviderRuntimeObservation::Ambiguous { .. }
-        ));
-        crate::runtime_lease::cleanup_stale_runtime_lease(
-            &session.public.room_id,
-            &session.public.session_id,
-        );
-    }
-    #[cfg(target_os = "linux")]
-    {
-        adapter
-            .release_confirmed_stop(
-                &session.public.room_id,
-                &session.public.session_id,
-                &started.runtime_handle_id,
-                &started.runtime_owner_id,
-                &started.runtime_lease_token,
-            )
-            .await;
-        wait_until(Duration::from_secs(2), || !process_exists(pid)).await;
-        cleanup.disarm();
-    }
-}
-
-#[tokio::test]
 async fn fresh_supervisor_uses_the_guardian_lease_before_reporting_gone() {
     let _serial = RUNTIME_TEST_LOCK.lock().await;
     let directory =
@@ -577,45 +402,6 @@ async fn fresh_supervisor_uses_the_guardian_lease_before_reporting_gone() {
     );
 }
 
-#[tokio::test]
-async fn cancelled_initialization_remains_owned_for_shutdown() {
-    let _serial = RUNTIME_TEST_LOCK.lock().await;
-    let directory =
-        tempfile::tempdir().unwrap_or_else(|error| panic!("create cancellation fixture: {error}"));
-    let descendant_pid = directory.path().join("cancelled-descendant.pid");
-    let script = format!(
-        "#!/bin/sh\nIFS= read -r initialize\n(while :; do sleep 1; done) </dev/null >/dev/null 2>&1 &\nprintf '%s' \"$!\" > {}\nwhile :; do sleep 1; done\n",
-        shell_quote(&descendant_pid)
-    );
-    let session = fixture_session(directory.path(), &script).await;
-    let adapter = ProviderAdapter::new();
-    let pending_adapter = adapter.clone();
-    let pending_session = session.clone();
-    let pending = tokio::spawn(async move { pending_adapter.start(&pending_session).await });
-    let pid = wait_for_pid(&descendant_pid).await;
-    let mut cleanup = ExactProcessCleanup::new(pid);
-    pending.abort();
-    let _ = pending.await;
-    let shutdown = adapter.shutdown().await;
-    #[cfg(not(target_os = "macos"))]
-    shutdown.unwrap_or_else(|error| panic!("shutdown cancelled initialization: {error}"));
-    #[cfg(target_os = "macos")]
-    {
-        let Err(error) = shutdown else {
-            panic!("macOS must fail closed after a cancelled provider fork");
-        };
-        assert_eq!(error.code, "provider_stop_unconfirmed");
-        cleanup.kill_now();
-    }
-    wait_until(Duration::from_secs(2), || !process_exists(pid)).await;
-    cleanup.disarm();
-    #[cfg(target_os = "macos")]
-    crate::runtime_lease::cleanup_stale_runtime_lease(
-        &session.public.room_id,
-        &session.public.session_id,
-    );
-}
-
 pub(super) async fn fixture_session(directory: &Path, script: &str) -> DurableAgentSession {
     let executable = directory.join("codex-fixture");
     std::fs::write(&executable, script)
@@ -645,17 +431,6 @@ pub(super) async fn fixture_session(directory: &Path, script: &str) -> DurableAg
         &workspace_identity,
     )
 }
-async fn wait_for_pid(path: &Path) -> u32 {
-    let mut pid = None;
-    wait_until(Duration::from_secs(2), || {
-        pid = std::fs::read_to_string(path)
-            .ok()
-            .and_then(|value| value.parse::<u32>().ok());
-        pid.is_some()
-    })
-    .await;
-    pid.unwrap_or_else(|| panic!("fixture did not publish descendant pid"))
-}
 async fn wait_until(mut remaining: Duration, mut condition: impl FnMut() -> bool) {
     while !condition() && !remaining.is_zero() {
         let interval = Duration::from_millis(10).min(remaining);
@@ -664,42 +439,6 @@ async fn wait_until(mut remaining: Duration, mut condition: impl FnMut() -> bool
     }
     assert!(condition(), "condition did not become true before timeout");
 }
-async fn leader_is_alive(adapter: &ProviderAdapter, session: &DurableAgentSession) -> bool {
-    let Some(slot) = adapter.owner.runtimes.try_lock().ok().and_then(|slots| {
-        slots
-            .get(&super::RuntimeKey {
-                room_id: session.public.room_id.clone(),
-                session_id: session.public.session_id.clone(),
-            })
-            .cloned()
-    }) else {
-        return true;
-    };
-    let Ok(mut slot) = slot.try_lock() else {
-        return true;
-    };
-    let super::RuntimeState::Running(runtime) = &mut slot.state else {
-        return false;
-    };
-    let Ok(mut driver) = runtime.driver.try_take() else {
-        return true;
-    };
-    let alive = driver.is_alive().await.unwrap_or(true);
-    runtime.driver.put(driver).await;
-    alive
-}
-
-fn process_exists(raw_pid: u32) -> bool {
-    i32::try_from(raw_pid)
-        .ok()
-        .and_then(rustix::process::Pid::from_raw)
-        .is_some_and(|pid| match rustix::process::test_kill_process(pid) {
-            Ok(()) | Err(rustix::io::Errno::PERM) => true,
-            Err(rustix::io::Errno::SRCH) => false,
-            Err(error) => panic!("inspect exact process {raw_pid}: {error}"),
-        })
-}
-
 async fn read_guardian_ready(
     output: tokio::process::ChildStdout,
     context: &str,
@@ -754,10 +493,6 @@ fn process_group_exists(raw_pid: u32) -> bool {
             Err(rustix::io::Errno::SRCH) => false,
             Err(error) => panic!("inspect exact process group {raw_pid}: {error}"),
         })
-}
-
-fn shell_quote(path: &Path) -> String {
-    format!("'{}'", path.to_string_lossy().replace('\'', "'\\''"))
 }
 
 fn session(
