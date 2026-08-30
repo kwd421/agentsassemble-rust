@@ -37,6 +37,7 @@ mod opencode_startup;
 mod process;
 mod profile;
 mod registration;
+mod remote_https;
 mod room_attachment;
 mod room_portal;
 mod room_portal_mcp;

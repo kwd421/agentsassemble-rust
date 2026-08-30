@@ -2,7 +2,7 @@ use std::{collections::HashSet, time::Duration};
 
 use agentsassemble_domain::DurableAgentSession;
 use futures_util::StreamExt;
-use reqwest::{Client, StatusCode, Url, redirect::Policy};
+use reqwest::{Client, StatusCode, Url};
 use rmcp::{
     RoleClient, ServiceExt,
     model::{CallToolRequestParams, CallToolResult, Tool},
@@ -20,9 +20,11 @@ use crate::{
         DriverError, DriverFuture, ProviderDriver, ProviderSessionAttachment,
         ProviderTurnCompleted, ProviderTurnRequest,
     },
+    remote_https::direct_client,
     room_portal::{ProviderTurnOutcome, RoomObservationStart, RoomPortal},
 };
 
+const DEEPSEEK_API_HOST: &str = "api.deepseek.com";
 const CHAT_COMPLETIONS_URL: &str = "https://api.deepseek.com/chat/completions";
 const MAX_REQUEST_BYTES: usize = 256_000 - 16_384 - 32_768;
 const MAX_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
@@ -431,14 +433,7 @@ impl ProviderDriver for DeepSeekDriver {
 
 impl DeepSeekApi {
     fn new() -> Result<Self, DriverError> {
-        let client = Client::builder()
-            .redirect(Policy::none())
-            .connect_timeout(Duration::from_secs(10))
-            .read_timeout(Duration::from_mins(3))
-            .https_only(true)
-            .user_agent("AgentsAssemble/1.0")
-            .build()
-            .map_err(|_| API_UNAVAILABLE)?;
+        let client = direct_client(DEEPSEEK_API_HOST).map_err(|_| API_UNAVAILABLE)?;
         let endpoint = Url::parse(CHAT_COMPLETIONS_URL).map_err(|_| API_UNAVAILABLE)?;
         Ok(Self { client, endpoint })
     }

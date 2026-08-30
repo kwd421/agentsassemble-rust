@@ -14,6 +14,7 @@ fs2.workspace = true
 http-body-util.workspace = true
 hyper.workspace = true
 hyper-util.workspace = true
+ip_network.workspace = true
 keyring.workspace = true
 process-wrap.workspace = true
 rmcp.workspace = true
