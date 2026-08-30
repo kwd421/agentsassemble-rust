@@ -42,6 +42,7 @@ import {
   type RoomMessageSearchController,
 } from "./useRoomMessageSearch";
 import type { MessageAttachmentReadOwner } from "../lib/messageAttachmentReadScheduler";
+import { isVoteTransitionKind } from "../lib/voteEventKind";
 
 type PinOperation = { retired: boolean };
 
@@ -623,7 +624,7 @@ export default function LobbyView({
               );
             }
             const event = row.event;
-            if (["vote_cast", "vote_withdraw", "vote_close"].includes(event.kind)) return null;
+            if (isVoteTransitionKind(event.kind)) return null;
             if (
               event.kind === "system" ||
               event.kind === "flow_event"

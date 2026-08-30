@@ -15,6 +15,7 @@ import {
 } from "../../api";
 import type { RoomDockItem } from "../../lib/roomDockModel";
 import type { RoomTypingIndicator } from "../../lib/roomTypingIndicators";
+import { isVoteTransitionKind } from "../../lib/voteEventKind";
 
 
 const HISTORY_TOP_THRESHOLD = 120;
@@ -88,8 +89,9 @@ export function useLobbyHistory({
     const roomEvents = events
       .filter(
         (event) =>
-          !event.flow_meeting_id ||
-          event.flow_meeting_id === activeRoom.meetingId
+          !isVoteTransitionKind(event.kind) &&
+          (!event.flow_meeting_id ||
+            event.flow_meeting_id === activeRoom.meetingId)
       );
     return roomEvents;
   }, [
@@ -100,7 +102,7 @@ export function useLobbyHistory({
     const revisions: Record<string, string> = {};
     events.forEach((event) => {
       if (
-        !["vote_cast", "vote_withdraw", "vote_close"].includes(event.kind) ||
+        !isVoteTransitionKind(event.kind) ||
         !event.vote_id ||
         (event.flow_meeting_id && event.flow_meeting_id !== activeRoom.meetingId)
       ) {
@@ -290,7 +292,8 @@ export function useLobbyHistory({
     }
     const needsInitialBackfill =
         canonicalHasMoreHistory &&
-        (canonicalEvents || []).length < INITIAL_HISTORY_MESSAGE_TARGET &&
+        (canonicalEvents || []).filter((event) => !isVoteTransitionKind(event.kind)).length <
+          INITIAL_HISTORY_MESSAGE_TARGET &&
         initialBackfillFailedRoomRef.current !== activeRoom.id;
     if (needsInitialBackfill && loadCanonicalHistory) {
         historyReadyRef.current = false;

@@ -20,6 +20,7 @@ import {
 import type { LobbyEvent } from "../../api";
 import type { MessageAttachmentReadScheduler } from "../../lib/messageAttachmentReadScheduler";
 import type { RoomTypingIndicator } from "../../lib/roomTypingIndicators";
+import { isVoteTransitionKind } from "../../lib/voteEventKind";
 import DiscordText, { type MentionLabels } from "../components/DiscordText";
 import LobbyAttachments from "../components/LobbyAttachments";
 import ProviderLogo from "../components/ProviderLogo";
@@ -376,9 +377,7 @@ export function LobbyMessageRow({
   const systemLike =
     event.kind === "system" ||
     event.kind === "flow_event" ||
-    event.kind === "vote_cast" ||
-    event.kind === "vote_withdraw" ||
-    event.kind === "vote_close";
+    isVoteTransitionKind(event.kind);
   return (
     <div
       className={`dc-message grid grid-cols-[40px_minmax(0,1fr)] gap-3 px-4 ${

@@ -219,7 +219,7 @@ describe("projectRoomEventsToTimeline", () => {
     ]);
   });
 
-  it("does not project an individual anonymous ballot into the room timeline", () => {
+  it("projects an anonymous ballot only as a non-display revision marker", () => {
     const timeline = projectRoomEventsToTimeline([
       event({
         id: "ballot-1",
@@ -232,7 +232,17 @@ describe("projectRoomEventsToTimeline", () => {
       }),
     ]);
 
-    expect(timeline).toEqual([]);
+    expect(timeline).toEqual([
+      expect.objectContaining({
+        id: "ballot-1",
+        kind: "vote_cast",
+        message: "",
+        name: "",
+        vote_id: "vote-1",
+      }),
+    ]);
+    expect(timeline[0]).not.toHaveProperty("actor_id");
+    expect(timeline[0]).not.toHaveProperty("vote_choice");
   });
 
   it("keeps provider failures out of the public conversation timeline", () => {

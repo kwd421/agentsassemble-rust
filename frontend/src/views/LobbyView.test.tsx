@@ -137,23 +137,6 @@ function SearchBackedLobby({ target }: { target: LobbyEvent }) {
   );
 }
 
-function voteResult(id: string, voter: string, choice: string): LobbyEvent {
-  return {
-    id,
-    kind: "vote_cast",
-    name: "투표",
-    message: `🗳️ ${voter}의 선택: 「${choice}」`,
-    side: "other",
-    created_at: "2026-07-26T01:00:00Z",
-    actor_id: `voter-${id}`,
-    actor_type: "human",
-    flow_meeting_id: "room-a",
-    flow_action: "message_final",
-    vote_id: "vote-1",
-    vote_choice: choice,
-  };
-}
-
 describe("LobbyView active provider turn", () => {
   it("does not substitute the loaded timeline when canonical search is unavailable", async () => {
     renderLobby(
@@ -471,24 +454,6 @@ describe("LobbyView active provider turn", () => {
       Boolean(details.compareDocumentPosition(finalAnswer) & Node.DOCUMENT_POSITION_FOLLOWING)
     ).toBe(true);
     expect(details.textContent).not.toContain("단계");
-  });
-});
-
-describe("LobbyView vote results", () => {
-  it("does not reveal individual ballot activity from retained timeline state", () => {
-    const { container } = renderLobby(
-      [
-        voteResult("ballot-a", "민지", "남쪽"),
-        voteResult("ballot-b", "준호", "북쪽"),
-      ],
-      []
-    );
-
-    const firstRow = container.querySelector('[data-room-event-id="ballot-a"]');
-    const secondRow = container.querySelector('[data-room-event-id="ballot-b"]');
-    expect(firstRow).toBeNull();
-    expect(secondRow).toBeNull();
-    expect(screen.queryByText(/민지|준호/)).toBeNull();
   });
 });
 

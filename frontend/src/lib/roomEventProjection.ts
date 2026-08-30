@@ -1,5 +1,6 @@
 import type { LobbyEvent, RoomEvent } from "../api";
 import { resolveAttachmentReference } from "./attachmentReference";
+import { isVoteTransitionKind } from "./voteEventKind";
 
 export type AgentSessionProgress = {
   participantId: string;
@@ -151,10 +152,23 @@ export function projectRoomEventsToTimeline(
       const existingIndex = turnIndex.get(key);
       const existing = existingIndex === undefined ? null : timeline[existingIndex];
       const messageKind = String(event.message_kind || existing?.kind || "message");
-      if (
-        event.type === "message_final" &&
-        ["vote_cast", "vote_withdraw", "vote_close"].includes(messageKind)
-      ) return;
+      if (event.type === "message_final" && isVoteTransitionKind(messageKind)) {
+        const voteId = String(event.vote_id || "");
+        if (voteId) {
+          timeline.push({
+            id: event.id,
+            seq: Number(event.seq) || undefined,
+            created_at: event.created_at,
+            name: "",
+            side: "other",
+            kind: messageKind,
+            message: "",
+            flow_meeting_id: event.room_id,
+            vote_id: voteId,
+          });
+        }
+        return;
+      }
       const message = event.type === "message_final"
         ? String(event.content || "")
         : `${existing?.message || ""}${event.content || ""}`;
@@ -249,7 +263,7 @@ export function projectRoomEventsToTimeline(
 
   return timeline.filter(
     (item) =>
-      !["vote_cast", "vote_withdraw", "vote_close"].includes(item.kind) ||
+      !isVoteTransitionKind(item.kind) ||
       !item.vote_id ||
       !deletedVoteIds.has(item.vote_id)
   );

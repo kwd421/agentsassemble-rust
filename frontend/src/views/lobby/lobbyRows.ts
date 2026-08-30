@@ -1,4 +1,5 @@
 import type { LobbyEvent } from "../../api";
+import { isVoteTransitionKind } from "../../lib/voteEventKind";
 
 export type LobbyRow =
   | { type: "divider"; key: string; label: string }
@@ -38,9 +39,7 @@ export function buildLobbyRows(events: LobbyEvent[]): LobbyRow[] {
   const authorKey = (event: LobbyEvent) =>
     event.kind === "system" ||
     event.kind === "flow_event" ||
-    event.kind === "vote_cast" ||
-    event.kind === "vote_withdraw" ||
-    event.kind === "vote_close"
+    isVoteTransitionKind(event.kind)
       ? "::system"
       : event.actor_id || event.name || "";
   const timestamp = (iso: string) => Date.parse(iso || "") || 0;
