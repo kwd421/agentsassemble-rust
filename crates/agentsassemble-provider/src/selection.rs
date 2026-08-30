@@ -7,13 +7,12 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::filesystem::{FilesystemFailure, canonical_workspace, runtime_executable_identity};
-use crate::profile::runtime_profile_key;
 use crate::registration::provider_registration_by_id;
 use crate::selection_input::SelectionInput;
 
 #[path = "selection_controls.rs"]
 mod controls;
-use controls::{selected_value, validate_model_relation};
+use controls::{selected_u32, selected_value, validate_model_relation};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProviderSelection {
@@ -135,10 +134,11 @@ impl ProviderSelection {
                 "Alternate execution harnesses are not available in this runtime slice.",
             ));
         }
-        if input.max_output_tokens.unwrap_or(0) != 0
-            || input
-                .provider_session_id
-                .is_some_and(|value| !value.is_empty())
+        let max_output_tokens =
+            selected_u32(provider, "max_output_tokens", input.max_output_tokens)?;
+        if input
+            .provider_session_id
+            .is_some_and(|value| !value.is_empty())
         {
             return Err(ProviderSelectionError::new(
                 "unsupported_control",
@@ -199,7 +199,7 @@ impl ProviderSelection {
             variant,
             execution_harness: "builtin".to_owned(),
             permission_mode,
-            max_output_tokens: 0,
+            max_output_tokens,
             catalog_revision: revision,
             persona_card_id,
             runtime_profile_key: String::new(),
@@ -211,22 +211,25 @@ impl ProviderSelection {
     }
 
     fn profile_key(&self) -> String {
-        runtime_profile_key([
-            self.provider_kind.as_str(),
-            self.runtime_kind.as_str(),
-            self.executable.as_str(),
-            self.executable_identity.as_str(),
-            self.workspace.as_str(),
-            self.workspace_identity.as_str(),
-            self.model.as_str(),
-            self.reasoning_effort.as_str(),
-            self.service_tier.as_str(),
-            self.variant.as_str(),
-            self.execution_harness.as_str(),
-            self.permission_mode.as_str(),
-            self.persona_card_id.as_str(),
-            self.transport.as_str(),
-        ])
+        crate::profile::runtime_profile_key_with_output(
+            [
+                self.provider_kind.as_str(),
+                self.runtime_kind.as_str(),
+                self.executable.as_str(),
+                self.executable_identity.as_str(),
+                self.workspace.as_str(),
+                self.workspace_identity.as_str(),
+                self.model.as_str(),
+                self.reasoning_effort.as_str(),
+                self.service_tier.as_str(),
+                self.variant.as_str(),
+                self.execution_harness.as_str(),
+                self.permission_mode.as_str(),
+                self.persona_card_id.as_str(),
+                self.transport.as_str(),
+            ],
+            self.max_output_tokens,
+        )
     }
 }
 
@@ -703,5 +706,63 @@ mod tests {
         .await
         .unwrap_or_else(|error| panic!("empty relation should allow empty effort: {error}"));
         assert!(selected.reasoning_effort.is_empty());
+    }
+
+    #[tokio::test]
+    async fn output_limit_is_owned_by_the_exact_catalog_control() {
+        let workspace =
+            tempfile::tempdir().unwrap_or_else(|error| panic!("create workspace: {error}"));
+        let mut authority = catalog();
+        authority.providers[0].controls.push(control(
+            "max_output_tokens",
+            vec![option("4096", json!({})), option("8192", json!({}))],
+            "4096",
+        ));
+        let base = json!({
+            "provider_id": "codex",
+            "catalog_revision": "catalog-1",
+            "display_name": "Terra",
+            "workspace": workspace.path(),
+            "model": "gpt-5.6-terra",
+            "reasoning_effort": "medium"
+        });
+        let defaulted = ProviderSelection::from_catalog(
+            "general",
+            "operator-local-user",
+            "output-default",
+            &base,
+            &authority,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("select default output limit: {error}"));
+        assert_eq!(defaulted.max_output_tokens, 4_096);
+
+        let mut selected = base.clone();
+        selected["max_output_tokens"] = json!(8192);
+        let selected = ProviderSelection::from_catalog(
+            "general",
+            "operator-local-user",
+            "output-selected",
+            &selected,
+            &authority,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("select exact output limit: {error}"));
+        assert_eq!(selected.max_output_tokens, 8_192);
+        assert_ne!(selected.runtime_profile_key, defaulted.runtime_profile_key);
+
+        let mut unsupported = base;
+        unsupported["max_output_tokens"] = json!(16384);
+        let error = ProviderSelection::from_catalog(
+            "general",
+            "operator-local-user",
+            "output-unsupported",
+            &unsupported,
+            &authority,
+        )
+        .await
+        .err()
+        .unwrap_or_else(|| panic!("unadvertised output limit must fail"));
+        assert_eq!(error.code, "unsupported_control");
     }
 }

@@ -32,6 +32,26 @@ pub(super) fn selected_value(
         })
 }
 
+pub(super) fn selected_u32(
+    provider: &ProviderAvailability,
+    key: &str,
+    requested: Option<u64>,
+) -> Result<u32, ProviderSelectionError> {
+    let requested = requested
+        .filter(|value| *value != 0)
+        .map(|value| value.to_string());
+    let selected = selected_value(provider, key, requested)?;
+    if selected.is_empty() {
+        return Ok(0);
+    }
+    selected.parse::<u32>().map_err(|_| {
+        ProviderSelectionError::new(
+            "catalog_inconsistent",
+            format!("Provider {} has an invalid {key} authority.", provider.id),
+        )
+    })
+}
+
 pub(super) fn validate_model_relation(
     provider: &ProviderAvailability,
     model: &str,

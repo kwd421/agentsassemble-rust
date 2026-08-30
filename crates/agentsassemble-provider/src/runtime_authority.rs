@@ -2,7 +2,7 @@ use agentsassemble_domain::{CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession
 
 use crate::{
     filesystem::{canonical_workspace, runtime_executable_identity},
-    profile::runtime_profile_key,
+    profile::runtime_profile_key_with_output,
     registration::provider_registration_by_profile,
     runtime::DriverError,
 };
@@ -16,22 +16,25 @@ pub(crate) async fn revalidate_runtime_authority(
             "The provider runtime profile version is unsupported.",
         ));
     }
-    let expected_profile_key = runtime_profile_key([
-        session.public.provider_kind.as_str(),
-        session.public.runtime_kind.as_str(),
-        session.executable.as_str(),
-        session.executable_identity.as_str(),
-        session.workspace.as_str(),
-        session.workspace_identity.as_str(),
-        session.public.model.as_str(),
-        session.public.reasoning_effort.as_str(),
-        session.public.service_tier.as_str(),
-        session.public.variant.as_str(),
-        session.public.execution_harness.as_str(),
-        session.public.permission_mode.as_str(),
-        session.public.persona_card_id.as_ref(),
-        session.public.transport.as_str(),
-    ]);
+    let expected_profile_key = runtime_profile_key_with_output(
+        [
+            session.public.provider_kind.as_str(),
+            session.public.runtime_kind.as_str(),
+            session.executable.as_str(),
+            session.executable_identity.as_str(),
+            session.workspace.as_str(),
+            session.workspace_identity.as_str(),
+            session.public.model.as_str(),
+            session.public.reasoning_effort.as_str(),
+            session.public.service_tier.as_str(),
+            session.public.variant.as_str(),
+            session.public.execution_harness.as_str(),
+            session.public.permission_mode.as_str(),
+            session.public.persona_card_id.as_ref(),
+            session.public.transport.as_str(),
+        ],
+        session.public.max_output_tokens,
+    );
     if expected_profile_key != session.runtime_profile_key {
         return Err(DriverError::new(
             "runtime_profile_changed",
