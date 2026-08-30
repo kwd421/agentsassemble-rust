@@ -95,25 +95,37 @@ where
 }
 
 fn validate_sync(draft: &AgentSessionDraft) -> io::Result<()> {
-    let workspace = Path::new(&draft.workspace);
-    let canonical_workspace = workspace.canonicalize()?;
-    if canonical_workspace != workspace || !canonical_workspace.is_dir() {
-        return Err(io::Error::other("workspace authority is not canonical"));
-    }
-    let workspace_identity = stable_identity_hash(&Handle::from_path(&canonical_workspace)?);
-    if workspace_identity != draft.workspace_identity {
-        return Err(io::Error::other("workspace identity changed"));
+    if draft.workspace.is_empty() {
+        if !draft.workspace_identity.is_empty() {
+            return Err(io::Error::other("workspace authority is inconsistent"));
+        }
+    } else {
+        let workspace = Path::new(&draft.workspace);
+        let canonical_workspace = workspace.canonicalize()?;
+        if canonical_workspace != workspace || !canonical_workspace.is_dir() {
+            return Err(io::Error::other("workspace authority is not canonical"));
+        }
+        let workspace_identity = stable_identity_hash(&Handle::from_path(&canonical_workspace)?);
+        if workspace_identity != draft.workspace_identity {
+            return Err(io::Error::other("workspace identity changed"));
+        }
     }
 
-    let executable = Path::new(&draft.executable);
-    let canonical_executable = executable.canonicalize()?;
-    if canonical_executable != executable {
-        return Err(io::Error::other("executable authority is not canonical"));
-    }
-    let executable_identity =
-        runtime_executable_identity(&draft.provider_kind, &canonical_executable)?;
-    if executable_identity != draft.executable_identity {
-        return Err(io::Error::other("executable identity changed"));
+    if draft.executable.is_empty() {
+        if !draft.executable_identity.is_empty() {
+            return Err(io::Error::other("executable authority is inconsistent"));
+        }
+    } else {
+        let executable = Path::new(&draft.executable);
+        let canonical_executable = executable.canonicalize()?;
+        if canonical_executable != executable {
+            return Err(io::Error::other("executable authority is not canonical"));
+        }
+        let executable_identity =
+            runtime_executable_identity(&draft.provider_kind, &canonical_executable)?;
+        if executable_identity != draft.executable_identity {
+            return Err(io::Error::other("executable identity changed"));
+        }
     }
     Ok(())
 }
@@ -173,9 +185,48 @@ fn is_executable_file(file: &File) -> io::Result<bool> {
 mod tests {
     use std::{io, path::Path, sync::Arc, time::Duration};
 
+    use agentsassemble_domain::AgentSessionDraft;
     use tokio::sync::Semaphore;
 
-    use super::{AuthorityFailure, run_with, runtime_executable_identity};
+    use super::{AuthorityFailure, run_with, runtime_executable_identity, validate_sync};
+
+    fn api_draft() -> AgentSessionDraft {
+        AgentSessionDraft {
+            agent_id: "deepseek-test".to_owned(),
+            display_name: "DeepSeek".to_owned(),
+            provider_kind: "deepseek_api".to_owned(),
+            runtime_kind: "api".to_owned(),
+            connection_kind: "native_cli_bridge".to_owned(),
+            executable: String::new(),
+            executable_identity: String::new(),
+            workspace: String::new(),
+            workspace_identity: String::new(),
+            model: "deepseek-v4-flash".to_owned(),
+            reasoning_effort: "high".to_owned(),
+            service_tier: "default".to_owned(),
+            variant: "thinking".to_owned(),
+            execution_harness: "builtin".to_owned(),
+            permission_mode: "meeting_read_only".to_owned(),
+            max_output_tokens: 4_096,
+            catalog_revision: "catalog-1".to_owned(),
+            persona_card_id: String::new(),
+            runtime_profile_key: "profile-1".to_owned(),
+            transport: "https".to_owned(),
+        }
+    }
+
+    #[test]
+    fn optional_authority_must_be_absent_as_a_complete_pair() {
+        assert!(validate_sync(&api_draft()).is_ok());
+
+        let mut inconsistent_workspace = api_draft();
+        inconsistent_workspace.workspace_identity = "unexpected".to_owned();
+        assert!(validate_sync(&inconsistent_workspace).is_err());
+
+        let mut inconsistent_executable = api_draft();
+        inconsistent_executable.executable_identity = "unexpected".to_owned();
+        assert!(validate_sync(&inconsistent_executable).is_err());
+    }
 
     fn write_executable(path: &Path, bytes: &[u8]) {
         std::fs::write(path, bytes).unwrap_or_else(|error| panic!("write executable: {error}"));
