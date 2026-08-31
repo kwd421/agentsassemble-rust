@@ -100,7 +100,10 @@ without creating a second interrupt owner.
   Its payload contains exactly one unmodified Agent Session identifier, and only a complete active
   turn whose session, execution, runtime handle, supervisor owner, lease generation, and provider
   turn authority agree can be interrupted.
-- Command admission and the exact interrupt intent commit before provider I/O. Same
+- A fresh command first checks the exact durable busy-turn identity and the resident driver's
+  retained-interrupt capability without reserving command identity or room budget. A committed
+  replay returns before live proof. After that proof, command admission and the exact interrupt
+  intent commit before provider I/O and recheck the same durable authority. Same
   request/action/payload replay is deduplicated, changed reuse conflicts, and a second independent
   interrupt cannot claim or overwrite an unresolved effect. The durable interrupt cause remains
   distinguishable from participant mute through restart and reconciliation.
@@ -135,6 +138,19 @@ no immediate assignment. The real TCP/WebSocket Codex fixture proves exactly one
 one official `turn/interrupt`, committed ACK replay, terminal publication, idle return, and retained
 provider-session projection. The complete repository gate passes. Packaged real-provider control
 and restart recovery remain required before this extension is complete.
+
+Critical review found that Antigravity's prior Ctrl-C path stopped the runtime after accepting the
+command because it had no authoritative retained-quiescence receipt. An isolated probe of the exact
+installed Antigravity 1.1.22 interactive PTY confirmed that Ctrl-C cancels the active tool and keeps
+the conversation alive, but does not invoke the official synchronous Stop hook; a subsequent normal
+turn invokes that hook with `fullyIdle=true`. The transcript contains no authoritative cancellation
+record, and terminal/prompt silence is forbidden as proof. Commit `5aa5219` therefore stores one
+immutable capability derived from the launched driver: Codex and OpenCode declare retained exact
+interrupt support, while Antigravity and DeepSeek reject a fresh explicit interrupt before durable
+admission. Replay remains persistence-owned, and the final mutation repeats every authority check.
+Antigravity parity remains explicitly incomplete until its native boundary supplies an exact
+receipt; no provider-name branch, heuristic, polling, retry, fallback, or runtime replacement was
+added.
 
 ## Required slice contract
 

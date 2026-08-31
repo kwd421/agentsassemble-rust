@@ -4911,3 +4911,41 @@ bindings, original-CSS comparison, the production frontend build and 657 fronten
 tests, all Rust unit/integration/TCP/WebSocket tests and doc tests, warning-denied workspace Clippy,
 and `git diff --check`. Packaged copied-frontend verification with the exact allowed real providers
 and restart recovery remain pending; this local candidate is not yet declared complete.
+
+### Retained-interrupt capability correction
+
+Critical-web review of pushed `6f9115a` found that the Antigravity Ctrl-C implementation poisoned
+the driver and required the common runtime owner to stop it after the interrupt command had already
+been accepted. That contradicted the copied control's same-runtime/same-conversation contract. The
+review also found two independently written public interruption diagnostic literals; `e4bf62e`
+centralizes those literals in the persistence-private interrupt owner.
+
+An isolated interactive probe used the exact installed Antigravity CLI 1.1.22 and model
+`gemini-3.7-flash-low`; it did not use print mode. A turn running `sleep 30` received Ctrl-C, returned
+the native interrupted prompt, kept the same opaque conversation identity, and left no sleep
+process. Its configured official synchronous Stop hook did not run. A subsequent ordinary
+`Reply exactly ok.` turn did run the same hook and reported that same identity plus
+`terminationReason=NO_TOOL_CALL` and `fullyIdle=true`. The transcript had no explicit cancellation
+receipt. This proves that Stop-hook or transcript authority cannot currently establish retained
+quiescence after Ctrl-C; it does not prove packaged command behavior.
+
+Commit `5aa5219` moves that uncertainty before durable command admission. One driver-owned immutable
+capability is captured when the resident runtime launches. Codex and OpenCode opt in because their
+native exact interrupt protocols already provide retained completion; Antigravity and DeepSeek do
+not. A fresh command first performs a read-only durable exact-turn preflight and then checks the
+matching resident slot and capability. Unsupported paths return
+`provider_turn_interrupt_unsupported` without a command result, state event, effect row, room-budget
+reservation, Ctrl-C, or runtime stop. A committed replay bypasses live proof, and the existing
+mutation repeats every durable authority check after proof to close the race.
+
+Focused tests prove that the persistence preflight is repeatable and read-only, a committed replay
+is still returned, a non-capable driver retains its prepared exact turn without control I/O, and the
+Codex driver passes capability proof. The real TCP/WebSocket Codex fixture still observes one
+`turn/start`, one `turn/interrupt`, retained idle state, and exact ACK replay. Warning-denied Clippy
+for persistence/provider/server, all focused tests, and the complete `make verify` gate pass. The
+four-line capability override moves both `codex.rs` and `opencode.rs` from 799 to 803 lines. Each
+override belongs to that provider's existing `ProviderDriver` implementation and introduces no
+state flow or independent invariant; moving it solely to reduce LOC would add forwarding glue, so
+both cohesive provider owners remain strong-warning candidates rather than being mechanically
+split. The copied packaged Antigravity rejection boundary and post-rejection turn continuity remain
+required; this correction does not claim Antigravity explicit-interrupt parity.
