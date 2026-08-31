@@ -4947,5 +4947,42 @@ four-line capability override moves both `codex.rs` and `opencode.rs` from 799 t
 override belongs to that provider's existing `ProviderDriver` implementation and introduces no
 state flow or independent invariant; moving it solely to reduce LOC would add forwarding glue, so
 both cohesive provider owners remain strong-warning candidates rather than being mechanically
-split. The copied packaged Antigravity rejection boundary and post-rejection turn continuity remain
-required; this correction does not claim Antigravity explicit-interrupt parity.
+split. At this local checkpoint the copied packaged Antigravity rejection boundary and
+post-rejection turn continuity were still required; the evidence below closes only that
+fail-closed boundary and does not claim Antigravity explicit-interrupt parity.
+
+### Packaged Antigravity rejection evidence: 2026-09-01
+
+Computer Use drove release package `AgentsAssemble Interrupt Verify 901` under isolated identifier
+`app.agentsassemble.rust.interruptverify0901`. The copied Agent Add surface selected the installed
+Antigravity `gemini-3.6-flash` catalog entry, Medium reasoning, the real repository workspace, and
+the persistent native PTY path; no print or one-shot mode was used. A fresh Agent Session completed
+two ordinary turns as `FAST_CONTINUITY_901` and `FAST_INTERRUPT_CONTINUITY_901` before the interrupt
+boundary was exercised.
+
+A third turn asked the provider to inspect the provider source tree. While the copied UI and durable
+session both reported `busy`, the copied `agent.interrupt` control returned
+`The provider cannot prove retained-runtime interruption for this turn.` Read-only inspection
+immediately before and after that rejection showed the same guardian, anchor, and provider process,
+the same active turn and provider conversation, zero `agent.interrupt` command results, and zero
+`agent_interrupt` effect rows. The same process remained alive and the turn remained busy until the
+existing three-minute provider inactivity deadline reported `provider_turn_timeout`; the rejection
+did not send Ctrl-C, stop, replace the runtime, reserve durable room-write budget, or create durable
+interrupt authority.
+
+That deliberately overlong turn is not same-process completion evidence. Explicit UI Resume started
+a new owned process for the unchanged provider conversation and completed the preserved pending
+input as `LONG_CONTINUITY_901`; the input was not lost or treated as interrupted. The result proves
+the fail-closed packaged boundary and post-rejection durable input continuity, while leaving native
+Antigravity retained-interrupt parity unsupported and same-process completion for that timed-out
+turn unclaimed. Point observations during the rejected busy turn showed the desktop, supervisor,
+server, guardian, anchor, and provider near idle CPU; the provider RSS was about 268 MiB. These are
+resource observations for this run, not a performance claim or optimization basis.
+
+Both Agent Sessions were stopped through their copied product controls before normal application
+quit. No verification-owned desktop, supervisor, server, guardian, anchor, or provider process
+remained. The exact 50 MiB package, isolated Application Support, Caches, WebKit, preferences, and
+the 49 MiB standalone Antigravity probe were moved together to a recoverable Trash directory; shared
+staging roots and unrelated processes were untouched. Computer Use was then reset. Supported Codex
+or OpenCode packaged busy-turn interruption and restart recovery remain required before the overall
+explicit-interrupt extension is complete.

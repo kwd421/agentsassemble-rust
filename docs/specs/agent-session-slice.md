@@ -150,7 +150,11 @@ interrupt support, while Antigravity and DeepSeek reject a fresh explicit interr
 admission. Replay remains persistence-owned, and the final mutation repeats every authority check.
 Antigravity parity remains explicitly incomplete until its native boundary supplies an exact
 receipt; no provider-name branch, heuristic, polling, retry, fallback, or runtime replacement was
-added.
+added. The copied packaged control now proves the unsupported command is rejected before any
+command result, room event, effect row, provider signal, or process replacement. Its deliberately
+long validation turn later hit the existing provider inactivity deadline; the same pending input
+completed only after explicit resume with the same provider conversation, so this evidence does not
+claim same-process turn completion or native Antigravity interrupt parity.
 
 ## Required slice contract
 

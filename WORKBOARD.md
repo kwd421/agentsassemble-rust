@@ -15,8 +15,10 @@ Purpose: route the asynchronous Rust reimplementation without duplicating its co
 - Active gate: the copied `agent.interrupt` reaches the existing exact-turn interrupt owner and
   passes durable plus real TCP/WebSocket retained-runtime proofs. Critical review showed that the
   installed Antigravity boundary has no authoritative Ctrl-C quiescence receipt, so fresh
-  unsupported commands now fail before durable admission. Verify that packaged rejection and turn
-  continuity, then verify supported-provider busy-turn and restart recovery and close both external
+  unsupported commands now fail before durable admission. The packaged Antigravity flow verifies
+  that rejection, zero durable interrupt mutation, unchanged live process until an independent
+  provider timeout, and pending-input completion through the same provider conversation after
+  explicit resume. Verify supported-provider busy-turn and restart recovery and close both external
   reviews before advancing.
 - Review cadence: keep every independent change below 1,000 changed lines. Push and cross-review when the unreviewed aggregate first reaches at least 1,000 changed lines; feature count alone does not trigger review, but a three-feature batch must not grow beyond roughly 2,000 changed lines.
 - Source structure: LOC only signals possible ownership drift. Review at 500 lines; treat 800 lines as a strong split candidate; reject over 1,000 by default, with concrete generated-code, fixture, or declarative-data exceptions considered only when they exist. Split at differing state/invariant, domain, authority, lifecycle, or change-reason owners regardless of size; reconsider a split if it increases state transfer, public interfaces, inter-module dependency count, or obscuring glue.
