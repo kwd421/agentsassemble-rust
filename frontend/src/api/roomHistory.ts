@@ -269,13 +269,26 @@ export function lobbyEventId(event: LobbyEvent): string {
   ).trim();
 }
 
+function isMessageMutationTransition(event: LobbyEvent) {
+  return Boolean(
+    event.target_event_id &&
+    ["message_updated", "message_deleted"].includes(event.flow_action || ""),
+  );
+}
+
 export function mergeLobbyEvents(
   existing: LobbyEvent[],
   incoming: LobbyEvent[]
 ): LobbyEvent[] {
   const byId = new Map<string, LobbyEvent>();
   const byRecordId = new Map<string, string>();
+  const latestMutationByTarget = new Map<string, LobbyEvent>();
   const order: string[] = [];
+  incoming.forEach((event) => {
+    if (isMessageMutationTransition(event)) {
+      latestMutationByTarget.set(event.target_event_id || "", event);
+    }
+  });
   for (const event of existing) {
     const eventId = lobbyEventId(event);
     if (!eventId) continue;
@@ -284,11 +297,10 @@ export function mergeLobbyEvents(
     order.push(eventId);
   }
   for (const event of incoming) {
-    if (
-      ["message_updated", "message_deleted"].includes(event.flow_action || "") &&
-      event.target_event_id
-    ) {
-      const targetId = byRecordId.get(event.target_event_id);
+    if (isMessageMutationTransition(event)) {
+      const targetEventId = event.target_event_id || "";
+      if (latestMutationByTarget.get(targetEventId) !== event) continue;
+      const targetId = byRecordId.get(targetEventId);
       const target = targetId ? byId.get(targetId) : undefined;
       if (!targetId || !target) continue;
       const replacement = event.flow_action === "message_deleted"

@@ -251,6 +251,13 @@ and vote-revision regressions pass; the complete frontend suite passes 650 tests
 TypeScript/Vite/original-CSS build. Final correction re-review remains pending and is not claimed as
 approved here.
 
+Daybreaker correction re-review found one additional Medium: single-transition identity reuse did
+not cover a retained batch with two transitions for the same target, so replaying edit A then edit B
+could still rebuild the final B object and retrigger the effect. The display merge now coalesces a
+canonical batch to its final transition per durable target before folding it. Two-edit and
+edit-then-delete replays both preserve the already-final target identity in focused regression, and
+the production frontend build passes. Re-review of this follow-up is pending; no approval is claimed.
+
 ## Verification path
 
 - focused parser and persistence tests for cursor edges, 200/remaining pages, current authority,

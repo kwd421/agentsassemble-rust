@@ -165,34 +165,52 @@ describe("projectRoomEventsToTimeline", () => {
     ]);
   });
 
-  it("preserves target identity when the same off-window mutation is folded again", () => {
+  it("preserves target identity when an off-window mutation batch is folded again", () => {
     const visible = projectRoomEventsToTimeline([
       event({ id: "old-message", seq: 1, content: "draft" }),
     ]);
-    const edit = projectRoomEventsToTimeline([
+    const edits = projectRoomEventsToTimeline([
       event({
-        id: "edit-old-message",
+        id: "edit-old-message-a",
         seq: 201,
+        type: "message_updated",
+        target_event_id: "old-message",
+        content: "intermediate",
+        edited_at: "2026-01-01T00:00:30Z",
+      }),
+      event({
+        id: "edit-old-message-b",
+        seq: 202,
         type: "message_updated",
         target_event_id: "old-message",
         content: "final",
         edited_at: "2026-01-01T00:01:00Z",
       }),
     ]);
-    const editedOnce = mergeLobbyEvents(visible, edit);
-    const editedTwice = mergeLobbyEvents(editedOnce, edit);
+    const editedOnce = mergeLobbyEvents(visible, edits);
+    const editedTwice = mergeLobbyEvents(editedOnce, edits);
+    expect(editedOnce[0].message).toBe("final");
     expect(editedTwice[0]).toBe(editedOnce[0]);
 
-    const deletion = projectRoomEventsToTimeline([
+    const editThenDelete = projectRoomEventsToTimeline([
+      event({
+        id: "edit-before-delete",
+        seq: 203,
+        type: "message_updated",
+        target_event_id: "old-message",
+        content: "do not retain",
+        edited_at: "2026-01-01T00:01:30Z",
+      }),
       event({
         id: "delete-old-message",
-        seq: 202,
+        seq: 204,
         type: "message_deleted",
         target_event_id: "old-message",
       }),
     ]);
-    const deletedOnce = mergeLobbyEvents(editedTwice, deletion);
-    const deletedTwice = mergeLobbyEvents(deletedOnce, deletion);
+    const deletedOnce = mergeLobbyEvents(editedTwice, editThenDelete);
+    const deletedTwice = mergeLobbyEvents(deletedOnce, editThenDelete);
+    expect(deletedOnce[0].message_deleted).toBe(true);
     expect(deletedTwice[0]).toBe(deletedOnce[0]);
   });
 
