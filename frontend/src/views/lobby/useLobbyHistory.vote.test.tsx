@@ -1,6 +1,6 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { Hash } from "lucide-react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { LobbyEvent } from "../../api";
 import type { RoomDockItem } from "../../lib/roomDockModel";
@@ -59,5 +59,113 @@ describe("useLobbyHistory vote refresh ownership", () => {
     expect(hook.result.current.voteRevisions).toEqual({
       "vote-1": "vote-transition-2",
     });
+
+    hook.rerender({ canonicalEvents: [event("later-live-message")] });
+    expect(hook.result.current.voteRevisions).toEqual({
+      "vote-1": "vote-transition-2",
+    });
+  });
+
+  it("reconciles only mutations of records in a fixed search-history window", async () => {
+    const historicalMessage: LobbyEvent = {
+      ...event("search-target"),
+      record_id: "record-1",
+      message: "draft",
+    };
+    const hook = renderHook(({ canonicalEvents }) => useLobbyHistory({
+      activeRoom: room,
+      typingIndicators: [],
+      canonicalEvents,
+      canonicalHistoryReady: true,
+      canonicalOldestSeq: 1,
+      canonicalHasMoreHistory: false,
+      canonicalWindowRevision: 1,
+    }), { initialProps: { canonicalEvents: [] as LobbyEvent[] } });
+    await waitFor(() => expect(hook.result.current.loaded).toBe(true));
+    act(() => hook.result.current.showHistoryWindow([historicalMessage]));
+
+    hook.rerender({ canonicalEvents: [
+      { ...historicalMessage, message: "edited", edited_at: "2026-08-31T00:01:00Z" },
+      event("unrelated-live-message"),
+    ] });
+    await waitFor(() => expect(hook.result.current.visibleEvents[0]).toMatchObject({
+      id: "search-target",
+      message: "edited",
+    }));
+    expect(hook.result.current.visibleEvents).toHaveLength(1);
+
+    hook.rerender({ canonicalEvents: [{
+      ...event("delete-search-target"),
+      kind: "message_transition",
+      message: "",
+      flow_action: "message_deleted",
+      target_event_id: "record-1",
+    }] });
+    await waitFor(() => expect(hook.result.current.visibleEvents[0]).toMatchObject({
+      id: "search-target",
+      message_deleted: true,
+    }));
+    expect(hook.result.current.visibleEvents).toHaveLength(1);
+  });
+
+  it("discards a history page from an authoritative window that was replaced", async () => {
+    let resolvePage!: (page: {
+      loadedCount: number;
+      oldestSeq: number;
+      hasMoreBefore: boolean;
+      events: LobbyEvent[];
+    }) => void;
+    const pendingPage = new Promise<Parameters<typeof resolvePage>[0]>((resolve) => {
+      resolvePage = resolve;
+    });
+    const loadCanonicalHistory = vi.fn().mockReturnValue(pendingPage);
+    const hook = renderHook(({
+      canonicalEvents,
+      canonicalHasMoreHistory,
+      canonicalOldestSeq,
+      canonicalWindowRevision,
+    }) => useLobbyHistory({
+      activeRoom: room,
+      typingIndicators: [],
+      canonicalEvents,
+      canonicalHistoryReady: true,
+      canonicalOldestSeq,
+      canonicalHasMoreHistory,
+      canonicalWindowRevision,
+      loadCanonicalHistory,
+    }), {
+      initialProps: {
+        canonicalEvents: [event("old-window-message")],
+        canonicalHasMoreHistory: true,
+        canonicalOldestSeq: 100,
+        canonicalWindowRevision: 1,
+      },
+    });
+    await waitFor(() => expect(loadCanonicalHistory).toHaveBeenCalledWith(100));
+
+    const replacement = Array.from({ length: 20 }, (_, index) =>
+      event(`replacement-message-${index}`));
+    hook.rerender({
+      canonicalEvents: replacement,
+      canonicalHasMoreHistory: false,
+      canonicalOldestSeq: 200,
+      canonicalWindowRevision: 2,
+    });
+    await waitFor(() => expect(hook.result.current.visibleEvents).toHaveLength(20));
+
+    await act(async () => {
+      resolvePage({
+        loadedCount: 1,
+        oldestSeq: 1,
+        hasMoreBefore: true,
+        events: [event("stale-page-message")],
+      });
+      await pendingPage;
+    });
+
+    expect(hook.result.current.visibleEvents.map(({ id }) => id)).not.toContain(
+      "stale-page-message",
+    );
+    expect(hook.result.current.hasMoreHistory).toBe(false);
   });
 });

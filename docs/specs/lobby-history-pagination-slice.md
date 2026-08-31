@@ -229,6 +229,28 @@ The gate correction now prints every 500-line review candidate with its file nam
 the distinct 800-line strong label and 1,000-line rejection. Its command-output regression and the
 policy test suite pass; it adds no exception or threshold change.
 
+Correction cross-review found four Medium issues and no Critical, High, or Low issue. Daybreaker
+found that replaying the same off-window mutation changed object identity on every merge, producing
+a deterministic React update loop, and that an in-flight history page was authorized only by room
+ID, allowing a pre-resync page and scroll anchor to enter a replacement window. The critical web
+review found that a fixed search-context window ignored edits and deletes for records already on
+screen, and that unique, non-rendered vote-transition rows accumulated in the deliberately
+unbounded display array. Both reviews returned `REVISE C0/H0/M2/L0` for `881c0c4` and its cumulative
+range; these are the only findings recorded from those reviews.
+
+The correction keeps mutation folding referentially idempotent, binds page acceptance, failure
+state, completion, and scroll anchors to the exact room, canonical-window revision, and request
+identity, and reconciles only canonical mutations whose durable record is already present in a
+fixed search window. Ordinary displayed messages remain unbounded under the existing scroll
+contract. Vote-transition rows are no longer retained there; one latest revision token is kept only
+for each non-deleted poll currently represented in displayed history. This bounds hidden vote state
+by visible poll count while preserving vote-summary refresh, current search context, page cursors,
+snapshot replacement, and exact edit/delete behavior. It adds no timer, retry, polling, fallback,
+cache, worker, or new authority. Focused idempotency, replacement-window, fixed-context mutation,
+and vote-revision regressions pass; the complete frontend suite passes 650 tests and the production
+TypeScript/Vite/original-CSS build. Final correction re-review remains pending and is not claimed as
+approved here.
+
 ## Verification path
 
 - focused parser and persistence tests for cursor edges, 200/remaining pages, current authority,

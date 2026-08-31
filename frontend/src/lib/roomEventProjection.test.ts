@@ -165,6 +165,37 @@ describe("projectRoomEventsToTimeline", () => {
     ]);
   });
 
+  it("preserves target identity when the same off-window mutation is folded again", () => {
+    const visible = projectRoomEventsToTimeline([
+      event({ id: "old-message", seq: 1, content: "draft" }),
+    ]);
+    const edit = projectRoomEventsToTimeline([
+      event({
+        id: "edit-old-message",
+        seq: 201,
+        type: "message_updated",
+        target_event_id: "old-message",
+        content: "final",
+        edited_at: "2026-01-01T00:01:00Z",
+      }),
+    ]);
+    const editedOnce = mergeLobbyEvents(visible, edit);
+    const editedTwice = mergeLobbyEvents(editedOnce, edit);
+    expect(editedTwice[0]).toBe(editedOnce[0]);
+
+    const deletion = projectRoomEventsToTimeline([
+      event({
+        id: "delete-old-message",
+        seq: 202,
+        type: "message_deleted",
+        target_event_id: "old-message",
+      }),
+    ]);
+    const deletedOnce = mergeLobbyEvents(editedTwice, deletion);
+    const deletedTwice = mergeLobbyEvents(deletedOnce, deletion);
+    expect(deletedTwice[0]).toBe(deletedOnce[0]);
+  });
+
   it("groups delta and final events by source event and actor", () => {
     const timeline = projectRoomEventsToTimeline([
       event({ id: "delta-1", seq: 1, type: "message_delta", source_event_id: "human-1", content: "clean" }),

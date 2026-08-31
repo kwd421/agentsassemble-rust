@@ -291,20 +291,27 @@ export function mergeLobbyEvents(
       const targetId = byRecordId.get(event.target_event_id);
       const target = targetId ? byId.get(targetId) : undefined;
       if (!targetId || !target) continue;
-      byId.set(
-        targetId,
-        event.flow_action === "message_deleted"
-          ? {
+      const replacement = event.flow_action === "message_deleted"
+        ? target.message_deleted === true &&
+          target.message === "삭제된 메시지입니다" &&
+          target.attachments?.length === 0
+          ? target
+          : {
               ...target,
               message: "삭제된 메시지입니다",
               attachments: [],
               message_deleted: true,
             }
+        : target.message === event.message && target.edited_at === event.edited_at
+          ? target
           : {
               ...target,
               message: event.message,
               edited_at: event.edited_at,
-            },
+            };
+      byId.set(
+        targetId,
+        replacement,
       );
       continue;
     }

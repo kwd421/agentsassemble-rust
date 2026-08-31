@@ -10,7 +10,6 @@ import {
 
 import {
   mergeLobbyEvents,
-  mergeLobbyEventsByCreatedAt,
   type LobbyEvent,
 } from "../../api";
 import type { RoomDockItem } from "../../lib/roomDockModel";
@@ -39,11 +38,20 @@ type CanonicalHistoryPage = {
   events?: LobbyEvent[];
 };
 
+type HistoryPageRequest = {
+  roomId: string;
+  windowRevision: number;
+};
+
 function mergeDisplayedLobbyEvents(
   existing: LobbyEvent[],
   incoming: LobbyEvent[],
 ) {
-  const merged = mergeLobbyEvents(existing, incoming).sort((left, right) => {
+  const retained = existing.filter((event) => !isVoteTransitionKind(event.kind));
+  const durableIncoming = incoming.filter(
+    (event) => !isVoteTransitionKind(event.kind),
+  );
+  const merged = mergeLobbyEvents(retained, durableIncoming).sort((left, right) => {
     const sequence = Number(left.seq || 0) - Number(right.seq || 0);
     return sequence || left.created_at.localeCompare(right.created_at);
   });
@@ -51,6 +59,57 @@ function mergeDisplayedLobbyEvents(
     merged.every((event, index) => event === existing[index])
     ? existing
     : merged;
+}
+
+function reconcileFixedHistoryWindow(
+  displayed: LobbyEvent[],
+  canonical: LobbyEvent[],
+) {
+  const displayedRecordIds = new Set(
+    displayed.map((event) => event.record_id).filter(Boolean),
+  );
+  const relevant = canonical.filter((event) =>
+    Boolean(event.record_id && displayedRecordIds.has(event.record_id)) ||
+    Boolean(
+      event.target_event_id &&
+      ["message_updated", "message_deleted"].includes(event.flow_action || "") &&
+      displayedRecordIds.has(event.target_event_id),
+    ));
+  return mergeDisplayedLobbyEvents(displayed, relevant);
+}
+
+function reconcileDisplayedVoteRevisions(
+  previous: Record<string, string>,
+  displayed: LobbyEvent[],
+  canonical: LobbyEvent[],
+  roomId: string,
+) {
+  const displayedVoteIds = new Set(
+    displayed
+      .filter((event) => event.kind === "vote" && !event.message_deleted)
+      .map((event) => event.vote_id || event.record_id || event.id)
+      .filter(Boolean),
+  );
+  const next: Record<string, string> = {};
+  displayedVoteIds.forEach((voteId) => {
+    if (previous[voteId]) next[voteId] = previous[voteId];
+  });
+  canonical.forEach((event) => {
+    if (
+      isVoteTransitionKind(event.kind) &&
+      event.vote_id &&
+      displayedVoteIds.has(event.vote_id) &&
+      (!event.flow_meeting_id || event.flow_meeting_id === roomId)
+    ) {
+      next[event.vote_id] = event.id;
+    }
+  });
+  const previousKeys = Object.keys(previous);
+  const nextKeys = Object.keys(next);
+  return previousKeys.length === nextKeys.length &&
+    nextKeys.every((key) => previous[key] === next[key])
+    ? previous
+    : next;
 }
 
 
@@ -80,14 +139,15 @@ export function useLobbyHistory({
   const historyReadyRef = useRef(false);
   const historyRoomRef = useRef(activeRoom.id);
   const initialBackfillFailedRoomRef = useRef("");
-  const loadingOlderRoomRef = useRef("");
+  const loadingHistoryRequestRef = useRef<HistoryPageRequest | null>(null);
   const historyLoadSuppressedUntilRef = useRef(0);
   const historyWindowActiveRef = useRef(false);
   const canonicalWindowRevisionRef = useRef(-1);
+  const currentCanonicalWindowRevisionRef = useRef(canonicalWindowRevision);
   const canonicalOldestSeqRef = useRef(canonicalOldestSeq);
-  const historicalVoteIdsRef = useRef<Set<string>>(new Set());
   const prependAnchorRef = useRef<{
     roomId: string;
+    windowRevision: number;
     eventId: string;
     viewportTop: number;
     scrollHeight: number;
@@ -101,19 +161,20 @@ export function useLobbyHistory({
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [historyLoadError, setHistoryLoadError] = useState(false);
   const [historyWindowActive, setHistoryWindowActive] = useState(false);
-  const [historicalVoteRevisions, setHistoricalVoteRevisions] = useState<
+  const [displayedVoteRevisions, setDisplayedVoteRevisions] = useState<
     Record<string, string>
   >({});
   const loaded = loadedRoomId === activeRoom.id;
+  currentCanonicalWindowRevisionRef.current = canonicalWindowRevision;
   if (historyRoomRef.current !== activeRoom.id) {
     historyRoomRef.current = activeRoom.id;
     historyReadyRef.current = false;
     initialBackfillFailedRoomRef.current = "";
     prependAnchorRef.current = null;
     historyWindowActiveRef.current = false;
-    historicalVoteIdsRef.current.clear();
     canonicalWindowRevisionRef.current = -1;
     canonicalOldestSeqRef.current = canonicalOldestSeq;
+    loadingHistoryRequestRef.current = null;
   }
 
   const visibleEvents = useMemo(() => {
@@ -130,22 +191,15 @@ export function useLobbyHistory({
     events,
     participantProfiles,
   ]);
-  const voteRevisions = useMemo(() => {
-    const revisions: Record<string, string> = {};
-    events.forEach((event) => {
-      if (
-        !isVoteTransitionKind(event.kind) ||
-        !event.vote_id ||
-        (event.flow_meeting_id && event.flow_meeting_id !== activeRoom.meetingId)
-      ) {
-        return;
-      }
-      revisions[event.vote_id] = event.id;
-    });
-    return historyWindowActive
-      ? { ...revisions, ...historicalVoteRevisions }
-      : revisions;
-  }, [activeRoom.meetingId, events, historicalVoteRevisions, historyWindowActive]);
+  useEffect(() => {
+    setDisplayedVoteRevisions((previous) =>
+      reconcileDisplayedVoteRevisions(
+        previous,
+        events,
+        canonicalEvents || [],
+        activeRoom.meetingId,
+      ));
+  }, [activeRoom.meetingId, canonicalEvents, events]);
 
   const updatePinnedToLatest = useCallback((nextPinned: boolean) => {
     pinnedToLatestRef.current = nextPinned;
@@ -154,9 +208,8 @@ export function useLobbyHistory({
 
   const scrollToLatest = useCallback(() => {
     historyWindowActiveRef.current = false;
-    historicalVoteIdsRef.current.clear();
     setHistoryWindowActive(false);
-    setHistoricalVoteRevisions({});
+    setDisplayedVoteRevisions({});
     setEvents(mergeDisplayedLobbyEvents([], canonicalEvents || []));
     setOldestSeq(canonicalOldestSeq);
     setHasMoreHistory(canonicalHasMoreHistory);
@@ -168,11 +221,16 @@ export function useLobbyHistory({
     updatePinnedToLatest(true);
   }, [canonicalEvents, canonicalHasMoreHistory, canonicalOldestSeq, updatePinnedToLatest]);
 
+  const historyPageRequestIsCurrent = useCallback((request: HistoryPageRequest) =>
+    historyRoomRef.current === request.roomId &&
+    currentCanonicalWindowRevisionRef.current === request.windowRevision &&
+    loadingHistoryRequestRef.current === request, []);
+
   const acceptHistoryPage = useCallback((
-    requestedRoomId: string,
+    request: HistoryPageRequest,
     page: CanonicalHistoryPage,
   ) => {
-    if (historyRoomRef.current !== requestedRoomId) return;
+    if (!historyPageRequestIsCurrent(request)) return false;
     setOldestSeq(page.oldestSeq);
     setHasMoreHistory(page.hasMoreBefore);
     if (page.events?.length) {
@@ -180,13 +238,14 @@ export function useLobbyHistory({
         mergeDisplayedLobbyEvents(previous, page.events || [])
       );
     }
-  }, []);
+    return true;
+  }, [historyPageRequestIsCurrent]);
 
   const loadOlderHistory = useCallback((triggerScrollTop?: number) => {
     if (
       Date.now() < historyLoadSuppressedUntilRef.current ||
       !historyReadyRef.current ||
-      loadingOlderRoomRef.current === activeRoom.id ||
+      loadingHistoryRequestRef.current?.roomId === activeRoom.id ||
       !hasMoreHistory ||
       !loaded
     ) {
@@ -194,8 +253,11 @@ export function useLobbyHistory({
     }
     const element = scrollRef.current;
     if (!element || !loadCanonicalHistory) return;
-    const requestedRoomId = activeRoom.id;
-    loadingOlderRoomRef.current = requestedRoomId;
+    const request: HistoryPageRequest = {
+      roomId: activeRoom.id,
+      windowRevision: currentCanonicalWindowRevisionRef.current,
+    };
+    loadingHistoryRequestRef.current = request;
     setLoadingOlder(true);
     setHistoryLoadError(false);
     const anchorEventId = visibleEvents[0]?.id || "";
@@ -203,7 +265,8 @@ export function useLobbyHistory({
       element.querySelectorAll<HTMLElement>("[data-room-event-id]")
     ).find((candidate) => candidate.dataset.roomEventId === anchorEventId);
     prependAnchorRef.current = {
-      roomId: requestedRoomId,
+      roomId: request.roomId,
+      windowRevision: request.windowRevision,
       eventId: anchorEventId,
       viewportTop: anchorElement
         ? element.getBoundingClientRect().top +
@@ -215,25 +278,23 @@ export function useLobbyHistory({
     };
     loadCanonicalHistory(oldestSeq)
         .then((page) => {
-          if (historyRoomRef.current !== requestedRoomId) return;
-          acceptHistoryPage(requestedRoomId, page);
+          if (!acceptHistoryPage(request, page)) return;
           if (!page.loadedCount) {
             prependAnchorRef.current = null;
-            if (loadingOlderRoomRef.current === requestedRoomId) {
-              loadingOlderRoomRef.current = "";
-            }
           }
         })
         .catch(() => {
-          if (historyRoomRef.current !== requestedRoomId) return;
+          if (!historyPageRequestIsCurrent(request)) return;
           prependAnchorRef.current = null;
           setHistoryLoadError(true);
-          if (loadingOlderRoomRef.current === requestedRoomId) {
-            loadingOlderRoomRef.current = "";
-          }
         })
         .finally(() => {
-          if (historyRoomRef.current === requestedRoomId) {
+          if (loadingHistoryRequestRef.current !== request) return;
+          loadingHistoryRequestRef.current = null;
+          if (
+            historyRoomRef.current === request.roomId &&
+            currentCanonicalWindowRevisionRef.current === request.windowRevision
+          ) {
             setLoadingOlder(false);
           }
         });
@@ -247,6 +308,7 @@ export function useLobbyHistory({
     loaded,
     oldestSeq,
     visibleEvents,
+    historyPageRequestIsCurrent,
   ]);
 
   const handleLobbyScroll = useCallback(
@@ -270,11 +332,14 @@ export function useLobbyHistory({
     const element = scrollRef.current;
     if (!element || !loaded) return;
     const anchor = prependAnchorRef.current;
-    if (anchor?.roomId === activeRoom.id) {
+    if (
+      anchor &&
+      (anchor.roomId !== activeRoom.id ||
+        anchor.windowRevision !== currentCanonicalWindowRevisionRef.current)
+    ) {
       prependAnchorRef.current = null;
-      if (loadingOlderRoomRef.current === activeRoom.id) {
-        loadingOlderRoomRef.current = "";
-      }
+    } else if (anchor) {
+      prependAnchorRef.current = null;
       const restoreAnchor = () => {
         const anchorElement = Array.from(
           element.querySelectorAll<HTMLElement>("[data-room-event-id]")
@@ -322,7 +387,7 @@ export function useLobbyHistory({
     updatePinnedToLatest(true);
     setHistoryLoadError(false);
     setHistoryWindowActive(false);
-    setHistoricalVoteRevisions({});
+    setDisplayedVoteRevisions({});
   }, [activeRoom.id, updatePinnedToLatest]);
 
   useEffect(() => {
@@ -338,29 +403,21 @@ export function useLobbyHistory({
       : hasMoreHistory;
     if (windowChanged) {
       canonicalWindowRevisionRef.current = canonicalWindowRevision;
+      loadingHistoryRequestRef.current = null;
+      prependAnchorRef.current = null;
+      initialBackfillFailedRoomRef.current = "";
       historyWindowActiveRef.current = false;
-      historicalVoteIdsRef.current.clear();
       setHistoryWindowActive(false);
-      setHistoricalVoteRevisions({});
+      setDisplayedVoteRevisions({});
+      setHistoryLoadError(false);
+      setLoadingOlder(false);
       setEvents(mergeDisplayedLobbyEvents([], canonicalEvents || []));
       setOldestSeq(canonicalOldestSeq);
       canonicalOldestSeqRef.current = canonicalOldestSeq;
       setHasMoreHistory(canonicalHasMoreHistory);
     } else if (historyWindowActiveRef.current && historyRoomRef.current === activeRoom.id) {
-      const latest: Record<string, string> = {};
-      (canonicalEvents || []).forEach((event) => {
-        if (
-          isVoteTransitionKind(event.kind) &&
-          event.vote_id &&
-          historicalVoteIdsRef.current.has(event.vote_id) &&
-          (!event.flow_meeting_id || event.flow_meeting_id === activeRoom.meetingId)
-        ) {
-          latest[event.vote_id] = event.id;
-        }
-      });
-      if (Object.keys(latest).length) {
-        setHistoricalVoteRevisions((previous) => ({ ...previous, ...latest }));
-      }
+      setEvents((previous) =>
+        reconcileFixedHistoryWindow(previous, canonicalEvents || []));
       setHasMoreHistory(false);
       setLoadedRoomId(activeRoom.id);
       return;
@@ -383,7 +440,7 @@ export function useLobbyHistory({
     }
     if (!canonicalHistoryReady) {
         historyReadyRef.current = false;
-        if (loadingOlderRoomRef.current !== activeRoom.id) {
+        if (loadingHistoryRequestRef.current?.roomId !== activeRoom.id) {
           setLoadingOlder(false);
         }
         setLoadedRoomId((current) => (current === activeRoom.id ? "" : current));
@@ -397,29 +454,33 @@ export function useLobbyHistory({
     if (needsInitialBackfill && loadCanonicalHistory) {
         historyReadyRef.current = false;
         setLoadedRoomId((current) => (current === activeRoom.id ? "" : current));
-        if (loadingOlderRoomRef.current !== activeRoom.id) {
-          const requestedRoomId = activeRoom.id;
-          loadingOlderRoomRef.current = requestedRoomId;
+        if (loadingHistoryRequestRef.current?.roomId !== activeRoom.id) {
+          const request: HistoryPageRequest = {
+            roomId: activeRoom.id,
+            windowRevision: currentCanonicalWindowRevisionRef.current,
+          };
+          loadingHistoryRequestRef.current = request;
           setLoadingOlder(true);
           void loadCanonicalHistory(requestOldestSeq)
             .then((page) => {
-              if (historyRoomRef.current !== requestedRoomId) return;
-              acceptHistoryPage(requestedRoomId, page);
+              if (!acceptHistoryPage(request, page)) return;
               historyReadyRef.current = true;
-              setLoadedRoomId(requestedRoomId);
+              setLoadedRoomId(request.roomId);
             })
             .catch(() => {
-              if (historyRoomRef.current !== requestedRoomId) return;
-              initialBackfillFailedRoomRef.current = requestedRoomId;
+              if (!historyPageRequestIsCurrent(request)) return;
+              initialBackfillFailedRoomRef.current = request.roomId;
               setHistoryLoadError(true);
               historyReadyRef.current = true;
-              setLoadedRoomId(requestedRoomId);
+              setLoadedRoomId(request.roomId);
             })
             .finally(() => {
-              if (loadingOlderRoomRef.current === requestedRoomId) {
-                loadingOlderRoomRef.current = "";
-              }
-              if (historyRoomRef.current === requestedRoomId) {
+              if (loadingHistoryRequestRef.current !== request) return;
+              loadingHistoryRequestRef.current = null;
+              if (
+                historyRoomRef.current === request.roomId &&
+                currentCanonicalWindowRevisionRef.current === request.windowRevision
+              ) {
                 setLoadingOlder(false);
               }
             });
@@ -427,7 +488,7 @@ export function useLobbyHistory({
       return;
     }
     historyReadyRef.current = true;
-    if (loadingOlderRoomRef.current !== activeRoom.id) {
+    if (loadingHistoryRequestRef.current?.roomId !== activeRoom.id) {
       setLoadingOlder(false);
     }
     setLoadedRoomId(activeRoom.id);
@@ -442,6 +503,7 @@ export function useLobbyHistory({
     canonicalWindowRevision,
     events,
     hasMoreHistory,
+    historyPageRequestIsCurrent,
     loadCanonicalHistory,
     loaded,
     oldestSeq,
@@ -449,9 +511,8 @@ export function useLobbyHistory({
 
   const handleLobbyPosted = useCallback((postedEvents: LobbyEvent[]) => {
     historyWindowActiveRef.current = false;
-    historicalVoteIdsRef.current.clear();
     setHistoryWindowActive(false);
-    setHistoricalVoteRevisions({});
+    setDisplayedVoteRevisions({});
     setEvents(mergeDisplayedLobbyEvents(canonicalEvents || [], postedEvents));
     setOldestSeq(canonicalOldestSeq);
     setHasMoreHistory(canonicalHasMoreHistory);
@@ -459,23 +520,13 @@ export function useLobbyHistory({
 
   const showHistoryWindow = useCallback((historyEvents: LobbyEvent[]) => {
     historyWindowActiveRef.current = true;
-    historicalVoteIdsRef.current = new Set(
-      historyEvents
-        .filter(
-          (event) =>
-            event.kind === "vote" &&
-            (!event.flow_meeting_id || event.flow_meeting_id === activeRoom.meetingId)
-        )
-        .map((event) => event.vote_id || event.id)
-        .filter(Boolean)
-    );
     setHistoryWindowActive(true);
-    setHistoricalVoteRevisions({});
-    setEvents(mergeLobbyEventsByCreatedAt([], historyEvents));
+    setDisplayedVoteRevisions({});
+    setEvents(mergeDisplayedLobbyEvents([], historyEvents));
     setHasMoreHistory(false);
     setLoadedRoomId(activeRoom.id);
     updatePinnedToLatest(false);
-  }, [activeRoom.id, activeRoom.meetingId, updatePinnedToLatest]);
+  }, [activeRoom.id, updatePinnedToLatest]);
 
   const suppressAutomaticHistoryLoad = useCallback((durationMs = 1200) => {
     historyLoadSuppressedUntilRef.current = Date.now() + durationMs;
@@ -495,7 +546,7 @@ export function useLobbyHistory({
     pinnedToLatest,
     scrollRef,
     scrollToLatest,
-    voteRevisions,
+    voteRevisions: displayedVoteRevisions,
     visibleEvents,
   };
 }
