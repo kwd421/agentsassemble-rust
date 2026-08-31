@@ -3,6 +3,7 @@ mod command;
 mod diagnostic;
 mod identity;
 mod message_attachments;
+mod message_mutations;
 mod message_pins;
 mod message_search;
 mod model;
@@ -30,6 +31,12 @@ pub use message_attachments::{
     MESSAGE_ATTACHMENT_ID_HEX_LENGTH, MESSAGE_ATTACHMENT_ID_PREFIX,
     MESSAGE_ATTACHMENT_REFERENCE_PREFIX, MESSAGE_ATTACHMENT_VIEW_SUFFIX,
     canonical_message_attachment_filename, is_message_attachment_id,
+};
+pub use message_mutations::{
+    MessageDelete, MessageEdit, MutableMessageKind, authorize_message_delete,
+    authorize_message_edit, prepare_deleted_message, prepare_message_deleted_event,
+    prepare_message_updated_event, prepare_updated_message, redact_deleted_vote_transition,
+    require_mutable_message,
 };
 pub use message_pins::{MAX_LOBBY_MESSAGE_PINS, MAX_MESSAGE_EVENT_ID_BYTES, is_message_event_id};
 pub use message_search::{
