@@ -89,34 +89,45 @@ pub(crate) async fn execute_command(
             Ok(outcome) => CommandExecution::success(outcome),
             Err(error) => CommandExecution::transactional_failure(error),
         },
-        RoomAction::ParticipantMute => match store
-            .execute_participant_mute(&command.principal, &command.request_id, &command.payload)
-            .await
-        {
-            Ok(mutation) => {
-                let effect = mutation.interrupt_effect.clone();
-                let mut execution = CommandExecution::participant_mute(mutation);
-                if let Some(effect) = effect {
-                    match Box::pin(crate::participant_mute_runtime::apply_exact_interrupt(
-                        store,
-                        provider_adapter,
-                        &effect,
-                    ))
-                    .await
-                    {
-                        Ok(commit) => execution.extend_turn_commit(commit),
-                        Err(error) => log_interrupt_error(&error, command, &effect),
-                    }
-                }
-                execution
-            }
-            Err(error) => CommandExecution::transactional_failure(error),
-        },
+        RoomAction::ParticipantMute => {
+            execute_participant_mute(store, provider_adapter, command).await
+        }
         RoomAction::ParticipantLeave => execute_participant_leave(store, command).await,
         RoomAction::RoomHistory | RoomAction::RoomVoteSummary => {
             misrouted_direct_read(command.action)
         }
     }
+}
+
+async fn execute_participant_mute(
+    store: &SqliteStore,
+    provider_adapter: &ProviderAdapter,
+    command: &RoomCommand,
+) -> CommandExecution {
+    let mutation = match store
+        .execute_participant_mute(&command.principal, &command.request_id, &command.payload)
+        .await
+    {
+        Ok(mutation) => mutation,
+        Err(error) => return CommandExecution::transactional_failure(error),
+    };
+    let effect = mutation.interrupt_effect.clone();
+    let mut execution = CommandExecution::participant_mute(mutation);
+    if let Some(effect) = effect {
+        match Box::pin(
+            crate::provider_turn_interrupt_runtime::apply_exact_interrupt(
+                store,
+                provider_adapter,
+                &effect,
+            ),
+        )
+        .await
+        {
+            Ok(commit) => execution.extend_turn_commit(commit),
+            Err(error) => log_interrupt_error(&error, command, &effect),
+        }
+    }
+    execution
 }
 
 async fn execute_message_send(store: &SqliteStore, command: &RoomCommand) -> CommandExecution {

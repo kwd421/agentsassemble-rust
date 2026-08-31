@@ -1,3 +1,5 @@
+//! Executes and reconciles one persistence-owned exact provider-turn interrupt.
+
 use std::time::Duration;
 
 use agentsassemble_persistence::{

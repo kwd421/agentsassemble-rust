@@ -48,11 +48,13 @@ async fn reconcile_startup_candidate(
 ) -> Result<(), PersistenceError> {
     let execution = &candidate.execution;
     if let Some(effect) = &candidate.effect
-        && let Some(commit) = Box::pin(crate::participant_mute_runtime::resume_exact_interrupt(
-            store,
-            provider_adapter,
-            effect,
-        ))
+        && let Some(commit) = Box::pin(
+            crate::provider_turn_interrupt_runtime::resume_exact_interrupt(
+                store,
+                provider_adapter,
+                effect,
+            ),
+        )
         .await?
     {
         publish_commit(rooms, commit).await?;
@@ -145,11 +147,13 @@ async fn reconcile_live_candidate(
 ) -> Result<(), PersistenceError> {
     let authority = exact_authority(candidate);
     if let Some(effect) = &candidate.effect
-        && let Some(commit) = Box::pin(crate::participant_mute_runtime::resume_exact_interrupt(
-            store,
-            provider_adapter,
-            effect,
-        ))
+        && let Some(commit) = Box::pin(
+            crate::provider_turn_interrupt_runtime::resume_exact_interrupt(
+                store,
+                provider_adapter,
+                effect,
+            ),
+        )
         .await?
     {
         publish_commit(rooms, commit).await?;
