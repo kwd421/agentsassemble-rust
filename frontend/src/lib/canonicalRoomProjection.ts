@@ -1,8 +1,9 @@
-import type { RoomAgentSession, RoomEvent, RoomMember } from "../api";
+import type { LobbyEvent, RoomAgentSession, RoomEvent, RoomMember } from "../api";
 import type {
   ProviderCatalogSnapshot,
   RoomSocketAuth,
 } from "../roomSocketClient";
+import { ROOM_HISTORY_MAX_EVENTS } from "../types/generated/ROOM_HISTORY_WIRE";
 import { resolveAttachmentReference } from "./attachmentReference";
 import { isParticipantRole } from "./participantRole";
 import {
@@ -16,6 +17,7 @@ export type CanonicalRoomHistoryState = {
   lastSeq: number;
   hasMoreBefore: boolean;
   resumeGap: boolean;
+  windowRevision: number;
 };
 
 export const EMPTY_CANONICAL_HISTORY: CanonicalRoomHistoryState = {
@@ -24,6 +26,7 @@ export const EMPTY_CANONICAL_HISTORY: CanonicalRoomHistoryState = {
   lastSeq: 0,
   hasMoreBefore: false,
   resumeGap: false,
+  windowRevision: 0,
 };
 
 export const EMPTY_PROVIDER_CATALOG: ProviderCatalogSnapshot = {
@@ -38,6 +41,29 @@ export type CanonicalParticipantProfile = {
   providerKind?: string;
   role?: string;
 };
+
+export function applyCanonicalParticipantProfiles(
+  events: LobbyEvent[],
+  profiles: Record<string, CanonicalParticipantProfile>,
+) {
+  return events.map((event) => {
+    const profile = profiles[event.actor_id || ""];
+    if (!profile) return event;
+    const next = {
+      ...event,
+      name: profile.displayName || event.name,
+      avatar_image_url: profile.avatarImageUrl,
+      provider_kind: profile.providerKind || event.provider_kind,
+      role: profile.role || event.role,
+    };
+    return next.name === event.name &&
+      next.avatar_image_url === event.avatar_image_url &&
+      next.provider_kind === event.provider_kind &&
+      next.role === event.role
+      ? event
+      : next;
+  });
+}
 
 export function canonicalParticipantProfiles(
   sessions: RoomAgentSession[],
@@ -88,7 +114,7 @@ export function mergeRoomEvents(
   });
   return [...byId.values()].sort(
     (left, right) => Number(left.seq || 0) - Number(right.seq || 0),
-  );
+  ).slice(-ROOM_HISTORY_MAX_EVENTS);
 }
 
 export function upsertAgentSessions(

@@ -46,7 +46,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     activeRoom, activeRoomAgentSessions, activeRoomCapabilities, activeRoomDisconnected,
     activeRoomHistory, activeRoomMembers, activeSideChatMeetingId, addFreshRoom,
     addFriendsCandidate, addFriendsManual, adjustSidebarWidthWithKeyboard, adminOpen,
-    admittedSessionToken, agentActivityVisibility, bindLobbyStream, cancelMobileShellPointer,
+    admittedSessionToken, agentActivityVisibility, cancelMobileShellPointer,
     canonicalRoom, changeAgentActivityVisibility, changeHomeFilter, channel,
     channelHeaderActions, channelMenu, channelSearchNeedle, channelSearchQuery,
     channelSidebarWidth, closeMobileRoomInfo, closeMobileSidebar, collapsedChannelSections,
@@ -434,7 +434,6 @@ export default function AppView({ controller }: { controller: AppController }) {
               agents={scopedAgents}
               messageAttachmentReadOwner={messageAttachmentReadOwner}
               mentionables={scopedMentionables}
-              bindLobbyStream={bindLobbyStream}
               roomSessionToken={lobbyPostingState.sessionToken}
               messagePinsAuthority={roomHttpAuthority}
               viewerParticipantId={guestSession?.agentId || "operator-local"}
@@ -456,6 +455,8 @@ export default function AppView({ controller }: { controller: AppController }) {
               canonicalHistoryReady={activeRoomHistory.initialized}
               canonicalOldestSeq={activeRoomHistory.oldestSeq}
               canonicalHasMoreHistory={activeRoomHistory.hasMoreBefore}
+              canonicalWindowRevision={activeRoomHistory.windowRevision}
+              participantProfiles={canonicalRoom.participantProfiles}
               loadCanonicalHistory={loadCanonicalRoomHistory}
               providerRequests={canonicalRoom.providerRequests}
               resolveProviderRequest={canonicalRoom.sendProviderRequestResolution}

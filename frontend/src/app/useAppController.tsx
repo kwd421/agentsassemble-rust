@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   CSSProperties,
   MouseEvent as ReactMouseEvent,
@@ -9,7 +9,6 @@ import {
   refreshProviderCatalog,
   type ChannelNotificationSetting,
   type ChannelSettings,
-  type LobbyEvent,
   type RoomFriend,
   type RoomMember,
   type RoomSearchResult,
@@ -289,15 +288,6 @@ export function useAppController(deviceToken: string, clientId: string) {
   // Rooms-as-server-objects: when a room becomes active, promote it to a
   // server-backed meeting (idempotent) so adding agents / roster / lobby always
   // have a real meeting to bind to instead of failing with "Meeting not found".
-  const lobbyStreamRef = useRef<((events: LobbyEvent[]) => void) | null>(null);
-  const bindLobbyStream = useCallback((receive: (events: LobbyEvent[]) => void) => {
-    lobbyStreamRef.current = receive;
-    return () => {
-      if (lobbyStreamRef.current === receive) {
-        lobbyStreamRef.current = null;
-      }
-    };
-  }, []);
   const canonicalRoomAuth = activeRoomDisconnected
     ? undefined
     : guestLocked
@@ -412,11 +402,6 @@ export function useAppController(deviceToken: string, clientId: string) {
     setAgentActivityVisibility,
   });
   useDismissMenus(roomMenu, channelMenu, setRoomMenu, setChannelMenu);
-  useEffect(() => {
-    if (visibleRoomTimelineEvents.length) {
-      lobbyStreamRef.current?.(visibleRoomTimelineEvents);
-    }
-  }, [activeRoom.meetingId, visibleRoomTimelineEvents]);
   const activeChannelSettings = roomSettings.channelSettingsFor(activeRoom);
   const activeCustomChannels = roomChannels.activeChannels;
   const activeCustomChannel = roomChannels.activeChannelFor(channel);
@@ -744,7 +729,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     activeRoomDisconnected, activeRoomHistory, activeRoomMembers, activeSideChatMeetingId,
     addFreshRoom, addFriendsCandidate, addFriendsManual, adjustSidebarWidthWithKeyboard,
     adminOpen, admittedSessionToken, agentActivityVisibility, agentCreateOpen,
-    agentInviteUrl, bindLobbyStream, cancelMobileShellPointer, canonicalRoom,
+    agentInviteUrl, cancelMobileShellPointer, canonicalRoom,
     changeAgentActivityVisibility, changeHomeFilter, channel, channelHeaderActions,
     channelMenu, channelSearchNeedle, channelSearchQuery, channelSidebarWidth,
     closeInviteModal, closeMobileRoomInfo, closeMobileSidebar, collapsedChannelSections,

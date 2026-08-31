@@ -50,6 +50,7 @@ export interface LobbyEvent {
   flow_event_type?: string;
   flow_action?: string;
   flow_reason?: string;
+  target_event_id?: string;
   activity_id?: string;
   activity_title?: string;
   activity_detail?: string;
@@ -273,18 +274,45 @@ export function mergeLobbyEvents(
   incoming: LobbyEvent[]
 ): LobbyEvent[] {
   const byId = new Map<string, LobbyEvent>();
+  const byRecordId = new Map<string, string>();
   const order: string[] = [];
   for (const event of existing) {
     const eventId = lobbyEventId(event);
     if (!eventId) continue;
     byId.set(eventId, event);
+    if (event.record_id) byRecordId.set(event.record_id, eventId);
     order.push(eventId);
   }
   for (const event of incoming) {
+    if (
+      ["message_updated", "message_deleted"].includes(event.flow_action || "") &&
+      event.target_event_id
+    ) {
+      const targetId = byRecordId.get(event.target_event_id);
+      const target = targetId ? byId.get(targetId) : undefined;
+      if (!targetId || !target) continue;
+      byId.set(
+        targetId,
+        event.flow_action === "message_deleted"
+          ? {
+              ...target,
+              message: "삭제된 메시지입니다",
+              attachments: [],
+              message_deleted: true,
+            }
+          : {
+              ...target,
+              message: event.message,
+              edited_at: event.edited_at,
+            },
+      );
+      continue;
+    }
     const eventId = lobbyEventId(event);
     if (!eventId) continue;
     if (!byId.has(eventId)) order.push(eventId);
     byId.set(eventId, event);
+    if (event.record_id) byRecordId.set(event.record_id, eventId);
   }
   return order.map((eventId) => byId.get(eventId)).filter(Boolean) as LobbyEvent[];
 }

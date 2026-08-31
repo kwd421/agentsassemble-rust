@@ -97,6 +97,44 @@ function snapshot(
 }
 
 describe("useCanonicalRoom", () => {
+  it("advances the bounded live window without retaining inactive raw history", async () => {
+    let handlers: RoomSocketHandlers | undefined;
+    const openSocket = vi.fn((_auth, _streams, nextHandlers: RoomSocketHandlers) => {
+      handlers = nextHandlers;
+      return {
+        close: vi.fn(),
+        ready: () => true,
+        command: vi.fn(),
+        say: vi.fn(),
+        historyBefore: vi.fn(),
+      } satisfies RoomSocketHandle;
+    });
+    const { result } = renderHook(() =>
+      useCanonicalRoom({
+        serverSurface: TEST_SERVER_PRODUCT_SURFACE,
+        roomId: "general",
+        auth: { kind: "host", meetingId: "general" },
+        openSocket,
+      })
+    );
+    await waitFor(() => expect(openSocket).toHaveBeenCalledOnce());
+    const initial = snapshot(
+      Array.from({ length: 200 }, (_, index) => event(index + 1, "message_final")),
+    );
+    initial.has_more_before = false;
+
+    act(() => handlers?.onRoomSnapshot?.(initial, "http://127.0.0.1:43123"));
+    act(() => handlers?.onRoomEvents?.([event(201, "message_final")]));
+
+    expect(result.current.events).toHaveLength(200);
+    expect(result.current.events[0].seq).toBe(2);
+    expect(result.current.history).toMatchObject({
+      oldestSeq: 2,
+      lastSeq: 201,
+      hasMoreBefore: true,
+    });
+  });
+
   it("rejects lifecycle commands when the canonical room socket is unavailable", async () => {
     const { result } = renderHook(() =>
       useCanonicalRoom({
@@ -326,13 +364,16 @@ describe("useCanonicalRoom", () => {
     ));
     expect(result.current.timelineEvents[0].message).toBe("hello world");
 
+    let loadedHistory: Awaited<ReturnType<typeof result.current.loadHistory>> | undefined;
     await act(async () => {
-      await result.current.loadHistory(3);
+      loadedHistory = await result.current.loadHistory(3);
       await result.current.sendAgentControl(session(), "stop");
       await result.current.sendAgentConfigure(session(), { display_name: "Luna" });
     });
-    expect(result.current.events.map((item) => item.seq)).toEqual([1, 2, 3, 4, 5, 6]);
-    expect(result.current.history.hasMoreBefore).toBe(false);
+    expect(result.current.events.map((item) => item.seq)).toEqual([3, 4, 5, 6]);
+    expect(loadedHistory?.events.map((item) => item.message)).toEqual(["older"]);
+    expect(loadedHistory?.hasMoreBefore).toBe(false);
+    expect(result.current.history.hasMoreBefore).toBe(true);
     expect(result.current.agentSessionProgress).toBeNull();
     expect(historyBefore).toHaveBeenNthCalledWith(1, 3);
     expect(historyBefore).toHaveBeenNthCalledWith(2, 2);
@@ -703,12 +744,13 @@ describe("useCanonicalRoom", () => {
       avatar_image_url: "http://127.0.0.1:43123/api/attachments/makima-avatar?view=1",
     });
 
+    let loadedHistory: Awaited<ReturnType<typeof result.current.loadHistory>> | undefined;
     await act(async () => {
-      await result.current.loadHistory(3);
+      loadedHistory = await result.current.loadHistory(3);
     });
 
-    expect(result.current.timelineEvents.map((item) => item.message)).toEqual(["older", "recent"]);
-    expect(result.current.timelineEvents).toEqual(
+    expect(result.current.timelineEvents.map((item) => item.message)).toEqual(["recent"]);
+    expect(loadedHistory?.events).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           name: "Makima",
@@ -716,7 +758,7 @@ describe("useCanonicalRoom", () => {
         }),
       ])
     );
-    expect(result.current.timelineEvents.every((item) => item.name === "Makima")).toBe(true);
+    expect(loadedHistory?.events.every((item) => item.name === "Makima")).toBe(true);
   });
 
 

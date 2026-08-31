@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import type { RoomEvent } from "../api";
-import { applyParticipantEvents } from "./canonicalRoomProjection";
+import type { LobbyEvent, RoomEvent } from "../api";
+import {
+  applyCanonicalParticipantProfiles,
+  applyParticipantEvents,
+  mergeRoomEvents,
+} from "./canonicalRoomProjection";
 
 function joinedEvent(): RoomEvent {
   return {
@@ -31,6 +35,48 @@ function joinedEvent(): RoomEvent {
 }
 
 describe("canonical participant event projection", () => {
+  it("retains only the server-sized live event window", () => {
+    const events = Array.from({ length: 201 }, (_, index) => ({
+      ...joinedEvent(),
+      id: `event-${index + 1}`,
+      seq: index + 1,
+    }));
+
+    const retained = mergeRoomEvents([], events, false);
+
+    expect(retained).toHaveLength(200);
+    expect(retained[0].seq).toBe(2);
+    expect(retained.at(-1)?.seq).toBe(201);
+  });
+
+  it("reapplies the current participant profile to an older displayed page", () => {
+    const older: LobbyEvent = {
+      id: "older-message",
+      record_id: "older-record",
+      kind: "message",
+      name: "Old name",
+      message: "hello",
+      side: "other",
+      created_at: "2026-08-25T00:00:00Z",
+      actor_id: "agent-one",
+    };
+
+    expect(applyCanonicalParticipantProfiles([older], {
+      "agent-one": {
+        displayName: "Current name",
+        avatarImageUrl: "http://127.0.0.1/avatar",
+        providerKind: "codex_live_session",
+        role: "agent",
+      },
+    })).toEqual([
+      expect.objectContaining({
+        id: "older-message",
+        name: "Current name",
+        avatar_image_url: "http://127.0.0.1/avatar",
+      }),
+    ]);
+  });
+
   it("inserts a newly joined participant from the complete sequenced event", () => {
     expect(applyParticipantEvents([], [joinedEvent()])).toEqual([
       expect.objectContaining({

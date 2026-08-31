@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { RoomEvent } from "../api";
+import { mergeLobbyEvents, type RoomEvent } from "../api";
 import { projectRoomEventProgress, projectRoomEventsToTimeline } from "./roomEventProjection";
 
 function event(overrides: Partial<RoomEvent>): RoomEvent {
@@ -141,7 +141,28 @@ describe("projectRoomEventsToTimeline", () => {
       }),
     ]);
 
-    expect(boundedHistory).toEqual([]);
+    expect(boundedHistory).toEqual([
+      expect.objectContaining({
+        id: "delete-old-vote",
+        flow_action: "message_deleted",
+        target_event_id: "old-vote",
+      }),
+    ]);
+    const olderVisiblePoll = projectRoomEventsToTimeline([
+      event({
+        id: "old-vote",
+        seq: 1,
+        message_kind: "vote",
+        vote_id: "old-vote",
+        vote_question: "Old question?",
+      }),
+    ]);
+    expect(mergeLobbyEvents(olderVisiblePoll, boundedHistory)).toEqual([
+      expect.objectContaining({
+        record_id: "old-vote",
+        message_deleted: true,
+      }),
+    ]);
   });
 
   it("groups delta and final events by source event and actor", () => {

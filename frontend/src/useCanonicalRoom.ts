@@ -101,6 +101,9 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     onRoomDeleted: options.onRoomDeleted,
   };
   const connectionGenerationRef = useRef(0);
+  const timelineProjectionOptionsRef = useRef<
+    NonNullable<Parameters<typeof projectRoomEventsToTimeline>[1]>
+  >({});
 
   const eventsRef = useRef<Record<string, RoomEvent[]>>({});
   const roomSettingsSeqRef = useRef<Record<string, number>>({});
@@ -148,8 +151,27 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
       projectSessionState = true,
     } = options;
     const next = mergeRoomEvents(eventsRef.current[targetRoomId] || [], incoming, replace);
-    eventsRef.current = { ...eventsRef.current, [targetRoomId]: next };
-    setEventsByRoom((previous) => ({ ...previous, [targetRoomId]: next }));
+    eventsRef.current = replace
+      ? { [targetRoomId]: next }
+      : { ...eventsRef.current, [targetRoomId]: next };
+    setEventsByRoom((previous) =>
+      replace ? { [targetRoomId]: next } : { ...previous, [targetRoomId]: next }
+    );
+    setHistoryByRoom((previous) => {
+      const current = previous[targetRoomId];
+      if (!current?.initialized || !next.length) return previous;
+      const retainedOldest = Number(next[0]?.seq || current.oldestSeq);
+      const retainedLatest = Number(next.at(-1)?.seq || current.lastSeq);
+      return {
+        ...previous,
+        [targetRoomId]: {
+          ...current,
+          oldestSeq: retainedOldest,
+          lastSeq: Math.max(current.lastSeq, retainedLatest),
+          hasMoreBefore: current.hasMoreBefore || retainedOldest > 1,
+        },
+      };
+    });
 
     let latestSettingsEvent: RoomEvent | null = null;
     const currentSettingsSeq = Number(
@@ -351,6 +373,9 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
               lastSeq: Number(snapshot.last_seq || current?.lastSeq || 0),
               hasMoreBefore: resumed ? current.hasMoreBefore : Boolean(snapshot.has_more_before),
               resumeGap: Boolean(snapshot.resume_gap),
+              windowRevision: resumed
+                ? current.windowRevision
+                : Number(current?.windowRevision || 0) + 1,
             },
           };
         });
@@ -509,29 +534,18 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
         }
       }
       requireCurrentProjectionSocket();
-      applyEvents(roomId, events, {
-        projectProgress: false,
-        projectParticipantState: false,
-        projectSessionState: false,
-      });
-      setHistoryByRoom((previous) => ({
-        ...previous,
-        [roomId]: {
-          initialized: true,
-          oldestSeq: Number(oldestSeq || previous[roomId]?.oldestSeq || 0),
-          lastSeq: Number(previous[roomId]?.lastSeq || 0),
-          hasMoreBefore,
-          resumeGap: false,
-        },
-      }));
       const visibleCount = events.filter((event) => event.type === "message_final").length;
       return {
         loadedCount: visibleCount,
         oldestSeq,
         hasMoreBefore,
+        events: projectRoomEventsToTimeline(
+          events,
+          timelineProjectionOptionsRef.current,
+        ),
       };
     },
-    [applyEvents, requireCurrentProjectionSocket, roomId]
+    [requireCurrentProjectionSocket, roomId]
   );
 
   const sendAgentControl = useCallback(
@@ -749,6 +763,11 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     }),
     [acceptedProjection.displayResourceBase, events, participantProfiles, viewerParticipantId]
   );
+  timelineProjectionOptionsRef.current = {
+    viewerParticipantId,
+    participantProfiles,
+    displayResourceBase: acceptedProjection.displayResourceBase,
+  };
 
   return {
     socket: projectionIsCurrent ? socket : null,
@@ -774,6 +793,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     displayResourceBase:
       projectionIsCurrent ? acceptedProjection.displayResourceBase : "",
     participants,
+    participantProfiles,
     roomSettings: projectionIsCurrent ? roomSettingsByRoom[roomId] || null : null,
     agentSessions,
     capabilities: projectionIsCurrent ? capabilitiesByRoom[roomId] || {} : {},

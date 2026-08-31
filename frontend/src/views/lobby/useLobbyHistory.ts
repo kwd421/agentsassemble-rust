@@ -14,6 +14,10 @@ import {
   type LobbyEvent,
 } from "../../api";
 import type { RoomDockItem } from "../../lib/roomDockModel";
+import {
+  applyCanonicalParticipantProfiles,
+  type CanonicalParticipantProfile,
+} from "../../lib/canonicalRoomProjection";
 import type { RoomTypingIndicator } from "../../lib/roomTypingIndicators";
 import { isVoteTransitionKind } from "../../lib/voteEventKind";
 
@@ -32,26 +36,43 @@ type CanonicalHistoryPage = {
   loadedCount: number;
   oldestSeq: number;
   hasMoreBefore: boolean;
+  events?: LobbyEvent[];
 };
+
+function mergeDisplayedLobbyEvents(
+  existing: LobbyEvent[],
+  incoming: LobbyEvent[],
+) {
+  const merged = mergeLobbyEvents(existing, incoming).sort((left, right) => {
+    const sequence = Number(left.seq || 0) - Number(right.seq || 0);
+    return sequence || left.created_at.localeCompare(right.created_at);
+  });
+  return merged.length === existing.length &&
+    merged.every((event, index) => event === existing[index])
+    ? existing
+    : merged;
+}
 
 
 export function useLobbyHistory({
   activeRoom,
   typingIndicators,
-  bindLobbyStream,
   canonicalEvents,
   canonicalHistoryReady,
   canonicalOldestSeq,
   canonicalHasMoreHistory,
+  canonicalWindowRevision,
+  participantProfiles = {},
   loadCanonicalHistory,
 }: {
   activeRoom: RoomDockItem;
   typingIndicators: RoomTypingIndicator[];
-  bindLobbyStream?: (receive: (events: LobbyEvent[]) => void) => () => void;
   canonicalEvents?: LobbyEvent[];
   canonicalHistoryReady: boolean;
   canonicalOldestSeq: number;
   canonicalHasMoreHistory: boolean;
+  canonicalWindowRevision: number;
+  participantProfiles?: Record<string, CanonicalParticipantProfile>;
   loadCanonicalHistory?: (beforeSeq: number) => Promise<CanonicalHistoryPage>;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -62,6 +83,8 @@ export function useLobbyHistory({
   const loadingOlderRoomRef = useRef("");
   const historyLoadSuppressedUntilRef = useRef(0);
   const historyWindowActiveRef = useRef(false);
+  const canonicalWindowRevisionRef = useRef(-1);
+  const canonicalOldestSeqRef = useRef(canonicalOldestSeq);
   const historicalVoteIdsRef = useRef<Set<string>>(new Set());
   const prependAnchorRef = useRef<{
     roomId: string;
@@ -74,6 +97,7 @@ export function useLobbyHistory({
   const [loadedRoomId, setLoadedRoomId] = useState("");
   const [pinnedToLatest, setPinnedToLatest] = useState(true);
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
+  const [oldestSeq, setOldestSeq] = useState(canonicalOldestSeq);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [historyLoadError, setHistoryLoadError] = useState(false);
   const [historyWindowActive, setHistoryWindowActive] = useState(false);
@@ -88,10 +112,12 @@ export function useLobbyHistory({
     prependAnchorRef.current = null;
     historyWindowActiveRef.current = false;
     historicalVoteIdsRef.current.clear();
+    canonicalWindowRevisionRef.current = -1;
+    canonicalOldestSeqRef.current = canonicalOldestSeq;
   }
 
   const visibleEvents = useMemo(() => {
-    const roomEvents = events
+    const roomEvents = applyCanonicalParticipantProfiles(events, participantProfiles)
       .filter(
         (event) =>
           !isVoteTransitionKind(event.kind) &&
@@ -102,6 +128,7 @@ export function useLobbyHistory({
   }, [
     activeRoom.meetingId,
     events,
+    participantProfiles,
   ]);
   const voteRevisions = useMemo(() => {
     const revisions: Record<string, string> = {};
@@ -126,21 +153,34 @@ export function useLobbyHistory({
   }, []);
 
   const scrollToLatest = useCallback(() => {
-    if (historyWindowActiveRef.current) {
-      historyWindowActiveRef.current = false;
-      historicalVoteIdsRef.current.clear();
-      setHistoryWindowActive(false);
-      setHistoricalVoteRevisions({});
-      setEvents(canonicalEvents || []);
-      setHasMoreHistory(canonicalHasMoreHistory);
-    }
+    historyWindowActiveRef.current = false;
+    historicalVoteIdsRef.current.clear();
+    setHistoryWindowActive(false);
+    setHistoricalVoteRevisions({});
+    setEvents(mergeDisplayedLobbyEvents([], canonicalEvents || []));
+    setOldestSeq(canonicalOldestSeq);
+    setHasMoreHistory(canonicalHasMoreHistory);
     const element = scrollRef.current;
     if (!element) return;
     window.requestAnimationFrame(() => {
       element.scrollTop = element.scrollHeight;
     });
     updatePinnedToLatest(true);
-  }, [canonicalEvents, canonicalHasMoreHistory, updatePinnedToLatest]);
+  }, [canonicalEvents, canonicalHasMoreHistory, canonicalOldestSeq, updatePinnedToLatest]);
+
+  const acceptHistoryPage = useCallback((
+    requestedRoomId: string,
+    page: CanonicalHistoryPage,
+  ) => {
+    if (historyRoomRef.current !== requestedRoomId) return;
+    setOldestSeq(page.oldestSeq);
+    setHasMoreHistory(page.hasMoreBefore);
+    if (page.events?.length) {
+      setEvents((previous) =>
+        mergeDisplayedLobbyEvents(previous, page.events || [])
+      );
+    }
+  }, []);
 
   const loadOlderHistory = useCallback((triggerScrollTop?: number) => {
     if (
@@ -173,10 +213,10 @@ export function useLobbyHistory({
       scrollHeight: element.scrollHeight,
       scrollTop: triggerScrollTop ?? element.scrollTop,
     };
-    loadCanonicalHistory(canonicalOldestSeq)
+    loadCanonicalHistory(oldestSeq)
         .then((page) => {
           if (historyRoomRef.current !== requestedRoomId) return;
-          setHasMoreHistory(page.hasMoreBefore);
+          acceptHistoryPage(requestedRoomId, page);
           if (!page.loadedCount) {
             prependAnchorRef.current = null;
             if (loadingOlderRoomRef.current === requestedRoomId) {
@@ -200,11 +240,12 @@ export function useLobbyHistory({
   }, [
     activeRoom.id,
     activeRoom.meetingId,
-    canonicalOldestSeq,
+    acceptHistoryPage,
     events,
     hasMoreHistory,
     loadCanonicalHistory,
     loaded,
+    oldestSeq,
     visibleEvents,
   ]);
 
@@ -285,13 +326,61 @@ export function useLobbyHistory({
   }, [activeRoom.id, updatePinnedToLatest]);
 
   useEffect(() => {
-    if (historyWindowActiveRef.current && historyRoomRef.current === activeRoom.id) {
+    const windowChanged =
+      canonicalWindowRevisionRef.current !== canonicalWindowRevision;
+    const enteringCanonicalWindow = windowChanged || !loaded;
+    const requestOldestSeq = enteringCanonicalWindow ? canonicalOldestSeq : oldestSeq;
+    const displayedForBackfill = enteringCanonicalWindow
+      ? canonicalEvents || []
+      : events;
+    const canBackfill = enteringCanonicalWindow
+      ? canonicalHasMoreHistory
+      : hasMoreHistory;
+    if (windowChanged) {
+      canonicalWindowRevisionRef.current = canonicalWindowRevision;
+      historyWindowActiveRef.current = false;
+      historicalVoteIdsRef.current.clear();
+      setHistoryWindowActive(false);
+      setHistoricalVoteRevisions({});
+      setEvents(mergeDisplayedLobbyEvents([], canonicalEvents || []));
+      setOldestSeq(canonicalOldestSeq);
+      canonicalOldestSeqRef.current = canonicalOldestSeq;
+      setHasMoreHistory(canonicalHasMoreHistory);
+    } else if (historyWindowActiveRef.current && historyRoomRef.current === activeRoom.id) {
+      const latest: Record<string, string> = {};
+      (canonicalEvents || []).forEach((event) => {
+        if (
+          isVoteTransitionKind(event.kind) &&
+          event.vote_id &&
+          historicalVoteIdsRef.current.has(event.vote_id) &&
+          (!event.flow_meeting_id || event.flow_meeting_id === activeRoom.meetingId)
+        ) {
+          latest[event.vote_id] = event.id;
+        }
+      });
+      if (Object.keys(latest).length) {
+        setHistoricalVoteRevisions((previous) => ({ ...previous, ...latest }));
+      }
       setHasMoreHistory(false);
       setLoadedRoomId(activeRoom.id);
       return;
+    } else {
+      const priorCanonicalOldest = canonicalOldestSeqRef.current;
+      canonicalOldestSeqRef.current = canonicalOldestSeq;
+      if (
+        canonicalOldestSeq > priorCanonicalOldest &&
+        oldestSeq >= priorCanonicalOldest
+      ) {
+        setOldestSeq(canonicalOldestSeq);
+        setHasMoreHistory(true);
+      }
+      setEvents((previous) =>
+        mergeDisplayedLobbyEvents(
+          previous,
+          canonicalEvents || [],
+        )
+      );
     }
-    setEvents(canonicalEvents || []);
-    setHasMoreHistory(canonicalHasMoreHistory);
     if (!canonicalHistoryReady) {
         historyReadyRef.current = false;
         if (loadingOlderRoomRef.current !== activeRoom.id) {
@@ -301,8 +390,8 @@ export function useLobbyHistory({
       return;
     }
     const needsInitialBackfill =
-        canonicalHasMoreHistory &&
-        (canonicalEvents || []).filter((event) => !isVoteTransitionKind(event.kind)).length <
+        canBackfill &&
+        displayedForBackfill.filter((event) => !isVoteTransitionKind(event.kind)).length <
           INITIAL_HISTORY_MESSAGE_TARGET &&
         initialBackfillFailedRoomRef.current !== activeRoom.id;
     if (needsInitialBackfill && loadCanonicalHistory) {
@@ -312,10 +401,12 @@ export function useLobbyHistory({
           const requestedRoomId = activeRoom.id;
           loadingOlderRoomRef.current = requestedRoomId;
           setLoadingOlder(true);
-          void loadCanonicalHistory(canonicalOldestSeq)
+          void loadCanonicalHistory(requestOldestSeq)
             .then((page) => {
               if (historyRoomRef.current !== requestedRoomId) return;
-              setHasMoreHistory(page.hasMoreBefore);
+              acceptHistoryPage(requestedRoomId, page);
+              historyReadyRef.current = true;
+              setLoadedRoomId(requestedRoomId);
             })
             .catch(() => {
               if (historyRoomRef.current !== requestedRoomId) return;
@@ -343,55 +434,28 @@ export function useLobbyHistory({
   }, [
     activeRoom.meetingId,
     activeRoom.id,
+    acceptHistoryPage,
     canonicalEvents,
     canonicalHasMoreHistory,
     canonicalHistoryReady,
     canonicalOldestSeq,
+    canonicalWindowRevision,
+    events,
+    hasMoreHistory,
     loadCanonicalHistory,
+    loaded,
+    oldestSeq,
   ]);
-
-  const handleStreamEvents = useCallback((incoming: LobbyEvent[]) => {
-    if (historyWindowActiveRef.current) {
-      const latest: Record<string, string> = {};
-      incoming.forEach((event) => {
-        if (
-          isVoteTransitionKind(event.kind) &&
-          event.vote_id &&
-          historicalVoteIdsRef.current.has(event.vote_id) &&
-          (!event.flow_meeting_id || event.flow_meeting_id === activeRoom.meetingId)
-        ) {
-          latest[event.vote_id] = event.id;
-        }
-      });
-      if (Object.keys(latest).length) {
-        setHistoricalVoteRevisions((previous) => ({ ...previous, ...latest }));
-      }
-      return;
-    }
-    setEvents((previous) => {
-      if (!incoming.length) return previous;
-      const next = mergeLobbyEvents(previous, incoming);
-      if (next.length === previous.length) {
-        const changed = next.some((event, index) => event !== previous[index]);
-        return changed ? next : previous;
-      }
-      return next;
-    });
-  }, [activeRoom.meetingId]);
-
-  useEffect(() => {
-    if (!bindLobbyStream) return undefined;
-    return bindLobbyStream(handleStreamEvents);
-  }, [bindLobbyStream, handleStreamEvents]);
 
   const handleLobbyPosted = useCallback((postedEvents: LobbyEvent[]) => {
     historyWindowActiveRef.current = false;
     historicalVoteIdsRef.current.clear();
     setHistoryWindowActive(false);
     setHistoricalVoteRevisions({});
-    setEvents(mergeLobbyEvents(canonicalEvents || [], postedEvents));
+    setEvents(mergeDisplayedLobbyEvents(canonicalEvents || [], postedEvents));
+    setOldestSeq(canonicalOldestSeq);
     setHasMoreHistory(canonicalHasMoreHistory);
-  }, [canonicalEvents, canonicalHasMoreHistory]);
+  }, [canonicalEvents, canonicalHasMoreHistory, canonicalOldestSeq]);
 
   const showHistoryWindow = useCallback((historyEvents: LobbyEvent[]) => {
     historyWindowActiveRef.current = true;

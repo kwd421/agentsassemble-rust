@@ -176,6 +176,59 @@ and returned APPROVE C0/H0/M0/L0. It ran no automated security scan, tests, prov
 critical web review and the local frontend commit's threshold batch remain pending and are not
 claimed as approved here.
 
+## Browser live-window ownership correction
+
+- Finding: the later Daybreaker catch-up review found one Medium where the canonical React owner
+  retained every raw page and live event for every visited room, sorted and reprojected the full
+  array after each batch, and then republished that full timeline through a second callback for the
+  lobby to merge again. The existing room ceiling of 14,400 commands and 32 MiB of accepted command
+  content per minute made the hidden duplicate's linear heap and whole-history CPU growth concrete.
+  The same review found one Low where the source gate counted 500--799-line review candidates but
+  printed only the 800-line strong subset. The critical web review of the same pushed cumulative
+  range reported no actionable finding and `APPROVE C0/H0/M0/L0`; Daybreaker reported
+  `REVISE C0/H0/M1/L1`.
+- Intent and owner: the canonical socket now retains only the same generated 200-event bound used by
+  a server history page and evicts all inactive-room raw event arrays when an authoritative initial
+  window replaces the active projection. Explicit history pages are projected once and returned to
+  the lobby instead of being copied into the live socket window. The lobby remains the one owner of
+  messages the user is actually displaying; it can keep scrolling through ordinary paginated
+  history, so this correction does not impose a new retention policy or virtualization framework on
+  reachable chat behavior. The current canonical participant profile is reapplied at the display
+  boundary, including to older pages, so separating raw custody does not create a stale identity
+  cache. A non-resume snapshot revision replaces that display window, while a
+  resume or live batch merges into it. The duplicate app-controller callback and full-timeline
+  republish path were removed.
+- Mutation and profile invariants: a history page is projected with the current canonical
+  participant/Agent Session profile at read time. A later `message_updated` or `message_deleted`
+  event whose target has already left the 200-event raw window is projected as a private transition;
+  the lobby applies it to a currently displayed record by exact durable event ID and never renders
+  or retains the transition as a chat row. Snapshot replacement, cursor-contiguous history,
+  mutation tombstones, current profile projection, vote revision signals, scroll anchoring, and the
+  explicit jump-to-latest control remain intact. No HTTP path, cache, polling, heartbeat, retry,
+  fallback, worker, or timer was added.
+- Trade-off and verification: one displayed lobby history can still grow when the user deliberately
+  reads more pages or leaves a long live conversation visible; bounding that state would change the
+  current scroll contract and requires a separately specified bidirectional/virtualized reader.
+  This correction removes only the avoidable hidden raw duplicate and inactive-room retention. A
+  focused regression proves 201 live raw events retain sequences 2--201 and advance the history
+  cursor, while page results remain separate and current-profile-projected. Mutation projection,
+  historical vote revision, lobby paging, canonical synchronization, and production frontend build
+  checks also pass. Complete `make verify` passed the architecture/source gates, generated protocol
+  check, 647 frontend tests and production/CSS build, 26 desktop tests, every workspace unit,
+  integration, and doc test, and warning-denied workspace Clippy. Final correction re-review is
+  pending and is not claimed as approved here.
+
+`useCanonicalRoom.ts` is in 800--1,000-line structure-review territory after this correction. It
+remains intact because the live-window and history-page paths share one accepted socket, projection
+generation, current-profile state, cursor authority, and fail-closed operation check. Moving either
+path out would add public React state transfer and socket/projection interfaces while obscuring the
+one acceptance invariant; no unrelated domain, lifecycle, or second state owner was added. This is
+a reviewed cohesive-file decision, not a LOC exception or a reason to raise a gate.
+
+The gate correction now prints every 500-line review candidate with its file name while preserving
+the distinct 800-line strong label and 1,000-line rejection. Its command-output regression and the
+policy test suite pass; it adds no exception or threshold change.
+
 ## Verification path
 
 - focused parser and persistence tests for cursor edges, 200/remaining pages, current authority,

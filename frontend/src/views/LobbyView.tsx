@@ -21,6 +21,7 @@ import type {
 import type { RoomAppearance } from "../lib/roomAppearance";
 import type { RoomPostingMode } from "../lib/roomGuestPosting";
 import type { RoomTypingIndicator } from "../lib/roomTypingIndicators";
+import type { CanonicalParticipantProfile } from "../lib/canonicalRoomProjection";
 import type { Mentionable } from "../lib/mentionComposerModel";
 import { buildLobbyRows } from "./lobby/lobbyRows";
 import {
@@ -75,12 +76,13 @@ export default function LobbyView({
   messagePinsAuthority,
   viewerParticipantId = "",
   typingIndicators = [],
-  bindLobbyStream,
   submitMessage,
   canonicalEvents,
   canonicalHistoryReady = true,
   canonicalOldestSeq = 0,
   canonicalHasMoreHistory = false,
+  canonicalWindowRevision = 0,
+  participantProfiles = {},
   loadCanonicalHistory,
   providerRequests = [],
   resolveProviderRequest,
@@ -111,16 +113,18 @@ export default function LobbyView({
   roomSessionToken?: string;
   messagePinsAuthority?: MessagePinsAuthority;
   viewerParticipantId?: string;
-  bindLobbyStream?: (receive: (events: LobbyEvent[]) => void) => () => void;
   submitMessage?: (message: string) => Promise<LobbyEvent[]>;
   canonicalEvents?: LobbyEvent[];
   canonicalHistoryReady?: boolean;
   canonicalOldestSeq?: number;
   canonicalHasMoreHistory?: boolean;
+  canonicalWindowRevision?: number;
+  participantProfiles?: Record<string, CanonicalParticipantProfile>;
   loadCanonicalHistory?: (beforeSeq: number) => Promise<{
     loadedCount: number;
     oldestSeq: number;
     hasMoreBefore: boolean;
+    events?: LobbyEvent[];
   }>;
   providerRequests?: PendingProviderRequest[];
   resolveProviderRequest?: (
@@ -155,11 +159,12 @@ export default function LobbyView({
   } = useLobbyHistory({
     activeRoom,
     typingIndicators,
-    bindLobbyStream,
     canonicalEvents,
     canonicalHistoryReady,
     canonicalOldestSeq,
     canonicalHasMoreHistory,
+    canonicalWindowRevision,
+    participantProfiles,
     loadCanonicalHistory,
   });
   const [pinnedItems, setPinnedItems] = useState<MessagePin[]>([]);

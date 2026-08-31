@@ -1,6 +1,6 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { Hash } from "lucide-react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import type { LobbyEvent } from "../../api";
 import type { RoomDockItem } from "../../lib/roomDockModel";
@@ -34,31 +34,25 @@ function event(id: string, kind = "message", voteId = "vote-1"): LobbyEvent {
 
 describe("useLobbyHistory vote refresh ownership", () => {
   it("검색 문맥은 그대로 두고 투표 변경 신호만 받는다", async () => {
-    let receive: (incoming: LobbyEvent[]) => void = () => undefined;
-    const bindLobbyStream = vi.fn((next: (incoming: LobbyEvent[]) => void) => {
-      receive = next;
-      return () => undefined;
-    });
     const historicalPoll = event("vote-1", "vote");
-    const canonicalEvents = [historicalPoll];
-    const hook = renderHook(() => useLobbyHistory({
+    const hook = renderHook(({ canonicalEvents }) => useLobbyHistory({
       activeRoom: room,
       typingIndicators: [],
-      bindLobbyStream,
       canonicalEvents,
       canonicalHistoryReady: true,
       canonicalOldestSeq: 1,
       canonicalHasMoreHistory: false,
-    }));
+      canonicalWindowRevision: 1,
+    }), { initialProps: { canonicalEvents: [historicalPoll] } });
     await waitFor(() => expect(hook.result.current.loaded).toBe(true));
 
     act(() => hook.result.current.showHistoryWindow([historicalPoll]));
-    act(() => receive([
-      event("live-message"),
-      event("vote-transition-1", "vote_cast"),
-      event("irrelevant-transition", "vote_cast", "vote-outside-window"),
-      event("vote-transition-2", "vote_cast"),
-    ]));
+    hook.rerender({ canonicalEvents: [
+        event("live-message"),
+        event("vote-transition-1", "vote_cast"),
+        event("irrelevant-transition", "vote_cast", "vote-outside-window"),
+        event("vote-transition-2", "vote_cast"),
+      ] });
 
     expect(hook.result.current.historyWindowActive).toBe(true);
     expect(hook.result.current.visibleEvents.map(({ id }) => id)).toEqual(["vote-1"]);

@@ -238,7 +238,22 @@ export function projectRoomEventsToTimeline(
         deletedVoteIds.add(String(event.target_event_id || ""));
       }
       const targetIndex = recordIndex.get(String(event.target_event_id || ""));
-      if (targetIndex === undefined) return;
+      if (targetIndex === undefined) {
+        timeline.push({
+          id: event.id,
+          seq: Number(event.seq) || undefined,
+          created_at: event.created_at,
+          name: "",
+          side: "other",
+          kind: "message_transition",
+          message: String(event.content || ""),
+          edited_at: String(event.edited_at || "") || undefined,
+          flow_meeting_id: event.room_id,
+          flow_action: event.type,
+          target_event_id: String(event.target_event_id || ""),
+        });
+        return;
+      }
       const existing = timeline[targetIndex];
       timeline[targetIndex] = event.type === "message_deleted"
         ? {
