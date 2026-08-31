@@ -6,7 +6,8 @@ use sqlx::{Row, Sqlite, Transaction};
 
 use crate::{
     AgentTurnAssignment, AgentTurnCommit, PersistenceError, ProviderTurnExecution,
-    ProviderTurnExecutionPhase, ProviderTurnInterruptEffect, SqliteStore,
+    ProviderTurnExecutionPhase, ProviderTurnInterruptCause, ProviderTurnInterruptEffect,
+    SqliteStore,
     agent_lifecycle::{load_session, save_session},
     agent_reconciliation::load_candidate as load_lifecycle_candidate,
     message_attachments::message_attachment_ids_from_events,
@@ -419,11 +420,12 @@ impl SqliteStore {
             &now,
         )
         .await?;
+        let interrupt_cause = candidate.effect.as_ref().map(|effect| effect.cause);
         finalize_runtime_gone_session(
             transaction,
             session,
             &execution,
-            candidate.effect.is_some(),
+            interrupt_cause,
             floor_progression,
         )
         .await
@@ -520,11 +522,11 @@ async fn finalize_runtime_gone_session(
     mut transaction: Transaction<'_, Sqlite>,
     mut session: DurableAgentSession,
     execution: &ProviderTurnExecution,
-    interrupted: bool,
+    interrupt_cause: Option<ProviderTurnInterruptCause>,
     floor_progression: FloorProgression,
 ) -> Result<AgentTurnCommit, PersistenceError> {
     let mut events = Vec::with_capacity(3);
-    if !interrupted {
+    if interrupt_cause.is_none() {
         events.push(
             error_event(
                 &mut transaction,
@@ -535,19 +537,32 @@ async fn finalize_runtime_gone_session(
             )
             .await?,
         );
+    } else if interrupt_cause == Some(ProviderTurnInterruptCause::AgentInterrupt) {
+        events.push(
+            error_event(
+                &mut transaction,
+                &session,
+                &execution.turn_id,
+                "interrupted",
+                "The provider turn was interrupted by a room operator.",
+            )
+            .await?,
+        );
     }
     events.push(
         turn_finished_event(
             &mut transaction,
             &session,
             &execution.turn_id,
-            if interrupted { "interrupted" } else { "error" },
-            None,
-            Some(if interrupted {
-                "participant_muted"
+            if interrupt_cause.is_some() {
+                "interrupted"
             } else {
-                "provider_runtime_gone"
-            }),
+                "error"
+            },
+            None,
+            Some(
+                interrupt_cause.map_or("provider_runtime_gone", ProviderTurnInterruptCause::as_str),
+            ),
         )
         .await?,
     );
@@ -571,6 +586,11 @@ async fn finalize_runtime_gone_session(
     session.runtime_owner_id.clear();
     session.runtime_lease_token.clear();
     session.schedule_requested = false;
+    if interrupt_cause == Some(ProviderTurnInterruptCause::AgentInterrupt) {
+        "The provider turn was interrupted by a room operator."
+            .clone_into(&mut session.public.last_error);
+        "interrupted".clone_into(&mut session.public.last_error_code);
+    }
     session.public.recovery_required = false;
     clear_active_turn_fields(&mut session);
     session.public.updated_at = Utc::now();
@@ -585,7 +605,9 @@ async fn finalize_runtime_gone_session(
     participant.updated_at = Utc::now();
     save_participant(&mut transaction, &participant).await?;
     events.push(session_state_event(&mut transaction, &session).await?);
-    let scheduled = if floor_progression == FloorProgression::Assign {
+    let scheduled = if floor_progression == FloorProgression::Assign
+        && interrupt_cause != Some(ProviderTurnInterruptCause::AgentInterrupt)
+    {
         let (room, settings) = load_active_room(&mut transaction, &execution.room_id).await?;
         assign_pending_in(&mut transaction, &room, &settings).await?
     } else {

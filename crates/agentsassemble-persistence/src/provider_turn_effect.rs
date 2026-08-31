@@ -20,6 +20,30 @@ pub enum ProviderTurnEffectPhase {
     Finalized,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProviderTurnInterruptCause {
+    ParticipantMuted,
+    AgentInterrupt,
+}
+
+impl ProviderTurnInterruptCause {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ParticipantMuted => "participant_muted",
+            Self::AgentInterrupt => "agent_interrupt",
+        }
+    }
+
+    fn parse(value: &str) -> Result<Self, PersistenceError> {
+        match value {
+            "participant_muted" => Ok(Self::ParticipantMuted),
+            "agent_interrupt" => Ok(Self::AgentInterrupt),
+            _ => Err(invalid_effect()),
+        }
+    }
+}
+
 impl ProviderTurnEffectPhase {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
@@ -54,6 +78,7 @@ pub struct ProviderTurnInterruptEffect {
     pub session_id: String,
     pub turn_generation: u64,
     pub effect_id: String,
+    pub cause: ProviderTurnInterruptCause,
     pub phase: ProviderTurnEffectPhase,
     pub execution_id: String,
     pub participant_id: String,
@@ -74,6 +99,7 @@ pub struct ProviderTurnEffectClaim {
 pub(crate) async fn prepare_interrupt_effect(
     transaction: &mut Transaction<'_, Sqlite>,
     execution: &ProviderTurnExecution,
+    cause: ProviderTurnInterruptCause,
 ) -> Result<ProviderTurnInterruptEffect, PersistenceError> {
     if !execution.phase.is_blocking() {
         return Err(stale_effect());
@@ -82,17 +108,28 @@ pub(crate) async fn prepare_interrupt_effect(
     let now = canonical_now();
     sqlx::query(
         "INSERT OR IGNORE INTO provider_turn_effects(\
-         room_id, session_id, turn_generation, effect_id, effect_kind, phase, created_at, updated_at) \
-         VALUES (?, ?, ?, ?, 'interrupt', 'prepared', ?, ?)",
+         room_id, session_id, turn_generation, effect_id, effect_kind, interrupt_cause, phase, created_at, updated_at) \
+         VALUES (?, ?, ?, ?, 'interrupt', ?, 'prepared', ?, ?)",
     )
     .bind(&execution.room_id)
     .bind(&execution.session_id)
     .bind(generation_i64(execution.turn_generation)?)
     .bind(effect_id)
+    .bind(cause.as_str())
     .bind(&now)
     .bind(&now)
     .execute(&mut **transaction)
     .await?;
+    let effect = load_effect_in(
+        transaction,
+        &execution.room_id,
+        &execution.session_id,
+        execution.turn_generation,
+    )
+    .await?;
+    if effect.cause != cause {
+        return Err(unresolved_effect());
+    }
     if matches!(
         execution.phase,
         ProviderTurnExecutionPhase::Assigned
@@ -636,7 +673,7 @@ pub(crate) async fn load_effect_in(
     turn_generation: u64,
 ) -> Result<ProviderTurnInterruptEffect, PersistenceError> {
     let row = sqlx::query(
-        "SELECT effect.effect_id, effect.phase, effect.dispatch_nonce, \
+        "SELECT effect.effect_id, effect.interrupt_cause, effect.phase, effect.dispatch_nonce, \
          execution.execution_id, execution.participant_id, execution.turn_id, \
          execution.start_dispatch_nonce, execution.runtime_handle_id, \
          execution.runtime_owner_id, execution.runtime_lease_token \
@@ -657,6 +694,7 @@ pub(crate) async fn load_effect_in(
         session_id: session_id.to_owned(),
         turn_generation,
         effect_id: row.get("effect_id"),
+        cause: ProviderTurnInterruptCause::parse(row.get::<String, _>("interrupt_cause").as_str())?,
         phase: ProviderTurnEffectPhase::parse(row.get::<String, _>("phase").as_str())?,
         execution_id: row.get("execution_id"),
         participant_id: row.get("participant_id"),
@@ -677,6 +715,7 @@ pub(crate) fn require_exact_effect(
         || expected.session_id != current.session_id
         || expected.turn_generation != current.turn_generation
         || expected.effect_id != current.effect_id
+        || expected.cause != current.cause
         || expected.execution_id != current.execution_id
         || expected.participant_id != current.participant_id
         || expected.turn_id != current.turn_id

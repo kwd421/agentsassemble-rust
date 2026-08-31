@@ -2,7 +2,8 @@ use chrono::Utc;
 use sqlx::{Sqlite, Transaction};
 
 use crate::{
-    AgentTurnCommit, PersistenceError, ProviderTurnExecutionPhase, SqliteStore,
+    AgentTurnCommit, PersistenceError, ProviderTurnExecutionPhase, ProviderTurnInterruptCause,
+    SqliteStore,
     agent_lifecycle::{load_session, save_session},
     provider_turn_effect::{
         ProviderTurnEffectPhase, ProviderTurnInterruptEffect, canonical_now, generation_i64,
@@ -30,7 +31,6 @@ impl SqliteStore {
         expected: &ProviderTurnInterruptEffect,
     ) -> Result<AgentTurnCommit, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        let (room, settings) = load_active_room(&mut transaction, &expected.room_id).await?;
         let mut session =
             load_session(&mut transaction, &expected.room_id, &expected.session_id).await?;
         if !active_turn_authority(&session).map_err(|_| invalid_effect())?
@@ -46,15 +46,30 @@ impl SqliteStore {
         terminalize_retained_interrupt(&mut transaction, expected).await?;
 
         let turn_id = session.public.active_turn_id.clone();
-        let finished = turn_finished_event(
-            &mut transaction,
-            &session,
-            &turn_id,
-            "interrupted",
-            None,
-            Some("participant_muted"),
-        )
-        .await?;
+        let mut events = Vec::with_capacity(3);
+        if expected.cause == ProviderTurnInterruptCause::AgentInterrupt {
+            events.push(
+                crate::room_turns::support::error_event(
+                    &mut transaction,
+                    &session,
+                    &turn_id,
+                    "interrupted",
+                    "The provider turn was interrupted by a room operator.",
+                )
+                .await?,
+            );
+        }
+        events.push(
+            turn_finished_event(
+                &mut transaction,
+                &session,
+                &turn_id,
+                "interrupted",
+                None,
+                Some(expected.cause.as_str()),
+            )
+            .await?,
+        );
         session.pending_inputs = merge_room_inputs(
             session
                 .inflight_inputs
@@ -67,16 +82,30 @@ impl SqliteStore {
         "idle".clone_into(&mut session.public.runtime_status);
         session.public.turn_phase.clear();
         session.public.active_turn_id.clear();
-        session.public.last_error.clear();
-        session.public.last_error_code.clear();
+        if expected.cause == ProviderTurnInterruptCause::AgentInterrupt {
+            "The provider turn was interrupted by a room operator."
+                .clone_into(&mut session.public.last_error);
+            "interrupted".clone_into(&mut session.public.last_error_code);
+        } else {
+            session.public.last_error.clear();
+            session.public.last_error_code.clear();
+        }
         session.public.recovery_required = false;
         clear_active_turn_fields(&mut session);
         session.public.updated_at = Utc::now();
         save_session(&mut transaction, &session).await?;
         let state = session_state_event(&mut transaction, &session).await?;
-        let scheduled = assign_pending_in(&mut transaction, &room, &settings).await?;
+        let scheduled = if expected.cause == ProviderTurnInterruptCause::ParticipantMuted {
+            let (room, settings) = load_active_room(&mut transaction, &expected.room_id).await?;
+            assign_pending_in(&mut transaction, &room, &settings).await?
+        } else {
+            AgentTurnCommit {
+                events: Vec::new(),
+                next_assignments: Vec::new(),
+            }
+        };
         transaction.commit().await?;
-        let mut events = vec![finished, state];
+        events.push(state);
         events.extend(scheduled.events);
         Ok(AgentTurnCommit {
             events,

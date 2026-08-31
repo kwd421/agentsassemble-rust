@@ -11,8 +11,8 @@ use sqlx::{Row, Sqlite, Transaction};
 use uuid::Uuid;
 
 use crate::{
-    AgentTurnAssignment, CommandOutcome, PersistenceError, ProviderTurnInterruptEffect,
-    SqliteStore,
+    AgentTurnAssignment, CommandOutcome, PersistenceError, ProviderTurnInterruptCause,
+    ProviderTurnInterruptEffect, SqliteStore,
     agent_lifecycle::save_session,
     authority::active_room_for_principal,
     command_admission::{admit_non_lifecycle_command, store_command_result},
@@ -179,7 +179,14 @@ async fn prepare_participant_mute(
                 session.turn_generation,
             )
             .await?;
-            interrupt_effect = Some(prepare_interrupt_effect(transaction, &execution).await?);
+            interrupt_effect = Some(
+                prepare_interrupt_effect(
+                    transaction,
+                    &execution,
+                    ProviderTurnInterruptCause::ParticipantMuted,
+                )
+                .await?,
+            );
         } else if !update.muted {
             session.schedule_requested = true;
             session.public.updated_at = Utc::now();

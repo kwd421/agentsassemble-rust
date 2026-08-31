@@ -1,6 +1,7 @@
 mod agent_configuration;
 mod agent_create_start;
 mod agent_creation_records;
+mod agent_interrupt;
 mod agent_launch_events;
 mod agent_lifecycle;
 mod agent_lifecycle_authority;
@@ -89,6 +90,7 @@ mod room_vote_tests;
 pub use agent_create_start::{
     AgentCreateStartCommit, AgentCreateStartEffect, AgentCreateStartPlan,
 };
+pub use agent_interrupt::AgentInterruptMutation;
 pub use agent_lifecycle::{
     AgentRuntimeStarted, AgentStartEffect, AgentStartPlan, AgentStopEffect, AgentStopPlan,
 };
@@ -129,7 +131,8 @@ pub use private_fs::secure_private_directory;
 pub use profile_attachments::{ProfileAttachment, ProfileAttachmentMetadata};
 pub use profile_store::ProfileUpdateOutcome;
 pub use provider_turn_effect::{
-    ProviderTurnEffectClaim, ProviderTurnEffectPhase, ProviderTurnInterruptEffect,
+    ProviderTurnEffectClaim, ProviderTurnEffectPhase, ProviderTurnInterruptCause,
+    ProviderTurnInterruptEffect,
 };
 pub use provider_turn_execution::{
     ProviderTurnExecution, ProviderTurnExecutionPhase, ProviderTurnStartAuthority,
