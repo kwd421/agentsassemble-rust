@@ -1,6 +1,6 @@
 # Agent Session vertical slice
 
-Status: published implementation owner; web and manual-security review complete
+Status: published implementation owner; idle pause/resume cutover active
 
 ## Definition
 
@@ -26,6 +26,45 @@ Implementation order is mandatory:
 3. implement the server-owned Agent Session command and lifecycle contract;
 4. verify the copied UI, crash/replay cases, exact provider matrix, restart, and
    owned-resource cleanup before declaring the slice complete.
+
+## Active idle pause/resume extension
+
+The original reachable client exposes `agent.pause` only for an idle connected Agent Session and
+`agent.resume` for a paused session. Pause disables scheduling while preserving the exact provider
+process and provider conversation; resume re-enables that same resident runtime and advances queued
+room work. This extension owns only that state-preserving pair. Busy-turn `agent.interrupt`, stopped
+runtime resume through provider launch, re-add, kick, and provider-request resolution retain their
+separate existing or future owners.
+
+- Both actions require the current server-derived `agent.control` capability, an active-room
+  principal, and a payload containing exactly one canonical Agent Session identifier. A browser
+  display condition never creates authority, and admitted non-operator or Agent Bridge principals
+  cannot use either action.
+- `agent.pause` accepts only a complete idle/enabled resident session with empty active and inflight
+  turn authority, no lifecycle intent, and the exact durable runtime handle/owner/lease and active
+  provider-session identity. It atomically changes only `enabled=false` and
+  `runtime_status=paused`, appends the canonical complete `agent_session_state`, and stores the exact
+  replay result. It sends no provider request and does not stop, detach, replace, or reattach the
+  runtime.
+- A paused session continues to own newly queued canonical inputs but is ineligible for assignment,
+  so it consumes no new provider turn while paused. The existing combined 256-input ceiling remains
+  the sole queue bound.
+- `agent.resume` takes the state-only path only for that exact paused resident state. It preserves
+  every runtime and provider identity, atomically sets `enabled=true` and `runtime_status=idle`,
+  appends the canonical state event/result, and lets the existing ordered-floor owner assign queued
+  work after commit. Every non-paused resume retains the current stopped-runtime launch contract and
+  its durable external-effect reservation; the client does not choose between the paths.
+- Same request/action/payload replay returns the committed result without another event or state
+  transition; changed request reuse conflicts. Invalid, active-turn, stopping, recovery-required,
+  incomplete-runtime, or lifecycle-owned state fails before mutation. No schema, migration,
+  compatibility branch, provider-specific path, background task, polling, heartbeat, timer, retry,
+  or fallback is added.
+- Verification must prove exact replay/conflict and invalid-state rejection, no assignment while
+  paused, queued-work assignment after resume, unchanged runtime/provider identities across reload
+  and restart, copied-control surface gating, and real packaged Codex Terra, Antigravity Flash, and
+  OpenCode Muse Spark process-preserving flows. Resource evidence compares the resident process set
+  and idle CPU/RSS before pause, during pause, and after resume without claiming an improvement from
+  point samples.
 
 ## Required slice contract
 

@@ -1,6 +1,6 @@
 # Lobby Message Mutations Slice
 
-Status: implementation and packaged flow complete; external review pending
+Status: implementation, packaged flow, and both manual reviews complete
 
 ## Definition
 
@@ -263,7 +263,8 @@ event, redaction, deletion, budget reservation, or publication.
   assertions with exact replay cursors, durable snapshots, and causal socket closure. No index,
   background cleanup, timer, polling, heartbeat, retry, fallback, or swallowed failure was added.
   Daybreaker correction review approved pushed HEAD `d168354` and cumulative
-  `a958bab..d168354` at C0/H0/M0/L0; critical-web review remains pending.
+  `a958bab..d168354` at C0/H0/M0/L0. The independent critical-web review then approved pushed HEAD
+  `23c9f35`, cumulative `a958bab..23c9f35`, and corrections `edd9ce4..23c9f35` at C0/H0/M0/L0.
 - Provider terminal correction: Daybreak then traced `vote_capacity_reached` through the provider
   finalization path, which commits terminal product rejection events in the same transaction. The
   cast branch had inserted its anonymous transition before discovering that a new ballot exceeded

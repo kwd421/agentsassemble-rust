@@ -4603,9 +4603,10 @@ regenerable runtime staging were moved to the recoverable
 never-launched packaging attempt were included in that same bundle. No shared build cache, user
 profile, user browser, provider, or uncommitted source was removed, and Computer Use was reset.
 
-The cumulative threshold batch and these packaged results still require critical-web and Daybreaker
-manual source review. This section therefore records implementation and observed-flow completion,
-not external approval.
+The cumulative threshold batch and packaged results received both required manual source approvals.
+Daybreaker approved through `d168354` at C0/H0/M0/L0. The independent critical-web review then
+approved pushed HEAD `23c9f35`, cumulative `a958bab..23c9f35`, and corrections
+`edd9ce4..23c9f35` at C0/H0/M0/L0.
 
 ## Lobby message-mutation review corrections: 2026-08-31
 
@@ -4662,4 +4663,6 @@ The TCP correction removes all uses of the shared elapsed-silence helper. Exact 
 the next durable snapshot and event sequence containing exactly one target mutation, read-only
 rejection is bracketed by unchanged durable room state, and server rejection closure is awaited as a
 causal socket event without an arbitrary deadline. Daybreaker manually approved pushed HEAD
-`d168354` and cumulative `a958bab..d168354` at C0/H0/M0/L0; critical-web review remains pending.
+`d168354` and cumulative `a958bab..d168354` at C0/H0/M0/L0. The independent critical-web review
+approved pushed HEAD `23c9f35`, cumulative `a958bab..23c9f35`, and corrections
+`edd9ce4..23c9f35` at C0/H0/M0/L0.
