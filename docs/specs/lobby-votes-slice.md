@@ -186,6 +186,27 @@ mount, explicit user refresh, or sequenced vote events—not polling.
 
 ## Manual review record
 
+### Provider terminal-path implementation
+
+- Prior gap and intent: provider turns could finish only with ordinary speech or decline, so an
+  Agent Session could not use the same room-owned poll state transitions as a human. The common
+  RoomPortal now stages one typed create/cast/withdraw/close terminal outcome, and the exact active
+  turn transaction applies it through the existing domain and persistence vote owner. Provider
+  adapters do not own vote validation, ballot state, close authority, sequence allocation, or
+  publication.
+- Preserved contracts and resource result: the transaction revalidates the execution receipt,
+  input cursor, durable Agent Session participant, membership, mute state, and poll ownership before
+  committing the vote and common turn finalization atomically. Provider poll creation rejects
+  browser upload custody and is the only vote transition routed to the floor. DeepSeek and
+  Antigravity converge on the same staged outcome; Antigravity's private helper and one-use hook do
+  not treat transcript or printed text as publication. No durable state, network polling, heartbeat,
+  retry, cache, background task, or compatibility path was added.
+- Verification result: `make verify` passed all structure/source-growth/policy/generated/CSS/diff
+  gates, the production frontend build and 104-file/644-test frontend suite, 26 desktop tests,
+  52 domain tests, 228 persistence tests, 6 protocol tests, 152 provider tests, 94 server tests plus
+  the actual TCP/integration boundaries, and warning-denied workspace Clippy. Packaged UI and the
+  three real-provider acceptance flows remain pending and are not claimed by this result.
+
 - Finding: both independent manual reviews identified the historical `77697b7` Low where deadline
   expiry and manual close shared `vote_closed`; `aa77058` restored deadline-first `vote_expired`,
   and both reviewers marked the finding closed with no remaining actionable item.
@@ -202,3 +223,13 @@ mount, explicit user refresh, or sequenced vote events—not polling.
   repository-wide owners as `APPROVE C0/H0/M0/L0`. Daybreaker Blue High could not run because its
   real usage allowance is unavailable until 2026-09-06; under the user's standing instruction, the
   same very-high session performed the security cross-review. No automated scan was used.
+- Finding: the provider terminal-path review found no actionable item. It independently ruled out
+  external Browser-to-AgentBridge authority escalation, temporary provider text or Antigravity
+  transcript/print publication, competing vote/idempotency/sequence owners, partial terminalization,
+  and unbounded polling or fallback introduced by this batch.
+- Final approval: after a replacement session approved the review plan under Pro reasoning, critical
+  web (`GPT-5.6 Sol`, explicitly verified very-high reasoning) approved `fe229e9`, `242caf2`,
+  `11af535`, exact `d965dce..11af535`, cumulative `aa77058..11af535`, pushed HEAD `11af535`, and
+  related repository-wide owners as `APPROVE C0/H0/M0/L0`. Daybreaker Blue High remained unavailable
+  until 2026-09-06, so the same session performed the authorized security cross-review. The review
+  used public immutable source only and no automated scan, provider, packaged app, or Computer Use.
