@@ -46,6 +46,49 @@ pub(crate) enum ProviderForkPolicy {
     AllowInGroup,
 }
 
+#[derive(Clone, Copy)]
+pub(crate) enum GuardianCleanupFailure {
+    ProviderState = 20,
+    LeaderExited = 21,
+    RuntimeCapture = 22,
+    AnchorTermination = 23,
+    CapturedTermination = 24,
+    ProviderHistory = 25,
+    AbsenceConfirmation = 26,
+    CleanupReceipt = 27,
+}
+
+impl GuardianCleanupFailure {
+    pub(crate) const fn from_exit_code(code: Option<i32>) -> Option<Self> {
+        match code {
+            Some(20) => Some(Self::ProviderState),
+            Some(21) => Some(Self::LeaderExited),
+            Some(22) => Some(Self::RuntimeCapture),
+            Some(23) => Some(Self::AnchorTermination),
+            Some(24) => Some(Self::CapturedTermination),
+            Some(25) => Some(Self::ProviderHistory),
+            Some(26) => Some(Self::AbsenceConfirmation),
+            Some(27) => Some(Self::CleanupReceipt),
+            _ => None,
+        }
+    }
+
+    const fn exit_code(self) -> i32 {
+        self as i32
+    }
+}
+
+enum GuardianRunFailure {
+    Operation,
+    Cleanup(GuardianCleanupFailure),
+}
+
+impl From<io::Error> for GuardianRunFailure {
+    fn from(_error: io::Error) -> Self {
+        Self::Operation
+    }
+}
+
 impl ProviderForkPolicy {
     const fn as_str(self) -> &'static str {
         match self {
@@ -496,14 +539,18 @@ fn run_helper(
     launch: Option<&GuardianLaunch>,
     fork_policy: ProviderForkPolicy,
 ) -> i32 {
-    let result = match mode {
-        HelperMode::Guardian => launch
-            .ok_or_else(|| io::Error::other("provider guardian launch is unavailable"))
-            .and_then(|launch| run_guardian(lease_path, lease_token, launch, fork_policy)),
-        HelperMode::Anchor => run_anchor(lease_path, lease_token),
-        HelperMode::ProviderLauncher => run_provider_launcher(lease_token),
-    };
-    i32::from(result.is_err())
+    match mode {
+        HelperMode::Guardian => match launch {
+            Some(launch) => match run_guardian(lease_path, lease_token, launch, fork_policy) {
+                Ok(()) => 0,
+                Err(GuardianRunFailure::Operation) => 1,
+                Err(GuardianRunFailure::Cleanup(failure)) => failure.exit_code(),
+            },
+            None => 1,
+        },
+        HelperMode::Anchor => i32::from(run_anchor(lease_path, lease_token).is_err()),
+        HelperMode::ProviderLauncher => i32::from(run_provider_launcher(lease_token).is_err()),
+    }
 }
 
 fn run_guardian(
@@ -511,7 +558,7 @@ fn run_guardian(
     lease_token: &str,
     launch: &GuardianLaunch,
     fork_policy: ProviderForkPolicy,
-) -> io::Result<()> {
+) -> Result<(), GuardianRunFailure> {
     let launch_lifetime = crate::guardian_lifetime::accept_handoff(lease_path, lease_token)?;
     #[cfg(test)]
     if let Some(signal) = env::var_os(TEST_PRE_ANCHOR_SIGNAL_ENV) {
@@ -596,13 +643,16 @@ fn run_guardian(
             #[cfg(target_os = "macos")]
             provider_history.as_mut(),
         ),
-        None => terminate_anchor(&mut anchor, anchor_pid).and_then(|()| {
-            crate::runtime_lease::mark_unix_runtime_gone(lease_path, lease_token)
-                .map_err(|error| io::Error::other(format!("record cleanup receipt: {error}")))
-        }),
+        None => terminate_anchor(&mut anchor, anchor_pid)
+            .map_err(|_| GuardianCleanupFailure::AnchorTermination)
+            .and_then(|()| {
+                crate::runtime_lease::mark_unix_runtime_gone(lease_path, lease_token)
+                    .map_err(|_| GuardianCleanupFailure::CleanupReceipt)
+            }),
     };
     drop(anchor_input);
-    operation.and(cleanup)
+    operation.map_err(|_| GuardianRunFailure::Operation)?;
+    cleanup.map_err(GuardianRunFailure::Cleanup)
 }
 
 fn run_provider_launcher(lease_token: &str) -> io::Result<()> {
@@ -757,40 +807,49 @@ fn terminate_runtime(
     lease_token: &str,
     fork_policy: ProviderForkPolicy,
     #[cfg(target_os = "macos")] provider_history: Option<&mut MacProviderHistory>,
-) -> io::Result<()> {
+) -> Result<(), GuardianCleanupFailure> {
     let pid = i32::try_from(raw_pid)
         .ok()
         .and_then(Pid::from_raw)
-        .ok_or_else(|| io::Error::other("provider anchor pid is invalid"))?;
-    let provider_was_running = provider.try_wait()?.is_none();
+        .ok_or(GuardianCleanupFailure::ProviderState)?;
+    let provider_was_running = provider
+        .try_wait()
+        .map_err(|_| GuardianCleanupFailure::ProviderState)?
+        .is_none();
+    #[cfg(target_os = "macos")]
+    if !provider_was_running {
+        let _ = terminate_anchor(anchor, raw_pid);
+        return Err(GuardianCleanupFailure::LeaderExited);
+    }
     let captured =
-        CapturedRuntimeProcesses::freeze(lease_path, lease_token, pid, provider_was_running);
-    let anchor_result = terminate_anchor(anchor, raw_pid)
-        .map_err(|error| io::Error::other(format!("terminate provider anchor: {error}")));
+        CapturedRuntimeProcesses::freeze(lease_path, lease_token, pid, provider_was_running)
+            .map_err(|_| GuardianCleanupFailure::RuntimeCapture);
+    let anchor_result =
+        terminate_anchor(anchor, raw_pid).map_err(|_| GuardianCleanupFailure::AnchorTermination);
     let captured = match captured {
         Ok(captured) => captured,
-        Err(error) => {
+        Err(failure) => {
             let _ = anchor_result;
-            return Err(error);
+            return Err(failure);
         }
     };
     let captured_result = captured
         .kill()
-        .map_err(|error| io::Error::other(format!("kill captured provider runtime: {error}")))
+        .map_err(|_| GuardianCleanupFailure::CapturedTermination)
         .and_then(|()| {
             let _ = provider.wait();
             #[cfg(target_os = "macos")]
             provider_history
-                .ok_or_else(|| io::Error::other("macOS provider lineage history is unavailable"))?
+                .ok_or(GuardianCleanupFailure::ProviderHistory)?
                 .finish(fork_policy)
-                .map_err(|error| io::Error::other(format!("finish provider history: {error}")))?;
+                .map_err(|_| GuardianCleanupFailure::ProviderHistory)?;
             captured
                 .confirm_gone(lease_path, lease_token, Duration::from_secs(4))
-                .map_err(|error| io::Error::other(format!("confirm provider absence: {error}")))
+                .map_err(|_| GuardianCleanupFailure::AbsenceConfirmation)
         })
         .and_then(|()| {
             crate::runtime_lease::mark_unix_runtime_gone(lease_path, lease_token)
-                .map_err(|error| io::Error::other(format!("record cleanup receipt: {error}")))
+                .map_err(|_| GuardianCleanupFailure::CleanupReceipt)
         });
     anchor_result.and(captured_result)
 }

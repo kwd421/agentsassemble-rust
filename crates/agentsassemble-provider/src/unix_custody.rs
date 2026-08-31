@@ -14,7 +14,7 @@ use tokio_util::codec::{FramedRead, LinesCodec};
 
 use crate::{
     filesystem::BoundExecutable,
-    guardian::{GuardianLaunch, ProviderForkPolicy, ProviderLaunchConfig},
+    guardian::{GuardianCleanupFailure, GuardianLaunch, ProviderForkPolicy, ProviderLaunchConfig},
     guardian_health, guardian_lifetime,
     launch_error::DriverLaunchError,
     runtime::DriverError,
@@ -313,7 +313,7 @@ impl UnixProcessCustody {
         tokio::time::timeout(HELPER_TIMEOUT, async {
             let guardian = self.guardian.wait().await.map_err(|_| stop_error())?;
             if !guardian.success() {
-                return Err(stop_error());
+                return Err(stop_error_for(guardian.code()));
             }
             wait_for_group_absence(self.anchor_pid).await?;
             match tagged_runtime_exists(&self.runtime_token) {
@@ -591,6 +591,37 @@ const fn stop_error() -> DriverError {
         "provider_stop_unconfirmed",
         "The Codex app-server process tree shutdown could not be confirmed.",
     )
+}
+
+const fn stop_error_for(exit_code: Option<i32>) -> DriverError {
+    let message = match GuardianCleanupFailure::from_exit_code(exit_code) {
+        Some(GuardianCleanupFailure::ProviderState) => {
+            "The provider leader state could not be observed during shutdown."
+        }
+        Some(GuardianCleanupFailure::LeaderExited) => {
+            "The provider leader exited before descendant custody could be proven."
+        }
+        Some(GuardianCleanupFailure::RuntimeCapture) => {
+            "The provider process tree could not be captured with stable custody."
+        }
+        Some(GuardianCleanupFailure::AnchorTermination) => {
+            "The provider process group shutdown could not be confirmed."
+        }
+        Some(GuardianCleanupFailure::CapturedTermination) => {
+            "A captured provider process could not be terminated."
+        }
+        Some(GuardianCleanupFailure::ProviderHistory) => {
+            "The provider lineage history could not be confirmed."
+        }
+        Some(GuardianCleanupFailure::AbsenceConfirmation) => {
+            "The provider process-tree absence could not be confirmed."
+        }
+        Some(GuardianCleanupFailure::CleanupReceipt) => {
+            "The provider cleanup receipt could not be recorded."
+        }
+        None => "The Codex app-server process tree shutdown could not be confirmed.",
+    };
+    DriverError::new("provider_stop_unconfirmed", message)
 }
 
 const fn health_error() -> DriverError {

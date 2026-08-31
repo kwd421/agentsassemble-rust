@@ -151,6 +151,10 @@ async fn stop_kills_descendants_after_the_codex_leader_exits() {
             panic!("macOS must fail closed when the provider forked before its leader exited");
         };
         assert_eq!(error.code, "provider_stop_unconfirmed");
+        assert_eq!(
+            error.message,
+            "The provider leader exited before descendant custody could be proven."
+        );
     }
     #[cfg(not(target_os = "macos"))]
     adapter
@@ -216,6 +220,10 @@ async fn stop_captures_a_reparented_descendant_from_a_new_session() {
             panic!("a platform without stable process handles must fail closed");
         };
         assert_eq!(error.code, "provider_stop_unconfirmed");
+        assert_eq!(
+            error.message,
+            "The provider lineage history could not be confirmed."
+        );
         assert!(process_exists(pid));
         let mut durable_session = session.clone();
         durable_session.runtime_handle_id = started.runtime_handle_id.clone();

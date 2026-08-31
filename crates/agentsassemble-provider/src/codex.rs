@@ -448,7 +448,7 @@ impl CodexDriver {
 
     async fn stop_process(&mut self) -> Result<(), DriverError> {
         #[cfg(unix)]
-        let stopped = self.process_group.stop().await;
+        self.process_group.stop().await?;
         #[cfg(not(unix))]
         let stopped = tokio::time::timeout(STOP_TIMEOUT, Box::into_pin(self.child.kill())).await;
         #[cfg(not(unix))]
@@ -458,6 +458,7 @@ impl CodexDriver {
                 "The Codex app-server exceeded its shutdown deadline.",
             )
         })?;
+        #[cfg(not(unix))]
         stopped.map_err(|_| {
             DriverError::new(
                 "provider_stop_unconfirmed",
