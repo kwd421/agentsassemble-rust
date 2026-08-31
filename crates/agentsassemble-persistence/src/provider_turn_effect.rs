@@ -397,7 +397,19 @@ impl SqliteStore {
         Ok(())
     }
 
-    /// Quarantines an interrupt whose exact control or quiescence proof was lost.
+    /// Hands an unissued interrupt claim back to recovery without retaining its lease.
+    ///
+    /// # Errors
+    ///
+    /// Rejects a stale claim or an effect that already crossed provider I/O.
+    pub async fn handoff_unissued_provider_interrupt_claim(
+        &self,
+        claim: &ProviderTurnEffectClaim,
+    ) -> Result<(), PersistenceError> {
+        transition_to_recovery_required(self, &claim.effect, Some(&claim.claim_owner)).await
+    }
+
+    /// Quarantines an interrupt whose exact quiescence proof was lost after dispatch.
     ///
     /// # Errors
     ///
@@ -406,42 +418,41 @@ impl SqliteStore {
         &self,
         expected: &ProviderTurnInterruptEffect,
     ) -> Result<(), PersistenceError> {
+        transition_to_recovery_required(self, expected, None).await
+    }
+
+    /// Releases one recovery lease after an attempt exits before provider I/O.
+    ///
+    /// # Errors
+    ///
+    /// Rejects a stale effect or a claim already replaced by another owner.
+    pub async fn release_provider_interrupt_recovery_claim(
+        &self,
+        claim: &ProviderTurnEffectClaim,
+    ) -> Result<(), PersistenceError> {
         let mut transaction = self.pool.begin().await?;
         let current = load_effect_in(
             &mut transaction,
-            &expected.room_id,
-            &expected.session_id,
-            expected.turn_generation,
+            &claim.effect.room_id,
+            &claim.effect.session_id,
+            claim.effect.turn_generation,
         )
         .await?;
-        require_exact_effect(expected, &current)?;
-        let effect_changed = sqlx::query(
-            "UPDATE provider_turn_effects SET phase = 'recovery_required', updated_at = ? \
-             WHERE room_id = ? AND effect_id = ? \
-             AND phase IN ('claimed', 'issued_waiting_quiescence')",
+        require_exact_effect(&claim.effect, &current)?;
+        let changed = sqlx::query(
+            "UPDATE provider_turn_effects SET claim_owner = '', claim_expires_at = NULL, \
+             updated_at = ? WHERE room_id = ? AND effect_id = ? AND phase = ? \
+             AND dispatch_nonce = ? AND claim_owner = ?",
         )
         .bind(canonical_now())
         .bind(&current.room_id)
         .bind(&current.effect_id)
+        .bind(current.phase.as_str())
+        .bind(&current.dispatch_nonce)
+        .bind(&claim.claim_owner)
         .execute(&mut *transaction)
         .await?;
-        let execution_changed = sqlx::query(
-            "UPDATE provider_turn_executions SET phase = 'recovery_required', updated_at = ? \
-             WHERE room_id = ? AND session_id = ? AND turn_generation = ? \
-             AND execution_id = ? AND phase IN ('interrupt_pending', 'quiescing') \
-             AND runtime_handle_id = ? AND runtime_owner_id = ? AND runtime_lease_token = ?",
-        )
-        .bind(canonical_now())
-        .bind(&current.room_id)
-        .bind(&current.session_id)
-        .bind(generation_i64(current.turn_generation)?)
-        .bind(&current.execution_id)
-        .bind(&current.runtime_handle_id)
-        .bind(&current.runtime_owner_id)
-        .bind(&current.runtime_lease_token)
-        .execute(&mut *transaction)
-        .await?;
-        if effect_changed.rows_affected() != 1 || execution_changed.rows_affected() != 1 {
+        if changed.rows_affected() != 1 {
             return Err(stale_effect());
         }
         transaction.commit().await?;
@@ -640,6 +651,96 @@ async fn transition_to_waiting_effect(
             expected.turn_generation,
         )
         .await
+}
+
+async fn transition_to_recovery_required(
+    store: &SqliteStore,
+    expected: &ProviderTurnInterruptEffect,
+    release_claim_owner: Option<&str>,
+) -> Result<(), PersistenceError> {
+    let mut transaction = store.pool.begin().await?;
+    let current = load_effect_in(
+        &mut transaction,
+        &expected.room_id,
+        &expected.session_id,
+        expected.turn_generation,
+    )
+    .await?;
+    require_exact_effect(expected, &current)?;
+    let execution = load_execution_in(
+        &mut transaction,
+        &current.room_id,
+        &current.session_id,
+        current.turn_generation,
+    )
+    .await?;
+    let (expected_effect_phase, expected_execution_phase) = if release_claim_owner.is_some() {
+        (
+            ProviderTurnEffectPhase::Claimed,
+            ProviderTurnExecutionPhase::InterruptPending,
+        )
+    } else {
+        (
+            ProviderTurnEffectPhase::IssuedWaitingQuiescence,
+            ProviderTurnExecutionPhase::Quiescing,
+        )
+    };
+    if current.phase != expected_effect_phase
+        || execution.phase != expected_execution_phase
+        || execution.execution_id != current.execution_id
+        || execution.runtime_handle_id != current.runtime_handle_id
+        || execution.runtime_owner_id != current.runtime_owner_id
+        || execution.runtime_lease_token != current.runtime_lease_token
+        || execution.requeue_finalized
+    {
+        return Err(stale_effect());
+    }
+    let now = canonical_now();
+    let effect_changed = if let Some(claim_owner) = release_claim_owner {
+        sqlx::query(
+            "UPDATE provider_turn_effects SET phase = 'recovery_required', claim_owner = '', \
+             claim_expires_at = NULL, updated_at = ? WHERE room_id = ? AND effect_id = ? \
+             AND phase = 'claimed' AND claim_owner = ?",
+        )
+        .bind(&now)
+        .bind(&current.room_id)
+        .bind(&current.effect_id)
+        .bind(claim_owner)
+        .execute(&mut *transaction)
+        .await?
+    } else {
+        sqlx::query(
+            "UPDATE provider_turn_effects SET phase = 'recovery_required', updated_at = ? \
+             WHERE room_id = ? AND effect_id = ? AND phase = 'issued_waiting_quiescence'",
+        )
+        .bind(&now)
+        .bind(&current.room_id)
+        .bind(&current.effect_id)
+        .execute(&mut *transaction)
+        .await?
+    };
+    let execution_changed = sqlx::query(
+        "UPDATE provider_turn_executions SET phase = 'recovery_required', updated_at = ? \
+         WHERE room_id = ? AND session_id = ? AND turn_generation = ? \
+         AND execution_id = ? AND phase = ? AND runtime_handle_id = ? \
+         AND runtime_owner_id = ? AND runtime_lease_token = ? AND requeue_finalized = 0",
+    )
+    .bind(&now)
+    .bind(&execution.room_id)
+    .bind(&execution.session_id)
+    .bind(generation_i64(execution.turn_generation)?)
+    .bind(&execution.execution_id)
+    .bind(execution.phase.as_str())
+    .bind(&execution.runtime_handle_id)
+    .bind(&execution.runtime_owner_id)
+    .bind(&execution.runtime_lease_token)
+    .execute(&mut *transaction)
+    .await?;
+    if effect_changed.rows_affected() != 1 || execution_changed.rows_affected() != 1 {
+        return Err(stale_effect());
+    }
+    transaction.commit().await?;
+    Ok(())
 }
 
 pub(crate) async fn load_optional_effect_in(

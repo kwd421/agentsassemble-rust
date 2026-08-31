@@ -440,33 +440,32 @@ async fn exact_live_control_can_resume_a_quarantined_interrupt_without_reissuing
         .await
         .unwrap_or_else(|error| panic!("claim recovery interrupt: {error}"));
     store
-        .mark_provider_interrupt_recovery_required(&claim.effect)
+        .handoff_unissued_provider_interrupt_claim(&claim)
         .await
         .unwrap_or_else(|error| panic!("quarantine lost control: {error}"));
     let quarantined = store
         .provider_turn_interrupt_effect("general", AGENT_ID, assignment.turn_generation)
         .await
         .unwrap_or_else(|error| panic!("load quarantined interrupt: {error}"));
-    let competing_claim = store
+    let recovery_claim = store
         .claim_provider_turn_interrupt_recovery(
             &quarantined,
             "10000000-0000-4000-8000-000000000201",
         )
-        .await;
+        .await
+        .unwrap_or_else(|error| panic!("claim handed-off recovery interrupt: {error}"));
     assert!(matches!(
-        competing_claim,
+        store
+            .claim_provider_turn_interrupt_recovery(
+                &quarantined,
+                "10000000-0000-4000-8000-000000000202",
+            )
+            .await,
         Err(crate::PersistenceError::CommandUnresolved {
             code: "provider_turn_effect_unresolved",
             ..
         })
     ));
-    let recovery_claim = store
-        .claim_provider_turn_interrupt_recovery(
-            &quarantined,
-            "10000000-0000-4000-8000-000000000101",
-        )
-        .await
-        .unwrap_or_else(|error| panic!("renew recovery interrupt claim: {error}"));
     let waiting = store
         .authorize_provider_interrupt_recovery_wait(&recovery_claim)
         .await

@@ -26,7 +26,7 @@ pub(crate) async fn apply_exact_interrupt(
         Ok(control) => control,
         Err(error) => {
             store
-                .mark_provider_interrupt_recovery_required(&claim.effect)
+                .handoff_unissued_provider_interrupt_claim(&claim)
                 .await?;
             return Err(unresolved(error.code, error.message));
         }
@@ -78,6 +78,9 @@ pub(crate) async fn resume_exact_interrupt(
     };
     let authority = exact_authority(&claim.effect);
     let Ok(mut control) = provider_adapter.begin_exact_turn(&authority).await else {
+        store
+            .release_provider_interrupt_recovery_claim(&claim)
+            .await?;
         return Ok(None);
     };
     let waiting = store
@@ -163,3 +166,7 @@ fn unresolved(code: &'static str, message: &'static str) -> PersistenceError {
         message: message.to_owned(),
     }
 }
+
+#[cfg(test)]
+#[path = "provider_turn_interrupt_runtime_tests.rs"]
+mod tests;
