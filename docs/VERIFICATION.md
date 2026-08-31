@@ -4647,6 +4647,17 @@ removes all 192 ballot rows. The real deletion took 1.035 ms in that debug in-me
 evidence for the absolute work bound, not a production latency claim. The cap uses one domain
 constant and one persistence enforcement owner; no duplicated SQL quota or schema CHECK was added.
 
+Daybreaker source tracing found that provider terminal rejection commits its error/finalization in
+the same transaction rather than propagating the command error. Because the cast event was inserted
+before the capacity check, that path could retain an anonymous but false `vote_cast` marker even
+though no ballot or tally changed. The cast owner now performs ballot validation/replacement before
+event insertion in the same transaction; later event or projection failure still rolls every write
+back. A provider fixture fills all 192 ballots with departed participants, assigns one real Agent
+Session turn, and attempts a new cast. The commit contains only `error`, `turn_finished`, and
+`agent_session_state`, reports `vote_capacity_reached`, has zero `vote_cast` rows after the pre-call
+cursor, and retains 192 unchanged Yes votes. The correction adds no preflight query, compensating
+write, transaction, task, timer, retry, or fallback.
+
 The TCP correction removes all uses of the shared elapsed-silence helper. Exact replay is proven by
 the next durable snapshot and event sequence containing exactly one target mutation, read-only
 rejection is bracketed by unchanged durable room state, and server rejection closure is awaited as a

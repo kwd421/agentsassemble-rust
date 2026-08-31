@@ -263,3 +263,12 @@ event, redaction, deletion, budget reservation, or publication.
   assertions with exact replay cursors, durable snapshots, and causal socket closure. No index,
   background cleanup, timer, polling, heartbeat, retry, fallback, or swallowed failure was added.
   Critical-web and Daybreaker correction review remain pending.
+- Provider terminal correction: Daybreak then traced `vote_capacity_reached` through the provider
+  finalization path, which commits terminal product rejection events in the same transaction. The
+  cast branch had inserted its anonymous transition before discovering that a new ballot exceeded
+  capacity, so that provider-only path could commit a phantom cast marker. Ballot validation and
+  replacement now precede event insertion inside the same transaction; any later insert or state
+  failure still rolls the ballot change back. A full 192-ballot fixture proves a new Agent Session
+  cast commits exactly the bounded error, `turn_finished`, and idle Agent Session events, with no
+  `vote_cast` row after the assigned-turn cursor and unchanged tallies. No second preflight, cache,
+  compensating delete, fallback, or alternate transaction was added.
