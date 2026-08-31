@@ -4659,7 +4659,7 @@ the new 149-line companion lifecycle was separated rather than mixed into it. `g
 the single private launch-manifest, stopped-launcher, process-group, and cleanup-receipt invariant;
 extracting that state flow would increase cross-module state transfer and private interfaces. No new
 public trait, configuration layer, background task, or parallel lifecycle owner was introduced.
-Manual critical-web and Daybreaker review of the pushed threshold range remain pending.
+The threshold corrections and their final manual approvals are recorded in the next section.
 
 ## Pause/custody threshold-review corrections: 2026-09-01
 
@@ -4667,8 +4667,7 @@ Manual review of pushed `23c9f35..a340a31` diverged. The critical web session re
 APPROVE C0/H0/M0/L0. Daybreaker returned REVISE C0/H0/M2/L0: Linux/Android could drop the staged
 multi-file Codex bundle after guardian readiness but before the resumed launcher opened its paths,
 and a fresh pause/resume trusted durable resident identifiers without consulting the live adapter.
-No other finding was reported. The correction range begins at `c53fa5a`; final review remains
-pending.
+No other finding was reported. The correction range begins at `c53fa5a`.
 
 The Codex issue was a concrete lifetime race introduced when the native companion changed Codex
 from the ordinary Linux/Android single-file `memfd` path to a filesystem-staged two-file bundle.
@@ -4729,7 +4728,29 @@ or direct database mutation was used. Every provider was stopped through its ses
 exact app, owned server/provider children, and staging directories were gone after quit; the unique
 bundle, application data, and temporary Tauri config were moved to the user's Trash for recovery.
 No unrelated app, provider, user data, shared build cache, or user-owned working-tree change was
-touched. Both correction re-reviews remain pending.
+touched.
+
+Critical-web review of intermediate pushed HEAD `ffd4fd8` returned REVISE C0/H0/M1/L1. The Medium
+finding showed that the new `agent.resume` resident preflight rejected an exact existing lifecycle
+reservation before its established retry/recovery owner could classify it. The Low finding showed
+that the first stopped-launcher fixture could inspect staged paths before `CodexDriver::spawn`
+returned, so it did not causally prove that the resident driver retained their guard. No other
+finding was reported.
+
+Commit `81b74fe` closed the Low finding by waiting concurrently for the launcher barrier and the
+returned driver, then using that same driver for path inspection, attachment, exact stop, and
+cleanup-receipt verification. Commit `0821b0a` closed the Medium finding by reusing the existing
+`ExistingRequestIdentity` owner: committed results replay directly, while exact pending or rejected
+lifecycle identities continue through the existing launch/reservation owner. Changed action or
+payload identity still conflicts. New WebSocket boundary tests prove current-generation pending
+resume completion plus replay and stop, stored rejected-reservation replay, and previous-generation
+prepared-reservation startup recovery. The complete `make verify` passed at `0821b0a`.
+
+Daybreaker manual source review and the independent critical-web review both approved individual
+`0821b0a`, cumulative `a340a31..0821b0a`, and pushed HEAD `0821b0a` at C0/H0/M0/L0. Both reviews
+included authority/SSoT, lifecycle, duplication, overimplementation, repository structure, LOC,
+fallback/polling/heartbeat/timer/retry/failure-swallowing, performance-evidence, and fixture-quality
+checks. Neither reviewer ran an automated security scan.
 
 ## Agent Session idle pause/resume packaged candidate: 2026-09-01
 
@@ -4779,8 +4800,8 @@ isolated app bundle were moved to the recoverable
 `~/.Trash/agentsassemble-pause-verify-0831-cleanup-20260901-0131` directory. Shared Cargo artifacts,
 user files, other applications, and unrelated providers were untouched. The post-cleanup unchanged
 `make verify` passed all mandatory architecture, policy, source-structure, generated-binding,
-frontend, Rust unit/integration/TCP/WebSocket, warning-denied Clippy, and diff gates. Manual critical-
-web and Daybreaker review of the eventual pushed range remain pending.
+frontend, Rust unit/integration/TCP/WebSocket, warning-denied Clippy, and diff gates. The later
+threshold-correction section records the final critical-web and Daybreaker approvals.
 
 ## Lobby message-mutation review corrections: 2026-08-31
 

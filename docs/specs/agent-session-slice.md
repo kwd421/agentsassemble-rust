@@ -1,6 +1,6 @@
 # Agent Session vertical slice
 
-Status: published implementation owner; idle pause/resume packaged verification complete, review pending
+Status: published implementation owner; idle pause/resume packaged verification and manual review complete
 
 ## Definition
 
@@ -83,7 +83,8 @@ binds and stages that official companion with the selected Codex executable, sta
 same-group child before `app-server`, and supplies only its validated loopback endpoint to the
 official `--code-mode-host` option. A fresh packaged Terra turn and UI Stop now produce confirmed
 cleanup with no recovery state. Exact packaged evidence and cleanup are recorded in
-`docs/VERIFICATION.md`; manual review of the eventual pushed range remains pending.
+`docs/VERIFICATION.md`. Critical-web and Daybreaker manual review approved pushed HEAD `0821b0a`
+and cumulative `a340a31..0821b0a` at C0/H0/M0/L0; no automated scan was run.
 
 ## Required slice contract
 
