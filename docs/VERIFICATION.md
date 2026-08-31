@@ -4608,6 +4608,59 @@ Daybreaker approved through `d168354` at C0/H0/M0/L0. The independent critical-w
 approved pushed HEAD `23c9f35`, cumulative `a958bab..23c9f35`, and corrections
 `edd9ce4..23c9f35` at C0/H0/M0/L0.
 
+## Codex code-mode-host custody correction: 2026-09-01
+
+The prior packaged pause run exposed a real custody boundary rather than a pause defect. Codex
+0.147.0 started its internal code-mode host in a process group outside the guardian-owned anchor.
+UI Stop killed and reaped the guardian, anchor, and `app-server`, but the escaped companion kept the
+generation from receiving its exact cleanup receipt. Persistence correctly retained
+`provider_stop_unconfirmed` and recovery authority. Process absence was never promoted to proof, and
+no compatibility path, retry, polling loop, timer, or cleanup fallback was added.
+
+The correction keeps the official mechanism and changes only its owner. Discovery and binding now
+treat the installed Codex executable and `codex-code-mode-host` as one byte-identified bundle. The
+existing private executable staging owns both files. The stopped provider launcher starts the
+companion explicitly with `--listen ws://127.0.0.1:0`, verifies the child is still in the anchor
+group before and after a bounded 128-byte readiness line, accepts only the canonical
+`ws://127.0.0.1:<nonzero-port>` form, and then execs `app-server --code-mode-host <endpoint> --stdio`.
+The companion inherits the sanitized provider environment plus only the runtime custody token; the
+RoomPortal bearer remains with `app-server`, and inherited descriptors 4 through 8 are replaced by
+`/dev/null`. Missing, changed, ambiguous, non-loopback, exited, or group-escaping companion
+authority fails the launch and leaves cleanup to the existing guardian owner.
+
+The focused Unix regression proves the companion endpoint reaches the provider, the companion is
+not its own process-group leader, and exact adapter Stop removes it. Fixture descriptors also try to
+write a protocol marker through descriptor 5 before readiness, exercising the descriptor
+replacement boundary. The unchanged complete `make verify` passed architecture and source gates,
+657 frontend tests, 26 desktop tests, all Rust unit/integration/TCP/WebSocket tests, warning-denied
+Clippy for every target and feature, and the diff gate.
+
+A fresh isolated copied release then created one stopped `gpt-5.6-terra` session through the real
+agent modal, started it through the copied member controls, and sent one addressed room message.
+Terra replied exactly `CODE_HOST_STOP_901`. While resident, the observed guardian, anchor,
+`app-server`, and code-mode host RSS values were 8,592 KiB, 7,984 KiB, 110,176 KiB, and 22,032 KiB.
+The anchor, `app-server`, and code-mode host shared one process group, and `lsof` found the companion
+listening only on one IPv4 loopback endpoint. These are point measurements that establish the added
+resident process cost; they are not a CPU, latency, or leak improvement claim. The cost is accepted
+because current official Codex code-mode execution requires that companion, while explicit external
+launch closes the observed custody escape.
+
+The copied UI Stop immediately reached `stopped`; all four captured process identities were absent.
+Read-only durable inspection found `runtime_status=stopped`, no error code, and
+`recovery_required=false`. Normal application quit left no isolated desktop, supervisor, server, or
+provider process. Computer Use was reset, and only the isolated app bundle, identifier-owned
+Application Support/WebKit/cache state, and temporary package configuration were moved to the
+recoverable `~/.Trash/agentsassemble-code-host-0901-final-20260901-0341` directory. Unrelated
+ChatGPT/Codex processes, shared build artifacts, user files, and uncommitted source were untouched.
+
+The LOC review found `codex.rs` at 803 lines and `guardian.rs` at 893 lines, so both received the
+required strong structural check. `codex.rs` remains one JSONL protocol and thread/turn state owner;
+the new 149-line companion lifecycle was separated rather than mixed into it. `guardian.rs` remains
+the single private launch-manifest, stopped-launcher, process-group, and cleanup-receipt invariant;
+extracting that state flow would increase cross-module state transfer and private interfaces. No new
+public trait, configuration layer, background task, or parallel lifecycle owner was introduced.
+Manual critical-web and Daybreaker review of the pushed threshold range remain pending.
+
 ## Agent Session idle pause/resume packaged candidate: 2026-09-01
 
 The isolated copied release was built from local `ab4ab78` on pushed baseline `23c9f35`, with the

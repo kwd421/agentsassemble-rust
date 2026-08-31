@@ -66,19 +66,21 @@ separate existing or future owners.
   and idle CPU/RSS before pause, during pause, and after resume without claiming an improvement from
   point samples.
 
-The local `ab4ab78` candidate passed the complete repository gate and the copied packaged UI for all
-three exact providers. Each provider completed one addressed turn, retained the same guardian,
+The local pause/resume candidate passed the complete repository gate and the copied packaged UI for
+all three exact providers. Each provider completed one addressed turn, retained the same guardian,
 anchor, provider process, runtime handle, and provider-conversation identity across idle pause, left
 one paused direct mention pending with no inflight turn, and completed that queued turn after resume.
-Antigravity and OpenCode then produced confirmed stop receipts. Codex killed and reaped its exact
-process tree but the macOS guardian did not publish its required cleanup receipt, so the durable
-owner correctly retained an explicit disconnected/recovery-required unconfirmed stop instead of
-claiming absence. That cleanup-proof boundary remains a follow-up; it is not a pause fallback or a
-reason to weaken the guardian receipt requirement. Exact packaged evidence and cleanup are recorded
-in `docs/VERIFICATION.md`; manual review of the eventual pushed range remains pending.
+The original Codex verification then exposed its official internally spawned code-mode host outside
+the guardian group, so the fail-closed stop correctly withheld a cleanup receipt. The correction
+binds and stages that official companion with the selected Codex executable, starts it as an explicit
+same-group child before `app-server`, and supplies only its validated loopback endpoint to the
+official `--code-mode-host` option. A fresh packaged Terra turn and UI Stop now produce confirmed
+cleanup with no recovery state. Exact packaged evidence and cleanup are recorded in
+`docs/VERIFICATION.md`; manual review of the eventual pushed range remains pending.
 
 ## Required slice contract
 
+- Codex lifecycle start binds its official executable and code-mode companion as one byte-identified bundle. The guardian's stopped launcher starts the companion as a same-anchor-group child on one validated canonical IPv4-loopback WebSocket endpoint, passes only that endpoint through the official `--code-mode-host` option, and then execs the persistent `app-server --stdio`. The companion receives a sanitized environment and runtime custody token but no RoomPortal bearer; unexpected inherited protocol descriptors are replaced with `/dev/null`. Missing or changed companion authority, invalid readiness, early exit, or custody change fails the launch without a fallback.
 - Provider options come from bounded probes of the installed provider CLIs. Every probe runs in its own owned process tree with a credential-free environment allowlist, a ten-second deadline, and bounded output; cancellation and shutdown kill and reap the whole tree. Windows probes are created suspended, assigned to their Job Object, and only then resumed, so no descendant can escape before ownership attaches. A session can be created only from a `ready` catalog entry and the exact current `catalog_revision`; a stale, unavailable, unlisted, oversized, or internally inconsistent selection fails visibly.
 - OpenCode subscription discovery accepts only syntactically valid model IDs in the original managed `opencode` and `opencode-go` namespaces. Other namespaces never become startable subscription authority.
 - `agent.create` requires the server-derived `agent.control` capability evaluated from the current principal and durable room state when the command runs. Client-supplied ownership, participant role, provider command, executable, runtime kind, transport, process identity, capability, or operator status is ignored as authority.
