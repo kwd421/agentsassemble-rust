@@ -4936,7 +4936,22 @@ not. A fresh command first performs a read-only durable exact-turn preflight and
 matching resident slot and capability. Unsupported paths return
 `provider_turn_interrupt_unsupported` without a command result, state event, effect row, room-budget
 reservation, Ctrl-C, or runtime stop. A committed replay bypasses live proof, and the existing
-mutation repeats every durable authority check after proof to close the race.
+mutation repeats every durable authority check after proof to close the race. The exact durable
+`Assigned` phase alone permits a matching retained-capable runtime whose in-memory turn slot has not
+yet been installed; `StartDispatching` and later phases still require the exact active turn. Focused
+tests prove both sides of this scheduling boundary. The ordinary process-wide principal mutation
+debit still applies to a fresh unsupported request; only durable room-write reservation is avoided.
+
+Critical review also found a concrete write-amplification path in interrupt recovery: when a
+durable recovery candidate had no exact in-memory turn control, the existing one-second lifecycle
+scan could claim and immediately release it, producing two SQLite updates and commits on every
+pass without changing authority. Commit `22c8df0` moves the existing read-only
+`owns_exact_turn` check ahead of the durable claim in the recovery owner. A candidate with no exact
+control now performs no claim write; if control disappears after that proof, the existing release
+still closes the narrow race. This adds no timer, cache, retry, or fallback. The accepted trade-off
+is that control installed immediately after a negative proof is observed on the next existing scan.
+The focused no-control recovery test, warning-denied server Clippy, and the complete `make verify`
+gate pass after this correction.
 
 Focused tests prove that the persistence preflight is repeatable and read-only, a committed replay
 is still returned, a non-capable driver retains its prepared exact turn without control I/O, and the

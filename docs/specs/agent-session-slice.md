@@ -106,7 +106,11 @@ without creating a second interrupt owner.
   intent commit before provider I/O and recheck the same durable authority. Same
   request/action/payload replay is deduplicated, changed reuse conflicts, and a second independent
   interrupt cannot claim or overwrite an unresolved effect. The durable interrupt cause remains
-  distinguishable from participant mute through restart and reconciliation.
+  distinguishable from participant mute through restart and reconciliation. Durable `Assigned` is
+  the only phase in which the exact resident runtime may not yet have installed its in-memory turn
+  slot; that phase may prove capability from the matching running handle/owner/lease, while every
+  later phase still requires the exact active turn ID and generation. The final mutation repeats
+  the durable phase check, so this narrow scheduling gap cannot authorize a stale turn.
 - The existing common provider control issues at most one exact interrupt and proves quiescence.
   A retained runtime keeps the provider process and conversation, terminalizes the turn as
   interrupted, restores inflight input to pending, clears only active-turn authority, and returns
