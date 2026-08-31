@@ -10,7 +10,10 @@ use crate::{
     agent_lifecycle_authority::{authorize_control, lifecycle_intent_is_empty, payload_agent_id},
     agent_lifecycle_events::{append_state_event, store_result},
     authority::active_room_for_principal,
-    command_admission::{admit_non_lifecycle_command, inspect_non_lifecycle_command},
+    command_admission::{
+        ExistingRequestIdentity, admit_non_lifecycle_command, existing_command,
+        existing_request_identity, inspect_non_lifecycle_command,
+    },
     room_write_budget::command_size,
     turn_authority::active_turn_authority,
 };
@@ -77,7 +80,41 @@ impl SqliteStore {
         let payload_hash = canonical_payload_hash(payload);
         let mut transaction = self.pool.begin().await?;
         active_room_for_principal(&mut transaction, principal).await?;
-        if let Some(outcome) = inspect_non_lifecycle_command(
+        if resume {
+            match existing_request_identity(
+                &mut transaction,
+                &principal.room_id,
+                &principal.principal_id,
+                request_id,
+                action,
+                &payload_hash,
+            )
+            .await?
+            {
+                Some(ExistingRequestIdentity::CommittedResult) => {
+                    let outcome = existing_command(
+                        &mut transaction,
+                        &principal.room_id,
+                        &principal.principal_id,
+                        request_id,
+                        action,
+                        &payload_hash,
+                    )
+                    .await?
+                    .ok_or_else(invalid_request_owner)?;
+                    transaction.commit().await?;
+                    return Ok(AgentResidentPlan::Outcome(Box::new(outcome)));
+                }
+                Some(
+                    ExistingRequestIdentity::PendingLifecycle
+                    | ExistingRequestIdentity::RejectedLifecycle,
+                ) => {
+                    transaction.commit().await?;
+                    return Ok(AgentResidentPlan::ProviderLaunch);
+                }
+                None => {}
+            }
+        } else if let Some(outcome) = inspect_non_lifecycle_command(
             &mut transaction,
             &principal.room_id,
             &principal.principal_id,
@@ -245,6 +282,13 @@ impl SqliteStore {
         .await?;
         transaction.commit().await?;
         Ok(Some(outcome))
+    }
+}
+
+fn invalid_request_owner() -> PersistenceError {
+    PersistenceError::CommandRejected {
+        code: "invalid_state",
+        message: "A room request lost its durable result owner.".to_owned(),
     }
 }
 

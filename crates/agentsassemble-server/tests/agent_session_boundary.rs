@@ -39,6 +39,10 @@ mod agent_configuration;
 #[path = "agent_session_boundary/agent_create_start.rs"]
 mod agent_create_start;
 
+#[cfg(unix)]
+#[path = "agent_session_boundary/lifecycle_resume_retry.rs"]
+mod lifecycle_resume_retry;
+
 const HOST_TOKEN: &str = "agent-boundary-host-token-000000001";
 static AGENT_BOUNDARY_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
