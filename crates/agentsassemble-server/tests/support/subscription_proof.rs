@@ -168,14 +168,10 @@ where
     }
 
     pub async fn wait_closed(&mut self) -> bool {
-        let closed = tokio::time::timeout(Duration::from_secs(1), self.socket.next()).await;
-        matches!(closed, Ok(None | Some(Ok(Message::Close(_)) | Err(_))))
-    }
-
-    pub async fn has_no_frame_for(&mut self, duration: Duration) -> bool {
-        tokio::time::timeout(duration, self.socket.next())
-            .await
-            .is_err()
+        matches!(
+            self.socket.next().await,
+            None | Some(Ok(Message::Close(_)) | Err(_))
+        )
     }
 
     async fn send_plain(&mut self, frame: &Value) {

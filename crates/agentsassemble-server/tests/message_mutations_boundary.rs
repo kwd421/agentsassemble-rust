@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use agentsassemble_domain::InviteScope;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use reqwest::Client;
@@ -83,7 +81,6 @@ async fn local_socket_edits_deletes_and_replays_one_exact_sequenced_mutation() {
     assert_eq!(replay["action"], "message.edit");
     assert_eq!(replay["deduplicated"], true);
     assert_eq!(replay["result"], edit_ack["result"]);
-    assert!(socket.has_no_frame_for(Duration::from_millis(100)).await);
 
     send_command(
         &mut socket,
@@ -115,6 +112,18 @@ async fn local_socket_edits_deletes_and_replays_one_exact_sequenced_mutation() {
     assert_eq!(tombstone["type"], "message_final");
     assert_eq!(tombstone["content"], "");
     assert_eq!(tombstone["message_deleted"], true);
+    assert_eq!(
+        snapshot["events"].as_array().map(|events| {
+            events
+                .iter()
+                .filter(|event| {
+                    event["type"] == "message_updated" && event["target_event_id"] == message_id
+                })
+                .count()
+        }),
+        Some(1),
+        "exact replay appended another durable mutation",
+    );
     reload.close().await;
     server.stop().await;
 }
@@ -201,7 +210,7 @@ async fn admitted_read_write_socket_mutates_only_its_own_message() {
 #[tokio::test]
 async fn admitted_read_only_socket_rejects_message_mutations_before_dispatch() {
     let (store, credentials) = fixture(InviteScope::ReadOnly).await;
-    let server = start(store).await;
+    let server = start(store.clone()).await;
     let mut local = open_local_socket(&server.base_url).await;
     send_command(
         &mut local,
@@ -233,6 +242,10 @@ async fn admitted_read_only_socket_rejects_message_mutations_before_dispatch() {
         canonical_session_token(&admitted),
     )
     .await;
+    let before_denials = store
+        .snapshot("general", 0, 200)
+        .await
+        .unwrap_or_else(|error| panic!("read state before read-only denials: {error}"));
 
     for (request_id, action, payload) in [
         (
@@ -253,8 +266,23 @@ async fn admitted_read_only_socket_rejects_message_mutations_before_dispatch() {
         assert_eq!(nack["action"], action);
         assert_eq!(nack["resolution"], "rejected");
         assert_eq!(nack["error"]["code"], "permission_denied");
-        assert!(socket.has_no_frame_for(Duration::from_millis(50)).await);
     }
+    let after_denials = store
+        .snapshot("general", 0, 200)
+        .await
+        .unwrap_or_else(|error| panic!("read state after read-only denials: {error}"));
+    assert_eq!(after_denials.last_seq, before_denials.last_seq);
+    let target = after_denials
+        .events
+        .iter()
+        .find(|event| event.id == message_id)
+        .unwrap_or_else(|| panic!("read-only denial removed its target"));
+    assert_eq!(target.content.as_deref(), Some("operator-owned target"));
+    assert!(!target.extra.contains_key("edited_at"));
+    assert_ne!(
+        target.extra.get("message_deleted"),
+        Some(&Value::Bool(true))
+    );
 
     socket.close().await;
     local.close().await;

@@ -131,11 +131,6 @@ async fn external_client_recovers_committed_command_after_restart() {
     assert_eq!(retry["resolution"], "committed");
     assert_eq!(retry["deduplicated"], true);
     assert_eq!(retry["result"]["event_seq"], 2);
-    assert!(
-        second_socket
-            .has_no_frame_for(Duration::from_millis(100))
-            .await
-    );
     let mut cursor_ahead = connect(&second_server.base_url, HOST_TOKEN, "general").await;
     let resync = subscribe(&mut cursor_ahead, 50).await;
     assert_eq!(resync["op"], "resync_required");

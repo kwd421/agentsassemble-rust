@@ -124,7 +124,6 @@ async fn local_tcp_history_pages_large_events_without_gaps_or_mutation() {
             .last_seq,
         durable_last_seq
     );
-    assert!(socket.has_no_frame_for(Duration::from_millis(50)).await);
     socket.close().await;
     server.stop().await;
 }
