@@ -310,7 +310,10 @@ async fn driver_without_retained_interrupt_capability_is_rejected_before_control
         .await
         .unwrap_or_else(|error| panic!("prepare unsupported interrupt: {error}"));
     let authority = prepared.exact_authority();
-    let Err(error) = adapter.require_retained_turn_interrupt(&active).await else {
+    let Err(error) = adapter
+        .require_retained_turn_interrupt(&active, false)
+        .await
+    else {
         panic!("driver without retained-runtime evidence must reject interrupt");
     };
     assert_eq!(error.code, "provider_turn_interrupt_unsupported");
@@ -318,6 +321,35 @@ async fn driver_without_retained_interrupt_capability_is_rejected_before_control
 
     adapter.retain_unstarted_turn(&prepared).await;
     adapter.release_terminal_turn(&authority).await;
+    stop_and_release(&adapter, &active, &started).await;
+}
+
+#[tokio::test]
+async fn assigned_turn_can_prove_retained_interrupt_before_slot_installation() {
+    let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
+    let directory = tempfile::tempdir()
+        .unwrap_or_else(|error| panic!("create assigned-interrupt fixture: {error}"));
+    let transcript = directory.path().join("requests.jsonl");
+    let session = fixture_session(directory.path(), &turn_fixture(&transcript, "", "", "")).await;
+    let adapter = ProviderAdapter::new();
+    let started = adapter
+        .start(&session)
+        .await
+        .unwrap_or_else(|error| panic!("start assigned-interrupt fixture: {error}"));
+    let active = active_session(&session, &started, "assigned-room-turn");
+
+    let Err(error) = adapter
+        .require_retained_turn_interrupt(&active, false)
+        .await
+    else {
+        panic!("an uninstalled turn slot needs exact durable Assigned authority");
+    };
+    assert_eq!(error.code, "stale_provider_turn");
+    adapter
+        .require_retained_turn_interrupt(&active, true)
+        .await
+        .unwrap_or_else(|error| panic!("prove assigned retained interrupt: {error}"));
+
     stop_and_release(&adapter, &active, &started).await;
 }
 
@@ -352,7 +384,7 @@ async fn exact_control_freezes_provider_entry_before_durable_interrupt_wait() {
         .await
         .unwrap_or_else(|error| panic!("prepare unstarted turn: {error}"));
     adapter
-        .require_retained_turn_interrupt(&active)
+        .require_retained_turn_interrupt(&active, false)
         .await
         .unwrap_or_else(|error| panic!("prove Codex retained interrupt capability: {error}"));
     let authority = prepared.exact_authority();

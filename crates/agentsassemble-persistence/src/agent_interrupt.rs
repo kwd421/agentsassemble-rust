@@ -33,7 +33,10 @@ pub struct AgentInterruptMutation {
 #[derive(Debug, Clone)]
 pub enum AgentInterruptPlan {
     Outcome(Box<CommandOutcome>),
-    Interruptible(Box<DurableAgentSession>),
+    Interruptible {
+        session: Box<DurableAgentSession>,
+        durable_turn_is_assigned: bool,
+    },
 }
 
 impl SqliteStore {
@@ -66,10 +69,13 @@ impl SqliteStore {
             transaction.commit().await?;
             return Ok(AgentInterruptPlan::Outcome(Box::new(outcome)));
         }
-        let (session, _) =
+        let (session, execution) =
             load_interruptible_session(&mut transaction, &principal.room_id, &agent_id).await?;
         transaction.commit().await?;
-        Ok(AgentInterruptPlan::Interruptible(Box::new(session)))
+        Ok(AgentInterruptPlan::Interruptible {
+            session: Box::new(session),
+            durable_turn_is_assigned: execution.phase == ProviderTurnExecutionPhase::Assigned,
+        })
     }
 
     /// Durably accepts one exact busy-turn interrupt before provider I/O.

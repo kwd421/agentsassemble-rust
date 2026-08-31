@@ -161,10 +161,13 @@ impl ProviderAdapter {
     ///
     /// # Errors
     ///
-    /// Rejects stale runtime/turn authority or a driver without that exact capability.
+    /// Rejects stale runtime/turn authority or a driver without that exact capability. A missing
+    /// in-memory turn slot is accepted only when persistence still owns the exact `Assigned`
+    /// pre-dispatch phase.
     pub async fn require_retained_turn_interrupt(
         &self,
         session: &DurableAgentSession,
+        durable_turn_is_assigned: bool,
     ) -> Result<(), ProviderAdapterError> {
         let slot = self
             .existing_slot(&session.public.room_id, &session.public.session_id)
@@ -175,14 +178,17 @@ impl ProviderAdapter {
             return Err(owner_mismatch(session));
         };
         validate_owned_runtime(session, runtime)?;
-        let exact_active_turn = runtime.active_turn.as_ref().is_some_and(|active| {
-            active.turn_id == session.public.active_turn_id
-                && active.turn_generation == session.turn_generation
-                && matches!(
-                    active.phase,
-                    ActiveProviderTurnPhase::Preparing | ActiveProviderTurnPhase::Entered
-                )
-        });
+        let exact_active_turn = match runtime.active_turn.as_ref() {
+            Some(active) => {
+                active.turn_id == session.public.active_turn_id
+                    && active.turn_generation == session.turn_generation
+                    && matches!(
+                        active.phase,
+                        ActiveProviderTurnPhase::Preparing | ActiveProviderTurnPhase::Entered
+                    )
+            }
+            None => durable_turn_is_assigned,
+        };
         if !exact_active_turn {
             return Err(ProviderAdapterError::safe(stale_turn()));
         }

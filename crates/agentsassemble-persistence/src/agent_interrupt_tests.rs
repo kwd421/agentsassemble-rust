@@ -108,7 +108,7 @@ async fn explicit_interrupt_is_exact_replayable_and_does_not_rerun_restored_inpu
 #[tokio::test]
 async fn explicit_interrupt_preflight_is_read_only_and_replay_aware() {
     let (store, principal, _directory) = fixture().await;
-    store
+    let mutation = store
         .execute_message_with_turn(
             &principal,
             "preflight-source",
@@ -117,17 +117,43 @@ async fn explicit_interrupt_preflight_is_read_only_and_replay_aware() {
         )
         .await
         .unwrap_or_else(|error| panic!("assign preflight turn: {error}"));
+    let assignment = &mutation.assignments[0];
     let payload = json!({"agent_id": AGENT_ID});
     for _ in 0..2 {
         let plan = store
             .prepare_agent_interrupt(&principal, "preflight-interrupt", &payload)
             .await
             .unwrap_or_else(|error| panic!("prepare exact interrupt: {error}"));
-        let AgentInterruptPlan::Interruptible(session) = plan else {
+        let AgentInterruptPlan::Interruptible {
+            session,
+            durable_turn_is_assigned,
+        } = plan
+        else {
             panic!("fresh interrupt must require live capability proof");
         };
         assert_eq!(session.public.session_id, AGENT_ID);
+        assert!(durable_turn_is_assigned);
     }
+    store
+        .authorize_provider_turn_start(
+            &assignment.session.public.room_id,
+            &assignment.session.public.session_id,
+            assignment.turn_generation,
+            &assignment.turn_id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize preflight turn start: {error}"));
+    let AgentInterruptPlan::Interruptible {
+        durable_turn_is_assigned,
+        ..
+    } = store
+        .prepare_agent_interrupt(&principal, "started-preflight-interrupt", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare started exact interrupt: {error}"))
+    else {
+        panic!("fresh started interrupt must require live capability proof");
+    };
+    assert!(!durable_turn_is_assigned);
     store
         .execute_agent_interrupt(&principal, "preflight-interrupt", &payload)
         .await

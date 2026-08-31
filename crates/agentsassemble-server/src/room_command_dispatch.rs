@@ -147,12 +147,15 @@ async fn execute_agent_interrupt(
         Ok(plan) => plan,
         Err(error) => return CommandExecution::transactional_failure(error),
     };
-    let session = match plan {
+    let (session, durable_turn_is_assigned) = match plan {
         AgentInterruptPlan::Outcome(outcome) => return CommandExecution::success(*outcome),
-        AgentInterruptPlan::Interruptible(session) => session,
+        AgentInterruptPlan::Interruptible {
+            session,
+            durable_turn_is_assigned,
+        } => (session, durable_turn_is_assigned),
     };
     if let Err(error) = provider_adapter
-        .require_retained_turn_interrupt(&session)
+        .require_retained_turn_interrupt(&session, durable_turn_is_assigned)
         .await
     {
         return CommandExecution::transactional_failure(PersistenceError::CommandRejected {
