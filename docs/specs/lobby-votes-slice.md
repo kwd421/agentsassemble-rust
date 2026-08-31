@@ -193,3 +193,12 @@ mount, explicit user refresh, or sequenced vote events—not polling.
   independently approved exact `da62f4c..aa77058`, correction `b49d710..aa77058`, and cumulative
   `b95e128..aa77058` as `APPROVE C0/H0/M0/L0`; cross-review status `MATCHED`. Neither used an
   automated scan, provider, packaged app, or Computer Use for this source review.
+- Finding: the critical web review of `a0725be` found one Low where finite vote deadlines emitted as
+  `+00:00` were rejected by the search context's `Z`-only parser. `21792df` separated the two exact
+  timestamp wire owners and the reviewer marked the finding closed; the prior searchable-ballot
+  privacy Medium remained closed.
+- Final approval: critical web (`GPT-5.6 Sol`, verified very-high reasoning) approved `21792df`, exact
+  `a0725be..21792df`, full correction `04050fa..21792df`, cumulative `aa77058..21792df`, and related
+  repository-wide owners as `APPROVE C0/H0/M0/L0`. Daybreaker Blue High could not run because its
+  real usage allowance is unavailable until 2026-09-06; under the user's standing instruction, the
+  same very-high session performed the security cross-review. No automated scan was used.
