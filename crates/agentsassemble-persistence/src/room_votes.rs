@@ -191,6 +191,20 @@ pub(crate) async fn apply_vote_command(
     }
 }
 
+pub(crate) fn is_terminal_vote_rejection(error: &PersistenceError) -> bool {
+    matches!(
+        error,
+        PersistenceError::CommandRejected {
+            code: "vote_not_found"
+                | "vote_expired"
+                | "vote_closed"
+                | "invalid_vote_choice"
+                | "permission_denied",
+            ..
+        }
+    )
+}
+
 pub(crate) async fn delete_vote_projection(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,

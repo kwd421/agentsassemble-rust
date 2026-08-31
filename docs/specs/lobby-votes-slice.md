@@ -288,3 +288,23 @@ mount, explicit user refresh, or sequenced vote events—not polling.
   `APPROVE C0/H0/M0/L0`, with no actionable finding. Daybreaker Blue High remained unavailable until
   2026-09-06, so the same session performed the authorized security cross-review. It used public
   immutable source only and did not rerun the provided packaged-app or `make verify` evidence.
+- Later catch-up finding: Daybreaker Blue High traced a state race that the earlier review missed. A
+  provider could stage a valid cast, withdrawal, or close while the poll was open, but a human could
+  close, delete, or expire the poll before the retained result reached persistence. The vote
+  transaction then returned a deterministic current-state rejection, while the server retained the
+  same provider result for one-second reconciliation and retried it without a terminal state change.
+  This could stop ordered progression and repeat SQLite and log work indefinitely.
+- Correction intent and owner: the vote owner now classifies only `vote_not_found`, `vote_expired`,
+  `vote_closed`, `invalid_vote_choice`, and provider-close `permission_denied` as deterministic
+  terminal action rejections. The same transaction marks the exact provider execution failed, emits
+  an internal error and `turn_finished`, advances the Agent Session to attached/idle without
+  requeuing or reinvoking its consumed input, and assigns any independent pending work. Storage,
+  corrupt-state, stale-turn, and uncertain-effect failures remain errors and are not converted into
+  success or a retry fallback. A committed terminal result is released by the existing server owner.
+- Preserved contracts and verification: vote authority, projection/event atomicity, provider-session
+  identity, input cursor, ordered/ambient floor ownership, and post-commit publication ordering are
+  unchanged. The focused closed-during-cast test proved one `error`/`turn_finished`/session-state
+  commit, failed execution phase, attached/idle session, no recovery flag, no next reconciliation
+  candidate, and no ballot event. Both focused provider-vote tests and warning-denied persistence and
+  server Clippy passed. No polling, heartbeat, timer, fallback, compatibility path, background task,
+  or new retry was added.

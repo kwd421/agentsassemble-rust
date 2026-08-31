@@ -308,13 +308,6 @@ impl SqliteStore {
         let (room, settings) = load_active_room(&mut transaction, room_id).await?;
         let mut session = load_session(&mut transaction, room_id, session_id).await?;
         require_active_turn(&session, turn_id)?;
-        crate::provider_turn_execution::terminalize_ordinary_execution(
-            &mut transaction,
-            &session,
-            authority,
-            crate::ProviderTurnExecutionPhase::Completed,
-        )
-        .await?;
         validate_input_cursor(&mut transaction, &session).await?;
         apply_provider_session_transition(&mut session, provider_session_id)?;
         let participant = load_participant(
@@ -325,7 +318,7 @@ impl SqliteStore {
         .await?;
         let principal = provider_room_principal(&session, &participant, InviteScope::ReadWrite)?;
         let sequence = next_sequence(&mut transaction, room_id).await?;
-        let event = crate::room_votes::apply_vote_command(
+        let vote_result = crate::room_votes::apply_vote_command(
             &mut transaction,
             &principal,
             &participant,
@@ -333,18 +326,54 @@ impl SqliteStore {
             sequence,
             Utc::now(),
         )
-        .await?;
-        let commit = ProviderTurnFinalization {
-            room: &room,
-            settings: &settings,
-            turn_id,
-            provider_turn_id,
-            disposition: ProviderTurnDisposition::Completed {
-                route_first_event: route_to_floor,
-            },
-        }
-        .apply(&mut transaction, &mut session, vec![event])
-        .await?;
+        .await;
+        let commit = match vote_result {
+            Ok(event) => {
+                crate::provider_turn_execution::terminalize_ordinary_execution(
+                    &mut transaction,
+                    &session,
+                    authority,
+                    crate::ProviderTurnExecutionPhase::Completed,
+                )
+                .await?;
+                ProviderTurnFinalization {
+                    room: &room,
+                    settings: &settings,
+                    turn_id,
+                    provider_turn_id,
+                    disposition: ProviderTurnDisposition::Completed {
+                        route_first_event: route_to_floor,
+                    },
+                }
+                .apply(&mut transaction, &mut session, vec![event])
+                .await?
+            }
+            Err(error) if crate::room_votes::is_terminal_vote_rejection(&error) => {
+                let PersistenceError::CommandRejected { code, message } = error else {
+                    unreachable!("terminal vote rejections are command rejections")
+                };
+                crate::provider_turn_execution::terminalize_ordinary_execution(
+                    &mut transaction,
+                    &session,
+                    authority,
+                    crate::ProviderTurnExecutionPhase::Failed,
+                )
+                .await?;
+                ProviderTurnFinalization {
+                    room: &room,
+                    settings: &settings,
+                    turn_id,
+                    provider_turn_id,
+                    disposition: ProviderTurnDisposition::Rejected {
+                        error_code: code,
+                        message: &message,
+                    },
+                }
+                .apply(&mut transaction, &mut session, Vec::new())
+                .await?
+            }
+            Err(error) => return Err(error),
+        };
         transaction.commit().await?;
         Ok(commit)
     }

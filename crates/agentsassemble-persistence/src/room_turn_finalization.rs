@@ -4,13 +4,21 @@ use sqlx::{Sqlite, Transaction};
 use crate::{AgentTurnCommit, PersistenceError, agent_lifecycle::save_session};
 
 use super::{
-    assign_available_pending, complete_session_state, rejected, route_message, session_state_event,
-    turn_finished_event,
+    assign_available_pending, complete_session_state, error_event, rejected, route_message,
+    session_state_event, turn_finished_event,
 };
 
 pub(super) enum ProviderTurnDisposition<'a> {
-    Completed { route_first_event: bool },
-    Declined { reason_code: &'a str },
+    Completed {
+        route_first_event: bool,
+    },
+    Declined {
+        reason_code: &'a str,
+    },
+    Rejected {
+        error_code: &'static str,
+        message: &'a str,
+    },
 }
 
 pub(super) struct ProviderTurnFinalization<'a> {
@@ -34,6 +42,15 @@ impl ProviderTurnFinalization<'_> {
             }
             ProviderTurnDisposition::Declined { reason_code } => {
                 ("declined", Some(reason_code), false)
+            }
+            ProviderTurnDisposition::Rejected {
+                error_code,
+                message,
+            } => {
+                events.push(
+                    error_event(transaction, session, self.turn_id, error_code, message).await?,
+                );
+                ("error", Some(error_code), false)
             }
         };
         let input_event_id = session.input_up_to_event_id.clone();
