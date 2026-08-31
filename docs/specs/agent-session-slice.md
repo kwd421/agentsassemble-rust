@@ -1,6 +1,6 @@
 # Agent Session vertical slice
 
-Status: published implementation owner; idle pause/resume cutover active
+Status: published implementation owner; idle pause/resume packaged verification complete, review pending
 
 ## Definition
 
@@ -27,7 +27,7 @@ Implementation order is mandatory:
 4. verify the copied UI, crash/replay cases, exact provider matrix, restart, and
    owned-resource cleanup before declaring the slice complete.
 
-## Active idle pause/resume extension
+## Idle pause/resume extension
 
 The original reachable client exposes `agent.pause` only for an idle connected Agent Session and
 `agent.resume` for a paused session. Pause disables scheduling while preserving the exact provider
@@ -65,6 +65,17 @@ separate existing or future owners.
   OpenCode Muse Spark process-preserving flows. Resource evidence compares the resident process set
   and idle CPU/RSS before pause, during pause, and after resume without claiming an improvement from
   point samples.
+
+The local `ab4ab78` candidate passed the complete repository gate and the copied packaged UI for all
+three exact providers. Each provider completed one addressed turn, retained the same guardian,
+anchor, provider process, runtime handle, and provider-conversation identity across idle pause, left
+one paused direct mention pending with no inflight turn, and completed that queued turn after resume.
+Antigravity and OpenCode then produced confirmed stop receipts. Codex killed and reaped its exact
+process tree but the macOS guardian did not publish its required cleanup receipt, so the durable
+owner correctly retained an explicit disconnected/recovery-required unconfirmed stop instead of
+claiming absence. That cleanup-proof boundary remains a follow-up; it is not a pause fallback or a
+reason to weaken the guardian receipt requirement. Exact packaged evidence and cleanup are recorded
+in `docs/VERIFICATION.md`; manual review of the eventual pushed range remains pending.
 
 ## Required slice contract
 
@@ -179,7 +190,7 @@ These are sequencing boundaries, not reductions of the repository reimplementati
 ### Slice exit: real provider conversation
 
 1. The same visible session can start, consume canonical room context, publish a durable reply, stop, and restart without changing its provider conversation identity when the provider supports resume.
-2. The exact real-client matrix in `docs/VERIFICATION.md` passes: Codex Terra, Antigravity Flash, and OpenCode Hy3 free. Missing availability remains failed or unknown and never substitutes a model.
+2. The exact real-client matrix in `docs/VERIFICATION.md` passes: Codex Terra, Antigravity Flash, and OpenCode Muse Spark contributor free. Missing availability remains failed or unknown and never substitutes a model.
 3. Every Computer Use window, test runtime, Agent Session, and provider process created for verification is shut down and its cleanup result recorded.
 4. The final public commit reproduces ACK-loss replay, launch ambiguity or adoption, exact stop, hidden-sequence reconnect, provider conversation reuse, and restart cleanup evidence; a create-and-start success screen alone is not slice completion.
 

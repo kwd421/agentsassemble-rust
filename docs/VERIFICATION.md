@@ -4608,6 +4608,57 @@ Daybreaker approved through `d168354` at C0/H0/M0/L0. The independent critical-w
 approved pushed HEAD `23c9f35`, cumulative `a958bab..23c9f35`, and corrections
 `edd9ce4..23c9f35` at C0/H0/M0/L0.
 
+## Agent Session idle pause/resume packaged candidate: 2026-09-01
+
+The isolated copied release was built from local `ab4ab78` on pushed baseline `23c9f35`, with the
+distinct product name `AgentsAssemble Pause Verify 831` and identifier
+`app.agentsassemble.rust.pauseverify0831`. The active implementation adds no schema, migration,
+compatibility path, provider branch, process restart, background task, polling, heartbeat, timer,
+retry, or fallback. Pause is one persistence-owned state transition; resume uses that same owner and
+then the existing ordered-floor progression boundary.
+
+Computer Use selected the actual Rust project workspace and exercised exact installed models rather
+than substitutes. Codex `gpt-5.6-terra` returned `CODEX_FIRST_831`, paused while idle, accepted a
+direct mention without starting a turn, and after resume returned `CODEX_PAUSE_831`. The same Codex
+provider PID, runtime handle, and provider conversation remained present across pause and resume.
+Antigravity `gemini-3.6-flash` similarly returned `ANTIGRAVITY_FIRST_831`, retained its guardian,
+anchor, PTY provider, runtime handle, and conversation while the paused input remained pending, then
+returned `ANTIGRAVITY_PAUSE_831` after resume. It never used print mode.
+
+The installed OpenCode 1.17.18 catalog exposed exact
+`opencode/muse-spark-1.2-contributor-free`; the retired Hy3-free identifier and every paid or
+fallback model remained unused. The copied selector created that exact read-only workspace session.
+After one normal application restart, resume reused its private provider conversation and a new
+persistent loopback server. Its first real turn returned `OPENCODE_FIRST_831`. Idle pause retained
+the exact guardian, anchor, `opencode serve` PID, runtime handle, and provider conversation; the
+addressed `OPENCODE_PAUSE_831` input remained `pending=1`, `inflight=0`, and `turn_count=1` with no
+visible provider response. Resume consumed it through the existing floor owner, returned exactly
+`OPENCODE_PAUSE_831`, and reached `turn_count=2` on the same resident process set and identities.
+
+The resident-process comparison observed no process replacement across any pause/resume pair.
+OpenCode's point RSS sample was 919,392 KiB before and during pause and 773,136 KiB after the queued
+turn; Antigravity's observed provider process remained resident at 182,768 KiB after resume. These
+are upstream point observations, not a claimed optimization or leak diagnosis. The state-only
+implementation performs no provider I/O at pause, adds no allocation owner or disk record beyond the
+existing command result/event, and preserves the existing combined 256-input queue bound.
+
+Antigravity and OpenCode stopped through the copied control with confirmed cleanup, detached/stopped
+durable state, and no owned process left. Codex stop killed and reaped its exact guardian, anchor, and
+provider tree, but the macOS guardian did not write the required generation-bound cleanup receipt.
+The runtime therefore emitted `provider_stop_unconfirmed` and persistence retained
+disconnected/recovery-required authority instead of claiming a successful stop or admitting a
+replacement. Process absence alone was not promoted to security proof. This is an explicit cleanup-
+receipt follow-up, not a successful-stop claim and not a reason to add a fallback.
+
+The exact app and all provider processes were normally shut down. Computer Use was reset, and only
+the identifier-owned Application Support, WebKit, cache, preferences, temporary package config, and
+isolated app bundle were moved to the recoverable
+`~/.Trash/agentsassemble-pause-verify-0831-cleanup-20260901-0131` directory. Shared Cargo artifacts,
+user files, other applications, and unrelated providers were untouched. The post-cleanup unchanged
+`make verify` passed all mandatory architecture, policy, source-structure, generated-binding,
+frontend, Rust unit/integration/TCP/WebSocket, warning-denied Clippy, and diff gates. Manual critical-
+web and Daybreaker review of the eventual pushed range remain pending.
+
 ## Lobby message-mutation review corrections: 2026-08-31
 
 Daybreaker manual source review of pushed `a958bab..edd9ce4` returned REVISE C0/H0/M1/L1. The
