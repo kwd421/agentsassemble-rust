@@ -156,8 +156,8 @@ pub(crate) async fn apply_vote_command(
                 prepare_vote_event(principal, participant, &canonical, sequence, now)
                     .map_err(|error| rejection(&error))?,
             );
-            insert_event(transaction, &event).await?;
             replace_ballot(transaction, participant, &mut stored, choice_index).await?;
+            insert_event(transaction, &event).await?;
             save_vote_state(transaction, &stored).await?;
             Ok(event)
         }

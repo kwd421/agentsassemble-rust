@@ -1,4 +1,7 @@
-use agentsassemble_domain::VoteCommand;
+use agentsassemble_domain::{
+    MAX_VOTE_BALLOTS_PER_POLL, Participant, ParticipantRole, ParticipantStatus, VoteCommand,
+};
+use chrono::Utc;
 use serde_json::json;
 
 use super::{AGENT_ID, authority, event_types, fixture, running_authority, stored_session};
@@ -78,6 +81,119 @@ async fn closed_vote_rejection_terminalizes_the_exact_provider_turn() {
             .unwrap_or_else(|error| panic!("check rejected provider reconciliation: {error}"))
             .is_none()
     );
+}
+
+#[tokio::test]
+async fn full_poll_terminalizes_provider_cast_without_a_phantom_transition() {
+    let (store, principal, _directory) = fixture().await;
+    let vote_id = create_provider_vote(&store, &principal).await;
+    fill_current_ballots(&store, &vote_id).await;
+    let cast_start = assigned_turn(
+        &store,
+        &principal,
+        "provider-full-vote-input",
+        "@Terra cast after the poll fills",
+        "provider-full-vote",
+    )
+    .await;
+    let before_completion =
+        sqlx::query_scalar::<_, i64>("SELECT MAX(seq) FROM room_events WHERE room_id = 'general'")
+            .fetch_one(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("read sequence before full provider vote: {error}"));
+    let cast = VoteCommand::from_payload(&json!({
+        "kind": "vote_cast",
+        "vote_id": vote_id,
+        "vote_choice": "Yes"
+    }))
+    .unwrap_or_else(|error| panic!("parse full provider cast: {error}"));
+
+    let commit = store
+        .complete_agent_vote_turn(
+            "general",
+            AGENT_ID,
+            authority(&cast_start, "provider-full-vote", None),
+            cast,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("terminalize full provider cast: {error}"));
+
+    assert_eq!(
+        event_types(&commit.events),
+        ["error", "turn_finished", "agent_session_state"]
+    );
+    assert_eq!(
+        commit.events[0].extra["error_code"],
+        json!("vote_capacity_reached")
+    );
+    let phantom_casts = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM room_events WHERE room_id = 'general' AND seq > ? AND json_extract(event_json, '$.message_kind') = 'vote_cast'",
+    )
+    .bind(before_completion)
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("count rejected provider vote transitions: {error}"));
+    assert_eq!(phantom_casts, 0);
+    let summary = store
+        .local_room_vote_summary(
+            "general",
+            &principal.principal_id,
+            &principal.participant_id,
+            &vote_id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("read full vote summary: {error}"));
+    assert_eq!(summary.total_votes, MAX_VOTE_BALLOTS_PER_POLL);
+    assert_eq!(summary.tallies["Yes"], MAX_VOTE_BALLOTS_PER_POLL);
+    assert_eq!(summary.tallies["No"], 0);
+}
+
+async fn fill_current_ballots(store: &SqliteStore, vote_id: &str) {
+    let now = Utc::now();
+    for index in 0..MAX_VOTE_BALLOTS_PER_POLL {
+        let participant_id = format!("departed-voter-{index}");
+        let participant = Participant {
+            room_id: "general".to_owned(),
+            participant_id: participant_id.clone(),
+            display_name: "Departed voter".to_owned(),
+            avatar_image_url: String::new(),
+            participant_type: "human".to_owned(),
+            status: ParticipantStatus::Left,
+            role: ParticipantRole::Human,
+            owner_id: format!("departed-user-{index}"),
+            muted: false,
+            created_at: now,
+            updated_at: now,
+        };
+        sqlx::query(
+            "INSERT INTO participants(room_id, participant_id, participant_json) VALUES ('general', ?, ?)",
+        )
+        .bind(&participant_id)
+        .bind(
+            serde_json::to_string(&participant)
+                .unwrap_or_else(|error| panic!("encode departed voter: {error}")),
+        )
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("insert departed voter: {error}"));
+        sqlx::query(
+            "INSERT INTO room_vote_ballots(room_id, vote_id, participant_id, choice_index) VALUES ('general', ?, ?, 0)",
+        )
+        .bind(vote_id)
+        .bind(&participant_id)
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("insert full vote ballot: {error}"));
+    }
+    sqlx::query(
+        "UPDATE room_vote_states SET tallies_json = ?, total_votes = ? WHERE room_id = 'general' AND vote_id = ?",
+    )
+    .bind(format!("[{MAX_VOTE_BALLOTS_PER_POLL},0]"))
+    .bind(i64::try_from(MAX_VOTE_BALLOTS_PER_POLL).unwrap_or(i64::MAX))
+    .bind(vote_id)
+    .execute(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("fill vote projection: {error}"));
 }
 
 async fn create_provider_vote(
