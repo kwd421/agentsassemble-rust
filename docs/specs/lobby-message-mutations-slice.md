@@ -154,3 +154,21 @@ event, redaction, deletion, budget reservation, or publication.
 - Verification: repository-wide source search found one remaining production allocator query; the
   full persistence test suite, structure gates, and warning-denied Clippy passed with unchanged
   contiguous cursor, replay, rollback, profile, admission, settings, and lifecycle behavior.
+
+## WebSocket mutation surface exposure
+
+- Prior incomplete boundary: the atomic persistence owner and copied lobby controls existed, but
+  the canonical `RoomAction` registry did not contain `message.edit` or `message.delete`. The strict
+  browser command parser therefore rejected both controls before they could reach the server-owned
+  transaction; the UI alone was not a reachable implementation.
+- Intent and owner: the protocol registry now exposes exactly those two WebSocket actions and bumps
+  the product-surface revision. Local and admitted-human command dispatch route them directly to the
+  existing mutation transaction and publish its existing `CommandOutcome`; no HTTP route, client
+  authority, adapter, compatibility path, fallback, or second mutation owner was added.
+- Preserved contracts and verification: the existing command admission still owns current-principal
+  revalidation, exact request/payload identity, inflight capacity, and principal/room budgets. The
+  persistence transaction still owns authorization, edit/delete state, replay, result, and event
+  construction, while the common room runtime owns sequenced publication and strict ACK/NACK. The
+  protocol suite, all 94 server unit tests, generated-surface checks, focused browser surface/socket
+  tests, workspace all-target check, and diff check pass. Authenticated real-TCP behavior remains the
+  next independent verification unit and is not claimed here.

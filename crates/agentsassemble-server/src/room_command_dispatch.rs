@@ -66,18 +66,10 @@ pub(crate) async fn execute_command(
                 Err(error) => CommandExecution::transactional_failure(error),
             }
         }
-        RoomAction::MessageSend => match store
-            .execute_message_with_turn(
-                &command.principal,
-                &command.request_id,
-                command.action.as_str(),
-                &command.payload,
-            )
-            .await
-        {
-            Ok(mutation) => CommandExecution::mutation(mutation),
-            Err(error) => CommandExecution::transactional_failure(error),
-        },
+        RoomAction::MessageSend => execute_message_send(store, command).await,
+        RoomAction::MessageEdit | RoomAction::MessageDelete => {
+            execute_message_mutation(store, command).await
+        }
         RoomAction::ParticipantRoleUpdate => match store
             .execute_participant_role_update(
                 &command.principal,
@@ -116,6 +108,36 @@ pub(crate) async fn execute_command(
         RoomAction::RoomHistory | RoomAction::RoomVoteSummary => {
             misrouted_direct_read(command.action)
         }
+    }
+}
+
+async fn execute_message_send(store: &SqliteStore, command: &RoomCommand) -> CommandExecution {
+    match store
+        .execute_message_with_turn(
+            &command.principal,
+            &command.request_id,
+            command.action.as_str(),
+            &command.payload,
+        )
+        .await
+    {
+        Ok(mutation) => CommandExecution::mutation(mutation),
+        Err(error) => CommandExecution::transactional_failure(error),
+    }
+}
+
+async fn execute_message_mutation(store: &SqliteStore, command: &RoomCommand) -> CommandExecution {
+    match store
+        .execute_message_mutation(
+            &command.principal,
+            &command.request_id,
+            command.action.as_str(),
+            &command.payload,
+        )
+        .await
+    {
+        Ok(outcome) => CommandExecution::success(outcome),
+        Err(error) => CommandExecution::transactional_failure(error),
     }
 }
 
@@ -165,6 +187,18 @@ async fn execute_human_session_command(
             .await
         {
             Ok(mutation) => CommandExecution::mutation(mutation),
+            Err(error) => CommandExecution::transactional_failure(error),
+        },
+        RoomAction::MessageEdit | RoomAction::MessageDelete => match store
+            .execute_human_session_message_mutation(
+                authorization,
+                &command.request_id,
+                command.action.as_str(),
+                &command.payload,
+            )
+            .await
+        {
+            Ok(outcome) => CommandExecution::success(outcome),
             Err(error) => CommandExecution::transactional_failure(error),
         },
         RoomAction::RoomRandomRoll | RoomAction::RoomRandomChoose => {

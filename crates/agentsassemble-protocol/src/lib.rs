@@ -26,7 +26,7 @@ pub use local_control::{
 };
 
 pub const PROTOCOL_VERSION: u32 = 1;
-pub const PRODUCT_SURFACE_REVISION: u32 = 9;
+pub const PRODUCT_SURFACE_REVISION: u32 = 10;
 pub const HUMAN_INVITE_SIGNED_TOKEN_PREFIX: &str = "aai1";
 pub const HUMAN_INVITE_JOIN_CODE_PREFIX: &str = "aaj1_";
 pub const HUMAN_INVITE_SIGNED_TOKEN_MAX_BYTES: usize = 4 * 1024;
@@ -90,6 +90,10 @@ impl RoomStream {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, TS)]
 pub enum RoomAction {
+    #[serde(rename = "message.delete")]
+    MessageDelete,
+    #[serde(rename = "message.edit")]
+    MessageEdit,
     #[serde(rename = "message.send")]
     MessageSend,
     #[serde(rename = "participant.role.update")]
@@ -121,12 +125,14 @@ pub enum RoomAction {
 }
 
 impl RoomAction {
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 16] = [
         Self::AgentConfigure,
         Self::AgentCreate,
         Self::AgentResume,
         Self::AgentStart,
         Self::AgentStop,
+        Self::MessageDelete,
+        Self::MessageEdit,
         Self::MessageSend,
         Self::ParticipantLeave,
         Self::ParticipantMute,
@@ -141,6 +147,8 @@ impl RoomAction {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
+            Self::MessageDelete => "message.delete",
+            Self::MessageEdit => "message.edit",
             Self::MessageSend => "message.send",
             Self::ParticipantMute => "participant.mute",
             Self::ParticipantLeave => "participant.leave",
@@ -503,6 +511,21 @@ mod tests {
         .unwrap_or_else(|error| panic!("valid command envelope: {error}"));
 
         assert!(matches!(frame, ClientFrame::Command { request_id, .. } if request_id == "web-1"));
+
+        let mutation: ClientFrame = serde_json::from_value(json!({
+            "op": "command",
+            "request_id": "web-edit-1",
+            "action": "message.edit",
+            "payload": {"event_id": "event-1", "content": "updated"}
+        }))
+        .unwrap_or_else(|error| panic!("valid message mutation envelope: {error}"));
+        assert!(matches!(
+            mutation,
+            ClientFrame::Command {
+                action: super::RoomAction::MessageEdit,
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -547,6 +570,16 @@ mod tests {
             surface
                 .websocket_actions
                 .contains(&super::RoomAction::ParticipantRoleUpdate)
+        );
+        assert!(
+            surface
+                .websocket_actions
+                .contains(&super::RoomAction::MessageDelete)
+        );
+        assert!(
+            surface
+                .websocket_actions
+                .contains(&super::RoomAction::MessageEdit)
         );
         assert!(
             surface
