@@ -14,6 +14,7 @@ from scripts.check_source_growth import (
     SourceGrowthPolicy,
     SourceMetric,
     _tracked_source,
+    structure_warnings,
     violations,
 )
 
@@ -149,10 +150,11 @@ class SourceGrowthPolicyTests(unittest.TestCase):
 
     def test_compressed_one_line_source_hits_logical_line_limit(self) -> None:
         policy = SourceGrowthPolicy(
-            new_file_line_limit=500,
+            warning_line_limit=500,
+            strong_warning_line_limit=800,
+            hard_line_limit=1_000,
             new_file_byte_limit=262_144,
             max_logical_line_bytes=16_384,
-            frozen_file_line_limits={},
         )
         found = violations(
             {
@@ -169,41 +171,29 @@ class SourceGrowthPolicyTests(unittest.TestCase):
             found,
         )
 
-    def test_frozen_oversized_file_cannot_grow_or_leave_stale_headroom(self) -> None:
+    def test_line_warnings_do_not_replace_the_absolute_limit(self) -> None:
         policy = SourceGrowthPolicy(
-            new_file_line_limit=500,
+            warning_line_limit=500,
+            strong_warning_line_limit=800,
+            hard_line_limit=1_000,
             new_file_byte_limit=262_144,
             max_logical_line_bytes=16_384,
-            frozen_file_line_limits={"src/existing.rs": 640},
         )
+        metrics = {
+            "src/regular.rs": SourceMetric(500, 1_000, 80),
+            "src/strong.rs": SourceMetric(800, 1_000, 80),
+            "src/cohesive.rs": SourceMetric(1_000, 1_000, 80),
+            "src/oversized.rs": SourceMetric(1_001, 1_000, 80),
+        }
 
+        warnings = structure_warnings(metrics, policy)
+        self.assertTrue(any(item.startswith("warning: src/regular.rs") for item in warnings))
+        self.assertTrue(any(item.startswith("strong: src/strong.rs") for item in warnings))
+        self.assertTrue(any(item.startswith("strong: src/cohesive.rs") for item in warnings))
+        self.assertFalse(any("oversized.rs" in item for item in warnings))
         self.assertIn(
-            "src/existing.rs: 641 lines exceeds its frozen baseline limit of 640",
-            violations(
-                {"src/existing.rs": SourceMetric(641, 1_000, 80)}, policy
-            ),
-        )
-        self.assertIn(
-            "src/existing.rs: 620 lines is below its frozen baseline of 640; "
-            "lower the recorded baseline to preserve the ratchet",
-            violations(
-                {"src/existing.rs": SourceMetric(620, 1_000, 80)}, policy
-            ),
-        )
-
-    def test_frozen_baseline_must_be_removed_after_split_below_cap(self) -> None:
-        policy = SourceGrowthPolicy(
-            new_file_line_limit=500,
-            new_file_byte_limit=262_144,
-            max_logical_line_bytes=16_384,
-            frozen_file_line_limits={"src/existing.rs": 640},
-        )
-
-        self.assertIn(
-            "src/existing.rs: now fits the 500-line limit; remove its frozen baseline",
-            violations(
-                {"src/existing.rs": SourceMetric(480, 1_000, 80)}, policy
-            ),
+            "src/oversized.rs: 1001 lines exceeds the absolute limit of 1000",
+            violations(metrics, policy),
         )
 
     def test_executable_lockfile_name_is_still_source(self) -> None:

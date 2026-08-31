@@ -24,10 +24,11 @@ GENERATED_LOCKFILES = frozenset({"Cargo.lock", "package-lock.json"})
 
 @dataclass(frozen=True)
 class SourceGrowthPolicy:
-    new_file_line_limit: int
+    warning_line_limit: int
+    strong_warning_line_limit: int
+    hard_line_limit: int
     new_file_byte_limit: int
     max_logical_line_bytes: int
-    frozen_file_line_limits: Mapping[str, int]
 
 
 @dataclass(frozen=True)
@@ -42,14 +43,18 @@ def load_policy(repository_root: Path) -> SourceGrowthPolicy:
         (repository_root / POLICY_PATH).read_text(encoding="utf-8")
     )
     policy = payload.get("policy")
-    raw_limits = payload.get("frozen_file_line_limits")
-    if not isinstance(policy, dict) or not isinstance(raw_limits, dict):
-        raise ValueError(
-            "Source growth policy needs [policy] and [frozen_file_line_limits]."
-        )
-    default_limit = policy.get("new_file_line_limit")
-    if isinstance(default_limit, bool) or not isinstance(default_limit, int) or default_limit < 1:
-        raise ValueError("new_file_line_limit must be a positive integer.")
+    if not isinstance(policy, dict):
+        raise ValueError("Source growth policy needs [policy].")
+    warning_limit = policy.get("warning_line_limit")
+    strong_warning_limit = policy.get("strong_warning_line_limit")
+    hard_limit = policy.get("hard_line_limit")
+    if any(
+        isinstance(limit, bool) or not isinstance(limit, int) or limit < 1
+        for limit in (warning_limit, strong_warning_limit, hard_limit)
+    ):
+        raise ValueError("Source line thresholds must be positive integers.")
+    if not warning_limit < strong_warning_limit < hard_limit:
+        raise ValueError("Source line thresholds must increase from warning to hard limit.")
     byte_limit = policy.get("new_file_byte_limit")
     logical_line_limit = policy.get("max_logical_line_bytes")
     if isinstance(byte_limit, bool) or not isinstance(byte_limit, int) or byte_limit < 1:
@@ -60,20 +65,13 @@ def load_policy(repository_root: Path) -> SourceGrowthPolicy:
         or logical_line_limit < 1
     ):
         raise ValueError("max_logical_line_bytes must be a positive integer.")
-    if list(raw_limits) != sorted(raw_limits):
-        raise ValueError("Frozen source baselines must be sorted by path.")
-
-    limits: dict[str, int] = {}
-    for relative, raw in raw_limits.items():
-        path = Path(relative)
-        if path.is_absolute() or ".." in path.parts or path.as_posix() != relative:
-            raise ValueError(f"Invalid source growth path: {relative!r}")
-        if isinstance(raw, bool) or not isinstance(raw, int) or raw <= default_limit:
-            raise ValueError(
-                f"Frozen file {relative!r} must have a limit above {default_limit}."
-            )
-        limits[relative] = raw
-    return SourceGrowthPolicy(default_limit, byte_limit, logical_line_limit, limits)
+    return SourceGrowthPolicy(
+        warning_limit,
+        strong_warning_limit,
+        hard_limit,
+        byte_limit,
+        logical_line_limit,
+    )
 
 
 def tracked_paths(repository_root: Path) -> tuple[Path, ...]:
@@ -117,24 +115,11 @@ def collect_line_counts(repository_root: Path) -> dict[str, int]:
 def violations(metrics: Mapping[str, SourceMetric], policy: SourceGrowthPolicy) -> tuple[str, ...]:
     found: list[str] = []
     for relative, metric in sorted(metrics.items()):
-        frozen_limit = policy.frozen_file_line_limits.get(relative)
-        limit = frozen_limit or policy.new_file_line_limit
-        if metric.lines > limit:
-            ownership = "frozen baseline" if frozen_limit else "source-file"
+        if metric.lines > policy.hard_line_limit:
             found.append(
-                f"{relative}: {metric.lines} lines exceeds its {ownership} limit of {limit}"
+                f"{relative}: {metric.lines} lines exceeds the absolute limit of "
+                f"{policy.hard_line_limit}"
             )
-        elif frozen_limit and metric.lines < frozen_limit:
-            if metric.lines <= policy.new_file_line_limit:
-                found.append(
-                    f"{relative}: now fits the {policy.new_file_line_limit}-line limit; "
-                    "remove its frozen baseline"
-                )
-            else:
-                found.append(
-                    f"{relative}: {metric.lines} lines is below its frozen baseline of "
-                    f"{frozen_limit}; lower the recorded baseline to preserve the ratchet"
-                )
         if metric.bytes > policy.new_file_byte_limit:
             found.append(
                 f"{relative}: {metric.bytes} bytes exceeds the source byte limit of {policy.new_file_byte_limit}"
@@ -143,8 +128,25 @@ def violations(metrics: Mapping[str, SourceMetric], policy: SourceGrowthPolicy) 
             found.append(
                 f"{relative}: {metric.max_logical_line_bytes}-byte logical line exceeds the limit of {policy.max_logical_line_bytes}"
             )
-    for relative in sorted(set(policy.frozen_file_line_limits) - set(metrics)):
-        found.append(f"{relative}: recorded source file is missing")
+    return tuple(found)
+
+
+def structure_warnings(
+    metrics: Mapping[str, SourceMetric], policy: SourceGrowthPolicy
+) -> tuple[str, ...]:
+    found: list[str] = []
+    for relative, metric in sorted(metrics.items()):
+        if metric.lines > policy.hard_line_limit:
+            continue
+        if metric.lines >= policy.strong_warning_line_limit:
+            found.append(
+                f"strong: {relative}: {metric.lines} lines requires an especially strict "
+                "single-responsibility review"
+            )
+        elif metric.lines >= policy.warning_line_limit:
+            found.append(
+                f"warning: {relative}: {metric.lines} lines requires a responsibility review"
+            )
     return tuple(found)
 
 
@@ -165,15 +167,27 @@ def _tracked_source(path: Path) -> bool:
 
 def main() -> int:
     root = Path(__file__).resolve().parents[1]
-    found = violations(collect_source_metrics(root), load_policy(root))
+    policy = load_policy(root)
+    metrics = collect_source_metrics(root)
+    found = violations(metrics, policy)
+    warnings = structure_warnings(metrics, policy)
+    if warnings:
+        strong = tuple(item for item in warnings if item.startswith("strong:"))
+        print(
+            f"Source structure warnings: {len(warnings)} file(s) are at least "
+            f"{policy.warning_line_limit} lines; responsibility boundaries, not line count, "
+            "decide whether to split."
+        )
+        for item in strong:
+            print(f"- {item}")
     if not found:
         return 0
     print("Source growth violations:")
     for violation in found:
         print(f"- {violation}")
     print(
-        "Split at an owning boundary. Frozen baselines only preserve files that "
-        "already exceeded 500 lines when the cap changed; never add or raise one."
+        "Split at an owning boundary before the absolute limit. A small file that mixes "
+        "authorities still requires separation."
     )
     return 1
 
