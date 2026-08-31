@@ -1,6 +1,6 @@
 # Lobby Votes Slice
 
-Status: active design owner
+Status: completed Rust contract and packaged acceptance
 
 ## Definition
 
