@@ -10,7 +10,11 @@ use agentsassemble_server::{AppState, HostSecret, TicketStore, serve};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
-use tokio::{net::TcpListener, task::JoinHandle};
+use tokio::{
+    net::{TcpListener, TcpStream},
+    task::JoinHandle,
+};
+use tokio_tungstenite::MaybeTlsStream;
 use tokio_util::sync::CancellationToken;
 
 mod support {
@@ -18,7 +22,10 @@ mod support {
     pub mod subscription_proof;
 }
 
-use support::human_invite::{canonical_session_token, fixture, join, open_session_socket, start};
+use support::{
+    human_invite::{canonical_session_token, fixture, join, open_session_socket, start},
+    subscription_proof::AuthenticatedTestSocket,
+};
 
 const HOST_TOKEN: &str = "message-attachment-boundary-host-token-0001";
 const PNG_BASE64: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMQ0bD5DwACRAF4aig0hQAAAABJRU5ErkJggg==";
@@ -237,30 +244,7 @@ async fn human_session_tcp_upload_send_and_read_preserve_scope() {
     .await;
 
     let mut socket = open_session_socket(&client, &server.base_url, session_token).await;
-    socket
-        .send_json(&json!({
-            "op": "command",
-            "request_id": "remote-message-attachment-bind",
-            "action": "message.send",
-            "payload": {"content": "remote file", "attachment_ids": [attachment["id"]]}
-        }))
-        .await;
-    let first = socket.receive_json().await;
-    let second = socket.receive_json().await;
-    assert!([&first, &second].iter().any(|frame| {
-        frame["op"] == "ack" && frame["request_id"] == "remote-message-attachment-bind"
-    }));
-    assert!(
-        [&first, &second].iter().any(|frame| {
-            frame["op"] == "event"
-                && frame["events"].as_array().is_some_and(|events| {
-                    events
-                        .iter()
-                        .any(|event| event["attachments"][0]["id"] == attachment["id"])
-                })
-        }),
-        "attachment event missing from {first} and {second}"
-    );
+    let message_id = bind_remote_attachment(&mut socket, &attachment).await;
 
     let raw_session = read_attachment(
         &client,
@@ -297,10 +281,94 @@ async fn human_session_tcp_upload_send_and_read_preserve_scope() {
     )
     .await;
     assert_eq!(replay.status(), StatusCode::UNAUTHORIZED);
+
+    assert_remote_attachment_deleted(
+        &client,
+        &server.base_url,
+        session_token,
+        &attachment,
+        &message_id,
+        &mut socket,
+    )
+    .await;
     socket.close().await;
     server.stop().await;
 
     assert_read_only_session(&client).await;
+}
+
+async fn bind_remote_attachment(
+    socket: &mut AuthenticatedTestSocket<MaybeTlsStream<TcpStream>>,
+    attachment: &Value,
+) -> String {
+    socket
+        .send_json(&json!({
+            "op": "command",
+            "request_id": "remote-message-attachment-bind",
+            "action": "message.send",
+            "payload": {"content": "remote file", "attachment_ids": [attachment["id"]]}
+        }))
+        .await;
+    let first = socket.receive_json().await;
+    let second = socket.receive_json().await;
+    assert!([&first, &second].iter().any(|frame| {
+        frame["op"] == "ack" && frame["request_id"] == "remote-message-attachment-bind"
+    }));
+    assert!(
+        [&first, &second].iter().any(|frame| {
+            frame["op"] == "event"
+                && frame["events"].as_array().is_some_and(|events| {
+                    events
+                        .iter()
+                        .any(|event| event["attachments"][0]["id"] == attachment["id"])
+                })
+        }),
+        "attachment event missing from {first} and {second}"
+    );
+    [&first, &second]
+        .iter()
+        .find(|frame| frame["op"] == "ack")
+        .and_then(|frame| frame["result"]["event"]["id"].as_str())
+        .unwrap_or_else(|| panic!("attachment message ACK omitted its identity"))
+        .to_owned()
+}
+
+async fn assert_remote_attachment_deleted(
+    client: &Client,
+    base_url: &str,
+    session_token: &str,
+    attachment: &Value,
+    message_id: &str,
+    socket: &mut AuthenticatedTestSocket<MaybeTlsStream<TcpStream>>,
+) {
+    socket
+        .send_json(&json!({
+            "op": "command",
+            "request_id": "remote-message-attachment-delete",
+            "action": "message.delete",
+            "payload": {"event_id": message_id},
+        }))
+        .await;
+    let first = socket.receive_json().await;
+    let second = socket.receive_json().await;
+    assert!([&first, &second].iter().any(|frame| {
+        frame["op"] == "ack"
+            && frame["action"] == "message.delete"
+            && frame["result"]["attachment_ids"][0] == attachment["id"]
+    }));
+    assert!([&first, &second].iter().any(|frame| {
+        frame["op"] == "event" && frame["events"][0]["type"] == "message_deleted"
+    }));
+    let read_ticket = issue_session_attachment_read(
+        client,
+        base_url,
+        session_token,
+        attachment["id"].as_str().unwrap_or_default(),
+    )
+    .await;
+    let deleted =
+        read_attachment(client, base_url, &attachment["download_url"], &read_ticket).await;
+    assert_eq!(deleted.status(), StatusCode::NOT_FOUND);
 }
 
 async fn assert_read_only_session(client: &Client) {
