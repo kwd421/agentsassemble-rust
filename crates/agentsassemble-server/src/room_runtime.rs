@@ -534,7 +534,7 @@ async fn handle_room_input(
             .await;
         }
         RoomInput::Provider(result) => {
-            return Box::pin(handle_provider_result(
+            return handle_provider_result(
                 &context.store,
                 &context.provider_adapter,
                 &context.event_tx,
@@ -542,7 +542,7 @@ async fn handle_room_input(
                 *result,
                 &context.room_tool_ingress,
                 &context.attachment_ingress,
-            ))
+            )
             .await;
         }
         RoomInput::Tool(command) => {

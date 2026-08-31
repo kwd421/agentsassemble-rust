@@ -505,7 +505,7 @@ pub(crate) async fn handle_provider_result(
         );
         return None;
     }
-    match commit_provider_result(store, provider_adapter, result).await {
+    match Box::pin(commit_provider_result(store, provider_adapter, result)).await {
         Ok(commit) => {
             return publish_turn_commit(
                 store,

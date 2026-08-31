@@ -161,6 +161,20 @@ source file. No CPU, memory, disk, or latency improvement is claimed. Focused
 RoomPortal MCP tests, including the authentication/eviction race and raw loopback
 admission/body-limit checks, passed after the split.
 
+The warning-denied workspace check then measured three server async boundaries above
+the 16-KiB `large_futures` threshold: provider-result commit at 16,448 bytes,
+interrupt recovery at 17,088 bytes, and its startup candidate at 17,360 bytes. The
+completed-result owner now boxes the exact commit future and removes the former outer
+box around the whole result handler, retaining one allocation per completed provider
+result rather than adding a second one. Startup and live reconciliation box only the
+exact interrupt-resume future when a durable interrupt effect exists; ordinary
+candidates allocate nothing new. Durable ordering, cancellation points, retained-turn
+release, publication, exact interrupt authority, and failure classification keep the
+same owners and await points. The trade-off is one heap allocation for each recovered
+interrupt effect to bound its caller's stack state. No latency or throughput gain is
+claimed. Warning-denied server Clippy and the complete repository `make verify`
+gate passed with no lint exception after the change.
+
 The cancelled-initialization regression had twice failed before this correction,
 and successful repetitions spent 6.7–7.1 seconds in the test because shutdown could
 wait its complete five-second driver-ownership deadline. The fixture also published
