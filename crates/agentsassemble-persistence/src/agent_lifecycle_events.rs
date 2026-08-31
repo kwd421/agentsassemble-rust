@@ -6,7 +6,10 @@ use serde_json::{Value, json};
 use sqlx::{Sqlite, Transaction};
 use uuid::Uuid;
 
-use crate::{CommandOutcome, PersistenceError, command_admission::store_command_result};
+use crate::{
+    CommandOutcome, PersistenceError, command_admission::store_command_result,
+    room_event_sequence::next_sequence,
+};
 
 pub(crate) async fn append_session_event(
     transaction: &mut Transaction<'_, Sqlite>,
@@ -153,16 +156,4 @@ pub(crate) async fn store_result(
         events,
         deduplicated: false,
     })
-}
-
-async fn next_sequence(
-    transaction: &mut Transaction<'_, Sqlite>,
-    room_id: &str,
-) -> Result<i64, PersistenceError> {
-    Ok(sqlx::query_scalar::<_, i64>(
-        "SELECT COALESCE(MAX(seq), 0) + 1 FROM room_events WHERE room_id = ?",
-    )
-    .bind(room_id)
-    .fetch_one(&mut **transaction)
-    .await?)
 }

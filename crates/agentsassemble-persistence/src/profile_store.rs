@@ -15,6 +15,7 @@ use crate::{
     authority::authorize_session,
     human_session_authority::revalidate_human_session,
     profile_attachments::{authorize_profile_avatar, replace_profile_avatar},
+    room_event_sequence::next_sequence,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -371,12 +372,7 @@ async fn participant_updated_event(
     profile: &UserProfile,
     room_id: String,
 ) -> Result<RoomEvent, PersistenceError> {
-    let seq = sqlx::query_scalar::<_, i64>(
-        "SELECT COALESCE(MAX(seq), 0) + 1 FROM room_events WHERE room_id = ?",
-    )
-    .bind(&room_id)
-    .fetch_one(&mut **transaction)
-    .await?;
+    let seq = next_sequence(transaction, &room_id).await?;
     Ok(RoomEvent {
         v: 1,
         id: Uuid::new_v4().to_string(),

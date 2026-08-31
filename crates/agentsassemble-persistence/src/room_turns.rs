@@ -14,6 +14,7 @@ use crate::{
     command_admission::{admit_non_lifecycle_command, store_command_result},
     human_session_authority::revalidate_human_session,
     message_attachments::{bind_message_attachments, prepare_message_attachment_bindings},
+    room_event_sequence::next_sequence,
     room_write_budget::command_size,
     turn_queue::merge_room_inputs,
 };
@@ -765,8 +766,8 @@ pub(crate) use scheduler::remove_pending_input_reference;
 use scheduler::{assign_available_pending, route_message};
 use support::{
     agent_final_event, clear_active_turn_fields, error_event, insert_event, load_active_room,
-    load_participant, next_sequence, provider_room_principal, public_error_code, rejected,
-    rejection, require_active_turn, session_state_event, turn_finished_event, validate_identifier,
+    load_participant, provider_room_principal, public_error_code, rejected, rejection,
+    require_active_turn, session_state_event, turn_finished_event, validate_identifier,
     validate_input_cursor,
 };
 

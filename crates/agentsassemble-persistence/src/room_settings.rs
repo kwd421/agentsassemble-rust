@@ -12,6 +12,7 @@ use crate::{
     authority::active_room_for_principal,
     command_admission::{admit_non_lifecycle_command, store_command_result},
     room_appearance_assets::transition_room_appearance_references,
+    room_event_sequence::next_sequence,
     room_write_budget::command_size,
 };
 
@@ -142,18 +143,6 @@ fn settings_updated_event(
         message_kind: None,
         extra: BTreeMap::from([("room_settings".to_owned(), json!(public))]),
     }
-}
-
-async fn next_sequence(
-    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    room_id: &str,
-) -> Result<i64, PersistenceError> {
-    Ok(sqlx::query_scalar::<_, i64>(
-        "SELECT COALESCE(MAX(seq), 0) + 1 FROM room_events WHERE room_id = ?",
-    )
-    .bind(room_id)
-    .fetch_one(&mut **transaction)
-    .await?)
 }
 
 fn rejected(code: &'static str, message: impl Into<String>) -> PersistenceError {

@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::{
     PersistenceError, message_search_index::index_lobby_message,
-    turn_authority::active_turn_authority,
+    room_event_sequence::next_sequence, turn_authority::active_turn_authority,
 };
 
 const MAX_PROVIDER_TURN_ID_BYTES: usize = 128;
@@ -180,18 +180,6 @@ pub(crate) async fn replace_event(
         ));
     }
     Ok(())
-}
-
-pub(crate) async fn next_sequence(
-    transaction: &mut Transaction<'_, Sqlite>,
-    room_id: &str,
-) -> Result<i64, PersistenceError> {
-    Ok(sqlx::query_scalar::<_, i64>(
-        "SELECT COALESCE(MAX(seq), 0) + 1 FROM room_events WHERE room_id = ?",
-    )
-    .bind(room_id)
-    .fetch_one(&mut **transaction)
-    .await?)
 }
 
 pub(crate) async fn insert_event(

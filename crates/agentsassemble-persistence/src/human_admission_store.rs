@@ -19,6 +19,7 @@ use crate::{
     human_invite_preflight::{load_invite_and_room, require_credential_binding},
     human_session_authority::fixed_session_fingerprint,
     profile_store::decode_bound_profile,
+    room_event_sequence::next_sequence,
 };
 
 const SESSION_BEARER_CONTEXT: &[u8] = b"agentsassemble-human-session-bearer-v1\0";
@@ -493,12 +494,7 @@ async fn append_participant_joined(
     participant: &Participant,
     now: DateTime<Utc>,
 ) -> Result<RoomEvent, PersistenceError> {
-    let seq = sqlx::query_scalar::<_, i64>(
-        "SELECT COALESCE(MAX(seq), 0) + 1 FROM room_events WHERE room_id = ?",
-    )
-    .bind(&participant.room_id)
-    .fetch_one(&mut **transaction)
-    .await?;
+    let seq = next_sequence(transaction, &participant.room_id).await?;
     let event = RoomEvent {
         v: 1,
         id: Uuid::new_v4().to_string(),

@@ -140,3 +140,17 @@ event, redaction, deletion, budget reservation, or publication.
 - Verification: repository-wide source search found one remaining production
   `INSERT INTO command_results`; focused mutation and role tests and warning-denied persistence
   Clippy passed with unchanged exact replay, rollback, event, and budget behavior.
+
+## Room event-sequence owner correction
+
+- Prior structure: the same `MAX(seq) + 1` SQLite allocation was independently defined by room
+  turns, Agent Session lifecycle and creation, room settings, human admission, and profile
+  projection. The process writer lease and owning SQLite transaction kept current results ordered,
+  but a future query change could have split the durable cursor contract silently.
+- Intent and preserved contract: one small `room_event_sequence` module now owns that exact query;
+  every product writer still allocates inside its existing transaction and owns event construction,
+  insert, rollback, and publication. The change adds no sequence cache, counter table, lock, trait,
+  migration, or alternate authority and does not alter the existing single-writer cost.
+- Verification: repository-wide source search found one remaining production allocator query; the
+  full persistence test suite, structure gates, and warning-denied Clippy passed with unchanged
+  contiguous cursor, replay, rollback, profile, admission, settings, and lifecycle behavior.

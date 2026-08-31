@@ -16,10 +16,9 @@ use crate::{
     message_attachments::{delete_bound_message_attachments, message_attachments_from_event},
     message_pins::remove_lobby_message_pin,
     message_search_index::{remove_lobby_message_index, replace_lobby_message_index},
+    room_event_sequence::next_sequence,
     room_turns::remove_pending_input_reference,
-    room_turns::support::{
-        insert_event, load_event, load_participant, next_sequence, replace_event,
-    },
+    room_turns::support::{insert_event, load_event, load_participant, replace_event},
     room_votes::delete_vote_projection,
     room_write_budget::command_size,
 };

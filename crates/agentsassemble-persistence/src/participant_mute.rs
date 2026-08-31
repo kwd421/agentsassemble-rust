@@ -18,9 +18,10 @@ use crate::{
     command_admission::{admit_non_lifecycle_command, store_command_result},
     provider_turn_effect::prepare_interrupt_effect,
     provider_turn_execution::load_execution_in,
+    room_event_sequence::next_sequence,
     room_turns::{
         assign_pending_in,
-        support::{insert_event, load_active_room, load_participant, next_sequence},
+        support::{insert_event, load_active_room, load_participant},
     },
     room_write_budget::command_size,
     turn_authority::active_turn_authority,

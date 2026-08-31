@@ -15,7 +15,8 @@ use crate::{
     authority::active_room_for_principal,
     command_admission::inspect_non_lifecycle_command,
     human_session_authority::{fixed_session_fingerprint, revalidate_human_session},
-    room_turns::support::{insert_event, load_participant, next_sequence},
+    room_event_sequence::next_sequence,
+    room_turns::support::{insert_event, load_participant},
 };
 
 pub(crate) const PARTICIPANT_LEAVE_ACTION: &str = "participant.leave";

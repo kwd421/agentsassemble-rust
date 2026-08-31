@@ -15,7 +15,7 @@ pub(super) async fn assert_projection(
         .unwrap_or_else(|error| panic!("begin private-message check: {error}"));
     let mut excluded = first.outcome.event.clone();
     excluded.id = "owner-only-search-event".to_owned();
-    excluded.seq = super::super::support::next_sequence(&mut transaction, "general")
+    excluded.seq = crate::room_event_sequence::next_sequence(&mut transaction, "general")
         .await
         .unwrap_or_else(|error| panic!("sequence owner-only message: {error}"));
     excluded
@@ -25,7 +25,7 @@ pub(super) async fn assert_projection(
         .await
         .unwrap_or_else(|error| panic!("insert owner-only message: {error}"));
     excluded.id = "deleted-search-event".to_owned();
-    excluded.seq = super::super::support::next_sequence(&mut transaction, "general")
+    excluded.seq = crate::room_event_sequence::next_sequence(&mut transaction, "general")
         .await
         .unwrap_or_else(|error| panic!("sequence deleted message: {error}"));
     excluded.extra.remove("visibility");

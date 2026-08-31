@@ -15,7 +15,8 @@ use crate::{
     authority::active_room_for_principal,
     command_admission::{admit_non_lifecycle_command, store_command_result},
     human_session_authority::revalidate_human_session,
-    room_turns::support::{insert_event, load_active_room, load_participant, next_sequence},
+    room_event_sequence::next_sequence,
+    room_turns::support::{insert_event, load_active_room, load_participant},
     room_write_budget::{command_size, reserve_room_write_budget},
     turn_authority::require_provider_room_tool_authority,
 };

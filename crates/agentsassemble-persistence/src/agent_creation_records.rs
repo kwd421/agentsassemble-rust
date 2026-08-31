@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use crate::{
     PersistenceError, persona_library::resolve_persona_selection,
-    sqlite::MAX_AGENT_SESSIONS_PER_ROOM,
+    room_event_sequence::next_sequence, sqlite::MAX_AGENT_SESSIONS_PER_ROOM,
 };
 
 pub(crate) struct AgentCreationRecords {
@@ -348,18 +348,6 @@ async fn latest_message_cursor(
             Ok((event.id, event.seq))
         },
     )
-}
-
-async fn next_sequence(
-    transaction: &mut Transaction<'_, Sqlite>,
-    room_id: &str,
-) -> Result<i64, PersistenceError> {
-    Ok(sqlx::query_scalar::<_, i64>(
-        "SELECT COALESCE(MAX(seq), 0) + 1 FROM room_events WHERE room_id = ?",
-    )
-    .bind(room_id)
-    .fetch_one(&mut **transaction)
-    .await?)
 }
 
 fn rejected(code: &'static str, message: impl Into<String>) -> PersistenceError {
