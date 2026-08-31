@@ -16,6 +16,8 @@ const AGENT_ID: &str = "codex-00000000-0000-5000-8000-000000000001";
 const SECOND_AGENT_ID: &str = "codex-00000000-0000-5000-8000-000000000002";
 const SPEAKER_AGENT_ID: &str = "codex-00000000-0000-5000-8000-000000000003";
 
+#[path = "agent_pause_tests.rs"]
+mod agent_pause_tests;
 #[path = "message_attachment_binding_tests.rs"]
 mod message_attachment_binding_tests;
 #[path = "message_mutation_queue_tests.rs"]
