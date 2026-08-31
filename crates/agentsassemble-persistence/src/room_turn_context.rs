@@ -358,7 +358,7 @@ fn render_observation_input(
     let mut sections = vec![
         format!("[{mode} shared-room observation]"),
         format!("Your room identity is {} in {}.", session.public.display_name, room.label),
-        "Call `read_discussion` before deciding. Then finish with exactly one `publish_message` for a substantive reply or `decline_to_speak` when you have nothing useful to add. Ordinary assistant final text is not a room publication.".to_owned(),
+        "Call `read_discussion` before deciding. Then finish with exactly one terminal action exposed by the room transport, choosing the action that fulfills the current room request. Ordinary assistant final text is not a room publication.".to_owned(),
     ];
     if tabletop_tools {
         sections.push(if session.public.provider_kind == "antigravity_live_session" {

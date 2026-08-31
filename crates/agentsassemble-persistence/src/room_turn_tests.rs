@@ -123,6 +123,8 @@ async fn ordered_assignment_and_finalization_are_durable_and_exact() {
     assert_eq!(first_assignment.session.public.session_id, AGENT_ID);
     assert!(first_assignment.room_view.contains("take the first turn"));
     assert!(first_assignment.provider_input.contains("read_discussion"));
+    let provider_input = &first_assignment.provider_input;
+    assert!(provider_input.contains("one terminal action exposed by the room transport"));
     let replay = store
         .execute_message_with_turn(&principal, "message-1", "message.send", &first_payload)
         .await
