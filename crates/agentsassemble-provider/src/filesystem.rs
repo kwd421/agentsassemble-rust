@@ -18,7 +18,8 @@ mod codex_executable;
 mod executable_staging;
 
 pub(crate) use codex_executable::{
-    bind_codex_executable, codex_executable_identity, resolve_codex_executable,
+    bind_codex_executable, codex_code_mode_host_path, codex_executable_identity,
+    resolve_codex_executable,
 };
 #[cfg(unix)]
 use executable_staging::ExecutableStaging;

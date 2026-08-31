@@ -1,9 +1,13 @@
-use std::{os::unix::fs::PermissionsExt, path::Path, time::Duration};
+use std::{
+    os::unix::fs::PermissionsExt,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 use agentsassemble_domain::DurableAgentSession;
 
 use super::{ProviderAdapter, ProviderRuntimeObservation};
-use crate::filesystem::{canonical_workspace, executable_identity};
+use crate::filesystem::{canonical_workspace, codex_executable_identity, executable_identity};
 use crate::profile::runtime_profile_key;
 use crate::runtime::test_cleanup::{ExactProcessCleanup, ExactProcessGroupCleanup};
 use crate::test_support::durable_session;
@@ -77,11 +81,7 @@ async fn guardian_runs_outside_the_server_process_group() {
             lease.token(),
             crate::guardian::ProviderLaunchConfig {
                 provider: &provider,
-                arguments: &[
-                    "--exact".to_owned(),
-                    "runtime::tests::inert_provider_entry".to_owned(),
-                    "--nocapture".to_owned(),
-                ],
+                arguments: &inert_provider_arguments(),
                 environment: &[(
                     "AGENTSASSEMBLE_TEST_CWD_REPORT".to_owned(),
                     cwd_report.to_string_lossy().into_owned(),
@@ -93,6 +93,7 @@ async fn guardian_runs_outside_the_server_process_group() {
                     provider_stderr.into(),
                 ],
                 fork_policy: crate::guardian::ProviderForkPolicy::Deny,
+                codex_code_mode_host: None,
             },
         )
         .unwrap_or_else(|error| panic!("configure guardian test command: {error}"));
@@ -150,6 +151,14 @@ fn assert_provider_working_directory(report: &Path, expected: &Path) {
     );
 }
 
+fn inert_provider_arguments() -> [String; 3] {
+    [
+        "--exact".to_owned(),
+        "runtime::tests::inert_provider_entry".to_owned(),
+        "--nocapture".to_owned(),
+    ]
+}
+
 #[tokio::test]
 async fn guardian_death_without_a_cleanup_receipt_never_proves_gone() {
     let _serial = RUNTIME_TEST_LOCK.lock().await;
@@ -180,11 +189,7 @@ async fn guardian_death_without_a_cleanup_receipt_never_proves_gone() {
             lease.token(),
             crate::guardian::ProviderLaunchConfig {
                 provider: &provider,
-                arguments: &[
-                    "--exact".to_owned(),
-                    "runtime::tests::inert_provider_entry".to_owned(),
-                    "--nocapture".to_owned(),
-                ],
+                arguments: &inert_provider_arguments(),
                 environment: &[],
                 working_directory: Path::new(env!("CARGO_MANIFEST_DIR")),
                 pipes: [
@@ -193,6 +198,7 @@ async fn guardian_death_without_a_cleanup_receipt_never_proves_gone() {
                     provider_stderr.into(),
                 ],
                 fork_policy: crate::guardian::ProviderForkPolicy::Deny,
+                codex_code_mode_host: None,
             },
         )
         .unwrap_or_else(|error| panic!("configure guardian death command: {error}"));
@@ -333,6 +339,128 @@ async fn codex_runtime_is_initialized_reused_and_stopped_by_exact_owner() {
         .shutdown()
         .await
         .unwrap_or_else(|error| panic!("shutdown runtime owner: {error}"));
+}
+
+#[tokio::test]
+async fn codex_code_mode_host_stays_in_the_guardian_process_group() {
+    let _serial = RUNTIME_TEST_LOCK.lock().await;
+    let directory = tempfile::tempdir()
+        .unwrap_or_else(|error| panic!("create code-mode host fixture: {error}"));
+    let (session, arguments_report, host_pid_report) =
+        code_mode_host_fixture(directory.path()).await;
+    let adapter = ProviderAdapter::new();
+    let started = adapter.start(&session).await.unwrap_or_else(|error| {
+        panic!(
+            "start code-mode host fixture: {error}; arguments={:?}; host_pid={:?}",
+            std::fs::read_to_string(&arguments_report),
+            std::fs::read_to_string(&host_pid_report)
+        )
+    });
+    wait_until(super::fixture::FIXTURE_READINESS_TIMEOUT, || {
+        arguments_report.exists() && host_pid_report.exists()
+    })
+    .await;
+    let arguments = std::fs::read_to_string(&arguments_report)
+        .unwrap_or_else(|error| panic!("read provider arguments: {error}"))
+        .lines()
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    let host_argument = arguments
+        .windows(2)
+        .find_map(|pair| (pair[0] == "--code-mode-host").then_some(pair[1].as_str()))
+        .unwrap_or_else(|| panic!("provider did not receive the code-mode host endpoint"));
+    assert_eq!(host_argument, "ws://127.0.0.1:43123");
+    let host_pid = std::fs::read_to_string(&host_pid_report)
+        .ok()
+        .and_then(|value| value.parse::<i32>().ok())
+        .and_then(rustix::process::Pid::from_raw)
+        .unwrap_or_else(|| panic!("code-mode host pid is invalid"));
+    let mut host_cleanup = ExactProcessCleanup::new(host_pid.as_raw_pid().cast_unsigned());
+    assert_ne!(
+        rustix::process::getpgid(Some(host_pid))
+            .unwrap_or_else(|error| panic!("inspect code-mode host group: {error}")),
+        host_pid
+    );
+    adapter
+        .stop(
+            &session.public.room_id,
+            &session.public.session_id,
+            &started.runtime_handle_id,
+            &started.runtime_owner_id,
+            &started.runtime_lease_token,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("stop code-mode host fixture: {error}"));
+    wait_until(Duration::from_secs(2), || {
+        matches!(
+            rustix::process::test_kill_process(host_pid),
+            Err(rustix::io::Errno::SRCH)
+        )
+    })
+    .await;
+    host_cleanup.disarm();
+    adapter
+        .release_confirmed_stop(
+            &session.public.room_id,
+            &session.public.session_id,
+            &started.runtime_handle_id,
+            &started.runtime_owner_id,
+            &started.runtime_lease_token,
+        )
+        .await;
+    adapter
+        .shutdown()
+        .await
+        .unwrap_or_else(|error| panic!("shutdown code-mode host fixture owner: {error}"));
+}
+
+async fn code_mode_host_fixture(root: &Path) -> (DurableAgentSession, PathBuf, PathBuf) {
+    let executable = root.join("codex");
+    let companion = root.join("codex-code-mode-host");
+    let arguments_report = root.join("provider-arguments");
+    let host_pid_report = root.join("code-mode-host-pid");
+    let provider_script = format!(
+        "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\nIFS= read -r initialize\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nIFS= read -r thread\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{{\"thread\":{{\"id\":\"thread-1\"}}}}}}'\nIFS= read -r forever\n",
+        arguments_report.display()
+    );
+    let host_script = format!(
+        "#!/bin/sh\nprintf '%s\\n' 'SIDE_CAR_PROTOCOL_LEAK' >&5\nprintf '%s' \"$$\" > '{}'\nprintf '%s\\n' 'ws://127.0.0.1:43123'\nexec /bin/sleep 30\n",
+        host_pid_report.display()
+    );
+    for (path, contents) in [
+        (&executable, provider_script.as_bytes()),
+        (&companion, host_script.as_bytes()),
+    ] {
+        std::fs::write(path, contents)
+            .unwrap_or_else(|error| panic!("write code-mode host fixture: {error}"));
+        let mut permissions = std::fs::metadata(path)
+            .unwrap_or_else(|error| panic!("read code-mode host fixture mode: {error}"))
+            .permissions();
+        permissions.set_mode(0o700);
+        std::fs::set_permissions(path, permissions)
+            .unwrap_or_else(|error| panic!("make code-mode host fixture executable: {error}"));
+    }
+    let executable = executable
+        .canonicalize()
+        .unwrap_or_else(|error| panic!("canonicalize code-mode host fixture: {error}"))
+        .to_string_lossy()
+        .into_owned();
+    let executable_identity = codex_executable_identity(executable.clone())
+        .await
+        .unwrap_or_else(|error| panic!("identify code-mode host fixture: {error:?}"));
+    let (workspace, workspace_identity) = canonical_workspace(root.to_string_lossy().into_owned())
+        .await
+        .unwrap_or_else(|error| panic!("identify code-mode host workspace: {error:?}"));
+    (
+        session(
+            executable,
+            executable_identity,
+            &workspace,
+            &workspace_identity,
+        ),
+        arguments_report,
+        host_pid_report,
+    )
 }
 
 async fn assert_adopted(

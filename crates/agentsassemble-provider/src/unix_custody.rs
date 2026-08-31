@@ -103,6 +103,7 @@ impl UnixProcessCustody {
             provider_environment,
             working_directory,
             ProviderForkPolicy::Deny,
+            None,
         )
         .await
     }
@@ -127,6 +128,33 @@ impl UnixProcessCustody {
             } else {
                 ProviderForkPolicy::Deny
             },
+            None,
+        )
+        .await
+    }
+
+    pub(crate) async fn start_codex(
+        runtime_lease: &HeldRuntimeLease,
+        launch: &GuardianLaunch,
+        provider: &BoundExecutable,
+        provider_arguments: &[String],
+        provider_environment: &[(String, String)],
+        working_directory: &std::path::Path,
+        code_mode_host: Option<&std::path::Path>,
+    ) -> Result<(Self, UnixProviderPipes), DriverLaunchError> {
+        Self::start_pipes(
+            runtime_lease,
+            launch,
+            provider,
+            provider_arguments,
+            provider_environment,
+            working_directory,
+            if provider.allows_child_processes() {
+                ProviderForkPolicy::AllowInGroup
+            } else {
+                ProviderForkPolicy::Deny
+            },
+            code_mode_host,
         )
         .await
     }
@@ -140,6 +168,7 @@ impl UnixProcessCustody {
         provider_environment: &[(String, String)],
         working_directory: &std::path::Path,
         fork_policy: ProviderForkPolicy,
+        codex_code_mode_host: Option<&std::path::Path>,
     ) -> Result<(Self, UnixProviderPipes), DriverLaunchError> {
         let (provider_stdin, stdin) = provider_pipe()?;
         let (stdout, provider_stdout) = provider_pipe()?;
@@ -154,6 +183,7 @@ impl UnixProcessCustody {
                 working_directory,
                 pipes: [provider_stdin, provider_stdout, provider_stderr],
                 fork_policy,
+                codex_code_mode_host,
             },
         )
         .await
@@ -201,6 +231,7 @@ impl UnixProcessCustody {
                 working_directory,
                 pipes: [provider_stdin, provider_stdout, provider_stderr],
                 fork_policy: ProviderForkPolicy::AllowInGroup,
+                codex_code_mode_host: None,
             },
         )
         .await

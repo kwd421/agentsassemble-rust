@@ -2,7 +2,7 @@ use std::{
     env,
     fs::{File, OpenOptions},
     io::{self, Read, Seek},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use agentsassemble_domain::{stable_bundle_identity, stable_content_identity};
@@ -13,6 +13,36 @@ use std::os::unix::fs::PermissionsExt;
 use super::{BoundExecutable, FilesystemFailure};
 
 const CODEX_COMPANION: &str = "codex-code-mode-host";
+
+pub(crate) fn codex_code_mode_host_path(
+    executable: &BoundExecutable,
+) -> io::Result<Option<PathBuf>> {
+    if executable.companion_files.is_empty() {
+        #[cfg(test)]
+        return Ok(None);
+        #[cfg(not(test))]
+        return Err(io::Error::other(
+            "Codex code-mode host authority is unavailable",
+        ));
+    }
+    if executable.companion_files.len() != 1 {
+        return Err(io::Error::other(
+            "Codex code-mode host authority is ambiguous",
+        ));
+    }
+    let path = Path::new(executable.launch_path())
+        .parent()
+        .ok_or_else(|| io::Error::other("Codex bundle directory is unavailable"))?
+        .join(codex_companion_name());
+    let staged = Handle::from_path(&path)?;
+    let held = Handle::from_file(executable.companion_files[0].try_clone()?)?;
+    if staged != held {
+        return Err(io::Error::other(
+            "Codex code-mode host authority changed after binding",
+        ));
+    }
+    Ok(Some(path))
+}
 
 pub(crate) async fn resolve_codex_executable() -> Result<Option<(String, String)>, FilesystemFailure>
 {

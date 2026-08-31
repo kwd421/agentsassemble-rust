@@ -16,6 +16,8 @@ mod antigravity_unix;
 mod antigravity_windows;
 mod catalog;
 mod codex;
+#[cfg(unix)]
+mod codex_code_mode_host;
 mod codex_identity;
 mod configuration;
 mod credentials;

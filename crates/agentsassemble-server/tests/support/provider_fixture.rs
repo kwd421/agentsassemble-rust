@@ -15,6 +15,12 @@ pub fn write_codex_bundle(root: &Path, fixture: &[u8]) -> (String, String) {
         "codex-code-mode-host"
     });
     write_executable(&executable, fixture);
+    #[cfg(unix)]
+    write_executable(
+        &companion,
+        b"#!/bin/sh\nprintf '%s\\n' 'ws://127.0.0.1:43123'\nexec /usr/bin/tail -f /dev/null\n",
+    );
+    #[cfg(not(unix))]
     write_executable(&companion, b"codex companion fixture");
     let executable = executable
         .canonicalize()

@@ -121,11 +121,14 @@ impl CodexDriver {
         .map_err(|_| executable_authority_error())?;
         #[cfg(unix)]
         {
+            let code_mode_host = crate::filesystem::codex_code_mode_host_path(&executable)
+                .map_err(|_| executable_authority_error())?;
             return Self::spawn_unix(
                 room_portal,
                 executable,
                 arguments,
                 std::path::Path::new(&session.workspace),
+                code_mode_host.as_deref(),
                 runtime_lease,
                 guardian_launch,
             )
@@ -193,17 +196,19 @@ impl CodexDriver {
         executable: crate::filesystem::BoundExecutable,
         arguments: Vec<String>,
         workspace: &std::path::Path,
+        code_mode_host: Option<&std::path::Path>,
         runtime_lease: &HeldRuntimeLease,
         guardian_launch: &GuardianLaunch,
     ) -> Result<Self, DriverLaunchError> {
         let provider_environment = room_portal.provider_environment();
-        let (process_group, pipes) = UnixProcessCustody::start_with_children(
+        let (process_group, pipes) = UnixProcessCustody::start_codex(
             runtime_lease,
             guardian_launch,
             &executable,
             &arguments,
             &provider_environment,
             workspace,
+            code_mode_host,
         )
         .await?;
         let stderr_task = tokio::spawn(drain_stderr(pipes.stderr));

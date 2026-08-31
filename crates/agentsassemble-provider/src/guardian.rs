@@ -182,6 +182,7 @@ impl MacProviderHistory {
 struct ProviderLaunch {
     executable: String,
     inherited_executable_fd: bool,
+    codex_code_mode_host: Option<String>,
     arguments: Vec<String>,
     environment: Vec<(String, String)>,
     working_directory: String,
@@ -194,6 +195,7 @@ pub(crate) struct ProviderLaunchConfig<'a> {
     pub(crate) working_directory: &'a Path,
     pub(crate) pipes: [OwnedFd; 3],
     pub(crate) fork_policy: ProviderForkPolicy,
+    pub(crate) codex_code_mode_host: Option<&'a Path>,
 }
 
 #[derive(Clone)]
@@ -245,6 +247,7 @@ impl GuardianLaunch {
             working_directory,
             pipes: [provider_stdin, provider_stdout, provider_stderr],
             fork_policy,
+            codex_code_mode_host,
         } = config;
 
         let mut command = tokio::process::Command::new(self.executable.launch_path());
@@ -267,6 +270,7 @@ impl GuardianLaunch {
         let provider_launch = ProviderLaunch {
             executable: provider.launch_path().to_owned(),
             inherited_executable_fd: provider.requires_inherited_executable_fd(),
+            codex_code_mode_host: codex_code_mode_host.map(|path| path.to_string_lossy().into()),
             arguments: provider_arguments.to_vec(),
             environment: provider_environment.to_vec(),
             working_directory: working_directory
@@ -671,6 +675,10 @@ fn run_provider_launcher(lease_token: &str) -> io::Result<()> {
         || launch.arguments.len() > 256
         || launch.environment.len() > 64
         || launch.working_directory.len() > 4096
+        || launch
+            .codex_code_mode_host
+            .as_ref()
+            .is_some_and(|path| path.is_empty() || path.len() > 4096)
         || launch.environment.iter().any(|(name, value)| {
             name.is_empty()
                 || name.len() > 128
@@ -692,9 +700,39 @@ fn run_provider_launcher(lease_token: &str) -> io::Result<()> {
     }
     let pid = rustix::process::getpid();
     rustix::process::kill_process(pid, Signal::STOP)?;
+    let code_mode_host = launch
+        .codex_code_mode_host
+        .as_deref()
+        .map(|executable| {
+            crate::codex_code_mode_host::CodexCodeModeHost::start(
+                Path::new(executable),
+                working_directory,
+                lease_token,
+                open_inherited_fd(PROVIDER_STDERR_FD, true)?,
+            )
+        })
+        .transpose()?;
     let mut command = Command::new(&launch.executable);
+    if let Some(host) = &code_mode_host {
+        let Some((subcommand, arguments)) = launch.arguments.split_first() else {
+            return Err(io::Error::other(
+                "Codex app-server arguments are unavailable",
+            ));
+        };
+        if subcommand != "app-server" {
+            return Err(io::Error::other(
+                "Codex code-mode host requires the app-server runtime",
+            ));
+        }
+        command
+            .arg(subcommand)
+            .arg("--code-mode-host")
+            .arg(host.endpoint())
+            .args(arguments);
+    } else {
+        command.args(&launch.arguments);
+    }
     command
-        .args(&launch.arguments)
         .current_dir(working_directory)
         .stdin(Stdio::from(open_inherited_fd(PROVIDER_STDIN_FD, false)?))
         .stdout(Stdio::from(open_inherited_fd(PROVIDER_STDOUT_FD, true)?))
