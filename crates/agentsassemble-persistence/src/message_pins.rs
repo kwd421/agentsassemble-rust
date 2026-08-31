@@ -9,8 +9,22 @@ use crate::{
     HumanSessionAuthorization, PersistenceError, SqliteStore,
     human_session_authority::revalidate_human_session,
     message_attachments::{MessageAttachmentMetadata, message_attachments_from_event},
+    room_turns::support::load_event,
     room_user_identity::current_local_room_principal,
 };
+
+pub(crate) async fn remove_lobby_message_pin(
+    transaction: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    event_id: &str,
+) -> Result<(), PersistenceError> {
+    sqlx::query("DELETE FROM room_message_pins WHERE room_id = ? AND event_id = ?")
+        .bind(room_id)
+        .bind(event_id)
+        .execute(&mut **transaction)
+        .await?;
+    Ok(())
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PinnedLobbyMessage {
@@ -197,24 +211,10 @@ async fn load_target_message(
     room_id: &str,
     event_id: &str,
 ) -> Result<RoomEvent, PersistenceError> {
-    let rows = sqlx::query(
-        "SELECT seq, event_json FROM room_events WHERE room_id = ? AND json_extract(event_json, '$.id') = ? LIMIT 2",
-    )
-    .bind(room_id)
-    .bind(event_id)
-    .fetch_all(&mut **transaction)
-    .await?;
-    if rows.len() != 1 {
-        return Err(if rows.is_empty() {
-            rejected("message_missing", "The message was not found.")
-        } else {
-            invalid_state("Stored room event identity is not unique.")
-        });
-    }
-    let row = &rows[0];
-    let seq = row.get::<i64, _>("seq");
-    let event: RoomEvent = serde_json::from_str(row.get::<String, _>("event_json").as_str())?;
-    let _ = require_message_event(&event, room_id, event_id, seq)?;
+    let event = load_event(transaction, room_id, event_id)
+        .await?
+        .ok_or_else(|| rejected("message_missing", "The message was not found."))?;
+    let _ = require_message_event(&event, room_id, event_id, event.seq)?;
     Ok(event)
 }
 

@@ -191,6 +191,26 @@ pub(crate) async fn apply_vote_command(
     }
 }
 
+pub(crate) async fn delete_vote_projection(
+    transaction: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    vote_id: &str,
+    poll_seq: i64,
+) -> Result<(), PersistenceError> {
+    let result = sqlx::query(
+        "DELETE FROM room_vote_states WHERE room_id = ? AND vote_id = ? AND poll_seq = ?",
+    )
+    .bind(room_id)
+    .bind(vote_id)
+    .bind(poll_seq)
+    .execute(&mut **transaction)
+    .await?;
+    if result.rows_affected() != 1 {
+        return Err(invalid_vote_state());
+    }
+    Ok(())
+}
+
 async fn insert_vote_state(
     transaction: &mut Transaction<'_, Sqlite>,
     event: &RoomEvent,

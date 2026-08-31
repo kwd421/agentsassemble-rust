@@ -116,6 +116,39 @@ pub(crate) fn message_attachment_ids_from_events<'a>(
     Ok(ids)
 }
 
+pub(crate) async fn delete_bound_message_attachments(
+    transaction: &mut Transaction<'_, Sqlite>,
+    event: &RoomEvent,
+) -> Result<Vec<String>, PersistenceError> {
+    let mut expected = message_attachments_from_event(event)?
+        .into_iter()
+        .map(|attachment| attachment.id)
+        .collect::<Vec<_>>();
+    expected.sort_unstable();
+    let mut stored = sqlx::query_scalar::<_, String>(
+        "SELECT attachment_id FROM room_message_attachments WHERE room_id = ? AND event_seq = ? AND state = 'bound' ORDER BY attachment_id",
+    )
+    .bind(&event.room_id)
+    .bind(event.seq)
+    .fetch_all(&mut **transaction)
+    .await?;
+    stored.sort_unstable();
+    if stored != expected {
+        return Err(invalid_attachment_state());
+    }
+    let result = sqlx::query(
+        "DELETE FROM room_message_attachments WHERE room_id = ? AND event_seq = ? AND state = 'bound'",
+    )
+    .bind(&event.room_id)
+    .bind(event.seq)
+    .execute(&mut **transaction)
+    .await?;
+    if usize::try_from(result.rows_affected()).ok() != Some(expected.len()) {
+        return Err(invalid_attachment_state());
+    }
+    Ok(expected)
+}
+
 pub(crate) async fn prepare_message_attachment_bindings(
     transaction: &mut Transaction<'_, Sqlite>,
     principal: &AuthenticatedPrincipal,

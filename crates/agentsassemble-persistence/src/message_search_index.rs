@@ -43,6 +43,32 @@ pub(crate) async fn index_lobby_message(
     Ok(())
 }
 
+pub(crate) async fn replace_lobby_message_index(
+    transaction: &mut Transaction<'_, Sqlite>,
+    event: &RoomEvent,
+) -> Result<(), PersistenceError> {
+    remove_lobby_message_index(transaction, event).await?;
+    index_lobby_message(transaction, event).await
+}
+
+pub(crate) async fn remove_lobby_message_index(
+    transaction: &mut Transaction<'_, Sqlite>,
+    event: &RoomEvent,
+) -> Result<(), PersistenceError> {
+    let result = sqlx::query(
+        "DELETE FROM room_message_search_records WHERE room_id = ? AND event_seq = ? AND event_id = ?",
+    )
+    .bind(&event.room_id)
+    .bind(event.seq)
+    .bind(&event.id)
+    .execute(&mut **transaction)
+    .await?;
+    if result.rows_affected() != 1 {
+        return Err(invalid_search_event());
+    }
+    Ok(())
+}
+
 pub(crate) fn searchable_lobby_message(
     event: &RoomEvent,
 ) -> Result<Option<SearchableLobbyMessage>, PersistenceError> {

@@ -136,16 +136,50 @@ pub(crate) async fn load_event(
     room_id: &str,
     event_id: &str,
 ) -> Result<Option<RoomEvent>, PersistenceError> {
-    let value = sqlx::query_scalar::<_, String>(
-        "SELECT event_json FROM room_events WHERE room_id = ? AND json_extract(event_json, '$.id') = ? LIMIT 1",
+    let rows = sqlx::query(
+        "SELECT seq, event_json FROM room_events WHERE room_id = ? AND json_extract(event_json, '$.id') = ? LIMIT 2",
     )
     .bind(room_id)
     .bind(event_id)
-    .fetch_optional(&mut **transaction)
+    .fetch_all(&mut **transaction)
     .await?;
-    value
-        .map(|value| serde_json::from_str(&value).map_err(PersistenceError::from))
-        .transpose()
+    if rows.len() > 1 {
+        return Err(rejected(
+            "invalid_state",
+            "Stored room event identity is not unique.",
+        ));
+    }
+    let Some(row) = rows.first() else {
+        return Ok(None);
+    };
+    let sequence = row.get::<i64, _>("seq");
+    let event: RoomEvent = serde_json::from_str(row.get::<String, _>("event_json").as_str())?;
+    if event.room_id != room_id || event.id != event_id || event.seq != sequence {
+        return Err(rejected(
+            "invalid_state",
+            "Stored room event identity is inconsistent.",
+        ));
+    }
+    Ok(Some(event))
+}
+
+pub(crate) async fn replace_event(
+    transaction: &mut Transaction<'_, Sqlite>,
+    event: &RoomEvent,
+) -> Result<(), PersistenceError> {
+    let result = sqlx::query("UPDATE room_events SET event_json = ? WHERE room_id = ? AND seq = ?")
+        .bind(serde_json::to_string(event)?)
+        .bind(&event.room_id)
+        .bind(event.seq)
+        .execute(&mut **transaction)
+        .await?;
+    if result.rows_affected() != 1 {
+        return Err(rejected(
+            "invalid_state",
+            "Stored room event disappeared during its mutation.",
+        ));
+    }
+    Ok(())
 }
 
 pub(crate) async fn next_sequence(
