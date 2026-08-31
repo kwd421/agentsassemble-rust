@@ -26,7 +26,7 @@ GENERATED_LOCKFILES = frozenset({"Cargo.lock", "package-lock.json"})
 class SourceGrowthPolicy:
     warning_line_limit: int
     strong_warning_line_limit: int
-    hard_line_limit: int
+    default_line_limit: int
     new_file_byte_limit: int
     max_logical_line_bytes: int
 
@@ -47,14 +47,14 @@ def load_policy(repository_root: Path) -> SourceGrowthPolicy:
         raise ValueError("Source growth policy needs [policy].")
     warning_limit = policy.get("warning_line_limit")
     strong_warning_limit = policy.get("strong_warning_line_limit")
-    hard_limit = policy.get("hard_line_limit")
+    default_limit = policy.get("default_line_limit")
     if any(
         isinstance(limit, bool) or not isinstance(limit, int) or limit < 1
-        for limit in (warning_limit, strong_warning_limit, hard_limit)
+        for limit in (warning_limit, strong_warning_limit, default_limit)
     ):
         raise ValueError("Source line thresholds must be positive integers.")
-    if not warning_limit < strong_warning_limit < hard_limit:
-        raise ValueError("Source line thresholds must increase from warning to hard limit.")
+    if not warning_limit < strong_warning_limit < default_limit:
+        raise ValueError("Source line thresholds must increase from warning to default limit.")
     byte_limit = policy.get("new_file_byte_limit")
     logical_line_limit = policy.get("max_logical_line_bytes")
     if isinstance(byte_limit, bool) or not isinstance(byte_limit, int) or byte_limit < 1:
@@ -68,7 +68,7 @@ def load_policy(repository_root: Path) -> SourceGrowthPolicy:
     return SourceGrowthPolicy(
         warning_limit,
         strong_warning_limit,
-        hard_limit,
+        default_limit,
         byte_limit,
         logical_line_limit,
     )
@@ -115,10 +115,10 @@ def collect_line_counts(repository_root: Path) -> dict[str, int]:
 def violations(metrics: Mapping[str, SourceMetric], policy: SourceGrowthPolicy) -> tuple[str, ...]:
     found: list[str] = []
     for relative, metric in sorted(metrics.items()):
-        if metric.lines > policy.hard_line_limit:
+        if metric.lines > policy.default_line_limit:
             found.append(
-                f"{relative}: {metric.lines} lines exceeds the absolute limit of "
-                f"{policy.hard_line_limit}"
+                f"{relative}: {metric.lines} lines exceeds the default limit of "
+                f"{policy.default_line_limit}"
             )
         if metric.bytes > policy.new_file_byte_limit:
             found.append(
@@ -136,12 +136,12 @@ def structure_warnings(
 ) -> tuple[str, ...]:
     found: list[str] = []
     for relative, metric in sorted(metrics.items()):
-        if metric.lines > policy.hard_line_limit:
+        if metric.lines > policy.default_line_limit:
             continue
         if metric.lines >= policy.strong_warning_line_limit:
             found.append(
-                f"strong: {relative}: {metric.lines} lines requires an especially strict "
-                "single-responsibility review"
+                f"strong: {relative}: {metric.lines} lines is a strong split candidate; "
+                "keep it only when one state and invariant owner remains cohesive"
             )
         elif metric.lines >= policy.warning_line_limit:
             found.append(
@@ -186,8 +186,8 @@ def main() -> int:
     for violation in found:
         print(f"- {violation}")
     print(
-        "Split at an owning boundary before the absolute limit. A small file that mixes "
-        "authorities still requires separation."
+        "Split at state and invariant ownership boundaries before the default limit. A small "
+        "file that mixes authorities still requires separation."
     )
     return 1
 

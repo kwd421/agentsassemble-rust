@@ -152,7 +152,7 @@ class SourceGrowthPolicyTests(unittest.TestCase):
         policy = SourceGrowthPolicy(
             warning_line_limit=500,
             strong_warning_line_limit=800,
-            hard_line_limit=1_000,
+            default_line_limit=1_000,
             new_file_byte_limit=262_144,
             max_logical_line_bytes=16_384,
         )
@@ -175,7 +175,7 @@ class SourceGrowthPolicyTests(unittest.TestCase):
         policy = SourceGrowthPolicy(
             warning_line_limit=500,
             strong_warning_line_limit=800,
-            hard_line_limit=1_000,
+            default_line_limit=1_000,
             new_file_byte_limit=262_144,
             max_logical_line_bytes=16_384,
         )
@@ -192,7 +192,7 @@ class SourceGrowthPolicyTests(unittest.TestCase):
         self.assertTrue(any(item.startswith("strong: src/cohesive.rs") for item in warnings))
         self.assertFalse(any("oversized.rs" in item for item in warnings))
         self.assertIn(
-            "src/oversized.rs: 1001 lines exceeds the absolute limit of 1000",
+            "src/oversized.rs: 1001 lines exceeds the default limit of 1000",
             violations(metrics, policy),
         )
 

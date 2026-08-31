@@ -1,11 +1,11 @@
-# Line count is a review signal, never a substitute for responsibility boundaries.
-# A 250-line file still splits when concepts or authorities differ. A cohesive
-# single flow may remain between 600 and 1,000 lines when splitting would obscure
-# its invariant. Files above 1,000 lines fail the gate.
+# Line count only signals possible ownership drift. State and invariant ownership
+# decides the boundary. Review at 500 lines; treat 800 as a strong split candidate;
+# reject over 1,000 by default. Do not predeclare exceptions: a concrete generated
+# file, fixture, or declarative-data owner may receive one only when the need exists.
 
 [policy]
 warning_line_limit = 500
 strong_warning_line_limit = 800
-hard_line_limit = 1000
+default_line_limit = 1000
 new_file_byte_limit = 262144
 max_logical_line_bytes = 16384
