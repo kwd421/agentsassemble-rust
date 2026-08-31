@@ -23,17 +23,11 @@ GENERATED_LOCKFILES = frozenset({"Cargo.lock", "package-lock.json"})
 
 
 @dataclass(frozen=True)
-class FileLimit:
-    limit: int
-    reason: str
-
-
-@dataclass(frozen=True)
 class SourceGrowthPolicy:
     new_file_line_limit: int
     new_file_byte_limit: int
     max_logical_line_bytes: int
-    file_limits: Mapping[str, FileLimit]
+    frozen_file_line_limits: Mapping[str, int]
 
 
 @dataclass(frozen=True)
@@ -48,9 +42,11 @@ def load_policy(repository_root: Path) -> SourceGrowthPolicy:
         (repository_root / POLICY_PATH).read_text(encoding="utf-8")
     )
     policy = payload.get("policy")
-    raw_limits = payload.get("file_limits")
+    raw_limits = payload.get("frozen_file_line_limits")
     if not isinstance(policy, dict) or not isinstance(raw_limits, dict):
-        raise ValueError("Source growth policy needs [policy] and [file_limits].")
+        raise ValueError(
+            "Source growth policy needs [policy] and [frozen_file_line_limits]."
+        )
     default_limit = policy.get("new_file_line_limit")
     if isinstance(default_limit, bool) or not isinstance(default_limit, int) or default_limit < 1:
         raise ValueError("new_file_line_limit must be a positive integer.")
@@ -65,26 +61,18 @@ def load_policy(repository_root: Path) -> SourceGrowthPolicy:
     ):
         raise ValueError("max_logical_line_bytes must be a positive integer.")
     if list(raw_limits) != sorted(raw_limits):
-        raise ValueError("Source growth exceptions must be sorted by path.")
+        raise ValueError("Frozen source baselines must be sorted by path.")
 
-    limits: dict[str, FileLimit] = {}
+    limits: dict[str, int] = {}
     for relative, raw in raw_limits.items():
         path = Path(relative)
         if path.is_absolute() or ".." in path.parts or path.as_posix() != relative:
             raise ValueError(f"Invalid source growth path: {relative!r}")
-        if not isinstance(raw, dict):
-            raise ValueError(f"Exception {relative!r} needs limit and reason.")
-        limit = raw.get("limit")
-        reason = raw.get("reason")
-        if isinstance(limit, bool) or not isinstance(limit, int) or limit <= default_limit:
+        if isinstance(raw, bool) or not isinstance(raw, int) or raw <= default_limit:
             raise ValueError(
-                f"Exception {relative!r} must have a limit above {default_limit}."
+                f"Frozen file {relative!r} must have a limit above {default_limit}."
             )
-        if not isinstance(reason, str) or len(reason.strip()) < 40:
-            raise ValueError(
-                f"Exception {relative!r} needs a specific cohesive-owner reason."
-            )
-        limits[relative] = FileLimit(limit=limit, reason=reason.strip())
+        limits[relative] = raw
     return SourceGrowthPolicy(default_limit, byte_limit, logical_line_limit, limits)
 
 
@@ -129,13 +117,24 @@ def collect_line_counts(repository_root: Path) -> dict[str, int]:
 def violations(metrics: Mapping[str, SourceMetric], policy: SourceGrowthPolicy) -> tuple[str, ...]:
     found: list[str] = []
     for relative, metric in sorted(metrics.items()):
-        exception = policy.file_limits.get(relative)
-        limit = exception.limit if exception else policy.new_file_line_limit
+        frozen_limit = policy.frozen_file_line_limits.get(relative)
+        limit = frozen_limit or policy.new_file_line_limit
         if metric.lines > limit:
-            ownership = "cohesive-owner exception" if exception else "unowned-file"
+            ownership = "frozen baseline" if frozen_limit else "source-file"
             found.append(
                 f"{relative}: {metric.lines} lines exceeds its {ownership} limit of {limit}"
             )
+        elif frozen_limit and metric.lines < frozen_limit:
+            if metric.lines <= policy.new_file_line_limit:
+                found.append(
+                    f"{relative}: now fits the {policy.new_file_line_limit}-line limit; "
+                    "remove its frozen baseline"
+                )
+            else:
+                found.append(
+                    f"{relative}: {metric.lines} lines is below its frozen baseline of "
+                    f"{frozen_limit}; lower the recorded baseline to preserve the ratchet"
+                )
         if metric.bytes > policy.new_file_byte_limit:
             found.append(
                 f"{relative}: {metric.bytes} bytes exceeds the source byte limit of {policy.new_file_byte_limit}"
@@ -144,7 +143,7 @@ def violations(metrics: Mapping[str, SourceMetric], policy: SourceGrowthPolicy) 
             found.append(
                 f"{relative}: {metric.max_logical_line_bytes}-byte logical line exceeds the limit of {policy.max_logical_line_bytes}"
             )
-    for relative in sorted(set(policy.file_limits) - set(metrics)):
+    for relative in sorted(set(policy.frozen_file_line_limits) - set(metrics)):
         found.append(f"{relative}: recorded source file is missing")
     return tuple(found)
 
@@ -173,8 +172,8 @@ def main() -> int:
     for violation in found:
         print(f"- {violation}")
     print(
-        "Split at an owning boundary. Do not add or raise an exception without "
-        "an explicit decision that the responsibility must remain cohesive."
+        "Split at an owning boundary. Frozen baselines only preserve files that "
+        "already exceeded 500 lines when the cap changed; never add or raise one."
     )
     return 1
 

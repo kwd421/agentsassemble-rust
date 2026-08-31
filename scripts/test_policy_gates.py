@@ -149,10 +149,10 @@ class SourceGrowthPolicyTests(unittest.TestCase):
 
     def test_compressed_one_line_source_hits_logical_line_limit(self) -> None:
         policy = SourceGrowthPolicy(
-            new_file_line_limit=800,
+            new_file_line_limit=500,
             new_file_byte_limit=262_144,
             max_logical_line_bytes=16_384,
-            file_limits={},
+            frozen_file_line_limits={},
         )
         found = violations(
             {
@@ -167,6 +167,43 @@ class SourceGrowthPolicyTests(unittest.TestCase):
         self.assertIn(
             "frontend/src/compressed.ts: 20000-byte logical line exceeds the limit of 16384",
             found,
+        )
+
+    def test_frozen_oversized_file_cannot_grow_or_leave_stale_headroom(self) -> None:
+        policy = SourceGrowthPolicy(
+            new_file_line_limit=500,
+            new_file_byte_limit=262_144,
+            max_logical_line_bytes=16_384,
+            frozen_file_line_limits={"src/existing.rs": 640},
+        )
+
+        self.assertIn(
+            "src/existing.rs: 641 lines exceeds its frozen baseline limit of 640",
+            violations(
+                {"src/existing.rs": SourceMetric(641, 1_000, 80)}, policy
+            ),
+        )
+        self.assertIn(
+            "src/existing.rs: 620 lines is below its frozen baseline of 640; "
+            "lower the recorded baseline to preserve the ratchet",
+            violations(
+                {"src/existing.rs": SourceMetric(620, 1_000, 80)}, policy
+            ),
+        )
+
+    def test_frozen_baseline_must_be_removed_after_split_below_cap(self) -> None:
+        policy = SourceGrowthPolicy(
+            new_file_line_limit=500,
+            new_file_byte_limit=262_144,
+            max_logical_line_bytes=16_384,
+            frozen_file_line_limits={"src/existing.rs": 640},
+        )
+
+        self.assertIn(
+            "src/existing.rs: now fits the 500-line limit; remove its frozen baseline",
+            violations(
+                {"src/existing.rs": SourceMetric(480, 1_000, 80)}, policy
+            ),
         )
 
     def test_executable_lockfile_name_is_still_source(self) -> None:
