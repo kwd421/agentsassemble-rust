@@ -35,8 +35,7 @@ pub use message_attachments::{
 pub use message_mutations::{
     MessageDelete, MessageEdit, MutableMessageKind, authorize_message_delete,
     authorize_message_edit, prepare_deleted_message, prepare_message_deleted_event,
-    prepare_message_updated_event, prepare_updated_message, redact_deleted_vote_transition,
-    require_mutable_message,
+    prepare_message_updated_event, prepare_updated_message, require_mutable_message,
 };
 pub use message_pins::{MAX_LOBBY_MESSAGE_PINS, MAX_MESSAGE_EVENT_ID_BYTES, is_message_event_id};
 pub use message_search::{
@@ -61,7 +60,8 @@ pub use persona::{
 pub use persona_text::{persona_card_keywords, trim_persona_card_text};
 pub use profile::{UserProfile, UserProfilePatch, avatar_attachment_id, canonical_avatar_url};
 pub use projection::{
-    public_event_for_principal, public_value_for_principal, room_event_is_owner_only,
+    privacy_minimized_vote_transition, public_event_for_principal, public_value_for_principal,
+    room_event_is_owner_only,
 };
 pub use room_history::{ROOM_HISTORY_MAX_EVENTS, RoomHistoryPage, RoomHistoryRequest};
 pub use room_preferences::{

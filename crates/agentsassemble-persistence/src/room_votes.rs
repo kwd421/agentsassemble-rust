@@ -2,7 +2,8 @@ use std::collections::BTreeMap;
 
 use agentsassemble_domain::{
     AuthenticatedPrincipal, ClientKind, Participant, RoomEvent, VoteCast, VoteCommand, VoteSummary,
-    has_visible_text, prepare_vote_event, resolve_vote_choice, validate_vote_id, vote_deadline_at,
+    has_visible_text, prepare_vote_event, privacy_minimized_vote_transition, resolve_vote_choice,
+    validate_vote_id, vote_deadline_at,
 };
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
@@ -151,8 +152,10 @@ pub(crate) async fn apply_vote_command(
                 vote_id: cast.vote_id,
                 choice,
             });
-            let event = prepare_vote_event(principal, participant, &canonical, sequence, now)
-                .map_err(|error| rejection(&error))?;
+            let event = privacy_minimized_vote_transition(
+                prepare_vote_event(principal, participant, &canonical, sequence, now)
+                    .map_err(|error| rejection(&error))?,
+            );
             insert_event(transaction, &event).await?;
             replace_ballot(transaction, participant, &mut stored, choice_index).await?;
             save_vote_state(transaction, &stored).await?;
@@ -162,8 +165,10 @@ pub(crate) async fn apply_vote_command(
             let mut stored = load_vote(transaction, &principal.room_id, &reference.vote_id).await?;
             require_open(&stored, now)?;
             let command = VoteCommand::Withdraw(reference);
-            let event = prepare_vote_event(principal, participant, &command, sequence, now)
-                .map_err(|error| rejection(&error))?;
+            let event = privacy_minimized_vote_transition(
+                prepare_vote_event(principal, participant, &command, sequence, now)
+                    .map_err(|error| rejection(&error))?,
+            );
             insert_event(transaction, &event).await?;
             remove_ballot(transaction, participant, &mut stored).await?;
             save_vote_state(transaction, &stored).await?;
@@ -181,8 +186,10 @@ pub(crate) async fn apply_vote_command(
                 ));
             }
             let command = VoteCommand::Close(reference);
-            let event = prepare_vote_event(principal, participant, &command, sequence, now)
-                .map_err(|error| rejection(&error))?;
+            let event = privacy_minimized_vote_transition(
+                prepare_vote_event(principal, participant, &command, sequence, now)
+                    .map_err(|error| rejection(&error))?,
+            );
             insert_event(transaction, &event).await?;
             stored.manual_close = Some((sequence, now));
             save_vote_state(transaction, &stored).await?;

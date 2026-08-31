@@ -56,18 +56,6 @@ const PRIVATE_PUBLIC_KEYS: &[&str] = &[
     "write_budget_turn_id",
 ];
 
-const PRIVATE_VOTE_KEYS: &[&str] = &[
-    "actor_id",
-    "actor_type",
-    "avatar_image_url",
-    "display_name",
-    "owner_id",
-    "participant_id",
-    "participant_type",
-    "session_id",
-    "vote_choice",
-];
-
 /// Projects one durable event for a viewer while preserving its room cursor.
 #[must_use]
 pub fn public_event_for_principal(
@@ -76,7 +64,7 @@ pub fn public_event_for_principal(
 ) -> RoomEvent {
     let mut projected = event.clone();
     projected.extra = project_map(&event.extra);
-    anonymize_private_vote(&mut projected);
+    let mut projected = privacy_minimized_vote_transition(projected);
     if !room_event_is_owner_only(&projected) || event_is_visible_to(&projected, principal) {
         if room_event_is_owner_only(&projected) {
             projected.extra.remove("audience");
@@ -189,13 +177,19 @@ fn event_is_visible_to(event: &RoomEvent, principal: &AuthenticatedPrincipal) ->
     })
 }
 
-fn anonymize_private_vote(event: &mut RoomEvent) {
+/// Keeps only the canonical public marker for a vote transition.
+///
+/// The current ballot projection owns participant identity and choice. Durable history and command
+/// replay need only the vote ID to refresh the corresponding poll card, so storing those private
+/// fields would create deletion work without a reachable product consumer.
+#[must_use]
+pub fn privacy_minimized_vote_transition(mut event: RoomEvent) -> RoomEvent {
     let private_vote = event
         .message_kind
         .as_deref()
         .is_some_and(|kind| matches!(kind, "vote_cast" | "vote_withdraw" | "vote_close"));
     if !private_vote {
-        return;
+        return event;
     }
     event.actor.participant_id.clear();
     event.actor.participant_type.clear();
@@ -204,9 +198,9 @@ fn anonymize_private_vote(event: &mut RoomEvent) {
     event.actor_id = None;
     event.actor_type = None;
     event.display_name = None;
+    event.content = Some(String::new());
+    event.extra.retain(|key, _| key == "vote_id");
     event
-        .extra
-        .retain(|key, _| !PRIVATE_VOTE_KEYS.contains(&key.as_str()));
 }
 
 #[cfg(test)]

@@ -147,7 +147,9 @@ async fn cast_provider_vote(
         .await
         .unwrap_or_else(|error| panic!("complete provider cast: {error}"));
     assert_eq!(casted.events[0].message_kind.as_deref(), Some("vote_cast"));
-    assert_eq!(casted.events[0].extra["vote_choice"], json!("Yes"));
+    assert!(casted.events[0].actor.participant_id.is_empty());
+    assert_eq!(casted.events[0].extra["vote_id"], vote_id);
+    assert!(!casted.events[0].extra.contains_key("vote_choice"));
     let summary = store
         .local_room_vote_summary(
             "general",

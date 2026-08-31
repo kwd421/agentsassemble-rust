@@ -168,7 +168,7 @@ async fn delete_rolls_back_then_removes_exact_attachment_search_and_pin() {
 }
 
 #[tokio::test]
-async fn poll_delete_removes_projection_and_redacts_every_ballot_transition() {
+async fn poll_delete_removes_projection_without_rewriting_minimized_transitions() {
     let (store, operator) = fixture().await;
     let created = store
         .execute_message_with_turn(
@@ -184,7 +184,7 @@ async fn poll_delete_removes_projection_and_redacts_every_ballot_transition() {
         .await
         .unwrap_or_else(|error| panic!("create delete poll: {error}"));
     let vote_id = created.outcome.event.id;
-    store
+    let cast = store
         .execute_message_with_turn(
             &operator,
             "cast-delete-poll",
@@ -193,6 +193,15 @@ async fn poll_delete_removes_projection_and_redacts_every_ballot_transition() {
         )
         .await
         .unwrap_or_else(|error| panic!("cast delete poll: {error}"));
+    assert!(cast.outcome.event.actor.participant_id.is_empty());
+    assert_eq!(cast.outcome.event.extra["vote_id"], vote_id);
+    assert!(!cast.outcome.event.extra.contains_key("vote_choice"));
+    sqlx::query(
+        "CREATE TRIGGER reject_vote_transition_rewrite BEFORE UPDATE OF event_json ON room_events WHEN json_extract(OLD.event_json, '$.message_kind') IN ('vote_cast', 'vote_withdraw', 'vote_close') BEGIN SELECT RAISE(ABORT, 'vote transition rewrite'); END",
+    )
+    .execute(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("install transition rewrite guard: {error}"));
 
     store
         .execute_message_mutation(
@@ -210,18 +219,10 @@ async fn poll_delete_removes_projection_and_redacts_every_ballot_transition() {
     assert_eq!(poll.extra["message_deleted"], true);
     assert_eq!(poll.extra["vote_question"], "");
     assert_eq!(poll.extra["vote_options"], json!([]));
-    let ballot = sqlx::query_scalar::<_, String>(
-        "SELECT event_json FROM room_events WHERE json_extract(event_json, '$.message_kind') = 'vote_cast'",
-    )
-    .fetch_one(&store.pool)
-    .await
-    .unwrap_or_else(|error| panic!("load redacted ballot: {error}"));
-    let ballot: RoomEvent =
-        serde_json::from_str(&ballot).unwrap_or_else(|error| panic!("decode ballot: {error}"));
-    assert!(ballot.actor.participant_id.is_empty());
-    assert_eq!(ballot.extra["message_deleted"], true);
-    assert!(!ballot.extra.contains_key("vote_id"));
-    assert!(!ballot.extra.contains_key("vote_choice"));
+    assert_eq!(
+        stored_event(&store, &cast.outcome.event.id).await,
+        cast.outcome.event
+    );
     assert_rejected(
         store
             .local_room_vote_summary(

@@ -41,13 +41,41 @@ async fn ballot_replacement_withdrawal_and_replay_update_one_projection() {
     assert!(replay.outcome.deduplicated);
     assert_eq!(replay.outcome.event.id, vote_id);
 
-    command(
+    let first_cast = command(
         &store,
         &operator,
         "10000000-0000-4000-8000-000000000002",
         json!({"kind": "vote_cast", "vote_id": vote_id, "vote_choice": "yes"}),
     )
     .await;
+    assert_vote_transition_is_minimized(&first_cast.outcome.event, &vote_id);
+    let stored_transition = sqlx::query_scalar::<_, String>(
+        "SELECT event_json FROM room_events WHERE room_id = ? AND seq = ?",
+    )
+    .bind(&first_cast.outcome.event.room_id)
+    .bind(first_cast.outcome.event.seq)
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("read minimized vote transition: {error}"));
+    assert_eq!(
+        serde_json::from_str::<RoomEvent>(&stored_transition)
+            .unwrap_or_else(|error| panic!("decode minimized vote transition: {error}")),
+        first_cast.outcome.event,
+    );
+    let stored_result = sqlx::query_scalar::<_, String>(
+        "SELECT result_json FROM command_results WHERE room_id = ? AND principal_id = ? AND request_id = ?",
+    )
+    .bind(&operator.room_id)
+    .bind(&operator.principal_id)
+    .bind("10000000-0000-4000-8000-000000000002")
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("read minimized vote replay result: {error}"));
+    let stored_result: Value = serde_json::from_str(&stored_result)
+        .unwrap_or_else(|error| panic!("decode minimized vote replay result: {error}"));
+    let replay_event: RoomEvent = serde_json::from_value(stored_result["event"].clone())
+        .unwrap_or_else(|error| panic!("decode minimized replay event: {error}"));
+    assert_vote_transition_is_minimized(&replay_event, &vote_id);
     assert_vote_state(&store, &[1, 0], 1, Some(0)).await;
 
     command(
@@ -433,6 +461,19 @@ async fn vote_event_count(store: &SqliteStore) -> i64 {
     .fetch_one(&store.pool)
     .await
     .unwrap_or_else(|error| panic!("count vote events: {error}"))
+}
+
+fn assert_vote_transition_is_minimized(event: &RoomEvent, vote_id: &str) {
+    assert!(event.actor.participant_id.is_empty());
+    assert!(event.actor.participant_type.is_empty());
+    assert!(event.participant_id.is_none());
+    assert!(event.participant_type.is_none());
+    assert!(event.actor_id.is_none());
+    assert!(event.actor_type.is_none());
+    assert!(event.display_name.is_none());
+    assert_eq!(event.content.as_deref(), Some(""));
+    assert_eq!(event.extra.len(), 1);
+    assert_eq!(event.extra["vote_id"], vote_id);
 }
 
 fn assert_rejected<T>(result: &Result<T, PersistenceError>, expected: &str) {

@@ -193,29 +193,6 @@ pub fn prepare_deleted_message(
 }
 
 #[must_use]
-pub fn redact_deleted_vote_transition(
-    transition: &RoomEvent,
-    deleted_at: DateTime<Utc>,
-) -> RoomEvent {
-    let mut redacted = transition.clone();
-    redacted.actor = Actor {
-        participant_id: String::new(),
-        participant_type: String::new(),
-    };
-    redacted.participant_id = None;
-    redacted.participant_type = None;
-    redacted.actor_id = None;
-    redacted.actor_type = None;
-    redacted.display_name = None;
-    redacted.content = Some(String::new());
-    redacted.extra = BTreeMap::from([
-        ("deleted_at".to_owned(), json!(deleted_at)),
-        ("message_deleted".to_owned(), json!(true)),
-    ]);
-    redacted
-}
-
-#[must_use]
 pub fn prepare_message_updated_event(
     principal: &AuthenticatedPrincipal,
     target: &RoomEvent,
@@ -358,7 +335,7 @@ mod tests {
 
     use super::{
         MessageDelete, MessageEdit, MutableMessageKind, authorize_message_delete,
-        authorize_message_edit, prepare_deleted_message, redact_deleted_vote_transition,
+        authorize_message_edit, prepare_deleted_message,
     };
     use crate::{
         Actor, AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, Participant,
@@ -418,7 +395,7 @@ mod tests {
     }
 
     #[test]
-    fn poll_tombstone_and_transitions_remove_private_vote_state() {
+    fn poll_tombstone_removes_the_poll_definition() {
         let now = Utc::now();
         let mut poll = event("agent-1", "agent", "vote");
         poll.content = Some("secret question".to_owned());
@@ -432,15 +409,6 @@ mod tests {
         assert_eq!(deleted.extra.get("vote_options"), Some(&json!([])));
         assert_eq!(deleted.extra.get("attachments"), Some(&json!([])));
         assert_eq!(deleted.extra.get("message_deleted"), Some(&json!(true)));
-
-        let mut ballot = event("human-1", "human", "vote_cast");
-        ballot.extra.insert("vote_id".to_owned(), json!(poll.id));
-        ballot.extra.insert("vote_choice".to_owned(), json!("yes"));
-        let redacted = redact_deleted_vote_transition(&ballot, now);
-        assert!(redacted.actor.participant_id.is_empty());
-        assert_eq!(redacted.extra.len(), 2);
-        assert!(!redacted.extra.contains_key("vote_choice"));
-        assert!(!redacted.extra.contains_key("vote_id"));
     }
 
     fn principal(

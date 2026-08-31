@@ -2,11 +2,11 @@ use agentsassemble_domain::{
     AuthenticatedPrincipal, MessageDelete, MessageEdit, MutableMessageKind, RoomEvent,
     authorize_message_delete, authorize_message_edit, canonical_payload_hash, has_visible_text,
     prepare_deleted_message, prepare_message_deleted_event, prepare_message_updated_event,
-    prepare_updated_message, redact_deleted_vote_transition,
+    prepare_updated_message,
 };
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
-use sqlx::{Row, Sqlite, Transaction};
+use sqlx::{Sqlite, Transaction};
 
 use crate::{
     CommandOutcome, HumanSessionAuthorization, PersistenceError, SqliteStore,
@@ -184,7 +184,6 @@ async fn delete_message(
     remove_lobby_message_pin(transaction, &principal.room_id, &target.id).await?;
     remove_lobby_message_index(transaction, target).await?;
     if kind == MutableMessageKind::Vote {
-        redact_vote_transitions(transaction, target, now).await?;
         delete_vote_projection(transaction, &principal.room_id, &target.id, target.seq).await?;
     }
     remove_pending_input_reference(transaction, &principal.room_id, &target.id).await?;
@@ -199,45 +198,6 @@ async fn delete_message(
         "attachment_ids": attachment_ids,
     });
     Ok((updated, mutation, result))
-}
-
-async fn redact_vote_transitions(
-    transaction: &mut Transaction<'_, Sqlite>,
-    poll: &RoomEvent,
-    deleted_at: DateTime<Utc>,
-) -> Result<(), PersistenceError> {
-    let rows = sqlx::query(
-        "SELECT seq, event_json FROM room_events WHERE room_id = ? AND json_extract(event_json, '$.vote_id') = ? ORDER BY seq",
-    )
-    .bind(&poll.room_id)
-    .bind(&poll.id)
-    .fetch_all(&mut **transaction)
-    .await?;
-    for row in rows {
-        let sequence = row.get::<i64, _>("seq");
-        let event: RoomEvent = serde_json::from_str(row.get::<String, _>("event_json").as_str())?;
-        if event.room_id != poll.room_id
-            || event.seq != sequence
-            || event.event_type != "message_final"
-            || !matches!(
-                event.message_kind.as_deref(),
-                Some("vote_cast" | "vote_withdraw" | "vote_close")
-            )
-            || event.extra.get("vote_id").and_then(Value::as_str) != Some(poll.id.as_str())
-            || event.extra.get("message_deleted") == Some(&Value::Bool(true))
-        {
-            return Err(rejected(
-                "invalid_state",
-                "Stored vote transition is inconsistent.",
-            ));
-        }
-        replace_event(
-            transaction,
-            &redact_deleted_vote_transition(&event, deleted_at),
-        )
-        .await?;
-    }
-    Ok(())
 }
 
 fn rejection(error: agentsassemble_domain::CommandRejection) -> PersistenceError {
