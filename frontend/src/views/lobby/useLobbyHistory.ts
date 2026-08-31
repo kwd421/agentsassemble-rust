@@ -142,6 +142,7 @@ export function useLobbyHistory({
   const loadingHistoryRequestRef = useRef<HistoryPageRequest | null>(null);
   const historyLoadSuppressedUntilRef = useRef(0);
   const historyWindowActiveRef = useRef(false);
+  const anchorRestorationEpochRef = useRef(0);
   const canonicalWindowRevisionRef = useRef(-1);
   const currentCanonicalWindowRevisionRef = useRef(canonicalWindowRevision);
   const canonicalOldestSeqRef = useRef(canonicalOldestSeq);
@@ -167,6 +168,7 @@ export function useLobbyHistory({
   const loaded = loadedRoomId === activeRoom.id;
   currentCanonicalWindowRevisionRef.current = canonicalWindowRevision;
   if (historyRoomRef.current !== activeRoom.id) {
+    anchorRestorationEpochRef.current += 1;
     historyRoomRef.current = activeRoom.id;
     historyReadyRef.current = false;
     initialBackfillFailedRoomRef.current = "";
@@ -207,6 +209,7 @@ export function useLobbyHistory({
   }, []);
 
   const retireHistoryPageRequest = useCallback(() => {
+    anchorRestorationEpochRef.current += 1;
     loadingHistoryRequestRef.current = null;
     prependAnchorRef.current = null;
     setLoadingOlder(false);
@@ -354,7 +357,15 @@ export function useLobbyHistory({
       prependAnchorRef.current = null;
     } else if (anchor) {
       prependAnchorRef.current = null;
+      const restorationEpoch = anchorRestorationEpochRef.current;
       const restoreAnchor = () => {
+        if (
+          anchorRestorationEpochRef.current !== restorationEpoch ||
+          historyRoomRef.current !== anchor.roomId ||
+          currentCanonicalWindowRevisionRef.current !== anchor.windowRevision
+        ) {
+          return;
+        }
         const anchorElement = Array.from(
           element.querySelectorAll<HTMLElement>("[data-room-event-id]")
         ).find((candidate) => candidate.dataset.roomEventId === anchor.eventId);

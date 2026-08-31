@@ -1,4 +1,4 @@
-import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
+import { act, cleanup, render, renderHook, waitFor } from "@testing-library/react";
 import { Hash } from "lucide-react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -6,7 +6,10 @@ import type { LobbyEvent } from "../../api";
 import type { RoomDockItem } from "../../lib/roomDockModel";
 import { useLobbyHistory } from "./useLobbyHistory";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 const room: RoomDockItem = {
   id: "room-a",
@@ -208,5 +211,88 @@ describe("useLobbyHistory vote refresh ownership", () => {
       "search-context-message",
     ]);
     expect(hook.result.current.hasMoreHistory).toBe(false);
+  });
+
+  it("retires an already-scheduled anchor restoration when the display is replaced", async () => {
+    const requestFrame = window.requestAnimationFrame.bind(window);
+    let scheduledFrame: FrameRequestCallback | null = null;
+    let resolvePage!: (page: {
+      loadedCount: number;
+      oldestSeq: number;
+      hasMoreBefore: boolean;
+      events: LobbyEvent[];
+    }) => void;
+    const pendingPage = new Promise<Parameters<typeof resolvePage>[0]>((resolve) => {
+      resolvePage = resolve;
+    });
+    const loadCanonicalHistory = vi.fn().mockReturnValue(pendingPage);
+    const canonicalEvents = [
+      event("current-message"),
+      ...Array.from({ length: 19 }, (_, index) => event(`message-${index}`)),
+    ];
+    let history!: ReturnType<typeof useLobbyHistory>;
+    function HistoryHarness() {
+      history = useLobbyHistory({
+        activeRoom: room,
+        typingIndicators: [],
+        canonicalEvents,
+        canonicalHistoryReady: true,
+        canonicalOldestSeq: 100,
+        canonicalHasMoreHistory: true,
+        canonicalWindowRevision: 1,
+        loadCanonicalHistory,
+      });
+      return (
+        <div ref={history.scrollRef}>
+          {history.visibleEvents.map(({ id }) => (
+            <div key={id} data-room-event-id={id}>{id}</div>
+          ))}
+        </div>
+      );
+    }
+    const view = render(<HistoryHarness />);
+    await waitFor(() => expect(history.loaded).toBe(true));
+    vi.spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        return requestFrame(() => {
+          scheduledFrame = callback;
+        });
+      });
+
+    const feed = view.container.firstElementChild as HTMLDivElement;
+    Object.defineProperties(feed, {
+      scrollHeight: { configurable: true, value: 1_000 },
+      scrollTop: { configurable: true, writable: true, value: 100 },
+    });
+    const anchor = feed.querySelector<HTMLElement>("[data-room-event-id]")!;
+    anchor.getBoundingClientRect = () => ({
+      bottom: 50,
+      height: 0,
+      left: 0,
+      right: 0,
+      top: 50,
+      width: 0,
+      x: 0,
+      y: 50,
+      toJSON: () => undefined,
+    });
+
+    act(() => history.loadOlderHistory(100));
+    await act(async () => {
+      resolvePage({
+        loadedCount: 1,
+        oldestSeq: 1,
+        hasMoreBefore: false,
+        events: [event("older-message")],
+      });
+      await pendingPage;
+    });
+    await waitFor(() => expect(scheduledFrame).not.toBeNull());
+
+    act(() => history.showHistoryWindow([event("search-context-message")]));
+    feed.scrollTop = 777;
+    act(() => scheduledFrame!(0));
+
+    expect(feed.scrollTop).toBe(777);
   });
 });
