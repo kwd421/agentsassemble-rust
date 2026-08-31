@@ -26,7 +26,7 @@ pub use local_control::{
 };
 
 pub const PROTOCOL_VERSION: u32 = 1;
-pub const PRODUCT_SURFACE_REVISION: u32 = 10;
+pub const PRODUCT_SURFACE_REVISION: u32 = 11;
 pub const HUMAN_INVITE_SIGNED_TOKEN_PREFIX: &str = "aai1";
 pub const HUMAN_INVITE_JOIN_CODE_PREFIX: &str = "aaj1_";
 pub const HUMAN_INVITE_SIGNED_TOKEN_MAX_BYTES: usize = 4 * 1024;
@@ -118,6 +118,8 @@ pub enum RoomAction {
     AgentConfigure,
     #[serde(rename = "agent.start")]
     AgentStart,
+    #[serde(rename = "agent.pause")]
+    AgentPause,
     #[serde(rename = "agent.resume")]
     AgentResume,
     #[serde(rename = "agent.stop")]
@@ -125,9 +127,10 @@ pub enum RoomAction {
 }
 
 impl RoomAction {
-    pub const ALL: [Self; 16] = [
+    pub const ALL: [Self; 17] = [
         Self::AgentConfigure,
         Self::AgentCreate,
+        Self::AgentPause,
         Self::AgentResume,
         Self::AgentStart,
         Self::AgentStop,
@@ -161,6 +164,7 @@ impl RoomAction {
             Self::AgentCreate => "agent.create",
             Self::AgentConfigure => "agent.configure",
             Self::AgentStart => "agent.start",
+            Self::AgentPause => "agent.pause",
             Self::AgentResume => "agent.resume",
             Self::AgentStop => "agent.stop",
         }
@@ -570,6 +574,11 @@ mod tests {
             surface
                 .websocket_actions
                 .contains(&super::RoomAction::ParticipantRoleUpdate)
+        );
+        assert!(
+            surface
+                .websocket_actions
+                .contains(&super::RoomAction::AgentPause)
         );
         assert!(
             surface

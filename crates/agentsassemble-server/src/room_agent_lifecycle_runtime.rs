@@ -16,6 +16,11 @@ pub(crate) async fn execute_agent_start(
     provider_adapter: &ProviderAdapter,
     command: &RoomCommand,
 ) -> CommandExecution {
+    if command.action == RoomAction::AgentResume
+        && let Some(execution) = execute_paused_resume(store, command).await
+    {
+        return execution;
+    }
     let mut plan = if command.action == RoomAction::AgentResume {
         store
             .prepare_agent_resume(&command.principal, &command.request_id, &command.payload)
@@ -106,6 +111,35 @@ pub(crate) async fn execute_agent_start(
             record_agent_start_failure(store, provider_adapter, command, &authorized, error).await
         }
     }
+}
+
+async fn execute_paused_resume(
+    store: &SqliteStore,
+    command: &RoomCommand,
+) -> Option<CommandExecution> {
+    match store
+        .resume_paused_agent(&command.principal, &command.request_id, &command.payload)
+        .await
+    {
+        Ok(Some(outcome)) => {
+            Some(progressed_execution(store, &command.principal.room_id, outcome).await)
+        }
+        Ok(None) => None,
+        Err(error) => Some(CommandExecution::transactional_failure(error)),
+    }
+}
+
+pub(crate) async fn execute_agent_pause(
+    store: &SqliteStore,
+    command: &RoomCommand,
+) -> CommandExecution {
+    store
+        .execute_agent_pause(&command.principal, &command.request_id, &command.payload)
+        .await
+        .map_or_else(
+            CommandExecution::transactional_failure,
+            CommandExecution::success,
+        )
 }
 
 async fn record_agent_start_pre_effect_failure(

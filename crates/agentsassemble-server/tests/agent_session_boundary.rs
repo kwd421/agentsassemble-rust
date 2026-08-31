@@ -200,6 +200,7 @@ async fn lifecycle_commands_use_the_owned_codex_app_server_before_committing() {
     let reused = receive_until_ack(&mut socket, 3).await;
     assert_eq!(reused["result"]["runtime_reused"], true);
     assert_session_flag(&reused, "provider_session_reused");
+    assert_resident_pause_resume(&mut socket, &lifecycle_payload).await;
     send_command(
         &mut socket,
         "stop-runtime",
@@ -574,6 +575,24 @@ async fn send_command<S>(
     socket
         .send_json(&json!({"op": "command", "request_id": request_id, "action": action, "payload": payload}))
         .await;
+}
+
+#[cfg(unix)]
+async fn assert_resident_pause_resume<S>(socket: &mut AuthenticatedTestSocket<S>, payload: &Value)
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    send_command(socket, "pause-runtime", "agent.pause", payload).await;
+    let paused = receive_until_ack(socket, 2).await;
+    assert_eq!(
+        paused["result"]["agent_session"]["runtime_status"],
+        "paused"
+    );
+    assert_eq!(paused["result"]["process_preserved"], true);
+    send_command(socket, "resume-paused-runtime", "agent.resume", payload).await;
+    let resumed = receive_until_ack(socket, 2).await;
+    assert_eq!(resumed["result"]["agent_session"]["runtime_status"], "idle");
+    assert_eq!(resumed["result"]["process_reused"], true);
 }
 
 #[cfg(unix)]
