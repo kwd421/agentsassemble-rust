@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use agentsassemble_domain::RoomRandomRequest;
+use agentsassemble_domain::{RoomRandomRequest, VoteCommand};
 use bytes::Bytes;
 use futures_util::future::{AbortHandle, Abortable};
 use http_body_util::{BodyExt, Empty, combinators::BoxBody};
@@ -38,13 +38,13 @@ use uuid::Uuid;
 
 use crate::room_attachment::attachment_tool_result;
 use crate::room_portal::{
-    PortalState, ProviderRoomToolRequest, ProviderRoomToolResult, RoomPortalError, StagedOutcome,
-    canonical_message, require_current_receipt, reserve_attachment_read, reserve_room_tool,
-    reserve_tabletop_tool, valid_decline_reason,
+    ActiveObservation, PortalState, ProviderRoomToolRequest, ProviderRoomToolResult,
+    RoomPortalError, StagedOutcome, canonical_message, require_current_receipt,
+    reserve_attachment_read, reserve_room_tool, reserve_tabletop_tool, valid_decline_reason,
 };
 use crate::room_portal_tool_contract::{
-    ChooseRandom, DeclineToSpeak, PublishMessage, ReadAttachment, ReadMessageContext, RollDice,
-    SearchMessages,
+    CastVote, ChooseRandom, CreateVote, DeclineToSpeak, PublishMessage, ReadAttachment,
+    ReadMessageContext, RollDice, SearchMessages, VoteTarget,
 };
 
 const MAX_MCP_REQUEST_BYTES: usize = 64 * 1024;
@@ -433,6 +433,35 @@ impl RoomPortalMcp {
         }
         .map_err(|_| "The room tool result could not be encoded.".to_owned())
     }
+
+    fn stage_vote(&self, payload: &serde_json::Value) -> Result<String, String> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| "The shared room authority is unavailable.".to_owned())?;
+        let active = terminal_observation(&mut state)?;
+        let command = VoteCommand::from_payload(payload).map_err(|error| error.message)?;
+        active.outcome = Some(StagedOutcome::Vote {
+            receipt_generation: active.turn_generation,
+            command,
+        });
+        Ok("Staged a vote action for the shared room.".to_owned())
+    }
+}
+
+fn terminal_observation(state: &mut PortalState) -> Result<&mut ActiveObservation, String> {
+    let active = state
+        .active
+        .as_mut()
+        .ok_or_else(|| "No active room observation.".to_owned())?;
+    require_current_receipt(active)?;
+    if active.closing || active.outcome.is_some() {
+        return Err("This turn already has a terminal room action.".to_owned());
+    }
+    if active.has_pending_operations() {
+        return Err("Wait for pending room tools before completing this turn.".to_owned());
+    }
+    Ok(active)
 }
 
 #[tool_router]
@@ -505,17 +534,7 @@ impl RoomPortalMcp {
             .state
             .lock()
             .map_err(|_| "The shared room authority is unavailable.".to_owned())?;
-        let active = state
-            .active
-            .as_mut()
-            .ok_or_else(|| "No active room observation.".to_owned())?;
-        require_current_receipt(active)?;
-        if active.closing || active.outcome.is_some() {
-            return Err("This turn already has a terminal room action.".to_owned());
-        }
-        if active.has_pending_operations() {
-            return Err("Wait for pending room tools before publishing.".to_owned());
-        }
+        let active = terminal_observation(&mut state)?;
         let content = canonical_message(&input.content)
             .ok_or_else(|| "The room publication is invalid.".to_owned())?;
         let target_agent_id = if active
@@ -546,17 +565,7 @@ impl RoomPortalMcp {
             .state
             .lock()
             .map_err(|_| "The shared room authority is unavailable.".to_owned())?;
-        let active = state
-            .active
-            .as_mut()
-            .ok_or_else(|| "No active room observation.".to_owned())?;
-        require_current_receipt(active)?;
-        if active.closing || active.outcome.is_some() {
-            return Err("This turn already has a terminal room action.".to_owned());
-        }
-        if active.has_pending_operations() {
-            return Err("Wait for pending room tools before declining.".to_owned());
-        }
+        let active = terminal_observation(&mut state)?;
         if !valid_decline_reason(&input.reason_code) {
             return Err("The decline reason is unsupported.".to_owned());
         }
@@ -565,6 +574,43 @@ impl RoomPortalMcp {
             reason_code: input.reason_code,
         });
         Ok("Declined this shared-room turn.".to_owned())
+    }
+
+    #[tool(
+        description = "Create one bounded single-choice room poll and end this turn. Read the discussion first."
+    )]
+    fn create_vote(&self, Parameters(input): Parameters<CreateVote>) -> Result<String, String> {
+        self.stage_vote(&json!({
+            "kind": "vote",
+            "vote_question": input.question,
+            "vote_options": input.options,
+            "vote_duration_seconds": input.duration_seconds,
+        }))
+    }
+
+    #[tool(
+        description = "Cast or replace this Agent Session's ballot and end this turn. Read the discussion first."
+    )]
+    fn cast_vote(&self, Parameters(input): Parameters<CastVote>) -> Result<String, String> {
+        self.stage_vote(&json!({
+            "kind": "vote_cast",
+            "vote_id": input.vote_id,
+            "vote_choice": input.choice,
+        }))
+    }
+
+    #[tool(
+        description = "Withdraw this Agent Session's ballot and end this turn. Read the discussion first."
+    )]
+    fn withdraw_vote(&self, Parameters(input): Parameters<VoteTarget>) -> Result<String, String> {
+        self.stage_vote(&json!({"kind": "vote_withdraw", "vote_id": input.vote_id}))
+    }
+
+    #[tool(
+        description = "Close a poll created by this Agent Session and end this turn. Read the discussion first."
+    )]
+    fn close_vote(&self, Parameters(input): Parameters<VoteTarget>) -> Result<String, String> {
+        self.stage_vote(&json!({"kind": "vote_close", "vote_id": input.vote_id}))
     }
 
     #[tool(
@@ -599,7 +645,7 @@ impl RoomPortalMcp {
 impl ServerHandler for RoomPortalMcp {
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
-            "Read the bounded shared-room view, then publish once or decline once.",
+            "Read the bounded shared-room view, then publish, vote, or decline exactly once.",
         )
     }
 }

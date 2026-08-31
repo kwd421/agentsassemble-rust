@@ -6,6 +6,8 @@ use std::{
 use thiserror::Error;
 use uuid::Uuid;
 
+use agentsassemble_domain::VoteCommand;
+
 #[cfg(windows)]
 use crate::filesystem::BoundExecutable;
 #[cfg(unix)]
@@ -32,6 +34,12 @@ const MAX_TURN_ID_BYTES: usize = 128;
 const MAX_AGENT_IDS: usize = 64;
 pub(super) const MAX_MESSAGE_CHARS: usize = 12_000;
 const MAX_ROOM_TOOL_RESULTS: usize = 32;
+pub(crate) const VOTE_TOOL_NAMES: [&str; 4] =
+    ["create_vote", "cast_vote", "withdraw_vote", "close_vote"];
+
+pub(crate) fn is_vote_tool(name: &str) -> bool {
+    VOTE_TOOL_NAMES.contains(&name)
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProviderTurnOutcome {
@@ -41,6 +49,9 @@ pub enum ProviderTurnOutcome {
     },
     Declined {
         reason_code: String,
+    },
+    Vote {
+        command: VoteCommand,
     },
 }
 
@@ -52,9 +63,9 @@ pub enum RoomPortalError {
     Observation,
     #[error("the provider did not read the assigned room observation")]
     ReceiptMissing,
-    #[error("the provider did not stage exactly one room publication or decline")]
+    #[error("the provider did not stage exactly one terminal room action")]
     OutcomeMissing,
-    #[error("the provider staged an invalid room publication or decline")]
+    #[error("the provider staged an invalid terminal room action")]
     OutcomeInvalid,
     #[error("the room portal MCP server failed")]
     Mcp,
@@ -94,6 +105,10 @@ pub(super) enum StagedOutcome {
     Declined {
         receipt_generation: Uuid,
         reason_code: String,
+    },
+    Vote {
+        receipt_generation: Uuid,
+        command: VoteCommand,
     },
 }
 
@@ -421,6 +436,12 @@ impl RoomPortal {
                     reason_code: reason_code.clone(),
                 }
             }
+            StagedOutcome::Vote {
+                receipt_generation: staged_generation,
+                command,
+            } if *staged_generation == receipt_generation => ProviderTurnOutcome::Vote {
+                command: command.clone(),
+            },
             _ => return Err(RoomPortalError::OutcomeInvalid),
         };
         state.active = None;

@@ -17,6 +17,28 @@ pub(super) struct DeclineToSpeak {
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub(super) struct CreateVote {
+    pub(super) question: String,
+    pub(super) options: Vec<String>,
+    #[serde(default)]
+    pub(super) duration_seconds: u32,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub(super) struct CastVote {
+    pub(super) vote_id: String,
+    pub(super) choice: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub(super) struct VoteTarget {
+    pub(super) vote_id: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub(super) struct ReadAttachment {
     pub(super) attachment_id: String,
 }

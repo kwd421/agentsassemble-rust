@@ -4,6 +4,7 @@ use std::{
     time::Duration,
 };
 
+use agentsassemble_domain::VoteCommand;
 use futures_util::future::AbortHandle;
 use rmcp::{
     ServiceExt,
@@ -98,7 +99,10 @@ async fn loopback_mcp_requires_a_same_turn_read_before_commit() {
     assert_eq!(
         names,
         BTreeSet::from([
+            "cast_vote".to_owned(),
             "choose_random".to_owned(),
+            "close_vote".to_owned(),
+            "create_vote".to_owned(),
             "decline_to_speak".to_owned(),
             "publish_message".to_owned(),
             "read_attachment".to_owned(),
@@ -106,6 +110,7 @@ async fn loopback_mcp_requires_a_same_turn_read_before_commit() {
             "read_message_context".to_owned(),
             "roll_dice".to_owned(),
             "search_messages".to_owned(),
+            "withdraw_vote".to_owned(),
         ])
     );
     let early = call_tool(
@@ -156,6 +161,150 @@ async fn loopback_mcp_requires_a_same_turn_read_before_commit() {
         }
     );
     let _ = client.cancel().await;
+}
+
+#[tokio::test]
+async fn loopback_mcp_stages_one_canonical_vote_terminal_action() {
+    let portal = RoomPortal::create()
+        .await
+        .unwrap_or_else(|error| panic!("create vote portal fixture: {error}"));
+    portal
+        .begin_observation(RoomObservationStart {
+            session_id: "agent-1",
+            turn_id: "turn-vote",
+            input_up_to_seq: 9,
+            durable_turn_generation: 2,
+            execution_id: "00000000-0000-4000-8000-000000000002",
+            room_view: "Room: General\n#9 Human: create a poll",
+            attachment_ids: &[],
+            attachment_ingress: None,
+            allowed_agent_ids: &[],
+            tabletop_tools: false,
+            tool_ingress: None,
+        })
+        .unwrap_or_else(|error| panic!("begin vote observation: {error}"));
+    let client = ()
+        .serve(StreamableHttpClientTransport::from_config(
+            StreamableHttpClientTransportConfig::with_uri(portal.endpoint())
+                .auth_header(portal.bearer_token()),
+        ))
+        .await
+        .unwrap_or_else(|error| panic!("connect vote portal MCP: {error}"));
+    assert_eq!(
+        call_tool(
+            &client,
+            "create_vote",
+            json!({"question": "Ship?", "options": ["Yes", "No"]}),
+        )
+        .await
+        .is_error,
+        Some(true)
+    );
+    assert_ne!(
+        call_tool(&client, "read_discussion", json!({}))
+            .await
+            .is_error,
+        Some(true)
+    );
+    let staged = call_tool(
+        &client,
+        "create_vote",
+        json!({
+            "question": "Ship the common tools?",
+            "options": ["Yes", "No"],
+            "duration_seconds": 300
+        }),
+    )
+    .await;
+    assert_ne!(staged.is_error, Some(true));
+    let command = VoteCommand::from_payload(&json!({
+        "kind": "vote",
+        "vote_question": "Ship the common tools?",
+        "vote_options": ["Yes", "No"],
+        "vote_duration_seconds": 300
+    }))
+    .unwrap_or_else(|error| panic!("parse expected staged vote: {error}"));
+    assert_eq!(
+        portal
+            .finish_observation("turn-vote", 9)
+            .unwrap_or_else(|error| panic!("finish vote observation: {error}")),
+        ProviderTurnOutcome::Vote { command }
+    );
+    stage_vote_action(
+        &portal,
+        &client,
+        "turn-cast",
+        "00000000-0000-4000-8000-000000000003",
+        "cast_vote",
+        json!({"vote_id": "poll-1", "choice": "yes"}),
+        json!({"kind": "vote_cast", "vote_id": "poll-1", "vote_choice": "yes"}),
+    )
+    .await;
+    stage_vote_action(
+        &portal,
+        &client,
+        "turn-withdraw",
+        "00000000-0000-4000-8000-000000000004",
+        "withdraw_vote",
+        json!({"vote_id": "poll-1"}),
+        json!({"kind": "vote_withdraw", "vote_id": "poll-1"}),
+    )
+    .await;
+    stage_vote_action(
+        &portal,
+        &client,
+        "turn-close",
+        "00000000-0000-4000-8000-000000000005",
+        "close_vote",
+        json!({"vote_id": "poll-1"}),
+        json!({"kind": "vote_close", "vote_id": "poll-1"}),
+    )
+    .await;
+    let _ = client.cancel().await;
+}
+
+async fn stage_vote_action(
+    portal: &RoomPortal,
+    client: &rmcp::service::RunningService<rmcp::RoleClient, ()>,
+    turn_id: &str,
+    execution_id: &str,
+    tool: &'static str,
+    arguments: serde_json::Value,
+    expected_payload: serde_json::Value,
+) {
+    portal
+        .begin_observation(RoomObservationStart {
+            session_id: "agent-1",
+            turn_id,
+            input_up_to_seq: 10,
+            durable_turn_generation: 3,
+            execution_id,
+            room_view: "Room: General\n#10 Human: continue the poll",
+            attachment_ids: &[],
+            attachment_ingress: None,
+            allowed_agent_ids: &[],
+            tabletop_tools: false,
+            tool_ingress: None,
+        })
+        .unwrap_or_else(|error| panic!("begin {tool} observation: {error}"));
+    assert_ne!(
+        call_tool(client, "read_discussion", json!({}))
+            .await
+            .is_error,
+        Some(true)
+    );
+    assert_ne!(
+        call_tool(client, tool, arguments).await.is_error,
+        Some(true)
+    );
+    let command = VoteCommand::from_payload(&expected_payload)
+        .unwrap_or_else(|error| panic!("parse expected {tool}: {error}"));
+    assert_eq!(
+        portal
+            .finish_observation(turn_id, 10)
+            .unwrap_or_else(|error| panic!("finish {tool} observation: {error}")),
+        ProviderTurnOutcome::Vote { command }
+    );
 }
 
 #[tokio::test]

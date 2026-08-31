@@ -51,6 +51,10 @@ fn thinking_tool_transaction_preserves_exact_authority() {
     assert!(allowed_tool("read_discussion", false));
     assert!(allowed_tool("search_messages", false));
     assert!(allowed_tool("read_message_context", false));
+    assert!(allowed_tool("create_vote", false));
+    assert!(allowed_tool("cast_vote", false));
+    assert!(allowed_tool("withdraw_vote", false));
+    assert!(allowed_tool("close_vote", false));
     assert!(!allowed_tool("read_attachment", true));
     assert!(!allowed_tool("roll_dice", false));
     assert!(allowed_tool("roll_dice", true));

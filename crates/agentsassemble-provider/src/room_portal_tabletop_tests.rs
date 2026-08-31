@@ -52,7 +52,10 @@ async fn reservation_first_orders_random_tool_before_terminal_action() {
     assert_eq!(
         names,
         BTreeSet::from([
+            "cast_vote".to_owned(),
             "choose_random".to_owned(),
+            "close_vote".to_owned(),
+            "create_vote".to_owned(),
             "decline_to_speak".to_owned(),
             "publish_message".to_owned(),
             "read_attachment".to_owned(),
@@ -60,6 +63,7 @@ async fn reservation_first_orders_random_tool_before_terminal_action() {
             "read_message_context".to_owned(),
             "roll_dice".to_owned(),
             "search_messages".to_owned(),
+            "withdraw_vote".to_owned(),
         ])
     );
     let read = call_tool(client.as_ref(), "read_discussion", json!({})).await;

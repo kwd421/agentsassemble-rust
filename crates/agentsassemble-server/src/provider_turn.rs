@@ -259,6 +259,16 @@ async fn commit_completed_provider_result(
                 )
                 .await
         }
+        ProviderTurnOutcome::Vote { command } => {
+            store
+                .complete_agent_vote_turn(
+                    &start.room_id,
+                    &start.session_id,
+                    turn_authority(start, result),
+                    command.clone(),
+                )
+                .await
+        }
     }
 }
 

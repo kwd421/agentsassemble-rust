@@ -248,7 +248,7 @@ impl DeepSeekDriver {
         let terminal_action = matches!(
             call.function.name.as_str(),
             "publish_message" | "decline_to_speak"
-        );
+        ) || crate::room_portal::is_vote_tool(&call.function.name);
         let replay_unsafe =
             terminal_action || matches!(call.function.name.as_str(), "roll_dice" | "choose_random");
         let previous_effect_uncertain = self.turn_effect_uncertain;
@@ -519,14 +519,16 @@ fn api_tools(tools: &[Tool], random_tools: bool) -> Vec<Value> {
 }
 
 fn allowed_tool(name: &str, random_tools: bool) -> bool {
-    matches!(
-        name,
-        "read_discussion"
-            | "search_messages"
-            | "read_message_context"
-            | "publish_message"
-            | "decline_to_speak"
-    ) || (random_tools && matches!(name, "roll_dice" | "choose_random"))
+    crate::room_portal::is_vote_tool(name)
+        || matches!(
+            name,
+            "read_discussion"
+                | "search_messages"
+                | "read_message_context"
+                | "publish_message"
+                | "decline_to_speak"
+        )
+        || (random_tools && matches!(name, "roll_dice" | "choose_random"))
 }
 
 fn validate_tool_catalog(tools: &[Tool]) -> Result<(), DriverError> {
@@ -544,6 +546,7 @@ fn validate_tool_catalog(tools: &[Tool]) -> Result<(), DriverError> {
         "choose_random",
     ]
     .into_iter()
+    .chain(crate::room_portal::VOTE_TOOL_NAMES)
     .all(|name| names.contains(name))
     .then_some(())
     .ok_or(PORTAL_UNAVAILABLE)
