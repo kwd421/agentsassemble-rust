@@ -3,6 +3,7 @@ use std::{
     path::{Path, PathBuf},
     time::Duration,
 };
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 use agentsassemble_domain::DurableAgentSession;
 
@@ -412,6 +413,77 @@ async fn codex_code_mode_host_stays_in_the_guardian_process_group() {
         .shutdown()
         .await
         .unwrap_or_else(|error| panic!("shutdown code-mode host fixture owner: {error}"));
+}
+
+#[tokio::test]
+async fn codex_staged_bundle_outlives_stopped_launcher_readiness() {
+    let _serial = RUNTIME_TEST_LOCK.lock().await;
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create staged bundle fixture: {error}"));
+    let (session, _arguments_report, _host_pid_report) =
+        code_mode_host_fixture(directory.path()).await;
+    let barrier_path = directory.path().join("launcher-barrier.sock");
+    let listener = tokio::net::UnixListener::bind(&barrier_path)
+        .unwrap_or_else(|error| panic!("bind launcher barrier: {error}"));
+    let guardian =
+        crate::guardian::GuardianLaunch::test_harness_with_launcher_barrier(barrier_path.clone())
+            .unwrap_or_else(|error| panic!("bind guarded launcher fixture: {error}"));
+    let adapter = ProviderAdapter::with_guardian_launch(guardian);
+    let start_adapter = adapter.clone();
+    let start_session = session.clone();
+    let start = tokio::spawn(async move { start_adapter.start(&start_session).await });
+
+    let (stream, _) = listener
+        .accept()
+        .await
+        .unwrap_or_else(|error| panic!("accept launcher barrier: {error}"));
+    let mut stream = BufReader::new(stream);
+    let mut report = String::new();
+    stream
+        .read_line(&mut report)
+        .await
+        .unwrap_or_else(|error| panic!("read launcher report: {error}"));
+    let (provider, companion): (String, Option<String>) = serde_json::from_str(&report)
+        .unwrap_or_else(|error| panic!("decode launcher report: {error}"));
+    assert!(Path::new(&provider).is_file());
+    assert!(
+        companion
+            .as_deref()
+            .is_some_and(|path| Path::new(path).is_file())
+    );
+    stream
+        .get_mut()
+        .write_all(b"continue\n")
+        .await
+        .unwrap_or_else(|error| panic!("release launcher barrier: {error}"));
+
+    let started = start
+        .await
+        .unwrap_or_else(|error| panic!("join staged bundle start: {error}"))
+        .unwrap_or_else(|error| panic!("start staged bundle fixture: {error}"));
+    adapter
+        .stop(
+            &session.public.room_id,
+            &session.public.session_id,
+            &started.runtime_handle_id,
+            &started.runtime_owner_id,
+            &started.runtime_lease_token,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("stop staged bundle fixture: {error}"));
+    adapter
+        .release_confirmed_stop(
+            &session.public.room_id,
+            &session.public.session_id,
+            &started.runtime_handle_id,
+            &started.runtime_owner_id,
+            &started.runtime_lease_token,
+        )
+        .await;
+    adapter
+        .shutdown()
+        .await
+        .unwrap_or_else(|error| panic!("shutdown staged bundle fixture owner: {error}"));
 }
 
 async fn code_mode_host_fixture(root: &Path) -> (DurableAgentSession, PathBuf, PathBuf) {

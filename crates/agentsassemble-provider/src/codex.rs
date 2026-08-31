@@ -15,8 +15,6 @@ use tokio::{
 };
 use tokio_util::codec::{FramedRead, LinesCodec};
 
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
-use crate::filesystem::BoundExecutable;
 #[cfg(not(unix))]
 use crate::process::sanitize_environment;
 use crate::{
@@ -24,7 +22,7 @@ use crate::{
         checked_provider_session_id, observed_model_id_from_response,
         provider_session_id_from_response, provider_session_mismatch, provider_session_unconfirmed,
     },
-    filesystem::bind_codex_executable,
+    filesystem::{BoundExecutable, bind_codex_executable},
     launch_error::DriverLaunchError,
     room_portal::{ProviderTurnOutcome, RoomObservationStart, RoomPortal, RoomPortalError},
     runtime::{
@@ -52,7 +50,6 @@ struct PendingRequest {
 pub(crate) struct CodexDriver {
     #[cfg(not(unix))]
     child: Box<dyn ChildWrapper>,
-    #[cfg(not(any(target_os = "linux", target_os = "android")))]
     _executable_guard: BoundExecutable,
     #[cfg(unix)]
     process_group: UnixProcessCustody,
@@ -214,7 +211,6 @@ impl CodexDriver {
         let stderr_task = tokio::spawn(drain_stderr(pipes.stderr));
         Ok(Self {
             process_group,
-            #[cfg(not(any(target_os = "linux", target_os = "android")))]
             _executable_guard: executable,
             stdin: pipes.stdin,
             stdout: FramedRead::new(

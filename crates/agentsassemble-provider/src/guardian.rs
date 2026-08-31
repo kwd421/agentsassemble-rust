@@ -29,6 +29,8 @@ const TEST_TOKEN_ENV: &str = "AGENTSASSEMBLE_INTERNAL_GUARDIAN_TOKEN";
 const TEST_FORK_POLICY_ENV: &str = "AGENTSASSEMBLE_INTERNAL_PROVIDER_FORK_POLICY";
 #[cfg(test)]
 const TEST_PRE_ANCHOR_SIGNAL_ENV: &str = "AGENTSASSEMBLE_INTERNAL_PRE_ANCHOR_SIGNAL";
+#[cfg(test)]
+const TEST_LAUNCHER_BARRIER_ENV: &str = "AGENTSASSEMBLE_INTERNAL_LAUNCHER_BARRIER";
 const PROVIDER_STDIN_FD: i32 = 4;
 const PROVIDER_STDOUT_FD: i32 = 5;
 const PROVIDER_STDERR_FD: i32 = 6;
@@ -204,6 +206,8 @@ pub(crate) struct GuardianLaunch {
     test_harness: bool,
     #[cfg(test)]
     pre_anchor_signal: Option<PathBuf>,
+    #[cfg(test)]
+    launcher_barrier: Option<PathBuf>,
 }
 
 impl GuardianLaunch {
@@ -213,6 +217,8 @@ impl GuardianLaunch {
             test_harness: false,
             #[cfg(test)]
             pre_anchor_signal: None,
+            #[cfg(test)]
+            launcher_barrier: None,
         })
     }
 
@@ -222,6 +228,7 @@ impl GuardianLaunch {
             executable: Arc::new(bind_helper_executable_sync(&reexecution_path()?)?),
             test_harness: true,
             pre_anchor_signal: None,
+            launcher_barrier: None,
         })
     }
 
@@ -229,6 +236,13 @@ impl GuardianLaunch {
     pub(crate) fn test_harness_with_pre_anchor_signal(signal: PathBuf) -> io::Result<Self> {
         let mut launch = Self::test_harness()?;
         launch.pre_anchor_signal = Some(signal);
+        Ok(launch)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn test_harness_with_launcher_barrier(barrier: PathBuf) -> io::Result<Self> {
+        let mut launch = Self::test_harness()?;
+        launch.launcher_barrier = Some(barrier);
         Ok(launch)
     }
 
@@ -266,6 +280,10 @@ impl GuardianLaunch {
         #[cfg(test)]
         if let Some(signal) = &self.pre_anchor_signal {
             command.env(TEST_PRE_ANCHOR_SIGNAL_ENV, signal);
+        }
+        #[cfg(test)]
+        if let Some(barrier) = &self.launcher_barrier {
+            command.env(TEST_LAUNCHER_BARRIER_ENV, barrier);
         }
         let provider_launch = ProviderLaunch {
             executable: provider.launch_path().to_owned(),
@@ -349,6 +367,10 @@ impl GuardianLaunch {
             lease_path,
             lease_token,
         );
+        #[cfg(test)]
+        if let Some(barrier) = &self.launcher_barrier {
+            command.env(TEST_LAUNCHER_BARRIER_ENV, barrier);
+        }
         command
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -511,9 +533,10 @@ pub(crate) fn run_test_helper_if_requested() -> Option<i32> {
     };
     let launch = match mode {
         HelperMode::Guardian => {
-            let Ok(launch) = GuardianLaunch::test_harness() else {
+            let Ok(mut launch) = GuardianLaunch::test_harness() else {
                 return Some(1);
             };
+            launch.launcher_barrier = env::var_os(TEST_LAUNCHER_BARRIER_ENV).map(PathBuf::from);
             Some(launch)
         }
         HelperMode::Anchor | HelperMode::ProviderLauncher => None,
@@ -700,6 +723,8 @@ fn run_provider_launcher(lease_token: &str) -> io::Result<()> {
     }
     let pid = rustix::process::getpid();
     rustix::process::kill_process(pid, Signal::STOP)?;
+    #[cfg(test)]
+    wait_at_launcher_barrier(&launch)?;
     let code_mode_host = launch
         .codex_code_mode_host
         .as_deref()
@@ -756,6 +781,32 @@ fn run_provider_launcher(lease_token: &str) -> io::Result<()> {
     }
     let error = command.exec();
     Err(error)
+}
+
+#[cfg(test)]
+fn wait_at_launcher_barrier(launch: &ProviderLaunch) -> io::Result<()> {
+    use std::io::{BufRead, BufReader};
+    use std::os::unix::net::UnixStream;
+
+    let Some(path) = env::var_os(TEST_LAUNCHER_BARRIER_ENV) else {
+        return Ok(());
+    };
+    let mut stream = UnixStream::connect(path)?;
+    serde_json::to_writer(
+        &mut stream,
+        &(
+            launch.executable.as_str(),
+            launch.codex_code_mode_host.as_deref(),
+        ),
+    )?;
+    stream.write_all(b"\n")?;
+    let mut response = String::new();
+    BufReader::new(stream).read_line(&mut response)?;
+    if response == "continue\n" {
+        Ok(())
+    } else {
+        Err(io::Error::other("provider launcher barrier was rejected"))
+    }
 }
 
 fn wait_for_launcher_stop(raw_pid: u32) -> io::Result<()> {
