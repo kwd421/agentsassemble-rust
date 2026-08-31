@@ -763,6 +763,7 @@ mod scheduler;
 pub(crate) mod support;
 
 use finalization::{ProviderTurnDisposition, ProviderTurnFinalization};
+pub(crate) use scheduler::remove_pending_input_reference;
 use scheduler::{assign_available_pending, route_message};
 use support::{
     agent_final_event, clear_active_turn_fields, error_event, insert_event, load_active_room,

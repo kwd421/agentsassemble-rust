@@ -16,6 +16,7 @@ use crate::{
     message_attachments::{delete_bound_message_attachments, message_attachments_from_event},
     message_pins::remove_lobby_message_pin,
     message_search_index::{remove_lobby_message_index, replace_lobby_message_index},
+    room_turns::remove_pending_input_reference,
     room_turns::support::{
         insert_event, load_event, load_participant, next_sequence, replace_event,
     },
@@ -187,6 +188,7 @@ async fn delete_message(
         redact_vote_transitions(transaction, target, now).await?;
         delete_vote_projection(transaction, &principal.room_id, &target.id, target.seq).await?;
     }
+    remove_pending_input_reference(transaction, &principal.room_id, &target.id).await?;
     let updated = prepare_deleted_message(target, kind, now);
     replace_event(transaction, &updated).await?;
     let mutation = prepare_message_deleted_event(principal, target, sequence, now);

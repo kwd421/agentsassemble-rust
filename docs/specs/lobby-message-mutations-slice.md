@@ -46,8 +46,10 @@ Rust improves the original post-commit cleanup boundary without changing reachab
 bound lobby attachment belongs to exactly one `(room_id, event_seq)` row and cannot be shared.
 Therefore deletion verifies the target event's canonical attachment metadata, deletes only those
 exact bound rows, removes the exact search record and pin, updates/redacts affected event rows,
-removes the vote projection when applicable, appends the public mutation, and stores the command
-result in one SQLite transaction. Failure commits none of them. Pending uploads, profile images,
+removes the vote projection when applicable, removes that exact event only from Agent Session
+`pending_inputs`, appends the public mutation, and stores the command result in one SQLite
+transaction. An `inflight_inputs` reference has already crossed the provider boundary and is not
+cancelled or reinvoked. Failure commits none of these changes. Pending uploads, profile images,
 prejoin avatars, room appearance, other messages, and any referenced asset outside that exact
 binding are untouched. No cleanup retry, orphan sweep, reconciliation task, or silent failure is
 needed.
@@ -78,8 +80,9 @@ event, redaction, deletion, budget reservation, or publication.
 3. Edit atomically updates the target and its search projection, appends one exact mutation, records
    one result, and never advances the room floor. Exact replay is inert and changed replay conflicts.
 4. Delete atomically tombstones the target, removes its pin and search result, removes only its bound
-   attachment rows, and appends one exact mutation. Poll deletion additionally removes current vote
-   state/ballots and redacts all linked transition records without leaking identity or choice.
+   attachment rows and pending Agent Session queue references, and appends one exact mutation. Poll
+   deletion additionally removes current vote state/ballots and redacts all linked transition
+   records without leaking identity or choice. An already-inflight observation remains untouched.
 5. Snapshot, paginated history, search/context, pins, attachment reads, vote summary, live events,
    reload, and normal restart all agree on the same post-mutation state. Deleted attachment reads and
    deleted poll summaries fail closed; unrelated assets and messages remain byte-for-byte reachable.
@@ -104,3 +107,22 @@ event, redaction, deletion, budget reservation, or publication.
   authority; then `make verify`;
 - isolated packaged local and remote browser flows, normal restart, measured CPU/memory/disk/latency,
   exact resource cleanup, and threshold-based critical-web plus Daybreaker manual source review.
+
+## Pending-input lifecycle correction
+
+- Prior threat: manual cross-review traced a busy Agent Session whose queued ordered or ambient
+  event was later deleted. The tombstone remained referenced by `pending_inputs`; when the active
+  provider turn completed, strict queue validation rejected the contentless target and rolled back
+  that unrelated completion. The retained provider result could then be retried by reconciliation.
+- Intent and owner: the room-turn scheduler remains the sole pending-queue owner and exposes one
+  narrow operation that removes an exact event ID from every room session's pending queue. Message
+  deletion invokes it inside the existing mutation transaction before tombstoning. It deliberately
+  leaves `inflight_inputs` unchanged because those observations already crossed the provider effect
+  boundary; deleting history neither cancels nor reinvokes them.
+- Preserved contracts and verification: target authorization, tombstone/search/pin/attachment/vote
+  ownership, command replay, active-turn authority, and publication ordering are unchanged. An
+  injected command-result failure proved the queued references roll back with the rest of deletion;
+  successful deletion removed both ordered and ambient pending references, after which the existing
+  provider turn completed once with no replacement assignment. The focused test and warning-denied
+  persistence Clippy passed. No fallback, polling, heartbeat, timer, retry, reconciliation cleanup,
+  cache, or background task was added.

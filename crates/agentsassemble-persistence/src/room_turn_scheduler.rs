@@ -50,30 +50,35 @@ pub(super) async fn route_message(
     Ok(())
 }
 
+/// Removes one deleted event only from queues that have not crossed the provider boundary.
+pub(crate) async fn remove_pending_input_reference(
+    transaction: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    event_id: &str,
+) -> Result<(), PersistenceError> {
+    for mut session in load_room_sessions(transaction, room_id).await? {
+        let original_len = session.pending_inputs.len();
+        session
+            .pending_inputs
+            .retain(|input| input.event_id != event_id);
+        if session.pending_inputs.len() == original_len {
+            continue;
+        }
+        save_session(transaction, &session).await?;
+    }
+    Ok(())
+}
+
 /// Assigns every currently available session allowed by the current floor mode.
 pub(super) async fn assign_available_pending(
     transaction: &mut Transaction<'_, Sqlite>,
     room: &Room,
     settings: &RoomSettings,
 ) -> Result<Vec<PreparedAssignment>, PersistenceError> {
-    let rows = sqlx::query(
-        "SELECT session_json FROM agent_sessions WHERE room_id = ? ORDER BY session_id LIMIT 65",
-    )
-    .bind(&room.room_id)
-    .fetch_all(&mut **transaction)
-    .await?;
-    if rows.len() > 64 {
-        return Err(rejected(
-            "agent_session_capacity",
-            "This room exceeds its Agent Session capacity.",
-        ));
-    }
     let mut any_active = false;
     let mut candidates = Vec::new();
     let mut empty_schedule_requests = Vec::new();
-    for row in rows {
-        let session: DurableAgentSession =
-            serde_json::from_str(row.get::<String, _>("session_json").as_str())?;
+    for session in load_room_sessions(transaction, &room.room_id).await? {
         any_active |= turn_authority_is_active(&session)?;
         if !session_is_assignable(&session) {
             continue;
@@ -273,10 +278,26 @@ async fn route_sessions(
     transaction: &mut Transaction<'_, Sqlite>,
     event: &RoomEvent,
 ) -> Result<Vec<(DurableAgentSession, Participant)>, PersistenceError> {
+    let room_sessions = load_room_sessions(transaction, &event.room_id).await?;
+    let mut sessions = Vec::with_capacity(room_sessions.len());
+    for session in room_sessions {
+        let _ = turn_authority_is_active(&session)?;
+        validate_provider_cursor(transaction, &session).await?;
+        let participant =
+            load_participant(transaction, &event.room_id, &session.public.participant_id).await?;
+        sessions.push((session, participant));
+    }
+    Ok(sessions)
+}
+
+async fn load_room_sessions(
+    transaction: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+) -> Result<Vec<DurableAgentSession>, PersistenceError> {
     let rows = sqlx::query(
         "SELECT session_json FROM agent_sessions WHERE room_id = ? ORDER BY session_id LIMIT 65",
     )
-    .bind(&event.room_id)
+    .bind(room_id)
     .fetch_all(&mut **transaction)
     .await?;
     if rows.len() > 64 {
@@ -285,17 +306,12 @@ async fn route_sessions(
             "This room exceeds its Agent Session capacity.",
         ));
     }
-    let mut sessions = Vec::with_capacity(rows.len());
-    for row in rows {
-        let session: DurableAgentSession =
-            serde_json::from_str(row.get::<String, _>("session_json").as_str())?;
-        let _ = turn_authority_is_active(&session)?;
-        validate_provider_cursor(transaction, &session).await?;
-        let participant =
-            load_participant(transaction, &event.room_id, &session.public.participant_id).await?;
-        sessions.push((session, participant));
-    }
-    Ok(sessions)
+    rows.into_iter()
+        .map(|row| {
+            serde_json::from_str(row.get::<String, _>("session_json").as_str())
+                .map_err(PersistenceError::from)
+        })
+        .collect()
 }
 
 fn is_actor(session: &DurableAgentSession, event: &RoomEvent) -> bool {
