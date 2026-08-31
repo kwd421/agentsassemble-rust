@@ -593,7 +593,8 @@ fn run_guardian(
         std::thread::sleep(Duration::from_millis(500));
     }
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    rustix::process::set_child_subreaper(Some(rustix::process::getpid()))?;
+    rustix::process::set_child_subreaper(Some(rustix::process::getpid()))
+        .map_err(io::Error::from)?;
 
     let mut command = launch.anchor_command(lease_path, lease_token)?;
     command
@@ -897,6 +898,8 @@ fn terminate_runtime(
     fork_policy: ProviderForkPolicy,
     #[cfg(target_os = "macos")] provider_history: Option<&mut MacProviderHistory>,
 ) -> Result<(), GuardianCleanupFailure> {
+    #[cfg(not(target_os = "macos"))]
+    let _ = fork_policy;
     let pid = i32::try_from(raw_pid)
         .ok()
         .and_then(Pid::from_raw)
