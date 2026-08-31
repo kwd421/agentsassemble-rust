@@ -63,6 +63,7 @@ export default function LobbyView({
   mentionables: roomMentionables,
   canManageRoom = true,
   canPostMessages = true,
+  canModifyMessages = false,
   postingMode = "host",
   composerDisabledReason = "",
   membersOpen,
@@ -101,6 +102,7 @@ export default function LobbyView({
   mentionables?: Mentionable[];
   canManageRoom?: boolean;
   canPostMessages?: boolean;
+  canModifyMessages?: boolean;
   postingMode?: RoomPostingMode;
   composerDisabledReason?: string;
   membersOpen?: boolean;
@@ -676,14 +678,14 @@ export default function LobbyView({
                   void setPinned(eventId, !pinnedEventIds.has(eventId));
                 }}
                 canEdit={
-                  canPostMessages &&
+                  canModifyMessages &&
                   !event.message_deleted &&
                   event.kind === "message" &&
                   event.actor_type === "human" &&
                   event.actor_id === viewerParticipantId
                 }
                 canDelete={
-                  canPostMessages &&
+                  canModifyMessages &&
                   !event.message_deleted &&
                   ["message", "vote"].includes(event.kind) &&
                   (

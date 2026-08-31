@@ -439,6 +439,10 @@ export default function AppView({ controller }: { controller: AppController }) {
               viewerParticipantId={guestSession?.agentId || "operator-local"}
               canManageRoom={!guestLocked && !activeRoomDisconnected}
               canPostMessages={lobbyPostingState.canPost}
+              canModifyMessages={
+                !activeRoomDisconnected &&
+                Boolean(canonicalRoom.capabilities["message.modify"])
+              }
               postingMode={lobbyPostingState.mode}
               composerDisabledReason={
                 guestExpired ? GUEST_SESSION_EXPIRED_MESSAGE : lobbyPostingState.disabledReason
