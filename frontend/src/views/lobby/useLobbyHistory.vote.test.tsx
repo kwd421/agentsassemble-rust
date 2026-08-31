@@ -19,7 +19,7 @@ const room: RoomDockItem = {
   tone: "fresh",
 };
 
-function event(id: string, kind = "message"): LobbyEvent {
+function event(id: string, kind = "message", voteId = "vote-1"): LobbyEvent {
   return {
     id,
     kind,
@@ -28,7 +28,7 @@ function event(id: string, kind = "message"): LobbyEvent {
     side: "mine",
     created_at: "2026-08-31T00:00:00Z",
     flow_meeting_id: room.meetingId,
-    ...(kind === "vote" || kind === "vote_cast" ? { vote_id: "vote-1" } : {}),
+    ...(kind === "vote" || kind === "vote_cast" ? { vote_id: voteId } : {}),
   };
 }
 
@@ -55,11 +55,15 @@ describe("useLobbyHistory vote refresh ownership", () => {
     act(() => hook.result.current.showHistoryWindow([historicalPoll]));
     act(() => receive([
       event("live-message"),
-      event("vote-transition", "vote_cast"),
+      event("vote-transition-1", "vote_cast"),
+      event("irrelevant-transition", "vote_cast", "vote-outside-window"),
+      event("vote-transition-2", "vote_cast"),
     ]));
 
     expect(hook.result.current.historyWindowActive).toBe(true);
     expect(hook.result.current.visibleEvents.map(({ id }) => id)).toEqual(["vote-1"]);
-    expect(hook.result.current.voteRevisions["vote-1"]).toContain("vote-transition");
+    expect(hook.result.current.voteRevisions).toEqual({
+      "vote-1": "vote-transition-2",
+    });
   });
 });

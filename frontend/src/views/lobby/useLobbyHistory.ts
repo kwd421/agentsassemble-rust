@@ -62,6 +62,7 @@ export function useLobbyHistory({
   const loadingOlderRoomRef = useRef("");
   const historyLoadSuppressedUntilRef = useRef(0);
   const historyWindowActiveRef = useRef(false);
+  const historicalVoteIdsRef = useRef<Set<string>>(new Set());
   const prependAnchorRef = useRef<{
     roomId: string;
     eventId: string;
@@ -76,6 +77,9 @@ export function useLobbyHistory({
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [historyLoadError, setHistoryLoadError] = useState(false);
   const [historyWindowActive, setHistoryWindowActive] = useState(false);
+  const [historicalVoteRevisions, setHistoricalVoteRevisions] = useState<
+    Record<string, string>
+  >({});
   const loaded = loadedRoomId === activeRoom.id;
   if (historyRoomRef.current !== activeRoom.id) {
     historyRoomRef.current = activeRoom.id;
@@ -83,6 +87,7 @@ export function useLobbyHistory({
     initialBackfillFailedRoomRef.current = "";
     prependAnchorRef.current = null;
     historyWindowActiveRef.current = false;
+    historicalVoteIdsRef.current.clear();
   }
 
   const visibleEvents = useMemo(() => {
@@ -108,10 +113,12 @@ export function useLobbyHistory({
       ) {
         return;
       }
-      revisions[event.vote_id] = `${revisions[event.vote_id] || ""}|${event.id}`;
+      revisions[event.vote_id] = event.id;
     });
-    return revisions;
-  }, [activeRoom.meetingId, events]);
+    return historyWindowActive
+      ? { ...revisions, ...historicalVoteRevisions }
+      : revisions;
+  }, [activeRoom.meetingId, events, historicalVoteRevisions, historyWindowActive]);
 
   const updatePinnedToLatest = useCallback((nextPinned: boolean) => {
     pinnedToLatestRef.current = nextPinned;
@@ -121,7 +128,9 @@ export function useLobbyHistory({
   const scrollToLatest = useCallback(() => {
     if (historyWindowActiveRef.current) {
       historyWindowActiveRef.current = false;
+      historicalVoteIdsRef.current.clear();
       setHistoryWindowActive(false);
+      setHistoricalVoteRevisions({});
       setEvents(canonicalEvents || []);
       setHasMoreHistory(canonicalHasMoreHistory);
     }
@@ -272,6 +281,7 @@ export function useLobbyHistory({
     updatePinnedToLatest(true);
     setHistoryLoadError(false);
     setHistoryWindowActive(false);
+    setHistoricalVoteRevisions({});
   }, [activeRoom.id, updatePinnedToLatest]);
 
   useEffect(() => {
@@ -341,19 +351,33 @@ export function useLobbyHistory({
   ]);
 
   const handleStreamEvents = useCallback((incoming: LobbyEvent[]) => {
+    if (historyWindowActiveRef.current) {
+      const latest: Record<string, string> = {};
+      incoming.forEach((event) => {
+        if (
+          isVoteTransitionKind(event.kind) &&
+          event.vote_id &&
+          historicalVoteIdsRef.current.has(event.vote_id) &&
+          (!event.flow_meeting_id || event.flow_meeting_id === activeRoom.meetingId)
+        ) {
+          latest[event.vote_id] = event.id;
+        }
+      });
+      if (Object.keys(latest).length) {
+        setHistoricalVoteRevisions((previous) => ({ ...previous, ...latest }));
+      }
+      return;
+    }
     setEvents((previous) => {
-      const accepted = historyWindowActiveRef.current
-        ? incoming.filter((event) => isVoteTransitionKind(event.kind))
-        : incoming;
-      if (!accepted.length) return previous;
-      const next = mergeLobbyEvents(previous, accepted);
+      if (!incoming.length) return previous;
+      const next = mergeLobbyEvents(previous, incoming);
       if (next.length === previous.length) {
         const changed = next.some((event, index) => event !== previous[index]);
         return changed ? next : previous;
       }
       return next;
     });
-  }, []);
+  }, [activeRoom.meetingId]);
 
   useEffect(() => {
     if (!bindLobbyStream) return undefined;
@@ -362,19 +386,32 @@ export function useLobbyHistory({
 
   const handleLobbyPosted = useCallback((postedEvents: LobbyEvent[]) => {
     historyWindowActiveRef.current = false;
+    historicalVoteIdsRef.current.clear();
     setHistoryWindowActive(false);
+    setHistoricalVoteRevisions({});
     setEvents(mergeLobbyEvents(canonicalEvents || [], postedEvents));
     setHasMoreHistory(canonicalHasMoreHistory);
   }, [canonicalEvents, canonicalHasMoreHistory]);
 
   const showHistoryWindow = useCallback((historyEvents: LobbyEvent[]) => {
     historyWindowActiveRef.current = true;
+    historicalVoteIdsRef.current = new Set(
+      historyEvents
+        .filter(
+          (event) =>
+            event.kind === "vote" &&
+            (!event.flow_meeting_id || event.flow_meeting_id === activeRoom.meetingId)
+        )
+        .map((event) => event.vote_id || event.id)
+        .filter(Boolean)
+    );
     setHistoryWindowActive(true);
+    setHistoricalVoteRevisions({});
     setEvents(mergeLobbyEventsByCreatedAt([], historyEvents));
     setHasMoreHistory(false);
     setLoadedRoomId(activeRoom.id);
     updatePinnedToLatest(false);
-  }, [activeRoom.id, updatePinnedToLatest]);
+  }, [activeRoom.id, activeRoom.meetingId, updatePinnedToLatest]);
 
   const suppressAutomaticHistoryLoad = useCallback((durationMs = 1200) => {
     historyLoadSuppressedUntilRef.current = Date.now() + durationMs;

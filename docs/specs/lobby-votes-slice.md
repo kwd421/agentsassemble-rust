@@ -146,8 +146,10 @@ mount, explicit user refresh, or sequenced vote events—not polling.
   mutation authority remains on the Rust server. The UI adds no optimistic ballot state and stores
   only a privacy-minimized transition marker (vote ID, event ID/sequence, room, and timestamp) long
   enough to refresh the visible card; voter identity and choice are not copied into that marker.
-  Transition markers are filtered before display and message-count/backfill decisions. This accepts
-  one bounded marker per already-received transition instead of a polling task or a second cache.
+  Transition markers are filtered before display and message-count/backfill decisions. The normal
+  canonical history remains server-window-bounded. A fixed search-history window retains only the
+  latest event ID per poll actually displayed in that window and never merges transition records
+  into the displayed history.
 - Resource and security result: no HTTP request, interval, heartbeat, retry, task, or deadline worker
   was added. A manual review found that a successful local cast, withdrawal, or close initially read
   the summary once after its ACK and once again after the same durable sequenced event. Each read
@@ -155,9 +157,14 @@ mount, explicit user refresh, or sequenced vote events—not polling.
   post-write refresh owner; mount and explicit user refresh remain separate intentional reads. This
   removes one direct read per local transition without cache, debounce, timer, or optimistic state.
   A follow-up review found that the fixed message-search history window discarded every live event,
-  including that owner. The stream now keeps ordinary incoming messages out of the fixed window but
-  admits only privacy-minimized vote transition markers, so a poll shown in historical context still
-  refreshes without changing the visible history or retaining voter identity and choice.
+  including that owner. It initially admitted privacy-minimized transition markers, but later manual
+  review observed that each ballot replacement could append another marker and repeatedly copy the
+  growing array; the existing 14,400-command/minute room budget made an unbounded tab-memory and
+  latency path concrete. The fixed window now ignores ordinary messages and transition records,
+  keeps one latest revision token only for each poll already displayed, and ignores unrelated poll
+  IDs. A focused test proved two transitions collapse to the latest token while an outside poll and
+  ordinary message add no retained key or visible row. Historical polls still refresh without
+  polling, voter identity, choice, or unbounded event retention.
   Cross-review then followed that path to its earlier search owner and found a reachable privacy and
   functionality mismatch: the raw search index admitted contentless ballot transitions before public
   projection, so human search could expose the transition author's name and the shared Agent Session
