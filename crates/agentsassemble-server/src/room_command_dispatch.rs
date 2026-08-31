@@ -44,6 +44,9 @@ pub(crate) async fn execute_command(
             )
             .await
         }
+        RoomAction::AgentInterrupt => {
+            execute_agent_interrupt(store, provider_adapter, command).await
+        }
         RoomAction::AgentStart | RoomAction::AgentResume => {
             crate::room_agent_lifecycle_runtime::execute_agent_start(
                 store,
@@ -130,6 +133,37 @@ async fn execute_participant_mute(
     execution
 }
 
+async fn execute_agent_interrupt(
+    store: &SqliteStore,
+    provider_adapter: &ProviderAdapter,
+    command: &RoomCommand,
+) -> CommandExecution {
+    let mutation = match store
+        .execute_agent_interrupt(&command.principal, &command.request_id, &command.payload)
+        .await
+    {
+        Ok(mutation) => mutation,
+        Err(error) => return CommandExecution::transactional_failure(error),
+    };
+    let effect = mutation.interrupt_effect;
+    let mut execution = CommandExecution::success(mutation.outcome);
+    if let Some(effect) = effect {
+        match Box::pin(
+            crate::provider_turn_interrupt_runtime::apply_exact_interrupt(
+                store,
+                provider_adapter,
+                &effect,
+            ),
+        )
+        .await
+        {
+            Ok(commit) => execution.extend_turn_commit(commit),
+            Err(error) => log_agent_interrupt_error(&error, command, &effect),
+        }
+    }
+    execution
+}
+
 async fn execute_message_send(store: &SqliteStore, command: &RoomCommand) -> CommandExecution {
     match store
         .execute_message_with_turn(
@@ -187,6 +221,19 @@ fn log_interrupt_error(
         room_id = command.principal.room_id,
         session_id = effect.session_id,
         "participant mute committed; exact provider interrupt remains quarantined"
+    );
+}
+
+fn log_agent_interrupt_error(
+    error: &PersistenceError,
+    command: &RoomCommand,
+    effect: &ProviderTurnInterruptEffect,
+) {
+    tracing::error!(
+        code = persistence_error_code(error),
+        room_id = command.principal.room_id,
+        session_id = effect.session_id,
+        "explicit provider interrupt was accepted; exact effect remains owned by recovery"
     );
 }
 

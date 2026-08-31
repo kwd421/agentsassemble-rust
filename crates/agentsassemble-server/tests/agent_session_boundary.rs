@@ -40,6 +40,10 @@ mod agent_configuration;
 mod agent_create_start;
 
 #[cfg(unix)]
+#[path = "agent_session_boundary/agent_interrupt.rs"]
+mod agent_interrupt;
+
+#[cfg(unix)]
 #[path = "agent_session_boundary/lifecycle_resume_retry.rs"]
 mod lifecycle_resume_retry;
 
