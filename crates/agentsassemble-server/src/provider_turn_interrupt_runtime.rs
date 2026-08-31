@@ -65,6 +65,10 @@ pub(crate) async fn resume_exact_interrupt(
     provider_adapter: &ProviderAdapter,
     effect: &ProviderTurnInterruptEffect,
 ) -> Result<Option<AgentTurnCommit>, PersistenceError> {
+    let authority = exact_authority(effect);
+    if !provider_adapter.owns_exact_turn(&authority).await {
+        return Ok(None);
+    }
     let claim = match store
         .claim_provider_turn_interrupt_recovery(effect, &Uuid::new_v4().to_string())
         .await

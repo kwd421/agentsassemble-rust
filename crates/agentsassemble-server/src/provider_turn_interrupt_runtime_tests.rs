@@ -39,6 +39,16 @@ async fn pre_slot_interrupt_hands_claim_to_recovery_without_ttl_wait() {
         .await
         .unwrap_or_else(|error| panic!("load handed-off interrupt: {error}"));
     assert_eq!(handed_off.phase, ProviderTurnEffectPhase::RecoveryRequired);
+    assert!(
+        Box::pin(super::resume_exact_interrupt(
+            &fixture.store,
+            &ProviderAdapter::new(),
+            &handed_off,
+        ))
+        .await
+        .unwrap_or_else(|error| panic!("skip unowned recovery candidate: {error}"))
+        .is_none()
+    );
     let recovery = fixture
         .store
         .claim_provider_turn_interrupt_recovery(&handed_off, "10000000-0000-4000-8000-000000000401")
