@@ -554,6 +554,9 @@ mod provider_turn_tests;
 #[path = "runtime_resident.rs"]
 mod resident;
 #[cfg(all(test, unix))]
+#[path = "runtime_resident_tests.rs"]
+mod resident_tests;
+#[cfg(all(test, unix))]
 #[path = "runtime_test_cleanup.rs"]
 mod test_cleanup;
 #[cfg(all(test, unix))]
