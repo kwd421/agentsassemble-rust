@@ -34,8 +34,16 @@ const MAX_TURN_ID_BYTES: usize = 128;
 const MAX_AGENT_IDS: usize = 64;
 pub(super) const MAX_MESSAGE_CHARS: usize = 12_000;
 const MAX_ROOM_TOOL_RESULTS: usize = 32;
-pub(crate) const VOTE_TOOL_NAMES: [&str; 4] =
-    ["create_vote", "cast_vote", "withdraw_vote", "close_vote"];
+pub(crate) const CREATE_VOTE_TOOL: &str = "create_vote";
+pub(crate) const CAST_VOTE_TOOL: &str = "cast_vote";
+pub(crate) const WITHDRAW_VOTE_TOOL: &str = "withdraw_vote";
+pub(crate) const CLOSE_VOTE_TOOL: &str = "close_vote";
+pub(crate) const VOTE_TOOL_NAMES: [&str; 4] = [
+    CREATE_VOTE_TOOL,
+    CAST_VOTE_TOOL,
+    WITHDRAW_VOTE_TOOL,
+    CLOSE_VOTE_TOOL,
+];
 
 pub(crate) fn is_vote_tool(name: &str) -> bool {
     VOTE_TOOL_NAMES.contains(&name)

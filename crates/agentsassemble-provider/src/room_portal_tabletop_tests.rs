@@ -42,30 +42,7 @@ async fn reservation_first_orders_random_tool_before_terminal_action() {
         .unwrap_or_else(|error| panic!("begin tabletop observation: {error}"));
     let client = Arc::new(connect(&portal).await);
     let control_client = connect(&portal).await;
-    let names = client
-        .list_all_tools()
-        .await
-        .unwrap_or_else(|error| panic!("list tabletop tools: {error}"))
-        .into_iter()
-        .map(|tool| tool.name.to_string())
-        .collect::<BTreeSet<_>>();
-    assert_eq!(
-        names,
-        BTreeSet::from([
-            "cast_vote".to_owned(),
-            "choose_random".to_owned(),
-            "close_vote".to_owned(),
-            "create_vote".to_owned(),
-            "decline_to_speak".to_owned(),
-            "publish_message".to_owned(),
-            "read_attachment".to_owned(),
-            "read_discussion".to_owned(),
-            "read_message_context".to_owned(),
-            "roll_dice".to_owned(),
-            "search_messages".to_owned(),
-            "withdraw_vote".to_owned(),
-        ])
-    );
+    assert_tabletop_tool_catalog(client.as_ref()).await;
     let read = call_tool(client.as_ref(), "read_discussion", json!({})).await;
     assert_ne!(read.is_error, Some(true));
 
@@ -128,6 +105,33 @@ async fn reservation_first_orders_random_tool_before_terminal_action() {
         .unwrap_or_else(|_| panic!("tabletop client references must be released"));
     let _ = client.cancel().await;
     let _ = control_client.cancel().await;
+}
+
+async fn assert_tabletop_tool_catalog(client: &RoomClient) {
+    let names = client
+        .list_all_tools()
+        .await
+        .unwrap_or_else(|error| panic!("list tabletop tools: {error}"))
+        .into_iter()
+        .map(|tool| tool.name.to_string())
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        names,
+        BTreeSet::from([
+            "cast_vote".to_owned(),
+            "choose_random".to_owned(),
+            "close_vote".to_owned(),
+            "create_vote".to_owned(),
+            "decline_to_speak".to_owned(),
+            "publish_message".to_owned(),
+            "read_attachment".to_owned(),
+            "read_discussion".to_owned(),
+            "read_message_context".to_owned(),
+            "roll_dice".to_owned(),
+            "search_messages".to_owned(),
+            "withdraw_vote".to_owned(),
+        ])
+    );
 }
 
 #[tokio::test]

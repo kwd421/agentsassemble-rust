@@ -30,7 +30,7 @@ use crate::guardian::GuardianLaunch;
 use crate::{
     filesystem::PrivateExecutable,
     room_attachment::{ProviderAttachment, attachment_from_tool_result},
-    room_portal::RoomPortalError,
+    room_portal::{RoomPortalError, is_vote_tool},
 };
 use command::helper_tool;
 pub(crate) use command::safe_room_command;
@@ -261,7 +261,7 @@ fn print_helper_help(
     let helper =
         absolute_helper_command(executable).map_err(|_| "room helper invocation is unavailable")?;
     println!(
-        "{helper} read | media <attachment-id> | search <query> [cursor] | context <event-id> | speak <message> | speak-to <agent-id> <message> | decline <reason> | roll <NdS+M> | choose <json-options>"
+        "{helper} read | media <attachment-id> | search <query> [cursor] | context <event-id> | speak <message> | speak-to <agent-id> <message> | decline <reason> | vote-create <json-definition> | vote-cast <vote-id> <choice> | vote-withdraw <vote-id> | vote-close <vote-id> | roll <NdS+M> | choose <json-options>"
     );
     Ok(())
 }
@@ -292,6 +292,8 @@ fn render_helper_result(
         print!("{content}");
     } else if tool == "decline_to_speak" {
         println!("{{\"declined\":true}}");
+    } else if is_vote_tool(tool) {
+        println!("room vote action staged");
     } else if matches!(
         tool,
         "search_messages" | "read_message_context" | "roll_dice" | "choose_random"

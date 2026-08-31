@@ -1,13 +1,21 @@
 use agentsassemble_domain::{
-    MAX_MESSAGE_SEARCH_CURSOR_BYTES, RoomRandomRequest, clean_message_search_query,
+    MAX_MESSAGE_SEARCH_CURSOR_BYTES, RoomRandomRequest, VoteCommand, clean_message_search_query,
     is_message_attachment_id, is_message_event_id,
 };
 use serde_json::{Value, json};
+
+use crate::{
+    room_portal::{CAST_VOTE_TOOL, CLOSE_VOTE_TOOL, CREATE_VOTE_TOOL, WITHDRAW_VOTE_TOOL},
+    room_portal_tool_contract::CreateVote,
+};
 
 pub(super) fn helper_tool(
     action: &str,
     mut arguments: impl Iterator<Item = String>,
 ) -> Result<(&'static str, Value), &'static str> {
+    if action.starts_with("vote-") {
+        return vote_tool(action, arguments);
+    }
     let (tool, payload) = match action {
         "read" if arguments.next().is_none() => ("read_discussion", json!({})),
         "media" => {
@@ -106,6 +114,90 @@ pub(super) fn helper_tool(
     Ok((tool, payload))
 }
 
+fn vote_tool(
+    action: &str,
+    mut arguments: impl Iterator<Item = String>,
+) -> Result<(&'static str, Value), &'static str> {
+    match action {
+        "vote-create" => {
+            let encoded = one_argument(
+                &mut arguments,
+                "usage: agentsassemble-room vote-create <json-definition>",
+            )?;
+            let input = serde_json::from_str::<CreateVote>(&encoded)
+                .map_err(|_| "vote definition must be one exact JSON object")?;
+            let domain_payload = json!({
+                "kind": "vote",
+                "vote_question": input.question,
+                "vote_options": input.options,
+                "vote_duration_seconds": input.duration_seconds,
+            });
+            validate_vote(&domain_payload)?;
+            Ok((
+                CREATE_VOTE_TOOL,
+                json!({
+                    "question": domain_payload["vote_question"],
+                    "options": domain_payload["vote_options"],
+                    "duration_seconds": domain_payload["vote_duration_seconds"],
+                }),
+            ))
+        }
+        "vote-cast" => {
+            let usage = "usage: agentsassemble-room vote-cast <vote-id> <choice>";
+            let vote_id = arguments.next().ok_or(usage)?;
+            let choice = arguments.next().ok_or(usage)?;
+            if arguments.next().is_some() {
+                return Err(usage);
+            }
+            validate_vote(&json!({
+                "kind": "vote_cast",
+                "vote_id": vote_id,
+                "vote_choice": choice,
+            }))?;
+            Ok((
+                CAST_VOTE_TOOL,
+                json!({"vote_id": vote_id, "choice": choice}),
+            ))
+        }
+        "vote-withdraw" | "vote-close" => {
+            let (usage, kind, tool) = if action == "vote-withdraw" {
+                (
+                    "usage: agentsassemble-room vote-withdraw <vote-id>",
+                    "vote_withdraw",
+                    WITHDRAW_VOTE_TOOL,
+                )
+            } else {
+                (
+                    "usage: agentsassemble-room vote-close <vote-id>",
+                    "vote_close",
+                    CLOSE_VOTE_TOOL,
+                )
+            };
+            let vote_id = one_argument(&mut arguments, usage)?;
+            validate_vote(&json!({"kind": kind, "vote_id": vote_id}))?;
+            Ok((tool, json!({"vote_id": vote_id})))
+        }
+        _ => Err("unsupported room helper command"),
+    }
+}
+
+fn one_argument(
+    arguments: &mut impl Iterator<Item = String>,
+    usage: &'static str,
+) -> Result<String, &'static str> {
+    let value = arguments.next().ok_or(usage)?;
+    if arguments.next().is_some() {
+        return Err(usage);
+    }
+    Ok(value)
+}
+
+fn validate_vote(payload: &Value) -> Result<(), &'static str> {
+    VoteCommand::from_payload(payload)
+        .map(|_| ())
+        .map_err(|_| "room vote action is invalid")
+}
+
 pub(crate) fn safe_room_command(command: &str, command_prefix: &str) -> bool {
     let Some(arguments) = command
         .strip_prefix(command_prefix)
@@ -125,7 +217,9 @@ pub(crate) fn safe_room_command(command: &str, command_prefix: &str) -> bool {
     match parts[0].as_str() {
         "help" | "read" => parts.len() == 1,
         "media" => parts.len() == 2 && is_message_attachment_id(&parts[1]),
-        "search" | "context" => helper_tool(parts[0].as_str(), parts[1..].iter().cloned()).is_ok(),
+        "search" | "context" | "vote-create" | "vote-cast" | "vote-withdraw" | "vote-close" => {
+            helper_tool(parts[0].as_str(), parts[1..].iter().cloned()).is_ok()
+        }
         "decline" => {
             parts.len() == 2
                 && matches!(
@@ -264,6 +358,70 @@ mod tests {
     }
 
     #[test]
+    fn vote_commands_map_to_the_common_roomportal_tools() {
+        let definition =
+            r#"{"question":"Ship the helper?","options":["Yes","No"],"duration_seconds":300}"#;
+        let (tool, payload) = helper_tool("vote-create", [definition.to_owned()].into_iter())
+            .unwrap_or_else(|error| panic!("parse vote-create helper command: {error}"));
+        assert_eq!(tool, "create_vote");
+        assert_eq!(
+            payload,
+            serde_json::json!({
+                "question": "Ship the helper?",
+                "options": ["Yes", "No"],
+                "duration_seconds": 300,
+            })
+        );
+
+        for (action, arguments, expected_tool, expected_payload) in [
+            (
+                "vote-cast",
+                vec!["poll-1".to_owned(), "Yes".to_owned()],
+                "cast_vote",
+                serde_json::json!({"vote_id": "poll-1", "choice": "Yes"}),
+            ),
+            (
+                "vote-withdraw",
+                vec!["poll-1".to_owned()],
+                "withdraw_vote",
+                serde_json::json!({"vote_id": "poll-1"}),
+            ),
+            (
+                "vote-close",
+                vec!["poll-1".to_owned()],
+                "close_vote",
+                serde_json::json!({"vote_id": "poll-1"}),
+            ),
+        ] {
+            let (tool, payload) = helper_tool(action, arguments.into_iter())
+                .unwrap_or_else(|error| panic!("parse {action} helper command: {error}"));
+            assert_eq!(tool, expected_tool);
+            assert_eq!(payload, expected_payload);
+        }
+
+        for (action, arguments) in [
+            (
+                "vote-create",
+                vec![r#"{"question":"No","options":["A","B"],"extra":true}"#.to_owned()],
+            ),
+            (
+                "vote-create",
+                vec![r#"{"question":"No","options":["A","B"],"duration_seconds":29}"#.to_owned()],
+            ),
+            (
+                "vote-cast",
+                vec!["poll-1".to_owned(), "Yes".to_owned(), "extra".to_owned()],
+            ),
+            ("vote-close", vec!["poll-1".to_owned(), "extra".to_owned()]),
+        ] {
+            assert!(
+                helper_tool(action, arguments.into_iter()).is_err(),
+                "invalid {action} helper command was accepted"
+            );
+        }
+    }
+
+    #[test]
     fn hook_allows_only_one_exact_room_helper_command() {
         let message = if cfg!(windows) {
             "\"hello room\""
@@ -290,6 +448,11 @@ mod tests {
         } else {
             "'old deployment'"
         };
+        let vote_definition = if cfg!(windows) {
+            r#"{\"question\":\"Ship?\",\"options\":[\"Yes\",\"No\"]}"#
+        } else {
+            r#"'{"question":"Ship?","options":["Yes","No"]}'"#
+        };
         let literal_pattern = if cfg!(windows) { "\"*\"" } else { "'*'" };
         for command in [
             format!("{HELPER} help"),
@@ -302,6 +465,10 @@ mod tests {
             format!("{HELPER} speak {message}"),
             format!("{HELPER} speak-to agent-2 {targeted_message}"),
             format!("{HELPER} decline duplicate"),
+            format!("{HELPER} vote-create {vote_definition}"),
+            format!("{HELPER} vote-cast poll-1 Yes"),
+            format!("{HELPER} vote-withdraw poll-1"),
+            format!("{HELPER} vote-close poll-1"),
             format!("{HELPER} roll {roll}"),
             format!("{HELPER} choose {choices}"),
         ] {
@@ -318,6 +485,10 @@ mod tests {
             format!("{HELPER} search {search_query} cursor extra"),
             format!("{HELPER} context {}", "x".repeat(129)),
             format!("{HELPER} context event-1 extra"),
+            format!("{HELPER} vote-create invalid-json"),
+            format!("{HELPER} vote-cast poll-1 Yes extra"),
+            format!("{HELPER} vote-withdraw poll-1 extra"),
+            format!("{HELPER} vote-close poll-1 extra"),
             if cfg!(windows) {
                 format!("{HELPER} speak ^& whoami")
             } else {

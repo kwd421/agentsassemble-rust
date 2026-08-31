@@ -18,6 +18,14 @@ const ROLL_ARGUMENT: &str = "\"<NdS±M>\"";
 const CHOOSE_ARGUMENT: &str = "'<json-options>'";
 #[cfg(windows)]
 const CHOOSE_ARGUMENT: &str = "<compact-json-options>";
+#[cfg(unix)]
+const VOTE_DEFINITION_ARGUMENT: &str = "'<json-definition>'";
+#[cfg(windows)]
+const VOTE_DEFINITION_ARGUMENT: &str = "<compact-json-definition>";
+#[cfg(unix)]
+const VOTE_CHOICE_ARGUMENT: &str = "'<choice>'";
+#[cfg(windows)]
+const VOTE_CHOICE_ARGUMENT: &str = "\"<choice>\"";
 
 pub(super) fn terminal_prompt(
     request: &ProviderTurnRequest,
@@ -51,8 +59,11 @@ pub(super) fn terminal_prompt(
                 " To search older room messages, run `{helper} search {SEARCH_ARGUMENT}`; pass the returned `next_cursor` as a second argument for the next page, and run `{helper} context <event-id>` to read one result's bounded context."
             )
         });
+    let vote_instruction = format!(
+        " To create or update a room poll, finish with exactly one `{helper} vote-create {VOTE_DEFINITION_ARGUMENT}`, `{helper} vote-cast <vote-id> {VOTE_CHOICE_ARGUMENT}`, `{helper} vote-withdraw <vote-id>`, or `{helper} vote-close <vote-id>` command. A vote definition is one compact JSON object with `question`, `options`, and optional `duration_seconds`."
+    );
     format!(
-        "{}\n\n<agentsassemble-transport turn=\"{}\" launch=\"{transcript_nonce}\">Antigravity room transport: first run `{helper} help`, then run `{helper} read`.{media_instruction}{history_instruction}{random_instruction} Finish with exactly one `{helper} speak {MESSAGE_ARGUMENT}`, `{helper} speak-to agent-id {MESSAGE_ARGUMENT}`, or `{helper} decline reason`. Run one helper command per terminal tool call and set `BypassSandbox` to `true`; the managed PreToolUse hook allows that only for this exact private helper prefix. Ordinary assistant final text is not a room publication.</agentsassemble-transport>",
+        "{}\n\n<agentsassemble-transport turn=\"{}\" launch=\"{transcript_nonce}\">Antigravity room transport: first run `{helper} help`, then run `{helper} read`.{media_instruction}{history_instruction}{random_instruction}{vote_instruction} Otherwise finish with exactly one `{helper} speak {MESSAGE_ARGUMENT}`, `{helper} speak-to agent-id {MESSAGE_ARGUMENT}`, or `{helper} decline reason`. Run one helper command per terminal tool call and set `BypassSandbox` to `true`; the managed PreToolUse hook allows that only for this exact private helper prefix. Ordinary assistant final text is not a room publication.</agentsassemble-transport>",
         request.input, request.turn_id,
     )
 }
@@ -142,6 +153,11 @@ mod tests {
         let prompt = terminal_prompt(&request, Uuid::nil(), "agentsassemble-room");
         assert!(prompt.contains("agentsassemble-room search"));
         assert!(prompt.contains("agentsassemble-room context <event-id>"));
+        assert!(prompt.contains("agentsassemble-room vote-create"));
+        assert!(prompt.contains("agentsassemble-room vote-cast <vote-id>"));
+        assert!(prompt.contains("agentsassemble-room vote-withdraw <vote-id>"));
+        assert!(prompt.contains("agentsassemble-room vote-close <vote-id>"));
+        assert!(prompt.contains("`question`, `options`, and optional `duration_seconds`"));
         assert!(!prompt.contains("official game randomness"));
     }
 }
