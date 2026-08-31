@@ -1,6 +1,6 @@
 # Lobby Message Mutations Slice
 
-Status: active design owner
+Status: implementation and packaged flow complete; external review pending
 
 ## Definition
 
@@ -182,3 +182,40 @@ event, redaction, deletion, budget reservation, or publication.
 - The three real-TCP cases and warning-denied server Clippy pass. They add no product path, timer,
   retry, polling, fallback, or alternate authority; stale-session revocation and deleted-resource
   boundaries remain separate acceptance units and are not claimed here.
+
+## Packaged mutation verification
+
+- The isolated copied release was built from local `a81d3ad` on pushed baseline `a958bab`, with an
+  empty central URL and a distinct application identifier. The exact pre-package candidate passed
+  the complete repository verification gate: production frontend build and 106 files with 657
+  tests; 26 desktop, 55 domain, 233 persistence, six protocol, 152 provider, and 94 server unit
+  tests; every real TCP/WebSocket/integration/doc test; and warning-denied workspace and desktop
+  Clippy.
+- A fresh local human created a room, sent and edited one ordinary message, then sent and edited a
+  second message. Both exact edited values displayed the copied edited marker. Normal application
+  quit and relaunch retained both canonical edited values. The local human then deleted the first
+  edited message through the copied confirmation dialog; another normal restart retained its
+  tombstone while preserving the second edited message.
+- A one-use read/write invite admitted a fresh browser human through the production join flow. That
+  human observed the earlier edits, sent and edited its own message, and the host observed the same
+  live current state. Deletion through the guest's copied confirmation dialog produced the same
+  tombstone for guest and host. A separate one-use read-only invite admitted a fresh identity whose
+  reason was visible, composer and attachment/app/mention/emoji/send controls were disabled, and
+  hover exposed no pin or mutation action. Tokenless reload retained that denial.
+- Read-only SQLite inspection after the flows found 14 room events, 11 command results, and three
+  invites: the consumed read/write and read-only invites each had `use_count=1` and `max_uses=1`;
+  one unused read-only invite had been explicitly revoked during verification and had
+  `use_count=0`. The current history held two deleted messages and one nondeleted edited message,
+  with three update transitions and two deletion transitions. No deleted current row retained
+  nonempty content or attachment metadata.
+- No provider ran and the slice introduced no timer, polling, retry, fallback, heartbeat, or
+  background owner. One final idle point sample observed 0.0% CPU for the desktop, supervisor, and
+  server with RSS of 122,016 KiB, 9,728 KiB, and 21,232 KiB respectively; these are snapshots, not
+  general latency or performance claims. The isolated data used 492 KiB of Application Support and
+  76 KiB of caches, while the packaged application used 50 MiB.
+- The host stopped public ingress before shutdown and no owned tunnel, desktop, supervisor, or
+  server process remained. The exact application, identifier-owned data, caches, WebKit state, and
+  regenerable staging artifacts were moved to the recoverable
+  `~/.Trash/AgentsAssemble-Mutation-Verify-20260831-2100` bundle; the user's normal browser and data
+  were untouched and Computer Use was reset. Critical-web and Daybreaker manual review remain the
+  only outstanding acceptance item, so this section claims no external approval.

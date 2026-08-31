@@ -4546,3 +4546,63 @@ Daybreaker Blue High manually re-reviewed pushed `4cbbdcd..b95e128` and cumulati
 CLOSED and returned APPROVE C0/H0/M0/L0 for both exact correction and cumulative ranges. It ran no
 automated scan, test, provider, or app. The critical web review and review of the local frontend
 threshold batch remain pending, so this section does not claim their approval.
+
+## Lobby message-mutation packaged completion candidate: 2026-08-31
+
+The isolated copied release was built from local Rust `a81d3ad` on pushed baseline `a958bab`, with
+`VITE_AGENTSASSEMBLE_CENTRAL_URL` empty. Its distinct product name was `AgentsAssemble Mutation
+Verify 831A` and its identifier was `app.agentsassemble.rust.mutationverify0831a`. Before packaging,
+the exact candidate passed `make verify`: architecture, policy, source-growth, generated-binding,
+original-CSS, formatting, and diff gates; the production frontend build and 106 files with 657
+tests; 26 desktop tests; 55 domain, 233 persistence, six protocol, 152 provider, and 94 server unit
+tests; all real TCP/WebSocket/integration/doc tests; and warning-denied workspace and desktop
+Clippy.
+
+Computer Use created a fresh local profile and room through the copied packaged UI. The local human
+sent `MUTATION_LOCAL_ORIGINAL_20260831`, edited it through the real menu and dialog to
+`MUTATION_LOCAL_EDITED_20260831`, and observed the edited marker. It then sent and edited a second
+message to `MUTATION_RESTART_EDITED_20260831`. Normal application quit and relaunch retained both
+edited states. Later, deleting the first message through the real confirmation dialog and restarting
+again retained its tombstone while preserving the second edited message and marker.
+
+The host opened its owned quick tunnel and issued a one-use read/write invite. A fresh Chrome
+incognito identity joined through the production preflight/profile flow as `Mutation RW 831A`; the
+token disappeared from the URL and the guest observed the host's prior edits. It sent and edited its
+own message to `MUTATION_RW_EDITED_20260831`, which the host observed live. The guest's real delete
+dialog named that exact edited value; confirmation produced `삭제된 메시지입니다` for both clients.
+
+The host then changed the room-owned invite scope to read-only and issued a separate one-use invite.
+One unused read-only invite was explicitly revoked during verification and a replacement was issued;
+no token from the revoked invite was admitted. A second fresh incognito identity joined as
+`Mutation RO 831A`. The explicit read-only reason was visible; composer, attachment, app, mention,
+emoji, and send controls were disabled; and message hover exposed no pin, edit, or delete action.
+Tokenless browser reload retained the session and exact denial. The user's normal Chrome window was
+not closed or modified.
+
+Read-only SQLite observation after these interactions found 14 room events, 11 command results, and
+three invite rows. The consumed read/write and read-only invites each had `use_count=1`,
+`max_uses=1`, and no revocation; the unused revoked read-only invite had `use_count=0`. Current and
+transition event aggregates showed one room creation, two joins, three room-settings updates, three
+message updates, two message deletions, two current deleted messages, and one current nondeleted
+message. A direct query found zero deleted current rows retaining nonempty content or nonempty
+attachment metadata. These counts describe this isolated run only.
+
+No provider ran and this slice added no polling, heartbeat, periodic timer, retry, fallback,
+reconciliation loop, or background task. One final idle point sample observed 0.0% CPU for the
+desktop, supervisor, and server, with RSS of 122,016 KiB, 9,728 KiB, and 21,232 KiB respectively.
+An earlier tunnel-active point sample also observed 0.0% CPU, with desktop, supervisor, server, and
+owned tunnel RSS of 114,752 KiB, 9,664 KiB, 21,664 KiB, and 43,840 KiB respectively. These are point
+observations rather than latency or general performance claims. The isolated identifier-owned data
+used 492 KiB of Application Support and 76 KiB of caches; the packaged application used 50 MiB.
+
+Public ingress was stopped through the copied UI before application shutdown and the exact owned
+tunnel process disappeared. Normal quit left no matching desktop, supervisor, server, or tunnel
+process. The exact application, identifier-specific Application Support/WebKit/cache state, and
+regenerable runtime staging were moved to the recoverable
+`~/.Trash/AgentsAssemble-Mutation-Verify-20260831-2100` bundle; regenerable artifacts from one
+never-launched packaging attempt were included in that same bundle. No shared build cache, user
+profile, user browser, provider, or uncommitted source was removed, and Computer Use was reset.
+
+The cumulative threshold batch and these packaged results still require critical-web and Daybreaker
+manual source review. This section therefore records implementation and observed-flow completion,
+not external approval.

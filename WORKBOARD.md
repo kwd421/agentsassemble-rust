@@ -1,6 +1,6 @@
 # WORKBOARD
 
-Status: Phase 5 — canonical lobby votes are packaged/provider-verified; lobby message mutations are active.
+Status: Phase 5 — canonical lobby mutations are implementation/package-verified; external review is pending.
 
 Purpose: route the asynchronous Rust reimplementation without duplicating its contracts.
 
@@ -12,11 +12,19 @@ Purpose: route the asynchronous Rust reimplementation without duplicating its co
 - Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - Real-client verification: [`docs/VERIFICATION.md`](docs/VERIFICATION.md)
 - Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`; pushed, fully verified, and manually approved Rust persona baseline `f6f8636`.
-- Active gate: complete canonical lobby message edit and message/poll deletion with one atomic history, search, pin, vote, and attachment-lifecycle owner.
+- Active gate: close critical-web and Daybreaker manual review of canonical lobby message edit and
+  message/poll deletion, including the cumulative implementation, copied controls, and packaged
+  lifecycle evidence.
 - Review cadence: keep every independent change below 1,000 changed lines. Push and cross-review when the unreviewed aggregate first reaches at least 1,000 changed lines; feature count alone does not trigger review, but a three-feature batch must not grow beyond roughly 2,000 changed lines.
 - Source structure: LOC only signals possible ownership drift. Review at 500 lines; treat 800 lines as a strong split candidate; reject over 1,000 by default, with concrete generated-code, fixture, or declarative-data exceptions considered only when they exist. Split at differing state/invariant, domain, authority, lifecycle, or change-reason owners regardless of size; reconsider a split if it increases state transfer, public interfaces, inter-module dependency count, or obscuring glue.
-- Required order: follow the active owner from strict mutation contracts through one persistence transaction, WebSocket/product-surface exposure, copied controls, and packaged local/remote verification without coupling custom channels or provider orchestration.
-- Exit: local and admitted clients preserve exact edited/tombstoned state across live delivery, reload, and restart; search, pins, votes, and attachments agree without leaked deleted data or background cleanup.
+- Required order: commit the packaged evidence, run complete gates, push the threshold batch, then
+  review each commit and cumulative range for ownership, duplication, overengineering, lifecycle,
+  meaningless polling/heartbeat/timers/retries, fallback, and swallowed failure before accepting
+  findings or advancing the workboard.
+- Exit: critical-web and Daybreaker both approve the exact pushed range after any corrections; the
+  recorded local and admitted flows already preserve exact edited/tombstoned state across live
+  delivery, reload, and restart, with search, pins, votes, and attachments agreeing without leaked
+  deleted data or background cleanup.
 
 ## Read routes
 
