@@ -206,7 +206,15 @@ export function useLobbyHistory({
     setPinnedToLatest(nextPinned);
   }, []);
 
+  const retireHistoryPageRequest = useCallback(() => {
+    loadingHistoryRequestRef.current = null;
+    prependAnchorRef.current = null;
+    setLoadingOlder(false);
+    setHistoryLoadError(false);
+  }, []);
+
   const scrollToLatest = useCallback(() => {
+    retireHistoryPageRequest();
     historyWindowActiveRef.current = false;
     setHistoryWindowActive(false);
     setDisplayedVoteRevisions({});
@@ -219,7 +227,13 @@ export function useLobbyHistory({
       element.scrollTop = element.scrollHeight;
     });
     updatePinnedToLatest(true);
-  }, [canonicalEvents, canonicalHasMoreHistory, canonicalOldestSeq, updatePinnedToLatest]);
+  }, [
+    canonicalEvents,
+    canonicalHasMoreHistory,
+    canonicalOldestSeq,
+    retireHistoryPageRequest,
+    updatePinnedToLatest,
+  ]);
 
   const historyPageRequestIsCurrent = useCallback((request: HistoryPageRequest) =>
     historyRoomRef.current === request.roomId &&
@@ -403,14 +417,11 @@ export function useLobbyHistory({
       : hasMoreHistory;
     if (windowChanged) {
       canonicalWindowRevisionRef.current = canonicalWindowRevision;
-      loadingHistoryRequestRef.current = null;
-      prependAnchorRef.current = null;
+      retireHistoryPageRequest();
       initialBackfillFailedRoomRef.current = "";
       historyWindowActiveRef.current = false;
       setHistoryWindowActive(false);
       setDisplayedVoteRevisions({});
-      setHistoryLoadError(false);
-      setLoadingOlder(false);
       setEvents(mergeDisplayedLobbyEvents([], canonicalEvents || []));
       setOldestSeq(canonicalOldestSeq);
       canonicalOldestSeqRef.current = canonicalOldestSeq;
@@ -507,18 +518,26 @@ export function useLobbyHistory({
     loadCanonicalHistory,
     loaded,
     oldestSeq,
+    retireHistoryPageRequest,
   ]);
 
   const handleLobbyPosted = useCallback((postedEvents: LobbyEvent[]) => {
+    retireHistoryPageRequest();
     historyWindowActiveRef.current = false;
     setHistoryWindowActive(false);
     setDisplayedVoteRevisions({});
     setEvents(mergeDisplayedLobbyEvents(canonicalEvents || [], postedEvents));
     setOldestSeq(canonicalOldestSeq);
     setHasMoreHistory(canonicalHasMoreHistory);
-  }, [canonicalEvents, canonicalHasMoreHistory, canonicalOldestSeq]);
+  }, [
+    canonicalEvents,
+    canonicalHasMoreHistory,
+    canonicalOldestSeq,
+    retireHistoryPageRequest,
+  ]);
 
   const showHistoryWindow = useCallback((historyEvents: LobbyEvent[]) => {
+    retireHistoryPageRequest();
     historyWindowActiveRef.current = true;
     setHistoryWindowActive(true);
     setDisplayedVoteRevisions({});
@@ -526,7 +545,7 @@ export function useLobbyHistory({
     setHasMoreHistory(false);
     setLoadedRoomId(activeRoom.id);
     updatePinnedToLatest(false);
-  }, [activeRoom.id, updatePinnedToLatest]);
+  }, [activeRoom.id, retireHistoryPageRequest, updatePinnedToLatest]);
 
   const suppressAutomaticHistoryLoad = useCallback((durationMs = 1200) => {
     historyLoadSuppressedUntilRef.current = Date.now() + durationMs;

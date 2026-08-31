@@ -258,6 +258,14 @@ canonical batch to its final transition per durable target before folding it. Tw
 edit-then-delete replays both preserve the already-final target identity in focused regression, and
 the production frontend build passes. Re-review of this follow-up is pending; no approval is claimed.
 
+The critical-web correction re-review found one further Medium: search-context, jump-to-latest, and
+post-success display replacements did not retire a same-room, same-window page request, so its page,
+failure, or scroll anchor could re-enter the replacement display. The hook now has one private
+request-retirement operation that clears the exact request identity, anchor, loading flag, and
+obsolete load error before every display replacement; stale promise continuations are consequently
+inert under the existing identity check. A controlled pending-page regression proves a search
+context remains exact after the old page resolves. Final re-review remains pending.
+
 ## Verification path
 
 - focused parser and persistence tests for cursor edges, 200/remaining pages, current authority,

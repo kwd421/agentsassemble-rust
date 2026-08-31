@@ -168,4 +168,45 @@ describe("useLobbyHistory vote refresh ownership", () => {
     );
     expect(hook.result.current.hasMoreHistory).toBe(false);
   });
+
+  it("discards an in-flight page when search replaces the display in the same window", async () => {
+    let resolvePage!: (page: {
+      loadedCount: number;
+      oldestSeq: number;
+      hasMoreBefore: boolean;
+      events: LobbyEvent[];
+    }) => void;
+    const pendingPage = new Promise<Parameters<typeof resolvePage>[0]>((resolve) => {
+      resolvePage = resolve;
+    });
+    const loadCanonicalHistory = vi.fn().mockReturnValue(pendingPage);
+    const canonicalEvents = [event("live-window-message")];
+    const hook = renderHook(() => useLobbyHistory({
+      activeRoom: room,
+      typingIndicators: [],
+      canonicalEvents,
+      canonicalHistoryReady: true,
+      canonicalOldestSeq: 100,
+      canonicalHasMoreHistory: true,
+      canonicalWindowRevision: 1,
+      loadCanonicalHistory,
+    }));
+    await waitFor(() => expect(loadCanonicalHistory).toHaveBeenCalledWith(100));
+
+    act(() => hook.result.current.showHistoryWindow([event("search-context-message")]));
+    await act(async () => {
+      resolvePage({
+        loadedCount: 1,
+        oldestSeq: 1,
+        hasMoreBefore: true,
+        events: [event("stale-page-message")],
+      });
+      await pendingPage;
+    });
+
+    expect(hook.result.current.visibleEvents.map(({ id }) => id)).toEqual([
+      "search-context-message",
+    ]);
+    expect(hook.result.current.hasMoreHistory).toBe(false);
+  });
 });
