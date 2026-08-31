@@ -1,6 +1,6 @@
 # WORKBOARD
 
-Status: Phase 5 — Agent Session idle pause/resume and Codex cleanup custody are implemented and packaged-verified; threshold review is active.
+Status: Phase 5 — idle pause/resume and Codex cleanup custody are approved; explicit busy-turn interrupt is active.
 
 Purpose: route the asynchronous Rust reimplementation without duplicating its contracts.
 
@@ -12,18 +12,17 @@ Purpose: route the asynchronous Rust reimplementation without duplicating its co
 - Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - Real-client verification: [`docs/VERIFICATION.md`](docs/VERIFICATION.md)
 - Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`; pushed, fully verified, and manually approved Rust persona baseline `f6f8636`.
-- Active gate: push the repository-verified correction range and obtain both manual re-reviews.
-  The corrected pause/resume behavior has also passed a fresh isolated packaged run with the exact
-  Codex Terra, Antigravity Flash, and OpenCode Muse Spark models.
+- Active gate: connect copied `agent.interrupt` through the existing exact-turn interrupt owner,
+  then prove durable replay/recovery, retained-runtime semantics, and the packaged busy-turn flow.
 - Review cadence: keep every independent change below 1,000 changed lines. Push and cross-review when the unreviewed aggregate first reaches at least 1,000 changed lines; feature count alone does not trigger review, but a three-feature batch must not grow beyond roughly 2,000 changed lines.
 - Source structure: LOC only signals possible ownership drift. Review at 500 lines; treat 800 lines as a strong split candidate; reject over 1,000 by default, with concrete generated-code, fixture, or declarative-data exceptions considered only when they exist. Split at differing state/invariant, domain, authority, lifecycle, or change-reason owners regardless of size; reconsider a split if it increases state transfer, public interfaces, inter-module dependency count, or obscuring glue.
-- Required order: keep the verified product flow intact, retain the staged Codex bundle through the
-  resident driver lifetime, require fresh live-slot proof before state-only pause/resume, then
-  re-review the exact correction range before advancing the slice.
-- Exit: pause leaves each exact resident provider process and conversation intact with no new turn;
-  paused input stays durably queued; resume assigns it through the existing floor owner; reload,
-  restart, and Codex Terra, Antigravity Flash, and OpenCode Muse Spark packaged flows pass; both
-  reviewers approve the pushed range.
+- Required order: preserve the approved pause/resume and custody flow; freeze the explicit
+  interrupt contract in the active owner; reuse the existing durable provider-turn effect and
+  reconciliation owner; connect protocol/server/frontend surface; then verify the real flow.
+- Exit: a copied busy-session control durably requests one exact interrupt, retains the provider
+  runtime and conversation when quiescence proves that result, restores inflight input without an
+  immediate re-run, survives replay/restart boundaries, and passes repository plus packaged
+  verification.
 
 ## Read routes
 

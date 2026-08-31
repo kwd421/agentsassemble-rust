@@ -1,6 +1,6 @@
 # Agent Session vertical slice
 
-Status: published implementation owner; idle pause/resume packaged verification and manual review complete
+Status: published implementation owner; idle pause/resume complete, explicit busy-turn interrupt active
 
 ## Definition
 
@@ -85,6 +85,43 @@ official `--code-mode-host` option. A fresh packaged Terra turn and UI Stop now 
 cleanup with no recovery state. Exact packaged evidence and cleanup are recorded in
 `docs/VERIFICATION.md`. Critical-web and Daybreaker manual review approved pushed HEAD `0821b0a`
 and cumulative `a340a31..0821b0a` at C0/H0/M0/L0; no automated scan was run.
+
+## Active busy-turn interrupt extension
+
+The copied client exposes `agent.interrupt` only while an Agent Session is `busy`. The original
+server forwards that control to the resident bridge without stopping the runtime; the interrupted
+turn becomes terminal, its inflight room input returns to pending, and the same provider session
+returns to idle without immediately assigning that pending input again. Rust already owns the
+provider-neutral, crash-recoverable exact-turn interrupt used by participant mute, but the explicit
+room action is not advertised or dispatched. This extension connects that existing product control
+without creating a second interrupt owner.
+
+- The current server-derived `agent.control` capability and active-room authority gate the action.
+  Its payload contains exactly one unmodified Agent Session identifier, and only a complete active
+  turn whose session, execution, runtime handle, supervisor owner, lease generation, and provider
+  turn authority agree can be interrupted.
+- Command admission and the exact interrupt intent commit before provider I/O. Same
+  request/action/payload replay is deduplicated, changed reuse conflicts, and a second independent
+  interrupt cannot claim or overwrite an unresolved effect. The durable interrupt cause remains
+  distinguishable from participant mute through restart and reconciliation.
+- The existing common provider control issues at most one exact interrupt and proves quiescence.
+  A retained runtime keeps the provider process and conversation, terminalizes the turn as
+  interrupted, restores inflight input to pending, clears only active-turn authority, and returns
+  the session to idle. Explicit interrupt does not immediately schedule that restored input; a
+  later canonical scheduling trigger may combine it with newer actionable room input.
+- The command ACK means the exact interrupt request was durably accepted, not that an uncertain
+  provider effect was invented as complete. Lost dispatch or quiescence proof remains explicit
+  recovery authority for the existing reconciliation owner. No stop, pause, process replacement,
+  provider-specific branch, polling, heartbeat, timer, retry loop, fallback, or swallowed failure
+  is added.
+- Public-safe `turn_finished`, bounded/redacted interruption diagnostics, and complete
+  `agent_session_state` projection must agree with the durable result under the existing viewer
+  projector. The copied button must use the advertised Rust action and fail closed when the surface
+  or capability is absent.
+- Verification covers exact replay/conflict, invalid/non-busy and stale authority, pre-dispatch and
+  running-turn interruption, runtime-retained and runtime-gone outcomes, restart recovery, no
+  immediate re-run, WebSocket projection/ACK ordering, and one packaged real-provider busy-turn
+  control before this extension is complete.
 
 ## Required slice contract
 
