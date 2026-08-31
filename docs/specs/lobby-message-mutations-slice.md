@@ -262,7 +262,8 @@ event, redaction, deletion, budget reservation, or publication.
   bound, not production latency. The paired TCP-review correction replaces elapsed-time absence
   assertions with exact replay cursors, durable snapshots, and causal socket closure. No index,
   background cleanup, timer, polling, heartbeat, retry, fallback, or swallowed failure was added.
-  Critical-web and Daybreaker correction review remain pending.
+  Daybreaker correction review approved pushed HEAD `d168354` and cumulative
+  `a958bab..d168354` at C0/H0/M0/L0; critical-web review remains pending.
 - Provider terminal correction: Daybreak then traced `vote_capacity_reached` through the provider
   finalization path, which commits terminal product rejection events in the same transaction. The
   cast branch had inserted its anonymous transition before discovering that a new ballot exceeded

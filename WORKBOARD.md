@@ -12,10 +12,10 @@ Purpose: route the asynchronous Rust reimplementation without duplicating its co
 - Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - Real-client verification: [`docs/VERIFICATION.md`](docs/VERIFICATION.md)
 - Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`; pushed, fully verified, and manually approved Rust persona baseline `f6f8636`.
-- Active gate: validate, commit, and push the provider-capacity event-order correction identified
-  during review of the 192-current-ballot bound, then close critical-web and Daybreaker manual review
-  of canonical lobby message edit and message/poll deletion, including every correction, the
-  cumulative implementation, copied controls, and packaged lifecycle evidence.
+- Active gate: Daybreaker manually approved pushed HEAD `d168354` and cumulative
+  `a958bab..d168354` at C0/H0/M0/L0. Close critical-web manual review of canonical lobby message edit
+  and message/poll deletion, including every correction, the cumulative implementation, copied
+  controls, and packaged lifecycle evidence.
 - Review cadence: keep every independent change below 1,000 changed lines. Push and cross-review when the unreviewed aggregate first reaches at least 1,000 changed lines; feature count alone does not trigger review, but a three-feature batch must not grow beyond roughly 2,000 changed lines.
 - Source structure: LOC only signals possible ownership drift. Review at 500 lines; treat 800 lines as a strong split candidate; reject over 1,000 by default, with concrete generated-code, fixture, or declarative-data exceptions considered only when they exist. Split at differing state/invariant, domain, authority, lifecycle, or change-reason owners regardless of size; reconsider a split if it increases state transfer, public interfaces, inter-module dependency count, or obscuring glue.
 - Required order: run complete gates on the review corrections; commit them as independent

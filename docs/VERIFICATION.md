@@ -4661,5 +4661,5 @@ write, transaction, task, timer, retry, or fallback.
 The TCP correction removes all uses of the shared elapsed-silence helper. Exact replay is proven by
 the next durable snapshot and event sequence containing exactly one target mutation, read-only
 rejection is bracketed by unchanged durable room state, and server rejection closure is awaited as a
-causal socket event without an arbitrary deadline. Complete gates and both manual correction reviews
-must still pass before this batch is approved.
+causal socket event without an arbitrary deadline. Daybreaker manually approved pushed HEAD
+`d168354` and cumulative `a958bab..d168354` at C0/H0/M0/L0; critical-web review remains pending.
