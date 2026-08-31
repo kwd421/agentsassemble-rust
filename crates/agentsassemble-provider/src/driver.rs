@@ -11,6 +11,9 @@ use crate::{
 pub(crate) type DriverFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 pub(crate) trait ProviderDriver: Send {
+    fn retains_runtime_after_turn_interrupt(&self) -> bool {
+        false
+    }
     fn attach_session<'a>(
         &'a mut self,
         session: &'a DurableAgentSession,

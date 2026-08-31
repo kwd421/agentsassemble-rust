@@ -90,7 +90,7 @@ mod room_vote_tests;
 pub use agent_create_start::{
     AgentCreateStartCommit, AgentCreateStartEffect, AgentCreateStartPlan,
 };
-pub use agent_interrupt::AgentInterruptMutation;
+pub use agent_interrupt::{AgentInterruptMutation, AgentInterruptPlan};
 pub use agent_lifecycle::{
     AgentRuntimeStarted, AgentStartEffect, AgentStartPlan, AgentStopEffect, AgentStopPlan,
 };

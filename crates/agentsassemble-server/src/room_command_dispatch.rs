@@ -1,5 +1,7 @@
 use agentsassemble_domain::RoomEvent;
-use agentsassemble_persistence::{PersistenceError, ProviderTurnInterruptEffect, SqliteStore};
+use agentsassemble_persistence::{
+    AgentInterruptPlan, PersistenceError, ProviderTurnInterruptEffect, SqliteStore,
+};
 use agentsassemble_protocol::RoomAction;
 use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService};
 use tokio::sync::broadcast;
@@ -138,6 +140,26 @@ async fn execute_agent_interrupt(
     provider_adapter: &ProviderAdapter,
     command: &RoomCommand,
 ) -> CommandExecution {
+    let plan = match store
+        .prepare_agent_interrupt(&command.principal, &command.request_id, &command.payload)
+        .await
+    {
+        Ok(plan) => plan,
+        Err(error) => return CommandExecution::transactional_failure(error),
+    };
+    let session = match plan {
+        AgentInterruptPlan::Outcome(outcome) => return CommandExecution::success(*outcome),
+        AgentInterruptPlan::Interruptible(session) => session,
+    };
+    if let Err(error) = provider_adapter
+        .require_retained_turn_interrupt(&session)
+        .await
+    {
+        return CommandExecution::transactional_failure(PersistenceError::CommandRejected {
+            code: error.code,
+            message: error.message.to_owned(),
+        });
+    }
     let mutation = match store
         .execute_agent_interrupt(&command.principal, &command.request_id, &command.payload)
         .await

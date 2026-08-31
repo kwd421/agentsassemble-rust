@@ -1,7 +1,9 @@
 use serde_json::json;
 
 use super::{AGENT_ID, event_types, fixture, input_ids, stored_session};
-use crate::{PersistenceError, ProviderTurnExecutionPhase, ProviderTurnInterruptCause};
+use crate::{
+    AgentInterruptPlan, PersistenceError, ProviderTurnExecutionPhase, ProviderTurnInterruptCause,
+};
 
 #[tokio::test]
 async fn explicit_interrupt_is_exact_replayable_and_does_not_rerun_restored_input() {
@@ -101,6 +103,42 @@ async fn explicit_interrupt_is_exact_replayable_and_does_not_rerun_restored_inpu
         .unwrap_or_else(|error| panic!("read terminal interrupt execution: {error}"));
     assert_eq!(execution.phase, ProviderTurnExecutionPhase::Interrupted);
     assert!(execution.requeue_finalized);
+}
+
+#[tokio::test]
+async fn explicit_interrupt_preflight_is_read_only_and_replay_aware() {
+    let (store, principal, _directory) = fixture().await;
+    store
+        .execute_message_with_turn(
+            &principal,
+            "preflight-source",
+            "message.send",
+            &json!({"content": "@Terra retain this input after interrupt"}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("assign preflight turn: {error}"));
+    let payload = json!({"agent_id": AGENT_ID});
+    for _ in 0..2 {
+        let plan = store
+            .prepare_agent_interrupt(&principal, "preflight-interrupt", &payload)
+            .await
+            .unwrap_or_else(|error| panic!("prepare exact interrupt: {error}"));
+        let AgentInterruptPlan::Interruptible(session) = plan else {
+            panic!("fresh interrupt must require live capability proof");
+        };
+        assert_eq!(session.public.session_id, AGENT_ID);
+    }
+    store
+        .execute_agent_interrupt(&principal, "preflight-interrupt", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("accept exact interrupt: {error}"));
+    assert!(matches!(
+        store
+            .prepare_agent_interrupt(&principal, "preflight-interrupt", &payload)
+            .await
+            .unwrap_or_else(|error| panic!("prepare committed replay: {error}")),
+        AgentInterruptPlan::Outcome(_)
+    ));
 }
 
 #[tokio::test]

@@ -701,6 +701,10 @@ fn isolated_environment(
 }
 
 impl ProviderDriver for OpenCodeDriver {
+    fn retains_runtime_after_turn_interrupt(&self) -> bool {
+        true
+    }
+
     fn attach_session<'a>(
         &'a mut self,
         session: &'a DurableAgentSession,

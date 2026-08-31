@@ -1,6 +1,9 @@
-use agentsassemble_domain::{AuthenticatedPrincipal, ParticipantStatus, canonical_payload_hash};
+use agentsassemble_domain::{
+    AuthenticatedPrincipal, DurableAgentSession, ParticipantStatus, canonical_payload_hash,
+};
 use chrono::Utc;
 use serde_json::{Value, json};
+use sqlx::{Sqlite, Transaction};
 
 use crate::{
     CommandOutcome, PersistenceError, ProviderTurnExecution, ProviderTurnExecutionPhase,
@@ -9,7 +12,7 @@ use crate::{
     agent_lifecycle_authority::{authorize_control, lifecycle_intent_is_empty, payload_agent_id},
     agent_lifecycle_events::{append_state_event, store_result},
     authority::active_room_for_principal,
-    command_admission::admit_non_lifecycle_command,
+    command_admission::{admit_non_lifecycle_command, inspect_non_lifecycle_command},
     provider_turn_effect::{load_optional_effect_in, prepare_interrupt_effect},
     provider_turn_execution::load_execution_in,
     room_write_budget::command_size,
@@ -27,7 +30,48 @@ pub struct AgentInterruptMutation {
     pub interrupt_effect: Option<ProviderTurnInterruptEffect>,
 }
 
+#[derive(Debug, Clone)]
+pub enum AgentInterruptPlan {
+    Outcome(Box<CommandOutcome>),
+    Interruptible(Box<DurableAgentSession>),
+}
+
 impl SqliteStore {
+    /// Checks replay and exact durable turn authority before live provider capability proof.
+    ///
+    /// # Errors
+    ///
+    /// Returns authorization, replay-conflict, active-turn, or storage failures.
+    pub async fn prepare_agent_interrupt(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request_id: &str,
+        payload: &Value,
+    ) -> Result<AgentInterruptPlan, PersistenceError> {
+        authorize_control(principal)?;
+        let agent_id = payload_agent_id(payload)?;
+        let payload_hash = canonical_payload_hash(payload);
+        let mut transaction = self.pool.begin().await?;
+        active_room_for_principal(&mut transaction, principal).await?;
+        if let Some(outcome) = inspect_non_lifecycle_command(
+            &mut transaction,
+            &principal.room_id,
+            &principal.principal_id,
+            request_id,
+            ACTION,
+            &payload_hash,
+        )
+        .await?
+        {
+            transaction.commit().await?;
+            return Ok(AgentInterruptPlan::Outcome(Box::new(outcome)));
+        }
+        let (session, _) =
+            load_interruptible_session(&mut transaction, &principal.room_id, &agent_id).await?;
+        transaction.commit().await?;
+        Ok(AgentInterruptPlan::Interruptible(Box::new(session)))
+    }
+
     /// Durably accepts one exact busy-turn interrupt before provider I/O.
     ///
     /// # Errors
@@ -61,36 +105,8 @@ impl SqliteStore {
                 interrupt_effect: None,
             });
         }
-        let mut session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
-        let participant = load_participant(
-            &mut transaction,
-            &principal.room_id,
-            &session.public.participant_id,
-        )
-        .await?;
-        require_busy_session(&session, &participant, &agent_id)?;
-        let execution = load_execution_in(
-            &mut transaction,
-            &principal.room_id,
-            &agent_id,
-            session.turn_generation,
-        )
-        .await?;
-        if load_optional_effect_in(
-            &mut transaction,
-            &principal.room_id,
-            &agent_id,
-            session.turn_generation,
-        )
-        .await?
-        .is_some()
-        {
-            return Err(rejected(
-                "provider_turn_interrupt_in_progress",
-                "The exact provider turn already has an interrupt owner.",
-            ));
-        }
-        require_interruptible(&session, &execution, &agent_id)?;
+        let (mut session, execution) =
+            load_interruptible_session(&mut transaction, &principal.room_id, &agent_id).await?;
         let effect = prepare_interrupt_effect(
             &mut transaction,
             &execution,
@@ -125,8 +141,32 @@ impl SqliteStore {
     }
 }
 
+async fn load_interruptible_session(
+    transaction: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    agent_id: &str,
+) -> Result<(DurableAgentSession, ProviderTurnExecution), PersistenceError> {
+    let session = load_session(transaction, room_id, agent_id).await?;
+    let participant =
+        load_participant(transaction, room_id, &session.public.participant_id).await?;
+    require_busy_session(&session, &participant, agent_id)?;
+    let execution =
+        load_execution_in(transaction, room_id, agent_id, session.turn_generation).await?;
+    if load_optional_effect_in(transaction, room_id, agent_id, session.turn_generation)
+        .await?
+        .is_some()
+    {
+        return Err(rejected(
+            "provider_turn_interrupt_in_progress",
+            "The exact provider turn already has an interrupt owner.",
+        ));
+    }
+    require_interruptible(&session, &execution, agent_id)?;
+    Ok((session, execution))
+}
+
 fn require_busy_session(
-    session: &agentsassemble_domain::DurableAgentSession,
+    session: &DurableAgentSession,
     participant: &agentsassemble_domain::Participant,
     agent_id: &str,
 ) -> Result<(), PersistenceError> {
@@ -151,7 +191,7 @@ fn require_busy_session(
 }
 
 fn require_interruptible(
-    session: &agentsassemble_domain::DurableAgentSession,
+    session: &DurableAgentSession,
     execution: &ProviderTurnExecution,
     agent_id: &str,
 ) -> Result<(), PersistenceError> {

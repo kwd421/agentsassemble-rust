@@ -485,6 +485,10 @@ fn is_room_portal_approval(message: &Value) -> bool {
 }
 
 impl ProviderDriver for CodexDriver {
+    fn retains_runtime_after_turn_interrupt(&self) -> bool {
+        true
+    }
+
     fn attach_session<'a>(
         &'a mut self,
         session: &'a DurableAgentSession,

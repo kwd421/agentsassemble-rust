@@ -287,6 +287,41 @@ async fn definitive_driver_failure_does_not_quarantine_or_discard_the_runtime() 
 }
 
 #[tokio::test]
+async fn driver_without_retained_interrupt_capability_is_rejected_before_control() {
+    let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
+    let directory = tempfile::tempdir()
+        .unwrap_or_else(|error| panic!("create interrupt-capability fixture: {error}"));
+    let session = fixture_session(directory.path(), "#!/bin/sh\nexit 0\n").await;
+    let adapter = ProviderAdapter::with_factory(Arc::new(DefinitiveFailureFactory));
+    let started = adapter
+        .start(&session)
+        .await
+        .unwrap_or_else(|error| panic!("start interrupt-capability fixture: {error}"));
+    let active = active_session(&session, &started, "capability-room-turn");
+    let request = ProviderTurnRequest {
+        turn_id: "capability-room-turn".to_owned(),
+        turn_generation: 1,
+        execution_id: "11111111-1111-4111-8111-111111111111".to_owned(),
+        input: "Do not dispatch this turn.".to_owned(),
+        room_observation: None,
+    };
+    let prepared = adapter
+        .prepare_turn(&active, &request)
+        .await
+        .unwrap_or_else(|error| panic!("prepare unsupported interrupt: {error}"));
+    let authority = prepared.exact_authority();
+    let Err(error) = adapter.require_retained_turn_interrupt(&active).await else {
+        panic!("driver without retained-runtime evidence must reject interrupt");
+    };
+    assert_eq!(error.code, "provider_turn_interrupt_unsupported");
+    assert!(adapter.owns_exact_turn(&authority).await);
+
+    adapter.retain_unstarted_turn(&prepared).await;
+    adapter.release_terminal_turn(&authority).await;
+    stop_and_release(&adapter, &active, &started).await;
+}
+
+#[tokio::test]
 async fn exact_control_freezes_provider_entry_before_durable_interrupt_wait() {
     let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
     let directory = tempfile::tempdir()
@@ -316,6 +351,10 @@ async fn exact_control_freezes_provider_entry_before_durable_interrupt_wait() {
         .prepare_turn(&active, &request)
         .await
         .unwrap_or_else(|error| panic!("prepare unstarted turn: {error}"));
+    adapter
+        .require_retained_turn_interrupt(&active)
+        .await
+        .unwrap_or_else(|error| panic!("prove Codex retained interrupt capability: {error}"));
     let authority = prepared.exact_authority();
     let turn_gate = Arc::new(Barrier::new(2));
     let turn_adapter = adapter.clone();

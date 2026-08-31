@@ -157,6 +157,44 @@ impl ProviderTurnControl {
 }
 
 impl ProviderAdapter {
+    /// Proves that the exact active provider turn supports a retained-runtime interrupt.
+    ///
+    /// # Errors
+    ///
+    /// Rejects stale runtime/turn authority or a driver without that exact capability.
+    pub async fn require_retained_turn_interrupt(
+        &self,
+        session: &DurableAgentSession,
+    ) -> Result<(), ProviderAdapterError> {
+        let slot = self
+            .existing_slot(&session.public.room_id, &session.public.session_id)
+            .await
+            .ok_or_else(|| owner_mismatch(session))?;
+        let slot = slot.lock().await;
+        let RuntimeState::Running(runtime) = &slot.state else {
+            return Err(owner_mismatch(session));
+        };
+        validate_owned_runtime(session, runtime)?;
+        let exact_active_turn = runtime.active_turn.as_ref().is_some_and(|active| {
+            active.turn_id == session.public.active_turn_id
+                && active.turn_generation == session.turn_generation
+                && matches!(
+                    active.phase,
+                    ActiveProviderTurnPhase::Preparing | ActiveProviderTurnPhase::Entered
+                )
+        });
+        if !exact_active_turn {
+            return Err(ProviderAdapterError::safe(stale_turn()));
+        }
+        if !runtime.retained_interrupt {
+            return Err(ProviderAdapterError::safe(DriverError::new(
+                "provider_turn_interrupt_unsupported",
+                "The provider cannot prove retained-runtime interruption for this turn.",
+            )));
+        }
+        Ok(())
+    }
+
     /// Installs exact in-memory turn authority before durable start authorization.
     ///
     /// # Errors

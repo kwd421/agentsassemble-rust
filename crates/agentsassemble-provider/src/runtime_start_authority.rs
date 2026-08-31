@@ -264,6 +264,7 @@ impl ProviderAdapter {
                     owner_id: runtime.owner_id,
                     lease_token: runtime.runtime_lease.token().to_owned(),
                     profile_key: session.runtime_profile_key.clone(),
+                    retained_interrupt: driver.retains_runtime_after_turn_interrupt(),
                     driver: super::runtime_driver::DriverCell::new(driver),
                     turn_cancellation: CancellationToken::new(),
                     runtime_lease: Some(runtime.runtime_lease),

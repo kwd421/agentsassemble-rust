@@ -191,6 +191,7 @@ struct OwnedRuntime {
     owner_id: String,
     lease_token: String,
     profile_key: String,
+    retained_interrupt: bool,
     driver: Arc<runtime_driver::DriverCell>,
     turn_cancellation: CancellationToken,
     runtime_lease: Option<HeldRuntimeLease>,
