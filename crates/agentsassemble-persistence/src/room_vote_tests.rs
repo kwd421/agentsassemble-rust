@@ -1,7 +1,7 @@
 use agentsassemble_domain::{
     AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID,
-    LOCAL_OPERATOR_USER_ID, Participant, ParticipantRole, ParticipantStatus, RoomEvent,
-    VoteSummary, vote_deadline_at,
+    LOCAL_OPERATOR_USER_ID, MAX_VOTE_BALLOTS_PER_POLL, Participant, ParticipantRole,
+    ParticipantStatus, RoomEvent, VoteSummary, vote_deadline_at,
 };
 use chrono::{Duration, Utc};
 use serde_json::{Value, json};
@@ -97,6 +97,90 @@ async fn ballot_replacement_withdrawal_and_replay_update_one_projection() {
     assert!(withdrawn.assignments.is_empty());
     assert_vote_state(&store, &[0, 0], 0, None).await;
     assert_eq!(vote_event_count(&store).await, 4);
+}
+
+#[tokio::test]
+async fn distinct_ballots_are_bounded_without_blocking_replacement_or_withdrawal() {
+    let (store, operator) = fixture().await;
+    let created = command(
+        &store,
+        &operator,
+        "31000000-0000-4000-8000-000000000001",
+        json!({
+            "kind": "vote",
+            "vote_question": "Bound this poll?",
+            "vote_options": ["Yes", "No"]
+        }),
+    )
+    .await;
+    let vote_id = created.outcome.event.id;
+    let mut voters = Vec::new();
+    for index in 0..MAX_VOTE_BALLOTS_PER_POLL {
+        let participant_id = format!("bounded-voter-{index}");
+        let voter = add_human(&store, &participant_id, "Voter").await;
+        command(
+            &store,
+            &voter,
+            format!("31100000-0000-4000-8000-{index:012}").as_str(),
+            json!({"kind": "vote_cast", "vote_id": vote_id, "vote_choice": "Yes"}),
+        )
+        .await;
+        voters.push(voter);
+    }
+    let overflow = add_human(&store, "bounded-voter-overflow", "Overflow").await;
+    let before_rejection = persisted_write_counts(&store).await;
+    assert_rejected(
+        &store
+            .execute_message_with_turn(
+                &overflow,
+                "31000000-0000-4000-8000-999999999997",
+                "message.send",
+                &json!({"kind": "vote_cast", "vote_id": vote_id, "vote_choice": "No"}),
+            )
+            .await,
+        "vote_capacity_reached",
+    );
+    assert_eq!(persisted_write_counts(&store).await, before_rejection);
+
+    command(
+        &store,
+        &voters[0],
+        "31000000-0000-4000-8000-999999999998",
+        json!({"kind": "vote_cast", "vote_id": vote_id, "vote_choice": "No"}),
+    )
+    .await;
+    command(
+        &store,
+        &voters[0],
+        "31000000-0000-4000-8000-999999999999",
+        json!({"kind": "vote_withdraw", "vote_id": vote_id}),
+    )
+    .await;
+    command(
+        &store,
+        &overflow,
+        "31000000-0000-4000-8000-999999999996",
+        json!({"kind": "vote_cast", "vote_id": vote_id, "vote_choice": "No"}),
+    )
+    .await;
+    let summary = local_summary(&store, &vote_id).await;
+    assert_eq!(summary.total_votes, MAX_VOTE_BALLOTS_PER_POLL);
+    assert_eq!(summary.tallies["Yes"], MAX_VOTE_BALLOTS_PER_POLL - 1);
+    assert_eq!(summary.tallies["No"], 1);
+    store
+        .execute_message_mutation(
+            &operator,
+            "31000000-0000-4000-8000-999999999995",
+            "message.delete",
+            &json!({"event_id": vote_id}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("delete full vote projection: {error}"));
+    let ballots = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM room_vote_ballots")
+        .fetch_one(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("count deleted ballots: {error}"));
+    assert_eq!(ballots, 0);
 }
 
 #[tokio::test]

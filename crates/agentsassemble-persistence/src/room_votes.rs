@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 
 use agentsassemble_domain::{
-    AuthenticatedPrincipal, ClientKind, Participant, RoomEvent, VoteCast, VoteCommand, VoteSummary,
-    has_visible_text, prepare_vote_event, privacy_minimized_vote_transition, resolve_vote_choice,
-    validate_vote_id, vote_deadline_at,
+    AuthenticatedPrincipal, ClientKind, MAX_VOTE_BALLOTS_PER_POLL, Participant, RoomEvent,
+    VoteCast, VoteCommand, VoteSummary, has_visible_text, prepare_vote_event,
+    privacy_minimized_vote_transition, resolve_vote_choice, validate_vote_id, vote_deadline_at,
 };
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
@@ -205,6 +205,7 @@ pub(crate) fn is_terminal_vote_rejection(error: &PersistenceError) -> bool {
             code: "vote_not_found"
                 | "vote_expired"
                 | "vote_closed"
+                | "vote_capacity_reached"
                 | "invalid_vote_choice"
                 | "permission_denied",
             ..
@@ -271,7 +272,8 @@ async fn load_vote(
     let tallies: Vec<u64> = serde_json::from_str(row.get::<String, _>("tallies_json").as_str())?;
     let total_votes =
         u64::try_from(row.get::<i64, _>("total_votes")).map_err(|_| invalid_vote_state())?;
-    if tallies.len() != definition.options.len()
+    if total_votes > MAX_VOTE_BALLOTS_PER_POLL
+        || tallies.len() != definition.options.len()
         || tallies
             .iter()
             .try_fold(0_u64, |total, value| total.checked_add(*value))
@@ -464,6 +466,9 @@ async fn replace_ballot(
             .checked_sub(1)
             .ok_or_else(invalid_vote_state)?;
     } else {
+        if stored.total_votes >= MAX_VOTE_BALLOTS_PER_POLL {
+            return Err(vote_capacity_reached());
+        }
         stored.total_votes = stored
             .total_votes
             .checked_add(1)
@@ -561,6 +566,13 @@ fn vote_missing() -> PersistenceError {
 
 fn invalid_vote_choice() -> PersistenceError {
     rejected("invalid_vote_choice", "The vote choice is invalid.")
+}
+
+fn vote_capacity_reached() -> PersistenceError {
+    rejected(
+        "vote_capacity_reached",
+        "This vote has reached its participant limit.",
+    )
 }
 
 fn invalid_vote_state() -> PersistenceError {

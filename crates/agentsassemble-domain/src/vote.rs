@@ -22,6 +22,12 @@ pub const VOTE_QUESTION_CHARACTER_LIMIT: usize = 300;
 pub const VOTE_OPTION_CHARACTER_LIMIT: usize = 100;
 pub const MIN_VOTE_OPTIONS: usize = 2;
 pub const MAX_VOTE_OPTIONS: usize = 10;
+/// Absolute distinct-current-ballot ceiling for one poll.
+///
+/// A room can concurrently expose 112 public-human seats, 16 reserved operator/external seats,
+/// and 64 Agent Sessions. Bounding the ballot projection to that complete participant surface
+/// keeps poll deletion bounded even when an indefinite poll spans repeated admissions.
+pub const MAX_VOTE_BALLOTS_PER_POLL: u64 = 192;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VoteCreate {
