@@ -4661,6 +4661,72 @@ extracting that state flow would increase cross-module state transfer and privat
 public trait, configuration layer, background task, or parallel lifecycle owner was introduced.
 Manual critical-web and Daybreaker review of the pushed threshold range remain pending.
 
+## Pause/custody threshold-review corrections: 2026-09-01
+
+Manual review of pushed `23c9f35..a340a31` diverged. The critical web session returned
+APPROVE C0/H0/M0/L0. Daybreaker returned REVISE C0/H0/M2/L0: Linux/Android could drop the staged
+multi-file Codex bundle after guardian readiness but before the resumed launcher opened its paths,
+and a fresh pause/resume trusted durable resident identifiers without consulting the live adapter.
+No other finding was reported. The correction range begins at `c53fa5a`; final review remains
+pending.
+
+The Codex issue was a concrete lifetime race introduced when the native companion changed Codex
+from the ordinary Linux/Android single-file `memfd` path to a filesystem-staged two-file bundle.
+The resident driver now retains `BoundExecutable` on every platform. A test-only Unix-stream barrier
+blocks the resumed provider launcher after guardian readiness and reports both launch paths; the
+test proves both verified staged files still exist before releasing the launcher, then completes
+attachment and exact owned shutdown. The barrier has no production branch, timer, polling, retry,
+or sleep. Runtime cost is the required lifetime of the existing private staging directory and its
+already-open executable/companion files; no additional production process, copy, or scan is added.
+
+The resident-state issue could otherwise produce a false `process_preserved`/`process_reused`
+claim, and resume could advance queued work toward a dead or mismatched runtime. Exact command replay
+still returns before mutable runtime consultation. Every fresh state-only pause/resume now performs
+one on-demand adapter check of the exact slot, handle, owner, lease, profile, absence of an active
+turn, driver liveness, and safe attachment state. The database transaction then compares the same
+identity before writing. Missing, borrowed, stopped, dead, uncertain, or changed runtime authority
+rejects without a state event, command result, or consumed durable room budget. It does not perform
+full filesystem selection revalidation, and adds no background task, polling, heartbeat, timer,
+retry, reconciliation fallback, new lifecycle owner, or provider-specific branch. The accepted
+cost is one existing bounded driver-health exchange per fresh pause or state-only resume; replay and
+unrelated commands pay none.
+
+Focused verification passed the deterministic stopped-launcher staging test, provider resident
+proof success/borrowed/stopped cases, persistence replay/conflict/stale-proof and no-mutation cases,
+the real TCP/WebSocket lifecycle boundary through Codex start/pause/resume/stop, and warning-denied
+workspace Clippy. The fresh Android cross-check first exposed two existing guardian cfg defects once
+the installed versioned NDK compiler was supplied: `set_child_subreaper` returned `Errno` where the
+guardian boundary required an explicit `io::Error`, and Android did not consume the macOS-only fork
+policy during cleanup. The minimal correction preserves the same behavior, compiles warning-free on
+macOS, and `cargo check -p agentsassemble-provider --target aarch64-linux-android --lib` then passed
+with the installed target and NDK compiler. A subsequent complete `make verify` passed the source
+and architecture gates, original-CSS check, 657 frontend tests and production build, 26 desktop
+tests, all Rust unit/integration/TCP/WebSocket tests and doc tests, warning-denied workspace Clippy,
+and `git diff --check`.
+
+The resident-proof fixture initially pushed the provider runtime test module over the 800-line
+strong-warning boundary and mixed provider-neutral residency invariants with Codex/guardian launch
+tests. It now lives in an 83-line private sibling test module; the original module is 734 lines and
+no production or public interface changed. The 947-line guardian remains a reviewed cohesive
+exception below the absolute 1,000-line gate: launch-manifest custody, stopped-launcher handoff,
+process-group ownership, and exact cleanup receipts share one state machine and invariant. Splitting
+that owner would add cross-module state transfer and private interfaces while making the custody
+proof harder to follow. `codex.rs` is 799 lines. These are structural decisions, not targets to grow
+to; any separate authority, lifecycle, or change reason still splits immediately.
+
+A fresh isolated macOS package named `AgentsAssemble Resident Verify 901` used its own bundle ID,
+application-support directory, SQLite database, identity keys, logs, and room. Through the packaged
+frontend, the exact `gpt-5.6-terra`, `gemini-3.6-flash`, and
+`opencode/muse-spark-1.2-contributor-free` sessions each produced an exact initial marker, entered
+idle pause, accepted an addressed message without starting or showing a provider turn while paused,
+and after resume produced the exact queued marker before returning idle. OpenCode's two Muse results
+were disambiguated by the exact free model ID; no Go credential, paid model, substitute, fallback,
+or direct database mutation was used. Every provider was stopped through its session control. The
+exact app, owned server/provider children, and staging directories were gone after quit; the unique
+bundle, application data, and temporary Tauri config were moved to the user's Trash for recovery.
+No unrelated app, provider, user data, shared build cache, or user-owned working-tree change was
+touched. Both correction re-reviews remain pending.
+
 ## Agent Session idle pause/resume packaged candidate: 2026-09-01
 
 The isolated copied release was built from local `ab4ab78` on pushed baseline `23c9f35`, with the

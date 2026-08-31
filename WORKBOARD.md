@@ -12,14 +12,14 @@ Purpose: route the asynchronous Rust reimplementation without duplicating its co
 - Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - Real-client verification: [`docs/VERIFICATION.md`](docs/VERIFICATION.md)
 - Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`; pushed, fully verified, and manually approved Rust persona baseline `f6f8636`.
-- Active gate: commit the verified Codex code-mode-host custody correction, push the threshold batch,
-  and obtain both manual reviews. The pause/resume behavior, exact three-provider matrix, and clean
-  Codex stop receipt are implemented and locally verified.
+- Active gate: push the repository-verified correction range and obtain both manual re-reviews.
+  The corrected pause/resume behavior has also passed a fresh isolated packaged run with the exact
+  Codex Terra, Antigravity Flash, and OpenCode Muse Spark models.
 - Review cadence: keep every independent change below 1,000 changed lines. Push and cross-review when the unreviewed aggregate first reaches at least 1,000 changed lines; feature count alone does not trigger review, but a three-feature batch must not grow beyond roughly 2,000 changed lines.
 - Source structure: LOC only signals possible ownership drift. Review at 500 lines; treat 800 lines as a strong split candidate; reject over 1,000 by default, with concrete generated-code, fixture, or declarative-data exceptions considered only when they exist. Split at differing state/invariant, domain, authority, lifecycle, or change-reason owners regardless of size; reconsider a split if it increases state transfer, public interfaces, inter-module dependency count, or obscuring glue.
-- Required order: keep the verified pause/resume commits intact, preserve the external Codex
-  code-mode host under the existing guardian's process-group owner, retain fail-closed launch and
-  stop semantics, then review the exact pushed range before advancing the slice.
+- Required order: keep the verified product flow intact, retain the staged Codex bundle through the
+  resident driver lifetime, require fresh live-slot proof before state-only pause/resume, then
+  re-review the exact correction range before advancing the slice.
 - Exit: pause leaves each exact resident provider process and conversation intact with no new turn;
   paused input stays durably queued; resume assigns it through the existing floor owner; reload,
   restart, and Codex Terra, Antigravity Flash, and OpenCode Muse Spark packaged flows pass; both
