@@ -92,6 +92,7 @@ pub use agent_create_start::{
 pub use agent_lifecycle::{
     AgentRuntimeStarted, AgentStartEffect, AgentStartPlan, AgentStopEffect, AgentStopPlan,
 };
+pub use agent_pause::{AgentResidentPlan, AgentResidentRuntime};
 pub use agent_reconciliation::{
     LiveRuntimeReconciliation, RuntimeReconciliationCandidate, RuntimeReconciliationObservation,
     RuntimeReconciliationReservation,

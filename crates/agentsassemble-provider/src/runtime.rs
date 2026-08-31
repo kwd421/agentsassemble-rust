@@ -48,6 +48,14 @@ pub struct ProviderRuntimeGone {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProviderResidentRuntime {
+    pub runtime_handle_id: String,
+    pub runtime_owner_id: String,
+    pub runtime_lease_token: String,
+    pub runtime_profile_key: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProviderShutdownOutcome {
     pub gone: Vec<ProviderRuntimeGone>,
     pub failure: Option<ProviderAdapterError>,
@@ -543,6 +551,8 @@ mod provider_turn_exact_tests;
 #[cfg(all(test, unix))]
 #[path = "runtime_provider_turn_tests.rs"]
 mod provider_turn_tests;
+#[path = "runtime_resident.rs"]
+mod resident;
 #[cfg(all(test, unix))]
 #[path = "runtime_test_cleanup.rs"]
 mod test_cleanup;

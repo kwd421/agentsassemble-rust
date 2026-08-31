@@ -10,7 +10,7 @@ use crate::{
     agent_lifecycle_authority::{authorize_control, lifecycle_intent_is_empty, payload_agent_id},
     agent_lifecycle_events::{append_state_event, store_result},
     authority::active_room_for_principal,
-    command_admission::{admit_non_lifecycle_command, existing_command},
+    command_admission::{admit_non_lifecycle_command, inspect_non_lifecycle_command},
     room_write_budget::command_size,
     turn_authority::active_turn_authority,
 };
@@ -18,7 +18,95 @@ use crate::{
 const PAUSE: &str = "agent.pause";
 const RESUME: &str = "agent.resume";
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentResidentRuntime {
+    pub runtime_handle_id: String,
+    pub runtime_owner_id: String,
+    pub runtime_lease_token: String,
+    pub runtime_profile_key: String,
+}
+
+#[derive(Debug, Clone)]
+pub enum AgentResidentPlan {
+    Outcome(Box<CommandOutcome>),
+    Resident(Box<DurableAgentSession>),
+    ProviderLaunch,
+}
+
 impl SqliteStore {
+    /// Checks replay, authority, and durable idle state before live runtime proof.
+    ///
+    /// # Errors
+    ///
+    /// Returns authorization, replay-conflict, state-invariant, or storage failures.
+    pub async fn prepare_agent_pause(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request_id: &str,
+        payload: &Value,
+    ) -> Result<AgentResidentPlan, PersistenceError> {
+        self.prepare_resident_action(principal, request_id, payload, PAUSE, false)
+            .await
+    }
+
+    /// Routes an exact paused session to live proof and every other resume to provider launch.
+    ///
+    /// # Errors
+    ///
+    /// Returns authorization, replay-conflict, state-invariant, or storage failures.
+    pub async fn prepare_paused_agent_resume(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request_id: &str,
+        payload: &Value,
+    ) -> Result<AgentResidentPlan, PersistenceError> {
+        self.prepare_resident_action(principal, request_id, payload, RESUME, true)
+            .await
+    }
+
+    async fn prepare_resident_action(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request_id: &str,
+        payload: &Value,
+        action: &'static str,
+        resume: bool,
+    ) -> Result<AgentResidentPlan, PersistenceError> {
+        authorize_control(principal)?;
+        let agent_id = payload_agent_id(payload)?;
+        let payload_hash = canonical_payload_hash(payload);
+        let mut transaction = self.pool.begin().await?;
+        active_room_for_principal(&mut transaction, principal).await?;
+        if let Some(outcome) = inspect_non_lifecycle_command(
+            &mut transaction,
+            &principal.room_id,
+            &principal.principal_id,
+            request_id,
+            action,
+            &payload_hash,
+        )
+        .await?
+        {
+            transaction.commit().await?;
+            return Ok(AgentResidentPlan::Outcome(Box::new(outcome)));
+        }
+        let session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
+        if resume && session.public.runtime_status != "paused" {
+            transaction.commit().await?;
+            return Ok(AgentResidentPlan::ProviderLaunch);
+        }
+        require_resident_state(
+            &mut transaction,
+            &session,
+            &agent_id,
+            if resume { "paused" } else { "idle" },
+            !resume,
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(AgentResidentPlan::Resident(Box::new(session)))
+    }
+
     /// Pauses one idle resident runtime without calling or replacing its provider.
     ///
     /// # Errors
@@ -29,6 +117,7 @@ impl SqliteStore {
         principal: &AuthenticatedPrincipal,
         request_id: &str,
         payload: &Value,
+        runtime: &AgentResidentRuntime,
     ) -> Result<CommandOutcome, PersistenceError> {
         authorize_control(principal)?;
         let agent_id = payload_agent_id(payload)?;
@@ -51,6 +140,7 @@ impl SqliteStore {
         }
         let mut session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
         require_resident_state(&mut transaction, &session, &agent_id, "idle", true).await?;
+        require_matching_runtime(&session, runtime)?;
         session.public.enabled = false;
         "paused".clone_into(&mut session.public.runtime_status);
         session.public.updated_at = Utc::now();
@@ -89,13 +179,14 @@ impl SqliteStore {
         principal: &AuthenticatedPrincipal,
         request_id: &str,
         payload: &Value,
+        runtime: &AgentResidentRuntime,
     ) -> Result<Option<CommandOutcome>, PersistenceError> {
         authorize_control(principal)?;
         let agent_id = payload_agent_id(payload)?;
         let payload_hash = canonical_payload_hash(payload);
         let mut transaction = self.pool.begin().await?;
         active_room_for_principal(&mut transaction, principal).await?;
-        if let Some(outcome) = existing_command(
+        if let Some(outcome) = inspect_non_lifecycle_command(
             &mut transaction,
             &principal.room_id,
             &principal.principal_id,
@@ -128,6 +219,7 @@ impl SqliteStore {
             return Ok(Some(outcome));
         }
         require_resident_state(&mut transaction, &session, &agent_id, "paused", false).await?;
+        require_matching_runtime(&session, runtime)?;
         session.public.enabled = true;
         "idle".clone_into(&mut session.public.runtime_status);
         session.public.updated_at = Utc::now();
@@ -153,6 +245,25 @@ impl SqliteStore {
         .await?;
         transaction.commit().await?;
         Ok(Some(outcome))
+    }
+}
+
+fn require_matching_runtime(
+    session: &DurableAgentSession,
+    runtime: &AgentResidentRuntime,
+) -> Result<(), PersistenceError> {
+    if session.runtime_handle_id == runtime.runtime_handle_id
+        && session.runtime_owner_id == runtime.runtime_owner_id
+        && session.runtime_lease_token == runtime.runtime_lease_token
+        && session.runtime_profile_key == runtime.runtime_profile_key
+    {
+        Ok(())
+    } else {
+        Err(PersistenceError::CommandRejected {
+            code: "resident_runtime_changed",
+            message: "The resident provider runtime changed before the scheduling-state update."
+                .to_owned(),
+        })
     }
 }
 

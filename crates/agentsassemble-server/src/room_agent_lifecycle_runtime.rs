@@ -1,9 +1,11 @@
 use agentsassemble_persistence::{
-    AgentRuntimeStarted, AgentStartEffect, AgentStartPlan, AgentStopPlan,
-    LiveRuntimeReconciliation, PersistenceError, SqliteStore,
+    AgentResidentPlan, AgentResidentRuntime, AgentRuntimeStarted, AgentStartEffect, AgentStartPlan,
+    AgentStopPlan, LiveRuntimeReconciliation, PersistenceError, SqliteStore,
 };
 use agentsassemble_protocol::RoomAction;
-use agentsassemble_provider::{ProviderAdapter, ProviderAdapterError, ProviderRuntimeStarted};
+use agentsassemble_provider::{
+    ProviderAdapter, ProviderAdapterError, ProviderResidentRuntime, ProviderRuntimeStarted,
+};
 
 use crate::{
     room_command_execution::{CommandExecution, progressed_execution},
@@ -17,7 +19,7 @@ pub(crate) async fn execute_agent_start(
     command: &RoomCommand,
 ) -> CommandExecution {
     if command.action == RoomAction::AgentResume
-        && let Some(execution) = execute_paused_resume(store, command).await
+        && let Some(execution) = execute_paused_resume(store, provider_adapter, command).await
     {
         return execution;
     }
@@ -115,31 +117,98 @@ pub(crate) async fn execute_agent_start(
 
 async fn execute_paused_resume(
     store: &SqliteStore,
+    provider_adapter: &ProviderAdapter,
     command: &RoomCommand,
 ) -> Option<CommandExecution> {
+    let plan = match store
+        .prepare_paused_agent_resume(&command.principal, &command.request_id, &command.payload)
+        .await
+    {
+        Ok(plan) => plan,
+        Err(error) => return Some(CommandExecution::transactional_failure(error)),
+    };
+    let session = match plan {
+        AgentResidentPlan::Outcome(outcome) => {
+            return Some(progressed_execution(store, &command.principal.room_id, *outcome).await);
+        }
+        AgentResidentPlan::Resident(session) => session,
+        AgentResidentPlan::ProviderLaunch => return None,
+    };
+    let runtime = match provider_adapter.prove_resident_runtime(&session).await {
+        Ok(runtime) => persisted_resident_runtime(runtime),
+        Err(error) => return Some(resident_runtime_failure(&error)),
+    };
     match store
-        .resume_paused_agent(&command.principal, &command.request_id, &command.payload)
+        .resume_paused_agent(
+            &command.principal,
+            &command.request_id,
+            &command.payload,
+            &runtime,
+        )
         .await
     {
         Ok(Some(outcome)) => {
             Some(progressed_execution(store, &command.principal.room_id, outcome).await)
         }
-        Ok(None) => None,
+        Ok(None) => Some(CommandExecution::transactional_failure(
+            PersistenceError::CommandRejected {
+                code: "resident_runtime_changed",
+                message: "The paused Agent Session changed before resume committed.".to_owned(),
+            },
+        )),
         Err(error) => Some(CommandExecution::transactional_failure(error)),
     }
 }
 
 pub(crate) async fn execute_agent_pause(
     store: &SqliteStore,
+    provider_adapter: &ProviderAdapter,
     command: &RoomCommand,
 ) -> CommandExecution {
+    let plan = match store
+        .prepare_agent_pause(&command.principal, &command.request_id, &command.payload)
+        .await
+    {
+        Ok(plan) => plan,
+        Err(error) => return CommandExecution::transactional_failure(error),
+    };
+    let session = match plan {
+        AgentResidentPlan::Outcome(outcome) => return CommandExecution::success(*outcome),
+        AgentResidentPlan::Resident(session) => session,
+        AgentResidentPlan::ProviderLaunch => unreachable!("pause never launches a provider"),
+    };
+    let runtime = match provider_adapter.prove_resident_runtime(&session).await {
+        Ok(runtime) => persisted_resident_runtime(runtime),
+        Err(error) => return resident_runtime_failure(&error),
+    };
     store
-        .execute_agent_pause(&command.principal, &command.request_id, &command.payload)
+        .execute_agent_pause(
+            &command.principal,
+            &command.request_id,
+            &command.payload,
+            &runtime,
+        )
         .await
         .map_or_else(
             CommandExecution::transactional_failure,
             CommandExecution::success,
         )
+}
+
+fn persisted_resident_runtime(runtime: ProviderResidentRuntime) -> AgentResidentRuntime {
+    AgentResidentRuntime {
+        runtime_handle_id: runtime.runtime_handle_id,
+        runtime_owner_id: runtime.runtime_owner_id,
+        runtime_lease_token: runtime.runtime_lease_token,
+        runtime_profile_key: runtime.runtime_profile_key,
+    }
+}
+
+fn resident_runtime_failure(error: &ProviderAdapterError) -> CommandExecution {
+    CommandExecution::transactional_failure(PersistenceError::CommandRejected {
+        code: error.code,
+        message: error.message.to_owned(),
+    })
 }
 
 async fn record_agent_start_pre_effect_failure(

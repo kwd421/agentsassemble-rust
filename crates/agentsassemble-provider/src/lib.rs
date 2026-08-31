@@ -84,9 +84,10 @@ pub use room_portal::{
 pub use room_portal_terminal::run_room_helper_if_requested;
 pub use runtime::{
     ProviderAdapter, ProviderAdapterError, ProviderExactTurnAuthority, ProviderPreparedTurn,
-    ProviderRoomObservation, ProviderRuntimeGone, ProviderRuntimeObservation,
-    ProviderRuntimeStarted, ProviderShutdownOutcome, ProviderStartReservation,
-    ProviderTurnCompleted, ProviderTurnControl, ProviderTurnInterruptDisposition,
-    ProviderTurnNotStartedProof, ProviderTurnQuiescence, ProviderTurnRequest,
+    ProviderResidentRuntime, ProviderRoomObservation, ProviderRuntimeGone,
+    ProviderRuntimeObservation, ProviderRuntimeStarted, ProviderShutdownOutcome,
+    ProviderStartReservation, ProviderTurnCompleted, ProviderTurnControl,
+    ProviderTurnInterruptDisposition, ProviderTurnNotStartedProof, ProviderTurnQuiescence,
+    ProviderTurnRequest,
 };
 pub use selection::{ProviderSelection, ProviderSelectionError, creation_start_requested};

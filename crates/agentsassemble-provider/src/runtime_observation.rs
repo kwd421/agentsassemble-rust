@@ -120,13 +120,9 @@ fn observe_launching_runtime(
     )
 }
 
-async fn unavailable_running_health(runtime: &OwnedRuntime) -> Option<ProviderRuntimeObservation> {
+pub(super) async fn running_health_reason(runtime: &OwnedRuntime) -> Option<&'static str> {
     let Ok(mut driver) = runtime.driver.try_take() else {
-        return Some(ProviderRuntimeObservation::LeaseUncertain {
-            handle_id: runtime.handle_id.clone(),
-            owner_id: runtime.owner_id.clone(),
-            reason_code: "provider_turn_active".to_owned(),
-        });
+        return Some("provider_turn_active");
     };
     let reason_code = match driver.is_alive().await {
         Ok(true) if driver.attachment_replay_is_safe() => None,
@@ -135,6 +131,11 @@ async fn unavailable_running_health(runtime: &OwnedRuntime) -> Option<ProviderRu
         Err(_) => Some("runtime_health_unknown"),
     };
     runtime.driver.put(driver).await;
+    reason_code
+}
+
+async fn unavailable_running_health(runtime: &OwnedRuntime) -> Option<ProviderRuntimeObservation> {
+    let reason_code = running_health_reason(runtime).await;
     reason_code.map(|reason_code| ProviderRuntimeObservation::LeaseUncertain {
         handle_id: runtime.handle_id.clone(),
         owner_id: runtime.owner_id.clone(),

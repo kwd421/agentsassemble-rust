@@ -37,7 +37,12 @@ pub(crate) async fn execute_command(
             .await
             .unwrap_or_else(CommandExecution::transactional_failure),
         RoomAction::AgentPause => {
-            crate::room_agent_lifecycle_runtime::execute_agent_pause(store, command).await
+            crate::room_agent_lifecycle_runtime::execute_agent_pause(
+                store,
+                provider_adapter,
+                command,
+            )
+            .await
         }
         RoomAction::AgentStart | RoomAction::AgentResume => {
             crate::room_agent_lifecycle_runtime::execute_agent_start(
