@@ -99,6 +99,28 @@ pub(crate) async fn admit_non_lifecycle_command(
     Ok(outcome)
 }
 
+pub(crate) async fn store_command_result(
+    transaction: &mut Transaction<'_, Sqlite>,
+    principal: &AuthenticatedPrincipal,
+    request_id: &str,
+    action: &str,
+    payload_hash: &str,
+    result: &Value,
+) -> Result<(), PersistenceError> {
+    sqlx::query(
+        "INSERT INTO command_results(room_id, principal_id, request_id, action, payload_hash, result_json) VALUES (?, ?, ?, ?, ?, ?)",
+    )
+    .bind(&principal.room_id)
+    .bind(&principal.principal_id)
+    .bind(request_id)
+    .bind(action)
+    .bind(payload_hash)
+    .bind(serde_json::to_string(result)?)
+    .execute(&mut **transaction)
+    .await?;
+    Ok(())
+}
+
 impl SqliteStore {
     /// Reports whether one exact new authenticated command should consume the
     /// process-wide principal window before slow validation or provider work.

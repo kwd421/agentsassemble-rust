@@ -126,3 +126,17 @@ event, redaction, deletion, budget reservation, or publication.
   provider turn completed once with no replacement assignment. The focused test and warning-denied
   persistence Clippy passed. No fallback, polling, heartbeat, timer, retry, reconciliation cleanup,
   cache, or background task was added.
+
+## Durable command-result owner correction
+
+- Prior structure: manual review found the new mutation path had copied the raw `command_results`
+  insert already repeated by room messages, settings, roles, mute, random tools, and Agent Session
+  lifecycle. The values currently matched, but multiple production SQL writers could diverge from the
+  one replay reader without a mechanical failure.
+- Intent and preserved contract: `command_admission` now owns the sole raw result insert beside its
+  replay/admission reader. Each product command still owns its result shape, event list, transaction,
+  and commit boundary and calls one neutral helper with those exact values. No trait, framework,
+  state, alternate transaction, or forwarding-only compatibility wrapper was added.
+- Verification: repository-wide source search found one remaining production
+  `INSERT INTO command_results`; focused mutation and role tests and warning-denied persistence
+  Clippy passed with unchanged exact replay, rollback, event, and budget behavior.

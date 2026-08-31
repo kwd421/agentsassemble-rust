@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::{
     CommandOutcome, HumanSessionAuthorization, PersistenceError, SqliteStore,
     agent_lifecycle::{load_session, save_session},
-    command_admission::admit_non_lifecycle_command,
+    command_admission::{admit_non_lifecycle_command, store_command_result},
     human_session_authority::revalidate_human_session,
     message_attachments::{bind_message_attachments, prepare_message_attachment_bindings},
     room_write_budget::command_size,
@@ -577,16 +577,14 @@ async fn execute_message_in(
         assignments.push(item.assignment);
     }
     let result = json!({"event": event, "event_seq": sequence});
-    sqlx::query(
-        "INSERT INTO command_results(room_id, principal_id, request_id, action, payload_hash, result_json) VALUES (?, ?, ?, ?, ?, ?)",
+    store_command_result(
+        transaction,
+        principal,
+        request_id,
+        action,
+        &payload_hash,
+        &result,
     )
-    .bind(&principal.room_id)
-    .bind(&principal.principal_id)
-    .bind(request_id)
-    .bind(action)
-    .bind(payload_hash)
-    .bind(serde_json::to_string(&result)?)
-    .execute(&mut **transaction)
     .await?;
     Ok(RoomCommandMutation {
         outcome: CommandOutcome {

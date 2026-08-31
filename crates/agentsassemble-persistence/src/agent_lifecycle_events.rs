@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use sqlx::{Sqlite, Transaction};
 use uuid::Uuid;
 
-use crate::{CommandOutcome, PersistenceError};
+use crate::{CommandOutcome, PersistenceError, command_admission::store_command_result};
 
 pub(crate) async fn append_session_event(
     transaction: &mut Transaction<'_, Sqlite>,
@@ -138,16 +138,14 @@ pub(crate) async fn store_result(
             code: "invalid_state",
             message: "Command outcome has no event.".to_owned(),
         })?;
-    sqlx::query(
-        "INSERT INTO command_results(room_id, principal_id, request_id, action, payload_hash, result_json) VALUES (?, ?, ?, ?, ?, ?)",
+    store_command_result(
+        transaction,
+        principal,
+        request_id,
+        action,
+        &payload_hash,
+        &result,
     )
-    .bind(&principal.room_id)
-    .bind(&principal.principal_id)
-    .bind(request_id)
-    .bind(action)
-    .bind(payload_hash)
-    .bind(serde_json::to_string(&result)?)
-    .execute(&mut **transaction)
     .await?;
     Ok(CommandOutcome {
         result,

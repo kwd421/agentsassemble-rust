@@ -8,9 +8,11 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::{
-    CommandOutcome, PersistenceError, SqliteStore, authority::active_room_for_principal,
-    command_admission::admit_non_lifecycle_command,
-    room_appearance_assets::transition_room_appearance_references, room_write_budget::command_size,
+    CommandOutcome, PersistenceError, SqliteStore,
+    authority::active_room_for_principal,
+    command_admission::{admit_non_lifecycle_command, store_command_result},
+    room_appearance_assets::transition_room_appearance_references,
+    room_write_budget::command_size,
 };
 
 impl SqliteStore {
@@ -95,15 +97,14 @@ impl SqliteStore {
             .bind(serde_json::to_string(&event)?)
             .execute(&mut *transaction)
             .await?;
-        sqlx::query(
-            "INSERT INTO command_results(room_id, principal_id, request_id, action, payload_hash, result_json) VALUES (?, ?, ?, 'room.settings.update', ?, ?)",
+        store_command_result(
+            &mut transaction,
+            principal,
+            request_id,
+            "room.settings.update",
+            &payload_hash,
+            &result,
         )
-        .bind(&principal.room_id)
-        .bind(&principal.principal_id)
-        .bind(request_id)
-        .bind(payload_hash)
-        .bind(serde_json::to_string(&result)?)
-        .execute(&mut *transaction)
         .await?;
         transaction.commit().await?;
         Ok(CommandOutcome {

@@ -13,7 +13,7 @@ use crate::{
     CommandOutcome, HumanSessionAuthorization, PersistenceError, SqliteStore,
     agent_lifecycle::load_session,
     authority::active_room_for_principal,
-    command_admission::admit_non_lifecycle_command,
+    command_admission::{admit_non_lifecycle_command, store_command_result},
     human_session_authority::revalidate_human_session,
     room_turns::support::{insert_event, load_active_room, load_participant, next_sequence},
     room_write_budget::{command_size, reserve_room_write_budget},
@@ -244,16 +244,14 @@ async fn execute_room_random_command_in(
     .await?;
     let response = json!({"event": event, "event_seq": event.seq});
     insert_event(transaction, &event).await?;
-    sqlx::query(
-        "INSERT INTO command_results(room_id, principal_id, request_id, action, payload_hash, result_json) VALUES (?, ?, ?, ?, ?, ?)",
+    store_command_result(
+        transaction,
+        principal,
+        request_id,
+        action,
+        &payload_hash,
+        &response,
     )
-    .bind(&principal.room_id)
-    .bind(&principal.principal_id)
-    .bind(request_id)
-    .bind(action)
-    .bind(payload_hash)
-    .bind(serde_json::to_string(&response)?)
-    .execute(&mut **transaction)
     .await?;
     Ok(CommandOutcome {
         result: response,

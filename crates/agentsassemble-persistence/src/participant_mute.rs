@@ -15,7 +15,7 @@ use crate::{
     SqliteStore,
     agent_lifecycle::save_session,
     authority::active_room_for_principal,
-    command_admission::admit_non_lifecycle_command,
+    command_admission::{admit_non_lifecycle_command, store_command_result},
     provider_turn_effect::prepare_interrupt_effect,
     provider_turn_execution::load_execution_in,
     room_turns::{
@@ -95,17 +95,14 @@ impl SqliteStore {
             "event": prepared.event,
             "event_seq": prepared.event.seq,
         });
-        sqlx::query(
-            "INSERT INTO command_results(room_id, principal_id, request_id, action, payload_hash, result_json) \
-             VALUES (?, ?, ?, ?, ?, ?)",
+        store_command_result(
+            &mut transaction,
+            principal,
+            request_id,
+            ACTION,
+            &payload_hash,
+            &result,
         )
-        .bind(&principal.room_id)
-        .bind(&principal.principal_id)
-        .bind(request_id)
-        .bind(ACTION)
-        .bind(payload_hash)
-        .bind(serde_json::to_string(&result)?)
-        .execute(&mut *transaction)
         .await?;
         transaction.commit().await?;
         let mut events = vec![prepared.event.clone()];

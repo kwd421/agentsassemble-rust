@@ -11,7 +11,7 @@ use sqlx::{Row, Sqlite, Transaction};
 use crate::{
     CommandOutcome, HumanSessionAuthorization, PersistenceError, SqliteStore,
     authority::load_active_participant,
-    command_admission::admit_non_lifecycle_command,
+    command_admission::{admit_non_lifecycle_command, store_command_result},
     human_session_authority::revalidate_human_session,
     message_attachments::{delete_bound_message_attachments, message_attachments_from_event},
     message_pins::remove_lobby_message_pin,
@@ -127,7 +127,7 @@ async fn execute_message_mutation_in(
         delete_message(transaction, principal, &target, sequence, now).await?
     };
     insert_event(transaction, &mutation).await?;
-    store_result(
+    store_command_result(
         transaction,
         principal,
         request_id,
@@ -238,28 +238,6 @@ async fn redact_vote_transitions(
         )
         .await?;
     }
-    Ok(())
-}
-
-async fn store_result(
-    transaction: &mut Transaction<'_, Sqlite>,
-    principal: &AuthenticatedPrincipal,
-    request_id: &str,
-    action: &str,
-    payload_hash: &str,
-    result: &Value,
-) -> Result<(), PersistenceError> {
-    sqlx::query(
-        "INSERT INTO command_results(room_id, principal_id, request_id, action, payload_hash, result_json) VALUES (?, ?, ?, ?, ?, ?)",
-    )
-    .bind(&principal.room_id)
-    .bind(&principal.principal_id)
-    .bind(request_id)
-    .bind(action)
-    .bind(payload_hash)
-    .bind(serde_json::to_string(result)?)
-    .execute(&mut **transaction)
-    .await?;
     Ok(())
 }
 
