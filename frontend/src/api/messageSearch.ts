@@ -105,6 +105,8 @@ const VOTE_EVENT_KEYS = [
   "vote_deadline_at",
 ] as const;
 const RFC3339_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/;
+const RFC3339_UTC_OFFSET =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?\+00:00$/;
 const CURSOR = /^[A-Za-z0-9_-]+$/;
 
 function invalidResponse(): never {
@@ -135,6 +137,12 @@ function eventId(value: unknown): string {
 function timestamp(value: unknown): string {
   const result = boundedString(value, 40);
   if (!RFC3339_UTC.test(result) || Number.isNaN(Date.parse(result))) invalidResponse();
+  return result;
+}
+
+function voteDeadlineTimestamp(value: unknown): string {
+  const result = boundedString(value, 40);
+  if (!RFC3339_UTC_OFFSET.test(result) || Number.isNaN(Date.parse(result))) invalidResponse();
   return result;
 }
 
@@ -292,7 +300,7 @@ function parseVoteFields(event: Record<string, unknown>, createdAt: string) {
     (duration === 0 && deadline !== "") ||
     (duration !== 0 &&
       (deadline === "" ||
-        timestamp(deadline) !== deadline ||
+        voteDeadlineTimestamp(deadline) !== deadline ||
         Date.parse(deadline) - Date.parse(createdAt) !== Number(duration) * 1000))
   ) {
     invalidResponse();

@@ -108,7 +108,7 @@ function voteContextEvent(eventId = "event-1", seq = 7) {
     vote_question: "Ship privately?",
     vote_options: ["Yes", "No"],
     vote_duration_seconds: 300,
-    vote_deadline_at: "2026-08-29T01:05:00Z",
+    vote_deadline_at: "2026-08-29T01:05:00+00:00",
   };
 }
 
@@ -276,6 +276,12 @@ describe("lobby message-search HTTP authority", () => {
         vote_options: ["Yes", "No"],
       }],
     });
+
+    await expect(localContextResponse({
+      channel_id: "lobby",
+      event_id: "event-1",
+      events: [{ ...voteContextEvent(), vote_deadline_at: "2026-08-29T10:05:00+09:00" }],
+    })).rejects.toThrow("응답 계약");
 
     await expect(localContextResponse({
       channel_id: "lobby",

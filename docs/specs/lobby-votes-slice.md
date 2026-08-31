@@ -167,6 +167,15 @@ mount, explicit user refresh, or sequenced vote events—not polling.
   poll definition under limits generated from the Rust vote owner and continues to reject transition
   records. The canonical event log remains unchanged, so historical poll cards are reachable and
   refresh from sequenced events without making ballot history searchable or provider-visible.
+  The next manual review found that finite polls were still rejected because their domain-owned
+  deadline uses Chrono's exact `+00:00` UTC offset while ordinary event timestamps use serde's `Z`
+  form. The search decoder now preserves those two strict wire owners instead of broadening its
+  event timestamp parser: finite deadlines accept only the producer's `+00:00` form, and a test uses
+  that real shape while rejecting an equivalent nonzero offset. This changes no stored event,
+  deadline calculation, timer, or compatibility policy. The focused message-search suite passed
+  all seven tests, and the complete `make verify` passed the same structure, production build,
+  104-file/644-test frontend, desktop, Rust workspace, real TCP boundary, and warning-denied Clippy
+  gates recorded below.
   Moving payload construction out of the transport reduced `roomSocketClient.ts` from 788 to 746
   lines and removed the broad legacy-shaped request assembly. The final correction's `make verify`
   passed every structure/800-line/source-growth/policy/generated/CSS/diff gate, the production
