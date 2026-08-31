@@ -4,6 +4,7 @@ use agentsassemble_domain::InviteScope;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use reqwest::Client;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use tokio::net::TcpStream;
 use tokio_tungstenite::MaybeTlsStream;
 
@@ -257,6 +258,125 @@ async fn admitted_read_only_socket_rejects_message_mutations_before_dispatch() {
 
     socket.close().await;
     local.close().await;
+    server.stop().await;
+}
+
+#[tokio::test]
+async fn stale_human_session_cannot_mutate_on_an_unnotified_live_socket() {
+    let (store, credentials) = fixture(InviteScope::ReadWrite).await;
+    let server = start(store.clone()).await;
+    let client = Client::new();
+    let admitted = join(
+        &client,
+        &server.base_url,
+        credentials.join_code(),
+        &format!("aad1_{}", URL_SAFE_NO_PAD.encode([0x63; 32])),
+        "313e4567-e89b-12d3-a456-426614174003",
+        "Stale Mutation Writer",
+        "",
+    )
+    .await;
+    let session_token = canonical_session_token(&admitted);
+    let mut socket = open_session_socket(&client, &server.base_url, session_token).await;
+    send_command(
+        &mut socket,
+        "stale-target-create",
+        "message.send",
+        json!({"content": "soon stale"}),
+    )
+    .await;
+    let (created_ack, _) = receive_commit(&mut socket).await;
+    let message_id = created_ack["result"]["event"]["id"]
+        .as_str()
+        .unwrap_or_else(|| panic!("stale target ACK omitted its identity"))
+        .to_owned();
+
+    let fingerprint: [u8; 32] = Sha256::digest(session_token.as_bytes()).into();
+    let authorization = store
+        .authorize_human_session(&fingerprint)
+        .await
+        .unwrap_or_else(|error| panic!("authorize controlled stale session: {error}"));
+    let revoked = store
+        .execute_human_session_participant_leave(
+            &authorization,
+            "313e4567-e89b-12d3-a456-426614174004",
+            &json!({}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("commit controlled stale session: {error}"));
+    assert_eq!(revoked.revoked_session_fingerprints.len(), 1);
+
+    send_command(
+        &mut socket,
+        "stale-message-edit",
+        "message.edit",
+        json!({"event_id": message_id, "content": "must not commit"}),
+    )
+    .await;
+    assert!(socket.wait_closed().await);
+    let target = store
+        .snapshot("general", 0, 200)
+        .await
+        .unwrap_or_else(|error| panic!("read target after stale mutation attempt: {error}"))
+        .events
+        .into_iter()
+        .find(|event| event.id == message_id)
+        .unwrap_or_else(|| panic!("stale mutation target disappeared"));
+    assert_eq!(target.content.as_deref(), Some("soon stale"));
+    assert!(!target.extra.contains_key("edited_at"));
+    server.stop().await;
+}
+
+#[tokio::test]
+async fn deleted_vote_has_no_summary_after_its_mutation_event() {
+    let (store, _) = fixture(InviteScope::ReadOnly).await;
+    let server = start(store).await;
+    let mut socket = open_local_socket(&server.base_url).await;
+    send_command(
+        &mut socket,
+        "vote-target-create",
+        "message.send",
+        json!({
+            "kind": "vote",
+            "vote_question": "Delete this vote?",
+            "vote_options": ["Yes", "No"],
+        }),
+    )
+    .await;
+    let (created_ack, _) = receive_commit(&mut socket).await;
+    let vote_id = created_ack["result"]["event"]["id"]
+        .as_str()
+        .unwrap_or_else(|| panic!("vote ACK omitted its identity"))
+        .to_owned();
+
+    send_command(
+        &mut socket,
+        "vote-target-delete",
+        "message.delete",
+        json!({"event_id": vote_id}),
+    )
+    .await;
+    let (deleted_ack, deleted_event) = receive_commit(&mut socket).await;
+    assert_commit(
+        &deleted_ack,
+        &deleted_event,
+        "vote-target-delete",
+        "message.delete",
+        "message_deleted",
+    );
+
+    send_command(
+        &mut socket,
+        "deleted-vote-summary",
+        "room.vote.summary",
+        json!({"vote_id": vote_id}),
+    )
+    .await;
+    let rejected = socket.receive_json().await;
+    assert_eq!(rejected["op"], "nack");
+    assert_eq!(rejected["resolution"], "rejected");
+    assert_eq!(rejected["error"]["code"], "vote_not_found");
+    socket.close().await;
     server.stop().await;
 }
 
