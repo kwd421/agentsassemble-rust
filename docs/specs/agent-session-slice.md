@@ -123,6 +123,19 @@ without creating a second interrupt owner.
   immediate re-run, WebSocket projection/ACK ordering, and one packaged real-provider busy-turn
   control before this extension is complete.
 
+The local persistence and server candidate stores `participant_muted` versus `agent_interrupt` on
+the existing exact effect row in clean schema 55. That one cause controls public diagnostics and
+floor progression after both retained-runtime and runtime-gone proof; it is not a second lifecycle
+or provider state machine. The explicit command commits its normal complete session-state event and
+idempotent accepted result in the same transaction as the effect, then the common provider control
+attempts the exact interrupt. Fixed public text prevents provider-private diagnostics from crossing
+the room boundary. Focused persistence tests prove replay/conflict, competing-request rejection,
+pre-dispatch and runtime-gone finalization, cause survival, retained custody, input restoration, and
+no immediate assignment. The real TCP/WebSocket Codex fixture proves exactly one `turn/start` and
+one official `turn/interrupt`, committed ACK replay, terminal publication, idle return, and retained
+provider-session projection. The complete repository gate passes. Packaged real-provider control
+and restart recovery remain required before this extension is complete.
+
 ## Required slice contract
 
 - Codex lifecycle start binds its official executable and code-mode companion as one byte-identified bundle. The guardian's stopped launcher starts the companion as a same-anchor-group child on one validated canonical IPv4-loopback WebSocket endpoint, passes only that endpoint through the official `--code-mode-host` option, and then execs the persistent `app-server --stdio`. The companion receives a sanitized environment and runtime custody token but no RoomPortal bearer; unexpected inherited protocol descriptors are replaced with `/dev/null`. Missing or changed companion authority, invalid readiness, early exit, or custody change fails the launch without a fallback.

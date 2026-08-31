@@ -4861,3 +4861,53 @@ causal socket event without an arbitrary deadline. Daybreaker manually approved 
 `d168354` and cumulative `a958bab..d168354` at C0/H0/M0/L0. The independent critical-web review
 approved pushed HEAD `23c9f35`, cumulative `a958bab..23c9f35`, and corrections
 `edd9ce4..23c9f35` at C0/H0/M0/L0.
+
+## Agent Session explicit interrupt local candidate: 2026-09-01
+
+Commits `8d4c91b`, `3d432f1`, and `be7c4fc` connect the copied busy-session
+`agent.interrupt` control without adding a second provider or lifecycle state machine. Clean schema
+55 adds one constrained `interrupt_cause` field to the existing exact provider-turn effect owner.
+The field distinguishes `participant_muted` from `agent_interrupt` across replay and restart so the
+shared finalizers preserve each product contract: mute retains its established floor progression,
+while explicit interrupt restores inflight input to pending and does not immediately assign it
+again. Both retained-runtime and runtime-gone paths consume the same durable cause.
+
+The command requires current server-derived `agent.control`, active membership, a joined unmuted
+Agent participant, complete busy-turn authority, and exact session/execution/runtime
+handle-owner-lease agreement. Its command result and complete `agent_session_state` event commit in
+the same transaction as the interrupt effect before provider I/O. Same identity replay returns that
+accepted result, changed reuse conflicts, and another request cannot own the unresolved exact turn.
+The ACK means durable acceptance; uncertain dispatch or quiescence remains visible durable recovery
+authority. Public interruption output uses only fixed bounded text and code `interrupted`, so no
+provider diagnostic, path, token, or private runtime identity is copied into events or state.
+
+The prior common effect row could express only participant-mute semantics. Reusing it for the copied
+control without a durable cause would either schedule the restored input immediately or lose the
+reason during restart. The accepted storage cost is one short constrained TEXT value per interrupt
+effect plus the existing command-result/state-event records. No new process, task, cache, queue,
+allocation owner, polling, heartbeat, timer, retry, fallback, provider branch, compatibility path,
+or swallowed failure was introduced. Explicit finalization deliberately skips the existing
+assignment query and provider scheduling call; this is required product behavior rather than a
+speculative performance claim. The 766-line effect module remains one exact-effect claim,
+dispatch-fence, quiescence, and recovery state machine. Splitting it would add effect-state transfer
+and private interfaces; it remains below the 800-line strong warning. The 802-line room-turn test
+root is a module router plus the single room-turn invariant suite; the new behavior itself is in a
+160-line sibling test module, so no production owner or forwarding abstraction was added to meet a
+line target.
+
+Focused persistence verification proves pre-dispatch interrupt, exact replay and changed conflict,
+competing-request rejection, retained runtime/provider conversation, terminal execution, restored
+input, runtime-gone cause survival, fixed public diagnostics, and no immediate assignment. The
+existing ten participant-mute effect tests also pass unchanged. The real TCP/WebSocket boundary
+starts an owned Codex app-server fixture, observes exactly one `turn/start`, sends exactly one
+official `turn/interrupt`, receives the committed accepted ACK and terminal events, returns to
+attached/idle with the provider session active, observes no second `turn/start`, and replays the ACK
+without another effect. The generated product surface advances to revision 12; its canonical digest
+fixtures were recomputed from the same length-delimited action registry rather than bypassing the
+integrity check.
+
+The complete `make verify` gate passes: architecture and source-structure policy, generated
+bindings, original-CSS comparison, the production frontend build and 657 frontend tests, 26 desktop
+tests, all Rust unit/integration/TCP/WebSocket tests and doc tests, warning-denied workspace Clippy,
+and `git diff --check`. Packaged copied-frontend verification with the exact allowed real providers
+and restart recovery remain pending; this local candidate is not yet declared complete.
