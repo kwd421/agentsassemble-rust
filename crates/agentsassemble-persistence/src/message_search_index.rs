@@ -6,7 +6,10 @@ use agentsassemble_domain::{
 use serde_json::Value;
 use sqlx::{Sqlite, Transaction};
 
-use crate::{PersistenceError, message_attachments::message_attachments_from_event};
+use crate::{
+    PersistenceError,
+    message_attachments::{message_attachments_from_event, message_visible_text},
+};
 
 pub(crate) struct SearchableLobbyMessage {
     pub(crate) author: String,
@@ -70,7 +73,7 @@ pub(crate) fn searchable_lobby_message(
         })
         .unwrap_or_else(|| "Room".to_owned());
     let content = clean_message_search_value(
-        event.content.as_deref().unwrap_or_default(),
+        &message_visible_text(event)?,
         MAX_MESSAGE_SEARCH_CONTENT_CHARACTERS,
     );
     let attachment_filenames = message_attachments_from_event(event)?
@@ -82,6 +85,9 @@ pub(crate) fn searchable_lobby_message(
             )
         })
         .collect::<Vec<_>>();
+    if content.is_empty() && attachment_filenames.is_empty() {
+        return Ok(None);
+    }
     let mut values = Vec::with_capacity(attachment_filenames.len() + 2);
     values.push(author.clone());
     if !content.is_empty() {

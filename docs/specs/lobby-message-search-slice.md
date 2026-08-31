@@ -11,7 +11,9 @@ receiving private event fields or invented custom-channel data.
 ## Current contract
 
 The authoritative input remains `room_events`. Search indexes only public, non-deleted
-`message_final` events and matches the casefolded author, visible content, and attachment filenames.
+`message_final` records with visible text or attachments and matches the casefolded author, visible
+content, and attachment filenames. A poll's visible question is its search content. Private ballot
+and close transitions have neither visible text nor attachments and never enter the derived index.
 It preserves the original SQLite `unicode61` phrase behavior for every query and additionally uses
 the original whitespace-insensitive match when the compact query has at least three Unicode scalars.
 Results are newest-first in pages of 30; context is the selected event with at most 15 earlier and 15
@@ -95,7 +97,8 @@ reads, or present invented history.
 The frontend now resolves one local-or-remote `RoomHttpAuthority`, obtains a fresh one-use
 `message-search-read` grant for each search or context read, sends only that grant to the target, and
 validates the complete private/no-store response before exposing it. The parser accepts only the
-three currently emitted public lobby `message_final` variants, rejects unknown or private fields,
+currently emitted visible lobby `message_final` variants, including a strict canonical poll
+definition, and rejects unknown or private fields,
 and bounds pages, context windows, strings, attachment metadata, sequence order, and target identity.
 Room, channel, or authority changes synchronously invalidate pending requests and clear their visible
 query/results. Concrete custom channels report the unimplemented owner rather than synthesizing

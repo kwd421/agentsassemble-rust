@@ -17,6 +17,7 @@ pub const MIN_VOTE_DURATION_SECONDS: u32 = 30;
 pub const MAX_VOTE_DURATION_SECONDS: u32 = 86_400;
 pub const VOTE_QUESTION_CHARACTER_LIMIT: usize = 300;
 pub const VOTE_OPTION_CHARACTER_LIMIT: usize = 100;
+pub const MIN_VOTE_OPTIONS: usize = 2;
 pub const MAX_VOTE_OPTIONS: usize = 10;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -251,7 +252,7 @@ fn parse_create(object: &Map<String, Value>) -> Result<VoteCreate, CommandReject
             ));
         }
     }
-    if options.len() < 2 {
+    if options.len() < MIN_VOTE_OPTIONS {
         return Err(CommandRejection::new(
             "invalid_vote",
             "A vote requires at least two distinct options.",

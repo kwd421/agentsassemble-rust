@@ -186,6 +186,73 @@ async fn context_is_bounded_chronological_and_uses_public_event_projection() {
     );
 }
 
+#[tokio::test]
+async fn polls_search_by_visible_question_without_indexing_private_transitions() {
+    let (store, principal) = fixture().await;
+    let before = send(&store, &principal, "vote-search-before", "before poll").await;
+    let poll = store
+        .execute_message(
+            &principal,
+            "vote-search-poll",
+            "message.send",
+            &json!({
+                "kind": "vote",
+                "vote_question": "Ship privately?",
+                "vote_options": ["Yes", "No"]
+            }),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("create searchable poll: {error}"))
+        .event;
+    let transition = store
+        .execute_message(
+            &principal,
+            "vote-search-cast",
+            "message.send",
+            &json!({"kind": "vote_cast", "vote_id": poll.id, "vote_choice": "Yes"}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("cast private searchable ballot: {error}"))
+        .event;
+    let after = send(&store, &principal, "vote-search-after", "after poll").await;
+
+    let results = search(&store, "ship privately", "").await.results;
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].event_id, poll.id);
+    assert_eq!(results[0].content, "Ship privately?");
+
+    let indexed = sqlx::query_scalar::<_, String>(
+        "SELECT event_id FROM room_message_search_records WHERE room_id = ? ORDER BY event_seq",
+    )
+    .bind(&principal.room_id)
+    .fetch_all(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("read vote search index: {error}"));
+    assert_eq!(
+        indexed,
+        [before.id.clone(), poll.id.clone(), after.id.clone()]
+    );
+    assert!(!indexed.contains(&transition.id));
+
+    let context = store
+        .local_lobby_message_context(
+            &principal.room_id,
+            LOCAL_OPERATOR_USER_ID,
+            LOCAL_OPERATOR_PARTICIPANT_ID,
+            &poll.id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("read poll context: {error}"));
+    assert_eq!(
+        context
+            .events
+            .iter()
+            .map(|event| event.id.as_str())
+            .collect::<Vec<_>>(),
+        [before.id.as_str(), poll.id.as_str(), after.id.as_str()]
+    );
+}
+
 async fn fixture() -> (SqliteStore, AuthenticatedPrincipal) {
     let store = SqliteStore::open(&format!(
         "sqlite:file:{}?mode=memory&cache=shared",

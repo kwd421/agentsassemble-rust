@@ -13,6 +13,14 @@ import {
   MESSAGE_SEARCH_PAGE_SIZE,
 } from "../types/generated/MESSAGE_SEARCH_WIRE";
 import {
+  MAX_VOTE_DURATION_SECONDS,
+  MAX_VOTE_OPTIONS,
+  MIN_VOTE_DURATION_SECONDS,
+  MIN_VOTE_OPTIONS,
+  VOTE_OPTION_CHARACTER_LIMIT,
+  VOTE_QUESTION_CHARACTER_LIMIT,
+} from "../types/generated/VOTE_WIRE";
+import {
   parseMessageAttachment,
   parseMessageAttachmentFilename,
 } from "./messageAttachments";
@@ -89,6 +97,12 @@ const ROOM_TOOL_KEYS = [
   "source_turn_id",
   "source_participant_id",
   "details",
+] as const;
+const VOTE_EVENT_KEYS = [
+  "vote_question",
+  "vote_options",
+  "vote_duration_seconds",
+  "vote_deadline_at",
 ] as const;
 const RFC3339_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/;
 const CURSOR = /^[A-Za-z0-9_-]+$/;
@@ -246,11 +260,63 @@ function parseRoomToolDetails(event: Record<string, unknown>): Readonly<Record<s
   return Object.freeze({ ...details });
 }
 
+function parseVoteFields(event: Record<string, unknown>, createdAt: string) {
+  const question = boundedString(event.vote_question, VOTE_QUESTION_CHARACTER_LIMIT);
+  if (
+    !hasVisibleText(question) ||
+    !Array.isArray(event.vote_options) ||
+    event.vote_options.length < MIN_VOTE_OPTIONS ||
+    event.vote_options.length > MAX_VOTE_OPTIONS
+  ) {
+    invalidResponse();
+  }
+  const options = event.vote_options.map((option) => {
+    const parsed = boundedString(option, VOTE_OPTION_CHARACTER_LIMIT);
+    if (!hasVisibleText(parsed)) invalidResponse();
+    return parsed;
+  });
+  const duration = event.vote_duration_seconds;
+  if (
+    new Set(options).size !== options.length ||
+    !Number.isSafeInteger(duration) ||
+    !(
+      duration === 0 ||
+      (Number(duration) >= MIN_VOTE_DURATION_SECONDS &&
+        Number(duration) <= MAX_VOTE_DURATION_SECONDS)
+    )
+  ) {
+    invalidResponse();
+  }
+  const deadline = boundedString(event.vote_deadline_at, 40, true);
+  if (
+    (duration === 0 && deadline !== "") ||
+    (duration !== 0 &&
+      (deadline === "" ||
+        timestamp(deadline) !== deadline ||
+        Date.parse(deadline) - Date.parse(createdAt) !== Number(duration) * 1000))
+  ) {
+    invalidResponse();
+  }
+  return Object.freeze({
+    vote_question: question,
+    vote_options: options,
+    vote_duration_seconds: Number(duration),
+    vote_deadline_at: deadline,
+  });
+}
+
 function parseContextEvent(value: unknown, roomId: string): RoomEvent {
   const event = strictRecord(value, "로비 메시지 검색 컨텍스트 이벤트");
   const source = event.message_source;
   if (source === undefined) {
-    assertExactKeys(event, CONTEXT_EVENT_KEYS, "로비 메시지 검색 컨텍스트 이벤트", ["attachments"]);
+    assertExactKeys(
+      event,
+      event.message_kind === "vote"
+        ? [...CONTEXT_EVENT_KEYS, ...VOTE_EVENT_KEYS]
+        : CONTEXT_EVENT_KEYS,
+      "로비 메시지 검색 컨텍스트 이벤트",
+      ["attachments"]
+    );
   } else if (source === "room_portal") {
     assertExactKeys(event, [...CONTEXT_EVENT_KEYS, ...ROOM_PORTAL_KEYS], "로비 메시지 검색 컨텍스트 이벤트");
   } else if (source === "room_tool_result") {
@@ -267,6 +333,7 @@ function parseContextEvent(value: unknown, roomId: string): RoomEvent {
       : invalidResponse();
   const participantId = boundedString(event.participant_id, 256);
   const participantType = boundedString(event.participant_type, 64);
+  const createdAt = timestamp(event.created_at);
   if (
     event.v !== 1 ||
     event.room_id !== roomId ||
@@ -274,15 +341,27 @@ function parseContextEvent(value: unknown, roomId: string): RoomEvent {
     event.actor_id !== participantId ||
     event.actor_type !== participantType ||
     actor.participant_id !== participantId ||
-    actor.participant_type !== participantType ||
-    (!hasVisibleText(content) && attachments.length === 0)
+    actor.participant_type !== participantType
   ) {
     invalidResponse();
   }
   const messageKind = boundedString(event.message_kind, 32);
-  if (source === undefined && messageKind !== "message") invalidResponse();
+  let voteFields: ReturnType<typeof parseVoteFields> | undefined;
+  if (source === undefined) {
+    if (messageKind === "vote") {
+      if (content !== "") invalidResponse();
+      voteFields = parseVoteFields(event, createdAt);
+    } else if (messageKind !== "message" || (!hasVisibleText(content) && attachments.length === 0)) {
+      invalidResponse();
+    }
+  }
   if (source === "room_portal") {
-    if (participantType !== "agent" || messageKind !== "message" || attachments.length) invalidResponse();
+    if (
+      participantType !== "agent" ||
+      messageKind !== "message" ||
+      attachments.length ||
+      !hasVisibleText(content)
+    ) invalidResponse();
     ["session_id", "turn_id", "source_event_id"].forEach((key) =>
       boundedString(event[key], 256)
     );
@@ -295,6 +374,7 @@ function parseContextEvent(value: unknown, roomId: string): RoomEvent {
       participantType !== "system" ||
       messageKind !== "system" ||
       attachments.length ||
+      !hasVisibleText(content) ||
       !/^result-[0-9a-f]{32}$/.test(String(event.room_result_id))
     ) {
       invalidResponse();
@@ -307,7 +387,7 @@ function parseContextEvent(value: unknown, roomId: string): RoomEvent {
     ...event,
     id: eventId(event.id),
     seq: positiveSequence(event.seq),
-    created_at: timestamp(event.created_at),
+    created_at: createdAt,
     room_id: roomId,
     type: "message_final",
     actor,
@@ -319,6 +399,7 @@ function parseContextEvent(value: unknown, roomId: string): RoomEvent {
     content,
     message_kind: messageKind,
     ...(event.attachments !== undefined ? { attachments } : {}),
+    ...(voteFields || {}),
     ...(details ? { details } : {}),
   }) as unknown as RoomEvent;
 }

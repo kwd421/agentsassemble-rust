@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde_json::{Map, Value, json};
 
-use crate::{Actor, AuthenticatedPrincipal, ClientKind, RoomEvent};
+use crate::{Actor, AuthenticatedPrincipal, RoomEvent};
 
 const PRIVATE_PUBLIC_KEYS: &[&str] = &[
     "absolute_path",
@@ -76,7 +76,7 @@ pub fn public_event_for_principal(
 ) -> RoomEvent {
     let mut projected = event.clone();
     projected.extra = project_map(&event.extra);
-    anonymize_private_vote(&mut projected, principal);
+    anonymize_private_vote(&mut projected);
     if !room_event_is_owner_only(&projected) || event_is_visible_to(&projected, principal) {
         if room_event_is_owner_only(&projected) {
             projected.extra.remove("audience");
@@ -189,12 +189,12 @@ fn event_is_visible_to(event: &RoomEvent, principal: &AuthenticatedPrincipal) ->
     })
 }
 
-fn anonymize_private_vote(event: &mut RoomEvent, principal: &AuthenticatedPrincipal) {
+fn anonymize_private_vote(event: &mut RoomEvent) {
     let private_vote = event
         .message_kind
         .as_deref()
         .is_some_and(|kind| matches!(kind, "vote_cast" | "vote_withdraw" | "vote_close"));
-    if !private_vote || principal.client_kind == ClientKind::AgentBridge {
+    if !private_vote {
         return;
     }
     event.actor.participant_id.clear();
@@ -297,5 +297,28 @@ mod tests {
                 .get("provider_session_id")
                 .is_none()
         );
+    }
+
+    #[test]
+    fn agent_bridge_never_receives_private_ballot_identity_or_choice() {
+        let mut bridge = principal("bridge");
+        bridge.client_kind = ClientKind::AgentBridge;
+        bridge.capabilities =
+            CapabilitySet::for_principal(ClientKind::AgentBridge, InviteScope::ReadWrite, false);
+        let mut event = owner_event();
+        event.event_type = "message_final".to_owned();
+        event.message_kind = Some("vote_cast".to_owned());
+        event.extra.remove("visibility");
+        event.extra.insert("vote_id".to_owned(), json!("poll-1"));
+        event
+            .extra
+            .insert("vote_choice".to_owned(), json!("Secret"));
+
+        let projected = public_event_for_principal(&event, &bridge);
+        assert!(projected.actor.participant_id.is_empty());
+        assert!(projected.participant_id.is_none());
+        assert!(projected.display_name.is_none());
+        assert!(!projected.extra.contains_key("vote_choice"));
+        assert_eq!(projected.extra.get("vote_id"), Some(&json!("poll-1")));
     }
 }

@@ -156,10 +156,24 @@ mount, explicit user refresh, or sequenced vote events—not polling.
   including that owner. The stream now keeps ordinary incoming messages out of the fixed window but
   admits only privacy-minimized vote transition markers, so a poll shown in historical context still
   refreshes without changing the visible history or retaining voter identity and choice.
+  Cross-review then followed that path to its earlier search owner and found a reachable privacy and
+  functionality mismatch: the raw search index admitted contentless ballot transitions before public
+  projection, so human search could expose the transition author's name and the shared Agent Session
+  context path could expose both voter identity and choice; meanwhile the strict browser context
+  decoder rejected the poll definition itself. The derived index now reuses the existing
+  `message_visible_text` owner, indexes the visible poll question, and excludes every contentless
+  transition. The common public-event projection also removes its old Agent Bridge exception, so all
+  consumers retain only the privacy-minimized transition marker. The browser accepts only an exact
+  poll definition under limits generated from the Rust vote owner and continues to reject transition
+  records. The canonical event log remains unchanged, so historical poll cards are reachable and
+  refresh from sequenced events without making ballot history searchable or provider-visible.
   Moving payload construction out of the transport reduced `roomSocketClient.ts` from 788 to 746
-  lines and removed the broad legacy-shaped request assembly. The targeted 58 tests, full
-  103-file/642-test frontend suite, TypeScript production build, and original-CSS verification passed.
-  Packaged UI and real-provider acceptance remain pending and are not claimed here.
+  lines and removed the broad legacy-shaped request assembly. The final correction's `make verify`
+  passed every structure/800-line/source-growth/policy/generated/CSS/diff gate, the production
+  frontend build and 104-file/644-test suite, 26 desktop tests, 51 domain tests, 227 persistence
+  tests, 6 protocol tests, 150 provider tests, 94 server tests plus the real TCP/integration suite,
+  and warning-denied workspace Clippy. Packaged UI and real-provider acceptance remain pending and
+  are not claimed here.
 
 ## Manual review record
 

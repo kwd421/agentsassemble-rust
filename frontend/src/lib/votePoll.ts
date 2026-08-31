@@ -1,3 +1,10 @@
+import {
+  MAX_VOTE_OPTIONS,
+  MIN_VOTE_OPTIONS,
+  VOTE_OPTION_CHARACTER_LIMIT,
+  VOTE_QUESTION_CHARACTER_LIMIT,
+} from "../types/generated/VOTE_WIRE";
+
 export type VoteCommand = {
   question: string;
   options: string[];
@@ -23,11 +30,11 @@ export function parseVoteCommand(text: string): VoteCommand | null {
     const key = option.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    options.push(option.slice(0, 100));
-    if (options.length >= 10) break;
+    options.push(option.slice(0, VOTE_OPTION_CHARACTER_LIMIT));
+    if (options.length >= MAX_VOTE_OPTIONS) break;
   }
-  if (!question || options.length < 2) {
+  if (!question || options.length < MIN_VOTE_OPTIONS) {
     throw new Error(`투표 형식: ${VOTE_COMMAND_USAGE}`);
   }
-  return { question: question.slice(0, 300), options };
+  return { question: question.slice(0, VOTE_QUESTION_CHARACTER_LIMIT), options };
 }

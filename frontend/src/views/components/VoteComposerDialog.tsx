@@ -7,10 +7,18 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { Plus, Trash2, X } from "lucide-react";
+import {
+  MAX_VOTE_DURATION_SECONDS,
+  MAX_VOTE_OPTIONS,
+  MIN_VOTE_DURATION_SECONDS,
+  MIN_VOTE_OPTIONS,
+  VOTE_OPTION_CHARACTER_LIMIT,
+  VOTE_QUESTION_CHARACTER_LIMIT,
+} from "../../types/generated/VOTE_WIRE";
 
-const MIN_OPTIONS = 2;
-const MAX_OPTIONS = 10;
 const DEFAULT_DURATION_MINUTES = 5;
+const MIN_DURATION_MINUTES = Math.ceil(MIN_VOTE_DURATION_SECONDS / 60);
+const MAX_DURATION_MINUTES = Math.floor(MAX_VOTE_DURATION_SECONDS / 60);
 const FOCUSABLE_SELECTOR = [
   "button:not([disabled])",
   "input:not([disabled])",
@@ -93,14 +101,14 @@ export default function VoteComposerDialog({
   }
 
   function removeOption(index: number) {
-    if (options.length <= MIN_OPTIONS || busy) return;
+    if (options.length <= MIN_VOTE_OPTIONS || busy) return;
     setOptions((current) =>
       current.filter((_option, optionIndex) => optionIndex !== index)
     );
   }
 
   function addOption() {
-    if (options.length >= MAX_OPTIONS || busy) return;
+    if (options.length >= MAX_VOTE_OPTIONS || busy) return;
     setOptions((current) => [...current, ""]);
   }
 
@@ -127,10 +135,12 @@ export default function VoteComposerDialog({
     if (
       !noDeadline &&
       (!Number.isInteger(durationMinutes) ||
-        durationMinutes < 1 ||
-        durationMinutes > 1440)
+        durationMinutes < MIN_DURATION_MINUTES ||
+        durationMinutes > MAX_DURATION_MINUTES)
     ) {
-      setError("투표 기간은 1분에서 1440분 사이여야 합니다.");
+      setError(
+        `투표 기간은 ${MIN_DURATION_MINUTES}분에서 ${MAX_DURATION_MINUTES}분 사이여야 합니다.`
+      );
       return;
     }
 
@@ -191,7 +201,7 @@ export default function VoteComposerDialog({
               ref={questionInputRef}
               className="ops-input"
               value={question}
-              maxLength={300}
+              maxLength={VOTE_QUESTION_CHARACTER_LIMIT}
               placeholder="어느 길로 갈까요?"
               onChange={(event) => setQuestion(event.target.value)}
               disabled={busy}
@@ -208,7 +218,7 @@ export default function VoteComposerDialog({
                 <input
                   className="ops-input"
                   value={option}
-                  maxLength={100}
+                  maxLength={VOTE_OPTION_CHARACTER_LIMIT}
                   placeholder={`선택지 ${index + 1}`}
                   onChange={(event) => updateOption(index, event.target.value)}
                   disabled={busy}
@@ -218,7 +228,7 @@ export default function VoteComposerDialog({
                   type="button"
                   className="ops-button grid place-items-center px-0"
                   onClick={() => removeOption(index)}
-                  disabled={busy || options.length <= MIN_OPTIONS}
+                  disabled={busy || options.length <= MIN_VOTE_OPTIONS}
                   aria-label={`선택지 ${index + 1} 제거`}
                 >
                   <Trash2 size={15} />
@@ -229,7 +239,7 @@ export default function VoteComposerDialog({
               type="button"
               className="ops-button mt-1 inline-flex items-center justify-center gap-2"
               onClick={addOption}
-              disabled={busy || options.length >= MAX_OPTIONS}
+              disabled={busy || options.length >= MAX_VOTE_OPTIONS}
             >
               <Plus size={15} />
               선택지 추가
@@ -242,8 +252,8 @@ export default function VoteComposerDialog({
               <input
                 className="ops-input"
                 type="number"
-                min={1}
-                max={1440}
+                min={MIN_DURATION_MINUTES}
+                max={MAX_DURATION_MINUTES}
                 step={1}
                 value={durationMinutes}
                 onChange={(event) => {

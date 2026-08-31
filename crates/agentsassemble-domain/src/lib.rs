@@ -74,7 +74,7 @@ pub use text::{
     clean_identifier, clean_message, clean_single_line, has_visible_text, validate_room_id,
 };
 pub use vote::{
-    MAX_VOTE_DURATION_SECONDS, MAX_VOTE_OPTIONS, MIN_VOTE_DURATION_SECONDS,
+    MAX_VOTE_DURATION_SECONDS, MAX_VOTE_OPTIONS, MIN_VOTE_DURATION_SECONDS, MIN_VOTE_OPTIONS,
     VOTE_OPTION_CHARACTER_LIMIT, VOTE_QUESTION_CHARACTER_LIMIT, VoteCast, VoteCommand, VoteCreate,
     VoteReference, VoteSummary, prepare_vote_event, resolve_vote_choice, validate_vote_id,
     vote_deadline_at,

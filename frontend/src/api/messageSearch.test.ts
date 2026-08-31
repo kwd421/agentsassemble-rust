@@ -100,6 +100,18 @@ function roomToolContextEvent(eventId = "event-tool", seq = 9) {
   };
 }
 
+function voteContextEvent(eventId = "event-1", seq = 7) {
+  return {
+    ...contextEvent(eventId, seq),
+    content: "",
+    message_kind: "vote",
+    vote_question: "Ship privately?",
+    vote_options: ["Yes", "No"],
+    vote_duration_seconds: 300,
+    vote_deadline_at: "2026-08-29T01:05:00Z",
+  };
+}
+
 async function localSearchResponse(payload: unknown, privateResponse = true) {
   bridge.read.mockResolvedValueOnce(grant("a".repeat(64)));
   vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(
@@ -250,6 +262,31 @@ describe("lobby message-search HTTP authority", () => {
       results,
       next_cursor: "",
     });
+  });
+
+  it("accepts a canonical poll context while rejecting private transitions", async () => {
+    await expect(localContextResponse({
+      channel_id: "lobby",
+      event_id: "event-1",
+      events: [voteContextEvent()],
+    })).resolves.toMatchObject({
+      events: [{
+        message_kind: "vote",
+        vote_question: "Ship privately?",
+        vote_options: ["Yes", "No"],
+      }],
+    });
+
+    await expect(localContextResponse({
+      channel_id: "lobby",
+      event_id: "event-1",
+      events: [{
+        ...contextEvent(),
+        content: "",
+        message_kind: "vote_cast",
+        vote_id: "event-poll",
+      }],
+    })).rejects.toThrow("응답 계약");
   });
 
   it("rejects malformed complete pages rather than projecting permissive defaults", async () => {
