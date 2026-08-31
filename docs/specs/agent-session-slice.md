@@ -146,6 +146,21 @@ These are sequencing boundaries, not reductions of the repository reimplementati
 
 ## Verification
 
+The RoomPortal MCP owner previously kept two independently changing flows in one
+655-line module: loopback HTTP server lifetime, bearer authentication, connection
+admission and deadlines; and provider-visible tool routing plus terminal-action
+staging. The transport flow now lives in a sibling module while the tool handler
+retains the shared `PortalState` and every room-action invariant. The split reuses
+the existing `Arc<Mutex<PortalState>>` boundary and exposes only the handler type and
+constructor within the provider crate; it adds no trait, forwarding wrapper, state,
+task, timer, retry, fallback, or dependency. Capability-path secrecy, constant-time
+bearer validation, the atomic authenticated/eviction transition, request and
+connection bounds, exact read receipt, and one terminal outcome remain unchanged.
+The accepted cost is one direct sibling-module dependency instead of one mixed
+source file. No CPU, memory, disk, or latency improvement is claimed. Focused
+RoomPortal MCP tests, including the authentication/eviction race and raw loopback
+admission/body-limit checks, passed after the split.
+
 The cancelled-initialization regression had twice failed before this correction,
 and successful repetitions spent 6.7–7.1 seconds in the test because shutdown could
 wait its complete five-second driver-ownership deadline. The fixture also published

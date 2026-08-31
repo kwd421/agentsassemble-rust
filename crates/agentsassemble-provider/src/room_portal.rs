@@ -13,7 +13,7 @@ use crate::filesystem::BoundExecutable;
 #[cfg(unix)]
 use crate::guardian::GuardianLaunch;
 use crate::room_attachment::{ProviderAttachmentReadIngress, valid_observation_attachments};
-use crate::room_portal_mcp::PortalServer;
+use crate::room_portal_mcp_transport::PortalServer;
 #[cfg(any(unix, windows))]
 use crate::room_portal_terminal::RoomPortalTerminalHelper;
 

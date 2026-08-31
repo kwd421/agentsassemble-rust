@@ -15,10 +15,10 @@ use rmcp::{
 };
 use serde_json::{Map, json};
 
-use super::{
+use crate::room_portal::{ProviderTurnOutcome, RoomObservationStart, RoomPortal};
+use crate::room_portal_mcp_transport::{
     ConnectionAuthentication, ConnectionRegistry, MAX_MCP_REQUEST_BYTES, MAX_PORTAL_CONNECTIONS,
 };
-use crate::room_portal::{ProviderTurnOutcome, RoomObservationStart, RoomPortal};
 
 #[test]
 fn bearer_authentication_is_atomic_with_unauthenticated_eviction() {

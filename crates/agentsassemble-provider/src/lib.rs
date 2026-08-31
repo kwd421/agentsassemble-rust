@@ -41,6 +41,7 @@ mod remote_https;
 mod room_attachment;
 mod room_portal;
 mod room_portal_mcp;
+mod room_portal_mcp_transport;
 #[cfg(any(unix, windows))]
 mod room_portal_terminal;
 mod room_portal_tool_contract;
