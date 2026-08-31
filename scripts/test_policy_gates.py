@@ -1,8 +1,11 @@
 """Regression tests for architecture and source-growth policy boundaries."""
 
+from contextlib import redirect_stdout
+import io
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from scripts.check_architecture import (
     architecture_violations,
@@ -14,6 +17,7 @@ from scripts.check_source_growth import (
     SourceGrowthPolicy,
     SourceMetric,
     _tracked_source,
+    main as source_growth_main,
     structure_warnings,
     violations,
 )
@@ -195,6 +199,25 @@ class SourceGrowthPolicyTests(unittest.TestCase):
             "src/oversized.rs: 1001 lines exceeds the default limit of 1000",
             violations(metrics, policy),
         )
+
+    def test_command_names_every_structure_review_candidate(self) -> None:
+        policy = SourceGrowthPolicy(500, 800, 1_000, 262_144, 16_384)
+        metrics = {
+            "src/review.rs": SourceMetric(500, 1_000, 80),
+            "src/strong.rs": SourceMetric(800, 1_000, 80),
+        }
+        output = io.StringIO()
+
+        with (
+            patch("scripts.check_source_growth.load_policy", return_value=policy),
+            patch("scripts.check_source_growth.collect_source_metrics", return_value=metrics),
+            redirect_stdout(output),
+        ):
+            self.assertEqual(source_growth_main(), 0)
+
+        report = output.getvalue()
+        self.assertIn("- warning: src/review.rs", report)
+        self.assertIn("- strong: src/strong.rs", report)
 
     def test_executable_lockfile_name_is_still_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

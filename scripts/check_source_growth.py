@@ -172,13 +172,12 @@ def main() -> int:
     found = violations(metrics, policy)
     warnings = structure_warnings(metrics, policy)
     if warnings:
-        strong = tuple(item for item in warnings if item.startswith("strong:"))
         print(
             f"Source structure warnings: {len(warnings)} file(s) are at least "
             f"{policy.warning_line_limit} lines; responsibility boundaries, not line count, "
             "decide whether to split."
         )
-        for item in strong:
+        for item in warnings:
             print(f"- {item}")
     if not found:
         return 0
