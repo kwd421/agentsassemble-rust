@@ -4624,16 +4624,28 @@ The correction moves privacy minimization to the durable vote-write boundary. On
 constructs the stored and replayed transition marker with only event identity, sequence, room, time,
 kind, and `vote_id`; current identity and choice remain owned by the vote projection and ballots.
 Poll deletion now removes that projection and the poll secret without reading or rewriting historical
-transitions. Schema 53 is a clean stored-contract cutoff and rejects older stores without migration,
-fallback, or compatibility behavior. A trigger that rejects any transition-row update remains armed
-while deletion succeeds, the transition rows compare byte-for-byte before and after, and the stored
-command result carries the same minimized marker.
+transitions. Daybreaker correction review then found that current ballot rows could still grow with
+unbounded sequential admissions to an indefinite poll. The vote owner therefore caps one poll at
+192 current ballots: the complete concurrent room surface of 112 public-human, 16 reserved
+operator/external, and 64 Agent Session participants. Existing-ballot replacement and withdrawal
+remain available at capacity, and a withdrawal releases one slot. Schema 54 is a clean
+stored-contract cutoff and rejects older stores without migration, fallback, or compatibility
+behavior. A trigger that rejects any transition-row update remains armed while deletion succeeds,
+the transition rows compare byte-for-byte before and after, and the stored command result carries
+the same minimized marker.
 
 On the same 14,400-transition debug fixture, the corrected real deletion completed in 10.650 ms and
 database page bytes remained 4,947,968 before and after. These are controlled point observations,
 not production latency claims. Event cursor identity and current vote summaries are preserved; no
 index, cache, task, cleanup loop, timer, polling, heartbeat, retry, fallback, or swallowed failure was
 introduced.
+
+The maximum-ballot fixture proved that the 193rd distinct ballot fails with
+`vote_capacity_reached` without a partial event or command result; an existing voter can still
+replace and withdraw, the released slot accepts the previously rejected voter, and deleting the poll
+removes all 192 ballot rows. The real deletion took 1.035 ms in that debug in-memory point. This is
+evidence for the absolute work bound, not a production latency claim. The cap uses one domain
+constant and one persistence enforcement owner; no duplicated SQL quota or schema CHECK was added.
 
 The TCP correction removes all uses of the shared elapsed-silence helper. Exact replay is proven by
 the next durable snapshot and event sequence containing exactly one target mutation, read-only

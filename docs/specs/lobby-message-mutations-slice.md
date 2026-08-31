@@ -40,9 +40,12 @@ and—when the target is a poll—its definition. It sets one server deletion ti
 current vote projection and all current ballots. Every ballot/withdraw/close transition is already
 persisted as an anonymous marker that retains only event identity, sequence, room, time, kind, and
 `vote_id`; the same minimized marker is stored for command replay. Current voter identity and choice
-belong only to the vote projection and ballots. Reload, history, search context, pins, provider
-context, and live projection must expose no deleted poll definition, ballot choice, voter identity,
-or attachment reference.
+belong only to the vote projection and ballots. One poll owns at most 192 current ballots, matching
+the complete concurrent room surface of 112 public-human, 16 reserved operator/external, and 64
+Agent Session participants. A replacement or withdrawal remains available at capacity; only a new
+distinct ballot fails explicitly until capacity is released. Reload, history, search context, pins,
+provider context, and live projection must expose no deleted poll definition, ballot choice, voter
+identity, or attachment reference.
 
 Rust improves the original post-commit cleanup boundary without changing reachable behavior. A
 bound lobby attachment belongs to exactly one `(room_id, event_seq)` row and cannot be shared.
@@ -235,9 +238,14 @@ event, redaction, deletion, budget reservation, or publication.
 - Intent and owner: one domain privacy function now constructs the exact anonymous vote-transition
   marker at the original write boundary. The persistence vote owner stores that marker in both
   `room_events` and the durable command result. Current identity and choice remain solely in the
-  vote projection and ballots. Poll deletion removes that projection and the poll secret without
-  scanning or rewriting historical transitions. Schema 53 makes this stored privacy invariant a
-  clean cutover and rejects older stores; no migration or compatibility path exists.
+  vote projection and ballots. Daybreak correction review then found that an indefinite poll could
+  retain ballots from unbounded sequentially admitted participants even though only current sessions
+  are admission-capped. The same vote owner now enforces an absolute 192-current-ballot ceiling from
+  the complete concurrent room participant surface. Replacements and withdrawals stay available at
+  capacity, and withdrawal releases one slot. Poll deletion removes that bounded projection and the
+  poll secret without scanning or rewriting historical transitions. Schema 54 makes both stored
+  privacy and bounded-projection invariants a clean cutover and rejects older stores; no migration
+  or compatibility path exists.
 - Preserved contracts and trade-off: event ID, sequence, room, time, kind, and `vote_id` still drive
   cursor-contiguous replay and copied-client refresh. Current vote summaries still come from the
   authoritative projection. Deletion, exact command replay, transaction rollback, public history,
@@ -247,7 +255,11 @@ event, redaction, deletion, budget reservation, or publication.
   while poll deletion succeeds; the rows compare byte-for-byte before and after, and stored command
   replay is minimized too. On the same 14,400-transition debug fixture, the corrected real delete
   completed in 10.650 ms and database page bytes stayed at 4,947,968 before and after. This is a
-  controlled point comparison, not production latency. The paired TCP-review correction replaces
-  elapsed-time absence assertions with exact replay cursors, durable snapshots, and causal socket
-  closure. No index, background cleanup, timer, polling, heartbeat, retry, fallback, or swallowed
-  failure was added. Critical-web and Daybreaker correction review remain pending.
+  controlled point comparison, not production latency. A separate maximum-ballot fixture proved the
+  193rd distinct ballot rejects without a partial event/result, replacement and withdrawal remain
+  available, the released slot accepts a new participant, and deletion removes all 192 ballots. Its
+  measured delete took 1.035 ms in the debug in-memory fixture; that point only validates the chosen
+  bound, not production latency. The paired TCP-review correction replaces elapsed-time absence
+  assertions with exact replay cursors, durable snapshots, and causal socket closure. No index,
+  background cleanup, timer, polling, heartbeat, retry, fallback, or swallowed failure was added.
+  Critical-web and Daybreaker correction review remain pending.
