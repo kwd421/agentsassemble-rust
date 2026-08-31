@@ -110,8 +110,10 @@ mount, explicit user refresh, or sequenced vote events—not polling.
    unauthorized, bridge, revoked, and cross-room paths fail closed without hidden work.
 5. Poll creation routes once through the existing floor; ballot/withdraw/close events never create
    another queued provider input. Public snapshot, history, and live projection stay cursor-complete.
-6. Codex Terra, Antigravity Flash, and OpenCode Hy3-free receive the same common vote tools and use
-   the same persistence owner; provider failure remains explicit with no print/exec/legacy fallback.
+6. Codex Terra, Antigravity Flash, and OpenCode Muse Spark receive the same common vote tools and
+   use the same persistence owner; provider failure remains explicit with no print/exec/legacy
+   fallback. Add Grok to this matrix only after the live OpenCode catalog exposes an eligible model
+   whose cost and tool-call capability have been verified.
 7. Measured raw-log scan and projection costs, schema/storage trade-off, CPU/memory/disk/latency,
    security boundaries, complete repository gates, real TCP, copied frontend, packaged human flows,
    actual provider flows, cleanup, and both manual reviews are recorded without extrapolation.
@@ -233,3 +235,56 @@ mount, explicit user refresh, or sequenced vote events—not polling.
   related repository-wide owners as `APPROVE C0/H0/M0/L0`. Daybreaker Blue High remained unavailable
   until 2026-09-06, so the same session performed the authorized security cross-review. The review
   used public immutable source only and no automated scan, provider, packaged app, or Computer Use.
+- Finding: the first real Terra turn exposed one reachable copied-policy conflict. The persistence
+  observation still required exactly `publish_message` or `decline_to_speak`, while the transport
+  already owned those terminal actions plus the four vote actions. Terra therefore refused an
+  explicit `create_vote` request and committed no vote. `68ee8cc` removed that stale terminal subset;
+  persistence now requires one terminal action exposed by the room transport and does not duplicate
+  its catalog. This adds no state, fallback, retry, polling, heartbeat, timer, cache, or background
+  task and preserves the same exact-turn, authority, transaction, release, and publication owners.
+- Verification result: the corrected isolated macOS package started a real `gpt-5.6-terra` Codex
+  app-server session from the copied UI. A UI request produced one empty-body `message_kind=vote`
+  event with the exact question and two options, one current-vote projection row, and a completed
+  provider turn with no agent text publication. The same package had already passed human create,
+  cast, replacement, withdrawal, close, normal restart, and persisted-summary flows. `make verify`
+  then passed all mandatory gates, the 104-file/644-test frontend suite, 26 desktop, 52 domain,
+  228 persistence, 6 protocol, 152 provider, and 94 server tests plus TCP/integration boundaries and
+  warning-denied Clippy. A real Antigravity `gemini-3.6-flash` native PTY session then cast `YES` on
+  that poll: the exact Agent Session owned the sole ballot, the tally became `[1,0]`, its turn
+  completed, and no transcript, printed text, or agent message was published. The installed OpenCode
+  1.17.18 catalog no longer exposes `opencode/hy3-free`; its only current Hy3 entry is the nonzero-cost
+  `opencode-go/hy3`. The copied selector therefore rejected that retired identifier before session
+  creation. The paid Hy3, a direct unlisted start, and every fallback remained unused.
+- Verification result: under the user's replacement choice, the same copied selector resolved exact
+  `opencode/muse-spark-1.2-contributor-free`. The live catalog reported it active with zero input,
+  output, and cache cost and tool-call support; it exposed no `opencode`-namespace Grok model. An
+  isolated package then started the exact Muse Spark Agent Session through OpenCode's persistent
+  loopback server. One addressed turn called the common `cast_vote` terminal action with `NO`, wrote
+  one empty-body agent-owned `vote_cast`, completed without an agent text publication, and changed
+  the canonical projection to `[1,1]`. The stored session retained the exact model, provider session,
+  executable and workspace identities, `meeting_read_only` workspace permission, idle runtime, and
+  completed generation; room vote authority remained with its joined Agent Session participant.
+- Packaged remote result: the managed tunnel issued separate one-use read/write and read-only
+  invites, each consumed exactly once. The writable browser created a finite poll, cast, replaced,
+  withdrew, and creator-closed it while the host updated from sequenced events. A fresh read-only
+  browser saw both polls, had composer and ballot controls disabled, received the host's live tally
+  change, and restored the exact tally after reload. Normal application restart restored the open
+  poll, `[1,0]` tally, and the host's own choice before Muse Spark added the second ballot. SQLite
+  independently recorded the two invite scopes, two admitted sessions, completed provider turn,
+  empty-body vote event, and current ballots; no client-owned or provider-specific tally existed.
+- Resource and cleanup result: the Muse Spark turn took 10.484 seconds from durable input event to
+  durable ballot event. An idle process snapshot measured 0.0% CPU for both Rust servers, provider
+  guardian/anchor, and OpenCode serve; the desktop renderer measured 0.7%. OpenCode serve's physical
+  footprint was 401.0 MiB at observation and 833.8 MiB peak. This is observed upstream persistent-
+  session cost, not an inferred Rust leak; replacing the process with per-turn startup would change
+  the current provider-session contract and was not introduced as a speculative optimization. The
+  isolated database was 480 KiB and the provider workspace remained empty. Normal quit removed the
+  desktop, both servers, guardian, anchor, and OpenCode serve; the 1.1 GiB package, app data, caches,
+  WebKit data, workspace, and generated sidecar were then removed by exact path. No polling,
+  heartbeat, retry, silent failure, fallback, cache, timer, compatibility path, or background task
+  was added for this verification.
+- Final approval: critical web (`GPT-5.6 Sol`, verified very-high reasoning) approved `68ee8cc`, exact
+  `d158c29..68ee8cc`, cumulative `aa77058..68ee8cc`, and the repository-wide terminal-action owner as
+  `APPROVE C0/H0/M0/L0`, with no actionable finding. Daybreaker Blue High remained unavailable until
+  2026-09-06, so the same session performed the authorized security cross-review. It used public
+  immutable source only and did not rerun the provided packaged-app or `make verify` evidence.
