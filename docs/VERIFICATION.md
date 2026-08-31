@@ -4691,8 +4691,12 @@ retry, reconciliation fallback, new lifecycle owner, or provider-specific branch
 cost is one existing bounded driver-health exchange per fresh pause or state-only resume; replay and
 unrelated commands pay none.
 
-Focused verification passed the deterministic stopped-launcher staging test, provider resident
-proof success/borrowed/stopped cases, persistence replay/conflict/stale-proof and no-mutation cases,
+Focused verification passed the stopped-launcher staging test. That test now waits concurrently for
+the launcher barrier and `CodexDriver::spawn` to return, so the returned driver—not a caller-local
+launch variable—owns the executable guard before either staged path is inspected or the launcher is
+released. It then attaches and stops that same driver and confirms the cleanup receipt. Focused
+verification also passed provider resident proof success/borrowed/stopped cases,
+persistence replay/conflict/stale-proof and no-mutation cases,
 the real TCP/WebSocket lifecycle boundary through Codex start/pause/resume/stop, and warning-denied
 workspace Clippy. The fresh Android cross-check first exposed two existing guardian cfg defects once
 the installed versioned NDK compiler was supplied: `set_child_subreaper` returned `Errno` where the

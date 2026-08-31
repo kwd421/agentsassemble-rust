@@ -8,9 +8,12 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use agentsassemble_domain::DurableAgentSession;
 
 use super::{ProviderAdapter, ProviderRuntimeObservation};
+use crate::codex::CodexDriver;
+use crate::driver::ProviderDriver;
 use crate::filesystem::{canonical_workspace, codex_executable_identity, executable_identity};
 use crate::profile::runtime_profile_key;
 use crate::runtime::test_cleanup::{ExactProcessCleanup, ExactProcessGroupCleanup};
+use crate::runtime_lease::HeldRuntimeLease;
 use crate::test_support::durable_session;
 
 pub(super) static RUNTIME_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
@@ -428,15 +431,18 @@ async fn codex_staged_bundle_outlives_stopped_launcher_readiness() {
     let guardian =
         crate::guardian::GuardianLaunch::test_harness_with_launcher_barrier(barrier_path.clone())
             .unwrap_or_else(|error| panic!("bind guarded launcher fixture: {error}"));
-    let adapter = ProviderAdapter::with_guardian_launch(guardian);
-    let start_adapter = adapter.clone();
-    let start_session = session.clone();
-    let start = tokio::spawn(async move { start_adapter.start(&start_session).await });
-
-    let (stream, _) = listener
-        .accept()
-        .await
-        .unwrap_or_else(|error| panic!("accept launcher barrier: {error}"));
+    let mut runtime_lease =
+        HeldRuntimeLease::prepare(&session.public.room_id, &session.public.session_id)
+            .unwrap_or_else(|error| panic!("prepare staged bundle lease: {error}"));
+    runtime_lease
+        .begin_launch_effect()
+        .unwrap_or_else(|error| panic!("begin staged bundle launch: {error}"));
+    let (driver, accepted) = tokio::join!(
+        CodexDriver::spawn(&session, &runtime_lease, &guardian),
+        listener.accept()
+    );
+    let mut driver = driver.unwrap_or_else(|error| panic!("spawn staged bundle driver: {error:?}"));
+    let (stream, _) = accepted.unwrap_or_else(|error| panic!("accept launcher barrier: {error}"));
     let mut stream = BufReader::new(stream);
     let mut report = String::new();
     stream
@@ -457,33 +463,17 @@ async fn codex_staged_bundle_outlives_stopped_launcher_readiness() {
         .await
         .unwrap_or_else(|error| panic!("release launcher barrier: {error}"));
 
-    let started = start
+    let attachment = driver
+        .attach_session(&session)
         .await
-        .unwrap_or_else(|error| panic!("join staged bundle start: {error}"))
-        .unwrap_or_else(|error| panic!("start staged bundle fixture: {error}"));
-    adapter
-        .stop(
-            &session.public.room_id,
-            &session.public.session_id,
-            &started.runtime_handle_id,
-            &started.runtime_owner_id,
-            &started.runtime_lease_token,
-        )
+        .unwrap_or_else(|error| panic!("attach staged bundle fixture: {error}"));
+    assert_eq!(attachment.provider_session_id, "thread-1");
+    driver
+        .stop()
         .await
         .unwrap_or_else(|error| panic!("stop staged bundle fixture: {error}"));
-    adapter
-        .release_confirmed_stop(
-            &session.public.room_id,
-            &session.public.session_id,
-            &started.runtime_handle_id,
-            &started.runtime_owner_id,
-            &started.runtime_lease_token,
-        )
-        .await;
-    adapter
-        .shutdown()
-        .await
-        .unwrap_or_else(|error| panic!("shutdown staged bundle fixture owner: {error}"));
+    assert!(runtime_lease.cleanup_receipt_is_present());
+    runtime_lease.release_and_remove();
 }
 
 pub(super) async fn code_mode_host_fixture(root: &Path) -> (DurableAgentSession, PathBuf, PathBuf) {

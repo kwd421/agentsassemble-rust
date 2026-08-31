@@ -217,14 +217,6 @@ impl ProviderAdapter {
         Self::with_factory(Arc::new(ProductionDriverFactory::with_guardian(executable)))
     }
 
-    #[cfg(all(test, unix))]
-    fn with_guardian_launch(guardian: crate::guardian::GuardianLaunch) -> Self {
-        Self::with_factory(Arc::new(ProductionDriverFactory {
-            credentials: ProviderCredentialStore::production(),
-            guardian: Some(guardian),
-        }))
-    }
-
     fn with_factory(factory: Arc<dyn DriverFactory>) -> Self {
         Self {
             owner: Arc::new(AdapterOwner {
