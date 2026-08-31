@@ -4606,3 +4606,37 @@ profile, user browser, provider, or uncommitted source was removed, and Computer
 The cumulative threshold batch and these packaged results still require critical-web and Daybreaker
 manual source review. This section therefore records implementation and observed-flow completion,
 not external approval.
+
+## Lobby message-mutation review corrections: 2026-08-31
+
+Daybreaker manual source review of pushed `a958bab..edd9ce4` returned REVISE C0/H0/M1/L1. The
+Medium finding was unbounded historical vote-transition rewriting during poll deletion under the
+global SQLite writer. The Low finding was elapsed-time-based TCP absence evidence using 50/100 ms
+silence windows and a one-second close timeout. This section records the correction evidence only;
+critical-web review and Daybreaker re-review remain pending.
+
+The old delete path selected and decoded every transition for the deleted poll and then updated each
+matching row. A controlled fixture with 14,400 transitions measured about 6.34 MiB and 180.6 ms for
+that read/decode portion before the 14,400 writes. Because a poll may remain open indefinitely, the
+per-minute room command budget did not bound the lifetime row count or global-writer occupancy.
+
+The correction moves privacy minimization to the durable vote-write boundary. One domain function
+constructs the stored and replayed transition marker with only event identity, sequence, room, time,
+kind, and `vote_id`; current identity and choice remain owned by the vote projection and ballots.
+Poll deletion now removes that projection and the poll secret without reading or rewriting historical
+transitions. Schema 53 is a clean stored-contract cutoff and rejects older stores without migration,
+fallback, or compatibility behavior. A trigger that rejects any transition-row update remains armed
+while deletion succeeds, the transition rows compare byte-for-byte before and after, and the stored
+command result carries the same minimized marker.
+
+On the same 14,400-transition debug fixture, the corrected real deletion completed in 10.650 ms and
+database page bytes remained 4,947,968 before and after. These are controlled point observations,
+not production latency claims. Event cursor identity and current vote summaries are preserved; no
+index, cache, task, cleanup loop, timer, polling, heartbeat, retry, fallback, or swallowed failure was
+introduced.
+
+The TCP correction removes all uses of the shared elapsed-silence helper. Exact replay is proven by
+the next durable snapshot and event sequence containing exactly one target mutation, read-only
+rejection is bracketed by unchanged durable room state, and server rejection closure is awaited as a
+causal socket event without an arbitrary deadline. Complete gates and both manual correction reviews
+must still pass before this batch is approved.

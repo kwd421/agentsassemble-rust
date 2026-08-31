@@ -37,22 +37,24 @@ Deletion retains the target event ID, sequence, kind, creation time, and non-sen
 author attribution needed for its tombstone, while removing content, target routing, attachments,
 and—when the target is a poll—its definition. It sets one server deletion timestamp and appends one
 `message_deleted` event referencing the target ID and sequence. Poll deletion also removes the one
-current vote projection and all current ballots, and redacts every stored ballot/close transition's
-actor, choice, vote link, content, and attachment fields while retaining cursor-contiguous
-tombstones. Reload, history, search context, pins, provider context, and live projection must expose
-no deleted poll definition, ballot choice, voter identity, or attachment reference.
+current vote projection and all current ballots. Every ballot/withdraw/close transition is already
+persisted as an anonymous marker that retains only event identity, sequence, room, time, kind, and
+`vote_id`; the same minimized marker is stored for command replay. Current voter identity and choice
+belong only to the vote projection and ballots. Reload, history, search context, pins, provider
+context, and live projection must expose no deleted poll definition, ballot choice, voter identity,
+or attachment reference.
 
 Rust improves the original post-commit cleanup boundary without changing reachable behavior. A
 bound lobby attachment belongs to exactly one `(room_id, event_seq)` row and cannot be shared.
 Therefore deletion verifies the target event's canonical attachment metadata, deletes only those
-exact bound rows, removes the exact search record and pin, updates/redacts affected event rows,
-removes the vote projection when applicable, removes that exact event only from Agent Session
-`pending_inputs`, appends the public mutation, and stores the command result in one SQLite
-transaction. An `inflight_inputs` reference has already crossed the provider boundary and is not
-cancelled or reinvoked. Failure commits none of these changes. Pending uploads, profile images,
-prejoin avatars, room appearance, other messages, and any referenced asset outside that exact
-binding are untouched. No cleanup retry, orphan sweep, reconciliation task, or silent failure is
-needed.
+exact bound rows, removes the exact search record and pin, tombstones the target event, removes the
+vote projection when applicable, leaves already-minimized transition markers unchanged, removes
+that exact event only from Agent Session `pending_inputs`, appends the public mutation, and stores
+the command result in one SQLite transaction. An `inflight_inputs` reference has already crossed
+the provider boundary and is not cancelled or reinvoked. Failure commits none of these changes.
+Pending uploads, profile images, prejoin avatars, room appearance, other messages, and any
+referenced asset outside that exact binding are untouched. No cleanup retry, orphan sweep,
+reconciliation task, or silent failure is needed.
 
 The current `room_events` row remains the authoritative history representation after a mutation;
 the appended mutation is the sequenced live transition, not a second current-message store. Search
@@ -81,8 +83,9 @@ event, redaction, deletion, budget reservation, or publication.
    one result, and never advances the room floor. Exact replay is inert and changed replay conflicts.
 4. Delete atomically tombstones the target, removes its pin and search result, removes only its bound
    attachment rows and pending Agent Session queue references, and appends one exact mutation. Poll
-   deletion additionally removes current vote state/ballots and redacts all linked transition
-   records without leaking identity or choice. An already-inflight observation remains untouched.
+   deletion additionally removes current vote state/ballots while all linked transition markers
+   remain byte-for-byte in their initially minimized form. An already-inflight observation remains
+   untouched.
 5. Snapshot, paginated history, search/context, pins, attachment reads, vote summary, live events,
    reload, and normal restart all agree on the same post-mutation state. Deleted attachment reads and
    deleted poll summaries fail closed; unrelated assets and messages remain byte-for-byte reachable.
@@ -90,8 +93,9 @@ event, redaction, deletion, budget reservation, or publication.
    edited marker, and tombstone behavior for local and admitted clients. Mutation events do not
    become visible chat rows or provider inputs.
 7. Repository-wide review finds one owner for each validation, SQL transition, search replacement,
-   pin removal, vote removal/redaction, and attachment deletion policy, with no fallback, meaningless
-   polling, heartbeat, periodic timer, unbounded retry, or swallowed failure coupled to the slice.
+   pin removal, vote-state removal/privacy minimization, and attachment deletion policy, with no
+   fallback, meaningless polling, heartbeat, periodic timer, unbounded retry, or swallowed failure
+   coupled to the slice.
 8. Focused domain/persistence/protocol/server/frontend tests, real authenticated TCP, complete gates,
    isolated packaged local/read-write/read-only flows, resource evidence, exact cleanup, and the
    threshold-triggered critical-web/Daybreaker manual reviews are recorded without extrapolation.
@@ -100,7 +104,8 @@ event, redaction, deletion, budget reservation, or publication.
 
 - focused domain tests for exact payloads, normalization, event-kind and authority decisions;
 - persistence tests for atomic edit/delete, exact replay/conflict, search/pin/attachment consistency,
-  poll transition redaction, rollback injection, and absence of provider assignments;
+  initial vote-transition minimization, poll deletion without historical transition rewrites,
+  rollback injection, and absence of provider assignments;
 - authenticated TCP tests for local, admitted read/write/read-only, stale authority, strict ACKs,
   sequenced mutation delivery, reload/history, and failed attachment/vote reads;
 - copied frontend tests for controls, dialog behavior, strict projection, and no polling or local
@@ -219,3 +224,30 @@ event, redaction, deletion, budget reservation, or publication.
   `~/.Trash/AgentsAssemble-Mutation-Verify-20260831-2100` bundle; the user's normal browser and data
   were untouched and Computer Use was reset. Critical-web and Daybreaker manual review remain the
   only outstanding acceptance item, so this section claims no external approval.
+
+## Durable vote-privacy and bounded-deletion correction
+
+- Review finding and prior cost: Daybreaker manual source review found that poll deletion selected
+  every historical vote transition, decoded each JSON payload, and issued one SQLite update per row
+  while holding the global writer. A controlled 14,400-transition fixture measured about 6.34 MiB
+  and 180.6 ms for the old read/decode portion alone, before its 14,400 writes. A poll can remain
+  open indefinitely, so room rate limits did not bound this lifetime work.
+- Intent and owner: one domain privacy function now constructs the exact anonymous vote-transition
+  marker at the original write boundary. The persistence vote owner stores that marker in both
+  `room_events` and the durable command result. Current identity and choice remain solely in the
+  vote projection and ballots. Poll deletion removes that projection and the poll secret without
+  scanning or rewriting historical transitions. Schema 53 makes this stored privacy invariant a
+  clean cutover and rejects older stores; no migration or compatibility path exists.
+- Preserved contracts and trade-off: event ID, sequence, room, time, kind, and `vote_id` still drive
+  cursor-contiguous replay and copied-client refresh. Current vote summaries still come from the
+  authoritative projection. Deletion, exact command replay, transaction rollback, public history,
+  provider projection, and live publication retain the same reachable result without retaining
+  private transition payloads for a consumer that does not exist.
+- Verification: a database trigger that rejects any update of a vote-transition row remains armed
+  while poll deletion succeeds; the rows compare byte-for-byte before and after, and stored command
+  replay is minimized too. On the same 14,400-transition debug fixture, the corrected real delete
+  completed in 10.650 ms and database page bytes stayed at 4,947,968 before and after. This is a
+  controlled point comparison, not production latency. The paired TCP-review correction replaces
+  elapsed-time absence assertions with exact replay cursors, durable snapshots, and causal socket
+  closure. No index, background cleanup, timer, polling, heartbeat, retry, fallback, or swallowed
+  failure was added. Critical-web and Daybreaker correction review remain pending.
