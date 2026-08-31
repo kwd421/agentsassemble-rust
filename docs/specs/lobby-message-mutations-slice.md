@@ -170,5 +170,15 @@ event, redaction, deletion, budget reservation, or publication.
   persistence transaction still owns authorization, edit/delete state, replay, result, and event
   construction, while the common room runtime owns sequenced publication and strict ACK/NACK. The
   protocol suite, all 94 server unit tests, generated-surface checks, focused browser surface/socket
-  tests, workspace all-target check, and diff check pass. Authenticated real-TCP behavior remains the
-  next independent verification unit and is not claimed here.
+  tests, workspace all-target check, and diff check pass.
+
+## Authenticated TCP mutation verification
+
+- The local authenticated socket creates, edits, exactly replays, deletes, and reloads one durable
+  tombstone. Every committed mutation ACK names the same event and sequence as the published event,
+  while exact replay emits one deduplicated ACK and no second publication.
+- An admitted read/write human creates and mutates only its own message through the session socket.
+  A read-only session receives an exact rejected NACK for both mutation actions and no event.
+- The three real-TCP cases and warning-denied server Clippy pass. They add no product path, timer,
+  retry, polling, fallback, or alternate authority; stale-session revocation and deleted-resource
+  boundaries remain separate acceptance units and are not claimed here.

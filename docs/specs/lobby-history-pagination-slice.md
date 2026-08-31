@@ -1,6 +1,6 @@
 # Lobby History Pagination Slice
 
-Status: packaged-verified implementation owner; local threshold review pending
+Status: packaged-verified implementation owner; correction cross-review approved
 
 ## Definition
 
@@ -264,7 +264,13 @@ failure, or scroll anchor could re-enter the replacement display. The hook now h
 request-retirement operation that clears the exact request identity, anchor, loading flag, and
 obsolete load error before every display replacement; stale promise continuations are consequently
 inert under the existing identity check. A controlled pending-page regression proves a search
-context remains exact after the old page resolves. Final re-review remains pending.
+context remains exact after the old page resolves.
+
+The final critical-web re-review found one Low stale-scroll race: a consumed anchor's already
+scheduled animation-frame callback could outlive request retirement. The private retirement owner
+now invalidates restoration by epoch, room, and canonical-window revision. Final manual re-review
+by the critical web session and Daybreaker found no remaining actionable issue and approved
+`a958bab`, `33cd2b9..a958bab`, and pushed HEAD with `C0/H0/M0/L0`.
 
 ## Verification path
 
