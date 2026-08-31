@@ -1,7 +1,8 @@
 use std::collections::BTreeMap;
 
 use agentsassemble_domain::{
-    Actor, DurableAgentSession, Participant, Room, RoomEvent, RoomSettings, RoomStatus,
+    Actor, AuthenticatedPrincipal, CapabilitySet, ClientKind, DurableAgentSession, InviteScope,
+    Participant, ParticipantStatus, Room, RoomEvent, RoomSettings, RoomStatus,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -14,6 +15,34 @@ use crate::{
 };
 
 const MAX_PROVIDER_TURN_ID_BYTES: usize = 128;
+
+pub(crate) fn provider_room_principal(
+    session: &DurableAgentSession,
+    participant: &Participant,
+    scope: InviteScope,
+) -> Result<AuthenticatedPrincipal, PersistenceError> {
+    if participant.status != ParticipantStatus::Joined
+        || participant.muted
+        || participant.participant_type != "agent"
+        || participant.room_id != session.public.room_id
+        || participant.participant_id != session.public.participant_id
+    {
+        return Err(rejected(
+            "stale_provider_turn",
+            "Room tool authority no longer matches an active Agent Session participant.",
+        ));
+    }
+    Ok(AuthenticatedPrincipal {
+        principal_id: session.public.session_id.clone(),
+        participant_id: participant.participant_id.clone(),
+        display_name: participant.display_name.clone(),
+        room_id: session.public.room_id.clone(),
+        client_kind: ClientKind::AgentBridge,
+        invite_scope: scope,
+        is_operator: false,
+        capabilities: CapabilitySet::for_principal(ClientKind::AgentBridge, scope, false),
+    })
+}
 
 async fn provider_cursor_is_valid(
     transaction: &mut Transaction<'_, Sqlite>,

@@ -1,7 +1,7 @@
 use agentsassemble_domain::{
-    Actor, AuthenticatedPrincipal, DurableAgentSession, MessageSend, Participant, RoomEvent,
-    RoomInputDeliveryKind, VoteCommand, canonical_payload_hash, clean_message, has_visible_text,
-    prepare_message_event, redact_persisted_diagnostic_text,
+    Actor, AuthenticatedPrincipal, DurableAgentSession, InviteScope, MessageSend, Participant,
+    RoomEvent, RoomInputDeliveryKind, VoteCommand, canonical_payload_hash, clean_message,
+    has_visible_text, prepare_message_event, redact_persisted_diagnostic_text,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -253,8 +253,6 @@ impl SqliteStore {
         validate_publication_target(&mut transaction, &session, target_agent_id).await?;
         apply_provider_session_transition(&mut session, provider_session_id)?;
         let source_event_id = session.active_source_event_id.clone();
-        let input_event_id = session.input_up_to_event_id.clone();
-        let input_seq = session.input_up_to_seq;
         let final_event = agent_final_event(
             &mut transaction,
             &session,
@@ -265,31 +263,90 @@ impl SqliteStore {
             target_agent_id,
         )
         .await?;
-        let finished = turn_finished_event(
+        let commit = ProviderTurnFinalization {
+            room: &room,
+            settings: &settings,
+            turn_id,
+            provider_turn_id,
+            disposition: ProviderTurnDisposition::Completed {
+                route_first_event: true,
+            },
+        }
+        .apply(&mut transaction, &mut session, vec![final_event])
+        .await?;
+        transaction.commit().await?;
+        Ok(commit)
+    }
+
+    /// Atomically applies one provider `RoomPortal` vote and completes its exact active turn.
+    ///
+    /// # Errors
+    ///
+    /// Returns an exact active-turn, participant, vote, or storage failure without a partial event.
+    pub async fn complete_agent_vote_turn(
+        &self,
+        room_id: &str,
+        session_id: &str,
+        authority: ProviderTurnAuthority<'_>,
+        command: VoteCommand,
+    ) -> Result<AgentTurnCommit, PersistenceError> {
+        let ProviderTurnAuthority {
+            turn_id,
+            provider_turn_id,
+            provider_session_id,
+            ..
+        } = authority;
+        validate_identifier(provider_turn_id, "provider_turn_invalid")?;
+        if matches!(&command, VoteCommand::Create(create) if !create.attachment_ids.is_empty()) {
+            return Err(rejected(
+                "invalid_vote",
+                "Agent Session votes cannot bind browser upload custody.",
+            ));
+        }
+        let route_to_floor = matches!(command, VoteCommand::Create(_));
+        let mut transaction = self.pool.begin().await?;
+        let (room, settings) = load_active_room(&mut transaction, room_id).await?;
+        let mut session = load_session(&mut transaction, room_id, session_id).await?;
+        require_active_turn(&session, turn_id)?;
+        crate::provider_turn_execution::terminalize_ordinary_execution(
             &mut transaction,
             &session,
-            turn_id,
-            "completed",
-            Some(provider_turn_id),
-            None,
+            authority,
+            crate::ProviderTurnExecutionPhase::Completed,
         )
         .await?;
-        complete_session_state(&mut session, &input_event_id, input_seq);
-        save_session(&mut transaction, &session).await?;
-        let state = session_state_event(&mut transaction, &session).await?;
-        route_message(&mut transaction, &settings, &final_event).await?;
-        let prepared = assign_available_pending(&mut transaction, &room, &settings).await?;
-        let mut events = vec![final_event, finished, state];
-        let mut next_assignments = Vec::with_capacity(prepared.len());
-        for item in prepared {
-            events.extend(item.events);
-            next_assignments.push(item.assignment);
+        validate_input_cursor(&mut transaction, &session).await?;
+        apply_provider_session_transition(&mut session, provider_session_id)?;
+        let participant = load_participant(
+            &mut transaction,
+            &session.public.room_id,
+            &session.public.participant_id,
+        )
+        .await?;
+        let principal = provider_room_principal(&session, &participant, InviteScope::ReadWrite)?;
+        let sequence = next_sequence(&mut transaction, room_id).await?;
+        let event = crate::room_votes::apply_vote_command(
+            &mut transaction,
+            &principal,
+            &participant,
+            command,
+            sequence,
+            Utc::now(),
+        )
+        .await?;
+        let commit = ProviderTurnFinalization {
+            room: &room,
+            settings: &settings,
+            turn_id,
+            provider_turn_id,
+            disposition: ProviderTurnDisposition::Completed {
+                route_first_event: route_to_floor,
+            },
         }
+        .apply(&mut transaction, &mut session, vec![event])
+        .await?;
         transaction.commit().await?;
-        Ok(AgentTurnCommit {
-            events,
-            next_assignments,
-        })
+        Ok(commit)
     }
 
     /// Atomically records an explicit provider decline and advances the ordered floor.
@@ -333,32 +390,17 @@ impl SqliteStore {
         .await?;
         validate_input_cursor(&mut transaction, &session).await?;
         apply_provider_session_transition(&mut session, provider_session_id)?;
-        let input_event_id = session.input_up_to_event_id.clone();
-        let input_seq = session.input_up_to_seq;
-        let finished = turn_finished_event(
-            &mut transaction,
-            &session,
+        let commit = ProviderTurnFinalization {
+            room: &room,
+            settings: &settings,
             turn_id,
-            "declined",
-            Some(provider_turn_id),
-            Some(reason_code),
-        )
-        .await?;
-        complete_session_state(&mut session, &input_event_id, input_seq);
-        save_session(&mut transaction, &session).await?;
-        let state = session_state_event(&mut transaction, &session).await?;
-        let prepared = assign_available_pending(&mut transaction, &room, &settings).await?;
-        let mut events = vec![finished, state];
-        let mut next_assignments = Vec::with_capacity(prepared.len());
-        for item in prepared {
-            events.extend(item.events);
-            next_assignments.push(item.assignment);
+            provider_turn_id,
+            disposition: ProviderTurnDisposition::Declined { reason_code },
         }
+        .apply(&mut transaction, &mut session, Vec::new())
+        .await?;
         transaction.commit().await?;
-        Ok(AgentTurnCommit {
-            events,
-            next_assignments,
-        })
+        Ok(commit)
     }
 
     /// Atomically records one provider failure, restores inflight input, and advances the floor.
@@ -682,6 +724,8 @@ async fn validate_publication_target(
 
 #[path = "room_turn_context.rs"]
 mod context;
+#[path = "room_turn_finalization.rs"]
+mod finalization;
 #[path = "room_turn_routing.rs"]
 mod routing;
 #[path = "room_turn_scheduler.rs"]
@@ -689,11 +733,13 @@ mod scheduler;
 #[path = "room_turn_support.rs"]
 pub(crate) mod support;
 
+use finalization::{ProviderTurnDisposition, ProviderTurnFinalization};
 use scheduler::{assign_available_pending, route_message};
 use support::{
     agent_final_event, clear_active_turn_fields, error_event, insert_event, load_active_room,
-    load_participant, next_sequence, public_error_code, rejected, rejection, require_active_turn,
-    session_state_event, turn_finished_event, validate_identifier, validate_input_cursor,
+    load_participant, next_sequence, provider_room_principal, public_error_code, rejected,
+    rejection, require_active_turn, session_state_event, turn_finished_event, validate_identifier,
+    validate_input_cursor,
 };
 
 #[cfg(test)]

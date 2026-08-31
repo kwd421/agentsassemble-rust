@@ -7,9 +7,12 @@ use serde_json::{Map, Value, json};
 use ts_rs::TS;
 
 use crate::{
-    AuthenticatedPrincipal, CommandRejection, Participant, RoomEvent, clean_identifier,
+    AuthenticatedPrincipal, ClientKind, CommandRejection, Participant, RoomEvent, clean_identifier,
     clean_message,
-    command::{parse_attachment_ids, prepare_participant_message_event},
+    command::{
+        parse_attachment_ids, prepare_authorized_participant_message_event,
+        require_active_write_participant,
+    },
     has_visible_text, is_message_event_id,
 };
 
@@ -180,6 +183,7 @@ pub fn prepare_vote_event(
     sequence: i64,
     now: DateTime<Utc>,
 ) -> Result<RoomEvent, CommandRejection> {
+    require_vote_write_authority(principal, participant)?;
     let mut extra = BTreeMap::new();
     match command {
         VoteCommand::Create(create) => {
@@ -206,8 +210,7 @@ pub fn prepare_vote_event(
             extra.insert("vote_id".to_owned(), json!(reference.vote_id));
         }
     }
-    prepare_participant_message_event(
-        principal,
+    prepare_authorized_participant_message_event(
         participant,
         sequence,
         now,
@@ -215,6 +218,23 @@ pub fn prepare_vote_event(
         command.message_kind(),
         extra,
     )
+}
+
+fn require_vote_write_authority(
+    principal: &AuthenticatedPrincipal,
+    participant: &Participant,
+) -> Result<(), CommandRejection> {
+    let allowed = match principal.client_kind {
+        ClientKind::Browser => principal.capabilities.message_send,
+        ClientKind::AgentBridge => principal.capabilities.bridge_publish,
+    };
+    if !allowed {
+        return Err(CommandRejection::new(
+            "permission_denied",
+            "This room session cannot publish votes.",
+        ));
+    }
+    require_active_write_participant(principal, participant)
 }
 
 fn parse_create(object: &Map<String, Value>) -> Result<VoteCreate, CommandRejection> {
@@ -493,5 +513,54 @@ mod tests {
             event.extra["vote_deadline_at"],
             json!("2026-08-31T00:00:30+00:00")
         );
+    }
+
+    #[test]
+    fn vote_event_accepts_only_the_bridge_publish_capability_for_agents() {
+        let now = Utc
+            .with_ymd_and_hms(2026, 8, 31, 0, 0, 0)
+            .single()
+            .unwrap_or_else(|| panic!("valid fixture time"));
+        let mut principal = AuthenticatedPrincipal {
+            principal_id: "agent-session".to_owned(),
+            participant_id: "agent-participant".to_owned(),
+            display_name: "Untrusted Copy".to_owned(),
+            room_id: "general".to_owned(),
+            client_kind: ClientKind::AgentBridge,
+            invite_scope: InviteScope::ReadWrite,
+            is_operator: false,
+            capabilities: CapabilitySet::for_principal(
+                ClientKind::AgentBridge,
+                InviteScope::ReadWrite,
+                false,
+            ),
+        };
+        let participant = Participant {
+            room_id: "general".to_owned(),
+            participant_id: "agent-participant".to_owned(),
+            display_name: "Stored Agent".to_owned(),
+            avatar_image_url: String::new(),
+            participant_type: "agent".to_owned(),
+            status: ParticipantStatus::Joined,
+            role: ParticipantRole::Agent,
+            owner_id: "human-owner".to_owned(),
+            muted: false,
+            created_at: now,
+            updated_at: now,
+        };
+        let command = VoteCommand::from_payload(&json!({
+            "kind": "vote",
+            "vote_question": "Agent poll?",
+            "vote_options": ["Yes", "No"]
+        }))
+        .unwrap_or_else(|error| panic!("vote create: {error}"));
+
+        let event = prepare_vote_event(&principal, &participant, &command, 8, now)
+            .unwrap_or_else(|error| panic!("agent vote event: {error}"));
+        assert_eq!(event.actor.participant_id, "agent-participant");
+        assert_eq!(event.display_name.as_deref(), Some("Stored Agent"));
+
+        principal.capabilities.bridge_publish = false;
+        assert!(prepare_vote_event(&principal, &participant, &command, 9, now).is_err());
     }
 }

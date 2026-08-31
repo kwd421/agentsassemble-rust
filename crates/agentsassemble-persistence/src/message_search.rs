@@ -1,8 +1,7 @@
 use agentsassemble_domain::{
-    AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, LobbyMessageContext,
-    LobbyMessageSearchPage, LobbyMessageSearchResult, MAX_MESSAGE_SEARCH_CURSOR_BYTES,
-    MESSAGE_CONTEXT_RADIUS, MESSAGE_SEARCH_PAGE_SIZE, ParticipantStatus, RoomEvent,
-    casefold_message_search_text, clean_message_search_query,
+    AuthenticatedPrincipal, InviteScope, LobbyMessageContext, LobbyMessageSearchPage,
+    LobbyMessageSearchResult, MAX_MESSAGE_SEARCH_CURSOR_BYTES, MESSAGE_CONTEXT_RADIUS,
+    MESSAGE_SEARCH_PAGE_SIZE, RoomEvent, casefold_message_search_text, clean_message_search_query,
     compact_casefolded_message_search_text, is_message_event_id, public_event_for_principal,
 };
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -14,7 +13,7 @@ use crate::{
     agent_lifecycle::load_session,
     human_session_authority::revalidate_human_session,
     message_search_index::{canonical_created_at_nanos, searchable_lobby_message},
-    room_turns::support::load_participant,
+    room_turns::support::{load_participant, provider_room_principal},
     room_user_identity::current_local_room_principal,
     turn_authority::require_provider_room_tool_authority,
 };
@@ -359,30 +358,7 @@ async fn provider_search_principal(
         &session.public.participant_id,
     )
     .await?;
-    if participant.status != ParticipantStatus::Joined
-        || participant.muted
-        || participant.participant_type != "agent"
-        || participant.participant_id != session.public.participant_id
-    {
-        return Err(rejected(
-            "stale_provider_turn",
-            "Room search no longer matches an active Agent Session participant.",
-        ));
-    }
-    Ok(AuthenticatedPrincipal {
-        principal_id: session.public.session_id,
-        participant_id: participant.participant_id,
-        display_name: participant.display_name,
-        room_id: authority.room_id.to_owned(),
-        client_kind: ClientKind::AgentBridge,
-        invite_scope: InviteScope::ReadOnly,
-        is_operator: false,
-        capabilities: CapabilitySet::for_principal(
-            ClientKind::AgentBridge,
-            InviteScope::ReadOnly,
-            false,
-        ),
-    })
+    provider_room_principal(&session, &participant, InviteScope::ReadOnly)
 }
 
 async fn context_side(

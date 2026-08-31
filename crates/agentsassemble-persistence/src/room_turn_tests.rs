@@ -28,6 +28,8 @@ mod persona_turn_tests;
 mod provider_turn_mute_tests;
 #[path = "provider_turn_stop_race_tests.rs"]
 mod provider_turn_stop_race_tests;
+#[path = "provider_vote_tests.rs"]
+mod provider_vote_tests;
 #[path = "shutdown_scheduler_tests.rs"]
 mod shutdown_scheduler_tests;
 #[path = "stateless_context_tests.rs"]

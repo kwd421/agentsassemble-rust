@@ -150,6 +150,24 @@ pub(crate) fn prepare_participant_message_event(
     extra: BTreeMap<String, Value>,
 ) -> Result<RoomEvent, CommandRejection> {
     require_message_write_authority(principal, participant)?;
+    prepare_authorized_participant_message_event(
+        participant,
+        sequence,
+        now,
+        content,
+        message_kind,
+        extra,
+    )
+}
+
+pub(crate) fn prepare_authorized_participant_message_event(
+    participant: &Participant,
+    sequence: i64,
+    now: DateTime<Utc>,
+    content: String,
+    message_kind: &str,
+    extra: BTreeMap<String, Value>,
+) -> Result<RoomEvent, CommandRejection> {
     if sequence <= 0 {
         return Err(CommandRejection::new(
             "invalid_state",
@@ -196,6 +214,13 @@ pub fn require_message_write_authority(
             "This room session cannot send messages.",
         ));
     }
+    require_active_write_participant(principal, participant)
+}
+
+pub(crate) fn require_active_write_participant(
+    principal: &AuthenticatedPrincipal,
+    participant: &Participant,
+) -> Result<(), CommandRejection> {
     if principal.room_id != participant.room_id
         || principal.participant_id != participant.participant_id
         || participant.status != ParticipantStatus::Joined
