@@ -17,6 +17,9 @@ use crate::{
 };
 
 const ACTION: &str = "agent.interrupt";
+pub(crate) const INTERRUPTED_CODE: &str = "interrupted";
+pub(crate) const INTERRUPTED_MESSAGE: &str =
+    "The provider turn was interrupted by a room operator.";
 
 #[derive(Debug, Clone)]
 pub struct AgentInterruptMutation {

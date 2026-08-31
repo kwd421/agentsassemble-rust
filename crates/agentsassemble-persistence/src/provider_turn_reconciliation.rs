@@ -8,6 +8,7 @@ use crate::{
     AgentTurnAssignment, AgentTurnCommit, PersistenceError, ProviderTurnExecution,
     ProviderTurnExecutionPhase, ProviderTurnInterruptCause, ProviderTurnInterruptEffect,
     SqliteStore,
+    agent_interrupt::{INTERRUPTED_CODE, INTERRUPTED_MESSAGE},
     agent_lifecycle::{load_session, save_session},
     agent_reconciliation::load_candidate as load_lifecycle_candidate,
     message_attachments::message_attachment_ids_from_events,
@@ -543,8 +544,8 @@ async fn finalize_runtime_gone_session(
                 &mut transaction,
                 &session,
                 &execution.turn_id,
-                "interrupted",
-                "The provider turn was interrupted by a room operator.",
+                INTERRUPTED_CODE,
+                INTERRUPTED_MESSAGE,
             )
             .await?,
         );
@@ -587,9 +588,8 @@ async fn finalize_runtime_gone_session(
     session.runtime_lease_token.clear();
     session.schedule_requested = false;
     if interrupt_cause == Some(ProviderTurnInterruptCause::AgentInterrupt) {
-        "The provider turn was interrupted by a room operator."
-            .clone_into(&mut session.public.last_error);
-        "interrupted".clone_into(&mut session.public.last_error_code);
+        INTERRUPTED_MESSAGE.clone_into(&mut session.public.last_error);
+        INTERRUPTED_CODE.clone_into(&mut session.public.last_error_code);
     }
     session.public.recovery_required = false;
     clear_active_turn_fields(&mut session);

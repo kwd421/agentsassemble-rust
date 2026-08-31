@@ -4,6 +4,7 @@ use sqlx::{Sqlite, Transaction};
 use crate::{
     AgentTurnCommit, PersistenceError, ProviderTurnExecutionPhase, ProviderTurnInterruptCause,
     SqliteStore,
+    agent_interrupt::{INTERRUPTED_CODE, INTERRUPTED_MESSAGE},
     agent_lifecycle::{load_session, save_session},
     provider_turn_effect::{
         ProviderTurnEffectPhase, ProviderTurnInterruptEffect, canonical_now, generation_i64,
@@ -53,8 +54,8 @@ impl SqliteStore {
                     &mut transaction,
                     &session,
                     &turn_id,
-                    "interrupted",
-                    "The provider turn was interrupted by a room operator.",
+                    INTERRUPTED_CODE,
+                    INTERRUPTED_MESSAGE,
                 )
                 .await?,
             );
@@ -83,9 +84,8 @@ impl SqliteStore {
         session.public.turn_phase.clear();
         session.public.active_turn_id.clear();
         if expected.cause == ProviderTurnInterruptCause::AgentInterrupt {
-            "The provider turn was interrupted by a room operator."
-                .clone_into(&mut session.public.last_error);
-            "interrupted".clone_into(&mut session.public.last_error_code);
+            INTERRUPTED_MESSAGE.clone_into(&mut session.public.last_error);
+            INTERRUPTED_CODE.clone_into(&mut session.public.last_error_code);
         } else {
             session.public.last_error.clear();
             session.public.last_error_code.clear();
