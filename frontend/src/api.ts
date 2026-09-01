@@ -93,13 +93,6 @@ export interface LiveAgent {
   capabilities: string[];
 }
 
-export interface ProviderLoginResponse {
-  status: string;
-  provider_id: string;
-  label?: string;
-  message?: string;
-}
-
 export interface ProviderCatalogRefreshResponse {
   status: string;
   catalog_revision: string;
@@ -311,12 +304,6 @@ export async function chooseLocalWorkspace(): Promise<{
 }> {
   if (isDesktopWebview()) return chooseDesktopWorkspace();
   return postJson("/api/local/workspace-picker", {});
-}
-
-export function startProviderLogin(providerId: string) {
-  return postJson<ProviderLoginResponse>("/api/providers/login", {
-    provider_id: providerId,
-  });
 }
 
 export function refreshProviderCatalog(force = true) {

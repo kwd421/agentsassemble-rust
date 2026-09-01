@@ -652,9 +652,7 @@ fn agent_catalog_with_fixture(root: &Path, fixture: &[u8]) -> ProviderCatalog {
             catalog_source: "discovered".to_owned(),
             discovery_error_code: String::new(),
             discovery_error: String::new(),
-            login_available: true,
-            login_label: "Login".to_owned(),
-            login_flow: "browser_oauth".to_owned(),
+            credential_available: false,
             controls: vec![
                 ProviderControl {
                     key: "model".to_owned(),

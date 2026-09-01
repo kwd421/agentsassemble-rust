@@ -52,8 +52,7 @@ export async function fetchProviderCredentialStatus(
 
 export async function setProviderCredential(
   providerId: string,
-  apiKey: string,
-  _options: { workspaceId?: string } = {}
+  apiKey: string
 ): Promise<ProviderCredentialStatus> {
   return providerCredentialStatus(
     await postJsonServerOperator<unknown>(credentialPath(providerId), {

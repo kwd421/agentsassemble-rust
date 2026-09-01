@@ -54,8 +54,7 @@ pub(crate) struct ProviderRegistration {
     pub(crate) connection_kind: &'static str,
     pub(crate) executable_required: bool,
     pub(crate) probe_executable: &'static str,
-    pub(crate) login_label: &'static str,
-    pub(crate) login_flow: &'static str,
+    pub(crate) credential_available: bool,
     discover: ProviderDiscovery,
     launch: ProviderLaunch,
 }
@@ -71,8 +70,7 @@ pub(crate) static CODEX_PROVIDER: ProviderRegistration = ProviderRegistration {
     connection_kind: "native_cli_bridge",
     executable_required: true,
     probe_executable: "codex",
-    login_label: "로그인",
-    login_flow: "browser_oauth",
+    credential_available: false,
     discover: discover_codex_registered,
     launch: launch_codex,
 };
@@ -88,8 +86,7 @@ pub(crate) static ANTIGRAVITY_PROVIDER: ProviderRegistration = ProviderRegistrat
     connection_kind: "native_cli_bridge",
     executable_required: true,
     probe_executable: "agy",
-    login_label: "로그인",
-    login_flow: "interactive_terminal",
+    credential_available: false,
     discover: discover_antigravity_registered,
     launch: launch_antigravity,
 };
@@ -105,8 +102,7 @@ pub(crate) static OPENCODE_PROVIDER: ProviderRegistration = ProviderRegistration
     connection_kind: "native_cli_bridge",
     executable_required: true,
     probe_executable: "opencode",
-    login_label: "로그인",
-    login_flow: "interactive_terminal",
+    credential_available: false,
     discover: discover_opencode_registered,
     launch: launch_opencode,
 };
@@ -122,8 +118,7 @@ pub(crate) static DEEPSEEK_PROVIDER: ProviderRegistration = ProviderRegistration
     connection_kind: "native_cli_bridge",
     executable_required: false,
     probe_executable: "",
-    login_label: "API 키",
-    login_flow: "api_key",
+    credential_available: true,
     discover: discover_deepseek_registered,
     launch: launch_deepseek,
 };
@@ -357,9 +352,7 @@ pub(crate) fn loading_provider(registration: &ProviderRegistration) -> ProviderA
         catalog_source: "discovered".to_owned(),
         discovery_error_code: String::new(),
         discovery_error: String::new(),
-        login_available: true,
-        login_label: registration.login_label.to_owned(),
-        login_flow: registration.login_flow.to_owned(),
+        credential_available: registration.credential_available,
         controls: Vec::new(),
     }
 }

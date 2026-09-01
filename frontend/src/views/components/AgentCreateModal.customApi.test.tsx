@@ -7,15 +7,11 @@ import AgentCreateModal from "./AgentCreateModal";
 
 const apiMocks = vi.hoisted(() => ({
   chooseLocalWorkspace: vi.fn(),
-  fetchProviderCredentialStatus: vi.fn(),
-  setProviderCredential: vi.fn(),
 }));
 
 vi.mock("../../api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../api")>()),
   chooseLocalWorkspace: apiMocks.chooseLocalWorkspace,
-  fetchProviderCredentialStatus: apiMocks.fetchProviderCredentialStatus,
-  setProviderCredential: apiMocks.setProviderCredential,
 }));
 
 afterEach(cleanup);
@@ -25,16 +21,6 @@ beforeEach(() => {
   apiMocks.chooseLocalWorkspace.mockResolvedValue({
     selected: true,
     path: "/workspace/project",
-  });
-  apiMocks.fetchProviderCredentialStatus.mockReset();
-  apiMocks.fetchProviderCredentialStatus.mockResolvedValue({
-    configured: false,
-    source: "missing",
-  });
-  apiMocks.setProviderCredential.mockReset();
-  apiMocks.setProviderCredential.mockResolvedValue({
-    configured: true,
-    source: "keyring",
   });
 });
 
@@ -96,8 +82,7 @@ it("creates a custom API agent from a full completion endpoint and model id", as
     "https://api.example.com/v1/chat/completions"
   );
   await userEvent.type(screen.getByLabelText("모델 ID"), "vendor-model");
-  await userEvent.type(screen.getByLabelText("API 키"), "private-custom-key");
-  await userEvent.click(screen.getByRole("button", { name: "보안 저장" }));
+  expect(screen.queryByLabelText("API 키")).toBeNull();
   await userEvent.click(primaryActionButton());
 
   await waitFor(() =>
@@ -109,10 +94,6 @@ it("creates a custom API agent from a full completion endpoint and model id", as
         maxOutputTokens: 4096,
       })
     )
-  );
-  expect(apiMocks.setProviderCredential).toHaveBeenCalledWith(
-    "custom_api",
-    "private-custom-key"
   );
 });
 
@@ -137,6 +118,7 @@ function customApiProvider(): NativeCliProviderAvailability {
     interactive: true,
     startable: true,
     available: true,
+    credential_available: false,
     workspace_required: false,
     work_harness_available: true,
     custom_endpoint: true,

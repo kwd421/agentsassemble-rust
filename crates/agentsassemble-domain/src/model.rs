@@ -305,9 +305,7 @@ pub struct ProviderAvailability {
     pub discovery_error_code: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub discovery_error: String,
-    pub login_available: bool,
-    pub login_label: String,
-    pub login_flow: String,
+    pub credential_available: bool,
     pub controls: Vec<ProviderControl>,
 }
 

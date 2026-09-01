@@ -3,9 +3,7 @@ import { Play, Plus, X } from "lucide-react";
 import {
   deleteProviderCredential,
   fetchProviderCredentialStatus,
-  refreshProviderCatalog,
   setProviderCredential,
-  startProviderLogin as requestProviderLogin,
   type FrontendLiveAgentCreateRequest,
   type ProviderCredentialStatus,
 } from "../../api";
@@ -73,7 +71,6 @@ export default function AgentCreateModal({
   const [personaCardId, setPersonaCardId] = useState("");
   const [credentialStatus, setCredentialStatus] = useState<ProviderCredentialStatus | null>(null);
   const [credentialBusy, setCredentialBusy] = useState(false);
-  const [loginBusy, setLoginBusy] = useState(false);
   const wasOpen = useRef(false);
   const groupedProviders = projectProvidersByCatalogGroup(providers);
   const visibleProviders = providerGroup ? groupedProviders[providerGroup] : [];
@@ -154,10 +151,7 @@ export default function AgentCreateModal({
     if (
       !open ||
       !selectedProvider ||
-      (
-        providerCatalogGroup(selectedProvider) !== "api" &&
-        selectedProvider.id !== "opencode"
-      )
+      !selectedProvider.credential_available
     ) {
       setProviderApiKey("");
       setCredentialStatus(null);
@@ -167,7 +161,7 @@ export default function AgentCreateModal({
     fetchProviderCredentialStatus(selectedProvider.id)
       .then(setCredentialStatus)
       .catch((error) => setStatus(error instanceof Error ? error.message : "키 상태 확인 실패"));
-  }, [open, selectedProvider?.id, selectedProvider?.catalog_group, selectedProvider?.runtime_kind]);
+  }, [open, selectedProvider?.id, selectedProvider?.credential_available]);
 
   function applyProvider(provider: NativeCliProviderAvailability) {
     const initialSettings = initializeProviderSettings(provider);
@@ -251,13 +245,14 @@ export default function AgentCreateModal({
     }
   }
 
-  async function saveProviderApiKey(options?: { workspaceId?: string }) {
+  async function saveProviderApiKey() {
     if (!selectedProvider || !providerApiKey.trim() || credentialBusy) return;
     setCredentialBusy(true);
     try {
-      const credentialStatus = options
-        ? await setProviderCredential(selectedProvider.id, providerApiKey, options)
-        : await setProviderCredential(selectedProvider.id, providerApiKey);
+      const credentialStatus = await setProviderCredential(
+        selectedProvider.id,
+        providerApiKey
+      );
       setCredentialStatus(credentialStatus);
       setProviderApiKey("");
       setStatus(`${selectedProvider.display_name} 키가 서버의 보안 저장소에 저장됐습니다`);
@@ -288,54 +283,6 @@ export default function AgentCreateModal({
       );
     } finally {
       setCredentialBusy(false);
-    }
-  }
-
-  async function handleProviderLogin() {
-    if (!selectedProvider?.login_available || loginBusy) return;
-    setLoginBusy(true);
-    setStatus(
-      selectedProvider.login_flow === "browser_oauth"
-        ? "브라우저에서 로그인 중..."
-        : ""
-    );
-    try {
-      const result = await requestProviderLogin(selectedProvider.id);
-      setStatus(
-        result.message ||
-          `${selectedProvider.display_name} 로그인 창을 열었습니다.`
-      );
-    } catch (error) {
-      setStatus(
-        error instanceof Error
-          ? error.message
-          : `${selectedProvider.display_name} 로그인을 시작하지 못했습니다`
-      );
-    } finally {
-      setLoginBusy(false);
-    }
-  }
-
-  async function recheckProviderLogin() {
-    if (!selectedProvider || loginBusy) return;
-    setLoginBusy(true);
-    setStatus("로그인 상태 확인 중...");
-    try {
-      const catalog = await refreshProviderCatalog();
-      const refreshed = catalog.providers.find(
-        (provider) => provider.id === selectedProvider.id
-      );
-      setStatus(
-        refreshed?.discovery_status === "ready"
-          ? `${selectedProvider.display_name} 로그인 확인 완료`
-          : refreshed?.discovery_error || "로그인 상태를 확인하지 못했습니다"
-      );
-    } catch (error) {
-      setStatus(
-        error instanceof Error ? error.message : "로그인 상태 확인 실패"
-      );
-    } finally {
-      setLoginBusy(false);
     }
   }
 
@@ -529,59 +476,17 @@ export default function AgentCreateModal({
             </section>
           )}
 
-          {selectedProvider &&
-            (providerCatalogGroup(selectedProvider) === "api" ||
-              selectedProvider.id === "opencode") && (
-              <ProviderCredentialField
-                provider={selectedProvider}
-                status={credentialStatus}
-                value={providerApiKey}
-                busy={credentialBusy}
-                onValueChange={setProviderApiKey}
-                onSave={(options) => void saveProviderApiKey(options)}
-                onDelete={() => void deleteProviderApiKey()}
-              />
+          {selectedProvider?.credential_available && (
+            <ProviderCredentialField
+              provider={selectedProvider}
+              status={credentialStatus}
+              value={providerApiKey}
+              busy={credentialBusy}
+              onValueChange={setProviderApiKey}
+              onSave={() => void saveProviderApiKey()}
+              onDelete={() => void deleteProviderApiKey()}
+            />
           )}
-
-          {selectedProvider?.login_available &&
-            selectedProvider.discovery_error_code ===
-              "authentication_required" && (
-              <section className="dc-agent-section">
-                <p className="dc-agent-section-title">인증</p>
-                <div className="dc-provider-secret-field">
-                  <div>
-                    <button
-                      type="button"
-                      disabled={loginBusy}
-                      onClick={() => void handleProviderLogin()}
-                    >
-                      {loginBusy
-                        ? selectedProvider.login_flow === "browser_oauth"
-                          ? "로그인 중..."
-                          : "처리 중..."
-                        : selectedProvider.login_label ||
-                          `${selectedProvider.display_name} 로그인`}
-                    </button>
-                    {selectedProvider.login_flow ===
-                      "interactive_terminal" && (
-                      <button
-                        type="button"
-                        disabled={loginBusy}
-                        onClick={() => void recheckProviderLogin()}
-                      >
-                        로그인 완료 후 다시 확인
-                      </button>
-                    )}
-                  </div>
-                  <p>
-                    {selectedProvider.login_flow === "browser_oauth"
-                      ? "브라우저 인증이 끝나면 모델 목록을 자동으로 다시 확인합니다."
-                      : "대화형 로그인이 끝나면 상태를 다시 확인하세요."}{" "}
-                    인증 정보는 AgentsAssemble에 저장하지 않습니다.
-                  </p>
-                </div>
-              </section>
-            )}
 
           {selectedProvider &&
             ["api", "local"].includes(providerCatalogGroup(selectedProvider)) && (

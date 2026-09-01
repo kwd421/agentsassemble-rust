@@ -25,9 +25,7 @@ const apiMocks = vi.hoisted(() => ({
   chooseLocalWorkspace: vi.fn(),
   deleteProviderCredential: vi.fn(),
   fetchProviderCredentialStatus: vi.fn(),
-  refreshProviderCatalog: vi.fn(),
   setProviderCredential: vi.fn(),
-  startProviderLogin: vi.fn(),
 }));
 
 vi.mock("../../api", async (importOriginal) => ({
@@ -35,9 +33,7 @@ vi.mock("../../api", async (importOriginal) => ({
   chooseLocalWorkspace: apiMocks.chooseLocalWorkspace,
   deleteProviderCredential: apiMocks.deleteProviderCredential,
   fetchProviderCredentialStatus: apiMocks.fetchProviderCredentialStatus,
-  refreshProviderCatalog: apiMocks.refreshProviderCatalog,
   setProviderCredential: apiMocks.setProviderCredential,
-  startProviderLogin: apiMocks.startProviderLogin,
 }));
 
 afterEach(cleanup);
@@ -210,7 +206,7 @@ describe("AgentCreateModal", () => {
     );
   });
 
-  it("waits for browser login and does not ask the operator to recheck it manually", async () => {
+  it("does not advertise authentication when no Rust operation owns it", async () => {
     render(
       <AgentCreateModal
         open
@@ -228,9 +224,7 @@ describe("AgentCreateModal", () => {
             discovery_status: "failed",
             discovery_error_code: "authentication_required",
             discovery_error: "Cursor CLI 로그인이 필요합니다.",
-            login_available: true,
-            login_label: "Cursor 로그인",
-            login_flow: "browser_oauth",
+            credential_available: false,
             controls: [],
           },
         ]}
@@ -240,14 +234,8 @@ describe("AgentCreateModal", () => {
     );
 
     await userEvent.click(screen.getByRole("listitem", { name: "Cursor" }));
-    await userEvent.click(screen.getByRole("button", { name: "Cursor 로그인" }));
-
-    expect(apiMocks.startProviderLogin).toHaveBeenCalledWith("cursor");
-    expect(screen.getByText("Cursor 로그인이 완료됐습니다.")).toBeTruthy();
-    expect(
-      screen.queryByRole("button", { name: "로그인 완료 후 다시 확인" })
-    ).toBeNull();
-    expect(apiMocks.refreshProviderCatalog).not.toHaveBeenCalled();
+    expect(screen.getByText("Cursor CLI 로그인이 필요합니다.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /로그인/ })).toBeNull();
   });
 
   it("does not switch providers when the selected provider disappears during refresh", async () => {
@@ -679,7 +667,7 @@ describe("AgentCreateModal", () => {
     expect((await screen.findByLabelText("API 키") as HTMLInputElement).value).toBe("");
   });
 
-  it("stores a Cerebras key for the API provider the operator selected", async () => {
+  it("does not expose credentials for an API provider without a Rust operation", async () => {
     render(
       <AgentCreateModal
         open
@@ -696,17 +684,9 @@ describe("AgentCreateModal", () => {
     await userEvent.click(
       screen.getByRole("listitem", { name: "Cerebras" })
     );
-    await userEvent.type(screen.getByLabelText("API 키"), "csk-private");
-    await userEvent.click(screen.getByRole("button", { name: "보안 저장" }));
-
-    await waitFor(() =>
-      expect(apiMocks.setProviderCredential).toHaveBeenCalledWith(
-        "cerebras",
-        "csk-private"
-      )
-    );
-    expect((screen.getByLabelText("API 키") as HTMLInputElement).value).toBe("");
-    expect(screen.getByText(/키 설정됨/)).toBeTruthy();
+    expect(screen.queryByLabelText("API 키")).toBeNull();
+    expect(apiMocks.fetchProviderCredentialStatus).not.toHaveBeenCalledWith("cerebras");
+    expect(apiMocks.setProviderCredential).not.toHaveBeenCalled();
   });
 
   it("keeps credential deletion retryable when the secure store rejects it", async () => {

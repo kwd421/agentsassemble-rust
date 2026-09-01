@@ -67,6 +67,7 @@ export function deepSeekProvider(): NativeCliProviderAvailability {
     startable: true,
     available: true,
     catalog_group: "api",
+    credential_available: true,
     workspace_required: false,
     work_harness_available: true,
     controls: [
@@ -105,6 +106,7 @@ export function cerebrasProvider(): NativeCliProviderAvailability {
     display_name: "Cerebras",
     provider_kind: "cerebras_api",
     default_model: "gpt-oss-120b",
+    credential_available: false,
   };
 }
 
@@ -115,6 +117,7 @@ export function ollamaProvider(): NativeCliProviderAvailability {
     display_name: "Ollama",
     provider_kind: "ollama_api",
     catalog_group: "harness",
+    credential_available: false,
     workspace_required: false,
     default_model: "nemotron-3-super:cloud",
     controls: [
@@ -158,6 +161,7 @@ export function openCodeProvider(): NativeCliProviderAvailability {
     catalog_group: "harness",
     workspace_required: true,
     work_harness_available: false,
+    credential_available: false,
     executable: "opencode",
     default_model: "opencode-go/glm-5.2",
     controls: [
@@ -200,6 +204,7 @@ export function lmStudioProvider(): NativeCliProviderAvailability {
     display_name: "LM Studio",
     provider_kind: "lmstudio_api",
     catalog_group: "local",
+    credential_available: false,
     workspace_required: false,
     default_model: "gemma-4-e4b-it",
     controls: [

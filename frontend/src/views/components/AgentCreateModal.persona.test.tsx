@@ -87,6 +87,7 @@ function deepSeekProvider(): NativeCliProviderAvailability {
     interactive: true,
     startable: true,
     available: true,
+    credential_available: true,
     controls: [],
   };
 }

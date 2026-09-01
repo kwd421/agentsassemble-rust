@@ -6,9 +6,7 @@ type AgentCreateApiMocks = Record<
   | "chooseLocalWorkspace"
   | "deleteProviderCredential"
   | "fetchProviderCredentialStatus"
-  | "refreshProviderCatalog"
-  | "setProviderCredential"
-  | "startProviderLogin",
+  | "setProviderCredential",
   Mock
 >;
 
@@ -24,22 +22,10 @@ export function resetAgentCreateApiMocks(apiMocks: AgentCreateApiMocks): void {
     source: "missing",
   });
   apiMocks.deleteProviderCredential.mockReset();
-  apiMocks.refreshProviderCatalog.mockReset();
-  apiMocks.refreshProviderCatalog.mockResolvedValue({
-    status: "ready",
-    catalog_revision: "cat-authenticated",
-    providers: [],
-  });
   apiMocks.setProviderCredential.mockReset();
   apiMocks.setProviderCredential.mockResolvedValue({
     configured: true,
     source: "keyring",
-  });
-  apiMocks.startProviderLogin.mockReset();
-  apiMocks.startProviderLogin.mockResolvedValue({
-    status: "authenticated",
-    provider_id: "cursor",
-    message: "Cursor 로그인이 완료됐습니다.",
   });
 }
 
