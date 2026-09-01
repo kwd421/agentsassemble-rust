@@ -93,7 +93,11 @@ contracts, findings, or verification journals.
   The exact CSS gate follows the measured artifact; the final frontend emits
   154.83/27.47 kB CSS and passes 98 files/617 tests. Future Phase 5 Friends and
   Phase 6 side-chat behavior remain open, as does separate dormant HomeSidebar CSS.
-  Full verification and cross-review are pending for this batch.
+  A fresh complete `make verify` passes in 238.79 seconds with a 573,587,456-byte
+  maximum resident set. Critical ChatGPT Pro and Daybreaker Blue High both found
+  the same documentation-only L1 unit error; `bbfb710` corrects “147 declarations”
+  to “147 source lines.” Each then approved exact `5d0ee87..bbfb710`, cumulative
+  F-05 `8903445..bbfb710`, and HEAD `bbfb710` at `C0/H0/M0/L0`.
 - Build-artifact lifecycle correction is complete through `537c1b9`. macOS uses
   packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the

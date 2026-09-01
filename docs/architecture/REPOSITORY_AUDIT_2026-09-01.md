@@ -390,6 +390,13 @@ delivered-byte reduction, not a runtime CPU or latency claim. Future Phase 5 Fri
 and Phase 6 side-chat behavior remain server-owned work; no fallback, timer, retry,
 placeholder, compatibility path, or alternate client authority replaces them.
 
+A fresh complete `make verify` passes in 238.79 seconds with a 573,587,456-byte
+maximum resident set. Critical ChatGPT Pro and Daybreaker Blue High independently
+found one documentation-only L1 in `66d2b22`: 147 deleted CSS source lines were
+called declarations. `bbfb710` corrects the unit. Both reviewers then approved the
+corrected exact `5d0ee87..bbfb710`, cumulative F-05 `8903445..bbfb710`, and HEAD
+`bbfb710` at `C0/H0/M0/L0` with no remaining actionable finding.
+
 ### F-06 — Agent Session identity SSoT is reversed in frontend projection
 
 Disposition: `Fix`; high product/medium ownership impact.

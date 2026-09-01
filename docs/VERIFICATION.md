@@ -5695,3 +5695,18 @@ unreachable, so this records delivered-byte and source-size reduction without a
 runtime CPU or latency claim. Phase 5 Friends and Phase 6 side chat remain future
 server-owned product work; no fallback, placeholder, timer, retry, compatibility
 path, or alternate authority is added.
+
+One complete verification attempt encountered a WebSocket reset after the
+`agent_session_boundary` binary stretched to 363.71 seconds under system delay. The
+exact failed test passed alone in 6.41 seconds, the full 12-test boundary binary
+passed alone in 62.98 seconds, and no retry, heartbeat, timeout relaxation, or test
+weakening was added. A fresh complete `make verify` then passed in 238.79 seconds
+with a 573,587,456-byte maximum resident set; the boundary binary passed in 62.66
+seconds.
+
+Critical ChatGPT Pro and Daybreaker Blue High independently found the same
+documentation-only L1: `66d2b22` called the 147 removed CSS source lines
+“declarations.” Commit `bbfb710` corrects that unit without changing code or any
+other claim. Both reviewers then approved `bbfb710`, corrected exact
+`5d0ee87..bbfb710`, cumulative F-05 `8903445..bbfb710`, and HEAD `bbfb710` at
+`C0/H0/M0/L0` with no remaining actionable finding and without an automated scan.
