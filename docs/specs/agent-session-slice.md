@@ -125,6 +125,12 @@ without creating a second interrupt owner.
   `agent_session_state` projection must agree with the durable result under the existing viewer
   projector. The copied button must use the advertised Rust action and fail closed when the surface
   or capability is absent.
+- An ordinary provider result whose external effect remains uncertain atomically changes the exact
+  execution to `recovery_required`, marks that same state on the public Agent Session, and publishes
+  its bounded state event without clearing the active turn or releasing its runtime owner. The
+  copied client exposes the recovery requirement and cannot offer a knowingly stale interrupt;
+  live reconciliation retains the already-classified result until runtime-gone proof rather than
+  attempting the same terminal classification on every watcher pass.
 - Verification covers exact replay/conflict, invalid/non-busy and stale authority, pre-dispatch and
   running-turn interruption, runtime-retained and runtime-gone outcomes, restart recovery, no
   immediate re-run, WebSocket projection/ACK ordering, and one packaged real-provider busy-turn

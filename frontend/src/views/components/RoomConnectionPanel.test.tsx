@@ -307,6 +307,32 @@ describe("RoomConnectionPanel", () => {
     expect((getByTitle("세션 일시정지") as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it("disables interrupt and exposes recovery when a busy turn is quarantined", () => {
+    const recovering = {
+      ...agentSession("busy"),
+      recovery_required: true,
+      last_error_code: "provider_turn_recovery_required",
+      last_error: "The exact provider turn remains quarantined pending recovery.",
+    };
+    render(
+      <RoomConnectionPanel
+        room={room}
+        agents={[agent()]}
+        members={[member()]}
+        agentSessions={[recovering]}
+        capabilities={agentControlCapability}
+        onAgentControl={vi.fn()}
+      />
+    );
+
+    openAgentDetails();
+
+    expect((screen.getByTitle("현재 응답 중단") as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      screen.getByText(/Provider 응답 결과가 불확실해 런타임 복구가 필요합니다\./)
+    ).toBeTruthy();
+  });
+
   it("does not offer process resume after an external session is stopped", () => {
     const stopped = {
       ...agentSession("stopped"),

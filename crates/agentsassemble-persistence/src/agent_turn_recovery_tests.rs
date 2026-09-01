@@ -181,6 +181,78 @@ async fn blocking_provider_execution_owns_restart_before_lifecycle_reconciliatio
 }
 
 #[tokio::test]
+async fn uncertain_provider_result_publishes_one_recovery_required_session_state() {
+    let (store, principal, _directory) = fixture().await;
+    clear_fixture_queue(&store).await;
+    start_fixture_runtime(
+        &store,
+        &principal,
+        "uncertain-turn-start",
+        "uncertain-runtime",
+        "uncertain-owner",
+        "uncertain-lease",
+        "uncertain-provider-session",
+    )
+    .await;
+    let mutation = store
+        .execute_message_with_turn(
+            &principal,
+            "uncertain-provider-turn",
+            "message.send",
+            &json!({"content": "@Terra preserve uncertain provider custody"}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("assign uncertain provider turn: {error}"));
+    let assignment = &mutation.assignments[0];
+    let start = store
+        .authorize_provider_turn_start(
+            "general",
+            super::tests::AGENT_ID,
+            assignment.turn_generation,
+            &assignment.turn_id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize uncertain provider turn: {error}"));
+
+    let commit = store
+        .mark_provider_turn_recovery_required(&start)
+        .await
+        .unwrap_or_else(|error| panic!("quarantine uncertain provider turn: {error}"));
+    assert_eq!(commit.events.len(), 1);
+    assert!(commit.next_assignments.is_empty());
+
+    let encoded = sqlx::query_scalar::<_, String>(
+        "SELECT session_json FROM agent_sessions WHERE room_id = 'general' AND session_id = ?",
+    )
+    .bind(super::tests::AGENT_ID)
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("load quarantined provider session: {error}"));
+    let session: DurableAgentSession = serde_json::from_str(&encoded)
+        .unwrap_or_else(|error| panic!("decode quarantined provider session: {error}"));
+    assert!(session.public.recovery_required);
+    assert_eq!(
+        session.public.last_error_code,
+        "provider_turn_recovery_required"
+    );
+    assert_eq!(session.public.runtime_status, "busy");
+    assert_eq!(session.public.active_turn_id, assignment.turn_id);
+
+    let execution = store
+        .provider_turn_execution(
+            "general",
+            super::tests::AGENT_ID,
+            assignment.turn_generation,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("load quarantined provider execution: {error}"));
+    assert_eq!(
+        execution.phase,
+        ProviderTurnExecutionPhase::RecoveryRequired
+    );
+}
+
+#[tokio::test]
 async fn prepared_stop_suppresses_a_late_ordinary_provider_final() {
     let (store, principal, _directory) = fixture().await;
     clear_fixture_queue(&store).await;

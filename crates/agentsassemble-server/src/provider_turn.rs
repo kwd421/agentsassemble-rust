@@ -306,11 +306,7 @@ async fn commit_provider_error(
         return Ok(empty_turn_commit());
     }
     if error.effect_uncertain && !error.runtime_stopped {
-        store.mark_provider_turn_recovery_required(start).await?;
-        return Err(PersistenceError::CommandUnresolved {
-            code: "provider_turn_recovery_required",
-            message: "The exact provider turn remains quarantined pending recovery.".to_owned(),
-        });
+        return store.mark_provider_turn_recovery_required(start).await;
     }
     let confirmed_stop = error.runtime_stopped.then_some((
         error.runtime_handle_id.as_str(),

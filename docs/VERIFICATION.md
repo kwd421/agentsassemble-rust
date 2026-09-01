@@ -5009,6 +5009,43 @@ approved each of `9fa3dac`, `7d06973`, `5b7dcc0`, `22c8df0`, and `1c5b37e`, cumu
 `6f9115a..1c5b37e`, and pushed HEAD `1c5b37e` at C0/H0/M0/L0. Neither reviewer ran an automated
 security scan.
 
+### Uncertain-turn recovery projection correction: 2026-09-01
+
+The first 1440-by-900 package resumed the exact OpenCode Muse Spark contributor Agent Session and
+its preserved input. OpenCode returned a provider error after external turn dispatch, so the
+provider adapter correctly classified the result as effect-uncertain and retained the same
+guardian, anchor, provider process, runtime owner, active turn, and one inflight input. Persistence
+changed the exact execution to `recovery_required`, but the public Agent Session remained
+ordinary `busy` with `recovery_required=false`. The copied UI consequently offered
+`agent.interrupt`; its exact durable recheck rejected `stale_provider_turn`, and no interrupt
+command result or effect row was created. The rejection was safe, but the public state and offered
+control contradicted the already authoritative execution phase.
+
+The correction makes the provider-turn execution transition, public recovery flag, bounded stable
+error code/message, and one `agent_session_state` event a single SQLite transaction owned by
+provider-turn persistence. The server publishes that commit while retaining the exact in-memory
+turn and runtime custody. Live reconciliation now recognizes an owned, already-classified
+`recovery_required` execution before consulting its retained result, avoiding a redundant
+classification attempt on every existing one-second unresolved-owner pass. The copied control
+disables interrupt for that state and presents the recovery requirement. The change adds no schema,
+provider branch, process, task, cache, queue, poll, timer, retry, fallback, compatibility path, or
+client authority. Its only added durable cost is the existing canonical state event when the rare
+uncertain transition first commits; inflight input, active-turn identity, provider conversation, and
+runtime handle/owner/lease remain unchanged until the existing runtime-gone recovery owner proves a
+terminal transition.
+
+The focused persistence regression proves the execution phase, public flag/error, unchanged busy
+turn authority, single state event, and absence of follow-on assignment in one commit. Five server
+provider-turn/reconciliation tests pass, and the copied frontend test proves the stale interrupt is
+disabled while the bounded recovery notice is visible. The rebuilt isolated package then reproduced
+the same real Muse failure on execution generation 3. Read-only SQLite inspection observed one
+`recovery_required` transition and one matching `agent_session_state` event, while Computer Use
+showed the session as busy with the bounded recovery notice and a disabled interrupt control. No
+repeated classification event appeared. Normal application shutdown provided runtime-gone proof;
+the existing recovery owner finalized only generation 3 as `failed/requeue_finalized=1`, cleared the
+active turn and recovery flag, and detached the stopped session. A healthy supported-provider
+retained interrupt remains required before this active slice can close.
+
 ### Room search header and result identity correction: 2026-09-01
 
 The 1440-by-900 packaged comparison exposed two desktop search fields with different owners: the

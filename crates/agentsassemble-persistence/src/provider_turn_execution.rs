@@ -322,7 +322,36 @@ impl SqliteStore {
     pub async fn mark_provider_turn_recovery_required(
         &self,
         authority: &ProviderTurnStartAuthority,
-    ) -> Result<(), PersistenceError> {
+    ) -> Result<AgentTurnCommit, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        let mut session =
+            load_session(&mut transaction, &authority.room_id, &authority.session_id).await?;
+        let execution = load_execution_in(
+            &mut transaction,
+            &authority.room_id,
+            &authority.session_id,
+            authority.turn_generation,
+        )
+        .await?;
+        if execution.execution_id != authority.execution_id
+            || execution.turn_id != authority.turn_id
+            || execution.start_dispatch_nonce != authority.start_dispatch_nonce
+            || execution.runtime_handle_id != authority.runtime_handle_id
+            || execution.runtime_owner_id != authority.runtime_owner_id
+            || execution.runtime_lease_token != authority.runtime_lease_token
+            || !matches!(
+                execution.phase,
+                ProviderTurnExecutionPhase::StartDispatching | ProviderTurnExecutionPhase::Running
+            )
+            || session.public.active_turn_id != authority.turn_id
+            || session.turn_generation != authority.turn_generation
+            || session.runtime_handle_id != authority.runtime_handle_id
+            || session.runtime_owner_id != authority.runtime_owner_id
+            || session.runtime_lease_token != authority.runtime_lease_token
+            || !active_turn_authority(&session).map_err(|_| invalid_execution())?
+        {
+            return Err(stale_execution());
+        }
         let updated = sqlx::query(
             "UPDATE provider_turn_executions SET phase = 'recovery_required', updated_at = ? \
              WHERE room_id = ? AND session_id = ? AND turn_generation = ? \
@@ -340,12 +369,23 @@ impl SqliteStore {
         .bind(&authority.runtime_handle_id)
         .bind(&authority.runtime_owner_id)
         .bind(&authority.runtime_lease_token)
-        .execute(&self.pool)
+        .execute(&mut *transaction)
         .await?;
         if updated.rows_affected() != 1 {
             return Err(stale_execution());
         }
-        Ok(())
+        session.public.recovery_required = true;
+        "provider_turn_recovery_required".clone_into(&mut session.public.last_error_code);
+        "The exact provider turn remains quarantined pending recovery."
+            .clone_into(&mut session.public.last_error);
+        session.public.updated_at = Utc::now();
+        save_session(&mut transaction, &session).await?;
+        let state = session_state_event(&mut transaction, &session).await?;
+        transaction.commit().await?;
+        Ok(AgentTurnCommit {
+            events: vec![state],
+            next_assignments: Vec::new(),
+        })
     }
 
     /// Loads one exact durable execution for reconciliation and verification.

@@ -74,6 +74,9 @@ function actionCompletedLabel(action: AgentSessionControlAction) {
 }
 
 function sessionErrorMessage(session: RoomAgentSession) {
+  if (session.last_error_code === "provider_turn_recovery_required") {
+    return "Provider 응답 결과가 불확실해 런타임 복구가 필요합니다.";
+  }
   if (session.last_error_code === "quota_exhausted") {
     return "Provider 할당량 또는 사용 가능 잔액이 소진되었습니다.";
   }
@@ -127,7 +130,7 @@ export default function AgentSessionDetails({
     (!session.external_owned &&
       hasRunBefore &&
       ["stopped", "error", "disconnected", "available"].includes(status || ""));
-  const canInterrupt = status === "busy";
+  const canInterrupt = status === "busy" && !session.recovery_required;
   const continuity = providerSessionContinuity(session);
   const canConfigure =
     !session.enabled &&
@@ -250,7 +253,7 @@ export default function AgentSessionDetails({
           {agentSessionStatusLabel(status)}
         </span>
       </div>
-      {status === "error" && visibleSessionError && (
+      {(status === "error" || session.recovery_required) && visibleSessionError && (
         <p className="dc-room-play-error preserve-words">
           오류 원인 · {visibleSessionError}
         </p>
