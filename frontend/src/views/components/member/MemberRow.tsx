@@ -4,7 +4,6 @@ import { VolumeX, Zap } from "lucide-react";
 import { agentSessionPresenceStatus } from "../AgentSessionDetails";
 import ProviderLogo from "../ProviderLogo";
 import {
-  inlineQuotaChips,
   isPrimaryActivationPointer,
   rowPointerMovedTooFar,
   rowTargetIsInteractive,
@@ -31,7 +30,6 @@ export default function MemberRow({
   const canOpenDetails = Boolean(entry.agent || entry.agentSession);
   const Icon = entry.icon;
   const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
-  const quotaChips = entry.agent && entry.canViewQuota ? inlineQuotaChips(entry.agent) : [];
   const roleLabel = ROLE_OPTIONS.find((option) => option.id === entry.role)?.label || "에이전트";
 
   function openDetails() {
@@ -131,20 +129,6 @@ export default function MemberRow({
               aria-label="뮤트됨"
             >
               <VolumeX size={11} />
-            </span>
-          )}
-          {quotaChips.length > 0 && (
-            <span className="dc-member-inline-quota" aria-label={`${entry.displayName} 사용량`}>
-              {entry.agent?.quota_status === "stale" && (
-                <span data-tone="muted" title="새로 확인하지 못한 이전 사용량입니다.">
-                  이전 값
-                </span>
-              )}
-              {quotaChips.map((chip) => (
-                <span key={`${chip.label}-${chip.value}`} data-tone={chip.tone} title={chip.title}>
-                  <b>{chip.label}</b> {chip.value}
-                </span>
-              ))}
             </span>
           )}
         </div>

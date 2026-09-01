@@ -29,6 +29,5 @@ export type MemberEntry = {
   active: boolean;
   muted: boolean;
   meetingId: string;
-  canViewQuota: boolean;
   icon: LucideIcon;
 };

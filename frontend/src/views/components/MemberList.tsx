@@ -7,9 +7,6 @@ import type {
   RoomMember,
 } from "../../api";
 
-import type {
-  AgentQuotaVisibilityViewer,
-} from "../../lib/agentQuotaVisibility";
 import ProviderTruthChips from "./ProviderTruthChips";
 import type {
   AgentSessionControlAction,
@@ -32,7 +29,6 @@ export default function MemberList({
   onRoleChange,
   canEditRoles = true,
   onSessionActionComplete,
-  quotaViewer,
   searchQuery,
   onSearchQueryChange,
   hideSearch = false,
@@ -54,7 +50,6 @@ export default function MemberList({
   onRoleChange?: (memberId: string, role: RoleId) => void | Promise<void>;
   canEditRoles?: boolean;
   onSessionActionComplete?: () => void;
-  quotaViewer?: AgentQuotaVisibilityViewer;
   searchQuery?: string;
   onSearchQueryChange?: (query: string) => void;
   hideSearch?: boolean;
@@ -86,8 +81,6 @@ export default function MemberList({
     viewerParticipantId,
     displayResourceBase,
     agentSessions,
-    quotaViewer,
-    canEditRoles,
   });
   const detailEntry = useMemo(
     () => entries.find((entry) => entry.id === detailEntryId) || null,

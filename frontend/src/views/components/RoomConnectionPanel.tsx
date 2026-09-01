@@ -5,7 +5,6 @@ import {
   type RoomMember,
   type RoomAgentSession,
 } from "../../api";
-import type { AgentQuotaVisibilityViewer } from "../../lib/agentQuotaVisibility";
 import type { NativeCliProviderAvailability } from "../../roomSocketClient";
 import MemberList, { type RoleId } from "./MemberList";
 
@@ -27,7 +26,6 @@ type RoomConnectionPanelProps = {
   guestLocked?: boolean;
   channelNotifications?: Record<string, { notifications: ChannelNotificationSetting; lastReadAt?: string }>;
   onSessionActionComplete?: () => void;
-  quotaViewer?: AgentQuotaVisibilityViewer;
   onStartAddAgent?: () => void;
   agentSessions?: RoomAgentSession[];
   capabilities?: Record<string, boolean>;
@@ -61,7 +59,6 @@ export default function RoomConnectionPanel({
   guestLocked = false,
   channelNotifications,
   onSessionActionComplete,
-  quotaViewer,
   onStartAddAgent,
   agentSessions = [],
   capabilities = {},
@@ -97,7 +94,6 @@ export default function RoomConnectionPanel({
         canModerate={Boolean(capabilities["participant.mute"])}
         onParticipantMute={capabilities["participant.mute"] ? onParticipantMute : undefined}
         onSessionActionComplete={onSessionActionComplete}
-        quotaViewer={quotaViewer}
         hideSearch
         agentSessions={agentSessions}
         onAgentControl={capabilities["agent.control"] ? onAgentControl : undefined}

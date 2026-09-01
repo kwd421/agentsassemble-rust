@@ -128,7 +128,6 @@ export function agentSessionMemberToLiveAgent(
     execution_mode: member.execution_mode || "agent_session_app_server",
     last_seen_at: member.last_seen_at || member.updated_at,
     last_reply_at: member.updated_at,
-    quota_status: "unsupported",
     capabilities: [],
   };
 }

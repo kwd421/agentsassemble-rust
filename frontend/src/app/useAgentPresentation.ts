@@ -7,7 +7,6 @@ import {
   persistAgentActivityVisibility,
   type AgentActivityVisibility,
 } from "../lib/agentActivityPreferences";
-import type { AgentQuotaVisibilityViewer } from "../lib/agentQuotaVisibility";
 import { isActivePresence } from "../lib/presenceStatus";
 import { roomHasAgent } from "../lib/roomDockModel";
 import { roomMentionables } from "../lib/roomMentionables";
@@ -19,7 +18,6 @@ type AgentPresentationOptions = {
   canonicalRoom: ReturnType<typeof useCanonicalRoom>;
   activeRoom: RoomDockItem;
   activeRoomMembers: RoomMember[];
-  guestLocked: boolean;
   guestSession: RoomGuestSession | null;
   agentActivityVisibility: AgentActivityVisibility;
   setAgentActivityVisibility: Dispatch<SetStateAction<AgentActivityVisibility>>;
@@ -29,7 +27,6 @@ export function useAgentPresentation({
   canonicalRoom,
   activeRoom,
   activeRoomMembers,
-  guestLocked,
   guestSession,
   agentActivityVisibility,
   setAgentActivityVisibility,
@@ -66,29 +63,6 @@ export function useAgentPresentation({
         sessionByParticipantId.get(member.participant_id)
       )
     );
-  const guestOwnedAgentIds = useMemo(() => {
-    const agentId = guestSession?.agentId || "";
-    return agentId ? [agentId, `${agentId}-ai`] : [];
-  }, [guestSession?.agentId]);
-  const localProcessAgentIds = useMemo(
-    () =>
-      guestLocked
-        ? []
-        : activeRoomAgentSessions
-            .filter((session) => !session.external_owned)
-            .map((session) => session.participant_id)
-            .filter(Boolean),
-    [activeRoomAgentSessions, guestLocked]
-  );
-  const quotaViewer = useMemo<AgentQuotaVisibilityViewer>(
-    () => ({
-      ownedAgentIds: guestOwnedAgentIds,
-      localProcessAgentIds,
-      hostCanViewLocalAgentQuotas: !guestLocked,
-    }),
-    [guestLocked, guestOwnedAgentIds, localProcessAgentIds]
-  );
-
   const scopedAgents = agents.filter((agent) => roomHasAgent(activeRoom, agent));
   const scopedViewerParticipantId = guestSession?.agentId || "operator-local";
   const changeAgentActivityVisibility = useCallback(
@@ -138,7 +112,6 @@ export function useAgentPresentation({
     sendAgentConfigure,
     sendParticipantMute,
     sendParticipantRole,
-    quotaViewer,
     scopedAgents,
     changeAgentActivityVisibility,
     scopedMentionables,

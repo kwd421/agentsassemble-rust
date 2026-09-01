@@ -2,7 +2,6 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import { Bot, Code2, Crown, ShieldCheck, User } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { LiveAgent, RoomMember } from "../../../api";
-import { agentQuotaWindowSignals } from "../../../lib/agentLabels";
 import { isActivePresence, presenceStatusLabel } from "../../../lib/presenceStatus";
 import type { RoleId } from "./memberTypes";
 
@@ -45,14 +44,6 @@ export function statusDotClass(status: string) {
   return "bg-offline";
 }
 
-function signalToneClass(tone: "accent" | "online" | "idle" | "danger" | "muted") {
-  if (tone === "online") return "online";
-  if (tone === "idle") return "idle";
-  if (tone === "danger") return "danger";
-  if (tone === "muted") return "muted";
-  return "accent";
-}
-
 export function inferAgentRole(agent: LiveAgent): RoleId {
   const text = [
     agent.binding_role_id,
@@ -85,62 +76,4 @@ export function memberRole(member: RoomMember): RoleId {
 
 export function memberStatusLabel(member: RoomMember) {
   return presenceStatusLabel(member.status);
-}
-
-export function inlineQuotaChips(agent: LiveAgent) {
-  if (agent.quota_state === "exhausted") {
-    return [
-      {
-        label: "할당량",
-        value: "소진",
-        tone: signalToneClass("danger"),
-        title: "Provider가 할당량 또는 사용 가능 잔액 소진을 명시했습니다.",
-      },
-    ];
-  }
-  const quotaWindows = agentQuotaWindowSignals(agent);
-  if (quotaWindows.length > 0) {
-    return quotaWindows.slice(0, 2).map((window) => ({
-      label: window.label,
-      value: window.usageLabel || `${window.percent}%`,
-      tone: signalToneClass(window.tone),
-      title: window.title,
-    }));
-  }
-  const balances = Array.isArray(agent.account_balances) ? agent.account_balances : [];
-  if (balances.length > 0) {
-    return balances.slice(0, 2).map((balance) => ({
-      label: "잔액",
-      value: formatAccountBalance(balance.amount, balance.currency),
-      tone: signalToneClass(agent.account_available === false ? "danger" : "muted"),
-      title: `Provider account balance: ${balance.amount} ${balance.currency}`,
-    }));
-  }
-  const quotaValues = [];
-  if (String(agent.quota_5h || "").trim()) {
-    quotaValues.push({
-      label: "5h",
-      value: String(agent.quota_5h).trim(),
-      tone: signalToneClass("muted"),
-      title: "5-hour usage",
-    });
-  }
-  if (String(agent.quota_1w || "").trim()) {
-    quotaValues.push({
-      label: "1w",
-      value: String(agent.quota_1w).trim(),
-      tone: signalToneClass("muted"),
-      title: "1-week usage",
-    });
-  }
-  return quotaValues;
-}
-
-function formatAccountBalance(amount: string, currency: string) {
-  const normalizedCurrency = currency.trim().toUpperCase();
-  return normalizedCurrency === "USD" ? `$${amount}` : `${amount} ${normalizedCurrency}`.trim();
-}
-
-export function signalTone(tone: "accent" | "online" | "idle" | "danger" | "muted") {
-  return signalToneClass(tone);
 }

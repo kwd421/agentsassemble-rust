@@ -43,7 +43,6 @@ describe("agentSessionMemberToLiveAgent", () => {
       session_id: "agent-1",
       meeting_id: "room-1",
       status: "joined",
-      quota_status: "unsupported",
     });
   });
 });

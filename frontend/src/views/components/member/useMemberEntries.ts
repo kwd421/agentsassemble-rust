@@ -6,10 +6,6 @@ import type {
   RoomMember,
 } from "../../../api";
 import { providerExecutionLabel, roomContextSummaryBadges } from "../../../lib/agentLabels";
-import {
-  canViewAgentQuota,
-  type AgentQuotaVisibilityViewer,
-} from "../../../lib/agentQuotaVisibility";
 import { participantTypeMeta } from "../../../lib/participantTypes";
 import { resolveAttachmentReference } from "../../../lib/attachmentReference";
 import {
@@ -31,8 +27,6 @@ type MemberEntriesOptions = {
   members: RoomMember[];
   viewerParticipantId: string;
   agentSessions: RoomAgentSession[];
-  quotaViewer?: AgentQuotaVisibilityViewer;
-  canEditRoles: boolean;
   displayResourceBase: string;
 };
 
@@ -41,8 +35,6 @@ export function useMemberEntries({
   members,
   viewerParticipantId,
   agentSessions,
-  quotaViewer,
-  canEditRoles,
   displayResourceBase,
 }: MemberEntriesOptions): {
   entries: MemberEntry[];
@@ -69,7 +61,6 @@ export function useMemberEntries({
       active: viewerMember ? memberActive(viewerMember) : true,
       muted: Boolean(viewerMember?.muted),
       meetingId: String(viewerMember?.meeting_id || ""),
-      canViewQuota: false,
       ownedByViewer: true,
       ownerId: viewerEntryId,
       ownerDisplayName: viewerDisplayName,
@@ -85,11 +76,8 @@ export function useMemberEntries({
       const agentSession = sessionByParticipantId.get(agent.agent_id);
       const inferredRole = inferAgentRole(agent);
       const role = member ? memberRole(member) : inferredRole;
-      const canViewQuotaForAgent = canViewAgentQuota(agent, quotaViewer);
       const ownerId = String(member?.owner_id || agent.owner_id || "").trim();
-      const ownedByViewer = ownerId
-        ? ownerId === viewerParticipantId
-        : canViewQuotaForAgent || canEditRoles;
+      const ownedByViewer = Boolean(ownerId && ownerId === viewerParticipantId);
       const ownerDisplayName = String(
         agent.owner_display_name ||
           memberById.get(ownerId)?.display_name ||
@@ -145,7 +133,6 @@ export function useMemberEntries({
         active: agentSession ? agentSessionIsPresent(runtimeStatus) : isActive(agent),
         muted: mutedById.get(agent.agent_id) ?? false,
         meetingId: String(member?.meeting_id || agent.meeting_id || ""),
-        canViewQuota: canViewQuotaForAgent,
         ownedByViewer,
         ownerId: ownerId || (ownedByViewer ? viewerEntryId : undefined),
         ownerDisplayName,
@@ -211,7 +198,6 @@ export function useMemberEntries({
             : memberActive(member),
           muted: Boolean(member.muted),
           meetingId: String(member.meeting_id || ""),
-          canViewQuota: false,
           ownedByViewer: Boolean(agentSession && !agentSession.external_owned),
           ownerId:
             member.participant_type === "human"
@@ -238,10 +224,8 @@ export function useMemberEntries({
   }, [
     agentSessions,
     agents,
-    canEditRoles,
     displayResourceBase,
     members,
-    quotaViewer,
     viewerParticipantId,
   ]);
 

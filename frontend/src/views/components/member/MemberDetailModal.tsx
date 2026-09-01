@@ -77,7 +77,6 @@ export default function MemberDetailModal({
   }
 
   if (!entry.agent) return null;
-  const agent = entry.agent;
   const DetailIcon = entry.icon;
 
   return (
@@ -123,7 +122,7 @@ export default function MemberDetailModal({
             onActivityVisibilityChange={onActivityVisibilityChange}
           />
         )}
-        <MemberUsage entry={entry} agent={agent} />
+        <MemberUsage displayName={entry.displayName} />
       </section>
     </div>
   );

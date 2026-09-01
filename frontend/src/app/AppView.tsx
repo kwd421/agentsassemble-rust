@@ -53,7 +53,6 @@ export default function AppView({ controller }: { controller: AppController }) {
     mobileSidebarOpen, openAgentCreate,
     openChannelMenu, openCrossChannelSearchResult, openMobileProfileFromPanel, openMobileRoomInfo,
     openMobileSidebar, openRoomMenu, openRoomSettings, pendingMessageSearchTarget,
-    quotaViewer,
     roomAppearances, roomDirectorySyncIssue, roomHttpAuthority, roomMenu, roomMessageSearch,
     roomSettings, roomSocket, rooms, scopedAgents, scopedMentionables, serverProductSurface,
     scopedOnlineCount, selectRoom, sendAgentConfigure, sendAgentControl,
@@ -449,7 +448,6 @@ export default function AppView({ controller }: { controller: AppController }) {
               onRoleChange={updateMemberRole}
               guestLocked={guestLocked}
               channelNotifications={activeChannelSettings}
-              quotaViewer={quotaViewer}
               onStartAddAgent={openAgentCreate}
               agentSessions={activeRoomAgentSessions}
               capabilities={activeRoomCapabilities}

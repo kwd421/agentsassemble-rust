@@ -54,24 +54,6 @@ export interface LiveAgent {
   relaunch_host?: string;
   relaunch_argv?: string[];
   relaunch_cwd?: string;
-  quota_5h?: string;
-  quota_1w?: string;
-  quota_state?: "ok" | "low" | "exhausted" | "unknown" | "";
-  quota_status?: "loading" | "ready" | "stale" | "unavailable" | "unsupported";
-  quota_windows?: Array<{
-    label: string;
-    percent: number;
-    resetsAt?: string | number | null;
-    used?: number;
-    limit?: number;
-    remaining?: number;
-    unit?: string;
-  }>;
-  account_available?: boolean;
-  account_balances?: Array<{
-    currency: string;
-    amount: string;
-  }>;
   persona_card_id?: string;
   character_mode?: string;
   join_semantics?: string;

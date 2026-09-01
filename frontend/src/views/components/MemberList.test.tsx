@@ -220,6 +220,22 @@ describe("MemberList component wiring", () => {
     ).not.toBeNull();
   });
 
+  it("does not infer agent ownership from room-management permission", () => {
+    render(
+      <MemberList
+        agents={[{ ...AGENT, owner_id: undefined, owner_display_name: "Remote Owner" }]}
+        viewerParticipantId="operator-local"
+        roomId="room-1"
+        roomName="Room One"
+        canEditRoles
+      />
+    );
+
+    const group = screen.getByText("Remote Owner").closest(".dc-person-member-group");
+    expect(group).not.toBeNull();
+    expect(within(group as HTMLElement).getByText("Agent One")).toBeTruthy();
+  });
+
   it("keeps participant kind independent when roles cross presentation defaults", () => {
     const members: RoomMember[] = [
       {
