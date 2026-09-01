@@ -5436,3 +5436,36 @@ complete participant/session transition. Focused verification for that correctio
 passed all 242 persistence tests and warning-denied persistence Clippy. Exact
 `fe8ffbf..7b2168f`, cumulative `dd1e99d..7b2168f`, and HEAD `7b2168f` then received
 `APPROVE — C0/H0/M0/L0` from both Critical ChatGPT Pro and Daybreaker Blue High.
+
+### F-05 absent-service frontend exposure, first batch: 2026-09-01
+
+The observed pre-change costs were concrete: normal authenticated startup mounted
+`useFriendsDirectory` against absent `/api/room-friends`; every active room mounted
+`useRoomSideChat` against absent `/api/side-chat`; and selecting a copied custom
+channel mounted a 2.5-second absent-message poll plus deferred five-second voice
+presence polling and a 20-second join heartbeat. Permanent 404s and unsupported voice
+state are not transient failures, so adding retries, dummy routes, or fallback data
+would preserve the wrong owner.
+
+Commits `f687667`, `eecdb20`, and `d058af8` remove those three active composition
+boundaries independently. Startup now uses the implemented lobby. The right panel
+keeps one room-connection-information control and content owner. Custom-channel
+creation, selection, and lazy rendering are absent, so `CustomChannelView` is outside
+the production import graph. No backend route, fake state, compatibility branch,
+retry, timer, heartbeat, or feature framework was introduced. Dormant copied hooks and
+components, external-AI/AI-friend/operator-pairing/companion controls, and public
+Google controls are not claimed complete by this batch.
+
+The production build regrouped its chunks after removing the custom-channel lazy
+boundary. Total emitted JavaScript changed from 871.84 kB to 854.80 kB minified and
+from 265.89 kB to 256.70 kB gzip; CSS changed from 169.71 kB to 169.23 kB minified and
+from 30.42 kB to 29.63 kB gzip. These are bundle observations, not CPU, memory, or
+runtime-latency claims. The CSS provenance gate pins the new single production CSS
+artifact and its exact hash rather than weakening the comparison.
+
+A fresh complete `make verify` passed: architecture, source-growth, policy, and diff
+gates; Rust formatting and checks; the exact-CSS production frontend build; all 103
+frontend files and 644 tests; desktop preparation/build, warning-denied Clippy, and
+tests; all Rust workspace tests including real TCP boundary suites; and workspace
+warning-denied Clippy. Exact pushed-range Critical ChatGPT Pro and Daybreaker Blue
+High manual review is pending.

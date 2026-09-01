@@ -24,18 +24,23 @@ contracts, findings, or verification journals.
   tickets and one-use WebSocket upgrade tickets remain because they cross distinct
   authority boundaries. Critical ChatGPT Pro and Daybreaker Blue High each manually
   approved cumulative `ac905de..5693e13` and HEAD at `C0/H0/M0/L0`.
-- Completed: F-04 through `7b2168f`. Four non-executable capability fields,
+- Completed: F-04 through `8903445`. Four non-executable capability fields,
   copied room-delete/participant-kick/provider-response/agent-readd controls, and the
   producerless provider-request snapshot, kicked-event projection, and room-delete
   callback are absent. `bridge.publish` remains because the current vote path consumes
   it; the distinct server `participant_kicked` start-denial code and OpenCode's
   interactive-request fail-closed test remain current contracts. Critical ChatGPT Pro
-  and Daybreaker Blue High each approved exact `fe8ffbf..7b2168f`, cumulative
-  `dd1e99d..7b2168f`, and HEAD `7b2168f` at `C0/H0/M0/L0` after the stale re-add
-  guidance correction.
+  and Daybreaker Blue High each approved exact `f4bc3d9..8903445`, cumulative
+  `dd1e99d..8903445`, and HEAD `8903445` at `C0/H0/M0/L0` after the stale re-add
+  guidance and audit-state corrections.
 - Active task: F-05 frontend exposure correction — gate copied requests,
   polling, and heartbeats whose complete Rust owner does not yet exist. Do not add
-  dummy routes, fallback data, timers, or a generic feature framework.
+  dummy routes, fallback data, timers, or a generic feature framework. The first
+  independently committed batch through `d058af8` removes the active Friends,
+  side-chat, custom-channel, and deferred voice entry paths; a fresh `make verify`
+  passes, and exact-range cross-review is pending. External-AI/AI-friend invite,
+  operator-pairing, companion, and public Google controls plus evidence-backed
+  dormant-source cleanup remain in F-05.
 - Sequence/exit owner: [`docs/PRODUCT_REIMPLEMENTATION_PLAN.md`](docs/PRODUCT_REIMPLEMENTATION_PLAN.md)
 - Finding/evidence owner: [`docs/architecture/REPOSITORY_AUDIT_2026-09-01.md`](docs/architecture/REPOSITORY_AUDIT_2026-09-01.md)
 - Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`;

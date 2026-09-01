@@ -253,6 +253,23 @@ permissive or add empty/dummy endpoints. Voice is user-deferred and must not run
 production importer currently mounts it. It is dead/latent source, not an active
 runtime cost; remove or leave unmounted until a runtime-version owner exists.
 
+Candidate correction through `d058af8`: three independent frontend commits remove
+the normal-startup Friends route and request owner, the active-room side-chat request
+owner and panels, and the custom-channel selection/create/render path. The last change
+also makes the copied 2.5-second text poll, five-second voice poll, and 20-second voice
+join heartbeat unreachable from the production import graph. Normal startup now enters
+the implemented lobby, and the right panel retains its implemented room-connection
+information. No Rust route, placeholder, fallback, compatibility branch, retry, timer,
+or generic feature abstraction was added.
+
+The copied hooks and some presentation modules remain dormant source and some are still
+referenced by the CSS provenance import owner; this batch does not claim their deletion.
+`FrontendUpdateNotice` remains unmounted. The next F-05 review must decide their removal
+from actual reachability and CSS ownership evidence, then assess the still-exposed
+external-AI/AI-friend invite, operator-pairing, companion, and public Google controls.
+The candidate passed the complete repository gate; exact pushed-range cross-review is
+pending.
+
 ### F-06 — Agent Session identity SSoT is reversed in frontend projection
 
 Disposition: `Fix`; high product/medium ownership impact.
