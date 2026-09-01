@@ -49,10 +49,12 @@ contracts, findings, or verification journals.
   the copied Room Connector invite, operator-pairing issuer, and guest companion
   admission controls without changing human invitation, incoming pairing redemption,
   or room membership. A fresh complete `make verify` passes. Both manual reviewers
-  found only a Low documentation error in the emitted JavaScript total; corrections
-  through `7f2e878` distinguish the raw-byte aggregate from displayed per-chunk gzip
-  figures. Critical ChatGPT Pro and Daybreaker Blue High each approved the corrected
-  original batch, correction `9759d73..7f2e878`, cumulative `8903445..7f2e878`, and
+  found the Low omission of a JavaScript chunk from the emitted total; Daybreaker then
+  found that first correction `95951d9` described the aggregate rounding incorrectly.
+  Corrections through `7f2e878` distinguish the raw-byte aggregate from displayed
+  per-chunk gzip figures. Critical ChatGPT Pro and Daybreaker Blue High each approved
+  the corrected original batch, correction `9759d73..7f2e878`, cumulative
+  `8903445..7f2e878`, and
   HEAD `7f2e878` at `C0/H0/M0/L0`.
   The dormant AI-friend invite branch, public Google controls, and evidence-backed
   dormant-source cleanup remain in F-05.

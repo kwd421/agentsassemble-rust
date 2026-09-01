@@ -292,10 +292,12 @@ displayed per-chunk gzip figures total 254.02 kB. CSS is 169.13/29.62 kB after t
 three removals; a fresh complete `make verify` passes 103 frontend files/643 tests,
 desktop Clippy/25 tests, all Rust and real TCP boundary tests, and workspace
 warning-denied Clippy. Dormant AI-friend invitation, public Google controls, and
-evidence-backed dormant-source cleanup remain. Both manual reviewers found only the Low
-omission of the separate `AdminPanel` chunk from the first documentation total.
-Corrections through `7f2e878` close that record; Critical ChatGPT Pro and Daybreaker Blue
-High each approved correction `9759d73..7f2e878`, the original batch as corrected,
+evidence-backed dormant-source cleanup remain. Both manual reviewers found the Low
+omission of the separate `AdminPanel` chunk from the first documentation total;
+Daybreaker then found that first correction `95951d9` misstated the aggregate-rounding
+method. Corrections through `7f2e878` close both documentation findings; Critical
+ChatGPT Pro and Daybreaker Blue High each approved correction `9759d73..7f2e878`,
+the original batch as corrected,
 cumulative F-05 `8903445..7f2e878`, and HEAD `7f2e878` at `C0/H0/M0/L0`.
 
 ### F-06 — Agent Session identity SSoT is reversed in frontend projection

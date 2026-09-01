@@ -5545,8 +5545,10 @@ A fresh complete `make verify` passes architecture/source-growth/policy/diff gat
 Rust format/check, the exact-CSS production build, all 103 frontend files and 643 tests,
 desktop build/warning-denied Clippy/25 tests, the complete Rust workspace including real
 TCP boundary tests, and workspace warning-denied Clippy. Both manual reviewers found one
-Low documentation error: the first record counted only the main JavaScript chunk as the
-emitted total. Corrections through `7f2e878` record the raw-byte aggregate and displayed
-per-chunk gzip sum separately. Critical ChatGPT Pro and Daybreaker Blue High each
-approved correction `9759d73..7f2e878`, the original batch as corrected, cumulative
+Low documentation error in the first record, which counted only the main JavaScript
+chunk as the emitted total. Daybreaker then found that first correction `95951d9`
+misdescribed the 844.34 kB aggregate as a per-chunk-rounded total. Corrections through
+`7f2e878` record the raw-byte aggregate and displayed per-chunk gzip sum separately.
+Critical ChatGPT Pro and Daybreaker Blue High each approved correction
+`9759d73..7f2e878`, the original batch as corrected, cumulative
 F-05 `8903445..7f2e878`, and HEAD `7f2e878` at `C0/H0/M0/L0`.
