@@ -1,10 +1,21 @@
 """Tests for the repository-owned Cargo artifact cleanup boundary."""
 
+from contextlib import redirect_stderr
+import io
 from pathlib import Path
+from types import SimpleNamespace
 import tempfile
 import unittest
+from unittest.mock import patch
 
-from scripts.prune_build_artifacts import allocated_bytes, clean_plan
+from scripts.prune_build_artifacts import (
+    CleanTarget,
+    allocated_bytes,
+    clean_plan,
+    execute_plan,
+    file_allocation_bytes,
+    file_identity,
+)
 
 
 class BuildArtifactCleanupTests(unittest.TestCase):
@@ -51,6 +62,29 @@ class BuildArtifactCleanupTests(unittest.TestCase):
                 allocated_bytes(target),
                 original.stat().st_blocks * 512,
             )
+
+    def test_platform_without_block_counts_uses_logical_bytes(self) -> None:
+        metadata = SimpleNamespace(st_size=123)
+
+        self.assertEqual(file_allocation_bytes(metadata), 123)
+
+    def test_unavailable_file_index_never_collapses_distinct_files(self) -> None:
+        metadata = SimpleNamespace(st_dev=0, st_ino=0)
+
+        self.assertIsNone(file_identity(metadata))
+
+    def test_oversized_check_never_invokes_cargo_clean(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            plan = (CleanTarget(root / "target", 21, "over limit"),)
+
+            with (
+                patch("scripts.prune_build_artifacts.subprocess.run") as run,
+                redirect_stderr(io.StringIO()),
+            ):
+                self.assertEqual(execute_plan(root, plan, clean=False), 1)
+
+            run.assert_not_called()
 
     def test_symlinked_target_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

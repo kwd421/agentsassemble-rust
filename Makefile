@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := test
 
-.PHONY: architecture-check artifact-prune bindings frontend-check desktop-check format-check check clippy test verify diff-check
+.PHONY: architecture-check artifact-check artifact-prune bindings frontend-check desktop-check format-check check clippy test verify diff-check
 
 PYTHON ?= python3
 
@@ -9,8 +9,11 @@ architecture-check:
 	$(PYTHON) -B scripts/check_source_growth.py
 	$(PYTHON) -B -m unittest scripts/test_policy_gates.py scripts/test_prune_build_artifacts.py
 
-artifact-prune:
+artifact-check:
 	$(PYTHON) -B scripts/prune_build_artifacts.py
+
+artifact-prune:
+	$(PYTHON) -B scripts/prune_build_artifacts.py --clean
 
 bindings:
 	cargo run -p agentsassemble-protocol --bin export_types
@@ -37,7 +40,7 @@ test: check frontend-check desktop-check
 diff-check:
 	git diff --check
 
-verify: artifact-prune
+verify: artifact-check
 	$(MAKE) test
 	$(MAKE) clippy
 	$(MAKE) diff-check

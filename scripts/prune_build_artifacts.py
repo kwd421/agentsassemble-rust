@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import argparse
 from dataclasses import dataclass
 import os
 from pathlib import Path
 import stat
 import subprocess
+import sys
 
 
 MAX_ACTIVE_TARGET_BYTES = 20 * 1024**3
@@ -19,6 +21,21 @@ class CleanTarget:
     path: Path
     observed_bytes: int
     reason: str
+
+
+def file_allocation_bytes(metadata: os.stat_result) -> int:
+    """Use physical blocks where portable, otherwise the file's logical bytes."""
+    blocks = getattr(metadata, "st_blocks", None)
+    if isinstance(blocks, int):
+        return blocks * 512
+    return metadata.st_size
+
+
+def file_identity(metadata: os.stat_result) -> tuple[int, int] | None:
+    """Return a stable hard-link identity when the platform provides one."""
+    if metadata.st_ino == 0:
+        return None
+    return (metadata.st_dev, metadata.st_ino)
 
 
 def allocated_bytes(path: Path) -> int:
@@ -36,11 +53,12 @@ def allocated_bytes(path: Path) -> int:
             except FileNotFoundError:
                 continue
             if stat.S_ISREG(metadata.st_mode):
-                inode = (metadata.st_dev, metadata.st_ino)
-                if inode in seen_inodes:
-                    continue
-                seen_inodes.add(inode)
-                total += metadata.st_blocks * 512
+                inode = file_identity(metadata)
+                if inode is not None:
+                    if inode in seen_inodes:
+                        continue
+                    seen_inodes.add(inode)
+                total += file_allocation_bytes(metadata)
     return total
 
 
@@ -78,18 +96,30 @@ def clean_plan(repository_root: Path, maximum_bytes: int) -> tuple[CleanTarget, 
     return tuple(planned)
 
 
-def main() -> int:
-    repository_root = Path(__file__).resolve().parents[1]
-    plan = clean_plan(repository_root, MAX_ACTIVE_TARGET_BYTES)
+def execute_plan(
+    repository_root: Path, plan: tuple[CleanTarget, ...], clean: bool
+) -> int:
     if not plan:
         current = allocated_bytes(repository_root / ROOT_TARGET)
-        print(f"Cargo artifacts retained for the next build: {current} allocated bytes")
+        print(f"Cargo artifacts retained for the next build: {current} bytes")
         return 0
+
+    if not clean:
+        for target in plan:
+            print(
+                f"Cargo artifact maintenance required for {target.path}: "
+                f"{target.observed_bytes} bytes; {target.reason}",
+                file=sys.stderr,
+            )
+        print(
+            "Stop repository Cargo and Tauri work, then run `make artifact-prune`.",
+            file=sys.stderr,
+        )
+        return 1
 
     for target in plan:
         print(
-            f"Cleaning {target.path}: {target.observed_bytes} allocated bytes; "
-            f"{target.reason}"
+            f"Cleaning {target.path}: {target.observed_bytes} bytes; {target.reason}"
         )
         subprocess.run(
             ["cargo", "clean", "--target-dir", str(target.path)],
@@ -97,6 +127,19 @@ def main() -> int:
             check=True,
         )
     return 0
+
+
+def main(arguments: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="clean exact project-owned targets during an explicit maintenance window",
+    )
+    options = parser.parse_args(arguments)
+    repository_root = Path(__file__).resolve().parents[1]
+    plan = clean_plan(repository_root, MAX_ACTIVE_TARGET_BYTES)
+    return execute_plan(repository_root, plan, options.clean)
 
 
 if __name__ == "__main__":
