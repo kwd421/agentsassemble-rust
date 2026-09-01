@@ -376,6 +376,20 @@ commit, exact `e0c6ad0..d338936`, cumulative F-05 `8903445..d338936`, and HEAD
 `d338936`. Both returned `APPROVE C0/H0/M0/L0` with no actionable finding and
 without an automated security scan.
 
+Candidates `84ceb13`, `adf17ee`, and `2f439f1` remove the separately owned dormant
+side-chat, Friends directory/activity, and Friends profile/DM styles after their
+presentation consumers are absent. Repository-wide source search confirms no
+non-CSS consumer for those selectors. The active `.dc-agent-add-entry` rule and
+human-invite `.dc-invite-friend-*` family are deliberately retained; dormant
+HomeSidebar CSS remains a separate open boundary.
+
+The exact CSS artifact shrinks from 168.34/29.49 kB to 154.83/27.47 kB by displayed
+raw/gzip measures while JavaScript remains 835.41/253.02 kB. All 98 frontend
+files/617 tests pass after every candidate. This is an unreachable-source and
+delivered-byte reduction, not a runtime CPU or latency claim. Future Phase 5 Friends
+and Phase 6 side-chat behavior remain server-owned work; no fallback, timer, retry,
+placeholder, compatibility path, or alternate client authority replaces them.
+
 ### F-06 — Agent Session identity SSoT is reversed in frontend projection
 
 Disposition: `Fix`; high product/medium ownership impact.

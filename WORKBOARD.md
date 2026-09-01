@@ -87,6 +87,13 @@ contracts, findings, or verification journals.
   every individual commit, exact `e0c6ad0..d338936`, cumulative F-05
   `8903445..d338936`, and HEAD `d338936` at `C0/H0/M0/L0` with no actionable
   finding.
+  The next independent commits `84ceb13`, `adf17ee`, and `2f439f1` remove only
+  the now-unreachable side-chat, Friends directory/activity, and Friends profile/DM
+  selectors. The active agent-add button and human-invite friend rows remain styled.
+  The exact CSS gate follows the measured artifact; the final frontend emits
+  154.83/27.47 kB CSS and passes 98 files/617 tests. Future Phase 5 Friends and
+  Phase 6 side-chat behavior remain open, as does separate dormant HomeSidebar CSS.
+  Full verification and cross-review are pending for this batch.
 - Build-artifact lifecycle correction is complete through `537c1b9`. macOS uses
   packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the

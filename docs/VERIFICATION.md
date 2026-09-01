@@ -5674,3 +5674,24 @@ reviewed every individual commit, exact `e0c6ad0..d338936`, cumulative F-05
 `8903445..d338936`, and HEAD `d338936`. Each returned
 `APPROVE C0/H0/M0/L0` with no actionable finding and without an automated
 security scan.
+
+### F-05 dormant side-chat and Friends styles: 2026-09-02
+
+After their presentation owners were removed, repository-wide non-CSS search found
+no consumer for the copied side-chat or Friends directory/profile/DM selectors.
+Candidate `84ceb13` removes 147 side-chat declarations across the original desktop
+and mobile segments plus the side-chat-only mention-popover override. Candidate
+`adf17ee` separately removes 340 Friends directory/list/activity lines. It preserves
+the intervening `.dc-agent-add-entry` rule because the active room connection panel
+still consumes it. Candidate `2f439f1` removes the remaining 408 Friends profile/DM
+lines. Current human-invite `.dc-invite-friend-*` styles are a distinct reachable
+contract and remain unchanged; dormant HomeSidebar CSS remains open.
+
+The exact CSS gate is updated after each intentional cascade change. CSS moves from
+168.34/29.49 kB before this batch to 166.28/29.18, then 161.30/28.39, and finally
+154.83/27.47 kB by displayed raw/gzip measures. JavaScript remains 835.41/253.02 kB
+and all 98 frontend files/617 tests pass after every candidate. The source was
+unreachable, so this records delivered-byte and source-size reduction without a
+runtime CPU or latency claim. Phase 5 Friends and Phase 6 side chat remain future
+server-owned product work; no fallback, placeholder, timer, retry, compatibility
+path, or alternate authority is added.
