@@ -5187,3 +5187,25 @@ protocol export, warning-denied server and desktop Clippy, Rust formatting, diff
 the architecture/source-growth policy gate. Repository-wide current-source search found no
 remaining proof key, connection nonce, authenticated envelope, frame-HMAC module, or obsolete
 proof-oriented test peer.
+
+### D-03 direct remote profile authorization: 2026-09-01
+
+Before `8d0c9f5`, every remote profile read, patch, or avatar upload first authorized the reusable
+session in SQLite, allocated a short-lived profile grant under the shared ticket-store lock, returned
+it through an extra HTTP response, and then consumed and durably revalidated it at the target. The
+exchange did not create an independent trust boundary: both requests used the same HTTPS origin and
+an injected script able to use the session could also mint the grant.
+
+The profile target now classifies the canonical `aas1.` bearer before any local-ticket lookup,
+resolves it once from durable session authority, and performs the existing operation-specific
+revalidation at the owning profile or attachment transaction. A malformed session-shaped bearer
+fails as unauthorized and never falls through to local authority. The retired profile exchange
+returns 404 at the real TCP boundary. Local desktop profile tickets, pre-join avatar credentials,
+public bound-avatar reads, read-only profile patch and avatar-upload denial, no-store responses,
+and the separate one-use WebSocket exchange remain unchanged.
+
+This removes one HTTP round trip, one ticket-map insertion/consumption, and one exchange-time SQLite
+authorization per remote profile operation. It adds no cache, timer, retry, fallback, compatibility
+path, or new durable state; no latency claim is made beyond the removed operations. All 90 server
+unit tests, the real invite/profile TCP suite, 651 frontend tests, the production CSS-verified build,
+warning-denied server Clippy, formatting, and the architecture/source-growth/policy gates passed.
