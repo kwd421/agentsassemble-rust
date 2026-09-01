@@ -342,9 +342,14 @@ original React frontend rather than recreated, but that statement is not parity
 evidence by itself. The frontend provenance is original commit `d504647…`.
 Every Rust-only frontend change must be allowlisted with its file and reason. The
 allowlist is limited to runtime bootstrap, ticket/transport, Tauri native boundary,
-and behavior-preserving structure-gate splits. Product-controller orchestration,
-client-owned authority, changed DOM order, or changed CSS cascade is not justified
-by the allowlist.
+behavior-preserving structure-gate splits, and the observed
+`styles/channel-search.css` cascade correction that hides the mobile message-search
+trigger when the copied desktop search field is visible. Product-controller
+orchestration, client-owned authority, changed DOM order, or any other changed CSS
+cascade is not justified by the allowlist. Packaged 1440-by-900 verification of that
+correction exposed one desktop `general` message-search field, one right-panel member
+filter, no duplicate mobile trigger, and a visible header toggle that removed and
+restored the whole right panel without clipping the remaining header controls.
 
 At the public Rust comparison commit:
 

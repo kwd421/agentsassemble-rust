@@ -12,8 +12,8 @@ const expectedCss = new Map([
     "ec5e1ef2db1793bcc1a326ae07a1b9ddfc3499f89dd3ab8f0374fe5386cc0331",
   ],
   [
-    "useRoomMessageSearch-CjG4hGG5.css",
-    "0f8706c7f8c5758a5885516809cf1fa238026e41b166b35e79ffc77aafdc29b6",
+    "useRoomMessageSearch-zcoL7RyC.css",
+    "11ef334f47deae9e89d775309ed75363793549bfd8a95d9fa67a5932dd9b59e8",
   ],
 ]);
 
@@ -25,7 +25,7 @@ const expectedNames = [...expectedCss.keys()].sort();
 
 if (JSON.stringify(actualNames) !== JSON.stringify(expectedNames)) {
   throw new Error(
-    `original frontend CSS chunks changed: expected ${expectedNames.join(", ")}; got ${actualNames.join(", ")}`,
+    `approved frontend CSS chunks changed: expected ${expectedNames.join(", ")}; got ${actualNames.join(", ")}`,
   );
 }
 
@@ -35,9 +35,9 @@ for (const name of expectedNames) {
   const expectedHash = expectedCss.get(name);
   if (actualHash !== expectedHash) {
     throw new Error(
-      `${name} no longer matches the latest original frontend CSS cascade: expected ${expectedHash}; got ${actualHash}`,
+      `${name} no longer matches the approved frontend CSS cascade: expected ${expectedHash}; got ${actualHash}`,
     );
   }
 }
 
-console.log("verified latest original frontend CSS chunks and cascade");
+console.log("verified approved frontend CSS chunks and cascade");

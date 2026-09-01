@@ -1,3 +1,13 @@
+.dc-head-icon.dc-mobile-search-trigger {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .dc-head-icon.dc-mobile-search-trigger {
+    display: grid;
+  }
+}
+
 .dc-head-popover-search {
   display: flex;
   height: 34px;
