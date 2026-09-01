@@ -5209,3 +5209,22 @@ authorization per remote profile operation. It adds no cache, timer, retry, fall
 path, or new durable state; no latency claim is made beyond the removed operations. All 90 server
 unit tests, the real invite/profile TCP suite, 651 frontend tests, the production CSS-verified build,
 warning-denied server Clippy, formatting, and the architecture/source-growth/policy gates passed.
+
+### D-03 direct remote preference authorization: 2026-09-01
+
+Commit `1333c5c` removes the remote preference-read and preference-write exchange routes and grants.
+The target distinguishes canonical session bearers from local one-use tickets before lookup, resolves
+the remote session once, and keeps preference read/write revalidation in the owning SQLite unit. The
+write target now owns the read-only denial that the deleted exchange previously enforced.
+
+Cross-room requests fail without consuming a reusable session, session replacement invalidates the
+old bearer, malformed session-shaped values never fall through to local tickets, and both retired
+exchange routes return 404 at the real TCP boundary. Local desktop read/write tickets, auth-before-body
+for both authority kinds, no-store responses, bounded bodies, and room-global WebSocket ownership are
+unchanged. The change removes one HTTP round trip, ticket-map insertion/consumption, and exchange-time
+SQLite authorization per remote preference operation without adding state, fallback, polling, retry,
+or compatibility handling.
+
+All 90 server unit tests, the real remote preference TCP suite, 651 frontend tests, the production
+CSS-verified build, warning-denied server Clippy, formatting, and the architecture/source-growth/policy
+gates passed.
