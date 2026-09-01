@@ -5,6 +5,7 @@ use agentsassemble_domain::{
     LOCAL_OPERATOR_USER_ID, ProviderCatalog,
 };
 use agentsassemble_persistence::SqliteStore;
+use agentsassemble_protocol::MAX_ROOM_SOCKET_MESSAGE_BYTES;
 use agentsassemble_provider::ProviderCatalogService;
 use agentsassemble_server::{AppState, TicketStore, serve};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -86,7 +87,7 @@ async fn local_tcp_history_pages_large_events_without_gaps_or_mutation() {
         assert_eq!(ack["request_id"], request_id);
         assert_eq!(ack["action"], "room.history");
         assert_eq!(ack["resolution"], "committed");
-        assert!(ack.to_string().len() <= 256 * 1024);
+        assert!(ack.to_string().len() <= MAX_ROOM_SOCKET_MESSAGE_BYTES);
         let events = ack["result"]["events"]
             .as_array()
             .unwrap_or_else(|| panic!("history ACK omitted events"));

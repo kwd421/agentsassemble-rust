@@ -2,6 +2,7 @@ use std::{path::PathBuf, time::Duration};
 
 use agentsassemble_domain::ProviderCatalog;
 use agentsassemble_persistence::SqliteStore;
+use agentsassemble_protocol::MAX_ROOM_SOCKET_MESSAGE_BYTES;
 use agentsassemble_provider::ProviderCatalogService;
 use agentsassemble_server::{AppState, TicketStore, serve};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
@@ -288,7 +289,7 @@ async fn snapshot_is_trimmed_to_the_websocket_message_budget() {
     let snapshot = receive_json(&mut resumed).await;
     let encoded =
         serde_json::to_vec(&snapshot).unwrap_or_else(|error| panic!("re-encode snapshot: {error}"));
-    assert!(encoded.len() <= 256 * 1024);
+    assert!(encoded.len() <= MAX_ROOM_SOCKET_MESSAGE_BYTES);
     assert_eq!(snapshot["last_seq"], 33);
     assert_eq!(snapshot["has_more_before"], true);
     assert_eq!(snapshot["resume_gap"], false);
