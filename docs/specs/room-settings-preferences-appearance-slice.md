@@ -1,8 +1,8 @@
 # Room Settings, Scheduling, Tabletop, Preferences, and Appearance Slice
 
 Status: implementation and flow evidence retained; the repository-audit D-03
-remote-session HTTP correction is implemented through `9bfee34` and pending batch
-cross-review. Stage A, local desktop authority, appearance lifecycle,
+remote-session HTTP correction is implemented through `9bfee34` and final manual
+cross-review closed at `5693e13`. Stage A, local desktop authority, appearance lifecycle,
 copied-frontend activation, and packaged restart evidence remain.
 
 ## Definition

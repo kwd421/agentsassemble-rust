@@ -105,7 +105,7 @@ only after the correction commit is pushed and re-reviewed.
   final public HEAD `aea2a06` at `APPROVE — C0/H0/M0/L0`. Daybreaker Blue High
   manually approved final public HEAD `aea2a06` at `APPROVE — C0/H0/M0/L0`.
 
-### Phase 0B D-03 profile/preference/pin manual cross-review closure
+### Phase 0B D-03 manual cross-review closure
 
 - For `5d0b069..6ab175d`, Critical ChatGPT Pro returned `REVISE — C0/H0/M0/L3`
   and Daybreaker Blue High returned `REVISE — C0/H0/M0/L2`: stale grant lifecycle
@@ -117,7 +117,15 @@ only after the correction commit is pushed and re-reviewed.
   `f5ddb91` removed that compatibility path and its stale profile branches.
 - Critical ChatGPT Pro and Daybreaker Blue High each manually approved exact
   `9e2c9f3..f5ddb91`, cumulative `5d0b069..f5ddb91`, and final public HEAD `f5ddb91`
-  at `APPROVE — C0/H0/M0/L0`. Search, attachments, and appearance remain D-03 work.
+  at `APPROVE — C0/H0/M0/L0` before the remaining targets.
+- For final-target batch `ac905de..e68261e`, Critical ChatGPT Pro found two Low
+  stale-contract strings in search and attachment code, while Daybreaker Blue High
+  found two Low current-status/range errors in planning documents. `3e8dd1b` corrected
+  the status owners and `5693e13` corrected the two source strings without changing
+  behavior, state, or authority.
+- Critical ChatGPT Pro and Daybreaker Blue High each manually approved exact
+  `3e8dd1b..5693e13`, cumulative `ac905de..5693e13`, and final public HEAD `5693e13`
+  at `APPROVE — C0/H0/M0/L0`. All D-03 target operations are closed.
 
 ## Fix findings
 

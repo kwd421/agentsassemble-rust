@@ -17,16 +17,18 @@ contracts, findings, or verification journals.
   evidence-free receipt, digests, per-frame HMAC/base64/counter envelope, proof-key
   ticket state, and obsolete test vocabulary are absent. One-use ticket authority,
   strict bounded JSON, finite snapshot/catch-up, replay, and failure contracts remain.
-- Task: D-03 — remove the redundant human-session HTTP purpose-ticket exchange while
-  preserving one bounded-header authorization at each target route. Desktop purpose
-  tickets and one-use WebSocket upgrade tickets remain because they cross distinct
-  authority boundaries.
-- Completed D-03 targets through `9bfee34`: profile, preferences, message pins,
+- Completed: D-03 through `5693e13`. Profile, preferences, message pins,
   message search, message attachments, and bound room-appearance reads authorize
   reusable remote sessions at the target; the obsolete socket-to-profile authority
-  interpretation and public HTTP-purpose exchange state are absent. The three-feature
-  batch beginning after `ac905de`, including its current review corrections, is pending
-  manual cross-review.
+  interpretation and public HTTP-purpose exchange state are absent. Desktop purpose
+  tickets and one-use WebSocket upgrade tickets remain because they cross distinct
+  authority boundaries. Critical ChatGPT Pro and Daybreaker Blue High each manually
+  approved cumulative `ac905de..5693e13` and HEAD at `C0/H0/M0/L0`.
+- Task: F-04/F-05 frontend exposure correction — remove signed capabilities for absent
+  actions and gate copied controls, requests, polling, and heartbeats whose complete
+  Rust owner does not yet exist. Do not add dummy routes, fallback data, timers, or a
+  generic feature framework. The next implementation batch starts after this
+  review-record commit.
 - Sequence/exit owner: [`docs/PRODUCT_REIMPLEMENTATION_PLAN.md`](docs/PRODUCT_REIMPLEMENTATION_PLAN.md)
 - Finding/evidence owner: [`docs/architecture/REPOSITORY_AUDIT_2026-09-01.md`](docs/architecture/REPOSITORY_AUDIT_2026-09-01.md)
 - Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`;

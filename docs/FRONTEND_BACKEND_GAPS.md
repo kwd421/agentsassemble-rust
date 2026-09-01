@@ -16,8 +16,8 @@ HTTP host-challenge routes and startup secret at `a7949bd`; remote profile,
 preferences, message pins, message search, message attachments, and bound
 room-appearance reads now authorize the session at their target routes. D-02 removed
 the evidence-free room frame proof at `3ffb9eb`, `77cae0e`, `0d24741`, and `57fd6ec`;
-the completed D-03 implementation batch is pending manual cross-review before further
-UI completion.
+the completed D-03 implementation batch and corrections received final manual
+cross-review approval at `5693e13`.
 
 ## Scope and method
 

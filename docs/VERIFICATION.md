@@ -5340,7 +5340,7 @@ and post-leave revocation. Nine real control-pipe tests, 12 focused ticket-store
 build, warning-denied server Clippy, Rust formatting, diff checks, and the
 architecture/source-growth/policy gates passed. No provider or packaged frontend was
 started because this correction changes only the already-verified human HTTP authority
-hop; its public batch review remains pending.
+hop. The later cumulative D-03 review closed at `5693e13`.
 
 ### D-03 direct remote room-appearance authorization: 2026-09-01
 
@@ -5379,4 +5379,4 @@ focused profile appearance test, 18 focused frontend appearance/hook tests, the
 production CSS-verified frontend build, warning-denied server Clippy, Rust formatting,
 diff checks, and the architecture/source-growth/policy gates passed. No provider or
 packaged frontend was started because this correction changes only the already-verified
-human HTTP authority hop; the three-feature public batch review remains pending.
+human HTTP authority hop. The later cumulative D-03 review closed at `5693e13`.

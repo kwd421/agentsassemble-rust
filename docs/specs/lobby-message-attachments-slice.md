@@ -1,7 +1,7 @@
 # Lobby message attachments
 
 Status: implementation and flow evidence retained; remote-human HTTP authorization
-cut over at `e0622cb`, with the current review batch still pending
+cut over at `e0622cb`, with final D-03 manual cross-review closed at `5693e13`
 
 ## Definition
 
