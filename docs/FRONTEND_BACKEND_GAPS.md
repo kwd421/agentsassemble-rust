@@ -77,7 +77,7 @@ boundary resumes explicitly at `Historical public Rust slice and provenance reco
 | Participant role/mute/self-leave | implemented; kick/re-add and room lifecycle are not |
 | Agent Session create/configure/lifecycle | partial; provider completion, cleanup, and profile SSoT are reopened |
 | Friends | server owner absent; the normal-startup and room-invite entry paths are inactive through `f687667`; candidate `daadd8d`/`9ee4952` removes the unreachable presentation and `/api/room-friends` client/hook source, while dormant copied CSS and future Phase 5 product completion remain open |
-| Side chat | server owner absent; active room, mobile, and RimWorld entry paths are inactive through `eecdb20`, and `a2b2f41` removes the leftover mobile-mode and producerless socket-callback state; dormant copied source remains pending review |
+| Side chat | server owner absent; active room, mobile, and RimWorld entry paths are inactive through `eecdb20`, and `a2b2f41` removes the leftover mobile-mode and producerless socket-callback state; `b723715`/`1521067`/`8cd8628` remove the unreachable presentation, browser state, and absent HTTP client contract, while copied CSS and future Phase 6 product completion remain open |
 | Custom text channels | server message owner absent; create/select/render entry paths are inactive through `d058af8`, so the copied poller is outside the production graph; `a2b2f41` restricts active search routing to `all`/`lobby` |
 | Voice | user-deferred; the custom-channel view is outside the production graph through `d058af8`, so its copied presence poll and join heartbeat do not run |
 | Mafia, RimWorld | user-deferred; no production request/poll/heartbeat is permitted |
@@ -289,7 +289,10 @@ commands absent from the advertised action set, and sends canonical
 RimWorld view remain source provenance and are not mounted or requested by the
 current Rust product surface. That statement now also covers HTTP side chat through
 `eecdb20`: the active room controller and mounted right/mobile panels no longer import
-or invoke its absent Rust routes. The absent native Google-login command is
+or invoke its absent Rust routes. Commits `b723715`, `1521067`, and `8cd8628`
+remove the isolated presentation, state hook, and client request/parser source
+without claiming the future server-owned side-chat contract. The absent native
+Google-login command is
 also rejected at the host-surface boundary rather than being attempted as an
 unregistered Tauri invocation. Central guest creation, recovery, bootstrap, and
 proof-bound local-server registration use their implemented owners and do not

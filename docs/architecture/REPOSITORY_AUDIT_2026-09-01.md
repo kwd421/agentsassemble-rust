@@ -358,6 +358,19 @@ commit, exact `168bb32..91a071f`, cumulative F-05 `8903445..91a071f`, and HEAD
 `91a071f`. Both returned `APPROVE C0/H0/M0/L0` with no actionable finding and
 without an automated security scan.
 
+Candidates `b723715`, `1521067`, and `8cd8628` next remove the independently
+rollbackable dormant side-chat presentation, browser state owner, and absent HTTP
+client/parser contract. The active entry points and canonical socket callback were
+already removed, and repository-wide TypeScript search now finds no side-chat symbol
+or `/api/side-chat` route. This removes 848 unreachable source/test lines without
+replacing them with a flag, fallback, timer, retry, placeholder, or client authority.
+
+The production CSS/JavaScript artifacts remain unchanged and the reduced suite passes
+98 frontend files/617 tests. This is a source/state ownership reduction, not a runtime
+performance claim. Phase 6 retains future server-owned side chat and the original
+reachable behavior as its reference; dormant copied CSS remains an explicit open
+cleanup boundary.
+
 ### F-06 — Agent Session identity SSoT is reversed in frontend projection
 
 Disposition: `Fix`; high product/medium ownership impact.

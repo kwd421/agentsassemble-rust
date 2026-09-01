@@ -78,6 +78,12 @@ contracts, findings, or verification journals.
   Daybreaker Blue High each approved every individual commit, exact
   `168bb32..91a071f`, cumulative F-05 `8903445..91a071f`, and HEAD `91a071f`
   at `C0/H0/M0/L0` with no actionable finding.
+  The next independent commits `b723715`, `1521067`, and `8cd8628` remove the
+  now-unreachable side-chat presentation, browser state owner, and absent
+  `/api/side-chat` client contract. The production CSS/JavaScript output remains
+  unchanged and the reduced frontend passes 98 files/617 tests. Phase 6 side-chat
+  product completion and dormant copied CSS remain open; full verification and
+  cross-review are pending for this batch.
 - Build-artifact lifecycle correction is complete through `537c1b9`. macOS uses
   packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the

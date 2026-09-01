@@ -5644,3 +5644,26 @@ Critical ChatGPT Pro and Daybreaker Blue High manually reviewed every individual
 commit, exact `168bb32..91a071f`, cumulative F-05 `8903445..91a071f`, and HEAD
 `91a071f`. Each returned `APPROVE C0/H0/M0/L0` with no actionable finding and
 without an automated security scan.
+
+### F-05 dormant side-chat source: 2026-09-02
+
+The production entry points and producerless callback were already absent, but the
+copied tree still retained an isolated side-chat component, browser state hook,
+tests, and `/api/side-chat` client/parser contract. Keeping those 848 lines provided
+no reachable behavior and left an absent-route contract plus a second future state
+owner available for accidental reuse.
+
+Candidate `b723715` removes the presentation and its tests. Candidate `1521067`
+separately removes the room/principal-scoped state owner and isolation tests.
+Candidate `8cd8628` removes only the side-chat types, request functions, merge helper,
+and stream parser from the still-current room-history module. Repository-wide
+TypeScript search then finds no side-chat symbol or route. Phase 6 still owns future
+server-backed side chat and its actual behavior reference; copied side-chat CSS is
+not removed or claimed complete here.
+
+After each candidate the production build emits the unchanged 2,189-module CSS and
+JavaScript artifacts: CSS 168.34/29.49 kB and JavaScript 835.41/253.02 kB by the
+documented raw/displayed-gzip measures. The reduced frontend passes 98 files/617
+tests. Because the source was unreachable, this records source/state reduction and
+does not claim a runtime CPU or latency improvement. No route, placeholder, timer,
+polling, retry, fallback, compatibility path, or alternative authority is added.
