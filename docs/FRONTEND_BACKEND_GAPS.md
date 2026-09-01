@@ -13,11 +13,11 @@ custom-channel, account, provider-operation, and external-AI controls remain act
 or reachable without complete Rust owners, and Agent Session identity plus several
 provider completion/lifecycle contracts are reopened. D-01 removed the uncalled
 HTTP host-challenge routes and startup secret at `a7949bd`; remote profile,
-preferences, message pins, message search, and message attachments now authorize the
-session at their target routes, while room appearance still performs the remaining
-redundant purpose-ticket exchange. D-02 removed the evidence-free room frame proof at
-`3ffb9eb`, `77cae0e`, `0d24741`, and `57fd6ec`; audit D-03 routes the remaining HTTP
-correction before further UI completion.
+preferences, message pins, message search, message attachments, and bound
+room-appearance reads now authorize the session at their target routes. D-02 removed
+the evidence-free room frame proof at `3ffb9eb`, `77cae0e`, `0d24741`, and `57fd6ec`;
+the completed D-03 implementation batch is pending manual cross-review before further
+UI completion.
 
 ## Scope and method
 
@@ -72,7 +72,7 @@ boundary resumes explicitly at `Historical public Rust slice and provenance reco
 | --- | --- |
 | Core room, general messages/history/search/pins/attachments/votes | finite bounded-JSON sync/replay and lobby search implemented; room-wide search overclaim and false capabilities remain reopened; frame-proof decision closed by D-02 removal |
 | Human profile/avatar and room appearance | implemented; Agent identity projection is separately reopened |
-| Human invite/admission/session/public ingress | substantial implementation; dead host challenge closed at `a7949bd`, while the remaining room-appearance remote HTTP ticket exchange plus guide/client-kind/TCP findings remain open |
+| Human invite/admission/session/public ingress | substantial implementation; dead host challenge closed at `a7949bd` and the remote HTTP purpose exchanges are removed, while guide/client-kind/TCP findings remain open |
 | Participant role/mute/self-leave | implemented; kick/re-add and room lifecycle are not |
 | Agent Session create/configure/lifecycle | partial; provider completion, cleanup, and profile SSoT are reopened |
 | Friends | active copied UI calls absent Rust routes |
@@ -325,9 +325,9 @@ Provider roll/choose uses the existing private `RoomPortal` on Codex and the exa
 bound helper on Antigravity/OpenCode; it is not print mode or a client-side result.
 The original React client still has no direct human roll/choose control, so the
 human commands remain a reachable server contract without a fabricated button.
-Local-operator preferences use their purpose-ticketed HTTP owner; admitted remote
-profile, preference, message-pin, message-search, and message-attachment operations
-authorize at their target routes.
+Local-operator preferences and appearance use their purpose-ticketed HTTP owner;
+admitted remote profile, preference, message-pin, message-search, message-attachment,
+and bound room-appearance operations authorize at their target routes.
 Human invite activation is complete. Room
 appearance persistence, local/remote HTTP boundaries, typed desktop issuance, and
 the copied frontend's authenticated object-URL lifecycle are active. Custom channels

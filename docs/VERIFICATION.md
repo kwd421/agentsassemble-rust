@@ -5341,3 +5341,42 @@ build, warning-denied server Clippy, Rust formatting, diff checks, and the
 architecture/source-growth/policy gates passed. No provider or packaged frontend was
 started because this correction changes only the already-verified human HTTP authority
 hop; its public batch review remains pending.
+
+### D-03 direct remote room-appearance authorization: 2026-09-01
+
+Before `9bfee34`, each remote bound-appearance read first resolved the reusable room
+session, allocated a short-lived exact-asset grant under the shared ticket-map lock,
+returned it through a separate HTTP response, and then consumed and revalidated the
+same session at the asset target. Both requests used the same HTTPS origin, so the
+second credential established no distinct trust boundary.
+
+The shared `GET /api/attachments/{id}` target now classifies a durable human session
+directly and accepts it only for the canonical `ra_` asset namespace and exact `view=1`
+query. The owning persistence transaction verifies the current session, joined room
+membership, exact room appearance reference, metadata, and size before loading the
+BLOB. Read-only remote members retain read authority; leave or revocation fails closed.
+Malformed session-shaped credentials never fall through to local tickets, malformed
+reserved `ra_` identifiers never fall through to profile assets, and the retired
+exchange route returns 404. Local pending-preview and bound-read tickets remain exact,
+one-use authorities crossing the desktop private-control boundary; a remote session
+cannot read pending assets.
+
+The correction removes one HTTP round trip and one ticket-map insertion/consumption per
+remote read, the public appearance-grant variant and generic purpose state, and the now
+unused frontend session-ticket parser. The remaining human-session ticket map is named
+and typed only for the WebSocket upgrade it owns. It adds no durable state, cache,
+process, timer, polling, heartbeat, retry, fallback, compatibility path, or speculative
+abstraction. No latency or memory claim is made beyond the removed operations and grant
+state. The 749-line shared profile-and-asset HTTP adapter was reviewed at the 500-line
+structure warning: extracting only the appearance branch would increase shared
+error/CORS/response interfaces while canonical asset-ID dispatch and authentication
+remain one cohesive owner, so no line-count-only split was made.
+
+The real TCP appearance suite covers direct reusable reads, target-room denial, local
+one-use consumption, retired exchange rejection, malformed-session fail-closed behavior,
+reserved-ID dispatch, and post-leave revocation. Twelve focused ticket-store tests, one
+focused profile appearance test, 18 focused frontend appearance/hook tests, the
+production CSS-verified frontend build, warning-denied server Clippy, Rust formatting,
+diff checks, and the architecture/source-growth/policy gates passed. No provider or
+packaged frontend was started because this correction changes only the already-verified
+human HTTP authority hop; the three-feature public batch review remains pending.

@@ -1,8 +1,9 @@
 # Room Settings, Scheduling, Tabletop, Preferences, and Appearance Slice
 
-Status: implementation and flow evidence retained; remote-session HTTP authorization
-reopened by repository audit D-03. Stage A, local desktop authority, appearance
-lifecycle, copied-frontend activation, and packaged restart evidence remain.
+Status: implementation and flow evidence retained; the repository-audit D-03
+remote-session HTTP correction is implemented through `9bfee34` and pending batch
+cross-review. Stage A, local desktop authority, appearance lifecycle,
+copied-frontend activation, and packaged restart evidence remain.
 
 ## Definition
 
@@ -26,9 +27,10 @@ below must be reviewed with the resulting implementation.
 
 Audit correction at Rust baseline `8a5f75a`: the remote browser must present its
 durable session once at the target preferences or appearance route, which performs
-the exact room/permission/lifecycle revalidation. The detailed remote exchange and
-derived-grant descriptions below are historical implementation evidence until
-Phase 0B removes that extra credential hop. Desktop private-control grants remain.
+the exact room/permission/lifecycle revalidation. Phase 0B implemented that contract
+at the preference and appearance targets; the detailed remote exchange and
+derived-grant descriptions below are historical implementation evidence. Desktop
+private-control grants remain.
 
 ## Original reachable contract
 
@@ -220,7 +222,7 @@ The reachable no-room local-operator branch has a distinct server-wide one-use
 purpose and returns archived rooms too. HTTP global writes conflict; the canonical
 WebSocket command remains the only room-global writer.
 
-Room HTTP grants are a closed set: preference read, preference write, appearance
+Local room HTTP grants are a closed set: preference read, preference write, appearance
 upload, exact pending preview read, and exact bound appearance read. A separate
 closed grant owns the no-room settings directory read. Grants bind the exact room,
 principal, participant, purpose, and read asset where applicable. Consumption
@@ -286,10 +288,10 @@ transport is a fallback for the other.
 
 The persistence owner, atomic settings transition, existing attachment route,
 private control pipe, and typed desktop bridge are active and test-verified. The
-audited remote human-session exchange is historical evidence and remains reopened
-until D-03 is implemented. The control-pipe boundary performs a real HTTP upload and
-pending preview after issuance, and rejects changed server, lineage, room UID, and
-malformed asset authority. A remote bound read
+audited remote human-session exchange is superseded historical evidence; direct
+target authorization is implemented through `9bfee34`. The control-pipe boundary
+performs a real HTTP upload and pending preview after issuance, and rejects changed
+server, lineage, room UID, and malformed asset authority. A remote bound read
 must revalidate session, membership, profile binding, room reference, metadata, and
 bytes in one SQLite snapshot. Read-only room members may read. Local desktop issuance, the
 frontend's strict grant request functions, and the copied settings UI are active.

@@ -21,10 +21,11 @@ contracts, findings, or verification journals.
   preserving one bounded-header authorization at each target route. Desktop purpose
   tickets and one-use WebSocket upgrade tickets remain because they cross distinct
   authority boundaries.
-- Completed D-03 targets through `e0622cb`: profile, preferences, message pins,
-  message search, and message attachments authorize reusable remote sessions at the
-  target; the obsolete socket-to-profile authority interpretation is absent. Room
-  appearance remains active D-03 work.
+- Completed D-03 targets through `9bfee34`: profile, preferences, message pins,
+  message search, message attachments, and bound room-appearance reads authorize
+  reusable remote sessions at the target; the obsolete socket-to-profile authority
+  interpretation and public HTTP-purpose exchange state are absent. The exact
+  `ac905de..9bfee34` three-feature batch is pending manual cross-review.
 - Sequence/exit owner: [`docs/PRODUCT_REIMPLEMENTATION_PLAN.md`](docs/PRODUCT_REIMPLEMENTATION_PLAN.md)
 - Finding/evidence owner: [`docs/architecture/REPOSITORY_AUDIT_2026-09-01.md`](docs/architecture/REPOSITORY_AUDIT_2026-09-01.md)
 - Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`;
