@@ -42,7 +42,9 @@ contracts, findings, or verification journals.
   `a2b2f41` removes them and a fresh complete `make verify` passes. Follow-up
   re-review found two Low producerless/dead projections plus one Low documentation
   overclaim; `87d3d0d` and the current documentation correction address them, with
-  a fresh complete `make verify` passing and final re-review pending.
+  a fresh complete `make verify` passing. Critical ChatGPT Pro and Daybreaker Blue
+  High each approved exact `778d761..f74af57`, cumulative `8903445..f74af57`, and
+  HEAD `f74af57` at `C0/H0/M0/L0`.
   External-AI/AI-friend invite,
   operator-pairing, companion, and public Google controls plus evidence-backed
   dormant-source cleanup remain in F-05.
