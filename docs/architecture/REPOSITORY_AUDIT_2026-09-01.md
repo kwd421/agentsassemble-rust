@@ -464,13 +464,15 @@ Disposition: `Fix`; medium product/structure impact.
 - `catalog.rs:402-407` substitutes the first discovered model when the preferred
   model is missing. The OpenCode preference at `catalog.rs:191` is still
   `opencode/hy3-free`, contrary to the selected Muse Spark flow.
-- `registration.rs:341-364` advertises login for every provider, while the Rust
-  server implements only DeepSeek credential operations.
-- `AgentCreateModal.tsx` renders OpenCode credential UI, but
-  `api/providerCredentials.ts` supports only DeepSeek.
-- opening the Agent modal calls an absent catalog-refresh route and silently
-  ignores the failure.
-- `useAgentPresentation.ts:63-79` silently absorbs missing provider-usage results.
+- Commits `582a02e`, `edfb7c5`, and `c890a9a` close the operation-exposure half of
+  this finding. The Rust registration descriptor now advertises only implemented
+  credential ownership, so DeepSeek retains its keyring operations while Codex,
+  Antigravity, and OpenCode expose no login or credential controls. The absent
+  catalog-refresh and provider-usage requests, their response types, and their client
+  state are removed. Usage is projected as explicitly unsupported rather than
+  inferred from a missing response.
+- The remaining issue is exact model selection: the first-discovered-model
+  substitution and stale OpenCode preference above are unchanged.
 
 Require an exact verified preferred model or explicit unavailable/unselected state.
 Advertise login, credential, usage, refresh, and model operations only from their
@@ -777,13 +779,13 @@ at a line count.
 
 Disposition: `Consolidate at the existing registration owner`; medium drift risk.
 
-Provider discovery and creation already have a Rust registration, while login,
-credential, usage, refresh, model labels, and availability are also inferred from
-provider-name conditionals in the frontend. This produced the false controls in
-F-07. Extend the existing descriptor only with operations that an implemented
-server owner can execute; generate/project that bounded surface to the client.
-Provider-native authentication and model rules stay in their modules. Do not build
-a speculative plugin framework.
+Provider discovery and creation already have a Rust registration. Commit `582a02e`
+extends that existing owner with one bounded `credential_available` fact and removes
+the frontend provider-name inference that produced the false login/credential
+controls in F-07. Commits `edfb7c5` and `c890a9a` remove unsupported refresh and usage
+operations instead of inventing descriptor fields without a server owner. Exact
+model selection remains separate and open. Provider-native authentication and model
+rules stay in their modules. Do not build a speculative plugin framework.
 
 ### C-09 — future-only activity-plugin state occupies the live room contract
 

@@ -5822,3 +5822,67 @@ records the independently reproduced 26,579 `gzip -9` bytes. Both reviewers appr
 `35bc375..7566d3f`, cumulative F-06 `8903445..7566d3f`, and HEAD `7566d3f` at
 `C0/H0/M0/L0`; `e912e75` alone remains `C0/H0/M0/L1` because its error is repaired
 by the following commit.
+
+### F-07 provider operation exposure correction: 2026-09-02
+
+The copied provider UI advertised operations without a Rust owner. Before this
+correction, opening the Agent Add modal issued one failed
+`POST /api/provider-catalog/refresh`, and opening an eligible Agent detail issued one
+failed `GET /api/provider-usage/{provider}` plus a client state update. Both failures
+were silently absorbed. This was bounded interaction work rather than polling, but it
+still created avoidable requests and hid an authority mismatch.
+
+Commit `582a02e` replaces the generic login label/flow claims with one
+registration-owned `credential_available` fact. Only DeepSeek advertises that fact
+because only its keyring status/set/delete owner exists. Codex, Antigravity, and
+OpenCode no longer expose login, workspace-cookie, or credential controls. Commit
+`edfb7c5` removes the absent catalog-refresh request and its swallowed modal-open
+failure. Commit `c890a9a` removes the absent provider-usage request, route/type/state,
+and swallowed detail-open failure; the existing presentation truthfully reports
+usage as unsupported. The room WebSocket snapshot remains the catalog owner, and
+DeepSeek credential behavior is unchanged. No dummy route, client authority,
+placeholder result, compatibility path, retry, polling, heartbeat, timer, fallback,
+or replacement abstraction was added.
+
+Provider focused tests pass 158 Rust cases. The server boundary compiles, 26 focused
+frontend tests pass after the credential correction, 20 focused frontend tests pass
+after the usage correction, the production build and architecture gate pass after
+each slice, and generated bindings match. The default-central production JavaScript
+decreases from 825.24/249.66 kB raw/displayed gzip to 823.45/249.07 kB; this records
+removed unreachable request/state cost rather than a general latency claim. The
+fresh complete verification exposed one independent async test race: the workspace
+picker error assertion read the button before the hook's `finally` restored idle
+state. Correction `9794b0a` waits for that public recovery state; the test then passes
+ten consecutive invocations without changing product code.
+
+The first complete verification passed frontend, desktop, Rust, TCP, WebSocket,
+Clippy, binding, CSS, diff, and architecture checks, then failed closed at the artifact
+gate because the target occupied 27,948,400,640 bytes, above the measured 24 GiB
+ceiling. With no Cargo or Tauri process active, explicit `make artifact-prune` removed
+30,357 regenerable files and 26.0 GiB. After the test-race correction, a fresh complete
+`make verify` passed all 97 frontend files/617 tests and every repository gate in
+592.65 seconds with a 2,402,697,216-byte maximum resident set. The retained debug
+target occupied 21,547,324 KiB. These are validation costs, not runtime performance
+claims.
+
+Computer Use then drove a release package named `AgentsAssemble F07 Verify 902`
+under isolated identifier `app.agentsassemble.rust.f07verify0902` and an explicitly
+empty central URL. A fresh local human and room opened the copied Agent Add flow.
+Codex, Antigravity, and OpenCode exposed their real model/runtime settings without a
+login or API-key control. DeepSeek alone exposed its existing keyring status and
+credential controls; the stored key was neither read nor mutated. One DeepSeek Agent
+Session was created with start disabled, so no provider process or turn ran. Its
+detail surface reported that the provider does not supply an exact inspectable
+remainder. The packaged frontend contained neither removed endpoint string; the exact
+runtime logs had no 404/not-found record, and runtime stderr was empty. This proves the
+copied interaction boundary, not provider execution or credential mutation.
+
+Normal application quit left no verification-owned desktop, supervisor, server, or
+provider process. Computer Use was reset. The exact 50 MiB application, 1.3 MiB of
+identifier-owned Application Support/WebKit data plus cache/preferences, and its two
+executable staging directories were deleted. `cargo clean --release` removed 6,448
+regenerable files and 1.9 GiB while retaining the debug cache needed by the next
+incremental verification. Critical ChatGPT Pro and Daybreaker Blue High review of
+this pushed batch remains pending; no approval is claimed here. Exact preferred-model
+selection and removal of the first-discovered-model substitution remain the next
+F-07 work.

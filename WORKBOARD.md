@@ -33,7 +33,7 @@ contracts, findings, or verification journals.
   and Daybreaker Blue High each approved exact `f4bc3d9..8903445`, cumulative
   `dd1e99d..8903445`, and HEAD `8903445` at `C0/H0/M0/L0` after the stale re-add
   guidance and audit-state corrections.
-- Active task: F-05 closure and F-06 profile projection correction — gate copied requests,
+- Correction history: F-05 closure and F-06 profile projection correction — gate copied requests,
   polling, and heartbeats whose complete Rust owner does not yet exist. Do not add
   dummy routes, fallback data, timers, or a generic feature framework. The first
   independently committed batch through `87d3d0d` removes the active Friends,
@@ -138,6 +138,20 @@ contracts, findings, or verification journals.
   F-06 `8903445..7566d3f`, and HEAD `7566d3f` at `C0/H0/M0/L0`; `e912e75` alone
   retains its historical L1. The complete Agent profile mutation/asset owner remains
   open.
+- Active task: F-07 provider operation exposure. Independent commits `582a02e`,
+  `edfb7c5`, and `c890a9a` make the Rust registration descriptor the credential-
+  operation owner, remove the absent catalog-refresh request, and remove the absent
+  provider-usage request/state. Codex, Antigravity, and OpenCode no longer expose
+  login or credential controls; DeepSeek retains its implemented keyring operations;
+  usage remains visibly unsupported. Correction `9794b0a` waits for the actual
+  workspace-picker recovery state exposed by the fresh complete verification instead
+  of racing its async `finally`. Focused tests, production builds, architecture gates,
+  and a fresh complete `make verify` pass. An isolated local-mode package confirms the
+  operation boundary without starting a provider. No dummy route, local authority,
+  compatibility path, retry, polling, heartbeat, timer, fallback, or swallowed failure
+  replaces the removed requests. Exact preferred-model selection and removal of the
+  first-discovered-model substitution remain open in F-07. This threshold batch is
+  ready for push and critical-web Pro plus Daybreaker Blue High manual source review.
 - Build-artifact lifecycle correction is complete through `537c1b9`. macOS uses
   packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the
