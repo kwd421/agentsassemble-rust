@@ -126,7 +126,7 @@ means code exists; it can still be reopened by Phase 0 findings.
 
 | Area | Audited Rust state | Required remaining result | Phase |
 | --- | --- | --- | --- |
-| Core room snapshot/event transport | finite snapshot/catch-up/replay is implemented; redundant signed receipt removed at `3ffb9eb` | remove the remaining evidence-free per-frame envelope while preserving the synchronization contract | 0-1 |
+| Core room snapshot/event transport | finite snapshot/catch-up/replay is implemented; redundant receipt and per-frame proof removed at `3ffb9eb`, `77cae0e`, and `0d24741` | preserve the synchronization contract through final real-flow verification | 0, 9 |
 | Local bootstrap, room directory/create | implemented | reconcile stale spec statuses and final real-flow evidence | 0, 9 |
 | Room settings/preferences/appearance | substantially implemented | verify one authority per setting and exact copied controls | 4, 9 |
 | Human profile and avatar | implemented but Agent projection/UI ownership is inconsistent | restore human and Agent Session SSoTs; keep exact asset lifecycle | 3 |
