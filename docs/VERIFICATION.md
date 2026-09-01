@@ -5862,11 +5862,17 @@ Critical-web Pro's correction review found one further Low in the secondary rost
 projection. When a room participant had an Agent Session but no primary `LiveAgent`
 entry, the copied code treated `external_owned=false` runtime custody as viewer-owned
 human identity and could replace a missing owner with the viewer. Correction `9256976`
-removes the redundant `ownedByViewer` projection and its viewer fallback. Primary and
-secondary Agent rows now group only by the room participant's exact `owner_id`;
-`external_owned` remains runtime custody only. The direct regression covers a local
-runtime owned by another room human and passes with all 12 MemberList tests. The
-production build, exact CSS gate, diff gate, and architecture gate also pass.
+removes the redundant `ownedByViewer` projection and its viewer fallback. Its direct
+regression covers a local runtime owned by another room human. Replacement
+critical-web Pro then found that the primary `LiveAgent` projection still fell back to
+`agent.owner_id` when an existing room participant had an empty `owner_id`; the same
+review also rejected the resulting claim here that both paths were already room-only.
+Correction `4c1bd57` makes a present room participant's exact `owner_id` the only
+grouping authority and fails closed to the unassigned group when it is empty. A
+`LiveAgent` for which no room participant exists remains a distinct presentation case
+rather than a substitute participant authority. `external_owned` remains runtime
+custody only. All 13 focused MemberList tests, the production build, exact CSS gate,
+diff gate, and architecture gate pass.
 
 Provider focused tests pass 158 Rust cases. The server boundary compiles, 26 focused
 frontend tests pass after the credential correction, 20 focused frontend tests pass
@@ -5913,9 +5919,11 @@ production build plus CSS, diff, and architecture gates pass. The JavaScript is
 is 148,564 bytes raw and 26,236 bytes under `gzip -9`, with SHA-256
 `2227380ce846d01d0c1f704ffb291a50c6cf4ab3a51d44e7df63ea24011e0989`.
 These reductions are dead-code removal evidence, not a broad latency claim.
-Daybreaker approves `ae171dc`, exact `534a953..ae171dc`, full correction
-`879db4b..ae171dc`, cumulative `5ec012f..ae171dc`, and HEAD `ae171dc` at
-`C0/H0/M0/L0`. Replacement critical-web Pro and Daybreaker review of `9256976`
-remain pending; no Pro final approval is claimed here. Exact
-preferred-model selection and removal of the first-discovered-model substitution remain
-the next F-07 work.
+Daybreaker approves individual `9256976` and `d0c8ce8`, exact
+`ae171dc..d0c8ce8`, full correction `879db4b..d0c8ce8`, cumulative
+`5ec012f..d0c8ce8`, and HEAD `d0c8ce8` at `C0/H0/M0/L0`. Replacement
+critical-web Pro independently revised that state at `C0/H0/M0/L2` for the primary
+fallback and copied documentation overclaim above. Re-review of source correction
+`4c1bd57` and this factual record remains pending; no final Pro approval is claimed
+here. Exact preferred-model selection and removal of the first-discovered-model
+substitution remain the next F-07 work.

@@ -162,13 +162,19 @@ contracts, findings, or verification journals.
   without moving DeepSeek execution authority from its route and credential store.
   Critical-web Pro's correction review then found one remaining Low: the secondary
   roster projection inferred human ownership from Agent Session runtime custody.
-  Correction `9256976` removes that duplicate `ownedByViewer` state and groups every
-  Agent participant only by the room-owned `owner_id`; its focused test, production
-  build, CSS gate, diff gate, and architecture gate pass. Daybreaker approves HEAD
-  `ae171dc`, exact `534a953..ae171dc`, full correction `879db4b..ae171dc`, and
-  cumulative `5ec012f..ae171dc` at `C0/H0/M0/L0`. Replacement critical-web Pro and
-  Daybreaker review of `9256976` remain pending. Exact preferred-model selection and removal of the
-  first-discovered-model substitution remain open in F-07.
+  Correction `9256976` removes that duplicate `ownedByViewer` state and viewer
+  fallback. Replacement critical-web Pro then found that the primary `LiveAgent`
+  projection still substituted `agent.owner_id` when an existing room participant had
+  no owner. Correction `4c1bd57` now uses only that participant's room-owned
+  `owner_id`; a `LiveAgent` with no participant remains an explicitly separate
+  presentation case. All 13 focused MemberList tests, the production build, CSS gate,
+  diff gate, and architecture gate pass. Daybreaker approved individual `9256976` and
+  `d0c8ce8`, exact `ae171dc..d0c8ce8`, full correction
+  `879db4b..d0c8ce8`, cumulative `5ec012f..d0c8ce8`, and HEAD `d0c8ce8` at
+  `C0/H0/M0/L0`; critical-web Pro correctly revised that state at `C0/H0/M0/L2`.
+  Re-review of `4c1bd57` and this factual correction remains pending. Exact
+  preferred-model selection and removal of the first-discovered-model substitution
+  remain open in F-07.
 - Build-artifact lifecycle correction is complete through `537c1b9`. macOS uses
   packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the

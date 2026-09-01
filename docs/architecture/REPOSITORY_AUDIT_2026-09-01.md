@@ -479,8 +479,12 @@ Disposition: `Fix`; medium product/structure impact.
   excluded test, and the deleted helper has no repository reference. Critical-web
   Pro then found that a secondary roster projection still treated Agent Session
   `external_owned=false` runtime custody as viewer ownership. Correction `9256976`
-  removes that derived ownership state and fallback; both roster projection paths now
-  group Agent participants only by the room-owned `owner_id`.
+  removes that derived ownership state and viewer fallback. Replacement critical-web
+  Pro then found that the primary `LiveAgent` path still substituted `agent.owner_id`
+  for an existing room participant with no owner. Correction `4c1bd57` makes that
+  present participant's room-owned `owner_id` the sole grouping authority and leaves
+  an empty owner unassigned; the no-participant `LiveAgent` presentation case remains
+  explicit and separate.
 - The remaining issue is exact model selection: the first-discovered-model
   substitution and stale OpenCode preference above are unchanged.
 
