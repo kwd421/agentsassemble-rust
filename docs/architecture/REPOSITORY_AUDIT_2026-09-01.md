@@ -1101,22 +1101,30 @@ instead of a second Cargo owner. Desktop warning-denied clippy and all 25 deskto
 tests pass from that shared target, and `desktop/src-tauri/target` remains absent.
 
 The first fresh complete `make verify` after both corrections took 436.67 seconds
-and produced one 12.017 GiB physical/11.834 GiB logical cache with 20,656 files and
-zero `.rcgu.o` units. Commit `9e13cf3` makes the exact project-owned cleanup boundary
-the first step of complete verification. It always removes a reappearing obsolete
-desktop target and cleans the active root target only when physical allocation
+and produced one complete cache with zero `.rcgu.o` units. Commit `9e13cf3` makes
+the exact project-owned cleanup boundary the first step of complete verification.
+It always removes a reappearing obsolete desktop target and cleans the active root
+target only when physical allocation
 exceeds 20 GiB, leaving 8 GiB of measured change headroom before paying for a cold
 rebuild. The same verification invocation then rebuilds the current HEAD cache, so
 cleanup never leaves the routine next build intentionally cold. The owner rejects a
 symlinked target, accepts no arbitrary path, uses Cargo's own clean command, and adds
 no timer, background worker, age heuristic, fallback, or swallowed failure. Tests
 cover below-ceiling retention, above-ceiling exact cleanup, obsolete-owner cleanup,
-and symlink rejection. A second complete verification retained the 12.017 GiB cache,
-passed architecture and source gates, 102 frontend files/639 tests, 25 desktop tests,
-all workspace and real TCP boundary tests, and warning-denied clippy in 234.76
-seconds. The accepted trade-off is an evidence-triggered cold verification after
-the cache crosses 20 GiB rather than either unbounded disk growth or a speculative
-third-party artifact classifier.
+and symlink rejection.
+
+Daybreaker found one Low measurement defect in the first review: the physical-byte
+counter counted each hard-link directory entry rather than each allocated inode. On
+the retained complete cache, that reported 12.013 GiB instead of 11.800 GiB by
+double-counting 218.090 MiB across 483 hard-link entries. Commit `52d9383`
+deduplicates regular files by `(device, inode)` and adds an exact hard-link regression.
+The corrected measurement is 11.800 GiB physically, 11.621 GiB logically, and
+20,173 unique regular-file inodes. A complete post-correction verification retained
+that cache and passed architecture and source gates, 102 frontend files/639 tests,
+25 desktop tests, all workspace and real TCP boundary tests, and warning-denied
+clippy in 234.62 seconds. The accepted trade-off is an evidence-triggered cold
+verification after the cache crosses 20 GiB rather than either unbounded disk growth
+or a speculative third-party artifact classifier.
 
 ## Current verdict and exit
 
