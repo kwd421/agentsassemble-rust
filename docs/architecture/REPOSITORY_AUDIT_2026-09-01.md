@@ -331,6 +331,28 @@ commit in the batch, exact `a9dceae..d45978a`, cumulative F-05
 `8903445..d45978a`, and HEAD `d45978a`. Both returned `APPROVE C0/H0/M0/L0`
 with no actionable finding and without an automated security scan.
 
+Candidate `84dbc3a` removes the `originalImportOrder` behavior-module import chain
+that existed only to reproduce global component-CSS traversal. One
+`styles/componentOrder.ts` owner now imports the same 14 production component
+styles in their measured emitted order; the component modules no longer own global
+CSS side effects. The exact CSS filename and SHA-256 gate remains unchanged.
+Removing the forced graph edges reduces transformed production modules from 2,196
+to 2,189. Emitted JavaScript raw bytes remain 835.41 kB total, while the displayed
+per-chunk gzip sum increases from 251.51 to 253.02 kB because module ordering changed;
+the accepted 1.51 kB gzip cost avoids restoring non-product imports merely to tune
+compression.
+
+Candidates `daadd8d` and `9ee4952` then remove the separately rollbackable dormant
+Friends presentation and client owners. Repository-wide frontend search finds no
+remaining `RoomFriend`, Friends directory hook, or `/api/room-friends` request.
+These commits do not implement or remove the retained future Friends product
+contract; the original project remains its behavior reference for Phase 5. They do
+not yet remove dormant Friends selectors from the copied original stylesheet.
+Production CSS and JavaScript remain unchanged after the stylesheet-owner candidate,
+and the reduced suite passes 101 frontend files/628 tests. No route, placeholder,
+feature flag, polling, retry, fallback, or client authority replaces the removed
+absent-service path.
+
 ### F-06 — Agent Session identity SSoT is reversed in frontend projection
 
 Disposition: `Fix`; high product/medium ownership impact.

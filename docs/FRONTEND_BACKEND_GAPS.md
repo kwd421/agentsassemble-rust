@@ -76,7 +76,7 @@ boundary resumes explicitly at `Historical public Rust slice and provenance reco
 | Human invite/admission/session/public ingress | substantial implementation; dead host challenge closed at `a7949bd` and the remote HTTP purpose exchanges are removed, while guide/client-kind/TCP findings remain open |
 | Participant role/mute/self-leave | implemented; kick/re-add and room lifecycle are not |
 | Agent Session create/configure/lifecycle | partial; provider completion, cleanup, and profile SSoT are reopened |
-| Friends | server owner absent; the normal-startup and room-invite entry paths are inactive through `f687667`; dormant copied source remains pending review |
+| Friends | server owner absent; the normal-startup and room-invite entry paths are inactive through `f687667`; candidate `daadd8d`/`9ee4952` removes the unreachable presentation and `/api/room-friends` client/hook source, while dormant copied CSS and future Phase 5 product completion remain open |
 | Side chat | server owner absent; active room, mobile, and RimWorld entry paths are inactive through `eecdb20`, and `a2b2f41` removes the leftover mobile-mode and producerless socket-callback state; dormant copied source remains pending review |
 | Custom text channels | server message owner absent; create/select/render entry paths are inactive through `d058af8`, so the copied poller is outside the production graph; `a2b2f41` restricts active search routing to `all`/`lobby` |
 | Voice | user-deferred; the custom-channel view is outside the production graph through `d058af8`, so its copied presence poll and join heartbeat do not run |
@@ -378,6 +378,12 @@ than matching mutable names. This does not allow the lobby-only `all` alias to c
 custom-channel coverage; that is audit finding F-20. Product-controller orchestration,
 client-owned authority, or any other changed CSS cascade is not justified by the
 allowlist.
+
+Candidate `84dbc3a` narrows the behavior-preserving structure exception: the
+production component styles now have one explicit `styles/componentOrder.ts` owner
+instead of importing behavior modules for their CSS side effects. The exact emitted
+CSS artifact remains byte-identical. This does not authorize a CSS redesign or make
+an unavailable component reachable.
 
 ## Historical public Rust slice and provenance record
 

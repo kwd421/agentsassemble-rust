@@ -5621,3 +5621,21 @@ automated security scan. Each approved individual commits `96a7573`, `18fe318`,
 `fd74b90`, `67117ac`, `d45afb5`, and `d45978a`; exact
 `a9dceae..d45978a`; cumulative F-05 `8903445..d45978a`; and HEAD `d45978a`
 at `C0/H0/M0/L0`. Neither reviewer reported an actionable finding.
+
+### F-05 explicit stylesheet owner and dormant Friends source: 2026-09-02
+
+Candidate `84dbc3a` replaces the behavior-module `originalImportOrder` chain with
+one `styles/componentOrder.ts` owner for the same 14 production component
+styles. Every one of those former component-local CSS imports is absent. The production
+build emits the unchanged approved CSS name/hash and reduces transformed modules
+from 2,196 to 2,189. Raw JavaScript remains 835.41 kB; displayed per-chunk gzip
+figures total 253.02 kB rather than 251.51 kB after module reordering, an explicit
+1.51 kB trade-off rather than a hidden performance claim.
+
+Candidate `daadd8d` removes the unreachable Friends presentation modules and their
+private search helper. Candidate `9ee4952` removes the now-isolated Friends hook,
+its tests/types, and the `/api/room-friends` request/response contract. Production
+bundle output is unchanged after the stylesheet candidate, and all 101 remaining
+frontend files/628 tests pass. Friends product behavior remains a later Phase 5
+slice, and dormant Friends CSS remains open; no fake route, disabled synchronization,
+timer, fallback, compatibility path, or alternative client authority is introduced.

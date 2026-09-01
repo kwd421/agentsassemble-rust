@@ -69,6 +69,12 @@ contracts, findings, or verification journals.
   individual commit, exact `a9dceae..d45978a`, cumulative F-05
   `8903445..d45978a`, and HEAD `d45978a` at `C0/H0/M0/L0`. Evidence-backed
   dormant-source cleanup remains in F-05.
+  The next candidate commits `84dbc3a`, `daadd8d`, and `9ee4952` replace the
+  behavior-module CSS side-effect chain with one explicit stylesheet-order owner,
+  then remove the unreachable Friends presentation and absent `/api/room-friends`
+  client/hook boundary. The production CSS artifact remains byte-identical and the
+  current frontend passes 101 files/628 tests. Friends product completion and its
+  remaining dormant CSS are not claimed by this batch.
 - Build-artifact lifecycle correction is complete through `537c1b9`. macOS uses
   packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the
