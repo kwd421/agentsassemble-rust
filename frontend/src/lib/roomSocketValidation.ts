@@ -145,14 +145,6 @@ export function commandAckResultIsValid(
   if (action === "room.history") {
     return roomHistoryResultIsValid(payload, result, expectedRoomId);
   }
-  if (action === "participant.kick") {
-    const participant = isRecord(result.participant) ? result.participant : null;
-    return Boolean(
-      participant &&
-      participant.participant_id === payload.participant_id &&
-      participant.status === "kicked"
-    );
-  }
   if (action === "participant.role.update") {
     const participant = isRecord(result.participant) ? result.participant : null;
     return Boolean(
@@ -192,7 +184,6 @@ export function commandAckResultIsValid(
       event.participant_id === expectedParticipantId
     );
   }
-  if (action === "room.delete") return result.deleted === true;
   if (action === "provider.request.resolve") {
     return Boolean(
       result.status === "resolving" &&

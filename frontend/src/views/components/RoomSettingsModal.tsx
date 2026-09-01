@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
-import { Image as ImageIcon, Trash2, UserPlus, X } from "lucide-react";
+import { Image as ImageIcon, UserPlus, X } from "lucide-react";
 import {
   type ChannelNotificationSetting,
   type ChannelSettings,
@@ -31,8 +31,7 @@ type RoomSettingsSectionId =
   | "settings-appearance"
   | "settings-channels"
   | "settings-notify"
-  | "settings-invite"
-  | "settings-delete";
+  | "settings-invite";
 
 export default function RoomSettingsModal({
   room,
@@ -59,7 +58,6 @@ export default function RoomSettingsModal({
   onOrderedExcludePreviousSpeakerChange,
   onRetrySettings,
   onRetryAppearance,
-  onDeleteRoom,
 }: {
   room: RoomDockItem;
   initialSectionId?: RoomSettingsSectionId;
@@ -88,12 +86,8 @@ export default function RoomSettingsModal({
   onOrderedExcludePreviousSpeakerChange: (exclude: boolean) => void;
   onRetrySettings: () => void;
   onRetryAppearance: () => void;
-  onDeleteRoom: (confirmationName: string) => Promise<void>;
 }) {
   const [uploadStatus, setUploadStatus] = useState("");
-  const [deleteConfirmation, setDeleteConfirmation] = useState("");
-  const [deleteError, setDeleteError] = useState("");
-  const [deleting, setDeleting] = useState(false);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const routingSettingsReady = settingsStatus === "ready";
   const preferenceSettingsReady = preferenceStatus === "ready";
@@ -178,7 +172,6 @@ export default function RoomSettingsModal({
           <a href="#settings-channels">채널</a>
           <a href="#settings-notify">알림</a>
           <a href="#settings-invite">초대</a>
-          <a href="#settings-delete">서버 삭제</a>
         </aside>
         <div ref={bodyRef} className="dc-settings-body chat-scroll">
           <header className="dc-settings-titlebar">
@@ -493,46 +486,6 @@ export default function RoomSettingsModal({
                 초대 링크 만들기
               </button>
             )}
-          </section>
-          <section id="settings-delete" className="dc-settings-section">
-            <h3>서버 삭제</h3>
-            <p className="text-[13px] text-text-muted preserve-words">
-              이 작업은 복구할 수 없습니다. 확인하려면 서버 이름{" "}
-              <strong>“{room.label}”</strong>을 정확히 입력하세요.
-            </p>
-            <label>
-              서버 이름
-              <input
-                className="ops-input"
-                value={deleteConfirmation}
-                onChange={(event) => {
-                  setDeleteConfirmation(event.target.value);
-                  setDeleteError("");
-                }}
-                autoComplete="off"
-                placeholder={room.label}
-              />
-            </label>
-            {deleteError && <p className="text-[13px] text-red-400 preserve-words">{deleteError}</p>}
-            <button
-              type="button"
-              className="danger dc-upload-button"
-              disabled={deleting || deleteConfirmation !== room.label}
-              onClick={async () => {
-                setDeleting(true);
-                setDeleteError("");
-                try {
-                  await onDeleteRoom(deleteConfirmation);
-                } catch (error) {
-                  setDeleteError(error instanceof Error ? error.message : "서버 삭제에 실패했습니다.");
-                } finally {
-                  setDeleting(false);
-                }
-              }}
-            >
-              <Trash2 size={15} />
-              {deleting ? "삭제 중..." : "서버 영구 삭제"}
-            </button>
           </section>
         </div>
       </section>

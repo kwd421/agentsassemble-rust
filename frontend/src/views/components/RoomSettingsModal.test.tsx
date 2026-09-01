@@ -62,7 +62,6 @@ function renderSettings(
       onOrderedExcludePreviousSpeakerChange={onOrderedExcludePreviousSpeakerChange}
       onRetrySettings={onRetrySettings}
       onRetryAppearance={() => undefined}
-      onDeleteRoom={async () => undefined}
     />
   );
   return { onAppearanceUpload, onConversationModeChange };
@@ -70,6 +69,13 @@ function renderSettings(
 
 describe("RoomSettingsModal conversation mode", () => {
   beforeEach(() => vi.resetAllMocks());
+
+  it("does not advertise room deletion before the server owns that action", () => {
+    renderSettings("ordered");
+
+    expect(screen.queryByText("서버 삭제")).toBeNull();
+    expect(screen.queryByRole("button", { name: "서버 영구 삭제" })).toBeNull();
+  });
 
   it("binds a banner upload to the room and waits for canonical appearance persistence", async () => {
     const onAppearanceChange = vi.fn().mockResolvedValue(undefined);
@@ -218,7 +224,6 @@ describe("RoomSettingsModal conversation mode", () => {
         onOrderedExcludePreviousSpeakerChange={() => undefined}
         onRetrySettings={() => undefined}
         onRetryAppearance={() => undefined}
-        onDeleteRoom={async () => undefined}
       />
     );
 
@@ -259,7 +264,6 @@ describe("RoomSettingsModal conversation mode", () => {
         onOrderedExcludePreviousSpeakerChange={() => undefined}
         onRetrySettings={() => undefined}
         onRetryAppearance={() => undefined}
-        onDeleteRoom={async () => undefined}
       />
     );
 

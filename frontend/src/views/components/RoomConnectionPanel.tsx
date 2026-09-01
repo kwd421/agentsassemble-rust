@@ -41,7 +41,6 @@ type RoomConnectionPanelProps = {
     session: RoomAgentSession,
     action: "start" | "pause" | "stop" | "resume" | "interrupt"
   ) => void | Promise<void>;
-  onParticipantKick?: (participantId: string) => void | Promise<void>;
   onParticipantMute?: (participantId: string, muted: boolean) => void | Promise<void>;
   availableProviders?: NativeCliProviderAvailability[];
   onAgentConfigure?: (
@@ -79,7 +78,6 @@ export default function RoomConnectionPanel({
   agentSessions = [],
   capabilities = {},
   onAgentControl,
-  onParticipantKick,
   onParticipantMute,
   availableProviders = [],
   onAgentConfigure,
@@ -150,8 +148,7 @@ export default function RoomConnectionPanel({
         roomName={room.label}
         onRoleChange={onRoleChange}
         canEditRoles={Boolean(capabilities["room.manage"])}
-        canModerate={Boolean(capabilities["participant.kick"] || capabilities["participant.mute"])}
-        onParticipantKick={capabilities["participant.kick"] ? onParticipantKick : undefined}
+        canModerate={Boolean(capabilities["participant.mute"])}
         onParticipantMute={capabilities["participant.mute"] ? onParticipantMute : undefined}
         onSessionActionComplete={onSessionActionComplete}
         quotaViewer={quotaViewer}

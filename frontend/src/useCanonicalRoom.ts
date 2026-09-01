@@ -589,31 +589,6 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     [activeCatalogRevision, requireCurrentProjectionSocket, roomId]
   );
 
-  const sendParticipantKick = useCallback(
-    async (participantId: string) => {
-      const operationSocket = requireCurrentProjectionSocket();
-      const ack = await operationSocket.command("participant.kick", { participant_id: participantId });
-      requireCurrentProjectionSocket();
-      const participant = ack.result?.participant as RoomMember | undefined;
-      if (
-        participant?.participant_id !== participantId ||
-        participant.status !== "kicked"
-      ) {
-        throw new RoomSocketSayError(
-          "서버가 추방 완료 상태를 확인해 주지 않았습니다. 방 상태를 다시 동기화합니다.",
-          "invalid_kick_ack"
-        );
-      }
-      setParticipantsByRoom((previous) => ({
-        ...previous,
-        [roomId]: (previous[roomId] || []).filter(
-          (current) => current.participant_id !== participantId
-        ),
-      }));
-    },
-    [requireCurrentProjectionSocket, roomId]
-  );
-
   const sendParticipantMute = useCallback(
     async (participantId: string, muted: boolean) => {
       const operationSocket = requireCurrentProjectionSocket();
@@ -810,7 +785,6 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     loadHistory,
     sendAgentControl,
     sendAgentConfigure,
-    sendParticipantKick,
     sendParticipantMute,
     sendParticipantRole,
     sendRoomSettingsUpdate,

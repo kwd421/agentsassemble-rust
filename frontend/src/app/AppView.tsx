@@ -67,7 +67,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     roomSettings, roomSocket, rooms, scopedAgents, scopedMentionables, serverProductSurface,
     scopedOnlineCount, scopedViewerDisplayName, selectDirectoryFriend, selectHomeFriend,
     selectRoom, selectedHomeFriendId, sendAgentConfigure, sendAgentControl,
-    sendParticipantKick, sendParticipantMute, setAdminOpen, setChannelNotifications,
+    sendParticipantMute, setAdminOpen, setChannelNotifications,
     setChannelSearchQuery, setCreateChannelOpen, setLeaveRoomTargetId, setMembersOpen,
     setMessageSearchScope, setMobileRoomInfoInitialMode, setMobileRoomInfoOpen, setMobileSidebarOpen,
     setPendingMessageSearchTarget, setRightPanelMode, setRoomMenu,
@@ -617,7 +617,6 @@ export default function AppView({ controller }: { controller: AppController }) {
                 onAgentConfigure={sendAgentConfigure}
                 agentActivityVisibility={agentActivityVisibility}
                 onAgentActivityVisibilityChange={changeAgentActivityVisibility}
-                onParticipantKick={sendParticipantKick}
                 onParticipantMute={sendParticipantMute}
               />
             </section>

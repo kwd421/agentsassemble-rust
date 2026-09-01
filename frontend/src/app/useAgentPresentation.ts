@@ -57,7 +57,6 @@ export function useAgentPresentation({
   const loadCanonicalRoomHistory = canonicalRoom.loadHistory;
   const sendAgentControl = canonicalRoom.sendAgentControl;
   const sendAgentConfigure = canonicalRoom.sendAgentConfigure;
-  const sendParticipantKick = canonicalRoom.sendParticipantKick;
   const sendParticipantMute = canonicalRoom.sendParticipantMute;
   const sendParticipantRole = canonicalRoom.sendParticipantRole;
   const loadProviderUsage = useCallback(async (session: Parameters<typeof providerUsageTarget>[0]) => {
@@ -170,7 +169,6 @@ export function useAgentPresentation({
     loadCanonicalRoomHistory,
     sendAgentControl,
     sendAgentConfigure,
-    sendParticipantKick,
     sendParticipantMute,
     sendParticipantRole,
     loadProviderUsage,

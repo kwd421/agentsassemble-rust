@@ -14,7 +14,7 @@ export default function AppOverlays({ controller }: { controller: AppController 
     acceptRecoveredSession, activeRoom, agentCreateOpen, agentInviteUrl,
     canonicalRoom, closeInviteModal, copyAgentInviteLink,
     copyOperatorPairingLink, copyRemoteClientPacket,
-    createChannel, createChannelOpen, deleteRoom, deviceToken, clientId, generateAgentInviteLink,
+    createChannel, createChannelOpen, deviceToken, clientId, generateAgentInviteLink,
     generateInviteLink, generateOperatorPairingLink, guestAdmissionBusy, guestExpired,
     guestJoinRequested, guestJoinStatus, guestJoinToken, guestLocked,
     guestPreflightRetryable, guestJoinRetryable,
@@ -145,7 +145,6 @@ export default function AppOverlays({ controller }: { controller: AppController 
             }
             onRetrySettings={() => roomSettings.refresh(settingsModalRoom)}
             onRetryAppearance={() => roomAppearanceAssets.retry(settingsModalRoom)}
-            onDeleteRoom={(confirmationName) => deleteRoom(settingsModalRoom.id, confirmationName)}
           />
         )}
 

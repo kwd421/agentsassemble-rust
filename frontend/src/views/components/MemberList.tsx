@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
-import { Bot, Search, UserMinus, Volume2, VolumeX } from "lucide-react";
+import { Bot, Search, Volume2, VolumeX } from "lucide-react";
 import type {
   LiveAgent,
   RoomAgentSession,
@@ -40,7 +40,6 @@ export default function MemberList({
   onSearchQueryChange,
   hideSearch = false,
   canModerate = false,
-  onParticipantKick,
   onParticipantMute,
   agentSessions = [],
   onAgentControl,
@@ -65,7 +64,6 @@ export default function MemberList({
   onSearchQueryChange?: (query: string) => void;
   hideSearch?: boolean;
   canModerate?: boolean;
-  onParticipantKick?: (participantId: string) => void | Promise<void>;
   onParticipantMute?: (participantId: string, muted: boolean) => void | Promise<void>;
   agentSessions?: RoomAgentSession[];
   onAgentControl?: (
@@ -110,7 +108,7 @@ export default function MemberList({
     // Self and any participant without a room scope can't be muted.
     if (
       !canModerate ||
-      (!onParticipantKick && !onParticipantMute) ||
+      !onParticipantMute ||
       entry.owner ||
       !entry.meetingId
     ) return;
@@ -126,24 +124,6 @@ export default function MemberList({
       onSessionActionComplete?.();
     } catch (error) {
       window.alert(`뮤트 변경 실패: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setMuteBusy(false);
-      setMemberMenu(null);
-    }
-  }
-
-  async function handleKick(entry: MemberEntry) {
-    if (!entry.meetingId || !onParticipantKick) return;
-    if (!window.confirm(`${entry.displayName}을(를) 이 방에서 내보낼까요? (열린 초대 링크로는 다시 들어올 수 있어요)`)) {
-      setMemberMenu(null);
-      return;
-    }
-    setMuteBusy(true);
-    try {
-      await onParticipantKick(entry.id);
-      onSessionActionComplete?.();
-    } catch (error) {
-      window.alert(`내보내기 실패: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setMuteBusy(false);
       setMemberMenu(null);
@@ -276,7 +256,6 @@ export default function MemberList({
           roomSessionToken={roomSessionToken}
           onClose={() => setDetailEntryId("")}
           onSessionActionComplete={onSessionActionComplete}
-          onParticipantKick={canModerate ? onParticipantKick : undefined}
           onAgentControl={onAgentControl}
           availableProviders={availableProviders}
           onAgentConfigure={onAgentConfigure}
@@ -315,19 +294,6 @@ export default function MemberList({
               >
                 {memberMenu.entry.muted ? <Volume2 size={14} /> : <VolumeX size={14} />}
                 {memberMenu.entry.muted ? "뮤트 해제" : "뮤트"}
-              </button>
-            )}
-            {onParticipantKick && (
-              <button
-                type="button"
-                role="menuitem"
-                className="dc-member-context-menu-item"
-                data-variant="danger"
-                disabled={muteBusy}
-                onClick={() => void handleKick(memberMenu.entry)}
-              >
-                <UserMinus size={14} />
-                내보내기
               </button>
             )}
           </div>

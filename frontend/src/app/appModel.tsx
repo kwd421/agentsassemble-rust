@@ -30,8 +30,7 @@ export type RoomSettingsSectionId =
   | "settings-appearance"
   | "settings-channels"
   | "settings-notify"
-  | "settings-invite"
-  | "settings-delete";
+  | "settings-invite";
 
 export type RoomSettingsState = {
   roomId: string;

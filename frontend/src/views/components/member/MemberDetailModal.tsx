@@ -1,12 +1,13 @@
 import { useRef } from "react";
 import { Camera, X } from "lucide-react";
 import type { RoomAgentSession } from "../../../api";
-import type { AgentSessionControlAction } from "../AgentSessionDetails";
+import AgentSessionDetails, {
+  type AgentSessionControlAction,
+} from "../AgentSessionDetails";
 import type { NativeCliProviderAvailability } from "../../../roomSocketClient";
 import ProviderLogo from "../ProviderLogo";
 import AgentIdentitySettings from "./AgentIdentitySettings";
 import MemberUsage from "./MemberUsage";
-import AgentSessionMemberDetails from "./AgentSessionMemberDetails";
 import type { MemberEntry } from "./memberTypes";
 
 export type MemberDetailModalProps = {
@@ -14,7 +15,6 @@ export type MemberDetailModalProps = {
   roomSessionToken?: string;
   onClose: () => void;
   onSessionActionComplete?: () => void;
-  onParticipantKick?: (participantId: string) => void | Promise<void>;
   onAgentControl?: (
     session: RoomAgentSession,
     action: AgentSessionControlAction
@@ -33,7 +33,6 @@ export default function MemberDetailModal({
   roomSessionToken = "",
   onClose,
   onSessionActionComplete,
-  onParticipantKick,
   onAgentControl,
   availableProviders = [],
   onAgentConfigure,
@@ -70,14 +69,13 @@ export default function MemberDetailModal({
               <X size={18} />
             </button>
           </header>
-          <AgentSessionMemberDetails
-            entry={entry}
+          <AgentSessionDetails
             session={entry.agentSession}
-            onClose={onClose}
-            onParticipantKick={onParticipantKick}
-            onAgentControl={onAgentControl}
-            availableProviders={availableProviders}
-            onAgentConfigure={onAgentConfigure}
+            provider={availableProviders.find(
+              (provider) => provider.provider_kind === entry.agentSession?.provider_kind
+            )}
+            onControl={onAgentControl}
+            onConfigure={onAgentConfigure}
             activityVisible={activityVisible}
             onActivityVisibilityChange={onActivityVisibilityChange}
           />
@@ -144,14 +142,13 @@ export default function MemberDetailModal({
           onAgentConfigure={onAgentConfigure}
         />
         {entry.agentSession && (
-          <AgentSessionMemberDetails
-            entry={entry}
+          <AgentSessionDetails
             session={entry.agentSession}
-            onClose={onClose}
-            onParticipantKick={onParticipantKick}
-            onAgentControl={onAgentControl}
-            availableProviders={availableProviders}
-            onAgentConfigure={onAgentConfigure}
+            provider={availableProviders.find(
+              (provider) => provider.provider_kind === entry.agentSession?.provider_kind
+            )}
+            onControl={onAgentControl}
+            onConfigure={onAgentConfigure}
             activityVisible={activityVisible}
             onActivityVisibilityChange={onActivityVisibilityChange}
           />

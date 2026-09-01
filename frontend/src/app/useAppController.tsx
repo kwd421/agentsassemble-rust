@@ -380,7 +380,6 @@ export function useAppController(deviceToken: string, clientId: string) {
     loadCanonicalRoomHistory,
     sendAgentControl,
     sendAgentConfigure,
-    sendParticipantKick,
     sendParticipantMute,
     sendParticipantRole,
     loadProviderUsage,
@@ -592,15 +591,6 @@ export function useAppController(deviceToken: string, clientId: string) {
     }
   }
 
-  async function deleteRoom(roomId: string, confirmationName: string) {
-    if (roomId !== activeRoom.id || !roomSocket?.ready()) {
-      throw new Error("삭제할 서버를 먼저 열고 연결이 완료될 때까지 기다려 주세요.");
-    }
-    await roomSocket.command("room.delete", { confirmation_name: confirmationName });
-    setSettingsModal(null);
-    removeAcknowledgedRoom(roomId);
-  }
-
   function goToChannel(next: string) {
     // Guests stay out of the operator-only fixed surfaces (live/board/records/
     // friends), but custom channels are shared spaces they can enter.
@@ -735,7 +725,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     copyAgentInviteLink, copyGuestAiPacket, copyOperatorPairingLink,
     copyRemoteClientPacket,
     createChannel, createChannelOpen, createCompanionAiPacket, deleteDirectoryFriend,
-    deleteRoom, deviceToken, clientId, exitGuestSurface, expireGuestSession,
+    deviceToken, clientId, exitGuestSurface, expireGuestSession,
     friendAddDraftName, friendListFilter, friendsBusyId, friendsLoading,
     friendsStatus, generateAgentInviteLink, generateInviteLink, generateOperatorPairingLink,
     goToChannel, guestAdmissionBusy, guestAiPacketPreview, guestAiPacketStatus,
@@ -761,7 +751,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     rooms, scopedAgents, scopedMentionables, serverProductSurface,
     scopedOnlineCount, scopedViewerDisplayName, selectDirectoryFriend,
     selectHomeFriend, selectRoom, selectedHomeFriendId, sendAgentConfigure,
-    sendAgentControl, sendParticipantKick, sendParticipantMute, setAdminOpen,
+    sendAgentControl, sendParticipantMute, setAdminOpen,
     setAgentCreateOpen, setChannelNotifications, setChannelSearchQuery, setCreateChannelOpen,
     setGuestRecoveryRequest, setLeaveRoomTargetId, setMembersOpen,
     setMessageSearchScope, setMobileRoomInfoInitialMode, setMobileRoomInfoOpen, setMobileSidebarOpen,
