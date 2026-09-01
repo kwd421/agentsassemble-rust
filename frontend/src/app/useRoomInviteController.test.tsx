@@ -13,7 +13,6 @@ import { useRoomInviteController } from "./useRoomInviteController";
 
 const apiMocks = vi.hoisted(() => ({
   createManagedHumanInvite: vi.fn(),
-  createOperatorPairing: vi.fn(),
   createRoomInvite: vi.fn(),
   fetchPublicInviteStatus: vi.fn(),
   revokeManagedHumanInvite: vi.fn(),
@@ -492,32 +491,6 @@ describe("useRoomInviteController", () => {
     expect(hook.result.current.remoteClientPacket).toEqual({ friendName: "", preview: "" });
     expect(hook.result.current.friendStatuses).toEqual({});
     expect(hook.result.current.humanInvites).toEqual([]);
-    expect(hook.result.current.operatorPairingUrl).toBe("");
-  });
-
-  it("creates a dedicated short-lived operator pairing link", async () => {
-    apiMocks.createOperatorPairing.mockResolvedValue({
-      status: "created",
-      pairing_id: "pair-1",
-      room_id: room.meetingId,
-      target_origin: "https://room.example.com",
-      expires_at: "2026-07-15T12:02:00Z",
-      pairing_url: "https://room.example.com/pair?token=aap1_secret",
-    });
-    const hook = renderInviteController();
-
-    await act(async () => {
-      await hook.result.current.generateOperatorPairing(room);
-    });
-
-    expect(apiMocks.createOperatorPairing).toHaveBeenCalledWith({
-      meetingId: room.meetingId,
-      sessionToken: "",
-    });
-    expect(hook.result.current.operatorPairingUrl).toBe(
-      "https://room.example.com/pair?token=aap1_secret"
-    );
-    expect(hook.result.current.copyStatus).toContain("2분");
   });
 
   it("makes no ingress or timer call for an ineligible surface", async () => {
@@ -620,22 +593,20 @@ describe("useRoomInviteController", () => {
     expect(hook.result.current.publicAccessTransition).toBe("idle");
   });
 
-  it("gives a superseding invite operation ownership of the access state", async () => {
+  it("gives a superseding human invite operation ownership of the access state", async () => {
     vi.useFakeTimers();
     try {
       apiMocks.startPublicInviteTunnel.mockResolvedValue(startingStatus);
       apiMocks.fetchPublicInviteStatus.mockResolvedValue(startingStatus);
-      apiMocks.createOperatorPairing.mockResolvedValue({
-        status: "created",
-        pairing_id: "pair-superseding",
-        room_id: room.meetingId,
-        target_origin: publicStatus.public_url,
-        expires_at: "2026-07-15T12:02:00Z",
-        pairing_url: `${publicStatus.public_url}/pair?token=aap1_superseding`,
-      });
+      apiMocks.createManagedHumanInvite.mockResolvedValue(managedCustody("superseding"));
       const hook = renderInviteController();
       let startPromise!: Promise<void>;
 
+      act(() => hook.result.current.open(room.id));
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
       await act(async () => {
         startPromise = hook.result.current.startTunnel();
         await Promise.resolve();
@@ -646,13 +617,19 @@ describe("useRoomInviteController", () => {
 
       apiMocks.fetchPublicInviteStatus.mockResolvedValue(publicStatus);
       await act(async () => {
-        await hook.result.current.generateOperatorPairing(room);
+        await hook.result.current.generateSecureInvite(room, "room");
         await startPromise;
       });
 
-      expect(vi.getTimerCount()).toBe(0);
+      expect(vi.getTimerCount()).toBe(1);
       expect(hook.result.current.publicAccessTransition).toBe("idle");
-      expect(hook.result.current.operatorPairingUrl).toContain("aap1_superseding");
+      expect(hook.result.current.humanInvites).toHaveLength(1);
+      await act(async () => {
+        vi.runOnlyPendingTimers();
+        await Promise.resolve();
+      });
+      expect(vi.getTimerCount()).toBe(0);
+      expect(hook.result.current.humanInvites[0]?.expired).toBe(true);
     } finally {
       vi.useRealTimers();
     }

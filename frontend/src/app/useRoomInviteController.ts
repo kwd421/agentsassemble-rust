@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
   createManagedHumanInvite,
-  createOperatorPairing,
   createRoomInvite,
   fetchPublicInviteStatus,
   startPublicInviteTunnel,
@@ -88,7 +87,6 @@ export function useRoomInviteController({
 }: UseRoomInviteControllerOptions) {
   const [modal, setModal] = useState<InviteModalState>(null);
   const [copyStatus, setCopyStatus] = useState("");
-  const [operatorPairingUrl, setOperatorPairingUrl] = useState("");
   const [publicInviteStatus, setPublicInviteStatus] = useState<PublicInviteStatus | null>(null);
   const [publicAccessTransition, setPublicAccessTransition] =
     useState<PublicAccessTransition>("idle");
@@ -198,7 +196,6 @@ export function useRoomInviteController({
     retireIngressOperation();
     setModal({ roomId });
     setCopyStatus("");
-    setOperatorPairingUrl("");
     setPublicInviteStatus(null);
     setPublicAccessTransition("idle");
     setFriendStatuses({});
@@ -433,7 +430,6 @@ export function useRoomInviteController({
       );
       assertIngressOperation(generation);
       setPublicInviteStatus(status);
-      setOperatorPairingUrl("");
       setCopyStatus("외부 접속을 닫았습니다. 룸은 이 컴퓨터에서 계속 작동합니다.");
     } catch (error) {
       if (error === RETIRED_INGRESS_OPERATION) return;
@@ -465,34 +461,6 @@ export function useRoomInviteController({
       if (error === RETIRED_INGRESS_OPERATION) return;
       setCopyStatus(error instanceof Error ? error.message : "보안 초대 링크 생성 실패");
     }
-  }
-
-  async function generateOperatorPairing(room: RoomDockItem) {
-    setCopyStatus("공개 주소용 운영자 연결 링크 생성 중...");
-    try {
-      if (!localOperatorEligible) {
-        throw new Error("외부 접속 관리는 패키지 앱의 로컬 운영자만 사용할 수 있습니다.");
-      }
-      const generation = beginIngressOperation();
-      await requirePublicInviteReady(generation, false);
-      assertIngressOperation(generation);
-      const pairing = await createOperatorPairing({
-        meetingId: room.meetingId,
-        sessionToken,
-      });
-      assertIngressOperation(generation);
-      setOperatorPairingUrl(pairing.pairing_url);
-      setCopyStatus("운영자 연결 링크 생성됨 · 2분 안에 한 번만 사용할 수 있습니다.");
-    } catch (error) {
-      if (error === RETIRED_INGRESS_OPERATION) return;
-      setCopyStatus(error instanceof Error ? error.message : "운영자 연결 링크 생성 실패");
-    }
-  }
-
-  async function copyOperatorPairing() {
-    if (!operatorPairingUrl) return;
-    const copied = await copyText(operatorPairingUrl);
-    setCopyStatus(copied ? "운영자 연결 링크 복사됨" : "운영자 연결 링크 복사 실패");
   }
 
   async function copyRemoteClientPacket() {
@@ -567,7 +535,6 @@ export function useRoomInviteController({
     modal,
     copyStatus,
     humanInvites: managedHumanInvites.humanInvites,
-    operatorPairingUrl,
     publicInviteStatus,
     publicAccessTransition,
     friendStatuses,
@@ -580,8 +547,6 @@ export function useRoomInviteController({
     startTunnel,
     stopTunnel,
     generateSecureInvite,
-    generateOperatorPairing,
-    copyOperatorPairing,
     copyHumanInvite: managedHumanInvites.copy,
     revokeHumanInvite: managedHumanInvites.revoke,
     copyRemoteClientPacket,

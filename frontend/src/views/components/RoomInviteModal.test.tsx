@@ -28,7 +28,6 @@ function renderInviteModal({
     <RoomInviteModal
       roomLabel="제품 방"
       humanInvites={humanInvites}
-      operatorPairingUrl=""
       publicUrl={publicAccess ? "https://room.example.com" : ""}
       publicAccessTransition={requestState}
       tunnelStatus={{
@@ -43,8 +42,6 @@ function renderInviteModal({
       onGenerateSecureInvite={onGenerateSecureInvite}
       onCopyHumanInvite={onCopyHumanInvite}
       onRevokeHumanInvite={onRevokeHumanInvite}
-      onGenerateOperatorPairing={vi.fn()}
-      onCopyOperatorPairing={vi.fn()}
       onStartTunnel={vi.fn()}
       onStopTunnel={onStopTunnel}
     />
@@ -191,5 +188,12 @@ describe("RoomInviteModal", () => {
 
     expect(screen.queryByRole("heading", { name: "외부 AI 세션 초대" })).toBeNull();
     expect(screen.queryByText(/Room Connector 설치/)).toBeNull();
+  });
+
+  it("does not expose operator-pairing creation before its issuer exists", () => {
+    renderInviteModal();
+
+    expect(screen.queryByText("고급 연결 설정")).toBeNull();
+    expect(screen.queryByRole("button", { name: "운영자 기기 연결 링크 생성" })).toBeNull();
   });
 });

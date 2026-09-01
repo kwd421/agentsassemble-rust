@@ -41,15 +41,6 @@ export type { RoomInviteAdmissionResponse };
 
 export type PublicInviteStatus = PublicIngressStatus;
 
-export interface OperatorPairingCreateResponse {
-  status: "created";
-  pairing_id: string;
-  room_id: string;
-  target_origin: string;
-  expires_at: string;
-  pairing_url: string;
-}
-
 export function createRoomInvite({
   meetingId,
   agentId,
@@ -157,20 +148,6 @@ export function preflightRoomInvite({
     { invite_token: inviteToken },
     { deviceToken, sessionToken }
   ).then(parseRoomInviteAdmissionResponse);
-}
-
-export function createOperatorPairing({
-  meetingId,
-  sessionToken = "",
-}: {
-  meetingId: string;
-  sessionToken?: string;
-}) {
-  return postJsonModerator<OperatorPairingCreateResponse>(
-    "/api/operator-pairing/create",
-    { meeting_id: meetingId, ttl_seconds: 120 },
-    sessionToken
-  );
 }
 
 export function redeemOperatorPairing({

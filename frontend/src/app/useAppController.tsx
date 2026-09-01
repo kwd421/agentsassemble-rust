@@ -292,7 +292,6 @@ export function useAppController(deviceToken: string, clientId: string) {
   const {
     modal: inviteModal,
     copyStatus: inviteCopyStatus,
-    operatorPairingUrl,
     publicInviteStatus,
     invitePublicUrl,
     open: openInviteModal,
@@ -300,8 +299,6 @@ export function useAppController(deviceToken: string, clientId: string) {
     startTunnel: startInviteTunnel,
     stopTunnel: stopInviteTunnel,
     generateSecureInvite: generateInviteLink,
-    generateOperatorPairing: generateOperatorPairingLink,
-    copyOperatorPairing: copyOperatorPairingLink,
   } = roomInvite;
   const roomSocket = canonicalRoom.socket;
   const {
@@ -574,10 +571,10 @@ export function useAppController(deviceToken: string, clientId: string) {
     changeAgentActivityVisibility, channel, channelHeaderActions,
     channelMenu, channelSearchNeedle, channelSearchQuery, channelSidebarWidth,
     closeInviteModal, closeMobileRoomInfo, closeMobileSidebar, collapsedChannelSections,
-    copyGuestAiPacket, copyOperatorPairingLink,
+    copyGuestAiPacket,
     createCompanionAiPacket,
     deviceToken, clientId, exitGuestSurface, expireGuestSession,
-    generateInviteLink, generateOperatorPairingLink,
+    generateInviteLink,
     goToChannel, guestAdmissionBusy, guestAiPacketPreview, guestAiPacketStatus,
     guestExpired, guestJoinRequested, guestJoinStatus, guestJoinToken,
     guestPreflightRetryable, guestJoinRetryable,
@@ -592,7 +589,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     openAgentCreate, openChannelMenu,
     openCrossChannelSearchResult, openMobileProfileFromPanel, openMobileRoomInfo, openMobileSidebar,
     openRoomMenu, openRoomSettings, operatorPairingPending, operatorPairingState,
-    operatorPairingUrl, pendingGuestAvatarImage, pendingGuestDisplayName, pendingMessageSearchTarget,
+    pendingGuestAvatarImage, pendingGuestDisplayName, pendingMessageSearchTarget,
     publicInviteStatus, quotaViewer,
     requestGuestJoin, retryOperatorPairing,
     roomAppearanceAssets, roomAppearances, roomDirectorySyncIssue, roomInvite,

@@ -11,15 +11,15 @@ import RoomSettingsModal from "../views/components/RoomSettingsModal";
 export default function AppOverlays({ controller }: { controller: AppController }) {
   const {
     acceptRecoveredSession, activeRoom, agentCreateOpen,
-    canonicalRoom, closeInviteModal, copyOperatorPairingLink,
+    canonicalRoom, closeInviteModal,
     deviceToken, clientId,
-    generateInviteLink, generateOperatorPairingLink, guestAdmissionBusy, guestExpired,
+    generateInviteLink, guestAdmissionBusy, guestExpired,
     guestJoinRequested, guestJoinStatus, guestJoinToken, guestLocked,
     guestPreflightRetryable, guestJoinRetryable,
     guestRecoveryRequest, guestSession,
     inviteCopyStatus, inviteModalAppearance, inviteModalRoom, invitePublicUrl,
     inviteRoom, leaveRoom, leaveRoomTarget,
-    operatorPairingPending, operatorPairingState, operatorPairingUrl,
+    operatorPairingPending, operatorPairingState,
     pendingGuestAvatarImage, pendingGuestDisplayName, publicInviteStatus,
     requestGuestJoin, retryOperatorPairing, roomAppearanceAssets, roomInvite,
     roomSettings, roomSocket,
@@ -43,7 +43,6 @@ export default function AppOverlays({ controller }: { controller: AppController 
           <RoomInviteModal
             roomLabel={inviteModalRoom.label}
             humanInvites={roomInvite.humanInvites}
-            operatorPairingUrl={operatorPairingUrl}
             publicUrl={invitePublicUrl}
             publicAccessTransition={roomInvite.publicAccessTransition}
             tunnelStatus={publicInviteStatus?.tunnel}
@@ -60,8 +59,6 @@ export default function AppOverlays({ controller }: { controller: AppController 
             }
             onCopyHumanInvite={(key) => void roomInvite.copyHumanInvite(key)}
             onRevokeHumanInvite={(key) => void roomInvite.revokeHumanInvite(key)}
-            onGenerateOperatorPairing={() => void generateOperatorPairingLink(inviteModalRoom)}
-            onCopyOperatorPairing={() => void copyOperatorPairingLink()}
             onStartTunnel={() => void startInviteTunnel()}
             onStopTunnel={() => void stopInviteTunnel()}
           />

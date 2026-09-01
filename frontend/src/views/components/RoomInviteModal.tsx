@@ -29,7 +29,6 @@ function humanInviteUseLabel(maxUses: number) {
 export default function RoomInviteModal({
   roomLabel,
   humanInvites = [],
-  operatorPairingUrl,
   publicUrl,
   publicAccessTransition = "idle",
   tunnelStatus,
@@ -39,14 +38,11 @@ export default function RoomInviteModal({
   onGenerateSecureInvite,
   onCopyHumanInvite,
   onRevokeHumanInvite,
-  onGenerateOperatorPairing,
-  onCopyOperatorPairing,
   onStartTunnel,
   onStopTunnel,
 }: {
   roomLabel: string;
   humanInvites?: readonly HumanInvitePresentation[];
-  operatorPairingUrl: string;
   publicUrl?: string;
   publicAccessTransition?: PublicAccessTransition;
   tunnelStatus?: PublicInviteStatus["tunnel"];
@@ -56,8 +52,6 @@ export default function RoomInviteModal({
   onGenerateSecureInvite: (options: HumanInviteOptions, startTunnelIfNeeded: boolean) => void;
   onCopyHumanInvite: (key: string) => void;
   onRevokeHumanInvite: (key: string) => void;
-  onGenerateOperatorPairing: () => void;
-  onCopyOperatorPairing: () => void;
   onStartTunnel: () => void;
   onStopTunnel: () => void;
 }) {
@@ -323,43 +317,6 @@ export default function RoomInviteModal({
 
         </div>
 
-        <details className="dc-invite-advanced">
-          <summary>고급 연결 설정</summary>
-          <div className="dc-invite-advanced-body">
-            <label className="dc-invite-link-label">
-              공개 주소에서 나로 열기
-              <span className="text-[12px] font-bold text-text-muted preserve-words">
-                현재 운영자 본인만 사용하세요. 2분 뒤 만료되며 한 번 사용하면 폐기됩니다.
-              </span>
-              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_112px_112px]">
-                <input
-                  className="dc-invite-link-input"
-                  value={operatorPairingUrl}
-                  placeholder="일회용 운영자 기기 연결 링크"
-                  readOnly
-                  onFocus={(event) => event.currentTarget.select()}
-                />
-                <button
-                  type="button"
-                  className="dc-invite-copy-button"
-                  aria-label="운영자 기기 연결 링크 생성"
-                  onClick={onGenerateOperatorPairing}
-                >
-                  링크 생성
-                </button>
-                <button
-                  type="button"
-                  className="dc-invite-copy-button"
-                  disabled={!operatorPairingUrl}
-                  onClick={onCopyOperatorPairing}
-                >
-                  <Copy size={15} />
-                  복사
-                </button>
-              </div>
-            </label>
-          </div>
-        </details>
         <p className="mt-3 text-[12px] text-text-muted preserve-words">
           {copyStatus ||
             (readOnlyInvite
