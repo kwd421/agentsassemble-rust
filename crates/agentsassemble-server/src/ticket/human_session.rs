@@ -1,4 +1,4 @@
-use agentsassemble_domain::{AuthenticatedPrincipal, InviteScope};
+use agentsassemble_domain::AuthenticatedPrincipal;
 use agentsassemble_persistence::{HumanSessionAuthorization, LocalRoomManagerAuthority};
 use chrono::Utc;
 use tokio::time::Instant;
@@ -17,8 +17,6 @@ pub(super) struct HumanSessionGrant {
 #[derive(Clone, PartialEq, Eq)]
 pub(super) enum HumanSessionGrantPurpose {
     WebSocketConnect,
-    MessagePinsRead,
-    MessagePinsWrite,
     MessageSearchRead,
     MessageAttachmentUpload,
     BoundMessageAttachmentRead { attachment_id: String },
@@ -83,35 +81,6 @@ impl TicketStore {
         authorization: HumanSessionAuthorization,
     ) -> Result<IssuedTicket, TicketError> {
         self.issue_human_session(authorization, HumanSessionGrantPurpose::WebSocketConnect)
-            .await
-    }
-
-    /// Issues an exact message-pin read grant from current durable human-session authority.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Invalid` when the session has expired or a grant bound is exhausted.
-    pub async fn issue_human_session_message_pins_read(
-        &self,
-        authorization: HumanSessionAuthorization,
-    ) -> Result<IssuedTicket, TicketError> {
-        self.issue_human_session(authorization, HumanSessionGrantPurpose::MessagePinsRead)
-            .await
-    }
-
-    /// Issues an exact message-pin write grant from current writable human-session authority.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Invalid` for read-only/expired sessions or an exhausted grant bound.
-    pub async fn issue_human_session_message_pins_write(
-        &self,
-        authorization: HumanSessionAuthorization,
-    ) -> Result<IssuedTicket, TicketError> {
-        if authorization.principal().invite_scope != InviteScope::ReadWrite {
-            return Err(TicketError::Invalid);
-        }
-        self.issue_human_session(authorization, HumanSessionGrantPurpose::MessagePinsWrite)
             .await
     }
 

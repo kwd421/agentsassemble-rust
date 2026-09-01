@@ -80,6 +80,7 @@ async fn preflight_and_join_preserve_bounded_credentials_and_exact_retry() {
         assert_profile_target_boundary(&client, &server.base_url, &store, session_token, &avatar)
             .await;
     assert_session_socket_boundary(&client, &server.base_url, session_token).await;
+    assert_session_pin_target(&client, &server.base_url, &store, session_token).await;
 
     let retry = join(
         &client,
@@ -124,7 +125,7 @@ async fn preflight_and_join_preserve_bounded_credentials_and_exact_retry() {
 }
 
 #[tokio::test]
-async fn read_only_session_patches_profile_but_cannot_upload_an_avatar() {
+async fn read_only_session_preserves_allowed_targets_and_denies_restricted_mutations() {
     let (store, credentials) = fixture(InviteScope::ReadOnly).await;
     let server = start(store).await;
     let client = Client::new();
@@ -189,6 +190,7 @@ async fn read_only_session_patches_profile_but_cannot_upload_an_avatar() {
     assert_eq!(nack["op"], "nack");
     assert_eq!(nack["error"]["code"], "permission_denied");
     socket.close().await;
+    assert_read_only_pin_target(&client, &server.base_url, session_token).await;
     server.stop().await;
 }
 
@@ -352,38 +354,6 @@ async fn assert_read_only_remote_preferences(client: &Client) {
         .unwrap_or_else(|error| panic!("decode read-only preference denial: {error}"));
     assert_eq!(denied["error"]["code"], "session_read_only");
 
-    let pin_read_ticket = issue_session_ticket(
-        client,
-        &read_only_server.base_url,
-        read_only_session,
-        "message-pins-read",
-    )
-    .await;
-    let pins = client
-        .get(format!(
-            "{}/api/room-pins?room_id=general&channel_id=lobby",
-            read_only_server.base_url
-        ))
-        .bearer_auth(pin_read_ticket)
-        .send()
-        .await
-        .unwrap_or_else(|error| panic!("read pins through read-only session: {error}"));
-    assert_eq!(pins.status(), reqwest::StatusCode::OK);
-    let denied = client
-        .post(format!(
-            "{}/api/session-tickets/message-pins-write",
-            read_only_server.base_url
-        ))
-        .bearer_auth(read_only_session)
-        .send()
-        .await
-        .unwrap_or_else(|error| panic!("deny read-only pin exchange: {error}"));
-    assert_eq!(denied.status(), reqwest::StatusCode::FORBIDDEN);
-    let denied: Value = denied
-        .json()
-        .await
-        .unwrap_or_else(|error| panic!("decode read-only pin denial: {error}"));
-    assert_eq!(denied["code"], "session_read_only");
     read_only_server.stop().await;
 }
 
@@ -468,30 +438,86 @@ async fn assert_session_socket_boundary(client: &Client, base_url: &str, session
     socket.close().await;
 }
 
-async fn issue_session_ticket(
+async fn assert_session_pin_target(
     client: &Client,
     base_url: &str,
+    store: &SqliteStore,
     session_token: &str,
-    purpose: &str,
-) -> String {
-    let response = client
-        .post(format!("{base_url}/api/session-tickets/{purpose}"))
+) {
+    let event_id = store
+        .snapshot("general", 0, 100)
+        .await
+        .unwrap_or_else(|error| panic!("read human message for pin target: {error}"))
+        .events
+        .into_iter()
+        .find(|event| event.content.as_deref() == Some("human socket boundary"))
+        .unwrap_or_else(|| panic!("human message for pin target is missing"))
+        .id;
+    let pinned = client
+        .post(format!("{base_url}/api/room-pins"))
+        .bearer_auth(session_token)
+        .json(&json!({
+            "room_id": "general",
+            "channel_id": "lobby",
+            "event_id": &event_id,
+            "pinned": true
+        }))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("pin through direct session: {error}"));
+    assert_eq!(pinned.status(), reqwest::StatusCode::OK);
+    let pinned: Value = pinned
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("decode direct-session pins: {error}"));
+    assert_eq!(pinned["pins"][0]["event_id"], event_id);
+
+    let listed: Value = client
+        .get(format!(
+            "{base_url}/api/room-pins?room_id=general&channel_id=lobby"
+        ))
         .bearer_auth(session_token)
         .send()
         .await
-        .unwrap_or_else(|error| panic!("exchange human session ticket: {error}"));
-    assert_eq!(response.status(), reqwest::StatusCode::OK);
-    assert_eq!(response.headers()["cache-control"], "private, no-store");
-    let grant: Value = response
+        .unwrap_or_else(|error| panic!("list pins through direct session: {error}"))
         .json()
         .await
-        .unwrap_or_else(|error| panic!("decode human session ticket: {error}"));
-    let ticket = grant["ticket"]
-        .as_str()
-        .unwrap_or_else(|| panic!("human session ticket is missing"));
-    assert_eq!(ticket.len(), 64);
-    assert!(ticket.bytes().all(|byte| byte.is_ascii_hexdigit()));
-    ticket.to_owned()
+        .unwrap_or_else(|error| panic!("decode listed direct-session pins: {error}"));
+    assert_eq!(listed["pins"][0]["event_id"], event_id);
+}
+
+async fn assert_read_only_pin_target(client: &Client, base_url: &str, session_token: &str) {
+    for retired in ["message-pins-read", "message-pins-write"] {
+        let response = client
+            .post(format!("{base_url}/api/session-tickets/{retired}"))
+            .bearer_auth(session_token)
+            .send()
+            .await
+            .unwrap_or_else(|error| panic!("probe retired pin exchange: {error}"));
+        assert_eq!(response.status(), reqwest::StatusCode::NOT_FOUND);
+    }
+    let pins = client
+        .get(format!(
+            "{base_url}/api/room-pins?room_id=general&channel_id=lobby"
+        ))
+        .bearer_auth(session_token)
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("read pins through read-only session: {error}"));
+    assert_eq!(pins.status(), reqwest::StatusCode::OK);
+    let denied = client
+        .post(format!("{base_url}/api/room-pins"))
+        .bearer_auth(session_token)
+        .body("{")
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("deny read-only pin target: {error}"));
+    assert_eq!(denied.status(), reqwest::StatusCode::FORBIDDEN);
+    let denied: Value = denied
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("decode read-only pin denial: {error}"));
+    assert_eq!(denied["error"]["code"], "permission_denied");
 }
 
 fn assert_session_server_surface(admission: &Value) {

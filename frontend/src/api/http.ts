@@ -14,11 +14,7 @@ function isServerWideProfileRoute(url: string): boolean {
 }
 
 export async function exchangeSessionTicket(
-  purpose:
-    | "socket"
-    | "message-search-read"
-    | "message-pins-read"
-    | "message-pins-write",
+  purpose: "socket" | "message-search-read",
   sessionToken: string
 ): Promise<Record<string, unknown>> {
   const res = await fetch(`/api/session-tickets/${purpose}`, {
@@ -35,10 +31,7 @@ export async function exchangeSessionTicket(
 }
 
 export async function exchangeSessionHttpTicket(
-  purpose:
-    | "message-search-read"
-    | "message-pins-read"
-    | "message-pins-write",
+  purpose: "message-search-read",
   sessionToken: string
 ): Promise<string> {
   const payload = await exchangeSessionTicket(purpose, sessionToken);

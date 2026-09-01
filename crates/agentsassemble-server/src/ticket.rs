@@ -543,13 +543,9 @@ impl TicketStore {
     pub(crate) async fn consume_message_pins_read(
         &self,
         ticket: &str,
-    ) -> Result<ConsumedRoomHumanTicket, TicketError> {
-        self.consume_room_human(
-            ticket,
-            RoomHttpPurpose::MessagePinsRead,
-            HumanSessionGrantPurpose::MessagePinsRead,
-        )
-        .await
+    ) -> Result<ConsumedRoomHttpTicket, TicketError> {
+        self.consume_room_http(ticket, &RoomHttpPurpose::MessagePinsRead)
+            .await
     }
 
     /// Consumes only an exact message-pin write credential.
@@ -560,13 +556,9 @@ impl TicketStore {
     pub(crate) async fn consume_message_pins_write(
         &self,
         ticket: &str,
-    ) -> Result<ConsumedRoomHumanTicket, TicketError> {
-        self.consume_room_human(
-            ticket,
-            RoomHttpPurpose::MessagePinsWrite,
-            HumanSessionGrantPurpose::MessagePinsWrite,
-        )
-        .await
+    ) -> Result<ConsumedRoomHttpTicket, TicketError> {
+        self.consume_room_http(ticket, &RoomHttpPurpose::MessagePinsWrite)
+            .await
     }
 
     /// Consumes only an exact lobby-message-search credential.

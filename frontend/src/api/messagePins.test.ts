@@ -95,16 +95,10 @@ describe("lobby message-pin HTTP authority", () => {
     });
   });
 
-  it("exchanges a remote session for a fresh purpose ticket per operation", async () => {
+  it("presents a remote session directly to each pin operation", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(
-        jsonResponse({ ticket: "c".repeat(64), ttl_seconds: 30 })
-      )
       .mockResolvedValueOnce(jsonResponse({ pins: [] }))
-      .mockResolvedValueOnce(
-        jsonResponse({ ticket: "d".repeat(64), ttl_seconds: 30 })
-      )
       .mockResolvedValueOnce(jsonResponse({ pinned: true, pins: [pin()] }));
     vi.stubGlobal("fetch", fetchMock);
     const authority = { kind: "remote", sessionToken: "aas1.session" } as const;
@@ -119,37 +113,27 @@ describe("lobby message-pin HTTP authority", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      "/api/session-tickets/message-pins-read",
-      {
-        cache: "no-store",
-        method: "POST",
-        headers: { Authorization: "Bearer aas1.session" },
-      }
+      "/api/room-pins?room_id=general&channel_id=lobby",
+      expect.objectContaining({ headers: expect.any(Headers) })
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
-      3,
-      "/api/session-tickets/message-pins-write",
-      {
-        cache: "no-store",
-        method: "POST",
-        headers: { Authorization: "Bearer aas1.session" },
-      }
+      2,
+      "/api/room-pins",
+      expect.objectContaining({ method: "POST", headers: expect.any(Headers) })
     );
-    const readHeaders = fetchMock.mock.calls[1]?.[1]?.headers as Headers;
-    const writeHeaders = fetchMock.mock.calls[3]?.[1]?.headers as Headers;
-    expect(readHeaders.get("Authorization")).toBe(`Bearer ${"c".repeat(64)}`);
-    expect(writeHeaders.get("Authorization")).toBe(`Bearer ${"d".repeat(64)}`);
-    expect(readHeaders.get("Authorization")).not.toContain("aas1.session");
-    expect(writeHeaders.get("Authorization")).not.toContain("aas1.session");
+    const readHeaders = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
+    const writeHeaders = fetchMock.mock.calls[1]?.[1]?.headers as Headers;
+    expect(readHeaders.get("Authorization")).toBe("Bearer aas1.session");
+    expect(writeHeaders.get("Authorization")).toBe("Bearer aas1.session");
   });
 
-  it("does not dispatch the target request when remote exchange is denied", async () => {
+  it("surfaces a read-only denial from the pin target", async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
       jsonResponse(
         {
           error: {
-            code: "session_read_only",
-            message: "Read-only room sessions cannot modify messages.",
+            code: "permission_denied",
+            message: "This room session cannot modify messages.",
           },
         },
         403
@@ -164,27 +148,9 @@ describe("lobby message-pin HTTP authority", () => {
         pinned: true,
         authority: { kind: "remote", sessionToken: "aas1.read-only" },
       })
-    ).rejects.toThrow("Read-only room sessions cannot modify messages.");
+    ).rejects.toThrow("This room session cannot modify messages.");
     expect(fetchMock).toHaveBeenCalledOnce();
-  });
-
-  it("does not dispatch the target request for a malformed exchanged grant", async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(
-      jsonResponse({
-        ticket: "c".repeat(64),
-        ttl_seconds: 30,
-        ignored: true,
-      })
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    await expect(
-      fetchLobbyMessagePins({
-        roomId: "general",
-        authority: { kind: "remote", sessionToken: "aas1.session" },
-      })
-    ).rejects.toThrow("ticket response");
-    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/room-pins");
   });
 
   it("checks local operation currentness after a deferred grant and before dispatch", async () => {
@@ -212,30 +178,21 @@ describe("lobby message-pin HTTP authority", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("checks remote operation currentness after exchange and before target dispatch", async () => {
-    let resolveExchange: ((value: Response) => void) | undefined;
-    const fetchMock = vi.fn().mockReturnValueOnce(
-      new Promise<Response>((resolve) => {
-        resolveExchange = resolve;
-      })
-    );
+  it("checks remote operation currentness immediately before target dispatch", async () => {
+    const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-    let current = true;
-    const request = setLobbyMessagePinned({
-      roomId: "general",
-      eventId: "event-1",
-      pinned: true,
-      authority: { kind: "remote", sessionToken: "aas1.session" },
-      beforeDispatch: () => {
-        if (!current) throw new Error("retired");
-      },
-    });
-
-    current = false;
-    resolveExchange?.(jsonResponse({ ticket: "c".repeat(64), ttl_seconds: 30 }));
-
-    await expect(request).rejects.toThrow("retired");
-    expect(fetchMock).toHaveBeenCalledOnce();
+    await expect(
+      setLobbyMessagePinned({
+        roomId: "general",
+        eventId: "event-1",
+        pinned: true,
+        authority: { kind: "remote", sessionToken: "aas1.session" },
+        beforeDispatch: () => {
+          throw new Error("retired");
+        },
+      })
+    ).rejects.toThrow("retired");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("rejects malformed complete-list state instead of projecting defaults", async () => {

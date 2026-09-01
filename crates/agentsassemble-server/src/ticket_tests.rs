@@ -178,7 +178,7 @@ async fn room_http_purposes_and_asset_bindings_are_consumed_on_mismatch() {
         .unwrap_or_else(|error| panic!("issue pin write: {error}"));
     assert!(matches!(
         store.consume_message_pins_write(&pin_write.ticket).await,
-        Ok(crate::ticket::ConsumedRoomHumanTicket::Local(_))
+        Ok(crate::ticket::ConsumedRoomHttpTicket { .. })
     ));
 
     let asset = store
@@ -297,18 +297,12 @@ async fn settings_directory_ticket_never_crosses_room_or_profile_scopes() {
 async fn human_session_grants_are_exact_purpose_and_one_use() {
     let fixture = HumanSessionFixture::new(1).await;
     let store = TicketStore::new(Duration::from_secs(30), 4_096);
-    assert!(matches!(
-        store
-            .issue_human_session_message_pins_write(fixture.authorize(0).await)
-            .await,
-        Err(TicketError::Invalid)
-    ));
-    let pin_read = store
-        .issue_human_session_message_pins_read(fixture.authorize(0).await)
+    let search_read = store
+        .issue_human_session_message_search_read(fixture.authorize(0).await)
         .await
-        .unwrap_or_else(|error| panic!("issue read-only pin grant: {error}"));
+        .unwrap_or_else(|error| panic!("issue read-only search grant: {error}"));
     assert!(matches!(
-        store.consume_message_pins_read(&pin_read.ticket).await,
+        store.consume_message_search_read(&search_read.ticket).await,
         Ok(crate::ticket::ConsumedRoomHumanTicket::HumanSession(_))
     ));
     let wrong_asset = store
@@ -405,17 +399,17 @@ async fn human_session_message_attachment_grants_are_exact_and_read_only_upload_
 async fn socket_hint_consumes_wrong_purpose_without_cross_authority_fallback() {
     let fixture = HumanSessionFixture::new(1).await;
     let store = TicketStore::new(Duration::from_secs(30), 4_096);
-    let pin_read = store
-        .issue_human_session_message_pins_read(fixture.authorize(0).await)
+    let search_read = store
+        .issue_human_session_message_search_read(fixture.authorize(0).await)
         .await
-        .unwrap_or_else(|error| panic!("issue wrong-purpose pin grant: {error}"));
+        .unwrap_or_else(|error| panic!("issue wrong-purpose search grant: {error}"));
 
     assert!(matches!(
-        store.socket_ticket_hint(&pin_read.ticket).await,
+        store.socket_ticket_hint(&search_read.ticket).await,
         Err(TicketError::Invalid)
     ));
     assert!(matches!(
-        store.consume_message_pins_read(&pin_read.ticket).await,
+        store.consume_message_search_read(&search_read.ticket).await,
         Err(TicketError::Invalid)
     ));
 }

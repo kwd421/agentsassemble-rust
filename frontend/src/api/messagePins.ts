@@ -13,11 +13,7 @@ import {
   MAX_LOBBY_MESSAGE_PINS,
   MAX_MESSAGE_EVENT_ID_BYTES,
 } from "../types/generated/MESSAGE_PINS_WIRE";
-import {
-  exchangeSessionHttpTicket,
-  queryString,
-  responseError,
-} from "./http";
+import { queryString, responseError } from "./http";
 import type { RoomHttpAuthority } from "./roomHttpAuthority";
 
 export type MessagePin = {
@@ -163,10 +159,7 @@ async function operationGrant(
   }
   return {
     baseUrl: "",
-    ticket: await exchangeSessionHttpTicket(
-      operation === "read" ? "message-pins-read" : "message-pins-write",
-      authority.sessionToken
-    ),
+    ticket: authority.sessionToken,
   };
 }
 

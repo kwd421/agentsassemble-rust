@@ -16,6 +16,9 @@ use crate::{
         BodyDecodeError, PRIVATE_NO_STORE, bearer_ticket, decode_json_body, ensure_empty_body,
         exact_tauri_cors,
     },
+    human_session_http_authority::{
+        HumanSessionBearerError, HumanSessionBearerResolution, resolve_human_session_bearer,
+    },
     ticket::ConsumedRoomHumanTicket,
 };
 
@@ -170,11 +173,19 @@ async fn consume_read_ticket(
     headers: &axum::http::HeaderMap,
 ) -> Result<ConsumedRoomHumanTicket, MessagePinsHttpError> {
     let ticket = bearer_ticket(headers).ok_or_else(MessagePinsHttpError::unauthorized)?;
-    state
-        .tickets
-        .consume_message_pins_read(ticket)
-        .await
-        .map_err(|_| MessagePinsHttpError::unauthorized())
+    match resolve_human_session_bearer(state, ticket).await {
+        Ok(HumanSessionBearerResolution::Authorized(authorization)) => {
+            Ok(ConsumedRoomHumanTicket::HumanSession(authorization))
+        }
+        Ok(HumanSessionBearerResolution::Other) => state
+            .tickets
+            .consume_message_pins_read(ticket)
+            .await
+            .map(ConsumedRoomHumanTicket::Local)
+            .map_err(|_| MessagePinsHttpError::unauthorized()),
+        Err(HumanSessionBearerError::Invalid) => Err(MessagePinsHttpError::unauthorized()),
+        Err(HumanSessionBearerError::Persistence(error)) => Err(error.into()),
+    }
 }
 
 async fn consume_write_ticket(
@@ -182,11 +193,19 @@ async fn consume_write_ticket(
     headers: &axum::http::HeaderMap,
 ) -> Result<ConsumedRoomHumanTicket, MessagePinsHttpError> {
     let ticket = bearer_ticket(headers).ok_or_else(MessagePinsHttpError::unauthorized)?;
-    state
-        .tickets
-        .consume_message_pins_write(ticket)
-        .await
-        .map_err(|_| MessagePinsHttpError::unauthorized())
+    match resolve_human_session_bearer(state, ticket).await {
+        Ok(HumanSessionBearerResolution::Authorized(authorization)) => {
+            Ok(ConsumedRoomHumanTicket::HumanSession(authorization))
+        }
+        Ok(HumanSessionBearerResolution::Other) => state
+            .tickets
+            .consume_message_pins_write(ticket)
+            .await
+            .map(ConsumedRoomHumanTicket::Local)
+            .map_err(|_| MessagePinsHttpError::unauthorized()),
+        Err(HumanSessionBearerError::Invalid) => Err(MessagePinsHttpError::unauthorized()),
+        Err(HumanSessionBearerError::Persistence(error)) => Err(error.into()),
+    }
 }
 
 async fn reauthorize_write(
@@ -262,7 +281,7 @@ impl MessagePinsHttpError {
         Self {
             status: StatusCode::UNAUTHORIZED,
             code: "unauthorized",
-            message: "A valid one-use message-pin ticket is required.".to_owned(),
+            message: "Valid message-pin authority is required.".to_owned(),
         }
     }
 

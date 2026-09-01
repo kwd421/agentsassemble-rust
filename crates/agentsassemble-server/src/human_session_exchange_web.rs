@@ -1,4 +1,4 @@
-use agentsassemble_domain::{InviteScope, is_message_attachment_id, is_room_appearance_asset_id};
+use agentsassemble_domain::{is_message_attachment_id, is_room_appearance_asset_id};
 use agentsassemble_persistence::PersistenceError;
 use agentsassemble_protocol::{CommandResolution, RoomAction};
 use axum::{
@@ -49,8 +49,6 @@ pub(crate) fn routes() -> Router<AppState> {
 registered_routes! {
     fn session_exchange_routes<AppState>() {
         same_origin_public "/api/session-tickets/socket" => post(issue_socket_ticket),
-        same_origin_public "/api/session-tickets/message-pins-read" => post(issue_message_pins_read_ticket),
-        same_origin_public "/api/session-tickets/message-pins-write" => post(issue_message_pins_write_ticket),
         same_origin_public "/api/session-tickets/message-search-read" => post(issue_message_search_read_ticket),
         same_origin_public "/api/session-tickets/message-attachment-upload" => post(issue_message_attachment_upload_ticket),
         same_origin_public "/api/session-tickets/message-attachment/{attachment_id}" => post(issue_message_attachment_read_ticket),
@@ -93,45 +91,6 @@ async fn issue_socket_ticket(
     let issued = state
         .tickets
         .issue_human_session_socket(authorization)
-        .await
-        .map_err(|_| SessionExchangeError::capacity())?;
-    Ok(Json(SessionTicketResponse {
-        ticket: issued.ticket,
-        ttl_seconds,
-    })
-    .into_response())
-}
-
-async fn issue_message_pins_read_ticket(
-    State(state): State<AppState>,
-    request: Request,
-) -> Result<Response, SessionExchangeError> {
-    let authorization = authorize_exchange(&state, request).await?;
-    let ttl_seconds = session_ticket_ttl(&state, &authorization);
-    let issued = state
-        .tickets
-        .issue_human_session_message_pins_read(authorization)
-        .await
-        .map_err(|_| SessionExchangeError::capacity())?;
-    Ok(Json(SessionTicketResponse {
-        ticket: issued.ticket,
-        ttl_seconds,
-    })
-    .into_response())
-}
-
-async fn issue_message_pins_write_ticket(
-    State(state): State<AppState>,
-    request: Request,
-) -> Result<Response, SessionExchangeError> {
-    let authorization = authorize_exchange(&state, request).await?;
-    if authorization.principal().invite_scope != InviteScope::ReadWrite {
-        return Err(SessionExchangeError::read_only_message_pins());
-    }
-    let ttl_seconds = session_ticket_ttl(&state, &authorization);
-    let issued = state
-        .tickets
-        .issue_human_session_message_pins_write(authorization)
         .await
         .map_err(|_| SessionExchangeError::capacity())?;
     Ok(Json(SessionTicketResponse {
@@ -286,14 +245,6 @@ impl SessionExchangeError {
             status: StatusCode::TOO_MANY_REQUESTS,
             code: "ticket_capacity_reached".to_owned(),
             message: "Session ticket capacity is unavailable.".to_owned(),
-        }
-    }
-
-    fn read_only_message_pins() -> Self {
-        Self {
-            status: StatusCode::FORBIDDEN,
-            code: "session_read_only".to_owned(),
-            message: "Read-only room sessions cannot change pinned messages.".to_owned(),
         }
     }
 
