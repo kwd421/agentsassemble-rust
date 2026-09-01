@@ -54,9 +54,9 @@ function pngResponse(body: BodyInit = pngBytes()) {
   });
 }
 
-function jsonResponse(value: unknown) {
+function jsonResponse(value: unknown, status = 200) {
   return new Response(JSON.stringify(value), {
-    status: 200,
+    status,
     headers: {
       "Cache-Control": "private, no-store",
       "Content-Type": "application/json",
@@ -178,13 +178,8 @@ describe("room appearance HTTP contract", () => {
     expect(secondHeaders.get("Authorization")).toBe(`Bearer ${"d".repeat(64)}`);
   });
 
-  it("exchanges a remote session once and reads only the bound canonical asset", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        jsonResponse({ ticket: "e".repeat(64), ttl_seconds: 30 })
-      )
-      .mockResolvedValueOnce(pngResponse());
+  it("sends the reusable remote session directly to the bound canonical asset", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(pngResponse());
     vi.stubGlobal("fetch", fetchMock);
 
     await fetchRoomAppearanceBlob(
@@ -195,18 +190,11 @@ describe("room appearance HTTP contract", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      `/api/session-tickets/room-appearance/${assetId}`,
-      expect.objectContaining({ method: "POST", headers: expect.any(Headers) })
-    );
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
       reference,
       expect.objectContaining({ headers: expect.any(Headers) })
     );
-    const exchangeHeaders = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
-    const readHeaders = fetchMock.mock.calls[1]?.[1]?.headers as Headers;
-    expect(exchangeHeaders.get("Authorization")).toBe("Bearer aas1.session");
-    expect(readHeaders.get("Authorization")).toBe(`Bearer ${"e".repeat(64)}`);
+    const readHeaders = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
+    expect(readHeaders.get("Authorization")).toBe("Bearer aas1.session");
     await expect(
       fetchRoomAppearanceBlob(
         reference,
@@ -214,7 +202,23 @@ describe("room appearance HTTP contract", () => {
         "pending"
       )
     ).rejects.toThrow("pending");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("surfaces a remote target denial without exchange or fallback", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: "session revoked" }, 401));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      fetchRoomAppearanceBlob(
+        reference,
+        { kind: "remote", sessionToken: "aas1.session" },
+        "bound"
+      )
+    ).rejects.toThrow("session revoked");
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 
   it("rejects noncanonical references and non-PNG reads without fallback", async () => {

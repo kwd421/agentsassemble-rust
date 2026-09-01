@@ -1,9 +1,8 @@
-use agentsassemble_domain::is_room_appearance_asset_id;
 use agentsassemble_persistence::PersistenceError;
 use agentsassemble_protocol::{CommandResolution, RoomAction};
 use axum::{
     Json, Router,
-    extract::{Path, Request, State},
+    extract::{Request, State},
     http::{Method, StatusCode, header},
     response::{IntoResponse, Response},
 };
@@ -49,7 +48,6 @@ pub(crate) fn routes() -> Router<AppState> {
 registered_routes! {
     fn session_exchange_routes<AppState>() {
         same_origin_public "/api/session-tickets/socket" => post(issue_socket_ticket),
-        same_origin_public "/api/session-tickets/room-appearance/{asset_id}" => post(issue_room_appearance_ticket),
         same_origin_public "/api/room-invite/leave" => post(leave_room),
     }
 }
@@ -88,28 +86,6 @@ async fn issue_socket_ticket(
     let issued = state
         .tickets
         .issue_human_session_socket(authorization)
-        .await
-        .map_err(|_| SessionExchangeError::capacity())?;
-    Ok(Json(SessionTicketResponse {
-        ticket: issued.ticket,
-        ttl_seconds,
-    })
-    .into_response())
-}
-
-async fn issue_room_appearance_ticket(
-    State(state): State<AppState>,
-    Path(asset_id): Path<String>,
-    request: Request,
-) -> Result<Response, SessionExchangeError> {
-    let authorization = authorize_exchange(&state, request).await?;
-    if !is_room_appearance_asset_id(&asset_id) {
-        return Err(SessionExchangeError::invalid_appearance_asset());
-    }
-    let ttl_seconds = session_ticket_ttl(&state, &authorization);
-    let issued = state
-        .tickets
-        .issue_human_session_bound_appearance_read(authorization, asset_id)
         .await
         .map_err(|_| SessionExchangeError::capacity())?;
     Ok(Json(SessionTicketResponse {
@@ -180,14 +156,6 @@ impl SessionExchangeError {
             status: StatusCode::TOO_MANY_REQUESTS,
             code: "ticket_capacity_reached".to_owned(),
             message: "Session ticket capacity is unavailable.".to_owned(),
-        }
-    }
-
-    fn invalid_appearance_asset() -> Self {
-        Self {
-            status: StatusCode::BAD_REQUEST,
-            code: "appearance_asset_invalid".to_owned(),
-            message: "A canonical room appearance asset is required.".to_owned(),
         }
     }
 

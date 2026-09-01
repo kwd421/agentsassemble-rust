@@ -404,21 +404,16 @@ async fn read_attachment(
                 "Room appearance assets require the exact view query.",
             ));
         }
-        let ticket =
-            bearer_credential(request.headers()).ok_or_else(ProfileHttpError::unauthorized)?;
-        let grant = state
-            .tickets
-            .consume_appearance_read(ticket, &attachment_id)
-            .await
-            .map_err(|_| ProfileHttpError::unauthorized())?;
-        let attachment = match grant {
-            ConsumedAppearanceReadTicket::Pending(grant) => {
+        let authority =
+            resolve_appearance_read_authority(&state, request.headers(), &attachment_id).await?;
+        let attachment = match authority {
+            AppearanceReadAuthority::Local(ConsumedAppearanceReadTicket::Pending(grant)) => {
                 state
                     .store
                     .pending_room_appearance_asset(&grant, &attachment_id)
                     .await?
             }
-            ConsumedAppearanceReadTicket::Bound(grant) => {
+            AppearanceReadAuthority::Local(ConsumedAppearanceReadTicket::Bound(grant)) => {
                 state
                     .store
                     .bound_room_appearance_asset(
@@ -429,7 +424,7 @@ async fn read_attachment(
                     )
                     .await?
             }
-            ConsumedAppearanceReadTicket::HumanSession(authorization) => {
+            AppearanceReadAuthority::HumanSession(authorization) => {
                 state
                     .store
                     .bound_human_session_room_appearance_asset(&authorization, &attachment_id)
@@ -496,6 +491,32 @@ enum ProfileAuthority {
 enum AttachmentUploadAuthority {
     Profile(ProfileAuthority),
     Appearance(agentsassemble_persistence::LocalRoomManagerAuthority),
+}
+
+enum AppearanceReadAuthority {
+    Local(ConsumedAppearanceReadTicket),
+    HumanSession(HumanSessionAuthorization),
+}
+
+async fn resolve_appearance_read_authority(
+    state: &AppState,
+    headers: &axum::http::HeaderMap,
+    asset_id: &str,
+) -> Result<AppearanceReadAuthority, ProfileHttpError> {
+    let credential = bearer_credential(headers).ok_or_else(ProfileHttpError::unauthorized)?;
+    match resolve_human_session_bearer(state, credential).await {
+        Ok(HumanSessionBearerResolution::Authorized(authorization)) => {
+            Ok(AppearanceReadAuthority::HumanSession(authorization))
+        }
+        Ok(HumanSessionBearerResolution::Other) => state
+            .tickets
+            .consume_appearance_read(credential, asset_id)
+            .await
+            .map(AppearanceReadAuthority::Local)
+            .map_err(|_| ProfileHttpError::unauthorized()),
+        Err(HumanSessionBearerError::Invalid) => Err(ProfileHttpError::unauthorized()),
+        Err(HumanSessionBearerError::Persistence(error)) => Err(error.into()),
+    }
 }
 
 async fn resolve_message_attachment_upload_authority(

@@ -1,7 +1,6 @@
 import {
   fileToBase64,
   isPrivateNoStoreResponse,
-  parseSessionHttpTicket,
   responseError,
 } from "./http";
 import {
@@ -130,26 +129,9 @@ async function fetchRemoteAppearance(
   if (!authority.sessionToken) {
     throw new Error("방 세션 권위를 사용할 수 없습니다.");
   }
-  const exchange = await fetch(
-    `/api/session-tickets/room-appearance/${reference.assetId}`,
-    {
-      cache: "no-store",
-      method: "POST",
-      headers: bearer(authority.sessionToken),
-      signal,
-    }
-  );
-  if (!exchange.ok) throw await responseError(exchange);
-  requireResponseMetadata(exchange, "application/json");
-  let ticket: string;
-  try {
-    ticket = parseSessionHttpTicket(await exchange.json());
-  } catch {
-    invalidResponse();
-  }
   return fetch(reference.url, {
     cache: "no-store",
-    headers: bearer(ticket),
+    headers: bearer(authority.sessionToken),
     signal,
   });
 }

@@ -320,36 +320,9 @@ async fn settings_directory_ticket_never_crosses_room_or_profile_scopes() {
 }
 
 #[tokio::test]
-async fn human_session_grants_are_exact_purpose_and_one_use() {
+async fn human_session_socket_grant_is_one_use() {
     let fixture = HumanSessionFixture::new(1).await;
     let store = TicketStore::new(Duration::from_secs(30), 4_096);
-    let wrong_asset = store
-        .issue_human_session_bound_appearance_read(
-            fixture.authorize(0).await,
-            "ra_00000000000000000000000000000000".to_owned(),
-        )
-        .await
-        .unwrap_or_else(|error| panic!("issue session appearance grant: {error}"));
-    assert!(matches!(
-        store
-            .consume_appearance_read(&wrong_asset.ticket, "ra_11111111111111111111111111111111",)
-            .await,
-        Err(TicketError::Invalid)
-    ));
-    let appearance = store
-        .issue_human_session_bound_appearance_read(
-            fixture.authorize(0).await,
-            "ra_00000000000000000000000000000000".to_owned(),
-        )
-        .await
-        .unwrap_or_else(|error| panic!("issue exact session appearance grant: {error}"));
-    assert!(matches!(
-        store
-            .consume_appearance_read(&appearance.ticket, "ra_00000000000000000000000000000000",)
-            .await,
-        Ok(crate::ticket::ConsumedAppearanceReadTicket::HumanSession(_))
-    ));
-
     let socket = store
         .issue_human_session_socket(fixture.authorize(0).await)
         .await
@@ -377,16 +350,17 @@ async fn human_session_grants_are_exact_purpose_and_one_use() {
 }
 
 #[tokio::test]
-async fn socket_hint_consumes_wrong_purpose_without_cross_authority_fallback() {
-    let fixture = HumanSessionFixture::new(1).await;
+async fn socket_hint_consumes_http_purpose_without_cross_authority_fallback() {
     let store = TicketStore::new(Duration::from_secs(30), 4_096);
     let appearance = store
-        .issue_human_session_bound_appearance_read(
-            fixture.authorize(0).await,
+        .issue_bound_appearance_read(
+            "general".to_owned(),
+            "operator-local-user".to_owned(),
+            "operator-local".to_owned(),
             "ra_00000000000000000000000000000000".to_owned(),
         )
         .await
-        .unwrap_or_else(|error| panic!("issue wrong-purpose appearance grant: {error}"));
+        .unwrap_or_else(|error| panic!("issue local appearance grant: {error}"));
 
     assert!(matches!(
         store.socket_ticket_hint(&appearance.ticket).await,
@@ -401,7 +375,7 @@ async fn socket_hint_consumes_wrong_purpose_without_cross_authority_fallback() {
 }
 
 #[tokio::test]
-async fn human_session_grant_rechecks_absolute_expiry_after_issue() {
+async fn human_session_socket_ticket_rechecks_absolute_expiry_after_issue() {
     let fixture = HumanSessionFixture::new(1).await;
     let store = TicketStore::new(Duration::from_secs(30), 4_096);
     let authorization = fixture.authorize(0).await;
@@ -424,7 +398,7 @@ async fn human_session_grant_rechecks_absolute_expiry_after_issue() {
 }
 
 #[tokio::test]
-async fn human_session_grants_enforce_per_session_limit_and_reclaim_consumption() {
+async fn human_session_socket_tickets_enforce_per_session_limit_and_reclaim_consumption() {
     let fixture = HumanSessionFixture::new(1).await;
     let store = TicketStore::new(Duration::from_secs(30), 4_096);
     let mut issued = Vec::new();
@@ -455,7 +429,7 @@ async fn human_session_grants_enforce_per_session_limit_and_reclaim_consumption(
 }
 
 #[tokio::test]
-async fn public_partition_preserves_private_reserve_and_reclaims_both_classes() {
+async fn public_socket_partition_preserves_private_reserve_and_reclaims_both_classes() {
     let fixture = HumanSessionFixture::new(3).await;
     let store = TicketStore::new(Duration::from_secs(30), 2_320);
     let mut public = Vec::new();
@@ -505,7 +479,7 @@ async fn public_partition_preserves_private_reserve_and_reclaims_both_classes() 
     assert!(store.issue(principal()).await.is_ok());
 
     let production = TicketStore::new(Duration::from_secs(30), 4_096);
-    assert_eq!(production.public_session_capacity(), 1_792);
+    assert_eq!(production.public_socket_capacity(), 1_792);
 }
 
 pub(crate) struct HumanSessionFixture {

@@ -4,7 +4,7 @@ use agentsassemble_domain::{
 };
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use reqwest::Client;
-use serde_json::{Value, json};
+use serde_json::json;
 
 mod support {
     pub mod human_invite;
@@ -14,7 +14,7 @@ mod support {
 use support::human_invite::{canonical_session_token, fixture, join, start};
 
 #[tokio::test]
-async fn human_session_exchanges_one_exact_bound_appearance_read() {
+async fn human_session_reads_exact_bound_appearance_directly() {
     let (store, credentials) = fixture(InviteScope::ReadOnly).await;
     let manager = store
         .authorize_local_room_manager(
@@ -65,44 +65,60 @@ async fn human_session_exchanges_one_exact_bound_appearance_read() {
     .await;
     let session_token = canonical_session_token(&admitted);
 
-    let raw_session = client
-        .get(format!("{}{}", server.base_url, stored.url))
+    exercise_session_reads(&client, &server.base_url, &stored.url, session_token).await;
+    server.stop().await;
+}
+
+async fn exercise_session_reads(
+    client: &Client,
+    base_url: &str,
+    asset_url: &str,
+    session_token: &str,
+) {
+    let readable = client
+        .get(format!("{base_url}{asset_url}"))
         .bearer_auth(session_token)
         .send()
         .await
-        .unwrap_or_else(|error| panic!("reject raw session appearance read: {error}"));
-    assert_eq!(raw_session.status(), reqwest::StatusCode::UNAUTHORIZED);
-    let invalid = client
+        .unwrap_or_else(|error| panic!("read direct room appearance: {error}"));
+    assert_private_png(readable).await;
+    let reusable = client
+        .get(format!("{base_url}{asset_url}"))
+        .bearer_auth(session_token)
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("reuse direct room appearance authority: {error}"));
+    assert_private_png(reusable).await;
+
+    let retired = client
         .post(format!(
-            "{}/api/session-tickets/room-appearance/profile_avatar",
-            server.base_url
+            "{base_url}/api/session-tickets/room-appearance/profile_avatar"
         ))
         .bearer_auth(session_token)
         .send()
         .await
-        .unwrap_or_else(|error| panic!("reject malformed appearance exchange: {error}"));
-    assert_eq!(invalid.status(), reqwest::StatusCode::BAD_REQUEST);
-
-    let ticket =
-        issue_appearance_ticket(&client, &server.base_url, session_token, &stored.id).await;
-    let readable = client
-        .get(format!("{}{}", server.base_url, stored.url))
-        .bearer_auth(&ticket)
+        .unwrap_or_else(|error| panic!("call retired appearance exchange: {error}"));
+    assert_eq!(retired.status(), reqwest::StatusCode::NOT_FOUND);
+    let malformed_session = client
+        .get(format!("{base_url}{asset_url}"))
+        .bearer_auth("aas1.malformed")
         .send()
         .await
-        .unwrap_or_else(|error| panic!("read exchanged room appearance: {error}"));
-    assert_private_png(readable).await;
-    let replay = client
-        .get(format!("{}{}", server.base_url, stored.url))
-        .bearer_auth(ticket)
+        .unwrap_or_else(|error| panic!("reject malformed appearance session: {error}"));
+    assert_eq!(
+        malformed_session.status(),
+        reqwest::StatusCode::UNAUTHORIZED
+    );
+    let reserved_id = client
+        .get(format!("{base_url}/api/attachments/ra_invalid?view=1"))
+        .bearer_auth(session_token)
         .send()
         .await
-        .unwrap_or_else(|error| panic!("reject appearance ticket replay: {error}"));
-    assert_eq!(replay.status(), reqwest::StatusCode::UNAUTHORIZED);
+        .unwrap_or_else(|error| panic!("reject malformed reserved appearance ID: {error}"));
+    assert_eq!(reserved_id.status(), reqwest::StatusCode::NOT_FOUND);
 
-    let stale = issue_appearance_ticket(&client, &server.base_url, session_token, &stored.id).await;
     let leave = client
-        .post(format!("{}/api/room-invite/leave", server.base_url))
+        .post(format!("{base_url}/api/room-invite/leave"))
         .bearer_auth(session_token)
         .json(&json!({}))
         .send()
@@ -110,38 +126,12 @@ async fn human_session_exchanges_one_exact_bound_appearance_read() {
         .unwrap_or_else(|error| panic!("leave appearance room: {error}"));
     assert_eq!(leave.status(), reqwest::StatusCode::OK);
     let revoked = client
-        .get(format!("{}{}", server.base_url, stored.url))
-        .bearer_auth(stale)
+        .get(format!("{base_url}{asset_url}"))
+        .bearer_auth(session_token)
         .send()
         .await
         .unwrap_or_else(|error| panic!("reject revoked appearance session: {error}"));
     assert_eq!(revoked.status(), reqwest::StatusCode::UNAUTHORIZED);
-    server.stop().await;
-}
-
-async fn issue_appearance_ticket(
-    client: &Client,
-    base_url: &str,
-    session_token: &str,
-    asset_id: &str,
-) -> String {
-    let response = client
-        .post(format!(
-            "{base_url}/api/session-tickets/room-appearance/{asset_id}"
-        ))
-        .bearer_auth(session_token)
-        .send()
-        .await
-        .unwrap_or_else(|error| panic!("exchange room appearance ticket: {error}"));
-    assert_eq!(response.status(), reqwest::StatusCode::OK);
-    assert_eq!(response.headers()["cache-control"], "private, no-store");
-    response
-        .json::<Value>()
-        .await
-        .unwrap_or_else(|error| panic!("decode room appearance ticket: {error}"))["ticket"]
-        .as_str()
-        .unwrap_or_else(|| panic!("room appearance ticket is missing"))
-        .to_owned()
 }
 
 async fn assert_private_png(response: reqwest::Response) {

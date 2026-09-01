@@ -10,7 +10,6 @@ use std::{
 
 use agentsassemble_domain::{AuthenticatedPrincipal, is_room_appearance_asset_id};
 use agentsassemble_persistence::{HumanSessionAuthorization, LocalRoomManagerAuthority};
-use chrono::Utc;
 use thiserror::Error;
 use tokio::{sync::Mutex, time::Instant};
 use uuid::Uuid;
@@ -18,11 +17,11 @@ use uuid::Uuid;
 mod human_session;
 mod message_attachments;
 
+use human_session::HumanSessionSocketGrant;
 pub(crate) use human_session::{
     ConsumedAttachmentUploadTicket, ConsumedSocketTicket, SocketTicketHint,
 };
 pub use human_session::{ConsumedHumanSessionSocketTicket, ConsumedProfileTicket};
-use human_session::{HumanSessionGrant, HumanSessionGrantPurpose};
 
 struct StoredTicketGrant {
     authority: TicketAuthority,
@@ -33,7 +32,7 @@ enum TicketAuthority {
     Room(AuthenticatedPrincipal),
     RoomHttp(RoomHttpGrant),
     LocalRoomManager(LocalRoomManagerGrant),
-    HumanSession(HumanSessionGrant),
+    HumanSessionSocket(HumanSessionSocketGrant),
     SettingsDirectoryRead {
         principal_id: String,
     },
@@ -119,7 +118,6 @@ pub(crate) enum RoomHumanHttpAuthority {
 pub(crate) enum ConsumedAppearanceReadTicket {
     Pending(LocalRoomManagerAuthority),
     Bound(ConsumedRoomHttpTicket),
-    HumanSession(HumanSessionAuthorization),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -630,15 +628,8 @@ impl TicketStore {
                 }
                 _ => Err(TicketError::Invalid),
             },
-            TicketAuthority::HumanSession(session) => Self::resolve_human_session_authority(
-                session,
-                &HumanSessionGrantPurpose::BoundAppearanceRead {
-                    asset_id: asset_id.to_owned(),
-                },
-                Utc::now(),
-            )
-            .map(ConsumedAppearanceReadTicket::HumanSession),
             TicketAuthority::Room(_)
+            | TicketAuthority::HumanSessionSocket(_)
             | TicketAuthority::SettingsDirectoryRead { .. }
             | TicketAuthority::ServerOperator { .. }
             | TicketAuthority::CentralRegistration { .. } => Err(TicketError::Invalid),

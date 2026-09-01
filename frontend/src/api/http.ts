@@ -29,26 +29,6 @@ export async function exchangeSessionSocketTicket(
   return payload as Record<string, unknown>;
 }
 
-export function parseSessionHttpTicket(payload: unknown): string {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    throw new Error("Session HTTP ticket response is invalid.");
-  }
-  const record = payload as Record<string, unknown>;
-  const keys = Object.keys(record).sort();
-  if (
-    keys.length !== 2 ||
-    keys[0] !== "ticket" ||
-    keys[1] !== "ttl_seconds" ||
-    typeof record.ticket !== "string" ||
-    !/^[0-9a-f]{64}$/.test(record.ticket) ||
-    !Number.isSafeInteger(record.ttl_seconds) ||
-    Number(record.ttl_seconds) < 1
-  ) {
-    throw new Error("Session HTTP ticket response is invalid.");
-  }
-  return record.ticket;
-}
-
 export function isPrivateNoStoreResponse(
   response: Response,
   contentType: string
