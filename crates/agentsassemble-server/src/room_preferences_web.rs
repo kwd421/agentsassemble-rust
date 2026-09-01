@@ -18,7 +18,7 @@ use tower_http::set_header::SetResponseHeaderLayer;
 use crate::{
     AppState,
     http_api::{
-        BodyDecodeError, PRIVATE_NO_STORE, bearer_ticket, decode_json_body, ensure_empty_body,
+        BodyDecodeError, PRIVATE_NO_STORE, bearer_credential, decode_json_body, ensure_empty_body,
         exact_tauri_cors,
     },
     human_session_http_authority::{
@@ -153,14 +153,15 @@ async fn resolve_preferences_read_authority(
     state: &AppState,
     headers: &axum::http::HeaderMap,
 ) -> Result<RoomHumanHttpAuthority, RoomPreferencesHttpError> {
-    let ticket = bearer_ticket(headers).ok_or_else(RoomPreferencesHttpError::unauthorized)?;
-    match resolve_human_session_bearer(state, ticket).await {
+    let credential =
+        bearer_credential(headers).ok_or_else(RoomPreferencesHttpError::unauthorized)?;
+    match resolve_human_session_bearer(state, credential).await {
         Ok(HumanSessionBearerResolution::Authorized(authorization)) => {
             Ok(RoomHumanHttpAuthority::HumanSession(authorization))
         }
         Ok(HumanSessionBearerResolution::Other) => state
             .tickets
-            .consume_preferences_read(ticket)
+            .consume_preferences_read(credential)
             .await
             .map(RoomHumanHttpAuthority::LocalTicket)
             .map_err(|_| RoomPreferencesHttpError::unauthorized()),
@@ -173,14 +174,15 @@ async fn resolve_preferences_write_authority(
     state: &AppState,
     headers: &axum::http::HeaderMap,
 ) -> Result<RoomHumanHttpAuthority, RoomPreferencesHttpError> {
-    let ticket = bearer_ticket(headers).ok_or_else(RoomPreferencesHttpError::unauthorized)?;
-    match resolve_human_session_bearer(state, ticket).await {
+    let credential =
+        bearer_credential(headers).ok_or_else(RoomPreferencesHttpError::unauthorized)?;
+    match resolve_human_session_bearer(state, credential).await {
         Ok(HumanSessionBearerResolution::Authorized(authorization)) => {
             Ok(RoomHumanHttpAuthority::HumanSession(authorization))
         }
         Ok(HumanSessionBearerResolution::Other) => state
             .tickets
-            .consume_preferences_write(ticket)
+            .consume_preferences_write(credential)
             .await
             .map(RoomHumanHttpAuthority::LocalTicket)
             .map_err(|_| RoomPreferencesHttpError::unauthorized()),
@@ -217,7 +219,7 @@ async fn consume_directory_ticket(
     state: &AppState,
     headers: &axum::http::HeaderMap,
 ) -> Result<(), RoomPreferencesHttpError> {
-    let ticket = bearer_ticket(headers).ok_or_else(RoomPreferencesHttpError::unauthorized)?;
+    let ticket = bearer_credential(headers).ok_or_else(RoomPreferencesHttpError::unauthorized)?;
     let grant = state
         .tickets
         .consume_settings_directory_read(ticket)

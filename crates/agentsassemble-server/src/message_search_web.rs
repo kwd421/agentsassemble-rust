@@ -13,7 +13,7 @@ use tower_http::set_header::SetResponseHeaderLayer;
 use crate::{
     AppState,
     http_api::{
-        BodyDecodeError, PRIVATE_NO_STORE, bearer_ticket, ensure_empty_body, exact_tauri_cors,
+        BodyDecodeError, PRIVATE_NO_STORE, bearer_credential, ensure_empty_body, exact_tauri_cors,
     },
     ticket::RoomHumanHttpAuthority,
 };
@@ -155,7 +155,7 @@ async fn consume_ticket(
     state: &AppState,
     headers: &axum::http::HeaderMap,
 ) -> Result<RoomHumanHttpAuthority, MessageSearchHttpError> {
-    let ticket = bearer_ticket(headers).ok_or_else(MessageSearchHttpError::unauthorized)?;
+    let ticket = bearer_credential(headers).ok_or_else(MessageSearchHttpError::unauthorized)?;
     state
         .tickets
         .consume_message_search_read(ticket)

@@ -19,7 +19,7 @@ use crate::{
     AppState, ConsumedProfileTicket,
     http_api::{
         BodyDecodeError, DEVICE_CREDENTIAL_HEADER, INVITE_CREDENTIAL_HEADER,
-        MAX_BASE64_UPLOAD_BODY_BYTES, PRIVATE_NO_STORE, bearer_ticket, decode_json_body,
+        MAX_BASE64_UPLOAD_BODY_BYTES, PRIVATE_NO_STORE, bearer_credential, decode_json_body,
         ensure_empty_body, exact_tauri_cors,
     },
     human_browser_credential::fingerprint_browser_credential,
@@ -168,7 +168,7 @@ async fn upload_attachment(
         | (Some(AttachmentUploadAuthority::Profile(_)) | None, "profile_avatar") => {}
         (Some(_), _) => {
             return Err(ProfileHttpError::bad_request(
-                "Attachment purpose does not match its one-use authority.",
+                "Attachment purpose does not match its authority.",
             ));
         }
         (None, _) => {
@@ -365,7 +365,8 @@ async fn read_attachment(
                 ));
             }
         };
-        let ticket = bearer_ticket(request.headers()).ok_or_else(ProfileHttpError::unauthorized)?;
+        let ticket =
+            bearer_credential(request.headers()).ok_or_else(ProfileHttpError::unauthorized)?;
         let grant = state
             .tickets
             .consume_message_attachment_read(ticket, &attachment_id)
@@ -404,7 +405,8 @@ async fn read_attachment(
                 "Room appearance assets require the exact view query.",
             ));
         }
-        let ticket = bearer_ticket(request.headers()).ok_or_else(ProfileHttpError::unauthorized)?;
+        let ticket =
+            bearer_credential(request.headers()).ok_or_else(ProfileHttpError::unauthorized)?;
         let grant = state
             .tickets
             .consume_appearance_read(ticket, &attachment_id)
@@ -503,8 +505,8 @@ async fn resolve_attachment_upload_authority(
     state: &AppState,
     headers: &axum::http::HeaderMap,
 ) -> Result<AttachmentUploadAuthority, ProfileHttpError> {
-    let ticket = bearer_ticket(headers).ok_or_else(ProfileHttpError::unauthorized)?;
-    match resolve_human_session_bearer(state, ticket).await {
+    let credential = bearer_credential(headers).ok_or_else(ProfileHttpError::unauthorized)?;
+    match resolve_human_session_bearer(state, credential).await {
         Ok(HumanSessionBearerResolution::Authorized(authorization)) => {
             return Ok(AttachmentUploadAuthority::Profile(
                 ProfileAuthority::HumanSession(authorization),
@@ -516,7 +518,7 @@ async fn resolve_attachment_upload_authority(
     }
     match state
         .tickets
-        .consume_attachment_upload(ticket)
+        .consume_attachment_upload(credential)
         .await
         .map_err(|_| ProfileHttpError::unauthorized())?
     {
@@ -536,8 +538,8 @@ async fn resolve_profile_authority(
     state: &AppState,
     headers: &axum::http::HeaderMap,
 ) -> Result<ProfileAuthority, ProfileHttpError> {
-    let ticket = bearer_ticket(headers).ok_or_else(ProfileHttpError::unauthorized)?;
-    match resolve_human_session_bearer(state, ticket).await {
+    let credential = bearer_credential(headers).ok_or_else(ProfileHttpError::unauthorized)?;
+    match resolve_human_session_bearer(state, credential).await {
         Ok(HumanSessionBearerResolution::Authorized(authorization)) => {
             return Ok(ProfileAuthority::HumanSession(authorization));
         }
@@ -548,7 +550,7 @@ async fn resolve_profile_authority(
     profile_authority(
         state
             .tickets
-            .consume_profile(ticket)
+            .consume_profile(credential)
             .await
             .map_err(|_| ProfileHttpError::unauthorized())?,
     )

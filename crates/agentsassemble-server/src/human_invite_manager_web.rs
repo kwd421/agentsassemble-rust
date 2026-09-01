@@ -15,7 +15,7 @@ use uuid::Uuid;
 use crate::{
     AppState,
     http_api::{
-        BodyDecodeError, PRIVATE_NO_STORE, bearer_ticket, decode_json_body, exact_tauri_cors,
+        BodyDecodeError, PRIVATE_NO_STORE, bearer_credential, decode_json_body, exact_tauri_cors,
     },
     human_invite_credentials::{HumanInviteCredentialDraft, format_invite_timestamp},
     ticket::ConsumedHumanInviteManagerTicket,
@@ -180,7 +180,7 @@ async fn consume_create_ticket(
     state: &AppState,
     headers: &axum::http::HeaderMap,
 ) -> Result<ConsumedHumanInviteManagerTicket, InviteManagerHttpError> {
-    let ticket = bearer_ticket(headers).ok_or_else(InviteManagerHttpError::unauthorized)?;
+    let ticket = bearer_credential(headers).ok_or_else(InviteManagerHttpError::unauthorized)?;
     state
         .tickets
         .consume_human_invite_create(ticket)
@@ -192,7 +192,7 @@ async fn consume_revoke_ticket(
     state: &AppState,
     headers: &axum::http::HeaderMap,
 ) -> Result<ConsumedHumanInviteManagerTicket, InviteManagerHttpError> {
-    let ticket = bearer_ticket(headers).ok_or_else(InviteManagerHttpError::unauthorized)?;
+    let ticket = bearer_credential(headers).ok_or_else(InviteManagerHttpError::unauthorized)?;
     state
         .tickets
         .consume_human_invite_revoke(ticket)

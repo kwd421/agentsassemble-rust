@@ -15,7 +15,7 @@ use tower_http::set_header::SetResponseHeaderLayer;
 use crate::{
     AppState,
     http_api::{
-        BodyDecodeError, PRIVATE_NO_STORE, bearer_ticket, decode_json_body, ensure_empty_body,
+        BodyDecodeError, PRIVATE_NO_STORE, bearer_credential, decode_json_body, ensure_empty_body,
         exact_tauri_cors,
     },
     human_session_bearer::fingerprint_presented_bearer,
@@ -199,7 +199,7 @@ async fn authorize_presented_session(
     state: &AppState,
     headers: &axum::http::HeaderMap,
 ) -> Result<agentsassemble_persistence::HumanSessionAuthorization, SessionExchangeError> {
-    let fingerprint = bearer_ticket(headers)
+    let fingerprint = bearer_credential(headers)
         .and_then(fingerprint_presented_bearer)
         .ok_or_else(SessionExchangeError::unauthorized)?;
     state

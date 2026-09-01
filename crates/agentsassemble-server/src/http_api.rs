@@ -36,7 +36,7 @@ pub(crate) fn exact_tauri_cors(methods: impl IntoIterator<Item = Method>) -> Cor
         .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
 }
 
-pub(crate) fn bearer_ticket(headers: &HeaderMap) -> Option<&str> {
+pub(crate) fn bearer_credential(headers: &HeaderMap) -> Option<&str> {
     headers
         .get(header::AUTHORIZATION)?
         .to_str()
@@ -49,7 +49,7 @@ pub(crate) async fn consume_local_operator(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Option<NonZeroU64> {
-    let ticket = bearer_ticket(headers)?;
+    let ticket = bearer_credential(headers)?;
     state
         .tickets
         .consume_server_operator(ticket)
@@ -60,7 +60,7 @@ pub(crate) async fn consume_local_operator(
 }
 
 pub(crate) async fn consume_central_registration(state: &AppState, headers: &HeaderMap) -> bool {
-    let Some(ticket) = bearer_ticket(headers) else {
+    let Some(ticket) = bearer_credential(headers) else {
         return false;
     };
     state

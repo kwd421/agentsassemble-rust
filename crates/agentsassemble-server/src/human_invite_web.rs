@@ -19,7 +19,7 @@ use tower_http::{cors::CorsLayer, set_header::SetResponseHeaderLayer};
 use crate::{
     AppState,
     http_api::{
-        BodyDecodeError, DEVICE_CREDENTIAL_HEADER, PRIVATE_NO_STORE, bearer_ticket,
+        BodyDecodeError, DEVICE_CREDENTIAL_HEADER, PRIVATE_NO_STORE, bearer_credential,
         decode_json_body, exact_tauri_cors,
     },
     human_browser_credential::fingerprint_browser_credential,
@@ -101,7 +101,7 @@ async fn preflight(
         ));
     }
     let browser_credential = browser_credential.to_owned();
-    let session_bearer = bearer_ticket(request.headers());
+    let session_bearer = bearer_credential(request.headers());
     if session_bearer.is_some_and(|bearer| {
         crate::human_session_bearer::fingerprint_presented_bearer(bearer).is_none()
     }) {
