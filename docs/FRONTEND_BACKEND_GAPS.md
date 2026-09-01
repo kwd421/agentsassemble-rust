@@ -11,7 +11,7 @@ do not override the current findings in
 `docs/PRODUCT_REIMPLEMENTATION_PLAN.md`. Friends, side-chat, custom-channel, Room
 Connector, pairing-issuer, companion, and public Google account entry points are now
 inactive while their Rust owners are absent; copied provider controls and a dormant
-AI-friend branch still require correction, and Agent Session identity plus several provider
+source set still require correction, and Agent Session identity plus several provider
 completion/lifecycle contracts are reopened. D-01 removed the uncalled
 HTTP host-challenge routes and startup secret at `a7949bd`; remote profile,
 preferences, message pins, message search, message attachments, and bound
@@ -84,7 +84,7 @@ boundary resumes explicitly at `Historical public Rust slice and provenance reco
 | Accounts/Google/operator pairing/companion | public Google account settings and their absent-route client are inactive through `96a7573`; copied operator-pairing issuance and companion controls are inactive through `11e167b` and `7159c2d`, while central startup identity and incoming pairing redemption remain separate incomplete flows |
 | Provider operations | four providers registered; only DeepSeek credential operations exist; copied provider-response write UI/state and the always-empty provider-request snapshot field are locally removed through `cccf513`, while other login/usage/refresh controls overclaim |
 | Room Connector | original retained flow and Rust owner absent; the copied obsolete invite entry is inactive through `762ba40` |
-| External/managed AgentBridge | complete admission/runtime owners absent; the companion entry is inactive through `7159c2d`, while the dormant AI-friend branch remains pending source cleanup |
+| External/managed AgentBridge | complete admission/runtime owners absent; the companion entry is inactive through `7159c2d`, and the producerless AI-friend packet branch plus obsolete moderator client are absent through `fd74b90` |
 | Runtime/update/resources/release diagnostics | dormant or partly unreachable copied source; no parity claim |
 
 ## Python backend behavior with no direct React exposure

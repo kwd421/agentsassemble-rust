@@ -309,6 +309,15 @@ complete 102-file/640-test frontend suite, production build, exact CSS gate, arc
 gate, and diff check pass. Dormant AI-friend and evidence-backed dormant-source cleanup
 remain in F-05; no backend completion is claimed.
 
+Local feature commit `fd74b90` removes the producerless AI-friend invite state/actions,
+obsolete moderator/host-token `createRoomInvite` client, optional controller session
+credential, and the unreferenced invite-copy helper. The current managed-human invite
+and public-ingress owner is unchanged. Repository-wide frontend search finds no active
+caller or exported AI-friend packet action; the focused 13-test controller suite,
+complete 102-file/639-test frontend suite, production build, unchanged exact CSS gate,
+architecture gate, and diff check pass. Evidence-backed dormant-source cleanup remains
+in F-05; no AgentBridge backend completion is claimed.
+
 ### F-06 — Agent Session identity SSoT is reversed in frontend projection
 
 Disposition: `Fix`; high product/medium ownership impact.

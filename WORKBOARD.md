@@ -59,8 +59,10 @@ contracts, findings, or verification journals.
   Local feature commit `96a7573` removes the public Google account-settings mount,
   absent `/api/account*` client contract, and browser script loader while preserving
   central startup identity, guest recovery, and ordinary profile editing. The production
-  build and all 102 frontend files/640 tests pass. The dormant AI-friend invite branch
-  and evidence-backed dormant-source cleanup remain in F-05.
+  build and all 102 frontend files/640 tests pass. Local feature commit `fd74b90` then
+  removes the producerless AI-friend packet branch and its obsolete moderator client
+  while preserving managed human invitation; all 102 frontend files/639 tests pass.
+  Evidence-backed dormant-source cleanup remains in F-05.
 - Sequence/exit owner: [`docs/PRODUCT_REIMPLEMENTATION_PLAN.md`](docs/PRODUCT_REIMPLEMENTATION_PLAN.md)
 - Finding/evidence owner: [`docs/architecture/REPOSITORY_AUDIT_2026-09-01.md`](docs/architecture/REPOSITORY_AUDIT_2026-09-01.md)
 - Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`;

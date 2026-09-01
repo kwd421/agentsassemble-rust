@@ -5576,3 +5576,24 @@ raw bytes total 838.11 kB and the displayed gzip figures total 252.31 kB. CSS is
 These are build-size observations; the owning-boundary intent is to remove user-triggered
 requests and script injection to an absent authority, not to claim measured runtime CPU,
 memory, or latency improvement.
+
+### F-05 dormant AI-friend invite branch: 2026-09-01
+
+After the Friends surface left the production graph, `useRoomInviteController` still
+owned producerless per-friend status and remote-packet state plus an `inviteFriend`
+branch. That branch called the copied moderator/host-token invite client rather than the
+current managed-human invite owner. Nothing consumed its returned fields or actions.
+
+Commit `fd74b90` removes the unused state, actions, optional session-token input,
+obsolete `createRoomInvite` client contract, and the now-unreferenced invite-copy module.
+Managed human invite custody, public-ingress start/stop, incoming pairing redemption,
+and room admission remain unchanged. No bridge placeholder, compatibility shim,
+fallback authority, retry, polling, timer, or silent failure replaces the branch.
+
+The focused invite-controller suite passes 13 tests, all 102 frontend files/639 tests
+pass, and the production build, exact CSS gate, architecture gate, and diff check pass.
+The controller is 426 lines after its second authority/state branch leaves. Emitted
+JavaScript is a 5.18/2.15 kB `AdminPanel` chunk plus an 830.23/249.36 kB main chunk:
+raw bytes total 835.41 kB and displayed gzip figures total 251.51 kB. Against the public
+account candidate this is a 2.70/0.80 kB JavaScript reduction; CSS is unchanged at
+168.65/29.55 kB. These are build-size observations, not a runtime performance claim.
