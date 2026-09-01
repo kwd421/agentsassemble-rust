@@ -87,6 +87,24 @@ only after the correction commit is pushed and re-reviewed.
   `b558da5` rollback/review limitation in their documented states. Approval closes
   the Phase 0A plan and finding route only; it does not close pending product work.
 
+### Phase 0B D-01/D-02 manual cross-review closure
+
+- Critical ChatGPT Pro initially returned `REVISE — C0/H0/M2/L2` for
+  `4ab5ee1..640429e`: the master plan still routed completed D-02 work, the remote
+  socket-ticket parser accepted the retired proof field, the 256 KiB frame policy
+  had independent Rust/TypeScript owners, and the retired-envelope TCP test did not
+  reproduce the canonical old base64 wire shape.
+- Daybreaker Blue High initially returned `REVISE — C0/H0/M2/L2` for the same
+  batch: it confirmed the parser, frame-limit, TCP-fixture, and stale proof-era
+  vocabulary findings. Its correction reviews additionally found protocol-limit
+  literals in integration assertions and unused proof-era frame/counter/async test
+  harness ceremony.
+- Corrections `e434496..aea2a06` close those findings without restoring a proof,
+  compatibility path, or second policy owner. Critical ChatGPT Pro and Daybreaker
+  Blue High each manually approved every correction, cumulative
+  `640429e..aea2a06`, full `4ab5ee1..aea2a06`, and final public HEAD `aea2a06` at
+  `APPROVE — C0/H0/M0/L0`.
+
 ## Fix findings
 
 ### F-01 — Antigravity transcript remains live
