@@ -244,8 +244,7 @@
   opacity: 0.5;
 }
 
-.dc-agent-add-entry,
-.dc-home-agent-add {
+.dc-agent-add-entry {
   display: inline-flex;
   align-items: center;
   justify-content: center;

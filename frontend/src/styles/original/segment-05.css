@@ -22,13 +22,6 @@
   gap: 12px;
 }
 
-.dc-home-agent-add {
-  width: 100%;
-  min-height: 34px;
-  margin-bottom: 8px;
-  padding: 0 10px;
-}
-
 .dc-profile-card-title > div {
   min-width: 0;
 }

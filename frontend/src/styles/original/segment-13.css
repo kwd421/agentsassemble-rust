@@ -23,8 +23,7 @@
     transition: transform 180ms ease;
   }
 
-  .dc-sidebar,
-  .dc-home-sidebar {
+  .dc-sidebar {
     position: fixed;
     z-index: 82;
     top: 0;
@@ -39,8 +38,7 @@
   }
 
   .dc-shell[data-mobile-sidebar-open="true"] .dc-rail,
-  .dc-shell[data-mobile-sidebar-open="true"] .dc-sidebar,
-  .dc-shell[data-mobile-sidebar-open="true"] .dc-home-sidebar {
+  .dc-shell[data-mobile-sidebar-open="true"] .dc-sidebar {
     transform: translateX(0);
   }
 
