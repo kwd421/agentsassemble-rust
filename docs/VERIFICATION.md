@@ -5793,7 +5793,7 @@ the small avatar branch would add an interface and glue without separating an
 independent state or invariant owner.
 
 Focused lobby verification passes 18/18. After the CSS correction the production
-frontend emits 150,971 raw bytes and 26,842 gzip bytes with SHA-256
+frontend emits 150,971 raw bytes and 26,579 `gzip -9` bytes with SHA-256
 `5f4c8d4033bfa732da672a0c2316893d73a6ffd3c56f0a34ff97190b81c7cc96`; all 98
 files/619 tests pass. A
 fresh complete `make verify`, including real TCP-boundary tests, passes in 228.86
