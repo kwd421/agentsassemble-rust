@@ -4,8 +4,8 @@ import { resolve } from "node:path";
 
 const expectedCss = new Map([
   [
-    "index-DgGjXyoy.css",
-    "7dddbd94d94f8696bd9fdd575aa359fed3f1021e6b0a500aa70e70a9572cb454",
+    "index-Bh5TkY5m.css",
+    "5f4c8d4033bfa732da672a0c2316893d73a6ffd3c56f0a34ff97190b81c7cc96",
   ],
 ]);
 

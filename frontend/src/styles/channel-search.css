@@ -116,7 +116,7 @@
   font-weight: 900;
 }
 
-.dc-head-search-result-avatar img {
+.dc-head-search-result-avatar > img {
   position: absolute;
   width: 100%;
   height: 100%;
