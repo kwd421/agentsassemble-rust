@@ -5667,3 +5667,10 @@ documented raw/displayed-gzip measures. The reduced frontend passes 98 files/617
 tests. Because the source was unreachable, this records source/state reduction and
 does not claim a runtime CPU or latency improvement. No route, placeholder, timer,
 polling, retry, fallback, compatibility path, or alternative authority is added.
+
+A fresh complete `make verify` passes in 281.37 seconds with a 575,832,064-byte
+maximum resident set. Critical ChatGPT Pro and Daybreaker Blue High manually
+reviewed every individual commit, exact `e0c6ad0..d338936`, cumulative F-05
+`8903445..d338936`, and HEAD `d338936`. Each returned
+`APPROVE C0/H0/M0/L0` with no actionable finding and without an automated
+security scan.
