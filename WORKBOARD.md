@@ -130,8 +130,14 @@ contracts, findings, or verification journals.
   visual recheck remains explicit `unknown`: central guest creation stayed pending on
   two bounded attempts, local-mode Antigravity failed on an unapproved terminal command,
   and the required OpenCode Muse Spark model was absent from that run's catalog. No
-  alternate model, retry loop, or fallback was used. Final correction/cumulative
-  approval and the complete Agent profile mutation/asset owner remain open.
+  alternate model, retry loop, or fallback was used. Daybreaker and critical-web Pro
+  each found the same documentation-only Low: `e912e75` carried the preceding CSS
+  artifact's gzip byte count. Correction `7566d3f` records the SHA-matching current
+  artifact's 26,579 `gzip -9` bytes. Both reviewers approved `0363622`, `7566d3f`,
+  exact `12430b1..7566d3f`, original search batch `35bc375..7566d3f`, cumulative
+  F-06 `8903445..7566d3f`, and HEAD `7566d3f` at `C0/H0/M0/L0`; `e912e75` alone
+  retains its historical L1. The complete Agent profile mutation/asset owner remains
+  open.
 - Build-artifact lifecycle correction is complete through `537c1b9`. macOS uses
   packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the

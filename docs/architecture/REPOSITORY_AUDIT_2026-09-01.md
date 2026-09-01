@@ -449,7 +449,13 @@ stayed pending on two bounded attempts, the real Antigravity turn failed on an
 unapproved terminal command, and the required OpenCode Muse Spark model was absent
 from the current catalog. No substitute, retry loop, fallback, or placeholder was
 used. The Codex lifecycle failure and future complete Agent profile mutation/avatar
-owner keep F-06 open.
+owner keep F-06 open. Daybreaker Blue High and critical-web Pro each found the same
+documentation-only Low in `e912e75`: its current CSS SHA was paired with the prior
+artifact's gzip byte count. `7566d3f` corrects that value to the independently
+reproduced 26,579 `gzip -9` bytes. Both reviewers approved `0363622`, `7566d3f`,
+exact `12430b1..7566d3f`, original search batch `35bc375..7566d3f`, cumulative
+F-06 `8903445..7566d3f`, and HEAD `7566d3f` at `C0/H0/M0/L0`; the superseded
+`e912e75` remains an individual `C0/H0/M0/L1` result.
 
 ### F-07 — provider catalog and controls overstate real operations
 

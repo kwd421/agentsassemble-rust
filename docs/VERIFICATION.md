@@ -5814,4 +5814,11 @@ packaged `unknown` rather than a visual-pass claim. The exact app and both runs'
 isolated profile/cache/WebKit/preferences data were removed; no owned app, sidecar, or
 provider process remained. Cargo release artifacts reclaimed 1.9 GiB while the 21 GiB
 debug cache required for the next incremental verification was retained. Critical
-ChatGPT Pro and Daybreaker Blue High correction/cumulative approval remain pending.
+ChatGPT Pro and Daybreaker Blue High each manually reviewed the correction without an
+automated scan. Both found the documentation-only Low in `e912e75`: it used the
+preceding artifact's 26,842-byte gzip result for the new SHA. Commit `7566d3f`
+records the independently reproduced 26,579 `gzip -9` bytes. Both reviewers approved
+`0363622`, `7566d3f`, exact `12430b1..7566d3f`, original search batch
+`35bc375..7566d3f`, cumulative F-06 `8903445..7566d3f`, and HEAD `7566d3f` at
+`C0/H0/M0/L0`; `e912e75` alone remains `C0/H0/M0/L1` because its error is repaired
+by the following commit.
