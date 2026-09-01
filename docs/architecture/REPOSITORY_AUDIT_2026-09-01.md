@@ -459,10 +459,11 @@ F-06 `8903445..7566d3f`, and HEAD `7566d3f` at `C0/H0/M0/L0`; the superseded
 
 ### F-07 — provider catalog and controls overstate real operations
 
-Disposition: `Fix`; medium product/structure impact.
+Disposition: `Fixed through d081761; correction review pending`; medium
+product/structure impact.
 
-- `catalog.rs:402-407` substitutes the first discovered model when the preferred
-  model is missing. The OpenCode preference at `catalog.rs:191` is still
+- Before `5b94ac6`, `catalog.rs` substituted the first discovered model when the
+  preferred model was missing, and the OpenCode preference still named
   `opencode/hy3-free`, contrary to the selected Muse Spark flow.
 - Commits `582a02e`, `edfb7c5`, and `c890a9a` close the operation-exposure half of
   this finding. The Rust registration descriptor now advertises the credential exposure
@@ -496,8 +497,17 @@ Disposition: `Fix`; medium product/structure impact.
   `020d89f`, and `b6d844b`, exact `f934382..b6d844b`, full correction
   `879db4b..b6d844b`, cumulative `5ec012f..b6d844b`, and HEAD `b6d844b` at
   `C0/H0/M0/L0`.
-- The remaining issue is exact model selection: the first-discovered-model
-  substitution and stale OpenCode preference above are unchanged.
+- Commit `5b94ac6` makes the exact advertised
+  `opencode/muse-spark-1.2-contributor-free` the sole OpenCode preference and leaves
+  a ready nonempty catalog unselected when that preference is absent. Backend exact
+  selection remains authoritative; empty catalogs and invalid non-model defaults
+  still fail closed. Commit `1959a08` removes the same first-option substitution from
+  the frontend scoped projection and requires an explicit exact selection, even for
+  one candidate. Commit `d081761` removes the producerless `stale_cache` source,
+  status branch, and test without replacing it. Both manual reviewers approve each
+  source commit at `C0/H0/M0/L0`; each revises exact `67303e0..d081761` and HEAD
+  `d081761` only at `C0/H0/M0/L1` for the stale current-state records corrected here.
+  Final correction re-review remains pending.
 
 Require an exact verified preferred model or explicit unavailable/unselected state.
 Advertise login, credential, usage, refresh, and model operations only from their
@@ -811,8 +821,10 @@ controls in F-07. Commits `edfb7c5` and `c890a9a` remove unsupported refresh and
 operations instead of inventing descriptor fields without a server owner. Correction
 `1313aba` removes the now-producerless dynamic quota contract and decouples roster
 ownership from quota visibility instead of preserving a speculative future surface. Exact
-model selection remains separate and open. Provider-native authentication and model
-rules stay in their modules. Do not build a speculative plugin framework.
+model selection is closed at its existing Rust catalog and frontend projection owners
+through `5b94ac6` and `1959a08`; `d081761` removes the dead cached-source branch.
+Provider-native authentication and model rules stay in their modules. Do not build a
+speculative plugin framework.
 
 ### C-09 — future-only activity-plugin state occupies the live room contract
 
@@ -1098,8 +1110,9 @@ application owner is demonstrated.
 Disposition: `Keep validation, remove selection fallback`.
 
 CLI discovery output and executable/model identity can be stale or substituted.
-Keep bounded parsing and exact selection validation. The unrelated preferred-model
-to first-model substitution remains F-07 and must be removed.
+Keep bounded parsing and exact selection validation. Commits `5b94ac6` and `1959a08`
+remove the preferred-model-to-first-model substitution at the Rust and frontend
+projection owners; absence now remains an explicit unselected state.
 
 ### K-08 — exact request replay owns a real ACK-loss window
 

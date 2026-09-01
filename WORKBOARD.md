@@ -184,9 +184,20 @@ contracts, findings, or verification journals.
   Manual source re-review of public HEAD `b6d844b` is now complete. Critical-web Pro
   and Daybreaker each approve individual `703b5c6`, `8beb103`, `020d89f`, and
   `b6d844b`, exact `f934382..b6d844b`, full correction `879db4b..b6d844b`,
-  cumulative `5ec012f..b6d844b`, and HEAD `b6d844b` at `C0/H0/M0/L0`. Exact
-  preferred-model selection and removal of the first-discovered-model substitution
-  remain open in F-07.
+  cumulative `5ec012f..b6d844b`, and HEAD `b6d844b` at `C0/H0/M0/L0`.
+  Independent commits `5b94ac6`, `1959a08`, and `d081761` close the remaining
+  F-07 model-selection scope. The Rust catalog now prefers exact
+  `opencode/muse-spark-1.2-contributor-free` only when advertised, otherwise leaves
+  the model unselected while retaining a ready nonempty catalog; the frontend also
+  leaves an absent scoped default unselected, and the producerless `stale_cache`
+  client state is absent. Backend exact selection remains authoritative. A fresh
+  complete `make verify` and an isolated package pass; the package confirms the exact
+  Muse Spark default and explicit selection of a different advertised model, while the
+  preferred-missing packaged flow remains `unknown` because every current catalog
+  contained its preference. Critical-web Pro and Daybreaker approve each source
+  commit at `C0/H0/M0/L0` and revise exact `67303e0..d081761` and HEAD `d081761`
+  only at `C0/H0/M0/L1` for stale current-state documentation corrected here. Final
+  correction re-review remains pending; no broader provider-completion claim is made.
 - Build-artifact lifecycle correction is complete through `537c1b9`. macOS uses
   packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the

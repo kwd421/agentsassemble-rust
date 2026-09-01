@@ -5941,6 +5941,54 @@ consumers described above. Daybreaker then revised public HEAD `8beb103` at
 critical-web Pro and Daybreaker each manually approve individual `703b5c6`,
 `8beb103`, `020d89f`, and `b6d844b`, exact `f934382..b6d844b`, full correction
 `879db4b..b6d844b`, cumulative `5ec012f..b6d844b`, and HEAD `b6d844b` at
-`C0/H0/M0/L0`. Exact preferred-model
-selection and removal of the first-discovered-model substitution remain the next F-07
-work.
+`C0/H0/M0/L0`.
+
+Commits `5b94ac6` and `1959a08` then close the remaining exact-model correction at
+the two owning boundaries. Rust prefers
+`opencode/muse-spark-1.2-contributor-free` only on an exact advertised match. A
+provider with a nonempty model catalog but no matching preference remains ready and
+startable with an empty model default, so backend creation requires an explicit exact
+selection; empty catalogs and invalid non-model defaults still fail closed. The
+frontend scoped projection likewise leaves a missing server default empty, including
+when only one candidate exists, and keeps creation disabled until the user selects
+that exact option. Commit `d081761` removes the producerless `stale_cache` wire value,
+status branch, and fabricated creation test; `discovered` and `static_manifest`
+remain the only real catalog sources. Repository-wide `stale_cache` source search is
+empty.
+
+The provider crate passes all 160 tests. The focused Agent Add modal passes all 18
+tests after the dead-state deletion, and the production build, generated-binding,
+CSS, diff, and architecture gates pass. A fresh `/usr/bin/time -l make verify` passes
+all repository gates in 258.65 seconds: 97 frontend files/621 tests, 25 desktop
+tests, 160 provider tests, 242 persistence tests, 89 server tests, and the complete
+domain, protocol, real TCP, and WebSocket boundary suites. Its maximum resident-set
+report is 2,395,373,568 bytes. These are validation costs and observed scope, not
+runtime performance claims.
+
+Computer Use drove an isolated release package named
+`AgentsAssemble Model Verify 902` under identifier
+`app.agentsassemble.rust.modelverify0902` with an explicitly empty central URL. A
+fresh local human and room opened the real Agent Add flow. OpenCode displayed and
+selected the exact Muse Spark contributor-free preference. Opening its real selector
+and choosing `opencode-go/gpt-5.6-luna` updated both the selected model and derived
+display name to that exact value. No Hy3 or first-discovered substitution appeared.
+The Add action remained disabled because no workspace was selected, so no Agent
+Session or provider process was started. Every catalog in this run advertised its
+preference; therefore the packaged preferred-missing flow remains explicit `unknown`,
+while the direct Rust and modal regressions cover its owner contracts.
+
+Normal application quit left no verification-owned desktop, supervisor, server, or
+provider process, and runtime stdout/stderr contained none of the searched provider,
+turn, session, start, error, warning, 404, stale-cache, Hy3, or Muse-Spark records.
+Computer Use was reset. The exact identifier-owned Application Support, cache, and
+WebKit data (about 1.2 MiB), temporary configuration, and generated release sidecar
+were moved to Trash. `cargo clean --release` removed 6,452 regenerable files and
+1.9 GiB, including the 49 MiB app and 17 MiB DMG, while retaining the debug cache for
+the next incremental verification.
+
+Critical-web Pro and Daybreaker each manually approve individual `5b94ac6`,
+`1959a08`, and `d081761` at `C0/H0/M0/L0`. Each revises exact
+`67303e0..d081761` and HEAD `d081761` only at `C0/H0/M0/L1` because the preceding
+current-state records still called the now-removed model substitution open. This
+documentation correction addresses that single shared Low; final correction
+re-review remains pending.
