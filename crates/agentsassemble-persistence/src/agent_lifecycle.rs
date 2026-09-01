@@ -138,7 +138,7 @@ impl SqliteStore {
         if participant.status == ParticipantStatus::Kicked {
             return Err(rejected(
                 "participant_kicked",
-                "This agent was removed from the room. Add it again before starting it.",
+                "This agent was removed from the room and cannot be started.",
             ));
         }
         if session.runtime_profile_version != CURRENT_RUNTIME_PROFILE_VERSION {

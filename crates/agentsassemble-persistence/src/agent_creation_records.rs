@@ -64,7 +64,7 @@ pub(crate) async fn create_or_reuse_agent_records(
         }
         _ => Err(rejected(
             "session_exists",
-            "An Agent Session with this identity already exists; re-add or configure the existing session instead.",
+            "An Agent Session with this identity already exists.",
         )),
     }
 }
