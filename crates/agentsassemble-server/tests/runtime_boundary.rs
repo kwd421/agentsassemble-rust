@@ -17,12 +17,12 @@ use tokio_util::sync::CancellationToken;
 
 mod support {
     pub mod local_socket;
-    pub mod subscription_proof;
+    pub mod room_socket_peer;
 }
 
 use support::{
     local_socket::{connect, request_ticket},
-    subscription_proof::AuthenticatedTestSocket,
+    room_socket_peer::RoomSocketPeer,
 };
 
 struct RunningServer {
@@ -380,7 +380,7 @@ fn assert_static_frontend_headers(response: &reqwest::Response) {
 }
 
 #[tokio::test]
-async fn authenticated_binary_frame_is_rejected_and_closed() {
+async fn binary_frame_is_rejected_and_closed() {
     let directory =
         tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
     let database_url = format!(
@@ -493,7 +493,7 @@ async fn websocket_snapshot_is_bound_to_the_private_ticket_scope_and_finite_curs
     assert_eq!(receipt["op"], "subscribed");
     let raw_snapshot = receive_text(&mut socket).await;
     let snapshot: Value = serde_json::from_str(&raw_snapshot)
-        .unwrap_or_else(|error| panic!("decode proved snapshot: {error}"));
+        .unwrap_or_else(|error| panic!("decode bounded snapshot: {error}"));
     assert_eq!(snapshot["op"], "snapshot");
     assert_eq!(receipt["room_id"], "general");
     assert_eq!(receipt["participant_id"], "operator-local");
@@ -547,14 +547,14 @@ async fn start_server(
     }
 }
 
-async fn subscribe<S>(socket: &mut AuthenticatedTestSocket<S>, cursor: i64) -> Value
+async fn subscribe<S>(socket: &mut RoomSocketPeer<S>, cursor: i64) -> Value
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
     socket.subscribe(cursor).await
 }
 
-async fn send_command<S>(socket: &mut AuthenticatedTestSocket<S>)
+async fn send_command<S>(socket: &mut RoomSocketPeer<S>)
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
@@ -568,7 +568,7 @@ where
         .await;
 }
 
-async fn receive_json<S>(socket: &mut AuthenticatedTestSocket<S>) -> Value
+async fn receive_json<S>(socket: &mut RoomSocketPeer<S>) -> Value
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {

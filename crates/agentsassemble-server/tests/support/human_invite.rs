@@ -18,7 +18,7 @@ use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_tungstenite::connect_async;
 use tokio_util::sync::CancellationToken;
 
-use super::subscription_proof::AuthenticatedTestSocket;
+use super::room_socket_peer::RoomSocketPeer;
 
 pub struct RunningServer {
     pub base_url: String,
@@ -204,7 +204,7 @@ pub async fn open_session_socket(
     client: &Client,
     base_url: &str,
     session_token: &str,
-) -> AuthenticatedTestSocket<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
+) -> RoomSocketPeer<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
     let response = client
         .post(format!("{base_url}/api/session-tickets/socket"))
         .header("authorization", format!("Bearer {session_token}"))
@@ -228,7 +228,7 @@ pub async fn open_session_socket(
     .await
     .unwrap_or_else(|error| panic!("connect human room socket: {error}"))
     .0;
-    let mut socket = AuthenticatedTestSocket::new(socket);
+    let mut socket = RoomSocketPeer::new(socket);
     let receipt = socket.subscribe(0).await;
     assert_eq!(receipt["op"], "subscribed");
     assert_eq!(receipt["room_id"], "general");

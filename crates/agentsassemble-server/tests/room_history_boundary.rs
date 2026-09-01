@@ -16,7 +16,7 @@ use tokio_util::sync::CancellationToken;
 mod support {
     pub mod human_invite;
     pub mod local_socket;
-    pub mod subscription_proof;
+    pub mod room_socket_peer;
 }
 
 use support::{

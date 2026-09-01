@@ -3,7 +3,7 @@ use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
 use tokio_tungstenite::connect_async;
 
-use super::{ControlledServer, support::subscription_proof::AuthenticatedTestSocket};
+use super::{ControlledServer, support::room_socket_peer::RoomSocketPeer};
 
 pub(super) async fn assert_message_attachment_tickets(server: &mut ControlledServer) {
     let client = Client::new();
@@ -157,7 +157,7 @@ async fn read(
 
 async fn connect_room(
     server: &mut ControlledServer,
-) -> AuthenticatedTestSocket<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
+) -> RoomSocketPeer<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
     let response = server.issue_ticket().await;
     let LocalControlResponse::Ok { ticket, .. } = response else {
         panic!("room socket ticket was rejected");
@@ -169,7 +169,7 @@ async fn connect_room(
     .await
     .unwrap_or_else(|error| panic!("connect controlled room socket: {error}"))
     .0;
-    let mut socket = AuthenticatedTestSocket::new(socket);
+    let mut socket = RoomSocketPeer::new(socket);
     let receipt = socket.subscribe(0).await;
     assert_eq!(receipt["op"], "subscribed");
     assert_eq!(socket.receive_json().await["op"], "snapshot");

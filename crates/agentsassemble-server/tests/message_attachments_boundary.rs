@@ -19,12 +19,12 @@ use tokio_util::sync::CancellationToken;
 
 mod support {
     pub mod human_invite;
-    pub mod subscription_proof;
+    pub mod room_socket_peer;
 }
 
 use support::{
     human_invite::{canonical_session_token, fixture, join, open_session_socket, start},
-    subscription_proof::AuthenticatedTestSocket,
+    room_socket_peer::RoomSocketPeer,
 };
 
 const PNG_BASE64: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMQ0bD5DwACRAF4aig0hQAAAABJRU5ErkJggg==";
@@ -297,7 +297,7 @@ async fn human_session_tcp_upload_send_and_read_preserve_scope() {
 }
 
 async fn bind_remote_attachment(
-    socket: &mut AuthenticatedTestSocket<MaybeTlsStream<TcpStream>>,
+    socket: &mut RoomSocketPeer<MaybeTlsStream<TcpStream>>,
     attachment: &Value,
 ) -> String {
     socket
@@ -338,7 +338,7 @@ async fn assert_remote_attachment_deleted(
     session_token: &str,
     attachment: &Value,
     message_id: &str,
-    socket: &mut AuthenticatedTestSocket<MaybeTlsStream<TcpStream>>,
+    socket: &mut RoomSocketPeer<MaybeTlsStream<TcpStream>>,
 ) {
     socket
         .send_json(&json!({

@@ -134,7 +134,7 @@ impl LocalRuntime {
         handle_bootstrap_result(&mut process, result)
     }
 
-    /// Issues the proof-bound WebSocket ticket for one validated room.
+    /// Issues the one-use WebSocket ticket for one validated room.
     ///
     /// # Errors
     ///

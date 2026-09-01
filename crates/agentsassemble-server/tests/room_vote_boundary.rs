@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 mod support {
     pub mod human_invite;
     pub mod local_socket;
-    pub mod subscription_proof;
+    pub mod room_socket_peer;
 }
 
 use support::{
@@ -19,7 +19,7 @@ use support::{
 };
 
 #[tokio::test]
-async fn authenticated_tcp_summary_is_strict_private_read_only_and_revocable() {
+async fn tcp_summary_is_strict_private_read_only_and_revocable() {
     let (store, credentials) = fixture(InviteScope::ReadOnly).await;
     let (vote_id, durable_last_seq) = seed_vote(&store).await;
     let server = start(store.clone()).await;

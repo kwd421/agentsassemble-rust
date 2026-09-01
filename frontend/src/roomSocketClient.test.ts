@@ -1,15 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RoomSocketSayError } from "./roomSocketClient";
 import {
-  authenticatedServerFrame,
+  encodedServerFrame,
   event,
   flushPromises,
   handshakeFrames,
   malformedMuteEvent,
   malformedRoleEvent,
   openHarness,
-  receiveAuthenticated,
-  sentAuthenticatedCommand,
+  receiveServerFrame,
+  sentClientFrame,
 } from "./test/roomSocketHarness";
 
 function leaveAck(
@@ -44,11 +44,11 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("proof-bound canonical room socket", () => {
+describe("bounded canonical room socket", () => {
   it("holds commands and readiness until the exact finite high-water is delivered", async () => {
     const onOpen = vi.fn();
     const onEvents = vi.fn();
-    const { handle, sockets, tickets } = openHarness({
+    const { handle, sockets } = openHarness({
       onOpen,
       onRoomEvents: onEvents,
     });
@@ -58,14 +58,14 @@ describe("proof-bound canonical room socket", () => {
     expect(sockets[0].sent).toHaveLength(1);
     expect(handle.ready()).toBe(false);
 
-    const frames = await handshakeFrames(sockets[0], tickets[0], 1, 2);
+    const frames = await handshakeFrames(1, 2);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await flushPromises();
     expect(onOpen).not.toHaveBeenCalled();
     expect(sockets[0].sent).toHaveLength(1);
 
-    await receiveAuthenticated(sockets[0], frames, {
+    await receiveServerFrame(sockets[0], frames, {
       op: "event",
       stream: "room_events",
       events: [event(2)],
@@ -76,13 +76,13 @@ describe("proof-bound canonical room socket", () => {
     expect(onOpen).toHaveBeenCalledOnce();
     expect(onEvents).toHaveBeenCalledWith([event(2)]);
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
-    const command = await sentAuthenticatedCommand(sockets[0], frames);
+    const command = await sentClientFrame(sockets[0], frames);
     expect(command).toMatchObject({
       op: "command",
       action: "message.send",
       payload: { content: "hello" },
     });
-    await receiveAuthenticated(sockets[0], frames, {
+    await receiveServerFrame(sockets[0], frames, {
       op: "ack",
       accepted: true,
       resolution: "committed",
@@ -96,14 +96,14 @@ describe("proof-bound canonical room socket", () => {
 
   it("rejects a snapshot outside the finite receipt cursor", async () => {
     const errors: RoomSocketSayError[] = [];
-    const { handle, sockets, tickets } = openHarness({
+    const { handle, sockets } = openHarness({
       onError: (error) => {
         if (error instanceof RoomSocketSayError) errors.push(error);
       },
     });
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(sockets[0], tickets[0], 0, 0);
+    const frames = await handshakeFrames(0, 0);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot.replace('"last_seq":0', '"last_seq":1'));
     await vi.waitFor(() =>
@@ -130,14 +130,14 @@ describe("proof-bound canonical room socket", () => {
 
   it("rejects a validly signed receipt for a different product surface", async () => {
     const errors: RoomSocketSayError[] = [];
-    const { handle, sockets, tickets } = openHarness({
+    const { handle, sockets } = openHarness({
       onError: (error) => {
         if (error instanceof RoomSocketSayError) errors.push(error);
       },
     });
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(sockets[0], tickets[0], 0, 0, (receipt) => {
+    const frames = await handshakeFrames(0, 0, (receipt) => {
       receipt.server_surface_digest = "d".repeat(64);
     });
     sockets[0].receive(frames.receipt);
@@ -150,17 +150,17 @@ describe("proof-bound canonical room socket", () => {
 
   it("fails closed on a gap inside authenticated catch-up", async () => {
     const errors: RoomSocketSayError[] = [];
-    const { handle, sockets, tickets } = openHarness({
+    const { handle, sockets } = openHarness({
       onError: (error) => {
         if (error instanceof RoomSocketSayError) errors.push(error);
       },
     });
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(sockets[0], tickets[0], 1, 3);
+    const frames = await handshakeFrames(1, 3);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
-    await receiveAuthenticated(sockets[0], frames, {
+    await receiveServerFrame(sockets[0], frames, {
       op: "event",
       stream: "room_events",
       events: [event(3)],
@@ -174,14 +174,14 @@ describe("proof-bound canonical room socket", () => {
   it("rejects a malformed role in the snapshot before consuming its cursor", async () => {
     vi.useFakeTimers();
     const errors: RoomSocketSayError[] = [];
-    const { handle, sockets, tickets } = openHarness({
+    const { handle, sockets } = openHarness({
       onError: (error) => {
         if (error instanceof RoomSocketSayError) errors.push(error);
       },
     });
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(sockets[0], tickets[0], 1, 1);
+    const frames = await handshakeFrames(1, 1);
     frames.snap.events = [malformedRoleEvent(1)];
     frames.rawSnapshot = JSON.stringify(frames.snap);
     sockets[0].receive(frames.receipt);
@@ -199,17 +199,17 @@ describe("proof-bound canonical room socket", () => {
   it("rejects a malformed role during authenticated catch-up without consuming its cursor", async () => {
     vi.useFakeTimers();
     const errors: RoomSocketSayError[] = [];
-    const { handle, sockets, tickets } = openHarness({
+    const { handle, sockets } = openHarness({
       onError: (error) => {
         if (error instanceof RoomSocketSayError) errors.push(error);
       },
     });
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(sockets[0], tickets[0], 1, 2);
+    const frames = await handshakeFrames(1, 2);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
-    await receiveAuthenticated(sockets[0], frames, {
+    await receiveServerFrame(sockets[0], frames, {
       op: "event",
       stream: "room_events",
       events: [malformedRoleEvent(2)],
@@ -228,18 +228,18 @@ describe("proof-bound canonical room socket", () => {
   it("rejects a malformed live role event without consuming the last valid cursor", async () => {
     vi.useFakeTimers();
     const errors: RoomSocketSayError[] = [];
-    const { handle, sockets, tickets } = openHarness({
+    const { handle, sockets } = openHarness({
       onError: (error) => {
         if (error instanceof RoomSocketSayError) errors.push(error);
       },
     });
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(sockets[0], tickets[0], 1, 1);
+    const frames = await handshakeFrames(1, 1);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
-    await receiveAuthenticated(sockets[0], frames, {
+    await receiveServerFrame(sockets[0], frames, {
       op: "event",
       stream: "room_events",
       events: [malformedRoleEvent(2)],
@@ -257,18 +257,18 @@ describe("proof-bound canonical room socket", () => {
   it("rejects a mute event without a canonical target before consuming its cursor", async () => {
     vi.useFakeTimers();
     const errors: RoomSocketSayError[] = [];
-    const { handle, sockets, tickets } = openHarness({
+    const { handle, sockets } = openHarness({
       onError: (error) => {
         if (error instanceof RoomSocketSayError) errors.push(error);
       },
     });
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(sockets[0], tickets[0], 1, 1);
+    const frames = await handshakeFrames(1, 1);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
-    await receiveAuthenticated(sockets[0], frames, {
+    await receiveServerFrame(sockets[0], frames, {
       op: "event",
       stream: "room_events",
       events: [malformedMuteEvent(2)],
@@ -287,30 +287,30 @@ describe("proof-bound canonical room socket", () => {
     vi.useFakeTimers();
     const onEvents = vi.fn();
     const onError = vi.fn();
-    const { handle, sockets, tickets } = openHarness({
+    const { handle, sockets } = openHarness({
       onRoomEvents: onEvents,
       onError,
     });
     await flushPromises();
     sockets[0].open();
-    const first = await handshakeFrames(sockets[0], tickets[0], 0, 0);
+    const first = await handshakeFrames(0, 0);
     sockets[0].receive(first.receipt);
     sockets[0].receiveRaw(first.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
-    await receiveAuthenticated(sockets[0], first, {
+    await receiveServerFrame(sockets[0], first, {
       op: "event",
       stream: "room_events",
       events: [event(1)],
       latest_seq: 1,
     });
     await vi.waitFor(() => expect(onEvents).toHaveBeenCalledWith([event(1)]));
-    const resync = await authenticatedServerFrame(first, {
+    const resync = await encodedServerFrame(first, {
       op: "resync_required",
       stream: "room_events",
       latest_seq: 1,
       reason: "subscriber lagged",
     });
-    const staleEvent = await authenticatedServerFrame(first, {
+    const staleEvent = await encodedServerFrame(first, {
       op: "event",
       stream: "room_events",
       events: [event(2)],
@@ -329,21 +329,21 @@ describe("proof-bound canonical room socket", () => {
 
   it("rejects an ACK whose action differs from the pending command", async () => {
     const errors: RoomSocketSayError[] = [];
-    const { handle, sockets, tickets } = openHarness({
+    const { handle, sockets } = openHarness({
       onError: (error) => {
         if (error instanceof RoomSocketSayError) errors.push(error);
       },
     });
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(sockets[0], tickets[0], 0, 0);
+    const frames = await handshakeFrames(0, 0);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     void handle.command("message.send", { content: "hello" }).catch(() => {});
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
-    const command = await sentAuthenticatedCommand(sockets[0], frames);
-    await receiveAuthenticated(sockets[0], frames, {
+    const command = await sentClientFrame(sockets[0], frames);
+    await receiveServerFrame(sockets[0], frames, {
       op: "ack",
       accepted: true,
       resolution: "committed",
@@ -357,14 +357,14 @@ describe("proof-bound canonical room socket", () => {
 
   it("rejects a mute ACK without its exact durable participant event", async () => {
     const errors: RoomSocketSayError[] = [];
-    const { handle, sockets, tickets } = openHarness({
+    const { handle, sockets } = openHarness({
       onError: (error) => {
         if (error instanceof RoomSocketSayError) errors.push(error);
       },
     });
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(sockets[0], tickets[0], 0, 0);
+    const frames = await handshakeFrames(0, 0);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
@@ -372,8 +372,8 @@ describe("proof-bound canonical room socket", () => {
       .command("participant.mute", { participant_id: "agent-one", muted: true })
       .catch(() => {});
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
-    const command = await sentAuthenticatedCommand(sockets[0], frames);
-    await receiveAuthenticated(sockets[0], frames, {
+    const command = await sentClientFrame(sockets[0], frames);
+    await receiveServerFrame(sockets[0], frames, {
       op: "ack",
       accepted: true,
       resolution: "committed",
@@ -398,23 +398,23 @@ describe("proof-bound canonical room socket", () => {
   it("fails closed on an authenticated command response for an unknown request", async () => {
     vi.useFakeTimers();
     const errors: RoomSocketSayError[] = [];
-    const { handle, sockets, tickets } = openHarness({
+    const { handle, sockets } = openHarness({
       onError: (error) => {
         if (error instanceof RoomSocketSayError) errors.push(error);
       },
     });
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(sockets[0], tickets[0], 0, 0);
+    const frames = await handshakeFrames(0, 0);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     const pendingLeave = handle.command("participant.leave", {});
     void pendingLeave.catch(() => {});
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
-    const command = await sentAuthenticatedCommand(sockets[0], frames);
+    const command = await sentClientFrame(sockets[0], frames);
 
-    const unknown = await authenticatedServerFrame(frames, {
+    const unknown = await encodedServerFrame(frames, {
       op: "nack",
       accepted: false,
       resolution: "rejected",
@@ -425,7 +425,7 @@ describe("proof-bound canonical room socket", () => {
         message: "Message content is invalid.",
       },
     });
-    const trailingLeave = await authenticatedServerFrame(frames, leaveAck(command.request_id));
+    const trailingLeave = await encodedServerFrame(frames, leaveAck(command.request_id));
     sockets[0].receiveRaw(unknown);
     sockets[0].receiveRaw(trailingLeave);
 
@@ -439,18 +439,18 @@ describe("proof-bound canonical room socket", () => {
   });
 
   it("settles a command only for a server-declared definitive rejection", async () => {
-    const { handle, sockets, tickets } = openHarness();
+    const { handle, sockets } = openHarness();
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(sockets[0], tickets[0], 0, 0);
+    const frames = await handshakeFrames(0, 0);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     const pending = handle.command("message.send", { content: "rejected" });
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
-    const command = await sentAuthenticatedCommand(sockets[0], frames);
+    const command = await sentClientFrame(sockets[0], frames);
 
-    await receiveAuthenticated(sockets[0], frames, {
+    await receiveServerFrame(sockets[0], frames, {
       op: "nack",
       accepted: false,
       resolution: "rejected",
@@ -469,23 +469,23 @@ describe("proof-bound canonical room socket", () => {
 
   it("does not accept a queued leave ACK after an unresolved outcome", async () => {
     vi.useFakeTimers();
-    const { handle, sockets, tickets } = openHarness();
+    const { handle, sockets } = openHarness();
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(sockets[0], tickets[0], 0, 0);
+    const frames = await handshakeFrames(0, 0);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     const pendingLeave = handle.command("participant.leave", {});
     void pendingLeave.catch(() => {});
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
-    const command = await sentAuthenticatedCommand(sockets[0], frames);
-    const unresolved = await authenticatedServerFrame(frames, {
+    const command = await sentClientFrame(sockets[0], frames);
+    const unresolved = await encodedServerFrame(frames, {
       op: "nack", accepted: false, resolution: "unresolved",
       request_id: command.request_id, action: "participant.leave",
       error: { code: "persistence_failed", message: "Persistence operation failed." },
     });
-    const trailingLeave = await authenticatedServerFrame(frames, leaveAck(command.request_id));
+    const trailingLeave = await encodedServerFrame(frames, leaveAck(command.request_id));
     sockets[0].receiveRaw(unresolved);
     sockets[0].receiveRaw(trailingLeave);
     await vi.waitFor(() => expect(sockets[0].readyState).toBe(WebSocket.CLOSED));
@@ -496,14 +496,14 @@ describe("proof-bound canonical room socket", () => {
 
   it("accepts provider catalog pushes only after the subscription is ready", async () => {
     const onProviderCatalog = vi.fn();
-    const { handle, sockets, tickets } = openHarness({ onProviderCatalog });
+    const { handle, sockets } = openHarness({ onProviderCatalog });
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(sockets[0], tickets[0], 0, 0);
+    const frames = await handshakeFrames(0, 0);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await flushPromises();
-    await receiveAuthenticated(sockets[0], frames, {
+    await receiveServerFrame(sockets[0], frames, {
       op: "provider_catalog_updated",
       catalog: { status: "ready", catalog_revision: "cat-2", providers: [] },
     });
@@ -519,19 +519,19 @@ describe("proof-bound canonical room socket", () => {
 
   it("finishes a delivered leave ACK before the server closes", async () => {
     vi.useFakeTimers();
-    const { handle, sockets, tickets } = openHarness();
+    const { handle, sockets } = openHarness();
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(sockets[0], tickets[0], 0, 0);
+    const frames = await handshakeFrames(0, 0);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
 
     const pendingLeave = handle.command("participant.leave", {});
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
-    const command = await sentAuthenticatedCommand(sockets[0], frames);
+    const command = await sentClientFrame(sockets[0], frames);
 
-    await receiveAuthenticated(sockets[0], frames, leaveAck(command.request_id));
+    await receiveServerFrame(sockets[0], frames, leaveAck(command.request_id));
     sockets[0].close();
 
     await expect(pendingLeave).resolves.toMatchObject({
@@ -561,20 +561,20 @@ describe("proof-bound canonical room socket", () => {
   ])("rejects a close-before-verify leave ACK with %s", async (_case, mutate) => {
     vi.useFakeTimers();
     const errors: RoomSocketSayError[] = [];
-    const { handle, sockets, tickets } = openHarness({
+    const { handle, sockets } = openHarness({
       onError: (error) => { if (error instanceof RoomSocketSayError) errors.push(error); },
     });
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(sockets[0], tickets[0], 0, 0);
+    const frames = await handshakeFrames(0, 0);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     const pendingLeave = handle.command("participant.leave", {});
     void pendingLeave.catch(() => {});
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
-    const command = await sentAuthenticatedCommand(sockets[0], frames);
-    sockets[0].receiveRaw(await authenticatedServerFrame(
+    const command = await sentClientFrame(sockets[0], frames);
+    sockets[0].receiveRaw(await encodedServerFrame(
       frames, leaveAck(command.request_id, mutate)
     ));
     sockets[0].close();

@@ -174,7 +174,7 @@ fn database_url(root: &Path) -> String {
 }
 
 async fn create_stopped_agent<S>(
-    socket: &mut AuthenticatedTestSocket<S>,
+    socket: &mut RoomSocketPeer<S>,
     workspace: &Path,
     request_id: &str,
 ) -> String
@@ -201,7 +201,7 @@ where
         .to_owned()
 }
 
-async fn receive_nack<S>(socket: &mut AuthenticatedTestSocket<S>) -> Value
+async fn receive_nack<S>(socket: &mut RoomSocketPeer<S>) -> Value
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {

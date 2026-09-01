@@ -24,10 +24,10 @@ mod room_portal_fixture;
 #[path = "support/provider_fixture.rs"]
 mod provider_fixture;
 
-#[path = "support/subscription_proof.rs"]
-mod subscription_proof;
+#[path = "support/room_socket_peer.rs"]
+mod room_socket_peer;
 
-use subscription_proof::AuthenticatedTestSocket;
+use room_socket_peer::RoomSocketPeer;
 
 #[cfg(unix)]
 #[path = "agent_session_boundary/agent_configuration.rs"]
@@ -483,7 +483,7 @@ async fn start(store: SqliteStore, catalog: ProviderCatalog) -> RunningServer {
 async fn connect(
     base_url: &str,
     state: &AppState,
-) -> AuthenticatedTestSocket<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
+) -> RoomSocketPeer<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
     let grant = issue_local_ticket(state, "general")
         .await
         .unwrap_or_else(|error| panic!("issue private-control-equivalent ticket: {error}"));
@@ -495,10 +495,10 @@ async fn connect(
     .await
     .unwrap_or_else(|error| panic!("connect WebSocket: {error}"))
     .0;
-    AuthenticatedTestSocket::new(socket)
+    RoomSocketPeer::new(socket)
 }
 
-async fn subscribe<S>(socket: &mut AuthenticatedTestSocket<S>)
+async fn subscribe<S>(socket: &mut RoomSocketPeer<S>)
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
@@ -507,7 +507,7 @@ where
     assert_eq!(receipt["streams"], json!(["room_events"]));
 }
 
-async fn send_create<S>(socket: &mut AuthenticatedTestSocket<S>, request_id: &str, payload: &Value)
+async fn send_create<S>(socket: &mut RoomSocketPeer<S>, request_id: &str, payload: &Value)
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
@@ -518,7 +518,7 @@ where
 
 #[cfg(unix)]
 async fn send_command<S>(
-    socket: &mut AuthenticatedTestSocket<S>,
+    socket: &mut RoomSocketPeer<S>,
     request_id: &str,
     action: &str,
     payload: &Value,
@@ -531,7 +531,7 @@ async fn send_command<S>(
 }
 
 #[cfg(unix)]
-async fn assert_resident_pause_resume<S>(socket: &mut AuthenticatedTestSocket<S>, payload: &Value)
+async fn assert_resident_pause_resume<S>(socket: &mut RoomSocketPeer<S>, payload: &Value)
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
@@ -549,7 +549,7 @@ where
 }
 
 #[cfg(unix)]
-async fn receive_until_ack<S>(socket: &mut AuthenticatedTestSocket<S>, limit: usize) -> Value
+async fn receive_until_ack<S>(socket: &mut RoomSocketPeer<S>, limit: usize) -> Value
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
@@ -564,7 +564,7 @@ where
 }
 
 #[cfg(unix)]
-async fn receive_command_ack<S>(socket: &mut AuthenticatedTestSocket<S>) -> Value
+async fn receive_command_ack<S>(socket: &mut RoomSocketPeer<S>) -> Value
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
@@ -577,17 +577,14 @@ where
     panic!("command ACK was not delivered");
 }
 
-async fn receive_json<S>(socket: &mut AuthenticatedTestSocket<S>) -> Value
+async fn receive_json<S>(socket: &mut RoomSocketPeer<S>) -> Value
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
     socket.receive_json().await
 }
 
-async fn receive_json_with_timeout<S>(
-    socket: &mut AuthenticatedTestSocket<S>,
-    timeout: Duration,
-) -> Value
+async fn receive_json_with_timeout<S>(socket: &mut RoomSocketPeer<S>, timeout: Duration) -> Value
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {

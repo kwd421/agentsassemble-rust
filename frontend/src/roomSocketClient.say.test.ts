@@ -6,8 +6,8 @@ import {
   flushPromises,
   handshakeFrames,
   openHarness,
-  receiveAuthenticated,
-  sentAuthenticatedCommand,
+  receiveServerFrame,
+  sentClientFrame,
 } from "./test/roomSocketHarness";
 
 function attachment(hex: string): LobbyAttachmentRef {
@@ -30,10 +30,10 @@ afterEach(() => {
 
 describe("room socket message attachments", () => {
   it("signs exact ordered attachment IDs for text and attachment-only sends", async () => {
-    const { handle, sockets, tickets } = openHarness();
+    const { handle, sockets } = openHarness();
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(sockets[0], tickets[0], 0, 0);
+    const frames = await handshakeFrames(0, 0);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
@@ -45,7 +45,7 @@ describe("room socket message attachments", () => {
       attachments: [second, first],
     });
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
-    const textCommand = await sentAuthenticatedCommand(sockets[0], frames);
+    const textCommand = await sentClientFrame(sockets[0], frames);
     expect(textCommand).toMatchObject({
       action: "message.send",
       payload: {
@@ -53,7 +53,7 @@ describe("room socket message attachments", () => {
         attachment_ids: [second.id, first.id],
       },
     });
-    await receiveAuthenticated(sockets[0], frames, {
+    await receiveServerFrame(sockets[0], frames, {
       op: "ack",
       accepted: true,
       resolution: "committed",
@@ -65,12 +65,12 @@ describe("room socket message attachments", () => {
 
     const attachmentOnly = handle.say({ message: "", attachments: [first] });
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(3));
-    const attachmentCommand = await sentAuthenticatedCommand(sockets[0], frames, 2, 2);
+    const attachmentCommand = await sentClientFrame(sockets[0], frames, 2);
     expect(attachmentCommand).toMatchObject({
       action: "message.send",
       payload: { content: "", attachment_ids: [first.id] },
     });
-    await receiveAuthenticated(sockets[0], frames, {
+    await receiveServerFrame(sockets[0], frames, {
       op: "ack",
       accepted: true,
       resolution: "committed",
@@ -83,10 +83,10 @@ describe("room socket message attachments", () => {
   });
 
   it("rejects invalid attachment lists before signing or sending a command", async () => {
-    const { handle, sockets, tickets } = openHarness();
+    const { handle, sockets } = openHarness();
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(sockets[0], tickets[0], 0, 0);
+    const frames = await handshakeFrames(0, 0);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
@@ -106,10 +106,10 @@ describe("room socket message attachments", () => {
   });
 
   it("signs each vote operation with its exact Rust-owned payload", async () => {
-    const { handle, sockets, tickets } = openHarness();
+    const { handle, sockets } = openHarness();
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(sockets[0], tickets[0], 0, 0);
+    const frames = await handshakeFrames(0, 0);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
@@ -123,7 +123,7 @@ describe("room socket message attachments", () => {
       voteDurationSeconds: 300,
     });
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
-    const createCommand = await sentAuthenticatedCommand(sockets[0], frames);
+    const createCommand = await sentClientFrame(sockets[0], frames);
     expect(createCommand.payload).toEqual({
       kind: "vote",
       vote_question: "Ship it?",
@@ -131,7 +131,7 @@ describe("room socket message attachments", () => {
       vote_duration_seconds: 300,
       attachment_ids: [attachment("a").id],
     });
-    await receiveAuthenticated(sockets[0], frames, {
+    await receiveServerFrame(sockets[0], frames, {
       op: "ack",
       accepted: true,
       resolution: "committed",
@@ -164,14 +164,14 @@ describe("room socket message attachments", () => {
       const pending = handle.say(operation.request);
       const wireIndex = index + 2;
       await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(wireIndex + 1));
-      const command = await sentAuthenticatedCommand(
+      const command = await sentClientFrame(
         sockets[0],
         frames,
         wireIndex,
         wireIndex
       );
       expect(command.payload).toEqual(operation.payload);
-      await receiveAuthenticated(sockets[0], frames, {
+      await receiveServerFrame(sockets[0], frames, {
         op: "ack",
         accepted: true,
         resolution: "committed",

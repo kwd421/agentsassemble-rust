@@ -6,11 +6,11 @@ use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use tokio_tungstenite::{WebSocketStream, tungstenite::Message};
 
-pub struct AuthenticatedTestSocket<S> {
+pub struct RoomSocketPeer<S> {
     socket: WebSocketStream<S>,
 }
 
-impl<S> AuthenticatedTestSocket<S>
+impl<S> RoomSocketPeer<S>
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {

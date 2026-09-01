@@ -15,8 +15,8 @@ mod control_pipe_invite_tickets;
 mod control_pipe_managed_ingress;
 mod control_pipe_message_attachments;
 mod support {
-    #[path = "../support/subscription_proof.rs"]
-    pub mod subscription_proof;
+    #[path = "../support/room_socket_peer.rs"]
+    pub mod room_socket_peer;
 }
 const PUBLIC_ORIGIN: &str = "https://public.example.test";
 const PROXY_SECRET: &str = "manual-ingress-control-secret-000000001";
@@ -152,7 +152,7 @@ async fn control_pipe_eof_releases_database_for_restart() {
 }
 
 #[tokio::test]
-async fn owned_control_pipe_issues_proof_bound_ticket_without_http_secret() {
+async fn owned_control_pipe_issues_room_ticket_without_http_secret() {
     let directory =
         tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
     let database = directory.path().join("runtime.sqlite3");

@@ -14,10 +14,10 @@ use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_tungstenite::connect_async;
 use tokio_util::sync::CancellationToken;
 
-#[path = "support/subscription_proof.rs"]
-mod subscription_proof;
+#[path = "support/room_socket_peer.rs"]
+mod room_socket_peer;
 
-use subscription_proof::AuthenticatedTestSocket;
+use room_socket_peer::RoomSocketPeer;
 
 struct RunningServer {
     base_url: String,
@@ -536,7 +536,7 @@ async fn assert_static_private_png(response: reqwest::Response) {
 async fn connect_room(
     base_url: &str,
     state: &AppState,
-) -> AuthenticatedTestSocket<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
+) -> RoomSocketPeer<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
     let grant = issue_local_ticket(state, "general")
         .await
         .unwrap_or_else(|error| panic!("issue profile socket ticket: {error}"));
@@ -549,13 +549,13 @@ async fn connect_room(
         .await
         .unwrap_or_else(|error| panic!("connect profile socket: {error}"))
         .0;
-    let mut socket = AuthenticatedTestSocket::new(socket);
+    let mut socket = RoomSocketPeer::new(socket);
     let receipt = socket.subscribe(0).await;
     assert_eq!(receipt["op"], "subscribed");
     socket
 }
 
-async fn receive_json<S>(socket: &mut AuthenticatedTestSocket<S>) -> Value
+async fn receive_json<S>(socket: &mut RoomSocketPeer<S>) -> Value
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {

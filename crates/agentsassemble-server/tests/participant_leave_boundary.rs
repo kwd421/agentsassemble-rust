@@ -5,7 +5,7 @@ use serde_json::json;
 
 mod support {
     pub mod human_invite;
-    pub mod subscription_proof;
+    pub mod room_socket_peer;
 }
 
 use support::human_invite::{canonical_session_token, fixture, join, open_session_socket, start};

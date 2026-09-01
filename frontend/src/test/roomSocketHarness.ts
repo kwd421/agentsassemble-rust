@@ -111,8 +111,6 @@ function snapshot(cursor: number) {
 }
 
 export async function handshakeFrames(
-  _socket: FakeWebSocket,
-  _ticket: string,
   snapshotCursor: number,
   catchupHighWater: number,
   mutateReceipt?: (receipt: SubscriptionReceipt) => void
@@ -139,26 +137,25 @@ export async function handshakeFrames(
   };
 }
 
-export async function receiveAuthenticated(
+export async function receiveServerFrame(
   socket: FakeWebSocket,
   frames: Awaited<ReturnType<typeof handshakeFrames>>,
   message: Record<string, unknown>
 ) {
-  socket.receiveRaw(await authenticatedServerFrame(frames, message));
+  socket.receiveRaw(await encodedServerFrame(frames, message));
 }
 
-export async function authenticatedServerFrame(
+export async function encodedServerFrame(
   _frames: Awaited<ReturnType<typeof handshakeFrames>>,
   message: Record<string, unknown>
 ) {
   return JSON.stringify(message);
 }
 
-export async function sentAuthenticatedCommand(
+export async function sentClientFrame(
   socket: FakeWebSocket,
   _frames: Awaited<ReturnType<typeof handshakeFrames>>,
-  index = 1,
-  _counter = 1
+  index = 1
 ) {
   return socket.sent[index];
 }
@@ -166,7 +163,6 @@ export async function sentAuthenticatedCommand(
 export function openHarness(handlers: Parameters<typeof openRoomSocket>[2] = {}) {
   const sockets: FakeWebSocket[] = [];
   let issued = 0;
-  const tickets: string[] = [];
   let reportOpened = () => {};
   const opened = new Promise<void>((resolve) => { reportOpened = resolve; });
   const handle = openRoomSocket(
@@ -183,7 +179,6 @@ export function openHarness(handlers: Parameters<typeof openRoomSocket>[2] = {})
       getTicket: async () => {
         issued += 1;
         const ticket = issued.toString(16).padStart(64, "a");
-        tickets.push(ticket);
         return {
           ticket,
           ttl_seconds: 30,
@@ -201,7 +196,7 @@ export function openHarness(handlers: Parameters<typeof openRoomSocket>[2] = {})
       expectedParticipantId: "operator-local",
     }
   );
-  return { handle, opened, sockets, tickets };
+  return { handle, opened, sockets };
 }
 
 export async function flushPromises() {

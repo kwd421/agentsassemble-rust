@@ -4,13 +4,13 @@ use agentsassemble_protocol::TicketResponse;
 use agentsassemble_server::{AppState, issue_local_ticket};
 use tokio_tungstenite::connect_async;
 
-use super::subscription_proof::AuthenticatedTestSocket;
+use super::room_socket_peer::RoomSocketPeer;
 
 pub async fn connect(
     base_url: &str,
     state: &AppState,
     room_id: &str,
-) -> AuthenticatedTestSocket<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
+) -> RoomSocketPeer<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
     let grant = request_ticket(state, room_id).await;
     let ticket = grant.ticket;
     let url = format!(
@@ -21,7 +21,7 @@ pub async fn connect(
         .await
         .unwrap_or_else(|error| panic!("connect WebSocket: {error}"))
         .0;
-    AuthenticatedTestSocket::new(socket)
+    RoomSocketPeer::new(socket)
 }
 
 pub async fn request_ticket(state: &AppState, room_id: &str) -> TicketResponse {

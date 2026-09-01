@@ -13,7 +13,7 @@ use tokio::{
 mod support {
     pub mod human_invite;
     pub mod human_profile_exchange;
-    pub mod subscription_proof;
+    pub mod room_socket_peer;
 }
 
 use support::{

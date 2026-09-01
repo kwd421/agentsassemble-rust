@@ -9,16 +9,16 @@ use tokio_tungstenite::MaybeTlsStream;
 mod support {
     pub mod human_invite;
     pub mod local_socket;
-    pub mod subscription_proof;
+    pub mod room_socket_peer;
 }
 
 use support::{
     human_invite::{canonical_session_token, fixture, join, open_session_socket, start},
     local_socket::connect,
-    subscription_proof::AuthenticatedTestSocket,
+    room_socket_peer::RoomSocketPeer,
 };
 
-type BoundarySocket = AuthenticatedTestSocket<MaybeTlsStream<TcpStream>>;
+type BoundarySocket = RoomSocketPeer<MaybeTlsStream<TcpStream>>;
 
 #[tokio::test]
 async fn local_socket_edits_deletes_and_replays_one_exact_sequenced_mutation() {

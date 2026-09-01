@@ -3,7 +3,7 @@ use std::{fmt::Write, path::Path, time::Duration};
 use serde_json::{Value, json};
 
 use super::{
-    AGENT_BOUNDARY_LOCK, AuthenticatedTestSocket, agent_catalog_with_fixture, bootstrap, connect,
+    AGENT_BOUNDARY_LOCK, RoomSocketPeer, agent_catalog_with_fixture, bootstrap, connect,
     receive_command_ack, receive_json, receive_json_with_timeout, send_command, send_create, start,
     subscribe,
 };
@@ -88,7 +88,7 @@ async fn busy_turn_interrupt_is_exact_and_runtime_retaining() {
     server.stop().await;
 }
 
-async fn create_started_agent<S>(socket: &mut AuthenticatedTestSocket<S>, root: &Path) -> String
+async fn create_started_agent<S>(socket: &mut RoomSocketPeer<S>, root: &Path) -> String
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
@@ -122,7 +122,7 @@ where
     session_id
 }
 
-async fn receive_terminal_state<S>(socket: &mut AuthenticatedTestSocket<S>) -> (Vec<String>, Value)
+async fn receive_terminal_state<S>(socket: &mut RoomSocketPeer<S>) -> (Vec<String>, Value)
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {

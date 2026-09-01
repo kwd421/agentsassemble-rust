@@ -12,7 +12,7 @@ use sha2::{Digest, Sha256};
 
 mod support {
     pub mod human_invite;
-    pub mod subscription_proof;
+    pub mod room_socket_peer;
 }
 
 use support::human_invite::{
