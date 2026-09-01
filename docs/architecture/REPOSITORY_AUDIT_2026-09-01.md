@@ -1,10 +1,9 @@
 # Repository-wide reimplementation audit — 2026-09-01
 
 Status: manual source, history, duplication, and defensive-complexity audit
-complete; initial external reviews returned `REVISE`; implementation verdict
-`REVISE`. This record
-owns findings and dispositions, not product contracts or the implementation
-sequence.
+complete; the Phase 0A planning route is approved at reviewed content checkpoint
+`9711232`. Product implementation remains paused. This record owns findings and
+dispositions, not product contracts or the implementation sequence.
 
 Audited baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`, Rust
 `8a5f75a`. User-owned working-tree changes in `AGENTS.md` and `.agents/` were not
@@ -78,6 +77,20 @@ refer only to authority present in the same commit.
 
 These are review findings, not approvals. Final reviewer dispositions are recorded
 only after the correction commit is pushed and re-reviewed.
+
+## Final external review closure
+
+- Critical ChatGPT Pro closed its workflow-owner Medium and the stale-baseline,
+  per-commit-ceiling, and historical-wording Low findings through `032c20f`,
+  `9808441`, and `9711232`. It approved commit/HEAD `9711232`, exact
+  `9808441..9711232`, correction chain `bbc99ff..9711232`, and cumulative planning
+  range `1c5b37e..9711232` at `C0/H0/M0/L0`.
+- Daybreaker Blue High closed its corresponding stale-baseline,
+  per-commit-ceiling, and wording findings and manually approved the same commit,
+  correction chain, cumulative range, and HEAD at `C0/H0/M0/L0`.
+- Both reviews left F-20, D-02/D-03, the frontend allowlist, and the historical
+  `b558da5` rollback/review limitation in their documented states. Approval closes
+  the Phase 0A plan and finding route only; it does not close pending product work.
 
 ## Fix findings
 
@@ -911,10 +924,11 @@ active work are not treated as arbitrary trash.
 
 ## Current verdict and exit
 
-Verdict: `REVISE`. Passing gates and prior slice approvals do not close the
-repository-wide product and ownership findings above.
+Verdict: `APPROVE` for the Phase 0A inventory, dispositions, ownership map, and
+implementation order at reviewed content checkpoint `9711232`. This verdict does
+not approve or complete the routed product findings.
 
-This audit exits only when:
+The following exit criteria are satisfied:
 
 1. every finding has one confirmed owner and `Fix`, `Consolidate`, `Keep`, or
    `Deferred/Unknown` disposition;
