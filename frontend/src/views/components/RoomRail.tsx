@@ -1,5 +1,5 @@
 import type { MouseEvent as ReactMouseEvent } from "react";
-import { Check, LogOut, Plus, Settings, UserPlus, Users } from "lucide-react";
+import { Check, LogOut, Plus, Settings, UserPlus } from "lucide-react";
 import {
   completeRoomAppearance,
   roomAppearanceStyle,
@@ -28,10 +28,8 @@ export default function RoomRail({
   roomAppearances,
   guestLocked,
   adminOpen,
-  channelIsFriends,
   menuRoom,
   roomMenu,
-  onHomeClick,
   onSelectRoom,
   onAddRoom,
   onOpenRoomMenu,
@@ -45,10 +43,8 @@ export default function RoomRail({
   roomAppearances: Record<string, RoomAppearance>;
   guestLocked: boolean;
   adminOpen: boolean;
-  channelIsFriends: boolean;
   menuRoom?: RoomDockItem;
   roomMenu: RoomMenuState;
-  onHomeClick: () => void;
   onSelectRoom: (roomId: string) => void;
   onAddRoom: () => void;
   onOpenRoomMenu: (event: ReactMouseEvent, room: RoomDockItem) => void;
@@ -62,25 +58,10 @@ export default function RoomRail({
       className="dc-rail flex shrink-0 flex-col items-center gap-2 py-3"
       aria-label="룸 레일"
     >
-      {!guestLocked && (
-        <>
-          <button
-            type="button"
-            onClick={onHomeClick}
-            className="dc-rail-home"
-            data-active={!adminOpen && channelIsFriends}
-            aria-label="친구와 DM"
-            title="친구"
-          >
-            <Users size={20} />
-          </button>
-          <span className="dc-server-divider" aria-hidden />
-        </>
-      )}
       <div className="dc-room-stack min-h-0 flex-1 overflow-y-auto chat-scroll" aria-label="방 목록">
         {rooms.map((room) => {
           const Icon = room.icon;
-          const active = !adminOpen && !channelIsFriends && activeRoom.id === room.id;
+          const active = !adminOpen && activeRoom.id === room.id;
           const disconnected = roomIsDisconnected(room);
           const roomAppearance = completeRoomAppearance(
             {

@@ -9,7 +9,6 @@ import {
   refreshProviderCatalog,
   type ChannelNotificationSetting,
   type ChannelSettings,
-  type RoomFriend,
   type RoomMember,
   type RoomSearchResult,
 } from "../api";
@@ -33,7 +32,6 @@ import { roomPostingState } from "../lib/roomGuestPosting";
 import { currentServerProductSurface } from "../lib/roomDirectoryContract";
 import { remoteClientPacketPreview } from "../lib/roomInviteCopy";
 import { roomRailMenuPosition } from "../lib/roomRailMenuPosition";
-import type { HomeFilter } from "./friendsDirectoryTypes";
 import {
   CHANNELS,
   EMPTY_ROOM,
@@ -46,8 +44,7 @@ import {
   type RoomSettingsSectionId,
   type RoomSettingsState,
 } from "./appModel";
-import { mobileViewportMatches, useMobilePanels } from "./useMobilePanels";
-import { useFriendsDirectory } from "./useFriendsDirectory";
+import { useMobilePanels } from "./useMobilePanels";
 import { useAgentPresentation } from "./useAgentPresentation";
 import { useAppMessageSearch } from "./useAppMessageSearch";
 import { useDismissMenus } from "./useDismissMenus";
@@ -87,16 +84,8 @@ export function useAppController(deviceToken: string, clientId: string) {
         operatorPairingToken ||
         guestRecoveryRequest
     );
-  // A built-in surface ("friends"/"lobby") or an opaque custom channel id.
-  const [channel, setChannel] = useState<string>(() => {
-    if (
-      startupRoute.initialChannel === "friends" &&
-      mobileViewportMatches()
-    ) {
-      return "lobby";
-    }
-    return startupRoute.initialChannel;
-  });
+  // A built-in surface ("lobby") or an opaque custom channel id.
+  const [channel, setChannel] = useState<string>(startupRoute.initialChannel);
   const [adminOpen, setAdminOpen] = useState(false);
   const [membersOpen, setMembersOpen] = useState(true);
   const [rightPanelMode, setRightPanelMode] = useState<RightPanelMode>("room-info");
@@ -167,7 +156,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     handleMobileShellPointerDown,
     handleMobileShellPointerEnd,
     cancelMobileShellPointer,
-  } = useMobilePanels({ canOpenRoomInfo: channel !== "friends" });
+  } = useMobilePanels({ canOpenRoomInfo: true });
   const {
     channelSidebarWidth,
     startSidebarResize,
@@ -241,24 +230,6 @@ export function useAppController(deviceToken: string, clientId: string) {
     verifyRoomDirectoryAuthority,
     onCreated: onRoomCreated,
   });
-  const {
-    payload: homeFriendsPayload,
-    loading: friendsLoading,
-    status: friendsStatus,
-    busyId: friendsBusyId,
-    homeFilter,
-    friendListFilter,
-    selectedFriendId: selectedHomeFriendId,
-    addDraftName: friendAddDraftName,
-    changeHomeFilter: changeFriendsHomeFilter,
-    showDirectory: showFriendsDirectory,
-    selectHomeFriend: selectFriendsHomeFriend,
-    selectFriend: selectDirectoryFriend,
-    openAddFriend: openFriendsAddView,
-    addCandidate: addFriendsCandidate,
-    addManual: addFriendsManual,
-    deleteFriend: deleteDirectoryFriend,
-  } = useFriendsDirectory({ enabled: startupIdentityResolved && !guestLocked });
   const lobbyPostingState = useMemo(
     () =>
       roomPostingState({
@@ -355,8 +326,6 @@ export function useAppController(deviceToken: string, clientId: string) {
     agentInviteUrl,
     operatorPairingUrl,
     publicInviteStatus,
-    friendStatuses: inviteFriendStatuses,
-    remoteClientPacket: inviteRemoteClientPacket,
     invitePublicUrl,
     open: openInviteModal,
     close: closeInviteModal,
@@ -367,8 +336,6 @@ export function useAppController(deviceToken: string, clientId: string) {
     generateOperatorPairing: generateOperatorPairingLink,
     copyAgentInvite: copyAgentInviteLink,
     copyOperatorPairing: copyOperatorPairingLink,
-    copyRemoteClientPacket,
-    inviteFriend: inviteFriendToRoom,
   } = roomInvite;
   const roomSocket = canonicalRoom.socket;
   const {
@@ -453,26 +420,6 @@ export function useAppController(deviceToken: string, clientId: string) {
     setRoomMenu(null);
     setChannelMenu(null);
     closeMobileOverlays();
-  }
-
-  function changeHomeFilter(filter: HomeFilter) {
-    changeFriendsHomeFilter(filter);
-  }
-
-  function selectHomeFriend(friend: RoomFriend) {
-    setChannel("friends");
-    setAdminOpen(false);
-    setChannelMenu(null);
-    closeMobileOverlays();
-    selectFriendsHomeFriend(friend);
-  }
-
-  function openAddFriendView(draftName = "") {
-    setChannel("friends");
-    setAdminOpen(false);
-    setChannelMenu(null);
-    closeMobileOverlays();
-    openFriendsAddView(draftName);
   }
 
   function openRoomMenu(event: ReactMouseEvent, room: RoomDockItem) {
@@ -574,8 +521,8 @@ export function useAppController(deviceToken: string, clientId: string) {
   }
 
   function goToChannel(next: string) {
-    // Guests stay out of the operator-only fixed surfaces (live/board/records/
-    // friends), but custom channels are shared spaces they can enter.
+    // Guests stay out of operator-only fixed surfaces, but custom channels are
+    // shared spaces they can enter.
     const isCustom = roomChannels.isActiveCustomChannel(next);
     const guestBlocked = guestLocked && next !== "lobby" && !isCustom;
     setChannel(guestBlocked ? "lobby" : next);
@@ -631,7 +578,7 @@ export function useAppController(deviceToken: string, clientId: string) {
   }
 
   const toggleMembers = useCallback(() => setMembersOpen((value) => !value), []);
-  const showMembers = !adminOpen && channel !== "friends";
+  const showMembers = !adminOpen;
   const inviteModalRoom = inviteModal ? rooms.find((room) => room.id === inviteModal.roomId) : undefined;
   const settingsModalRoom = settingsModal
     ? rooms.find((room) => room.id === settingsModal.roomId)
@@ -641,9 +588,6 @@ export function useAppController(deviceToken: string, clientId: string) {
   const inviteModalAppearance = inviteModalRoom
     ? roomSettings.appearanceFor(inviteModalRoom)
     : undefined;
-  const inviteModalMembers = inviteModalRoom
-    ? roomMembers.membersFor(inviteModalRoom)
-    : [];
   const activeAppearance = roomAppearanceAssets.appearanceFor(activeRoom);
   const activeRoomStyle = useMemo(() => roomAppearanceStyle(activeAppearance), [activeAppearance]);
   const shellStyle = useMemo(
@@ -698,31 +642,28 @@ export function useAppController(deviceToken: string, clientId: string) {
     activeChannelDisplay, activeChannelSettings, activeCustomChannel, activeCustomChannels,
     activeRoom, activeRoomAgentSessions, activeRoomCapabilities,
     activeRoomDisconnected, activeRoomHistory, activeRoomMembers, activeSideChatMeetingId,
-    addFreshRoom, addFriendsCandidate, addFriendsManual, adjustSidebarWidthWithKeyboard,
+    addFreshRoom, adjustSidebarWidthWithKeyboard,
     adminOpen, admittedSessionToken, agentActivityVisibility, agentCreateOpen,
     agentInviteUrl, cancelMobileShellPointer, canonicalRoom,
-    changeAgentActivityVisibility, changeHomeFilter, channel, channelHeaderActions,
+    changeAgentActivityVisibility, channel, channelHeaderActions,
     channelMenu, channelSearchNeedle, channelSearchQuery, channelSidebarWidth,
     closeInviteModal, closeMobileRoomInfo, closeMobileSidebar, collapsedChannelSections,
     copyAgentInviteLink, copyGuestAiPacket, copyOperatorPairingLink,
-    copyRemoteClientPacket,
-    createChannel, createChannelOpen, createCompanionAiPacket, deleteDirectoryFriend,
+    createChannel, createChannelOpen, createCompanionAiPacket,
     deviceToken, clientId, exitGuestSurface, expireGuestSession,
-    friendAddDraftName, friendListFilter, friendsBusyId, friendsLoading,
-    friendsStatus, generateAgentInviteLink, generateInviteLink, generateOperatorPairingLink,
+    generateAgentInviteLink, generateInviteLink, generateOperatorPairingLink,
     goToChannel, guestAdmissionBusy, guestAiPacketPreview, guestAiPacketStatus,
     guestExpired, guestJoinRequested, guestJoinStatus, guestJoinToken,
     guestPreflightRetryable, guestJoinRetryable,
     guestLocked, guestPanelProfile, guestRecoveryRequest, guestSession,
-    handleMobileShellPointerDown, handleMobileShellPointerEnd, handleSideChatPosted, homeFilter,
-    homeFriendsPayload, inviteCopyStatus, inviteFriendStatuses,
-    inviteFriendToRoom, inviteModalAppearance, inviteModalMembers,
-    inviteModalRoom, invitePublicUrl, inviteRemoteClientPacket, inviteRoom,
+    handleMobileShellPointerDown, handleMobileShellPointerEnd, handleSideChatPosted,
+    inviteCopyStatus, inviteModalAppearance,
+    inviteModalRoom, invitePublicUrl, inviteRoom,
     leaveRoom, leaveRoomTarget, loadCanonicalRoomHistory, loadProviderUsage,
     lobbyPostingState, markChannelRead, markRoomRead,
     membersOpen, menuChannelDisplay, menuRoom, messageSearchChannelLabels,
     messageSearchScope, mobileRoomInfoInitialMode, mobileRoomInfoOpen, mobileSidebarOpen,
-    mobileViewportIsActive, openAddFriendView, openAgentCreate, openChannelMenu,
+    mobileViewportIsActive, openAgentCreate, openChannelMenu,
     openCrossChannelSearchResult, openMobileProfileFromPanel, openMobileRoomInfo, openMobileSidebar,
     openRoomMenu, openRoomSettings, operatorPairingPending, operatorPairingState,
     operatorPairingUrl, pendingGuestAvatarImage, pendingGuestDisplayName, pendingMessageSearchTarget,
@@ -731,15 +672,14 @@ export function useAppController(deviceToken: string, clientId: string) {
     roomAppearanceAssets, roomAppearances, roomDirectorySyncIssue, roomInvite,
     roomHttpAuthority, roomMenu, roomMessageSearch, roomSettings, roomSocket,
     rooms, scopedAgents, scopedMentionables, serverProductSurface,
-    scopedOnlineCount, scopedViewerDisplayName, selectDirectoryFriend,
-    selectHomeFriend, selectRoom, selectedHomeFriendId, sendAgentConfigure,
+    scopedOnlineCount, scopedViewerDisplayName, selectRoom, sendAgentConfigure,
     sendAgentControl, sendParticipantMute, setAdminOpen,
     setAgentCreateOpen, setChannelNotifications, setChannelSearchQuery, setCreateChannelOpen,
     setGuestRecoveryRequest, setLeaveRoomTargetId, setMembersOpen,
     setMessageSearchScope, setMobileRoomInfoInitialMode, setMobileRoomInfoOpen, setMobileSidebarOpen,
     setPendingGuestAvatarImage, setPendingGuestDisplayName, setPendingMessageSearchTarget,
     setRightPanelMode, setRoomMenu, setSettingsModal,
-    settingsModalInitialSectionId, settingsModalRoom, shellStyle, showFriendsDirectory,
+    settingsModalInitialSectionId, settingsModalRoom, shellStyle,
     showMembers, sideChatDraftsByContext, sideChatError, sideChatEvents,
     startInviteTunnel, startSidebarResize, startupIdentityResolved, stopInviteTunnel,
     toggleChannelSection, toggleMembers, typingIndicators, updateMemberRole,

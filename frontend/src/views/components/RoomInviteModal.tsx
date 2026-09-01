@@ -1,49 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
-import { Copy, Globe2, LoaderCircle, LockKeyhole, Search, X } from "lucide-react";
-import type { PublicInviteStatus, RoomFriend, RoomMember } from "../../api";
+import { useEffect, useState } from "react";
+import { Copy, Globe2, LoaderCircle, LockKeyhole, X } from "lucide-react";
+import type { PublicInviteStatus } from "../../api";
 import type {
   HumanInviteOptions,
   PublicAccessTransition,
 } from "../../app/useRoomInviteController";
 import type { HumanInvitePresentation } from "../../app/useManagedHumanInvites";
-import { roomFriendMatchesSearch } from "../../lib/friendSearch";
-import { participantTypeMeta } from "../../lib/participantTypes";
-import { isActivePresence, presenceStatusLabel } from "../../lib/presenceStatus";
-import { inviteFriendButtonLabel } from "../../lib/roomInviteCopy";
 import type { RoomAppearance } from "../../lib/roomAppearance";
 import "./RoomInviteModal.css";
 
-function participantIdForFriend(friend: RoomFriend): string {
-  return friend.source_agent_id || friend.friend_id;
-}
-
-function memberForFriend(friend: RoomFriend, members: RoomMember[]): RoomMember | undefined {
-  const participantIds = new Set([participantIdForFriend(friend), friend.friend_id].filter(Boolean));
-  return members.find((member) => participantIds.has(member.participant_id));
-}
-
-function inviteStatusForMember(member?: RoomMember): string {
-  if (!member) return "";
-  if (member.status === "pending") return "실행 필요";
-  if (member.status === "invited") return "초대됨";
-  if (isActivePresence(member.status)) return "참가 중";
-  return presenceStatusLabel(member.status);
-}
-
-function inviteFriendSubtitle(friend: RoomFriend, typeLabel: string): string {
-  const detail =
-    friend.handle ||
-    friend.provider_kind ||
-    friend.connection_kind ||
-    friend.source_agent_id ||
-    "";
-  return detail ? `${typeLabel} · ${detail}` : typeLabel;
-}
-
 type PendingPublicAction =
   | { kind: "human"; options: HumanInviteOptions }
-  | { kind: "agent" }
-  | { kind: "friend"; friend: RoomFriend };
+  | { kind: "agent" };
 
 function humanInviteStatus(invite: HumanInvitePresentation) {
   if (invite.revocation === "dead") return "폐기됨";
@@ -69,12 +37,7 @@ export default function RoomInviteModal({
   publicAccessTransition = "idle",
   tunnelStatus,
   inviteScope = "room",
-  friends,
-  members = [],
-  friendStatuses,
   copyStatus,
-  remoteClientPacketPreview,
-  remoteClientPacketFriendName,
   onClose,
   onGenerateSecureInvite,
   onCopyHumanInvite,
@@ -85,8 +48,6 @@ export default function RoomInviteModal({
   onCopyOperatorPairing,
   onStartTunnel,
   onStopTunnel,
-  onCopyRemoteClientPacket,
-  onInviteFriend,
 }: {
   roomLabel: string;
   humanInvites?: readonly HumanInvitePresentation[];
@@ -96,12 +57,7 @@ export default function RoomInviteModal({
   publicAccessTransition?: PublicAccessTransition;
   tunnelStatus?: PublicInviteStatus["tunnel"];
   inviteScope?: RoomAppearance["inviteScope"];
-  friends: RoomFriend[];
-  members?: RoomMember[];
-  friendStatuses?: Record<string, string>;
   copyStatus?: string;
-  remoteClientPacketPreview?: string;
-  remoteClientPacketFriendName?: string;
   onClose: () => void;
   onGenerateSecureInvite: (options: HumanInviteOptions, startTunnelIfNeeded: boolean) => void;
   onCopyHumanInvite: (key: string) => void;
@@ -112,16 +68,11 @@ export default function RoomInviteModal({
   onCopyOperatorPairing: () => void;
   onStartTunnel: () => void;
   onStopTunnel: () => void;
-  onCopyRemoteClientPacket?: () => void;
-  onInviteFriend: (friend: RoomFriend, startTunnelIfNeeded: boolean) => void;
 }) {
-  const [query, setQuery] = useState("");
   const [humanMaxUses, setHumanMaxUses] = useState(1);
   const [humanTtlSeconds, setHumanTtlSeconds] = useState(86400);
   const [pendingPublicAction, setPendingPublicAction] =
     useState<PendingPublicAction | null>(null);
-  const searchQuery = query.trim();
-  const searchNeedle = searchQuery.toLowerCase();
   const readOnlyInvite = inviteScope === "read_only";
   const currentHumanOptions = { maxUses: humanMaxUses, ttlSeconds: humanTtlSeconds };
   const selectedHumanInvite = humanInvites.find(
@@ -143,10 +94,8 @@ export default function RoomInviteModal({
     if (publicAccessRunning) {
       if (action.kind === "human") {
         onGenerateSecureInvite(action.options, false);
-      } else if (action.kind === "agent") {
-        onGenerateAgentInvite(false);
       } else {
-        onInviteFriend(action.friend, false);
+        onGenerateAgentInvite(false);
       }
       return;
     }
@@ -159,16 +108,10 @@ export default function RoomInviteModal({
     if (!action) return;
     if (action.kind === "human") {
       onGenerateSecureInvite(action.options, true);
-    } else if (action.kind === "agent") {
-      onGenerateAgentInvite(true);
     } else {
-      onInviteFriend(action.friend, true);
+      onGenerateAgentInvite(true);
     }
   }
-  const visibleFriends = useMemo(() => {
-    if (!searchNeedle) return friends;
-    return friends.filter((friend) => roomFriendMatchesSearch(friend, searchNeedle));
-  }, [friends, searchNeedle]);
   useEffect(() => {
     function closeOnEscape(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
@@ -453,74 +396,6 @@ export default function RoomInviteModal({
           </section>
         </div>
 
-        <section className="dc-invite-friends-section" aria-labelledby="saved-friends-heading">
-          <div className="dc-invite-section-heading">
-            <div>
-              <h3 id="saved-friends-heading">저장된 친구</h3>
-              <p>이미 등록한 사람이나 AI 세션에 초대를 보냅니다.</p>
-            </div>
-          </div>
-          <label className="dc-invite-search">
-            <Search size={20} />
-            <input
-              type="search"
-              aria-label="친구 검색"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="친구 찾기"
-            />
-          </label>
-          <div className="dc-invite-friend-list" role="list" aria-label="초대할 친구">
-            {visibleFriends.length ? (
-              visibleFriends.map((friend) => {
-                const meta = participantTypeMeta(friend.participant_type);
-                const Icon = meta.icon;
-                const existingMember = memberForFriend(friend, members);
-                const status = friendStatuses?.[friend.friend_id] || inviteStatusForMember(existingMember);
-                const done = status === "초대됨" || status === "호출됨" || status === "참가 중";
-                const needsRun = status === "실행 필요";
-                const disabled = status === "초대 중" || done || needsRun;
-                const isAiFriend = friend.participant_type !== "human";
-                return (
-                  <div
-                    key={friend.friend_id}
-                    className="dc-invite-friend-row"
-                    data-type={meta.tone}
-                    data-member-state={existingMember?.status || undefined}
-                    role="listitem"
-                  >
-                    <span className="dc-invite-friend-avatar">
-                      <Icon size={20} />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="dc-invite-friend-name preserve-words">{friend.display_name}</span>
-                      <span className="dc-invite-friend-handle preserve-words">
-                        {inviteFriendSubtitle(friend, meta.label)}
-                      </span>
-                    </span>
-                    <button
-                      type="button"
-                      className="dc-invite-friend-button"
-                      data-state={needsRun ? "attention" : done ? "done" : "idle"}
-                      disabled={disabled}
-                      title={needsRun ? "provider/CLI 세션을 먼저 시작하거나 resume해야 합니다." : undefined}
-                      onClick={() => requestPublicAction({ kind: "friend", friend })}
-                    >
-                      {inviteFriendButtonLabel({ status, isAiFriend, readOnlyInvite })}
-                    </button>
-                  </div>
-                );
-              })
-            ) : (
-              <p className="dc-invite-empty">
-                {searchQuery
-                  ? "일치하는 친구가 없습니다."
-                  : "초대할 친구가 없습니다. 친구 탭에서 먼저 추가하세요."}
-              </p>
-            )}
-          </div>
-        </section>
-
         <details className="dc-invite-advanced">
           <summary>고급 연결 설정</summary>
           <div className="dc-invite-advanced-body">
@@ -556,29 +431,6 @@ export default function RoomInviteModal({
                 </button>
               </div>
             </label>
-        {remoteClientPacketPreview && (
-          <label className="dc-invite-link-label">
-            선택한 AI 친구 연결 정보
-            <span className="text-[12px] font-bold text-text-muted preserve-words">
-              {remoteClientPacketFriendName || "상대 AI"}에게 보낸 초대의 연결 정보입니다.
-            </span>
-            <textarea
-              className="dc-invite-packet-textarea"
-              value={remoteClientPacketPreview}
-              readOnly
-              onFocus={(event) => event.currentTarget.select()}
-              aria-label="AI 세션용 입장 패킷"
-            />
-            <button
-              type="button"
-              className="dc-invite-copy-button"
-              onClick={onCopyRemoteClientPacket}
-            >
-              <Copy size={15} />
-              패킷 복사
-            </button>
-          </label>
-        )}
           </div>
         </details>
         <p className="mt-3 text-[12px] text-text-muted preserve-words">

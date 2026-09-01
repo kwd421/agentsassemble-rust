@@ -41,7 +41,6 @@ function renderInviteModal({
         local_url: "http://127.0.0.1:43123",
         stable_phase: "unconfigured",
       }}
-      friends={[]}
       onClose={vi.fn()}
       onGenerateSecureInvite={onGenerateSecureInvite}
       onCopyHumanInvite={onCopyHumanInvite}
@@ -52,7 +51,6 @@ function renderInviteModal({
       onCopyOperatorPairing={vi.fn()}
       onStartTunnel={vi.fn()}
       onStopTunnel={onStopTunnel}
-      onInviteFriend={vi.fn()}
     />
   );
   return {

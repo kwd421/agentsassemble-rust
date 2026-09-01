@@ -42,6 +42,10 @@ describe("createStartupRoute", () => {
     expect(route.activeRoomId).toBe("");
   });
 
+  it("starts on the canonical lobby while the friends service has no Rust owner", () => {
+    expect(createStartupRoute().initialChannel).toBe("lobby");
+  });
+
   it("keeps a stored room session while a new invite is preflighted", () => {
     persistRoomGuestSession(SESSION);
     window.history.replaceState({}, "", "/join?token=new-invite");

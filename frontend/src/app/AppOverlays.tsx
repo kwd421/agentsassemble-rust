@@ -13,15 +13,14 @@ export default function AppOverlays({ controller }: { controller: AppController 
   const {
     acceptRecoveredSession, activeRoom, agentCreateOpen, agentInviteUrl,
     canonicalRoom, closeInviteModal, copyAgentInviteLink,
-    copyOperatorPairingLink, copyRemoteClientPacket,
+    copyOperatorPairingLink,
     createChannel, createChannelOpen, deviceToken, clientId, generateAgentInviteLink,
     generateInviteLink, generateOperatorPairingLink, guestAdmissionBusy, guestExpired,
     guestJoinRequested, guestJoinStatus, guestJoinToken, guestLocked,
     guestPreflightRetryable, guestJoinRetryable,
-    guestRecoveryRequest, guestSession, homeFriendsPayload,
-    inviteCopyStatus, inviteFriendStatuses, inviteFriendToRoom,
-    inviteModalAppearance, inviteModalMembers, inviteModalRoom, invitePublicUrl,
-    inviteRemoteClientPacket, inviteRoom, leaveRoom, leaveRoomTarget,
+    guestRecoveryRequest, guestSession,
+    inviteCopyStatus, inviteModalAppearance, inviteModalRoom, invitePublicUrl,
+    inviteRoom, leaveRoom, leaveRoomTarget,
     operatorPairingPending, operatorPairingState, operatorPairingUrl,
     pendingGuestAvatarImage, pendingGuestDisplayName, publicInviteStatus,
     requestGuestJoin, retryOperatorPairing, roomAppearanceAssets, roomInvite,
@@ -52,12 +51,7 @@ export default function AppOverlays({ controller }: { controller: AppController 
             publicAccessTransition={roomInvite.publicAccessTransition}
             tunnelStatus={publicInviteStatus?.tunnel}
             inviteScope={inviteModalAppearance?.inviteScope || inviteModalRoom.inviteScope || "room"}
-            friends={homeFriendsPayload.friends}
-            members={inviteModalMembers}
-            friendStatuses={inviteFriendStatuses}
             copyStatus={inviteCopyStatus}
-            remoteClientPacketPreview={inviteRemoteClientPacket.preview}
-            remoteClientPacketFriendName={inviteRemoteClientPacket.friendName}
             onClose={closeInviteModal}
             onGenerateSecureInvite={(options, startTunnelIfNeeded) =>
               void generateInviteLink(
@@ -77,15 +71,6 @@ export default function AppOverlays({ controller }: { controller: AppController 
             onCopyOperatorPairing={() => void copyOperatorPairingLink()}
             onStartTunnel={() => void startInviteTunnel()}
             onStopTunnel={() => void stopInviteTunnel()}
-            onCopyRemoteClientPacket={() => void copyRemoteClientPacket()}
-            onInviteFriend={(friend, startTunnelIfNeeded) =>
-              void inviteFriendToRoom({
-                friend,
-                room: inviteModalRoom,
-                appearance: inviteModalAppearance,
-                startTunnelIfNeeded,
-              })
-            }
           />
         )}
 

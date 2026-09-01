@@ -4,7 +4,6 @@ import {
   CalendarDays,
   ChevronDown,
   Hash,
-  Home,
   Plus,
   Search,
   Settings,
@@ -20,7 +19,6 @@ import LobbyView from "../views/LobbyView";
 import RimWorldPluginView from "../views/plugins/rimworld/RimWorldPluginView";
 import { RoomSocketProvider } from "../RoomSocketContext";
 import ChannelContextMenu from "../views/components/ChannelContextMenu";
-import HomeSidebar from "../views/components/HomeSidebar";
 import RoomConnectionPanel from "../views/components/RoomConnectionPanel";
 import DisconnectedRoomView from "../views/components/DisconnectedRoomView";
 import MobileRoomInfoPanel from "../views/components/MobileRoomInfoPanel";
@@ -33,7 +31,6 @@ import { GUEST_SESSION_EXPIRED_MESSAGE } from "../lib/apiErrors";
 import { createMessageAttachmentReadOwner } from "../lib/messageAttachmentReadScheduler";
 
 const AdminPanel = lazy(() => import("../views/AdminPanel"));
-const FriendsView = lazy(() => import("../views/FriendsView"));
 const CustomChannelView = lazy(() => import("../views/CustomChannelView"));
 
 export default function AppView({ controller }: { controller: AppController }) {
@@ -45,33 +42,31 @@ export default function AppView({ controller }: { controller: AppController }) {
     activeChannelSettings, activeCustomChannel, activeCustomChannels,
     activeRoom, activeRoomAgentSessions, activeRoomCapabilities, activeRoomDisconnected,
     activeRoomHistory, activeRoomMembers, activeSideChatMeetingId, addFreshRoom,
-    addFriendsCandidate, addFriendsManual, adjustSidebarWidthWithKeyboard, adminOpen,
+    adjustSidebarWidthWithKeyboard, adminOpen,
     admittedSessionToken, agentActivityVisibility, cancelMobileShellPointer,
-    canonicalRoom, changeAgentActivityVisibility, changeHomeFilter, channel,
+    canonicalRoom, changeAgentActivityVisibility, channel,
     channelHeaderActions, channelMenu, channelSearchNeedle, channelSearchQuery,
     channelSidebarWidth, closeMobileRoomInfo, closeMobileSidebar, collapsedChannelSections,
-    copyGuestAiPacket, createCompanionAiPacket, deleteDirectoryFriend, deviceToken, exitGuestSurface,
-    expireGuestSession, friendAddDraftName, friendListFilter, friendsBusyId,
-    friendsLoading, friendsStatus, goToChannel, guestAiPacketPreview,
+    copyGuestAiPacket, createCompanionAiPacket, deviceToken, exitGuestSurface,
+    expireGuestSession, goToChannel, guestAiPacketPreview,
     guestAiPacketStatus, guestExpired, guestJoinStatus, guestLocked,
     guestPanelProfile, guestSession, handleMobileShellPointerDown, handleMobileShellPointerEnd,
-    handleSideChatPosted, homeFilter, homeFriendsPayload, inviteRoom,
+    handleSideChatPosted, inviteRoom,
     loadCanonicalRoomHistory, loadProviderUsage, lobbyPostingState, markChannelRead,
     markRoomRead, membersOpen, menuChannelDisplay, menuRoom,
     messageSearchChannelLabels, messageSearchScope, mobileRoomInfoInitialMode, mobileRoomInfoOpen,
-    mobileSidebarOpen, mobileViewportIsActive, openAddFriendView, openAgentCreate,
+    mobileSidebarOpen, mobileViewportIsActive, openAgentCreate,
     openChannelMenu, openCrossChannelSearchResult, openMobileProfileFromPanel, openMobileRoomInfo,
     openMobileSidebar, openRoomMenu, openRoomSettings, pendingMessageSearchTarget,
     quotaViewer, rightPanelMode,
     roomAppearances, roomDirectorySyncIssue, roomHttpAuthority, roomMenu, roomMessageSearch,
     roomSettings, roomSocket, rooms, scopedAgents, scopedMentionables, serverProductSurface,
-    scopedOnlineCount, scopedViewerDisplayName, selectDirectoryFriend, selectHomeFriend,
-    selectRoom, selectedHomeFriendId, sendAgentConfigure, sendAgentControl,
+    scopedOnlineCount, scopedViewerDisplayName, selectRoom, sendAgentConfigure, sendAgentControl,
     sendParticipantMute, setAdminOpen, setChannelNotifications,
     setChannelSearchQuery, setCreateChannelOpen, setLeaveRoomTargetId, setMembersOpen,
     setMessageSearchScope, setMobileRoomInfoInitialMode, setMobileRoomInfoOpen, setMobileSidebarOpen,
     setPendingMessageSearchTarget, setRightPanelMode, setRoomMenu,
-    shellStyle, showFriendsDirectory, showMembers, sideChatDraftsByContext,
+    shellStyle, showMembers, sideChatDraftsByContext,
     sideChatError, sideChatEvents, startSidebarResize, toggleChannelSection,
     toggleMembers, typingIndicators, updateMemberRole, updateSideChatDraft,
     visibleChannels, visibleRoomTimelineEvents,
@@ -97,10 +92,8 @@ export default function AppView({ controller }: { controller: AppController }) {
         roomAppearances={roomAppearances}
         guestLocked={guestLocked}
         adminOpen={adminOpen}
-        channelIsFriends={channel === "friends"}
         menuRoom={menuRoom}
         roomMenu={roomMenu}
-        onHomeClick={() => goToChannel("friends")}
         onSelectRoom={selectRoom}
         onAddRoom={addFreshRoom}
         onOpenRoomMenu={openRoomMenu}
@@ -115,22 +108,7 @@ export default function AppView({ controller }: { controller: AppController }) {
 
       <AppOverlays controller={controller} />
       {/* Channel sidebar */}
-      {channel === "friends" && !guestLocked ? (
-        <HomeSidebar
-          activeFilter={homeFilter}
-          onFilterChange={changeHomeFilter}
-          onlineCount={scopedOnlineCount}
-          agentCount={scopedAgents.length || 0}
-          hasBackendError={Boolean(canonicalRoom.syncIssue || roomDirectorySyncIssue)}
-          profileIdentity={{ deviceToken }}
-          friends={homeFriendsPayload.friends}
-          selectedFriendId={selectedHomeFriendId}
-          onFriendSelect={selectHomeFriend}
-          onStartAddFriend={openAddFriendView}
-          onStartAddAgent={openAgentCreate}
-        />
-      ) : (
-        <aside className="dc-sidebar flex shrink-0 flex-col" aria-label="채널 목록">
+      <aside className="dc-sidebar flex shrink-0 flex-col" aria-label="채널 목록">
           <header className="dc-sidebar-head shrink-0" data-tone={activeRoom.tone}>
             <button
               type="button"
@@ -342,10 +320,6 @@ export default function AppView({ controller }: { controller: AppController }) {
           />
         </footer>
         <nav className="dc-mobile-bottom-nav" aria-label="모바일 하단 탐색">
-          <button type="button" onClick={() => goToChannel("friends")}>
-            <Home size={19} />
-            <span>홈</span>
-          </button>
           <button type="button" onClick={() => markChannelRead(channel)}>
             <Bell size={19} />
             <span>알림</span>
@@ -356,7 +330,6 @@ export default function AppView({ controller }: { controller: AppController }) {
           </button>
         </nav>
       </aside>
-      )}
       <button
         type="button"
         className="dc-mobile-scrim"
@@ -380,25 +353,8 @@ export default function AppView({ controller }: { controller: AppController }) {
       {/* Central channel column */}
       <main className="dc-chat flex min-w-0 flex-1 flex-col" aria-label="채널 내용">
         <Suspense fallback={<DeferredViewFallback />}>
-          {activeRoomDisconnected && channel !== "friends" ? (
+          {activeRoomDisconnected ? (
             <DisconnectedRoomView room={activeRoom} />
-          ) : channel === "friends" && !guestLocked ? (
-            <FriendsView
-              typeFilter={homeFilter === "friends" ? null : homeFilter}
-              filter={friendListFilter}
-              payload={homeFriendsPayload}
-              loading={friendsLoading}
-              status={friendsStatus}
-              busyId={friendsBusyId}
-              addDraftName={friendAddDraftName}
-              onShowDirectory={showFriendsDirectory}
-              selectedFriendId={selectedHomeFriendId}
-              onSelectFriend={selectDirectoryFriend}
-              onAddCandidate={addFriendsCandidate}
-              onAddManual={addFriendsManual}
-              onDeleteFriend={deleteDirectoryFriend}
-              onStartAddAgent={openAgentCreate}
-            />
           ) : adminOpen ? (
             <AdminPanel onClose={() => setAdminOpen(false)} activeMeetingId={activeRoom.meetingId} />
           ) : channel === "lobby" ? (
