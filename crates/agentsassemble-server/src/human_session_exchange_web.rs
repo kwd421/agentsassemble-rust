@@ -48,7 +48,6 @@ pub(crate) fn routes() -> Router<AppState> {
 
 registered_routes! {
     fn session_exchange_routes<AppState>() {
-        same_origin_public "/api/session-tickets/profile" => post(issue_profile_ticket),
         same_origin_public "/api/session-tickets/socket" => post(issue_socket_ticket),
         same_origin_public "/api/session-tickets/preferences-read" => post(issue_preferences_read_ticket),
         same_origin_public "/api/session-tickets/preferences-write" => post(issue_preferences_write_ticket),
@@ -85,24 +84,6 @@ async fn leave_room(
         status: "left",
         agent_id: participant_id,
     }))
-}
-
-async fn issue_profile_ticket(
-    State(state): State<AppState>,
-    request: Request,
-) -> Result<Response, SessionExchangeError> {
-    let authorization = authorize_exchange(&state, request).await?;
-    let ttl_seconds = session_ticket_ttl(&state, &authorization);
-    let issued = state
-        .tickets
-        .issue_human_session_profile(authorization)
-        .await
-        .map_err(|_| SessionExchangeError::capacity())?;
-    Ok(Json(SessionTicketResponse {
-        ticket: issued.ticket,
-        ttl_seconds,
-    })
-    .into_response())
 }
 
 async fn issue_socket_ticket(

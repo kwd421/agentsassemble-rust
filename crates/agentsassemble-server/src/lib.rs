@@ -71,6 +71,7 @@ mod human_invite_preflight;
 mod human_invite_web;
 mod human_session_bearer;
 mod human_session_exchange_web;
+mod human_session_http_authority;
 mod ingress_trust;
 mod lifecycle_command_tracker;
 mod message_pins_web;

@@ -15,7 +15,6 @@ function isServerWideProfileRoute(url: string): boolean {
 
 export async function exchangeSessionTicket(
   purpose:
-    | "profile"
     | "socket"
     | "preferences-read"
     | "preferences-write"
@@ -39,7 +38,6 @@ export async function exchangeSessionTicket(
 
 export async function exchangeSessionHttpTicket(
   purpose:
-    | "profile"
     | "preferences-read"
     | "preferences-write"
     | "message-search-read"
@@ -86,12 +84,6 @@ export function isPrivateNoStoreResponse(
       cacheDirectives.includes("private") &&
       cacheDirectives.includes("no-store")
   );
-}
-
-async function profileTargetToken(url: string, sessionToken: string): Promise<string> {
-  return sessionToken && isServerWideProfileRoute(url)
-    ? exchangeSessionHttpTicket("profile", sessionToken)
-    : sessionToken;
 }
 
 export function loadHostToken(): string {
@@ -262,9 +254,8 @@ export async function fetchJsonWithIdentity<T>(
     if (!res.ok) throw await responseError(res);
     return res.json();
   }
-  const targetToken = await profileTargetToken(url, sessionToken);
   const headers: Record<string, string> = {};
-  if (targetToken) headers.Authorization = `Bearer ${targetToken}`;
+  if (sessionToken) headers.Authorization = `Bearer ${sessionToken}`;
   if (deviceToken) headers["X-Device-Token"] = deviceToken;
   const res = await fetch(url, { ...profileRequest, headers });
   if (!res.ok) throw await responseError(res);
@@ -297,9 +288,8 @@ export async function postJsonWithIdentity<T>(
     if (!res.ok) throw await responseError(res);
     return res.json();
   }
-  const targetToken = await profileTargetToken(url, sessionToken);
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (targetToken) headers.Authorization = `Bearer ${targetToken}`;
+  if (sessionToken) headers.Authorization = `Bearer ${sessionToken}`;
   if (deviceToken) headers["X-Device-Token"] = deviceToken;
   const res = await fetch(url, {
     ...profileRequest,

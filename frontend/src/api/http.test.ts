@@ -116,25 +116,13 @@ describe("desktop profile HTTP routing", () => {
     expect(secondHeaders.get("Content-Type")).toBe("application/json");
   });
 
-  it("exchanges an admitted session for a fresh one-use profile ticket", async () => {
+  it("presents an admitted session directly to the profile target", async () => {
     const invoke = vi.fn();
     Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ ticket: "a".repeat(64), ttl_seconds: 30 }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        })
-      )
-      .mockResolvedValueOnce(
         new Response(JSON.stringify({ profile: { display_name: "Guest" } }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        })
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ ticket: "b".repeat(64), ttl_seconds: 30 }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         })
@@ -158,25 +146,15 @@ describe("desktop profile HTTP routing", () => {
     );
 
     expect(invoke).not.toHaveBeenCalled();
-    expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/session-tickets/profile", {
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/user-profile", {
       cache: "no-store",
-      method: "POST",
       headers: { Authorization: "Bearer guest-session" },
     });
     expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/user-profile", {
       cache: "no-store",
-      headers: { Authorization: `Bearer ${"a".repeat(64)}` },
-    });
-    expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/session-tickets/profile", {
-      cache: "no-store",
-      method: "POST",
-      headers: { Authorization: "Bearer guest-session" },
-    });
-    expect(fetchMock).toHaveBeenNthCalledWith(4, "/api/user-profile", {
-      cache: "no-store",
       method: "POST",
       headers: {
-        Authorization: `Bearer ${"b".repeat(64)}`,
+        Authorization: "Bearer guest-session",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ display_name: "Changed" }),

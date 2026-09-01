@@ -325,19 +325,6 @@ async fn human_session_grants_are_exact_purpose_and_one_use() {
         store.consume_message_pins_read(&pin_read.ticket).await,
         Ok(crate::ticket::ConsumedRoomHumanTicket::HumanSession(_))
     ));
-    let profile = store
-        .issue_human_session_profile(fixture.authorize(0).await)
-        .await
-        .unwrap_or_else(|error| panic!("issue session profile grant: {error}"));
-    assert!(matches!(
-        store.consume_preferences_read(&profile.ticket).await,
-        Err(TicketError::Invalid)
-    ));
-    assert!(matches!(
-        store.consume_human_session_profile(&profile.ticket).await,
-        Err(TicketError::Invalid)
-    ));
-
     let wrong_asset = store
         .issue_human_session_bound_appearance_read(
             fixture.authorize(0).await,
@@ -432,17 +419,17 @@ async fn human_session_message_attachment_grants_are_exact_and_read_only_upload_
 async fn socket_hint_consumes_wrong_purpose_without_cross_authority_fallback() {
     let fixture = HumanSessionFixture::new(1).await;
     let store = TicketStore::new(Duration::from_secs(30), 4_096);
-    let profile = store
-        .issue_human_session_profile(fixture.authorize(0).await)
+    let preferences = store
+        .issue_human_session_preferences_read(fixture.authorize(0).await)
         .await
-        .unwrap_or_else(|error| panic!("issue wrong-purpose profile grant: {error}"));
+        .unwrap_or_else(|error| panic!("issue wrong-purpose preference grant: {error}"));
 
     assert!(matches!(
-        store.socket_ticket_hint(&profile.ticket).await,
+        store.socket_ticket_hint(&preferences.ticket).await,
         Err(TicketError::Invalid)
     ));
     assert!(matches!(
-        store.consume_human_session_profile(&profile.ticket).await,
+        store.consume_preferences_read(&preferences.ticket).await,
         Err(TicketError::Invalid)
     ));
 }
@@ -453,19 +440,19 @@ async fn human_session_grant_rechecks_absolute_expiry_after_issue() {
     let store = TicketStore::new(Duration::from_secs(30), 4_096);
     let authorization = fixture.authorize(0).await;
     let after_session_expiry = authorization.expires_at() + ChronoDuration::microseconds(1);
-    let profile = store
-        .issue_human_session_profile(authorization)
+    let socket = store
+        .issue_human_session_socket(authorization)
         .await
-        .unwrap_or_else(|error| panic!("issue session profile grant: {error}"));
+        .unwrap_or_else(|error| panic!("issue session socket grant: {error}"));
 
     assert!(matches!(
         store
-            .consume_human_session_profile_at(&profile.ticket, after_session_expiry)
+            .consume_human_session_socket_at(&socket.ticket, after_session_expiry)
             .await,
         Err(TicketError::Invalid)
     ));
     assert!(matches!(
-        store.consume_human_session_profile(&profile.ticket).await,
+        store.consume_human_session_socket(&socket.ticket).await,
         Err(TicketError::Invalid)
     ));
 }
@@ -478,24 +465,24 @@ async fn human_session_grants_enforce_per_session_limit_and_reclaim_consumption(
     for _ in 0..8 {
         issued.push(
             store
-                .issue_human_session_profile(fixture.authorize(0).await)
+                .issue_human_session_socket(fixture.authorize(0).await)
                 .await
                 .unwrap_or_else(|error| panic!("issue bounded session grant: {error}")),
         );
     }
     assert!(matches!(
         store
-            .issue_human_session_profile(fixture.authorize(0).await)
+            .issue_human_session_socket(fixture.authorize(0).await)
             .await,
         Err(TicketError::Invalid)
     ));
     store
-        .consume_human_session_profile(&issued[0].ticket)
+        .consume_human_session_socket(&issued[0].ticket)
         .await
         .unwrap_or_else(|error| panic!("consume bounded session grant: {error}"));
     assert!(
         store
-            .issue_human_session_profile(fixture.authorize(0).await)
+            .issue_human_session_socket(fixture.authorize(0).await)
             .await
             .is_ok()
     );
@@ -510,7 +497,7 @@ async fn public_partition_preserves_private_reserve_and_reclaims_both_classes() 
         for _ in 0..8 {
             public.push(
                 store
-                    .issue_human_session_profile(fixture.authorize(session).await)
+                    .issue_human_session_socket(fixture.authorize(session).await)
                     .await
                     .unwrap_or_else(|error| panic!("fill public partition: {error}")),
             );
@@ -518,7 +505,7 @@ async fn public_partition_preserves_private_reserve_and_reclaims_both_classes() 
     }
     assert!(matches!(
         store
-            .issue_human_session_profile(fixture.authorize(2).await)
+            .issue_human_session_socket(fixture.authorize(2).await)
             .await,
         Err(TicketError::Invalid)
     ));
@@ -535,12 +522,12 @@ async fn public_partition_preserves_private_reserve_and_reclaims_both_classes() 
     assert_eq!(store.issue(principal()).await, Err(TicketError::Invalid));
 
     store
-        .consume_human_session_profile(&public[0].ticket)
+        .consume_human_session_socket(&public[0].ticket)
         .await
         .unwrap_or_else(|error| panic!("reclaim public grant: {error}"));
     assert!(
         store
-            .issue_human_session_profile(fixture.authorize(2).await)
+            .issue_human_session_socket(fixture.authorize(2).await)
             .await
             .is_ok()
     );

@@ -12,7 +12,7 @@ use tokio::{
 
 mod support {
     pub mod human_invite;
-    pub mod human_profile_exchange;
+    pub mod human_profile_target;
     pub mod room_socket_peer;
 }
 
@@ -21,9 +21,7 @@ use support::{
         canonical_session_token, fixture, fixture_with_max_uses, join, join_body,
         open_session_socket, persist_invite, start,
     },
-    human_profile_exchange::{
-        assert_avatar_available, assert_profile_exchange_boundary, issue_profile_ticket,
-    },
+    human_profile_target::{assert_avatar_available, assert_profile_target_boundary},
 };
 
 #[tokio::test]
@@ -79,7 +77,7 @@ async fn preflight_and_join_preserve_bounded_credentials_and_exact_retry() {
     )
     .await;
     let replacement_avatar =
-        assert_profile_exchange_boundary(&client, &server.base_url, &store, session_token, &avatar)
+        assert_profile_target_boundary(&client, &server.base_url, &store, session_token, &avatar)
             .await;
     assert_session_socket_boundary(&client, &server.base_url, session_token).await;
 
@@ -146,10 +144,9 @@ async fn read_only_session_patches_profile_but_cannot_upload_an_avatar() {
         .as_str()
         .unwrap_or_else(|| panic!("read-only admission has no session token"));
 
-    let update_ticket = issue_profile_ticket(&client, &server.base_url, session_token).await;
     let updated: Value = client
         .post(format!("{}/api/user-profile", server.base_url))
-        .header("authorization", format!("Bearer {update_ticket}"))
+        .header("authorization", format!("Bearer {session_token}"))
         .json(&json!({
             "expected_revision": 1,
             "custom_status": "Still a person profile"
@@ -165,10 +162,9 @@ async fn read_only_session_patches_profile_but_cannot_upload_an_avatar() {
         "Still a person profile"
     );
 
-    let upload_ticket = issue_profile_ticket(&client, &server.base_url, session_token).await;
     let rejected = client
         .post(format!("{}/api/attachments", server.base_url))
-        .header("authorization", format!("Bearer {upload_ticket}"))
+        .header("authorization", format!("Bearer {session_token}"))
         .body("{")
         .send()
         .await

@@ -24,6 +24,9 @@ use crate::{
     },
     human_browser_credential::fingerprint_browser_credential,
     human_invite_preflight::authenticated_invite_evidence,
+    human_session_http_authority::{
+        HumanSessionBearerError, HumanSessionBearerResolution, resolve_human_session_bearer,
+    },
     ingress_trust::single_header,
     ticket::{
         ConsumedAppearanceReadTicket, ConsumedAttachmentUploadTicket,
@@ -501,6 +504,16 @@ async fn consume_attachment_upload_authority(
     headers: &axum::http::HeaderMap,
 ) -> Result<AttachmentUploadAuthority, ProfileHttpError> {
     let ticket = bearer_ticket(headers).ok_or_else(ProfileHttpError::unauthorized)?;
+    match resolve_human_session_bearer(state, ticket).await {
+        Ok(HumanSessionBearerResolution::Authorized(authorization)) => {
+            return Ok(AttachmentUploadAuthority::Profile(
+                ProfileAuthority::HumanSession(authorization),
+            ));
+        }
+        Ok(HumanSessionBearerResolution::Other) => {}
+        Err(HumanSessionBearerError::Invalid) => return Err(ProfileHttpError::unauthorized()),
+        Err(HumanSessionBearerError::Persistence(error)) => return Err(error.into()),
+    }
     match state
         .tickets
         .consume_attachment_upload(ticket)
@@ -524,6 +537,14 @@ async fn consume_profile_authority(
     headers: &axum::http::HeaderMap,
 ) -> Result<ProfileAuthority, ProfileHttpError> {
     let ticket = bearer_ticket(headers).ok_or_else(ProfileHttpError::unauthorized)?;
+    match resolve_human_session_bearer(state, ticket).await {
+        Ok(HumanSessionBearerResolution::Authorized(authorization)) => {
+            return Ok(ProfileAuthority::HumanSession(authorization));
+        }
+        Ok(HumanSessionBearerResolution::Other) => {}
+        Err(HumanSessionBearerError::Invalid) => return Err(ProfileHttpError::unauthorized()),
+        Err(HumanSessionBearerError::Persistence(error)) => return Err(error.into()),
+    }
     profile_authority(
         state
             .tickets
@@ -536,9 +557,6 @@ async fn consume_profile_authority(
 fn profile_authority(ticket: ConsumedProfileTicket) -> Result<ProfileAuthority, ProfileHttpError> {
     match ticket {
         ConsumedProfileTicket::Room(principal) => Ok(ProfileAuthority::Room(principal)),
-        ConsumedProfileTicket::HumanSession(authorization) => {
-            Ok(ProfileAuthority::HumanSession(authorization))
-        }
         ConsumedProfileTicket::ServerOperator { principal_id }
             if principal_id == LOCAL_OPERATOR_USER_ID =>
         {

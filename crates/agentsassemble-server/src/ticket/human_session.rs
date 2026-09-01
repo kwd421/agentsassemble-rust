@@ -17,7 +17,6 @@ pub(super) struct HumanSessionGrant {
 #[derive(Clone, PartialEq, Eq)]
 pub(super) enum HumanSessionGrantPurpose {
     WebSocketConnect,
-    OwnProfile,
     PreferencesRead,
     PreferencesWrite,
     MessagePinsRead,
@@ -61,7 +60,6 @@ impl ConsumedHumanSessionSocketTicket {
 
 pub enum ConsumedProfileTicket {
     Room(AuthenticatedPrincipal),
-    HumanSession(HumanSessionAuthorization),
     ServerOperator { principal_id: String },
 }
 
@@ -87,20 +85,6 @@ impl TicketStore {
         authorization: HumanSessionAuthorization,
     ) -> Result<IssuedTicket, TicketError> {
         self.issue_human_session(authorization, HumanSessionGrantPurpose::WebSocketConnect)
-            .await
-    }
-
-    /// Issues an exact own-profile grant from current durable human-session authority.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Invalid` when the session has expired or a global, public, or per-session
-    /// grant bound is exhausted.
-    pub async fn issue_human_session_profile(
-        &self,
-        authorization: HumanSessionAuthorization,
-    ) -> Result<IssuedTicket, TicketError> {
-        self.issue_human_session(authorization, HumanSessionGrantPurpose::OwnProfile)
             .await
     }
 
@@ -319,17 +303,14 @@ impl TicketStore {
         Ok(ConsumedHumanSessionSocketTicket { authorization })
     }
 
-    /// Consumes only an exact human-session own-profile credential.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Invalid` after consuming a wrong-purpose, expired, unknown, or reused ticket.
-    pub async fn consume_human_session_profile(
+    #[cfg(test)]
+    pub(crate) async fn consume_human_session_socket_at(
         &self,
         ticket: &str,
+        now: chrono::DateTime<Utc>,
     ) -> Result<HumanSessionAuthorization, TicketError> {
-        self.consume_human_session(ticket, &HumanSessionGrantPurpose::OwnProfile)
-            .await
+        let grant = self.consume_grant(ticket).await?;
+        Self::resolve_human_session_at(grant, &HumanSessionGrantPurpose::WebSocketConnect, now)
     }
 
     async fn consume_human_session(
@@ -361,16 +342,6 @@ impl TicketStore {
             return Err(TicketError::Invalid);
         }
         Ok(public.authorization)
-    }
-
-    #[cfg(test)]
-    pub(crate) async fn consume_human_session_profile_at(
-        &self,
-        ticket: &str,
-        now: chrono::DateTime<Utc>,
-    ) -> Result<HumanSessionAuthorization, TicketError> {
-        let grant = self.consume_grant(ticket).await?;
-        Self::resolve_human_session_at(grant, &HumanSessionGrantPurpose::OwnProfile, now)
     }
 
     /// Removes and resolves a one-use credential accepted by the server-wide profile surface.
@@ -423,13 +394,7 @@ impl TicketStore {
                         )?,
                     ))
                 } else {
-                    ConsumedAttachmentUploadTicket::Profile(ConsumedProfileTicket::HumanSession(
-                        Self::resolve_human_session_authority(
-                            public,
-                            &HumanSessionGrantPurpose::OwnProfile,
-                            Utc::now(),
-                        )?,
-                    ))
+                    return Err(TicketError::Invalid);
                 }
             }
             TicketAuthority::ServerOperator { principal_id, .. } => {

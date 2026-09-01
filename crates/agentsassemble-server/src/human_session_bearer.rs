@@ -6,6 +6,23 @@ const BEARER_BYTES: usize = 32;
 const BEARER_BODY_CHARS: usize = 43;
 const BEARER_CHARS: usize = 48;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PresentedHumanSessionBearer {
+    Other,
+    Invalid,
+    Fingerprint([u8; 32]),
+}
+
+pub(crate) fn classify_presented_bearer(value: &str) -> PresentedHumanSessionBearer {
+    if !value.starts_with(BEARER_PREFIX) {
+        return PresentedHumanSessionBearer::Other;
+    }
+    fingerprint_presented_bearer(value).map_or(
+        PresentedHumanSessionBearer::Invalid,
+        PresentedHumanSessionBearer::Fingerprint,
+    )
+}
+
 pub(crate) fn fingerprint_presented_bearer(value: &str) -> Option<[u8; 32]> {
     if value.len() != BEARER_CHARS || !value.is_ascii() {
         return None;
@@ -31,7 +48,9 @@ fn fingerprint(value: &[u8]) -> [u8; 32] {
 
 #[cfg(test)]
 mod tests {
-    use super::fingerprint_presented_bearer;
+    use super::{
+        PresentedHumanSessionBearer, classify_presented_bearer, fingerprint_presented_bearer,
+    };
 
     #[test]
     fn presented_bearer_requires_one_canonical_domain() {
@@ -49,5 +68,17 @@ mod tests {
             assert_eq!(fingerprint_presented_bearer(&malformed), None);
         }
         assert!(fingerprint_presented_bearer(valid).is_some());
+        assert!(matches!(
+            classify_presented_bearer(valid),
+            PresentedHumanSessionBearer::Fingerprint(_)
+        ));
+        assert_eq!(
+            classify_presented_bearer("aas1.malformed"),
+            PresentedHumanSessionBearer::Invalid
+        );
+        assert_eq!(
+            classify_presented_bearer("0123456789abcdef"),
+            PresentedHumanSessionBearer::Other
+        );
     }
 }
