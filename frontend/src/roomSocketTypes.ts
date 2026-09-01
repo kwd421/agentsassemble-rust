@@ -7,7 +7,6 @@ import type {
   RoomMember,
   RoomSocketAuth,
   ServerRoom,
-  SideChatEvent,
 } from "./api";
 import type { PublicRoomGlobalSettings } from "./types/generatedRoomEvent";
 import type { PluginEnvelope } from "./pluginSocketProtocol";
@@ -19,7 +18,6 @@ import type { RoomRuntimeTicket } from "./lib/roomRuntimeTicket";
 export interface RoomSocketHandlers {
   onLobby?: (events: LobbyEvent[]) => void;
   onRoster?: (members: RoomMember[]) => void;
-  onSideChat?: (events: SideChatEvent[]) => void;
   onRoomSnapshot?: (
     snapshot: RoomSocketSnapshot,
     displayResourceBase: string

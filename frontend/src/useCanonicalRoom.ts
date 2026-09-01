@@ -8,7 +8,6 @@ import {
   type RoomGlobalSettings,
   type RoomGlobalSettingsUpdate,
   type RoomMember,
-  type SideChatEvent,
 } from "./api";
 import {
   openRoomSocket,
@@ -55,7 +54,6 @@ type OpenRoomSocket = (
 
 const NO_STREAMS: RoomStream[] = [];
 type CanonicalRoomCallbacks = {
-  onSideChat?: (events: SideChatEvent[]) => void;
   onError?: (error: Event | Error) => void;
   onUnauthorized?: () => void;
 };
@@ -88,7 +86,6 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
   } = options;
   const callbacksRef = useRef<CanonicalRoomCallbacks>({});
   callbacksRef.current = {
-    onSideChat: options.onSideChat,
     onError: options.onError,
     onUnauthorized: options.onUnauthorized,
   };
@@ -411,11 +408,6 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
         ) return;
         setProviderCatalogByRoom((previous) => ({ ...previous, [roomId]: catalog }));
         setProvidersByRoom((previous) => ({ ...previous, [roomId]: catalog.providers || [] }));
-      },
-      onSideChat: (events) => {
-        if (connectionIsCurrent() && socketIsAccepted(currentSocket)) {
-          callbacksRef.current.onSideChat?.(events);
-        }
       },
       onOpen: () => {
         if (!connectionIsCurrent()) return;

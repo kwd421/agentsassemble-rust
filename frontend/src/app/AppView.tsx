@@ -49,7 +49,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     inviteRoom,
     loadCanonicalRoomHistory, loadProviderUsage, lobbyPostingState, markChannelRead,
     markRoomRead, membersOpen, menuChannelDisplay, menuRoom,
-    messageSearchChannelLabels, messageSearchScope, mobileRoomInfoInitialMode, mobileRoomInfoOpen,
+    messageSearchChannelLabels, messageSearchScope, mobileRoomInfoOpen,
     mobileSidebarOpen, openAgentCreate,
     openChannelMenu, openCrossChannelSearchResult, openMobileProfileFromPanel, openMobileRoomInfo,
     openMobileSidebar, openRoomMenu, openRoomSettings, pendingMessageSearchTarget,
@@ -391,7 +391,6 @@ export default function AppView({ controller }: { controller: AppController }) {
           viewerParticipantId={guestSession?.agentId || "operator-local"}
           displayResourceBase={canonicalRoom.displayResourceBase}
           guestLocked={guestLocked}
-          initialMode={mobileRoomInfoInitialMode}
           onClose={closeMobileRoomInfo}
           onInvite={guestLocked ? undefined : () => inviteRoom(activeRoom.id)}
           onOpenSettings={guestLocked ? undefined : () => openRoomSettings(activeRoom.id)}

@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import type { MobileRoomInfoInitialMode } from "./appModel";
 
 type MobilePanelDragState = {
   startX: number;
@@ -21,8 +20,6 @@ export function mobileViewportMatches() {
 export function useMobilePanels({ canOpenRoomInfo }: { canOpenRoomInfo: boolean }) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(mobileViewportMatches);
   const [mobileRoomInfoOpen, setMobileRoomInfoOpen] = useState(false);
-  const [mobileRoomInfoInitialMode, setMobileRoomInfoInitialMode] =
-    useState<MobileRoomInfoInitialMode>("info");
   const mobilePanelDragRef = useRef<MobilePanelDragState | null>(null);
 
   function mobileViewportIsActive() {
@@ -41,13 +38,11 @@ export function useMobilePanels({ canOpenRoomInfo }: { canOpenRoomInfo: boolean 
   function openMobileRoomInfo() {
     if (!canOpenRoomInfo) return;
     setMobileSidebarOpen(false);
-    setMobileRoomInfoInitialMode("info");
     setMobileRoomInfoOpen(true);
   }
 
   function closeMobileRoomInfo() {
     setMobileRoomInfoOpen(false);
-    setMobileRoomInfoInitialMode("info");
   }
 
   function openMobileProfileFromPanel() {
@@ -171,8 +166,6 @@ export function useMobilePanels({ canOpenRoomInfo }: { canOpenRoomInfo: boolean 
     setMobileSidebarOpen,
     mobileRoomInfoOpen,
     setMobileRoomInfoOpen,
-    mobileRoomInfoInitialMode,
-    setMobileRoomInfoInitialMode,
     mobileViewportIsActive,
     openMobileSidebar,
     closeMobileSidebar,

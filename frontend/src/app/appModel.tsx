@@ -11,7 +11,6 @@ import type {
 import type { RoomDockItem } from "../lib/roomDockModel";
 
 export type Channel = "lobby";
-export type MobileRoomInfoInitialMode = "info" | "side-chat";
 
 export type ChannelConfig = {
   id: Channel;

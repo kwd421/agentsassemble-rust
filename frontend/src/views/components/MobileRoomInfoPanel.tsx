@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import {
   ArrowLeft,
   Bell,
@@ -35,7 +35,6 @@ type MobileRoomSummary = {
 };
 
 type MobileInfoTab = "members" | "media" | "pins" | "links" | "files";
-type MobilePanelMode = "info" | "side-chat";
 
 type MobileMemberRow = {
   id: string;
@@ -318,8 +317,6 @@ export default function MobileRoomInfoPanel({
   onClose,
   onInvite,
   onOpenSettings,
-  sideChatContent,
-  initialMode = "info",
   agentSessions = [],
   availableProviders = [],
   capabilities = {},
@@ -339,8 +336,6 @@ export default function MobileRoomInfoPanel({
   onClose: () => void;
   onInvite?: () => void;
   onOpenSettings?: () => void;
-  sideChatContent?: ReactNode;
-  initialMode?: MobilePanelMode;
   agentSessions?: RoomAgentSession[];
   availableProviders?: NativeCliProviderAvailability[];
   capabilities?: Record<string, boolean>;
@@ -355,9 +350,6 @@ export default function MobileRoomInfoPanel({
   agentActivityVisibility?: Record<string, boolean>;
   onAgentActivityVisibilityChange?: (session: RoomAgentSession, visible: boolean) => void;
 }) {
-  const [panelMode, setPanelMode] = useState<MobilePanelMode>(
-    sideChatContent ? initialMode : "info"
-  );
   const [activeTab, setActiveTab] = useState<MobileInfoTab>("members");
   const [selectedAgentSessionId, setSelectedAgentSessionId] = useState("");
   const selectedAgentSession = agentSessions.find(
@@ -374,18 +366,6 @@ export default function MobileRoomInfoPanel({
   );
   const tabLabel = MOBILE_INFO_TABS.find((tab) => tab.id === activeTab)?.label || "멤버";
   const hasRoomIconImage = Boolean(appearance.iconImage);
-
-  useEffect(() => {
-    setPanelMode(sideChatContent ? initialMode : "info");
-  }, [initialMode]);
-
-  useEffect(() => {
-    if (
-      panelMode === "side-chat" && !sideChatContent
-    ) {
-      setPanelMode("info");
-    }
-  }, [panelMode, sideChatContent]);
 
   return (
     <section className="dc-mobile-info-panel" role="dialog" aria-modal="true" aria-label="채널 정보">
@@ -406,32 +386,6 @@ export default function MobileRoomInfoPanel({
           </button>
         )}
       </header>
-
-      {sideChatContent && (
-        <nav className="dc-mobile-info-mode-tabs" aria-label="모바일 방 패널">
-          <button
-            type="button"
-            data-active={panelMode === "info"}
-            onClick={() => setPanelMode("info")}
-          >
-            방 정보
-          </button>
-          {sideChatContent && (
-            <button
-              type="button"
-              data-active={panelMode === "side-chat"}
-              onClick={() => setPanelMode("side-chat")}
-            >
-              사이드챗
-            </button>
-          )}
-        </nav>
-      )}
-
-      {panelMode === "side-chat" && sideChatContent ? (
-        <div className="dc-mobile-side-chat-shell">{sideChatContent}</div>
-      ) : (
-        <>
 
       <section className="dc-mobile-info-hero">
         <span className="dc-mobile-info-channel-icon" data-has-image={hasRoomIconImage}>
@@ -506,8 +460,6 @@ export default function MobileRoomInfoPanel({
           <p>{tabLabel}</p>
           <span>아직 이 채널에 표시할 항목이 없습니다.</span>
         </section>
-      )}
-        </>
       )}
     </section>
   );
