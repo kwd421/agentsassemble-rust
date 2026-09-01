@@ -33,7 +33,7 @@ describe("room socket message attachments", () => {
     const { handle, sockets } = openHarness();
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(0, 0);
+    const frames = handshakeFrames(0, 0);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
@@ -45,7 +45,7 @@ describe("room socket message attachments", () => {
       attachments: [second, first],
     });
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
-    const textCommand = await sentClientFrame(sockets[0], frames);
+    const textCommand = sentClientFrame(sockets[0]);
     expect(textCommand).toMatchObject({
       action: "message.send",
       payload: {
@@ -53,7 +53,7 @@ describe("room socket message attachments", () => {
         attachment_ids: [second.id, first.id],
       },
     });
-    await receiveServerFrame(sockets[0], frames, {
+    receiveServerFrame(sockets[0], {
       op: "ack",
       accepted: true,
       resolution: "committed",
@@ -65,12 +65,12 @@ describe("room socket message attachments", () => {
 
     const attachmentOnly = handle.say({ message: "", attachments: [first] });
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(3));
-    const attachmentCommand = await sentClientFrame(sockets[0], frames, 2);
+    const attachmentCommand = sentClientFrame(sockets[0], 2);
     expect(attachmentCommand).toMatchObject({
       action: "message.send",
       payload: { content: "", attachment_ids: [first.id] },
     });
-    await receiveServerFrame(sockets[0], frames, {
+    receiveServerFrame(sockets[0], {
       op: "ack",
       accepted: true,
       resolution: "committed",
@@ -86,7 +86,7 @@ describe("room socket message attachments", () => {
     const { handle, sockets } = openHarness();
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(0, 0);
+    const frames = handshakeFrames(0, 0);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
@@ -109,7 +109,7 @@ describe("room socket message attachments", () => {
     const { handle, sockets } = openHarness();
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(0, 0);
+    const frames = handshakeFrames(0, 0);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
@@ -123,7 +123,7 @@ describe("room socket message attachments", () => {
       voteDurationSeconds: 300,
     });
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
-    const createCommand = await sentClientFrame(sockets[0], frames);
+    const createCommand = sentClientFrame(sockets[0]);
     expect(createCommand.payload).toEqual({
       kind: "vote",
       vote_question: "Ship it?",
@@ -131,7 +131,7 @@ describe("room socket message attachments", () => {
       vote_duration_seconds: 300,
       attachment_ids: [attachment("a").id],
     });
-    await receiveServerFrame(sockets[0], frames, {
+    receiveServerFrame(sockets[0], {
       op: "ack",
       accepted: true,
       resolution: "committed",
@@ -164,9 +164,9 @@ describe("room socket message attachments", () => {
       const pending = handle.say(operation.request);
       const wireIndex = index + 2;
       await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(wireIndex + 1));
-      const command = await sentClientFrame(sockets[0], frames, wireIndex);
+      const command = sentClientFrame(sockets[0], wireIndex);
       expect(command.payload).toEqual(operation.payload);
-      await receiveServerFrame(sockets[0], frames, {
+      receiveServerFrame(sockets[0], {
         op: "ack",
         accepted: true,
         resolution: "committed",

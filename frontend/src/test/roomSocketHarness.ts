@@ -110,7 +110,7 @@ function snapshot(cursor: number) {
   };
 }
 
-export async function handshakeFrames(
+export function handshakeFrames(
   snapshotCursor: number,
   catchupHighWater: number,
   mutateReceipt?: (receipt: SubscriptionReceipt) => void
@@ -137,26 +137,18 @@ export async function handshakeFrames(
   };
 }
 
-export async function receiveServerFrame(
+export function receiveServerFrame(
   socket: FakeWebSocket,
-  frames: Awaited<ReturnType<typeof handshakeFrames>>,
   message: Record<string, unknown>
 ) {
-  socket.receiveRaw(await encodedServerFrame(frames, message));
+  socket.receiveRaw(encodedServerFrame(message));
 }
 
-export async function encodedServerFrame(
-  _frames: Awaited<ReturnType<typeof handshakeFrames>>,
-  message: Record<string, unknown>
-) {
+export function encodedServerFrame(message: Record<string, unknown>) {
   return JSON.stringify(message);
 }
 
-export async function sentClientFrame(
-  socket: FakeWebSocket,
-  _frames: Awaited<ReturnType<typeof handshakeFrames>>,
-  index = 1
-) {
+export function sentClientFrame(socket: FakeWebSocket, index = 1) {
   return socket.sent[index];
 }
 

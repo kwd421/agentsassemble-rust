@@ -58,14 +58,14 @@ describe("bounded canonical room socket", () => {
     expect(sockets[0].sent).toHaveLength(1);
     expect(handle.ready()).toBe(false);
 
-    const frames = await handshakeFrames(1, 2);
+    const frames = handshakeFrames(1, 2);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await flushPromises();
     expect(onOpen).not.toHaveBeenCalled();
     expect(sockets[0].sent).toHaveLength(1);
 
-    await receiveServerFrame(sockets[0], frames, {
+    receiveServerFrame(sockets[0], {
       op: "event",
       stream: "room_events",
       events: [event(2)],
@@ -76,13 +76,13 @@ describe("bounded canonical room socket", () => {
     expect(onOpen).toHaveBeenCalledOnce();
     expect(onEvents).toHaveBeenCalledWith([event(2)]);
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
-    const command = await sentClientFrame(sockets[0], frames);
+    const command = sentClientFrame(sockets[0]);
     expect(command).toMatchObject({
       op: "command",
       action: "message.send",
       payload: { content: "hello" },
     });
-    await receiveServerFrame(sockets[0], frames, {
+    receiveServerFrame(sockets[0], {
       op: "ack",
       accepted: true,
       resolution: "committed",
@@ -103,7 +103,7 @@ describe("bounded canonical room socket", () => {
     });
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(0, 0);
+    const frames = handshakeFrames(0, 0);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot.replace('"last_seq":0', '"last_seq":1'));
     await vi.waitFor(() =>
@@ -137,7 +137,7 @@ describe("bounded canonical room socket", () => {
     });
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(0, 0, (receipt) => {
+    const frames = handshakeFrames(0, 0, (receipt) => {
       receipt.server_surface_digest = "d".repeat(64);
     });
     sockets[0].receive(frames.receipt);
@@ -157,10 +157,10 @@ describe("bounded canonical room socket", () => {
     });
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(1, 3);
+    const frames = handshakeFrames(1, 3);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
-    await receiveServerFrame(sockets[0], frames, {
+    receiveServerFrame(sockets[0], {
       op: "event",
       stream: "room_events",
       events: [event(3)],
@@ -181,7 +181,7 @@ describe("bounded canonical room socket", () => {
     });
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(1, 1);
+    const frames = handshakeFrames(1, 1);
     frames.snap.events = [malformedRoleEvent(1)];
     frames.rawSnapshot = JSON.stringify(frames.snap);
     sockets[0].receive(frames.receipt);
@@ -206,10 +206,10 @@ describe("bounded canonical room socket", () => {
     });
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(1, 2);
+    const frames = handshakeFrames(1, 2);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
-    await receiveServerFrame(sockets[0], frames, {
+    receiveServerFrame(sockets[0], {
       op: "event",
       stream: "room_events",
       events: [malformedRoleEvent(2)],
@@ -235,11 +235,11 @@ describe("bounded canonical room socket", () => {
     });
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(1, 1);
+    const frames = handshakeFrames(1, 1);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
-    await receiveServerFrame(sockets[0], frames, {
+    receiveServerFrame(sockets[0], {
       op: "event",
       stream: "room_events",
       events: [malformedRoleEvent(2)],
@@ -264,11 +264,11 @@ describe("bounded canonical room socket", () => {
     });
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(1, 1);
+    const frames = handshakeFrames(1, 1);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
-    await receiveServerFrame(sockets[0], frames, {
+    receiveServerFrame(sockets[0], {
       op: "event",
       stream: "room_events",
       events: [malformedMuteEvent(2)],
@@ -293,24 +293,24 @@ describe("bounded canonical room socket", () => {
     });
     await flushPromises();
     sockets[0].open();
-    const first = await handshakeFrames(0, 0);
+    const first = handshakeFrames(0, 0);
     sockets[0].receive(first.receipt);
     sockets[0].receiveRaw(first.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
-    await receiveServerFrame(sockets[0], first, {
+    receiveServerFrame(sockets[0], {
       op: "event",
       stream: "room_events",
       events: [event(1)],
       latest_seq: 1,
     });
     await vi.waitFor(() => expect(onEvents).toHaveBeenCalledWith([event(1)]));
-    const resync = await encodedServerFrame(first, {
+    const resync = encodedServerFrame({
       op: "resync_required",
       stream: "room_events",
       latest_seq: 1,
       reason: "subscriber lagged",
     });
-    const staleEvent = await encodedServerFrame(first, {
+    const staleEvent = encodedServerFrame({
       op: "event",
       stream: "room_events",
       events: [event(2)],
@@ -336,14 +336,14 @@ describe("bounded canonical room socket", () => {
     });
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(0, 0);
+    const frames = handshakeFrames(0, 0);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     void handle.command("message.send", { content: "hello" }).catch(() => {});
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
-    const command = await sentClientFrame(sockets[0], frames);
-    await receiveServerFrame(sockets[0], frames, {
+    const command = sentClientFrame(sockets[0]);
+    receiveServerFrame(sockets[0], {
       op: "ack",
       accepted: true,
       resolution: "committed",
@@ -364,7 +364,7 @@ describe("bounded canonical room socket", () => {
     });
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(0, 0);
+    const frames = handshakeFrames(0, 0);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
@@ -372,8 +372,8 @@ describe("bounded canonical room socket", () => {
       .command("participant.mute", { participant_id: "agent-one", muted: true })
       .catch(() => {});
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
-    const command = await sentClientFrame(sockets[0], frames);
-    await receiveServerFrame(sockets[0], frames, {
+    const command = sentClientFrame(sockets[0]);
+    receiveServerFrame(sockets[0], {
       op: "ack",
       accepted: true,
       resolution: "committed",
@@ -405,16 +405,16 @@ describe("bounded canonical room socket", () => {
     });
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(0, 0);
+    const frames = handshakeFrames(0, 0);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     const pendingLeave = handle.command("participant.leave", {});
     void pendingLeave.catch(() => {});
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
-    const command = await sentClientFrame(sockets[0], frames);
+    const command = sentClientFrame(sockets[0]);
 
-    const unknown = await encodedServerFrame(frames, {
+    const unknown = encodedServerFrame({
       op: "nack",
       accepted: false,
       resolution: "rejected",
@@ -425,7 +425,7 @@ describe("bounded canonical room socket", () => {
         message: "Message content is invalid.",
       },
     });
-    const trailingLeave = await encodedServerFrame(frames, leaveAck(command.request_id));
+    const trailingLeave = encodedServerFrame(leaveAck(command.request_id));
     sockets[0].receiveRaw(unknown);
     sockets[0].receiveRaw(trailingLeave);
 
@@ -442,15 +442,15 @@ describe("bounded canonical room socket", () => {
     const { handle, sockets } = openHarness();
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(0, 0);
+    const frames = handshakeFrames(0, 0);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     const pending = handle.command("message.send", { content: "rejected" });
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
-    const command = await sentClientFrame(sockets[0], frames);
+    const command = sentClientFrame(sockets[0]);
 
-    await receiveServerFrame(sockets[0], frames, {
+    receiveServerFrame(sockets[0], {
       op: "nack",
       accepted: false,
       resolution: "rejected",
@@ -472,20 +472,20 @@ describe("bounded canonical room socket", () => {
     const { handle, sockets } = openHarness();
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(0, 0);
+    const frames = handshakeFrames(0, 0);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     const pendingLeave = handle.command("participant.leave", {});
     void pendingLeave.catch(() => {});
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
-    const command = await sentClientFrame(sockets[0], frames);
-    const unresolved = await encodedServerFrame(frames, {
+    const command = sentClientFrame(sockets[0]);
+    const unresolved = encodedServerFrame({
       op: "nack", accepted: false, resolution: "unresolved",
       request_id: command.request_id, action: "participant.leave",
       error: { code: "persistence_failed", message: "Persistence operation failed." },
     });
-    const trailingLeave = await encodedServerFrame(frames, leaveAck(command.request_id));
+    const trailingLeave = encodedServerFrame(leaveAck(command.request_id));
     sockets[0].receiveRaw(unresolved);
     sockets[0].receiveRaw(trailingLeave);
     await vi.waitFor(() => expect(sockets[0].readyState).toBe(WebSocket.CLOSED));
@@ -499,11 +499,11 @@ describe("bounded canonical room socket", () => {
     const { handle, sockets } = openHarness({ onProviderCatalog });
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(0, 0);
+    const frames = handshakeFrames(0, 0);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await flushPromises();
-    await receiveServerFrame(sockets[0], frames, {
+    receiveServerFrame(sockets[0], {
       op: "provider_catalog_updated",
       catalog: { status: "ready", catalog_revision: "cat-2", providers: [] },
     });
@@ -522,16 +522,16 @@ describe("bounded canonical room socket", () => {
     const { handle, sockets } = openHarness();
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(0, 0);
+    const frames = handshakeFrames(0, 0);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
 
     const pendingLeave = handle.command("participant.leave", {});
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
-    const command = await sentClientFrame(sockets[0], frames);
+    const command = sentClientFrame(sockets[0]);
 
-    await receiveServerFrame(sockets[0], frames, leaveAck(command.request_id));
+    receiveServerFrame(sockets[0], leaveAck(command.request_id));
     sockets[0].close();
 
     await expect(pendingLeave).resolves.toMatchObject({
@@ -566,17 +566,15 @@ describe("bounded canonical room socket", () => {
     });
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(0, 0);
+    const frames = handshakeFrames(0, 0);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     const pendingLeave = handle.command("participant.leave", {});
     void pendingLeave.catch(() => {});
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
-    const command = await sentClientFrame(sockets[0], frames);
-    sockets[0].receiveRaw(await encodedServerFrame(
-      frames, leaveAck(command.request_id, mutate)
-    ));
+    const command = sentClientFrame(sockets[0]);
+    sockets[0].receiveRaw(encodedServerFrame(leaveAck(command.request_id, mutate)));
     sockets[0].close();
     await vi.waitFor(() => expect(errors.at(-1)?.category).toBe("ack_contract_invalid"));
     await vi.advanceTimersByTimeAsync(500);

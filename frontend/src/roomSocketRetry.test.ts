@@ -29,23 +29,23 @@ describe("room socket exact-command retry", () => {
     vi.useFakeTimers();
     const { handle, sockets } = openHarness();
     await flushPromises();
-    let frames = await openReadyConnection(0, handle, sockets);
+    await openReadyConnection(0, handle, sockets);
     const pendingCommand = handle.command("message.send", { content: "received before close" });
     void pendingCommand.catch(() => {});
 
     for (let attempt = 0; attempt < 7; attempt += 1) {
       await vi.waitFor(() => expect(sockets[attempt].sent).toHaveLength(2));
-      const command = await sentClientFrame(sockets[attempt], frames);
-      await receiveServerFrame(sockets[attempt], frames, unresolved(command));
+      const command = sentClientFrame(sockets[attempt]);
+      receiveServerFrame(sockets[attempt], unresolved(command));
       await vi.waitFor(() => expect(sockets[attempt].readyState).toBe(WebSocket.CLOSED));
       await vi.advanceTimersByTimeAsync(500);
-      frames = await openReadyConnection(attempt + 1, handle, sockets);
+      await openReadyConnection(attempt + 1, handle, sockets);
       await vi.advanceTimersByTimeAsync(Math.max(0, UNRESOLVED_DELAYS_MS[attempt] - 500));
     }
 
     await vi.waitFor(() => expect(sockets[7].sent).toHaveLength(2));
-    const finalCommand = await sentClientFrame(sockets[7], frames);
-    await receiveServerFrame(sockets[7], frames, {
+    const finalCommand = sentClientFrame(sockets[7]);
+    receiveServerFrame(sockets[7], {
       op: "ack",
       accepted: true,
       resolution: "committed",
@@ -65,18 +65,18 @@ describe("room socket exact-command retry", () => {
     vi.useFakeTimers();
     const { handle, sockets } = openHarness();
     await flushPromises();
-    const firstFrames = await openReadyConnection(0, handle, sockets);
+    await openReadyConnection(0, handle, sockets);
     const pendingCommand = handle.command("message.send", { content: "closed transport" });
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
-    const firstCommand = await sentClientFrame(sockets[0], firstFrames);
+    const firstCommand = sentClientFrame(sockets[0]);
 
     sockets[0].close();
     await vi.advanceTimersByTimeAsync(500);
-    const secondFrames = await openReadyConnection(1, handle, sockets);
+    await openReadyConnection(1, handle, sockets);
     await vi.waitFor(() => expect(sockets[1].sent).toHaveLength(2));
-    const replayed = await sentClientFrame(sockets[1], secondFrames);
+    const replayed = sentClientFrame(sockets[1]);
     expect(replayed).toEqual(firstCommand);
-    await receiveServerFrame(sockets[1], secondFrames, {
+    receiveServerFrame(sockets[1], {
       op: "ack",
       accepted: true,
       resolution: "committed",
@@ -94,7 +94,7 @@ describe("room socket exact-command retry", () => {
     const { handle, sockets } = openHarness();
     await flushPromises();
     sockets[0].open();
-    const firstFrames = await handshakeFrames(0, 0);
+    const firstFrames = handshakeFrames(0, 0);
     sockets[0].receive(firstFrames.receipt);
     sockets[0].receiveRaw(firstFrames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
@@ -107,7 +107,7 @@ describe("room socket exact-command retry", () => {
       () => { settled = true; }
     );
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
-    const firstCommand = await sentClientFrame(sockets[0], firstFrames);
+    const firstCommand = sentClientFrame(sockets[0]);
     commandPayload.content = "mutated after send";
 
     await vi.advanceTimersByTimeAsync(COMMAND_TIMEOUT_MS);
@@ -116,43 +116,43 @@ describe("room socket exact-command retry", () => {
 
     await vi.advanceTimersByTimeAsync(500);
     sockets[1].open();
-    const secondFrames = await handshakeFrames(0, 0);
+    const secondFrames = handshakeFrames(0, 0);
     sockets[1].receive(secondFrames.receipt);
     sockets[1].receiveRaw(secondFrames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     await vi.waitFor(() => expect(sockets[1].sent).toHaveLength(2));
-    const replayedCommand = await sentClientFrame(sockets[1], secondFrames);
+    const replayedCommand = sentClientFrame(sockets[1]);
     expect(replayedCommand).toEqual(firstCommand);
 
-    await receiveServerFrame(sockets[1], secondFrames, unresolved(replayedCommand));
+    receiveServerFrame(sockets[1], unresolved(replayedCommand));
     await vi.waitFor(() => expect(sockets[1].readyState).toBe(WebSocket.CLOSED));
     expect(settled).toBe(false);
 
     await vi.advanceTimersByTimeAsync(500);
     sockets[2].open();
-    const thirdFrames = await handshakeFrames(0, 0);
+    const thirdFrames = handshakeFrames(0, 0);
     sockets[2].receive(thirdFrames.receipt);
     sockets[2].receiveRaw(thirdFrames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     await vi.waitFor(() => expect(sockets[2].sent).toHaveLength(2));
-    const replayedAfterUnresolved = await sentClientFrame(sockets[2], thirdFrames);
+    const replayedAfterUnresolved = sentClientFrame(sockets[2]);
     expect(replayedAfterUnresolved).toEqual(firstCommand);
 
-    await receiveServerFrame(sockets[2], thirdFrames, unresolved(replayedAfterUnresolved));
+    receiveServerFrame(sockets[2], unresolved(replayedAfterUnresolved));
     await vi.waitFor(() => expect(sockets[2].readyState).toBe(WebSocket.CLOSED));
     await vi.advanceTimersByTimeAsync(500);
     sockets[3].open();
-    const fourthFrames = await handshakeFrames(0, 0);
+    const fourthFrames = handshakeFrames(0, 0);
     sockets[3].receive(fourthFrames.receipt);
     sockets[3].receiveRaw(fourthFrames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     expect(sockets[3].sent).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(500);
     await vi.waitFor(() => expect(sockets[3].sent).toHaveLength(2));
-    const backedOffReplay = await sentClientFrame(sockets[3], fourthFrames);
+    const backedOffReplay = sentClientFrame(sockets[3]);
     expect(backedOffReplay).toEqual(firstCommand);
 
-    await receiveServerFrame(sockets[3], fourthFrames, {
+    receiveServerFrame(sockets[3], {
       op: "ack",
       accepted: true,
       resolution: "committed",
@@ -173,22 +173,22 @@ describe("room socket exact-command retry", () => {
     vi.useFakeTimers();
     const { handle, sockets } = openHarness();
     await flushPromises();
-    let frames = await openReadyConnection(0, handle, sockets);
+    await openReadyConnection(0, handle, sockets);
     const pendingCommand = handle.command("message.send", { content: "bounded uncertainty" });
     void pendingCommand.catch(() => {});
-    let exactCommand: Awaited<ReturnType<typeof sentClientFrame>> | undefined;
+    let exactCommand: ReturnType<typeof sentClientFrame> | undefined;
 
     for (let reply = 0; reply < 8; reply += 1) {
       await vi.waitFor(() => expect(sockets[reply].sent).toHaveLength(2));
-      const command = await sentClientFrame(sockets[reply], frames);
+      const command = sentClientFrame(sockets[reply]);
       exactCommand ||= command;
       expect(command).toEqual(exactCommand);
-      await receiveServerFrame(sockets[reply], frames, unresolved(command));
+      receiveServerFrame(sockets[reply], unresolved(command));
       if (reply === 7) break;
 
       await vi.waitFor(() => expect(sockets[reply].readyState).toBe(WebSocket.CLOSED));
       await vi.advanceTimersByTimeAsync(500);
-      frames = await openReadyConnection(reply + 1, handle, sockets);
+      await openReadyConnection(reply + 1, handle, sockets);
       await vi.advanceTimersByTimeAsync(Math.max(0, UNRESOLVED_DELAYS_MS[reply] - 500));
     }
 
@@ -202,14 +202,14 @@ describe("room socket exact-command retry", () => {
     vi.useFakeTimers();
     const { handle, sockets } = openHarness();
     await flushPromises();
-    let frames = await openReadyConnection(0, handle, sockets);
+    await openReadyConnection(0, handle, sockets);
     const pendingCommand = handle.command("message.send", { content: "silent outcome" });
     void pendingCommand.catch(() => {});
-    let exactCommand: Awaited<ReturnType<typeof sentClientFrame>> | undefined;
+    let exactCommand: ReturnType<typeof sentClientFrame> | undefined;
 
     for (let attempt = 0; attempt < 8; attempt += 1) {
       await vi.waitFor(() => expect(sockets[attempt].sent).toHaveLength(2));
-      const command = await sentClientFrame(sockets[attempt], frames);
+      const command = sentClientFrame(sockets[attempt]);
       exactCommand ||= command;
       expect(command).toEqual(exactCommand);
       await vi.advanceTimersByTimeAsync(COMMAND_TIMEOUT_MS);
@@ -217,7 +217,7 @@ describe("room socket exact-command retry", () => {
       if (attempt === 7) break;
 
       await vi.advanceTimersByTimeAsync(500);
-      frames = await openReadyConnection(attempt + 1, handle, sockets);
+      await openReadyConnection(attempt + 1, handle, sockets);
       await vi.advanceTimersByTimeAsync(Math.max(0, UNRESOLVED_DELAYS_MS[attempt] - 500));
     }
 
@@ -248,7 +248,7 @@ async function openReadyConnection(
 ) {
   expect(sockets).toHaveLength(index + 1);
   sockets[index].open();
-  const frames = await handshakeFrames(0, 0);
+  const frames = handshakeFrames(0, 0);
   sockets[index].receive(frames.receipt);
   sockets[index].receiveRaw(frames.rawSnapshot);
   await vi.waitFor(() => expect(handle.ready()).toBe(true));

@@ -21,7 +21,7 @@ describe("canonical room socket quiet keepalive", () => {
     const { handle, opened, sockets } = openHarness();
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(0, 0);
+    const frames = handshakeFrames(0, 0);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await opened;
@@ -31,17 +31,17 @@ describe("canonical room socket quiet keepalive", () => {
     expect(sockets[0].sent).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(1);
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
-    const firstPing = await sentClientFrame(sockets[0], frames);
+    const firstPing = sentClientFrame(sockets[0]);
     expect(firstPing).toEqual({ op: "ping", nonce: "keepalive-1" });
 
-    await receiveServerFrame(sockets[0], frames, {
+    receiveServerFrame(sockets[0], {
       op: "pong",
       nonce: firstPing.nonce,
     });
     await flushPromises();
     await vi.advanceTimersByTimeAsync(QUIET_KEEPALIVE_MS);
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(3));
-    await expect(sentClientFrame(sockets[0], frames, 2)).resolves.toEqual({
+    expect(sentClientFrame(sockets[0], 2)).toEqual({
       op: "ping",
       nonce: "keepalive-2",
     });
@@ -56,7 +56,7 @@ describe("canonical room socket quiet keepalive", () => {
     const { handle, opened, sockets } = openHarness();
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(0, 0);
+    const frames = handshakeFrames(0, 0);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await opened;
@@ -66,8 +66,8 @@ describe("canonical room socket quiet keepalive", () => {
     const commandIssuedAt = Date.now();
     const pending = handle.command("message.send", { content: "still here" });
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
-    const command = await sentClientFrame(sockets[0], frames);
-    await receiveServerFrame(sockets[0], frames, {
+    const command = sentClientFrame(sockets[0]);
+    receiveServerFrame(sockets[0], {
       op: "ack",
       accepted: true,
       resolution: "committed",
@@ -92,7 +92,7 @@ describe("canonical room socket quiet keepalive", () => {
     expect(sockets[0].sent).toHaveLength(2);
     await vi.advanceTimersByTimeAsync(1_000);
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(3));
-    await expect(sentClientFrame(sockets[0], frames, 2)).resolves.toMatchObject({
+    expect(sentClientFrame(sockets[0], 2)).toMatchObject({
       op: "ping",
     });
     handle.close();
@@ -108,7 +108,7 @@ describe("canonical room socket quiet keepalive", () => {
     });
     await flushPromises();
     sockets[0].open();
-    const frames = await handshakeFrames(0, 0);
+    const frames = handshakeFrames(0, 0);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await opened;
@@ -116,7 +116,7 @@ describe("canonical room socket quiet keepalive", () => {
     await vi.advanceTimersByTimeAsync(QUIET_KEEPALIVE_MS);
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
 
-    await receiveServerFrame(sockets[0], frames, {
+    receiveServerFrame(sockets[0], {
       op: "pong",
       nonce: "not-the-owned-keepalive",
     });
