@@ -21,6 +21,10 @@ contracts, findings, or verification journals.
   preserving one bounded-header authorization at each target route. Desktop purpose
   tickets and one-use WebSocket upgrade tickets remain because they cross distinct
   authority boundaries.
+- Completed D-03 targets through `f5ddb91`: profile, preferences, and message pins
+  authorize reusable remote sessions at the target; the obsolete socket-to-profile
+  authority interpretation is absent. Message search, attachments, and appearance
+  remain active D-03 work.
 - Sequence/exit owner: [`docs/PRODUCT_REIMPLEMENTATION_PLAN.md`](docs/PRODUCT_REIMPLEMENTATION_PLAN.md)
 - Finding/evidence owner: [`docs/architecture/REPOSITORY_AUDIT_2026-09-01.md`](docs/architecture/REPOSITORY_AUDIT_2026-09-01.md)
 - Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`;

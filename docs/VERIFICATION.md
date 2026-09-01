@@ -5252,3 +5252,26 @@ claim is made beyond the removed operations. All 90 server unit tests, the four-
 suite, the three-test message-pin TCP suite, nine focused and 650 full frontend tests,
 the production CSS-verified build, warning-denied server Clippy, formatting, and the
 architecture/source-growth/policy gates passed.
+
+### D-03 local socket/profile authority separation: 2026-09-01
+
+Repository-wide authority tracing found that the private-control `IssueTicket`
+credential used by `/ws?ticket=...` was also interpreted as local profile HTTP
+authority. The copied frontend and control protocol already use a distinct
+`IssueOperatorHttpTicket`/`runtime_operator_ticket` for local profile operations, so
+the second interpretation had no current product caller and violated the documented
+wrong-transport/scope consume-and-reject contract. An unused socket credential could
+therefore have read or durably changed the server-wide profile before WebSocket use.
+
+Commit `f5ddb91` rejects `TicketAuthority::Room` in the profile/attachment dispatcher
+and removes the corresponding profile authority and persistence branches. It adds no
+replacement credential, fallback, compatibility path, state, timer, polling, retry,
+or new abstraction. Local profile operations retain the one-use server-operator
+credential; remote profile operations retain direct reusable session authorization;
+message/appearance uploads and WebSocket admission retain their exact authorities.
+
+All 90 server unit tests, the three-test profile TCP suite, the four-test human-invite
+TCP suite, warning-denied server Clippy, formatting, and the architecture,
+source-growth, and policy gates passed. The profile TCP suite also proves that a socket
+ticket presented to profile HTTP receives 401 and is consumed before a later WebSocket
+attempt, while the positive local profile flow uses the server-operator ticket.

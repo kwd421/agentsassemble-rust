@@ -105,6 +105,19 @@ only after the correction commit is pushed and re-reviewed.
   final public HEAD `aea2a06` at `APPROVE — C0/H0/M0/L0`. Daybreaker Blue High
   manually approved final public HEAD `aea2a06` at `APPROVE — C0/H0/M0/L0`.
 
+### Phase 0B D-03 profile/preference/pin manual cross-review closure
+
+- For `5d0b069..6ab175d`, Critical ChatGPT Pro returned `REVISE — C0/H0/M0/L3`
+  and Daybreaker Blue High returned `REVISE — C0/H0/M0/L2`: stale grant lifecycle
+  names, an over-narrow profile error, and inaccurate removed-cost wording remained.
+- Corrections `787bbe5`, `f5737cf`, and `9e2c9f3` closed those findings. Follow-up
+  review found one further Medium: the WebSocket `Room` ticket was also accepted by
+  profile HTTP despite separate production issuers and callers. `f5ddb91` removed
+  that compatibility path and its stale profile branches.
+- Critical ChatGPT Pro and Daybreaker Blue High each manually approved exact
+  `9e2c9f3..f5ddb91`, cumulative `5d0b069..f5ddb91`, and final public HEAD `f5ddb91`
+  at `APPROVE — C0/H0/M0/L0`. Search, attachments, and appearance remain D-03 work.
+
 ## Fix findings
 
 ### F-01 — Antigravity transcript remains live
