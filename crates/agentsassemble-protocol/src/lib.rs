@@ -255,7 +255,6 @@ pub enum ClientFrame {
         streams: Vec<RoomStream>,
         #[serde(default)]
         resume_from_seq: i64,
-        server_challenge: String,
     },
     Command {
         request_id: String,
@@ -309,18 +308,14 @@ pub enum ServerFrame {
 pub struct Subscribed {
     pub streams: Vec<RoomStream>,
     pub protocol_version: u32,
-    pub server_challenge: String,
     pub connection_nonce: String,
     pub room_id: String,
     pub principal_id: String,
     pub participant_id: String,
     pub server_surface_revision: u32,
     pub server_surface_digest: String,
-    pub permissions_digest: String,
     pub snapshot_cursor: i64,
     pub catchup_high_water: i64,
-    pub snapshot_digest: String,
-    pub proof: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]

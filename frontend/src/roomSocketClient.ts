@@ -21,7 +21,7 @@ import {
   publicRoomEventIsValid,
   snapshotValidationError,
 } from "./lib/roomSocketValidation";
-import { createServerChallenge, isHex32Bytes } from "./lib/serverProof";
+import { isHex32Bytes } from "./lib/serverProof";
 import {
   RoomSocketSayError,
   type ProviderCatalogSnapshot,
@@ -97,8 +97,8 @@ function ticketSocketUrl(websocketBaseUrl: string, ticket: string): string {
 }
 
 /**
- * Opens the canonical room transport. The socket becomes ready only after a signed
- * receipt, its exact snapshot bytes, and the finite C+1..H catch-up have all verified.
+ * Opens the canonical room transport. The socket becomes ready only after its
+ * ticket-bound receipt, exact snapshot cursor, and finite C+1..H catch-up verify.
  */
 export function openRoomSocket(
   auth: RoomSocketAuth,
@@ -283,7 +283,6 @@ export function openRoomSocket(
           "runtime_ticket_invalid"
         );
       }
-      const serverChallenge = createServerChallenge();
       const currentSocket = createSocket(ticketSocketUrl(issued.websocket_base_url, issued.ticket));
       socket = currentSocket;
       transportReady = false;
@@ -430,8 +429,6 @@ export function openRoomSocket(
           const msg = JSON.parse(raw) as unknown;
           const verifiedReceipt = await verifySubscriptionReceipt(msg, {
             ticket: issued.ticket,
-            proofKey: issued.server_proof_key,
-            serverChallenge,
             roomId: dependencies.expectedRoomId,
             participantId: dependencies.expectedParticipantId,
             streams,
@@ -449,7 +446,7 @@ export function openRoomSocket(
         }
         if (!snapshotAccepted) {
           const msg = JSON.parse(raw) as unknown;
-          await verifyBoundSnapshot(raw, msg, receipt);
+          await verifyBoundSnapshot(msg, receipt);
           if (!canUseOpenSocket()) return;
           const validationError = snapshotValidationError(msg, {
             expectedRoomId: dependencies.expectedRoomId,
@@ -610,7 +607,6 @@ export function openRoomSocket(
           op: "subscribe",
           streams,
           resume_from_seq: lastSeq,
-          server_challenge: serverChallenge,
         }));
       };
       currentSocket.onmessage = (event) => {

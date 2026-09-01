@@ -1,12 +1,6 @@
 import { vi } from "vitest";
 import { openRoomSocket } from "../roomSocketClient";
-import {
-  deriveConnectionNonce,
-  digestPermissions,
-  digestSnapshotFrame,
-  subscriptionProofTranscript,
-} from "../lib/serverProof";
-import { utf8 } from "../lib/lengthDelimitedCrypto";
+import { deriveConnectionNonce } from "../lib/serverProof";
 import {
   decodeAuthenticatedFrame,
   deriveAuthenticatedFrameKey,
@@ -124,55 +118,36 @@ function snapshot(cursor: number) {
   };
 }
 
-export async function signReceipt(receipt: SubscriptionReceipt): Promise<string> {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    utf8(PROOF_KEY),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  const signature = new Uint8Array(
-    await crypto.subtle.sign("HMAC", key, subscriptionProofTranscript(receipt))
-  );
-  return Array.from(signature, (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
 export async function handshakeFrames(
-  socket: FakeWebSocket,
+  _socket: FakeWebSocket,
   ticket: string,
   snapshotCursor: number,
   catchupHighWater: number,
   mutateReceipt?: (receipt: SubscriptionReceipt) => void
 ) {
-  const subscription = socket.sent[0];
   const snap = snapshot(snapshotCursor);
   const rawSnapshot = JSON.stringify(snap);
+  const connectionNonce = await deriveConnectionNonce(ticket);
   const receipt: SubscriptionReceipt = {
     op: "subscribed",
     streams: ["room_events"],
     protocol_version: 1,
-    server_challenge: String(subscription.server_challenge),
-    connection_nonce: await deriveConnectionNonce(ticket),
+    connection_nonce: connectionNonce,
     room_id: "general",
     principal_id: "operator",
     participant_id: "operator-local",
     server_surface_revision: TEST_SERVER_PRODUCT_SURFACE.revision,
     server_surface_digest: TEST_SERVER_PRODUCT_SURFACE.digest,
-    permissions_digest: String(await digestPermissions(CAPABILITIES)),
     snapshot_cursor: snapshotCursor,
     catchup_high_water: catchupHighWater,
-    snapshot_digest: await digestSnapshotFrame(rawSnapshot),
-    proof: "",
   };
   mutateReceipt?.(receipt);
-  receipt.proof = await signReceipt(receipt);
   return {
     receipt,
     snap,
     rawSnapshot,
-    frameKey: await deriveAuthenticatedFrameKey(PROOF_KEY, receipt.connection_nonce),
-    connectionNonce: receipt.connection_nonce,
+    frameKey: await deriveAuthenticatedFrameKey(PROOF_KEY, connectionNonce),
+    connectionNonce,
     serverCounter: 0,
   };
 }

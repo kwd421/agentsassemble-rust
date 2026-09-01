@@ -19,7 +19,6 @@ use crate::{
     authenticated_channel::{
         AuthenticatedChannel, encode_server_frame, send_plain_encoded, send_plain_frame,
     },
-    server_proof::{challenge_is_valid, permissions_digest, sign_subscription, snapshot_digest},
     ticket::ConsumedSocketTicket,
 };
 
@@ -38,7 +37,6 @@ pub(crate) struct EstablishedSubscription {
 struct ValidatedSubscription {
     streams: Vec<RoomStream>,
     resume_from_seq: i64,
-    server_challenge: String,
 }
 
 struct PreparedSnapshot {
@@ -119,9 +117,8 @@ where
         state,
         &principal,
         &request,
-        &proof_key,
         connection_nonce.clone(),
-        &prepared,
+        prepared.cursor,
         catch_up.high_water,
     );
     send_subscription_receipt(sender, &state.shutdown, receipt).await?;
@@ -261,7 +258,6 @@ where
     let Ok(ClientFrame::Subscribe {
         streams,
         resume_from_seq,
-        server_challenge,
     }) = serde_json::from_str(raw.as_str())
     else {
         let _ = send_subscription_nack(
@@ -291,24 +287,9 @@ where
         .await;
         return None;
     }
-    if !challenge_is_valid(&server_challenge) {
-        let _ = send_subscription_nack(
-            sender,
-            state,
-            principal,
-            human_session,
-            (
-                "server_challenge_invalid",
-                "The server challenge must be 32 random bytes encoded as hexadecimal.",
-            ),
-        )
-        .await;
-        return None;
-    }
     Some(ValidatedSubscription {
         streams,
         resume_from_seq,
-        server_challenge,
     })
 }
 
@@ -461,29 +442,22 @@ fn subscription_receipt(
     state: &AppState,
     principal: &AuthenticatedPrincipal,
     request: &ValidatedSubscription,
-    proof_key: &str,
     connection_nonce: String,
-    prepared: &PreparedSnapshot,
+    snapshot_cursor: i64,
     catchup_high_water: i64,
 ) -> Subscribed {
-    let mut receipt = Subscribed {
+    Subscribed {
         streams: request.streams.clone(),
         protocol_version: PROTOCOL_VERSION,
-        server_challenge: request.server_challenge.clone(),
         connection_nonce,
         room_id: principal.room_id.clone(),
         principal_id: principal.principal_id.clone(),
         participant_id: principal.participant_id.clone(),
         server_surface_revision: state.server_product_surface.revision,
         server_surface_digest: state.server_product_surface.digest.clone(),
-        permissions_digest: permissions_digest(&principal.capabilities),
-        snapshot_cursor: prepared.cursor,
+        snapshot_cursor,
         catchup_high_water,
-        snapshot_digest: snapshot_digest(&prepared.encoded),
-        proof: String::new(),
-    };
-    receipt.proof = sign_subscription(proof_key, &receipt);
-    receipt
+    }
 }
 
 async fn send_subscription_receipt<S>(

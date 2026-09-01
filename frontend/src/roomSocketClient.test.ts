@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RoomSocketSayError } from "./roomSocketClient";
-import { digestSnapshotFrame } from "./lib/serverProof";
 import {
   authenticatedServerFrame,
   event,
@@ -12,7 +11,6 @@ import {
   openHarness,
   receiveAuthenticated,
   sentAuthenticatedCommand,
-  signReceipt,
 } from "./test/roomSocketHarness";
 
 const ROOM_SOCKET_COMMAND_TIMEOUT_MS_FOR_TEST = 20_000;
@@ -99,7 +97,7 @@ describe("proof-bound canonical room socket", () => {
     handle.close();
   });
 
-  it("rejects snapshot bytes that differ from the signed digest", async () => {
+  it("rejects a snapshot outside the finite receipt cursor", async () => {
     const errors: RoomSocketSayError[] = [];
     const { handle, sockets, tickets } = openHarness({
       onError: (error) => {
@@ -110,9 +108,9 @@ describe("proof-bound canonical room socket", () => {
     sockets[0].open();
     const frames = await handshakeFrames(sockets[0], tickets[0], 0, 0);
     sockets[0].receive(frames.receipt);
-    sockets[0].receiveRaw(frames.rawSnapshot.replace('"room_settings":{}', '"room_settings":{"label":"tampered"}'));
+    sockets[0].receiveRaw(frames.rawSnapshot.replace('"last_seq":0', '"last_seq":1'));
     await vi.waitFor(() =>
-      expect(errors.at(-1)?.category).toBe("snapshot_binding_invalid")
+      expect(errors.at(-1)?.category).toBe("snapshot_boundary_invalid")
     );
     expect(handle.ready()).toBe(false);
     handle.close();
@@ -161,7 +159,7 @@ describe("proof-bound canonical room socket", () => {
     handle.close();
   });
 
-  it("rejects a malformed role in the signed snapshot before consuming its cursor", async () => {
+  it("rejects a malformed role in the snapshot before consuming its cursor", async () => {
     vi.useFakeTimers();
     const errors: RoomSocketSayError[] = [];
     const { handle, sockets, tickets } = openHarness({
@@ -174,8 +172,6 @@ describe("proof-bound canonical room socket", () => {
     const frames = await handshakeFrames(sockets[0], tickets[0], 1, 1);
     frames.snap.events = [malformedRoleEvent(1)];
     frames.rawSnapshot = JSON.stringify(frames.snap);
-    frames.receipt.snapshot_digest = await digestSnapshotFrame(frames.rawSnapshot);
-    frames.receipt.proof = await signReceipt(frames.receipt);
     sockets[0].receive(frames.receipt);
     sockets[0].receiveRaw(frames.rawSnapshot);
 
@@ -608,7 +604,7 @@ describe("proof-bound canonical room socket", () => {
     handle.close();
   });
 
-  it("does not project an old socket after asynchronous snapshot verification", async () => {
+  it("does not project an old socket after asynchronous ticket binding", async () => {
     const onOpen = vi.fn();
     const onSnapshot = vi.fn();
     const { handle, sockets, tickets } = openHarness({
@@ -618,8 +614,6 @@ describe("proof-bound canonical room socket", () => {
     await flushPromises();
     sockets[0].open();
     const frames = await handshakeFrames(sockets[0], tickets[0], 0, 0);
-    sockets[0].receive(frames.receipt);
-    await flushPromises();
 
     let releaseDigest = () => {};
     let reportDigestStarted = () => {};
@@ -632,7 +626,7 @@ describe("proof-bound canonical room socket", () => {
       return realDigest(algorithm, data);
     });
 
-    sockets[0].receiveRaw(frames.rawSnapshot);
+    sockets[0].receive(frames.receipt);
     await digestStarted;
     sockets[0].close();
     releaseDigest();

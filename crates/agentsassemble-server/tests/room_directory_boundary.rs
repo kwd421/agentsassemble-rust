@@ -425,14 +425,12 @@ async fn verify_created_room_socket(
     let mut socket = connect_room(&server.base_url, &new_room_ticket)
         .await
         .unwrap_or_else(|error| panic!("connect newly created room: {error}"));
-    let challenge = "d".repeat(64);
     socket
         .send(Message::Text(
             json!({
                 "op":"subscribe",
                 "streams":["room_events"],
                 "resume_from_seq":0,
-                "server_challenge": challenge,
             })
             .to_string()
             .into(),
@@ -441,7 +439,6 @@ async fn verify_created_room_socket(
         .unwrap_or_else(|error| panic!("subscribe newly created room: {error}"));
     let receipt = receive_json(&mut socket).await;
     assert_eq!(receipt["op"], "subscribed");
-    assert_eq!(receipt["server_challenge"], challenge);
     let snapshot = receive_json(&mut socket).await;
     assert_eq!(snapshot["op"], "snapshot");
     assert_eq!(&snapshot["room"]["room_uid"], room_uid);

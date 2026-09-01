@@ -1,29 +1,19 @@
 import type { ServerProductSurface } from "../types/generated/ServerProductSurface";
 import type { Subscribed } from "../types/generated/Subscribed";
-import {
-  deriveConnectionNonce,
-  digestPermissions,
-  digestSnapshotFrame,
-  isHex32Bytes,
-  verifySubscriptionProof,
-} from "./serverProof";
+import { deriveConnectionNonce, isHex32Bytes } from "./serverProof";
 
 const RECEIPT_KEYS = [
   "op",
   "streams",
   "protocol_version",
-  "server_challenge",
   "connection_nonce",
   "room_id",
   "principal_id",
   "participant_id",
   "server_surface_revision",
   "server_surface_digest",
-  "permissions_digest",
   "snapshot_cursor",
   "catchup_high_water",
-  "snapshot_digest",
-  "proof",
 ] as const;
 
 export type SubscriptionReceipt = Subscribed & { op: "subscribed" };
@@ -40,8 +30,6 @@ export class SubscriptionContractError extends Error {
 
 type ExpectedSubscription = {
   ticket: string;
-  proofKey: string;
-  serverChallenge: string;
   roomId: string;
   participantId: string;
   streams: readonly string[];
@@ -80,7 +68,6 @@ export async function verifySubscriptionReceipt(
     receipt.protocol_version === 1 &&
     receivedStreams.length === expectedStreams.length &&
     receivedStreams.every((stream, index) => stream === expectedStreams[index]) &&
-    receipt.server_challenge === expected.serverChallenge &&
     typeof receipt.room_id === "string" &&
     receipt.room_id === expected.roomId &&
     typeof receipt.principal_id === "string" &&
@@ -89,9 +76,6 @@ export async function verifySubscriptionReceipt(
     receipt.server_surface_revision === expected.serverSurface.revision &&
     receipt.server_surface_digest === expected.serverSurface.digest &&
     isHex32Bytes(receipt.server_surface_digest) &&
-    isHex32Bytes(receipt.permissions_digest) &&
-    isHex32Bytes(receipt.snapshot_digest) &&
-    isHex32Bytes(receipt.proof) &&
     isSequence(receipt.snapshot_cursor) &&
     isSequence(receipt.catchup_high_water) &&
     receipt.catchup_high_water >= receipt.snapshot_cursor;
@@ -102,20 +86,16 @@ export async function verifySubscriptionReceipt(
     );
   }
   const connectionNonce = await deriveConnectionNonce(expected.ticket);
-  if (
-    receipt.connection_nonce !== connectionNonce ||
-    !(await verifySubscriptionProof(expected.proofKey, receipt))
-  ) {
+  if (receipt.connection_nonce !== connectionNonce) {
     throw new SubscriptionContractError(
       "server_identity_invalid",
-      "The desktop runtime did not prove the complete subscription boundary."
+      "The runtime subscription did not match its one-use connection ticket."
     );
   }
   return receipt;
 }
 
 export async function verifyBoundSnapshot(
-  raw: string,
   value: unknown,
   receipt: SubscriptionReceipt
 ): Promise<void> {
@@ -123,19 +103,6 @@ export async function verifyBoundSnapshot(
     throw new SubscriptionContractError(
       "snapshot_boundary_invalid",
       "The room snapshot did not match its authenticated cursor."
-    );
-  }
-  const [actualSnapshotDigest, actualPermissionsDigest] = await Promise.all([
-    digestSnapshotFrame(raw),
-    digestPermissions(value.capabilities),
-  ]);
-  if (
-    actualSnapshotDigest !== receipt.snapshot_digest ||
-    actualPermissionsDigest !== receipt.permissions_digest
-  ) {
-    throw new SubscriptionContractError(
-      "snapshot_binding_invalid",
-      "The room snapshot did not match its authenticated bytes and permissions."
     );
   }
 }

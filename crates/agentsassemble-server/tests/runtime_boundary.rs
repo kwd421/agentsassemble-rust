@@ -22,10 +22,7 @@ mod support {
 
 use support::{
     local_socket::{connect, request_ticket},
-    subscription_proof::{
-        AuthenticatedTestSocket, connection_nonce_for_ticket, expected_subscription_proof,
-        permissions_digest, sha256_hex,
-    },
+    subscription_proof::{AuthenticatedTestSocket, connection_nonce_for_ticket},
 };
 
 struct RunningServer {
@@ -458,7 +455,7 @@ async fn tampered_authenticated_command_cannot_create_a_durable_mutation() {
 }
 
 #[tokio::test]
-async fn websocket_snapshot_proves_the_private_ticket_control_channel() {
+async fn websocket_snapshot_is_bound_to_the_private_ticket_scope_and_finite_cursor() {
     let directory =
         tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
     let database_url = format!(
@@ -472,7 +469,6 @@ async fn websocket_snapshot_proves_the_private_ticket_control_channel() {
     let server = start(store).await;
     let grant = request_ticket(&server.state, "general").await;
     let ticket = grant.ticket;
-    let proof_key = grant.server_proof_key;
     let url = format!(
         "{}/ws?ticket={ticket}",
         server.base_url.replacen("http://", "ws://", 1)
@@ -481,14 +477,12 @@ async fn websocket_snapshot_proves_the_private_ticket_control_channel() {
         .await
         .unwrap_or_else(|error| panic!("connect proved WebSocket: {error}"))
         .0;
-    let challenge = "b".repeat(64);
     socket
         .send(Message::Text(
             json!({
                 "op": "subscribe",
                 "streams": ["room_events"],
                 "resume_from_seq": 0,
-                "server_challenge": challenge,
             })
             .to_string()
             .into(),
@@ -497,10 +491,6 @@ async fn websocket_snapshot_proves_the_private_ticket_control_channel() {
         .unwrap_or_else(|error| panic!("send proved subscription: {error}"));
     let receipt = receive_raw_json(&mut socket).await;
     assert_eq!(receipt["op"], "subscribed");
-    let received = receipt["proof"]
-        .as_str()
-        .unwrap_or_else(|| panic!("subscription receipt is missing proof"));
-    assert_eq!(received, expected_subscription_proof(&proof_key, &receipt));
     assert_eq!(
         receipt["connection_nonce"],
         connection_nonce_for_ticket(&ticket)
@@ -509,14 +499,8 @@ async fn websocket_snapshot_proves_the_private_ticket_control_channel() {
     let snapshot: Value = serde_json::from_str(&raw_snapshot)
         .unwrap_or_else(|error| panic!("decode proved snapshot: {error}"));
     assert_eq!(snapshot["op"], "snapshot");
-    assert_eq!(
-        receipt["snapshot_digest"],
-        sha256_hex(raw_snapshot.as_bytes())
-    );
-    assert_eq!(
-        receipt["permissions_digest"],
-        permissions_digest(&snapshot["capabilities"])
-    );
+    assert_eq!(receipt["room_id"], "general");
+    assert_eq!(receipt["participant_id"], "operator-local");
     assert_eq!(receipt["snapshot_cursor"], snapshot["last_seq"]);
     assert!(receipt["catchup_high_water"].as_i64() >= snapshot["last_seq"].as_i64());
     server.stop().await;
