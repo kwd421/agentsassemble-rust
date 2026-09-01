@@ -5679,7 +5679,7 @@ security scan.
 
 After their presentation owners were removed, repository-wide non-CSS search found
 no consumer for the copied side-chat or Friends directory/profile/DM selectors.
-Candidate `84ceb13` removes 147 side-chat declarations across the original desktop
+Candidate `84ceb13` removes 147 side-chat source lines across the original desktop
 and mobile segments plus the side-chat-only mention-popover override. Candidate
 `adf17ee` separately removes 340 Friends directory/list/activity lines. It preserves
 the intervening `.dc-agent-add-entry` rule because the active room connection panel
