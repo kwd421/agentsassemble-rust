@@ -69,8 +69,8 @@ contracts, findings, or verification journals.
   individual commit, exact `a9dceae..d45978a`, cumulative F-05
   `8903445..d45978a`, and HEAD `d45978a` at `C0/H0/M0/L0`. Evidence-backed
   dormant-source cleanup remains in F-05.
-- Build-artifact lifecycle correction is implemented through `5d812e1` and awaits
-  final cross-review. macOS uses packed debug information, eliminating Cargo's
+- Build-artifact lifecycle correction is complete through `537c1b9`. macOS uses
+  packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the
   desktop shell shares the repository Cargo target. Routine complete verification
   performs non-destructive checks before and after the build. It fails closed if an
@@ -82,6 +82,10 @@ contracts, findings, or verification journals.
   occupies 20.668 GiB physically, contains zero `.rcgu.o` files and 33 dSYM bundles,
   leaves the obsolete desktop target absent, and passes a packed cold build/test run
   plus the final warm complete verification in 822.72 and 315.16 seconds respectively.
+  Critical ChatGPT Pro and Daybreaker Blue High independently found the portable-test
+  and redundant-scan defects; `537c1b9` closes both. Each reviewer approved that
+  correction, exact `9d02acf..537c1b9`, full batch `9a4b5f6..537c1b9`, cumulative
+  `8903445..537c1b9`, and HEAD `537c1b9` at `C0/H0/M0/L0`.
 - Sequence/exit owner: [`docs/PRODUCT_REIMPLEMENTATION_PLAN.md`](docs/PRODUCT_REIMPLEMENTATION_PLAN.md)
 - Finding/evidence owner: [`docs/architecture/REPOSITORY_AUDIT_2026-09-01.md`](docs/architecture/REPOSITORY_AUDIT_2026-09-01.md)
 - Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`;

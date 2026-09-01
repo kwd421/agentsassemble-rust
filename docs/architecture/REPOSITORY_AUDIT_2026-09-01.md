@@ -1146,6 +1146,17 @@ The trade-off is explicit maintenance after a deterministic check rather than un
 automatic deletion, and a bounded 24 GiB warm cache rather than either repeated cold
 verification or unbounded disk growth.
 
+Critical ChatGPT Pro and Daybreaker Blue High independently found the same final two
+defects in `42f0af5`: the hard-link regression still read Unix-only `st_blocks`
+directly, and each successful artifact check repeated the complete target walk only
+to print its size. Pro classified them Medium/Low and Daybreaker Low/Low. Commit
+`537c1b9` routes the test expectation through the portable allocation owner and
+removes the second traversal. Two consecutive walks of the retained cache measured
+0.426 and 0.524 seconds, so the removed pre/post duplicates were concrete filesystem
+work. Both reviewers approved `537c1b9`, exact correction `42f0af5..537c1b9`,
+complete correction `9d02acf..537c1b9`, full batch `9a4b5f6..537c1b9`, cumulative
+`8903445..537c1b9`, and HEAD `537c1b9` at `C0/H0/M0/L0` with no actionable finding.
+
 ## Current verdict and exit
 
 Verdict: `APPROVE` for the Phase 0A inventory, dispositions, ownership map, and
