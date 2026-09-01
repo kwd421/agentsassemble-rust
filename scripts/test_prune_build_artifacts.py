@@ -67,11 +67,12 @@ class BuildArtifactCleanupTests(unittest.TestCase):
             original = target / "original"
             original.write_bytes(b"one physical allocation")
             (target / "hard-link").hardlink_to(original)
+            metadata = original.stat()
+            expected = file_allocation_bytes(metadata)
+            if file_identity(metadata) is None:
+                expected *= 2
 
-            self.assertEqual(
-                allocated_bytes(target),
-                original.stat().st_blocks * 512,
-            )
+            self.assertEqual(allocated_bytes(target), expected)
 
     def test_platform_without_block_counts_uses_logical_bytes(self) -> None:
         metadata = SimpleNamespace(st_size=123)

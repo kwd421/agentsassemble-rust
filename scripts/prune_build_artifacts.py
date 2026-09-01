@@ -108,8 +108,7 @@ def execute_plan(
     repository_root: Path, plan: tuple[CleanTarget, ...], clean: bool
 ) -> int:
     if not plan:
-        current = allocated_bytes(repository_root / ROOT_TARGET)
-        print(f"Cargo artifacts retained for the next build: {current} bytes")
+        print("Cargo artifacts retained for the next build; no maintenance required")
         return 0
 
     if not clean:
