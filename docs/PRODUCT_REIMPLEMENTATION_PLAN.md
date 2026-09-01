@@ -413,12 +413,12 @@ storage/external protocol, acceptance, and verification. Each change is the
 smallest independently buildable, verifiable, rollbackable commit under 1,000
 changed lines. Do not wait for 500 LOC before separating responsibilities: a mixed
 owner is split as soon as it appears, while a cohesive owner is not mechanically
-  cut to satisfy a count. Batch accumulation, push timing, and review timing are owned
-  only by the active `Standing project workflow` in `AGENTS.md`. This plan neither
-  restates nor reinterprets those thresholds.
+cut to satisfy a count. Batch accumulation, push timing, and review timing are owned
+only by the active `Standing project workflow` in `AGENTS.md`. This plan neither
+restates nor reinterprets those thresholds.
 
-Every pushed batch receives manual review of individual commits and the cumulative
-range from the designated critical web session and Daybreaker Blue High. Requests
+When that workflow invokes review, the request covers individual commits and the
+cumulative range. Requests
 explicitly include structure, duplicated policy, overimplementation, ownership,
 lifecycle, meaningless polling/heartbeat/timers, fallback, and swallowed failure.
 For defensive code, reviewers must name the reachable use case, observed failure,

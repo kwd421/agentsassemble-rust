@@ -100,8 +100,9 @@ event, redaction, deletion, budget reservation, or publication.
    fallback, meaningless polling, heartbeat, periodic timer, unbounded retry, or swallowed failure
    coupled to the slice.
 8. Focused domain/persistence/protocol/server/frontend tests, real authenticated TCP, complete gates,
-   isolated packaged local/read-write/read-only flows, resource evidence, exact cleanup, and the
-   threshold-triggered critical-web/Daybreaker manual reviews are recorded without extrapolation.
+   isolated packaged local/read-write/read-only flows, resource evidence, exact cleanup, and any
+   manual review required by the active `Standing project workflow` in `AGENTS.md` are recorded
+   without extrapolation.
 
 ## Verification path
 
@@ -114,7 +115,8 @@ event, redaction, deletion, budget reservation, or publication.
 - copied frontend tests for controls, dialog behavior, strict projection, and no polling or local
   authority; then `make verify`;
 - isolated packaged local and remote browser flows, normal restart, measured CPU/memory/disk/latency,
-  exact resource cleanup, and threshold-based critical-web plus Daybreaker manual source review.
+  exact resource cleanup, and any manual review required by the active `Standing project workflow`
+  in `AGENTS.md`.
 
 ## Pending-input lifecycle correction
 

@@ -12,8 +12,8 @@ evidence. They do not own current commit, push, or review timing; only the activ
 
 The active comparison baseline is original
 `d5046473010d1353a81ee38337360e6d98f7bd6f`, audited Rust product behavior
-`8a5f75a`, and public documentation HEAD `d9e6c06`. Local uncommitted behavior
-is never described as public completion. Every completed-slice evidence entry must
+`8a5f75a`, and the pre-correction documentation review baseline `d9e6c06`. Local
+uncommitted behavior is never described as public completion. Every completed-slice evidence entry must
 name the tested Rust commit, original provenance commit, platform/build, exact
 entry point and command flow, viewer identity, provider/model where applicable,
 owned process/session identity, restart step, cleanup result, and failure if any.
@@ -3209,8 +3209,9 @@ diff gates: 84 frontend files with 516 tests, 20 desktop tests, domain 23, persi
 Both exact verification apps, their owned sidecars and managed tunnels, all four
 incognito windows, isolated application data, and temporary package configuration were
 closed and removed or moved to recoverable Trash. The Computer Use kernel was reset.
-No provider, Deep Scan, or automated security scanner ran. This local feature commit is
-queued for the next three-feature-or-2,000-line manual review batch.
+No provider, Deep Scan, or automated security scanner ran. At that checkpoint, this
+local feature commit was queued under the then-active three-feature-or-2,000-line
+manual review rule.
 
 ## Packaged invite-scope and completion matrix: 2026-08-28
 
@@ -3264,8 +3265,9 @@ making already-authorized strict settings reach the existing invite owner. Full
 production frontend and original-CSS verification, all 84 frontend files with 516
 tests, 20 desktop tests, domain 24, persistence 172, protocol 5, provider 120, server
 84, every integration/TCP/documentation test, warning-denied Clippy, and the final diff
-check. No provider, Deep Scan, or automated security scanner ran. The two feature
-commits remain local pending the three-feature-or-2,000-line review threshold.
+check. No provider, Deep Scan, or automated security scanner ran. At that checkpoint,
+the two feature commits remained local under the then-active three-feature-or-2,000-line
+review rule.
 
 ## Room-appearance persistence and HTTP batch review: 2026-08-28
 
@@ -3315,8 +3317,8 @@ operation and reuses the existing manager resolver; it adds no durable state,
 cache, background task, fallback, compatibility path, or provider process. The
 copied settings UI's authenticated fetch and object-URL lifecycle remain visibly
 incomplete. No Computer Use resource, provider, Deep Scan, or automated security
-scanner ran. This local candidate remains unpushed pending the configured batch
-threshold.
+scanner ran. At that checkpoint, this candidate was still unpushed under the
+then-active configured batch threshold.
 
 ## Authenticated room-appearance frontend activation: 2026-08-28
 
@@ -3376,8 +3378,8 @@ left no packaged app or sidecar process. The Computer Use kernel was reset, and 
 the isolated build, Application Support, cache, and WebKit data were moved to the
 recoverable Trash directory
 `AgentsAssemble-Appearance-Verify-20260828.fKzLaX`; unrelated processes and user data
-were untouched. This threshold batch still requires exact public-diff review by the
-critical web session and Daybreaker Blue High.
+were untouched. At that checkpoint, this threshold batch still awaited exact
+public-diff review by the critical web session and Daybreaker Blue High.
 
 ## Authenticated appearance review corrections: 2026-08-29
 
@@ -3543,8 +3545,9 @@ frontend 87/539, desktop 20, domain 26, persistence 184, protocol 6, provider 12
 server 85, every TCP/integration/doc test, warning-denied Clippy, and the final diff
 gate. No real provider, Deep Scan, automated security scanner, or Computer Use ran.
 The copied frontend still uses its old pin transport and the feature remains explicitly
-incomplete pending that cutover and packaged verification. This 2,000-line threshold
-batch requires critical-web and Daybreaker review before implementation continues.
+incomplete pending that cutover and packaged verification. At that checkpoint, this
+was the then-2,000-line threshold batch and awaited critical-web and Daybreaker review
+before implementation continued.
 
 The first threshold cross-review returned `REVISE`. Daybreaker reported one Medium:
 unpin deleted before validating the canonical target, so missing and non-message targets
@@ -4143,8 +4146,9 @@ verification, frontend 94 files / 593 tests, persistence 210 tests, every Rust/T
 test, warning-denied Clippy, and the diff gate. The build initially stopped with `ENOSPC`; removing
 only this repository's regenerable Cargo outputs recovered about 40 GiB, after which the unchanged
 verification completed. User-owned files and `.agents/` were untouched. No provider, Computer Use,
-Deep Scan, or automated security scanner ran. These commits remain local until the configured
-three-feature-or-2,000-line push threshold, so manual cross-review is not yet claimed.
+Deep Scan, or automated security scanner ran. At that checkpoint, these commits remained local
+under the then-active three-feature-or-2,000-line push rule, so manual cross-review was not yet
+claimed.
 
 ## Persona local-operator HTTP candidate: 2026-08-30
 
@@ -4164,8 +4168,8 @@ leave rejected imports absent. The two tests completed in 0.07 seconds during fu
 That full run also passed architecture and 800-line gates, copied-CSS verification, frontend 94 files
 / 593 tests, persistence 210, server 86 plus every TCP/integration test, desktop 26, provider 134,
 warning-denied Clippy, and the diff gate. No provider, Computer Use, Deep Scan, or automated security
-scanner ran. The candidate remains local until the configured push threshold; reviewer approval is
-not claimed.
+scanner ran. At that checkpoint, the candidate remained local under the then-active configured push
+threshold; reviewer approval was not claimed.
 
 ## Persona packaged completion candidate: 2026-08-30
 
@@ -4556,8 +4560,8 @@ data were untouched. Computer Use was reset.
 Daybreaker Blue High manually re-reviewed pushed `4cbbdcd..b95e128` and cumulative
 `e1f7cca..b95e128`. It marked the earlier unbounded history-read High and broader-scope debit Medium
 CLOSED and returned APPROVE C0/H0/M0/L0 for both exact correction and cumulative ranges. It ran no
-automated scan, test, provider, or app. The critical web review and review of the local frontend
-threshold batch remain pending, so this section does not claim their approval.
+automated scan, test, provider, or app. At that checkpoint, critical web review and review of the
+local frontend threshold batch were pending, so this section did not claim their approval.
 
 ## Lobby message-mutation packaged completion candidate: 2026-08-31
 

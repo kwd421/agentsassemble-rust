@@ -634,8 +634,8 @@ reuse, unmute, reconnect, and finite catch-up. Only resources created by that
 verification run may be stopped or deleted.
 
 Each complete vertical slice is independently committed. Batch timing is owned only
-by the active `Standing project workflow` in `AGENTS.md`; the exact pushed range then receives
-same-session critical-diff and Daybreaker Blue High manual-security review. An
+by the active `Standing project workflow` in `AGENTS.md`. When that workflow invokes
+review, it covers the exact pushed range. An
 incomplete owner remains unexposed and is not completion evidence.
 
 Completion evidence is recorded in `docs/VERIFICATION.md` through public code

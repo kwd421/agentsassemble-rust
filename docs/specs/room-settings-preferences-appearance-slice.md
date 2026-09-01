@@ -383,8 +383,8 @@ re-enters the unchanged exact room resolver and performs a fresh grant/read.
   or structure gate makes that genuinely impossible. Each implementation change
   carries its focused invariant test; cross-layer, restart, race, packaged-client,
   and verification-record work remain separate.
-- Batch timing is owned only by the active `Standing project workflow` in `AGENTS.md`. The exact pushed
-  batch is cross-reviewed by the critical web session and Daybreaker Blue High.
+- Batch timing is owned only by the active `Standing project workflow` in `AGENTS.md`.
+  When that workflow invokes review, it covers the exact pushed range.
   Provider-dependent verification uses persistent Codex Terra, Antigravity Flash,
   and OpenCode Muse Spark sessions, never print mode, and removes every
   verification-owned process, window, server, and temporary resource afterward.

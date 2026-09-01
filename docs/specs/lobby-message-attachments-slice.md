@@ -290,11 +290,10 @@ speculate about it.
   owning boundary, preserved contracts, trade-off, and measured verification; do not
   add a cache or transport abstraction from intuition alone.
 - Commit each buildable, independently verifiable and rollbackable change below 1,000
-  changed lines. Batch timing is owned only by the active `Standing project workflow` in `AGENTS.md`;
-  then obtain manual web-session and Daybreaker Blue High source reviews for security,
-  structure, duplicated policy, overimplementation, SSoT, lifecycle cleanup, and removable
-  state. The Standard Scan already started for pushed HEAD `b46aa02` is a one-time review;
-  Deep Scan and later automated scans are not part of this workflow.
+  changed lines. Batch timing and scan authorization are owned only by the active
+  `Standing project workflow` in `AGENTS.md`. When that workflow invokes review, it
+  covers security, structure, duplicated policy, overimplementation, SSoT, lifecycle
+  cleanup, and removable state.
 
 Observed packaged download verification on 2026-08-29 used an isolated release bundle
 and authority. The local desktop file card saved the 3,307-byte `README.md` with SHA-256

@@ -173,8 +173,8 @@ identifier-specific Application Support, cache, and WebKit data were moved to th
 On the pushed correction, Daybreaker Blue High manually re-reviewed `4cbbdcd..b95e128` and
 `e1f7cca..b95e128`, marked the missing pre-read admission High and cross-scope debit Medium closed,
 and returned APPROVE C0/H0/M0/L0. It ran no automated security scan, tests, provider, or app. The
-critical web review and the local frontend commit's threshold batch remain pending and are not
-claimed as approved here.
+At that checkpoint, critical web review and the local frontend commit's threshold batch were
+pending and were not claimed as approved there.
 
 ## Browser live-window ownership correction
 
@@ -281,5 +281,5 @@ by the critical web session and Daybreaker found no remaining actionable issue a
 - copied frontend controller/view tests for strict rejection, initial backfill, top-scroll anchoring,
   one-page scheduling, and visible retry;
 - fresh packaged local and isolated read-only browser verification followed by exact resource cleanup;
-- final query/wire/memory measurement, `make verify`, and threshold-based critical-web plus
-  Daybreaker Blue High manual source review.
+- final query/wire/memory measurement, `make verify`, and any manual review required by the active
+  `Standing project workflow` in `AGENTS.md`.

@@ -206,5 +206,5 @@ measurement artifacts were stopped or moved to Trash after verification; Compute
 - focused RoomPortal MCP/terminal/provider tests for exact turn and receipt ownership;
 - copied-frontend API/controller tests followed by packaged local and isolated-browser verification;
 - representative release measurements of final schema/read/write costs;
-- `make architecture-check`, `make verify`, and exact pushed-range critical-web plus Daybreaker Blue
-  High manual source review at the configured batch threshold.
+- `make architecture-check` and `make verify`; when the active `Standing project
+  workflow` in `AGENTS.md` invokes review, it covers the exact pushed range.

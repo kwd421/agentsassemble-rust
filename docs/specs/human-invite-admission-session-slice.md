@@ -632,9 +632,8 @@ These stages add no durable frontend invite state, second URL/timestamp policy,
 generic resource framework, compatibility path, or fallback. Each independently
 buildable commit must remain below 1,000 changed lines, must pass the repository gates
 and focused contract tests, and remains independently rollbackable. Batch timing is
-owned only by the active `Standing project workflow` in `AGENTS.md`; the resulting exact range is pushed
-and reviewed by both manual reviewers. A correction needed to close an active
-review may be pushed and re-reviewed immediately as part of that batch. Packaged
+owned only by the active `Standing project workflow` in `AGENTS.md`. When that
+workflow invokes review, it covers the exact pushed range. Packaged
 Computer Use remains the completion test rather than a substitute for these authority
 and failure contracts.
 
@@ -813,7 +812,7 @@ query flag, or client-side readiness authority is added.
   server run passed 52 unit and 32 integration tests; warning-denied all-target Clippy,
   architecture/source-growth gates, and `make check` passed. The route module is 434
   lines; commit `b32c2b7` is 792 insertions/2 deletions across seven files, below the
-  1,000-line review threshold.
+  1,000-changed-line per-commit ceiling.
 - Review correction: critical line-by-line review found two reachable transport
   mismatches. Before `888084e`, the shared body collector collapsed the existing
   ten-second `tower-http` deadline error into 413, although the original returned

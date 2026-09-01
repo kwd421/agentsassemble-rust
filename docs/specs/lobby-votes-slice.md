@@ -128,7 +128,8 @@ mount, explicit user refresh, or sequenced vote events—not polling.
   cancellation, explicit refresh, and absence of polling;
 - common RoomPortal contract tests plus one real turn on each required provider;
 - isolated packaged local and remote read-only/read-write browser flows, restart, resource cleanup,
-  measured costs, `make verify`, and threshold-based critical-web plus Daybreaker manual review.
+  measured costs, `make verify`, and any manual review required by the active `Standing project
+  workflow` in `AGENTS.md`.
 
 ## Frontend direct-path implementation record
 
