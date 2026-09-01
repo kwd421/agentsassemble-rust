@@ -13,9 +13,11 @@ custom-channel, account, provider-operation, and external-AI controls remain act
 or reachable without complete Rust owners, and Agent Session identity plus several
 provider completion/lifecycle contracts are reopened. D-01 removed the uncalled
 HTTP host-challenge routes and startup secret at `a7949bd`; remote human HTTP still
-performs a redundant purpose-ticket exchange. D-02 removed the evidence-free room
-frame proof at `3ffb9eb`, `77cae0e`, `0d24741`, and `57fd6ec`; audit D-03 routes the
-remaining HTTP correction before further UI completion.
+performs a redundant purpose-ticket exchange for search, message attachments, and
+room appearance, while profile, preferences, and message pins now authorize the
+session at their target routes. D-02 removed the evidence-free room frame proof at
+`3ffb9eb`, `77cae0e`, `0d24741`, and `57fd6ec`; audit D-03 routes the remaining HTTP
+correction before further UI completion.
 
 ## Scope and method
 
@@ -323,8 +325,9 @@ Provider roll/choose uses the existing private `RoomPortal` on Codex and the exa
 bound helper on Antigravity/OpenCode; it is not print mode or a client-side result.
 The original React client still has no direct human roll/choose control, so the
 human commands remain a reachable server contract without a fabricated button.
-Local-operator and admitted remote-human preferences are connected through their
-complete purpose-ticketed HTTP owners. Human invite activation is complete. Room
+Local-operator preferences use their purpose-ticketed HTTP owner; admitted remote
+profile, preference, and message-pin operations authorize at their target routes.
+Human invite activation is complete. Room
 appearance persistence, local/remote HTTP boundaries, typed desktop issuance, and
 the copied frontend's authenticated object-URL lifecycle are active. Custom channels
 and plugin hosting remain incomplete.

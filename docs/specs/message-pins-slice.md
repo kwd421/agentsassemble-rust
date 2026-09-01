@@ -1,7 +1,7 @@
 # Lobby message pins
 
-Status: implementation and flow evidence retained; remote-human HTTP authorization
-reopened by repository audit D-03
+Status: remote-human HTTP authorization corrected at `ed9720c`; packaged-flow
+verification remains part of final parity
 
 ## Definition
 
@@ -25,8 +25,9 @@ canonical Rust room events through bounded-purpose HTTP authority.
   existing authorities.
 - Local desktop HTTP access uses a fresh one-use room- and operation-purpose ticket
   received through a typed host command. A remote human presents its durable session
-  bearer in the bounded Authorization header directly to the pin route, which resolves the exact room principal and operation;
-  the audited preliminary session-to-purpose-ticket exchange is a Phase 0B removal target.
+  bearer in the bounded Authorization header directly to the pin route, which resolves
+  the exact room principal and operation. The audited preliminary
+  session-to-purpose-ticket exchange is absent.
   Raw issuer credentials, reusable room socket tickets, and cross-scope credentials are
   not accepted.
 - Authentication happens before a mutation body is read. The persistence unit
@@ -75,7 +76,7 @@ canonical Rust room events through bounded-purpose HTTP authority.
    available at the bound.
 5. No legacy host-token, session bearer outside the bounded Authorization header,
    placeholder, fake-authority, migration, or fallback path becomes reachable.
-   Existing architecture, source-growth, and 800-line gates pass.
+   Existing architecture, source-growth, and structure gates pass.
 
 ## Verification path
 

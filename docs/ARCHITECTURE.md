@@ -428,12 +428,13 @@ settings-directory-read, and central-registration authority. React receives neit
 an issuer credential nor a reusable local credential. A ticket presented to the wrong transport
 or scope is consumed and rejected rather than interpreted as another authority.
 
-The audited implementation also mints short-lived public grants for own-profile,
-preference, search, pin, and attachment HTTP operations before revalidating the same
-durable `HumanSessionAuthorization` at the target. That second credential lifecycle
-is implementation evidence, not the approved target. Phase 0B makes each target
-route authenticate the session bearer from the bounded Authorization header, resolve its exact room/principal
-scope, and revalidate the operation-specific permission in the owning persistence
+The audited baseline minted short-lived public grants for profile, preference, search,
+pin, attachment, and appearance HTTP operations before revalidating the same durable
+`HumanSessionAuthorization` at the target. Phase 0B has removed that second credential
+lifecycle from profile, preference, and pin operations; search, attachments, and
+appearance remain correction work. Each corrected target route authenticates the
+session bearer from the bounded Authorization header, resolves its exact room/principal
+scope, and revalidates the operation-specific permission in the owning persistence
 transaction. The bearer never enters a URL, body, log, event, prompt, fixture, or
 durable row. Read-only and revoked sessions still fail closed, target responses
 remain private/no-store, and an unavailable custom channel is never replaced with

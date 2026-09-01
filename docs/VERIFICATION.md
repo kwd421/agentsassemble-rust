@@ -5228,3 +5228,26 @@ or compatibility handling.
 All 90 server unit tests, the real remote preference TCP suite, 651 frontend tests, the production
 CSS-verified build, warning-denied server Clippy, formatting, and the architecture/source-growth/policy
 gates passed.
+
+### D-03 direct remote message-pin authorization: 2026-09-01
+
+Before `ed9720c`, every remote pin list or mutation first authorized the reusable room
+session in SQLite, allocated a short-lived read/write grant under the shared ticket-store
+lock, returned it through an extra HTTP response, and then consumed and durably revalidated
+it at `/api/room-pins`. Both requests crossed the same HTTPS authority, so the second
+credential did not restrict an actor already able to present the session.
+
+The pin target now classifies the canonical `aas1.` bearer before local-ticket lookup,
+resolves its exact durable room principal, and leaves current history/mutation permission
+and session revalidation with the owning persistence operation. Local desktop read/write
+tickets remain exact-purpose and one-use. Read-only sessions can list pins but fail a
+mutation before its malformed body is parsed; both retired public pin-exchange routes
+return 404 at the real TCP boundary.
+
+This removes one HTTP round trip, one ticket-map insertion/consumption, and one
+exchange-time SQLite authorization per remote pin operation. It adds no state, cache,
+timer, polling, retry, fallback, or compatibility path; no latency claim is made beyond
+the removed operations. All 90 server unit tests, the four-test real human-invite TCP
+suite, the three-test message-pin TCP suite, nine focused and 650 full frontend tests,
+the production CSS-verified build, warning-denied server Clippy, formatting, and the
+architecture/source-growth/policy gates passed.
