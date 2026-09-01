@@ -221,10 +221,18 @@ async fn room_http_purposes_and_asset_bindings_are_consumed_on_mismatch() {
 #[tokio::test]
 async fn attachment_upload_dispatches_once_without_cross_purpose_fallback() {
     let store = TicketStore::new(Duration::from_secs(30), 8);
-    let profile = store
+    let socket = store
         .issue(principal())
         .await
-        .unwrap_or_else(|error| panic!("issue attachment profile ticket: {error}"));
+        .unwrap_or_else(|error| panic!("issue socket ticket: {error}"));
+    assert!(matches!(
+        store.consume_attachment_upload(&socket.ticket).await,
+        Err(TicketError::Invalid)
+    ));
+    let profile = store
+        .issue_server_operator("operator-local-user".to_owned())
+        .await
+        .unwrap_or_else(|error| panic!("issue profile ticket: {error}"));
     assert!(matches!(
         store.consume_attachment_upload(&profile.ticket).await,
         Ok(crate::ticket::ConsumedAttachmentUploadTicket::Profile(_))

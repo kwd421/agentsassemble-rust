@@ -1,6 +1,4 @@
-use agentsassemble_domain::{
-    AuthenticatedPrincipal, InviteScope, LOCAL_OPERATOR_USER_ID, UserProfilePatch,
-};
+use agentsassemble_domain::{InviteScope, LOCAL_OPERATOR_USER_ID, UserProfilePatch};
 use agentsassemble_persistence::{
     HumanPrejoinAvatarAuthorization, HumanSessionAuthorization, PersistenceError,
 };
@@ -86,7 +84,6 @@ async fn read_profile(
         .await
         .map_err(ProfileHttpError::from_body)?;
     let profile = match authority {
-        ProfileAuthority::Room(principal) => state.store.user_profile(&principal).await?,
         ProfileAuthority::HumanSession(authorization) => {
             state.store.human_session_profile(&authorization).await?
         }
@@ -104,12 +101,6 @@ async fn update_profile(
         .await
         .map_err(ProfileHttpError::from_body)?;
     let outcome = match authority {
-        ProfileAuthority::Room(principal) => {
-            state
-                .store
-                .update_user_profile(&principal, update.expected_revision, update.patch)
-                .await?
-        }
         ProfileAuthority::HumanSession(authorization) => {
             state
                 .store
@@ -263,17 +254,6 @@ async fn store_profile_attachment(
     content: Vec<u8>,
 ) -> Result<agentsassemble_persistence::ProfileAttachmentMetadata, ProfileHttpError> {
     Ok(match authority {
-        ProfileAuthority::Room(principal) => {
-            state
-                .store
-                .store_profile_attachment(
-                    &principal,
-                    &payload.filename,
-                    &payload.content_type,
-                    content,
-                )
-                .await?
-        }
         ProfileAuthority::HumanSession(authorization) => {
             state
                 .store
@@ -490,7 +470,6 @@ fn attachment_response(
 }
 
 enum ProfileAuthority {
-    Room(AuthenticatedPrincipal),
     HumanSession(HumanSessionAuthorization),
     LocalOperator,
 }
@@ -558,7 +537,6 @@ async fn resolve_profile_authority(
 
 fn profile_authority(ticket: ConsumedProfileTicket) -> Result<ProfileAuthority, ProfileHttpError> {
     match ticket {
-        ConsumedProfileTicket::Room(principal) => Ok(ProfileAuthority::Room(principal)),
         ConsumedProfileTicket::ServerOperator { principal_id }
             if principal_id == LOCAL_OPERATOR_USER_ID =>
         {

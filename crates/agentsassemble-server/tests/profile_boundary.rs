@@ -294,6 +294,25 @@ async fn assert_profile_auth_and_upload(
         .await
         .unwrap_or_else(|error| panic!("request unauthenticated profile: {error}"));
     assert_eq!(unauthorized.status(), reqwest::StatusCode::UNAUTHORIZED);
+    let socket_ticket = issue_local_ticket(state, "general")
+        .await
+        .unwrap_or_else(|error| panic!("issue crossed socket ticket: {error}"))
+        .ticket;
+    let crossed = client
+        .get(format!("{base_url}/api/user-profile"))
+        .bearer_auth(&socket_ticket)
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("reject socket ticket on profile HTTP: {error}"));
+    assert_eq!(crossed.status(), reqwest::StatusCode::UNAUTHORIZED);
+    let socket_url = format!(
+        "{}/ws?ticket={socket_ticket}",
+        base_url.replacen("http://", "ws://", 1)
+    );
+    assert!(
+        connect_async(socket_url).await.is_err(),
+        "cross-transport rejection did not consume the socket ticket"
+    );
     let read_ticket = request_ticket(state).await;
     let profile = client
         .get(format!("{base_url}/api/user-profile"))
@@ -565,10 +584,7 @@ where
 }
 
 async fn request_ticket(state: &AppState) -> String {
-    issue_local_ticket(state, "general")
-        .await
-        .unwrap_or_else(|error| panic!("issue profile HTTP ticket: {error}"))
-        .ticket
+    issue_operator_ticket(&state.tickets).await
 }
 
 async fn bootstrap(store: &SqliteStore) {

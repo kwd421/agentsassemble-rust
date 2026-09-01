@@ -55,7 +55,6 @@ impl ConsumedHumanSessionSocketTicket {
 }
 
 pub enum ConsumedProfileTicket {
-    Room(AuthenticatedPrincipal),
     ServerOperator { principal_id: String },
 }
 
@@ -317,9 +316,6 @@ impl TicketStore {
         authority: TicketAuthority,
     ) -> Result<ConsumedAttachmentUploadTicket, TicketError> {
         Ok(match authority {
-            TicketAuthority::Room(principal) => {
-                ConsumedAttachmentUploadTicket::Profile(ConsumedProfileTicket::Room(principal))
-            }
             TicketAuthority::HumanSession(public) => {
                 if public.purpose == HumanSessionGrantPurpose::MessageAttachmentUpload {
                     ConsumedAttachmentUploadTicket::Message(RoomHumanHttpAuthority::HumanSession(
@@ -351,7 +347,8 @@ impl TicketStore {
                     resolve_room_http_authority(room, &RoomHttpPurpose::MessageAttachmentUpload)?,
                 ))
             }
-            TicketAuthority::RoomHttp(_)
+            TicketAuthority::Room(_)
+            | TicketAuthority::RoomHttp(_)
             | TicketAuthority::SettingsDirectoryRead { .. }
             | TicketAuthority::CentralRegistration { .. } => return Err(TicketError::Invalid),
         })
