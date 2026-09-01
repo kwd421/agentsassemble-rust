@@ -619,15 +619,16 @@ generic executable-manifest framework is needed.
 
 ### D-01 — HTTP host challenge has no production caller
 
-Disposition: `Remove`; Phase 0B.
+Disposition: `Removed` at `a7949bd`; Phase 0B.
 
-`host_ticket.rs` and the private `/api/host-challenge` plus `/api/ws-ticket`
-routes add a 30-second challenge map/mutex, HMAC exchange, and startup secret.
+At the audited baseline, `host_ticket.rs` and the private `/api/host-challenge` plus
+`/api/ws-ticket` routes added a 30-second challenge map/mutex, HMAC exchange, and startup secret.
 Desktop production obtains its socket ticket over the owned private control pipe;
 admitted humans use the authenticated session exchange. Repository-wide search
-found no production frontend caller for the challenge routes. Remove the routes,
-cache, HMAC, and secret preamble while retaining control-pipe EOF ownership and
-both real ticket issuers.
+found no production frontend caller for the challenge routes. `a7949bd` removes the
+routes, cache, HMAC, and secret preamble while retaining control-pipe EOF ownership
+and both real ticket issuers. Actual TCP tests prove both retired routes return 404;
+the private control-pipe and admitted-human ticket paths remain covered.
 
 ### D-02 — local receipt, remote proof, and per-frame proof have different threats
 

@@ -11,10 +11,11 @@ do not override the current findings in
 `docs/PRODUCT_REIMPLEMENTATION_PLAN.md`. In particular, copied friends, side-chat,
 custom-channel, account, provider-operation, and external-AI controls remain active
 or reachable without complete Rust owners, and Agent Session identity plus several
-provider completion/lifecycle contracts are reopened. The HTTP host-challenge
-routes have no production caller, remote human HTTP currently performs a redundant
-purpose-ticket exchange, and room frames carry an unapproved cryptographic envelope;
-audit D-01 through D-03 route those corrections before further UI completion.
+provider completion/lifecycle contracts are reopened. D-01 removed the uncalled
+HTTP host-challenge routes and startup secret at `a7949bd`; remote human HTTP still
+performs a redundant purpose-ticket exchange, and room frames carry an unapproved
+cryptographic envelope. Audit D-02 and D-03 route those corrections before further
+UI completion.
 
 ## Scope and method
 
@@ -69,7 +70,7 @@ boundary resumes explicitly at `Historical public Rust slice and provenance reco
 | --- | --- |
 | Core room, general messages/history/search/pins/attachments/votes | finite sync/replay and lobby search implemented; room-wide search overclaim, frame-proof threat decision, and false capabilities reopened |
 | Human profile/avatar and room appearance | implemented; Agent identity projection is separately reopened |
-| Human invite/admission/session/public ingress | substantial implementation; dead host challenge and redundant remote HTTP ticket exchange plus guide/client-kind/TCP findings remain open |
+| Human invite/admission/session/public ingress | substantial implementation; dead host challenge closed at `a7949bd`, while redundant remote HTTP ticket exchange plus guide/client-kind/TCP findings remain open |
 | Participant role/mute/self-leave | implemented; kick/re-add and room lifecycle are not |
 | Agent Session create/configure/lifecycle | partial; provider completion, cleanup, and profile SSoT are reopened |
 | Friends | active copied UI calls absent Rust routes |

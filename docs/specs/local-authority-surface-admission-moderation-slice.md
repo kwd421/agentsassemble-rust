@@ -1,7 +1,7 @@
 # Local Authority, Product Surface, Admission, and Moderation Slice
 
-Status: implementation evidence retained; current socket/authentication contract
-reopened by repository audit D-01 and D-02
+Status: implementation evidence retained; D-01 closed at `a7949bd`, while the
+current socket proof contract remains reopened by repository audit D-02
 
 Comparison baseline: original
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; Rust
@@ -9,8 +9,8 @@ Comparison baseline: original
 
 Audit correction at Rust baseline `8a5f75a`: the finite snapshot/catch-up,
 one-use socket ticket, event sequence, request-ID deduplication, uncertain-ACK
-replay, bounds, and product-surface equality remain required. The uncalled HTTP host
-challenge/startup secret and remote proof are Phase 0B removal targets. Local receipt
+replay, bounds, and product-surface equality remain required. D-01 removed the
+uncalled HTTP host challenge/startup secret. Remote proof, local receipt,
 and per-frame authentication are also removed from the approved target unless separate
 controlled packaged reproductions, or equivalent concrete topology evidence, first
 defeat the smaller native-child/one-use-ticket boundary and then establish an in-scope

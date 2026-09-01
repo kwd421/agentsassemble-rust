@@ -1,17 +1,20 @@
 # WORKBOARD
 
 Status: The Phase 0A source/duplication/defensive-complexity audit and planning
-review are closed at reviewed content checkpoint `9711232`. Product implementation
-is paused before Phase 0B at the user's direction.
+review are closed at reviewed content checkpoint `9711232`. Phase 0B foundation
+correction is active from public baseline `4ab5ee1`.
 
 Purpose: route the asynchronous Rust reimplementation without duplicating product
 contracts, findings, or verification journals.
 
 ## Active work
 
-- Phase: implementation hold after Phase 0A.
-- Task: none while paused. On explicit resume, start the Phase 0 correction
-  substage (Phase 0B) from the master plan; do not repeat or bypass Phase 0A.
+- Phase: 0B foundation correction.
+- Completed: D-01 at `a7949bd`; the uncalled HTTP challenge/ticket bootstrap and
+  startup secret are absent, while private-control and admitted-human socket ticket
+  issuance remain.
+- Task: D-02 — remove the unapproved local/remote receipt and per-frame proof layers
+  while preserving the finite snapshot/catch-up and ordinary bounded JSON contract.
 - Sequence/exit owner: [`docs/PRODUCT_REIMPLEMENTATION_PLAN.md`](docs/PRODUCT_REIMPLEMENTATION_PLAN.md)
 - Finding/evidence owner: [`docs/architecture/REPOSITORY_AUDIT_2026-09-01.md`](docs/architecture/REPOSITORY_AUDIT_2026-09-01.md)
 - Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`;

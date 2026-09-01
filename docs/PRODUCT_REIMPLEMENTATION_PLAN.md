@@ -1,7 +1,7 @@
 # Product reimplementation master plan
 
-Status: approved planning owner at reviewed content checkpoint `9711232`; product
-implementation is paused before Phase 0B at the user's direction.
+Status: approved planning owner at reviewed content checkpoint `9711232`; Phase 0B
+foundation correction is active from public baseline `4ab5ee1`.
 
 Comparison baseline: original product commit
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; audited Rust baseline `8a5f75a`.
@@ -130,7 +130,7 @@ means code exists; it can still be reopened by Phase 0 findings.
 | Local bootstrap, room directory/create | implemented | reconcile stale spec statuses and final real-flow evidence | 0, 9 |
 | Room settings/preferences/appearance | substantially implemented | verify one authority per setting and exact copied controls | 4, 9 |
 | Human profile and avatar | implemented but Agent projection/UI ownership is inconsistent | restore human and Agent Session SSoTs; keep exact asset lifecycle | 3 |
-| Human invite/admission/session/public ingress | substantially implemented | remove dead host challenge, simplify redundant remote HTTP ticket exchange, fix guide drift and remaining boundaries | 0, 4-5 |
+| Human invite/admission/session/public ingress | substantially implemented; dead host challenge removed at `a7949bd` | simplify redundant remote HTTP ticket exchange, fix guide drift and remaining boundaries | 0, 4-5 |
 | Participant role/mute/leave | implemented | add complete kick/re-add and room lifecycle actions before advertising them | 4 |
 | General messages/history/edit/delete | implemented | retain canonical owner and final parity verification | 9 |
 | General search/context/pins/attachments/votes | implemented | preserve distinct trust-boundary validation and remove only semantic duplication | 9 |

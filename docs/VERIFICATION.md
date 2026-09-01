@@ -5111,3 +5111,20 @@ sidecar-preparation owner in `desktop/scripts/prepare_sidecar.mjs`; subsequent o
 `npm --prefix desktop run build`, and isolated-identifier packages run that same release-sidecar
 preparation immediately before Tauri's configured build. No second build path or compatibility
 check was added.
+
+### D-01 HTTP host bootstrap removal: 2026-09-01
+
+Repository-wide caller search found no production consumer of the 30-second host-challenge map,
+HMAC exchange, HTTP ticket route, or startup-secret preamble. Desktop already owns ticket issuance
+through its private anonymous control pipe, and admitted humans already use their authenticated
+session exchange. Commit `a7949bd` therefore deletes that second authority instead of replacing it.
+The preserved invariants are one-use room tickets, exact room and participant validation, private
+control EOF shutdown, admitted-human issuance, loopback ingress checks, and bounded socket admission.
+
+The removed path eliminates one mutex/map lifecycle, challenge expiry state, HMAC work, startup
+secret generation and transfer, and two private HTTP routes. This is evidence-based authority and
+resource removal, not a latency claim; no fallback, compatibility shim, timer, retry, cache, or new
+abstraction was added. Full server tests (93 unit plus all integration suites), 25 desktop tests,
+warning-denied server and desktop Clippy, formatting, architecture/source-growth gates, and diff
+checks passed. The runtime TCP boundary additionally proves both retired routes return 404, while
+control-pipe tests prove local issuance and EOF-owned shutdown still work.
