@@ -84,7 +84,8 @@ contracts, findings, or verification journals.
   plus the final warm complete verification in 822.72 and 315.16 seconds respectively.
   Critical ChatGPT Pro and Daybreaker Blue High independently found the portable-test
   and redundant-scan defects; `537c1b9` closes both. Each reviewer approved that
-  correction, exact `9d02acf..537c1b9`, full batch `9a4b5f6..537c1b9`, cumulative
+  correction, exact `42f0af5..537c1b9`, complete correction
+  `9d02acf..537c1b9`, full batch `9a4b5f6..537c1b9`, cumulative
   `8903445..537c1b9`, and HEAD `537c1b9` at `C0/H0/M0/L0`.
 - Sequence/exit owner: [`docs/PRODUCT_REIMPLEMENTATION_PLAN.md`](docs/PRODUCT_REIMPLEMENTATION_PLAN.md)
 - Finding/evidence owner: [`docs/architecture/REPOSITORY_AUDIT_2026-09-01.md`](docs/architecture/REPOSITORY_AUDIT_2026-09-01.md)
