@@ -9,7 +9,6 @@ import {
 } from "react";
 import { ArrowLeft, Bell, ChevronRight, Pin, Search, Users, PanelRight } from "lucide-react";
 import type { MessagePin } from "../../api/messagePins";
-import "../../styles/channel-search.css";
 
 type HeaderPanel = "notifications" | "pins" | "search";
 

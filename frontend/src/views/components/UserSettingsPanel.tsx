@@ -3,7 +3,6 @@ import { Camera, Headphones, Mic, MicOff, Palette, UserCircle } from "lucide-rea
 import type { UserProfile, UserProfileIdentity } from "../../api";
 import { resolveAttachmentReference } from "../../lib/attachmentReference";
 import GuestRecoverySettings from "./GuestRecoverySettings";
-import "./UserSettingsPanel.css";
 
 export type UserSettingsSection = "account" | "profile" | "voice" | "recovery";
 

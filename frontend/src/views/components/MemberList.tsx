@@ -20,7 +20,6 @@ import { buildMemberOwnerGroups } from "./member/memberOwnerGroups";
 import { useMemberEntries } from "./member/useMemberEntries";
 import type { MemberEntry, RoleId } from "./member/memberTypes";
 import type { NativeCliProviderAvailability } from "../../roomSocketClient";
-import "./member/MemberOwnership.css";
 
 export type { RoleId };
 

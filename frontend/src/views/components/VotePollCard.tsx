@@ -1,4 +1,3 @@
-import "./VotePollCard.css";
 import { useCallback, useEffect, useState } from "react";
 import { BarChart3, RefreshCw } from "lucide-react";
 import {

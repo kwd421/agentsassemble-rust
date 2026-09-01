@@ -25,7 +25,6 @@ import type { NativeCliProviderAvailability } from "../../roomSocketClient";
 import AgentSessionDetails, { type AgentSessionControlAction } from "./AgentSessionDetails";
 import { memberRole } from "./member/memberHelpers";
 import ProviderLogo from "./ProviderLogo";
-import "./member/MemberOwnership.css";
 
 type MobileRoomSummary = {
   id: string;

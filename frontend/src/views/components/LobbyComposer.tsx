@@ -10,7 +10,6 @@ import {
 } from "react";
 import type { LucideIcon } from "lucide-react";
 import { AtSign, Paperclip, Send, Smile, Sparkles, X } from "lucide-react";
-import "../../styles/lobby-composer-emoji.css";
 import {
   uploadLobbyAttachment,
   type LobbyAttachmentRef,

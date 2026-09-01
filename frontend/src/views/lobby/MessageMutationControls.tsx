@@ -3,7 +3,6 @@ import { createPortal } from "react-dom";
 import { MoreHorizontal, Pencil, Trash2, X } from "lucide-react";
 
 import type { LobbyEvent } from "../../api";
-import "./MessageMutationControls.css";
 
 type MutationKind = "edit" | "delete" | null;
 

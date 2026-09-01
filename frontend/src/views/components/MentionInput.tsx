@@ -16,7 +16,6 @@ import {
   type Mentionable,
 } from "../../lib/mentionComposerModel";
 import ProviderLogo from "./ProviderLogo";
-import "./MentionInput.css";
 
 type MentionInputProps = {
   value: string;

@@ -1,4 +1,4 @@
-import "./app/originalImportOrder";
+import "./styles/componentOrder";
 import AppView from "./app/AppView";
 import { useAppController } from "./app/useAppController";
 

@@ -1,6 +1,5 @@
 import { BarChart3 } from "lucide-react";
 
-import "./ComposerCommandMenu.css";
 
 export type ComposerCommand = {
   id: "vote";

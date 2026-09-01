@@ -14,7 +14,6 @@ import {
   ROOM_RAIL_MENU_SIZE,
   ROOM_RAIL_MENU_VIEWPORT_MARGIN,
 } from "../../lib/roomRailMenuPosition";
-import "./RoomRail.css";
 
 export type RoomMenuState = {
   roomId: string;

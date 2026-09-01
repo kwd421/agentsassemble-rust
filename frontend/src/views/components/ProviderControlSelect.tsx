@@ -19,7 +19,6 @@ import ProviderControlOptionContent, {
   providerControlOptionHasDescription,
 } from "./ProviderControlOptionContent";
 import { useProviderModelDetails } from "./ProviderModelDetailsPopover";
-import "./ProviderControlSelect.css";
 
 export default function ProviderControlSelect({
   label,

@@ -1,6 +1,5 @@
 import { ServerOff } from "lucide-react";
 import type { RoomDockItem } from "../../lib/roomDockModel";
-import "./DisconnectedRoomView.css";
 
 export default function DisconnectedRoomView({ room }: { room: RoomDockItem }) {
   return (

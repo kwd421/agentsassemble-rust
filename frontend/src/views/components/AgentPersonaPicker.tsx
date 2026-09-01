@@ -6,7 +6,6 @@ import {
   type PersonaAssetSummary,
 } from "../../api/personas";
 import { usePersonaThumbnails } from "./usePersonaThumbnails";
-import "./AgentPersonaPicker.css";
 
 const VISIBLE_RESULT_LIMIT = 8;
 

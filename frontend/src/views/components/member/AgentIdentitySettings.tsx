@@ -2,7 +2,6 @@ import { useEffect, useState, type RefObject } from "react";
 import { uploadLobbyAttachment, type RoomAgentSession } from "../../../api";
 import ImageCropper from "../ImageCropper";
 import type { MemberEntry } from "./memberTypes";
-import "./AgentIdentitySettings.css";
 
 export default function AgentIdentitySettings({
   entry,

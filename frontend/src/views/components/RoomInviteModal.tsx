@@ -7,7 +7,6 @@ import type {
 } from "../../app/useRoomInviteController";
 import type { HumanInvitePresentation } from "../../app/useManagedHumanInvites";
 import type { RoomAppearance } from "../../lib/roomAppearance";
-import "./RoomInviteModal.css";
 
 type PendingPublicAction = { kind: "human"; options: HumanInviteOptions };
 
