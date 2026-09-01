@@ -224,7 +224,9 @@ Critical ChatGPT Pro approved exact `5b1b331..fe8ffbf`, cumulative
 two active verification passages and two server rejections still presented removed
 re-add as available remediation. `d874d92` makes the rejection text authority-neutral;
 the active verification owner now defers re-add to its complete participant/session
-transition. Exact correction-range re-review is pending.
+transition. Critical ChatGPT Pro and Daybreaker Blue High each approved exact
+`fe8ffbf..7b2168f`, cumulative `dd1e99d..7b2168f`, and HEAD `7b2168f` at
+`C0/H0/M0/L0`.
 
 ### F-05 — copied frontend actively calls missing Rust services
 
