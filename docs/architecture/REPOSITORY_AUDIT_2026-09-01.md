@@ -397,6 +397,14 @@ called declarations. `bbfb710` corrects the unit. Both reviewers then approved t
 corrected exact `5d0ee87..bbfb710`, cumulative F-05 `8903445..bbfb710`, and HEAD
 `bbfb710` at `C0/H0/M0/L0` with no remaining actionable finding.
 
+Candidates `f16bc2c` and `fbb952f` close the remaining evidence-backed F-05
+dormant-source items: HomeSidebar-only CSS and the unimported Python-mirrored
+provider-permission helper. The active room sidebar/button styles and every named
+deferred or future product surface remain. CSS is 152.64/27.14 kB by displayed
+raw/gzip measures; the frontend passes 98 files/617 tests. Full repository
+verification passes in 239.05 seconds with a 579,043,328-byte maximum resident set;
+cross-review is pending.
+
 ### F-06 — Agent Session identity SSoT is reversed in frontend projection
 
 Disposition: `Fix`; high product/medium ownership impact.
@@ -416,6 +424,13 @@ editor therefore has no complete Agent profile mutation or asset lifecycle.
 Make the Agent Session authoritative for Agent identity fields, merge only
 room-owned participant state, and hide the editor until a distinct complete Agent
 profile/avatar owner exists.
+
+Candidate `fbebad6` corrects the first shared projection owner. Participant data is
+projected first for room role, then an Agent Session with the same participant ID
+authoritatively replaces display name, avatar, and provider. Current/paged lobby
+history and lobby search use this one map. Focused tests pass 35/35 and the complete
+frontend passes 98 files/618 tests. Roster projection still prefers participant
+identity and the incomplete editor remains exposed, so F-06 remains open.
 
 ### F-07 — provider catalog and controls overstate real operations
 

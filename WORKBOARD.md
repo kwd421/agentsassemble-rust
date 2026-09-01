@@ -33,7 +33,7 @@ contracts, findings, or verification journals.
   and Daybreaker Blue High each approved exact `f4bc3d9..8903445`, cumulative
   `dd1e99d..8903445`, and HEAD `8903445` at `C0/H0/M0/L0` after the stale re-add
   guidance and audit-state corrections.
-- Active task: F-05 frontend exposure correction — gate copied requests,
+- Active task: F-05 closure and F-06 profile projection correction — gate copied requests,
   polling, and heartbeats whose complete Rust owner does not yet exist. Do not add
   dummy routes, fallback data, timers, or a generic feature framework. The first
   independently committed batch through `87d3d0d` removes the active Friends,
@@ -98,6 +98,17 @@ contracts, findings, or verification journals.
   the same documentation-only L1 unit error; `bbfb710` corrects “147 declarations”
   to “147 source lines.” Each then approved exact `5d0ee87..bbfb710`, cumulative
   F-05 `8903445..bbfb710`, and HEAD `bbfb710` at `C0/H0/M0/L0`.
+  Candidate `f16bc2c` removes the last HomeSidebar-only selectors while preserving
+  the active room sidebar and agent-add button declarations. Candidate `fbb952f`
+  removes the unimported Python-mirrored provider-permission helper; deferred
+  Mafia/RimWorld/voice and named Phase 6/8 surfaces remain untouched. The resulting
+  production CSS is 152.64/27.14 kB and the frontend passes 98 files/617 tests.
+  Candidate `fbebad6` begins F-06 by making Agent Session identity authoritative in
+  the shared canonical timeline/history/search profile map while retaining room role
+  from the participant; focused 35 tests and the full 98-file/618-test frontend pass.
+  Roster projection and the incomplete Agent identity editor remain open, so F-06 is
+  not claimed complete. A fresh complete `make verify` passes in 239.05 seconds with
+  a 579,043,328-byte maximum resident set. Cross-review is pending.
 - Build-artifact lifecycle correction is complete through `537c1b9`. macOS uses
   packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the

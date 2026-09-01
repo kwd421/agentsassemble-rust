@@ -5710,3 +5710,30 @@ documentation-only L1: `66d2b22` called the 147 removed CSS source lines
 other claim. Both reviewers then approved `bbfb710`, corrected exact
 `5d0ee87..bbfb710`, cumulative F-05 `8903445..bbfb710`, and HEAD `bbfb710` at
 `C0/H0/M0/L0` with no remaining actionable finding and without an automated scan.
+
+### F-05 closure and F-06 canonical identity projection: 2026-09-02
+
+Repository-wide source search finds no remaining consumer for the deleted
+`HomeSidebar.tsx` selectors. Candidate `f16bc2c` removes only those selectors from
+the copied CSS, including their combined desktop/mobile lists, while retaining the
+active `.dc-sidebar` mobile behavior and `.dc-agent-add-entry` presentation. The
+exact CSS gate moves to SHA-256
+`fe4d94af438b110589e09becbd08461dafe09d30f7b7b4dd5aead0dd77c67523`;
+the artifact is 152,642 raw bytes and 26,842 gzip bytes, displayed by Vite as
+152.64/27.14 kB. Candidate `fbb952f` removes the unimported 50-line
+`liveAgentPermissionOptions.ts`, whose only synchronization authority was a Python
+implementation comment. Neither candidate adds a route, fallback, timer, polling,
+retry, compatibility path, or replacement abstraction. Deferred Mafia/RimWorld/
+voice and named future product surfaces remain unchanged. The frontend passes 98
+files/617 tests after each cleanup candidate.
+
+Candidate `fbebad6` reverses the shared canonical profile merge so a room
+participant contributes room role while an Agent Session with the same participant
+ID contributes display name, avatar, and provider. A missing session avatar does not
+fall back to participant identity. Current and paged lobby history and lobby search
+therefore consume the same Agent Session identity map. Focused projection/search
+tests pass 35/35 and the full frontend passes 98 files/618 tests. Roster projection
+and the incomplete Agent identity editor remain open; this candidate does not claim
+the full F-06 SSoT correction or a runtime performance improvement. Complete
+repository verification passes in 239.05 seconds with a 579,043,328-byte maximum
+resident set; external review is pending.
