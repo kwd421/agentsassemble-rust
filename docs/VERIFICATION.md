@@ -5781,19 +5781,37 @@ The run also found that a search result with no custom Agent Session avatar rend
 an author initial while roster and timeline used the provider logo. Commit `e869f42`
 passes the already-canonical `providerKind` into the search item and reuses the
 existing `ProviderLogo` owner. Custom avatar images still take precedence and
-avatarless humans still render an initial. Repackaged verification showed the
-Antigravity and OpenCode provider logos in search and preserved the human initial.
-The change adds no CSS, request, state owner, timer, polling, retry, fallback, or
-compatibility path. `ChannelHeader.tsx` reaches the 500-line structure-review signal
-but retains one header/panel state flow; extracting the small avatar branch would add
-an interface and glue without separating an independent state or invariant owner.
+avatarless humans still render an initial. The first repackaged run showed the
+Antigravity and OpenCode provider-logo branches in search and preserved the human
+initial, but Daybreaker Blue High then found one Low CSS defect: the descendant
+`.dc-head-search-result-avatar img` selector also targeted `ProviderLogo`'s nested
+image and imposed custom-avatar absolute sizing. Commit `0363622` narrows that rule to
+the direct custom-avatar child. It adds no new selector, state, request, timer,
+polling, retry, fallback, or compatibility path. `ChannelHeader.tsx` reaches the
+500-line structure-review signal but retains one header/panel state flow; extracting
+the small avatar branch would add an interface and glue without separating an
+independent state or invariant owner.
 
-Focused lobby verification passes 18/18. The production frontend emits the unchanged
-150.97/26.87 kB displayed raw/gzip CSS artifact and all 98 files/619 tests pass. A
+Focused lobby verification passes 18/18. After the CSS correction the production
+frontend emits 150,971 raw bytes and 26,842 gzip bytes with SHA-256
+`5f4c8d4033bfa732da672a0c2316893d73a6ffd3c56f0a34ff97190b81c7cc96`; all 98
+files/619 tests pass. A
 fresh complete `make verify`, including real TCP-boundary tests, passes in 228.86
 seconds with a 582,074,368-byte maximum resident set. This records validation cost,
-not a runtime performance improvement. After packaged verification the exact app and
-its isolated profile/cache/WebKit/preferences data were removed; Cargo release
-artifacts reclaimed 1.9 GiB while the 21 GiB debug cache needed for the next
-incremental verification was retained. Critical ChatGPT Pro and Daybreaker Blue High
-review of this correction and final F-06 documentation remain pending.
+not a runtime performance improvement.
+
+The post-`0363622` packaged visual recheck did not reach an Agent-authored searchable
+message. With the normal central configuration, fresh guest creation remained pending
+on two bounded attempts and wrote no local profile, room, or Agent Session. After
+normal quit and exact isolated-data removal, a supported local-mode build created a
+real profile, room, and `gemini-3.6-flash` Antigravity session. Its actual turn failed
+visibly and durably as `provider_turn_failed` because Antigravity requested an
+unapproved terminal command. The copied OpenCode selector exposed its current catalog,
+but the required Muse Spark contributor-free model was absent; no different free model
+was substituted. Therefore source, focused-test, build, CSS-artifact, and complete
+repository gates pass, while the corrected provider-logo geometry remains explicit
+packaged `unknown` rather than a visual-pass claim. The exact app and both runs'
+isolated profile/cache/WebKit/preferences data were removed; no owned app, sidecar, or
+provider process remained. Cargo release artifacts reclaimed 1.9 GiB while the 21 GiB
+debug cache required for the next incremental verification was retained. Critical
+ChatGPT Pro and Daybreaker Blue High correction/cumulative approval remain pending.

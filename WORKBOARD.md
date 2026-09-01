@@ -123,9 +123,15 @@ contracts, findings, or verification journals.
   `runtime_start_recovered_gone` lifecycle failure and remains open without a retry
   or fallback. Correction `e869f42` reuses the shared provider-logo owner for
   avatarless Agent Session search results while preserving custom Agent avatars and
-  human initials. A fresh complete `make verify` passes in 228.86 seconds with a
-  582,074,368-byte maximum resident set. Final cumulative approval and the complete
-  Agent profile mutation/asset owner remain open.
+  human initials. Daybreaker Blue High found that its descendant image selector also
+  restyled `ProviderLogo`'s nested image; correction `0363622` limits the search-avatar
+  rule to a direct custom-avatar child. A fresh complete `make verify` passes in 228.86
+  seconds with a 582,074,368-byte maximum resident set. A post-correction packaged
+  visual recheck remains explicit `unknown`: central guest creation stayed pending on
+  two bounded attempts, local-mode Antigravity failed on an unapproved terminal command,
+  and the required OpenCode Muse Spark model was absent from that run's catalog. No
+  alternate model, retry loop, or fallback was used. Final correction/cumulative
+  approval and the complete Agent profile mutation/asset owner remain open.
 - Build-artifact lifecycle correction is complete through `537c1b9`. macOS uses
   packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the

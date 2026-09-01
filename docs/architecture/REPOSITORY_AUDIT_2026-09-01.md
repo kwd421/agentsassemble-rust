@@ -441,9 +441,15 @@ timeline, and search for Codex Terra, Antigravity Flash, and OpenCode Muse Spark
 sessions. Actual Antigravity and OpenCode turns complete. Codex start instead
 exposes `runtime_start_recovered_gone` and remains an explicit lifecycle failure.
 Correction `e869f42` reuses the existing provider-logo owner for avatarless Agent
-search results while preserving human initials and custom Agent avatars. The Codex
-lifecycle failure and future complete Agent profile mutation/avatar owner keep F-06
-open; neither is hidden by a fallback or placeholder.
+search results while preserving human initials and custom Agent avatars. Daybreaker
+Blue High found that its broad descendant-image selector also restyled the nested
+provider-logo image; `0363622` restricts the custom-avatar rule to a direct child.
+Post-correction packaged visual closure remains `unknown`: central guest creation
+stayed pending on two bounded attempts, the real Antigravity turn failed on an
+unapproved terminal command, and the required OpenCode Muse Spark model was absent
+from the current catalog. No substitute, retry loop, fallback, or placeholder was
+used. The Codex lifecycle failure and future complete Agent profile mutation/avatar
+owner keep F-06 open.
 
 ### F-07 — provider catalog and controls overstate real operations
 
