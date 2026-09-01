@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  parseBrowserRoomRuntimeTicket,
   parseNativeRoomRuntimeTicket,
   requireAcceptedRoomRuntimeTicket,
 } from "./roomRuntimeTicket";
@@ -42,5 +43,18 @@ describe("room runtime ticket authority", () => {
         displayResourceBase: "http://127.0.0.1:43124",
       })
     ).toThrow("do not match");
+  });
+
+  it("rejects retired proof state in a remote socket grant", () => {
+    expect(() =>
+      parseBrowserRoomRuntimeTicket(
+        {
+          ticket: "b".repeat(64),
+          ttl_seconds: 30,
+          server_proof_key: "c".repeat(64),
+        },
+        "https://rooms.example/app"
+      )
+    ).toThrow("contract does not match");
   });
 });

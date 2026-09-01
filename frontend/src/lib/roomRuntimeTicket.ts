@@ -87,10 +87,7 @@ export function parseBrowserRoomRuntimeTicket(
   value: unknown,
   pageHref: string
 ): RoomRuntimeTicket {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("Room session socket ticket response is invalid.");
-  }
-  const grant = value as Record<string, unknown>;
+  const grant = exactObject(value, ["ticket", "ttl_seconds"]);
   const fields = ticketFields(grant.ticket, grant.ttl_seconds);
   const displayOrigin = exactOrigin(new URL(pageHref).origin, ["http:", "https:"]);
   const socketProtocol = displayOrigin.protocol === "https:" ? "wss:" : "ws:";
