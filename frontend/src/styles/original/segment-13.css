@@ -424,21 +424,6 @@
     color: #f2f3f5;
   }
 
-  .dc-mobile-side-chat-shell {
-    display: flex;
-    min-height: 0;
-    flex: 1;
-    padding: 0 12px 0;
-  }
-
-  .dc-mobile-side-chat-shell .dc-side-chat-dock {
-    min-height: 0;
-    flex: 1;
-    overflow: hidden;
-    border-radius: 14px;
-    background: #1e1f26;
-  }
-
   .dc-mobile-info-hero {
     display: flex;
     align-items: center;

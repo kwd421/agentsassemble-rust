@@ -14,12 +14,6 @@
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
 }
 
-.dc-side-composer .dc-mention-popover {
-  right: 8px;
-  bottom: 47px;
-  left: 8px;
-}
-
 .dc-mention-popover button {
   display: flex;
   width: 100%;
