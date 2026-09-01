@@ -219,6 +219,13 @@ remaining frontend caller for the three absent actions. The later owning slices 
 reintroduce a control only with its complete server action, authorization, transition,
 failure, and real-user flow.
 
+Critical ChatGPT Pro approved exact `5b1b331..fe8ffbf`, cumulative
+`dd1e99d..fe8ffbf`, and HEAD `fe8ffbf` at `C0/H0/M0/L0`. Daybreaker found one Low:
+two active verification passages and two server rejections still presented removed
+re-add as available remediation. `d874d92` makes the rejection text authority-neutral;
+the active verification owner now defers re-add to its complete participant/session
+transition. Exact correction-range re-review is pending.
+
 ### F-05 — copied frontend actively calls missing Rust services
 
 Disposition: `Fix exposure now, implement in later owning slice`; high product.

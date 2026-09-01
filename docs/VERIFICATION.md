@@ -60,9 +60,10 @@ At fixed desktop and responsive viewports, compare asset identity, selector/clas
 component and rendered DOM order, responsive breakpoints, left/right panel widths,
 central chat bounds, composer bounds, and left-bottom profile-card position and
 overlap. Screenshots support, but do not replace, geometry assertions. Exercise
-create stopped, create-and-start, re-add, stop, resume/restart, reconnect, and one
-provider reply through the copied controls. A hidden fake, no-op, or fallback is a
-failed run.
+create stopped, create-and-start, stop, resume/restart, reconnect, and one provider
+reply through the copied controls. Re-add remains deferred until its complete
+participant/session transition is implemented. A hidden fake, no-op, or fallback is
+a failed run.
 
 ## Frontend real-flow cleanup
 
@@ -5426,4 +5427,11 @@ warning-denied Clippy suites. After `cccf513`, 55 focused frontend tests and fou
 focused domain tests passed, followed by a fresh complete `make verify` on the
 documented correction: all gates above, 103 frontend files and 643 tests, desktop
 Clippy and 25 tests, and the full Rust workspace tests and warning-denied Clippy.
-Exact correction-range critical-web and Daybreaker manual re-review remain pending.
+Critical ChatGPT Pro approved exact `5b1b331..fe8ffbf`, cumulative
+`dd1e99d..fe8ffbf`, and HEAD `fe8ffbf` at `C0/H0/M0/L0`. Daybreaker's same review
+found one Low: these verification instructions and two server rejections still
+presented removed re-add as an available action. `d874d92` makes the rejection text
+authority-neutral, and the active verification contract now defers re-add to its
+complete participant/session transition. Focused verification for that correction
+passed all 242 persistence tests and warning-denied persistence Clippy. Exact
+correction-range re-review remains pending.
