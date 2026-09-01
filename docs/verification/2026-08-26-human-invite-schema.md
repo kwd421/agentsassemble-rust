@@ -782,7 +782,7 @@ only after commit for the RoomRuntime post-commit owner.
   identity modules are 664 and 276 lines respectively; the shared attachment owner
   is 731 lines. No 800-line gate exception or threshold change was added. The latest
   correction was 217 insertions and 25 deletions across four files, below the
-  1,000-line commit review threshold.
+  1,000-changed-line per-commit ceiling.
 - Daybreaker returned `C=0/H=0/M=1` on the pre-fix implementation, then manually
   approved `c99a031` and the complete admission series with `C=0/H=0/M=0`. It
   confirmed structural validation precedes liveness, reusable profiles use the
