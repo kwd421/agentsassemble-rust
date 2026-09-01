@@ -326,7 +326,8 @@ bound helper on Antigravity/OpenCode; it is not print mode or a client-side resu
 The original React client still has no direct human roll/choose control, so the
 human commands remain a reachable server contract without a fabricated button.
 Local-operator preferences use their purpose-ticketed HTTP owner; admitted remote
-profile, preference, and message-pin operations authorize at their target routes.
+profile, preference, message-pin, and message-search operations authorize at their
+target routes.
 Human invite activation is complete. Room
 appearance persistence, local/remote HTTP boundaries, typed desktop issuance, and
 the copied frontend's authenticated object-URL lifecycle are active. Custom channels

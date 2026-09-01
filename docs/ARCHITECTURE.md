@@ -431,7 +431,7 @@ or scope is consumed and rejected rather than interpreted as another authority.
 The audited baseline minted short-lived public grants for profile, preference, search,
 pin, attachment, and appearance HTTP operations before revalidating the same durable
 `HumanSessionAuthorization` at the target. Phase 0B has removed that second credential
-lifecycle from profile, preference, and pin operations; search, attachments, and
+lifecycle from profile, preference, pin, and search operations; attachments and
 appearance remain correction work. Each corrected target route authenticates the
 session bearer from the bounded Authorization header, resolves its exact room/principal
 scope, and revalidates the operation-specific permission in the owning persistence

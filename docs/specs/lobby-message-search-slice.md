@@ -1,7 +1,7 @@
 # Lobby Message Search Slice
 
-Status: implementation and flow evidence retained; remote-human HTTP authorization
-reopened by repository audit D-03
+Status: implementation and flow evidence retained; D-03 remote-human HTTP authorization
+cut over at `ae6fe7a`
 
 ## Definition
 
@@ -38,7 +38,7 @@ their fresh one-use `message-search-read` ticket because it crosses the private-
 Remote humans present their durable session bearer in the bounded Authorization header directly to the target, which resolves the exact
 room participant and revalidates `room.history` in the same persistence read transaction. The audited
 implementation's preliminary remote session-to-purpose-ticket exchange is historical evidence and a
-Phase 0B removal target, not part of this approved contract. Both responses are private/no-store. An
+removed Phase 0B path, not part of this approved contract. Both responses are private/no-store. An
 invalid nonempty cursor fails rather than silently restarting pagination.
 
 `channel_id=lobby` and `channel_id=all` currently search the same implemented lobby owner. That alias
@@ -104,16 +104,17 @@ empty canonical result, and cast lobby context into custom-channel events despit
 Rust custom-channel message owner. Those paths could cross purpose authority, hide failed canonical
 reads, or present invented history.
 
-The audited frontend resolves one local-or-remote `RoomHttpAuthority`, obtains a fresh one-use
-`message-search-read` grant for each search or context read, sends only that grant to the target, and
-validates the complete private/no-store response before exposing it. The parser accepts only the
+Before D-03, the audited frontend resolved one local-or-remote `RoomHttpAuthority`, obtained a fresh
+one-use `message-search-read` grant for each search or context read, sent only that grant to the target,
+and validated the complete private/no-store response before exposing it. The parser accepts only the
 currently emitted visible lobby `message_final` variants, including a strict canonical poll
 definition, and rejects unknown or private fields,
 and bounds pages, context windows, strings, attachment metadata, sequence order, and target identity.
 Room, channel, or authority changes synchronously invalidate pending requests and clear their visible
 query/results. Concrete custom channels report the unimplemented owner rather than synthesizing
 context or falling back to loaded events. Message attachments, pins, and search share only the small
-HTTP-authority value; each feature retains its own ticket purpose, parser, and lifecycle owner.
+HTTP-authority value; each feature retains its own parser and lifecycle owner, while local search
+alone retains the exact private-control ticket purpose.
 
 D-03 supersedes only the remote half of that cutover: the local desktop still obtains
 the one-use search ticket, while an admitted browser sends its session bearer in the

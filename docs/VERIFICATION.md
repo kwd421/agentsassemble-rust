@@ -5275,3 +5275,29 @@ TCP suite, warning-denied server Clippy, formatting, and the architecture,
 source-growth, and policy gates passed. The profile TCP suite also proves that a socket
 ticket presented to profile HTTP receives 401 and is consumed before a later WebSocket
 attempt, while the positive local profile flow uses the server-operator ticket.
+
+### D-03 direct remote message-search authorization: 2026-09-01
+
+Before `ae6fe7a`, each remote search or context read first resolved the reusable room
+session, allocated a short-lived `MessageSearchRead` grant under the shared ticket-map
+lock, returned it through a separate HTTP response, and then consumed and revalidated
+the same session authority at the target. Both requests used the same HTTPS origin, so
+that second credential did not establish a distinct trust boundary.
+
+The search target now classifies canonical `aas1.` bearers before local-ticket lookup,
+resolves the exact durable room principal, and leaves current `room.history`
+revalidation inside the owning search or context persistence transaction. Local desktop
+search tickets remain exact-purpose and one-use. A malformed session-shaped credential
+does not fall through to local tickets, and the retired remote exchange route returns
+404. The frontend sends the reusable remote session directly and retains its strict
+bounded response parser, request invalidation, no-store requirement, custom-channel
+rejection, and no-fallback behavior.
+
+The change removes one HTTP round trip and one ticket-map insertion/consumption per
+remote search operation, plus the now-unused mixed local/session ticket resolver and
+generic frontend exchange helper. It adds no state, cache, process, timer, polling,
+heartbeat, retry, fallback, compatibility path, or speculative abstraction; no latency
+claim is made beyond the removed operations. The four-test real message-search TCP
+suite, 13 focused ticket-store tests, 15 focused frontend HTTP/search tests, the
+production CSS-verified frontend build, warning-denied server Clippy, Rust formatting,
+and the architecture/source-growth/policy gates passed.
