@@ -116,6 +116,68 @@ fn duplicate_option_authority_cannot_be_startable() {
 }
 
 #[test]
+fn missing_preferred_model_remains_ready_but_requires_explicit_selection() {
+    let models = vec![super::option("opencode/available-free", "Available")];
+    assert!(super::preferred_model(&models, "opencode/missing-free").is_empty());
+    assert_eq!(
+        super::preferred_model(
+            &[
+                super::option("opencode/first-free", "First"),
+                super::option("opencode/muse-spark-1.2-contributor-free", "Muse Spark",),
+            ],
+            "opencode/muse-spark-1.2-contributor-free",
+        ),
+        "opencode/muse-spark-1.2-contributor-free"
+    );
+
+    let controls = vec![
+        super::control("model", "Model", "select", models, ""),
+        super::control(
+            "permission_mode",
+            "Permission",
+            "select",
+            vec![super::option("meeting_read_only", "Read only")],
+            "meeting_read_only",
+        ),
+    ];
+    let ready = ready_provider(fixture_provider(), String::new(), controls);
+
+    assert!(ready.available);
+    assert!(ready.startable);
+    assert_eq!(ready.discovery_status, "ready");
+    assert!(ready.default_model.is_empty());
+    assert_eq!(ready.controls[0].default_value, "");
+    assert_eq!(
+        ready.controls[0].options[0].value,
+        "opencode/available-free"
+    );
+}
+
+#[test]
+fn non_model_control_still_requires_a_valid_default() {
+    let controls = vec![
+        super::control(
+            "model",
+            "Model",
+            "select",
+            vec![super::option("opencode/available-free", "Available")],
+            "",
+        ),
+        super::control(
+            "permission_mode",
+            "Permission",
+            "select",
+            vec![super::option("meeting_read_only", "Read only")],
+            "missing",
+        ),
+    ];
+    let malformed = ready_provider(fixture_provider(), String::new(), controls);
+
+    assert!(!malformed.startable);
+    assert_eq!(malformed.discovery_error_code, "model_discovery_malformed");
+}
+
+#[test]
 fn fixed_catalogs_are_bounded_before_publication() {
     let mut provider = fixture_provider();
     provider.startable = true;

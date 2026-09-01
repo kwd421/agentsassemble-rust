@@ -188,7 +188,7 @@ pub(crate) async fn discover_opencode(
         Err(error) => return failed_provider(provider, error),
     };
     let models = opencode_models(&output);
-    let default_model = preferred_model(&models, "opencode/hy3-free");
+    let default_model = preferred_model(&models, "opencode/muse-spark-1.2-contributor-free");
     ready_provider(
         provider,
         default_model.clone(),
@@ -288,9 +288,6 @@ fn ready_provider(
     default_model: String,
     controls: Vec<ProviderControl>,
 ) -> ProviderAvailability {
-    if default_model.is_empty() {
-        return malformed_provider(provider);
-    }
     if !controls_are_bounded(&controls) {
         return failed_provider(provider, ProbeFailure::CatalogTooLarge);
     }
@@ -403,7 +400,6 @@ fn preferred_model(options: &[ProviderControlOption], preferred: &str) -> String
     options
         .iter()
         .find(|option| option.value == preferred)
-        .or_else(|| options.first())
         .map_or_else(String::new, |option| option.value.clone())
 }
 
@@ -473,6 +469,7 @@ fn controls_are_bounded(controls: &[ProviderControl]) -> bool {
 fn controls_are_consistent(default_model: &str, controls: &[ProviderControl]) -> bool {
     let mut control_keys = BTreeSet::new();
     if controls.iter().any(|control| {
+        let unselected_model = control.key == "model" && control.default_value.is_empty();
         control.options.is_empty()
             || !control_keys.insert(control.key.as_str())
             || control
@@ -482,22 +479,27 @@ fn controls_are_consistent(default_model: &str, controls: &[ProviderControl]) ->
                 .collect::<BTreeSet<_>>()
                 .len()
                 != control.options.len()
-            || !control
-                .options
-                .iter()
-                .any(|option| option.value == control.default_value)
+            || (!unselected_model
+                && !control
+                    .options
+                    .iter()
+                    .any(|option| option.value == control.default_value))
     }) {
         return false;
     }
-    let Some(model) = controls
+    let Some(model_control) = controls.iter().find(|control| control.key == "model") else {
+        return false;
+    };
+    if model_control.default_value != default_model {
+        return false;
+    }
+    if default_model.is_empty() {
+        return true;
+    }
+    let Some(model) = model_control
+        .options
         .iter()
-        .find(|control| control.key == "model" && control.default_value == default_model)
-        .and_then(|control| {
-            control
-                .options
-                .iter()
-                .find(|option| option.value == default_model)
-        })
+        .find(|option| option.value == default_model)
     else {
         return false;
     };
