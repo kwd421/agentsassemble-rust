@@ -147,7 +147,7 @@ describe("room socket exact-command retry", () => {
     sockets[3].receiveRaw(fourthFrames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     expect(sockets[3].sent).toHaveLength(1);
-    await vi.advanceTimersByTimeAsync(500);
+    await vi.advanceTimersByTimeAsync(UNRESOLVED_DELAYS_MS[2] - 500);
     await vi.waitFor(() => expect(sockets[3].sent).toHaveLength(2));
     const backedOffReplay = sentClientFrame(sockets[3]);
     expect(backedOffReplay).toEqual(firstCommand);
