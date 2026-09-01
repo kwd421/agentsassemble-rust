@@ -5128,3 +5128,23 @@ abstraction was added. Full server tests (93 unit plus all integration suites), 
 warning-denied server and desktop Clippy, formatting, architecture/source-growth gates, and diff
 checks passed. The runtime TCP boundary additionally proves both retired routes return 404, while
 control-pipe tests prove local issuance and EOF-owned shutdown still work.
+
+### D-02 subscription receipt proof removal: 2026-09-01
+
+The receipt challenge, receipt HMAC, snapshot-byte digest, and duplicate capability digest had no
+controlled endpoint-substitution reproduction or independent remote trust boundary. Commit
+`3ffb9eb` removes those four values and their server, browser, generated-schema, and test owners.
+It keeps the one-use ticket, exact room/participant/product-surface checks, finite snapshot cursor
+and catch-up high water, sequence validation, request replay, strict receipt keys, and bounded
+WebSocket admission. The remaining frame HMAC/base64/counter path is explicitly still active and
+belongs to the next D-02 change; no fallback, compatibility protocol, timer, cache, or new
+abstraction was introduced.
+
+The removed receipt avoids one browser challenge, one server HMAC, browser HMAC verification,
+snapshot hashing, capability hashing, and their transient buffers per connection. This records
+eliminated work rather than claiming representative latency improvement. Full server tests (92
+unit plus all integration suites), 657 frontend tests and production build, 25 desktop tests,
+protocol tests, warning-denied workspace Clippy, formatting, architecture/source-growth gates,
+and diff checks passed. Actual TCP/WebSocket tests still prove exact private-ticket scope, finite
+snapshot/catch-up readiness, binary-frame rejection, connection limits, replay recovery, and
+message-size enforcement.

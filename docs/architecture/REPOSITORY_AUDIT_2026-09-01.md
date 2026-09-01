@@ -632,8 +632,8 @@ the private control-pipe and admitted-human ticket paths remain covered.
 
 ### D-02 — local receipt, remote proof, and per-frame proof have different threats
 
-Disposition: `Remove remote proof; Measure local receipt and per-frame proof before
-retaining either`; Phase 0B.
+Disposition: `Receipt removed at 3ffb9eb; remove the remaining per-frame proof`;
+Phase 0B in progress.
 
 `authenticated_channel.rs`, `server_proof.rs`, and `authenticatedFrames.ts` HMAC,
 counter, base64-encode, copy, and asynchronously serialize every frame, adding
@@ -656,6 +656,12 @@ derivation, snapshot proof, and permissions digest, and keep
 one-use tickets, TLS/origin/ingress checks, strict schemas/limits, the finite `C/H`
 handshake, sequence, request-ID replay, uncertain-ACK recovery, and one-time
 native/sidecar product-surface equality.
+
+No qualifying endpoint-substitution evidence was found. `3ffb9eb` therefore removes
+the client challenge, HMAC receipt, snapshot digest, and duplicate permissions digest
+from both generated wire types and their client/server owners. It deliberately leaves
+the still-active per-frame key and envelope visible for the next independently
+verifiable removal rather than hiding a dual protocol or compatibility path.
 
 ### D-03 — remote human HTTP authorization performs a redundant ticket exchange
 
