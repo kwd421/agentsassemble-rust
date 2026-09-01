@@ -282,7 +282,7 @@ impl MessageSearchHttpError {
         Self {
             status: StatusCode::UNAUTHORIZED,
             code: "unauthorized",
-            message: "A valid one-use message-search ticket is required.".to_owned(),
+            message: "Valid message-search authority is required.".to_owned(),
         }
     }
 

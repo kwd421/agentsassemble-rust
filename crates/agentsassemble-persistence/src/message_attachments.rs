@@ -309,8 +309,8 @@ impl SqliteStore {
     ///
     /// # Errors
     ///
-    /// Fails closed when the consumed grant no longer matches its durable session, the current
-    /// participant is muted or read-only, or attachment validation and storage fail.
+    /// Fails closed when the resolved human-session authorization no longer matches its durable
+    /// session, the current participant is muted or read-only, or validation and storage fail.
     pub async fn store_human_session_message_attachment(
         &self,
         authorization: &HumanSessionAuthorization,
