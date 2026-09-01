@@ -5160,10 +5160,13 @@ one-use-ticket, origin, ingress, and TLS boundaries. This was concrete recurring
 state without a demonstrated security owner, not an optimization based on expected future
 load.
 
-Commit `77cae0e` moves both directions to the single `room_channel` 256 KiB strict JSON
-boundary. It measures incoming browser frames by UTF-8 bytes and rejects the retired
-authenticated envelope before dispatch; a real TCP test wraps a valid message command in
-that old envelope and proves no durable mutation occurs. Commits `0d24741` and `57fd6ec`
+Commit `77cae0e` moves both directions to the protocol-owned 256 KiB strict JSON
+boundary consumed by `room_channel` and the generated frontend constant. It measures
+incoming browser frames by UTF-8 bytes and rejects the retired authenticated envelope
+before dispatch; a real TCP test wraps a valid message command in the old canonical
+base64 envelope with a structurally valid nonmatching proof, then distinguishes the
+current `frame_schema_invalid` failure from the retired decoder's authentication failure
+and proves no durable mutation occurs. Commits `0d24741` and `57fd6ec`
 remove the HMAC/base64 modules, connection nonce, proof-key ticket storage and wire fields,
 duplicate browser queues/counters, and obsolete proof-oriented test harness. This halves
 the random UUID pairs generated per ticket and removes the roughly one-third base64 wire

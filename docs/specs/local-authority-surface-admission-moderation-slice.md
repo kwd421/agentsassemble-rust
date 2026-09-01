@@ -1,7 +1,7 @@
 # Local Authority, Product Surface, Admission, and Moderation Slice
 
-Status: implementation evidence retained; D-01 closed at `a7949bd`, while the
-current socket proof contract remains reopened by repository audit D-02
+Status: implementation evidence retained; D-01 closed at `a7949bd` and D-02
+closed by the bounded JSON socket cutover
 
 Comparison baseline: original
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; Rust

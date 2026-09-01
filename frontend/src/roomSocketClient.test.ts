@@ -128,7 +128,7 @@ describe("bounded canonical room socket", () => {
     handle.close();
   });
 
-  it("rejects a validly signed receipt for a different product surface", async () => {
+  it("rejects a receipt for a different product surface", async () => {
     const errors: RoomSocketSayError[] = [];
     const { handle, sockets } = openHarness({
       onError: (error) => {
