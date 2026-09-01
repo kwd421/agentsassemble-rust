@@ -57,7 +57,6 @@ macro_rules! registered_routes {
 
 mod agent_create_runtime;
 mod app_state;
-mod authenticated_channel;
 mod central_host_identity;
 mod central_registration_web;
 mod connection_admission;
@@ -93,6 +92,7 @@ mod public_ingress_process;
 mod public_ingress_runtime;
 mod public_ingress_web;
 mod room_agent_lifecycle_runtime;
+mod room_channel;
 mod room_command_admission;
 mod room_command_dispatch;
 mod room_command_execution;
@@ -111,6 +111,7 @@ mod runtime_reconciliation;
 mod runtime_reconciliation_cleanup;
 mod security_headers;
 mod server_identity_web;
+#[allow(dead_code)] // Removed with the now-unused ticket proof state in the next D-02 commit.
 mod server_proof;
 mod socket_admission;
 mod stable_entry;

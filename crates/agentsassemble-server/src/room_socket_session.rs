@@ -11,8 +11,8 @@ use tokio::sync::broadcast;
 
 use crate::{
     AppState,
-    authenticated_channel::AuthenticatedChannel,
     connection_admission::ConnectionLease,
+    room_channel::{decode_client_frame, send_frame, send_nack},
     room_history_socket::read_history_frame,
     room_socket::{
         EstablishedSubscription, establish, persistence_error, persistence_error_is_internal,
@@ -39,7 +39,6 @@ pub(crate) async fn run(
         mut events,
         mut catalog_updates,
         mut delivered_seq,
-        mut channel,
     }) = establish(&mut sender, &mut receiver, &state, grant).await
     else {
         return;
@@ -75,20 +74,19 @@ pub(crate) async fn run(
                     Message::Close(_) => return,
                 };
                 if !state.socket_admission.admit_frame(&principal, frame_bytes, control_frame) {
-                    let _ = send_authorized_nack(&state, &mut principal, &mut human_session, &mut channel, &mut sender, ("", "frame", CommandResolution::Unresolved, ProtocolError::new("ingress_limited", "WebSocket ingress budget exceeded."))).await;
+                    let _ = send_authorized_nack(&state, &mut principal, &mut human_session, &mut sender, ("", "frame", CommandResolution::Unresolved, ProtocolError::new("ingress_limited", "WebSocket ingress budget exceeded."))).await;
                     return;
                 }
                 let Message::Text(raw) = message else {
                     if matches!(message, Message::Binary(_)) {
-                        let _ = send_authorized_nack(&state, &mut principal, &mut human_session, &mut channel, &mut sender, ("", "frame", CommandResolution::Unresolved, ProtocolError::new("binary_frame_unsupported", "Binary WebSocket frames are not supported."))).await;
+                        let _ = send_authorized_nack(&state, &mut principal, &mut human_session, &mut sender, ("", "frame", CommandResolution::Unresolved, ProtocolError::new("binary_frame_unsupported", "Binary WebSocket frames are not supported."))).await;
                         return;
                     }
                     continue;
                 };
-                let Ok((client_frame, _authenticated_bytes)) =
-                    channel.decode_client(raw.as_str())
+                let Ok((client_frame, _product_bytes)) = decode_client_frame(raw.as_str())
                 else {
-                    let _ = send_authorized_nack(&state, &mut principal, &mut human_session, &mut channel, &mut sender, ("", "frame", CommandResolution::Unresolved, ProtocolError::new("frame_authentication_invalid", "WebSocket frame authentication failed."))).await;
+                    let _ = send_authorized_nack(&state, &mut principal, &mut human_session, &mut sender, ("", "frame", CommandResolution::Unresolved, ProtocolError::new("frame_schema_invalid", "WebSocket frame was invalid."))).await;
                     return;
                 };
                 if refresh_human_session(&state, &mut principal, &mut human_session).await.is_none() {
@@ -105,14 +103,14 @@ pub(crate) async fn run(
                                 &payload,
                             ).await {
                                 Ok(frame) => {
-                                    if send_authorized_frame(&state, &mut principal, &mut human_session, &mut channel, &mut sender, &frame).await.is_none() { return; }
+                                    if send_authorized_frame(&state, &mut principal, &mut human_session, &mut sender, &frame).await.is_none() { return; }
                                 }
                                 Err(failure) => {
                                     if persistence_error_is_internal(&failure.error) {
                                         tracing::error!(error = ?failure.error, room_id = %principal.room_id, action = %action.as_str(), "room history read failed");
                                     }
                                     let (code, message) = persistence_error(&failure.error);
-                                    if send_authorized_nack(&state, &mut principal, &mut human_session, &mut channel, &mut sender, (&request_id, action.as_str(), failure.resolution, ProtocolError::new(code, message))).await.is_none() { return; }
+                                    if send_authorized_nack(&state, &mut principal, &mut human_session, &mut sender, (&request_id, action.as_str(), failure.resolution, ProtocolError::new(code, message))).await.is_none() { return; }
                                 }
                             }
                             continue;
@@ -126,14 +124,14 @@ pub(crate) async fn run(
                                 &payload,
                             ).await {
                                 Ok(frame) => {
-                                    if send_authorized_frame(&state, &mut principal, &mut human_session, &mut channel, &mut sender, &frame).await.is_none() { return; }
+                                    if send_authorized_frame(&state, &mut principal, &mut human_session, &mut sender, &frame).await.is_none() { return; }
                                 }
                                 Err(failure) => {
                                     if persistence_error_is_internal(&failure.error) {
                                         tracing::error!(error = ?failure.error, room_id = %principal.room_id, action = %action.as_str(), "room vote summary read failed");
                                     }
                                     let (code, message) = persistence_error(&failure.error);
-                                    if send_authorized_nack(&state, &mut principal, &mut human_session, &mut channel, &mut sender, (&request_id, action.as_str(), failure.resolution, ProtocolError::new(code, message))).await.is_none() { return; }
+                                    if send_authorized_nack(&state, &mut principal, &mut human_session, &mut sender, (&request_id, action.as_str(), failure.resolution, ProtocolError::new(code, message))).await.is_none() { return; }
                                 }
                             }
                             continue;
@@ -165,25 +163,25 @@ pub(crate) async fn run(
                                     // This exact committed ACK is the final frame authorized by
                                     // the command that revoked the session. Revalidation would
                                     // suppress it and leave the copied browser flow unresolved.
-                                    let _ = channel.send(&mut sender, &state.shutdown, &frame).await;
+                                    let _ = send_frame(&mut sender, &state.shutdown, &frame).await;
                                     return;
                                 }
-                                if send_authorized_frame(&state, &mut principal, &mut human_session, &mut channel, &mut sender, &frame).await.is_none() { return; }
+                                if send_authorized_frame(&state, &mut principal, &mut human_session, &mut sender, &frame).await.is_none() { return; }
                             }
                             Err(failure) => {
                                 if persistence_error_is_internal(&failure.error) {
                                     tracing::error!(error = ?failure.error, room_id = %principal.room_id, action = %action_name, "room command persistence failed");
                                 }
                                 let (code, message) = persistence_error(&failure.error);
-                                if send_authorized_nack(&state, &mut principal, &mut human_session, &mut channel, &mut sender, (&request_id, &action_name, failure.resolution, ProtocolError::new(code, message))).await.is_none() { return; }
+                                if send_authorized_nack(&state, &mut principal, &mut human_session, &mut sender, (&request_id, &action_name, failure.resolution, ProtocolError::new(code, message))).await.is_none() { return; }
                             }
                         }
                     }
                     ClientFrame::Ping { nonce } => {
-                        if send_authorized_frame(&state, &mut principal, &mut human_session, &mut channel, &mut sender, &ServerFrame::Pong { nonce }).await.is_none() { return; }
+                        if send_authorized_frame(&state, &mut principal, &mut human_session, &mut sender, &ServerFrame::Pong { nonce }).await.is_none() { return; }
                     }
                     ClientFrame::Subscribe { .. } => {
-                        if send_authorized_nack(&state, &mut principal, &mut human_session, &mut channel, &mut sender, ("", "subscribe", CommandResolution::Unresolved, ProtocolError::new("already_subscribed", "This socket is already subscribed."))).await.is_none() { return; }
+                        if send_authorized_nack(&state, &mut principal, &mut human_session, &mut sender, ("", "subscribe", CommandResolution::Unresolved, ProtocolError::new("already_subscribed", "This socket is already subscribed."))).await.is_none() { return; }
                     }
                 }
             }
@@ -199,7 +197,7 @@ pub(crate) async fn run(
                                 reason: "live room event sequence is not contiguous".to_owned(),
                                 latest_seq: state.store.snapshot(&principal.room_id, 0, 1).await.map_or(delivered_seq, |snapshot| snapshot.last_seq),
                             };
-                            let _ = send_authorized_frame(&state, &mut principal, &mut human_session, &mut channel, &mut sender, &frame).await;
+                            let _ = send_authorized_frame(&state, &mut principal, &mut human_session, &mut sender, &frame).await;
                             return;
                         }
                         let current_principal = if human_session.is_some() {
@@ -219,7 +217,6 @@ pub(crate) async fn run(
                                         &state,
                                         &mut principal,
                                         &mut human_session,
-                                        &mut channel,
                                         &mut sender,
                                         ("", "session", CommandResolution::Unresolved, ProtocolError::new(code, message)),
                                     ).await;
@@ -233,7 +230,7 @@ pub(crate) async fn run(
                             events: vec![public_event_for_principal(&event, &current_principal)],
                             latest_seq,
                         };
-                        if send_authorized_frame(&state, &mut principal, &mut human_session, &mut channel, &mut sender, &frame).await.is_none() { return; }
+                        if send_authorized_frame(&state, &mut principal, &mut human_session, &mut sender, &frame).await.is_none() { return; }
                         delivered_seq = latest_seq;
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
@@ -242,7 +239,7 @@ pub(crate) async fn run(
                             reason: "subscriber fell behind the room event stream".to_owned(),
                             latest_seq: state.store.snapshot(&principal.room_id, 0, 1).await.map_or(0, |snapshot| snapshot.last_seq),
                         };
-                        let _ = send_authorized_frame(&state, &mut principal, &mut human_session, &mut channel, &mut sender, &frame).await;
+                        let _ = send_authorized_frame(&state, &mut principal, &mut human_session, &mut sender, &frame).await;
                         return;
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
@@ -255,7 +252,7 @@ pub(crate) async fn run(
                 let frame = ServerFrame::ProviderCatalogUpdated {
                     catalog: catalog_updates.borrow_and_update().clone(),
                 };
-                if send_authorized_frame(&state, &mut principal, &mut human_session, &mut channel, &mut sender, &frame).await.is_none() { return; }
+                if send_authorized_frame(&state, &mut principal, &mut human_session, &mut sender, &frame).await.is_none() { return; }
             }
         }
     }
@@ -308,25 +305,22 @@ async fn send_authorized_frame(
     state: &AppState,
     principal: &mut agentsassemble_domain::AuthenticatedPrincipal,
     human_session: &mut Option<HumanSessionAuthorization>,
-    channel: &mut AuthenticatedChannel,
     sender: &mut futures_util::stream::SplitSink<WebSocket, Message>,
     frame: &ServerFrame,
 ) -> Option<()> {
     refresh_human_session(state, principal, human_session).await?;
-    channel.send(sender, &state.shutdown, frame).await.ok()
+    send_frame(sender, &state.shutdown, frame).await.ok()
 }
 
 async fn send_authorized_nack(
     state: &AppState,
     principal: &mut agentsassemble_domain::AuthenticatedPrincipal,
     human_session: &mut Option<HumanSessionAuthorization>,
-    channel: &mut AuthenticatedChannel,
     sender: &mut futures_util::stream::SplitSink<WebSocket, Message>,
     nack: (&str, &str, CommandResolution, ProtocolError),
 ) -> Option<()> {
     refresh_human_session(state, principal, human_session).await?;
-    channel
-        .send_nack(sender, &state.shutdown, nack.0, nack.1, nack.2, nack.3)
+    send_nack(sender, &state.shutdown, nack.0, nack.1, nack.2, nack.3)
         .await
         .ok()
 }

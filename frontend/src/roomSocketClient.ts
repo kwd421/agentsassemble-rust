@@ -5,15 +5,11 @@ import {
 } from "./api";
 import {
   SubscriptionContractError,
+  isSha256Hex,
   type SubscriptionReceipt,
   verifyBoundSnapshot,
   verifySubscriptionReceipt,
 } from "./lib/roomSubscriptionContract";
-import {
-  decodeAuthenticatedFrame,
-  deriveAuthenticatedFrameKey,
-  encodeAuthenticatedFrame,
-} from "./lib/authenticatedFrames";
 import {
   commandAckResultIsValid,
   isRecord,
@@ -21,7 +17,6 @@ import {
   publicRoomEventIsValid,
   snapshotValidationError,
 } from "./lib/roomSocketValidation";
-import { isHex32Bytes } from "./lib/serverProof";
 import {
   RoomSocketSayError,
   type ProviderCatalogSnapshot,
@@ -57,7 +52,8 @@ export type {
 
 const ROOM_SOCKET_COMMAND_TIMEOUT_MS = 20_000;
 const ROOM_SOCKET_KEEPALIVE_MS = 3 * 60_000;
-const MAX_ROOM_SOCKET_WIRE_CHARS = 384 * 1024;
+const MAX_ROOM_SOCKET_MESSAGE_BYTES = 256 * 1024;
+const UTF8_ENCODER = new TextEncoder();
 
 interface PendingRoomCommand extends PendingCommandRetryState {
   action: string;
@@ -74,7 +70,7 @@ function validateClientAuthority(
   const surface = dependencies.serverSurface;
   if (
     surface.revision !== PRODUCT_SURFACE_REVISION ||
-    !isHex32Bytes(surface.digest) ||
+    !isSha256Hex(surface.digest) ||
     !dependencies.expectedRoomId ||
     !dependencies.expectedParticipantId ||
     streams.length !== 1 ||
@@ -98,7 +94,7 @@ function ticketSocketUrl(websocketBaseUrl: string, ticket: string): string {
 
 /**
  * Opens the canonical room transport. The socket becomes ready only after its
- * ticket-bound receipt, exact snapshot cursor, and finite C+1..H catch-up verify.
+ * strict receipt, exact snapshot cursor, and finite C+1..H catch-up verify.
  */
 export function openRoomSocket(
   auth: RoomSocketAuth,
@@ -291,11 +287,6 @@ export function openRoomSocket(
       let connectionEstablished = false;
       let connectionFailed = false;
       let terminalLeaveCommitted = false;
-      let verificationQueue = Promise.resolve();
-      let outboundQueue = Promise.resolve();
-      let frameKey: CryptoKey | null = null;
-      let nextServerCounter = 1;
-      let nextClientCounter = 1;
       let keepaliveTimer = 0;
       let keepaliveSequence = 0;
       let expectedPongNonce: string | null = null;
@@ -316,37 +307,29 @@ export function openRoomSocket(
       };
       const scheduleKeepalive = () => {
         clearKeepalive();
-        if (!canUseOpenSocket() || !transportReady || !frameKey) return;
+        if (!canUseOpenSocket() || !transportReady) return;
         keepaliveTimer = window.setTimeout(() => {
           keepaliveTimer = 0;
           if (expectedPongNonce !== null) {
             failConnection(new RoomSocketSayError(
-              "Room socket did not acknowledge its authenticated keepalive.",
+              "Room socket did not acknowledge its keepalive.",
               "keepalive_response_missing"
             ));
             return;
           }
+          const nonce = `keepalive-${++keepaliveSequence}`;
           const payload = JSON.stringify({
             op: "ping",
-            nonce: `keepalive-${++keepaliveSequence}`,
+            nonce,
           });
-          outboundQueue = outboundQueue
-            .then(async () => {
-              if (!canUseOpenSocket() || !transportReady || !frameKey) return;
-              const encoded = await encodeAuthenticatedFrame(
-                frameKey,
-                receipt?.connection_nonce || "",
-                "client",
-                nextClientCounter,
-                payload
-              );
-              if (!canUseOpenSocket() || !transportReady) return;
-              expectedPongNonce = `keepalive-${keepaliveSequence}`;
-              currentSocket.send(encoded);
-              nextClientCounter += 1;
-              scheduleKeepalive();
-            })
-            .catch(failConnection);
+          try {
+            currentSocket.send(payload);
+          } catch (error) {
+            failConnection(error);
+            return;
+          }
+          expectedPongNonce = nonce;
+          scheduleKeepalive();
         }, ROOM_SOCKET_KEEPALIVE_MS);
       };
       stopKeepaliveForConnection = clearKeepalive;
@@ -355,11 +338,10 @@ export function openRoomSocket(
         if (
           socket !== currentSocket ||
           currentSocket.readyState !== WebSocket.OPEN ||
-          !transportReady ||
-          !frameKey
+          !transportReady
         ) return;
-        pending.forEach((command, requestId) => {
-          if (command.transmissionGeneration === generation) return;
+        for (const [requestId, command] of pending) {
+          if (command.transmissionGeneration === generation) continue;
           const retryDelay = command.retryNotBefore - Date.now();
           if (retryDelay > 0) {
             if (command.retryTimerId !== null) window.clearTimeout(command.retryTimerId);
@@ -367,39 +349,24 @@ export function openRoomSocket(
               command.retryTimerId = null;
               sendPending();
             }, retryDelay);
-            return;
+            continue;
           }
           if (command.retryTimerId !== null) {
             window.clearTimeout(command.retryTimerId);
             command.retryTimerId = null;
           }
           command.transmissionGeneration = generation;
-          command.transmissionPhase = "encoding";
-          outboundQueue = outboundQueue
-            .then(async () => {
-              if (
-                !canUseOpenSocket() ||
-                !transportReady ||
-                !frameKey ||
-                pending.get(requestId) !== command
-              ) return;
-              const encoded = await encodeAuthenticatedFrame(
-                frameKey,
-                receipt?.connection_nonce || "",
-                "client",
-                nextClientCounter,
-                command.encoded
-              );
-              if (!canUseOpenSocket() || pending.get(requestId) !== command) return;
-              currentSocket.send(encoded);
-              command.transmissionPhase = "sent";
-              nextClientCounter += 1;
-              scheduleKeepalive();
-              command.everSent = true;
-              armCommandDeadline(requestId, command);
-            })
-            .catch(failConnection);
-        });
+          try {
+            currentSocket.send(command.encoded);
+          } catch (error) {
+            failConnection(error);
+            break;
+          }
+          command.transmissionPhase = "sent";
+          scheduleKeepalive();
+          command.everSent = true;
+          armCommandDeadline(requestId, command);
+        }
       };
 
       const markReady = () => {
@@ -418,8 +385,8 @@ export function openRoomSocket(
         sendPending();
       };
 
-      const processFrame = async (raw: string) => {
-        if (raw.length > MAX_ROOM_SOCKET_WIRE_CHARS) {
+      const processFrame = (raw: string) => {
+        if (UTF8_ENCODER.encode(raw).byteLength > MAX_ROOM_SOCKET_MESSAGE_BYTES) {
           throw new RoomSocketSayError(
             "Room socket frame exceeded the product wire limit.",
             "frame_too_large"
@@ -427,26 +394,19 @@ export function openRoomSocket(
         }
         if (!receipt) {
           const msg = JSON.parse(raw) as unknown;
-          const verifiedReceipt = await verifySubscriptionReceipt(msg, {
-            ticket: issued.ticket,
+          const verifiedReceipt = verifySubscriptionReceipt(msg, {
             roomId: dependencies.expectedRoomId,
             participantId: dependencies.expectedParticipantId,
             streams,
             serverSurface: dependencies.serverSurface,
           });
           if (!canUseOpenSocket()) return;
-          const derivedFrameKey = await deriveAuthenticatedFrameKey(
-            issued.server_proof_key,
-            verifiedReceipt.connection_nonce
-          );
-          if (!canUseOpenSocket()) return;
           receipt = verifiedReceipt;
-          frameKey = derivedFrameKey;
           return;
         }
         if (!snapshotAccepted) {
           const msg = JSON.parse(raw) as unknown;
-          await verifyBoundSnapshot(msg, receipt);
+          verifyBoundSnapshot(msg, receipt);
           if (!canUseOpenSocket()) return;
           const validationError = snapshotValidationError(msg, {
             expectedRoomId: dependencies.expectedRoomId,
@@ -461,7 +421,7 @@ export function openRoomSocket(
             ) === false
           ) {
             throw new RoomSocketSayError(
-              "The room projection rejected its authenticated snapshot.",
+              "The room projection rejected its snapshot.",
               "snapshot_rejected"
             );
           }
@@ -470,30 +430,7 @@ export function openRoomSocket(
           markReady();
           return;
         }
-        if (!frameKey) {
-          throw new RoomSocketSayError(
-            "The authenticated room channel key is unavailable.",
-            "frame_authentication_invalid"
-          );
-        }
-        let payload: string;
-        try {
-          payload = await decodeAuthenticatedFrame(
-            frameKey,
-            receipt.connection_nonce,
-            "server",
-            nextServerCounter,
-            raw
-          );
-        } catch {
-          throw new RoomSocketSayError(
-            "Room socket frame authentication failed; reconnecting.",
-            "frame_authentication_invalid"
-          );
-        }
-        if (!ownsConnectionGeneration() || connectionFailed) return;
-        nextServerCounter += 1;
-        const msg = JSON.parse(payload) as unknown;
+        const msg = JSON.parse(raw) as unknown;
         if (!isRecord(msg)) {
           throw new RoomSocketSayError("Room socket frame was invalid.", "frame_schema_invalid");
         }
@@ -618,16 +555,16 @@ export function openRoomSocket(
           ));
           return;
         }
-        verificationQueue = verificationQueue
-          .then(async () => {
-            if (
-              !ownsConnectionGeneration() ||
-              connectionFailed ||
-              (!connectionEstablished && !canUseOpenSocket())
-            ) return;
-            await processFrame(raw);
-          })
-          .catch(failConnection);
+        if (
+          !ownsConnectionGeneration() ||
+          connectionFailed ||
+          (!connectionEstablished && !canUseOpenSocket())
+        ) return;
+        try {
+          processFrame(raw);
+        } catch (error) {
+          failConnection(error);
+        }
       };
       currentSocket.onerror = (event) => {
         if (socket === currentSocket && generation === connectionGeneration) {
@@ -645,21 +582,19 @@ export function openRoomSocket(
         transportReady = false;
         handlers.onClose?.();
         if (closed) return;
-        void verificationQueue.finally(() => {
-          pending.forEach((command, requestId) => {
-            if (
-              command.transmissionGeneration !== generation ||
-              command.transmissionPhase !== "sent"
-            ) return;
-            if (command.timerId !== null) window.clearTimeout(command.timerId);
-            command.timerId = null;
-            if (scheduleUncertainCommandRetry(command, generation) === "exhausted") {
-              rejectUnknown(requestId, command);
-            }
-          });
-          if (terminalLeaveCommitted) return;
-          scheduleReconnect(generation);
+        pending.forEach((command, requestId) => {
+          if (
+            command.transmissionGeneration !== generation ||
+            command.transmissionPhase !== "sent"
+          ) return;
+          if (command.timerId !== null) window.clearTimeout(command.timerId);
+          command.timerId = null;
+          if (scheduleUncertainCommandRetry(command, generation) === "exhausted") {
+            rejectUnknown(requestId, command);
+          }
         });
+        if (terminalLeaveCommitted) return;
+        scheduleReconnect(generation);
       };
     } catch (error) {
       if (generation !== connectionGeneration) return;

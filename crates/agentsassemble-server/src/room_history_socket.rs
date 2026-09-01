@@ -4,7 +4,7 @@ use agentsassemble_protocol::{CommandAck, CommandResolution, RoomAction, ServerF
 use serde_json::Value;
 
 use crate::{
-    authenticated_channel::encode_server_frame,
+    room_channel::encode_server_frame,
     room_command_result::{CommandFailure, validate_command_envelope},
     socket_admission::SocketAdmission,
 };
@@ -112,7 +112,7 @@ mod tests {
     use agentsassemble_domain::{Actor, RoomEvent, RoomHistoryPage};
 
     use super::fit_history_ack;
-    use crate::authenticated_channel::encode_server_frame;
+    use crate::room_channel::encode_server_frame;
 
     fn event(seq: i64, content: &str) -> RoomEvent {
         RoomEvent {

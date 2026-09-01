@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { RoomSocketSayError } from "./roomSocketClient";
 import {
   flushPromises,
-  gateNextFrameVerification,
   handshakeFrames,
   openHarness,
   receiveAuthenticated,
@@ -17,7 +16,7 @@ afterEach(() => {
 });
 
 describe("canonical room socket quiet keepalive", () => {
-  it("sends one authenticated ping after client silence and stops with the connection", async () => {
+  it("sends one ping after client silence and stops with the connection", async () => {
     vi.useFakeTimers();
     const { handle, opened, sockets, tickets } = openHarness();
     await flushPromises();
@@ -35,14 +34,10 @@ describe("canonical room socket quiet keepalive", () => {
     const firstPing = await sentAuthenticatedCommand(sockets[0], frames);
     expect(firstPing).toEqual({ op: "ping", nonce: "keepalive-1" });
 
-    const pongVerification = gateNextFrameVerification();
     await receiveAuthenticated(sockets[0], frames, {
       op: "pong",
       nonce: firstPing.nonce,
     });
-    await pongVerification.started;
-    pongVerification.release();
-    await pongVerification.completed;
     await flushPromises();
     await vi.advanceTimersByTimeAsync(QUIET_KEEPALIVE_MS);
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(3));
@@ -56,7 +51,7 @@ describe("canonical room socket quiet keepalive", () => {
     expect(sockets[0].sent).toHaveLength(3);
   });
 
-  it("measures silence from the most recent authenticated command", async () => {
+  it("measures silence from the most recent command", async () => {
     vi.useFakeTimers();
     const { handle, opened, sockets, tickets } = openHarness();
     await flushPromises();
@@ -103,7 +98,7 @@ describe("canonical room socket quiet keepalive", () => {
     handle.close();
   });
 
-  it("fails the exact connection on a mismatched authenticated pong", async () => {
+  it("fails the exact connection on a mismatched pong", async () => {
     vi.useFakeTimers();
     const errors: RoomSocketSayError[] = [];
     const { handle, opened, sockets, tickets } = openHarness({
@@ -121,14 +116,10 @@ describe("canonical room socket quiet keepalive", () => {
     await vi.advanceTimersByTimeAsync(QUIET_KEEPALIVE_MS);
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
 
-    const pongVerification = gateNextFrameVerification();
     await receiveAuthenticated(sockets[0], frames, {
       op: "pong",
       nonce: "not-the-owned-keepalive",
     });
-    await pongVerification.started;
-    pongVerification.release();
-    await pongVerification.completed;
     await vi.waitFor(() =>
       expect(errors.at(-1)?.category).toBe("keepalive_response_invalid")
     );

@@ -22,7 +22,7 @@ mod support {
 
 use support::{
     local_socket::{connect, request_ticket},
-    subscription_proof::{AuthenticatedTestSocket, connection_nonce_for_ticket},
+    subscription_proof::AuthenticatedTestSocket,
 };
 
 struct RunningServer {
@@ -405,7 +405,7 @@ async fn authenticated_binary_frame_is_rejected_and_closed() {
 }
 
 #[tokio::test]
-async fn tampered_authenticated_command_cannot_create_a_durable_mutation() {
+async fn retired_authenticated_envelope_cannot_create_a_durable_mutation() {
     let directory =
         tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
     let database_url = format!(
@@ -420,22 +420,22 @@ async fn tampered_authenticated_command_cannot_create_a_durable_mutation() {
     let mut socket = connect(&server.base_url, &server.state, "general").await;
     subscribe(&mut socket, 0).await;
     assert_eq!(receive_json(&mut socket).await["op"], "snapshot");
-    let signed = json!({
-        "op": "command",
-        "request_id": "tampered-command",
-        "action": "message.send",
-        "payload": {"content": "signed content"}
-    });
-    let transmitted = json!({
-        "op": "command",
-        "request_id": "tampered-command",
-        "action": "message.send",
-        "payload": {"content": "attacker content"}
-    });
-    socket.send_tampered_json(&signed, &transmitted).await;
+    socket
+        .send_json(&json!({
+            "op": "authenticated",
+            "counter": 1,
+            "payload": {
+                "op": "command",
+                "request_id": "retired-envelope",
+                "action": "message.send",
+                "payload": {"content": "attacker content"}
+            },
+            "proof": "0".repeat(64),
+        }))
+        .await;
     let nack = receive_json(&mut socket).await;
     assert_eq!(nack["resolution"], "unresolved");
-    assert_eq!(nack["error"]["code"], "frame_authentication_invalid");
+    assert_eq!(nack["error"]["code"], "frame_schema_invalid");
     assert!(socket.wait_closed().await);
     server.stop().await;
 
@@ -475,7 +475,7 @@ async fn websocket_snapshot_is_bound_to_the_private_ticket_scope_and_finite_curs
     );
     let mut socket = connect_async(url)
         .await
-        .unwrap_or_else(|error| panic!("connect proved WebSocket: {error}"))
+        .unwrap_or_else(|error| panic!("connect bounded WebSocket: {error}"))
         .0;
     socket
         .send(Message::Text(
@@ -488,13 +488,9 @@ async fn websocket_snapshot_is_bound_to_the_private_ticket_scope_and_finite_curs
             .into(),
         ))
         .await
-        .unwrap_or_else(|error| panic!("send proved subscription: {error}"));
+        .unwrap_or_else(|error| panic!("send bounded subscription: {error}"));
     let receipt = receive_raw_json(&mut socket).await;
     assert_eq!(receipt["op"], "subscribed");
-    assert_eq!(
-        receipt["connection_nonce"],
-        connection_nonce_for_ticket(&ticket)
-    );
     let raw_snapshot = receive_text(&mut socket).await;
     let snapshot: Value = serde_json::from_str(&raw_snapshot)
         .unwrap_or_else(|error| panic!("decode proved snapshot: {error}"));

@@ -16,9 +16,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     AppState,
-    authenticated_channel::{
-        AuthenticatedChannel, encode_server_frame, send_plain_encoded, send_plain_frame,
-    },
+    room_channel::{encode_server_frame, send_encoded, send_frame},
     ticket::ConsumedSocketTicket,
 };
 
@@ -31,7 +29,6 @@ pub(crate) struct EstablishedSubscription {
     pub events: broadcast::Receiver<RoomEvent>,
     pub catalog_updates: watch::Receiver<ProviderCatalog>,
     pub delivered_seq: i64,
-    pub channel: AuthenticatedChannel,
 }
 
 struct ValidatedSubscription {
@@ -75,21 +72,11 @@ where
     S: Sink<Message, Error = axum::Error> + Unpin,
     R: Stream<Item = Result<Message, axum::Error>> + Unpin,
 {
-    let (ticket_principal, mut human_session, proof_key, connection_nonce) = match grant {
-        ConsumedSocketTicket::Local(grant) => (
-            grant.principal,
-            None,
-            grant.proof_key,
-            grant.connection_nonce,
-        ),
+    let (ticket_principal, mut human_session) = match grant {
+        ConsumedSocketTicket::Local(grant) => (grant.principal, None),
         ConsumedSocketTicket::HumanSession(grant) => {
-            let (authorization, proof_key, connection_nonce) = grant.into_parts();
-            (
-                authorization.principal().clone(),
-                Some(authorization),
-                proof_key,
-                connection_nonce,
-            )
+            let (authorization, _unused_proof_key, _unused_connection_nonce) = grant.into_parts();
+            (authorization.principal().clone(), Some(authorization))
         }
     };
     let mut principal =
@@ -117,16 +104,14 @@ where
         state,
         &principal,
         &request,
-        connection_nonce.clone(),
         prepared.cursor,
         catch_up.high_water,
     );
     send_subscription_receipt(sender, &state.shutdown, receipt).await?;
     refresh_human_session(state, &mut principal, &mut human_session).await?;
-    send_plain_encoded(sender, &state.shutdown, prepared.encoded)
+    send_encoded(sender, &state.shutdown, prepared.encoded)
         .await
         .ok()?;
-    let mut channel = AuthenticatedChannel::new(proof_key, connection_nonce);
     let delivered_seq = send_catch_up(
         sender,
         state,
@@ -134,7 +119,6 @@ where
         &mut human_session,
         prepared.cursor,
         catch_up,
-        &mut channel,
     )
     .await?;
     Some(EstablishedSubscription {
@@ -143,7 +127,6 @@ where
         events: prepared.events,
         catalog_updates: prepared.catalog_updates,
         delivered_seq,
-        channel,
     })
 }
 
@@ -442,14 +425,12 @@ fn subscription_receipt(
     state: &AppState,
     principal: &AuthenticatedPrincipal,
     request: &ValidatedSubscription,
-    connection_nonce: String,
     snapshot_cursor: i64,
     catchup_high_water: i64,
 ) -> Subscribed {
     Subscribed {
         streams: request.streams.clone(),
         protocol_version: PROTOCOL_VERSION,
-        connection_nonce,
         room_id: principal.room_id.clone(),
         principal_id: principal.principal_id.clone(),
         participant_id: principal.participant_id.clone(),
@@ -472,7 +453,7 @@ where
     let Ok(encoded_receipt) = encode_server_frame(&receipt_frame) else {
         return None;
     };
-    send_plain_encoded(sender, cancellation, encoded_receipt)
+    send_encoded(sender, cancellation, encoded_receipt)
         .await
         .ok()
 }
@@ -484,7 +465,6 @@ async fn send_catch_up<S>(
     human_session: &mut Option<HumanSessionAuthorization>,
     snapshot_cursor: i64,
     catch_up: RoomCatchUp,
-    channel: &mut AuthenticatedChannel,
 ) -> Option<i64>
 where
     S: Sink<Message, Error = axum::Error> + Unpin,
@@ -500,7 +480,7 @@ where
             latest_seq: event.seq,
             events: vec![public_event_for_principal(&event, principal)],
         };
-        if channel.send(sender, &state.shutdown, &frame).await.is_err() {
+        if send_frame(sender, &state.shutdown, &frame).await.is_err() {
             return None;
         }
         delivered_seq = event.seq;
@@ -522,7 +502,7 @@ pub(crate) async fn send_nack<S>(
 where
     S: Sink<Message, Error = axum::Error> + Unpin,
 {
-    send_plain_frame(
+    send_frame(
         sender,
         cancellation,
         &ServerFrame::Nack(CommandNack {
@@ -566,7 +546,7 @@ where
     S: Sink<Message, Error = axum::Error> + Unpin,
 {
     refresh_human_session(state, principal, human_session).await?;
-    send_plain_frame(sender, &state.shutdown, frame).await.ok()
+    send_frame(sender, &state.shutdown, frame).await.ok()
 }
 
 fn fit_snapshot_frame(mut snapshot: RoomSnapshot) -> Option<String> {

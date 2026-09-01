@@ -22,11 +22,11 @@ use tower_http::{
 
 use crate::{
     AppState, RoomShutdownError, TicketIssueError,
-    authenticated_channel::MAX_WS_WIRE_MESSAGE_BYTES,
     http_transport::{MAX_HTTP_CONNECTIONS, RejectionCounter, serve_connection},
     ingress_trust::{LocalIngress, require_trusted_ingress},
     provider_turn_reconciliation_runtime::reconcile_provider_turn_ownership,
     reconcile_runtime_ownership,
+    room_channel::MAX_WS_MESSAGE_BYTES,
     runtime_reconciliation::watch_runtime_reconciliation,
     ticket::{ConsumedSocketTicket, SocketTicketHint},
 };
@@ -450,8 +450,8 @@ async fn upgrade_socket(
         .map_err(|error| ApiError::unavailable(error.to_string()))?;
     let connections = state.connections.clone();
     Ok(upgrade
-        .max_message_size(MAX_WS_WIRE_MESSAGE_BYTES)
-        .max_frame_size(MAX_WS_WIRE_MESSAGE_BYTES)
+        .max_message_size(MAX_WS_MESSAGE_BYTES)
+        .max_frame_size(MAX_WS_MESSAGE_BYTES)
         .write_buffer_size(64 * 1024)
         .max_write_buffer_size(512 * 1024)
         .on_upgrade(move |socket| {

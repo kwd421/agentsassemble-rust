@@ -4,7 +4,6 @@ import {
   authenticatedServerFrame,
   event,
   flushPromises,
-  gateNextFrameVerification,
   handshakeFrames,
   malformedMuteEvent,
   malformedRoleEvent,
@@ -12,8 +11,6 @@ import {
   receiveAuthenticated,
   sentAuthenticatedCommand,
 } from "./test/roomSocketHarness";
-
-const ROOM_SOCKET_COMMAND_TIMEOUT_MS_FOR_TEST = 20_000;
 
 function leaveAck(
   requestId: unknown,
@@ -112,6 +109,21 @@ describe("proof-bound canonical room socket", () => {
     await vi.waitFor(() =>
       expect(errors.at(-1)?.category).toBe("snapshot_boundary_invalid")
     );
+    expect(handle.ready()).toBe(false);
+    handle.close();
+  });
+
+  it("measures the product frame limit in UTF-8 bytes", async () => {
+    const errors: RoomSocketSayError[] = [];
+    const { handle, sockets } = openHarness({
+      onError: (error) => {
+        if (error instanceof RoomSocketSayError) errors.push(error);
+      },
+    });
+    await flushPromises();
+    sockets[0].open();
+    sockets[0].receiveRaw("한".repeat(100_000));
+    await vi.waitFor(() => expect(errors.at(-1)?.category).toBe("frame_too_large"));
     expect(handle.ready()).toBe(false);
     handle.close();
   });
@@ -505,7 +517,7 @@ describe("proof-bound canonical room socket", () => {
     handle.close();
   });
 
-  it("finishes a delivered leave ACK after the server closes during WebCrypto verification", async () => {
+  it("finishes a delivered leave ACK before the server closes", async () => {
     vi.useFakeTimers();
     const { handle, sockets, tickets } = openHarness();
     await flushPromises();
@@ -519,12 +531,8 @@ describe("proof-bound canonical room socket", () => {
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
     const command = await sentAuthenticatedCommand(sockets[0], frames);
 
-    const verification = gateNextFrameVerification();
-
     await receiveAuthenticated(sockets[0], frames, leaveAck(command.request_id));
-    await verification.started;
     sockets[0].close();
-    verification.release();
 
     await expect(pendingLeave).resolves.toMatchObject({
       accepted: true,
@@ -533,34 +541,6 @@ describe("proof-bound canonical room socket", () => {
     await vi.advanceTimersByTimeAsync(5_000);
     expect(sockets).toHaveLength(1);
     expect(handle.ready()).toBe(false);
-    handle.close();
-  });
-
-  it("rejects a verified leave ACK when protocol failure wins during verification", async () => {
-    vi.useFakeTimers();
-    const { handle, sockets, tickets } = openHarness();
-    await flushPromises();
-    sockets[0].open();
-    const frames = await handshakeFrames(sockets[0], tickets[0], 0, 0);
-    sockets[0].receive(frames.receipt);
-    sockets[0].receiveRaw(frames.rawSnapshot);
-    await vi.waitFor(() => expect(handle.ready()).toBe(true));
-    const pendingLeave = handle.command("participant.leave", {});
-    let leaveSettled = false;
-    void pendingLeave.then(
-      () => { leaveSettled = true; },
-      () => { leaveSettled = true; }
-    );
-    await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
-    const command = await sentAuthenticatedCommand(sockets[0], frames);
-    const verification = gateNextFrameVerification();
-    await receiveAuthenticated(sockets[0], frames, leaveAck(command.request_id));
-    await verification.started;
-    sockets[0].onmessage?.({ data: new Uint8Array([0]) } as unknown as MessageEvent);
-    verification.release();
-    await vi.waitFor(() => expect(sockets[0].readyState).toBe(WebSocket.CLOSED));
-    await vi.waitFor(() => expect(sockets).toHaveLength(2));
-    expect(leaveSettled).toBe(false);
     handle.close();
   });
 
@@ -604,70 +584,4 @@ describe("proof-bound canonical room socket", () => {
     handle.close();
   });
 
-  it("does not project an old socket after asynchronous ticket binding", async () => {
-    const onOpen = vi.fn();
-    const onSnapshot = vi.fn();
-    const { handle, sockets, tickets } = openHarness({
-      onOpen,
-      onRoomSnapshot: onSnapshot,
-    });
-    await flushPromises();
-    sockets[0].open();
-    const frames = await handshakeFrames(sockets[0], tickets[0], 0, 0);
-
-    let releaseDigest = () => {};
-    let reportDigestStarted = () => {};
-    const digestStarted = new Promise<void>((resolve) => { reportDigestStarted = resolve; });
-    const digestGate = new Promise<void>((resolve) => { releaseDigest = resolve; });
-    const realDigest = crypto.subtle.digest.bind(crypto.subtle);
-    vi.spyOn(crypto.subtle, "digest").mockImplementationOnce(async (algorithm, data) => {
-      reportDigestStarted();
-      await digestGate;
-      return realDigest(algorithm, data);
-    });
-
-    sockets[0].receive(frames.receipt);
-    await digestStarted;
-    sockets[0].close();
-    releaseDigest();
-    await flushPromises();
-
-    expect(onSnapshot).not.toHaveBeenCalled();
-    expect(onOpen).not.toHaveBeenCalled();
-    expect(handle.ready()).toBe(false);
-    handle.close();
-  });
-
-  it("does not transmit a command whose pre-send deadline expired during signing", async () => {
-    vi.useFakeTimers();
-    const { handle, sockets, tickets } = openHarness();
-    await flushPromises();
-    sockets[0].open();
-    const frames = await handshakeFrames(sockets[0], tickets[0], 0, 0);
-    sockets[0].receive(frames.receipt);
-    sockets[0].receiveRaw(frames.rawSnapshot);
-    await vi.waitFor(() => expect(handle.ready()).toBe(true));
-
-    let releaseSignature = () => {};
-    let reportSignatureStarted = () => {};
-    const signatureStarted = new Promise<void>((resolve) => { reportSignatureStarted = resolve; });
-    const signatureGate = new Promise<void>((resolve) => { releaseSignature = resolve; });
-    const realSign = crypto.subtle.sign.bind(crypto.subtle);
-    vi.spyOn(crypto.subtle, "sign").mockImplementationOnce(async (algorithm, key, data) => {
-      reportSignatureStarted();
-      await signatureGate;
-      return realSign(algorithm, key, data);
-    });
-
-    const command = handle.command("message.send", { content: "never sent" });
-    const rejection = expect(command).rejects.toMatchObject({ category: "timeout" });
-    await signatureStarted;
-    await vi.advanceTimersByTimeAsync(ROOM_SOCKET_COMMAND_TIMEOUT_MS_FOR_TEST);
-    await rejection;
-    releaseSignature();
-    await flushPromises();
-
-    expect(sockets[0].sent).toHaveLength(1);
-    handle.close();
-  });
 });

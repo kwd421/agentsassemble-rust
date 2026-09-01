@@ -1,15 +1,8 @@
 import { vi } from "vitest";
 import { openRoomSocket } from "../roomSocketClient";
-import { deriveConnectionNonce } from "../lib/serverProof";
-import {
-  decodeAuthenticatedFrame,
-  deriveAuthenticatedFrameKey,
-  encodeAuthenticatedFrame,
-} from "../lib/authenticatedFrames";
 import type { SubscriptionReceipt } from "../lib/roomSubscriptionContract";
 import { TEST_SERVER_PRODUCT_SURFACE } from "./serverProductSurface";
 
-const PROOF_KEY = "b".repeat(64);
 const CAPABILITIES = {
   "agent.control": true,
   "bridge.publish": false,
@@ -26,6 +19,7 @@ const CAPABILITIES = {
   "room.random": true,
   "room.vote.summary": true,
 };
+const UNUSED_PROOF_KEY = "b".repeat(64);
 
 export class FakeWebSocket {
   readyState: number = WebSocket.CONNECTING;
@@ -120,19 +114,17 @@ function snapshot(cursor: number) {
 
 export async function handshakeFrames(
   _socket: FakeWebSocket,
-  ticket: string,
+  _ticket: string,
   snapshotCursor: number,
   catchupHighWater: number,
   mutateReceipt?: (receipt: SubscriptionReceipt) => void
 ) {
   const snap = snapshot(snapshotCursor);
   const rawSnapshot = JSON.stringify(snap);
-  const connectionNonce = await deriveConnectionNonce(ticket);
   const receipt: SubscriptionReceipt = {
     op: "subscribed",
     streams: ["room_events"],
     protocol_version: 1,
-    connection_nonce: connectionNonce,
     room_id: "general",
     principal_id: "operator",
     participant_id: "operator-local",
@@ -146,9 +138,6 @@ export async function handshakeFrames(
     receipt,
     snap,
     rawSnapshot,
-    frameKey: await deriveAuthenticatedFrameKey(PROOF_KEY, connectionNonce),
-    connectionNonce,
-    serverCounter: 0,
   };
 }
 
@@ -161,54 +150,19 @@ export async function receiveAuthenticated(
 }
 
 export async function authenticatedServerFrame(
-  frames: Awaited<ReturnType<typeof handshakeFrames>>,
+  _frames: Awaited<ReturnType<typeof handshakeFrames>>,
   message: Record<string, unknown>
 ) {
-  frames.serverCounter += 1;
-  return encodeAuthenticatedFrame(
-    frames.frameKey,
-    frames.connectionNonce,
-    "server",
-    frames.serverCounter,
-    JSON.stringify(message)
-  );
-}
-
-export function gateNextFrameVerification() {
-  let release = () => {};
-  let reportStarted = () => {};
-  let reportCompleted = () => {};
-  const started = new Promise<void>((resolve) => { reportStarted = resolve; });
-  const completed = new Promise<void>((resolve) => { reportCompleted = resolve; });
-  const gate = new Promise<void>((resolve) => { release = resolve; });
-  const realVerify = crypto.subtle.verify.bind(crypto.subtle);
-  vi.spyOn(crypto.subtle, "verify").mockImplementationOnce(
-    async (algorithm, key, signature, data) => {
-      reportStarted();
-      await gate;
-      const verified = await realVerify(algorithm, key, signature, data);
-      reportCompleted();
-      return verified;
-    }
-  );
-  return { release, started, completed };
+  return JSON.stringify(message);
 }
 
 export async function sentAuthenticatedCommand(
   socket: FakeWebSocket,
-  frames: Awaited<ReturnType<typeof handshakeFrames>>,
+  _frames: Awaited<ReturnType<typeof handshakeFrames>>,
   index = 1,
-  counter = 1
+  _counter = 1
 ) {
-  const raw = JSON.stringify(socket.sent[index]);
-  const payload = await decodeAuthenticatedFrame(
-    frames.frameKey,
-    frames.connectionNonce,
-    "client",
-    counter,
-    raw
-  );
-  return JSON.parse(payload) as Record<string, unknown>;
+  return socket.sent[index];
 }
 
 export function openHarness(handlers: Parameters<typeof openRoomSocket>[2] = {}) {
@@ -236,7 +190,7 @@ export function openHarness(handlers: Parameters<typeof openRoomSocket>[2] = {})
           ticket,
           ttl_seconds: 30,
           websocket_base_url: "ws://127.0.0.1:43123",
-          server_proof_key: PROOF_KEY,
+          server_proof_key: UNUSED_PROOF_KEY,
           displayResourceBase: "http://127.0.0.1:43123",
         };
       },

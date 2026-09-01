@@ -4,7 +4,7 @@ use agentsassemble_protocol::{CommandAck, CommandResolution, RoomAction, ServerF
 use serde_json::Value;
 
 use crate::{
-    authenticated_channel::encode_server_frame,
+    room_channel::encode_server_frame,
     room_command_result::{CommandFailure, validate_command_envelope},
 };
 

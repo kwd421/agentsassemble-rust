@@ -1,12 +1,12 @@
 import type { ServerProductSurface } from "../types/generated/ServerProductSurface";
 import type { Subscribed } from "../types/generated/Subscribed";
-import { deriveConnectionNonce, isHex32Bytes } from "./serverProof";
+
+const SHA256_HEX = /^[0-9a-f]{64}$/;
 
 const RECEIPT_KEYS = [
   "op",
   "streams",
   "protocol_version",
-  "connection_nonce",
   "room_id",
   "principal_id",
   "participant_id",
@@ -29,7 +29,6 @@ export class SubscriptionContractError extends Error {
 }
 
 type ExpectedSubscription = {
-  ticket: string;
   roomId: string;
   participantId: string;
   streams: readonly string[];
@@ -50,10 +49,14 @@ function exactKeys(value: Record<string, unknown>): boolean {
   return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
 }
 
-export async function verifySubscriptionReceipt(
+export function isSha256Hex(value: unknown): value is string {
+  return typeof value === "string" && SHA256_HEX.test(value);
+}
+
+export function verifySubscriptionReceipt(
   value: unknown,
   expected: ExpectedSubscription
-): Promise<SubscriptionReceipt> {
+): SubscriptionReceipt {
   if (!isRecord(value) || !exactKeys(value)) {
     throw new SubscriptionContractError(
       "subscription_receipt_schema_invalid",
@@ -75,7 +78,7 @@ export async function verifySubscriptionReceipt(
     receipt.participant_id === expected.participantId &&
     receipt.server_surface_revision === expected.serverSurface.revision &&
     receipt.server_surface_digest === expected.serverSurface.digest &&
-    isHex32Bytes(receipt.server_surface_digest) &&
+    isSha256Hex(receipt.server_surface_digest) &&
     isSequence(receipt.snapshot_cursor) &&
     isSequence(receipt.catchup_high_water) &&
     receipt.catchup_high_water >= receipt.snapshot_cursor;
@@ -85,24 +88,17 @@ export async function verifySubscriptionReceipt(
       "The runtime subscription receipt did not match the requested room authority."
     );
   }
-  const connectionNonce = await deriveConnectionNonce(expected.ticket);
-  if (receipt.connection_nonce !== connectionNonce) {
-    throw new SubscriptionContractError(
-      "server_identity_invalid",
-      "The runtime subscription did not match its one-use connection ticket."
-    );
-  }
   return receipt;
 }
 
-export async function verifyBoundSnapshot(
+export function verifyBoundSnapshot(
   value: unknown,
   receipt: SubscriptionReceipt
-): Promise<void> {
+): void {
   if (!isRecord(value) || value.op !== "snapshot" || value.last_seq !== receipt.snapshot_cursor) {
     throw new SubscriptionContractError(
       "snapshot_boundary_invalid",
-      "The room snapshot did not match its authenticated cursor."
+      "The room snapshot did not match its subscription cursor."
     );
   }
 }

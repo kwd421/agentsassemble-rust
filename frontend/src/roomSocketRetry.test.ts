@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   event,
   flushPromises,
-  gateNextFrameVerification,
   handshakeFrames,
   openHarness,
   receiveAuthenticated,
@@ -26,54 +25,6 @@ describe("room socket exact-command retry", () => {
     expect(retry.retryAttempt).toBe(1);
   });
 
-  it("does not charge a connection that closes before command send returns", async () => {
-    vi.useFakeTimers();
-    const { handle, sockets, tickets } = openHarness();
-    await flushPromises();
-    await openReadyConnection(0, handle, sockets, tickets);
-
-    let releaseSignature = () => {};
-    let reportSignatureStarted = () => {};
-    const signatureStarted = new Promise<void>((resolve) => { reportSignatureStarted = resolve; });
-    const signatureGate = new Promise<void>((resolve) => { releaseSignature = resolve; });
-    const realSign = crypto.subtle.sign.bind(crypto.subtle);
-    vi.spyOn(crypto.subtle, "sign").mockImplementationOnce(async (algorithm, key, data) => {
-      reportSignatureStarted();
-      await signatureGate;
-      return realSign(algorithm, key, data);
-    });
-
-    const pendingCommand = handle.command("message.send", { content: "not sent before close" });
-    await signatureStarted;
-    sockets[0].close();
-    releaseSignature();
-    await flushPromises();
-
-    await vi.advanceTimersByTimeAsync(500);
-    const secondFrames = await openReadyConnection(1, handle, sockets, tickets);
-    await vi.waitFor(() => expect(sockets[1].sent).toHaveLength(2));
-    const firstSentCommand = await sentAuthenticatedCommand(sockets[1], secondFrames);
-    await receiveAuthenticated(sockets[1], secondFrames, unresolved(firstSentCommand));
-    await vi.waitFor(() => expect(sockets[1].readyState).toBe(WebSocket.CLOSED));
-
-    await vi.advanceTimersByTimeAsync(500);
-    const thirdFrames = await openReadyConnection(2, handle, sockets, tickets);
-    await vi.waitFor(() => expect(sockets[2].sent).toHaveLength(2));
-    const replayed = await sentAuthenticatedCommand(sockets[2], thirdFrames);
-    expect(replayed).toEqual(firstSentCommand);
-    await receiveAuthenticated(sockets[2], thirdFrames, {
-      op: "ack",
-      accepted: true,
-      resolution: "committed",
-      request_id: replayed.request_id,
-      action: "message.send",
-      result: { event: event(1), event_seq: 1 },
-      deduplicated: true,
-    });
-    await expect(pendingCommand).resolves.toMatchObject({ resolution: "committed" });
-    handle.close();
-  });
-
   it("settles a received terminal ACK before charging its closing connection", async () => {
     vi.useFakeTimers();
     const { handle, sockets, tickets } = openHarness();
@@ -94,7 +45,6 @@ describe("room socket exact-command retry", () => {
 
     await vi.waitFor(() => expect(sockets[7].sent).toHaveLength(2));
     const finalCommand = await sentAuthenticatedCommand(sockets[7], frames);
-    const verification = gateNextFrameVerification();
     await receiveAuthenticated(sockets[7], frames, {
       op: "ack",
       accepted: true,
@@ -104,10 +54,7 @@ describe("room socket exact-command retry", () => {
       result: { event: event(1), event_seq: 1 },
       deduplicated: true,
     });
-    await verification.started;
     sockets[7].close();
-    verification.release();
-    await verification.completed;
     await flushPromises();
 
     await expect(pendingCommand).resolves.toMatchObject({ resolution: "committed" });

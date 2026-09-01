@@ -286,7 +286,7 @@ fn ensure_capacity(
 mod tests {
     use agentsassemble_domain::{AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope};
 
-    use crate::authenticated_channel::MAX_WS_WIRE_MESSAGE_BYTES;
+    use crate::room_channel::MAX_WS_MESSAGE_BYTES;
 
     use super::{GLOBAL_POLICY, MAX_TRACKED_ROOMS, PRINCIPAL_POLICY, ROOM_POLICY, SocketAdmission};
 
@@ -406,11 +406,11 @@ mod tests {
         let governor = SocketAdmission::new();
         let now = std::time::Instant::now();
         fill_tracking_capacity(&governor, now);
-        let attempts = GLOBAL_POLICY.bytes / MAX_WS_WIRE_MESSAGE_BYTES + 1;
+        let attempts = GLOBAL_POLICY.bytes / MAX_WS_MESSAGE_BYTES + 1;
         for index in 0..attempts {
             assert!(!governor.admit_frame_at(
                 &principal_for(&format!("principal-{index}"), &format!("untracked-{index}")),
-                MAX_WS_WIRE_MESSAGE_BYTES,
+                MAX_WS_MESSAGE_BYTES,
                 false,
                 now,
             ));
@@ -429,11 +429,11 @@ mod tests {
         let governor = SocketAdmission::new();
         let now = std::time::Instant::now();
         fill_tracking_capacity(&governor, now);
-        let attempts = PRINCIPAL_POLICY.bytes / MAX_WS_WIRE_MESSAGE_BYTES + 1;
+        let attempts = PRINCIPAL_POLICY.bytes / MAX_WS_MESSAGE_BYTES + 1;
         for index in 0..attempts {
             assert!(!governor.admit_frame_at(
                 &principal_for("principal-0", &format!("untracked-{index}")),
-                MAX_WS_WIRE_MESSAGE_BYTES,
+                MAX_WS_MESSAGE_BYTES,
                 false,
                 now,
             ));

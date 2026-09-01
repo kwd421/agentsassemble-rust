@@ -268,16 +268,6 @@ pub enum ClientFrame {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
-pub enum AuthenticatedFrame {
-    Authenticated {
-        counter: u64,
-        payload: String,
-        proof: String,
-    },
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum ServerFrame {
@@ -308,7 +298,6 @@ pub enum ServerFrame {
 pub struct Subscribed {
     pub streams: Vec<RoomStream>,
     pub protocol_version: u32,
-    pub connection_nonce: String,
     pub room_id: String,
     pub principal_id: String,
     pub participant_id: String,
