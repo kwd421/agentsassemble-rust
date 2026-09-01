@@ -40,6 +40,16 @@ class BuildArtifactCleanupTests(unittest.TestCase):
             self.assertEqual([item.path for item in plan], [target])
             self.assertGreater(plan[0].observed_bytes, 0)
 
+    def test_explicit_maintenance_includes_active_target_below_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "target"
+            target.mkdir()
+
+            plan = clean_plan(root, 1024**2, clean_active=True)
+
+            self.assertEqual([item.path for item in plan], [target])
+
     def test_obsolete_desktop_target_is_always_cleaned(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

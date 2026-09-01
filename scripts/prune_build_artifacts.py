@@ -62,7 +62,9 @@ def allocated_bytes(path: Path) -> int:
     return total
 
 
-def clean_plan(repository_root: Path, maximum_bytes: int) -> tuple[CleanTarget, ...]:
+def clean_plan(
+    repository_root: Path, maximum_bytes: int, clean_active: bool = False
+) -> tuple[CleanTarget, ...]:
     if maximum_bytes < 0:
         raise ValueError("maximum_bytes must not be negative")
 
@@ -85,12 +87,16 @@ def clean_plan(repository_root: Path, maximum_bytes: int) -> tuple[CleanTarget, 
         )
 
     root_bytes = allocated_bytes(root_target) if root_target.exists() else 0
-    if root_bytes > maximum_bytes:
+    if root_target.exists() and (clean_active or root_bytes > maximum_bytes):
         planned.append(
             CleanTarget(
                 root_target,
                 root_bytes,
-                f"active Cargo target exceeds {maximum_bytes} allocated bytes",
+                (
+                    "explicit active-target maintenance"
+                    if clean_active
+                    else f"active Cargo target exceeds {maximum_bytes} bytes"
+                ),
             )
         )
     return tuple(planned)
@@ -138,7 +144,11 @@ def main(arguments: list[str] | None = None) -> int:
     )
     options = parser.parse_args(arguments)
     repository_root = Path(__file__).resolve().parents[1]
-    plan = clean_plan(repository_root, MAX_ACTIVE_TARGET_BYTES)
+    plan = clean_plan(
+        repository_root,
+        MAX_ACTIVE_TARGET_BYTES,
+        clean_active=options.clean,
+    )
     return execute_plan(repository_root, plan, options.clean)
 
 
