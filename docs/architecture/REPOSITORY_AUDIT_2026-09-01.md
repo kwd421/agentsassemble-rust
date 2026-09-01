@@ -491,7 +491,11 @@ Disposition: `Fix`; medium product/structure impact.
   label from merging unrelated ownerless desktop/mobile presentation groups.
   Daybreaker's next pass found that the secondary mobile projection used mutable room
   role to identify a human; `020d89f` now uses participant kind, preserving room
-  ownership when an Agent has the Human role.
+  ownership when an Agent has the Human role. Critical-web Pro and Daybreaker manually
+  re-reviewed public HEAD `b6d844b` and each approve individual `703b5c6`, `8beb103`,
+  `020d89f`, and `b6d844b`, exact `f934382..b6d844b`, full correction
+  `879db4b..b6d844b`, cumulative `5ec012f..b6d844b`, and HEAD `b6d844b` at
+  `C0/H0/M0/L0`.
 - The remaining issue is exact model selection: the first-discovered-model
   substitution and stale OpenCode preference above are unchanged.
 

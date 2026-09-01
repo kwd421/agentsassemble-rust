@@ -5937,8 +5937,10 @@ critical-web Pro independently revised that state at `C0/H0/M0/L2` for the prima
 fallback and copied documentation overclaim above. Critical-web Pro and Daybreaker
 each revised public HEAD `f934382` at `C0/H0/M0/L2` for the two additional reachable
 consumers described above. Daybreaker then revised public HEAD `8beb103` at
-`C0/H0/M0/L1` for the mutable-role participant-kind defect. Re-review of the latest
-source corrections and this factual
-record remains pending; no final approval is claimed here. Exact preferred-model
+`C0/H0/M0/L1` for the mutable-role participant-kind defect. After corrections,
+critical-web Pro and Daybreaker each manually approve individual `703b5c6`,
+`8beb103`, `020d89f`, and `b6d844b`, exact `f934382..b6d844b`, full correction
+`879db4b..b6d844b`, cumulative `5ec012f..b6d844b`, and HEAD `b6d844b` at
+`C0/H0/M0/L0`. Exact preferred-model
 selection and removal of the first-discovered-model substitution remain the next F-07
 work.

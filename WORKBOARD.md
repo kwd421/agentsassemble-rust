@@ -181,7 +181,10 @@ contracts, findings, or verification journals.
   `d0c8ce8`, exact `ae171dc..d0c8ce8`, full correction
   `879db4b..d0c8ce8`, cumulative `5ec012f..d0c8ce8`, and HEAD `d0c8ce8` at
   `C0/H0/M0/L0`; critical-web Pro correctly revised that state at `C0/H0/M0/L2`.
-  Re-review of the latest corrections and this factual record remains pending. Exact
+  Manual source re-review of public HEAD `b6d844b` is now complete. Critical-web Pro
+  and Daybreaker each approve individual `703b5c6`, `8beb103`, `020d89f`, and
+  `b6d844b`, exact `f934382..b6d844b`, full correction `879db4b..b6d844b`,
+  cumulative `5ec012f..b6d844b`, and HEAD `b6d844b` at `C0/H0/M0/L0`. Exact
   preferred-model selection and removal of the first-discovered-model substitution
   remain open in F-07.
 - Build-artifact lifecycle correction is complete through `537c1b9`. macOS uses
