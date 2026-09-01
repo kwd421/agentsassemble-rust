@@ -93,16 +93,6 @@ export interface LiveAgent {
   capabilities: string[];
 }
 
-export interface ProviderCatalogRefreshResponse {
-  status: string;
-  catalog_revision: string;
-  providers: Array<{
-    id: string;
-    discovery_status?: string;
-    discovery_error?: string;
-  }>;
-}
-
 export interface LocalResourceProcess {
   pid: number;
   ppid: number;
@@ -304,10 +294,6 @@ export async function chooseLocalWorkspace(): Promise<{
 }> {
   if (isDesktopWebview()) return chooseDesktopWorkspace();
   return postJson("/api/local/workspace-picker", {});
-}
-
-export function refreshProviderCatalog(force = true) {
-  return postJson<ProviderCatalogRefreshResponse>("/api/provider-catalog/refresh", { force });
 }
 
 export function fetchLocalResources() {

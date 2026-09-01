@@ -4,7 +4,6 @@ import type {
   MouseEvent as ReactMouseEvent,
 } from "react";
 import {
-  refreshProviderCatalog,
   type ChannelNotificationSetting,
   type ChannelSettings,
   type RoomMember,
@@ -396,9 +395,6 @@ export function useAppController(deviceToken: string, clientId: string) {
 
   function openAgentCreate() {
     setAgentCreateOpen(true);
-    void refreshProviderCatalog(false).catch(() => {
-      // The modal keeps the last verified catalog and exposes its loading/error state.
-    });
     closeMobileOverlays();
     setRoomMenu(null);
     setChannelMenu(null);
