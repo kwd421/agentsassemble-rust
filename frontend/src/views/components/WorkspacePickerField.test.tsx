@@ -38,8 +38,10 @@ describe("WorkspacePickerField", () => {
 
     await waitFor(() => expect(onError).toHaveBeenCalledOnce());
     expect(String(onError.mock.lastCall?.[0])).not.toContain("workspace_picker_");
-    expect(
-      (screen.getByRole("button", { name: "폴더 선택" }) as HTMLButtonElement).disabled
-    ).toBe(false);
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("button", { name: "폴더 선택" }) as HTMLButtonElement).disabled
+      ).toBe(false)
+    );
   });
 });
