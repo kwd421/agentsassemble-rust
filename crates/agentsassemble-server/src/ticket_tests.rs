@@ -305,14 +305,6 @@ async fn settings_directory_ticket_never_crosses_room_or_profile_scopes() {
 async fn human_session_grants_are_exact_purpose_and_one_use() {
     let fixture = HumanSessionFixture::new(1).await;
     let store = TicketStore::new(Duration::from_secs(30), 4_096);
-    let search_read = store
-        .issue_human_session_message_search_read(fixture.authorize(0).await)
-        .await
-        .unwrap_or_else(|error| panic!("issue read-only search grant: {error}"));
-    assert!(matches!(
-        store.consume_message_search_read(&search_read.ticket).await,
-        Ok(crate::ticket::RoomHumanHttpAuthority::HumanSession(_))
-    ));
     let wrong_asset = store
         .issue_human_session_bound_appearance_read(
             fixture.authorize(0).await,
@@ -407,17 +399,22 @@ async fn human_session_message_attachment_grants_are_exact_and_read_only_upload_
 async fn socket_hint_consumes_wrong_purpose_without_cross_authority_fallback() {
     let fixture = HumanSessionFixture::new(1).await;
     let store = TicketStore::new(Duration::from_secs(30), 4_096);
-    let search_read = store
-        .issue_human_session_message_search_read(fixture.authorize(0).await)
+    let appearance = store
+        .issue_human_session_bound_appearance_read(
+            fixture.authorize(0).await,
+            "ra_00000000000000000000000000000000".to_owned(),
+        )
         .await
-        .unwrap_or_else(|error| panic!("issue wrong-purpose search grant: {error}"));
+        .unwrap_or_else(|error| panic!("issue wrong-purpose appearance grant: {error}"));
 
     assert!(matches!(
-        store.socket_ticket_hint(&search_read.ticket).await,
+        store.socket_ticket_hint(&appearance.ticket).await,
         Err(TicketError::Invalid)
     ));
     assert!(matches!(
-        store.consume_message_search_read(&search_read.ticket).await,
+        store
+            .consume_appearance_read(&appearance.ticket, "ra_00000000000000000000000000000000",)
+            .await,
         Err(TicketError::Invalid)
     ));
 }

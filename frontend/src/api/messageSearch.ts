@@ -25,7 +25,6 @@ import {
   parseMessageAttachmentFilename,
 } from "./messageAttachments";
 import {
-  exchangeSessionHttpTicket,
   isPrivateNoStoreResponse,
   queryString,
   responseError,
@@ -56,7 +55,7 @@ export type RoomMessageContext = Readonly<{
   events: RoomEvent[];
 }>;
 
-type SearchGrant = Readonly<{ baseUrl: string; ticket: string }>;
+type SearchAuthority = Readonly<{ baseUrl: string; credential: string }>;
 
 const SEARCH_RESULT_KEYS = [
   "event_id",
@@ -445,27 +444,27 @@ function parseContext(value: unknown, roomId: string, expectedEventId: string): 
   });
 }
 
-async function searchGrant(roomId: string, authority: MessageSearchAuthority): Promise<SearchGrant> {
+async function searchAuthority(
+  roomId: string,
+  authority: MessageSearchAuthority
+): Promise<SearchAuthority> {
   if (authority.kind === "local") {
     const grant = await requestDesktopMessageSearchReadTicket(roomId);
-    return { baseUrl: grant.http_base_url, ticket: grant.ticket };
+    return { baseUrl: grant.http_base_url, credential: grant.ticket };
   }
   if (!authority.sessionToken) throw new Error("방 세션 권위를 사용할 수 없습니다.");
-  return {
-    baseUrl: "",
-    ticket: await exchangeSessionHttpTicket("message-search-read", authority.sessionToken),
-  };
+  return { baseUrl: "", credential: authority.sessionToken };
 }
 
 async function fetchSearchJson(
   path: string,
-  grant: SearchGrant,
+  authority: SearchAuthority,
   beforeDispatch?: () => void
 ): Promise<unknown> {
   beforeDispatch?.();
-  const response = await fetch(`${grant.baseUrl}${path}`, {
+  const response = await fetch(`${authority.baseUrl}${path}`, {
     cache: "no-store",
-    headers: { Authorization: `Bearer ${grant.ticket}` },
+    headers: { Authorization: `Bearer ${authority.credential}` },
   });
   if (!response.ok) throw await responseError(response);
   if (!isPrivateNoStoreResponse(response, "application/json")) invalidResponse();
@@ -488,14 +487,14 @@ export async function searchRoomMessages({
   beforeDispatch?: () => void;
 }): Promise<RoomSearchPage> {
   const room = canonicalRoomId(roomId);
-  const grant = await searchGrant(room, authority);
+  const resolvedAuthority = await searchAuthority(room, authority);
   const path = `/api/room-search${queryString({
     room_id: room,
     channel_id: channelId,
     q: query,
     cursor: cursor || undefined,
   })}`;
-  return parseSearchPage(await fetchSearchJson(path, grant, beforeDispatch));
+  return parseSearchPage(await fetchSearchJson(path, resolvedAuthority, beforeDispatch));
 }
 
 export async function fetchRoomMessageContext({
@@ -513,11 +512,15 @@ export async function fetchRoomMessageContext({
 }): Promise<RoomMessageContext> {
   const room = canonicalRoomId(roomId);
   const target = eventId(rawEventId);
-  const grant = await searchGrant(room, authority);
+  const resolvedAuthority = await searchAuthority(room, authority);
   const path = `/api/room-search/context${queryString({
     room_id: room,
     channel_id: channelId,
     event_id: target,
   })}`;
-  return parseContext(await fetchSearchJson(path, grant, beforeDispatch), room, target);
+  return parseContext(
+    await fetchSearchJson(path, resolvedAuthority, beforeDispatch),
+    room,
+    target
+  );
 }

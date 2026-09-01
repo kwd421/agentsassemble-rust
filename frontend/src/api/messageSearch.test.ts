@@ -192,12 +192,10 @@ describe("lobby message-search HTTP authority", () => {
     });
   });
 
-  it("exchanges the remote session for the exact read purpose before every request", async () => {
+  it("sends the reusable remote session directly to each search read", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ ticket: "c".repeat(64), ttl_seconds: 30 }))
       .mockResolvedValueOnce(jsonResponse({ results: [], next_cursor: "" }))
-      .mockResolvedValueOnce(jsonResponse({ ticket: "d".repeat(64), ttl_seconds: 30 }))
       .mockResolvedValueOnce(jsonResponse({
         channel_id: "lobby",
         event_id: "event-1",
@@ -219,19 +217,16 @@ describe("lobby message-search HTTP authority", () => {
       authority,
     });
 
-    for (const index of [0, 2]) {
-      expect(fetchMock).toHaveBeenNthCalledWith(
-        index + 1,
-        "/api/session-tickets/message-search-read",
-        {
-          cache: "no-store",
-          method: "POST",
-          headers: { Authorization: "Bearer aas1.session" },
-        }
-      );
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "/api/room-search?room_id=general&channel_id=lobby&q=missing",
+      "/api/room-search/context?room_id=general&channel_id=lobby&event_id=event-1",
+    ]);
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(init).toEqual({
+        cache: "no-store",
+        headers: { Authorization: "Bearer aas1.session" },
+      });
     }
-    expect(JSON.stringify(fetchMock.mock.calls[1]?.[1])).not.toContain("aas1.session");
-    expect(JSON.stringify(fetchMock.mock.calls[3]?.[1])).not.toContain("aas1.session");
   });
 
   it("accepts empty optional provenance emitted by current message producers", async () => {

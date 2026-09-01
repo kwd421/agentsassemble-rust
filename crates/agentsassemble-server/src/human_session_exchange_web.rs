@@ -49,7 +49,6 @@ pub(crate) fn routes() -> Router<AppState> {
 registered_routes! {
     fn session_exchange_routes<AppState>() {
         same_origin_public "/api/session-tickets/socket" => post(issue_socket_ticket),
-        same_origin_public "/api/session-tickets/message-search-read" => post(issue_message_search_read_ticket),
         same_origin_public "/api/session-tickets/message-attachment-upload" => post(issue_message_attachment_upload_ticket),
         same_origin_public "/api/session-tickets/message-attachment/{attachment_id}" => post(issue_message_attachment_read_ticket),
         same_origin_public "/api/session-tickets/room-appearance/{asset_id}" => post(issue_room_appearance_ticket),
@@ -91,24 +90,6 @@ async fn issue_socket_ticket(
     let issued = state
         .tickets
         .issue_human_session_socket(authorization)
-        .await
-        .map_err(|_| SessionExchangeError::capacity())?;
-    Ok(Json(SessionTicketResponse {
-        ticket: issued.ticket,
-        ttl_seconds,
-    })
-    .into_response())
-}
-
-async fn issue_message_search_read_ticket(
-    State(state): State<AppState>,
-    request: Request,
-) -> Result<Response, SessionExchangeError> {
-    let authorization = authorize_exchange(&state, request).await?;
-    let ttl_seconds = session_ticket_ttl(&state, &authorization);
-    let issued = state
-        .tickets
-        .issue_human_session_message_search_read(authorization)
         .await
         .map_err(|_| SessionExchangeError::capacity())?;
     Ok(Json(SessionTicketResponse {

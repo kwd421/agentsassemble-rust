@@ -15,6 +15,9 @@ use crate::{
     http_api::{
         BodyDecodeError, PRIVATE_NO_STORE, bearer_credential, ensure_empty_body, exact_tauri_cors,
     },
+    human_session_http_authority::{
+        HumanSessionBearerError, HumanSessionBearerResolution, resolve_human_session_bearer,
+    },
     ticket::RoomHumanHttpAuthority,
 };
 
@@ -90,7 +93,7 @@ async fn search_messages(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<SearchResponse>, MessageSearchHttpError> {
-    let grant = consume_ticket(&state, request.headers()).await?;
+    let grant = resolve_read_authority(&state, request.headers()).await?;
     let query = parse_query::<SearchQuery>(&request)?;
     require_search_scope(&grant, &query.room_id, &query.channel_id)?;
     ensure_empty_body(request, MAX_SEARCH_BODY_BYTES)
@@ -123,7 +126,7 @@ async fn message_context(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<ContextResponse>, MessageSearchHttpError> {
-    let grant = consume_ticket(&state, request.headers()).await?;
+    let grant = resolve_read_authority(&state, request.headers()).await?;
     let query = parse_query::<ContextQuery>(&request)?;
     require_context_scope(&grant, &query.room, &query.channel)?;
     ensure_empty_body(request, MAX_SEARCH_BODY_BYTES)
@@ -151,16 +154,24 @@ async fn message_context(
     Ok(Json(project_context(context)))
 }
 
-async fn consume_ticket(
+async fn resolve_read_authority(
     state: &AppState,
     headers: &axum::http::HeaderMap,
 ) -> Result<RoomHumanHttpAuthority, MessageSearchHttpError> {
-    let ticket = bearer_credential(headers).ok_or_else(MessageSearchHttpError::unauthorized)?;
-    state
-        .tickets
-        .consume_message_search_read(ticket)
-        .await
-        .map_err(|_| MessageSearchHttpError::unauthorized())
+    let credential = bearer_credential(headers).ok_or_else(MessageSearchHttpError::unauthorized)?;
+    match resolve_human_session_bearer(state, credential).await {
+        Ok(HumanSessionBearerResolution::Authorized(authorization)) => {
+            Ok(RoomHumanHttpAuthority::HumanSession(authorization))
+        }
+        Ok(HumanSessionBearerResolution::Other) => state
+            .tickets
+            .consume_message_search_read(credential)
+            .await
+            .map(RoomHumanHttpAuthority::LocalTicket)
+            .map_err(|_| MessageSearchHttpError::unauthorized()),
+        Err(HumanSessionBearerError::Invalid) => Err(MessageSearchHttpError::unauthorized()),
+        Err(HumanSessionBearerError::Persistence(error)) => Err(error.into()),
+    }
 }
 
 fn parse_query<T: for<'de> Deserialize<'de>>(

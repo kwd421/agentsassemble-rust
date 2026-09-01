@@ -12,7 +12,7 @@ import {
   fetchJsonServerOperator,
   fetchJsonWithIdentity,
   fetchJsonWithToken,
-  exchangeSessionTicket,
+  exchangeSessionSocketTicket,
   deleteJson,
   postJson,
   postJsonServerOperator,
@@ -626,7 +626,7 @@ export async function getWsTicket(auth: RoomSocketAuth): Promise<RoomSocketTicke
     return requestDesktopRuntimeTicket(auth.meetingId);
   }
   if (auth.kind === "session") {
-    const payload = await exchangeSessionTicket("socket", auth.sessionToken);
+    const payload = await exchangeSessionSocketTicket(auth.sessionToken);
     return parseBrowserRoomRuntimeTicket(payload, window.location.href);
   }
   throw new Error("Host WebSocket authority requires the desktop Rust runtime.");

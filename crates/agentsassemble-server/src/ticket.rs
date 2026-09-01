@@ -569,13 +569,9 @@ impl TicketStore {
     pub(crate) async fn consume_message_search_read(
         &self,
         ticket: &str,
-    ) -> Result<RoomHumanHttpAuthority, TicketError> {
-        self.consume_room_human(
-            ticket,
-            RoomHttpPurpose::MessageSearchRead,
-            HumanSessionGrantPurpose::MessageSearchRead,
-        )
-        .await
+    ) -> Result<ConsumedRoomHttpTicket, TicketError> {
+        self.consume_room_http(ticket, &RoomHttpPurpose::MessageSearchRead)
+            .await
     }
 
     /// Consumes only an exact human-invite creation credential.
@@ -678,28 +674,6 @@ impl TicketStore {
         Ok(ConsumedHumanInviteManagerTicket {
             authority: resolve_local_room_manager_authority(manager, expected)?,
         })
-    }
-
-    async fn consume_room_human(
-        &self,
-        ticket: &str,
-        room_purpose: RoomHttpPurpose,
-        session_purpose: HumanSessionGrantPurpose,
-    ) -> Result<RoomHumanHttpAuthority, TicketError> {
-        let grant = self.consume_grant(ticket).await?;
-        match grant.authority {
-            TicketAuthority::RoomHttp(room) => resolve_room_http_authority(room, &room_purpose)
-                .map(RoomHumanHttpAuthority::LocalTicket),
-            TicketAuthority::HumanSession(session) => {
-                Self::resolve_human_session_authority(session, &session_purpose, Utc::now())
-                    .map(RoomHumanHttpAuthority::HumanSession)
-            }
-            TicketAuthority::Room(_)
-            | TicketAuthority::LocalRoomManager(_)
-            | TicketAuthority::SettingsDirectoryRead { .. }
-            | TicketAuthority::ServerOperator { .. }
-            | TicketAuthority::CentralRegistration { .. } => Err(TicketError::Invalid),
-        }
     }
 
     async fn consume_room_http(

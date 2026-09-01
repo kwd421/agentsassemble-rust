@@ -215,9 +215,9 @@ async fn crossed_purpose_and_wrong_room_consume_the_ticket() {
 }
 
 #[tokio::test]
-async fn read_only_session_search_revalidates_revocation_after_ticket_exchange() {
+async fn read_only_session_search_is_direct_reusable_and_current() {
     let (store, credentials) = fixture(InviteScope::ReadOnly).await;
-    send_message(&store, "remote-search-message", "remote searchable").await;
+    let message = send_message(&store, "remote-search-message", "remote searchable").await;
     let server = start_invite(store).await;
     let client = Client::new();
     let browser_credential = format!("aad1_{}", URL_SAFE_NO_PAD.encode([0x47; 32]));
@@ -232,13 +232,24 @@ async fn read_only_session_search_revalidates_revocation_after_ticket_exchange()
     )
     .await;
     let session_token = canonical_session_token(&admission);
-    let ticket = exchange_search_ticket(&client, &server.base_url, session_token).await;
+
+    let retired_exchange = client
+        .post(format!(
+            "{}/api/session-tickets/message-search-read",
+            server.base_url
+        ))
+        .bearer_auth(session_token)
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("call retired search exchange: {error}"));
+    assert_eq!(retired_exchange.status(), StatusCode::NOT_FOUND);
+
     let readable = client
         .get(format!(
             "{}/api/room-search?room_id=general&channel_id=lobby&q=remote",
             server.base_url
         ))
-        .bearer_auth(ticket)
+        .bearer_auth(session_token)
         .send()
         .await
         .unwrap_or_else(|error| panic!("search through read-only session: {error}"));
@@ -248,24 +259,58 @@ async fn read_only_session_search_revalidates_revocation_after_ticket_exchange()
         "remote searchable"
     );
 
-    let revoked_ticket = exchange_search_ticket(&client, &server.base_url, session_token).await;
+    let wrong_room = client
+        .get(format!(
+            "{}/api/room-search?room_id=other&q=remote",
+            server.base_url
+        ))
+        .bearer_auth(session_token)
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("search wrong room through session: {error}"));
+    assert_eq!(wrong_room.status(), StatusCode::UNAUTHORIZED);
+
+    let context = client
+        .get(format!(
+            "{}/api/room-search/context?room_id=general&channel_id=lobby&event_id={}",
+            server.base_url, message.id
+        ))
+        .bearer_auth(session_token)
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("read context through reusable session: {error}"));
+    assert_eq!(context.status(), StatusCode::OK);
+    assert_eq!(json_body(context).await["event_id"], message.id);
+
+    let malformed = client
+        .get(format!(
+            "{}/api/room-search?room_id=general&q=remote",
+            server.base_url
+        ))
+        .bearer_auth("aas1.malformed")
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("send malformed session bearer: {error}"));
+    assert_eq!(malformed.status(), StatusCode::UNAUTHORIZED);
+
     let left = client
         .post(format!("{}/api/room-invite/leave", server.base_url))
         .bearer_auth(session_token)
         .json(&json!({}))
         .send()
         .await
-        .unwrap_or_else(|error| panic!("leave before search ticket use: {error}"));
+        .unwrap_or_else(|error| panic!("leave before session reuse: {error}"));
     assert_eq!(left.status(), StatusCode::OK);
     let revoked = client
         .get(format!(
             "{}/api/room-search?room_id=general&q=remote",
             server.base_url
         ))
-        .bearer_auth(revoked_ticket)
+        .bearer_auth(session_token)
+        .body(vec![b'x'; 4 * 1024 + 1])
         .send()
         .await
-        .unwrap_or_else(|error| panic!("use revoked search ticket: {error}"));
+        .unwrap_or_else(|error| panic!("reuse departed session: {error}"));
     assert_eq!(revoked.status(), StatusCode::UNAUTHORIZED);
     server.stop().await;
 }
@@ -356,22 +401,6 @@ async fn issue_search(tickets: &TicketStore, room_id: &str) -> String {
         .await
         .unwrap_or_else(|error| panic!("issue search ticket: {error}"))
         .ticket
-}
-
-async fn exchange_search_ticket(client: &Client, base_url: &str, session_token: &str) -> String {
-    let response = client
-        .post(format!(
-            "{base_url}/api/session-tickets/message-search-read"
-        ))
-        .bearer_auth(session_token)
-        .send()
-        .await
-        .unwrap_or_else(|error| panic!("exchange search ticket: {error}"));
-    assert_eq!(response.status(), StatusCode::OK);
-    json_body(response).await["ticket"]
-        .as_str()
-        .unwrap_or_else(|| panic!("search ticket missing"))
-        .to_owned()
 }
 
 async fn json_body(response: reqwest::Response) -> Value {
