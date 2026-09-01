@@ -471,9 +471,8 @@ describe("useCanonicalRoom", () => {
     expect(result.current.timelineEvents[0].avatar_image_url).toBeUndefined();
   });
 
-  it.each(["participant_left", "participant_kicked"])(
-    "removes a participant from canonical browser state after %s",
-    async (eventType) => {
+  it("removes a participant from canonical browser state after participant_left", async () => {
+      const eventType = "participant_left";
       let handlers: RoomSocketHandlers | undefined;
       const openSocket = vi.fn((_auth, _streams, nextHandlers: RoomSocketHandlers) => {
         handlers = nextHandlers;
@@ -537,7 +536,7 @@ describe("useCanonicalRoom", () => {
       terminalSnapshot.participants = [
         {
           ...initial.participants[0],
-          status: eventType === "participant_left" ? "left" : "kicked",
+          status: "left",
         },
       ];
       act(() => handlers?.onRoomSnapshot?.(
@@ -545,8 +544,7 @@ describe("useCanonicalRoom", () => {
         "http://127.0.0.1:43123"
       ));
       expect(result.current.participants).toEqual([]);
-    }
-  );
+    });
 
   it("preserves session provider branding when a participant snapshot omits it", async () => {
     let handlers: RoomSocketHandlers | undefined;

@@ -346,7 +346,6 @@ where
         room_settings: settings,
         participants: snapshot_data.participants,
         agent_sessions: snapshot_data.agent_sessions,
-        provider_requests: Vec::new(),
         active_turns: Vec::new(),
         events: snapshot_data
             .events

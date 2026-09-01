@@ -315,8 +315,6 @@ pub struct RoomSnapshot {
     pub room_settings: PublicRoomSettings,
     pub participants: Vec<Participant>,
     pub agent_sessions: Vec<AgentSession>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub provider_requests: Vec<Value>,
     pub active_turns: Vec<Value>,
     pub events: Vec<RoomEvent>,
     pub oldest_seq: i64,

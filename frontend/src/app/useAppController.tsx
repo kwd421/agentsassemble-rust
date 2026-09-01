@@ -308,7 +308,6 @@ export function useAppController(deviceToken: string, clientId: string) {
     onSideChat: handleSideChatRealtimeEvents,
     onError: handleSideChatError,
     onUnauthorized: admittedSessionToken ? expireGuestSession : undefined,
-    onRoomDeleted: handleDeletedRoom,
   });
   const roomChannels = useRoomChannels({
     activeRoom,
@@ -556,23 +555,6 @@ export function useAppController(deviceToken: string, clientId: string) {
     url.search = "";
     url.hash = "";
     window.location.href = url.toString();
-  }
-
-  function handleDeletedRoom(deletedMeetingId: string) {
-    const deletedRoom = rooms.find(
-      (room) => room.meetingId === deletedMeetingId
-    );
-    if (!deletedRoom) return;
-    setSettingsModal((current) =>
-      current?.roomId === deletedRoom.id ? null : current
-    );
-    setLeaveRoomTargetId((current) =>
-      current === deletedRoom.id ? "" : current
-    );
-    removeAcknowledgedRoom(deletedRoom.id);
-    if (guestLocked) {
-      exitGuestSurface();
-    }
   }
 
   async function leaveRoom(roomId: string) {

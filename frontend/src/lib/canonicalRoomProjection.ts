@@ -214,10 +214,7 @@ export function applyParticipantEvents(
       changed = true;
       continue;
     }
-    if (
-      event.type === "participant_left" ||
-      event.type === "participant_kicked"
-    ) {
+    if (event.type === "participant_left") {
       changed = byId.delete(participantId) || changed;
       continue;
     }

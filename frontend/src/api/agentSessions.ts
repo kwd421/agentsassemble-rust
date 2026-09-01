@@ -128,7 +128,6 @@ export interface FrontendLiveAgentCreateRequest {
   permissionMode?: string;
   maxOutputTokens?: number;
   personaCardId?: string;
-  sessionId?: string;
   startNow?: boolean;
 }
 

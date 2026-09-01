@@ -9,10 +9,7 @@ import type {
   ServerRoom,
   SideChatEvent,
 } from "./api";
-import type {
-  PublicProviderRequest,
-  PublicRoomGlobalSettings,
-} from "./types/generatedRoomEvent";
+import type { PublicRoomGlobalSettings } from "./types/generatedRoomEvent";
 import type { PluginEnvelope } from "./pluginSocketProtocol";
 import type { CommandAck } from "./types/generated/CommandAck";
 import type { CommandResolution } from "./types/generated/CommandResolution";
@@ -30,7 +27,6 @@ export interface RoomSocketHandlers {
   onProviderCatalog?: (catalog: ProviderCatalogSnapshot) => void;
   onRoomEvents?: (events: RoomEvent[]) => void;
   onPlugin?: (events: PluginEnvelope[], snapshot: boolean) => void;
-  onRoomDeleted?: (roomId: string, roomName: string) => void;
   onOpen?: () => void;
   onClose?: () => void;
   onError?: (err: Event | Error) => void;
@@ -128,7 +124,6 @@ export interface RoomSocketSnapshot {
   room_settings: PublicRoomGlobalSettings;
   participants: RoomMember[];
   agent_sessions: RoomAgentSession[];
-  provider_requests?: PublicProviderRequest[];
   active_turns: Array<Record<string, unknown>>;
   events: RoomEvent[];
   oldest_seq: number;

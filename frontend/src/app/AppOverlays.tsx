@@ -154,35 +154,27 @@ export default function AppOverlays({ controller }: { controller: AppController 
           roomLabel={activeRoom.label}
           providers={canonicalRoom.availableProviders}
           catalogRevision={canonicalRoom.providerCatalog.catalog_revision}
-          existingSessions={canonicalRoom.agentSessions}
           onClose={() => setAgentCreateOpen(false)}
           onCreate={async (request) => {
             if (!roomSocket?.ready()) {
               throw new Error("방 연결이 아직 준비되지 않았습니다");
             }
-            if (request.sessionId) {
-              await roomSocket.command("agent.readd", {
-                agent_id: request.sessionId,
-                start: Boolean(request.startNow),
-              });
-            } else {
-              await roomSocket.command("agent.create", {
-                provider_id: request.providerId,
-                catalog_revision: request.catalogRevision || "",
-                display_name: request.displayName,
-                workspace: request.workspacePath,
-                model: request.modelId || "",
-                provider_endpoint: request.providerEndpoint || "",
-                reasoning_effort: request.reasoningEffort || "",
-                service_tier: request.serviceTier || "",
-                variant: request.variant || "",
-                execution_harness: request.executionHarness || "builtin",
-                permission_mode: request.permissionMode || "meeting_read_only",
-                max_output_tokens: request.maxOutputTokens || 0,
-                persona_card_id: request.personaCardId || "",
-                start: Boolean(request.startNow),
-              });
-            }
+            await roomSocket.command("agent.create", {
+              provider_id: request.providerId,
+              catalog_revision: request.catalogRevision || "",
+              display_name: request.displayName,
+              workspace: request.workspacePath,
+              model: request.modelId || "",
+              provider_endpoint: request.providerEndpoint || "",
+              reasoning_effort: request.reasoningEffort || "",
+              service_tier: request.serviceTier || "",
+              variant: request.variant || "",
+              execution_harness: request.executionHarness || "builtin",
+              permission_mode: request.permissionMode || "meeting_read_only",
+              max_output_tokens: request.maxOutputTokens || 0,
+              persona_card_id: request.personaCardId || "",
+              start: Boolean(request.startNow),
+            });
           }}
         />
 

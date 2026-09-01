@@ -26,7 +26,6 @@ const PRIVATE_PUBLIC_KEYS: &[&str] = &[
     "pending_event_ids",
     "pending_event_observation_kinds",
     "pending_inputs",
-    "pending_provider_request",
     "pid",
     "provider_endpoint",
     "provider_observation_kind",
@@ -237,7 +236,7 @@ mod tests {
             seq: 7,
             created_at: Utc::now(),
             room_id: "room".to_owned(),
-            event_type: "provider_request_opened".to_owned(),
+            event_type: "message_final".to_owned(),
             actor: Actor {
                 participant_id: "agent".to_owned(),
                 participant_type: "agent".to_owned(),
@@ -270,7 +269,7 @@ mod tests {
     #[test]
     fn owner_gets_redacted_event_and_command_result() {
         let projected = public_event_for_principal(&owner_event(), &principal("owner"));
-        assert_eq!(projected.event_type, "provider_request_opened");
+        assert_eq!(projected.event_type, "message_final");
         assert!(!projected.extra.contains_key("provider_turn_id"));
         assert!(!projected.extra.contains_key("workspace"));
         let result = public_value_for_principal(

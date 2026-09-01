@@ -187,7 +187,6 @@ export function commandAckResultIsValid(
   if (action === "agent.create" || action === "agent.configure") {
     return isRecord(result.agent_session);
   }
-  if (action === "agent.readd") return result.status === "readded";
   if (action.startsWith("agent.")) return isRecord(result.agent_session);
   if (action === "room.vote.summary") {
     return voteSummaryResultIsValid(payload, result);

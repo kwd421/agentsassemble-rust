@@ -107,61 +107,6 @@ describe("AgentCreateModal", () => {
     );
   });
 
-  it("can explicitly re-add an existing stopped session", async () => {
-    const onCreate = vi.fn().mockResolvedValue(undefined);
-    render(
-      <AgentCreateModal
-        open
-        meetingId="room-a"
-        roomLabel="Room A"
-        catalogRevision="cat-test"
-        providers={[
-          {
-            id: "codex",
-            display_name: "Codex",
-            provider_kind: "codex_live_session",
-            runtime_kind: "live_cli",
-            catalog_group: "harness",
-            connection_kind: "native_cli_bridge",
-            executable: "codex",
-            default_model: "gpt-5.6-luna",
-            interactive: true,
-            startable: true,
-            available: true,
-            controls: [],
-          },
-        ]}
-        existingSessions={[
-          {
-            room_id: "room-a",
-            session_id: "codex-existing",
-            participant_id: "codex-existing",
-            display_name: "Codex Existing",
-            status: "detached",
-            runtime_status: "stopped",
-            enabled: false,
-            provider_kind: "codex_live_session",
-            runtime_kind: "live_cli",
-            connection_kind: "native_cli_bridge",
-            model: "gpt-5.6-luna",
-            permission_mode: "meeting_read_only",
-            runtime_profile_key: "profile-test",
-            persona_card_id: "",
-            persona_card: null,
-          },
-        ]}
-        onClose={() => undefined}
-        onCreate={onCreate}
-      />
-    );
-
-    await userEvent.click(screen.getByRole("listitem", { name: "Codex" }));
-    await chooseProviderControl("기존 세션", "Codex Existing · gpt-5.6-luna");
-    await userEvent.click(primaryActionButton());
-
-    expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "codex-existing" }));
-  });
-
   it("submits Claude Sonnet 4.6 by its exact model id", async () => {
     const onCreate = vi.fn().mockResolvedValue(undefined);
     render(

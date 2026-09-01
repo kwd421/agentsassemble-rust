@@ -11,7 +11,6 @@ export function deriveAgentCreateStatus({
   selectedProviderMissing,
   hasProviders,
   invalidControl,
-  existingSessionId,
   workspaceRequired,
 }: {
   status: string;
@@ -20,7 +19,6 @@ export function deriveAgentCreateStatus({
   selectedProviderMissing: boolean;
   hasProviders: boolean;
   invalidControl: ProviderControl | undefined;
-  existingSessionId: string;
   workspaceRequired: boolean;
 }): string {
   if (status) return status;
@@ -45,11 +43,10 @@ export function deriveAgentCreateStatus({
   if (!selectedProvider && !selectedProviderMissing && hasProviders) {
     return "사용할 provider를 선택하세요.";
   }
-  if (!existingSessionId && invalidControl) {
+  if (invalidControl) {
     return `${invalidControl.label}의 유효한 기본값이 없어 직접 선택해야 합니다.`;
   }
   if (
-    !existingSessionId &&
     selectedProvider &&
     workspaceRequired &&
     !workspacePath.trim()
