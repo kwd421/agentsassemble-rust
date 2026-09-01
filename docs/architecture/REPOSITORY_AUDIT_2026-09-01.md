@@ -286,10 +286,10 @@ controller projection; `11e167b` removes only operator-pairing issuance while pr
 incoming pairing redemption; and `7159c2d` removes the admitted-human companion card,
 packet state, obsolete client call, and its now-unreferenced clipboard helper. The
 current human invite and managed public-ingress owners are unchanged. The production
-bundle emits a 5.18/2.15 kB `AdminPanel` chunk plus an 839.15/251.87 kB main chunk,
-totalling 844.34/254.02 kB JavaScript after per-chunk build rounding, and
-169.13/29.62 kB CSS after the three removals; a fresh complete `make verify` passes
-103 frontend files/643 tests,
+bundle emits a 5.18/2.15 kB `AdminPanel` chunk plus an 839.15/251.87 kB main chunk.
+Summing raw chunk bytes before rounding gives 844.34 kB minified JavaScript; the
+displayed per-chunk gzip figures total 254.02 kB. CSS is 169.13/29.62 kB after the
+three removals; a fresh complete `make verify` passes 103 frontend files/643 tests,
 desktop Clippy/25 tests, all Rust and real TCP boundary tests, and workspace
 warning-denied Clippy. Dormant AI-friend invitation, public Google controls, and
 evidence-backed dormant-source cleanup remain; manual batch review is pending.

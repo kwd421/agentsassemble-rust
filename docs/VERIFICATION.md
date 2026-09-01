@@ -5530,9 +5530,10 @@ and public Google controls are not claimed complete.
 
 The prior reviewed candidate emitted 853.34 kB JavaScript minified/256.30 kB gzip and
 169.23/29.63 kB CSS. The second candidate's emitted 5.18/2.15 kB `AdminPanel` chunk and
-839.15/251.87 kB main chunk total 844.34/254.02 kB JavaScript after per-chunk build
-rounding; CSS is 169.13/29.62 kB. This is a measured 9.00 kB minified and 2.28 kB gzip
-JavaScript reduction.
+839.15/251.87 kB main chunk total 844.34 kB after summing raw chunk bytes and rounding
+the aggregate; its displayed per-chunk gzip figures total 254.02 kB. CSS is
+169.13/29.62 kB. This is a measured 9.00 kB minified and 2.28 kB gzip JavaScript
+reduction.
 This batch removes user-triggered failing requests and unused React state; it makes no
 steady-state CPU, memory, or latency claim because these controls did not poll. The CSS
 gate pins the changed single production artifact and exact SHA-256 after the pairing
