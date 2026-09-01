@@ -5871,7 +5871,18 @@ Correction `4c1bd57` makes a present room participant's exact `owner_id` the onl
 grouping authority and fails closed to the unassigned group when it is empty. A
 `LiveAgent` for which no room participant exists remains a distinct presentation case
 rather than a substitute participant authority. `external_owned` remains runtime
-custody only. All 13 focused MemberList tests, the production build, exact CSS gate,
+custody only. Critical-web Pro and Daybreaker then independently found the same
+member/LiveAgent precedence defect in the active mobile roster and mention
+suggestions. Correction `703b5c6` applies the same member-presence rule to both
+consumers and adds direct regressions. Correction
+`8beb103` also stops ownerless desktop/mobile presentation rows from sharing a group
+through a display label: their non-authoritative group key is now their own Agent ID.
+Daybreaker's next pass found one adjacent Low: the secondary mobile projection used
+mutable `role === "human"` rather than participant kind to determine self-ownership.
+Correction `020d89f` uses `participant_type` instead, so an Agent assigned the Human
+role remains grouped by its room-owned `owner_id`; the direct cross-role regression
+also isolates each test render during cleanup. All 20 focused MemberList,
+MobileRoomInfoPanel, and roomMentionables tests, the production build, exact CSS gate,
 diff gate, and architecture gate pass.
 
 Provider focused tests pass 158 Rust cases. The server boundary compiles, 26 focused
@@ -5923,7 +5934,11 @@ Daybreaker approves individual `9256976` and `d0c8ce8`, exact
 `ae171dc..d0c8ce8`, full correction `879db4b..d0c8ce8`, cumulative
 `5ec012f..d0c8ce8`, and HEAD `d0c8ce8` at `C0/H0/M0/L0`. Replacement
 critical-web Pro independently revised that state at `C0/H0/M0/L2` for the primary
-fallback and copied documentation overclaim above. Re-review of source correction
-`4c1bd57` and this factual record remains pending; no final Pro approval is claimed
-here. Exact preferred-model selection and removal of the first-discovered-model
-substitution remain the next F-07 work.
+fallback and copied documentation overclaim above. Critical-web Pro and Daybreaker
+each revised public HEAD `f934382` at `C0/H0/M0/L2` for the two additional reachable
+consumers described above. Daybreaker then revised public HEAD `8beb103` at
+`C0/H0/M0/L1` for the mutable-role participant-kind defect. Re-review of the latest
+source corrections and this factual
+record remains pending; no final approval is claimed here. Exact preferred-model
+selection and removal of the first-discovered-model substitution remain the next F-07
+work.

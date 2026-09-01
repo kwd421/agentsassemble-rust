@@ -167,12 +167,21 @@ contracts, findings, or verification journals.
   projection still substituted `agent.owner_id` when an existing room participant had
   no owner. Correction `4c1bd57` now uses only that participant's room-owned
   `owner_id`; a `LiveAgent` with no participant remains an explicitly separate
-  presentation case. All 13 focused MemberList tests, the production build, CSS gate,
-  diff gate, and architecture gate pass. Daybreaker approved individual `9256976` and
+  presentation case. Critical-web Pro and Daybreaker then independently found the
+  same stale-owner fallback in the active mobile roster and mention suggestions and
+  revised HEAD `f934382` at `C0/H0/M0/L2`. Correction `703b5c6` applies the
+  member-presence rule to both consumers, and `8beb103` keys ownerless desktop/mobile
+  presentation groups by Agent
+  ID rather than a non-authoritative display label. Daybreaker's next pass found one
+  adjacent Low: the secondary mobile projection used mutable room role to identify a
+  human. Correction `020d89f` uses immutable participant kind instead, so an Agent
+  assigned the Human role still follows its room-owned owner. All 20 focused roster/
+  mobile/mention tests, the production build, CSS gate, diff gate, and architecture
+  gate pass. Daybreaker previously approved individual `9256976` and
   `d0c8ce8`, exact `ae171dc..d0c8ce8`, full correction
   `879db4b..d0c8ce8`, cumulative `5ec012f..d0c8ce8`, and HEAD `d0c8ce8` at
   `C0/H0/M0/L0`; critical-web Pro correctly revised that state at `C0/H0/M0/L2`.
-  Re-review of `4c1bd57` and this factual correction remains pending. Exact
+  Re-review of the latest corrections and this factual record remains pending. Exact
   preferred-model selection and removal of the first-discovered-model substitution
   remain open in F-07.
 - Build-artifact lifecycle correction is complete through `537c1b9`. macOS uses

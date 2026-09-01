@@ -484,7 +484,14 @@ Disposition: `Fix`; medium product/structure impact.
   for an existing room participant with no owner. Correction `4c1bd57` makes that
   present participant's room-owned `owner_id` the sole grouping authority and leaves
   an empty owner unassigned; the no-participant `LiveAgent` presentation case remains
-  explicit and separate.
+  explicit and separate. Critical-web Pro and Daybreaker then independently found the
+  same stale-owner precedence in the reachable mobile roster and mention suggestions.
+  Correction `703b5c6` applies the member-presence rule to both consumers;
+  `8beb103` also prevents an owner display
+  label from merging unrelated ownerless desktop/mobile presentation groups.
+  Daybreaker's next pass found that the secondary mobile projection used mutable room
+  role to identify a human; `020d89f` now uses participant kind, preserving room
+  ownership when an Agent has the Human role.
 - The remaining issue is exact model selection: the first-discovered-model
   substitution and stale OpenCode preference above are unchanged.
 
