@@ -1,7 +1,7 @@
 # Lobby message attachments
 
 Status: implementation and flow evidence retained; remote-human HTTP authorization
-reopened by repository audit D-03
+cut over at `e0622cb`, with the current review batch still pending
 
 ## Definition
 
@@ -49,7 +49,7 @@ Rust-owned upload, message-binding, authorized-read, and provider-read lifecycle
   their durable session credential in the bounded Authorization header at the target
   upload/read route, which resolves the
   exact room, principal, operation, and asset before access. The audited preliminary
-  session-to-purpose-ticket exchange is a Phase 0B removal target. Raw issuer secrets,
+  session-to-purpose-ticket exchange is removed at `e0622cb`. Raw issuer secrets,
   cross-scope credentials, read-only or muted uploaders,
   expired local grants, and revoked/left/kicked sessions fail closed. A joined member with
   `room.history` may still read while muted or read-only. Authentication happens

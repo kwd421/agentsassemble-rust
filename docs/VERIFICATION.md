@@ -5301,3 +5301,43 @@ claim is made beyond the removed operations. The four-test real message-search T
 suite, 13 focused ticket-store tests, 15 focused frontend HTTP/search tests, the
 production CSS-verified frontend build, warning-denied server Clippy, Rust formatting,
 and the architecture/source-growth/policy gates passed.
+
+### D-03 direct remote message-attachment authorization: 2026-09-01
+
+Before `e0622cb`, each remote upload or bound read first resolved the reusable room
+session, allocated a short-lived attachment grant under the shared ticket-map lock,
+returned it through a separate HTTP response, and then consumed and revalidated the
+same session authority at the target. Both requests used the same HTTPS origin, so the
+second credential established no distinct trust boundary.
+
+The remote browser now sends its durable session directly to the target. A dedicated
+`POST /api/message-attachments` authenticates the exact upload operation before reading
+the bounded base64 body, then the persistence transaction revalidates current writable
+room authority before storing bytes. This separate route is required because the shared
+profile/pre-join/appearance POST cannot infer message-upload authority from a session
+before parsing a caller-supplied purpose. The existing shared
+`GET /api/attachments/{id}` continues to dispatch the canonical `ma_` namespace once
+and revalidates current `room.history` plus exact visible-message binding before loading
+the BLOB. Local desktop upload and asset-bound read tickets remain exact-purpose and
+one-use. Malformed session-shaped bearers never fall through to local tickets, the two
+remote exchange routes return 404, the old generic POST rejects a message ticket before
+body admission, and the new strict body rejects the retired `room_attachment` payload.
+
+The change removes one HTTP round trip and one ticket-map insertion/consumption per
+remote transfer, the two public session-grant variants, and an unused frontend
+`room_attachment` compatibility branch. It adds no durable state, cache, timer, polling,
+heartbeat, retry, fallback, or generic transport abstraction. The 728-line shared
+profile-and-asset HTTP adapter was reviewed at the 500-line structure warning:
+extracting only this branch would add shared error/CORS/response interfaces while the
+canonical ID dispatcher still requires one owner, so no line-count-only split was
+made. No latency or memory claim is made beyond the removed operations and grant state.
+
+The two-test real TCP attachment suite covers local one-use consumption, crossed and
+retired routes, strict payload rejection, malformed-session auth-before-body, direct
+writable remote upload/read reuse, exact message deletion, read-only upload denial,
+and post-leave revocation. Nine real control-pipe tests, 12 focused ticket-store tests,
+12 focused frontend attachment/profile tests, the production CSS-verified frontend
+build, warning-denied server Clippy, Rust formatting, diff checks, and the
+architecture/source-growth/policy gates passed. No provider or packaged frontend was
+started because this correction changes only the already-verified human HTTP authority
+hop; its public batch review remains pending.
