@@ -19,7 +19,7 @@ use crate::{
     human_session_http_authority::{
         HumanSessionBearerError, HumanSessionBearerResolution, resolve_human_session_bearer,
     },
-    ticket::ConsumedRoomHumanTicket,
+    ticket::RoomHumanHttpAuthority,
 };
 
 const LOBBY_CHANNEL_ID: &str = "lobby";
@@ -99,13 +99,13 @@ async fn list_pins(
     Query(query): Query<PinListQuery>,
     request: Request,
 ) -> Result<Json<PinListResponse>, MessagePinsHttpError> {
-    let grant = consume_read_ticket(&state, request.headers()).await?;
+    let grant = resolve_read_authority(&state, request.headers()).await?;
     let room_id = require_lobby_request(&grant, &query.room_id, &query.channel_id)?;
     ensure_empty_body(request, MAX_MESSAGE_PIN_BODY_BYTES)
         .await
         .map_err(MessagePinsHttpError::from_body)?;
     let pins = match &grant {
-        ConsumedRoomHumanTicket::Local(grant) => {
+        RoomHumanHttpAuthority::LocalTicket(grant) => {
             state
                 .store
                 .local_lobby_message_pins(
@@ -115,7 +115,7 @@ async fn list_pins(
                 )
                 .await?
         }
-        ConsumedRoomHumanTicket::HumanSession(authorization) => {
+        RoomHumanHttpAuthority::HumanSession(authorization) => {
             state
                 .store
                 .human_session_lobby_message_pins(authorization)
@@ -132,14 +132,14 @@ async fn set_pin(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<PinMutationResponse>, MessagePinsHttpError> {
-    let grant = consume_write_ticket(&state, request.headers()).await?;
+    let grant = resolve_write_authority(&state, request.headers()).await?;
     reauthorize_write(&state, &grant).await?;
     let payload: PinMutation = decode_json_body(request, MAX_MESSAGE_PIN_BODY_BYTES)
         .await
         .map_err(MessagePinsHttpError::from_body)?;
     require_lobby_request(&grant, &payload.room_id, &payload.channel_id)?;
     let pins = match &grant {
-        ConsumedRoomHumanTicket::Local(grant) => {
+        RoomHumanHttpAuthority::LocalTicket(grant) => {
             state
                 .store
                 .set_local_lobby_message_pin(
@@ -151,7 +151,7 @@ async fn set_pin(
                 )
                 .await?
         }
-        ConsumedRoomHumanTicket::HumanSession(authorization) => {
+        RoomHumanHttpAuthority::HumanSession(authorization) => {
             state
                 .store
                 .set_human_session_lobby_message_pin(
@@ -168,40 +168,40 @@ async fn set_pin(
     }))
 }
 
-async fn consume_read_ticket(
+async fn resolve_read_authority(
     state: &AppState,
     headers: &axum::http::HeaderMap,
-) -> Result<ConsumedRoomHumanTicket, MessagePinsHttpError> {
+) -> Result<RoomHumanHttpAuthority, MessagePinsHttpError> {
     let ticket = bearer_ticket(headers).ok_or_else(MessagePinsHttpError::unauthorized)?;
     match resolve_human_session_bearer(state, ticket).await {
         Ok(HumanSessionBearerResolution::Authorized(authorization)) => {
-            Ok(ConsumedRoomHumanTicket::HumanSession(authorization))
+            Ok(RoomHumanHttpAuthority::HumanSession(authorization))
         }
         Ok(HumanSessionBearerResolution::Other) => state
             .tickets
             .consume_message_pins_read(ticket)
             .await
-            .map(ConsumedRoomHumanTicket::Local)
+            .map(RoomHumanHttpAuthority::LocalTicket)
             .map_err(|_| MessagePinsHttpError::unauthorized()),
         Err(HumanSessionBearerError::Invalid) => Err(MessagePinsHttpError::unauthorized()),
         Err(HumanSessionBearerError::Persistence(error)) => Err(error.into()),
     }
 }
 
-async fn consume_write_ticket(
+async fn resolve_write_authority(
     state: &AppState,
     headers: &axum::http::HeaderMap,
-) -> Result<ConsumedRoomHumanTicket, MessagePinsHttpError> {
+) -> Result<RoomHumanHttpAuthority, MessagePinsHttpError> {
     let ticket = bearer_ticket(headers).ok_or_else(MessagePinsHttpError::unauthorized)?;
     match resolve_human_session_bearer(state, ticket).await {
         Ok(HumanSessionBearerResolution::Authorized(authorization)) => {
-            Ok(ConsumedRoomHumanTicket::HumanSession(authorization))
+            Ok(RoomHumanHttpAuthority::HumanSession(authorization))
         }
         Ok(HumanSessionBearerResolution::Other) => state
             .tickets
             .consume_message_pins_write(ticket)
             .await
-            .map(ConsumedRoomHumanTicket::Local)
+            .map(RoomHumanHttpAuthority::LocalTicket)
             .map_err(|_| MessagePinsHttpError::unauthorized()),
         Err(HumanSessionBearerError::Invalid) => Err(MessagePinsHttpError::unauthorized()),
         Err(HumanSessionBearerError::Persistence(error)) => Err(error.into()),
@@ -210,10 +210,10 @@ async fn consume_write_ticket(
 
 async fn reauthorize_write(
     state: &AppState,
-    grant: &ConsumedRoomHumanTicket,
+    grant: &RoomHumanHttpAuthority,
 ) -> Result<(), MessagePinsHttpError> {
     match grant {
-        ConsumedRoomHumanTicket::Local(grant) => {
+        RoomHumanHttpAuthority::LocalTicket(grant) => {
             state
                 .store
                 .authorize_local_room_manager(
@@ -223,7 +223,7 @@ async fn reauthorize_write(
                 )
                 .await?;
         }
-        ConsumedRoomHumanTicket::HumanSession(authorization) => {
+        RoomHumanHttpAuthority::HumanSession(authorization) => {
             let current = state
                 .store
                 .revalidate_human_session_authorization(authorization)
@@ -237,7 +237,7 @@ async fn reauthorize_write(
 }
 
 fn require_lobby_request<'a>(
-    grant: &'a ConsumedRoomHumanTicket,
+    grant: &'a RoomHumanHttpAuthority,
     requested_room_id: &str,
     channel_id: &str,
 ) -> Result<&'a str, MessagePinsHttpError> {
@@ -254,10 +254,10 @@ fn require_lobby_request<'a>(
     Ok(grant_room_id(grant))
 }
 
-fn grant_room_id(grant: &ConsumedRoomHumanTicket) -> &str {
+fn grant_room_id(grant: &RoomHumanHttpAuthority) -> &str {
     match grant {
-        ConsumedRoomHumanTicket::Local(grant) => &grant.room_id,
-        ConsumedRoomHumanTicket::HumanSession(authorization) => &authorization.principal().room_id,
+        RoomHumanHttpAuthority::LocalTicket(grant) => &grant.room_id,
+        RoomHumanHttpAuthority::HumanSession(authorization) => &authorization.principal().room_id,
     }
 }
 

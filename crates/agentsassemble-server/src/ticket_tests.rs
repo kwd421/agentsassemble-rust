@@ -252,7 +252,7 @@ async fn attachment_upload_dispatches_once_without_cross_purpose_fallback() {
     assert!(matches!(
         store.consume_attachment_upload(&message.ticket).await,
         Ok(crate::ticket::ConsumedAttachmentUploadTicket::Message(
-            crate::ticket::ConsumedRoomHumanTicket::Local(_)
+            crate::ticket::RoomHumanHttpAuthority::LocalTicket(_)
         ))
     ));
 
@@ -303,7 +303,7 @@ async fn human_session_grants_are_exact_purpose_and_one_use() {
         .unwrap_or_else(|error| panic!("issue read-only search grant: {error}"));
     assert!(matches!(
         store.consume_message_search_read(&search_read.ticket).await,
-        Ok(crate::ticket::ConsumedRoomHumanTicket::HumanSession(_))
+        Ok(crate::ticket::RoomHumanHttpAuthority::HumanSession(_))
     ));
     let wrong_asset = store
         .issue_human_session_bound_appearance_read(

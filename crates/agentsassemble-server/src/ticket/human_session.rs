@@ -4,8 +4,8 @@ use chrono::Utc;
 use tokio::time::Instant;
 
 use super::{
-    ConsumedRoomHumanTicket, ConsumedTicket, IssuedTicket, LocalRoomManagerPurpose,
-    RoomHttpPurpose, StoredTicketGrant, TicketAuthority, TicketError, TicketStore, insert_grant,
+    ConsumedTicket, IssuedTicket, LocalRoomManagerPurpose, RoomHttpPurpose, RoomHumanHttpAuthority,
+    StoredTicketGrant, TicketAuthority, TicketError, TicketStore, insert_grant,
     resolve_local_room_manager_authority, resolve_room_http_authority,
 };
 
@@ -62,7 +62,7 @@ pub enum ConsumedProfileTicket {
 pub(crate) enum ConsumedAttachmentUploadTicket {
     Profile(ConsumedProfileTicket),
     Appearance(LocalRoomManagerAuthority),
-    Message(ConsumedRoomHumanTicket),
+    Message(RoomHumanHttpAuthority),
 }
 
 const PUBLIC_SESSION_GRANT_CAPACITY: usize = 1_792;
@@ -322,7 +322,7 @@ impl TicketStore {
             }
             TicketAuthority::HumanSession(public) => {
                 if public.purpose == HumanSessionGrantPurpose::MessageAttachmentUpload {
-                    ConsumedAttachmentUploadTicket::Message(ConsumedRoomHumanTicket::HumanSession(
+                    ConsumedAttachmentUploadTicket::Message(RoomHumanHttpAuthority::HumanSession(
                         Self::resolve_human_session_authority(
                             public,
                             &HumanSessionGrantPurpose::MessageAttachmentUpload,
@@ -347,7 +347,7 @@ impl TicketStore {
             TicketAuthority::RoomHttp(room)
                 if room.purpose == RoomHttpPurpose::MessageAttachmentUpload =>
             {
-                ConsumedAttachmentUploadTicket::Message(ConsumedRoomHumanTicket::Local(
+                ConsumedAttachmentUploadTicket::Message(RoomHumanHttpAuthority::LocalTicket(
                     resolve_room_http_authority(room, &RoomHttpPurpose::MessageAttachmentUpload)?,
                 ))
             }

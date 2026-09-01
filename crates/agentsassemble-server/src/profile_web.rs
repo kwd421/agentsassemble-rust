@@ -30,7 +30,7 @@ use crate::{
     ingress_trust::single_header,
     ticket::{
         ConsumedAppearanceReadTicket, ConsumedAttachmentUploadTicket,
-        ConsumedMessageAttachmentReadTicket, ConsumedRoomHumanTicket,
+        ConsumedMessageAttachmentReadTicket, RoomHumanHttpAuthority,
     },
 };
 
@@ -214,7 +214,7 @@ async fn store_uploaded_attachment(
             json!(store_profile_attachment(state, profile, payload, content).await?)
         }
         (Some(AttachmentUploadAuthority::Message(message)), None) => json!(match message {
-            ConsumedRoomHumanTicket::Local(grant) => {
+            RoomHumanHttpAuthority::LocalTicket(grant) => {
                 state
                     .store
                     .store_local_message_attachment(
@@ -227,7 +227,7 @@ async fn store_uploaded_attachment(
                     )
                     .await?
             }
-            ConsumedRoomHumanTicket::HumanSession(authorization) => {
+            RoomHumanHttpAuthority::HumanSession(authorization) => {
                 state
                     .store
                     .store_human_session_message_attachment(
@@ -496,7 +496,7 @@ enum ProfileAuthority {
 enum AttachmentUploadAuthority {
     Profile(ProfileAuthority),
     Appearance(agentsassemble_persistence::LocalRoomManagerAuthority),
-    Message(ConsumedRoomHumanTicket),
+    Message(RoomHumanHttpAuthority),
 }
 
 async fn consume_attachment_upload_authority(
@@ -608,7 +608,7 @@ impl ProfileHttpError {
         Self {
             status: StatusCode::UNAUTHORIZED,
             code: "unauthorized",
-            message: "A valid one-use user-profile ticket is required.".to_owned(),
+            message: "Valid user-profile authority is required.".to_owned(),
         }
     }
 

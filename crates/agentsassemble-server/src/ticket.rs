@@ -112,8 +112,8 @@ pub(crate) struct ConsumedHumanInviteManagerTicket {
     pub authority: LocalRoomManagerAuthority,
 }
 
-pub(crate) enum ConsumedRoomHumanTicket {
-    Local(ConsumedRoomHttpTicket),
+pub(crate) enum RoomHumanHttpAuthority {
+    LocalTicket(ConsumedRoomHttpTicket),
     HumanSession(HumanSessionAuthorization),
 }
 
@@ -569,7 +569,7 @@ impl TicketStore {
     pub(crate) async fn consume_message_search_read(
         &self,
         ticket: &str,
-    ) -> Result<ConsumedRoomHumanTicket, TicketError> {
+    ) -> Result<RoomHumanHttpAuthority, TicketError> {
         self.consume_room_human(
             ticket,
             RoomHttpPurpose::MessageSearchRead,
@@ -685,15 +685,14 @@ impl TicketStore {
         ticket: &str,
         room_purpose: RoomHttpPurpose,
         session_purpose: HumanSessionGrantPurpose,
-    ) -> Result<ConsumedRoomHumanTicket, TicketError> {
+    ) -> Result<RoomHumanHttpAuthority, TicketError> {
         let grant = self.consume_grant(ticket).await?;
         match grant.authority {
-            TicketAuthority::RoomHttp(room) => {
-                resolve_room_http_authority(room, &room_purpose).map(ConsumedRoomHumanTicket::Local)
-            }
+            TicketAuthority::RoomHttp(room) => resolve_room_http_authority(room, &room_purpose)
+                .map(RoomHumanHttpAuthority::LocalTicket),
             TicketAuthority::HumanSession(session) => {
                 Self::resolve_human_session_authority(session, &session_purpose, Utc::now())
-                    .map(ConsumedRoomHumanTicket::HumanSession)
+                    .map(RoomHumanHttpAuthority::HumanSession)
             }
             TicketAuthority::Room(_)
             | TicketAuthority::LocalRoomManager(_)

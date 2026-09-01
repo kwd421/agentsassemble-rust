@@ -5204,9 +5204,10 @@ returns 404 at the real TCP boundary. Local desktop profile tickets, pre-join av
 public bound-avatar reads, read-only profile patch and avatar-upload denial, no-store responses,
 and the separate one-use WebSocket exchange remain unchanged.
 
-This removes one HTTP round trip, one ticket-map insertion/consumption, and one exchange-time SQLite
-authorization per remote profile operation. It adds no cache, timer, retry, fallback, compatibility
-path, or new durable state; no latency claim is made beyond the removed operations. All 90 server
+This moves the initial durable session resolution into the target request and removes one HTTP round
+trip plus one ticket-map insertion/consumption per remote profile operation. It adds no cache, timer,
+retry, fallback, compatibility path, or new durable state; no latency claim is made beyond the removed
+operations. All 90 server
 unit tests, the real invite/profile TCP suite, 651 frontend tests, the production CSS-verified build,
 warning-denied server Clippy, formatting, and the architecture/source-growth/policy gates passed.
 
@@ -5221,9 +5222,9 @@ Cross-room requests fail without consuming a reusable session, session replaceme
 old bearer, malformed session-shaped values never fall through to local tickets, and both retired
 exchange routes return 404 at the real TCP boundary. Local desktop read/write tickets, auth-before-body
 for both authority kinds, no-store responses, bounded bodies, and room-global WebSocket ownership are
-unchanged. The change removes one HTTP round trip, ticket-map insertion/consumption, and exchange-time
-SQLite authorization per remote preference operation without adding state, fallback, polling, retry,
-or compatibility handling.
+unchanged. The change moves initial durable session resolution into the target request and removes
+one HTTP round trip plus one ticket-map insertion/consumption per remote preference operation without
+adding state, fallback, polling, retry, or compatibility handling.
 
 All 90 server unit tests, the real remote preference TCP suite, 651 frontend tests, the production
 CSS-verified build, warning-denied server Clippy, formatting, and the architecture/source-growth/policy
@@ -5244,10 +5245,10 @@ tickets remain exact-purpose and one-use. Read-only sessions can list pins but f
 mutation before its malformed body is parsed; both retired public pin-exchange routes
 return 404 at the real TCP boundary.
 
-This removes one HTTP round trip, one ticket-map insertion/consumption, and one
-exchange-time SQLite authorization per remote pin operation. It adds no state, cache,
-timer, polling, retry, fallback, or compatibility path; no latency claim is made beyond
-the removed operations. All 90 server unit tests, the four-test real human-invite TCP
+This moves initial durable session resolution into the target request and removes one
+HTTP round trip plus one ticket-map insertion/consumption per remote pin operation. It
+adds no state, cache, timer, polling, retry, fallback, or compatibility path; no latency
+claim is made beyond the removed operations. All 90 server unit tests, the four-test real human-invite TCP
 suite, the three-test message-pin TCP suite, nine focused and 650 full frontend tests,
 the production CSS-verified build, warning-denied server Clippy, formatting, and the
 architecture/source-growth/policy gates passed.

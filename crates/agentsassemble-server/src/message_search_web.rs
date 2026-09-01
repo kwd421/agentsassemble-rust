@@ -15,7 +15,7 @@ use crate::{
     http_api::{
         BodyDecodeError, PRIVATE_NO_STORE, bearer_ticket, ensure_empty_body, exact_tauri_cors,
     },
-    ticket::ConsumedRoomHumanTicket,
+    ticket::RoomHumanHttpAuthority,
 };
 
 const LOBBY_CHANNEL_ID: &str = "lobby";
@@ -97,7 +97,7 @@ async fn search_messages(
         .await
         .map_err(|error| MessageSearchHttpError::from_body(error, "search"))?;
     let page = match &grant {
-        ConsumedRoomHumanTicket::Local(local) => {
+        RoomHumanHttpAuthority::LocalTicket(local) => {
             state
                 .store
                 .search_local_lobby_messages(
@@ -109,7 +109,7 @@ async fn search_messages(
                 )
                 .await?
         }
-        ConsumedRoomHumanTicket::HumanSession(authorization) => {
+        RoomHumanHttpAuthority::HumanSession(authorization) => {
             state
                 .store
                 .search_human_session_lobby_messages(authorization, &query.q, &query.cursor)
@@ -130,7 +130,7 @@ async fn message_context(
         .await
         .map_err(|error| MessageSearchHttpError::from_body(error, "context"))?;
     let context = match &grant {
-        ConsumedRoomHumanTicket::Local(local) => {
+        RoomHumanHttpAuthority::LocalTicket(local) => {
             state
                 .store
                 .local_lobby_message_context(
@@ -141,7 +141,7 @@ async fn message_context(
                 )
                 .await?
         }
-        ConsumedRoomHumanTicket::HumanSession(authorization) => {
+        RoomHumanHttpAuthority::HumanSession(authorization) => {
             state
                 .store
                 .human_session_lobby_message_context(authorization, &query.event)
@@ -154,7 +154,7 @@ async fn message_context(
 async fn consume_ticket(
     state: &AppState,
     headers: &axum::http::HeaderMap,
-) -> Result<ConsumedRoomHumanTicket, MessageSearchHttpError> {
+) -> Result<RoomHumanHttpAuthority, MessageSearchHttpError> {
     let ticket = bearer_ticket(headers).ok_or_else(MessageSearchHttpError::unauthorized)?;
     state
         .tickets
@@ -172,7 +172,7 @@ fn parse_query<T: for<'de> Deserialize<'de>>(
 }
 
 fn require_search_scope(
-    grant: &ConsumedRoomHumanTicket,
+    grant: &RoomHumanHttpAuthority,
     requested_room_id: &str,
     channel_id: &str,
 ) -> Result<(), MessageSearchHttpError> {
@@ -186,7 +186,7 @@ fn require_search_scope(
 }
 
 fn require_context_scope(
-    grant: &ConsumedRoomHumanTicket,
+    grant: &RoomHumanHttpAuthority,
     requested_room_id: &str,
     channel_id: &str,
 ) -> Result<(), MessageSearchHttpError> {
@@ -205,7 +205,7 @@ fn require_context_scope(
 }
 
 fn require_room(
-    grant: &ConsumedRoomHumanTicket,
+    grant: &RoomHumanHttpAuthority,
     requested_room_id: &str,
 ) -> Result<(), MessageSearchHttpError> {
     let room_id = validate_room_id(requested_room_id)
@@ -216,10 +216,10 @@ fn require_room(
     Ok(())
 }
 
-fn grant_room_id(grant: &ConsumedRoomHumanTicket) -> &str {
+fn grant_room_id(grant: &RoomHumanHttpAuthority) -> &str {
     match grant {
-        ConsumedRoomHumanTicket::Local(local) => &local.room_id,
-        ConsumedRoomHumanTicket::HumanSession(authorization) => &authorization.principal().room_id,
+        RoomHumanHttpAuthority::LocalTicket(local) => &local.room_id,
+        RoomHumanHttpAuthority::HumanSession(authorization) => &authorization.principal().room_id,
     }
 }
 
