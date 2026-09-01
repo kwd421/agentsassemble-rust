@@ -469,8 +469,11 @@ Disposition: `Fix`; medium product/structure impact.
   credential ownership, so DeepSeek retains its keyring operations while Codex,
   Antigravity, and OpenCode expose no login or credential controls. The absent
   catalog-refresh and provider-usage requests, their response types, and their client
-  state are removed. Usage is projected as explicitly unsupported rather than
-  inferred from a missing response.
+  state are removed. Daybreaker found that the dynamic quota presentation and
+  visibility machinery remained without a producer and also influenced roster
+  ownership. Correction `1313aba` removes those types, formatters, visibility rules,
+  components, styles, and tests; the static unsupported notice remains, and roster
+  ownership now follows explicit `owner_id` only.
 - The remaining issue is exact model selection: the first-discovered-model
   substitution and stale OpenCode preference above are unchanged.
 
@@ -783,7 +786,9 @@ Provider discovery and creation already have a Rust registration. Commit `582a02
 extends that existing owner with one bounded `credential_available` fact and removes
 the frontend provider-name inference that produced the false login/credential
 controls in F-07. Commits `edfb7c5` and `c890a9a` remove unsupported refresh and usage
-operations instead of inventing descriptor fields without a server owner. Exact
+operations instead of inventing descriptor fields without a server owner. Correction
+`1313aba` removes the now-producerless dynamic quota contract and decouples roster
+ownership from quota visibility instead of preserving a speculative future surface. Exact
 model selection remains separate and open. Provider-native authentication and model
 rules stay in their modules. Do not build a speculative plugin framework.
 

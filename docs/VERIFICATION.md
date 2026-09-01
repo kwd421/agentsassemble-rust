@@ -5829,8 +5829,9 @@ The copied provider UI advertised operations without a Rust owner. Before this
 correction, opening the Agent Add modal issued one failed
 `POST /api/provider-catalog/refresh`, and opening an eligible Agent detail issued one
 failed `GET /api/provider-usage/{provider}` plus a client state update. Both failures
-were silently absorbed. This was bounded interaction work rather than polling, but it
-still created avoidable requests and hid an authority mismatch.
+were avoidable: catalog refresh discarded its failure, while provider usage collapsed
+the specific HTTP failure into a generic visible unavailable/stale state. This was
+bounded interaction work rather than polling, but it still hid an authority mismatch.
 
 Commit `582a02e` replaces the generic login label/flow claims with one
 registration-owned `credential_available` fact. Only DeepSeek advertises that fact
@@ -5838,8 +5839,14 @@ because only its keyring status/set/delete owner exists. Codex, Antigravity, and
 OpenCode no longer expose login, workspace-cookie, or credential controls. Commit
 `edfb7c5` removes the absent catalog-refresh request and its swallowed modal-open
 failure. Commit `c890a9a` removes the absent provider-usage request, route/type/state,
-and swallowed detail-open failure; the existing presentation truthfully reports
-usage as unsupported. The room WebSocket snapshot remains the catalog owner, and
+and generic detail-open failure state; the existing presentation truthfully reports
+usage as unsupported. Daybreaker's manual source review then found one valid Low:
+the only producer always projected unsupported usage, but dynamic quota types,
+formatters, visibility rules, chips, styles, and tests remained, and quota visibility
+also influenced roster ownership grouping. Correction `1313aba` removes that dead
+machinery and makes ownership grouping depend on explicit `owner_id` instead of quota
+or room-management capability. The static unsupported notice remains. The room
+WebSocket snapshot remains the catalog owner, and
 DeepSeek credential behavior is unchanged. No dummy route, client authority,
 placeholder result, compatibility path, retry, polling, heartbeat, timer, fallback,
 or replacement abstraction was added.
@@ -5882,7 +5889,14 @@ provider process. Computer Use was reset. The exact 50 MiB application, 1.3 MiB 
 identifier-owned Application Support/WebKit data plus cache/preferences, and its two
 executable staging directories were deleted. `cargo clean --release` removed 6,448
 regenerable files and 1.9 GiB while retaining the debug cache needed by the next
-incremental verification. Critical ChatGPT Pro and Daybreaker Blue High review of
-this pushed batch remains pending; no approval is claimed here. Exact preferred-model
+incremental verification. The `1313aba` correction passes all 97 frontend files/617
+tests, including an explicit no-ownership-from-room-management regression, and its
+production build plus CSS, diff, and architecture gates pass. The JavaScript is
+817,737 bytes raw and 243,670 bytes under independently reproduced `gzip -9`; the CSS
+is 148,564 bytes raw and 26,236 bytes under `gzip -9`, with SHA-256
+`2227380ce846d01d0c1f704ffb291a50c6cf4ab3a51d44e7df63ea24011e0989`.
+These reductions are dead-code removal evidence, not a broad latency claim.
+Critical ChatGPT Pro review and Daybreaker re-review of the corrected pushed batch
+remain pending; no final approval is claimed here. Exact preferred-model
 selection and removal of the first-discovered-model substitution remain the next
 F-07 work.

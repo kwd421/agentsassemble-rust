@@ -149,9 +149,14 @@ contracts, findings, or verification journals.
   and a fresh complete `make verify` pass. An isolated local-mode package confirms the
   operation boundary without starting a provider. No dummy route, local authority,
   compatibility path, retry, polling, heartbeat, timer, fallback, or swallowed failure
-  replaces the removed requests. Exact preferred-model selection and removal of the
-  first-discovered-model substitution remain open in F-07. This threshold batch is
-  ready for push and critical-web Pro plus Daybreaker Blue High manual source review.
+  replaces the removed requests. Daybreaker found two valid Lows in the pushed batch:
+  dead dynamic quota/visibility code still influenced roster ownership, and the
+  verification record overstated provider-usage failure handling as silent. Correction
+  `1313aba` removes that dead contract, uses explicit `owner_id` for grouping, and passes
+  all 97 frontend files/617 tests plus production-build, CSS, diff, and architecture
+  gates. This record corrects the failure description. Critical-web Pro and Daybreaker
+  re-review remain pending. Exact preferred-model selection and removal of the
+  first-discovered-model substitution remain open in F-07.
 - Build-artifact lifecycle correction is complete through `537c1b9`. macOS uses
   packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the
