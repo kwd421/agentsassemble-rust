@@ -8,8 +8,8 @@ const expectedCss = new Map([
     "f10dd6c3e344f04c7895e85be39cf1eb173ff9e597b8d9ff38f40bcd8cae3b4c",
   ],
   [
-    "index-Bx86Ww4p.css",
-    "bb75c087c0a957a647f52a1803f9f3b87c1cffb11c93d81dd2d41b3b2d7f4930",
+    "index-C6TrTk45.css",
+    "401253dff5d003502d0d03d8fbc0663ea40d3eaef6652ecf1a8498727f855785",
   ],
   [
     "useRoomMessageSearch-BBKeNGgP.css",

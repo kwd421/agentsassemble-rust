@@ -463,8 +463,6 @@ export default function AppView({ controller }: { controller: AppController }) {
               participantProfiles={canonicalRoom.participantProfiles}
               searchLabel={activeRoom.label}
               loadCanonicalHistory={loadCanonicalRoomHistory}
-              providerRequests={canonicalRoom.providerRequests}
-              resolveProviderRequest={canonicalRoom.sendProviderRequestResolution}
               sharedMessageSearch={roomMessageSearch}
               messageSearchScope={messageSearchScope}
               onMessageSearchScopeChange={setMessageSearchScope}

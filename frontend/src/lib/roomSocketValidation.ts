@@ -184,13 +184,6 @@ export function commandAckResultIsValid(
       event.participant_id === expectedParticipantId
     );
   }
-  if (action === "provider.request.resolve") {
-    return Boolean(
-      result.status === "resolving" &&
-      result.provider_request_id === payload.provider_request_id &&
-      event?.type === "provider_request_resolution_requested"
-    );
-  }
   if (action === "agent.create" || action === "agent.configure") {
     return isRecord(result.agent_session);
   }

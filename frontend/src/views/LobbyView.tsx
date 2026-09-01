@@ -31,11 +31,6 @@ import {
   LobbyTypingRow,
 } from "./lobby/LobbyEventRows";
 import { useLobbyHistory } from "./lobby/useLobbyHistory";
-import type {
-  PendingProviderRequest,
-  ProviderRequestResolution,
-} from "../lib/providerRequestModel";
-import ProviderRequestCard from "./components/ProviderRequestCard";
 import { projectRoomEventsToTimeline } from "../lib/roomEventProjection";
 import { useRoomSocket } from "../RoomSocketContext";
 import {
@@ -86,8 +81,6 @@ export default function LobbyView({
   participantProfiles = {},
   searchLabel,
   loadCanonicalHistory,
-  providerRequests = [],
-  resolveProviderRequest,
   sharedMessageSearch,
   messageSearchScope = "channel",
   onMessageSearchScopeChange,
@@ -130,11 +123,6 @@ export default function LobbyView({
     hasMoreBefore: boolean;
     events?: LobbyEvent[];
   }>;
-  providerRequests?: PendingProviderRequest[];
-  resolveProviderRequest?: (
-    providerRequestId: string,
-    resolution: ProviderRequestResolution
-  ) => Promise<void>;
   sharedMessageSearch?: RoomMessageSearchController;
   messageSearchScope?: ChannelSearchScope;
   onMessageSearchScopeChange?: (scope: ChannelSearchScope) => void;
@@ -728,17 +716,6 @@ export default function LobbyView({
             <button type="button" onClick={scrollToLatest} aria-label="최신 메시지로 이동">
               최근으로 이동하기
             </button>
-          </div>
-        )}
-        {resolveProviderRequest && providerRequests.length > 0 && (
-          <div className="dc-provider-request-stack">
-            {providerRequests.map((request) => (
-              <ProviderRequestCard
-                key={request.provider_request_id}
-                request={request}
-                onResolve={resolveProviderRequest}
-              />
-            ))}
           </div>
         )}
         <LobbyComposer

@@ -42,12 +42,6 @@ import {
 } from "./lib/canonicalRoomProjection";
 import type { RoomStream } from "./types/generated/RoomStream";
 import type { ServerProductSurface } from "./types/generated/ServerProductSurface";
-import {
-  applyProviderRequestEvents,
-  normalizePendingProviderRequests,
-  type PendingProviderRequest,
-  type ProviderRequestResolution,
-} from "./lib/providerRequestModel";
 import { useAcceptedRoomProjection } from "./lib/useAcceptedRoomProjection";
 
 export type { CanonicalRoomHistoryState } from "./lib/canonicalRoomProjection";
@@ -121,9 +115,6 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
   >({});
   const [providerCatalogByRoom, setProviderCatalogByRoom] = useState<
     Record<string, ProviderCatalogSnapshot>
-  >({});
-  const [providerRequestsByRoom, setProviderRequestsByRoom] = useState<
-    Record<string, PendingProviderRequest[]>
   >({});
   const [progressByRoom, setProgressByRoom] = useState<
     Record<string, AgentSessionProgress | null>
@@ -247,12 +238,6 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
       }
     }
 
-    if (incoming.some((event) => event.type.startsWith("provider_request_"))) {
-      setProviderRequestsByRoom((previous) => ({
-        ...previous,
-        [targetRoomId]: applyProviderRequestEvents(previous[targetRoomId] || [], incoming),
-      }));
-    }
   }, []);
 
   const projectionScopeKey = canonicalRoomProjectionScopeKey(
@@ -384,10 +369,6 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
           projectParticipantState: false,
           projectSessionState: false,
         });
-        setProviderRequestsByRoom((previous) => ({
-          ...previous,
-          [roomId]: normalizePendingProviderRequests(snapshot.provider_requests || []),
-        }));
         if (!projectionAlreadyAccepted) {
           setProgressByRoom((previous) => ({ ...previous, [roomId]: null }));
           setPluginEnvelopesByRoom((previous) => ({ ...previous, [roomId]: [] }));
@@ -704,22 +685,6 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     [applyEvents, requireCurrentProjectionSocket, roomId]
   );
 
-  const sendProviderRequestResolution = useCallback(
-    async (providerRequestId: string, resolution: ProviderRequestResolution) => {
-      const operationSocket = requireCurrentProjectionSocket();
-      const ack = await operationSocket.command("provider.request.resolve", {
-        provider_request_id: providerRequestId,
-        ...resolution,
-      });
-      requireCurrentProjectionSocket();
-      const event = ack.result?.event as RoomEvent | undefined;
-      if (event?.type === "provider_request_resolution_requested") {
-        applyEvents(roomId, [event]);
-      }
-    },
-    [applyEvents, requireCurrentProjectionSocket, roomId]
-  );
-
   const events = projectionIsCurrent ? eventsByRoom[roomId] || [] : [];
   const participants = projectionIsCurrent ? participantsByRoom[roomId] || [] : [];
   const agentSessions = projectionIsCurrent ? sessionsByRoom[roomId] || [] : [];
@@ -776,7 +741,6 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     providerCatalog: projectionIsCurrent
       ? providerCatalogByRoom[roomId] || EMPTY_PROVIDER_CATALOG
       : EMPTY_PROVIDER_CATALOG,
-    providerRequests: projectionIsCurrent ? providerRequestsByRoom[roomId] || [] : [],
     agentSessionProgress: projectionIsCurrent ? progressByRoom[roomId] || null : null,
     pluginEnvelopes: projectionIsCurrent ? pluginEnvelopesByRoom[roomId] || [] : [],
     history: projectionIsCurrent
@@ -788,6 +752,5 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     sendParticipantMute,
     sendParticipantRole,
     sendRoomSettingsUpdate,
-    sendProviderRequestResolution,
   };
 }
