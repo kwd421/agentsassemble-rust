@@ -4,6 +4,7 @@ use agentsassemble_domain::ProviderCatalog;
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_provider::ProviderCatalogService;
 use agentsassemble_server::{AppState, TicketStore, serve};
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use futures_util::{SinkExt, StreamExt};
 use reqwest::Client;
 use serde_json::{Value, json};
@@ -405,7 +406,7 @@ async fn binary_frame_is_rejected_and_closed() {
 }
 
 #[tokio::test]
-async fn retired_authenticated_envelope_cannot_create_a_durable_mutation() {
+async fn structurally_valid_retired_authenticated_envelope_has_no_compatibility_decoder() {
     let directory =
         tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
     let database_url = format!(
@@ -420,16 +421,17 @@ async fn retired_authenticated_envelope_cannot_create_a_durable_mutation() {
     let mut socket = connect(&server.base_url, &server.state, "general").await;
     subscribe(&mut socket, 0).await;
     assert_eq!(receive_json(&mut socket).await["op"], "snapshot");
+    let retired_inner_frame = json!({
+        "op": "command",
+        "request_id": "retired-envelope",
+        "action": "message.send",
+        "payload": {"content": "attacker content"}
+    });
     socket
         .send_json(&json!({
             "op": "authenticated",
             "counter": 1,
-            "payload": {
-                "op": "command",
-                "request_id": "retired-envelope",
-                "action": "message.send",
-                "payload": {"content": "attacker content"}
-            },
+            "payload": STANDARD.encode(retired_inner_frame.to_string()),
             "proof": "0".repeat(64),
         }))
         .await;
