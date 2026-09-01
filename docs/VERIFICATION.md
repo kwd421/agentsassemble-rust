@@ -5508,3 +5508,37 @@ tests, desktop build/Clippy/25 tests, all Rust workspace and TCP boundary tests,
 workspace warning-denied Clippy. Critical ChatGPT Pro and Daybreaker Blue High each
 found no remaining actionable issue and approved exact `778d761..f74af57`, cumulative
 F-05 `8903445..f74af57`, and HEAD `f74af57` at `C0/H0/M0/L0`.
+
+### F-05 absent external-admission exposure, second batch: 2026-09-01
+
+The reachable original exposes three distinct flows whose complete Rust owners do not
+yet exist: Room Connector admission for an already-running external AI session,
+operator-pairing issuance, and an admitted human's AgentBridge companion packet. The
+copied frontend instead sent the first two through the obsolete moderator/host-token
+client and sent the companion to an absent HTTP route. Widening the implemented human
+invite owner or adding placeholder routes would merge distinct principals and failure
+contracts.
+
+Commit `762ba40` removes the Room Connector card, installation instructions, and its
+controller state/callbacks. Commit `11e167b` removes the operator-pairing issuer UI,
+state, callback, response type, and client call while preserving the separate incoming
+pairing redemption state machine. Commit `7159c2d` removes the guest companion card,
+packet state, client call, and its now-unreferenced duplicate clipboard helper. Human
+invite creation/revocation, managed public-ingress start/stop, room membership, and
+ordinary member/Agent Session presentation remain unchanged. Dormant AI-friend source
+and public Google controls are not claimed complete.
+
+The prior reviewed candidate emitted 853.34 kB JavaScript minified/256.30 kB gzip and
+169.23/29.63 kB CSS. The second candidate emits 839.15/251.87 kB JavaScript and
+169.13/29.62 kB CSS, a measured 14.19 kB minified and 4.43 kB gzip JavaScript reduction.
+This batch removes user-triggered failing requests and unused React state; it makes no
+steady-state CPU, memory, or latency claim because these controls did not poll. The CSS
+gate pins the changed single production artifact and exact SHA-256 after the pairing
+panel styles leave the emitted cascade.
+
+Focused controller/modal verification passed 22 tests after Room Connector and pairing
+removal; focused room-connection verification passed 18 tests after companion removal.
+A fresh complete `make verify` passes architecture/source-growth/policy/diff gates,
+Rust format/check, the exact-CSS production build, all 103 frontend files and 643 tests,
+desktop build/warning-denied Clippy/25 tests, the complete Rust workspace including real
+TCP boundary tests, and workspace warning-denied Clippy. Manual batch review is pending.

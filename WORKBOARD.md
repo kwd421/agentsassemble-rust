@@ -45,8 +45,11 @@ contracts, findings, or verification journals.
   a fresh complete `make verify` passing. Critical ChatGPT Pro and Daybreaker Blue
   High each approved exact `778d761..f74af57`, cumulative `8903445..f74af57`, and
   HEAD `f74af57` at `C0/H0/M0/L0`.
-  External-AI/AI-friend invite,
-  operator-pairing, companion, and public Google controls plus evidence-backed
+  The next three independent commits, `762ba40`, `11e167b`, and `7159c2d`, remove
+  the copied Room Connector invite, operator-pairing issuer, and guest companion
+  admission controls without changing human invitation, incoming pairing redemption,
+  or room membership. A fresh complete `make verify` passes; batch review is pending.
+  The dormant AI-friend invite branch, public Google controls, and evidence-backed
   dormant-source cleanup remain in F-05.
 - Sequence/exit owner: [`docs/PRODUCT_REIMPLEMENTATION_PLAN.md`](docs/PRODUCT_REIMPLEMENTATION_PLAN.md)
 - Finding/evidence owner: [`docs/architecture/REPOSITORY_AUDIT_2026-09-01.md`](docs/architecture/REPOSITORY_AUDIT_2026-09-01.md)

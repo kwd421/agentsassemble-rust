@@ -280,6 +280,18 @@ repository gates pass. Critical ChatGPT Pro and Daybreaker Blue High each approv
 exact `778d761..f74af57`, cumulative F-05 `8903445..f74af57`, and HEAD `f74af57`
 at `C0/H0/M0/L0` with no remaining actionable finding.
 
+The second candidate batch keeps these future authority boundaries unavailable instead
+of borrowing human admission. `762ba40` removes the copied Room Connector card and its
+controller projection; `11e167b` removes only operator-pairing issuance while preserving
+incoming pairing redemption; and `7159c2d` removes the admitted-human companion card,
+packet state, obsolete client call, and its now-unreferenced clipboard helper. The
+current human invite and managed public-ingress owners are unchanged. The production
+bundle is 839.15 kB JavaScript minified/251.87 kB gzip and 169.13/29.62 kB CSS after the
+three removals; a fresh complete `make verify` passes 103 frontend files/643 tests,
+desktop Clippy/25 tests, all Rust and real TCP boundary tests, and workspace
+warning-denied Clippy. Dormant AI-friend invitation, public Google controls, and
+evidence-backed dormant-source cleanup remain; manual batch review is pending.
+
 ### F-06 — Agent Session identity SSoT is reversed in frontend projection
 
 Disposition: `Fix`; high product/medium ownership impact.
