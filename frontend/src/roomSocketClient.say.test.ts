@@ -164,12 +164,7 @@ describe("room socket message attachments", () => {
       const pending = handle.say(operation.request);
       const wireIndex = index + 2;
       await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(wireIndex + 1));
-      const command = await sentClientFrame(
-        sockets[0],
-        frames,
-        wireIndex,
-        wireIndex
-      );
+      const command = await sentClientFrame(sockets[0], frames, wireIndex);
       expect(command.payload).toEqual(operation.payload);
       await receiveServerFrame(sockets[0], frames, {
         op: "ack",
