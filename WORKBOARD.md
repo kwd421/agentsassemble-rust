@@ -18,8 +18,8 @@ Purpose: route the asynchronous Rust reimplementation without duplicating its co
   unsupported commands now fail before durable admission. The packaged Antigravity flow verifies
   that rejection, zero durable interrupt mutation, unchanged live process until an independent
   provider timeout, and pending-input completion through the same provider conversation after
-  explicit resume. Verify supported-provider busy-turn and restart recovery and close both external
-  reviews before advancing.
+  explicit resume. Both manual external reviews are closed at C0/H0/M0/L0. Verify
+  supported-provider busy-turn and restart recovery before advancing.
 - Review cadence: keep every independent change below 1,000 changed lines. Push and cross-review when the unreviewed aggregate first reaches at least 1,000 changed lines; feature count alone does not trigger review, but a three-feature batch must not grow beyond roughly 2,000 changed lines.
 - Source structure: LOC only signals possible ownership drift. Review at 500 lines; treat 800 lines as a strong split candidate; reject over 1,000 by default, with concrete generated-code, fixture, or declarative-data exceptions considered only when they exist. Split at differing state/invariant, domain, authority, lifecycle, or change-reason owners regardless of size; reconsider a split if it increases state transfer, public interfaces, inter-module dependency count, or obscuring glue.
 - Required order: preserve the approved pause/resume and custody flow; freeze the explicit
