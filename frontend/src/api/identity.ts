@@ -1,6 +1,4 @@
 import {
-  deleteJsonWithIdentity,
-  fetchJsonWithIdentity,
   postJson,
   postJsonWithIdentity,
 } from "./http";
@@ -8,89 +6,6 @@ import {
   parseGuestRecoveryRedeemResponse,
   type GuestRecoveryRedeemResponse,
 } from "../lib/roomAdmissionContract";
-import type { UserProfileIdentity } from "./userProfile";
-
-export type PublicAccount = {
-  account_id: string;
-  provider: "google" | string;
-  display_name: string;
-  email: string;
-  avatar_image_url: string;
-};
-
-export type AccountStatusResponse = {
-  account: PublicAccount | null;
-  google: {
-    enabled: boolean;
-    client_id: string;
-    unavailable_reason: string;
-  };
-};
-
-export type GoogleAccountChallengeResponse = {
-  status: "ready";
-  client_id: string;
-  nonce: string;
-};
-
-export type GoogleAccountConnectResponse = {
-  status: "connected";
-  identity_switched: boolean;
-  account: PublicAccount;
-  user: {
-    user_id: string;
-    participant_id: string;
-    display_name: string;
-    avatar_image_url: string;
-  };
-};
-
-export function fetchAccountStatus(
-  identity: UserProfileIdentity = {}
-): Promise<AccountStatusResponse> {
-  return fetchJsonWithIdentity<AccountStatusResponse>("/api/account", identity);
-}
-
-export function connectGoogleAccount({
-  credential,
-  nonce,
-  discardGuestOnAccountSwitch = false,
-  identity = {},
-}: {
-  credential: string;
-  nonce: string;
-  discardGuestOnAccountSwitch?: boolean;
-  identity?: UserProfileIdentity;
-}): Promise<GoogleAccountConnectResponse> {
-  return postJsonWithIdentity<GoogleAccountConnectResponse>(
-    "/api/account/google",
-    {
-      credential,
-      nonce,
-      discard_guest_on_account_switch: discardGuestOnAccountSwitch,
-    },
-    identity
-  );
-}
-
-export function startGoogleAccountLogin(
-  identity: UserProfileIdentity = {}
-): Promise<GoogleAccountChallengeResponse> {
-  return postJsonWithIdentity<GoogleAccountChallengeResponse>(
-    "/api/account/google/challenge",
-    {},
-    identity
-  );
-}
-
-export function disconnectGoogleAccount(
-  identity: UserProfileIdentity = {}
-): Promise<{ status: "disconnected" }> {
-  return deleteJsonWithIdentity<{ status: "disconnected" }>(
-    "/api/account/google",
-    identity
-  );
-}
 
 export type GuestRecoveryCodeResponse = {
   status: "issued";

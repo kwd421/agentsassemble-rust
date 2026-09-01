@@ -110,6 +110,7 @@ describe("UserPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /Guest Before/ }));
     fireEvent.click(screen.getByRole("button", { name: "프로필 편집" }));
     fireEvent.click(screen.getByRole("button", { name: /계정/ }));
+    expect(screen.queryByLabelText("공개 계정 연결")).toBeNull();
     fireEvent.change(screen.getByLabelText("표시 이름"), {
       target: { value: "Guest After" },
     });

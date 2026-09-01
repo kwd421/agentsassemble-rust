@@ -3,7 +3,6 @@ import { Camera, Headphones, Mic, MicOff, Palette, UserCircle } from "lucide-rea
 import type { UserProfile, UserProfileIdentity } from "../../api";
 import { resolveAttachmentReference } from "../../lib/attachmentReference";
 import GuestRecoverySettings from "./GuestRecoverySettings";
-import GoogleAccountSettings from "./GoogleAccountSettings";
 import "./UserSettingsPanel.css";
 
 export type UserSettingsSection = "account" | "profile" | "voice" | "recovery";
@@ -113,7 +112,6 @@ export default function UserSettingsPanel({
                   </select>
                 </label>
               </div>
-              <GoogleAccountSettings identity={profileIdentity || {}} />
             </>
           )}
 
