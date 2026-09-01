@@ -207,7 +207,7 @@ function buildMobileMembers({
         providerKind: member.provider_kind,
         app: member.participant_type !== "human",
         ownerId:
-          role === "human"
+          member.participant_type === "human"
             ? member.participant_id
             : String(member.owner_id || "").trim() || undefined,
         ownerDisplayName:

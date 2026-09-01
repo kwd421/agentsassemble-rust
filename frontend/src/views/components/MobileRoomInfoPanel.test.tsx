@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LiveAgent, RoomAgentSession, RoomMember } from "../../api";
 import { DEFAULT_ROOM_APPEARANCE } from "../../lib/roomAppearance";
 import MobileRoomInfoPanel from "./MobileRoomInfoPanel";
@@ -48,6 +48,8 @@ const STALE_MEMBER: RoomMember = {
   created_at: "",
   updated_at: "",
 };
+
+afterEach(cleanup);
 
 describe("MobileRoomInfoPanel", () => {
   it("does not expose Agent Session controls without the room capability", () => {
@@ -118,5 +120,52 @@ describe("MobileRoomInfoPanel", () => {
     expect(unassignedGroup).not.toBeNull();
     expect(remoteGroup?.textContent).not.toContain("Agent One");
     expect(unassignedGroup?.textContent).toContain("Agent One");
+  });
+
+  it("keeps participant kind independent from its mutable room role", () => {
+    const remoteOwner: RoomMember = {
+      meeting_id: "room-1",
+      participant_id: "remote-owner",
+      display_name: "Remote Owner",
+      role: "human",
+      participant_type: "human",
+      provider_kind: "",
+      connection_kind: "browser",
+      status: "joined",
+      source: "",
+      created_at: "",
+      updated_at: "",
+    };
+    const crossRoleAgent: RoomMember = {
+      meeting_id: "room-1",
+      participant_id: "agent-cross-role",
+      display_name: "Cross Role Agent",
+      role: "human",
+      participant_type: "local",
+      provider_kind: "codex",
+      connection_kind: "agent_session",
+      owner_id: "remote-owner",
+      status: "joined",
+      source: "agent_session",
+      created_at: "",
+      updated_at: "",
+    };
+
+    render(
+      <MobileRoomInfoPanel
+        room={{ id: "room-1", label: "Room One", meetingId: "room-1", topic: "" }}
+        appearance={DEFAULT_ROOM_APPEARANCE}
+        channelLabel="general"
+        agents={[]}
+        members={[remoteOwner, crossRoleAgent]}
+        onClose={vi.fn()}
+      />
+    );
+
+    const remoteGroup = screen.getByText("Remote Owner").closest(
+      ".dc-mobile-info-member-section"
+    );
+    expect(remoteGroup).not.toBeNull();
+    expect(remoteGroup?.textContent).toContain("Cross Role Agent");
   });
 });
