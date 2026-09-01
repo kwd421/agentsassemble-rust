@@ -5070,7 +5070,24 @@ surface for every result. The profile-image branch is covered by a canonical-par
 this isolated room's current profiles intentionally use initial fallbacks where no SSoT image is
 set.
 
+A follow-up visual pass found that the member panel's root border still crossed the 48-pixel room
+header, making the single header look like two adjacent menu bars. The copied CSS now keeps the
+member root borderless and assigns the same one-pixel separator only to the tabs and their active
+tabpanel below the header. This changes no width, breakpoint, state, event, or input owner. The CSS
+integrity gate was updated to the one expected production chunk and passed. In the rebuilt isolated
+package, the whole accessibility tree contained exactly one room search with the member panel both
+open and closed; the channel title, alert, pin, member toggle, and search stayed on one continuous
+header, while the vertical separator began below it and disappeared with the panel body.
+
+The exact app and owned sidecar were quit normally; its isolated Application Support directory,
+current package, two obsolete package copies, and generated DMG were then removed, reclaiming about
+217 MiB. No unrelated application, provider, or user data was touched.
+
 The first packaged attempt failed strict response parsing because the frontend and desktop had been
 rebuilt while the bundled server sidecar still emitted the previous result contract. No fallback or
 lenient parser was added. Rebuilding the release server sidecar and repackaging made the same query
-pass, confirming the build-input mismatch as the root cause.
+pass, confirming the build-input mismatch as the root cause. The repository already has one
+sidecar-preparation owner in `desktop/scripts/prepare_sidecar.mjs`; subsequent ordinary packages use
+`npm --prefix desktop run build`, and isolated-identifier packages run that same release-sidecar
+preparation immediately before Tauri's configured build. No second build path or compatibility
+check was added.

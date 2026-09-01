@@ -2,7 +2,6 @@
 /* Member list. */
 .dc-members {
   width: 300px;
-  border-left: 1px solid var(--color-panel-separator);
   background: var(--color-sidebar);
 }
 
@@ -15,7 +14,12 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
   padding: 8px;
+  border-left: 1px solid var(--color-panel-separator);
   border-bottom: 1px solid var(--color-panel-separator);
+}
+
+.dc-members > [role="tabpanel"] {
+  border-left: 1px solid var(--color-panel-separator);
 }
 
 .dc-right-panel-tabs button {
