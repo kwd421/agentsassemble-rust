@@ -73,24 +73,6 @@ export interface LobbyPostResponse {
   events: LobbyEvent[];
 }
 
-export interface SideChatEvent {
-  id: string;
-  kind: string;
-  name: string;
-  message: string;
-  side: string;
-  created_at: string;
-  flow_meeting_id?: string;
-  channel?: string;
-  audience?: string;
-  official_record?: boolean;
-}
-
-export interface SideChatPostResponse {
-  event?: SideChatEvent;
-  events: SideChatEvent[];
-}
-
 export type RoomEvent = GeneratedRoomEvent;
 
 export function uploadLobbyAttachment(
@@ -234,32 +216,6 @@ export function leaveVoiceChannel(params: {
   return result.then((payload) => normalizeVoiceParticipants(payload.participants));
 }
 
-export function fetchSideChat(meetingId = "") {
-  return fetchJson<{ events: SideChatEvent[] }>(`/api/side-chat${queryString({ meeting_id: meetingId })}`);
-}
-
-export function postSideChatMessage({
-  name,
-  side = "mine",
-  kind = "message",
-  message,
-  meetingId = "",
-}: {
-  name: string;
-  side?: string;
-  kind?: "message";
-  message: string;
-  meetingId?: string;
-}) {
-  return postJson<SideChatPostResponse>("/api/side-chat", {
-    name,
-    side,
-    kind,
-    message,
-    flow_meeting_id: meetingId,
-  });
-}
-
 export function lobbyEventId(event: LobbyEvent): string {
   return String(
     event.id ||
@@ -345,36 +301,6 @@ export function mergeLobbyEventsByCreatedAt(
     .sort((left, right) => left.created_at.localeCompare(right.created_at));
 }
 
-export function sideChatEventId(event: SideChatEvent): string {
-  return String(
-    event.id ||
-      [event.name, event.kind, event.created_at, event.message]
-        .filter(Boolean)
-        .join(":")
-  ).trim();
-}
-
-export function mergeSideChatEvents(
-  existing: SideChatEvent[],
-  incoming: SideChatEvent[]
-): SideChatEvent[] {
-  const byId = new Map<string, SideChatEvent>();
-  const order: string[] = [];
-  for (const event of existing) {
-    const eventId = sideChatEventId(event);
-    if (!eventId) continue;
-    byId.set(eventId, event);
-    order.push(eventId);
-  }
-  for (const event of incoming) {
-    const eventId = sideChatEventId(event);
-    if (!eventId) continue;
-    if (!byId.has(eventId)) order.push(eventId);
-    byId.set(eventId, event);
-  }
-  return order.map((eventId) => byId.get(eventId)).filter(Boolean) as SideChatEvent[];
-}
-
 export function parseLobbyStreamData(raw: string): LobbyEvent[] {
   try {
     const data = JSON.parse(raw) as { stream?: string; events?: unknown[] } | LobbyEvent | null;
@@ -394,25 +320,4 @@ function isLobbyEvent(value: unknown): value is LobbyEvent {
   const event = value as Partial<LobbyEvent> & { channel?: unknown };
   if (typeof event.channel === "string" && event.channel !== "lobby") return false;
   return typeof event.id === "string" && typeof event.name === "string";
-}
-
-export function parseSideChatStreamData(raw: string): SideChatEvent[] {
-  try {
-    const data = JSON.parse(raw) as { stream?: string; events?: unknown[] } | SideChatEvent | null;
-    if (!data || typeof data !== "object") return [];
-    if ("stream" in data && data.stream && data.stream !== "side_chat") return [];
-    if ("events" in data && Array.isArray(data.events)) {
-      return data.events.filter(isSideChatEvent) as SideChatEvent[];
-    }
-    return isSideChatEvent(data) ? [data] : [];
-  } catch {
-    return [];
-  }
-}
-
-function isSideChatEvent(value: unknown): value is SideChatEvent {
-  if (!value || typeof value !== "object") return false;
-  const event = value as Partial<SideChatEvent>;
-  if (typeof event.channel === "string" && event.channel !== "side_chat") return false;
-  return typeof event.id === "string" && typeof event.message === "string";
 }
