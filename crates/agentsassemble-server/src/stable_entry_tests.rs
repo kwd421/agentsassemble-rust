@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use super::{StableEntry, StableEntryConfig, StableEntryFile};
 #[cfg(unix)]
-use crate::{AppState, HostSecret, TicketStore, serve};
+use crate::{AppState, TicketStore, serve};
 use crate::{
     public_ingress::{ManagedIngressConfig, PublicIngress, PublicIngressControlError},
     public_ingress_runtime::run_generation,
@@ -244,8 +244,6 @@ async fn serve_preflight_failure_clears_claimed_stable_entry() {
     let state = AppState::local(
         store,
         TicketStore::new(Duration::from_secs(30), 8),
-        HostSecret::new("stable-cleanup-test-host-token-000001")
-            .unwrap_or_else(|error| panic!("build cleanup host secret: {error}")),
         ProviderCatalogService::fixed(ProviderCatalog::default()),
     )
     .await

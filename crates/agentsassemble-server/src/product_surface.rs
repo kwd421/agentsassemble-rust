@@ -106,7 +106,11 @@ mod tests {
         );
         assert_eq!(
             registered_route_exposure(HttpMethod::Post, "/api/ws-ticket"),
-            Some(RouteExposure::Private)
+            None
+        );
+        assert_eq!(
+            registered_route_exposure(HttpMethod::Get, "/api/host-challenge"),
+            None
         );
         assert_eq!(
             registered_route_exposure(HttpMethod::Post, "/api/room-invite/join"),

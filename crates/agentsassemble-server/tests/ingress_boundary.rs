@@ -7,7 +7,7 @@ use std::{
 use agentsassemble_domain::ProviderCatalog;
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_provider::ProviderCatalogService;
-use agentsassemble_server::{AppState, HostSecret, TicketStore, serve};
+use agentsassemble_server::{AppState, TicketStore, serve};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use ring::signature::{ED25519, UnparsedPublicKey};
 use serde_json::{Value, json};
@@ -18,7 +18,6 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-const HOST_TOKEN: &str = "ingress-boundary-host-token-000000001";
 const PUBLIC_ORIGIN: &str = "https://public.example.test";
 const PUBLIC_AUTHORITY: &str = "public.example.test";
 const PROXY_SECRET: &str = "manual-ingress-proxy-secret-000000001";
@@ -468,8 +467,6 @@ async fn start_on_with_manual(
     let mut state = AppState::local(
         store,
         TicketStore::new(Duration::from_secs(30), 8),
-        HostSecret::new(HOST_TOKEN)
-            .unwrap_or_else(|error| panic!("validate ingress host secret: {error}")),
         ProviderCatalogService::fixed(ProviderCatalog::default()),
     )
     .await

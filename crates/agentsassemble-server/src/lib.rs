@@ -62,7 +62,6 @@ mod central_host_identity;
 mod central_registration_web;
 mod connection_admission;
 mod event_publication;
-mod host_ticket;
 mod http_api;
 mod http_transport;
 mod human_admission_runtime;
@@ -123,7 +122,6 @@ mod web;
 
 pub use app_state::{AppState, AppStateBuildError};
 pub use central_host_identity::{CentralHostIdentity, HostIdentityError};
-pub use host_ticket::{HostSecret, InvalidHostSecret};
 pub use human_invite_credentials::{
     HumanInviteCredentialAuthority, HumanInviteCredentialDraft, HumanInviteCredentialError,
     IssuedHumanInviteCredentials, VerifiedHumanInviteClaims, VerifiedHumanInviteCredential,

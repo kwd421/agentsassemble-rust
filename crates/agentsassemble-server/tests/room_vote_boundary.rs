@@ -14,9 +14,7 @@ mod support {
 }
 
 use support::{
-    human_invite::{
-        HOST_TOKEN, canonical_session_token, fixture, join, open_session_socket, start,
-    },
+    human_invite::{canonical_session_token, fixture, join, open_session_socket, start},
     local_socket::connect,
 };
 
@@ -25,8 +23,14 @@ async fn authenticated_tcp_summary_is_strict_private_read_only_and_revocable() {
     let (store, credentials) = fixture(InviteScope::ReadOnly).await;
     let (vote_id, durable_last_seq) = seed_vote(&store).await;
     let server = start(store.clone()).await;
-    let local_tallies =
-        assert_local_tcp_summary(&server.base_url, &store, &vote_id, durable_last_seq).await;
+    let local_tallies = assert_local_tcp_summary(
+        &server.base_url,
+        server.state(),
+        &store,
+        &vote_id,
+        durable_last_seq,
+    )
+    .await;
 
     let client = Client::new();
     let admission = join(
@@ -134,11 +138,12 @@ async fn seed_vote(store: &agentsassemble_persistence::SqliteStore) -> (String, 
 
 async fn assert_local_tcp_summary(
     base_url: &str,
+    state: &agentsassemble_server::AppState,
     store: &agentsassemble_persistence::SqliteStore,
     vote_id: &str,
     durable_last_seq: i64,
 ) -> serde_json::Value {
-    let mut local = connect(base_url, HOST_TOKEN, "general").await;
+    let mut local = connect(base_url, state, "general").await;
     assert_eq!(local.subscribe(0).await["op"], "subscribed");
     assert_eq!(local.receive_json().await["op"], "snapshot");
     local

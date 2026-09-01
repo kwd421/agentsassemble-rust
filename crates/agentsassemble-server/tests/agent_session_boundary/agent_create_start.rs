@@ -14,7 +14,7 @@ async fn create_with_start_is_one_command_with_original_nested_result_and_replay
         .unwrap_or_else(|error| panic!("open create/start store: {error}"));
     bootstrap(&store).await;
     let server = start(store, agent_catalog(directory.path())).await;
-    let mut socket = connect(&server.base_url).await;
+    let mut socket = connect(&server.base_url, &server.state).await;
     subscribe(&mut socket).await;
     let _snapshot = receive_json(&mut socket).await;
     let payload = json!({
@@ -80,10 +80,10 @@ async fn shutdown_checkpoints_gone_after_aborting_initialization() {
     );
     let catalog = agent_catalog_with_fixture(directory.path(), fixture.as_bytes());
     let server = start(store, catalog.clone()).await;
-    let mut socket = connect(&server.base_url).await;
+    let mut socket = connect(&server.base_url, &server.state).await;
     subscribe(&mut socket).await;
     let _snapshot = receive_json(&mut socket).await;
-    let mut observer = connect(&server.base_url).await;
+    let mut observer = connect(&server.base_url, &server.state).await;
     subscribe(&mut observer).await;
     let _observer_snapshot = receive_json(&mut observer).await;
     let create_payload = json!({
@@ -108,7 +108,7 @@ async fn shutdown_checkpoints_gone_after_aborting_initialization() {
         .unwrap_or_else(|| panic!("creation event has no Agent Session identity"))
         .to_owned();
 
-    let mut snapshot_viewer = connect(&server.base_url).await;
+    let mut snapshot_viewer = connect(&server.base_url, &server.state).await;
     subscribe(&mut snapshot_viewer).await;
     let concurrent_snapshot = receive_json(&mut snapshot_viewer).await;
     assert_eq!(concurrent_snapshot["last_seq"], created_sequence);
@@ -162,7 +162,7 @@ async fn same_sidecar_recovers_unconfirmed_start_after_browser_identity_is_lost(
     bootstrap(&store).await;
     let recovery_store = store.clone();
     let server = start(store, agent_catalog(directory.path())).await;
-    let mut first_socket = connect(&server.base_url).await;
+    let mut first_socket = connect(&server.base_url, &server.state).await;
     subscribe(&mut first_socket).await;
     let _snapshot = receive_json(&mut first_socket).await;
     let create_payload = json!({
@@ -222,7 +222,7 @@ async fn same_sidecar_recovers_unconfirmed_start_after_browser_identity_is_lost(
     first_socket.close().await;
 
     wait_for_recovered_rejection(&recovery_store, &principal, "lost-browser-start", &payload).await;
-    let mut returning_socket = connect(&server.base_url).await;
+    let mut returning_socket = connect(&server.base_url, &server.state).await;
     subscribe(&mut returning_socket).await;
     let recovered = receive_json(&mut returning_socket).await;
     assert_eq!(
@@ -256,7 +256,7 @@ async fn same_sidecar_quiesces_exact_running_runtime_after_browser_identity_is_l
     bootstrap(&store).await;
     let recovery_store = store.clone();
     let server = start(store, agent_catalog(directory.path())).await;
-    let mut first_socket = connect(&server.base_url).await;
+    let mut first_socket = connect(&server.base_url, &server.state).await;
     subscribe(&mut first_socket).await;
     let _snapshot = receive_json(&mut first_socket).await;
     let create_payload = json!({
@@ -307,7 +307,7 @@ async fn same_sidecar_quiesces_exact_running_runtime_after_browser_identity_is_l
         "recovered running runtime retained private lifecycle authority"
     );
 
-    let mut returning_socket = connect(&server.base_url).await;
+    let mut returning_socket = connect(&server.base_url, &server.state).await;
     subscribe(&mut returning_socket).await;
     let snapshot = receive_json(&mut returning_socket).await;
     assert_eq!(
@@ -345,7 +345,7 @@ async fn exact_stop_replay_releases_its_tombstone_before_a_fresh_start() {
     bootstrap(&store).await;
     let recovery_store = store.clone();
     let server = start(store, agent_catalog(directory.path())).await;
-    let mut socket = connect(&server.base_url).await;
+    let mut socket = connect(&server.base_url, &server.state).await;
     subscribe(&mut socket).await;
     let _snapshot = receive_json(&mut socket).await;
     let create_payload = json!({
@@ -515,7 +515,7 @@ async fn verify_restarted_create_start_recovery(
         .await
         .unwrap_or_else(|error| panic!("reopen cancellation store: {error}"));
     let restarted = start(reopened, catalog).await;
-    let mut recovered_socket = connect(&restarted.base_url).await;
+    let mut recovered_socket = connect(&restarted.base_url, &restarted.state).await;
     subscribe(&mut recovered_socket).await;
     let recovered = receive_json(&mut recovered_socket).await;
     assert_eq!(

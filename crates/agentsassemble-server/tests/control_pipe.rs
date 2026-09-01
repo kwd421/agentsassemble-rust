@@ -18,7 +18,6 @@ mod support {
     #[path = "../support/subscription_proof.rs"]
     pub mod subscription_proof;
 }
-const HOST_TOKEN: &str = "control-pipe-test-host-token-000000001";
 const PUBLIC_ORIGIN: &str = "https://public.example.test";
 const PROXY_SECRET: &str = "manual-ingress-control-secret-000000001";
 #[test]
@@ -555,18 +554,10 @@ async fn start_controlled_with_environment(
     let mut child = command
         .spawn()
         .unwrap_or_else(|error| panic!("spawn controlled server: {error}"));
-    let mut control = child
+    let control = child
         .stdin
         .take()
         .unwrap_or_else(|| panic!("controlled server has no stdin"));
-    control
-        .write_all(format!("{HOST_TOKEN}\n").as_bytes())
-        .await
-        .unwrap_or_else(|error| panic!("write control secret: {error}"));
-    control
-        .flush()
-        .await
-        .unwrap_or_else(|error| panic!("flush control secret: {error}"));
 
     let stdout = child
         .stdout

@@ -8,8 +8,8 @@ use agentsassemble_domain::{
 use agentsassemble_persistence::{NewHumanInvite, SqliteStore};
 use agentsassemble_provider::ProviderCatalogService;
 use agentsassemble_server::{
-    AppState, HostSecret, HumanInviteCredentialAuthority, HumanInviteCredentialDraft, RoomRuntime,
-    TicketStore, serve,
+    AppState, HumanInviteCredentialAuthority, HumanInviteCredentialDraft, RoomRuntime, TicketStore,
+    serve,
 };
 use chrono::{DateTime, Duration as ChronoDuration, TimeZone, Utc};
 use reqwest::Client;
@@ -20,16 +20,19 @@ use tokio_util::sync::CancellationToken;
 
 use super::subscription_proof::AuthenticatedTestSocket;
 
-pub const HOST_TOKEN: &str = "human-invite-boundary-host-token-0001";
-
 pub struct RunningServer {
     pub base_url: String,
+    state: AppState,
     rooms: RoomRuntime,
     cancellation: CancellationToken,
     task: JoinHandle<()>,
 }
 
 impl RunningServer {
+    pub fn state(&self) -> &AppState {
+        &self.state
+    }
+
     pub fn rooms(&self) -> &RoomRuntime {
         &self.rooms
     }
@@ -261,12 +264,11 @@ pub async fn start(store: SqliteStore) -> RunningServer {
     let state = AppState::local(
         store,
         TicketStore::new(Duration::from_secs(30), 4_096),
-        HostSecret::new(HOST_TOKEN)
-            .unwrap_or_else(|error| panic!("validate human invite host secret: {error}")),
         ProviderCatalogService::fixed(ProviderCatalog::default()),
     )
     .await
     .unwrap_or_else(|error| panic!("build human invite app state: {error}"));
+    let server_state = state.clone();
     let rooms = state.rooms.clone();
     let task = tokio::spawn(async move {
         serve(listener, state, server_cancellation)
@@ -275,6 +277,7 @@ pub async fn start(store: SqliteStore) -> RunningServer {
     });
     RunningServer {
         base_url: format!("http://{address}"),
+        state: server_state,
         rooms,
         cancellation,
         task,

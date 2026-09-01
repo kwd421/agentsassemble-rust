@@ -6,7 +6,7 @@ use agentsassemble_domain::{
 };
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_provider::ProviderCatalogService;
-use agentsassemble_server::{AppState, HostSecret, TicketStore, serve};
+use agentsassemble_server::{AppState, TicketStore, serve};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use futures_util::{SinkExt, StreamExt};
 use reqwest::Client;
@@ -16,8 +16,6 @@ use sha2::{Digest, Sha256};
 use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use tokio_util::sync::CancellationToken;
-
-const HOST_TOKEN: &str = "room-directory-boundary-host-token-01";
 
 struct RunningServer {
     base_url: String,
@@ -481,8 +479,6 @@ async fn start_server(
     let mut state = AppState::local(
         store,
         tickets,
-        HostSecret::new(HOST_TOKEN)
-            .unwrap_or_else(|error| panic!("validate directory host secret: {error}")),
         ProviderCatalogService::fixed(ProviderCatalog::default()),
     )
     .await

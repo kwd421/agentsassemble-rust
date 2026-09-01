@@ -1,4 +1,4 @@
-use std::{fmt::Write, time::Duration};
+use std::time::Duration;
 
 use agentsassemble_domain::{
     AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID,
@@ -7,11 +7,9 @@ use agentsassemble_domain::{
 };
 use agentsassemble_persistence::{LocalRoomManagerAuthority, SqliteStore};
 use agentsassemble_provider::ProviderCatalogService;
-use agentsassemble_server::{AppState, HostSecret, TicketStore, serve};
-use hmac::{Hmac, Mac};
+use agentsassemble_server::{AppState, TicketStore, issue_local_ticket, serve};
 use reqwest::Client;
 use serde_json::{Value, json};
-use sha2::Sha256;
 use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_tungstenite::connect_async;
 use tokio_util::sync::CancellationToken;
@@ -21,11 +19,9 @@ mod subscription_proof;
 
 use subscription_proof::AuthenticatedTestSocket;
 
-const HOST_TOKEN: &str = "profile-boundary-host-token-000000001";
-const HOST_REQUEST_CONTEXT: &str = "agentsassemble-host-ticket-request-v1\0";
-
 struct RunningServer {
     base_url: String,
+    state: AppState,
     cancellation: CancellationToken,
     task: JoinHandle<()>,
 }
@@ -154,9 +150,15 @@ async fn authenticated_profile_avatar_and_room_projection_survive_restart() {
     let inspection_store = store.clone();
     let server = start(store).await;
     let client = Client::new();
-    let avatar_url = assert_profile_auth_and_upload(&client, &server.base_url).await;
-    assert_profile_update_and_avatar(&client, &server.base_url, &inspection_store, &avatar_url)
-        .await;
+    let avatar_url = assert_profile_auth_and_upload(&client, &server.base_url, &server.state).await;
+    assert_profile_update_and_avatar(
+        &client,
+        &server.base_url,
+        &server.state,
+        &inspection_store,
+        &avatar_url,
+    )
+    .await;
     server.stop().await;
     drop(inspection_store);
 
@@ -164,7 +166,7 @@ async fn authenticated_profile_avatar_and_room_projection_survive_restart() {
         .await
         .unwrap_or_else(|error| panic!("reopen profile store: {error}"));
     let restarted = start(reopened).await;
-    let restart_ticket = request_ticket(&restarted.base_url).await;
+    let restart_ticket = request_ticket(&restarted.state).await;
     let recovered: Value = client
         .get(format!("{}/api/user-profile", restarted.base_url))
         .header("authorization", format!("Bearer {restart_ticket}"))
@@ -281,14 +283,18 @@ async fn room_appearance_upload_preview_bind_and_member_read_use_exact_tickets()
     server.stop().await;
 }
 
-async fn assert_profile_auth_and_upload(client: &Client, base_url: &str) -> String {
+async fn assert_profile_auth_and_upload(
+    client: &Client,
+    base_url: &str,
+    state: &AppState,
+) -> String {
     let unauthorized = client
         .get(format!("{base_url}/api/user-profile"))
         .send()
         .await
         .unwrap_or_else(|error| panic!("request unauthenticated profile: {error}"));
     assert_eq!(unauthorized.status(), reqwest::StatusCode::UNAUTHORIZED);
-    let read_ticket = request_ticket(base_url).await;
+    let read_ticket = request_ticket(state).await;
     let profile = client
         .get(format!("{base_url}/api/user-profile"))
         .header("authorization", format!("Bearer {read_ticket}"))
@@ -314,7 +320,7 @@ async fn assert_profile_auth_and_upload(client: &Client, base_url: &str) -> Stri
         .await
         .unwrap_or_else(|error| panic!("reuse profile ticket: {error}"));
     assert_eq!(reused.status(), reqwest::StatusCode::UNAUTHORIZED);
-    let upload_ticket = request_ticket(base_url).await;
+    let upload_ticket = request_ticket(state).await;
     let upload = client
         .post(format!("{base_url}/api/attachments"))
         .header("authorization", format!("Bearer {upload_ticket}"))
@@ -342,7 +348,7 @@ async fn assert_profile_auth_and_upload(client: &Client, base_url: &str) -> Stri
         .await
         .unwrap_or_else(|error| panic!("read pending profile avatar: {error}"));
     assert_eq!(pending.status(), reqwest::StatusCode::NOT_FOUND);
-    let unsupported_ticket = request_ticket(base_url).await;
+    let unsupported_ticket = request_ticket(state).await;
     let unsupported = client
         .post(format!("{base_url}/api/attachments"))
         .header("authorization", format!("Bearer {unsupported_ticket}"))
@@ -360,12 +366,13 @@ async fn assert_profile_auth_and_upload(client: &Client, base_url: &str) -> Stri
 async fn assert_profile_update_and_avatar(
     client: &Client,
     base_url: &str,
+    state: &AppState,
     inspection_store: &SqliteStore,
     avatar_url: &str,
 ) {
-    let mut socket = connect_room(base_url).await;
+    let mut socket = connect_room(base_url, state).await;
     assert_eq!(receive_json(&mut socket).await["op"], "snapshot");
-    let update_ticket = request_ticket(base_url).await;
+    let update_ticket = request_ticket(state).await;
     let updated = client
         .post(format!("{base_url}/api/user-profile"))
         .header("authorization", format!("Bearer {update_ticket}"))
@@ -442,12 +449,11 @@ async fn start_with_tickets(store: SqliteStore, tickets: TicketStore) -> Running
     let state = AppState::local(
         store,
         tickets,
-        HostSecret::new(HOST_TOKEN)
-            .unwrap_or_else(|error| panic!("validate profile host secret: {error}")),
         ProviderCatalogService::fixed(ProviderCatalog::default()),
     )
     .await
     .unwrap_or_else(|error| panic!("build profile app state: {error}"));
+    let server_state = state.clone();
     let task = tokio::spawn(async move {
         serve(listener, state, server_cancellation)
             .await
@@ -455,6 +461,7 @@ async fn start_with_tickets(store: SqliteStore, tickets: TicketStore) -> Running
     });
     RunningServer {
         base_url: format!("http://{address}"),
+        state: server_state,
         cancellation,
         task,
     }
@@ -528,16 +535,13 @@ async fn assert_static_private_png(response: reqwest::Response) {
 
 async fn connect_room(
     base_url: &str,
+    state: &AppState,
 ) -> AuthenticatedTestSocket<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
-    let grant = request_ticket_grant(base_url).await;
-    let ticket = grant["ticket"]
-        .as_str()
-        .unwrap_or_else(|| panic!("profile ticket is missing"))
-        .to_owned();
-    let proof_key = grant["server_proof_key"]
-        .as_str()
-        .unwrap_or_else(|| panic!("profile proof key is missing"))
-        .to_owned();
+    let grant = issue_local_ticket(state, "general")
+        .await
+        .unwrap_or_else(|error| panic!("issue profile socket ticket: {error}"));
+    let ticket = grant.ticket;
+    let proof_key = grant.server_proof_key;
     let url = format!(
         "{}/ws?ticket={ticket}",
         base_url.replacen("http://", "ws://", 1)
@@ -561,58 +565,11 @@ where
         .await
 }
 
-async fn request_ticket(base_url: &str) -> String {
-    let grant = request_ticket_grant(base_url).await;
-    grant["ticket"]
-        .as_str()
-        .unwrap_or_else(|| panic!("profile ticket is missing"))
-        .to_owned()
-}
-
-async fn request_ticket_grant(base_url: &str) -> Value {
-    let challenge: Value = Client::new()
-        .get(format!("{base_url}/api/host-challenge"))
-        .send()
+async fn request_ticket(state: &AppState) -> String {
+    issue_local_ticket(state, "general")
         .await
-        .unwrap_or_else(|error| panic!("request profile host challenge: {error}"))
-        .json()
-        .await
-        .unwrap_or_else(|error| panic!("decode profile host challenge: {error}"));
-    let challenge = challenge["challenge"]
-        .as_str()
-        .unwrap_or_else(|| panic!("profile challenge is missing"));
-    let proof = expected_hmac(HOST_REQUEST_CONTEXT, &[challenge, "general"]);
-    let grant: Value = Client::new()
-        .post(format!("{base_url}/api/ws-ticket"))
-        .header("x-host-challenge", challenge)
-        .header("x-host-meeting", "general")
-        .header("x-host-proof", proof)
-        .send()
-        .await
-        .unwrap_or_else(|error| panic!("request profile ticket: {error}"))
-        .json()
-        .await
-        .unwrap_or_else(|error| panic!("decode profile ticket: {error}"));
-    grant
-}
-
-fn expected_hmac(context: &str, fields: &[&str]) -> String {
-    let mut signer = Hmac::<Sha256>::new_from_slice(HOST_TOKEN.as_bytes())
-        .unwrap_or_else(|error| panic!("construct profile HMAC: {error}"));
-    signer.update(context.as_bytes());
-    for field in fields {
-        signer.update(field.as_bytes());
-        signer.update(&[0]);
-    }
-    signer
-        .finalize()
-        .into_bytes()
-        .iter()
-        .fold(String::with_capacity(64), |mut encoded, byte| {
-            write!(encoded, "{byte:02x}")
-                .unwrap_or_else(|error| panic!("encode profile HMAC: {error}"));
-            encoded
-        })
+        .unwrap_or_else(|error| panic!("issue profile HTTP ticket: {error}"))
+        .ticket
 }
 
 async fn bootstrap(store: &SqliteStore) {

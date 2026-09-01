@@ -6,7 +6,7 @@ use agentsassemble_domain::{
 };
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_provider::ProviderCatalogService;
-use agentsassemble_server::{AppState, HostSecret, TicketStore, serve};
+use agentsassemble_server::{AppState, TicketStore, serve};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use reqwest::Client;
 use serde_json::json;
@@ -24,11 +24,11 @@ use support::{
     local_socket::connect,
 };
 
-const HOST_TOKEN: &str = "room-history-boundary-host-token-0001";
 const ROOM_ID: &str = "general";
 
 struct RunningServer {
     base_url: String,
+    state: AppState,
     cancellation: CancellationToken,
     task: JoinHandle<()>,
 }
@@ -65,7 +65,7 @@ async fn local_tcp_history_pages_large_events_without_gaps_or_mutation() {
     assert_eq!(durable_last_seq, 51);
 
     let server = start_local(store.clone()).await;
-    let mut socket = connect(&server.base_url, HOST_TOKEN, ROOM_ID).await;
+    let mut socket = connect(&server.base_url, &server.state, ROOM_ID).await;
     assert_eq!(socket.subscribe(0).await["op"], "subscribed");
     assert_eq!(socket.receive_json().await["op"], "snapshot");
 
@@ -186,7 +186,7 @@ async fn read_only_human_reads_history_and_revocation_closes_the_socket() {
 #[tokio::test]
 async fn local_tcp_history_work_is_bounded_without_disabling_the_socket() {
     let server = start_local(local_fixture().await).await;
-    let mut socket = connect(&server.base_url, HOST_TOKEN, ROOM_ID).await;
+    let mut socket = connect(&server.base_url, &server.state, ROOM_ID).await;
     assert_eq!(socket.subscribe(0).await["op"], "subscribed");
     assert_eq!(socket.receive_json().await["op"], "snapshot");
 
@@ -268,12 +268,11 @@ async fn start_local(store: SqliteStore) -> RunningServer {
     let state = AppState::local(
         store,
         TicketStore::new(Duration::from_secs(30), 16),
-        HostSecret::new(HOST_TOKEN)
-            .unwrap_or_else(|error| panic!("validate room-history host secret: {error}")),
         ProviderCatalogService::fixed(ProviderCatalog::default()),
     )
     .await
     .unwrap_or_else(|error| panic!("build room-history app state: {error}"));
+    let server_state = state.clone();
     let task = tokio::spawn(async move {
         serve(listener, state, server_cancellation)
             .await
@@ -281,6 +280,7 @@ async fn start_local(store: SqliteStore) -> RunningServer {
     });
     RunningServer {
         base_url: format!("http://{address}"),
+        state: server_state,
         cancellation,
         task,
     }

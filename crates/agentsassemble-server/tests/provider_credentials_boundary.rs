@@ -3,13 +3,11 @@ use std::time::Duration;
 use agentsassemble_domain::{LOCAL_OPERATOR_USER_ID, ProviderCatalog};
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_provider::ProviderCatalogService;
-use agentsassemble_server::{AppState, HostSecret, TicketStore, serve};
+use agentsassemble_server::{AppState, TicketStore, serve};
 use reqwest::{Client, Method, StatusCode};
 use serde_json::{Value, json};
 use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
-
-const HOST_TOKEN: &str = "credential-boundary-host-token-0000000001";
 
 struct RunningServer {
     base_url: String,
@@ -156,8 +154,6 @@ async fn start() -> RunningServer {
     let state = AppState::local(
         store,
         tickets.clone(),
-        HostSecret::new(HOST_TOKEN)
-            .unwrap_or_else(|error| panic!("validate credential host secret: {error}")),
         ProviderCatalogService::fixed(ProviderCatalog::default()),
     )
     .await

@@ -5,13 +5,11 @@ use agentsassemble_domain::{
 };
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_provider::ProviderCatalogService;
-use agentsassemble_server::{AppState, HostSecret, TicketStore, serve};
+use agentsassemble_server::{AppState, TicketStore, serve};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
-
-const HOST_TOKEN: &str = "room-preferences-boundary-host-token-0000001";
 
 struct RunningServer {
     base_url: String,
@@ -219,8 +217,6 @@ async fn start() -> RunningServer {
     let state = AppState::local(
         store.clone(),
         tickets.clone(),
-        HostSecret::new(HOST_TOKEN)
-            .unwrap_or_else(|error| panic!("validate preference host secret: {error}")),
         ProviderCatalogService::fixed(ProviderCatalog::default()),
     )
     .await

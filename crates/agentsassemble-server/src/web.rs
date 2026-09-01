@@ -23,11 +23,8 @@ use tower_http::{
 use crate::{
     AppState, RoomShutdownError, TicketIssueError,
     authenticated_channel::MAX_WS_WIRE_MESSAGE_BYTES,
-    host_ticket::{AuthenticatedTicketResponse, HostChallengeResponse},
-    http_api::{BodyDecodeError, ensure_empty_body},
     http_transport::{MAX_HTTP_CONNECTIONS, RejectionCounter, serve_connection},
     ingress_trust::{LocalIngress, require_trusted_ingress},
-    issue_local_ticket,
     provider_turn_reconciliation_runtime::reconcile_provider_turn_ownership,
     reconcile_runtime_ownership,
     runtime_reconciliation::watch_runtime_reconciliation,
@@ -35,7 +32,6 @@ use crate::{
 };
 
 const HTTP_BODY_DEADLINE: Duration = Duration::from_secs(10);
-const MAX_TICKET_BODY_BYTES: usize = 4 * 1024;
 const TRACKED_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(6);
 const ROOT_PATH: &str = "/";
 const APP_PREFIX: &str = "/app";
@@ -256,8 +252,6 @@ pub(crate) fn static_frontend_surfaces() -> Vec<agentsassemble_protocol::HttpRou
 registered_routes! {
     fn core_routes<AppState>() {
         private "/healthz" => get(health),
-        private "/api/host-challenge" => get(issue_host_challenge),
-        private "/api/ws-ticket" => post(issue_ticket),
         same_origin_public "/ws" => get(upgrade_socket),
     }
 }
@@ -426,38 +420,6 @@ async fn health() -> Json<Value> {
     Json(json!({"status": "ready", "runtime": "rust"}))
 }
 
-async fn issue_host_challenge(
-    State(state): State<AppState>,
-) -> Result<Json<HostChallengeResponse>, ApiError> {
-    state
-        .host_token
-        .challenge()
-        .map(Json)
-        .ok_or_else(|| ApiError::unavailable("Host challenge capacity is unavailable."))
-}
-
-async fn issue_ticket(
-    State(state): State<AppState>,
-    request: Request,
-) -> Result<Json<AuthenticatedTicketResponse>, ApiError> {
-    let Some(authenticated) = state
-        .host_token
-        .authenticate_ticket_request(request.headers())
-    else {
-        return Err(ApiError::unauthorized("A valid host proof is required."));
-    };
-    ensure_empty_body(request, MAX_TICKET_BODY_BYTES)
-        .await
-        .map_err(ApiError::from_body)?;
-    let grant = issue_local_ticket(&state, &authenticated.meeting_id)
-        .await
-        .map_err(ApiError::from)?;
-    Ok(Json(state.host_token.authenticated_ticket_response(
-        &authenticated.challenge,
-        grant,
-    )))
-}
-
 async fn upgrade_socket(
     State(state): State<AppState>,
     Query(query): Query<TicketQuery>,
@@ -522,22 +484,6 @@ struct ApiError {
 }
 
 impl ApiError {
-    fn from_body(error: BodyDecodeError) -> Self {
-        match error {
-            BodyDecodeError::RequestTimeout => Self {
-                status: StatusCode::REQUEST_TIMEOUT,
-                code: "request_timeout",
-                message: "Request body timed out.".to_owned(),
-            },
-            BodyDecodeError::PayloadTooLarge => {
-                Self::payload_too_large("Ticket request body exceeds the route limit.")
-            }
-            BodyDecodeError::InvalidJson | BodyDecodeError::NonEmpty => {
-                Self::bad_request("Ticket requests must not contain a body.")
-            }
-        }
-    }
-
     fn bad_request(message: impl Into<String>) -> Self {
         Self {
             status: StatusCode::BAD_REQUEST,
@@ -566,14 +512,6 @@ impl ApiError {
         Self {
             status: StatusCode::SERVICE_UNAVAILABLE,
             code: "unavailable",
-            message: message.into(),
-        }
-    }
-
-    fn payload_too_large(message: impl Into<String>) -> Self {
-        Self {
-            status: StatusCode::PAYLOAD_TOO_LARGE,
-            code: "payload_too_large",
             message: message.into(),
         }
     }
@@ -667,17 +605,9 @@ mod tests {
 
     use agentsassemble_persistence::PersistenceError;
 
-    use crate::HostSecret;
     use crate::room_socket::persistence_error;
 
     use super::{drain_reconciliation_owner_after, drain_reconciliation_then};
-
-    #[test]
-    fn host_secret_invariant_cannot_be_bypassed_by_an_adapter() {
-        assert!(HostSecret::new("short").is_err());
-        assert!(HostSecret::new(" padded-host-secret-00000000000000 ").is_err());
-        assert!(HostSecret::new("valid-host-secret-0000000000000001").is_ok());
-    }
 
     #[test]
     fn internal_persistence_errors_have_a_stable_wire_message() {

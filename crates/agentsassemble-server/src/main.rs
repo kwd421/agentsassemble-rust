@@ -14,8 +14,8 @@ use agentsassemble_protocol::{
 };
 use agentsassemble_provider::ProviderCatalogService;
 use agentsassemble_server::{
-    AppState, HostSecret, ManagerRoomAuthorityRequest, StableEntryConfig, TicketIssueError,
-    TicketStore, issue_central_registration_ticket, issue_human_invite_create_ticket,
+    AppState, ManagerRoomAuthorityRequest, StableEntryConfig, TicketIssueError, TicketStore,
+    issue_central_registration_ticket, issue_human_invite_create_ticket,
     issue_human_invite_revoke_ticket, issue_local_operator_http_ticket, issue_local_ticket,
     issue_preferences_read_ticket, issue_preferences_write_ticket,
     issue_settings_directory_read_ticket, local_bind_is_supported, serve,
@@ -23,7 +23,7 @@ use agentsassemble_server::{
 use anyhow::Context;
 use clap::Parser;
 use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, Stdin},
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     net::TcpListener,
 };
 
@@ -35,7 +35,6 @@ mod message_search_control;
 use tokio_util::sync::CancellationToken;
 use tracing_subscriber::EnvFilter;
 
-const MAX_CONTROL_SECRET_BYTES: usize = 128;
 const MAX_CONTROL_MESSAGE_BYTES: usize = 4 * 1024;
 const PUBLIC_URL_ENV: &str = "AGENTSASSEMBLE_PUBLIC_URL";
 const TRUSTED_PROXY_TOKEN_ENV: &str = "AGENTSASSEMBLE_TRUSTED_PROXY_TOKEN";
@@ -72,8 +71,6 @@ async fn main() -> anyhow::Result<()> {
         manual_public_ingress.is_some(),
     )?;
     let mut stdin = tokio::io::stdin();
-    let host_token = read_control_secret(&mut stdin).await?;
-    let host_secret = HostSecret::new(host_token)?;
     let cancellation = CancellationToken::new();
     if !local_bind_is_supported(args.bind) {
         anyhow::bail!("the local runtime may bind only to loopback");
@@ -90,9 +87,7 @@ async fn main() -> anyhow::Result<()> {
         .database
         .canonicalize()
         .with_context(|| format!("resolve database path {}", args.database.display()))?;
-    ensure_parent_alive(&cancellation)?;
     let listener = TcpListener::bind(args.bind).await?;
-    ensure_parent_alive(&cancellation)?;
     let address = listener.local_addr()?;
     let signal = cancellation.clone();
     tokio::spawn(async move {
@@ -103,7 +98,6 @@ async fn main() -> anyhow::Result<()> {
     let mut state = AppState::local(
         store,
         TicketStore::new(Duration::from_secs(30), 4_096),
-        host_secret,
         ProviderCatalogService::discovering(),
     )
     .await?;
@@ -667,35 +661,6 @@ async fn write_json_line<W: AsyncWrite + Unpin>(
     encoded.push(b'\n');
     writer.write_all(&encoded).await?;
     writer.flush().await?;
-    Ok(())
-}
-
-async fn read_control_secret(stdin: &mut Stdin) -> anyhow::Result<String> {
-    let mut bytes = Vec::with_capacity(64);
-    let mut byte = [0_u8; 1];
-    for _ in 0..=MAX_CONTROL_SECRET_BYTES {
-        let count = stdin
-            .read(&mut byte)
-            .await
-            .context("read parent control pipe")?;
-        if count == 0 {
-            anyhow::bail!("parent control pipe closed before the host secret");
-        }
-        if byte[0] == b'\n' {
-            if bytes.last() == Some(&b'\r') {
-                bytes.pop();
-            }
-            return String::from_utf8(bytes).context("parent control secret is not UTF-8");
-        }
-        bytes.push(byte[0]);
-    }
-    anyhow::bail!("parent control secret exceeds {MAX_CONTROL_SECRET_BYTES} bytes")
-}
-
-fn ensure_parent_alive(cancellation: &CancellationToken) -> anyhow::Result<()> {
-    if cancellation.is_cancelled() {
-        anyhow::bail!("parent control pipe closed during startup");
-    }
     Ok(())
 }
 

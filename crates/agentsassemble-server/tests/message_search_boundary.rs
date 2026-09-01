@@ -6,7 +6,7 @@ use agentsassemble_domain::{
 };
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_provider::ProviderCatalogService;
-use agentsassemble_server::{AppState, HostSecret, TicketStore, serve};
+use agentsassemble_server::{AppState, TicketStore, serve};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
@@ -19,8 +19,6 @@ mod support {
 }
 
 use support::human_invite::{canonical_session_token, fixture, join, start as start_invite};
-
-const HOST_TOKEN: &str = "message-search-boundary-host-token-00000001";
 
 struct RunningServer {
     base_url: String,
@@ -292,8 +290,6 @@ async fn start() -> RunningServer {
     let state = AppState::local(
         store.clone(),
         tickets.clone(),
-        HostSecret::new(HOST_TOKEN)
-            .unwrap_or_else(|error| panic!("validate search host secret: {error}")),
         ProviderCatalogService::fixed(ProviderCatalog::default()),
     )
     .await

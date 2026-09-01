@@ -340,7 +340,7 @@ mod tests {
     use tokio::sync::broadcast;
 
     use super::{receive_revocation, session_remains_authorized_after_revocation_signal};
-    use crate::{AppState, HostSecret, TicketStore, ticket_tests::HumanSessionFixture};
+    use crate::{AppState, TicketStore, ticket_tests::HumanSessionFixture};
 
     #[tokio::test]
     async fn lagged_revocations_revalidate_and_closed_notification_fails_closed() {
@@ -351,8 +351,6 @@ mod tests {
         let state = AppState::local(
             fixture.store().clone(),
             TicketStore::new(Duration::from_secs(30), 8),
-            HostSecret::new("socket-revocation-test-host-secret")
-                .unwrap_or_else(|error| panic!("construct test host secret: {error}")),
             ProviderCatalogService::fixed(ProviderCatalog::default()),
         )
         .await

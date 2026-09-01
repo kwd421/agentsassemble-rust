@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, fmt::Write, path::Path, time::Duration};
+use std::{collections::BTreeMap, path::Path, time::Duration};
 
 #[cfg(unix)]
 use agentsassemble_domain::{
@@ -10,11 +10,9 @@ use agentsassemble_domain::{
 };
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService};
-use agentsassemble_server::{AppState, HostSecret, TicketStore, serve};
-use hmac::{Hmac, Mac};
+use agentsassemble_server::{AppState, TicketStore, issue_local_ticket, serve};
 use reqwest::Client;
 use serde_json::{Value, json};
-use sha2::Sha256;
 use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_tungstenite::connect_async;
 use tokio_util::sync::CancellationToken;
@@ -47,11 +45,11 @@ mod agent_interrupt;
 #[path = "agent_session_boundary/lifecycle_resume_retry.rs"]
 mod lifecycle_resume_retry;
 
-const HOST_TOKEN: &str = "agent-boundary-host-token-000000001";
 static AGENT_BOUNDARY_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 struct RunningServer {
     base_url: String,
+    state: AppState,
     provider_adapter: ProviderAdapter,
     cancellation: CancellationToken,
     task: JoinHandle<Result<(), String>>,
@@ -95,7 +93,7 @@ async fn create_replay_conflict_and_restart_share_one_durable_authority() {
     bootstrap(&store).await;
     let catalog = agent_catalog(directory.path());
     let first = start(store, catalog.clone()).await;
-    let mut socket = connect(&first.base_url).await;
+    let mut socket = connect(&first.base_url, &first.state).await;
     subscribe(&mut socket).await;
     let snapshot = receive_json(&mut socket).await;
     assert_eq!(
@@ -143,7 +141,7 @@ async fn create_replay_conflict_and_restart_share_one_durable_authority() {
         .await
         .unwrap_or_else(|error| panic!("reopen agent store: {error}"));
     let second = start(reopened, catalog).await;
-    let mut recovered_socket = connect(&second.base_url).await;
+    let mut recovered_socket = connect(&second.base_url, &second.state).await;
     subscribe(&mut recovered_socket).await;
     let recovered = receive_json(&mut recovered_socket).await;
     assert_eq!(recovered["agent_sessions"][0]["session_id"], session_id);
@@ -169,7 +167,7 @@ async fn lifecycle_commands_use_the_owned_codex_app_server_before_committing() {
     bootstrap(&store).await;
     let catalog = agent_catalog(directory.path());
     let server = start(store, catalog.clone()).await;
-    let mut socket = connect(&server.base_url).await;
+    let mut socket = connect(&server.base_url, &server.state).await;
     subscribe(&mut socket).await;
     let _snapshot = receive_json(&mut socket).await;
     let create_payload = json!({
@@ -237,7 +235,7 @@ async fn lifecycle_commands_use_the_owned_codex_app_server_before_committing() {
         .await
         .unwrap_or_else(|error| panic!("reopen lifecycle store: {error}"));
     let restarted = start(reopened, catalog).await;
-    let mut recovered_socket = connect(&restarted.base_url).await;
+    let mut recovered_socket = connect(&restarted.base_url, &restarted.state).await;
     subscribe(&mut recovered_socket).await;
     let recovered = receive_json(&mut recovered_socket).await;
     assert_eq!(
@@ -281,7 +279,7 @@ async fn room_turns_publish_provider_finals_without_blocking_room_commands() {
     bootstrap(&store).await;
     let catalog = agent_catalog_with_fixture(directory.path(), fixture.as_bytes());
     let server = start(store, catalog).await;
-    let mut socket = connect(&server.base_url).await;
+    let mut socket = connect(&server.base_url, &server.state).await;
     subscribe(&mut socket).await;
     let _snapshot = receive_json(&mut socket).await;
     send_create(
@@ -440,13 +438,12 @@ async fn start(store: SqliteStore, catalog: ProviderCatalog) -> RunningServer {
     let state = AppState::local_with_provider_adapter(
         store,
         TicketStore::new(Duration::from_secs(30), 16),
-        HostSecret::new(HOST_TOKEN)
-            .unwrap_or_else(|error| panic!("validate test host secret: {error}")),
         ProviderCatalogService::fixed(catalog),
         provider_adapter.clone(),
     )
     .await
     .unwrap_or_else(|error| panic!("build test app state: {error}"));
+    let server_state = state.clone();
     let task = tokio::spawn(async move {
         serve(listener, state, server_cancellation)
             .await
@@ -476,6 +473,7 @@ async fn start(store: SqliteStore, catalog: ProviderCatalog) -> RunningServer {
     }
     RunningServer {
         base_url,
+        state: server_state,
         provider_adapter,
         cancellation,
         task,
@@ -484,31 +482,13 @@ async fn start(store: SqliteStore, catalog: ProviderCatalog) -> RunningServer {
 
 async fn connect(
     base_url: &str,
+    state: &AppState,
 ) -> AuthenticatedTestSocket<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
-    let challenge = request_challenge(base_url).await;
-    let proof = expected_hmac(
-        "agentsassemble-host-ticket-request-v1\0",
-        &[&challenge, "general"],
-    );
-    let grant: Value = Client::new()
-        .post(format!("{base_url}/api/ws-ticket"))
-        .header("x-host-challenge", challenge)
-        .header("x-host-meeting", "general")
-        .header("x-host-proof", proof)
-        .send()
+    let grant = issue_local_ticket(state, "general")
         .await
-        .unwrap_or_else(|error| panic!("request ticket: {error}"))
-        .json()
-        .await
-        .unwrap_or_else(|error| panic!("decode ticket: {error}"));
-    let ticket = grant["ticket"]
-        .as_str()
-        .unwrap_or_else(|| panic!("ticket response has no ticket"))
-        .to_owned();
-    let proof_key = grant["server_proof_key"]
-        .as_str()
-        .unwrap_or_else(|| panic!("ticket response has no proof key"))
-        .to_owned();
+        .unwrap_or_else(|error| panic!("issue private-control-equivalent ticket: {error}"));
+    let ticket = grant.ticket;
+    let proof_key = grant.server_proof_key;
     let socket = connect_async(format!(
         "{}/ws?ticket={ticket}",
         base_url.replacen("http://", "ws://", 1)
@@ -517,40 +497,6 @@ async fn connect(
     .unwrap_or_else(|error| panic!("connect WebSocket: {error}"))
     .0;
     AuthenticatedTestSocket::new(socket, ticket, proof_key)
-}
-
-async fn request_challenge(base_url: &str) -> String {
-    let grant: Value = Client::new()
-        .get(format!("{base_url}/api/host-challenge"))
-        .send()
-        .await
-        .unwrap_or_else(|error| panic!("request host challenge: {error}"))
-        .json()
-        .await
-        .unwrap_or_else(|error| panic!("decode host challenge: {error}"));
-    grant["challenge"]
-        .as_str()
-        .unwrap_or_else(|| panic!("challenge grant has no challenge"))
-        .to_owned()
-}
-
-fn expected_hmac(context: &str, fields: &[&str]) -> String {
-    let mut signer = Hmac::<Sha256>::new_from_slice(HOST_TOKEN.as_bytes())
-        .unwrap_or_else(|error| panic!("construct host signer: {error}"));
-    signer.update(context.as_bytes());
-    for field in fields {
-        signer.update(field.as_bytes());
-        signer.update(&[0]);
-    }
-    signer
-        .finalize()
-        .into_bytes()
-        .iter()
-        .fold(String::with_capacity(64), |mut encoded, byte| {
-            write!(encoded, "{byte:02x}")
-                .unwrap_or_else(|error| panic!("encode proof byte: {error}"));
-            encoded
-        })
 }
 
 async fn subscribe<S>(socket: &mut AuthenticatedTestSocket<S>)

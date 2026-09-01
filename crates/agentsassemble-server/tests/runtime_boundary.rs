@@ -3,7 +3,7 @@ use std::{path::PathBuf, time::Duration};
 use agentsassemble_domain::ProviderCatalog;
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_provider::ProviderCatalogService;
-use agentsassemble_server::{AppState, HostSecret, TicketStore, serve};
+use agentsassemble_server::{AppState, TicketStore, serve};
 use futures_util::{SinkExt, StreamExt};
 use reqwest::Client;
 use serde_json::{Value, json};
@@ -21,20 +21,16 @@ mod support {
 }
 
 use support::{
-    local_socket::{
-        assert_ticket_challenge_is_single_use, connect, expected_host_request_proof,
-        request_host_challenge, request_ticket,
-    },
+    local_socket::{connect, request_ticket},
     subscription_proof::{
         AuthenticatedTestSocket, connection_nonce_for_ticket, expected_subscription_proof,
         permissions_digest, sha256_hex,
     },
 };
 
-const HOST_TOKEN: &str = "boundary-test-host-token-0000000001";
-
 struct RunningServer {
     base_url: String,
+    state: AppState,
     cancellation: CancellationToken,
     task: JoinHandle<()>,
 }
@@ -61,30 +57,26 @@ async fn external_client_recovers_committed_command_after_restart() {
         .unwrap_or_else(|error| panic!("open first store: {error}"));
     bootstrap(&store).await;
     let first_server = start(store).await;
-    let unauthenticated = Client::new()
+    let retired_ticket_route = Client::new()
         .post(format!("{}/api/ws-ticket", first_server.base_url))
         .json(&json!({"meeting_id": "general"}))
         .send()
         .await
-        .unwrap_or_else(|error| panic!("request unauthenticated ticket: {error}"));
-    assert_eq!(unauthenticated.status(), reqwest::StatusCode::UNAUTHORIZED);
-    let wrong_challenge = "a".repeat(64);
-    let wrong_proof = expected_host_request_proof(
-        "wrong-boundary-host-token-000000000",
-        &wrong_challenge,
-        "general",
+        .unwrap_or_else(|error| panic!("request retired ticket route: {error}"));
+    assert_eq!(
+        retired_ticket_route.status(),
+        reqwest::StatusCode::NOT_FOUND
     );
-    let wrong_secret = Client::new()
-        .post(format!("{}/api/ws-ticket", first_server.base_url))
-        .header("x-host-challenge", wrong_challenge)
-        .header("x-host-meeting", "general")
-        .header("x-host-proof", wrong_proof)
+    let retired_challenge_route = Client::new()
+        .get(format!("{}/api/host-challenge", first_server.base_url))
         .send()
         .await
-        .unwrap_or_else(|error| panic!("request ticket with wrong secret: {error}"));
-    assert_eq!(wrong_secret.status(), reqwest::StatusCode::UNAUTHORIZED);
-    assert_ticket_challenge_is_single_use(&first_server.base_url, HOST_TOKEN, "general").await;
-    let mut first_socket = connect(&first_server.base_url, HOST_TOKEN, "general").await;
+        .unwrap_or_else(|error| panic!("request retired challenge route: {error}"));
+    assert_eq!(
+        retired_challenge_route.status(),
+        reqwest::StatusCode::NOT_FOUND
+    );
+    let mut first_socket = connect(&first_server.base_url, &first_server.state, "general").await;
     subscribe(&mut first_socket, 0).await;
     let initial = receive_json(&mut first_socket).await;
     assert_eq!(initial["op"], "snapshot");
@@ -115,7 +107,7 @@ async fn external_client_recovers_committed_command_after_restart() {
         .await
         .unwrap_or_else(|error| panic!("reopen store: {error}"));
     let second_server = start(reopened).await;
-    let mut second_socket = connect(&second_server.base_url, HOST_TOKEN, "general").await;
+    let mut second_socket = connect(&second_server.base_url, &second_server.state, "general").await;
     subscribe(&mut second_socket, 0).await;
     let recovered = receive_json(&mut second_socket).await;
     assert_eq!(recovered["op"], "snapshot");
@@ -131,7 +123,7 @@ async fn external_client_recovers_committed_command_after_restart() {
     assert_eq!(retry["resolution"], "committed");
     assert_eq!(retry["deduplicated"], true);
     assert_eq!(retry["result"]["event_seq"], 2);
-    let mut cursor_ahead = connect(&second_server.base_url, HOST_TOKEN, "general").await;
+    let mut cursor_ahead = connect(&second_server.base_url, &second_server.state, "general").await;
     let resync = subscribe(&mut cursor_ahead, 50).await;
     assert_eq!(resync["op"], "resync_required");
     assert_eq!(resync["latest_seq"], 2);
@@ -205,13 +197,11 @@ async fn websocket_connection_limit_is_shared_by_one_principal() {
     let server = start(store).await;
     let mut sockets = Vec::new();
     for _ in 0..8 {
-        sockets.push(connect(&server.base_url, HOST_TOKEN, "general").await);
+        sockets.push(connect(&server.base_url, &server.state, "general").await);
     }
 
-    let grant = request_ticket(&server.base_url, HOST_TOKEN, "general").await;
-    let ticket = grant["ticket"]
-        .as_str()
-        .unwrap_or_else(|| panic!("ticket response has no ticket"));
+    let grant = request_ticket(&server.state, "general").await;
+    let ticket = grant.ticket;
     let url = format!(
         "{}/ws?ticket={ticket}",
         server.base_url.replacen("http://", "ws://", 1)
@@ -231,7 +221,7 @@ async fn websocket_connection_limit_is_shared_by_one_principal() {
 }
 
 #[tokio::test]
-async fn ticket_auth_and_route_limit_are_checked_before_request_body() {
+async fn retired_http_ticket_routes_are_absent_at_the_tcp_boundary() {
     let directory =
         tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
     let database_url = format!(
@@ -245,25 +235,21 @@ async fn ticket_auth_and_route_limit_are_checked_before_request_body() {
     let server = start(store).await;
     let address = server.base_url.replacen("http://", "", 1);
 
-    let unauthorized = header_only_request(
+    let retired_ticket = header_only_request(
         &address,
         &format!(
             "POST /api/ws-ticket HTTP/1.1\r\nHost: {address}\r\nContent-Length: 1048576\r\n\r\n"
         ),
     )
     .await;
-    assert!(unauthorized.starts_with("HTTP/1.1 401"));
+    assert!(retired_ticket.starts_with("HTTP/1.1 404"));
 
-    let challenge = request_host_challenge(&server.base_url, HOST_TOKEN).await;
-    let proof = expected_host_request_proof(HOST_TOKEN, &challenge, "general");
-    let oversized = header_only_request(
+    let retired_challenge = header_only_request(
         &address,
-        &format!(
-            "POST /api/ws-ticket HTTP/1.1\r\nHost: {address}\r\nx-host-challenge: {challenge}\r\nx-host-meeting: general\r\nx-host-proof: {proof}\r\nContent-Length: 1048576\r\n\r\n"
-        ),
+        &format!("GET /api/host-challenge HTTP/1.1\r\nHost: {address}\r\n\r\n"),
     )
     .await;
-    assert!(oversized.starts_with("HTTP/1.1 413"));
+    assert!(retired_challenge.starts_with("HTTP/1.1 404"));
     server.stop().await;
 }
 
@@ -280,7 +266,7 @@ async fn snapshot_is_trimmed_to_the_websocket_message_budget() {
         .unwrap_or_else(|error| panic!("open test store: {error}"));
     bootstrap(&store).await;
     let server = start(store).await;
-    let mut socket = connect(&server.base_url, HOST_TOKEN, "general").await;
+    let mut socket = connect(&server.base_url, &server.state, "general").await;
     subscribe(&mut socket, 0).await;
     let _ = receive_json(&mut socket).await;
     let content = "x".repeat(12_000);
@@ -299,7 +285,7 @@ async fn snapshot_is_trimmed_to_the_websocket_message_budget() {
     }
     socket.close().await;
 
-    let mut resumed = connect(&server.base_url, HOST_TOKEN, "general").await;
+    let mut resumed = connect(&server.base_url, &server.state, "general").await;
     subscribe(&mut resumed, 0).await;
     let snapshot = receive_json(&mut resumed).await;
     let encoded =
@@ -409,7 +395,7 @@ async fn authenticated_binary_frame_is_rejected_and_closed() {
         .unwrap_or_else(|error| panic!("open test store: {error}"));
     bootstrap(&store).await;
     let server = start(store).await;
-    let mut socket = connect(&server.base_url, HOST_TOKEN, "general").await;
+    let mut socket = connect(&server.base_url, &server.state, "general").await;
     subscribe(&mut socket, 0).await;
     let snapshot = receive_json(&mut socket).await;
     assert_eq!(snapshot["op"], "snapshot");
@@ -434,7 +420,7 @@ async fn tampered_authenticated_command_cannot_create_a_durable_mutation() {
         .unwrap_or_else(|error| panic!("open test store: {error}"));
     bootstrap(&store).await;
     let server = start(store).await;
-    let mut socket = connect(&server.base_url, HOST_TOKEN, "general").await;
+    let mut socket = connect(&server.base_url, &server.state, "general").await;
     subscribe(&mut socket, 0).await;
     assert_eq!(receive_json(&mut socket).await["op"], "snapshot");
     let signed = json!({
@@ -484,13 +470,9 @@ async fn websocket_snapshot_proves_the_private_ticket_control_channel() {
         .unwrap_or_else(|error| panic!("open test store: {error}"));
     bootstrap(&store).await;
     let server = start(store).await;
-    let grant = request_ticket(&server.base_url, HOST_TOKEN, "general").await;
-    let ticket = grant["ticket"]
-        .as_str()
-        .unwrap_or_else(|| panic!("ticket grant is missing a ticket"));
-    let proof_key = grant["server_proof_key"]
-        .as_str()
-        .unwrap_or_else(|| panic!("ticket grant is missing a proof key"));
+    let grant = request_ticket(&server.state, "general").await;
+    let ticket = grant.ticket;
+    let proof_key = grant.server_proof_key;
     let url = format!(
         "{}/ws?ticket={ticket}",
         server.base_url.replacen("http://", "ws://", 1)
@@ -518,10 +500,10 @@ async fn websocket_snapshot_proves_the_private_ticket_control_channel() {
     let received = receipt["proof"]
         .as_str()
         .unwrap_or_else(|| panic!("subscription receipt is missing proof"));
-    assert_eq!(received, expected_subscription_proof(proof_key, &receipt));
+    assert_eq!(received, expected_subscription_proof(&proof_key, &receipt));
     assert_eq!(
         receipt["connection_nonce"],
-        connection_nonce_for_ticket(ticket)
+        connection_nonce_for_ticket(&ticket)
     );
     let raw_snapshot = receive_text(&mut socket).await;
     let snapshot: Value = serde_json::from_str(&raw_snapshot)
@@ -564,8 +546,6 @@ async fn start_server(
     let mut state = AppState::local(
         store,
         TicketStore::new(Duration::from_secs(30), 16),
-        HostSecret::new(HOST_TOKEN)
-            .unwrap_or_else(|error| panic!("validate test host secret: {error}")),
         ProviderCatalogService::fixed(catalog),
     )
     .await
@@ -573,6 +553,7 @@ async fn start_server(
     if let Some(frontend) = frontend {
         state = state.with_frontend(frontend);
     }
+    let server_state = state.clone();
     let task = tokio::spawn(async move {
         serve(listener, state, server_cancellation)
             .await
@@ -580,6 +561,7 @@ async fn start_server(
     });
     RunningServer {
         base_url: format!("http://{address}"),
+        state: server_state,
         cancellation,
         task,
     }

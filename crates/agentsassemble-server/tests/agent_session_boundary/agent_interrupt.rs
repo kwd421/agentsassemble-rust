@@ -28,7 +28,7 @@ async fn busy_turn_interrupt_is_exact_and_runtime_retaining() {
         agent_catalog_with_fixture(directory.path(), fixture.as_bytes()),
     )
     .await;
-    let mut socket = connect(&server.base_url).await;
+    let mut socket = connect(&server.base_url, &server.state).await;
     subscribe(&mut socket).await;
     let _snapshot = receive_json(&mut socket).await;
     let session_id = create_started_agent(&mut socket, directory.path()).await;
@@ -66,7 +66,7 @@ async fn busy_turn_interrupt_is_exact_and_runtime_retaining() {
 
     assert_one_start_and_interrupt(&transcript);
 
-    let mut replay_socket = connect(&server.base_url).await;
+    let mut replay_socket = connect(&server.base_url, &server.state).await;
     subscribe(&mut replay_socket).await;
     let replay_snapshot = receive_json(&mut replay_socket).await;
     assert_eq!(

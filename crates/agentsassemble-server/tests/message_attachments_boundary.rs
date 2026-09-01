@@ -6,7 +6,7 @@ use agentsassemble_domain::{
 };
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_provider::ProviderCatalogService;
-use agentsassemble_server::{AppState, HostSecret, TicketStore, serve};
+use agentsassemble_server::{AppState, TicketStore, serve};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
@@ -27,7 +27,6 @@ use support::{
     subscription_proof::AuthenticatedTestSocket,
 };
 
-const HOST_TOKEN: &str = "message-attachment-boundary-host-token-0001";
 const PNG_BASE64: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMQ0bD5DwACRAF4aig0hQAAAABJRU5ErkJggg==";
 
 struct LocalServer {
@@ -453,8 +452,6 @@ async fn start_local() -> LocalServer {
     let state = AppState::local(
         store.clone(),
         tickets.clone(),
-        HostSecret::new(HOST_TOKEN)
-            .unwrap_or_else(|error| panic!("validate message-attachment host secret: {error}")),
         ProviderCatalogService::fixed(ProviderCatalog::default()),
     )
     .await

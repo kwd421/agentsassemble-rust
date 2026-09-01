@@ -15,7 +15,6 @@ use agentsassemble_protocol::{LocalBootstrapGrant, LocalControlResponse};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 use url::Url;
-use uuid::Uuid;
 
 use crate::runtime_supervisor;
 
@@ -296,7 +295,6 @@ fn start_runtime(app: &AppHandle) -> Result<RuntimeProcess, String> {
         .map_err(|error| format!("cannot resolve bundled frontend directory: {error}"))?
         .join("frontend");
     let database = data_root.join("runtime.sqlite3");
-    let secret = generate_host_secret();
     let stdout_path = data_root.join("runtime.stdout.log");
     let stderr_path = data_root.join("runtime.stderr.log");
     let stdout_log = open_private_fresh_log(&stdout_path)?;
@@ -326,16 +324,10 @@ fn start_runtime(app: &AppHandle) -> Result<RuntimeProcess, String> {
         return Err("cannot capture Rust runtime diagnostics".to_owned());
     };
     capture_capped_stderr(stderr, stderr_log);
-    let Some(mut control) = child.stdin.take() else {
+    let Some(control) = child.stdin.take() else {
         abort_startup(&mut child, None);
         return Err("cannot open Rust runtime control pipe".to_owned());
     };
-    if let Err(error) = writeln!(control, "{secret}").and_then(|()| control.flush()) {
-        abort_startup(&mut child, Some(control));
-        return Err(format!(
-            "cannot initialize Rust runtime control pipe: {error}"
-        ));
-    }
     let Some(stdout) = child.stdout.take() else {
         abort_startup(&mut child, Some(control));
         return Err("cannot capture Rust runtime startup output".to_owned());
@@ -401,10 +393,6 @@ fn handle_ticket_result<T>(
             ))
         }
     }
-}
-
-fn generate_host_secret() -> String {
-    format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple())
 }
 
 fn open_private_rotating_log(path: &Path) -> Result<File, String> {
@@ -681,16 +669,9 @@ mod tests {
     use std::io::{Cursor, Read, Write};
 
     use super::{
-        RUNTIME_LOG_LIMIT_BYTES, StartupRecord, copy_capped, generate_host_secret,
-        open_private_fresh_log, open_private_rotating_log, validate_startup_record,
+        RUNTIME_LOG_LIMIT_BYTES, StartupRecord, copy_capped, open_private_fresh_log,
+        open_private_rotating_log, validate_startup_record,
     };
-
-    #[test]
-    fn generated_host_secret_is_high_entropy_and_unpadded() {
-        let secret = generate_host_secret();
-        assert_eq!(secret.len(), 64);
-        assert!(secret.bytes().all(|byte| byte.is_ascii_hexdigit()));
-    }
 
     #[test]
     fn startup_record_is_bound_to_the_owned_loopback_process() {

@@ -13,7 +13,7 @@ async fn stopped_runtime_configuration_is_revalidated_replayed_and_startable() {
     .unwrap_or_else(|error| panic!("open configure store: {error}"));
     bootstrap(&store).await;
     let server = start(store, agent_catalog(directory.path())).await;
-    let mut socket = connect(&server.base_url).await;
+    let mut socket = connect(&server.base_url, &server.state).await;
     subscribe(&mut socket).await;
     let _snapshot = receive_json(&mut socket).await;
     send_create(

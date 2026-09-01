@@ -11,8 +11,8 @@ use thiserror::Error;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
 use crate::{
-    CentralHostIdentity, HostIdentityError, HostSecret, HumanInviteCredentialAuthority,
-    RoomRuntime, TicketStore,
+    CentralHostIdentity, HostIdentityError, HumanInviteCredentialAuthority, RoomRuntime,
+    TicketStore,
     connection_admission::ConnectionAdmission,
     public_ingress::{ManualPublicIngressError, PublicIngress, PublicIngressControlError},
     socket_admission::SocketAdmission,
@@ -32,7 +32,6 @@ pub struct AppState {
     pub store: SqliteStore,
     pub rooms: RoomRuntime,
     pub tickets: TicketStore,
-    pub host_token: HostSecret,
     pub provider_catalog: ProviderCatalogService,
     pub provider_adapter: ProviderAdapter,
     pub(crate) provider_credentials: ProviderCredentialStore,
@@ -57,7 +56,6 @@ impl AppState {
     pub async fn local(
         store: SqliteStore,
         tickets: TicketStore,
-        host_token: HostSecret,
         provider_catalog: ProviderCatalogService,
     ) -> Result<Self, AppStateBuildError> {
         let provider_credentials = ProviderCredentialStore::production();
@@ -65,7 +63,6 @@ impl AppState {
         Self::local_with_provider_dependencies(
             store,
             tickets,
-            host_token,
             provider_catalog,
             provider_adapter,
             provider_credentials,
@@ -81,14 +78,12 @@ impl AppState {
     pub async fn local_with_provider_adapter(
         store: SqliteStore,
         tickets: TicketStore,
-        host_token: HostSecret,
         provider_catalog: ProviderCatalogService,
         provider_adapter: ProviderAdapter,
     ) -> Result<Self, AppStateBuildError> {
         Self::local_with_provider_dependencies(
             store,
             tickets,
-            host_token,
             provider_catalog,
             provider_adapter,
             ProviderCredentialStore::production(),
@@ -99,7 +94,6 @@ impl AppState {
     async fn local_with_provider_dependencies(
         store: SqliteStore,
         tickets: TicketStore,
-        host_token: HostSecret,
         provider_catalog: ProviderCatalogService,
         provider_adapter: ProviderAdapter,
         provider_credentials: ProviderCredentialStore,
@@ -117,7 +111,6 @@ impl AppState {
             ),
             store,
             tickets,
-            host_token,
             provider_catalog,
             provider_adapter,
             provider_credentials,

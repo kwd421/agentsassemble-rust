@@ -6,15 +6,13 @@ use agentsassemble_domain::{
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_provider::ProviderCatalogService;
 use agentsassemble_server::{
-    AppState, HostSecret, HumanInviteCredentialAuthority, TicketStore,
-    VerifiedHumanInviteCredential, serve,
+    AppState, HumanInviteCredentialAuthority, TicketStore, VerifiedHumanInviteCredential, serve,
 };
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
-const HOST_TOKEN: &str = "human-invite-manager-host-token-0000001";
 const PUBLIC_ORIGIN: &str = "https://public.example.test";
 const PROXY_SECRET: &str = "human-invite-manager-proxy-secret-000001";
 
@@ -271,8 +269,6 @@ async fn start(ready: bool) -> RunningServer {
     let mut state = AppState::local(
         store.clone(),
         tickets.clone(),
-        HostSecret::new(HOST_TOKEN)
-            .unwrap_or_else(|error| panic!("validate human invite manager host secret: {error}")),
         ProviderCatalogService::fixed(ProviderCatalog::default()),
     )
     .await

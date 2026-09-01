@@ -3,14 +3,12 @@ use std::{io::Cursor, time::Duration};
 use agentsassemble_domain::{LOCAL_OPERATOR_USER_ID, ProviderCatalog};
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_provider::ProviderCatalogService;
-use agentsassemble_server::{AppState, HostSecret, TicketStore, serve};
+use agentsassemble_server::{AppState, TicketStore, serve};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
 use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
-
-const HOST_TOKEN: &str = "persona-boundary-host-token-00000000001";
 
 struct RunningServer {
     base_url: String,
@@ -212,8 +210,6 @@ async fn start() -> RunningServer {
     let state = AppState::local(
         store,
         tickets.clone(),
-        HostSecret::new(HOST_TOKEN)
-            .unwrap_or_else(|error| panic!("validate persona host secret: {error}")),
         ProviderCatalogService::fixed(ProviderCatalog::default()),
     )
     .await

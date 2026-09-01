@@ -14,7 +14,7 @@ async fn current_generation_resume_retry_reaches_its_lifecycle_owner() {
     bootstrap(&store).await;
     let staging_store = store.clone();
     let server = start(store, agent_catalog(directory.path())).await;
-    let mut socket = connect(&server.base_url).await;
+    let mut socket = connect(&server.base_url, &server.state).await;
     subscribe(&mut socket).await;
     let _snapshot = receive_json(&mut socket).await;
     let session_id =
@@ -75,7 +75,7 @@ async fn rejected_and_previous_generation_resume_retries_keep_lifecycle_results(
     let staging_store = store.clone();
     let catalog = agent_catalog(directory.path());
     let first = start(store, catalog.clone()).await;
-    let mut socket = connect(&first.base_url).await;
+    let mut socket = connect(&first.base_url, &first.state).await;
     subscribe(&mut socket).await;
     let _snapshot = receive_json(&mut socket).await;
     let rejected_session = create_stopped_agent(
@@ -140,7 +140,7 @@ async fn rejected_and_previous_generation_resume_retries_keep_lifecycle_results(
         .await
         .unwrap_or_else(|error| panic!("reopen durable resume retry store: {error}"));
     let second = start(reopened, catalog).await;
-    let mut retry_socket = connect(&second.base_url).await;
+    let mut retry_socket = connect(&second.base_url, &second.state).await;
     subscribe(&mut retry_socket).await;
     let _snapshot = receive_json(&mut retry_socket).await;
 

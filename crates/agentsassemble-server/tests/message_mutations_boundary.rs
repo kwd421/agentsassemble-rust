@@ -13,9 +13,7 @@ mod support {
 }
 
 use support::{
-    human_invite::{
-        HOST_TOKEN, canonical_session_token, fixture, join, open_session_socket, start,
-    },
+    human_invite::{canonical_session_token, fixture, join, open_session_socket, start},
     local_socket::connect,
     subscription_proof::AuthenticatedTestSocket,
 };
@@ -26,7 +24,7 @@ type BoundarySocket = AuthenticatedTestSocket<MaybeTlsStream<TcpStream>>;
 async fn local_socket_edits_deletes_and_replays_one_exact_sequenced_mutation() {
     let (store, _) = fixture(InviteScope::ReadOnly).await;
     let server = start(store).await;
-    let mut socket = open_local_socket(&server.base_url).await;
+    let mut socket = open_local_socket(&server.base_url, server.state()).await;
 
     send_command(
         &mut socket,
@@ -101,7 +99,7 @@ async fn local_socket_edits_deletes_and_replays_one_exact_sequenced_mutation() {
     assert_eq!(delete_ack["result"]["target_event_id"], message_id);
     socket.close().await;
 
-    let mut reload = connect(&server.base_url, HOST_TOKEN, "general").await;
+    let mut reload = connect(&server.base_url, server.state(), "general").await;
     assert_eq!(reload.subscribe(0).await["op"], "subscribed");
     let snapshot = reload.receive_json().await;
     assert_eq!(snapshot["op"], "snapshot");
@@ -211,7 +209,7 @@ async fn admitted_read_write_socket_mutates_only_its_own_message() {
 async fn admitted_read_only_socket_rejects_message_mutations_before_dispatch() {
     let (store, credentials) = fixture(InviteScope::ReadOnly).await;
     let server = start(store.clone()).await;
-    let mut local = open_local_socket(&server.base_url).await;
+    let mut local = open_local_socket(&server.base_url, server.state()).await;
     send_command(
         &mut local,
         "read-only-target-create",
@@ -359,7 +357,7 @@ async fn stale_human_session_cannot_mutate_on_an_unnotified_live_socket() {
 async fn deleted_vote_has_no_summary_after_its_mutation_event() {
     let (store, _) = fixture(InviteScope::ReadOnly).await;
     let server = start(store).await;
-    let mut socket = open_local_socket(&server.base_url).await;
+    let mut socket = open_local_socket(&server.base_url, server.state()).await;
     send_command(
         &mut socket,
         "vote-target-create",
@@ -408,8 +406,11 @@ async fn deleted_vote_has_no_summary_after_its_mutation_event() {
     server.stop().await;
 }
 
-async fn open_local_socket(base_url: &str) -> BoundarySocket {
-    let mut socket = connect(base_url, HOST_TOKEN, "general").await;
+async fn open_local_socket(
+    base_url: &str,
+    state: &agentsassemble_server::AppState,
+) -> BoundarySocket {
+    let mut socket = connect(base_url, state, "general").await;
     let subscribed = socket.subscribe(0).await;
     assert_eq!(subscribed["op"], "subscribed");
     assert_eq!(socket.receive_json().await["op"], "snapshot");
