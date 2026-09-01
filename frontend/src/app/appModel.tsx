@@ -96,31 +96,6 @@ export function channelLastReadSummary(setting?: ChannelSettings): string {
   }
 }
 
-export async function copyText(value: string) {
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(value);
-      return true;
-    }
-  } catch {
-    // Fall through to the textarea path when browser permissions reject clipboard writes.
-  }
-  const textarea = document.createElement("textarea");
-  textarea.value = value;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.left = "-9999px";
-  textarea.style.top = "0";
-  textarea.style.opacity = "0";
-  document.body.appendChild(textarea);
-  textarea.focus({ preventScroll: true });
-  textarea.select();
-  textarea.setSelectionRange(0, value.length);
-  const copied = document.execCommand("copy");
-  textarea.remove();
-  return copied;
-}
-
 export function agentSessionMemberToLiveAgent(
   member: RoomMember,
   session?: RoomAgentSession,

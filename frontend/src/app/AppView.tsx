@@ -42,9 +42,9 @@ export default function AppView({ controller }: { controller: AppController }) {
     canonicalRoom, changeAgentActivityVisibility, channel,
     channelHeaderActions, channelMenu, channelSearchNeedle, channelSearchQuery,
     channelSidebarWidth, closeMobileRoomInfo, closeMobileSidebar, collapsedChannelSections,
-    copyGuestAiPacket, createCompanionAiPacket, deviceToken, exitGuestSurface,
-    expireGuestSession, goToChannel, guestAiPacketPreview,
-    guestAiPacketStatus, guestExpired, guestJoinStatus, guestLocked,
+    deviceToken, exitGuestSurface,
+    expireGuestSession, goToChannel,
+    guestExpired, guestLocked,
     guestPanelProfile, guestSession, handleMobileShellPointerDown, handleMobileShellPointerEnd,
     inviteRoom,
     loadCanonicalRoomHistory, loadProviderUsage, lobbyPostingState, markChannelRead,
@@ -449,10 +449,6 @@ export default function AppView({ controller }: { controller: AppController }) {
               displayResourceBase={canonicalRoom.displayResourceBase}
               onRoleChange={updateMemberRole}
               guestLocked={guestLocked}
-              guestAiPacketPreview={guestAiPacketPreview}
-              guestAiPacketStatus={guestAiPacketStatus || guestJoinStatus}
-              onCreateCompanionAiPacket={() => void createCompanionAiPacket()}
-              onCopyGuestAiPacket={() => void copyGuestAiPacket()}
               channelNotifications={activeChannelSettings}
               quotaViewer={quotaViewer}
               onAgentUsageRequest={loadProviderUsage}

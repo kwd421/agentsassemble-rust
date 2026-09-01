@@ -164,28 +164,6 @@ export function redeemOperatorPairing({
   ).then(parseOperatorPairingRedeemResponse);
 }
 
-export function createCompanionRoomInvite({
-  sessionToken,
-  agentId,
-  displayName,
-  ttlSeconds = 600,
-}: {
-  sessionToken: string;
-  agentId: string;
-  displayName: string;
-  ttlSeconds?: number;
-}) {
-  return postJsonWithToken<RoomInviteCreateResponse>(
-    "/api/room-invite/companion",
-    {
-      agent_id: agentId,
-      display_name: displayName,
-      ttl_seconds: ttlSeconds,
-    },
-    sessionToken
-  );
-}
-
 export function leaveRoomInvite({ sessionToken }: { sessionToken: string }) {
   return postJsonWithToken<{ status: string }>("/api/room-invite/leave", {}, sessionToken);
 }

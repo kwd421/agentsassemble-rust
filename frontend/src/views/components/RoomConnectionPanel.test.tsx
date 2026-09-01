@@ -180,6 +180,21 @@ function expectProviderControlValue(label: string, option: string): void {
 }
 
 describe("RoomConnectionPanel", () => {
+  it("does not expose companion admission before its AgentBridge owner exists", () => {
+    render(
+      <RoomConnectionPanel
+        room={room}
+        agents={[]}
+        members={[]}
+        agentSessions={[]}
+        guestLocked
+      />
+    );
+
+    expect(screen.queryByRole("region", { name: "게스트 AI 세션 연결" })).toBeNull();
+    expect(screen.queryByText("AI 세션 패킷 만들기")).toBeNull();
+  });
+
   it("does not render a separate fixed Agent Session section", () => {
     render(<RoomConnectionPanel room={room} agents={[]} members={[]} agentSessions={[]} />);
 

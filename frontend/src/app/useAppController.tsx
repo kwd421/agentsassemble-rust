@@ -4,7 +4,6 @@ import type {
   MouseEvent as ReactMouseEvent,
 } from "react";
 import {
-  createCompanionRoomInvite,
   refreshProviderCatalog,
   type ChannelNotificationSetting,
   type ChannelSettings,
@@ -29,14 +28,12 @@ import {
 import { consumeOperatorPairingTokenFromUrl } from "../lib/roomGuestSession";
 import { roomPostingState } from "../lib/roomGuestPosting";
 import { currentServerProductSurface } from "../lib/roomDirectoryContract";
-import { remoteClientPacketPreview } from "../lib/roomInviteCopy";
 import { roomRailMenuPosition } from "../lib/roomRailMenuPosition";
 import {
   CHANNELS,
   EMPTY_ROOM,
   channelLastReadSummary,
   channelNotificationSummary,
-  copyText,
   type Channel,
   type ChannelMenuState,
   type RoomSettingsSectionId,
@@ -119,8 +116,6 @@ export function useAppController(deviceToken: string, clientId: string) {
   const [settingsModal, setSettingsModal] = useState<RoomSettingsState>(null);
   const [leaveRoomTargetId, setLeaveRoomTargetId] = useState("");
   const [agentCreateOpen, setAgentCreateOpen] = useState(false);
-  const [guestAiPacketPreview, setGuestAiPacketPreview] = useState("");
-  const [guestAiPacketStatus, setGuestAiPacketStatus] = useState("");
   const [agentActivityVisibility, setAgentActivityVisibility] = useState(
     loadAgentActivityVisibility
   );
@@ -158,8 +153,6 @@ export function useAppController(deviceToken: string, clientId: string) {
   }, [replaceRooms]);
   const onGuestAdmissionReset = useCallback(() => {
     setChannel("lobby");
-    setGuestAiPacketPreview("");
-    setGuestAiPacketStatus("");
   }, []);
   const clearOperatorPairingToken = useCallback(() => {
     setOperatorPairingToken("");
@@ -477,29 +470,6 @@ export function useAppController(deviceToken: string, clientId: string) {
     goToChannel(targetChannel);
   }
 
-  async function createCompanionAiPacket() {
-    if (!admittedSessionToken || !guestSession) return;
-    setGuestAiPacketStatus("AI 입장 패킷 생성 중...");
-    try {
-      const invite = await createCompanionRoomInvite({
-        sessionToken: admittedSessionToken,
-        agentId: `${guestSession.agentId || "friend"}-ai`,
-        displayName: `${guestSession.displayName || "Friend"} AI`,
-      });
-      const preview = remoteClientPacketPreview(invite.remote_client_packet);
-      setGuestAiPacketPreview(preview);
-      setGuestAiPacketStatus(preview ? "AI 입장 패킷 생성됨" : "AI 입장 패킷이 비어 있습니다");
-    } catch {
-      setGuestAiPacketStatus("AI 입장 패킷 생성 실패. 초대 세션 권한과 공개 URL 설정을 확인하세요.");
-    }
-  }
-
-  async function copyGuestAiPacket() {
-    if (!guestAiPacketPreview) return;
-    const copied = await copyText(guestAiPacketPreview);
-    setGuestAiPacketStatus(copied ? "AI 입장 패킷 복사됨" : "AI 입장 패킷 복사 실패");
-  }
-
   const toggleMembers = useCallback(() => setMembersOpen((value) => !value), []);
   const showMembers = !adminOpen;
   const inviteModalRoom = inviteModal ? rooms.find((room) => room.id === inviteModal.roomId) : undefined;
@@ -571,11 +541,9 @@ export function useAppController(deviceToken: string, clientId: string) {
     changeAgentActivityVisibility, channel, channelHeaderActions,
     channelMenu, channelSearchNeedle, channelSearchQuery, channelSidebarWidth,
     closeInviteModal, closeMobileRoomInfo, closeMobileSidebar, collapsedChannelSections,
-    copyGuestAiPacket,
-    createCompanionAiPacket,
     deviceToken, clientId, exitGuestSurface, expireGuestSession,
     generateInviteLink,
-    goToChannel, guestAdmissionBusy, guestAiPacketPreview, guestAiPacketStatus,
+    goToChannel, guestAdmissionBusy,
     guestExpired, guestJoinRequested, guestJoinStatus, guestJoinToken,
     guestPreflightRetryable, guestJoinRetryable,
     guestLocked, guestPanelProfile, guestRecoveryRequest, guestSession,
