@@ -1,4 +1,3 @@
-import type { RoomAppearance } from "../lib/roomAppearance";
 import {
   parseOperatorPairingRedeemResponse,
   parseRoomInviteAdmissionResponse,
@@ -10,7 +9,6 @@ import {
 import {
   fetchJsonServerOperator,
   postJson,
-  postJsonModerator,
   postEmptyServerOperator,
   postJsonWithIdentity,
   postJsonWithToken,
@@ -20,66 +18,11 @@ import {
   type PublicIngressStatus,
 } from "../lib/publicIngressStatus";
 
-export interface RoomInviteCreateResponse {
-  invite_id: string;
-  invite_token: string;
-  meeting_id: string;
-  agent_id: string;
-  display_name: string;
-  invite_scope: RoomAppearance["inviteScope"];
-  expires_at: string;
-  room_url: string;
-  join_url?: string;
-  remote_client_packet?: Record<string, unknown>;
-  client_type?: string;
-  provider_kind?: string;
-}
-
 export type { OperatorPairingRedeemResponse, RoomInviteJoinResponse };
 
 export type { RoomInviteAdmissionResponse };
 
 export type PublicInviteStatus = PublicIngressStatus;
-
-export function createRoomInvite({
-  meetingId,
-  agentId,
-  displayName,
-  inviteScope = "room",
-  ttlSeconds = 604800,
-  clientType = "browser",
-  providerKind = "manual",
-  participantType = "human",
-  maxUses = 0,
-  sessionToken = "",
-}: {
-  meetingId: string;
-  agentId: string;
-  displayName: string;
-  inviteScope?: RoomAppearance["inviteScope"];
-  ttlSeconds?: number;
-  clientType?: "browser" | "agent_bridge";
-  providerKind?: string;
-  participantType?: "human" | "agent";
-  maxUses?: number;
-  sessionToken?: string;
-}) {
-  return postJsonModerator<RoomInviteCreateResponse>(
-    "/api/room-invite/create",
-    {
-      meeting_id: meetingId,
-      agent_id: agentId,
-      display_name: displayName,
-      invite_scope: inviteScope,
-      ttl_seconds: ttlSeconds,
-      client_type: clientType,
-      provider_kind: providerKind,
-      participant_type: participantType,
-      max_uses: maxUses,
-    },
-    sessionToken
-  );
-}
 
 export function fetchPublicInviteStatus(beforeDispatch?: () => void) {
   return fetchJsonServerOperator<unknown>("/api/public-invite/status", beforeDispatch).then(

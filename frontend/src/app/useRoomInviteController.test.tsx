@@ -5,7 +5,6 @@ import {
   HumanInviteDispatchError,
   type ManagedHumanInviteCustody,
   type PublicInviteStatus,
-  type RoomFriend,
 } from "../api";
 import type { DesktopManagerRoomAuthority } from "../lib/desktopBridge";
 import type { RoomDockItem } from "../lib/roomDockModel";
@@ -13,7 +12,6 @@ import { useRoomInviteController } from "./useRoomInviteController";
 
 const apiMocks = vi.hoisted(() => ({
   createManagedHumanInvite: vi.fn(),
-  createRoomInvite: vi.fn(),
   fetchPublicInviteStatus: vi.fn(),
   revokeManagedHumanInvite: vi.fn(),
   startPublicInviteTunnel: vi.fn(),
@@ -168,7 +166,6 @@ describe("useRoomInviteController", () => {
       },
       expect.any(Function)
     );
-    expect(apiMocks.createRoomInvite).not.toHaveBeenCalled();
     expect(hook.result.current.humanInvites[0].copyUrl).toBe(custody.joinUrl);
     expect(hook.result.current.humanInvites).toEqual([
       expect.objectContaining({
@@ -447,50 +444,6 @@ describe("useRoomInviteController", () => {
       await secondStatus.promise;
     });
     expect(hook.result.current.publicInviteStatus?.public_url).toBe("https://current.example.com");
-  });
-
-  it("invites an active AI friend and clears room-scoped state for the next modal", async () => {
-    const friend: RoomFriend = {
-      friend_id: "friend:codex",
-      display_name: "Codex Friend",
-      handle: "codex",
-      participant_type: "subscription_ai",
-      provider_kind: "codex",
-      connection_kind: "agent_session",
-      source_agent_id: "codex-friend",
-      last_meeting_id: "",
-      status: "online",
-      source: "test",
-      created_at: "2026-07-12T00:00:00Z",
-      updated_at: "2026-07-12T00:00:00Z",
-    };
-    apiMocks.createRoomInvite.mockResolvedValue({
-      invite_id: "invite-friend",
-      invite_token: "token-friend",
-      meeting_id: room.meetingId,
-      agent_id: friend.source_agent_id,
-      display_name: friend.display_name,
-      invite_scope: "room",
-      expires_at: "2026-07-13T00:00:00Z",
-      room_url: "https://room.example.com",
-      join_url: "https://room.example.com/join?token=token-friend",
-      remote_client_packet: { attend: { room: room.meetingId } },
-    });
-    const hook = renderInviteController();
-    act(() => hook.result.current.open("room-1"));
-
-    await act(async () => {
-      await hook.result.current.inviteFriend({ friend, room });
-    });
-
-    expect(hook.result.current.friendStatuses[friend.friend_id]).toBe("입장 패킷 생성됨");
-    expect(hook.result.current.remoteClientPacket.preview).toContain('"attend"');
-
-    act(() => hook.result.current.open("room-2"));
-
-    expect(hook.result.current.remoteClientPacket).toEqual({ friendName: "", preview: "" });
-    expect(hook.result.current.friendStatuses).toEqual({});
-    expect(hook.result.current.humanInvites).toEqual([]);
   });
 
   it("makes no ingress or timer call for an ineligible surface", async () => {

@@ -1,18 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import {
   createManagedHumanInvite,
-  createRoomInvite,
   fetchPublicInviteStatus,
   startPublicInviteTunnel,
   stopPublicInviteTunnel,
   type ManagedHumanInviteCustody,
   type PublicInviteStatus,
-  type RoomFriend,
 } from "../api";
-import {
-  remoteClientPacketPreview,
-  secureInviteCopyTarget,
-} from "../lib/roomInviteCopy";
 import type { RoomDockItem } from "../lib/roomDockModel";
 import type { RoomAppearance } from "../lib/roomAppearance";
 import type { DesktopManagerRoomAuthority } from "../lib/desktopBridge";
@@ -22,11 +16,6 @@ import {
 } from "./useManagedHumanInvites";
 
 type InviteModalState = { roomId: string } | null;
-
-type InviteRemoteClientPacketState = {
-  friendName: string;
-  preview: string;
-};
 
 export type PublicAccessTransition = "idle" | "starting" | "stopping";
 
@@ -38,7 +27,6 @@ export type HumanInviteOptions = {
 type UseRoomInviteControllerOptions = {
   localOperatorEligible: boolean;
   resolveManagerRoomAuthority: (roomDockId: string) => DesktopManagerRoomAuthority;
-  sessionToken?: string;
 };
 
 const RETIRED_INGRESS_OPERATION = Symbol("retired ingress operation");
@@ -83,16 +71,12 @@ async function copyText(
 export function useRoomInviteController({
   localOperatorEligible,
   resolveManagerRoomAuthority,
-  sessionToken = "",
 }: UseRoomInviteControllerOptions) {
   const [modal, setModal] = useState<InviteModalState>(null);
   const [copyStatus, setCopyStatus] = useState("");
   const [publicInviteStatus, setPublicInviteStatus] = useState<PublicInviteStatus | null>(null);
   const [publicAccessTransition, setPublicAccessTransition] =
     useState<PublicAccessTransition>("idle");
-  const [friendStatuses, setFriendStatuses] = useState<Record<string, string>>({});
-  const [remoteClientPacket, setRemoteClientPacket] =
-    useState<InviteRemoteClientPacketState>({ friendName: "", preview: "" });
   const ingressGenerationRef = useRef(0);
   const ingressWaitRef = useRef<(() => void) | null>(null);
 
@@ -198,8 +182,6 @@ export function useRoomInviteController({
     setCopyStatus("");
     setPublicInviteStatus(null);
     setPublicAccessTransition("idle");
-    setFriendStatuses({});
-    setRemoteClientPacket({ friendName: "", preview: "" });
   }
 
   function close() {
@@ -344,44 +326,6 @@ export function useRoomInviteController({
     return record;
   }
 
-  async function createSecureInviteForRoom({
-    room,
-    agentId,
-    displayName,
-    inviteScope,
-    ttlSeconds = 86400,
-    maxUses = 1,
-    startTunnelIfNeeded = false,
-  }: {
-    room: RoomDockItem;
-    agentId: string;
-    displayName: string;
-    inviteScope: RoomAppearance["inviteScope"];
-    ttlSeconds?: number;
-    maxUses?: number;
-    startTunnelIfNeeded?: boolean;
-  }) {
-    if (!localOperatorEligible) {
-      throw new Error("외부 접속 관리는 패키지 앱의 로컬 운영자만 사용할 수 있습니다.");
-    }
-    const generation = beginIngressOperation();
-    await requirePublicInviteReady(generation, startTunnelIfNeeded);
-    assertIngressOperation(generation);
-    const invite = await createRoomInvite({
-      meetingId: room.meetingId,
-      agentId,
-      displayName,
-      inviteScope,
-      ttlSeconds,
-      maxUses,
-      sessionToken,
-    });
-    assertIngressOperation(generation);
-    const target = secureInviteCopyTarget({ joinUrl: invite.join_url || "" });
-    if (!target.copyUrl) throw new Error(target.status);
-    return { invite, target };
-  }
-
   async function startTunnel() {
     if (!localOperatorEligible) {
       setCopyStatus("외부 접속 관리는 패키지 앱의 로컬 운영자만 사용할 수 있습니다.");
@@ -463,93 +407,20 @@ export function useRoomInviteController({
     }
   }
 
-  async function copyRemoteClientPacket() {
-    if (!remoteClientPacket.preview) return;
-    setCopyStatus("");
-    const copied = await copyText(remoteClientPacket.preview);
-    setCopyStatus(copied ? "AI 입장 패킷 복사됨" : "패킷 복사 실패");
-  }
-
-  async function inviteFriend({
-    friend,
-    room,
-    appearance,
-    startTunnelIfNeeded = false,
-  }: {
-    friend: RoomFriend;
-    room: RoomDockItem;
-    appearance?: RoomAppearance;
-    startTunnelIfNeeded?: boolean;
-  }) {
-    const friendId = friend.friend_id;
-    setFriendStatuses((previous) => ({ ...previous, [friendId]: "초대 중" }));
-    try {
-      const isAiFriend = friend.participant_type !== "human";
-      const inviteScope = appearance?.inviteScope || room.inviteScope || "room";
-      if (!isAiFriend) {
-        await createManagedHumanInviteForRoom({
-          room,
-          displayName: friend.display_name,
-          inviteScope,
-          ttlSeconds: 86400,
-          maxUses: 1,
-          startTunnelIfNeeded,
-        });
-        setRemoteClientPacket({ friendName: "", preview: "" });
-        setFriendStatuses((previous) => ({
-          ...previous,
-          [friendId]: "초대 링크 생성됨",
-        }));
-        return;
-      }
-      const participantId = friend.source_agent_id || friend.friend_id;
-      const { invite } = await createSecureInviteForRoom({
-        room,
-        agentId: participantId,
-        displayName: friend.display_name,
-        inviteScope,
-        startTunnelIfNeeded,
-      });
-      const packetPreview = remoteClientPacketPreview(invite.remote_client_packet);
-      setRemoteClientPacket({
-        friendName: packetPreview ? friend.display_name : "",
-        preview: packetPreview,
-      });
-      setFriendStatuses((previous) => ({
-        ...previous,
-        [friendId]: "입장 패킷 생성됨",
-      }));
-    } catch (error) {
-      if (error === RETIRED_INGRESS_OPERATION) return;
-      setFriendStatuses((previous) => ({
-        ...previous,
-        [friendId]:
-          error instanceof Error
-            ? error.message
-            : "초대에 실패했습니다.",
-      }));
-    }
-  }
-
   return {
     modal,
     copyStatus,
     humanInvites: managedHumanInvites.humanInvites,
     publicInviteStatus,
     publicAccessTransition,
-    friendStatuses,
-    remoteClientPacket,
     invitePublicUrl:
       publicInviteStatus?.stable_url || publicInviteStatus?.public_url || "",
     open,
     close,
-    createSecureInviteForRoom,
     startTunnel,
     stopTunnel,
     generateSecureInvite,
     copyHumanInvite: managedHumanInvites.copy,
     revokeHumanInvite: managedHumanInvites.revoke,
-    copyRemoteClientPacket,
-    inviteFriend,
   };
 }

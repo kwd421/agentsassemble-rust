@@ -280,7 +280,6 @@ export function useAppController(deviceToken: string, clientId: string) {
   const roomInvite = useRoomInviteController({
     localOperatorEligible: startupHostEnabled,
     resolveManagerRoomAuthority,
-    sessionToken: admittedSessionToken,
   });
   const {
     modal: inviteModal,

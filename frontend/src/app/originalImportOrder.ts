@@ -37,7 +37,6 @@ import "../lib/sidebarResizeModel";
 import "../lib/roomDockModel";
 import "../lib/roomRailMenuPosition";
 import "../lib/agentActivityPreferences";
-import "../lib/roomInviteCopy";
 import "../lib/apiErrors";
 import "../lib/deviceIdentity";
 import "../lib/guestRecovery";
