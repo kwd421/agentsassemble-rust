@@ -1,7 +1,7 @@
 # Human User Profile Slice
 
-Status: published contract owner; Agent Session projection and remote-human HTTP
-authorization boundaries reopened by repository audit F-06 and D-03
+Status: published contract owner; Agent Session projection remains reopened by
+repository audit F-06. The D-03 remote-human HTTP correction is implemented.
 
 ## Definition
 

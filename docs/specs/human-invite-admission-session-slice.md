@@ -1,17 +1,16 @@
 # Human Invite, Admission, and Room Session Slice
 
-Status: implementation evidence retained; current contract reopened by repository
-audit D-02, D-03, and D-07. Human admission/session and one-use WebSocket exchange
-remain, while
-the per-operation remote HTTP purpose-ticket exchange is a simplification target.
-Desktop private-control purpose tickets are not reopened by this finding.
+Status: implementation evidence retained; current contract remains reopened by
+repository audit D-07. The D-02 frame correction and D-03 direct remote HTTP target
+authorization are implemented. Human admission/session, the one-use WebSocket
+exchange, and desktop private-control purpose tickets remain.
 
 ## Definition
 
 Audit correction at Rust baseline `8a5f75a`: a remote human already presenting a
 room session bearer must be authorized once at the target HTTP route rather than
 minting and consuming a second purpose ticket first. The detailed exchange
-implementation below is historical evidence until Phase 0B replaces it; it is not
+implementation below is superseded historical evidence; it is not
 the approved target contract. Socket upgrade tickets remain one-use because the
 WebSocket boundary cannot carry the session Authorization header normally. The
 remote socket grant carries no proof key, and remote receipts/frames carry no proof
