@@ -384,7 +384,8 @@ falls through to desktop authority.
 
 Only WebSocket connection uses a typed session-exchange route, because the browser
 upgrade cannot normally carry the Authorization header. It mints one opaque,
-short-lived, one-use socket ticket bound to the exact room and origin. Desktop local
+short-lived, one-use socket ticket bound to the exact room; the ingress owner
+separately enforces the expected origin. Desktop local
 HTTP/WS tickets remain a separate private-control contract.
 
 Read-only room scope denies posting, preference mutation, profile-avatar upload, and
@@ -534,13 +535,13 @@ boundaries:
    retargets a request, and an older response generation cannot replace a newer
    pair.
 2. Historical B1b made the native runtime ticket plus frame-proof key one strictly
-   validated owner before any socket or resource effect. D-02 retains that key only
-   for a smaller local fresh-challenge receipt because native control and loopback
-   frames cross separate paths. The target accepts exactly `ticket`, `ttl_seconds`,
-   `websocket_base_url`, and `server_proof_key`. That key is an independent 32-byte
-   CSPRNG value unique to the same one-use ticket, shares its TTL and consumption,
-   and is strictly validated before any socket, display-resource, readiness, or
-   command effect.
+   validated owner before any socket or resource effect. D-02 no longer pre-approves
+   that key: separate native-control and loopback paths are only a threat hypothesis.
+   The target accepts exactly `ticket`, `ttl_seconds`, and `websocket_base_url` unless
+   a packaged endpoint-substitution reproduction, with a named in-scope actor, proves
+   the smaller exact-child and one-use-ticket boundary insufficient. Only then may a
+   ticket-bound proof key and minimal receipt be restored; per-frame proof needs a
+   separate active-relay reproduction.
    The opaque ticket is nonempty, TTL is a positive safe integer, and the URL is exactly
    `ws://127.0.0.1:<port>` with no credentials, path, query, fragment, or alternate
    serialization. The derived HTTP display base belongs only to that accepted
@@ -631,7 +632,7 @@ These stages add no durable frontend invite state, second URL/timestamp policy,
 generic resource framework, compatibility path, or fallback. Each independently
 buildable commit must remain below 1,000 changed lines, must pass the repository gates
 and focused contract tests, and remains independently rollbackable. Batch timing is
-owned by `docs/PRODUCT_REIMPLEMENTATION_PLAN.md`; the resulting exact range is pushed
+owned only by the active `Standing project workflow` in `AGENTS.md`; the resulting exact range is pushed
 and reviewed by both manual reviewers. A correction needed to close an active
 review may be pushed and re-reviewed immediately as part of that batch. Packaged
 Computer Use remains the completion test rather than a substitute for these authority
@@ -1188,8 +1189,8 @@ while promoting the same opaque ID through the profile lifecycle.
   The finite remote WebSocket handshake validates that already pinned surface plus
   the exact room/participant and reaches readiness only at its contiguous high-water;
   because remote key delivery would share that same HTTPS/WSS authority, D-02 adds no
-  remote signed receipt or per-frame proof layer. The separately delivered local
-  receipt remains owned by the native path.
+  remote signed receipt or per-frame proof layer. The native path likewise has no
+  approved proof layer without D-02's separate positive evidence gates.
 - CPU, memory, disk, and latency cost: a successful admission response performs one
   existing bootstrap-status SQLite read so server ID and lineage are not copied into
   a new process state owner. It serializes one bounded product-surface object and the

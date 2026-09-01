@@ -204,17 +204,19 @@ Correction substage:
 
 - Remove the uncalled HTTP host-challenge/ticket bootstrap and its startup secret;
   keep desktop private-control issuance and authenticated remote-session issuance.
-- Keep a simplified fresh-challenge server receipt for the local desktop because its
-  proof key crosses private control/Tauri IPC while frames cross a separate loopback
-  socket; this detects the concrete post-grant sidecar-death/port-substitution case.
-  Remove the remote proof because its key and frames cross the same HTTPS/WSS ingress
-  authority. Establish an in-scope active local relay through controlled reproduction
-  or equivalent concrete topology evidence before deciding whether local per-frame
-  HMAC remains necessary; if it is, authenticate the Snapshot and every later
-  bidirectional product frame as raw bounded UTF-8 bytes with the cached key and no
-  base64, repeated key derivation, or permissions digest. Otherwise use ordinary
-  bounded JSON after the local receipt. In every case
-  preserve the finite
+- Remove the remote proof because its key and frames cross the same HTTPS/WSS ingress
+  authority. Treat both the local fresh-challenge receipt and local per-frame proof as
+  unapproved until one controlled packaged reproduction, or equivalent concrete
+  topology evidence, names the attacker capability and shows why native-owned child
+  liveness/identity, an issuer-runtime-local one-use ticket, and separate exact ingress
+  checks cannot fail closed.
+  Separate private-control and loopback paths are a threat hypothesis, not that
+  evidence. Without it, remove the proof key, receipt, and frame envelope and use the
+  native-owned one-use ticket with ordinary bounded JSON. If evidence later justifies
+  a receipt but not an active relay, stop at the one receipt; per-frame authentication
+  requires its own evidence and, if retained, covers the Snapshot and every later
+  bidirectional product frame as raw bounded UTF-8 bytes with one cached key and no
+  base64, repeated derivation, or permissions digest. In every case preserve the finite
   snapshot/catch-up handshake, event sequence, request-ID deduplication, uncertain
   ACK recovery, product-surface equality, TLS/origin, ingress, and one-use socket
   ticket contracts.
@@ -224,6 +226,10 @@ Correction substage:
   Keep desktop purpose tickets and socket-upgrade tickets because they cross
   distinct private-control and WebSocket boundaries.
 - Remove or gate copied frontend promises that cannot reach a Rust authority.
+- Keep the user-approved single room-search presentation and participant-ID avatar
+  projection, but do not label lobby-only results as every readable channel. Until the
+  custom-text owner exists, the visible scope must state the implemented lobby/current
+  scope; the later custom-channel slice completes the true room-wide union.
 - Remove false capabilities from the advertised surface until their actions exist.
 - Replace the orphan frontend wire model and behavior-module CSS import chain with
   one generated protocol owner and one explicit stylesheet-order owner.
@@ -407,15 +413,9 @@ storage/external protocol, acceptance, and verification. Each change is the
 smallest independently buildable, verifiable, rollbackable commit under 1,000
 changed lines. Do not wait for 500 LOC before separating responsibilities: a mixed
 owner is split as soon as it appears, while a cohesive owner is not mechanically
-  cut to satisfy a count. The current batch rule is: feature count alone does not
-  trigger a push before the unreviewed aggregate reaches at least 1,000 changed
-  lines; once it does, push and review the batch. If three feature commits accumulate,
-  do not let that batch grow beyond roughly 2,000 changed lines before review. Older
-  slice-level `three features or 2,000 lines` text is historical and non-authoritative;
-  active slices refer here. The conflicting `AGENTS.md` wording remains a recorded
-  documentation correction because that file contains user-owned uncommitted work
-  and is not edited by this audit. The current unreviewed batch already triggers
-  review under either wording, so no action depends on choosing the weaker threshold.
+  cut to satisfy a count. Batch accumulation, push timing, and review timing are owned
+  only by the active `Standing project workflow` in `AGENTS.md`. This plan neither
+  restates nor reinterprets those thresholds.
 
 Every pushed batch receives manual review of individual commits and the cumulative
 range from the designated critical web session and Daybreaker Blue High. Requests

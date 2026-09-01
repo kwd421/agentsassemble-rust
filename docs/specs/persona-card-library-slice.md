@@ -589,7 +589,7 @@ current slice is reopened only for the separate D-04 fixed-host network-policy d
 - The copied frontend, HTTP/TCP authority, persistence, provider-neutral turn context,
   packaged local flow, and at least the authorized real provider matrix are verified.
   Computer Use owns only that packaged verification run and is fully cleaned afterward.
-- Every independent commit remains below 1,000 changed lines. Batch timing is owned by
-  `docs/PRODUCT_REIMPLEMENTATION_PLAN.md`, with structure,
+- Every independent commit remains below 1,000 changed lines. Batch timing is owned only by
+  the active `Standing project workflow` in `AGENTS.md`, with structure,
   duplicate policy, overimplementation, lifecycle, performance evidence, and security
   included in both critical-web and Daybreaker Blue High review requests.

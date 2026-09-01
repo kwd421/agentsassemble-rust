@@ -41,7 +41,8 @@ implementation's preliminary remote session-to-purpose-ticket exchange is histor
 Phase 0B removal target, not part of this approved contract. Both responses are private/no-store. An
 invalid nonempty cursor fails rather than silently restarting pagination.
 
-`channel_id=lobby` and `channel_id=all` currently search the same implemented lobby owner. Any
+`channel_id=lobby` and `channel_id=all` currently search the same implemented lobby owner. That alias
+is implementation evidence only and may not be presented as a completed room-wide search. Any
 concrete non-lobby channel remains explicitly unavailable until custom-channel messages have a Rust
 authority. No HTTP fallback supplies local visible events when the canonical search request fails.
 
@@ -131,8 +132,9 @@ final whole-repository gate and packaged evidence are recorded in `docs/VERIFICA
 
 The desktop room header now has one room-named message search. Its fixed header slot remains visible
 while the member body opens and closes; the removed right-panel member filter no longer owns a
-second query or duplicates the search affordance. The default scope is the room-wide `all` request,
-which still fails explicitly for custom-channel storage until that Rust owner exists. This layout
+second query or duplicates the search affordance. The default currently sends `all`, but the server
+silently executes only the lobby owner; F-20 requires the UI to expose the implemented scope
+truthfully until a later custom-channel owner completes the real room-wide union. This layout
 change removes one React state and one filter pass; it adds no request, timer, polling loop, cache,
 fallback, or durable state. Focused frontend tests cover the room label and profile-SSoT avatar, and
 the TCP search test covers the returned participant identity.

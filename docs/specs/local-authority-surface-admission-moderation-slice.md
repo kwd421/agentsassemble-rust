@@ -10,13 +10,13 @@ Comparison baseline: original
 Audit correction at Rust baseline `8a5f75a`: the finite snapshot/catch-up,
 one-use socket ticket, event sequence, request-ID deduplication, uncertain-ACK
 replay, bounds, and product-surface equality remain required. The uncalled HTTP host
-challenge/startup secret and remote proof are Phase 0B removal targets. The local
-fresh-challenge receipt remains in smaller form because its key crosses private
-control/Tauri IPC separately from the loopback socket and detects post-grant
-sidecar-death/port substitution. Local per-frame authentication remains open until
-controlled reproduction or equivalent concrete topology evidence establishes an
-in-scope active relay; base64, repeated key derivation, and permissions digest are
-not retained. Historical evidence below does not approve broader layers.
+challenge/startup secret and remote proof are Phase 0B removal targets. Local receipt
+and per-frame authentication are also removed from the approved target unless separate
+controlled packaged reproductions, or equivalent concrete topology evidence, first
+defeat the smaller native-child/one-use-ticket boundary and then establish an in-scope
+active relay. Separate private-control and loopback paths alone are not evidence;
+base64, repeated key derivation, and permissions digest are not retained. Historical
+evidence below does not approve broader layers.
 
 Historical implementation checkpoint, 2026-08-25: immutable local authority/zero-room
 bootstrap, server-wide human profile, canonical directory/create-room flow, and
@@ -286,20 +286,20 @@ lost unless the driver retains exact retry authority. A response for a request I
 browser does not currently own is also a protocol failure;
 it closes the channel rather than being ignored.
 
-## Target finite subscription after D-02
+## Finite subscription decision after D-02
 
 The target retains the canonical receiver/barrier, exact Snapshot cursor `C`, finite
 high-water `H`, contiguous durable catch-up, one establishment deadline, generated
 strict frame schemas, size limits, event sequence, request-ID deduplication, and
 uncertain-ACK replay. One-use ticket plus origin/TLS admission establishes the
 connection principal. Remote transport uses ordinary bounded JSON with no second
-proof from the same ingress authority. Local desktop verifies one minimal
-fresh-challenge receipt over the expected room, participant, protocol, and `C/H`
-using its separately delivered key. Post-receipt local frames use ordinary JSON
-unless controlled reproduction or equivalent concrete topology evidence establishes
-an in-scope active relay; only then may the Snapshot and every later bidirectional
-product frame authenticate raw UTF-8 bytes, direction, and counter with the cached
-key. No base64 envelope, repeated key derivation, Snapshot
+proof from the same ingress authority. Local transport also uses ordinary bounded
+JSON unless a controlled packaged endpoint-substitution reproduction names an
+in-scope actor and demonstrates why exact child liveness/identity plus the fresh
+issuer-runtime-local ticket and separate ingress checks are insufficient. Only that evidence may restore one minimal
+receipt. A separate active-relay reproduction is required before the Snapshot and
+every later bidirectional product frame may authenticate raw UTF-8 bytes, direction,
+and counter with one cached key. No base64 envelope, repeated key derivation, Snapshot
 digest, or permissions digest remains.
 
 ## Historical proof-bound subscription (superseded by D-02)
@@ -597,17 +597,21 @@ provider presentation, profile-card/modal stacking, panel geometry, conditional
 nickname input, and harness terminology; no approximate shell is introduced.
 
 High-value deterministic contracts cover bootstrap concurrency/restart, lease ABA,
-permanent debit/replay, proof transcript and `H == C`/gap/deadline, roster/roles,
+permanent debit/replay, `H == C`/gap/deadline, roster/roles,
 mute-before-authorize, authorize-before-mute, Preparing-slot mute, duplicate mute,
 pre-registration, every execution crash phase, claim expiry, owner-adoption ABA,
 runtime nonce mismatch, typed quiescence, terminal suppression, runtime reuse,
 idle unmute, early-unmute/remute, ordered-floor wake preservation, quarantine
 requeue zero, later exact-proof requeue one, cross-room session identity,
 immutable-launch uniqueness, cross-room finalizer rejection, and unmute progression.
-The D-02 correction additionally requires a replacement loopback listener that learns
-the ticket but not the private-control key to produce no accepted receipt, Snapshot,
-readiness, or command effect, plus a remote grant/frame fixture containing no proof
-key, receipt proof, frame proof, or authenticated-envelope fields.
+The audited baseline's proof-transcript tests remain historical evidence only and are
+not a target requirement without D-02's positive evidence gate.
+The D-02 correction first requires a packaged endpoint-substitution attempt against
+the exact owned child and fresh ticket. If it cannot establish an in-scope actor and
+false acceptance, the local and remote grant/frame fixtures contain no proof key,
+receipt proof, frame proof, or authenticated-envelope fields. Any retained receipt
+or frame proof instead requires its own positive reproduction and focused rejection
+test.
 The implemented candidate additionally covers immutable assignment-envelope
 rehydration, pre-dispatch task death, post-dispatch ambiguous task death, exact
 live-control recovery from quarantine, late provider-result suppression by the
@@ -629,8 +633,8 @@ Agent Add overlays, surface-gated absence, role/mute busy interruption, runtime
 reuse, unmute, reconnect, and finite catch-up. Only resources created by that
 verification run may be stopped or deleted.
 
-Each complete vertical slice is independently committed. Batch timing is owned by
-`docs/PRODUCT_REIMPLEMENTATION_PLAN.md`; the exact pushed range then receives
+Each complete vertical slice is independently committed. Batch timing is owned only
+by the active `Standing project workflow` in `AGENTS.md`; the exact pushed range then receives
 same-session critical-diff and Daybreaker Blue High manual-security review. An
 incomplete owner remains unexposed and is not completion evidence.
 

@@ -1,7 +1,8 @@
 # Repository-wide reimplementation audit — 2026-09-01
 
 Status: manual source, history, duplication, and defensive-complexity audit
-complete; external review pending; implementation verdict `REVISE`. This record
+complete; initial external reviews returned `REVISE`; implementation verdict
+`REVISE`. This record
 owns findings and dispositions, not product contracts or the implementation
 sequence.
 
@@ -55,6 +56,28 @@ Therefore the accurate conclusion is: there was substantial slice-level design,
 but no complete master reimplementation plan. Existing verified foundations are
 not discarded, but no completion percentage is meaningful until the inventory and
 authority map in `docs/PRODUCT_REIMPLEMENTATION_PLAN.md` are closed.
+
+Manual review also found one published commit-order defect. `b558da5` introduced
+the plan while referring to a complete finding register and `D-07`, but the register
+did not exist in that tree and arrived in `aaeb74c`. The current tree resolves the
+reference; the earlier commit is still not independently self-contained. Rewriting
+public history is outside this correction, so this remains a recorded historical
+rollback/review limitation rather than a defect claimed as fixed. Future commits may
+refer only to authority present in the same commit.
+
+## Initial external review findings
+
+- Critical ChatGPT Pro: `REVISE — C0/H0/M3/L0`. Accepted findings are the
+  lobby-only `all` search overclaim, the historical `b558da5`/`aaeb74c` ordering
+  defect above, and D-02's evidence-free local receipt approval. The participant
+  filter removal itself remains the user's approved UI difference, not a parity
+  restoration task.
+- Daybreaker Blue High manual review: `REVISE — C0/H0/M4/L0`. Accepted findings are
+  the duplicated batch-threshold authority, the same D-02 evidence gap, one D-03
+  current-versus-target wording error, and two competing frontend allowlist owners.
+
+These are review findings, not approvals. Final reviewer dispositions are recorded
+only after the correction commit is pushed and re-reviewed.
 
 ## Fix findings
 
@@ -381,6 +404,26 @@ generate only matching named UI hints from the existing contract exporter. An
 intentional narrower UI limit must be documented; no form-schema framework is
 needed.
 
+### F-20 — room-wide search silently returns lobby-only results
+
+Disposition: `Fix exposure in Phase 0B; complete in the custom-channel slice`;
+medium product correctness impact.
+
+The user-approved UI correction in `8c13a5c` intentionally removed the separate
+right-panel participant filter, retained one room-named message search, made `all`
+the default scope, and added participant-ID avatar projection. The search label and
+scope control now promise every readable channel (`ChannelHeader.tsx:382-412`), but
+`useAppMessageSearch.ts:20-24` sends `all` to a server that always calls the lobby
+store (`message_search_web.rs:99-117`) and always projects `channel_id = "lobby"`.
+The frontend response contract likewise accepts only lobby results. The original
+`message_search/routes.py:96-110` expanded `all` across lobby and custom text
+channels, so this is a silent narrowing rather than a completed room-wide search.
+
+Until the custom-text message/search owner exists, expose only the implemented
+lobby/current scope and describe it truthfully. The later custom-channel slice may
+restore a real room-wide union. Do not add a client-side merge, dummy endpoint,
+fallback, polling path, or generic search framework.
+
 ## Consolidate findings
 
 ### C-01 — participant JSON load/save SQL mechanism is repeated
@@ -580,25 +623,27 @@ both real ticket issuers.
 
 ### D-02 — local receipt, remote proof, and per-frame proof have different threats
 
-Disposition: `Keep/Simplify local receipt; Remove remote proof; Measure local
-per-frame proof`; Phase 0B.
+Disposition: `Remove remote proof; Measure local receipt and per-frame proof before
+retaining either`; Phase 0B.
 
 `authenticated_channel.rs`, `server_proof.rs`, and `authenticatedFrames.ts` HMAC,
 counter, base64-encode, copy, and asynchronously serialize every frame, adding
-roughly one-third wire expansion. The native proof key crosses private control and
-bundled-only Tauri IPC while its frames cross `ws://127.0.0.1`; a fresh-challenge
-receipt therefore detects the concrete post-grant sidecar-death/port-substitution
-case. Keep that local receipt but bind only the expected room, participant, protocol,
-and finite `C/H`. Remote key delivery and frames cross the same HTTPS/WSS ingress, so
-remote HMAC is not independent authority and is removed. The architecture's
-same-account exclusion applies only to provider executable binding and cannot decide
-room transport. Establish and scope an active local relay through controlled
-reproduction or equivalent concrete topology evidence before retaining local
-per-frame authentication. If proven, authenticate the Snapshot and every later
-bidirectional product frame as raw bounded UTF-8 bytes with direction and counter
-under the cached key; otherwise use ordinary JSON after the
-receipt. In both cases remove base64, repeated key derivation, snapshot proof, and
-permissions digest, and keep
+roughly one-third wire expansion. The native proof key and loopback frames cross
+different paths, but repository evidence shows synthetic payload tampering rather
+than a packaged endpoint-substitution or active-relay reproduction. The current
+separate-path topology is a hypothesis, not evidence that another proof lifecycle is
+required. Remote key delivery and frames cross the same HTTPS/WSS ingress, so remote
+HMAC is not independent authority and is removed.
+
+Before retaining any local receipt, record the attacker capability, a controlled
+packaged reproduction or equivalent concrete topology evidence, and why the native
+owner's exact child liveness/identity check, issuer-runtime-local one-use ticket, and
+separate ingress checks cannot fail closed. Without that evidence, remove the local proof key and receipt and
+use ordinary bounded JSON after the ticket is consumed. Local per-frame proof requires
+separate evidence of an in-scope active relay; if proven, authenticate the Snapshot
+and every later bidirectional product frame as raw bounded UTF-8 bytes with direction
+and counter under one cached key. In every outcome remove base64, repeated key
+derivation, snapshot proof, and permissions digest, and keep
 one-use tickets, TLS/origin/ingress checks, strict schemas/limits, the finite `C/H`
 handshake, sequence, request-ID replay, uncertain-ACK recovery, and one-time
 native/sidecar product-surface equality.
@@ -813,6 +858,7 @@ This table routes findings; it does not add another contract layer.
 | F-17 | OpenCode SSE decoder | 1 | malformed `data:` fails immediately; valid comments and split chunks still pass |
 | F-18 | invite controller and admission surfaces | 0B, 7 | old host-token path is absent; human flow remains exact; bridge controls stay unavailable until Phase 7 |
 | F-19 | domain settings/profile contract exporter | 0B | active UI hints match the decided product limit or document an intentional narrower UX bound; server remains authoritative |
+| F-20 | message-search exposure plus custom-channel search owner | 0B and custom-channel slice | lobby-only search is labelled as lobby/current scope until a real room-wide union exists; no fallback merge |
 | C-01 | persistence participant codec | 0B prerequisite to next participant mutation | exact load/save primitive checks cardinality; authorization/transitions stay local |
 | C-02 | protocol exporter/snapshot decoder | 0B | capabilities have one generated owner and no parallel permissions digest |
 | C-03 | provider-turn envelope contract | 1 | semantic constants/predicates have one owner while every trust boundary still validates |
@@ -828,7 +874,7 @@ This table routes findings; it does not add another contract layer.
 | C-13 | existing browser/session/provider protocol owners | 0B and 1 | identical wire constants have one producer; every trust boundary still validates independently |
 | C-14 | existing Codex bundle owner | 1 | pure bundle identity is shared while every TOCTOU revalidation boundary remains |
 | D-01 | local startup/control and core HTTP routes | 0B | no host challenge/secret path; desktop and human socket tickets still complete |
-| D-02 | room socket protocol/client and ingress topology | 0B | a fake replacement listener cannot forge the local receipt or cause Snapshot/readiness/command effects; remote grant/frames contain no proof; local post-receipt frame proof remains only on controlled reproduction or equivalent concrete in-scope topology evidence; finite subscribe, sequence, replay, and failure contracts hold |
+| D-02 | room socket protocol/client and ingress topology | 0B | remote proof is absent; local receipt and frame proof remain only if separate controlled evidence defeats the smaller child-identity plus one-use-ticket design; otherwise grants contain no proof key and frames use bounded JSON; finite subscribe, sequence, replay, and failure contracts hold |
 | D-03 | human-session target authorization | 0B | one bounded-header session authorization per HTTP operation, no bearer disclosure; desktop/socket tickets unchanged |
 | D-04 | DeepSeek fixed-host HTTP client | 1 | ordinary TLS client passes fixed-host tests; Custom API SSRF policy remains separate |
 | D-05 | provider runtime handle codec | 1 | discarded suffix absent; boot/token/owner and stale-CAS regressions pass |

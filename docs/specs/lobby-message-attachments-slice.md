@@ -290,7 +290,7 @@ speculate about it.
   owning boundary, preserved contracts, trade-off, and measured verification; do not
   add a cache or transport abstraction from intuition alone.
 - Commit each buildable, independently verifiable and rollbackable change below 1,000
-  changed lines. Batch timing is owned by `docs/PRODUCT_REIMPLEMENTATION_PLAN.md`;
+  changed lines. Batch timing is owned only by the active `Standing project workflow` in `AGENTS.md`;
   then obtain manual web-session and Daybreaker Blue High source reviews for security,
   structure, duplicated policy, overimplementation, SSoT, lifecycle cleanup, and removable
   state. The Standard Scan already started for pushed HEAD `b46aa02` is a one-time review;

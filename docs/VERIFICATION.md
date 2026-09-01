@@ -6,9 +6,13 @@ Status: current real-client verification owner
 
 Verification claims only the boundary actually observed. Build, lint, unit tests, simulated sockets, responsive browser emulation, and real provider runs are separate evidence classes and cannot substitute for one another.
 
+Historical entries below retain their contemporaneous batch and review wording as
+evidence. They do not own current commit, push, or review timing; only the active
+`Standing project workflow` in `AGENTS.md` does.
+
 The active comparison baseline is original
-`d5046473010d1353a81ee38337360e6d98f7bd6f` and public Rust
-`1c5b37e`. Local uncommitted behavior
+`d5046473010d1353a81ee38337360e6d98f7bd6f`, audited Rust product behavior
+`8a5f75a`, and public documentation HEAD `d9e6c06`. Local uncommitted behavior
 is never described as public completion. Every completed-slice evidence entry must
 name the tested Rust commit, original provenance commit, platform/build, exact
 entry point and command flow, viewer identity, provider/model where applicable,
@@ -46,10 +50,11 @@ boundaries:
 
 ## Frontend provenance and parity evidence
 
-The frontend reference is original commit `d504647…`. Each verified Rust commit
-records a Rust-only change allowlist. Allowed differences are runtime bootstrap,
-ticket/transport, the Tauri native boundary, and behavior-preserving source splits;
-controller command decomposition or client-owned product state is a parity failure.
+The frontend reference is original commit `d504647…`. The exact active Rust-only
+change allowlist is owned by `docs/FRONTEND_BACKEND_GAPS.md`; this document records
+verification methods and observed results without restating or widening that list.
+An unlisted controller decomposition, client-owned product state, or visual/product
+behavior change is a parity failure.
 
 At fixed desktop and responsive viewports, compare asset identity, selector/class,
 component and rendered DOM order, responsive breakpoints, left/right panel widths,
@@ -946,6 +951,13 @@ replacement, and non-desktop reachability. It likewise returned explicit
 `APPROVE` with no Critical, High, or Medium blocker.
 
 ### Proof-bound finite subscription candidate: 2026-08-25
+
+Repository audit D-02 supersedes the approval implication of this historical record.
+These tests establish properties of the implemented proof machinery after a peer is
+given its key; they do not reproduce a packaged actor that can replace the owned
+loopback endpoint or relay its traffic without reading the private-control key.
+Receipt and per-frame proof therefore remain unapproved without their separate
+positive evidence gates.
 
 The room socket now registers its live receiver before constructing the durable
 snapshot, serializes the exact final Snapshot frame at cursor `C`, and fixes one
@@ -5050,11 +5062,15 @@ retained interrupt remains required before this active slice can close.
 
 The 1440-by-900 packaged comparison exposed two desktop search fields with different owners: the
 channel header searched canonical messages while the right panel filtered only its current member
-projection. Discord reference captures showed one room search remaining at the same header position
-while only the member body opened or closed. The correction removes the member-filter state and
-filter pass, keeps one room-named message search in a fixed 300-pixel header slot, and makes the
-room-wide `all` scope the default. The right-panel body retains its existing 300-pixel ownership and
-gets no new request or client authority.
+projection. Discord reference captures and the user's explicit UI direction selected one room search
+at the stable header position, so the correction intentionally removed the member-filter state,
+kept one room-named message search in a fixed 300-pixel slot, and made `all` the default. The
+right-panel body retained its existing 300-pixel ownership and gained no request authority.
+
+The later repository audit limits that evidence: current Rust `all` is a lobby-only alias, not the
+original union of lobby plus custom text channels. The displayed “all readable channels” promise and
+default therefore remain F-20, not room-wide completion. Until the custom-channel owner exists, a
+real-client result proves only lobby search even when the request parameter is `all`.
 
 Search results now return the canonical message actor `participant_id` and resolve the current
 profile image through the existing room participant/Agent Session profile projection. Display-name
@@ -5065,7 +5081,7 @@ or unbounded allocation. Focused persistence, provider, TCP, parser, search life
 lobby tests plus the production frontend build pass. Computer Use then verified the rebuilt
 1440-by-900 package with one `새 회의실 검색` field, no `general` or right-panel member-search
 duplicate, and a stable search/toggle header position before and after closing the member body. A
-real `INTERRUPT` query returned ten canonical results in room-wide scope with a circular avatar
+real `INTERRUPT` query returned ten canonical lobby results through the `all` alias with a circular avatar
 surface for every result. The profile-image branch is covered by a canonical-participant fixture;
 this isolated room's current profiles intentionally use initial fallbacks where no SSoT image is
 set.

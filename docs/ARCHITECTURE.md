@@ -33,10 +33,11 @@ The same baseline's defensive-complexity audit also rejects a security label as
 sufficient evidence. The uncalled HTTP host-challenge/startup-secret path, remote
 human per-operation HTTP ticket exchange, remote WebSocket proof, and current
 per-frame HMAC/base64/counter envelope are findings D-01 through D-03 and are not
-approved target contracts. D-02 retains a smaller local fresh-challenge receipt
-because private control/Tauri IPC carries its key separately from the loopback
-socket and therefore detects post-grant sidecar death plus port substitution. Local
-per-frame authentication remains evidence-pending on an actual in-scope relay. The
+approved target contracts. D-02 also makes the local fresh-challenge receipt
+evidence-pending: separate private-control and loopback paths identify a possible
+TOCTOU, but no packaged endpoint-substitution actor has been reproduced. Without
+that evidence, the target removes the local proof key, receipt, and per-frame layer.
+Receipt and per-frame proof require separate evidence gates. The
 target retains desktop private-control tickets, one-use socket upgrade tickets,
 finite snapshot/catch-up synchronization, strict bounded generated frames, sequence,
 request-ID deduplication, uncertain-ACK replay, TLS/origin/ingress, and the one-time
@@ -144,12 +145,14 @@ decoder and one global decode-admission semaphore; accepted raster input is
 bounded and re-encoded to static PNG. Pending preview and bound reads are
 non-cacheable, `nosniff`, and `no-referrer`; active content, arbitrary URLs,
 cross-room references, and cross-owner binding fail closed.
-Pending preview uses an exact current-local-manager ticket. A bound read accepts
-either an exact current local member ticket or an admitted human's session bearer
-from the bounded Authorization header. The target resolves the remote principal and
-revalidates session, membership, profile binding, room reference, operation, and
-asset bytes in one transaction; the bearer never enters a URL, body, log, event, or
-durable row. Rejected reads validate metadata and `length(content)` without loading
+Pending preview uses an exact current-local-manager ticket. At the audited baseline,
+a bound read accepts an exact local purpose grant or the exact purpose grant obtained
+by exchanging an admitted human's session bearer. Phase 0B removes only that redundant
+remote exchange: the target then accepts the session bearer from the bounded
+Authorization header, resolves the principal, and revalidates session, membership,
+profile binding, room reference, operation, and asset bytes in one transaction. The
+bearer never enters a URL, body, log, event, or durable row. Rejected reads validate
+metadata and `length(content)` without loading
 the bounded BLOB, while successful reads pay one additional query for its bytes.
 The desktop private control pipe exposes upload, pending-read, and bound-read as
 three typed commands. Upload and pending-read retain the exact server, authority
@@ -290,19 +293,21 @@ The existing outer envelope remains compatible:
 
 Action payloads are added only by the slice that implements them.
 
-One-use room tickets bind the exact principal, room, origin, and short expiry. The
-server consumes the ticket, registers the canonical live receiver before reading a
+One-use room tickets bind the exact principal, room, and short expiry inside their
+issuer runtime; the ingress owner separately enforces the expected Origin, Host,
+loopback peer, or remote TLS boundary. The server consumes the ticket, registers the canonical live receiver before reading a
 durable snapshot, serializes one bounded Snapshot at cursor `C`, and fixes one
 transactionally authorized high-water `H`. It sends strict generated `Subscribed`
 metadata, that Snapshot, then the bounded contiguous durable range `C+1..H`;
 overflow, malformed JSON, an identity/surface mismatch, or a missing sequence closes
 without readiness. Remote TLS/origin admission protects the transport and adds no
-proof using a key from that same authority. Local desktop additionally verifies one
-fresh-challenge receipt using the key delivered over private control/Tauri IPC.
-Whether post-receipt local frames require authentication remains open until controlled
-reproduction or equivalent concrete topology evidence establishes an active relay in
-the room-transport threat boundary. If retained, it covers the Snapshot and every
-later bidirectional product frame.
+proof using a key from that same authority. The audited local desktop additionally
+verifies a fresh-challenge receipt and every frame; that is implementation evidence,
+not the approved target. Phase 0B first tests packaged endpoint substitution against
+the smaller native-child/one-use-ticket boundary. Without concrete in-scope evidence,
+local transport also uses plain generated bounded JSON. A receipt may return only if
+that smaller boundary is demonstrably insufficient, and per-frame proof requires a
+separate active-relay reproduction.
 
 The browser validates every generated frame and its expected room, participant,
 protocol, streams, surface revision, `C`, and `H`, and reaches ready only at
@@ -463,10 +468,10 @@ Product frames stop at 256 KiB, the first finite subscription has a ten-second
 deadline, and the raw governor owns message, byte, and control-frame windows.
 Binary frames are rejected. The audited baseline additionally wraps every frame in
 a 384-KiB HMAC/base64/counter envelope. D-02 removes remote proof plus base64,
-repeated key derivation, and the permissions digest, keeps a smaller local one-time
-receipt, and requires controlled reproduction or equivalent concrete active-relay
-topology evidence before retaining local per-frame authentication over raw bounded
-UTF-8 bytes, starting with the Snapshot. It preserves the finite
+repeated key derivation, and the permissions digest. Local receipt and per-frame proof
+are removed from the target unless separate controlled reproductions or equivalent
+concrete topology evidence defeat the smaller native-child/one-use-ticket boundary
+and then establish an active relay. It preserves the finite
 snapshot/catch-up high water, event sequence, request-ID deduplication, and
 uncertain-ACK replay. The server
 closes a socket after five minutes without client ingress. The browser therefore
@@ -540,7 +545,7 @@ schema instead of being converted or exposed.
 
 ### Runtime lifecycle
 
-Tauri owns the local sidecar it starts. The package carries the built frontend once as a Tauri resource for the sidecar and passes that fixed resource directory as `--frontend`; the server remains the sole canonical-path and `index.html` validator and fails startup if the resource is absent. The sidecar binds loopback, reports one structured startup record containing the selected address and readiness, and is cancelled and reaped by its owner. Tauri keeps its private anonymous stdin control pipe open, issues typed local control requests through it, and EOF makes a running sidecar shut down; no reusable issuer credential is sent to React, argv, the environment, or durable storage. The audited secret preamble exists only to support the dead HTTP host-challenge path and is removed with D-01. A second anonymous control pipe is owned only by Tauri and watched by a separate minimal process; parent death closes it and the watchdog force-kills the sidecar process tree even if the sidecar is stopped and cannot cooperate. Transport failure or an invalid ticket response retires the unhealthy owned child so the next request starts a fresh runtime, while valid application rejection does not restart it. Reusing an existing runtime requires a data-root-scoped ownership record plus a live readiness proof. The lifecycle control plane is separate from room application messages.
+Tauri owns the local sidecar it starts. The package carries the built frontend once as a Tauri resource for the sidecar and passes that fixed resource directory as `--frontend`; the server remains the sole canonical-path and `index.html` validator and fails startup if the resource is absent. The sidecar binds loopback, reports one structured startup record containing the selected address and readiness, and is cancelled and reaped by its owner. Tauri keeps its private anonymous stdin control pipe open, issues typed local control requests through it, and EOF makes a running sidecar shut down; no reusable issuer credential is sent to React, argv, the environment, or durable storage. The audited secret preamble exists only to support the dead HTTP host-challenge path and is removed with D-01. A second anonymous control pipe is owned only by Tauri and watched by a separate minimal process; parent death closes it and the watchdog force-kills the sidecar process tree even if the sidecar is stopped and cannot cooperate. Transport failure or an invalid ticket response retires the unhealthy owned child so the next request starts a fresh runtime, while valid application rejection does not restart it. The desktop process reuses only the exact in-memory child it started; if that child is absent or unhealthy it starts a fresh runtime. No persisted attach or cross-process runtime-reuse owner exists. The lifecycle control plane is separate from room application messages.
 
 On macOS, the desktop runtime supervisor is also the lifecycle owner for its private
 executable copies. The running desktop-image re-exec and server-sidecar binding share

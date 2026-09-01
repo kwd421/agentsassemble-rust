@@ -86,5 +86,5 @@ canonical Rust room events through bounded-purpose HTTP authority.
   disclosure rejection, and read-only denial.
 - Focused copied-frontend API/controller tests, full frontend suite/build, `make verify`,
   and a fresh isolated packaged Computer Use flow with exact process/data cleanup.
-- Each independent commit remains below 1,000 changed lines. Batch timing is owned by
-  `docs/PRODUCT_REIMPLEMENTATION_PLAN.md`.
+- Each independent commit remains below 1,000 changed lines. Batch timing is owned only by
+  the active `Standing project workflow` in `AGENTS.md`.

@@ -60,12 +60,14 @@ fake state likewise cannot close an exposure row.
 ## Current audited exposure snapshot
 
 This compact table is the current exposure owner at Rust baseline `8a5f75a`.
-Everything after it is frozen original evidence or a dated execution journal and
-must not be read as a newer current-state override.
+The separately named `Current frontend change allowlist` below is also active.
+Everything else after this table is frozen original evidence or a dated execution
+journal and must not be read as a newer current-state override; that historical
+boundary resumes explicitly at `Historical public Rust slice and provenance record`.
 
 | Surface | Current exposure |
 | --- | --- |
-| Core room, general messages/history/search/pins/attachments/votes | finite sync/replay and features implemented; frame-proof threat decision and false capabilities reopened |
+| Core room, general messages/history/search/pins/attachments/votes | finite sync/replay and lobby search implemented; room-wide search overclaim, frame-proof threat decision, and false capabilities reopened |
 | Human profile/avatar and room appearance | implemented; Agent identity projection is separately reopened |
 | Human invite/admission/session/public ingress | substantial implementation; dead host challenge and redundant remote HTTP ticket exchange plus guide/client-kind/TCP findings remain open |
 | Participant role/mute/self-leave | implemented; kick/re-add and room lifecycle are not |
@@ -351,22 +353,27 @@ write grant. The copied channel menu uses this path after admission, while a tok
 pre-admission remote remains failed closed. No local-operator authority, cached
 default, compatibility bearer branch, or client-owned mutation substitutes for it.
 
-## Historical public Rust slice and provenance record
+## Current frontend change allowlist
 
 The frontend source, styles, assets, and component hierarchy were copied from the
 original React frontend rather than recreated, but that statement is not parity
 evidence by itself. The frontend provenance is original commit `d504647…`.
 Every Rust-only frontend change must be allowlisted with its file and reason. The
-allowlist is limited to runtime bootstrap, ticket/transport, Tauri native boundary,
-behavior-preserving structure-gate splits, and the observed
+active allowlist is limited to runtime bootstrap, ticket/transport, Tauri native
+boundary, behavior-preserving structure-gate splits, and the observed
 `styles/channel-search.css` cascade correction that hides the mobile message-search
 trigger when the copied desktop search field is visible, plus the subsequent
 Discord-reference correction that keeps one room-named message search in a stable
-header slot while the right-panel body opens and closes. The obsolete right-panel
-member filter and its independent query state are removed. Search results resolve
+header slot while the right-panel body opens and closes. Per the user's explicit UI
+decision, the obsolete right-panel member filter and its independent query state are
+removed. Search results resolve
 avatars by canonical `participant_id` against the current room profile SSoT rather
-than matching mutable names. Product-controller orchestration, client-owned
-authority, or any other changed CSS cascade is not justified by the allowlist.
+than matching mutable names. This does not allow the lobby-only `all` alias to claim
+custom-channel coverage; that is audit finding F-20. Product-controller orchestration,
+client-owned authority, or any other changed CSS cascade is not justified by the
+allowlist.
+
+## Historical public Rust slice and provenance record
 
 At the public Rust comparison commit:
 
