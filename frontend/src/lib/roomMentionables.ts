@@ -53,8 +53,11 @@ export function roomMentionables({
   );
   const displayNameCounts = new Map<string, number>();
   participantIds.forEach((participantId) => {
+    const agent = agentById.get(participantId);
     const displayName = clean(
-      memberById.get(participantId)?.display_name || agentById.get(participantId)?.display_name
+      agent
+        ? agent.display_name
+        : memberById.get(participantId)?.display_name
     );
     const key = displayName.toLowerCase();
     if (key) displayNameCounts.set(key, (displayNameCounts.get(key) || 0) + 1);
@@ -63,7 +66,7 @@ export function roomMentionables({
   function mentionableFor(participantId: string): Mentionable {
     const agent = agentById.get(participantId);
     const member = memberById.get(participantId);
-    const displayName = clean(member?.display_name || agent?.display_name);
+    const displayName = clean(agent ? agent.display_name : member?.display_name);
     const uniqueDisplayName =
       displayName && displayNameCounts.get(displayName.toLowerCase()) === 1;
     const participantKind =
@@ -82,11 +85,11 @@ export function roomMentionables({
           ? `${displayName} · ${participantId}`
           : participantId,
       avatarImage: resolveAttachmentReference(
-        member?.avatar_image_url || agent?.avatar_image_url,
+        agent ? agent.avatar_image_url : member?.avatar_image_url,
         displayResourceBase
       ),
       participantKind,
-      providerKind: clean(member?.provider_kind || agent?.provider_kind) || undefined,
+      providerKind: clean(agent ? agent.provider_kind : member?.provider_kind) || undefined,
       detail:
         participantKind === "agent"
           ? ownerDisplayName

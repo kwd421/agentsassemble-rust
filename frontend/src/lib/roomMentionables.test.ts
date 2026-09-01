@@ -28,7 +28,9 @@ describe("roomMentionables", () => {
           },
           {
             participant_id: "codex-codex-gpt-5.6-luna",
-            display_name: "Luna — 플레이어",
+            display_name: "Stale Participant",
+            avatar_image_url: "/api/attachments/stale-avatar?view=1",
+            provider_kind: "stale-provider",
           },
         ],
       });
