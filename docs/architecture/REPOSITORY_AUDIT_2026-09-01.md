@@ -264,7 +264,7 @@ or generic feature abstraction was added.
 
 The copied hooks and some presentation modules remain dormant source and some are still
 referenced by the CSS provenance import owner; this batch does not claim their deletion.
-`FrontendUpdateNotice` remains unmounted. The next F-05 review must decide their removal
+At that checkpoint, `FrontendUpdateNotice` remained unmounted. The next F-05 review had to decide their removal
 from actual reachability and CSS ownership evidence, then assess the still-exposed
 external-AI/AI-friend invite, operator-pairing, companion, and public Google controls.
 The initial candidate passed the complete repository gate. Critical ChatGPT Pro found
@@ -317,6 +317,14 @@ caller or exported AI-friend packet action; the focused 13-test controller suite
 complete 102-file/639-test frontend suite, production build, unchanged exact CSS gate,
 architecture gate, and diff check pass. Evidence-backed dormant-source cleanup remains
 in F-05; no AgentBridge backend completion is claimed.
+
+Local feature commit `d45afb5` deletes the unmounted `FrontendUpdateNotice` source,
+including its absent-route 15-second interval, focus/visibility triggers, permissive
+response defaults, and blanket failure catch. No runtime-version caller or polling
+constant remains in frontend source. The production build, updated exact CSS artifact
+hash, architecture gate, and diff check pass; no route, timer, retry, fallback, or
+replacement abstraction is added. Other evidence-backed dormant-source cleanup remains
+in F-05.
 
 ### F-06 — Agent Session identity SSoT is reversed in frontend projection
 
@@ -685,8 +693,8 @@ extensibility and do not replace it with a generic extension bag.
 Disposition: `Gate or remove by retained-surface ownership`; medium maintenance
 risk.
 
-The unmounted Admin and FrontendUpdateNotice components, deferred Mafia/RimWorld
-paths, old broad `api.ts` calls, and unimported
+The unmounted Admin component, deferred Mafia/RimWorld paths, old broad `api.ts`
+calls, and unimported
 `frontend/src/lib/liveAgentPermissionOptions.ts` remain beside active code. Some
 contain routes, timers, permissions, or protocol vocabulary that no Rust surface
 owns. Their presence caused both false parity claims and repeated polling reviews.

@@ -4294,8 +4294,8 @@ No automated security scan was used.
 The copied `FrontendUpdateNotice` called the absent Rust `/api/runtime/version` route immediately,
 every 15 seconds, and again on focus or visibility restoration, while swallowing every permanent
 failure. That was at least 5,760 known-failing requests per continuously mounted client per day and
-could not detect an update because no Rust route or generation owner exists. The component remains
-copied source for the future rolling-restart slice, but the current Rust entry point and its cascade
+could not detect an update because no Rust route or generation owner exists. At that checkpoint the
+component remained copied source for the future rolling-restart slice, but the current Rust entry point and its cascade
 preservation list no longer import or mount it. Repository search confirms the request remains only
 inside that unreferenced component. This removes no working Rust behavior and adds no fallback, timer, state,
 or replacement update claim; the missing runtime-version owner remains explicit in the exposure
@@ -5597,3 +5597,21 @@ JavaScript is a 5.18/2.15 kB `AdminPanel` chunk plus an 830.23/249.36 kB main ch
 raw bytes total 835.41 kB and displayed gzip figures total 251.51 kB. Against the public
 account candidate this is a 2.70/0.80 kB JavaScript reduction; CSS is unchanged at
 168.65/29.55 kB. These are build-size observations, not a runtime performance claim.
+
+### F-05 dormant runtime-version poller: 2026-09-01
+
+`FrontendUpdateNotice` was outside the production import graph, but its copied source
+still described an immediate and 15-second recurring request to absent
+`/api/runtime/version`, focus/visibility listeners, permissive response defaults, and a
+blanket failure catch. Keeping it provided no reachable product behavior and preserved
+exactly the polling/failure-hiding pattern forbidden for future reuse.
+
+Commit `d45afb5` deletes that sole owner. Repository-wide frontend search finds no
+runtime-version request or interval constant. No replacement timer, retry, fallback,
+placeholder route, or update-state abstraction is added. The production build and
+architecture/diff gates pass; the unchanged 102-file/639-test frontend suite passed on
+the immediately preceding candidate. JavaScript is unchanged at 835.41/251.51 kB total.
+Removing Tailwind utilities referenced only by the dormant component changes CSS from
+168.65/29.55 kB to 168.34/29.49 kB; the exact artifact name and SHA-256 gate is updated,
+not weakened. This removes 0.31/0.06 kB CSS but makes no runtime CPU or latency claim
+because the component was not mounted.

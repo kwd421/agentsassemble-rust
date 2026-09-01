@@ -62,7 +62,10 @@ contracts, findings, or verification journals.
   build and all 102 frontend files/640 tests pass. Local feature commit `fd74b90` then
   removes the producerless AI-friend packet branch and its obsolete moderator client
   while preserving managed human invitation; all 102 frontend files/639 tests pass.
-  Evidence-backed dormant-source cleanup remains in F-05.
+  Local feature commit `d45afb5` removes the unmounted runtime-version component whose
+  source retained an absent-route 15-second poll and silently ignored failures; the
+  production build and exact CSS gate pass. Evidence-backed dormant-source cleanup
+  remains in F-05.
 - Sequence/exit owner: [`docs/PRODUCT_REIMPLEMENTATION_PLAN.md`](docs/PRODUCT_REIMPLEMENTATION_PLAN.md)
 - Finding/evidence owner: [`docs/architecture/REPOSITORY_AUDIT_2026-09-01.md`](docs/architecture/REPOSITORY_AUDIT_2026-09-01.md)
 - Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`;
