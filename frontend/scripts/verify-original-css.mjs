@@ -4,16 +4,8 @@ import { resolve } from "node:path";
 
 const expectedCss = new Map([
   [
-    "CustomChannelView-BZfYj86-.css",
-    "f10dd6c3e344f04c7895e85be39cf1eb173ff9e597b8d9ff38f40bcd8cae3b4c",
-  ],
-  [
-    "index-C6TrTk45.css",
-    "401253dff5d003502d0d03d8fbc0663ea40d3eaef6652ecf1a8498727f855785",
-  ],
-  [
-    "useRoomMessageSearch-BBKeNGgP.css",
-    "21d5c6fab91b09acda78881428fb38a26483184f260603d23261da5701ad9d28",
+    "index-BXqd9k-_.css",
+    "420f340e95ad50a5013ea23afbf5d39daa8a11fa34e60ab978f3182382f58283",
   ],
 ]);
 

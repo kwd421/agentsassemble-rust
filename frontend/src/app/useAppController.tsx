@@ -48,7 +48,6 @@ import { useAppMessageSearch } from "./useAppMessageSearch";
 import { useDismissMenus } from "./useDismissMenus";
 import { useRoomAdmission } from "./useRoomAdmission";
 import { useRoomAppearanceAssets } from "./useRoomAppearanceAssets";
-import { useRoomChannels } from "./useRoomChannels";
 import { useRoomCreation } from "./useRoomCreation";
 import { useRoomDirectory } from "./useRoomDirectory";
 import { useRoomInviteController } from "./useRoomInviteController";
@@ -125,7 +124,6 @@ export function useAppController(deviceToken: string, clientId: string) {
   const [agentActivityVisibility, setAgentActivityVisibility] = useState(
     loadAgentActivityVisibility
   );
-  const [createChannelOpen, setCreateChannelOpen] = useState(false);
   const [collapsedChannelSections, setCollapsedChannelSections] = useState<Record<string, boolean>>(
     {}
   );
@@ -261,11 +259,6 @@ export function useAppController(deviceToken: string, clientId: string) {
     viewerParticipantId: guestSession?.agentId || "operator-local",
     onUnauthorized: admittedSessionToken ? expireGuestSession : undefined,
   });
-  const roomChannels = useRoomChannels({
-    activeRoom,
-    canonicalSettings: canonicalRoom.roomSettings,
-    saveCanonicalSettings: canonicalRoom.sendRoomSettingsUpdate,
-  });
   const roomMembers = useRoomMembers({
     activeRoom,
     canonicalParticipants: canonicalRoom.participants,
@@ -348,25 +341,15 @@ export function useAppController(deviceToken: string, clientId: string) {
   });
   useDismissMenus(roomMenu, channelMenu, setRoomMenu, setChannelMenu);
   const activeChannelSettings = roomSettings.channelSettingsFor(activeRoom);
-  const activeCustomChannels = roomChannels.activeChannels;
-  const activeCustomChannel = roomChannels.activeChannelFor(channel);
   const { roomHttpAuthority, roomMessageSearch } = useAppMessageSearch({
     roomId: activeOperationalMeetingId,
     selectedChannel: channel,
-    customChannelSelected: Boolean(activeCustomChannel),
+    customChannelSelected: false,
     scope: messageSearchScope,
     sessionToken: admittedSessionToken,
     localAvailable: !guestLocked && isDesktopWebview(),
   });
-  const messageSearchChannelLabels = useMemo(
-    () => Object.fromEntries([
-      ["lobby", "general"],
-      ...activeCustomChannels
-        .filter((item) => item.type === "text")
-        .map((item) => [item.id, item.name]),
-    ]),
-    [activeCustomChannels]
-  );
+  const messageSearchChannelLabels = { lobby: "general" };
   useEffect(() => {
     setMessageSearchScope("all");
     setPendingMessageSearchTarget(null);
@@ -488,12 +471,8 @@ export function useAppController(deviceToken: string, clientId: string) {
     }
   }
 
-  function goToChannel(next: string) {
-    // Guests stay out of operator-only fixed surfaces, but custom channels are
-    // shared spaces they can enter.
-    const isCustom = roomChannels.isActiveCustomChannel(next);
-    const guestBlocked = guestLocked && next !== "lobby" && !isCustom;
-    setChannel(guestBlocked ? "lobby" : next);
+  function goToChannel(next: Channel) {
+    setChannel(next);
     setAdminOpen(false);
     setChannelMenu(null);
     closeMobileOverlays();
@@ -501,12 +480,7 @@ export function useAppController(deviceToken: string, clientId: string) {
 
   function openCrossChannelSearchResult(result: RoomSearchResult) {
     const targetChannel = result.channel_id;
-    if (
-      targetChannel !== "lobby"
-      && !activeCustomChannels.some(
-        (item) => item.id === targetChannel && item.type === "text"
-      )
-    ) {
+    if (targetChannel !== "lobby") {
       roomMessageSearch.setError("검색 결과의 채널을 더 이상 열 수 없습니다.");
       return;
     }
@@ -515,11 +489,6 @@ export function useAppController(deviceToken: string, clientId: string) {
       eventId: result.event_id,
     });
     goToChannel(targetChannel);
-  }
-
-  async function createChannel(params: { name: string; type: "text" | "voice" }) {
-    const channel = await roomChannels.create(params);
-    if (channel) goToChannel(channel.id);
   }
 
   async function createCompanionAiPacket() {
@@ -607,7 +576,7 @@ export function useAppController(deviceToken: string, clientId: string) {
 
   return {
     acceptRecoveredSession, activeAppearance,
-    activeChannelDisplay, activeChannelSettings, activeCustomChannel, activeCustomChannels,
+    activeChannelDisplay, activeChannelSettings,
     activeRoom, activeRoomAgentSessions, activeRoomCapabilities,
     activeRoomDisconnected, activeRoomHistory, activeRoomMembers,
     addFreshRoom, adjustSidebarWidthWithKeyboard,
@@ -617,7 +586,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     channelMenu, channelSearchNeedle, channelSearchQuery, channelSidebarWidth,
     closeInviteModal, closeMobileRoomInfo, closeMobileSidebar, collapsedChannelSections,
     copyAgentInviteLink, copyGuestAiPacket, copyOperatorPairingLink,
-    createChannel, createChannelOpen, createCompanionAiPacket,
+    createCompanionAiPacket,
     deviceToken, clientId, exitGuestSurface, expireGuestSession,
     generateAgentInviteLink, generateInviteLink, generateOperatorPairingLink,
     goToChannel, guestAdmissionBusy, guestAiPacketPreview, guestAiPacketStatus,
@@ -642,7 +611,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     rooms, scopedAgents, scopedMentionables, serverProductSurface,
     scopedOnlineCount, scopedViewerDisplayName, selectRoom, sendAgentConfigure,
     sendAgentControl, sendParticipantMute, setAdminOpen,
-    setAgentCreateOpen, setChannelNotifications, setChannelSearchQuery, setCreateChannelOpen,
+    setAgentCreateOpen, setChannelNotifications, setChannelSearchQuery,
     setGuestRecoveryRequest, setLeaveRoomTargetId, setMembersOpen,
     setMessageSearchScope, setMobileRoomInfoInitialMode, setMobileRoomInfoOpen, setMobileSidebarOpen,
     setPendingGuestAvatarImage, setPendingGuestDisplayName, setPendingMessageSearchTarget,

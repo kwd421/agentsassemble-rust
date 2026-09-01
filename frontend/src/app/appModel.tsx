@@ -10,7 +10,7 @@ import type {
 } from "../api";
 import type { RoomDockItem } from "../lib/roomDockModel";
 
-export type Channel = "friends" | "lobby";
+export type Channel = "lobby";
 export type MobileRoomInfoInitialMode = "info" | "side-chat";
 
 export type ChannelConfig = {

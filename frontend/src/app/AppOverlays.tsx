@@ -2,7 +2,6 @@ import { createPortal } from "react-dom";
 
 import type { AppController } from "./useAppController";
 import AgentCreateModal from "../views/components/AgentCreateModal";
-import CreateChannelModal from "../views/components/CreateChannelModal";
 import GuestIdentityRecoveryPanel from "../views/components/GuestIdentityRecoveryPanel";
 import GuestJoinProfilePanel from "../views/components/GuestJoinProfilePanel";
 import LeaveRoomDialog from "../views/components/LeaveRoomDialog";
@@ -14,7 +13,7 @@ export default function AppOverlays({ controller }: { controller: AppController 
     acceptRecoveredSession, activeRoom, agentCreateOpen, agentInviteUrl,
     canonicalRoom, closeInviteModal, copyAgentInviteLink,
     copyOperatorPairingLink,
-    createChannel, createChannelOpen, deviceToken, clientId, generateAgentInviteLink,
+    deviceToken, clientId, generateAgentInviteLink,
     generateInviteLink, generateOperatorPairingLink, guestAdmissionBusy, guestExpired,
     guestJoinRequested, guestJoinStatus, guestJoinToken, guestLocked,
     guestPreflightRetryable, guestJoinRetryable,
@@ -25,7 +24,7 @@ export default function AppOverlays({ controller }: { controller: AppController 
     pendingGuestAvatarImage, pendingGuestDisplayName, publicInviteStatus,
     requestGuestJoin, retryOperatorPairing, roomAppearanceAssets, roomInvite,
     roomSettings, roomSocket,
-    setAgentCreateOpen, setCreateChannelOpen, setGuestRecoveryRequest,
+    setAgentCreateOpen, setGuestRecoveryRequest,
     setLeaveRoomTargetId, setPendingGuestAvatarImage, setPendingGuestDisplayName,
     setSettingsModal, settingsModalInitialSectionId, settingsModalRoom, startInviteTunnel,
     stopInviteTunnel, updateRoom,
@@ -173,13 +172,6 @@ export default function AppOverlays({ controller }: { controller: AppController 
                 if (accepted) setGuestRecoveryRequest(null);
               });
             }}
-          />
-        )}
-
-        {createChannelOpen && !guestLocked && (
-          <CreateChannelModal
-            onClose={() => setCreateChannelOpen(false)}
-            onCreate={createChannel}
           />
         )}
 

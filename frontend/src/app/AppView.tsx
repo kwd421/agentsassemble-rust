@@ -3,13 +3,10 @@ import {
   Bell,
   CalendarDays,
   ChevronDown,
-  Hash,
-  Plus,
   Search,
   Settings,
   UserPlus,
   UserRound,
-  Volume2,
   X,
 } from "lucide-react";
 import { CHANNEL_SECTIONS, DeferredViewFallback, type ChannelConfig } from "./appModel";
@@ -30,7 +27,6 @@ import { GUEST_SESSION_EXPIRED_MESSAGE } from "../lib/apiErrors";
 import { createMessageAttachmentReadOwner } from "../lib/messageAttachmentReadScheduler";
 
 const AdminPanel = lazy(() => import("../views/AdminPanel"));
-const CustomChannelView = lazy(() => import("../views/CustomChannelView"));
 
 export default function AppView({ controller }: { controller: AppController }) {
   const [messageAttachmentReadOwner] = useState(
@@ -38,7 +34,7 @@ export default function AppView({ controller }: { controller: AppController }) {
   );
   const {
     activeAppearance, activeChannelDisplay,
-    activeChannelSettings, activeCustomChannel, activeCustomChannels,
+    activeChannelSettings,
     activeRoom, activeRoomAgentSessions, activeRoomCapabilities, activeRoomDisconnected,
     activeRoomHistory, activeRoomMembers, addFreshRoom,
     adjustSidebarWidthWithKeyboard, adminOpen,
@@ -62,7 +58,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     roomSettings, roomSocket, rooms, scopedAgents, scopedMentionables, serverProductSurface,
     scopedOnlineCount, selectRoom, sendAgentConfigure, sendAgentControl,
     sendParticipantMute, setAdminOpen, setChannelNotifications,
-    setChannelSearchQuery, setCreateChannelOpen, setLeaveRoomTargetId,
+    setChannelSearchQuery, setLeaveRoomTargetId,
     setMessageSearchScope,
     setPendingMessageSearchTarget, setRoomMenu,
     shellStyle, showMembers, startSidebarResize, toggleChannelSection,
@@ -246,47 +242,6 @@ export default function AppView({ controller }: { controller: AppController }) {
               </section>
             );
           })}
-          {(() => {
-            const customChannels = activeCustomChannels.filter(
-              (item) => !channelSearchNeedle || item.name.toLowerCase().includes(channelSearchNeedle)
-            );
-            if (!customChannels.length && guestLocked) return null;
-            return (
-              <section className="dc-channel-section">
-                <div className="dc-channel-category dc-channel-category-row">
-                  <span>Channels</span>
-                  {!guestLocked && (
-                    <button
-                      type="button"
-                      className="dc-channel-add"
-                      onClick={() => setCreateChannelOpen(true)}
-                      aria-label="채널 만들기"
-                      title="채널 만들기"
-                    >
-                      <Plus size={14} />
-                    </button>
-                  )}
-                </div>
-                {customChannels.map((item) => (
-                  <div key={item.id}>
-                    <button
-                      type="button"
-                      data-active={!adminOpen && channel === item.id}
-                      onClick={() => goToChannel(item.id)}
-                      className="dc-channel"
-                    >
-                      {item.type === "voice" ? (
-                        <Volume2 size={18} className="shrink-0 opacity-70" />
-                      ) : (
-                        <Hash size={18} className="shrink-0 opacity-70" />
-                      )}
-                      <span className="truncate">{item.name}</span>
-                    </button>
-                  </div>
-                ))}
-              </section>
-            );
-          })()}
           {menuChannelDisplay && channelMenu && (
             <ChannelContextMenu
               channelLabel={menuChannelDisplay.label}
@@ -420,26 +375,6 @@ export default function AppView({ controller }: { controller: AppController }) {
               onOpenCrossChannelSearchResult={openCrossChannelSearchResult}
             />
             )
-          ) : activeCustomChannel ? (
-            <CustomChannelView
-              key={activeCustomChannel.id}
-              channel={activeCustomChannel}
-              meetingId={activeRoom.meetingId}
-              sessionToken={admittedSessionToken}
-              localDisplayName={guestSession?.displayName || ""}
-              participantProfiles={canonicalRoom.participantProfiles}
-              searchLabel={activeRoom.label}
-              canPost={lobbyPostingState.canPost}
-              membersOpen={membersOpen}
-              onToggleMembers={toggleMembers}
-              onOpenMobileSidebar={openMobileSidebar}
-              onOpenMobileInfo={openMobileRoomInfo}
-              sharedMessageSearch={roomMessageSearch}
-              messageSearchScope={messageSearchScope}
-              onMessageSearchScopeChange={setMessageSearchScope}
-              messageSearchChannelLabels={messageSearchChannelLabels}
-              onOpenCrossChannelSearchResult={openCrossChannelSearchResult}
-            />
           ) : (
             <DeferredViewFallback />
           )}
