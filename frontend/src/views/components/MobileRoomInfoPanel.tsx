@@ -154,7 +154,9 @@ function buildMobileMembers({
   const agentRows = agents.map((agent) => {
     const member = memberById.get(agent.agent_id);
     const role = member ? memberRole(member) : "agent";
-    const ownerId = String(member?.owner_id || agent.owner_id || "").trim();
+    const ownerId = String(
+      member ? member.owner_id || "" : agent.owner_id || ""
+    ).trim();
     const ownedByViewer = ownerId === viewerParticipantId;
     return {
       id: agent.agent_id,
@@ -173,10 +175,10 @@ function buildMobileMembers({
       ),
       providerKind: agent.provider_kind,
       app: true,
-      ownerId: ownerId || (ownedByViewer ? self.id : undefined),
+      ownerId: ownerId || undefined,
       ownerDisplayName:
-        agent.owner_display_name ||
         memberById.get(ownerId)?.display_name ||
+        (!member ? agent.owner_display_name : "") ||
         (ownedByViewer ? self.displayName : "소유자 정보 없음"),
     } satisfies MobileMemberRow;
   });
@@ -224,9 +226,6 @@ function buildMobileMembers({
   agentLike.forEach((agent) => {
     const ownerId = String(agent.ownerId || "").trim();
     let group = groupByOwnerId.get(ownerId);
-    if (!group && agent.ownerDisplayName) {
-      group = groups.find((candidate) => candidate.label === agent.ownerDisplayName);
-    }
     if (!group) {
       const id = ownerId || `unassigned:${agent.ownerDisplayName || "agents"}`;
       group = groupByOwnerId.get(id);

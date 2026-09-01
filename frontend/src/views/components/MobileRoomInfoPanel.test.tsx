@@ -76,4 +76,47 @@ describe("MobileRoomInfoPanel", () => {
 
     expect(screen.queryByTitle("세션 시작")).toBeNull();
   });
+
+  it("does not group a room participant by stale LiveAgent ownership", () => {
+    const remoteOwner: RoomMember = {
+      meeting_id: "room-1",
+      participant_id: "remote-owner",
+      display_name: "Remote Owner",
+      role: "human",
+      participant_type: "human",
+      provider_kind: "",
+      connection_kind: "browser",
+      status: "joined",
+      source: "",
+      created_at: "",
+      updated_at: "",
+    };
+    render(
+      <MobileRoomInfoPanel
+        room={{ id: "room-1", label: "Room One", meetingId: "room-1", topic: "" }}
+        appearance={DEFAULT_ROOM_APPEARANCE}
+        channelLabel="general"
+        agents={[
+          {
+            ...AGENT,
+            owner_id: "remote-owner",
+            owner_display_name: "Remote Owner",
+          },
+        ]}
+        members={[remoteOwner, { ...STALE_MEMBER, owner_id: "" }]}
+        onClose={vi.fn()}
+      />
+    );
+
+    const remoteGroup = screen.getByText("Remote Owner").closest(
+      ".dc-mobile-info-member-section"
+    );
+    const unassignedGroup = screen.getByText("소유자 정보 없음").closest(
+      ".dc-mobile-info-member-section"
+    );
+    expect(remoteGroup).not.toBeNull();
+    expect(unassignedGroup).not.toBeNull();
+    expect(remoteGroup?.textContent).not.toContain("Agent One");
+    expect(unassignedGroup?.textContent).toContain("Agent One");
+  });
 });

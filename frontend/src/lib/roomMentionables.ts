@@ -73,9 +73,10 @@ export function roomMentionables({
       agent || (member?.participant_type && member.participant_type !== "human")
         ? "agent"
         : "human";
-    const ownerId = clean(member?.owner_id || agent?.owner_id);
+    const ownerId = clean(member ? member.owner_id : agent?.owner_id);
     const ownerDisplayName = clean(
-      agent?.owner_display_name || memberById.get(ownerId)?.display_name
+      memberById.get(ownerId)?.display_name ||
+        (!member ? agent?.owner_display_name : "")
     );
     return {
       token: participantId,

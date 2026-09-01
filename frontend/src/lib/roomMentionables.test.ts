@@ -30,6 +30,7 @@ describe("roomMentionables", () => {
             participant_id: "codex-codex-gpt-5.6-luna",
             display_name: "Stale Participant",
             avatar_image_url: "/api/attachments/stale-avatar?view=1",
+            owner_id: "operator-local",
             provider_kind: "stale-provider",
           },
         ],
@@ -103,6 +104,39 @@ describe("roomMentionables", () => {
     ).toEqual({
       message: expectedMention,
       cursor: expectedMention.length,
+    });
+  });
+
+  it("does not describe a room participant with stale LiveAgent ownership", () => {
+    const mentionable = roomMentionables({
+      displayResourceBase: "",
+      viewerParticipantId: "host",
+      agents: [
+        {
+          agent_id: "agent-1",
+          display_name: "Agent One",
+          owner_id: "remote-owner",
+          owner_display_name: "Remote Owner",
+        },
+      ],
+      members: [
+        {
+          participant_id: "remote-owner",
+          display_name: "Remote Owner",
+          participant_type: "human",
+        },
+        {
+          participant_id: "agent-1",
+          display_name: "Participant Copy",
+          owner_id: "",
+          participant_type: "local",
+        },
+      ],
+    }).find((entry) => entry.token === "agent-1");
+
+    expect(mentionable).toMatchObject({
+      label: "Agent One",
+      detail: "에이전트",
     });
   });
 });
