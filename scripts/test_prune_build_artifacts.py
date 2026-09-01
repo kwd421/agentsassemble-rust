@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from scripts.prune_build_artifacts import clean_plan
+from scripts.prune_build_artifacts import allocated_bytes, clean_plan
 
 
 class BuildArtifactCleanupTests(unittest.TestCase):
@@ -38,6 +38,19 @@ class BuildArtifactCleanupTests(unittest.TestCase):
             plan = clean_plan(root, 1024**2)
 
             self.assertEqual([item.path for item in plan], [obsolete])
+
+    def test_hard_links_count_one_physical_inode(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "target"
+            target.mkdir()
+            original = target / "original"
+            original.write_bytes(b"one physical allocation")
+            (target / "hard-link").hardlink_to(original)
+
+            self.assertEqual(
+                allocated_bytes(target),
+                original.stat().st_blocks * 512,
+            )
 
     def test_symlinked_target_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -24,6 +24,7 @@ class CleanTarget:
 def allocated_bytes(path: Path) -> int:
     """Return physical bytes without following links inside the Cargo target."""
     total = 0
+    seen_inodes: set[tuple[int, int]] = set()
     for directory, child_directories, files in os.walk(path, followlinks=False):
         current = Path(directory)
         child_directories[:] = [
@@ -35,6 +36,10 @@ def allocated_bytes(path: Path) -> int:
             except FileNotFoundError:
                 continue
             if stat.S_ISREG(metadata.st_mode):
+                inode = (metadata.st_dev, metadata.st_ino)
+                if inode in seen_inodes:
+                    continue
+                seen_inodes.add(inode)
                 total += metadata.st_blocks * 512
     return total
 
