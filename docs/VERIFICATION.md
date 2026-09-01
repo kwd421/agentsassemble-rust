@@ -5391,18 +5391,22 @@ unusable UI. The capability owner now omits `room.delete`, `participant.kick`,
 `provider.request.resolve`, and `bridge.report`; it retains `bridge.publish` because
 the current vote authorization path uses it.
 
-Commits `5842f8a` and `e711def` remove the three unusable control paths and their dead
-command, state, model, test, and presentation branches. The existing
-`participant_kicked` read projection and the server/protocol provider-request field
-remain because current server lifecycles and the provider-request read contract still own them; no
-client write authority is inferred from either. Repository-wide searches found no
-remaining frontend caller for the absent commands. No route, placeholder, fallback,
-compatibility branch, retry, timer, polling, heartbeat, or generic feature abstraction
-was added.
+Commits `5842f8a` and `e711def` remove three unusable control paths and their dead
+command, state, model, test, and presentation branches. First pushed cross-review
+found that `agent.readd` still had a reachable selector and locally rejected command,
+while provider requests, kicked events, and room deletion retained state or callbacks
+without a production owner. `cccf513` removes that selector/command/ACK path, the
+always-empty provider-request snapshot and frontend wire vocabulary, the producerless
+kicked-event projection, and the never-invoked room-delete callback chain. The current
+server kicked-participant start denial and OpenCode's interactive-request fail-closed
+test remain because they enforce reachable failure contracts rather than UI authority.
+Repository-wide searches found no remaining frontend caller for the absent commands.
+No route, placeholder, fallback, compatibility branch, retry, timer, polling,
+heartbeat, or generic feature abstraction was added.
 
-The observed production bundle changed from 791.52 kB to 785.90 kB minified
-JavaScript (239.04 kB to 237.59 kB gzip) and from 169.18 kB to 165.72 kB CSS
-(29.60 kB to 29.06 kB gzip). These are reductions of 5.62/1.45 kB JavaScript and
+The observed production bundle changed from 791.52 kB to 784.33 kB minified
+JavaScript (239.04 kB to 237.09 kB gzip) and from 169.18 kB to 165.72 kB CSS
+(29.60 kB to 29.06 kB gzip). These are reductions of 7.19/1.95 kB JavaScript and
 3.46/0.54 kB CSS, not a CPU or memory benchmark. The owning-boundary intent was to
 remove unreachable React normalization and state updates rather than introduce a
 second capability framework. The exact product/security invariant preserved is that
@@ -5414,9 +5418,12 @@ production frontend builds passed before this documentation record. One first fu
 frontend run exposed that the exact-command retry test depended on `vi.waitFor` to
 advance the final half of a documented 2,000 ms backoff at its timeout boundary. The
 test now advances the owned retry delay explicitly; this changes no production timer
-or retry policy. The corrected candidate passed a fresh complete `make verify`:
+or retry policy. The pre-review candidate passed a fresh complete `make verify`:
 architecture/source-growth/policy/diff gates, Rust format/check, the CSS-verified
 production frontend build, all 103 frontend files and 646 tests, the desktop build,
 warning-denied Clippy and 25 tests, and the full Rust workspace test and
-warning-denied Clippy suites. Pushed critical-web and Daybreaker manual review remain
-pending.
+warning-denied Clippy suites. After `cccf513`, 55 focused frontend tests and four
+focused domain tests passed, followed by a fresh complete `make verify` on the
+documented correction: all gates above, 103 frontend files and 643 tests, desktop
+Clippy and 25 tests, and the full Rust workspace tests and warning-denied Clippy.
+Exact correction-range critical-web and Daybreaker manual re-review remain pending.

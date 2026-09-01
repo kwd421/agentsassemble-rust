@@ -24,12 +24,13 @@ contracts, findings, or verification journals.
   tickets and one-use WebSocket upgrade tickets remain because they cross distinct
   authority boundaries. Critical ChatGPT Pro and Daybreaker Blue High each manually
   approved cumulative `ac905de..5693e13` and HEAD at `C0/H0/M0/L0`.
-- Completed locally: F-04 through `e711def`. Four non-executable capability fields
-  and the copied room-delete, participant-kick, and provider-response controls are
-  absent. `bridge.publish`, the `participant_kicked` event projection, and the
-  server-owned provider-request read wire remain because each still has a reachable
-  owner. The three-feature batch is verified locally and awaits its required pushed
-  cross-review before F-05 begins.
+- Corrected locally: F-04 through `cccf513`. Four non-executable capability fields,
+  copied room-delete/participant-kick/provider-response/agent-readd controls, and the
+  producerless provider-request snapshot, kicked-event projection, and room-delete
+  callback are absent. `bridge.publish` remains because the current vote path consumes
+  it; the distinct server `participant_kicked` start-denial code and OpenCode's
+  interactive-request fail-closed test remain current contracts. The pushed batch
+  received `REVISE` and its correction awaits exact-range re-review before F-05 begins.
 - Next task after review: F-05 frontend exposure correction — gate copied requests,
   polling, and heartbeats whose complete Rust owner does not yet exist. Do not add
   dummy routes, fallback data, timers, or a generic feature framework.

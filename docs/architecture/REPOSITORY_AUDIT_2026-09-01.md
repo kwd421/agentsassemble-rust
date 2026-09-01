@@ -187,7 +187,7 @@ last best effort after the explicit owner has reported the result.
 
 ### F-04 — signed capabilities advertised actions that did not exist
 
-Disposition: `Fixed locally through e711def; pushed cross-review pending`; high
+Disposition: `Corrected locally through cccf513; pushed re-review pending`; high
 product/medium structure impact.
 
 Before `1a87de8`, the signed capability projection included `room.delete`,
@@ -200,13 +200,18 @@ the single Rust capability owner and regenerated TypeScript contract. It retains
 permission.
 
 `5842f8a` removes the copied room-delete and participant-kick controls, command
-construction, ACK validation, and obsolete tests. It retains the
-`participant_kicked` event projection because current lifecycle paths can still emit
-that server-owned event. `e711def` removes the copied provider-response controls and
-the otherwise unowned per-room provider-request React state, normalization, model,
-card, tests, and CSS. The server/protocol provider-request read field remains intact;
-the frontend simply does not promote it into write authority until a complete action
-owner exists.
+construction, ACK validation, and obsolete tests. `e711def` removes the copied
+provider-response controls and the otherwise unowned per-room provider-request React
+state, normalization, model, card, tests, and CSS.
+
+The first pushed cross-review found four remaining false owners. `cccf513` removes the
+still-reachable `agent.readd` selector/command/ACK path, the always-empty
+`RoomSnapshot.provider_requests` field and frontend provider-request wire vocabulary,
+the producerless `participant_kicked` event projection, and the never-invoked
+room-delete callback chain and synthetic tests. The exact server
+`participant_kicked` start-denial error remains because it protects the current
+lifecycle invariant; OpenCode's interactive provider-request rejection remains
+because the current driver must fail closed instead of waiting for nonexistent UI.
 
 The correction adds no route, authority, fallback, compatibility branch, retry,
 timer, polling, heartbeat, or feature framework. Repository-wide searches found no
@@ -919,7 +924,7 @@ This table routes findings; it does not add another contract layer.
 | F-01 | Antigravity driver/module graph | 1 | no production import/build/runtime transcript edge; missing native completion is explicit |
 | F-02 | Codex/OpenCode native drivers | 1 | one documented completion/session authority per provider, with focused protocol fixtures |
 | F-03 | common adapter plus provider teardown | 1 | abort/cleanup returns a typed result and failed cleanup prevents unsafe reuse |
-| F-04 | protocol product surface plus capability projection | 0B | locally fixed through `e711def`; pushed cross-review pending |
+| F-04 | protocol product surface plus capability projection | 0B | corrected through `cccf513`; pushed re-review pending |
 | F-05 | frontend composition/product-surface gate | 0B | normal startup/room use issues no request or timer for an absent/deferred owner |
 | F-06 | Agent Session projection/profile owner | 3 | roster, timeline, search, restart, and editor obey Agent/participant SSoTs |
 | F-07 | provider registration/operation descriptor | 0B and 1 | Phase 0B gates false UI operations; Phase 1 closes provider-native operations and exact model selection |
