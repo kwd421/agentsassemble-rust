@@ -108,7 +108,7 @@ function SearchBackedLobby({ target }: { target: LobbyEvent }) {
       searchLabel={room.label}
       participantProfiles={{
         "agent-1": {
-          displayName: target.name,
+          displayName: "Canonical Agent",
           avatarImageUrl: "https://assets.example/agent-1.png",
         },
       }}
@@ -200,7 +200,7 @@ describe("LobbyView active provider turn", () => {
     const popupSearch = await screen.findByRole("searchbox", { name: "Room A 검색어" });
     fireEvent.change(popupSearch, { target: { value: "회귀" } });
     expect(
-      screen.getByRole("button", { name: /Agent B.*릴리스 전 회귀 검증/ })
+      screen.getByRole("button", { name: /Canonical Agent.*릴리스 전 회귀 검증/ })
         .querySelector(".dc-head-search-result-avatar img")
         ?.getAttribute("src")
     ).toBe("https://assets.example/agent-1.png");

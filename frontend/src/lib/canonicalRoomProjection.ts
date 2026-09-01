@@ -71,6 +71,18 @@ export function canonicalParticipantProfiles(
   displayResourceBase: string,
 ): Record<string, CanonicalParticipantProfile> {
   const profiles: Record<string, CanonicalParticipantProfile> = {};
+  participants.forEach((participant) => {
+    if (!participant.participant_id) return;
+    profiles[participant.participant_id] = {
+      displayName: participant.display_name,
+      avatarImageUrl: resolveAttachmentReference(
+        participant.avatar_image_url,
+        displayResourceBase,
+      ),
+      providerKind: participant.provider_kind,
+      role: participant.role,
+    };
+  });
   sessions.forEach((session) => {
     if (!session.participant_id) return;
     profiles[session.participant_id] = {
@@ -80,22 +92,7 @@ export function canonicalParticipantProfiles(
         displayResourceBase,
       ),
       providerKind: session.provider_kind,
-    };
-  });
-  participants.forEach((participant) => {
-    if (!participant.participant_id) return;
-    const previous = profiles[participant.participant_id] || {};
-    profiles[participant.participant_id] = {
-      displayName: participant.display_name || previous.displayName,
-      avatarImageUrl:
-        participant.avatar_image_url !== undefined
-          ? resolveAttachmentReference(
-              participant.avatar_image_url,
-              displayResourceBase,
-            )
-          : previous.avatarImageUrl,
-      providerKind: participant.provider_kind || previous.providerKind,
-      role: participant.role,
+      role: profiles[session.participant_id]?.role,
     };
   });
   return profiles;

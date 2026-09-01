@@ -286,10 +286,11 @@ export default function LobbyView({
           hour: "2-digit",
           minute: "2-digit",
         });
+        const participantProfile = participantProfiles[result.participant_id];
         return {
           id: result.event_id,
-          author: result.author || "Room",
-          avatarImage: participantProfiles[result.participant_id]?.avatarImageUrl,
+          author: participantProfile?.displayName || result.author || "Room",
+          avatarImage: participantProfile?.avatarImageUrl,
           body: result.content || result.attachment_filenames.join(", "),
           meta: messageSearchScope === "all"
             ? `#${messageSearchChannelLabels[result.channel_id] || result.channel_id} · ${timeLabel}`

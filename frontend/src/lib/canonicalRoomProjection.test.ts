@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import type { LobbyEvent, RoomEvent } from "../api";
+import type { LobbyEvent, RoomAgentSession, RoomEvent, RoomMember } from "../api";
 import {
   applyCanonicalParticipantProfiles,
   applyParticipantEvents,
+  canonicalParticipantProfiles,
   mergeRoomEvents,
 } from "./canonicalRoomProjection";
 
@@ -75,6 +76,38 @@ describe("canonical participant event projection", () => {
         avatar_image_url: "http://127.0.0.1/avatar",
       }),
     ]);
+  });
+
+  it("projects Agent identity from its session and room role from its participant", () => {
+    const participant = {
+      participant_id: "agent-one",
+      display_name: "stale participant name",
+      avatar_image_url: "/api/attachments/stale-avatar?view=1",
+      provider_kind: "stale-provider",
+      role: "reviewer",
+    } as RoomMember;
+    const session = {
+      participant_id: "agent-one",
+      display_name: "Session identity",
+      avatar_image_url: "/api/attachments/agent-avatar?view=1",
+      provider_kind: "codex_live_session",
+    } as RoomAgentSession;
+
+    expect(
+      canonicalParticipantProfiles(
+        [session],
+        [participant],
+        "http://127.0.0.1:8080",
+      ),
+    ).toEqual({
+      "agent-one": {
+        displayName: "Session identity",
+        avatarImageUrl:
+          "http://127.0.0.1:8080/api/attachments/agent-avatar?view=1",
+        providerKind: "codex_live_session",
+        role: "reviewer",
+      },
+    });
   });
 
   it("inserts a newly joined participant from the complete sequenced event", () => {

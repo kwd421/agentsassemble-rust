@@ -385,7 +385,7 @@ describe("useCanonicalRoom", () => {
     });
   });
 
-  it("reprojects existing messages when the canonical participant profile changes", async () => {
+  it("keeps Agent Session identity while applying room-owned participant changes", async () => {
     let handlers: RoomSocketHandlers | undefined;
     const openSocket = vi.fn((_auth, _streams, nextHandlers: RoomSocketHandlers) => {
       handlers = nextHandlers;
@@ -428,8 +428,8 @@ describe("useCanonicalRoom", () => {
 
     act(() => handlers?.onRoomSnapshot?.(initial, "http://127.0.0.1:43123"));
     expect(result.current.timelineEvents[0]).toMatchObject({
-      name: "Antigravity CLI",
-      avatar_image_url: "http://127.0.0.1:43123/api/attachments/old-avatar?view=1",
+      name: "Codex",
+      avatar_image_url: undefined,
     });
     expect(result.current.participants[0].avatar_image_url).toBe(
       "/api/attachments/old-avatar?view=1"
@@ -449,8 +449,8 @@ describe("useCanonicalRoom", () => {
     );
 
     expect(result.current.timelineEvents[0]).toMatchObject({
-      name: "Makima",
-      avatar_image_url: "http://127.0.0.1:43123/api/attachments/makima-avatar?view=1",
+      name: "Codex",
+      avatar_image_url: undefined,
       role: "director",
     });
     expect(result.current.participants[0].display_name).toBe("Makima");
@@ -546,7 +546,7 @@ describe("useCanonicalRoom", () => {
       expect(result.current.participants).toEqual([]);
     });
 
-  it("preserves session provider branding when a participant snapshot omits it", async () => {
+  it("preserves session identity and provider branding when a participant conflicts", async () => {
     let handlers: RoomSocketHandlers | undefined;
     const openSocket = vi.fn((_auth, _streams, nextHandlers: RoomSocketHandlers) => {
       handlers = nextHandlers;
@@ -588,12 +588,12 @@ describe("useCanonicalRoom", () => {
     act(() => handlers?.onRoomSnapshot?.(initial, "http://127.0.0.1:43123"));
 
     expect(result.current.timelineEvents[0]).toMatchObject({
-      name: "Luna",
+      name: "Codex",
       provider_kind: "codex_live_session",
     });
   });
 
-  it("applies the configure ACK to visible and later-loaded message history", async () => {
+  it("applies Agent Session identity from a command ACK to visible and later history", async () => {
     let handlers: RoomSocketHandlers | undefined;
     const updatedParticipant: RoomMember = {
       meeting_id: "general",
@@ -659,7 +659,7 @@ describe("useCanonicalRoom", () => {
     ];
 
     act(() => handlers?.onRoomSnapshot?.(initial, "http://127.0.0.1:43123"));
-    expect(result.current.timelineEvents[0].name).toBe("Antigravity CLI");
+    expect(result.current.timelineEvents[0].name).toBe("Codex");
 
     await act(async () => {
       await result.current.sendAgentConfigure(session(), {
