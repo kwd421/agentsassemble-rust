@@ -128,7 +128,7 @@ describe("roomTypingNames", () => {
     ).toEqual([]);
   });
 
-  it("uses the current participant name before a stale session or progress label", () => {
+  it("uses Agent Session identity before participant or progress labels", () => {
     expect(
       roomTypingNames({
         agents: [],
@@ -136,6 +136,6 @@ describe("roomTypingNames", () => {
         sessions: [{ ...session, display_name: "Antigravity CLI" }],
         progress: { ...progress, displayName: "Antigravity CLI" },
       })
-    ).toEqual(["Makima"]);
+    ).toEqual(["Antigravity CLI"]);
   });
 });

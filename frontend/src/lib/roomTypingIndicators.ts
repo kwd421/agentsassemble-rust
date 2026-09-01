@@ -103,9 +103,11 @@ export function roomTypingIndicators({
     if (member.thinking && sessionCanShowTyping(session)) {
       add(
         member.participant_id,
-        member.display_name || member.participant_id,
+        session
+          ? session.display_name || member.participant_id
+          : member.display_name || member.participant_id,
         session?.active_turn_id,
-        session?.provider_kind || member.provider_kind,
+        session ? session.provider_kind : member.provider_kind,
         "typing",
         member.role
       );
@@ -121,9 +123,11 @@ export function roomTypingIndicators({
     );
     add(
       activeProgress.participantId,
-      participant?.display_name || session?.display_name || activeProgress.displayName,
+      session
+        ? session.display_name || activeProgress.participantId
+        : participant?.display_name || activeProgress.displayName,
       activeProgress.turnId,
-      session?.provider_kind || participant?.provider_kind || "",
+      session ? session.provider_kind : participant?.provider_kind || "",
       activeProgress.activity,
       participant?.role || ""
     );
