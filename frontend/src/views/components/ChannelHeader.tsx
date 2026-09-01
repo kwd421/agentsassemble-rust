@@ -9,6 +9,7 @@ import {
 } from "react";
 import { ArrowLeft, Bell, ChevronRight, Pin, Search, Users, PanelRight } from "lucide-react";
 import type { MessagePin } from "../../api/messagePins";
+import ProviderLogo from "./ProviderLogo";
 
 type HeaderPanel = "notifications" | "pins" | "search";
 
@@ -32,6 +33,7 @@ export type ChannelSearchItem = {
   id: string;
   author: string;
   avatarImage?: string;
+  providerKind?: string;
   body: string;
   meta?: string;
   exactTime?: string;
@@ -432,15 +434,25 @@ export default function ChannelHeader({
                           title={item.exactTime}
                         >
                           <span className="dc-head-search-result-avatar" aria-hidden>
-                            {(item.author || "R").slice(0, 1).toLocaleUpperCase()}
-                            {item.avatarImage && (
-                              <img
-                                src={item.avatarImage}
-                                alt=""
-                                onError={(event) => {
-                                  event.currentTarget.hidden = true;
-                                }}
+                            {item.avatarImage ? (
+                              <>
+                                {(item.author || "R").slice(0, 1).toLocaleUpperCase()}
+                                <img
+                                  src={item.avatarImage}
+                                  alt=""
+                                  onError={(event) => {
+                                    event.currentTarget.hidden = true;
+                                  }}
+                                />
+                              </>
+                            ) : item.providerKind ? (
+                              <ProviderLogo
+                                providerKind={item.providerKind}
+                                size={32}
+                                fallback={(item.author || "R").slice(0, 1).toLocaleUpperCase()}
                               />
+                            ) : (
+                              (item.author || "R").slice(0, 1).toLocaleUpperCase()
                             )}
                           </span>
                           <span className="dc-head-search-result-copy">

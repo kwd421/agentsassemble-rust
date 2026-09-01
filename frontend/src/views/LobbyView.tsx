@@ -291,6 +291,7 @@ export default function LobbyView({
           id: result.event_id,
           author: participantProfile?.displayName || result.author || "Room",
           avatarImage: participantProfile?.avatarImageUrl,
+          providerKind: participantProfile?.providerKind,
           body: result.content || result.attachment_filenames.join(", "),
           meta: messageSearchScope === "all"
             ? `#${messageSearchChannelLabels[result.channel_id] || result.channel_id} · ${timeLabel}`

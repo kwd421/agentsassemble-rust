@@ -83,7 +83,20 @@ function renderLobby(events: LobbyEvent[], typingIndicators: RoomTypingIndicator
   );
 }
 
-function SearchBackedLobby({ target }: { target: LobbyEvent }) {
+function SearchBackedLobby({
+  target,
+  profile = {
+    displayName: "Canonical Agent",
+    avatarImageUrl: "https://assets.example/agent-1.png",
+  },
+}: {
+  target: LobbyEvent;
+  profile?: {
+    displayName?: string;
+    avatarImageUrl?: string;
+    providerKind?: string;
+  };
+}) {
   const [query, setQuery] = useState("");
   const contextEvent: RoomEvent = {
     v: 1,
@@ -107,10 +120,7 @@ function SearchBackedLobby({ target }: { target: LobbyEvent }) {
       agents={[]}
       searchLabel={room.label}
       participantProfiles={{
-        "agent-1": {
-          displayName: "Canonical Agent",
-          avatarImageUrl: "https://assets.example/agent-1.png",
-        },
+        "agent-1": profile,
       }}
       canonicalEvents={[target]}
       canonicalHasMoreHistory={false}
@@ -210,6 +220,39 @@ describe("LobbyView active provider turn", () => {
     await waitFor(() =>
       expect(scrollIntoView).toHaveBeenCalledWith({ block: "center" })
     );
+  });
+
+  it("uses the canonical provider logo when an Agent Session has no avatar image", async () => {
+    render(
+      <SearchBackedLobby
+        target={{
+          id: "provider-logo-search-target",
+          kind: "message",
+          name: "Stale Participant",
+          message: "provider identity result",
+          side: "other",
+          created_at: "2026-07-26T01:00:00Z",
+          actor_id: "agent-b",
+          flow_meeting_id: "room-a",
+          flow_action: "message_final",
+        }}
+        profile={{
+          displayName: "Antigravity · gemini-3.6-flash",
+          providerKind: "antigravity_live_session",
+        }}
+      />
+    );
+
+    fireEvent.keyDown(window, { key: "f", ctrlKey: true });
+    fireEvent.change(await screen.findByRole("searchbox", { name: "Room A 검색어" }), {
+      target: { value: "provider identity" },
+    });
+
+    expect(
+      screen
+        .getByRole("button", { name: /Antigravity · gemini-3.6-flash.*provider identity result/ })
+        .querySelector('[data-provider-brand="antigravity"]')
+    ).not.toBeNull();
   });
 
   it("jumps to the first unread message and marks through the current latest without moving", () => {
