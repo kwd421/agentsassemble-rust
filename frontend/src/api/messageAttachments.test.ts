@@ -88,25 +88,19 @@ describe("lobby message-attachment HTTP authority", () => {
     expect(bridge.upload).toHaveBeenCalledWith("general");
     expect(beforeDispatch).toHaveBeenCalledOnce();
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("http://127.0.0.1:49154/api/attachments");
+    expect(url).toBe("http://127.0.0.1:49154/api/message-attachments");
     expect((init.headers as Headers).get("Authorization")).toBe(
       `Bearer ${"a".repeat(64)}`
     );
     expect(JSON.parse(String(init.body))).toEqual({
-      purpose: "room_attachment",
       filename: "notes.txt",
       content_type: "text/plain",
       data_base64: "bm90ZXM=",
     });
   });
 
-  it("exchanges a remote session before upload and never sends it to the target", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        jsonResponse({ ticket: "b".repeat(64), ttl_seconds: 30 })
-      )
-      .mockResolvedValueOnce(jsonResponse({ attachment }));
+  it("sends the reusable remote session directly to the message target", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse({ attachment }));
     vi.stubGlobal("fetch", fetchMock);
 
     await uploadMessageAttachment(
@@ -115,48 +109,32 @@ describe("lobby message-attachment HTTP authority", () => {
       { kind: "remote", sessionToken: "aas1.session" }
     );
 
-    const exchangeHeaders = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
-    const targetHeaders = fetchMock.mock.calls[1]?.[1]?.headers as Headers;
-    expect(fetchMock.mock.calls[0]?.[0]).toBe(
-      "/api/session-tickets/message-attachment-upload"
-    );
-    expect(exchangeHeaders.get("Authorization")).toBe("Bearer aas1.session");
-    expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/attachments");
-    expect(targetHeaders.get("Authorization")).toBe(
-      `Bearer ${"b".repeat(64)}`
-    );
-    expect(JSON.stringify(fetchMock.mock.calls[1]?.[1])).not.toContain(
-      "aas1.session"
-    );
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/message-attachments");
+    const targetHeaders = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
+    expect(targetHeaders.get("Authorization")).toBe("Bearer aas1.session");
   });
 
-  it("does not dispatch an upload after denied, non-private, or malformed exchange", async () => {
-    const responses = [
+  it("surfaces a remote target denial without fallback", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
       jsonResponse(
         { code: "permission_denied", message: "This room session cannot upload." },
         403
-      ),
-      jsonResponse({ ticket: "b".repeat(64), ttl_seconds: 30 }, 200, "public"),
-      jsonResponse({ ticket: "b".repeat(64), ttl_seconds: 30, ignored: true }),
-    ];
-    for (const response of responses) {
-      const fetchMock = vi.fn().mockResolvedValueOnce(response);
-      vi.stubGlobal("fetch", fetchMock);
-      await expect(
-        uploadMessageAttachment(
-          new File(["notes"], "notes.txt", { type: "text/plain" }),
-          "general",
-          { kind: "remote", sessionToken: "aas1.session" }
-        )
-      ).rejects.toThrow();
-      expect(fetchMock).toHaveBeenCalledOnce();
-    }
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      uploadMessageAttachment(
+        new File(["notes"], "notes.txt", { type: "text/plain" }),
+        "general",
+        { kind: "remote", sessionToken: "aas1.session" }
+      )
+    ).rejects.toThrow("This room session cannot upload.");
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 
-  it("checks currentness after a grant and before either transfer dispatch", async () => {
-    const uploadFetch = vi.fn().mockResolvedValueOnce(
-      jsonResponse({ ticket: "b".repeat(64), ttl_seconds: 30 })
-    );
+  it("checks currentness before either transfer dispatch", async () => {
+    const uploadFetch = vi.fn();
     vi.stubGlobal("fetch", uploadFetch);
     await expect(
       uploadMessageAttachment(
@@ -168,7 +146,7 @@ describe("lobby message-attachment HTTP authority", () => {
         }
       )
     ).rejects.toThrow("retired");
-    expect(uploadFetch).toHaveBeenCalledOnce();
+    expect(uploadFetch).not.toHaveBeenCalled();
 
     bridge.read.mockResolvedValue(grant("c".repeat(64)));
     const readFetch = vi.fn();
@@ -188,30 +166,30 @@ describe("lobby message-attachment HTTP authority", () => {
     expect(readFetch).not.toHaveBeenCalled();
   });
 
-  it("does not dispatch a target upload after a delayed grant is retired", async () => {
-    let resolveExchange!: (response: Response) => void;
-    const exchange = new Promise<Response>((resolve) => {
-      resolveExchange = resolve;
-    });
-    const fetchMock = vi.fn().mockReturnValueOnce(exchange);
-    vi.stubGlobal("fetch", fetchMock);
+  it("does not dispatch a local upload after a delayed grant is retired", async () => {
+    let resolveGrant!: (value: ReturnType<typeof grant>) => void;
+    bridge.upload.mockReturnValueOnce(new Promise((resolve) => {
+      resolveGrant = resolve;
+    }));
+    const targetFetch = vi.fn();
+    vi.stubGlobal("fetch", targetFetch);
     const controller = new AbortController();
     const beforeDispatch = vi.fn();
     const request = uploadMessageAttachment(
       new File(["notes"], "notes.txt", { type: "text/plain" }),
       "general",
-      { kind: "remote", sessionToken: "aas1.session" },
+      { kind: "local" },
       beforeDispatch,
       controller.signal
     );
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(bridge.upload).toHaveBeenCalledOnce());
 
     controller.abort();
-    resolveExchange(jsonResponse({ ticket: "b".repeat(64), ttl_seconds: 30 }));
+    resolveGrant(grant("b".repeat(64)));
 
     await expect(request).rejects.toMatchObject({ name: "AbortError" });
     expect(beforeDispatch).not.toHaveBeenCalled();
-    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(targetFetch).not.toHaveBeenCalled();
   });
 
   it("does not request or dispatch a local read after retirement", async () => {
@@ -294,14 +272,11 @@ describe("lobby message-attachment HTTP authority", () => {
     ).resolves.toEqual(classified);
   });
 
-  it("uses exact local and remote read grants bound to the canonical attachment", async () => {
+  it("uses an exact local read grant and the direct reusable remote session", async () => {
     bridge.read.mockResolvedValue(grant("c".repeat(64)));
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(attachmentResponse())
-      .mockResolvedValueOnce(
-        jsonResponse({ ticket: "d".repeat(64), ttl_seconds: 30 })
-      )
       .mockResolvedValueOnce(attachmentResponse());
     vi.stubGlobal("fetch", fetchMock);
 
@@ -322,15 +297,9 @@ describe("lobby message-attachment HTTP authority", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
       `http://127.0.0.1:49154${attachment.download_url}`
     );
-    expect(fetchMock.mock.calls[1]?.[0]).toBe(
-      `/api/session-tickets/message-attachment/${attachmentId}`
-    );
-    expect(fetchMock.mock.calls[2]?.[0]).toBe(attachment.url);
-    const remoteTargetHeaders = fetchMock.mock.calls[2]?.[1]?.headers as Headers;
-    expect(remoteTargetHeaders.get("Authorization")).toBe(
-      `Bearer ${"d".repeat(64)}`
-    );
-    expect(remoteTargetHeaders.get("Authorization")).not.toContain("aas1.session");
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(attachment.url);
+    const remoteTargetHeaders = fetchMock.mock.calls[1]?.[1]?.headers as Headers;
+    expect(remoteTargetHeaders.get("Authorization")).toBe("Bearer aas1.session");
   });
 
   it("rejects non-private, wrong-type, and wrong-size reads without fallback", async () => {

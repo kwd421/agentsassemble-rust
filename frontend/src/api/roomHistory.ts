@@ -22,7 +22,7 @@ export type LobbyAttachmentUploadOptions = {
   sessionToken?: string;
   inviteToken?: string;
   deviceToken?: string;
-  purpose?: "room_attachment" | "profile_avatar" | "room_appearance";
+  purpose?: "profile_avatar" | "room_appearance";
   signal?: AbortSignal;
   beforeDispatch?: () => void;
 };
@@ -95,10 +95,10 @@ export type RoomEvent = GeneratedRoomEvent;
 
 export function uploadLobbyAttachment(
   file: File,
-  options: LobbyAttachmentUploadOptions | string = {}
+  options: LobbyAttachmentUploadOptions = {}
 ): Promise<LobbyAttachmentRef> {
-  const resolved = typeof options === "string" ? { roomId: options } : options;
-  if (!resolved.purpose || resolved.purpose === "room_attachment") {
+  const resolved = options;
+  if (!resolved.purpose) {
     return uploadMessageAttachment(
       file,
       resolved.roomId || "",

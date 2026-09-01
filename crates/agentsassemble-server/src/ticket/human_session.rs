@@ -4,9 +4,8 @@ use chrono::Utc;
 use tokio::time::Instant;
 
 use super::{
-    ConsumedTicket, IssuedTicket, LocalRoomManagerPurpose, RoomHttpPurpose, RoomHumanHttpAuthority,
-    StoredTicketGrant, TicketAuthority, TicketError, TicketStore, insert_grant,
-    resolve_local_room_manager_authority, resolve_room_http_authority,
+    ConsumedTicket, IssuedTicket, LocalRoomManagerPurpose, StoredTicketGrant, TicketAuthority,
+    TicketError, TicketStore, insert_grant, resolve_local_room_manager_authority,
 };
 
 pub(super) struct HumanSessionGrant {
@@ -17,8 +16,6 @@ pub(super) struct HumanSessionGrant {
 #[derive(Clone, PartialEq, Eq)]
 pub(super) enum HumanSessionGrantPurpose {
     WebSocketConnect,
-    MessageAttachmentUpload,
-    BoundMessageAttachmentRead { attachment_id: String },
     BoundAppearanceRead { asset_id: String },
 }
 
@@ -60,7 +57,6 @@ pub enum ConsumedProfileTicket {
 pub(crate) enum ConsumedAttachmentUploadTicket {
     Profile(ConsumedProfileTicket),
     Appearance(LocalRoomManagerAuthority),
-    Message(RoomHumanHttpAuthority),
 }
 
 const PUBLIC_SESSION_GRANT_CAPACITY: usize = 1_792;
@@ -280,8 +276,7 @@ impl TicketStore {
         let grant = self.consume_grant(ticket).await?;
         match Self::resolve_attachment_upload_authority(grant.authority)? {
             ConsumedAttachmentUploadTicket::Profile(profile) => Ok(profile),
-            ConsumedAttachmentUploadTicket::Appearance(_)
-            | ConsumedAttachmentUploadTicket::Message(_) => Err(TicketError::Invalid),
+            ConsumedAttachmentUploadTicket::Appearance(_) => Err(TicketError::Invalid),
         }
     }
 
@@ -302,19 +297,6 @@ impl TicketStore {
         authority: TicketAuthority,
     ) -> Result<ConsumedAttachmentUploadTicket, TicketError> {
         Ok(match authority {
-            TicketAuthority::HumanSession(public) => {
-                if public.purpose == HumanSessionGrantPurpose::MessageAttachmentUpload {
-                    ConsumedAttachmentUploadTicket::Message(RoomHumanHttpAuthority::HumanSession(
-                        Self::resolve_human_session_authority(
-                            public,
-                            &HumanSessionGrantPurpose::MessageAttachmentUpload,
-                            Utc::now(),
-                        )?,
-                    ))
-                } else {
-                    return Err(TicketError::Invalid);
-                }
-            }
             TicketAuthority::ServerOperator { principal_id, .. } => {
                 ConsumedAttachmentUploadTicket::Profile(ConsumedProfileTicket::ServerOperator {
                     principal_id,
@@ -326,14 +308,8 @@ impl TicketStore {
                     &LocalRoomManagerPurpose::AppearanceUpload,
                 )?)
             }
-            TicketAuthority::RoomHttp(room)
-                if room.purpose == RoomHttpPurpose::MessageAttachmentUpload =>
-            {
-                ConsumedAttachmentUploadTicket::Message(RoomHumanHttpAuthority::LocalTicket(
-                    resolve_room_http_authority(room, &RoomHttpPurpose::MessageAttachmentUpload)?,
-                ))
-            }
             TicketAuthority::Room(_)
+            | TicketAuthority::HumanSession(_)
             | TicketAuthority::RoomHttp(_)
             | TicketAuthority::SettingsDirectoryRead { .. }
             | TicketAuthority::CentralRegistration { .. } => return Err(TicketError::Invalid),

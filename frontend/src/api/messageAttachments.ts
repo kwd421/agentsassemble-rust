@@ -21,7 +21,6 @@ import {
 import {
   fileToBase64,
   isPrivateNoStoreResponse,
-  parseSessionHttpTicket,
   responseError,
 } from "./http";
 import type { RoomHttpAuthority } from "./roomHttpAuthority";
@@ -38,7 +37,7 @@ export type LobbyAttachmentRef = Readonly<{
 
 export type MessageAttachmentAuthority = RoomHttpAuthority;
 
-type TransferGrant = Readonly<{ baseUrl: string; ticket: string }>;
+type TransferAuthority = Readonly<{ baseUrl: string; credential: string }>;
 
 const ATTACHMENT_KEYS = [
   "id",
@@ -130,55 +129,27 @@ function bearer(ticket: string, json = false): Headers {
   return headers;
 }
 
-async function remoteGrant(
-  path: string,
-  sessionToken: string,
-  signal?: AbortSignal
-): Promise<TransferGrant> {
-  if (!sessionToken) throw new Error("방 세션 권위를 사용할 수 없습니다.");
-  const exchange = await fetch(path, {
-    cache: "no-store",
-    method: "POST",
-    headers: bearer(sessionToken),
-    signal,
-  });
-  if (!exchange.ok) throw await responseError(exchange);
-  if (!isPrivateNoStoreResponse(exchange, "application/json")) invalidResponse();
-  let ticket: string;
-  try {
-    ticket = parseSessionHttpTicket(await exchange.json());
-  } catch {
-    invalidResponse();
-  }
-  return { baseUrl: "", ticket };
-}
-
-async function uploadGrant(
+async function uploadAuthority(
   roomId: string,
   authority: MessageAttachmentAuthority,
   signal?: AbortSignal
-): Promise<TransferGrant> {
+): Promise<TransferAuthority> {
   signal?.throwIfAborted();
   if (authority.kind === "local") {
     const grant = await requestDesktopMessageAttachmentUploadTicket(roomId);
     signal?.throwIfAborted();
-    return { baseUrl: grant.http_base_url, ticket: grant.ticket };
+    return { baseUrl: grant.http_base_url, credential: grant.ticket };
   }
-  const grant = await remoteGrant(
-    "/api/session-tickets/message-attachment-upload",
-    authority.sessionToken,
-    signal
-  );
-  signal?.throwIfAborted();
-  return grant;
+  if (!authority.sessionToken) throw new Error("방 세션 권위를 사용할 수 없습니다.");
+  return { baseUrl: "", credential: authority.sessionToken };
 }
 
-async function readGrant(
+async function readAuthority(
   roomId: string,
   attachmentId: string,
   authority: MessageAttachmentAuthority,
   signal?: AbortSignal
-): Promise<TransferGrant> {
+): Promise<TransferAuthority> {
   signal?.throwIfAborted();
   if (authority.kind === "local") {
     const grant = await requestDesktopMessageAttachmentReadTicket(
@@ -186,15 +157,10 @@ async function readGrant(
       attachmentId
     );
     signal?.throwIfAborted();
-    return { baseUrl: grant.http_base_url, ticket: grant.ticket };
+    return { baseUrl: grant.http_base_url, credential: grant.ticket };
   }
-  const grant = await remoteGrant(
-    `/api/session-tickets/message-attachment/${attachmentId}`,
-    authority.sessionToken,
-    signal
-  );
-  signal?.throwIfAborted();
-  return grant;
+  if (!authority.sessionToken) throw new Error("방 세션 권위를 사용할 수 없습니다.");
+  return { baseUrl: "", credential: authority.sessionToken };
 }
 
 export async function uploadMessageAttachment(
@@ -208,16 +174,15 @@ export async function uploadMessageAttachment(
   if (!Number.isSafeInteger(file.size) || file.size < 1 || file.size > MAX_ATTACHMENT_BYTES) {
     throw new Error("메시지 첨부는 1바이트 이상 10MiB 이하여야 합니다.");
   }
-  const grant = await uploadGrant(canonicalRoom, authority, signal);
+  const resolvedAuthority = await uploadAuthority(canonicalRoom, authority, signal);
   const dataBase64 = await fileToBase64(file, signal);
   signal?.throwIfAborted();
   beforeDispatch?.();
-  const response = await fetch(`${grant.baseUrl}/api/attachments`, {
+  const response = await fetch(`${resolvedAuthority.baseUrl}/api/message-attachments`, {
     cache: "no-store",
     method: "POST",
-    headers: bearer(grant.ticket, true),
+    headers: bearer(resolvedAuthority.credential, true),
     body: JSON.stringify({
-      purpose: "room_attachment",
       filename: file.name || "attachment.bin",
       content_type: file.type || "application/octet-stream",
       data_base64: dataBase64,
@@ -239,13 +204,18 @@ export async function fetchMessageAttachmentBlob(
 ): Promise<Blob> {
   const canonicalRoom = canonicalRoomId(roomId);
   const attachment = parseMessageAttachment(attachmentValue);
-  const grant = await readGrant(canonicalRoom, attachment.id, authority, signal);
+  const resolvedAuthority = await readAuthority(
+    canonicalRoom,
+    attachment.id,
+    authority,
+    signal
+  );
   const reference =
     mode === "view" ? attachment.url : attachment.download_url;
   beforeDispatch?.();
-  const response = await fetch(`${grant.baseUrl}${reference}`, {
+  const response = await fetch(`${resolvedAuthority.baseUrl}${reference}`, {
     cache: "no-store",
-    headers: bearer(grant.ticket),
+    headers: bearer(resolvedAuthority.credential),
     signal,
   });
   if (!response.ok) throw await responseError(response);

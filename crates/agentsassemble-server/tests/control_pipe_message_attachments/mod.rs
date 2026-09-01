@@ -118,10 +118,9 @@ async fn issue_read(
 
 async fn upload(client: &Client, server: &ControlledServer, ticket: &str) -> Value {
     let response = client
-        .post(format!("{}/api/attachments", server.address))
+        .post(format!("{}/api/message-attachments", server.address))
         .bearer_auth(ticket)
         .json(&json!({
-            "purpose": "room_attachment",
             "filename": "control.txt",
             "content_type": "text/plain",
             "data_base64": "Y29udHJvbCBieXRlcw=="

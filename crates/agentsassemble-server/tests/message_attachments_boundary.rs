@@ -85,7 +85,7 @@ async fn assert_crossed_upload_rejected_before_body(client: &Client, server: &Lo
         .unwrap_or_else(|error| panic!("issue crossed upload ticket: {error}"))
         .ticket;
     let rejected = client
-        .post(format!("{}/api/attachments", server.base_url))
+        .post(format!("{}/api/message-attachments", server.base_url))
         .bearer_auth(&crossed)
         .header(reqwest::header::CONTENT_TYPE, "application/json")
         .body("x".repeat(12 * 1024 * 1024))
@@ -103,6 +103,62 @@ async fn assert_crossed_upload_rejected_before_body(client: &Client, server: &Lo
         .await
         .unwrap_or_else(|error| panic!("reject consumed crossed ticket: {error}"));
     assert_eq!(crossed_replay.status(), StatusCode::UNAUTHORIZED);
+
+    let retired = server
+        .tickets
+        .issue_message_attachment_upload(
+            "general".to_owned(),
+            LOCAL_OPERATOR_USER_ID.to_owned(),
+            LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("issue retired-route upload ticket: {error}"))
+        .ticket;
+    let retired_route = client
+        .post(format!("{}/api/attachments", server.base_url))
+        .bearer_auth(&retired)
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .body("x".repeat(12 * 1024 * 1024))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("reject retired upload route before body: {error}"));
+    assert_eq!(retired_route.status(), StatusCode::UNAUTHORIZED);
+    let retired_replay = client
+        .post(format!("{}/api/message-attachments", server.base_url))
+        .bearer_auth(retired)
+        .json(&json!({
+            "filename": "retired.txt",
+            "content_type": "text/plain",
+            "data_base64": "eA=="
+        }))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("reject consumed retired-route ticket: {error}"));
+    assert_eq!(retired_replay.status(), StatusCode::UNAUTHORIZED);
+
+    let strict = server
+        .tickets
+        .issue_message_attachment_upload(
+            "general".to_owned(),
+            LOCAL_OPERATOR_USER_ID.to_owned(),
+            LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("issue strict upload ticket: {error}"))
+        .ticket;
+    let legacy_payload = client
+        .post(format!("{}/api/message-attachments", server.base_url))
+        .bearer_auth(strict)
+        .json(&json!({
+            "purpose": "room_attachment",
+            "filename": "legacy.txt",
+            "content_type": "text/plain",
+            "data_base64": "eA=="
+        }))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("reject legacy message payload: {error}"));
+    assert_eq!(legacy_payload.status(), StatusCode::BAD_REQUEST);
 }
 
 async fn assert_unbound_read_consumed(
@@ -225,17 +281,34 @@ async fn human_session_tcp_upload_send_and_read_preserve_scope() {
     )
     .await;
     let session_token = canonical_session_token(&admitted);
-    let upload_ticket = issue_session_ticket(
-        &client,
-        &server.base_url,
-        session_token,
-        "message-attachment-upload",
-    )
-    .await;
+
+    for path in [
+        "message-attachment-upload".to_owned(),
+        format!("message-attachment/ma_{}", "0".repeat(32)),
+    ] {
+        let retired = client
+            .post(format!("{}/api/session-tickets/{path}", server.base_url))
+            .bearer_auth(session_token)
+            .send()
+            .await
+            .unwrap_or_else(|error| panic!("call retired attachment exchange: {error}"));
+        assert_eq!(retired.status(), StatusCode::NOT_FOUND);
+    }
+
+    let malformed = client
+        .post(format!("{}/api/message-attachments", server.base_url))
+        .bearer_auth("aas1.malformed")
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .body("x".repeat(12 * 1024 * 1024))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("reject malformed session before body: {error}"));
+    assert_eq!(malformed.status(), StatusCode::UNAUTHORIZED);
+
     let attachment = upload(
         &client,
         &server.base_url,
-        &upload_ticket,
+        session_token,
         "remote.txt",
         "text/plain",
         b"remote attachment",
@@ -245,26 +318,11 @@ async fn human_session_tcp_upload_send_and_read_preserve_scope() {
     let mut socket = open_session_socket(&client, &server.base_url, session_token).await;
     let message_id = bind_remote_attachment(&mut socket, &attachment).await;
 
-    let raw_session = read_attachment(
-        &client,
-        &server.base_url,
-        &attachment["download_url"],
-        session_token,
-    )
-    .await;
-    assert_eq!(raw_session.status(), StatusCode::UNAUTHORIZED);
-    let read_ticket = issue_session_attachment_read(
-        &client,
-        &server.base_url,
-        session_token,
-        attachment["id"].as_str().unwrap_or_default(),
-    )
-    .await;
     let readable = read_attachment(
         &client,
         &server.base_url,
         &attachment["download_url"],
-        &read_ticket,
+        session_token,
     )
     .await;
     assert_private_attachment(&readable, "text/plain", "attachment");
@@ -272,14 +330,14 @@ async fn human_session_tcp_upload_send_and_read_preserve_scope() {
         readable.bytes().await.unwrap_or_default(),
         b"remote attachment"[..]
     );
-    let replay = read_attachment(
+    let reusable = read_attachment(
         &client,
         &server.base_url,
         &attachment["download_url"],
-        &read_ticket,
+        session_token,
     )
     .await;
-    assert_eq!(replay.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(reusable.status(), StatusCode::OK);
 
     assert_remote_attachment_deleted(
         &client,
@@ -358,15 +416,8 @@ async fn assert_remote_attachment_deleted(
     assert!([&first, &second].iter().any(|frame| {
         frame["op"] == "event" && frame["events"][0]["type"] == "message_deleted"
     }));
-    let read_ticket = issue_session_attachment_read(
-        client,
-        base_url,
-        session_token,
-        attachment["id"].as_str().unwrap_or_default(),
-    )
-    .await;
     let deleted =
-        read_attachment(client, base_url, &attachment["download_url"], &read_ticket).await;
+        read_attachment(client, base_url, &attachment["download_url"], session_token).await;
     assert_eq!(deleted.status(), StatusCode::NOT_FOUND);
 }
 
@@ -404,24 +455,21 @@ async fn assert_read_only_session(client: &Client) {
     let session_token = canonical_session_token(&admitted);
 
     let denied = client
-        .post(format!(
-            "{}/api/session-tickets/message-attachment-upload",
-            server.base_url
-        ))
+        .post(format!("{}/api/message-attachments", server.base_url))
         .bearer_auth(session_token)
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .body("not valid JSON")
         .send()
         .await
-        .unwrap_or_else(|error| panic!("deny read-only upload grant: {error}"));
+        .unwrap_or_else(|error| panic!("deny read-only upload before body: {error}"));
     assert_eq!(denied.status(), StatusCode::FORBIDDEN);
     assert_eq!(json_body(denied).await["code"], "permission_denied");
 
-    let read_ticket =
-        issue_session_attachment_read(client, &server.base_url, session_token, &pending.id).await;
     let readable = read_attachment(
         client,
         &server.base_url,
         &Value::String(pending.download_url),
-        &read_ticket,
+        session_token,
     )
     .await;
     assert_eq!(readable.status(), StatusCode::OK);
@@ -429,6 +477,23 @@ async fn assert_read_only_session(client: &Client) {
         readable.bytes().await.unwrap_or_default(),
         b"shared read-only"[..]
     );
+
+    let left = client
+        .post(format!("{}/api/room-invite/leave", server.base_url))
+        .bearer_auth(session_token)
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("leave before attachment reread: {error}"));
+    assert_eq!(left.status(), StatusCode::OK);
+    let departed = read_attachment(
+        client,
+        &server.base_url,
+        &Value::String(format!("/api/attachments/{}?download=1", pending.id)),
+        session_token,
+    )
+    .await;
+    assert_eq!(departed.status(), StatusCode::UNAUTHORIZED);
     server.stop().await;
 }
 
@@ -515,10 +580,9 @@ async fn upload(
     content: &[u8],
 ) -> Value {
     let response = client
-        .post(format!("{base_url}/api/attachments"))
+        .post(format!("{base_url}/api/message-attachments"))
         .bearer_auth(ticket)
         .json(&json!({
-            "purpose": "room_attachment",
             "filename": filename,
             "content_type": content_type,
             "data_base64": STANDARD.encode(content)
@@ -545,40 +609,6 @@ async fn issue_local_read_id(tickets: &TicketStore, attachment_id: &str) -> Stri
         .await
         .unwrap_or_else(|error| panic!("issue local attachment read: {error}"))
         .ticket
-}
-
-async fn issue_session_ticket(
-    client: &Client,
-    base_url: &str,
-    session_token: &str,
-    purpose: &str,
-) -> String {
-    let response = client
-        .post(format!("{base_url}/api/session-tickets/{purpose}"))
-        .bearer_auth(session_token)
-        .send()
-        .await
-        .unwrap_or_else(|error| panic!("exchange attachment session ticket: {error}"));
-    assert_eq!(response.status(), StatusCode::OK);
-    json_body(response).await["ticket"]
-        .as_str()
-        .unwrap_or_else(|| panic!("attachment session ticket is missing"))
-        .to_owned()
-}
-
-async fn issue_session_attachment_read(
-    client: &Client,
-    base_url: &str,
-    session_token: &str,
-    attachment_id: &str,
-) -> String {
-    issue_session_ticket(
-        client,
-        base_url,
-        session_token,
-        &format!("message-attachment/{attachment_id}"),
-    )
-    .await
 }
 
 async fn read_attachment(

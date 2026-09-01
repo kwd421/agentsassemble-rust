@@ -23,7 +23,6 @@ pub(crate) use human_session::{
 };
 pub use human_session::{ConsumedHumanSessionSocketTicket, ConsumedProfileTicket};
 use human_session::{HumanSessionGrant, HumanSessionGrantPurpose};
-pub(crate) use message_attachments::ConsumedMessageAttachmentReadTicket;
 
 struct StoredTicketGrant {
     authority: TicketAuthority,
