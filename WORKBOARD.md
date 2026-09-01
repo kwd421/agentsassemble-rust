@@ -13,12 +13,14 @@ contracts, findings, or verification journals.
 - Completed: D-01 at `a7949bd`; the uncalled HTTP challenge/ticket bootstrap and
   startup secret are absent, while private-control and admitted-human socket ticket
   issuance remain.
-- Completed within D-02: `3ffb9eb` removes the challenge, HMAC receipt, snapshot and
-  permission digests. The finite snapshot/catch-up contract remains unchanged.
-- Task: D-02 — remove the unapproved local/remote receipt and per-frame proof layers
-  while preserving the finite snapshot/catch-up and ordinary bounded JSON contract.
-  The active subtask is removal of the remaining per-frame proof key,
-  HMAC/base64/counter envelope, and its duplicate client/server state.
+- Completed: D-02 at `3ffb9eb`, `77cae0e`, `0d24741`, and `57fd6ec`; the
+  evidence-free receipt, digests, per-frame HMAC/base64/counter envelope, proof-key
+  ticket state, and obsolete test vocabulary are absent. One-use ticket authority,
+  strict bounded JSON, finite snapshot/catch-up, replay, and failure contracts remain.
+- Task: D-03 — remove the redundant human-session HTTP purpose-ticket exchange while
+  preserving one bounded-header authorization at each target route. Desktop purpose
+  tickets and one-use WebSocket upgrade tickets remain because they cross distinct
+  authority boundaries.
 - Sequence/exit owner: [`docs/PRODUCT_REIMPLEMENTATION_PLAN.md`](docs/PRODUCT_REIMPLEMENTATION_PLAN.md)
 - Finding/evidence owner: [`docs/architecture/REPOSITORY_AUDIT_2026-09-01.md`](docs/architecture/REPOSITORY_AUDIT_2026-09-01.md)
 - Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`;

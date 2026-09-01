@@ -13,9 +13,9 @@ custom-channel, account, provider-operation, and external-AI controls remain act
 or reachable without complete Rust owners, and Agent Session identity plus several
 provider completion/lifecycle contracts are reopened. D-01 removed the uncalled
 HTTP host-challenge routes and startup secret at `a7949bd`; remote human HTTP still
-performs a redundant purpose-ticket exchange, and room frames carry an unapproved
-cryptographic envelope. Audit D-02 and D-03 route those corrections before further
-UI completion.
+performs a redundant purpose-ticket exchange. D-02 removed the evidence-free room
+frame proof at `3ffb9eb`, `77cae0e`, `0d24741`, and `57fd6ec`; audit D-03 routes the
+remaining HTTP correction before further UI completion.
 
 ## Scope and method
 
@@ -68,7 +68,7 @@ boundary resumes explicitly at `Historical public Rust slice and provenance reco
 
 | Surface | Current exposure |
 | --- | --- |
-| Core room, general messages/history/search/pins/attachments/votes | finite sync/replay and lobby search implemented; room-wide search overclaim, frame-proof threat decision, and false capabilities reopened |
+| Core room, general messages/history/search/pins/attachments/votes | finite bounded-JSON sync/replay and lobby search implemented; room-wide search overclaim and false capabilities remain reopened; frame-proof decision closed by D-02 removal |
 | Human profile/avatar and room appearance | implemented; Agent identity projection is separately reopened |
 | Human invite/admission/session/public ingress | substantial implementation; dead host challenge closed at `a7949bd`, while redundant remote HTTP ticket exchange plus guide/client-kind/TCP findings remain open |
 | Participant role/mute/self-leave | implemented; kick/re-add and room lifecycle are not |

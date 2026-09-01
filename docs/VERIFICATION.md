@@ -5148,3 +5148,39 @@ protocol tests, warning-denied workspace Clippy, formatting, architecture/source
 and diff checks passed. Actual TCP/WebSocket tests still prove exact private-ticket scope, finite
 snapshot/catch-up readiness, binary-frame rejection, connection limits, replay recovery, and
 message-size enforcement.
+
+### D-02 bounded JSON frame and proof-state removal: 2026-09-01
+
+The prior product-frame owner HMAC-signed, base64-expanded, copied, and asynchronously
+serialized every post-subscription frame, maintained two direction counters and browser
+promise queues, and generated a second 64-hex random secret for every ticket grant,
+including HTTP tickets that never consumed it. No packaged endpoint-substitution or
+active-relay reproduction established a threat that survived the existing exact-child,
+one-use-ticket, origin, ingress, and TLS boundaries. This was concrete recurring work and
+state without a demonstrated security owner, not an optimization based on expected future
+load.
+
+Commit `77cae0e` moves both directions to the single `room_channel` 256 KiB strict JSON
+boundary. It measures incoming browser frames by UTF-8 bytes and rejects the retired
+authenticated envelope before dispatch; a real TCP test wraps a valid message command in
+that old envelope and proves no durable mutation occurs. Commits `0d24741` and `57fd6ec`
+remove the HMAC/base64 modules, connection nonce, proof-key ticket storage and wire fields,
+duplicate browser queues/counters, and obsolete proof-oriented test harness. This halves
+the random UUID pairs generated per ticket and removes the roughly one-third base64 wire
+expansion without adding a fallback, legacy decoder, compatibility branch, polling loop,
+cache, or speculative abstraction.
+
+Preserved product and security contracts are one-use ticket consumption, exact room and
+participant authority, product-surface equality, TLS/origin and ingress admission, strict
+schema and byte bounds, finite `C/H` Snapshot/catch-up readiness, contiguous event sequence,
+request-ID replay, uncertain-ACK recovery, revocation revalidation, and the three-minute
+quiet-room keepalive required by the server's five-minute idle-input deadline. The accepted
+trade-off is the absence of a separate application-layer active-relay authenticator where no
+independent authority or reproduced attacker exists.
+
+Verification passed all 90 server unit tests and every real TCP/WebSocket/HTTP integration
+suite, 650 frontend tests and the production CSS-verified build, 25 desktop tests, generated
+protocol export, warning-denied server and desktop Clippy, Rust formatting, diff checks, and
+the architecture/source-growth policy gate. Repository-wide current-source search found no
+remaining proof key, connection nonce, authenticated envelope, frame-HMAC module, or obsolete
+proof-oriented test peer.

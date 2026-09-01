@@ -632,8 +632,8 @@ the private control-pipe and admitted-human ticket paths remain covered.
 
 ### D-02 — local receipt, remote proof, and per-frame proof have different threats
 
-Disposition: `Receipt removed at 3ffb9eb; remove the remaining per-frame proof`;
-Phase 0B in progress.
+Disposition: `Removed` at `3ffb9eb`, `77cae0e`, `0d24741`, and `57fd6ec`;
+Phase 0B.
 
 `authenticated_channel.rs`, `server_proof.rs`, and `authenticatedFrames.ts` HMAC,
 counter, base64-encode, copy, and asynchronously serialize every frame, adding
@@ -662,6 +662,17 @@ the client challenge, HMAC receipt, snapshot digest, and duplicate permissions d
 from both generated wire types and their client/server owners. It deliberately leaves
 the still-active per-frame key and envelope visible for the next independently
 verifiable removal rather than hiding a dual protocol or compatibility path.
+
+`77cae0e` completes the product-frame cutover to one 256 KiB strict JSON owner while
+retaining the finite receipt/Snapshot/catch-up sequence, event continuity, request-ID
+replay, uncertain-ACK recovery, ingress admission, and the one keepalive required by
+the server's five-minute idle-input deadline. `0d24741` then removes the disconnected
+HMAC modules and the second 64-hex random key from every ticket grant, including HTTP
+grants that never used it. `57fd6ec` removes the obsolete authenticated-frame test
+vocabulary and unused ticket/counter harness parameters. Repository search finds no
+remaining proof-key, connection-nonce, authenticated-envelope, or frame-HMAC owner in
+current server, desktop, frontend, or test source. No fallback or compatibility path
+was retained.
 
 ### D-03 — remote human HTTP authorization performs a redundant ticket exchange
 
