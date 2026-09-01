@@ -43,7 +43,7 @@ export function buildMemberOwnerGroups(
     const ownerId = String(agent.ownerId || "").trim();
     let group: MemberOwnerGroup | undefined = groupByOwnerId.get(ownerId);
     if (!group) {
-      const groupId = ownerId || `unassigned:${agent.ownerDisplayName || "agents"}`;
+      const groupId = ownerId || `unassigned:${agent.id}`;
       group = groupByOwnerId.get(groupId);
       if (!group) {
         group = {

@@ -227,7 +227,7 @@ function buildMobileMembers({
     const ownerId = String(agent.ownerId || "").trim();
     let group = groupByOwnerId.get(ownerId);
     if (!group) {
-      const id = ownerId || `unassigned:${agent.ownerDisplayName || "agents"}`;
+      const id = ownerId || `unassigned:${agent.id}`;
       group = groupByOwnerId.get(id);
       if (!group) {
         group = {
