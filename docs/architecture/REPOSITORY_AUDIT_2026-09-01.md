@@ -1078,6 +1078,46 @@ run, resolve which build/verification artifacts are still active and remove only
 stale regenerable outputs owned by this project. Dependency trees required for
 active work are not treated as arbitrary trash.
 
+### Build-artifact lifecycle correction
+
+The implementation run remeasured the Cargo owners before changing them. The root
+`target/` occupied 65 GiB physically and Cargo's dry-run inventory reported 453,268
+files and 117.5 GiB of logical bytes. `target/debug/deps` occupied 55 GiB,
+`target/debug/incremental` 7.6 GiB, and 415,713 files were Cargo's macOS default
+unpacked `.rcgu.o` debug units. The excluded desktop workspace separately owned a
+4.6 GiB target with 35,777 more `.rcgu.o` files. No Cargo, rustc, or
+AgentsAssemble process was active, and only these regenerable project build owners
+were cleaned; source, dependency trees, application data, and user changes were not
+touched. Available disk rose from 21 GiB to 95 GiB. A target-qualified Cargo clean
+also removed shared host intermediates, contrary to the narrower expected effect,
+so the final cleanup design never assumes that target-qualified cleanup is selective.
+
+Commit `8cda5f6` disables only macOS `split-debuginfo=unpacked`; it preserves full
+debug information and leaves targets such as Windows MSVC unchanged, where `off` is
+unsupported. A controlled cold domain-test build fell from 290 MiB and 568
+`.rcgu.o` files in 21.44 seconds to 259 MiB, zero `.rcgu.o` files, and 20.78
+seconds. Commit `b62c4cc` then gives the desktop build the existing repository target
+instead of a second Cargo owner. Desktop warning-denied clippy and all 25 desktop
+tests pass from that shared target, and `desktop/src-tauri/target` remains absent.
+
+The first fresh complete `make verify` after both corrections took 436.67 seconds
+and produced one 12.017 GiB physical/11.834 GiB logical cache with 20,656 files and
+zero `.rcgu.o` units. Commit `9e13cf3` makes the exact project-owned cleanup boundary
+the first step of complete verification. It always removes a reappearing obsolete
+desktop target and cleans the active root target only when physical allocation
+exceeds 20 GiB, leaving 8 GiB of measured change headroom before paying for a cold
+rebuild. The same verification invocation then rebuilds the current HEAD cache, so
+cleanup never leaves the routine next build intentionally cold. The owner rejects a
+symlinked target, accepts no arbitrary path, uses Cargo's own clean command, and adds
+no timer, background worker, age heuristic, fallback, or swallowed failure. Tests
+cover below-ceiling retention, above-ceiling exact cleanup, obsolete-owner cleanup,
+and symlink rejection. A second complete verification retained the 12.017 GiB cache,
+passed architecture and source gates, 102 frontend files/639 tests, 25 desktop tests,
+all workspace and real TCP boundary tests, and warning-denied clippy in 234.76
+seconds. The accepted trade-off is an evidence-triggered cold verification after
+the cache crosses 20 GiB rather than either unbounded disk growth or a speculative
+third-party artifact classifier.
+
 ## Current verdict and exit
 
 Verdict: `APPROVE` for the Phase 0A inventory, dispositions, ownership map, and

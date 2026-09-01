@@ -69,6 +69,15 @@ contracts, findings, or verification journals.
   individual commit, exact `a9dceae..d45978a`, cumulative F-05
   `8903445..d45978a`, and HEAD `d45978a` at `C0/H0/M0/L0`. Evidence-backed
   dormant-source cleanup remains in F-05.
+- Completed build-artifact lifecycle correction through `9e13cf3`. macOS debug
+  builds retain full debug information without Cargo's default unpacked per-unit
+  object copies, and the desktop shell shares the repository Cargo target instead
+  of owning a second cache. Complete verification now checks the exact project-owned
+  targets before compiling: an obsolete desktop target is removed, while the active
+  target is retained below the measured 20 GiB ceiling and rebuilt from clean state
+  only after exceeding it. The fresh complete cache occupies 12.017 GiB physically,
+  contains no `.rcgu.o` files, and passes the full verification suite; a second full
+  verification retains that cache and completes in 234.76 seconds.
 - Sequence/exit owner: [`docs/PRODUCT_REIMPLEMENTATION_PLAN.md`](docs/PRODUCT_REIMPLEMENTATION_PLAN.md)
 - Finding/evidence owner: [`docs/architecture/REPOSITORY_AUDIT_2026-09-01.md`](docs/architecture/REPOSITORY_AUDIT_2026-09-01.md)
 - Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`;
