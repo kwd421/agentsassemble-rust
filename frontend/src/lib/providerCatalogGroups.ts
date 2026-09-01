@@ -58,7 +58,7 @@ function projectProviderToCatalogGroup(
     (option) => option.value === modelControl.default_value
   )
     ? modelControl.default_value
-    : scopedOptions[0].value;
+    : "";
   return {
     ...provider,
     catalog_group: group,

@@ -598,8 +598,11 @@ describe("AgentCreateModal", () => {
 
     expect(screen.queryByLabelText("API 키")).toBeNull();
     const model = screen.getByRole("combobox", { name: "모델" }) as HTMLButtonElement;
+    expect(model.disabled).toBe(false);
+    expectProviderControlValue("모델", "선택 필요");
+    expect(primaryActionButton().hasAttribute("disabled")).toBe(true);
+    await chooseProviderControl("모델", "Gemma 4 12B Local");
     expect(model.disabled).toBe(true);
-    expect(model.textContent).toContain("Gemma 4 12B");
     expect(
       (screen.getByRole("combobox", { name: "추론 강도" }) as HTMLButtonElement).disabled
     ).toBe(true);
