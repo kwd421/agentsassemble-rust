@@ -65,7 +65,7 @@ impl SqliteStore {
         Ok(metadata)
     }
 
-    /// Stores a pending avatar only after revalidating the consumed human-session grant.
+    /// Stores a pending avatar only after revalidating the resolved human-session authorization.
     ///
     /// # Errors
     ///

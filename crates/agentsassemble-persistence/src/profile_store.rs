@@ -64,12 +64,12 @@ impl SqliteStore {
         Ok(profile)
     }
 
-    /// Reads one profile only after revalidating the durable session behind a consumed grant.
+    /// Reads one profile only after revalidating the resolved durable session authorization.
     ///
     /// # Errors
     ///
     /// Fails when the session or its exact room, membership, profile, scope, or expiry binding
-    /// changed after grant issuance.
+    /// changed after initial authorization.
     pub async fn human_session_profile(
         &self,
         authorization: &HumanSessionAuthorization,
@@ -118,7 +118,8 @@ impl SqliteStore {
         Ok(outcome)
     }
 
-    /// Updates one profile in the same transaction that revalidates a consumed session grant.
+    /// Updates one profile in the same transaction that revalidates a resolved session
+    /// authorization.
     ///
     /// # Errors
     ///

@@ -74,7 +74,7 @@ impl SqliteStore {
     /// # Errors
     ///
     /// Fails when any immutable session provenance, room, membership, profile binding, or expiry
-    /// no longer matches the consumed grant.
+    /// no longer matches the resolved authorization.
     pub async fn revalidate_human_session_authorization(
         &self,
         expected: &HumanSessionAuthorization,
@@ -190,7 +190,7 @@ pub(crate) async fn revalidate_human_session(
     };
     if !same_provenance(&authorization, expected) {
         return Err(invalid_state(
-            "Stored human session provenance changed after grant issuance.",
+            "Stored human session provenance changed after authorization resolution.",
         ));
     }
     Ok((authorization, *profile))

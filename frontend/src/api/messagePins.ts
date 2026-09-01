@@ -142,29 +142,29 @@ function parseMutationResponse(
   return pins;
 }
 
-async function operationGrant(
+async function operationAuthority(
   roomId: string,
   authority: MessagePinsAuthority,
   operation: PinOperation
-): Promise<{ baseUrl: string; ticket: string }> {
+): Promise<{ baseUrl: string; credential: string }> {
   if (authority.kind === "local") {
     const grant =
       operation === "read"
         ? await requestDesktopMessagePinsReadTicket(roomId)
         : await requestDesktopMessagePinsWriteTicket(roomId);
-    return { baseUrl: grant.http_base_url, ticket: grant.ticket };
+    return { baseUrl: grant.http_base_url, credential: grant.ticket };
   }
   if (!authority.sessionToken) {
     throw new Error("방 세션 권위를 사용할 수 없습니다.");
   }
   return {
     baseUrl: "",
-    ticket: authority.sessionToken,
+    credential: authority.sessionToken,
   };
 }
 
-function bearer(ticket: string, json = false): Headers {
-  const headers = new Headers({ Authorization: `Bearer ${ticket}` });
+function bearer(credential: string, json = false): Headers {
+  const headers = new Headers({ Authorization: `Bearer ${credential}` });
   if (json) headers.set("Content-Type", "application/json");
   return headers;
 }
@@ -179,15 +179,15 @@ export async function fetchLobbyMessagePins({
   beforeDispatch?: () => void;
 }): Promise<MessagePin[]> {
   const canonicalRoom = canonicalRoomId(roomId);
-  const grant = await operationGrant(canonicalRoom, authority, "read");
+  const resolved = await operationAuthority(canonicalRoom, authority, "read");
   const path = `/api/room-pins${queryString({
     room_id: canonicalRoom,
     channel_id: "lobby",
   })}`;
   beforeDispatch?.();
-  const response = await fetch(`${grant.baseUrl}${path}`, {
+  const response = await fetch(`${resolved.baseUrl}${path}`, {
     cache: "no-store",
-    headers: bearer(grant.ticket),
+    headers: bearer(resolved.credential),
   });
   if (!response.ok) throw await responseError(response);
   return parseListResponse(await response.json());
@@ -208,12 +208,12 @@ export async function setLobbyMessagePinned({
 }): Promise<MessagePin[]> {
   const canonicalRoom = canonicalRoomId(roomId);
   const canonicalEvent = canonicalEventId(eventId);
-  const grant = await operationGrant(canonicalRoom, authority, "write");
+  const resolved = await operationAuthority(canonicalRoom, authority, "write");
   beforeDispatch?.();
-  const response = await fetch(`${grant.baseUrl}/api/room-pins`, {
+  const response = await fetch(`${resolved.baseUrl}/api/room-pins`, {
     cache: "no-store",
     method: "POST",
-    headers: bearer(grant.ticket, true),
+    headers: bearer(resolved.credential, true),
     body: JSON.stringify({
       room_id: canonicalRoom,
       channel_id: "lobby",

@@ -81,7 +81,7 @@ async fn read_profile(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<serde_json::Value>, ProfileHttpError> {
-    let authority = consume_profile_authority(&state, request.headers()).await?;
+    let authority = resolve_profile_authority(&state, request.headers()).await?;
     ensure_empty_body(request, MAX_PROFILE_BODY_BYTES)
         .await
         .map_err(ProfileHttpError::from_body)?;
@@ -99,7 +99,7 @@ async fn update_profile(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<serde_json::Value>, ProfileHttpError> {
-    let authority = consume_profile_authority(&state, request.headers()).await?;
+    let authority = resolve_profile_authority(&state, request.headers()).await?;
     let update: ProfileUpdateRequest = decode_json_body(request, MAX_PROFILE_BODY_BYTES)
         .await
         .map_err(ProfileHttpError::from_body)?;
@@ -137,7 +137,7 @@ async fn upload_attachment(
 ) -> Result<Json<serde_json::Value>, ProfileHttpError> {
     let (authority, prejoin_authority) = if request.headers().contains_key(header::AUTHORIZATION) {
         (
-            Some(consume_attachment_upload_authority(&state, request.headers()).await?),
+            Some(resolve_attachment_upload_authority(&state, request.headers()).await?),
             None,
         )
     } else {
@@ -499,7 +499,7 @@ enum AttachmentUploadAuthority {
     Message(RoomHumanHttpAuthority),
 }
 
-async fn consume_attachment_upload_authority(
+async fn resolve_attachment_upload_authority(
     state: &AppState,
     headers: &axum::http::HeaderMap,
 ) -> Result<AttachmentUploadAuthority, ProfileHttpError> {
@@ -532,7 +532,7 @@ async fn consume_attachment_upload_authority(
     }
 }
 
-async fn consume_profile_authority(
+async fn resolve_profile_authority(
     state: &AppState,
     headers: &axum::http::HeaderMap,
 ) -> Result<ProfileAuthority, ProfileHttpError> {
