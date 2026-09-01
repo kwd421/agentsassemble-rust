@@ -110,20 +110,12 @@ pub struct CapabilitySet {
     pub message_modify: bool,
     #[serde(rename = "room.manage")]
     pub room_manage: bool,
-    #[serde(rename = "room.delete")]
-    pub room_delete: bool,
     #[serde(rename = "participant.leave")]
     pub participant_leave: bool,
-    #[serde(rename = "participant.kick")]
-    pub participant_kick: bool,
     #[serde(rename = "participant.mute")]
     pub participant_mute: bool,
     #[serde(rename = "agent.control")]
     pub agent_control: bool,
-    #[serde(rename = "provider.request.resolve")]
-    pub provider_request_resolve: bool,
-    #[serde(rename = "bridge.report")]
-    pub bridge_report: bool,
     #[serde(rename = "bridge.publish")]
     pub bridge_publish: bool,
 }
@@ -149,15 +141,40 @@ impl CapabilitySet {
             message_send: writable && !bridge,
             message_modify: writable && !bridge,
             room_manage: is_operator,
-            room_delete: is_operator,
             participant_leave: !bridge,
-            participant_kick: is_operator,
             participant_mute: is_operator,
             agent_control: is_operator,
-            provider_request_resolve: writable && !bridge,
-            bridge_report: bridge,
             bridge_publish: bridge && writable,
         }
+    }
+}
+
+#[cfg(test)]
+mod capability_tests {
+    use serde_json::to_value;
+
+    use super::{CapabilitySet, ClientKind, InviteScope};
+
+    #[test]
+    fn wire_capabilities_advertise_only_executable_authority() {
+        let browser = to_value(CapabilitySet::local_operator(
+            ClientKind::Browser,
+            InviteScope::ReadWrite,
+        ))
+        .unwrap_or_else(|error| panic!("serialize browser capabilities: {error}"));
+        for absent in [
+            "room.delete",
+            "participant.kick",
+            "provider.request.resolve",
+            "bridge.report",
+        ] {
+            assert!(browser.get(absent).is_none(), "unexpected {absent}");
+        }
+        assert_eq!(browser["room.manage"].as_bool(), Some(true));
+
+        let bridge =
+            CapabilitySet::for_principal(ClientKind::AgentBridge, InviteScope::ReadWrite, false);
+        assert!(bridge.bridge_publish);
     }
 }
 
