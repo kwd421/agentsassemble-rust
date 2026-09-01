@@ -11,7 +11,9 @@ import subprocess
 import sys
 
 
-MAX_ACTIVE_TARGET_BYTES = 20 * 1024**3
+# A packed-debug full workspace verification currently retains about 20.6 GiB.
+# Keep that measured warm cache plus a small amount of deterministic build variance.
+MAX_ACTIVE_TARGET_BYTES = 24 * 1024**3
 ROOT_TARGET = Path("target")
 OBSOLETE_DESKTOP_TARGET = Path("desktop/src-tauri/target")
 

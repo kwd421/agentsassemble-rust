@@ -44,3 +44,4 @@ verify: artifact-check
 	$(MAKE) test
 	$(MAKE) clippy
 	$(MAKE) diff-check
+	$(MAKE) artifact-check
