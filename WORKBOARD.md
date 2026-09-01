@@ -140,8 +140,8 @@ contracts, findings, or verification journals.
   open.
 - Active task: F-07 provider operation exposure. Independent commits `582a02e`,
   `edfb7c5`, and `c890a9a` make the Rust registration descriptor the credential-
-  operation owner, remove the absent catalog-refresh request, and remove the absent
-  provider-usage request/state. Codex, Antigravity, and OpenCode no longer expose
+  operation exposure owner, remove the absent catalog-refresh request, and remove the
+  absent provider-usage request/state. Codex, Antigravity, and OpenCode no longer expose
   login or credential controls; DeepSeek retains its implemented keyring operations;
   usage remains visibly unsupported. Correction `9794b0a` waits for the actual
   workspace-picker recovery state exposed by the fresh complete verification instead
@@ -154,8 +154,15 @@ contracts, findings, or verification journals.
   verification record overstated provider-usage failure handling as silent. Correction
   `1313aba` removes that dead contract, uses explicit `owner_id` for grouping, and passes
   all 97 frontend files/617 tests plus production-build, CSS, diff, and architecture
-  gates. This record corrects the failure description. Critical-web Pro and Daybreaker
-  re-review remain pending. Exact preferred-model selection and removal of the
+  gates. This record corrects the failure description. Daybreaker's re-review then
+  found one excluded obsolete quota-visibility suite; `534a953` removes it and a
+  repository-wide reference search is empty. Critical-web Pro independently confirmed
+  the dead quota finding and found that this board called registration the credential-
+  operation owner rather than the narrower exposure owner; the wording is now corrected
+  without moving DeepSeek execution authority from its route and credential store.
+  Critical-web Pro correction review remains pending; Daybreaker approves HEAD
+  `534a953`, exact `879db4b..534a953`, and cumulative `5ec012f..534a953` at
+  `C0/H0/M0/L0`. Exact preferred-model selection and removal of the
   first-discovered-model substitution remain open in F-07.
 - Build-artifact lifecycle correction is complete through `537c1b9`. macOS uses
   packed debug information, eliminating Cargo's

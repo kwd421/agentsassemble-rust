@@ -5833,19 +5833,26 @@ were avoidable: catalog refresh discarded its failure, while provider usage coll
 the specific HTTP failure into a generic visible unavailable/stale state. This was
 bounded interaction work rather than polling, but it still hid an authority mismatch.
 
-Commit `582a02e` replaces the generic login label/flow claims with one
-registration-owned `credential_available` fact. Only DeepSeek advertises that fact
-because only its keyring status/set/delete owner exists. Codex, Antigravity, and
+Commit `582a02e` replaces the generic login label/flow claims with one registration-owned
+`credential_available` exposure fact. Only DeepSeek advertises that fact because only
+its keyring status/set/delete owner exists. Codex, Antigravity, and
 OpenCode no longer expose login, workspace-cookie, or credential controls. Commit
 `edfb7c5` removes the absent catalog-refresh request and its swallowed modal-open
 failure. Commit `c890a9a` removes the absent provider-usage request, route/type/state,
 and generic detail-open failure state; the existing presentation truthfully reports
-usage as unsupported. Daybreaker's manual source review then found one valid Low:
+usage as unsupported. Daybreaker's manual source review and critical-web Pro review
+then found one shared valid Low:
 the only producer always projected unsupported usage, but dynamic quota types,
 formatters, visibility rules, chips, styles, and tests remained, and quota visibility
 also influenced roster ownership grouping. Correction `1313aba` removes that dead
 machinery and makes ownership grouping depend on explicit `owner_id` instead of quota
-or room-management capability. The static unsupported notice remains. The room
+or room-management capability. Daybreaker's re-review then found that one obsolete
+quota-visibility suite lived outside Vitest's include set and still imported the deleted
+helper; `534a953` removes that excluded suite, and a repository-wide reference search is
+empty. Critical-web Pro also found that the workboard called registration the credential-
+operation owner rather than the narrower exposure owner. This documentation correction
+keeps execution authority with the exact DeepSeek route and credential store. The static
+unsupported notice remains. The room
 WebSocket snapshot remains the catalog owner, and
 DeepSeek credential behavior is unchanged. No dummy route, client authority,
 placeholder result, compatibility path, retry, polling, heartbeat, timer, fallback,
@@ -5896,7 +5903,8 @@ production build plus CSS, diff, and architecture gates pass. The JavaScript is
 is 148,564 bytes raw and 26,236 bytes under `gzip -9`, with SHA-256
 `2227380ce846d01d0c1f704ffb291a50c6cf4ab3a51d44e7df63ea24011e0989`.
 These reductions are dead-code removal evidence, not a broad latency claim.
-Critical ChatGPT Pro review and Daybreaker re-review of the corrected pushed batch
-remain pending; no final approval is claimed here. Exact preferred-model
-selection and removal of the first-discovered-model substitution remain the next
-F-07 work.
+Daybreaker approves `534a953`, exact `879db4b..534a953`, cumulative
+`5ec012f..534a953`, and HEAD `534a953` at `C0/H0/M0/L0`. Critical ChatGPT Pro's
+correction review remains pending; no Pro final approval is claimed here. Exact
+preferred-model selection and removal of the first-discovered-model substitution remain
+the next F-07 work.

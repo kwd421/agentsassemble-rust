@@ -465,15 +465,18 @@ Disposition: `Fix`; medium product/structure impact.
   model is missing. The OpenCode preference at `catalog.rs:191` is still
   `opencode/hy3-free`, contrary to the selected Muse Spark flow.
 - Commits `582a02e`, `edfb7c5`, and `c890a9a` close the operation-exposure half of
-  this finding. The Rust registration descriptor now advertises only implemented
-  credential ownership, so DeepSeek retains its keyring operations while Codex,
-  Antigravity, and OpenCode expose no login or credential controls. The absent
-  catalog-refresh and provider-usage requests, their response types, and their client
+  this finding. The Rust registration descriptor now advertises the credential exposure
+  fact only where operations exist, so DeepSeek retains its separately owned keyring
+  operations while Codex, Antigravity, and OpenCode expose no login or credential
+  controls. The absent catalog-refresh and provider-usage requests, their response types,
+  and their client
   state are removed. Daybreaker found that the dynamic quota presentation and
   visibility machinery remained without a producer and also influenced roster
   ownership. Correction `1313aba` removes those types, formatters, visibility rules,
-  components, styles, and tests; the static unsupported notice remains, and roster
-  ownership now follows explicit `owner_id` only.
+  components, and styles; the static unsupported notice remains, and roster ownership
+  now follows explicit `owner_id` only. Daybreaker's re-review found an obsolete
+  quota-visibility suite outside Vitest's include set; `534a953` removes that final
+  excluded test, and the deleted helper has no repository reference.
 - The remaining issue is exact model selection: the first-discovered-model
   substitution and stale OpenCode preference above are unchanged.
 
