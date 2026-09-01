@@ -30,8 +30,6 @@ pub(super) enum HumanSessionGrantPurpose {
 
 pub struct ConsumedHumanSessionSocketTicket {
     authorization: HumanSessionAuthorization,
-    proof_key: String,
-    connection_nonce: String,
 }
 
 pub(crate) enum SocketTicketHint {
@@ -56,8 +54,8 @@ impl ConsumedSocketTicket {
 
 impl ConsumedHumanSessionSocketTicket {
     #[must_use]
-    pub fn into_parts(self) -> (HumanSessionAuthorization, String, String) {
-        (self.authorization, self.proof_key, self.connection_nonce)
+    pub fn into_authorization(self) -> HumanSessionAuthorization {
+        self.authorization
     }
 }
 
@@ -284,13 +282,10 @@ impl TicketStore {
         ticket: &str,
     ) -> Result<ConsumedSocketTicket, TicketError> {
         let grant = self.consume_grant(ticket).await?;
-        let connection_nonce = crate::server_proof::derive_connection_nonce(ticket);
         match grant.authority {
-            TicketAuthority::Room(principal) => Ok(ConsumedSocketTicket::Local(ConsumedTicket {
-                principal,
-                proof_key: grant.proof_key,
-                connection_nonce,
-            })),
+            TicketAuthority::Room(principal) => {
+                Ok(ConsumedSocketTicket::Local(ConsumedTicket { principal }))
+            }
             TicketAuthority::HumanSession(public) => {
                 let authorization = Self::resolve_human_session_authority(
                     public,
@@ -298,11 +293,7 @@ impl TicketStore {
                     Utc::now(),
                 )?;
                 Ok(ConsumedSocketTicket::HumanSession(
-                    ConsumedHumanSessionSocketTicket {
-                        authorization,
-                        proof_key: grant.proof_key,
-                        connection_nonce,
-                    },
+                    ConsumedHumanSessionSocketTicket { authorization },
                 ))
             }
             TicketAuthority::RoomHttp(_)
@@ -322,14 +313,10 @@ impl TicketStore {
         &self,
         ticket: &str,
     ) -> Result<ConsumedHumanSessionSocketTicket, TicketError> {
-        let grant = self
+        let authorization = self
             .consume_human_session(ticket, &HumanSessionGrantPurpose::WebSocketConnect)
             .await?;
-        Ok(ConsumedHumanSessionSocketTicket {
-            authorization: grant.authorization,
-            proof_key: grant.proof_key,
-            connection_nonce: crate::server_proof::derive_connection_nonce(ticket),
-        })
+        Ok(ConsumedHumanSessionSocketTicket { authorization })
     }
 
     /// Consumes only an exact human-session own-profile credential.
@@ -341,17 +328,15 @@ impl TicketStore {
         &self,
         ticket: &str,
     ) -> Result<HumanSessionAuthorization, TicketError> {
-        Ok(self
-            .consume_human_session(ticket, &HumanSessionGrantPurpose::OwnProfile)
-            .await?
-            .authorization)
+        self.consume_human_session(ticket, &HumanSessionGrantPurpose::OwnProfile)
+            .await
     }
 
     async fn consume_human_session(
         &self,
         ticket: &str,
         expected: &HumanSessionGrantPurpose,
-    ) -> Result<ConsumedHumanSessionGrant, TicketError> {
+    ) -> Result<HumanSessionAuthorization, TicketError> {
         let grant = self.consume_grant(ticket).await?;
         Self::resolve_human_session_at(grant, expected, Utc::now())
     }
@@ -360,15 +345,11 @@ impl TicketStore {
         grant: StoredTicketGrant,
         expected: &HumanSessionGrantPurpose,
         now: chrono::DateTime<Utc>,
-    ) -> Result<ConsumedHumanSessionGrant, TicketError> {
+    ) -> Result<HumanSessionAuthorization, TicketError> {
         let TicketAuthority::HumanSession(public) = grant.authority else {
             return Err(TicketError::Invalid);
         };
-        let authorization = Self::resolve_human_session_authority(public, expected, now)?;
-        Ok(ConsumedHumanSessionGrant {
-            authorization,
-            proof_key: grant.proof_key,
-        })
+        Self::resolve_human_session_authority(public, expected, now)
     }
 
     pub(super) fn resolve_human_session_authority(
@@ -389,10 +370,7 @@ impl TicketStore {
         now: chrono::DateTime<Utc>,
     ) -> Result<HumanSessionAuthorization, TicketError> {
         let grant = self.consume_grant(ticket).await?;
-        Ok(
-            Self::resolve_human_session_at(grant, &HumanSessionGrantPurpose::OwnProfile, now)?
-                .authorization,
-        )
+        Self::resolve_human_session_at(grant, &HumanSessionGrantPurpose::OwnProfile, now)
     }
 
     /// Removes and resolves a one-use credential accepted by the server-wide profile surface.
@@ -483,9 +461,4 @@ impl TicketStore {
             .saturating_sub(LOCAL_PRIVATE_GRANT_RESERVE)
             .min(PUBLIC_SESSION_GRANT_CAPACITY)
     }
-}
-
-struct ConsumedHumanSessionGrant {
-    authorization: HumanSessionAuthorization,
-    proof_key: String,
 }

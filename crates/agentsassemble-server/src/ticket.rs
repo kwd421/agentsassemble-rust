@@ -27,7 +27,6 @@ pub(crate) use message_attachments::ConsumedMessageAttachmentReadTicket;
 
 struct StoredTicketGrant {
     authority: TicketAuthority,
-    proof_key: String,
     expires_at: Instant,
 }
 
@@ -84,14 +83,11 @@ pub enum RoomHttpPurpose {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IssuedTicket {
     pub ticket: String,
-    pub proof_key: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConsumedTicket {
     pub principal: AuthenticatedPrincipal,
-    pub proof_key: String,
-    pub connection_nonce: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -467,11 +463,7 @@ impl TicketStore {
         let TicketAuthority::Room(principal) = grant.authority else {
             return Err(TicketError::Invalid);
         };
-        Ok(ConsumedTicket {
-            principal,
-            proof_key: grant.proof_key,
-            connection_nonce: crate::server_proof::derive_connection_nonce(ticket),
-        })
+        Ok(ConsumedTicket { principal })
     }
 
     /// Removes and resolves a server-operator HTTP credential exactly once.
@@ -776,14 +768,12 @@ fn insert_grant(
     expires_at: Instant,
 ) -> IssuedTicket {
     let ticket = format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
-    let proof_key = format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
     grants.insert(
         ticket.clone(),
         StoredTicketGrant {
             authority,
-            proof_key: proof_key.clone(),
             expires_at,
         },
     );
-    IssuedTicket { ticket, proof_key }
+    IssuedTicket { ticket }
 }

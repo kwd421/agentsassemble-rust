@@ -75,7 +75,7 @@ where
     let (ticket_principal, mut human_session) = match grant {
         ConsumedSocketTicket::Local(grant) => (grant.principal, None),
         ConsumedSocketTicket::HumanSession(grant) => {
-            let (authorization, _unused_proof_key, _unused_connection_nonce) = grant.into_parts();
+            let authorization = grant.into_authorization();
             (authorization.principal().clone(), Some(authorization))
         }
     };

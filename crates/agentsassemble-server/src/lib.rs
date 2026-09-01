@@ -111,8 +111,6 @@ mod runtime_reconciliation;
 mod runtime_reconciliation_cleanup;
 mod security_headers;
 mod server_identity_web;
-#[allow(dead_code)] // Removed with the now-unused ticket proof state in the next D-02 commit.
-mod server_proof;
 mod socket_admission;
 mod stable_entry;
 mod ticket;

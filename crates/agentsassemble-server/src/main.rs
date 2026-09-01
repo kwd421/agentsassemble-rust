@@ -265,7 +265,6 @@ async fn control_response(state: &AppState, line: &[u8]) -> LocalControlResponse
                     request_id,
                     ticket: ticket.ticket,
                     ttl_seconds: ticket.ttl_seconds,
-                    server_proof_key: ticket.server_proof_key,
                 },
                 Err(error) => control_error(request_id, error),
             }

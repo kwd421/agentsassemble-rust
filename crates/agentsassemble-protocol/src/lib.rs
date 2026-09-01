@@ -375,7 +375,6 @@ impl ProtocolError {
 pub struct TicketResponse {
     pub ticket: String,
     pub ttl_seconds: u64,
-    pub server_proof_key: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]

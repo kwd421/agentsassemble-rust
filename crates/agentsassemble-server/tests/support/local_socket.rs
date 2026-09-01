@@ -13,7 +13,6 @@ pub async fn connect(
 ) -> AuthenticatedTestSocket<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
     let grant = request_ticket(state, room_id).await;
     let ticket = grant.ticket;
-    let proof_key = grant.server_proof_key;
     let url = format!(
         "{}/ws?ticket={ticket}",
         base_url.replacen("http://", "ws://", 1)
@@ -22,7 +21,7 @@ pub async fn connect(
         .await
         .unwrap_or_else(|error| panic!("connect WebSocket: {error}"))
         .0;
-    AuthenticatedTestSocket::new(socket, ticket, proof_key)
+    AuthenticatedTestSocket::new(socket)
 }
 
 pub async fn request_ticket(state: &AppState, room_id: &str) -> TicketResponse {

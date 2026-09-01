@@ -488,7 +488,6 @@ async fn connect(
         .await
         .unwrap_or_else(|error| panic!("issue private-control-equivalent ticket: {error}"));
     let ticket = grant.ticket;
-    let proof_key = grant.server_proof_key;
     let socket = connect_async(format!(
         "{}/ws?ticket={ticket}",
         base_url.replacen("http://", "ws://", 1)
@@ -496,7 +495,7 @@ async fn connect(
     .await
     .unwrap_or_else(|error| panic!("connect WebSocket: {error}"))
     .0;
-    AuthenticatedTestSocket::new(socket, ticket, proof_key)
+    AuthenticatedTestSocket::new(socket)
 }
 
 async fn subscribe<S>(socket: &mut AuthenticatedTestSocket<S>)

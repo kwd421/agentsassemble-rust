@@ -221,10 +221,6 @@ pub async fn open_session_socket(
         .as_str()
         .unwrap_or_else(|| panic!("human socket ticket is missing"))
         .to_owned();
-    let proof_key = grant["server_proof_key"]
-        .as_str()
-        .unwrap_or_else(|| panic!("human socket proof key is missing"))
-        .to_owned();
     let socket = connect_async(format!(
         "{}/ws?ticket={ticket}",
         base_url.replacen("http://", "ws://", 1)
@@ -232,7 +228,7 @@ pub async fn open_session_socket(
     .await
     .unwrap_or_else(|error| panic!("connect human room socket: {error}"))
     .0;
-    let mut socket = AuthenticatedTestSocket::new(socket, ticket.clone(), proof_key);
+    let mut socket = AuthenticatedTestSocket::new(socket);
     let receipt = socket.subscribe(0).await;
     assert_eq!(receipt["op"], "subscribed");
     assert_eq!(receipt["room_id"], "general");

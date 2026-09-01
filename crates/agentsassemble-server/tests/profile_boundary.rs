@@ -541,7 +541,6 @@ async fn connect_room(
         .await
         .unwrap_or_else(|error| panic!("issue profile socket ticket: {error}"));
     let ticket = grant.ticket;
-    let proof_key = grant.server_proof_key;
     let url = format!(
         "{}/ws?ticket={ticket}",
         base_url.replacen("http://", "ws://", 1)
@@ -550,7 +549,7 @@ async fn connect_room(
         .await
         .unwrap_or_else(|error| panic!("connect profile socket: {error}"))
         .0;
-    let mut socket = AuthenticatedTestSocket::new(socket, ticket, proof_key);
+    let mut socket = AuthenticatedTestSocket::new(socket);
     let receipt = socket.subscribe(0).await;
     assert_eq!(receipt["op"], "subscribed");
     socket

@@ -186,7 +186,6 @@ async fn owned_control_pipe_issues_proof_bound_ticket_without_http_secret() {
         request_id,
         ticket,
         ttl_seconds,
-        server_proof_key,
     } = response
     else {
         panic!("control ticket request was rejected");
@@ -194,7 +193,6 @@ async fn owned_control_pipe_issues_proof_bound_ticket_without_http_secret() {
     assert_eq!(request_id, "control-ticket-1");
     assert_eq!(ticket.len(), 64);
     assert!(ttl_seconds > 0);
-    assert_eq!(server_proof_key.len(), 64);
     server.close_parent_pipe().await;
 }
 

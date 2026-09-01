@@ -85,7 +85,6 @@ pub async fn issue_local_ticket(
     Ok(TicketResponse {
         ticket: issued.ticket,
         ttl_seconds: state.tickets.ttl_seconds(),
-        server_proof_key: issued.proof_key,
     })
 }
 

@@ -9,7 +9,6 @@ const NATIVE_TICKET = {
   ticket: "a".repeat(64),
   ttl_seconds: 30,
   websocket_base_url: "ws://127.0.0.1:43123",
-  server_proof_key: "b".repeat(64),
 };
 
 describe("room runtime ticket authority", () => {
@@ -24,7 +23,7 @@ describe("room runtime ticket authority", () => {
     ["extra key", { ...NATIVE_TICKET, extra: true }],
     ["coercible ticket", { ...NATIVE_TICKET, ticket: [NATIVE_TICKET.ticket] }],
     ["zero TTL", { ...NATIVE_TICKET, ttl_seconds: 0 }],
-    ["uppercase proof", { ...NATIVE_TICKET, server_proof_key: "B".repeat(64) }],
+    ["uppercase ticket", { ...NATIVE_TICKET, ticket: "A".repeat(64) }],
     ["TLS socket", { ...NATIVE_TICKET, websocket_base_url: "wss://127.0.0.1:43123" }],
     ["hostname alias", { ...NATIVE_TICKET, websocket_base_url: "ws://localhost:43123" }],
     ["path", { ...NATIVE_TICKET, websocket_base_url: "ws://127.0.0.1:43123/ws" }],

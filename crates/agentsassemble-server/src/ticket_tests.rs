@@ -380,13 +380,11 @@ async fn human_session_grants_are_exact_purpose_and_one_use() {
     let ConsumedSocketTicket::HumanSession(consumed) = consumed else {
         panic!("human socket grant resolved as local authority");
     };
-    let (authorization, proof_key, connection_nonce) = consumed.into_parts();
+    let authorization = consumed.into_authorization();
     assert_eq!(
         authorization.session_fingerprint(),
         &fixture.fingerprints[0]
     );
-    assert_eq!(proof_key, socket.proof_key);
-    assert_eq!(connection_nonce.len(), 64);
     assert!(matches!(
         store.consume_human_session_socket(&socket.ticket).await,
         Err(TicketError::Invalid)

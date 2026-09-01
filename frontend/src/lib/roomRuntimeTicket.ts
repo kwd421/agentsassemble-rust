@@ -2,7 +2,6 @@ export interface RoomRuntimeTicket {
   ticket: string;
   ttl_seconds: number;
   websocket_base_url: string;
-  server_proof_key: string;
   displayResourceBase: string;
 }
 
@@ -27,25 +26,18 @@ function exactObject(
   return record;
 }
 
-function ticketFields(
-  ticket: unknown,
-  ttlSeconds: unknown,
-  serverProofKey: unknown
-) {
+function ticketFields(ticket: unknown, ttlSeconds: unknown) {
   if (
     typeof ticket !== "string" ||
     !SECRET_PATTERN.test(ticket) ||
     !Number.isSafeInteger(ttlSeconds) ||
-    Number(ttlSeconds) < 1 ||
-    typeof serverProofKey !== "string" ||
-    !SECRET_PATTERN.test(serverProofKey)
+    Number(ttlSeconds) < 1
   ) {
     throw new Error("Room runtime ticket authority is invalid.");
   }
   return {
     ticket,
     ttl_seconds: ttlSeconds as number,
-    server_proof_key: serverProofKey,
   };
 }
 
@@ -75,13 +67,8 @@ export function parseNativeRoomRuntimeTicket(value: unknown): RoomRuntimeTicket 
     "ticket",
     "ttl_seconds",
     "websocket_base_url",
-    "server_proof_key",
   ]);
-  const fields = ticketFields(
-    grant.ticket,
-    grant.ttl_seconds,
-    grant.server_proof_key
-  );
+  const fields = ticketFields(grant.ticket, grant.ttl_seconds);
   if (typeof grant.websocket_base_url !== "string") {
     throw new Error("Room runtime origin is invalid.");
   }
@@ -104,11 +91,7 @@ export function parseBrowserRoomRuntimeTicket(
     throw new Error("Room session socket ticket response is invalid.");
   }
   const grant = value as Record<string, unknown>;
-  const fields = ticketFields(
-    grant.ticket,
-    grant.ttl_seconds,
-    grant.server_proof_key
-  );
+  const fields = ticketFields(grant.ticket, grant.ttl_seconds);
   const displayOrigin = exactOrigin(new URL(pageHref).origin, ["http:", "https:"]);
   const socketProtocol = displayOrigin.protocol === "https:" ? "wss:" : "ws:";
   return {
@@ -125,14 +108,9 @@ export function requireAcceptedRoomRuntimeTicket(
     "ticket",
     "ttl_seconds",
     "websocket_base_url",
-    "server_proof_key",
     "displayResourceBase",
   ]);
-  const fields = ticketFields(
-    accepted.ticket,
-    accepted.ttl_seconds,
-    accepted.server_proof_key
-  );
+  const fields = ticketFields(accepted.ticket, accepted.ttl_seconds);
   if (
     typeof accepted.websocket_base_url !== "string" ||
     typeof accepted.displayResourceBase !== "string"

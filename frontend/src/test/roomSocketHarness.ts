@@ -19,8 +19,6 @@ const CAPABILITIES = {
   "room.random": true,
   "room.vote.summary": true,
 };
-const UNUSED_PROOF_KEY = "b".repeat(64);
-
 export class FakeWebSocket {
   readyState: number = WebSocket.CONNECTING;
   sent: Array<Record<string, unknown>> = [];
@@ -190,7 +188,6 @@ export function openHarness(handlers: Parameters<typeof openRoomSocket>[2] = {})
           ticket,
           ttl_seconds: 30,
           websocket_base_url: "ws://127.0.0.1:43123",
-          server_proof_key: UNUSED_PROOF_KEY,
           displayResourceBase: "http://127.0.0.1:43123",
         };
       },

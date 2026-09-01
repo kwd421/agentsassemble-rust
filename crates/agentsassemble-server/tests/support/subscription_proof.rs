@@ -14,7 +14,7 @@ impl<S> AuthenticatedTestSocket<S>
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
-    pub fn new(socket: WebSocketStream<S>, _ticket: String, _proof_key: String) -> Self {
+    pub fn new(socket: WebSocketStream<S>) -> Self {
         Self { socket }
     }
 

@@ -353,7 +353,6 @@ describe("browser session WebSocket ticket routing", () => {
         JSON.stringify({
           ticket: "c".repeat(64),
           ttl_seconds: 30,
-          server_proof_key: "d".repeat(64),
         }),
         { status: 200, headers: { "Content-Type": "application/json" } }
       )
@@ -375,7 +374,6 @@ describe("browser session WebSocket ticket routing", () => {
       ticket: "c".repeat(64),
       ttl_seconds: 30,
       websocket_base_url: window.location.origin.replace(/^http/, "ws"),
-      server_proof_key: "d".repeat(64),
       displayResourceBase: window.location.origin,
     });
   });

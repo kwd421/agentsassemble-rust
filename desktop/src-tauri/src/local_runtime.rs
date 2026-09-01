@@ -41,7 +41,6 @@ pub struct TicketGrant {
     ticket: String,
     ttl_seconds: u64,
     websocket_base_url: String,
-    server_proof_key: String,
 }
 
 #[derive(Debug, Clone, Serialize)]

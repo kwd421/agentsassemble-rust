@@ -124,7 +124,6 @@ pub enum LocalControlResponse {
         request_id: String,
         ticket: String,
         ttl_seconds: u64,
-        server_proof_key: String,
     },
     OperatorHttpOk {
         request_id: String,

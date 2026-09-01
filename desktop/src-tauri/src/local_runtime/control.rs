@@ -74,13 +74,12 @@ pub(super) fn request_ticket(
         meeting_id: room_id.to_owned(),
     };
     let response = request_control(runtime, &request)?;
-    let (ticket, ttl_seconds, server_proof_key) = match response {
+    let (ticket, ttl_seconds) = match response {
         LocalControlResponse::Ok {
             request_id: response_id,
             ticket,
             ttl_seconds,
-            server_proof_key,
-        } if response_id == request_id => (ticket, ttl_seconds, server_proof_key),
+        } if response_id == request_id => (ticket, ttl_seconds),
         LocalControlResponse::Error {
             request_id: response_id,
             code,
@@ -98,13 +97,7 @@ pub(super) fn request_ticket(
             ));
         }
     };
-    if ticket.is_empty()
-        || ttl_seconds == 0
-        || server_proof_key.len() != 64
-        || !server_proof_key
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit())
-    {
+    if ticket.is_empty() || ttl_seconds == 0 {
         return Err(TicketFailure::Broken(
             "local runtime returned an invalid ticket grant".to_owned(),
         ));
@@ -117,7 +110,6 @@ pub(super) fn request_ticket(
         ticket,
         ttl_seconds,
         websocket_base_url: format!("ws://127.0.0.1:{port}"),
-        server_proof_key,
     })
 }
 

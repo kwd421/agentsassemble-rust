@@ -32,13 +32,6 @@ struct SessionTicketResponse {
 }
 
 #[derive(Serialize)]
-struct SessionSocketTicketResponse {
-    ticket: String,
-    ttl_seconds: u64,
-    server_proof_key: String,
-}
-
-#[derive(Serialize)]
 struct LeaveResponse {
     status: &'static str,
     agent_id: String,
@@ -123,10 +116,9 @@ async fn issue_socket_ticket(
         .issue_human_session_socket(authorization)
         .await
         .map_err(|_| SessionExchangeError::capacity())?;
-    Ok(Json(SessionSocketTicketResponse {
+    Ok(Json(SessionTicketResponse {
         ticket: issued.ticket,
         ttl_seconds,
-        server_proof_key: issued.proof_key,
     })
     .into_response())
 }

@@ -159,12 +159,7 @@ async fn connect_room(
     server: &mut ControlledServer,
 ) -> AuthenticatedTestSocket<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
     let response = server.issue_ticket().await;
-    let LocalControlResponse::Ok {
-        ticket,
-        server_proof_key,
-        ..
-    } = response
-    else {
+    let LocalControlResponse::Ok { ticket, .. } = response else {
         panic!("room socket ticket was rejected");
     };
     let socket = connect_async(format!(
@@ -174,7 +169,7 @@ async fn connect_room(
     .await
     .unwrap_or_else(|error| panic!("connect controlled room socket: {error}"))
     .0;
-    let mut socket = AuthenticatedTestSocket::new(socket, ticket, server_proof_key);
+    let mut socket = AuthenticatedTestSocket::new(socket);
     let receipt = socket.subscribe(0).await;
     assert_eq!(receipt["op"], "subscribed");
     assert_eq!(socket.receive_json().await["op"], "snapshot");
