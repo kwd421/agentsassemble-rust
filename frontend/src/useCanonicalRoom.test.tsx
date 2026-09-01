@@ -368,7 +368,9 @@ describe("useCanonicalRoom", () => {
     await act(async () => {
       loadedHistory = await result.current.loadHistory(3);
       await result.current.sendAgentControl(session(), "stop");
-      await result.current.sendAgentConfigure(session(), { display_name: "Luna" });
+      await result.current.sendAgentConfigure(session("stopped"), {
+        model: "gpt-5.6-terra",
+      });
     });
     expect(result.current.events.map((item) => item.seq)).toEqual([3, 4, 5, 6]);
     expect(loadedHistory?.events.map((item) => item.message)).toEqual(["older"]);
@@ -381,7 +383,7 @@ describe("useCanonicalRoom", () => {
     expect(command).toHaveBeenCalledWith("agent.configure", {
       agent_id: "codex",
       catalog_revision: "cat-test",
-      display_name: "Luna",
+      model: "gpt-5.6-terra",
     });
   });
 
@@ -593,16 +595,16 @@ describe("useCanonicalRoom", () => {
     });
   });
 
-  it("applies Agent Session identity from a command ACK to visible and later history", async () => {
+  it("keeps Agent Session identity across a valid configure ACK and later history", async () => {
     let handlers: RoomSocketHandlers | undefined;
-    const updatedParticipant: RoomMember = {
+    const participant: RoomMember = {
       meeting_id: "general",
       participant_id: "codex",
-      display_name: "Makima",
-      avatar_image_url: "/api/attachments/makima-avatar?view=1",
+      display_name: "Antigravity CLI",
+      avatar_image_url: "",
       role: "agent",
       participant_type: "local",
-      provider_kind: "antigravity_live_session",
+      provider_kind: "",
       connection_kind: "native_cli_bridge",
       status: "joined",
       source: "agent_session",
@@ -610,9 +612,8 @@ describe("useCanonicalRoom", () => {
       updated_at: "2026-07-10T00:00:04Z",
     };
     const updatedSession = {
-      ...session(),
-      display_name: "Makima",
-      avatar_image_url: "/api/attachments/makima-avatar?view=1",
+      ...session("stopped"),
+      model: "gpt-5.6-terra",
     };
     const command = vi.fn(async (action: string) => ({
       op: "ack",
@@ -621,8 +622,8 @@ describe("useCanonicalRoom", () => {
       resolution: "committed",
       action,
       result: {
-        status: "profile_updated",
-        participant: updatedParticipant,
+        status: "configured",
+        participant,
         agent_session: updatedSession,
       },
     }) satisfies RoomCommandAck);
@@ -654,25 +655,27 @@ describe("useCanonicalRoom", () => {
     const initial = snapshot([
       { ...event(3, "message_final", "recent"), turn_id: "turn-recent" },
     ]);
-    initial.participants = [
-      { ...updatedParticipant, display_name: "Antigravity CLI", avatar_image_url: "" },
-    ];
+    initial.participants = [participant];
 
     act(() => handlers?.onRoomSnapshot?.(initial, "http://127.0.0.1:43123"));
     expect(result.current.timelineEvents[0].name).toBe("Codex");
 
     await act(async () => {
-      await result.current.sendAgentConfigure(session(), {
-        display_name: "Makima",
-        avatar_image_url: "/api/attachments/makima-avatar?view=1",
+      await result.current.sendAgentConfigure(session("stopped"), {
+        model: "gpt-5.6-terra",
       });
     });
 
-    expect(result.current.participants[0]).toMatchObject(updatedParticipant);
+    expect(command).toHaveBeenCalledWith("agent.configure", {
+      agent_id: "codex",
+      catalog_revision: "cat-test",
+      model: "gpt-5.6-terra",
+    });
+    expect(result.current.participants[0]).toMatchObject(participant);
     expect(result.current.agentSessions[0]).toMatchObject(updatedSession);
     expect(result.current.timelineEvents[0]).toMatchObject({
-      name: "Makima",
-      avatar_image_url: "http://127.0.0.1:43123/api/attachments/makima-avatar?view=1",
+      name: "Codex",
+      provider_kind: "codex_live_session",
     });
 
     let loadedHistory: Awaited<ReturnType<typeof result.current.loadHistory>> | undefined;
@@ -684,12 +687,12 @@ describe("useCanonicalRoom", () => {
     expect(loadedHistory?.events).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          name: "Makima",
-          avatar_image_url: "http://127.0.0.1:43123/api/attachments/makima-avatar?view=1",
+          name: "Codex",
+          provider_kind: "codex_live_session",
         }),
       ])
     );
-    expect(loadedHistory?.events.every((item) => item.name === "Makima")).toBe(true);
+    expect(loadedHistory?.events.every((item) => item.name === "Codex")).toBe(true);
   });
 
 
