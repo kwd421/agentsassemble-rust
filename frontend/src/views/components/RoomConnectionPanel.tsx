@@ -28,7 +28,6 @@ type RoomConnectionPanelProps = {
   channelNotifications?: Record<string, { notifications: ChannelNotificationSetting; lastReadAt?: string }>;
   onSessionActionComplete?: () => void;
   quotaViewer?: AgentQuotaVisibilityViewer;
-  onAgentUsageRequest?: (session: RoomAgentSession) => void | Promise<void>;
   onStartAddAgent?: () => void;
   agentSessions?: RoomAgentSession[];
   capabilities?: Record<string, boolean>;
@@ -63,7 +62,6 @@ export default function RoomConnectionPanel({
   channelNotifications,
   onSessionActionComplete,
   quotaViewer,
-  onAgentUsageRequest,
   onStartAddAgent,
   agentSessions = [],
   capabilities = {},
@@ -100,7 +98,6 @@ export default function RoomConnectionPanel({
         onParticipantMute={capabilities["participant.mute"] ? onParticipantMute : undefined}
         onSessionActionComplete={onSessionActionComplete}
         quotaViewer={quotaViewer}
-        onAgentUsageRequest={onAgentUsageRequest}
         hideSearch
         agentSessions={agentSessions}
         onAgentControl={capabilities["agent.control"] ? onAgentControl : undefined}

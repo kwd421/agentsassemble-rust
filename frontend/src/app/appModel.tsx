@@ -3,8 +3,6 @@ import type {
   ChannelNotificationSetting,
   ChannelSettings,
   LiveAgent,
-  ProviderUsageId,
-  ProviderUsageSnapshot,
   RoomAgentSession,
   RoomMember,
 } from "../api";
@@ -98,9 +96,7 @@ export function channelLastReadSummary(setting?: ChannelSettings): string {
 
 export function agentSessionMemberToLiveAgent(
   member: RoomMember,
-  session?: RoomAgentSession,
-  usage?: ProviderUsageSnapshot,
-  usageSupported = false
+  session?: RoomAgentSession
 ): LiveAgent {
   return {
     agent_id: member.participant_id,
@@ -132,36 +128,7 @@ export function agentSessionMemberToLiveAgent(
     execution_mode: member.execution_mode || "agent_session_app_server",
     last_seen_at: member.last_seen_at || member.updated_at,
     last_reply_at: member.updated_at,
-    quota_5h: usage?.quota_5h,
-    quota_1w: usage?.quota_1w,
-    quota_state: usage?.quota_state,
-    quota_status: usage?.status || (usageSupported ? "loading" : "unsupported"),
-    quota_windows: usage?.quota_windows,
-    account_available: usage?.account_available,
-    account_balances: usage?.account_balances,
+    quota_status: "unsupported",
     capabilities: [],
-  };
-}
-
-export function providerUsageTarget(session?: RoomAgentSession) {
-  if (!session) return null;
-  const providerByKind: Partial<Record<string, ProviderUsageId>> = {
-    claude_code: "claude",
-    codex_live_session: "codex",
-    antigravity_live_session: "antigravity",
-    grok_live_session: "grok",
-    deepseek_api: "deepseek",
-    opencode_server: "opencode",
-  };
-  const providerId = providerByKind[session.provider_kind];
-  if (!providerId) return null;
-  const model =
-    providerId === "codex" || providerId === "antigravity" || providerId === "opencode"
-      ? String(session.model || "").trim()
-      : "";
-  return {
-    providerId,
-    model,
-    key: `${providerId}:${model.toLocaleLowerCase()}`,
   };
 }

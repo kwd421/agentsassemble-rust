@@ -47,7 +47,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     guestExpired, guestLocked,
     guestPanelProfile, guestSession, handleMobileShellPointerDown, handleMobileShellPointerEnd,
     inviteRoom,
-    loadCanonicalRoomHistory, loadProviderUsage, lobbyPostingState, markChannelRead,
+    loadCanonicalRoomHistory, lobbyPostingState, markChannelRead,
     markRoomRead, membersOpen, menuChannelDisplay, menuRoom,
     messageSearchChannelLabels, messageSearchScope, mobileRoomInfoOpen,
     mobileSidebarOpen, openAgentCreate,
@@ -450,7 +450,6 @@ export default function AppView({ controller }: { controller: AppController }) {
               guestLocked={guestLocked}
               channelNotifications={activeChannelSettings}
               quotaViewer={quotaViewer}
-              onAgentUsageRequest={loadProviderUsage}
               onStartAddAgent={openAgentCreate}
               agentSessions={activeRoomAgentSessions}
               capabilities={activeRoomCapabilities}

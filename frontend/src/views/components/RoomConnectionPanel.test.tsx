@@ -257,32 +257,6 @@ describe("RoomConnectionPanel", () => {
     expect((screen.getByTitle("세션 중지") as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("loads provider usage only after the owner opens that agent's details", async () => {
-    const session = agentSession("idle");
-    const onAgentUsageRequest = vi.fn().mockResolvedValue(undefined);
-    render(
-      <RoomConnectionPanel
-        room={room}
-        agents={[agent()]}
-        members={[member()]}
-        agentSessions={[session]}
-        quotaViewer={{
-          hostCanViewLocalAgentQuotas: true,
-          localProcessAgentIds: ["codex"],
-        }}
-        onAgentUsageRequest={onAgentUsageRequest}
-      />
-    );
-
-    expect(onAgentUsageRequest).not.toHaveBeenCalled();
-    openAgentDetails();
-
-    await waitFor(() => {
-      expect(onAgentUsageRequest).toHaveBeenCalledTimes(1);
-      expect(onAgentUsageRequest).toHaveBeenCalledWith(session);
-    });
-  });
-
   it("pauses an idle session and resumes a paused session", async () => {
     const onAgentControl = vi.fn().mockResolvedValue(undefined);
     const idle = agentSession("idle");

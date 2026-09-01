@@ -1,10 +1,5 @@
-import { useCallback, useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import {
-  fetchProviderUsage,
-  type LiveAgent,
-  type ProviderUsageSnapshot,
-  type RoomMember,
-} from "../api";
+import { useCallback, useMemo, type Dispatch, type SetStateAction } from "react";
+import type { LiveAgent, RoomMember } from "../api";
 import type { RoomGuestSession } from "../lib/roomGuestSession";
 import type { RoomDockItem } from "../lib/roomDockModel";
 import {
@@ -14,12 +9,11 @@ import {
 } from "../lib/agentActivityPreferences";
 import type { AgentQuotaVisibilityViewer } from "../lib/agentQuotaVisibility";
 import { isActivePresence } from "../lib/presenceStatus";
-import { providerUsageAfterFailure } from "../lib/providerUsageState";
 import { roomHasAgent } from "../lib/roomDockModel";
 import { roomMentionables } from "../lib/roomMentionables";
 import { roomTypingIndicators } from "../lib/roomTypingIndicators";
 import { useCanonicalRoom } from "../useCanonicalRoom";
-import { agentSessionMemberToLiveAgent, providerUsageTarget } from "./appModel";
+import { agentSessionMemberToLiveAgent } from "./appModel";
 
 type AgentPresentationOptions = {
   canonicalRoom: ReturnType<typeof useCanonicalRoom>;
@@ -40,7 +34,6 @@ export function useAgentPresentation({
   agentActivityVisibility,
   setAgentActivityVisibility,
 }: AgentPresentationOptions) {
-  const [providerUsage, setProviderUsage] = useState<Record<string, ProviderUsageSnapshot>>({});
   const activeRoomAgentSessions = canonicalRoom.agentSessions;
   const activeRoomCapabilities = canonicalRoom.capabilities;
   const activeRoomHistory = canonicalRoom.history;
@@ -59,24 +52,6 @@ export function useAgentPresentation({
   const sendAgentConfigure = canonicalRoom.sendAgentConfigure;
   const sendParticipantMute = canonicalRoom.sendParticipantMute;
   const sendParticipantRole = canonicalRoom.sendParticipantRole;
-  const loadProviderUsage = useCallback(async (session: Parameters<typeof providerUsageTarget>[0]) => {
-    if (guestLocked) return;
-    const target = providerUsageTarget(session);
-    if (!target) return;
-    try {
-      const usage = await fetchProviderUsage(target.providerId, target.model);
-      setProviderUsage((previous) => ({ ...previous, [target.key]: usage }));
-    } catch {
-      setProviderUsage((previous) => ({
-        ...previous,
-        [target.key]: providerUsageAfterFailure(
-          previous[target.key],
-          target.providerId
-        ),
-      }));
-    }
-  }, [guestLocked]);
-
   const sessionByParticipantId = new Map(
     activeRoomAgentSessions.map((session) => [session.participant_id, session])
   );
@@ -85,16 +60,12 @@ export function useAgentPresentation({
       (member) =>
         member.source === "agent_session" && member.participant_type !== "human"
     )
-    .map((member) => {
-      const session = sessionByParticipantId.get(member.participant_id);
-      const usageTarget = providerUsageTarget(session);
-      return agentSessionMemberToLiveAgent(
+    .map((member) =>
+      agentSessionMemberToLiveAgent(
         member,
-        session,
-        usageTarget ? providerUsage[usageTarget.key] : undefined,
-        Boolean(usageTarget)
-      );
-    });
+        sessionByParticipantId.get(member.participant_id)
+      )
+    );
   const guestOwnedAgentIds = useMemo(() => {
     const agentId = guestSession?.agentId || "";
     return agentId ? [agentId, `${agentId}-ai`] : [];
@@ -167,7 +138,6 @@ export function useAgentPresentation({
     sendAgentConfigure,
     sendParticipantMute,
     sendParticipantRole,
-    loadProviderUsage,
     quotaViewer,
     scopedAgents,
     changeAgentActivityVisibility,

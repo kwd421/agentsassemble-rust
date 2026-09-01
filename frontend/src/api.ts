@@ -1,6 +1,5 @@
 // Aggregate exports for the current frontend API client.
-import { fetchJson, postJson, responseError } from "./api/http";
-import { loadHostToken } from "./api/http";
+import { fetchJson, postJson } from "./api/http";
 import { chooseDesktopWorkspace, isDesktopWebview } from "./lib/desktopBridge";
 
 export * from "./api/agentSessions";
@@ -241,51 +240,6 @@ export interface MafiaGame {
 
 export interface MafiaGameResponse {
   game: MafiaGame | null;
-}
-
-export interface ProviderUsageSnapshot {
-  provider_id: string;
-  status: "ready" | "stale" | "unavailable";
-  source: string;
-  observed_at: string;
-  error_code?: string;
-  quota_5h?: string;
-  quota_1w?: string;
-  quota_state?: "ok" | "low" | "exhausted" | "unknown";
-  quota_windows: NonNullable<LiveAgent["quota_windows"]>;
-  account_available?: boolean;
-  account_balances?: NonNullable<LiveAgent["account_balances"]>;
-}
-
-export type ProviderUsageId =
-  | "claude"
-  | "codex"
-  | "antigravity"
-  | "grok"
-  | "deepseek"
-  | "opencode";
-
-export async function fetchProviderUsage(
-  providerId: ProviderUsageId,
-  model = ""
-): Promise<ProviderUsageSnapshot> {
-  const providerUsagePaths: Record<ProviderUsageId, string> = {
-    claude: "/api/provider-usage/claude",
-    codex: "/api/provider-usage/codex",
-    antigravity: "/api/provider-usage/antigravity",
-    grok: "/api/provider-usage/grok",
-    deepseek: "/api/provider-usage/deepseek",
-    opencode: "/api/provider-usage/opencode",
-  };
-  const headers: Record<string, string> = {};
-  const hostToken = loadHostToken();
-  if (hostToken) headers["X-Host-Token"] = hostToken;
-  const query = new URLSearchParams();
-  if (model.trim()) query.set("model", model.trim());
-  const suffix = query.size > 0 ? `?${query.toString()}` : "";
-  const response = await fetch(`${providerUsagePaths[providerId]}${suffix}`, { headers });
-  if (!response.ok) throw await responseError(response);
-  return response.json();
 }
 
 export async function chooseLocalWorkspace(): Promise<{

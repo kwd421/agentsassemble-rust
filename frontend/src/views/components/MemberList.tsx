@@ -33,7 +33,6 @@ export default function MemberList({
   canEditRoles = true,
   onSessionActionComplete,
   quotaViewer,
-  onAgentUsageRequest,
   searchQuery,
   onSearchQueryChange,
   hideSearch = false,
@@ -56,7 +55,6 @@ export default function MemberList({
   canEditRoles?: boolean;
   onSessionActionComplete?: () => void;
   quotaViewer?: AgentQuotaVisibilityViewer;
-  onAgentUsageRequest?: (session: RoomAgentSession) => void | Promise<void>;
   searchQuery?: string;
   onSearchQueryChange?: (query: string) => void;
   hideSearch?: boolean;
@@ -148,9 +146,6 @@ export default function MemberList({
 
   function openMemberDetails(entry: MemberEntry) {
     setDetailEntryId(entry.id);
-    if (entry.canViewQuota && entry.agentSession && onAgentUsageRequest) {
-      void onAgentUsageRequest(entry.agentSession);
-    }
   }
 
   return (
