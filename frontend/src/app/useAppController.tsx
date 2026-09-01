@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   CSSProperties,
   MouseEvent as ReactMouseEvent,
-  PointerEvent as ReactPointerEvent,
 } from "react";
 import {
   createCompanionRoomInvite,
@@ -40,7 +39,6 @@ import {
   copyText,
   type Channel,
   type ChannelMenuState,
-  type RightPanelMode,
   type RoomSettingsSectionId,
   type RoomSettingsState,
 } from "./appModel";
@@ -59,7 +57,6 @@ import {
   useRoomSettingsController,
   type RoomPreferenceAuthority,
 } from "./useRoomSettingsController";
-import { useRoomSideChat } from "./useRoomSideChat";
 import { useSidebarResize } from "./useSidebarResize";
 
 export function useAppController(deviceToken: string, clientId: string) {
@@ -88,7 +85,6 @@ export function useAppController(deviceToken: string, clientId: string) {
   const [channel, setChannel] = useState<string>(startupRoute.initialChannel);
   const [adminOpen, setAdminOpen] = useState(false);
   const [membersOpen, setMembersOpen] = useState(true);
-  const [rightPanelMode, setRightPanelMode] = useState<RightPanelMode>("room-info");
   const startupHostEnabled =
     startupIdentityReady &&
     !startupRoute.guestInvite &&
@@ -242,19 +238,6 @@ export function useAppController(deviceToken: string, clientId: string) {
   const activeRoom = rooms.find((room) => room.id === activeRoomId) ?? rooms[0] ?? EMPTY_ROOM;
   const activeRoomDisconnected = roomIsDisconnected(activeRoom);
   const activeOperationalMeetingId = activeRoomDisconnected ? "" : activeRoom.meetingId;
-  const activeSideChatMeetingId = activeOperationalMeetingId;
-  const {
-    error: sideChatError,
-    draftsByContext: sideChatDraftsByContext,
-    sideChatEvents,
-    handleRealtimeEvents: handleSideChatRealtimeEvents,
-    handlePostedEvents: handleSideChatPosted,
-    handleRealtimeError: handleSideChatError,
-    updateDraft: updateSideChatDraft,
-  } = useRoomSideChat({
-    meetingId: activeSideChatMeetingId,
-    enabled: startupIdentityResolved && !activeRoomDisconnected,
-  });
   // Rooms-as-server-objects: when a room becomes active, promote it to a
   // server-backed meeting (idempotent) so adding agents / roster / lobby always
   // have a real meeting to bind to instead of failing with "Meeting not found".
@@ -276,8 +259,6 @@ export function useAppController(deviceToken: string, clientId: string) {
     streams: serverProductSurface?.websocket_streams || [],
     serverSurface: serverProductSurface,
     viewerParticipantId: guestSession?.agentId || "operator-local",
-    onSideChat: handleSideChatRealtimeEvents,
-    onError: handleSideChatError,
     onUnauthorized: admittedSessionToken ? expireGuestSession : undefined,
   });
   const roomChannels = useRoomChannels({
@@ -400,23 +381,10 @@ export function useAppController(deviceToken: string, clientId: string) {
   const visibleChannels = CHANNELS;
   const channelSearchNeedle = channelSearchQuery.trim().toLowerCase();
 
-  function activateRightPanelMode(mode: RightPanelMode) {
-    setRightPanelMode(mode);
-  }
-
-  function activateRightPanelModeFromPointer(
-    mode: RightPanelMode,
-    event: ReactPointerEvent<HTMLButtonElement>
-  ) {
-    if (event.pointerType === "mouse" && event.button !== 0) return;
-    activateRightPanelMode(mode);
-  }
-
   function selectRoom(roomId: string) {
     setActiveRoomId(roomId);
     setAdminOpen(false);
     setChannel("lobby");
-    setRightPanelMode("room-info");
     setRoomMenu(null);
     setChannelMenu(null);
     closeMobileOverlays();
@@ -638,10 +606,10 @@ export function useAppController(deviceToken: string, clientId: string) {
   }
 
   return {
-    acceptRecoveredSession, activateRightPanelMode, activateRightPanelModeFromPointer, activeAppearance,
+    acceptRecoveredSession, activeAppearance,
     activeChannelDisplay, activeChannelSettings, activeCustomChannel, activeCustomChannels,
     activeRoom, activeRoomAgentSessions, activeRoomCapabilities,
-    activeRoomDisconnected, activeRoomHistory, activeRoomMembers, activeSideChatMeetingId,
+    activeRoomDisconnected, activeRoomHistory, activeRoomMembers,
     addFreshRoom, adjustSidebarWidthWithKeyboard,
     adminOpen, admittedSessionToken, agentActivityVisibility, agentCreateOpen,
     agentInviteUrl, cancelMobileShellPointer, canonicalRoom,
@@ -656,7 +624,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     guestExpired, guestJoinRequested, guestJoinStatus, guestJoinToken,
     guestPreflightRetryable, guestJoinRetryable,
     guestLocked, guestPanelProfile, guestRecoveryRequest, guestSession,
-    handleMobileShellPointerDown, handleMobileShellPointerEnd, handleSideChatPosted,
+    handleMobileShellPointerDown, handleMobileShellPointerEnd,
     inviteCopyStatus, inviteModalAppearance,
     inviteModalRoom, invitePublicUrl, inviteRoom,
     leaveRoom, leaveRoomTarget, loadCanonicalRoomHistory, loadProviderUsage,
@@ -668,7 +636,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     openRoomMenu, openRoomSettings, operatorPairingPending, operatorPairingState,
     operatorPairingUrl, pendingGuestAvatarImage, pendingGuestDisplayName, pendingMessageSearchTarget,
     publicInviteStatus, quotaViewer,
-    requestGuestJoin, retryOperatorPairing, rightPanelMode,
+    requestGuestJoin, retryOperatorPairing,
     roomAppearanceAssets, roomAppearances, roomDirectorySyncIssue, roomInvite,
     roomHttpAuthority, roomMenu, roomMessageSearch, roomSettings, roomSocket,
     rooms, scopedAgents, scopedMentionables, serverProductSurface,
@@ -678,12 +646,12 @@ export function useAppController(deviceToken: string, clientId: string) {
     setGuestRecoveryRequest, setLeaveRoomTargetId, setMembersOpen,
     setMessageSearchScope, setMobileRoomInfoInitialMode, setMobileRoomInfoOpen, setMobileSidebarOpen,
     setPendingGuestAvatarImage, setPendingGuestDisplayName, setPendingMessageSearchTarget,
-    setRightPanelMode, setRoomMenu, setSettingsModal,
+    setRoomMenu, setSettingsModal,
     settingsModalInitialSectionId, settingsModalRoom, shellStyle,
-    showMembers, sideChatDraftsByContext, sideChatError, sideChatEvents,
+    showMembers,
     startInviteTunnel, startSidebarResize, startupIdentityResolved, stopInviteTunnel,
     toggleChannelSection, toggleMembers, typingIndicators, updateMemberRole,
-    updateRoom, updateSideChatDraft, visibleChannels, visibleRoomTimelineEvents,
+    updateRoom, visibleChannels, visibleRoomTimelineEvents,
   };
 }
 export type AppController = ReturnType<typeof useAppController>;

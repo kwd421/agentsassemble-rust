@@ -10,7 +10,6 @@ type RimWorldPluginViewProps = {
     revision?: string;
   }) => void;
   envelopes: PluginEnvelope[];
-  onOpenSideChat: () => void;
   canManage: boolean;
 };
 
@@ -18,7 +17,6 @@ export default function RimWorldPluginView({
   roomId,
   onCommand,
   envelopes,
-  onOpenSideChat,
   canManage,
 }: RimWorldPluginViewProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -90,9 +88,6 @@ export default function RimWorldPluginView({
     <div className="dc-plugin-stage" data-plugin="rimworld">
       <div className="dc-plugin-stage-toolbar">
         <strong>RimWorld Survival Slice</strong>
-        <button type="button" onClick={onOpenSideChat}>
-          보조 채팅
-        </button>
         {error ? <span className="dc-plugin-error">{error}</span> : null}
       </div>
       <iframe

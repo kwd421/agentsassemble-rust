@@ -24,7 +24,6 @@ import DisconnectedRoomView from "../views/components/DisconnectedRoomView";
 import MobileRoomInfoPanel from "../views/components/MobileRoomInfoPanel";
 import RoomRail from "../views/components/RoomRail";
 import RoomSyncNotice from "../views/components/RoomSyncNotice";
-import SideChatDock from "../views/components/SideChatDock";
 import UserPanel from "../views/components/UserPanel";
 import { SIDEBAR_WIDTH_MAX, SIDEBAR_WIDTH_MIN } from "../lib/sidebarResizeModel";
 import { GUEST_SESSION_EXPIRED_MESSAGE } from "../lib/apiErrors";
@@ -38,10 +37,10 @@ export default function AppView({ controller }: { controller: AppController }) {
     () => createMessageAttachmentReadOwner()
   );
   const {
-    activateRightPanelMode, activateRightPanelModeFromPointer, activeAppearance, activeChannelDisplay,
+    activeAppearance, activeChannelDisplay,
     activeChannelSettings, activeCustomChannel, activeCustomChannels,
     activeRoom, activeRoomAgentSessions, activeRoomCapabilities, activeRoomDisconnected,
-    activeRoomHistory, activeRoomMembers, activeSideChatMeetingId, addFreshRoom,
+    activeRoomHistory, activeRoomMembers, addFreshRoom,
     adjustSidebarWidthWithKeyboard, adminOpen,
     admittedSessionToken, agentActivityVisibility, cancelMobileShellPointer,
     canonicalRoom, changeAgentActivityVisibility, channel,
@@ -51,24 +50,23 @@ export default function AppView({ controller }: { controller: AppController }) {
     expireGuestSession, goToChannel, guestAiPacketPreview,
     guestAiPacketStatus, guestExpired, guestJoinStatus, guestLocked,
     guestPanelProfile, guestSession, handleMobileShellPointerDown, handleMobileShellPointerEnd,
-    handleSideChatPosted, inviteRoom,
+    inviteRoom,
     loadCanonicalRoomHistory, loadProviderUsage, lobbyPostingState, markChannelRead,
     markRoomRead, membersOpen, menuChannelDisplay, menuRoom,
     messageSearchChannelLabels, messageSearchScope, mobileRoomInfoInitialMode, mobileRoomInfoOpen,
-    mobileSidebarOpen, mobileViewportIsActive, openAgentCreate,
+    mobileSidebarOpen, openAgentCreate,
     openChannelMenu, openCrossChannelSearchResult, openMobileProfileFromPanel, openMobileRoomInfo,
     openMobileSidebar, openRoomMenu, openRoomSettings, pendingMessageSearchTarget,
-    quotaViewer, rightPanelMode,
+    quotaViewer,
     roomAppearances, roomDirectorySyncIssue, roomHttpAuthority, roomMenu, roomMessageSearch,
     roomSettings, roomSocket, rooms, scopedAgents, scopedMentionables, serverProductSurface,
-    scopedOnlineCount, scopedViewerDisplayName, selectRoom, sendAgentConfigure, sendAgentControl,
+    scopedOnlineCount, selectRoom, sendAgentConfigure, sendAgentControl,
     sendParticipantMute, setAdminOpen, setChannelNotifications,
-    setChannelSearchQuery, setCreateChannelOpen, setLeaveRoomTargetId, setMembersOpen,
-    setMessageSearchScope, setMobileRoomInfoInitialMode, setMobileRoomInfoOpen, setMobileSidebarOpen,
-    setPendingMessageSearchTarget, setRightPanelMode, setRoomMenu,
-    shellStyle, showMembers, sideChatDraftsByContext,
-    sideChatError, sideChatEvents, startSidebarResize, toggleChannelSection,
-    toggleMembers, typingIndicators, updateMemberRole, updateSideChatDraft,
+    setChannelSearchQuery, setCreateChannelOpen, setLeaveRoomTargetId,
+    setMessageSearchScope,
+    setPendingMessageSearchTarget, setRoomMenu,
+    shellStyle, showMembers, startSidebarResize, toggleChannelSection,
+    toggleMembers, typingIndicators, updateMemberRole,
     visibleChannels, visibleRoomTimelineEvents,
   } = controller;
   return (
@@ -364,16 +362,6 @@ export default function AppView({ controller }: { controller: AppController }) {
                 roomId={activeRoom.id}
                 envelopes={canonicalRoom.pluginEnvelopes}
                 canManage={Boolean(canonicalRoom.capabilities["room.manage"])}
-                onOpenSideChat={() => {
-                  if (mobileViewportIsActive()) {
-                    setMobileSidebarOpen(false);
-                    setMobileRoomInfoInitialMode("side-chat");
-                    setMobileRoomInfoOpen(true);
-                  } else {
-                    setMembersOpen(true);
-                    setRightPanelMode("side-chat");
-                  }
-                }}
                 onCommand={(command) => {
                   if (!roomSocket?.ready() || !roomSocket.plugin) return;
                   roomSocket.plugin({
@@ -472,19 +460,6 @@ export default function AppView({ controller }: { controller: AppController }) {
           onClose={closeMobileRoomInfo}
           onInvite={guestLocked ? undefined : () => inviteRoom(activeRoom.id)}
           onOpenSettings={guestLocked ? undefined : () => openRoomSettings(activeRoom.id)}
-          sideChatContent={
-            <SideChatDock
-              meetingId={activeSideChatMeetingId}
-              events={sideChatEvents}
-              error={sideChatError}
-              onPosted={handleSideChatPosted}
-              mentionables={scopedMentionables}
-              canPostMessages={lobbyPostingState.canPost}
-              draftsByContext={sideChatDraftsByContext}
-              onDraftChange={updateSideChatDraft}
-              authorName={scopedViewerDisplayName}
-            />
-          }
           agentSessions={activeRoomAgentSessions}
           availableProviders={canonicalRoom.availableProviders}
           capabilities={activeRoomCapabilities}
@@ -499,9 +474,8 @@ export default function AppView({ controller }: { controller: AppController }) {
       {showMembers && membersOpen && (
         <aside
           className="dc-members hidden shrink-0 xl:flex xl:flex-col"
-          aria-label="방 연결 정보와 사이드챗"
+          aria-label="방 연결 정보"
           data-testid="room-right-panel"
-          data-panel-mode={rightPanelMode}
         >
           <div className="dc-right-panel-header-spacer">
             <button
@@ -518,83 +492,47 @@ export default function AppView({ controller }: { controller: AppController }) {
               type="button"
               role="tab"
               id="room-info-panel-tab"
-              data-active={rightPanelMode === "room-info"}
-              aria-selected={rightPanelMode === "room-info"}
+              data-active="true"
+              aria-selected="true"
               aria-controls="room-info-panel"
-              onPointerUp={(event) => activateRightPanelModeFromPointer("room-info", event)}
-              onClick={() => activateRightPanelMode("room-info")}
             >
               방 연결 정보
             </button>
-            <button
-              type="button"
-              role="tab"
-              id="side-chat-panel-tab"
-              data-active={rightPanelMode === "side-chat"}
-              aria-selected={rightPanelMode === "side-chat"}
-              aria-controls="side-chat-panel"
-              onPointerUp={(event) => activateRightPanelModeFromPointer("side-chat", event)}
-              onClick={() => activateRightPanelMode("side-chat")}
-            >
-              사이드챗
-            </button>
           </div>
-          {rightPanelMode === "room-info" ? (
-            <section
-              id="room-info-panel"
-              role="tabpanel"
-              aria-labelledby="room-info-panel-tab"
-              className="min-h-0 flex-1"
-              data-testid="room-info-panel"
-            >
-              <RoomConnectionPanel
-                room={activeRoom}
-                agents={scopedAgents}
-                members={activeRoomMembers}
-                roomSessionToken={admittedSessionToken}
-                viewerParticipantId={guestSession?.agentId || "operator-local"}
-                displayResourceBase={canonicalRoom.displayResourceBase}
-                onRoleChange={updateMemberRole}
-                guestLocked={guestLocked}
-                guestAiPacketPreview={guestAiPacketPreview}
-                guestAiPacketStatus={guestAiPacketStatus || guestJoinStatus}
-                onCreateCompanionAiPacket={() => void createCompanionAiPacket()}
-                onCopyGuestAiPacket={() => void copyGuestAiPacket()}
-                channelNotifications={activeChannelSettings}
-                quotaViewer={quotaViewer}
-                onAgentUsageRequest={loadProviderUsage}
-                onStartAddAgent={openAgentCreate}
-                agentSessions={activeRoomAgentSessions}
-                capabilities={activeRoomCapabilities}
-                onAgentControl={sendAgentControl}
-                availableProviders={canonicalRoom.availableProviders}
-                onAgentConfigure={sendAgentConfigure}
-                agentActivityVisibility={agentActivityVisibility}
-                onAgentActivityVisibilityChange={changeAgentActivityVisibility}
-                onParticipantMute={sendParticipantMute}
-              />
-            </section>
-          ) : rightPanelMode === "side-chat" ? (
-            <section
-              id="side-chat-panel"
-              role="tabpanel"
-              aria-labelledby="side-chat-panel-tab"
-              className="min-h-0 flex-1"
-              data-testid="side-chat-panel"
-            >
-              <SideChatDock
-                meetingId={activeSideChatMeetingId}
-                events={sideChatEvents}
-                error={sideChatError}
-                onPosted={handleSideChatPosted}
-                mentionables={scopedMentionables}
-                canPostMessages={lobbyPostingState.canPost}
-                draftsByContext={sideChatDraftsByContext}
-                onDraftChange={updateSideChatDraft}
-                authorName={scopedViewerDisplayName}
-              />
-            </section>
-          ) : null}
+          <section
+            id="room-info-panel"
+            role="tabpanel"
+            aria-labelledby="room-info-panel-tab"
+            className="min-h-0 flex-1"
+            data-testid="room-info-panel"
+          >
+            <RoomConnectionPanel
+              room={activeRoom}
+              agents={scopedAgents}
+              members={activeRoomMembers}
+              roomSessionToken={admittedSessionToken}
+              viewerParticipantId={guestSession?.agentId || "operator-local"}
+              displayResourceBase={canonicalRoom.displayResourceBase}
+              onRoleChange={updateMemberRole}
+              guestLocked={guestLocked}
+              guestAiPacketPreview={guestAiPacketPreview}
+              guestAiPacketStatus={guestAiPacketStatus || guestJoinStatus}
+              onCreateCompanionAiPacket={() => void createCompanionAiPacket()}
+              onCopyGuestAiPacket={() => void copyGuestAiPacket()}
+              channelNotifications={activeChannelSettings}
+              quotaViewer={quotaViewer}
+              onAgentUsageRequest={loadProviderUsage}
+              onStartAddAgent={openAgentCreate}
+              agentSessions={activeRoomAgentSessions}
+              capabilities={activeRoomCapabilities}
+              onAgentControl={sendAgentControl}
+              availableProviders={canonicalRoom.availableProviders}
+              onAgentConfigure={sendAgentConfigure}
+              agentActivityVisibility={agentActivityVisibility}
+              onAgentActivityVisibilityChange={changeAgentActivityVisibility}
+              onParticipantMute={sendParticipantMute}
+            />
+          </section>
         </aside>
       )}
     </div>

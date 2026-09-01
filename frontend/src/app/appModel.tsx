@@ -37,8 +37,6 @@ export type RoomSettingsState = {
   initialSectionId?: RoomSettingsSectionId;
 } | null;
 
-export type RightPanelMode = "room-info" | "side-chat";
-
 export function DeferredViewFallback() {
   return (
     <div
