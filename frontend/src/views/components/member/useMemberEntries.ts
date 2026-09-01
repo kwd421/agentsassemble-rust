@@ -61,7 +61,6 @@ export function useMemberEntries({
       active: viewerMember ? memberActive(viewerMember) : true,
       muted: Boolean(viewerMember?.muted),
       meetingId: String(viewerMember?.meeting_id || ""),
-      ownedByViewer: true,
       ownerId: viewerEntryId,
       ownerDisplayName: viewerDisplayName,
       avatarImage: resolveAttachmentReference(
@@ -133,8 +132,7 @@ export function useMemberEntries({
         active: agentSession ? agentSessionIsPresent(runtimeStatus) : isActive(agent),
         muted: mutedById.get(agent.agent_id) ?? false,
         meetingId: String(member?.meeting_id || agent.meeting_id || ""),
-        ownedByViewer,
-        ownerId: ownerId || (ownedByViewer ? viewerEntryId : undefined),
+        ownerId: ownerId || undefined,
         ownerDisplayName,
         agentDisplayName,
         avatarImage,
@@ -171,6 +169,10 @@ export function useMemberEntries({
         ]
           .filter(Boolean)
           .join(" · ");
+        const ownerId =
+          member.participant_type === "human"
+            ? member.participant_id
+            : String(member.owner_id || "").trim();
         return {
           id: member.participant_id,
           agentSession,
@@ -198,11 +200,7 @@ export function useMemberEntries({
             : memberActive(member),
           muted: Boolean(member.muted),
           meetingId: String(member.meeting_id || ""),
-          ownedByViewer: Boolean(agentSession && !agentSession.external_owned),
-          ownerId:
-            member.participant_type === "human"
-              ? member.participant_id
-              : String(member.owner_id || "").trim() || undefined,
+          ownerId: ownerId || undefined,
           ownerDisplayName: String(
             memberById.get(String(member.owner_id || ""))?.display_name ||
               ""

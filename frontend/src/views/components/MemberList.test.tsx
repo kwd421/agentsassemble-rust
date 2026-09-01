@@ -236,6 +236,70 @@ describe("MemberList component wiring", () => {
     expect(within(group as HTMLElement).getByText("Agent One")).toBeTruthy();
   });
 
+  it("does not infer participant ownership from local runtime custody", () => {
+    const members: RoomMember[] = [
+      {
+        meeting_id: "room-1",
+        participant_id: "operator-local",
+        display_name: "Host",
+        role: "director",
+        participant_type: "human",
+        provider_kind: "",
+        connection_kind: "browser",
+        status: "joined",
+        source: "",
+        created_at: "",
+        updated_at: "",
+      },
+      {
+        meeting_id: "room-1",
+        participant_id: "remote-owner",
+        display_name: "Remote Owner",
+        role: "human",
+        participant_type: "human",
+        provider_kind: "",
+        connection_kind: "browser",
+        status: "joined",
+        source: "",
+        created_at: "",
+        updated_at: "",
+      },
+      {
+        meeting_id: "room-1",
+        participant_id: "agent-1",
+        display_name: "Participant Copy",
+        role: "agent",
+        participant_type: "local",
+        provider_kind: "codex",
+        connection_kind: "agent_session",
+        owner_id: "remote-owner",
+        status: "joined",
+        source: "agent_session",
+        created_at: "",
+        updated_at: "",
+      },
+    ];
+
+    render(
+      <MemberList
+        agents={[]}
+        agentSessions={[{ ...SESSION, external_owned: false }]}
+        members={members}
+        viewerParticipantId="operator-local"
+        roomId="room-1"
+        roomName="Room One"
+        onAgentControl={vi.fn()}
+      />
+    );
+
+    const hostGroup = screen.getByText("Host").closest(".dc-person-member-group");
+    const remoteGroup = screen.getByText("Remote Owner").closest(".dc-person-member-group");
+    expect(hostGroup).not.toBeNull();
+    expect(remoteGroup).not.toBeNull();
+    expect(within(remoteGroup as HTMLElement).getByText("Agent One")).toBeTruthy();
+    expect(within(hostGroup as HTMLElement).queryByText("Agent One")).toBeNull();
+  });
+
   it("keeps participant kind independent when roles cross presentation defaults", () => {
     const members: RoomMember[] = [
       {

@@ -19,7 +19,6 @@ export type MemberEntry = {
   statusLabel?: string;
   role: RoleId;
   owner: boolean;
-  ownedByViewer: boolean;
   ownerId?: string;
   ownerDisplayName?: string;
   agentDisplayName?: string;

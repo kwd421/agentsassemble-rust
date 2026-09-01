@@ -28,7 +28,6 @@ function matchesQuery(entry: MemberEntry, needle: string) {
 
 export function buildMemberOwnerGroups(
   entries: MemberEntry[],
-  viewerParticipantId: string,
   query: string
 ): MemberOwnerGroup[] {
   const people = entries.filter((entry) => !isAgentEntry(entry));
@@ -41,11 +40,7 @@ export function buildMemberOwnerGroups(
   const groupByOwnerId = new Map(groups.map((group) => [group.id, group]));
 
   entries.filter(isAgentEntry).forEach((agent) => {
-    const requestedOwnerId = String(agent.ownerId || "").trim();
-    const ownerId =
-      agent.ownedByViewer && !groupByOwnerId.has(requestedOwnerId)
-        ? viewerParticipantId
-        : requestedOwnerId;
+    const ownerId = String(agent.ownerId || "").trim();
     let group: MemberOwnerGroup | undefined = groupByOwnerId.get(ownerId);
     if (!group) {
       const groupId = ownerId || `unassigned:${agent.ownerDisplayName || "agents"}`;

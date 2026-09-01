@@ -87,8 +87,8 @@ export default function MemberList({
     [detailEntryId, entries]
   );
   const ownerGroups = useMemo(
-    () => buildMemberOwnerGroups(entries, viewerParticipantId, query),
-    [entries, query, viewerParticipantId]
+    () => buildMemberOwnerGroups(entries, query),
+    [entries, query]
   );
 
   function handleMemberContextMenu(entry: MemberEntry, event: ReactMouseEvent<HTMLElement>) {
