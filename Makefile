@@ -1,13 +1,16 @@
 .DEFAULT_GOAL := test
 
-.PHONY: architecture-check bindings frontend-check desktop-check format-check check clippy test verify diff-check
+.PHONY: architecture-check artifact-prune bindings frontend-check desktop-check format-check check clippy test verify diff-check
 
 PYTHON ?= python3
 
 architecture-check:
 	$(PYTHON) -B scripts/check_architecture.py
 	$(PYTHON) -B scripts/check_source_growth.py
-	$(PYTHON) -B -m unittest scripts/test_policy_gates.py
+	$(PYTHON) -B -m unittest scripts/test_policy_gates.py scripts/test_prune_build_artifacts.py
+
+artifact-prune:
+	$(PYTHON) -B scripts/prune_build_artifacts.py
 
 bindings:
 	cargo run -p agentsassemble-protocol --bin export_types
@@ -34,4 +37,7 @@ test: check frontend-check desktop-check
 diff-check:
 	git diff --check
 
-verify: test clippy diff-check
+verify: artifact-prune
+	$(MAKE) test
+	$(MAKE) clippy
+	$(MAKE) diff-check
