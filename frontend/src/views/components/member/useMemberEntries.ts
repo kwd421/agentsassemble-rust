@@ -95,15 +95,11 @@ export function useMemberEntries({
           memberById.get(ownerId)?.display_name ||
           (ownedByViewer ? viewerDisplayName : "소유자 정보 없음")
       ).trim();
-      const canonicalIdentity = member || agentSession;
+      const canonicalIdentity = agentSession || agent;
       const agentDisplayName = String(
-        canonicalIdentity
-          ? canonicalIdentity.display_name || agent.agent_id
-          : agent.display_name || agent.agent_id
+        canonicalIdentity.display_name || agent.agent_id
       ).trim();
-      const avatarReference = canonicalIdentity
-        ? canonicalIdentity.avatar_image_url
-        : agent.avatar_image_url;
+      const avatarReference = canonicalIdentity.avatar_image_url;
       const avatarImage = resolveAttachmentReference(
         avatarReference,
         displayResourceBase
@@ -157,7 +153,7 @@ export function useMemberEntries({
         avatarImage,
         avatarReference,
         providerKind: String(
-          canonicalIdentity?.provider_kind || agent.provider_kind || ""
+          canonicalIdentity.provider_kind || ""
         ),
         icon: ROLE_OPTIONS.find((option) => option.id === role)?.icon || Bot,
       } satisfies MemberEntry;
@@ -192,7 +188,9 @@ export function useMemberEntries({
           id: member.participant_id,
           agentSession,
           member,
-          displayName: member.display_name || member.participant_id,
+          displayName: agentSession
+            ? agentSession.display_name || member.participant_id
+            : member.display_name || member.participant_id,
           detail: [detail, agentSession?.model].filter(Boolean).join(" · "),
           modelLabel: String(agentSession?.model || "").trim(),
           reasoningEffort: String(agentSession?.reasoning_effort || "").trim(),
@@ -224,11 +222,15 @@ export function useMemberEntries({
               ""
           ).trim() || undefined,
           avatarImage: resolveAttachmentReference(
-            member.avatar_image_url,
+            agentSession ? agentSession.avatar_image_url : member.avatar_image_url,
             displayResourceBase
           ),
-          avatarReference: member.avatar_image_url,
-          providerKind: String(agentSession?.provider_kind || member.provider_kind || ""),
+          avatarReference: agentSession
+            ? agentSession.avatar_image_url
+            : member.avatar_image_url,
+          providerKind: String(
+            agentSession ? agentSession.provider_kind : member.provider_kind || ""
+          ),
           icon: ROLE_OPTIONS.find((option) => option.id === role)?.icon || typeMeta.icon,
         } satisfies MemberEntry;
       });

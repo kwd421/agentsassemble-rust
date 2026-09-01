@@ -104,19 +104,25 @@ export function agentSessionMemberToLiveAgent(
 ): LiveAgent {
   return {
     agent_id: member.participant_id,
-    display_name: member.display_name || member.participant_id,
-    avatar_image_url: member.avatar_image_url,
+    display_name: session
+      ? session.display_name || member.participant_id
+      : member.display_name || member.participant_id,
+    avatar_image_url: session ? session.avatar_image_url : member.avatar_image_url,
     owner_id: member.owner_id,
     created_by: member.created_by,
     status: member.thinking ? "working" : member.status || member.session_status || "online",
-    provider_kind: member.provider_kind || "agent_session",
-    connection_kind: member.connection_kind || "agent_session",
+    provider_kind: session
+      ? session.provider_kind
+      : member.provider_kind || "agent_session",
+    connection_kind: session
+      ? session.connection_kind
+      : member.connection_kind || "agent_session",
     engagement_mode: member.engagement_mode || "agent_session",
     meeting_id: member.meeting_id,
-    session_id: member.session_id || member.participant_id,
-    model_id: session?.model || member.model_id,
-    effort: session?.reasoning_effort || member.effort,
-    speed: session?.service_tier,
+    session_id: session ? session.session_id : member.session_id || member.participant_id,
+    model_id: session ? session.model : member.model_id,
+    effort: session ? session.reasoning_effort : member.effort,
+    speed: session ? session.service_tier : undefined,
     fast_mode: ["fast", "priority"].includes(
       String(session?.service_tier || "").toLowerCase()
     ),

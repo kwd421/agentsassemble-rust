@@ -166,7 +166,7 @@ describe("MemberList component wiring", () => {
     expect(onRoleChange).toHaveBeenCalledWith("agent-1", "reviewer");
   });
 
-  it("renders room-owned roles without profile or Agent Session overrides", () => {
+  it("renders room-owned roles independently from agent identity", () => {
     const members: RoomMember[] = [
       {
         meeting_id: "room-1",
@@ -211,12 +211,12 @@ describe("MemberList component wiring", () => {
     ).toBe("director");
     expect(
       (screen.getByRole("combobox", {
-        name: "Canonical Agent 역할",
+        name: "Implementation Coder 역할",
       }) as HTMLSelectElement).value
     ).toBe("reviewer");
     expect(screen.getByText("Host").closest(".dc-owner-agent-list")).toBeNull();
     expect(
-      screen.getByText("Canonical Agent").closest(".dc-owner-agent-list")
+      screen.getByText("Implementation Coder").closest(".dc-owner-agent-list")
     ).not.toBeNull();
   });
 
@@ -266,7 +266,7 @@ describe("MemberList component wiring", () => {
       screen.getByText("Human Reviewer").closest(".dc-owner-agent-list")
     ).toBeNull();
     expect(
-      screen.getByText("Agent Human Role").closest(".dc-owner-agent-list")
+      screen.getByText("Agent One").closest(".dc-owner-agent-list")
     ).not.toBeNull();
   });
 
@@ -320,17 +320,24 @@ describe("MemberList component wiring", () => {
     expect(screen.queryByText("다른 사람's Agent One")).toBeNull();
   });
 
-  it("renders canonical room identity for an Agent Session", () => {
+  it("renders Agent Session identity with the room-owned role", () => {
+    const canonicalSession = {
+      ...SESSION,
+      display_name: "Session Makima",
+      avatar_image_url: "/api/attachments/session-avatar?view=1",
+      provider_kind: "antigravity_live_session",
+    };
     render(
       <MemberList
-        agents={[AGENT]}
-        agentSessions={[SESSION]}
+        agents={[{ ...AGENT, display_name: "Live Agent Copy" }]}
+        agentSessions={[canonicalSession]}
         members={[
           {
             meeting_id: "room-1",
             participant_id: "agent-1",
-            display_name: "Canonical Makima",
-            role: "agent",
+            display_name: "Stale Participant",
+            avatar_image_url: "/api/attachments/participant-avatar?view=1",
+            role: "reviewer",
             participant_type: "local",
             provider_kind: "codex",
             connection_kind: "agent_session",
@@ -340,16 +347,25 @@ describe("MemberList component wiring", () => {
             updated_at: "",
           },
         ]}
+        displayResourceBase="http://127.0.0.1:43123"
         roomId="room-1"
         roomName="Room One"
+        canEditRoles
         onAgentControl={vi.fn()}
       />
     );
 
-    const canonicalRow = screen.getByText("Canonical Makima").closest("[role='button']");
+    const canonicalRow = screen.getByText("Session Makima").closest("[role='button']");
     expect(canonicalRow).not.toBeNull();
-    expect(canonicalRow?.querySelector(".dc-member-avatar-image")).toBeNull();
-    expect(canonicalRow?.querySelector('[data-provider-brand="codex"]')).not.toBeNull();
+    expect(
+      canonicalRow?.querySelector(".dc-member-avatar-image")?.getAttribute("src")
+    ).toBe("http://127.0.0.1:43123/api/attachments/session-avatar?view=1");
+    expect(
+      (screen.getByRole("combobox", {
+        name: "Session Makima 역할",
+      }) as HTMLSelectElement).value
+    ).toBe("reviewer");
+    expect(screen.queryByText("Stale Participant")).toBeNull();
   });
 
   it("saves profile changes only through Agent Session authority", async () => {

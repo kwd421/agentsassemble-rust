@@ -168,10 +168,10 @@ function buildMobileMembers({
       role,
       icon: Bot,
       avatarImage: resolveAttachmentReference(
-        member ? member.avatar_image_url : agent.avatar_image_url,
+        agent.avatar_image_url,
         displayResourceBase
       ),
-      providerKind: member ? member.provider_kind : agent.provider_kind,
+      providerKind: agent.provider_kind,
       app: true,
       ownerId: ownerId || (ownedByViewer ? self.id : undefined),
       ownerDisplayName:
