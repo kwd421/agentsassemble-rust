@@ -56,16 +56,19 @@ contracts, findings, or verification journals.
   the corrected original batch, correction `9759d73..7f2e878`, cumulative
   `8903445..7f2e878`, and
   HEAD `7f2e878` at `C0/H0/M0/L0`.
-  Local feature commit `96a7573` removes the public Google account-settings mount,
+  Feature commit `96a7573` removes the public Google account-settings mount,
   absent `/api/account*` client contract, and browser script loader while preserving
   central startup identity, guest recovery, and ordinary profile editing. The production
-  build and all 102 frontend files/640 tests pass. Local feature commit `fd74b90` then
+  build and all 102 frontend files/640 tests pass. Feature commit `fd74b90` then
   removes the producerless AI-friend packet branch and its obsolete moderator client
   while preserving managed human invitation; all 102 frontend files/639 tests pass.
-  Local feature commit `d45afb5` removes the unmounted runtime-version component whose
+  Feature commit `d45afb5` removes the unmounted runtime-version component whose
   source retained an absent-route 15-second poll and silently ignored failures; the
-  production build and exact CSS gate pass. Evidence-backed dormant-source cleanup
-  remains in F-05.
+  production build and exact CSS gate pass. A fresh complete `make verify` passes at
+  `d45978a`. Critical ChatGPT Pro and Daybreaker Blue High each manually approved every
+  individual commit, exact `a9dceae..d45978a`, cumulative F-05
+  `8903445..d45978a`, and HEAD `d45978a` at `C0/H0/M0/L0`. Evidence-backed
+  dormant-source cleanup remains in F-05.
 - Sequence/exit owner: [`docs/PRODUCT_REIMPLEMENTATION_PLAN.md`](docs/PRODUCT_REIMPLEMENTATION_PLAN.md)
 - Finding/evidence owner: [`docs/architecture/REPOSITORY_AUDIT_2026-09-01.md`](docs/architecture/REPOSITORY_AUDIT_2026-09-01.md)
 - Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`;
