@@ -13,8 +13,6 @@ import {
   fetchJsonWithIdentity,
   fetchJsonWithToken,
   exchangeSessionSocketTicket,
-  deleteJson,
-  postJson,
   postJsonServerOperator,
   postJsonWithIdentity,
   queryString,
@@ -107,24 +105,6 @@ export interface ServerRoomsResponse {
 
 export type ParticipantType = "human" | "subscription_ai" | "api" | "local" | "remote" | "unknown";
 
-export interface RoomFriend {
-  friend_id: string;
-  display_name: string;
-  handle: string;
-  participant_type: ParticipantType;
-  provider_kind: string;
-  connection_kind: string;
-  external_owned?: boolean;
-  agent_id?: string;
-  source_agent_id: string;
-  last_meeting_id: string;
-  status: string;
-  source: string;
-  created_at: string;
-  updated_at: string;
-  last_seen_at?: string;
-}
-
 export interface RoomMember {
   meeting_id: string;
   participant_id: string;
@@ -153,11 +133,6 @@ export interface RoomMember {
   created_at: string;
   updated_at: string;
   last_seen_at?: string;
-}
-
-export interface RoomFriendsResponse {
-  friends: RoomFriend[];
-  candidates: RoomFriend[];
 }
 
 export interface VoiceParticipant {
@@ -568,10 +543,6 @@ async function requestSessionRoomPreferences(
   return response.json();
 }
 
-export function fetchRoomFriends() {
-  return fetchJson<RoomFriendsResponse>("/api/room-friends");
-}
-
 export function createRoom(
   requestId: string,
   roomId: string,
@@ -595,16 +566,6 @@ export function fetchRooms(includeArchived = false, beforeDispatch?: () => void)
   }
   return fetchJsonServerOperator<unknown>("/api/rooms", beforeDispatch)
     .then(parseStrictRoomDirectory);
-}
-
-export function addRoomFriend(friend: Partial<RoomFriend>) {
-  return postJson<{ friend: RoomFriend; friends: RoomFriend[] }>("/api/room-friends", friend);
-}
-
-export function deleteRoomFriend(friendId: string) {
-  return deleteJson<RoomFriendsResponse & { deleted: { friend_id: string } }>(
-    `/api/room-friends${queryString({ friend_id: friendId })}`
-  );
 }
 
 export function fetchRoomChannels(meetingId: string, sessionToken = ""): Promise<RoomChannel[]> {
