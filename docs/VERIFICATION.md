@@ -107,7 +107,7 @@ Frontend flows that require real Agent Sessions use exactly this matrix:
 
 - Codex: Terra;
 - Antigravity: Flash;
-- OpenCode: the free Hy3 model.
+- OpenCode: Muse Spark contributor free.
 
 The verification records the exact provider/model identifiers exposed by the installed runtime at execution time. Missing login, unavailable capability, unsupported model, or provider failure remains visible as failed or `unknown`; it never triggers model substitution, a mock pass, or a fallback provider.
 
