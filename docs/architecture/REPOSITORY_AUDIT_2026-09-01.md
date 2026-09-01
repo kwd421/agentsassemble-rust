@@ -99,7 +99,7 @@ only after the correction commit is pushed and re-reviewed.
   vocabulary findings. Its correction reviews additionally found protocol-limit
   literals in integration assertions and unused proof-era frame/counter/async test
   harness ceremony.
-- Corrections `e434496..aea2a06` close those findings without restoring a proof,
+- Corrections `e434496` through `aea2a06` close those findings without restoring a proof,
   compatibility path, or second policy owner. Critical ChatGPT Pro and Daybreaker
   Blue High each manually approved every correction, cumulative
   `640429e..aea2a06`, full `4ab5ee1..aea2a06`, and final public HEAD `aea2a06` at
