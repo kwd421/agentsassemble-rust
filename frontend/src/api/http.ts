@@ -16,8 +16,6 @@ function isServerWideProfileRoute(url: string): boolean {
 export async function exchangeSessionTicket(
   purpose:
     | "socket"
-    | "preferences-read"
-    | "preferences-write"
     | "message-search-read"
     | "message-pins-read"
     | "message-pins-write",
@@ -38,8 +36,6 @@ export async function exchangeSessionTicket(
 
 export async function exchangeSessionHttpTicket(
   purpose:
-    | "preferences-read"
-    | "preferences-write"
     | "message-search-read"
     | "message-pins-read"
     | "message-pins-write",

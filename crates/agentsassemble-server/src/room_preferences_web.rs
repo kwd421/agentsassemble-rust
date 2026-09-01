@@ -1,5 +1,6 @@
 use agentsassemble_domain::{
-    LOCAL_OPERATOR_USER_ID, RoomUserPreferencesPatch, public_settings, validate_room_id,
+    InviteScope, LOCAL_OPERATOR_USER_ID, RoomUserPreferencesPatch, public_settings,
+    validate_room_id,
 };
 use agentsassemble_persistence::{
     LocalRoomPreferencesDirectoryEntry, PersistenceError, RoomPreferencesSnapshot,
@@ -19,6 +20,9 @@ use crate::{
     http_api::{
         BodyDecodeError, PRIVATE_NO_STORE, bearer_ticket, decode_json_body, ensure_empty_body,
         exact_tauri_cors,
+    },
+    human_session_http_authority::{
+        HumanSessionBearerError, HumanSessionBearerResolution, resolve_human_session_bearer,
     },
     ticket::ConsumedRoomHumanTicket,
 };
@@ -150,11 +154,19 @@ async fn consume_preferences_read_ticket(
     headers: &axum::http::HeaderMap,
 ) -> Result<ConsumedRoomHumanTicket, RoomPreferencesHttpError> {
     let ticket = bearer_ticket(headers).ok_or_else(RoomPreferencesHttpError::unauthorized)?;
-    state
-        .tickets
-        .consume_preferences_read(ticket)
-        .await
-        .map_err(|_| RoomPreferencesHttpError::unauthorized())
+    match resolve_human_session_bearer(state, ticket).await {
+        Ok(HumanSessionBearerResolution::Authorized(authorization)) => {
+            Ok(ConsumedRoomHumanTicket::HumanSession(authorization))
+        }
+        Ok(HumanSessionBearerResolution::Other) => state
+            .tickets
+            .consume_preferences_read(ticket)
+            .await
+            .map(ConsumedRoomHumanTicket::Local)
+            .map_err(|_| RoomPreferencesHttpError::unauthorized()),
+        Err(HumanSessionBearerError::Invalid) => Err(RoomPreferencesHttpError::unauthorized()),
+        Err(HumanSessionBearerError::Persistence(error)) => Err(error.into()),
+    }
 }
 
 async fn consume_preferences_write_ticket(
@@ -162,11 +174,19 @@ async fn consume_preferences_write_ticket(
     headers: &axum::http::HeaderMap,
 ) -> Result<ConsumedRoomHumanTicket, RoomPreferencesHttpError> {
     let ticket = bearer_ticket(headers).ok_or_else(RoomPreferencesHttpError::unauthorized)?;
-    state
-        .tickets
-        .consume_preferences_write(ticket)
-        .await
-        .map_err(|_| RoomPreferencesHttpError::unauthorized())
+    match resolve_human_session_bearer(state, ticket).await {
+        Ok(HumanSessionBearerResolution::Authorized(authorization)) => {
+            Ok(ConsumedRoomHumanTicket::HumanSession(authorization))
+        }
+        Ok(HumanSessionBearerResolution::Other) => state
+            .tickets
+            .consume_preferences_write(ticket)
+            .await
+            .map(ConsumedRoomHumanTicket::Local)
+            .map_err(|_| RoomPreferencesHttpError::unauthorized()),
+        Err(HumanSessionBearerError::Invalid) => Err(RoomPreferencesHttpError::unauthorized()),
+        Err(HumanSessionBearerError::Persistence(error)) => Err(error.into()),
+    }
 }
 
 async fn authorize_preference_write(
@@ -181,10 +201,13 @@ async fn authorize_preference_write(
                 .await?;
         }
         ConsumedRoomHumanTicket::HumanSession(authorization) => {
-            state
+            let current = state
                 .store
                 .revalidate_human_session_authorization(authorization)
                 .await?;
+            if current.principal().invite_scope != InviteScope::ReadWrite {
+                return Err(RoomPreferencesHttpError::read_only());
+            }
         }
     }
     Ok(())
@@ -353,7 +376,7 @@ impl RoomPreferencesHttpError {
         Self {
             status: StatusCode::UNAUTHORIZED,
             code: "unauthorized",
-            message: "A valid one-use room-settings ticket is required.".to_owned(),
+            message: "Valid room-settings authority is required.".to_owned(),
         }
     }
 
@@ -363,6 +386,14 @@ impl RoomPreferencesHttpError {
             code: "room_settings_transport_conflict",
             message: "Room-global settings must use the canonical room WebSocket command."
                 .to_owned(),
+        }
+    }
+
+    fn read_only() -> Self {
+        Self {
+            status: StatusCode::FORBIDDEN,
+            code: "session_read_only",
+            message: "Read-only room sessions cannot change preferences.".to_owned(),
         }
     }
 

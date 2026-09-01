@@ -17,8 +17,6 @@ pub(super) struct HumanSessionGrant {
 #[derive(Clone, PartialEq, Eq)]
 pub(super) enum HumanSessionGrantPurpose {
     WebSocketConnect,
-    PreferencesRead,
-    PreferencesWrite,
     MessagePinsRead,
     MessagePinsWrite,
     MessageSearchRead,
@@ -85,37 +83,6 @@ impl TicketStore {
         authorization: HumanSessionAuthorization,
     ) -> Result<IssuedTicket, TicketError> {
         self.issue_human_session(authorization, HumanSessionGrantPurpose::WebSocketConnect)
-            .await
-    }
-
-    /// Issues an exact preference-read grant from current durable human-session authority.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Invalid` when the session has expired or a global, public, or per-session
-    /// grant bound is exhausted.
-    pub async fn issue_human_session_preferences_read(
-        &self,
-        authorization: HumanSessionAuthorization,
-    ) -> Result<IssuedTicket, TicketError> {
-        self.issue_human_session(authorization, HumanSessionGrantPurpose::PreferencesRead)
-            .await
-    }
-
-    /// Issues an exact preference-write grant from current durable human-session authority.
-    ///
-    /// # Errors
-    ///
-    /// Returns `Invalid` when the session has expired or a global, public, or per-session
-    /// grant bound is exhausted.
-    pub async fn issue_human_session_preferences_write(
-        &self,
-        authorization: HumanSessionAuthorization,
-    ) -> Result<IssuedTicket, TicketError> {
-        if authorization.principal().invite_scope != InviteScope::ReadWrite {
-            return Err(TicketError::Invalid);
-        }
-        self.issue_human_session(authorization, HumanSessionGrantPurpose::PreferencesWrite)
             .await
     }
 

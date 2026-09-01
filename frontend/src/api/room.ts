@@ -12,7 +12,6 @@ import {
   fetchJsonServerOperator,
   fetchJsonWithIdentity,
   fetchJsonWithToken,
-  exchangeSessionHttpTicket,
   exchangeSessionTicket,
   deleteJson,
   postJson,
@@ -503,7 +502,6 @@ export function fetchRoomSettings(
   const request =
     identity.sessionToken
       ? requestSessionRoomPreferences(
-          "preferences-read",
           identity.sessionToken,
           `/api/room-settings${queryString({ room_id: roomId })}`
         )
@@ -537,7 +535,6 @@ export function saveRoomSettings({
   const request =
     identity.sessionToken
       ? requestSessionRoomPreferences(
-          "preferences-write",
           identity.sessionToken,
           "/api/room-settings",
           {
@@ -560,14 +557,12 @@ export function saveRoomSettings({
 }
 
 async function requestSessionRoomPreferences(
-  purpose: "preferences-read" | "preferences-write",
   sessionToken: string,
   url: string,
   init: RequestInit = {}
 ): Promise<unknown> {
-  const ticket = await exchangeSessionHttpTicket(purpose, sessionToken);
   const headers = new Headers(init.headers);
-  headers.set("Authorization", `Bearer ${ticket}`);
+  headers.set("Authorization", `Bearer ${sessionToken}`);
   const response = await fetch(url, { ...init, cache: "no-store", headers });
   if (!response.ok) throw await responseError(response);
   return response.json();

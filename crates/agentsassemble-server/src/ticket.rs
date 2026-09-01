@@ -517,13 +517,9 @@ impl TicketStore {
     pub(crate) async fn consume_preferences_read(
         &self,
         ticket: &str,
-    ) -> Result<ConsumedRoomHumanTicket, TicketError> {
-        self.consume_room_human(
-            ticket,
-            RoomHttpPurpose::PreferencesRead,
-            HumanSessionGrantPurpose::PreferencesRead,
-        )
-        .await
+    ) -> Result<ConsumedRoomHttpTicket, TicketError> {
+        self.consume_room_http(ticket, &RoomHttpPurpose::PreferencesRead)
+            .await
     }
 
     /// Consumes only an exact preference-write credential.
@@ -534,13 +530,9 @@ impl TicketStore {
     pub(crate) async fn consume_preferences_write(
         &self,
         ticket: &str,
-    ) -> Result<ConsumedRoomHumanTicket, TicketError> {
-        self.consume_room_human(
-            ticket,
-            RoomHttpPurpose::PreferencesWrite,
-            HumanSessionGrantPurpose::PreferencesWrite,
-        )
-        .await
+    ) -> Result<ConsumedRoomHttpTicket, TicketError> {
+        self.consume_room_http(ticket, &RoomHttpPurpose::PreferencesWrite)
+            .await
     }
 
     /// Consumes only an exact message-pin read credential.
@@ -717,6 +709,18 @@ impl TicketStore {
             | TicketAuthority::ServerOperator { .. }
             | TicketAuthority::CentralRegistration { .. } => Err(TicketError::Invalid),
         }
+    }
+
+    async fn consume_room_http(
+        &self,
+        ticket: &str,
+        expected: &RoomHttpPurpose,
+    ) -> Result<ConsumedRoomHttpTicket, TicketError> {
+        let grant = self.consume_grant(ticket).await?;
+        let TicketAuthority::RoomHttp(room) = grant.authority else {
+            return Err(TicketError::Invalid);
+        };
+        resolve_room_http_authority(room, expected)
     }
 
     async fn consume_grant(&self, ticket: &str) -> Result<StoredTicketGrant, TicketError> {

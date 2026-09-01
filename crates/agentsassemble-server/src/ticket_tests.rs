@@ -299,20 +299,6 @@ async fn human_session_grants_are_exact_purpose_and_one_use() {
     let store = TicketStore::new(Duration::from_secs(30), 4_096);
     assert!(matches!(
         store
-            .issue_human_session_preferences_write(fixture.authorize(0).await)
-            .await,
-        Err(TicketError::Invalid)
-    ));
-    let preferences = store
-        .issue_human_session_preferences_read(fixture.authorize(0).await)
-        .await
-        .unwrap_or_else(|error| panic!("issue read-only preference grant: {error}"));
-    assert!(matches!(
-        store.consume_preferences_read(&preferences.ticket).await,
-        Ok(crate::ticket::ConsumedRoomHumanTicket::HumanSession(_))
-    ));
-    assert!(matches!(
-        store
             .issue_human_session_message_pins_write(fixture.authorize(0).await)
             .await,
         Err(TicketError::Invalid)
@@ -419,17 +405,17 @@ async fn human_session_message_attachment_grants_are_exact_and_read_only_upload_
 async fn socket_hint_consumes_wrong_purpose_without_cross_authority_fallback() {
     let fixture = HumanSessionFixture::new(1).await;
     let store = TicketStore::new(Duration::from_secs(30), 4_096);
-    let preferences = store
-        .issue_human_session_preferences_read(fixture.authorize(0).await)
+    let pin_read = store
+        .issue_human_session_message_pins_read(fixture.authorize(0).await)
         .await
-        .unwrap_or_else(|error| panic!("issue wrong-purpose preference grant: {error}"));
+        .unwrap_or_else(|error| panic!("issue wrong-purpose pin grant: {error}"));
 
     assert!(matches!(
-        store.socket_ticket_hint(&preferences.ticket).await,
+        store.socket_ticket_hint(&pin_read.ticket).await,
         Err(TicketError::Invalid)
     ));
     assert!(matches!(
-        store.consume_preferences_read(&preferences.ticket).await,
+        store.consume_message_pins_read(&pin_read.ticket).await,
         Err(TicketError::Invalid)
     ));
 }

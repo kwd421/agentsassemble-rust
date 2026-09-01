@@ -193,7 +193,7 @@ async fn read_only_session_patches_profile_but_cannot_upload_an_avatar() {
 }
 
 #[tokio::test]
-async fn remote_preferences_use_exact_session_purposes_and_revalidate_durable_authority() {
+async fn remote_preferences_authorize_the_session_at_the_target() {
     let client = Client::new();
     assert_writable_remote_preferences(&client).await;
     assert_read_only_remote_preferences(&client).await;
@@ -223,11 +223,18 @@ async fn assert_writable_remote_preferences(client: &Client) {
     .await;
     let session_token = canonical_session_token(&admitted);
 
-    let write_ticket =
-        issue_session_ticket(client, &server.base_url, session_token, "preferences-write").await;
+    for retired in ["preferences-read", "preferences-write"] {
+        let response = client
+            .post(format!("{}/api/session-tickets/{retired}", server.base_url))
+            .bearer_auth(session_token)
+            .send()
+            .await
+            .unwrap_or_else(|error| panic!("probe retired preference exchange: {error}"));
+        assert_eq!(response.status(), reqwest::StatusCode::NOT_FOUND);
+    }
     let updated = client
         .post(format!("{}/api/room-settings", server.base_url))
-        .bearer_auth(&write_ticket)
+        .bearer_auth(session_token)
         .json(&json!({
             "room_id": "general",
             "appearance": {"notifications": "mute"}
@@ -241,37 +248,26 @@ async fn assert_writable_remote_preferences(client: &Client) {
         .await
         .unwrap_or_else(|error| panic!("decode remote preferences: {error}"));
     assert_eq!(updated["settings"]["appearance"]["notifications"], "mute");
-    let replay = client
-        .post(format!("{}/api/room-settings", server.base_url))
-        .bearer_auth(write_ticket)
-        .json(&json!({"room_id": "general"}))
-        .send()
-        .await
-        .unwrap_or_else(|error| panic!("replay remote preference write: {error}"));
-    assert_eq!(replay.status(), reqwest::StatusCode::UNAUTHORIZED);
-
-    let read_ticket =
-        issue_session_ticket(client, &server.base_url, session_token, "preferences-read").await;
     let cross_room = client
         .get(format!(
             "{}/api/room-settings?room_id=other",
             server.base_url
         ))
-        .bearer_auth(&read_ticket)
+        .bearer_auth(session_token)
         .send()
         .await
         .unwrap_or_else(|error| panic!("cross remote preference room: {error}"));
     assert_eq!(cross_room.status(), reqwest::StatusCode::UNAUTHORIZED);
-    let consumed = client
+    let readable = client
         .get(format!(
             "{}/api/room-settings?room_id=general",
             server.base_url
         ))
-        .bearer_auth(read_ticket)
+        .bearer_auth(session_token)
         .send()
         .await
-        .unwrap_or_else(|error| panic!("replay crossed preference ticket: {error}"));
-    assert_eq!(consumed.status(), reqwest::StatusCode::UNAUTHORIZED);
+        .unwrap_or_else(|error| panic!("reuse direct preference session: {error}"));
+    assert_eq!(readable.status(), reqwest::StatusCode::OK);
 
     assert_replaced_session_preference_fails(
         client,
@@ -291,8 +287,6 @@ async fn assert_replaced_session_preference_fails(
     replacement_join_code: &str,
     browser_credential: &str,
 ) {
-    let stale_ticket =
-        issue_session_ticket(client, base_url, session_token, "preferences-read").await;
     join(
         client,
         base_url,
@@ -305,10 +299,10 @@ async fn assert_replaced_session_preference_fails(
     .await;
     let stale = client
         .get(format!("{base_url}/api/room-settings?room_id=general"))
-        .bearer_auth(stale_ticket)
+        .bearer_auth(session_token)
         .send()
         .await
-        .unwrap_or_else(|error| panic!("consume replaced-session preference ticket: {error}"));
+        .unwrap_or_else(|error| panic!("reject replaced direct preference session: {error}"));
     assert_eq!(stale.status(), reqwest::StatusCode::UNAUTHORIZED);
 }
 
@@ -326,19 +320,12 @@ async fn assert_read_only_remote_preferences(client: &Client) {
     )
     .await;
     let read_only_session = canonical_session_token(&read_only);
-    let read_ticket = issue_session_ticket(
-        client,
-        &read_only_server.base_url,
-        read_only_session,
-        "preferences-read",
-    )
-    .await;
     let readable = client
         .get(format!(
             "{}/api/room-settings?room_id=general",
             read_only_server.base_url
         ))
-        .bearer_auth(read_ticket)
+        .bearer_auth(read_only_session)
         .send()
         .await
         .unwrap_or_else(|error| panic!("read read-only preferences: {error}"));
@@ -352,20 +339,18 @@ async fn assert_read_only_remote_preferences(client: &Client) {
         "mentions"
     );
     let denied = client
-        .post(format!(
-            "{}/api/session-tickets/preferences-write",
-            read_only_server.base_url
-        ))
+        .post(format!("{}/api/room-settings", read_only_server.base_url))
         .bearer_auth(read_only_session)
+        .body("{")
         .send()
         .await
-        .unwrap_or_else(|error| panic!("deny read-only preference exchange: {error}"));
+        .unwrap_or_else(|error| panic!("deny read-only preference target: {error}"));
     assert_eq!(denied.status(), reqwest::StatusCode::FORBIDDEN);
     let denied: Value = denied
         .json()
         .await
         .unwrap_or_else(|error| panic!("decode read-only preference denial: {error}"));
-    assert_eq!(denied["code"], "session_read_only");
+    assert_eq!(denied["error"]["code"], "session_read_only");
 
     let pin_read_ticket = issue_session_ticket(
         client,

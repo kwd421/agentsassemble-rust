@@ -134,25 +134,13 @@ describe("room preference HTTP authority", () => {
     });
   });
 
-  it("exchanges a remote session for a fresh exact-purpose ticket per operation", async () => {
+  it("presents a remote session directly to each preference operation", async () => {
     const invoke = vi.fn();
     Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ ticket: "d".repeat(64), ttl_seconds: 30 }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        })
-      )
-      .mockResolvedValueOnce(
         new Response(JSON.stringify(response()), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        })
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ ticket: "e".repeat(64), ttl_seconds: 30 }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         })
@@ -177,23 +165,13 @@ describe("room preference HTTP authority", () => {
     });
 
     expect(invoke).not.toHaveBeenCalled();
-    expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/session-tickets/preferences-read", {
-      cache: "no-store",
-      method: "POST",
-      headers: { Authorization: "Bearer aas1.guest-session" },
-    });
     expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
+      1,
       "/api/room-settings?room_id=general",
       expect.objectContaining({ cache: "no-store", headers: expect.any(Headers) })
     );
-    expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/session-tickets/preferences-write", {
-      cache: "no-store",
-      method: "POST",
-      headers: { Authorization: "Bearer aas1.guest-session" },
-    });
     expect(fetchMock).toHaveBeenNthCalledWith(
-      4,
+      2,
       "/api/room-settings",
       expect.objectContaining({
         cache: "no-store",
@@ -201,12 +179,12 @@ describe("room preference HTTP authority", () => {
         headers: expect.any(Headers),
       })
     );
-    const readHeaders = fetchMock.mock.calls[1]?.[1]?.headers as Headers;
-    const writeInit = fetchMock.mock.calls[3]?.[1] as RequestInit;
+    const readHeaders = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
+    const writeInit = fetchMock.mock.calls[1]?.[1] as RequestInit;
     const writeHeaders = writeInit.headers as Headers;
-    expect(readHeaders.get("Authorization")).toBe(`Bearer ${"d".repeat(64)}`);
+    expect(readHeaders.get("Authorization")).toBe("Bearer aas1.guest-session");
     expect(readHeaders.get("X-Device-Token")).toBeNull();
-    expect(writeHeaders.get("Authorization")).toBe(`Bearer ${"e".repeat(64)}`);
+    expect(writeHeaders.get("Authorization")).toBe("Bearer aas1.guest-session");
     expect(writeHeaders.get("X-Device-Token")).toBeNull();
     expect(writeHeaders.get("Content-Type")).toBe("application/json");
     expect(JSON.parse(String(writeInit.body))).toEqual({
@@ -215,7 +193,7 @@ describe("room preference HTTP authority", () => {
     });
   });
 
-  it("does not call the preference target when session exchange is denied", async () => {
+  it("surfaces a read-only denial from the preference target", async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -235,11 +213,17 @@ describe("room preference HTTP authority", () => {
       })
     ).rejects.toThrow("Read-only room sessions cannot change preferences.");
     expect(fetchMock).toHaveBeenCalledOnce();
-    expect(fetchMock).toHaveBeenCalledWith("/api/session-tickets/preferences-write", {
+    expect(fetchMock).toHaveBeenCalledWith("/api/room-settings", {
       cache: "no-store",
       method: "POST",
-      headers: { Authorization: "Bearer aas1.read-only-session" },
+      headers: expect.any(Headers),
+      body: JSON.stringify({
+        room_id: "general",
+        appearance: { notifications: "mute" },
+      }),
     });
+    const headers = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
+    expect(headers.get("Authorization")).toBe("Bearer aas1.read-only-session");
   });
 
   it("rejects a mismatched response room instead of projecting defaults", async () => {
