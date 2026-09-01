@@ -9,9 +9,7 @@ import type { HumanInvitePresentation } from "../../app/useManagedHumanInvites";
 import type { RoomAppearance } from "../../lib/roomAppearance";
 import "./RoomInviteModal.css";
 
-type PendingPublicAction =
-  | { kind: "human"; options: HumanInviteOptions }
-  | { kind: "agent" };
+type PendingPublicAction = { kind: "human"; options: HumanInviteOptions };
 
 function humanInviteStatus(invite: HumanInvitePresentation) {
   if (invite.revocation === "dead") return "폐기됨";
@@ -31,7 +29,6 @@ function humanInviteUseLabel(maxUses: number) {
 export default function RoomInviteModal({
   roomLabel,
   humanInvites = [],
-  agentInviteUrl,
   operatorPairingUrl,
   publicUrl,
   publicAccessTransition = "idle",
@@ -42,8 +39,6 @@ export default function RoomInviteModal({
   onGenerateSecureInvite,
   onCopyHumanInvite,
   onRevokeHumanInvite,
-  onGenerateAgentInvite,
-  onCopyAgentInvite,
   onGenerateOperatorPairing,
   onCopyOperatorPairing,
   onStartTunnel,
@@ -51,7 +46,6 @@ export default function RoomInviteModal({
 }: {
   roomLabel: string;
   humanInvites?: readonly HumanInvitePresentation[];
-  agentInviteUrl: string;
   operatorPairingUrl: string;
   publicUrl?: string;
   publicAccessTransition?: PublicAccessTransition;
@@ -62,8 +56,6 @@ export default function RoomInviteModal({
   onGenerateSecureInvite: (options: HumanInviteOptions, startTunnelIfNeeded: boolean) => void;
   onCopyHumanInvite: (key: string) => void;
   onRevokeHumanInvite: (key: string) => void;
-  onGenerateAgentInvite: (startTunnelIfNeeded: boolean) => void;
-  onCopyAgentInvite: () => void;
   onGenerateOperatorPairing: () => void;
   onCopyOperatorPairing: () => void;
   onStartTunnel: () => void;
@@ -92,11 +84,7 @@ export default function RoomInviteModal({
   const publicAccessBusy = publicAccessStarting || publicAccessStopping;
   function requestPublicAction(action: PendingPublicAction) {
     if (publicAccessRunning) {
-      if (action.kind === "human") {
-        onGenerateSecureInvite(action.options, false);
-      } else {
-        onGenerateAgentInvite(false);
-      }
+      onGenerateSecureInvite(action.options, false);
       return;
     }
     setPendingPublicAction(action);
@@ -106,11 +94,7 @@ export default function RoomInviteModal({
     const action = pendingPublicAction;
     setPendingPublicAction(null);
     if (!action) return;
-    if (action.kind === "human") {
-      onGenerateSecureInvite(action.options, true);
-    } else {
-      onGenerateAgentInvite(true);
-    }
+    onGenerateSecureInvite(action.options, true);
   }
   useEffect(() => {
     function closeOnEscape(event: KeyboardEvent) {
@@ -140,7 +124,7 @@ export default function RoomInviteModal({
               {roomLabel} 초대 및 연결
             </h2>
             <p className="mt-1 text-[13px] text-text-muted preserve-words">
-              사람이나 외부 AI 세션을 초대합니다. 서버가 계속 관리할 에이전트는 이 창이 아니라 에이전트 추가에서 만드세요.
+              브라우저에서 참가할 사람의 보안 초대 링크를 관리합니다.
             </p>
           </div>
           <button
@@ -337,63 +321,6 @@ export default function RoomInviteModal({
             )}
           </section>
 
-          <section className="dc-invite-card" aria-labelledby="ai-invite-heading">
-            <div>
-              <h3 id="ai-invite-heading">외부 AI 세션 초대</h3>
-              <p>
-                Room Connector가 등록된 Codex·Claude 앱이나 대화형 CLI에 링크를 붙여 넣으면 그 세션이 직접 참가합니다. 새 provider나 관리형 세션은 만들지 않습니다.
-              </p>
-              <span className="dc-invite-expiry-note">1회 사용 · 1시간 후 만료</span>
-            </div>
-            <div className="dc-invite-link-row">
-              <input
-                className="dc-invite-link-input"
-                value={agentInviteUrl}
-                placeholder="외부 AI 세션 초대 링크"
-                readOnly
-                aria-label="외부 AI 세션 초대 링크"
-                onFocus={(event) => event.currentTarget.select()}
-              />
-              <button
-                type="button"
-                className="dc-invite-copy-button"
-                aria-label="외부 AI 세션 초대 링크 생성"
-                onClick={() => requestPublicAction({ kind: "agent" })}
-              >
-                생성
-              </button>
-              <button
-                type="button"
-                className="dc-invite-copy-button"
-                disabled={!agentInviteUrl}
-                onClick={onCopyAgentInvite}
-              >
-                <Copy size={15} />
-                복사
-              </button>
-            </div>
-            <details className="dc-invite-setup">
-              <summary>처음 한 번: Room Connector 설치 및 등록</summary>
-              <ol>
-                <li>
-                  AgentsAssemble 프로젝트 폴더에서 설치
-                  <code>python3 -m pip install -e .</code>
-                </li>
-                <li>
-                  사용하는 앱에 MCP 등록
-                  <span className="dc-invite-command-label">Codex</span>
-                  <code>codex mcp add agentsassemble-room -- assemble room connector-mcp</code>
-                  <span className="dc-invite-command-label">Claude Code</span>
-                  <code>claude mcp add --scope user agentsassemble-room -- assemble room connector-mcp</code>
-                  <span className="dc-invite-command-label">기타 MCP 클라이언트</span>
-                  <code>{'{"command":"assemble","args":["room","connector-mcp"]}'}</code>
-                </li>
-                <li>
-                  앱에서 <code>room_join</code> 도구가 보이는지 확인한 뒤 위 초대 링크만 대화에 붙여 넣기
-                </li>
-              </ol>
-            </details>
-          </section>
         </div>
 
         <details className="dc-invite-advanced">
@@ -454,7 +381,7 @@ export default function RoomInviteModal({
             >
               <h3 id="public-access-confirm-title">외부 접속을 열까요?</h3>
               <p>
-                이 컴퓨터의 서버에 임시 공개 주소를 연결한 뒤 초대 링크를 만듭니다. 링크를 가진 사람이나 AI 세션만 참가할 수 있습니다.
+                이 컴퓨터의 서버에 임시 공개 주소를 연결한 뒤 사람 초대 링크를 만듭니다. 링크를 가진 사람만 참가할 수 있습니다.
               </p>
               <div className="dc-invite-confirm-actions">
                 <button

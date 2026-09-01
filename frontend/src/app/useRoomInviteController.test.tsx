@@ -492,7 +492,6 @@ describe("useRoomInviteController", () => {
     expect(hook.result.current.remoteClientPacket).toEqual({ friendName: "", preview: "" });
     expect(hook.result.current.friendStatuses).toEqual({});
     expect(hook.result.current.humanInvites).toEqual([]);
-    expect(hook.result.current.agentInviteUrl).toBe("");
     expect(hook.result.current.operatorPairingUrl).toBe("");
   });
 
@@ -519,56 +518,6 @@ describe("useRoomInviteController", () => {
       "https://room.example.com/pair?token=aap1_secret"
     );
     expect(hook.result.current.copyStatus).toContain("2분");
-  });
-
-  it("creates a current-session agent invite without selecting or launching a provider", async () => {
-    apiMocks.createRoomInvite.mockResolvedValue({
-      invite_id: "invite-current-session",
-      invite_token: "token-current-session",
-      meeting_id: room.meetingId,
-      agent_id: "external-agent",
-      display_name: "External Agent",
-      invite_scope: "room",
-      expires_at: "2026-07-13T00:00:00Z",
-      room_url: "https://room.example.com",
-      join_url: "https://room.example.com/join?token=token-current-session",
-    });
-    const hook = renderInviteController();
-
-    await act(async () => {
-      await hook.result.current.generateAgentInvite(room);
-    });
-
-    expect(apiMocks.createRoomInvite).toHaveBeenCalledWith({
-      meetingId: room.meetingId,
-      agentId: "external-agent",
-      displayName: "External Agent",
-      inviteScope: "room",
-      ttlSeconds: 3600,
-      clientType: "browser",
-      providerKind: "manual",
-      participantType: "agent",
-      maxUses: 1,
-      sessionToken: "",
-    });
-    expect(hook.result.current.agentInviteUrl).toBe(
-      "https://room.example.com/join?token=token-current-session"
-    );
-  });
-
-  it("does not expose the local server when invite generation lacks explicit consent", async () => {
-    apiMocks.fetchPublicInviteStatus.mockResolvedValue({
-      ...stoppedStatus,
-    });
-    const hook = renderInviteController();
-
-    await act(async () => {
-      await hook.result.current.generateAgentInvite(room);
-    });
-
-    expect(apiMocks.startPublicInviteTunnel).not.toHaveBeenCalled();
-    expect(apiMocks.createRoomInvite).not.toHaveBeenCalled();
-    expect(hook.result.current.copyStatus).toContain("외부 접속");
   });
 
   it("makes no ingress or timer call for an ineligible surface", async () => {

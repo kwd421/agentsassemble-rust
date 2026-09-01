@@ -10,10 +10,9 @@ import RoomSettingsModal from "../views/components/RoomSettingsModal";
 
 export default function AppOverlays({ controller }: { controller: AppController }) {
   const {
-    acceptRecoveredSession, activeRoom, agentCreateOpen, agentInviteUrl,
-    canonicalRoom, closeInviteModal, copyAgentInviteLink,
-    copyOperatorPairingLink,
-    deviceToken, clientId, generateAgentInviteLink,
+    acceptRecoveredSession, activeRoom, agentCreateOpen,
+    canonicalRoom, closeInviteModal, copyOperatorPairingLink,
+    deviceToken, clientId,
     generateInviteLink, generateOperatorPairingLink, guestAdmissionBusy, guestExpired,
     guestJoinRequested, guestJoinStatus, guestJoinToken, guestLocked,
     guestPreflightRetryable, guestJoinRetryable,
@@ -44,7 +43,6 @@ export default function AppOverlays({ controller }: { controller: AppController 
           <RoomInviteModal
             roomLabel={inviteModalRoom.label}
             humanInvites={roomInvite.humanInvites}
-            agentInviteUrl={agentInviteUrl}
             operatorPairingUrl={operatorPairingUrl}
             publicUrl={invitePublicUrl}
             publicAccessTransition={roomInvite.publicAccessTransition}
@@ -62,10 +60,6 @@ export default function AppOverlays({ controller }: { controller: AppController 
             }
             onCopyHumanInvite={(key) => void roomInvite.copyHumanInvite(key)}
             onRevokeHumanInvite={(key) => void roomInvite.revokeHumanInvite(key)}
-            onGenerateAgentInvite={(startTunnelIfNeeded) =>
-              void generateAgentInviteLink(inviteModalRoom, startTunnelIfNeeded)
-            }
-            onCopyAgentInvite={() => void copyAgentInviteLink()}
             onGenerateOperatorPairing={() => void generateOperatorPairingLink(inviteModalRoom)}
             onCopyOperatorPairing={() => void copyOperatorPairingLink()}
             onStartTunnel={() => void startInviteTunnel()}

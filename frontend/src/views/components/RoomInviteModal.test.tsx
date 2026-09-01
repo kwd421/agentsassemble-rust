@@ -19,7 +19,6 @@ function renderInviteModal({
   humanInvites?: HumanInvitePresentation[];
 } = {}) {
   const onGenerateSecureInvite = vi.fn();
-  const onGenerateAgentInvite = vi.fn();
   const onStopTunnel = vi.fn();
   const onCopyHumanInvite = vi.fn();
   const onRevokeHumanInvite = vi.fn();
@@ -29,7 +28,6 @@ function renderInviteModal({
     <RoomInviteModal
       roomLabel="제품 방"
       humanInvites={humanInvites}
-      agentInviteUrl=""
       operatorPairingUrl=""
       publicUrl={publicAccess ? "https://room.example.com" : ""}
       publicAccessTransition={requestState}
@@ -45,8 +43,6 @@ function renderInviteModal({
       onGenerateSecureInvite={onGenerateSecureInvite}
       onCopyHumanInvite={onCopyHumanInvite}
       onRevokeHumanInvite={onRevokeHumanInvite}
-      onGenerateAgentInvite={onGenerateAgentInvite}
-      onCopyAgentInvite={vi.fn()}
       onGenerateOperatorPairing={vi.fn()}
       onCopyOperatorPairing={vi.fn()}
       onStartTunnel={vi.fn()}
@@ -55,7 +51,6 @@ function renderInviteModal({
   );
   return {
     onGenerateSecureInvite,
-    onGenerateAgentInvite,
     onStopTunnel,
     onCopyHumanInvite,
     onRevokeHumanInvite,
@@ -191,20 +186,10 @@ describe("RoomInviteModal", () => {
     ).toBe(false);
   });
 
-  it("requires an explicit public-access confirmation for an external AI session", () => {
-    const { onGenerateAgentInvite } = renderInviteModal({ publicAccess: false });
+  it("does not expose an external AI invite before its Room Connector owner exists", () => {
+    renderInviteModal();
 
-    expect(screen.getByRole("heading", { name: "외부 AI 세션 초대" })).toBeTruthy();
-    fireEvent.click(
-      screen.getByRole("button", { name: "외부 AI 세션 초대 링크 생성" })
-    );
-
-    expect(onGenerateAgentInvite).not.toHaveBeenCalled();
-    expect(screen.getByRole("alertdialog", { name: "외부 접속을 열까요?" })).toBeTruthy();
-    fireEvent.click(
-      screen.getByRole("button", { name: "외부 접속 열고 링크 만들기" })
-    );
-
-    expect(onGenerateAgentInvite).toHaveBeenCalledWith(true);
+    expect(screen.queryByRole("heading", { name: "외부 AI 세션 초대" })).toBeNull();
+    expect(screen.queryByText(/Room Connector 설치/)).toBeNull();
   });
 });

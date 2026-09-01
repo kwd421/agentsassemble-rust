@@ -88,7 +88,6 @@ export function useRoomInviteController({
 }: UseRoomInviteControllerOptions) {
   const [modal, setModal] = useState<InviteModalState>(null);
   const [copyStatus, setCopyStatus] = useState("");
-  const [agentInviteUrl, setAgentInviteUrl] = useState("");
   const [operatorPairingUrl, setOperatorPairingUrl] = useState("");
   const [publicInviteStatus, setPublicInviteStatus] = useState<PublicInviteStatus | null>(null);
   const [publicAccessTransition, setPublicAccessTransition] =
@@ -199,7 +198,6 @@ export function useRoomInviteController({
     retireIngressOperation();
     setModal({ roomId });
     setCopyStatus("");
-    setAgentInviteUrl("");
     setOperatorPairingUrl("");
     setPublicInviteStatus(null);
     setPublicAccessTransition("idle");
@@ -435,7 +433,6 @@ export function useRoomInviteController({
       );
       assertIngressOperation(generation);
       setPublicInviteStatus(status);
-      setAgentInviteUrl("");
       setOperatorPairingUrl("");
       setCopyStatus("외부 접속을 닫았습니다. 룸은 이 컴퓨터에서 계속 작동합니다.");
     } catch (error) {
@@ -468,47 +465,6 @@ export function useRoomInviteController({
       if (error === RETIRED_INGRESS_OPERATION) return;
       setCopyStatus(error instanceof Error ? error.message : "보안 초대 링크 생성 실패");
     }
-  }
-
-  async function generateAgentInvite(room: RoomDockItem, startTunnelIfNeeded = false) {
-    setAgentInviteUrl("");
-    setCopyStatus("외부 AI 세션 초대 링크 생성 중...");
-    try {
-      if (!localOperatorEligible) {
-        throw new Error("외부 접속 관리는 패키지 앱의 로컬 운영자만 사용할 수 있습니다.");
-      }
-      const generation = beginIngressOperation();
-      await requirePublicInviteReady(generation, startTunnelIfNeeded);
-      assertIngressOperation(generation);
-      const invite = await createRoomInvite({
-        meetingId: room.meetingId,
-        agentId: "external-agent",
-        displayName: "External Agent",
-        inviteScope: "room",
-        ttlSeconds: 3600,
-        clientType: "browser",
-        providerKind: "manual",
-        participantType: "agent",
-        maxUses: 1,
-        sessionToken,
-      });
-      assertIngressOperation(generation);
-      const target = secureInviteCopyTarget({
-        joinUrl: invite.join_url || "",
-      });
-      if (!target.copyUrl) throw new Error(target.status);
-      setAgentInviteUrl(target.copyUrl);
-      setCopyStatus("외부 AI 세션 1회용 초대 링크 생성됨");
-    } catch (error) {
-      if (error === RETIRED_INGRESS_OPERATION) return;
-      setCopyStatus(error instanceof Error ? error.message : "외부 AI 세션 초대 생성 실패");
-    }
-  }
-
-  async function copyAgentInvite() {
-    if (!agentInviteUrl) return;
-    const copied = await copyText(agentInviteUrl);
-    setCopyStatus(copied ? "외부 AI 세션 초대 링크 복사됨" : "초대 링크 복사 실패");
   }
 
   async function generateOperatorPairing(room: RoomDockItem) {
@@ -611,7 +567,6 @@ export function useRoomInviteController({
     modal,
     copyStatus,
     humanInvites: managedHumanInvites.humanInvites,
-    agentInviteUrl,
     operatorPairingUrl,
     publicInviteStatus,
     publicAccessTransition,
@@ -625,9 +580,7 @@ export function useRoomInviteController({
     startTunnel,
     stopTunnel,
     generateSecureInvite,
-    generateAgentInvite,
     generateOperatorPairing,
-    copyAgentInvite,
     copyOperatorPairing,
     copyHumanInvite: managedHumanInvites.copy,
     revokeHumanInvite: managedHumanInvites.revoke,
