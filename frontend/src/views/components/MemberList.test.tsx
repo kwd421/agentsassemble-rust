@@ -300,6 +300,65 @@ describe("MemberList component wiring", () => {
     expect(within(hostGroup as HTMLElement).queryByText("Agent One")).toBeNull();
   });
 
+  it("does not fall back to LiveAgent ownership for a room participant", () => {
+    const members: RoomMember[] = [
+      {
+        meeting_id: "room-1",
+        participant_id: "remote-owner",
+        display_name: "Remote Owner",
+        role: "human",
+        participant_type: "human",
+        provider_kind: "",
+        connection_kind: "browser",
+        status: "joined",
+        source: "",
+        created_at: "",
+        updated_at: "",
+      },
+      {
+        meeting_id: "room-1",
+        participant_id: "agent-1",
+        display_name: "Participant Copy",
+        role: "agent",
+        participant_type: "local",
+        provider_kind: "codex",
+        connection_kind: "agent_session",
+        owner_id: "",
+        status: "joined",
+        source: "agent_session",
+        created_at: "",
+        updated_at: "",
+      },
+    ];
+
+    render(
+      <MemberList
+        agents={[
+          {
+            ...AGENT,
+            owner_id: "remote-owner",
+            owner_display_name: "Remote Owner",
+          },
+        ]}
+        members={members}
+        viewerParticipantId="operator-local"
+        roomId="room-1"
+        roomName="Room One"
+      />
+    );
+
+    const remoteGroup = screen.getByText("Remote Owner").closest(
+      ".dc-person-member-group"
+    );
+    const unassignedGroup = screen.getByText("소유자 정보 없음").closest(
+      ".dc-person-member-group"
+    );
+    expect(remoteGroup).not.toBeNull();
+    expect(unassignedGroup).not.toBeNull();
+    expect(within(remoteGroup as HTMLElement).queryByText("Agent One")).toBeNull();
+    expect(within(unassignedGroup as HTMLElement).getByText("Agent One")).toBeTruthy();
+  });
+
   it("keeps participant kind independent when roles cross presentation defaults", () => {
     const members: RoomMember[] = [
       {

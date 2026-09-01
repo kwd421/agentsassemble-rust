@@ -75,11 +75,13 @@ export function useMemberEntries({
       const agentSession = sessionByParticipantId.get(agent.agent_id);
       const inferredRole = inferAgentRole(agent);
       const role = member ? memberRole(member) : inferredRole;
-      const ownerId = String(member?.owner_id || agent.owner_id || "").trim();
+      const ownerId = String(
+        member ? member.owner_id || "" : agent.owner_id || ""
+      ).trim();
       const ownedByViewer = Boolean(ownerId && ownerId === viewerParticipantId);
       const ownerDisplayName = String(
-        agent.owner_display_name ||
-          memberById.get(ownerId)?.display_name ||
+        memberById.get(ownerId)?.display_name ||
+          (!member ? agent.owner_display_name : "") ||
           (ownedByViewer ? viewerDisplayName : "소유자 정보 없음")
       ).trim();
       const canonicalIdentity = agentSession || agent;
