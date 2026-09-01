@@ -80,14 +80,9 @@ only after the correction commit is pushed and re-reviewed.
 
 ## Final external review closure
 
-- Critical ChatGPT Pro closed its workflow-owner Medium and the stale-baseline,
-  per-commit-ceiling, and historical-wording Low findings through `032c20f`,
-  `9808441`, and `9711232`. It approved commit/HEAD `9711232`, exact
-  `9808441..9711232`, correction chain `bbc99ff..9711232`, and cumulative planning
-  range `1c5b37e..9711232` at `C0/H0/M0/L0`.
-- Daybreaker Blue High closed its corresponding stale-baseline,
-  per-commit-ceiling, and wording findings and manually approved the same commit,
-  correction chain, cumulative range, and HEAD at `C0/H0/M0/L0`.
+- Critical ChatGPT Pro and Daybreaker Blue High each closed their respective
+  documentation findings and returned `APPROVE — C0/H0/M0/L0` for the Phase 0A
+  planning state at reviewed content checkpoint `9711232`.
 - Both reviews left F-20, D-02/D-03, the frontend allowlist, and the historical
   `b558da5` rollback/review limitation in their documented states. Approval closes
   the Phase 0A plan and finding route only; it does not close pending product work.
